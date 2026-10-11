@@ -1,0 +1,2597 @@
+{
+  "architecture": "sm_120",
+  "device": {
+    "name": "NVIDIA GeForce RTX 5070",
+    "uuid_hex": "cba12639821a7a104cd3f918f9c0a545",
+    "ordinal": 0
+  },
+  "shape_bounds": {
+    "M": 129,
+    "N": 65,
+    "K": 513
+  },
+  "route": "abstract frontend Graph->native bounded projection->Schedule->Tile->Target->LLVM/PTX->ordered CUDA ABI",
+  "timing_scope": "Public completed wall time includes ordering and result download; native program/grouped member events are separate domains",
+  "programs": [
+    {
+      "dtype": "fp16",
+      "depth_per_operand": 1,
+      "cold_compile_and_public_call_ms": 1399.4821889791638,
+      "program_contract_digest": "0c1582943900531f76423a637d5661be0b0a27e40e1d729f5c6cd8e58f3e8a2a",
+      "native_plan": {
+        "active_shape": [
+          17,
+          19,
+          35
+        ],
+        "buffers": [
+          {
+            "bytes": 132354,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 1,
+            "ownership": "readonly_input",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 132354,
+            "first_write": 0,
+            "id": 2,
+            "last_read": 2,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": 1,
+            "id": 3,
+            "last_read": 2,
+            "ownership": "private_scratch",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 33540,
+            "first_write": 2,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "returned_output",
+            "shape": [
+              129,
+              65
+            ],
+            "storage": "f32"
+          }
+        ],
+        "dynamic_axes": [
+          "M",
+          "N",
+          "K"
+        ],
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x513xf16>) -> tensor<129x513xf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>) -> tensor<129x513xf16>\n    return %0 : tensor<129x513xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<513x65xf16>) -> tensor<513x65xf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xf16>) -> tensor<513x65xf16>\n    return %0 : tensor<513x65xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<?x?xf16>, %arg1: tensor<?x?xf16>) -> tensor<?x?xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", shape_bounds = [129, 65, 513], tessera.effect_kind = \"pure\"} : (tensor<?x?xf16>, tensor<?x?xf16>) -> tensor<?x?xf32>\n    return %0 : tensor<?x?xf32>\n  }\n}\n\n"
+        ],
+        "original_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.native.sm120_tensor_bounds = {K = 513 : i64, M = 129 : i64, N = 65 : i64}, tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag(%arg0: tensor<17x35xf16>, %arg1: tensor<35x19xf16>) -> tensor<17x19xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"e05a51bf0ec46196b09507bb5a43b1869b343cf844ae850f8c9d16e182e3cb54\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>) -> tensor<17x35xf16>\n    %1 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xf16>) -> tensor<35x19xf16>\n    %2 = tessera.matmul %0, %1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>, tensor<35x19xf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n",
+        "output": 4,
+        "role_indices": [
+          0,
+          1
+        ],
+        "root": "public_dag",
+        "schema": "tessera.native.sm120_tensor_program.v6",
+        "shape_bounds": [
+          129,
+          65,
+          513
+        ],
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag(%arg0: tensor<?x?xf16>, %arg1: tensor<?x?xf16>) -> tensor<?x?xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"e05a51bf0ec46196b09507bb5a43b1869b343cf844ae850f8c9d16e182e3cb54\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<?x?xf16>) -> tensor<?x?xf16>\n    %1 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<?x?xf16>) -> tensor<?x?xf16>\n    %2 = tessera.matmul %0, %1 {output_dtype = \"fp32\", shape_bounds = [129, 65, 513], tessera.effect_kind = \"pure\"} : (tensor<?x?xf16>, tensor<?x?xf16>) -> tensor<?x?xf32>\n    return %2 : tensor<?x?xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "public_dag__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              2
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "member": "public_dag__tensor_member_1",
+            "operation": "tessera.softmax",
+            "outputs": [
+              3
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              2,
+              3
+            ],
+            "member": "public_dag__tensor_member_2",
+            "operation": "tessera.matmul",
+            "outputs": [
+              4
+            ],
+            "step": 2
+          }
+        ]
+      },
+      "image_digests": [
+        "7e9e19b95a4377e0d2c1ae8aef2fa262de52ca42cd50975bc8ec8fffc71f45ee",
+        "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+        "c4c5412ca1841e09ff474dd017561282c7ca21f9d4e47683a89bb40d22f2e1b9"
+      ],
+      "scratch": [
+        399364,
+        2
+      ],
+      "rows": [
+        {
+          "dtype": "fp16",
+          "depth_per_operand": 1,
+          "frame_ordinal": 0,
+          "shape_mnk": [
+            17,
+            19,
+            35
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 1.833215355873108e-05,
+          "native_program_event_samples_ms": [
+            0.028342999517917633,
+            0.027146749198436737,
+            0.027060750871896744,
+            0.06615524739027023,
+            0.02723024971783161,
+            0.027654249221086502,
+            0.028500499203801155
+          ],
+          "native_program_event_median_ms": 0.027654249221086502,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009690250270068645,
+              0.007772250100970268,
+              0.00889275036752224
+            ],
+            [
+              0.008610250428318977,
+              0.00914475042372942,
+              0.008294999599456787
+            ],
+            [
+              0.009105750359594822,
+              0.008631750009953976,
+              0.00839575007557869
+            ],
+            [
+              0.009846000000834465,
+              0.008946750313043594,
+              0.008675750344991684
+            ],
+            [
+              0.008312249556183815,
+              0.009109499864280224,
+              0.008515500463545322
+            ],
+            [
+              0.00820150040090084,
+              0.009010749869048595,
+              0.008867000229656696
+            ],
+            [
+              0.010355999693274498,
+              0.008942250162363052,
+              0.008382500149309635
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            1.0444720392115414,
+            0.6630870047956705,
+            0.6419769488275051,
+            0.6324070272967219,
+            0.653476978186518,
+            0.6945279892534018,
+            0.7999780355021358
+          ],
+          "public_resident_completed_median_ms": 0.6630870047956705,
+          "public_host_completed_samples_ms": [
+            0.657666998449713,
+            0.620596983935684,
+            0.6374369841068983,
+            0.6366570014506578,
+            0.6038770079612732,
+            0.6005269824527204,
+            0.6714170449413359
+          ],
+          "public_host_completed_median_ms": 0.6366570014506578,
+          "resident_over_host_median_ratio": 1.0415137244776864,
+          "program_contract_digest": "0c1582943900531f76423a637d5661be0b0a27e40e1d729f5c6cd8e58f3e8a2a",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "fp16",
+          "depth_per_operand": 1,
+          "frame_ordinal": 1,
+          "shape_mnk": [
+            129,
+            65,
+            513
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 7.205614747363143e-05,
+          "native_program_event_samples_ms": [
+            0.038970500230789185,
+            0.03910600021481514,
+            0.039303749799728394,
+            0.040226999670267105,
+            0.03970475122332573,
+            0.03957875072956085,
+            0.039358001202344894
+          ],
+          "native_program_event_median_ms": 0.039358001202344894,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009734749794006348,
+              0.0165452491492033,
+              0.018540499731898308
+            ],
+            [
+              0.010040749795734882,
+              0.016641749069094658,
+              0.018154999241232872
+            ],
+            [
+              0.008829750120639801,
+              0.016965249553322792,
+              0.018151000142097473
+            ],
+            [
+              0.008557249791920185,
+              0.01654049940407276,
+              0.018095750361680984
+            ],
+            [
+              0.008809500373899937,
+              0.016511250287294388,
+              0.018322249874472618
+            ],
+            [
+              0.008720999583601952,
+              0.016544999554753304,
+              0.018246250227093697
+            ],
+            [
+              0.00866174977272749,
+              0.016499249264597893,
+              0.018197249621152878
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            0.7654290529899299,
+            0.7548379944637418,
+            0.7378479931503534,
+            0.7037579780444503,
+            0.7422179915010929,
+            0.7053180015645921,
+            0.707517028786242
+          ],
+          "public_resident_completed_median_ms": 0.7378479931503534,
+          "public_host_completed_samples_ms": [
+            0.752168009057641,
+            0.7536279736086726,
+            0.731457956135273,
+            0.7096269982866943,
+            0.7069169660098851,
+            0.6872269441373646,
+            0.6967580411583185
+          ],
+          "public_host_completed_median_ms": 0.7096269982866943,
+          "resident_over_host_median_ratio": 1.0397687727944331,
+          "program_contract_digest": "0c1582943900531f76423a637d5661be0b0a27e40e1d729f5c6cd8e58f3e8a2a",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "fp16",
+          "depth_per_operand": 1,
+          "frame_ordinal": 2,
+          "shape_mnk": [
+            1,
+            1,
+            1
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 0.0,
+          "native_program_event_samples_ms": [
+            0.026390250772237778,
+            0.02736850082874298,
+            0.06235849857330322,
+            0.028845999389886856,
+            0.027866000309586525,
+            0.02975575067102909,
+            0.04461374878883362
+          ],
+          "native_program_event_median_ms": 0.028845999389886856,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.008787250146269798,
+              0.008679250255227089,
+              0.008433500304818153
+            ],
+            [
+              0.01032674964517355,
+              0.008585999719798565,
+              0.00849900022149086
+            ],
+            [
+              0.009344750083982944,
+              0.008645500056445599,
+              0.00856850016862154
+            ],
+            [
+              0.00792699959129095,
+              0.008306499570608139,
+              0.008605750277638435
+            ],
+            [
+              0.009153000079095364,
+              0.009332999587059021,
+              0.008329249918460846
+            ],
+            [
+              0.008828249759972095,
+              0.008718250319361687,
+              0.008311750367283821
+            ],
+            [
+              0.00930275022983551,
+              0.009855750016868114,
+              0.008195250295102596
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            0.6845769821666181,
+            0.6389669724740088,
+            0.6631470168940723,
+            0.6751770270057023,
+            0.6533669657073915,
+            0.7131479796953499,
+            0.7281379657797515
+          ],
+          "public_resident_completed_median_ms": 0.6751770270057023,
+          "public_host_completed_samples_ms": [
+            0.6336260121315718,
+            0.6646179826930165,
+            0.6535769789479673,
+            0.6324169808067381,
+            0.5903869750909507,
+            0.649077002890408,
+            0.6147070089355111
+          ],
+          "public_host_completed_median_ms": 0.6336260121315718,
+          "resident_over_host_median_ratio": 1.0655765610606,
+          "program_contract_digest": "0c1582943900531f76423a637d5661be0b0a27e40e1d729f5c6cd8e58f3e8a2a",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "fp16",
+          "depth_per_operand": 1,
+          "frame_ordinal": 3,
+          "shape_mnk": [
+            63,
+            31,
+            255
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 8.763662481214851e-05,
+          "native_program_event_samples_ms": [
+            0.031203249469399452,
+            0.0301937498152256,
+            0.030504750087857246,
+            0.03282750025391579,
+            0.032309748232364655,
+            0.030400749295949936,
+            0.03014875017106533
+          ],
+          "native_program_event_median_ms": 0.030504750087857246,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009201000444591045,
+              0.010652500204741955,
+              0.01147099956870079
+            ],
+            [
+              0.008520999923348427,
+              0.011954249814152718,
+              0.012013999745249748
+            ],
+            [
+              0.009121749550104141,
+              0.011286499910056591,
+              0.011548999696969986
+            ],
+            [
+              0.008572249673306942,
+              0.04761575162410736,
+              0.01282500009983778
+            ],
+            [
+              0.008432500064373016,
+              0.0106412498280406,
+              0.011279500089585781
+            ],
+            [
+              0.010001000016927719,
+              0.011448999866843224,
+              0.011023500002920628
+            ],
+            [
+              0.00963549967855215,
+              0.010832499712705612,
+              0.011256749741733074
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            0.7484880043193698,
+            0.6603770307265222,
+            0.7439479813911021,
+            0.7169970194809139,
+            0.7743680034764111,
+            0.666856998577714,
+            0.7389180245809257
+          ],
+          "public_resident_completed_median_ms": 0.7389180245809257,
+          "public_host_completed_samples_ms": [
+            0.6725969724357128,
+            0.6290570017881691,
+            0.6334469653666019,
+            0.732218031771481,
+            0.6323070265352726,
+            0.6387470057234168,
+            0.6286659627221525
+          ],
+          "public_host_completed_median_ms": 0.6334469653666019,
+          "resident_over_host_median_ratio": 1.166503377521563,
+          "program_contract_digest": "0c1582943900531f76423a637d5661be0b0a27e40e1d729f5c6cd8e58f3e8a2a",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "fp16",
+          "depth_per_operand": 1,
+          "frame_ordinal": 4,
+          "shape_mnk": [
+            17,
+            19,
+            35
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 1.7182901501655579e-07,
+          "native_program_event_samples_ms": [
+            0.028895750641822815,
+            0.02636599913239479,
+            0.025130249559879303,
+            0.025374000892043114,
+            0.026919249445199966,
+            0.025588499382138252,
+            0.027989499270915985
+          ],
+          "native_program_event_median_ms": 0.02636599913239479,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.008811750449240208,
+              0.008822250179946423,
+              0.009361499920487404
+            ],
+            [
+              0.00860149972140789,
+              0.008152250200510025,
+              0.010650750249624252
+            ],
+            [
+              0.0086899995803833,
+              0.00804075039923191,
+              0.009644250385463238
+            ],
+            [
+              0.00823500007390976,
+              0.008108500391244888,
+              0.007923999801278114
+            ],
+            [
+              0.010801499709486961,
+              0.010196000337600708,
+              0.008985250256955624
+            ],
+            [
+              0.008430000394582748,
+              0.007889499887824059,
+              0.043704498559236526
+            ],
+            [
+              0.008740250021219254,
+              0.008107749745249748,
+              0.008921749889850616
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            0.7256980170495808,
+            0.6808769539929926,
+            0.7035169983282685,
+            0.6557569722644985,
+            0.875319994520396,
+            0.6945569766685367,
+            0.7884090300649405
+          ],
+          "public_resident_completed_median_ms": 0.7035169983282685,
+          "public_host_completed_samples_ms": [
+            0.6102059851400554,
+            0.6623969529755414,
+            0.6157860043458641,
+            0.6051360396668315,
+            0.6797380046918988,
+            0.7101479568518698,
+            0.6561470218002796
+          ],
+          "public_host_completed_median_ms": 0.6561470218002796,
+          "resident_over_host_median_ratio": 1.0721941500214682,
+          "program_contract_digest": "0c1582943900531f76423a637d5661be0b0a27e40e1d729f5c6cd8e58f3e8a2a",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        }
+      ]
+    },
+    {
+      "dtype": "fp16",
+      "depth_per_operand": 2,
+      "cold_compile_and_public_call_ms": 1562.0215870440006,
+      "program_contract_digest": "c1aef8aaa76be0e8f69b836be1cb12fff1f1e2d0b31b2968e1e6283814c45648",
+      "native_plan": {
+        "active_shape": [
+          17,
+          19,
+          35
+        ],
+        "buffers": [
+          {
+            "bytes": 132354,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": "readonly_input",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 132354,
+            "first_write": 0,
+            "id": 2,
+            "last_read": 1,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 132354,
+            "first_write": 1,
+            "id": 3,
+            "last_read": 4,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": 2,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "private_scratch",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": 3,
+            "id": 5,
+            "last_read": 4,
+            "ownership": "private_scratch",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 33540,
+            "first_write": 4,
+            "id": 6,
+            "last_read": 5,
+            "ownership": "returned_output",
+            "shape": [
+              129,
+              65
+            ],
+            "storage": "f32"
+          }
+        ],
+        "dynamic_axes": [
+          "M",
+          "N",
+          "K"
+        ],
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x513xf16>) -> tensor<129x513xf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>) -> tensor<129x513xf16>\n    return %0 : tensor<129x513xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x513xf16>) -> tensor<129x513xf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>) -> tensor<129x513xf16>\n    return %0 : tensor<129x513xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<513x65xf16>) -> tensor<513x65xf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xf16>) -> tensor<513x65xf16>\n    return %0 : tensor<513x65xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<513x65xf16>) -> tensor<513x65xf16> {\n    %0 = tessera.layer_norm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<513x65xf16>) -> tensor<513x65xf16>\n    return %0 : tensor<513x65xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<?x?xf16>, %arg1: tensor<?x?xf16>) -> tensor<?x?xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", shape_bounds = [129, 65, 513], tessera.effect_kind = \"pure\"} : (tensor<?x?xf16>, tensor<?x?xf16>) -> tensor<?x?xf32>\n    return %0 : tensor<?x?xf32>\n  }\n}\n\n"
+        ],
+        "original_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.native.sm120_tensor_bounds = {K = 513 : i64, M = 129 : i64, N = 65 : i64}, tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag_deep(%arg0: tensor<17x35xf16>, %arg1: tensor<35x19xf16>) -> tensor<17x19xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"15eda08afb80a51acb4ff76aa27c18f932c9c1a0b43c25b32416f9f45d3e6c0b\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>) -> tensor<17x35xf16>\n    %1 = tessera.softmax %0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>) -> tensor<17x35xf16>\n    %2 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xf16>) -> tensor<35x19xf16>\n    %3 = tessera.layer_norm %2 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<35x19xf16>) -> tensor<35x19xf16>\n    %4 = tessera.matmul %1, %3 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>, tensor<35x19xf16>) -> tensor<17x19xf32>\n    return %4 : tensor<17x19xf32>\n  }\n}\n\n",
+        "output": 6,
+        "role_indices": [
+          0,
+          1
+        ],
+        "root": "public_dag_deep",
+        "schema": "tessera.native.sm120_tensor_program.v6",
+        "shape_bounds": [
+          129,
+          65,
+          513
+        ],
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag_deep(%arg0: tensor<?x?xf16>, %arg1: tensor<?x?xf16>) -> tensor<?x?xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"15eda08afb80a51acb4ff76aa27c18f932c9c1a0b43c25b32416f9f45d3e6c0b\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<?x?xf16>) -> tensor<?x?xf16>\n    %1 = tessera.softmax %0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<?x?xf16>) -> tensor<?x?xf16>\n    %2 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<?x?xf16>) -> tensor<?x?xf16>\n    %3 = tessera.layer_norm %2 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<?x?xf16>) -> tensor<?x?xf16>\n    %4 = tessera.matmul %1, %3 {output_dtype = \"fp32\", shape_bounds = [129, 65, 513], tessera.effect_kind = \"pure\"} : (tensor<?x?xf16>, tensor<?x?xf16>) -> tensor<?x?xf32>\n    return %4 : tensor<?x?xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "public_dag_deep__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              2
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              2
+            ],
+            "member": "public_dag_deep__tensor_member_1",
+            "operation": "tessera.softmax",
+            "outputs": [
+              3
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "member": "public_dag_deep__tensor_member_2",
+            "operation": "tessera.softmax",
+            "outputs": [
+              4
+            ],
+            "step": 2
+          },
+          {
+            "inputs": [
+              4
+            ],
+            "member": "public_dag_deep__tensor_member_3",
+            "operation": "tessera.layer_norm",
+            "outputs": [
+              5
+            ],
+            "step": 3
+          },
+          {
+            "inputs": [
+              3,
+              5
+            ],
+            "member": "public_dag_deep__tensor_member_4",
+            "operation": "tessera.matmul",
+            "outputs": [
+              6
+            ],
+            "step": 4
+          }
+        ]
+      },
+      "image_digests": [
+        "7e9e19b95a4377e0d2c1ae8aef2fa262de52ca42cd50975bc8ec8fffc71f45ee",
+        "627b3f5f3a8ee4eb94e8b64f96ef3978d5f30260fcc4e0586d6661d7a3de8440",
+        "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+        "bddd0c166001bca97f6c79e34fac8c11a27e9d55a874e12b4df9f4adaabdd622",
+        "c4c5412ca1841e09ff474dd017561282c7ca21f9d4e47683a89bb40d22f2e1b9"
+      ],
+      "scratch": [
+        399364,
+        2
+      ],
+      "rows": [
+        {
+          "dtype": "fp16",
+          "depth_per_operand": 2,
+          "frame_ordinal": 0,
+          "shape_mnk": [
+            17,
+            19,
+            35
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 7.616181392222643e-05,
+          "native_program_event_samples_ms": [
+            0.03781275078654289,
+            0.036040499806404114,
+            0.04388599842786789,
+            0.04509950056672096,
+            0.045243751257658005,
+            0.044160500168800354,
+            0.04767800122499466
+          ],
+          "native_program_event_median_ms": 0.044160500168800354,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.007469499949365854,
+              0.009382500313222408,
+              0.008927999995648861,
+              0.008403000421822071,
+              0.008875750005245209
+            ],
+            [
+              0.010192249901592731,
+              0.0087075000628829,
+              0.009166999720036983,
+              0.008186249993741512,
+              0.00877275038510561
+            ],
+            [
+              0.009081750176846981,
+              0.00869075022637844,
+              0.006886499933898449,
+              0.007102250121533871,
+              0.008903750218451023
+            ],
+            [
+              0.009545999579131603,
+              0.007067500147968531,
+              0.007843250408768654,
+              0.009207500144839287,
+              0.0093560004606843
+            ],
+            [
+              0.008828500285744667,
+              0.008464000187814236,
+              0.04604950174689293,
+              0.0104587497189641,
+              0.008946750313043594
+            ],
+            [
+              0.008908499963581562,
+              0.008745750412344933,
+              0.008784250356256962,
+              0.008813749998807907,
+              0.008671999908983707
+            ],
+            [
+              0.010167250409722328,
+              0.008379749953746796,
+              0.00920874997973442,
+              0.00821324996650219,
+              0.008813000284135342
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            1.2340229586698115,
+            1.221512968186289,
+            1.2259330251254141,
+            1.2354429927654564,
+            1.3497750042006373,
+            1.256744028069079,
+            1.527006970718503
+          ],
+          "public_resident_completed_median_ms": 1.2354429927654564,
+          "public_host_completed_samples_ms": [
+            1.202383020427078,
+            1.2077830033376813,
+            1.2292839819565415,
+            1.2275429908186197,
+            1.1699929600581527,
+            1.2611130368895829,
+            1.2140229810029268
+          ],
+          "public_host_completed_median_ms": 1.2140229810029268,
+          "resident_over_host_median_ratio": 1.0176438272567412,
+          "program_contract_digest": "c1aef8aaa76be0e8f69b836be1cb12fff1f1e2d0b31b2968e1e6283814c45648",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "fp16",
+          "depth_per_operand": 2,
+          "frame_ordinal": 1,
+          "shape_mnk": [
+            129,
+            65,
+            513
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 8.249862071352254e-05,
+          "native_program_event_samples_ms": [
+            0.06682150065898895,
+            0.0627480000257492,
+            0.0625777468085289,
+            0.06308025121688843,
+            0.05992349982261658,
+            0.06412725150585175,
+            0.06390374898910522
+          ],
+          "native_program_event_median_ms": 0.06308025121688843,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009531750343739986,
+              0.008929749950766563,
+              0.016548750922083855,
+              0.017488500103354454,
+              0.01821249909698963
+            ],
+            [
+              0.009283999912440777,
+              0.00858249980956316,
+              0.016641249880194664,
+              0.01742899976670742,
+              0.018204249441623688
+            ],
+            [
+              0.008404499851167202,
+              0.008434750139713287,
+              0.017021000385284424,
+              0.018181750550866127,
+              0.01834999956190586
+            ],
+            [
+              0.00947249960154295,
+              0.006928000133484602,
+              0.01659500040113926,
+              0.01749975048005581,
+              0.018216999247670174
+            ],
+            [
+              0.010065999813377857,
+              0.0070912498049438,
+              0.016608500853180885,
+              0.017776750028133392,
+              0.018174249678850174
+            ],
+            [
+              0.006823500152677298,
+              0.007714500185102224,
+              0.016597500070929527,
+              0.017725249752402306,
+              0.01911425031721592
+            ],
+            [
+              0.00902900006622076,
+              0.008362499997019768,
+              0.01684124954044819,
+              0.017508000135421753,
+              0.018303999677300453
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            1.3572450261563063,
+            1.3359750155359507,
+            1.2930040247738361,
+            1.2678439961746335,
+            1.293203968089074,
+            1.29703403217718,
+            1.2960939784534276
+          ],
+          "public_resident_completed_median_ms": 1.2960939784534276,
+          "public_host_completed_samples_ms": [
+            1.2910640216432512,
+            1.3118740171194077,
+            1.2318739900365472,
+            1.2563939671963453,
+            1.2726240092888474,
+            1.259964017663151,
+            1.306443999055773
+          ],
+          "public_host_completed_median_ms": 1.2726240092888474,
+          "resident_over_host_median_ratio": 1.0184421863749806,
+          "program_contract_digest": "c1aef8aaa76be0e8f69b836be1cb12fff1f1e2d0b31b2968e1e6283814c45648",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "fp16",
+          "depth_per_operand": 2,
+          "frame_ordinal": 2,
+          "shape_mnk": [
+            1,
+            1,
+            1
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 0.0,
+          "native_program_event_samples_ms": [
+            0.04501025006175041,
+            0.04415050148963928,
+            0.04423850029706955,
+            0.04675174877047539,
+            0.048375751823186874,
+            0.0827377513051033,
+            0.04430624842643738
+          ],
+          "native_program_event_median_ms": 0.04501025006175041,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.008459500037133694,
+              0.00812975037842989,
+              0.00800000037997961,
+              0.04853999987244606,
+              0.009754249826073647
+            ],
+            [
+              0.009337999857962132,
+              0.008271750062704086,
+              0.00895250029861927,
+              0.009280749596655369,
+              0.00818675011396408
+            ],
+            [
+              0.008863749913871288,
+              0.007900250144302845,
+              0.007852749899029732,
+              0.008735000155866146,
+              0.006717999931424856
+            ],
+            [
+              0.008534000255167484,
+              0.008332500234246254,
+              0.008945249952375889,
+              0.009387999773025513,
+              0.00862825009971857
+            ],
+            [
+              0.008842499926686287,
+              0.009362000040709972,
+              0.008493750356137753,
+              0.009061000309884548,
+              0.008412250317633152
+            ],
+            [
+              0.009288749657571316,
+              0.008180749602615833,
+              0.008288250304758549,
+              0.00885349977761507,
+              0.008204749785363674
+            ],
+            [
+              0.010146000422537327,
+              0.008730500005185604,
+              0.00842250045388937,
+              0.007936500012874603,
+              0.008604999631643295
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            1.292984001338482,
+            1.2515929993242025,
+            1.2456029653549194,
+            1.2214530142955482,
+            1.3734550448134542,
+            1.291873981244862,
+            1.3486049720086157
+          ],
+          "public_resident_completed_median_ms": 1.291873981244862,
+          "public_host_completed_samples_ms": [
+            1.1732830316759646,
+            1.1958630057051778,
+            1.2433929950930178,
+            1.1858029756695032,
+            1.2377839884720743,
+            1.4094949583522975,
+            1.221023965626955
+          ],
+          "public_host_completed_median_ms": 1.221023965626955,
+          "resident_over_host_median_ratio": 1.0580250819086323,
+          "program_contract_digest": "c1aef8aaa76be0e8f69b836be1cb12fff1f1e2d0b31b2968e1e6283814c45648",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "fp16",
+          "depth_per_operand": 2,
+          "frame_ordinal": 3,
+          "shape_mnk": [
+            63,
+            31,
+            255
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 0.00022255564999795752,
+          "native_program_event_samples_ms": [
+            0.05270925164222717,
+            0.05128524824976921,
+            0.0522099994122982,
+            0.04865249991416931,
+            0.050088249146938324,
+            0.0510217510163784,
+            0.05108200013637543
+          ],
+          "native_program_event_median_ms": 0.05108200013637543,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.007943999953567982,
+              0.008402500301599503,
+              0.010864749550819397,
+              0.010249749757349491,
+              0.011076750233769417
+            ],
+            [
+              0.00916799996048212,
+              0.008175750263035297,
+              0.010840250179171562,
+              0.010851750150322914,
+              0.011359499767422676
+            ],
+            [
+              0.008982749655842781,
+              0.008924500085413456,
+              0.010851000435650349,
+              0.011099250055849552,
+              0.01168575044721365
+            ],
+            [
+              0.008801749907433987,
+              0.009082499891519547,
+              0.011301250196993351,
+              0.04472099989652634,
+              0.011261249892413616
+            ],
+            [
+              0.009368499740958214,
+              0.008601999841630459,
+              0.011085250414907932,
+              0.010325499810278416,
+              0.011771749705076218
+            ],
+            [
+              0.00814875029027462,
+              0.00909624993801117,
+              0.010945250280201435,
+              0.011179749853909016,
+              0.010439500212669373
+            ],
+            [
+              0.008420250378549099,
+              0.008459500037133694,
+              0.012362499721348286,
+              0.011369500309228897,
+              0.011847499758005142
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            1.2988040107302368,
+            1.310634019318968,
+            1.426096016075462,
+            1.247732958290726,
+            1.3446250231936574,
+            1.307553960941732,
+            1.7448390135541558
+          ],
+          "public_resident_completed_median_ms": 1.310634019318968,
+          "public_host_completed_samples_ms": [
+            1.221593003720045,
+            1.5046170447021723,
+            1.2138430029153824,
+            1.2795139919035137,
+            1.2270529987290502,
+            1.498055993579328,
+            1.2982839834876359
+          ],
+          "public_host_completed_median_ms": 1.2795139919035137,
+          "resident_over_host_median_ratio": 1.0243217562389901,
+          "program_contract_digest": "c1aef8aaa76be0e8f69b836be1cb12fff1f1e2d0b31b2968e1e6283814c45648",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "fp16",
+          "depth_per_operand": 2,
+          "frame_ordinal": 4,
+          "shape_mnk": [
+            17,
+            19,
+            35
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 0.00012172572314739227,
+          "native_program_event_samples_ms": [
+            0.045566998422145844,
+            0.048344749957323074,
+            0.047292500734329224,
+            0.045156750828027725,
+            0.04413124918937683,
+            0.04509950056672096,
+            0.04768050089478493
+          ],
+          "native_program_event_median_ms": 0.045566998422145844,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.008969999849796295,
+              0.007974250242114067,
+              0.008674999698996544,
+              0.0077344998717308044,
+              0.00861124973744154
+            ],
+            [
+              0.008746249601244926,
+              0.008911999873816967,
+              0.00850099977105856,
+              0.00891599990427494,
+              0.00949424970895052
+            ],
+            [
+              0.008977750316262245,
+              0.04160249978303909,
+              0.00976600032299757,
+              0.009557499550282955,
+              0.009321250021457672
+            ],
+            [
+              0.009940999560058117,
+              0.010093499906361103,
+              0.008307499811053276,
+              0.008771000429987907,
+              0.009140499867498875
+            ],
+            [
+              0.008851500228047371,
+              0.008670750074088573,
+              0.009112750180065632,
+              0.007866749539971352,
+              0.008072749711573124
+            ],
+            [
+              0.007931999862194061,
+              0.008540250360965729,
+              0.008640499785542488,
+              0.009077750146389008,
+              0.008306000381708145
+            ],
+            [
+              0.008803999982774258,
+              0.008555750362575054,
+              0.00765775004401803,
+              0.008531499654054642,
+              0.009579749777913094
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            1.4409659779630601,
+            1.2556829606182873,
+            1.414275960996747,
+            1.1918329983018339,
+            1.3707149773836136,
+            1.2546440120786428,
+            1.5152160194702446
+          ],
+          "public_resident_completed_median_ms": 1.3707149773836136,
+          "public_host_completed_samples_ms": [
+            1.2336430372670293,
+            1.3761149602942169,
+            1.2415530509315431,
+            1.2465330073609948,
+            1.194002979900688,
+            1.297184033319354,
+            1.3749650097452104
+          ],
+          "public_host_completed_median_ms": 1.2465330073609948,
+          "resident_over_host_median_ratio": 1.0996218866963832,
+          "program_contract_digest": "c1aef8aaa76be0e8f69b836be1cb12fff1f1e2d0b31b2968e1e6283814c45648",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        }
+      ]
+    },
+    {
+      "dtype": "bf16",
+      "depth_per_operand": 1,
+      "cold_compile_and_public_call_ms": 1190.1742600020953,
+      "program_contract_digest": "4cfaadb55ac947c859a3bc121354baa386098311656dcf2474e65022742422da",
+      "native_plan": {
+        "active_shape": [
+          17,
+          19,
+          35
+        ],
+        "buffers": [
+          {
+            "bytes": 132354,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 1,
+            "ownership": "readonly_input",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 132354,
+            "first_write": 0,
+            "id": 2,
+            "last_read": 2,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": 1,
+            "id": 3,
+            "last_read": 2,
+            "ownership": "private_scratch",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 33540,
+            "first_write": 2,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "returned_output",
+            "shape": [
+              129,
+              65
+            ],
+            "storage": "f32"
+          }
+        ],
+        "dynamic_axes": [
+          "M",
+          "N",
+          "K"
+        ],
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x513xbf16>) -> tensor<129x513xbf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>) -> tensor<129x513xbf16>\n    return %0 : tensor<129x513xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<513x65xbf16>) -> tensor<513x65xbf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xbf16>) -> tensor<513x65xbf16>\n    return %0 : tensor<513x65xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<?x?xbf16>, %arg1: tensor<?x?xbf16>) -> tensor<?x?xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", shape_bounds = [129, 65, 513], tessera.effect_kind = \"pure\"} : (tensor<?x?xbf16>, tensor<?x?xbf16>) -> tensor<?x?xf32>\n    return %0 : tensor<?x?xf32>\n  }\n}\n\n"
+        ],
+        "original_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.native.sm120_tensor_bounds = {K = 513 : i64, M = 129 : i64, N = 65 : i64}, tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag(%arg0: tensor<17x35xbf16>, %arg1: tensor<35x19xbf16>) -> tensor<17x19xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"e05a51bf0ec46196b09507bb5a43b1869b343cf844ae850f8c9d16e182e3cb54\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>) -> tensor<17x35xbf16>\n    %1 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xbf16>) -> tensor<35x19xbf16>\n    %2 = tessera.matmul %0, %1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>, tensor<35x19xbf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n",
+        "output": 4,
+        "role_indices": [
+          0,
+          1
+        ],
+        "root": "public_dag",
+        "schema": "tessera.native.sm120_tensor_program.v6",
+        "shape_bounds": [
+          129,
+          65,
+          513
+        ],
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag(%arg0: tensor<?x?xbf16>, %arg1: tensor<?x?xbf16>) -> tensor<?x?xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"e05a51bf0ec46196b09507bb5a43b1869b343cf844ae850f8c9d16e182e3cb54\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<?x?xbf16>) -> tensor<?x?xbf16>\n    %1 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<?x?xbf16>) -> tensor<?x?xbf16>\n    %2 = tessera.matmul %0, %1 {output_dtype = \"fp32\", shape_bounds = [129, 65, 513], tessera.effect_kind = \"pure\"} : (tensor<?x?xbf16>, tensor<?x?xbf16>) -> tensor<?x?xf32>\n    return %2 : tensor<?x?xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "public_dag__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              2
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "member": "public_dag__tensor_member_1",
+            "operation": "tessera.softmax",
+            "outputs": [
+              3
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              2,
+              3
+            ],
+            "member": "public_dag__tensor_member_2",
+            "operation": "tessera.matmul",
+            "outputs": [
+              4
+            ],
+            "step": 2
+          }
+        ]
+      },
+      "image_digests": [
+        "19699f30bd8bdb118525661d8c4074af83d381bf2d48c4cfa9d18d48054966ec",
+        "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+        "6a442e2ec65a9874a1e3fb9b37c866214e921763d6c4c00b4b883623a785214a"
+      ],
+      "scratch": [
+        399364,
+        2
+      ],
+      "rows": [
+        {
+          "dtype": "bf16",
+          "depth_per_operand": 1,
+          "frame_ordinal": 0,
+          "shape_mnk": [
+            17,
+            19,
+            35
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 7.450580596923828e-08,
+          "native_program_event_samples_ms": [
+            0.023376500234007835,
+            0.025072500109672546,
+            0.027848750352859497,
+            0.02727450057864189,
+            0.02609799988567829,
+            0.025321999564766884,
+            0.0274057500064373
+          ],
+          "native_program_event_median_ms": 0.02609799988567829,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009346500039100647,
+              0.009692249819636345,
+              0.00818725023418665
+            ],
+            [
+              0.04182025045156479,
+              0.009335000067949295,
+              0.009629749692976475
+            ],
+            [
+              0.00672700023278594,
+              0.00800700020045042,
+              0.007466999813914299
+            ],
+            [
+              0.00978775043040514,
+              0.00794174987822771,
+              0.008824000135064125
+            ],
+            [
+              0.0153414998203516,
+              0.014090250246226788,
+              0.030925249680876732
+            ],
+            [
+              0.008332249708473682,
+              0.00874324981123209,
+              0.008326499722898006
+            ],
+            [
+              0.009625500068068504,
+              0.008581750094890594,
+              0.008362749591469765
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            0.6782069685868919,
+            0.671677989885211,
+            0.6814569933339953,
+            0.6688570138067007,
+            0.6359569961205125,
+            0.6811770144850016,
+            0.718838011380285
+          ],
+          "public_resident_completed_median_ms": 0.6782069685868919,
+          "public_host_completed_samples_ms": [
+            0.6283569964580238,
+            0.5960069829598069,
+            0.6199459894560277,
+            0.6255669868551195,
+            0.6982579943723977,
+            0.6037660059519112,
+            0.6267770077101886
+          ],
+          "public_host_completed_median_ms": 0.6255669868551195,
+          "resident_over_host_median_ratio": 1.084147633807223,
+          "program_contract_digest": "4cfaadb55ac947c859a3bc121354baa386098311656dcf2474e65022742422da",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "bf16",
+          "depth_per_operand": 1,
+          "frame_ordinal": 1,
+          "shape_mnk": [
+            129,
+            65,
+            513
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 0.0003589317202568054,
+          "native_program_event_samples_ms": [
+            0.04012725129723549,
+            0.04104974865913391,
+            0.03938525170087814,
+            0.03937774896621704,
+            0.03970574960112572,
+            0.03976999968290329,
+            0.04078949987888336
+          ],
+          "native_program_event_median_ms": 0.03976999968290329,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009220249950885773,
+              0.016558250412344933,
+              0.01831899955868721
+            ],
+            [
+              0.009430999867618084,
+              0.016524000093340874,
+              0.018152249976992607
+            ],
+            [
+              0.008856999687850475,
+              0.016587000340223312,
+              0.01830350048840046
+            ],
+            [
+              0.007823250256478786,
+              0.016539499163627625,
+              0.018218500539660454
+            ],
+            [
+              0.00882750004529953,
+              0.016603000462055206,
+              0.018537500873208046
+            ],
+            [
+              0.008641749620437622,
+              0.016596000641584396,
+              0.01823675073683262
+            ],
+            [
+              0.00837675016373396,
+              0.01652050018310547,
+              0.018326999619603157
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            0.7364879711531103,
+            0.6864169845357537,
+            0.7397079607471824,
+            0.6862669833935797,
+            0.7177179795689881,
+            0.6971679977141321,
+            0.6982570048421621
+          ],
+          "public_resident_completed_median_ms": 0.6982570048421621,
+          "public_host_completed_samples_ms": [
+            0.7019379991106689,
+            0.7059180061332881,
+            0.6733670015819371,
+            0.7175870123319328,
+            0.6744780112057924,
+            0.7429179968312383,
+            0.8291089907288551
+          ],
+          "public_host_completed_median_ms": 0.7059180061332881,
+          "resident_over_host_median_ratio": 0.9891474629849866,
+          "program_contract_digest": "4cfaadb55ac947c859a3bc121354baa386098311656dcf2474e65022742422da",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "bf16",
+          "depth_per_operand": 1,
+          "frame_ordinal": 2,
+          "shape_mnk": [
+            1,
+            1,
+            1
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 0.0,
+          "native_program_event_samples_ms": [
+            0.026841500774025917,
+            0.06885550171136856,
+            0.025929249823093414,
+            0.024504249915480614,
+            0.026120999827980995,
+            0.022573750466108322,
+            0.026921000331640244
+          ],
+          "native_program_event_median_ms": 0.026120999827980995,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.008257250301539898,
+              0.008162500336766243,
+              0.008340000174939632
+            ],
+            [
+              0.008709999732673168,
+              0.008834750391542912,
+              0.008530749939382076
+            ],
+            [
+              0.006955749820917845,
+              0.00817249994724989,
+              0.008929249830543995
+            ],
+            [
+              0.009335249662399292,
+              0.008736499585211277,
+              0.008080749772489071
+            ],
+            [
+              0.008124499581754208,
+              0.007459749933332205,
+              0.007892999798059464
+            ],
+            [
+              0.007822750136256218,
+              0.007530999835580587,
+              0.007589749991893768
+            ],
+            [
+              0.0067529999651014805,
+              0.007942499592900276,
+              0.009222250431776047
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            0.7126679993234575,
+            0.6983469938859344,
+            0.656697025988251,
+            0.6550370017066598,
+            0.7072169682942331,
+            0.7027179817669094,
+            0.6690770387649536
+          ],
+          "public_resident_completed_median_ms": 0.6983469938859344,
+          "public_host_completed_samples_ms": [
+            0.6334870122373104,
+            0.6316969520412385,
+            0.6166469538584352,
+            0.6688980502076447,
+            0.6236659828573465,
+            0.6399470148608088,
+            0.6305259885266423
+          ],
+          "public_host_completed_median_ms": 0.6316969520412385,
+          "resident_over_host_median_ratio": 1.1055095194449265,
+          "program_contract_digest": "4cfaadb55ac947c859a3bc121354baa386098311656dcf2474e65022742422da",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "bf16",
+          "depth_per_operand": 1,
+          "frame_ordinal": 3,
+          "shape_mnk": [
+            63,
+            31,
+            255
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 5.085021257400513e-07,
+          "native_program_event_samples_ms": [
+            0.03125375136733055,
+            0.031102750450372696,
+            0.03018850088119507,
+            0.029428750276565552,
+            0.03117699921131134,
+            0.030657749623060226,
+            0.03099850006401539
+          ],
+          "native_program_event_median_ms": 0.03099850006401539,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009568249806761742,
+              0.01072125043720007,
+              0.011463750153779984
+            ],
+            [
+              0.008112000301480293,
+              0.010827249847352505,
+              0.011450500227510929
+            ],
+            [
+              0.04419475048780441,
+              0.011153499595820904,
+              0.011105000041425228
+            ],
+            [
+              0.008694250136613846,
+              0.011715750209987164,
+              0.011539500206708908
+            ],
+            [
+              0.00860700011253357,
+              0.010991750285029411,
+              0.011334000155329704
+            ],
+            [
+              0.009101499803364277,
+              0.011129500344395638,
+              0.012064499780535698
+            ],
+            [
+              0.00888300035148859,
+              0.011686000041663647,
+              0.010825250297784805
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            0.8116389508359134,
+            0.7155379862524569,
+            0.7896489696577191,
+            0.6660279468633235,
+            0.7603780250065029,
+            0.6659170030616224,
+            0.7102679810486734
+          ],
+          "public_resident_completed_median_ms": 0.7155379862524569,
+          "public_host_completed_samples_ms": [
+            0.6638269987888634,
+            0.6516269640997052,
+            0.7595280185341835,
+            0.6895479746162891,
+            0.6272069877013564,
+            0.6531769759021699,
+            0.6348660099320114
+          ],
+          "public_host_completed_median_ms": 0.6531769759021699,
+          "resident_over_host_median_ratio": 1.095473374982567,
+          "program_contract_digest": "4cfaadb55ac947c859a3bc121354baa386098311656dcf2474e65022742422da",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "bf16",
+          "depth_per_operand": 1,
+          "frame_ordinal": 4,
+          "shape_mnk": [
+            17,
+            19,
+            35
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 5.960464477539063e-08,
+          "native_program_event_samples_ms": [
+            0.025906749069690704,
+            0.027607500553131104,
+            0.02865225076675415,
+            0.02635749988257885,
+            0.026794249191880226,
+            0.056171998381614685,
+            0.025985749438405037
+          ],
+          "native_program_event_median_ms": 0.026794249191880226,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.008964749984443188,
+              0.010158250108361244,
+              0.008239000104367733
+            ],
+            [
+              0.008938999846577644,
+              0.008661500178277493,
+              0.008705499581992626
+            ],
+            [
+              0.009150000289082527,
+              0.008783250115811825,
+              0.009398000314831734
+            ],
+            [
+              0.008566750213503838,
+              0.008764250203967094,
+              0.008404499851167202
+            ],
+            [
+              0.008669249713420868,
+              0.008425249718129635,
+              0.008435750380158424
+            ],
+            [
+              0.011183000169694424,
+              0.008624250069260597,
+              0.009591749869287014
+            ],
+            [
+              0.009822250343859196,
+              0.008169249631464481,
+              0.008568249642848969
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            0.6872579688206315,
+            0.6956569850444794,
+            0.8595800027251244,
+            0.6876079714857042,
+            0.7269479683600366,
+            0.7178870146162808,
+            0.7120879599824548
+          ],
+          "public_resident_completed_median_ms": 0.7120879599824548,
+          "public_host_completed_samples_ms": [
+            0.6804380100220442,
+            0.6014159880578518,
+            0.6320269894786179,
+            0.6278670043684542,
+            0.6429170025512576,
+            0.6655969773419201,
+            0.6192959845066071
+          ],
+          "public_host_completed_median_ms": 0.6320269894786179,
+          "resident_over_host_median_ratio": 1.1266733412284846,
+          "program_contract_digest": "4cfaadb55ac947c859a3bc121354baa386098311656dcf2474e65022742422da",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        }
+      ]
+    },
+    {
+      "dtype": "bf16",
+      "depth_per_operand": 2,
+      "cold_compile_and_public_call_ms": 1549.2306840023957,
+      "program_contract_digest": "a072eef7851d531682321d93e0808a645e983d24f21bfefa7e0b88426807b627",
+      "native_plan": {
+        "active_shape": [
+          17,
+          19,
+          35
+        ],
+        "buffers": [
+          {
+            "bytes": 132354,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": "readonly_input",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 132354,
+            "first_write": 0,
+            "id": 2,
+            "last_read": 1,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 132354,
+            "first_write": 1,
+            "id": 3,
+            "last_read": 4,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": 2,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "private_scratch",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": 3,
+            "id": 5,
+            "last_read": 4,
+            "ownership": "private_scratch",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 33540,
+            "first_write": 4,
+            "id": 6,
+            "last_read": 5,
+            "ownership": "returned_output",
+            "shape": [
+              129,
+              65
+            ],
+            "storage": "f32"
+          }
+        ],
+        "dynamic_axes": [
+          "M",
+          "N",
+          "K"
+        ],
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x513xbf16>) -> tensor<129x513xbf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>) -> tensor<129x513xbf16>\n    return %0 : tensor<129x513xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x513xbf16>) -> tensor<129x513xbf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>) -> tensor<129x513xbf16>\n    return %0 : tensor<129x513xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<513x65xbf16>) -> tensor<513x65xbf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xbf16>) -> tensor<513x65xbf16>\n    return %0 : tensor<513x65xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<513x65xbf16>) -> tensor<513x65xbf16> {\n    %0 = tessera.layer_norm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<513x65xbf16>) -> tensor<513x65xbf16>\n    return %0 : tensor<513x65xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<?x?xbf16>, %arg1: tensor<?x?xbf16>) -> tensor<?x?xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", shape_bounds = [129, 65, 513], tessera.effect_kind = \"pure\"} : (tensor<?x?xbf16>, tensor<?x?xbf16>) -> tensor<?x?xf32>\n    return %0 : tensor<?x?xf32>\n  }\n}\n\n"
+        ],
+        "original_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.native.sm120_tensor_bounds = {K = 513 : i64, M = 129 : i64, N = 65 : i64}, tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag_deep(%arg0: tensor<17x35xbf16>, %arg1: tensor<35x19xbf16>) -> tensor<17x19xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"15eda08afb80a51acb4ff76aa27c18f932c9c1a0b43c25b32416f9f45d3e6c0b\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>) -> tensor<17x35xbf16>\n    %1 = tessera.softmax %0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>) -> tensor<17x35xbf16>\n    %2 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xbf16>) -> tensor<35x19xbf16>\n    %3 = tessera.layer_norm %2 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<35x19xbf16>) -> tensor<35x19xbf16>\n    %4 = tessera.matmul %1, %3 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>, tensor<35x19xbf16>) -> tensor<17x19xf32>\n    return %4 : tensor<17x19xf32>\n  }\n}\n\n",
+        "output": 6,
+        "role_indices": [
+          0,
+          1
+        ],
+        "root": "public_dag_deep",
+        "schema": "tessera.native.sm120_tensor_program.v6",
+        "shape_bounds": [
+          129,
+          65,
+          513
+        ],
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag_deep(%arg0: tensor<?x?xbf16>, %arg1: tensor<?x?xbf16>) -> tensor<?x?xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"15eda08afb80a51acb4ff76aa27c18f932c9c1a0b43c25b32416f9f45d3e6c0b\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<?x?xbf16>) -> tensor<?x?xbf16>\n    %1 = tessera.softmax %0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<?x?xbf16>) -> tensor<?x?xbf16>\n    %2 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<?x?xbf16>) -> tensor<?x?xbf16>\n    %3 = tessera.layer_norm %2 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<?x?xbf16>) -> tensor<?x?xbf16>\n    %4 = tessera.matmul %1, %3 {output_dtype = \"fp32\", shape_bounds = [129, 65, 513], tessera.effect_kind = \"pure\"} : (tensor<?x?xbf16>, tensor<?x?xbf16>) -> tensor<?x?xf32>\n    return %4 : tensor<?x?xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "public_dag_deep__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              2
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              2
+            ],
+            "member": "public_dag_deep__tensor_member_1",
+            "operation": "tessera.softmax",
+            "outputs": [
+              3
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "member": "public_dag_deep__tensor_member_2",
+            "operation": "tessera.softmax",
+            "outputs": [
+              4
+            ],
+            "step": 2
+          },
+          {
+            "inputs": [
+              4
+            ],
+            "member": "public_dag_deep__tensor_member_3",
+            "operation": "tessera.layer_norm",
+            "outputs": [
+              5
+            ],
+            "step": 3
+          },
+          {
+            "inputs": [
+              3,
+              5
+            ],
+            "member": "public_dag_deep__tensor_member_4",
+            "operation": "tessera.matmul",
+            "outputs": [
+              6
+            ],
+            "step": 4
+          }
+        ]
+      },
+      "image_digests": [
+        "19699f30bd8bdb118525661d8c4074af83d381bf2d48c4cfa9d18d48054966ec",
+        "99b13111471364aa6665d2749c56e54055a4e72f821a3af342f8ea186d420c76",
+        "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+        "04176a66bf888de23e4dc27e94f0e1ba6e91474fe630a36a4d50ffcf6923566b",
+        "6a442e2ec65a9874a1e3fb9b37c866214e921763d6c4c00b4b883623a785214a"
+      ],
+      "scratch": [
+        399364,
+        2
+      ],
+      "rows": [
+        {
+          "dtype": "bf16",
+          "depth_per_operand": 2,
+          "frame_ordinal": 0,
+          "shape_mnk": [
+            17,
+            19,
+            35
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 9.685754776000977e-08,
+          "native_program_event_samples_ms": [
+            0.045504748821258545,
+            0.04340774938464165,
+            0.04792724922299385,
+            0.047499749809503555,
+            0.04467974975705147,
+            0.04565799981355667,
+            0.04388650134205818
+          ],
+          "native_program_event_median_ms": 0.045504748821258545,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009011750109493732,
+              0.008923250250518322,
+              0.010884249582886696,
+              0.009096000343561172,
+              0.009558499790728092
+            ],
+            [
+              0.009660749696195126,
+              0.008851000107824802,
+              0.00947474967688322,
+              0.00867875013500452,
+              0.009763999842107296
+            ],
+            [
+              0.008809749968349934,
+              0.008888750337064266,
+              0.009388499893248081,
+              0.008936500176787376,
+              0.008264999836683273
+            ],
+            [
+              0.008831500075757504,
+              0.043939750641584396,
+              0.009322750382125378,
+              0.008668499998748302,
+              0.008437749929726124
+            ],
+            [
+              0.008506249636411667,
+              0.008040999993681908,
+              0.009197499603033066,
+              0.008342250250279903,
+              0.009222500026226044
+            ],
+            [
+              0.00784124992787838,
+              0.008776499889791012,
+              0.007893250323832035,
+              0.008847749792039394,
+              0.008318750187754631
+            ],
+            [
+              0.008350750431418419,
+              0.00813400000333786,
+              0.00849824957549572,
+              0.008300499990582466,
+              0.009385500103235245
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            1.2114020064473152,
+            1.2251529842615128,
+            1.2248330167494714,
+            1.2948040384799242,
+            1.3611949980258942,
+            1.2606039526872337,
+            1.3524440000765026
+          ],
+          "public_resident_completed_median_ms": 1.2606039526872337,
+          "public_host_completed_samples_ms": [
+            1.2585329823195934,
+            1.3091230066493154,
+            1.2334519997239113,
+            1.2108119553886354,
+            1.2106530484743416,
+            1.2714240001514554,
+            1.1800220236182213
+          ],
+          "public_host_completed_median_ms": 1.2334519997239113,
+          "resident_over_host_median_ratio": 1.0220129789966694,
+          "program_contract_digest": "a072eef7851d531682321d93e0808a645e983d24f21bfefa7e0b88426807b627",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "bf16",
+          "depth_per_operand": 2,
+          "frame_ordinal": 1,
+          "shape_mnk": [
+            129,
+            65,
+            513
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 0.00013773496903013438,
+          "native_program_event_samples_ms": [
+            0.06402075290679932,
+            0.06387700140476227,
+            0.06287399679422379,
+            0.06320200115442276,
+            0.063510000705719,
+            0.0631444975733757,
+            0.06215900182723999
+          ],
+          "native_program_event_median_ms": 0.06320200115442276,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.008959749713540077,
+              0.008515500463545322,
+              0.016553249210119247,
+              0.017583750188350677,
+              0.018326250836253166
+            ],
+            [
+              0.008794249966740608,
+              0.00878124963492155,
+              0.016714999452233315,
+              0.01885100081562996,
+              0.018355250358581543
+            ],
+            [
+              0.008631750009953976,
+              0.008464749902486801,
+              0.016766250133514404,
+              0.017573999240994453,
+              0.01836949959397316
+            ],
+            [
+              0.008354750461876392,
+              0.008927499875426292,
+              0.016491249203681946,
+              0.01749124936759472,
+              0.018401749432086945
+            ],
+            [
+              0.008268250152468681,
+              0.00858249980956316,
+              0.016909249126911163,
+              0.017837999388575554,
+              0.01819249987602234
+            ],
+            [
+              0.008842499926686287,
+              0.010404749773442745,
+              0.028545500710606575,
+              0.01764724962413311,
+              0.018261000514030457
+            ],
+            [
+              0.006360750179737806,
+              0.007836500182747841,
+              0.016926750540733337,
+              0.0175742506980896,
+              0.018313750624656677
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            1.3082629884593189,
+            1.3005840010009706,
+            1.2958539882674813,
+            1.2811130145564675,
+            1.2906829942949116,
+            1.2713730102404952,
+            1.2832439970225096
+          ],
+          "public_resident_completed_median_ms": 1.2906829942949116,
+          "public_host_completed_samples_ms": [
+            1.3626039726659656,
+            1.262693025637418,
+            1.3328539789654315,
+            1.2589929974637926,
+            1.2280629598535597,
+            1.3179639936424792,
+            1.294713991228491
+          ],
+          "public_host_completed_median_ms": 1.294713991228491,
+          "resident_over_host_median_ratio": 0.996886573435609,
+          "program_contract_digest": "a072eef7851d531682321d93e0808a645e983d24f21bfefa7e0b88426807b627",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "bf16",
+          "depth_per_operand": 2,
+          "frame_ordinal": 2,
+          "shape_mnk": [
+            1,
+            1,
+            1
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 0.0,
+          "native_program_event_samples_ms": [
+            0.08280225098133087,
+            0.040834251791238785,
+            0.04439850151538849,
+            0.041750501841306686,
+            0.04497475177049637,
+            0.04657075181603432,
+            0.044964749366045
+          ],
+          "native_program_event_median_ms": 0.044964749366045,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.010761500336229801,
+              0.009587249718606472,
+              0.008879500441253185,
+              0.00833749957382679,
+              0.008423499763011932
+            ],
+            [
+              0.00886599998921156,
+              0.006988000124692917,
+              0.00750399986281991,
+              0.007863249629735947,
+              0.007468999829143286
+            ],
+            [
+              0.008828249759972095,
+              0.009095000103116035,
+              0.009781749919056892,
+              0.007767499890178442,
+              0.006647999864071608
+            ],
+            [
+              0.006902500055730343,
+              0.006878749933093786,
+              0.00938399974256754,
+              0.008454999886453152,
+              0.007742249872535467
+            ],
+            [
+              0.008724000304937363,
+              0.008467249572277069,
+              0.008523750118911266,
+              0.04265175014734268,
+              0.009581499733030796
+            ],
+            [
+              0.008027000352740288,
+              0.008397250436246395,
+              0.008159250020980835,
+              0.008562999777495861,
+              0.00852274987846613
+            ],
+            [
+              0.008303999900817871,
+              0.00863024964928627,
+              0.008455749601125717,
+              0.008539999835193157,
+              0.008260750211775303
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            1.2540729949250817,
+            1.2458739802241325,
+            1.263212994672358,
+            1.1888319859281182,
+            1.3508740230463445,
+            1.257602998521179,
+            1.3367439969442785
+          ],
+          "public_resident_completed_median_ms": 1.257602998521179,
+          "public_host_completed_samples_ms": [
+            1.1939730029553175,
+            1.1972030042670667,
+            1.1971130152232945,
+            1.185412984341383,
+            1.1842019739560783,
+            1.2914330000057817,
+            1.1418220237828791
+          ],
+          "public_host_completed_median_ms": 1.1939730029553175,
+          "resident_over_host_median_ratio": 1.0532926585512108,
+          "program_contract_digest": "a072eef7851d531682321d93e0808a645e983d24f21bfefa7e0b88426807b627",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "bf16",
+          "depth_per_operand": 2,
+          "frame_ordinal": 3,
+          "shape_mnk": [
+            63,
+            31,
+            255
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 0.00018121185712516308,
+          "native_program_event_samples_ms": [
+            0.05070975050330162,
+            0.05086874961853027,
+            0.04967299848794937,
+            0.0507970005273819,
+            0.04976600036025047,
+            0.052553001791238785,
+            0.050912000238895416
+          ],
+          "native_program_event_median_ms": 0.0507970005273819,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.00857974961400032,
+              0.009697250090539455,
+              0.010302750393748283,
+              0.010324000380933285,
+              0.01106374990195036
+            ],
+            [
+              0.009662000462412834,
+              0.009226749651134014,
+              0.010803249664604664,
+              0.011124249547719955,
+              0.01076200045645237
+            ],
+            [
+              0.008347749710083008,
+              0.00880299974232912,
+              0.011052750051021576,
+              0.01112349983304739,
+              0.012160999700427055
+            ],
+            [
+              0.04543149843811989,
+              0.009099500253796577,
+              0.011366750113666058,
+              0.01101125031709671,
+              0.011475750245153904
+            ],
+            [
+              0.00847224984318018,
+              0.00980874989181757,
+              0.010559500195086002,
+              0.010694250464439392,
+              0.010992499999701977
+            ],
+            [
+              0.008611500263214111,
+              0.00786999985575676,
+              0.011416000314056873,
+              0.010824250057339668,
+              0.011674500070512295
+            ],
+            [
+              0.010355750098824501,
+              0.008224249817430973,
+              0.012559999711811543,
+              0.010354000143706799,
+              0.012290749698877335
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            1.7322180210612714,
+            1.3191740144975483,
+            1.2451430084183812,
+            1.2892030063085258,
+            1.380764995701611,
+            1.2641740031540394,
+            1.357034023385495
+          ],
+          "public_resident_completed_median_ms": 1.3191740144975483,
+          "public_host_completed_samples_ms": [
+            1.263512996956706,
+            1.5023259911686182,
+            1.217773009557277,
+            1.3795839622616768,
+            1.2271329760551453,
+            1.3486840180121362,
+            1.2253830209374428
+          ],
+          "public_host_completed_median_ms": 1.263512996956706,
+          "resident_over_host_median_ratio": 1.044052588042155,
+          "program_contract_digest": "a072eef7851d531682321d93e0808a645e983d24f21bfefa7e0b88426807b627",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        },
+        {
+          "dtype": "bf16",
+          "depth_per_operand": 2,
+          "frame_ordinal": 4,
+          "shape_mnk": [
+            17,
+            19,
+            35
+          ],
+          "shape_bounds": {
+            "M": 129,
+            "N": 65,
+            "K": 513
+          },
+          "max_abs_error": 8.195638656616211e-08,
+          "native_program_event_samples_ms": [
+            0.045411501079797745,
+            0.04397924989461899,
+            0.081045001745224,
+            0.07370699942111969,
+            0.04570075124502182,
+            0.041629500687122345,
+            0.044787000864744186
+          ],
+          "native_program_event_median_ms": 0.045411501079797745,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.008585250005126,
+              0.009357750415802002,
+              0.0081192497164011,
+              0.009171999990940094,
+              0.008581000380218029
+            ],
+            [
+              0.008317749947309494,
+              0.007893750444054604,
+              0.008616000413894653,
+              0.00856150034815073,
+              0.008879750035703182
+            ],
+            [
+              0.009700500406324863,
+              0.008821500465273857,
+              0.009058250114321709,
+              0.008550000376999378,
+              0.009093999862670898
+            ],
+            [
+              0.008290000259876251,
+              0.008131000213325024,
+              0.009260499849915504,
+              0.009077999740839005,
+              0.008807499893009663
+            ],
+            [
+              0.007981750182807446,
+              0.009087749756872654,
+              0.008579250425100327,
+              0.007935499772429466,
+              0.008604500442743301
+            ],
+            [
+              0.009374000132083893,
+              0.008227000012993813,
+              0.00950624980032444,
+              0.008634500205516815,
+              0.008344000205397606
+            ],
+            [
+              0.008428250439465046,
+              0.008706999942660332,
+              0.008618500083684921,
+              0.009248250164091587,
+              0.009057500399649143
+            ]
+          ],
+          "public_resident_completed_samples_ms": [
+            1.4365550014190376,
+            1.290112966671586,
+            1.415504957549274,
+            1.2910939985886216,
+            1.3302339939400554,
+            1.259074022527784,
+            1.2633439619094133
+          ],
+          "public_resident_completed_median_ms": 1.2910939985886216,
+          "public_host_completed_samples_ms": [
+            1.3135839835740626,
+            1.3146040146239102,
+            1.264863007236272,
+            1.2619229964911938,
+            1.1791230062954128,
+            1.458565006032586,
+            1.1669929954223335
+          ],
+          "public_host_completed_median_ms": 1.264863007236272,
+          "resident_over_host_median_ratio": 1.0207382073807854,
+          "program_contract_digest": "a072eef7851d531682321d93e0808a645e983d24f21bfefa7e0b88426807b627",
+          "correctness": "independent_fp64_stage_oracle_and_bitwise_host_resident",
+          "package_reuse": "one_program_and_owner_across_all_frames"
+        }
+      ]
+    }
+  ],
+  "sources": {
+    "python/tessera/compiler/bounded_nvidia_lhs.py": "637a421806204d7e71babc06c5d0971e7f67d9195c8ab1b37bd73e3c869091cd",
+    "python/tessera/compiler/jit.py": "b87bb6849491aadb72e2d990458dd2b8aa6f146263567a61abb0eec7cf763006",
+    "python/tessera/compiler/resident_nvidia_tensor.py": "dc51aae5817f44e867b82355b452967c16d723dbc717a86404aa0c398ce3c3fe",
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "adb4cb947077c1d63df2ed32fa8ec5fb9c533e13024533aba089377218c19321",
+    "python/tessera/compiler/nvidia_tensor_dag.py": "8321fd9f316fd1bd3d5964e152fd1a7963aa19bf18f0788cbbaf2d3b820b9996",
+    "tests/unit/test_bounded_resident_tensor_frontend.py": "2c0b4364ef291d2d0ada1fbdb9fa5a185b3941652576a7e50656d83c3e425c11",
+    "tests/device/nvidia/test_bounded_resident_tensor_frontend.py": "263c3b1e4e6e5e76d2e82f9b37514b8e9dca485a6f045b26f41a726200e20655",
+    "benchmarks/nvidia/record_bounded_resident_tensor_frontend.py": "3519d21c809c0f501433f0fffef7b37af5bc5dd4df9b933e9fba5c1ee5cc002c",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "a5697ee0bc0da90f6e042488a680bd3cfb419b1c74a9f080ceca9d1defda0993"
+  },
+  "tools": {
+    "TESSERA_OPT": "39d59eee080a6b0d44edaefae009a0947982a7e1c28aeb44f68d897c9011aa56",
+    "TESSERA_NVIDIA_OPT": "34cc11367b156953c52a997d5706b03db8f57b15f68d63372056c025a39cb1bf",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "285bdc70a2d9ecf6746566562ecdb1ca9b8d1e0a6cb7b6f456967a5065766e6d"
+  }
+}

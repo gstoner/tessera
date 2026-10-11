@@ -103,23 +103,33 @@ _AXES={"source":("M","K"),"rhs":("K","N"),"bias":("N",),"residual":("M","N")}
 
 def specialization_key(roles,ordered,bounds):
     import numpy as np
+    resident=any(hasattr(value,"__cuda_array_interface__") for value in ordered)
+    if resident:
+        if not all(hasattr(value,"__cuda_array_interface__") for value in ordered):
+            raise ValueError("bounded resident frontend requires all CUDA roots")
+        from .resident_nvidia_tensor import cuda_frontend_specs
+        specs=cuda_frontend_specs(ordered)
+    else:
+        if not all(isinstance(value,np.ndarray) for value in ordered):
+            raise ValueError("bounded LHS input rank/type differs")
+        specs=tuple((tuple(value.shape),value.dtype) for value in ordered)
     signature=[]
     for role,index in sorted(roles.items()):
-        value=ordered[index]
+        shape,dtype=specs[index]
         axes=_AXES[role]
-        if not isinstance(value,np.ndarray) or value.ndim!=len(axes):
+        if len(shape)!=len(axes):
             raise ValueError("bounded LHS input rank/type differs")
         if any(size<=0 or (axis in bounds and size>bounds[axis])
-               for size,axis in zip(value.shape,axes,strict=True)):
+               for size,axis in zip(shape,axes,strict=True)):
             raise ValueError("bounded LHS active shape is outside its declared bound")
-        signature.append((role,index,value.dtype.name,tuple(bounds.get(axis,size)
-            for size,axis in zip(value.shape,axes,strict=True))))
-    source,rhs=ordered[roles["source"]],ordered[roles["rhs"]]
-    if source.shape[1]!=rhs.shape[0]:
+        signature.append((role,index,dtype.name,tuple(bounds.get(axis,size)
+            for size,axis in zip(shape,axes,strict=True))))
+    source,rhs=specs[roles["source"]][0],specs[roles["rhs"]][0]
+    if source[1]!=rhs[0]:
         raise ValueError("bounded LHS source/RHS contraction extents differ")
-    m,n=source.shape[0],rhs.shape[1]
+    m,n=source[0],rhs[1]
     for role,shape in (("bias",(n,)),("residual",(m,n))):
-        if role in roles and ordered[roles[role]].shape!=shape:
+        if role in roles and specs[roles[role]][0]!=shape:
             raise ValueError("bounded LHS epilogue active extents differ")
     return tuple(signature)
 
@@ -152,13 +162,21 @@ class BoundedLhsDispatcher:
             bound=jit._nvidia_rhs_call_signature.bind(*args,**kwargs)
             bound.apply_defaults()
             ordered=tuple(bound.arguments[name] for name in jit.arg_names)
-            if len(ordered) not in {2,3,4} or not all(isinstance(value,np.ndarray) for value in ordered):
-                raise ValueError("shape_bounds requires host-array producer/matmul inputs")
+            resident=any(hasattr(value,"__cuda_array_interface__") for value in ordered)
+            if resident and not all(hasattr(value,"__cuda_array_interface__") for value in ordered):
+                raise ValueError("bounded resident frontend requires all CUDA roots")
+            if len(ordered) not in {2,3,4} or not all(isinstance(value,np.ndarray) or resident for value in ordered):
+                raise ValueError("shape_bounds requires tensor producer/matmul inputs")
             bounds=dict(self.bounds)
             key=specialization_key(self.roles,ordered,bounds) if self.roles is not None else None
             program=self.programs.get(key)
             if program is None:
-                module=lhs.project_rhs_storage(jit._traced_autodiff_module(ordered,{}),ordered,dynamic=True,
+                module=jit._traced_autodiff_module(ordered,{})
+                if resident:
+                    from .nvidia_tensor_dag import candidate as dag_candidate
+                    if not dag_candidate(module):
+                        raise ValueError("bounded resident frontend requires the native two-operand producer DAG")
+                module=lhs.project_rhs_storage(module,ordered,dynamic=True,
                                                rhs_storage_order=self.rhs_storage_order)
                 if not lhs.candidate(module):
                     raise ValueError("shape_bounds requires a named normalization/softmax -> matmul Graph")

@@ -5,6 +5,22 @@ owner: NVIDIA backend
 target: nvidia_sm120
 last_updated: 2026-10-09
 ---
+## SM120-BOUNDED-RESIDENT-FRONTEND-20261009
+
+Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Bounded public JIT now specializes compact resident FP16/BF16 two-sided
+producer DAGs from CUDA metadata and reuses native dynamic packages across
+active M/N/K. Runtime shape guards, stream ordering and allocation lifetimes
+are exercised; original Graph and native dynamic projection remain distinct.
+534 host gates and 39 new RTX5070 device tests pass.
+Two isolated 20-frame packets separate native program/member events from
+completed public calls. Resident/host wall ratios span 0.982–1.167;
+no general speedup or quantized schedule promotion follows.
+Evidence: benchmarks/baselines/sm120_bounded_resident_tensor_frontend_20261009/README.md.
+
+Parity validated for the named bounded compact SM120 primal DAG, including independently bounded axes and resident/host transitions. Single-sided/generic resident producers, mixed/pitched roots and resident AD remain follow-up required.
+
+
 ## SM120-PUBLIC-RESIDENT-TENSOR-FRONTEND-20261009
 
 Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

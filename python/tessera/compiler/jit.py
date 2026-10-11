@@ -2999,7 +2999,33 @@ class JitFn:
                 proof_policy = native_vjp_frontend_proof_policy(
                     plugin_source.op_name, target_kind
                 )
-                if proof_policy == "non_reexecuting_state_lineage":
+                certificate_roots=self._ordered_inputs(args,kwargs)
+                cotangent_roots=(tuple(out_cotangents) if isinstance(out_cotangents,(tuple,list))
+                                 else (out_cotangents,))
+                resident_attention=any(hasattr(value,"__cuda_array_interface__")
+                    for value in (*(certificate_roots or ()),*cotangent_roots))
+                if resident_attention:
+                    if (target_kind!="nvidia_sm120" or plugin_source.op_name!="tessera.flash_attn"
+                            or float(plugin_source.kwargs.get("dropout_p",0.0))!=0.0
+                            or certificate_roots is None or not all(
+                                hasattr(value,"__cuda_array_interface__")
+                                for value in (*certificate_roots,*cotangent_roots))):
+                        raise TesseraJitError("resident reverse requires all CUDA roots and zero-dropout SM120 attention")
+                    from .resident_nvidia_tensor import cuda_frontend_specs
+                    from .frontend_authority import certify_resident_frontends
+                    specs=cuda_frontend_specs(certificate_roots,ranks=(4,))
+                    seed_specs=cuda_frontend_specs(cotangent_roots,ranks=(4,))
+                    if any(dtype.name!="float32" for _,dtype in (*specs,*seed_specs)):
+                        raise TesseraJitError("resident reverse requires fp32 roots and cotangent")
+                    from dataclasses import replace
+                    source_module=replace(source_module,module_attrs={
+                        **source_module.module_attrs,"tessera.target":'"nvidia_sm120"',
+                        "tessera.arch":'"sm_120"'})
+                    frontend_certificate=certify_resident_frontends(
+                        legacy_module=self._ensure_legacy_graph_ir(),tracer_module=source_module,
+                        signature=specs,graph_consumers=(plugin_source.op_name,))
+                    self.last_frontend_differential=frontend_certificate
+                elif proof_policy == "non_reexecuting_state_lineage":
                     frontend_certificate = self._frontend_nonreexecuting_certificate(
                         args,
                         kwargs,
@@ -3030,7 +3056,8 @@ class JitFn:
                 # AST compatibility candidate so we can discover its family.
                 # Once a plugin claims the call, replace it with the certified
                 # tracer module; never label the candidate as tracer authority.
-                source_module = self._traced_autodiff_module(args, kwargs)
+                if not resident_attention:
+                    source_module = self._traced_autodiff_module(args, kwargs)
                 graph_ops = [
                     op
                     for function in source_module.functions

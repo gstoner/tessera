@@ -293,6 +293,20 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 **Remaining Graph-owned packaging and frontend retirement**
 
+- Current resident reverse slice (2026-10-09, sync SM120-RESIDENT-ATTENTION-VJP-20261009):
+  compact rank-four FP32 public native_backward roots/cotangent and broadcast
+  bias now reach native MLIR AD/Schedule/Tile/Target/LLVM-PTX packages.
+  Structural certification pins the exact target-annotated Graph with zero
+  concrete frontend executions. Native events order private snapshots and
+  checked saved-LSE lifetime. 379 host tests, 44 adjacent RTX5070 cases and
+  19 final resident reverse cases pass; two packets prove error below 1.7e-8.
+  Resident/host wall ratios span 1.274–1.423; no speedup is claimed.
+  Resident ordinary tuple forward, dynamic/composed AD, GPU gradient outputs
+  and frontend binding performance remain open.
+  [Evidence](../../../benchmarks/baselines/sm120_resident_attention_vjp_20261009/README.md).
+
+
+
 - Current resident AD slice (2026-10-09, sync SM120-RESIDENT-ATTENTION-JVP-20261009):
   compact rank-four FP32 public native_jvp roots reach the typed Graph and
   native MLIR AD/Schedule/Tile/Target/LLVM-PTX route. A structural certificate
@@ -358,7 +372,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 
 - Current slice (2026-09-30, sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30): The Graph-to-package contract composes bounded dynamic M/N/K on gfx1201 and sm_120. Exact-device fp16/bf16 parity, padded host ingress, allocation residency, and image reuse pass. Separate fp16 and bf16 event packets support stage attribution only; gfx1201 variation is high. Apple and x86 need independent resident consumers; wider physical layouts and remaining W1.1 producers stay open. [Evidence](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 
-- Latest: [2026-10-09 — resident SM120 saved-LSE public forward AD](INTEGRATED_COMPILER_LOG.md#2026-10-09--resident-sm120-saved-lse-public-forward-ad)
+- Latest: [2026-10-09 — resident SM120 saved-LSE public reverse AD](INTEGRATED_COMPILER_LOG.md#2026-10-09--resident-sm120-saved-lse-public-reverse-ad)
 
 Current increment: checked rank-four broadcast saved-LSE packages and private tape execute on SM120; physical bias extents, deterministic reduction and saved-state pairing are bound through native Graph/Schedule/Tile and checked CUDA descriptors. [Evidence](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md). Broader W1.1, frontend/AD and sibling routes remain open.
 

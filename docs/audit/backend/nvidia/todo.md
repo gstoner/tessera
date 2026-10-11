@@ -5,6 +5,23 @@ owner: NVIDIA backend
 target: nvidia_sm120
 last_updated: 2026-10-09
 ---
+## SM120-RESIDENT-ATTENTION-VJP-20261009
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Public native_backward integrates compact rank-four FP32 resident roots,
+cotangent and broadcast bias with existing native MLIR AD/Schedule/Tile/
+Target/LLVM-PTX packages. Native events order private primal/cotangent
+snapshots; saved output/LSE and gradient lifetime remain checked.
+The structural certificate seals the exact target-annotated Graph, records
+zero concrete frontend executions and requires native numerical authority.
+379 focused host gates, 44 adjacent RTX5070 cases and 19 final resident reverse
+cases pass. Two source-pinned six-program packets record error 1.692e-08,
+separate forward/backward events and completed public calls.
+Resident/host wall ratios span 1.274–1.423; no speedup is claimed.
+Evidence: benchmarks/baselines/sm120_resident_attention_vjp_20261009/README.md.
+
+Parity validated for named static compact FP32 SM120 resident public reverse, including broadcast bias and cotangent ordering. Resident ordinary tuple forward, dynamic/composed AD, GPU gradient outputs and binding performance remain follow-up required.
+
 ## SM120-RESIDENT-ATTENTION-JVP-20261009
 
 Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

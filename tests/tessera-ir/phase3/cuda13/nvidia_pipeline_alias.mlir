@@ -1,3 +1,5 @@
+// REQUIRES: tessera-nvidia-backend
+//
 // RUN: tessera-opt --tessera-nvidia-pipeline %s | FileCheck %s --check-prefix=PIPE
 // RUN: tessera-opt --tessera-nvidia-pipeline-sm90 %s | FileCheck %s --check-prefix=SM90
 // RUN: tessera-opt --tessera-nvidia-pipeline-sm100 %s | FileCheck %s --check-prefix=SM100

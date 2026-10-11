@@ -54,7 +54,7 @@ heuristics. "Standalone" means runtime-independent of PyTorch / JAX / Flax
 Target hardware: NVIDIA (SM90 Hopper, SM100 Blackwell), AMD ROCm,
 x86 AMX/AVX512, Apple M-series CPU/GPU.
 
-**Execution reality (updated 2026-09-15):** the **x86 AVX-512** backend and
+**Execution reality (updated 2026-09-15; see the 2026-10-11 addendum below):** the **x86 AVX-512** backend and
 **Apple CPU (Accelerate) + GPU (MPS/MSL/MPSGraph + Metal 4 MPP `matmul2d`)**
 backends execute natively. Since 2026-09-16 the EBM Langevin loop's compiler-derived gradient runs *inside* one cooperative kernel on gfx1151, gfx1201 and sm_120 through the row-program emitter (`tessera-row-program-to-gpu`), bit-exact with the CPU JIT lane's policy — a correctness lane, not a promotion. **ROCm** executes on two RDNA parts: **gfx1151**
 (Strix Halo, RDNA 3.5, `Princess-Luna`) has broad native execution across the
@@ -84,6 +84,23 @@ records). Everything else produces IR/artifacts until a hardware-gated proof row
 says otherwise — read `docs/audit/generated/runtime_execution_matrix.md` for
 what is actually proven, never counts copied into prose (Decision #26). See
 [`docs/audit/backend/BACKEND_AUDIT.md`](docs/audit/backend/BACKEND_AUDIT.md).
+
+**Addendum 2026-10-11 — what moved since 09-27 (≈640 commits to `main`).** The
+center of gravity shifted from per-family lowering to **public native AD and
+resident tensor programs**: `tessera.autodiff.jvp` now projects explicit native
+JIT requests into an independent native Graph AD owner (`native_public_jvp.py`;
+plan `docs/audit/compiler/native_public_jvp_integration_plan.md`, sync key
+`PUBLIC-NATIVE-JVP-20261009`, state `landing`), with public native scaled JVP
+proven on gfx1201; resident SM120 attention forward/reverse/JVP run through
+native owned snapshots; two-sided SM120 tensor DAGs execute with
+compiler-owned intermediates; bounded-row **NVFP4** native programs landed on
+ROCm (gfx1201-paired proof) with NVFP4 tensor modules on the SM120 path; and public JIT accepts resident tensor roots with ordered
+native output. Every item is device-claim-limited exactly as before — gfx1201
+evidence is not gfx1151 evidence, SM120 evidence is the RTX 5070 only — and
+none closes E2E-REAL-6; read the plan's own "does not close" line. Active AD
+scope: `docs/audit/compiler/AUTODIFF_EXECUTION_PLAN.md`. The root audit
+(`MASTER_AUDIT.md`, `last_updated: 2026-09-27`) lags this paragraph; trust
+`generated/compiler_progress.md` and the integrated plan's live queue first.
 
 **"Executes natively" is a runtime claim, not a compiler-maturity claim — read
 this before scoping Apple work (reviewed 2026-07-28).** The Apple GPU op
@@ -206,6 +223,7 @@ Per-phase deliverables and the open-work priority queue live in
 | `distributed/{region,domain,shard,array,launch,moe}.py` | `Region` annotations, `Rect`/`Block`/`Cyclic`/`Replicated`, `ShardSpec`/`MeshSpec`, `DistributedArray`, `index_launch`, MoE routing. |
 | `compiler/native_{unary,storage,attention}_contract.py`, `native_attention_program.py`, `scheduled_{absolute,checkpoint,paged_kv,ssd}.py` (+ `src/compiler/programming_model/lib/Native{Absolute,Checkpoint,PagedKV,SSD,Sparse}.h`) | **Native scheduled contracts** (foundation F2/F3, 2026-09): a Schedule-IR contract serialized from the Graph op, replayed and projected into the package, so bindings/shape/layout/numeric policy come from IR rather than a Python Tile constructor. Replay is mandatory and fails closed. |
 | `compiler/native_{device,persistent}_tape.py`, `native_tape_products.py`, `native_hvp.py`, `native_{attention,storage}_jvp.py`, `src/transforms/lib/NativeTapeToGPUPass.cpp`, `src/compiler/ir/AttentionADContract.h` | **Native tapes / resident GPU AD**: the AD tape as a compiler-owned, IR-serialized, GPU-resident record with ordered status dependencies; forward + VJP packages keep saved values and gradients device-resident under a scoped lifetime (`value_and_grad`). |
+| `compiler/native_{public_jvp,scaled_jvp_call,attention_jvp_artifact,attention_jvp_runtime,attention_vjp_artifact,attention_vjp_runtime,vmap}.py`, `native_scaled_program.py`, `native_sm120_tensor_program.py`, `nvidia_tensor_{dag,lhs,rhs}.py`, `resident_nvidia_tensor.py`, `prepared_{attention_forward,attention_vjp,nvidia_lhs,nvidia_matmul,rocm_movement}.py`, `{rocm_,native_}nvfp4*.py`, `nvfp4_tensor.py`, `rocm_{mxfp4,mxfp8,fp8}_*.py` | **Public native AD + resident tensor programs (2026-10)**: public `jvp` → native Graph AD owner, scaled/continuous-product SSA through native primal and AD programs, SM120 two-sided tensor DAGs with owned intermediates, NVFP4/MXFP4/MXFP8 block-scale storage and programs on ROCm/SM120. Evidence is per-device; see the JVP integration plan. |
 | `compiler/resident_{ssd,attention,trace,gated_pool,incremental_pool,object_pool,pool_snapshot,gradient_sum,rocm_attention}.py`, `gpu_exception_heap.py`, `heap_{barrier_contract,async_receipt,finalization,protocol_model,writer_model}.py`, `native_exception_{arena,ir,producer}.py`, `apple_native_arena.py` | **Resident storage / arenas / gated heaps**: `TileBufferArenaPass` dynamic GPU arenas (RTX 5070 + gfx1151 exact checks), opt-in `ResidentGatedPool` where every metadata op passes an owner-injected gate, exception-carrying heaps. |
 | `compiler/native_driver_isolation.py`, `native_isolated_ann.py`, `native_{module,reader}_retirement.py`, `native_stream_epoch.py`, `isolated_rocm_attention.py` | **Isolated recovery**: out-of-process CUDA/HIP workers; a replacement is admitted only after confirmed predecessor death plus a re-run numerical health probe; explicit device ordinals; retryable retirement. |
 | `compiler/rocm_sparse_{logical,packing,runtime}.py`, `sparse_capture.py` | 2:4 sparse stack for gfx1201: logical row-major producer → packed values/indices → `tessera_rocm.swmmac` (public Graph sparse admission still closed). |
@@ -431,8 +449,8 @@ Per-phase deliverables and the open-work priority queue live in
 
     **Updated 2026-09-15 — the fleet has an assertions-enabled LLVM again.**
     `Tajasarus` (gfx1201 box, commissioned 2026-09-13) runs assertions-ON
-    LLVM/MLIR 23.1.1 and its assertion subprocess aborts as required; 475 active
-    lit fixtures also pass on Super-Bear under an assertions build
+    LLVM/MLIR 23.1.1 and its assertion subprocess aborts as required; the active
+    lit fixtures (2026-09 count; the tree has since grown) also pass on Super-Bear under an assertions build
     (`INTEGRATED_COMPILER_PLAN.md` foundation program). `scripts/build_assertions_llvm.sh`
     builds such a prefix anywhere and `scripts/probe_llvm_assertions.py` proves
     the assertions execute. MASTER_AUDIT now treats the assertions compiler as
@@ -809,7 +827,8 @@ an arch a test pinned on purpose stays a failure. Before this, a full sweep on
 Tajasarus reported ~1500 gfx1151-lane tests as failures; read a gfx1201 sweep's
 skip reasons, not just its counts.
 
-Two fleet-wide lit facts: `tests/tessera-ir` holds 479 fixtures (475 active),
+Two fleet-wide lit facts: `tests/tessera-ir` fixture counts move weekly (read
+the tree, not this file),
 and `scripts/check_lit_fleet_union.py` is the gate — every active fixture must
 pass in **at least one** fleet lane, since no single box configures every
 backend. A per-box count is a lane result, not the suite result.
@@ -1037,7 +1056,7 @@ ninja -C build tessera-opt
 # AVX-512/AMX kernel subdirectory on a non-x86 host (they are `immintrin.h`
 # intrinsics and cannot compile for arm64). Without the toggle the 11 phase2
 # x86 fixtures fail as "tessera_x86 Target IR is unavailable"; with it the Mac
-# lane passes every fixture it can configure (479 in the tree, 475 active;
+# lane passes every fixture it can configure (count lives in the tree;
 # the suite result is the fleet union, `scripts/check_lit_fleet_union.py`). Per Decision #19's standing lesson this Mac — the only
 # fleet host WITHOUT AVX-512 — is the only one whose green result on those
 # fixtures is evidence of host portability.
@@ -1075,7 +1094,7 @@ python3 benchmarks/run_all.py --backends x86 --output tessera_benchmarks.json
 | **Foundation program (2026-09) + MLIR/LLVM foundation survey** — owner of E2E-REAL-6/6F and the F0–F5 cuts | `docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#foundation-program`, `docs/audit/compiler/MLIR_NATIVE_FOUNDATION_SURVEY.md` |
 | **Sibling instruction file** (Codex-facing; drift gates, plan lifecycle, cross-backend protocol) | `AGENTS.md` |
 | **Forward compiler direction (north star)** — three-tier/arbiter model + coordination (Decision #28) | `docs/audit/compiler/COMPILER_THEORY_OF_OPERATION.md` (read first) + `COMPILER_REFACTOR_PLAN.md` + reassessed `OPTIMIZING_COMPILER_PLAN.md` |
-| **Compiler map + authority chain** — which doc wins when plans disagree (dashboards > COMPILER_AUDIT > INTEGRATED_COMPILER_PLAN > scoped plans > backend todos) | `docs/audit/compiler/README.md` (routes all scoped plans, incl. `GAME_THEORY_PLAN.md`, `compiler_enhancement.md` (CAKE), `FORGE_ASSESSMENT.md`, `W1_1_TYPING_DESIGN.md`; the Workstream C handoff is archived under `compiler/archive/`) |
+| **Compiler map + authority chain** — which doc wins when plans disagree (dashboards > COMPILER_AUDIT > INTEGRATED_COMPILER_PLAN > scoped plans > backend todos) | `docs/audit/compiler/README.md` (routes all scoped plans, incl. `GAME_THEORY_PLAN.md`, `compiler_enhancement.md` (CAKE), `FORGE_ASSESSMENT.md`, `W1_1_TYPING_DESIGN.md`, `AUTODIFF_EXECUTION_PLAN.md`, `native_public_jvp_integration_plan.md`; the Workstream C handoff is archived under `compiler/archive/`) |
 | **Generated dashboards** (primary count/status evidence — never hand-edit) | `docs/audit/generated/` |
 | Authoritative API naming | `docs/CANONICAL_API.md` |
 | Canonical tensor attributes & dtypes | `docs/reference/tessera_tensor_attributes.md` |

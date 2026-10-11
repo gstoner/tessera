@@ -35,6 +35,8 @@ def execute_unprepared(metadata,args):
         with program.capture(*resident[:count]) as frame:
             result=frame.jvp(*resident[count:])
             def download(value):
+                if isinstance(value,tuple):
+                    return tuple(download(item) for item in value)
                 interface=value.__cuda_array_interface__
                 view=CudaOwnedDeviceBuffer(session,int(interface["data"][0]),
                     tuple(interface["shape"]),np.float32,
@@ -65,6 +67,7 @@ class PreparedAttentionJVP:
         program=self.program
         self.count=len(program.input_indices)
         self.biased=program.pair.forward.descriptor.provenance.get("bias",False)
+        self.saved_lse=program.saved_lse
         self.names=tuple(f"primal_{i}" for i in range(self.count))+tuple(
             f"tangent_{program.input_indices[i]}" for i in program.active)
         b,hq,hkv,sq,sk,d,dv=program.pair.forward.descriptor.provenance["shape"]
@@ -75,6 +78,7 @@ class PreparedAttentionJVP:
         for i,index in enumerate(program.input_indices):frontend[index]=physical[i]
         self.shapes=tuple(frontend)+tuple(physical[i] for i in program.active)
         self.output_shape=(b,hq,sq,dv)
+        self.lse_shape=(b,hq,sq)
         self.handle=0
         self.closed=False
         self.pid=os.getpid()
@@ -99,12 +103,13 @@ class PreparedAttentionJVP:
         if lib is None:raise RuntimeError("native PTX runtime unavailable")
         self.lib=lib
         P,S,I,U=ct.c_void_p,ct.c_size_t,ct.c_int,ct.c_uint64
-        prepare=(lib.tessera_nvidia_attention_jvp_prepare_bias if self.biased
+        prepare=(lib.tessera_nvidia_attention_jvp_prepare_lse if self.saved_lse else
+                 lib.tessera_nvidia_attention_jvp_prepare_bias if self.biased
                  else lib.tessera_nvidia_attention_jvp_prepare)
         signature: list[Any] = [
             P,S,ct.c_char_p,P,S,ct.c_char_p,ct.c_char_p,ct.c_char_p,
             ct.POINTER(ct.c_int64)] + (
-                [ct.POINTER(ct.c_int64)] if self.biased else []) + [
+                [ct.POINTER(ct.c_int64)] if self.biased or self.saved_lse else []) + [
             ct.POINTER(I),ct.POINTER(I),S,ct.POINTER(U)]
         prepare.argtypes=signature
         prepare.restype=I
@@ -124,7 +129,7 @@ class PreparedAttentionJVP:
         mapping=(I*self.count)(*program.input_indices)
         roles=(I*len(program.active))(*program.active)
         handle=U()
-        bias=((ct.c_int64*4)(*self.bias_shape),) if self.biased else ()
+        bias=(((ct.c_int64*4)(*self.bias_shape) if self.biased else None),) if self.biased or self.saved_lse else ()
         with tempfile.TemporaryDirectory(prefix="tessera-prepared-attention-sizer-") as directory:
             path=Path(directory)/"sizer.so";path.write_bytes(program.tangent.host_library)
             self._check(prepare(
@@ -163,7 +168,8 @@ class PreparedAttentionJVP:
                     raise ValueError("attention JVP host storage disagrees with native contract")
                 values=tuple(np.ascontiguousarray(x) for x in values)
             if not self.handle:self._prepare()
-            outputs=tuple(np.empty(self.output_shape,np.float32) for _ in range(2))
+            output_shapes=(self.output_shape,self.lse_shape,self.output_shape,self.lse_shape) if self.saved_lse else (self.output_shape,)*2
+            outputs=tuple(np.empty(shape,np.float32) for shape in output_shapes)
             if resident:
                 import math
                 interfaces=tuple(value.__cuda_array_interface__ for value in values)
@@ -173,27 +179,36 @@ class PreparedAttentionJVP:
             else:
                 pointers=(ct.c_void_p*len(values))(*(x.ctypes.data for x in values))
                 lengths=(ct.c_size_t*len(values))(*(x.nbytes for x in values))
-            destinations=(ct.c_void_p*2)(*(x.ctypes.data for x in outputs))
-            sizes=(ct.c_size_t*2)(*(x.nbytes for x in outputs))
+            destinations=(ct.c_void_p*len(outputs))(*(x.ctypes.data for x in outputs))
+            sizes=(ct.c_size_t*len(outputs))(*(x.nbytes for x in outputs))
             times=(ct.c_float*2)()
             if resident:
                 lib=self._library()
                 try:
-                    invoke=lib.tessera_nvidia_attention_jvp_invoke_resident_ordered
+                    invoke=(lib.tessera_nvidia_attention_jvp_invoke_lse_resident_ordered if self.saved_lse else
+                            lib.tessera_nvidia_attention_jvp_invoke_resident_ordered)
                 except AttributeError as exc:
                     raise RuntimeError("native attention runtime lacks ordered resident JVP ABI") from exc
-                invoke.argtypes=[
+                resident_signature: list[Any] = [
                     ct.c_uint64,ct.POINTER(ct.c_void_p),ct.POINTER(ct.c_size_t),ct.c_size_t,
                     ct.POINTER(ct.c_uint64),ct.c_size_t,ct.POINTER(ct.c_void_p),
-                    ct.POINTER(ct.c_size_t),ct.POINTER(ct.c_float)]
+                    ct.POINTER(ct.c_size_t)] + ([ct.c_size_t] if self.saved_lse else []) + [ct.POINTER(ct.c_float)]
+                invoke.argtypes=resident_signature
                 invoke.restype=ct.c_int
                 self._check(invoke(self.handle,pointers,lengths,len(values),streams,len(values),
-                                   destinations,sizes,times))
+                                   destinations,sizes,*((len(outputs),) if self.saved_lse else ()),times))
             else:
-                self._check(self._library().tessera_nvidia_attention_jvp_invoke(
-                    self.handle,pointers,lengths,len(values),destinations,sizes,times))
+                invoke=(self._library().tessera_nvidia_attention_jvp_invoke_lse if self.saved_lse else
+                        self._library().tessera_nvidia_attention_jvp_invoke)
+                host_signature: list[Any] = [ct.c_uint64,ct.POINTER(ct.c_void_p),ct.POINTER(ct.c_size_t),
+                                 ct.c_size_t,ct.POINTER(ct.c_void_p),ct.POINTER(ct.c_size_t)] + (
+                                 [ct.c_size_t] if self.saved_lse else []) + [ct.POINTER(ct.c_float)]
+                invoke.argtypes=host_signature
+                invoke.restype=ct.c_int
+                self._check(invoke(self.handle,pointers,lengths,len(values),destinations,sizes,
+                                   *((len(outputs),) if self.saved_lse else ()),times))
             self.last_device_ms=tuple(times)
-            return outputs
+            return ((outputs[0],outputs[1]),(outputs[2],outputs[3])) if self.saved_lse else outputs
 
     def close(self):
         if self.pid!=os.getpid():raise ValueError("prepared attention cannot cross fork")

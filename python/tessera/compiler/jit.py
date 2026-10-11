@@ -575,6 +575,7 @@ class JitFn:
         self._native_prepared_movement_calls: Dict[tuple, Any] = {}
         self._native_prepared_matmul_calls: Dict[tuple, Any] = {}
         self._native_prepared_attention_calls: Dict[tuple, Any] = {}
+        self._native_public_jvp_owners: Dict[tuple, Any] = {}
         self._native_descriptor_last_receipt: Any = None
         self._nvidia_rhs_call_signature = (
             inspect.signature(fn) if normalize_target_kind(target) == "nvidia_sm120" else None
@@ -939,6 +940,10 @@ class JitFn:
             for call in calls.values():
                 call.close()
             calls.clear()
+
+        for _, owner in self._native_public_jvp_owners.values():
+            owner.close_native_storage()
+        self._native_public_jvp_owners.clear()
 
         native_pair = getattr(self, "_native_storage_pair", None)
         if native_pair is not None:

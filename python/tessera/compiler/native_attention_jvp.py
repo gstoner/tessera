@@ -92,11 +92,15 @@ def materialize_generated(graph_source, dims, scale, causal, *, compiler, llvm_b
     # AD's portable JSON sentinel is -1; native checkpoint policy retains
     # MLIR's kDynamic. Convert only at this adapter boundary.
     portable=lambda shape:[-1 if d==DYNAMIC_DIM else d for d in shape]
-    expected_schema=(3 if shape_bounds else 1)+int(biased)
-    if (contract.get('schema')!=expected_schema or
+    saved_lse = contract.get('saved_lse', False)
+    if type(saved_lse) is not bool:
+        raise ValueError('automatic JVP saved-LSE output selection is invalid')
+    # 1/2: static O; 3/4: bounded O; 5: bounded O+LSE; 6: static O+LSE.
+    expected_schema = (5 if shape_bounds else 6) if saved_lse else (3 if shape_bounds else 1)+int(biased)
+    if (type(contract.get('schema')) is not int or contract.get('schema')!=expected_schema or
             contract.get('bias_shape',[])!=portable(bias_shape) or contract.get('dims')!=portable(dims) or
             contract.get('shape_bounds',[])!=list(shape_bounds) or
-            (bool(shape_bounds) and contract.get('shape_policy')!='bounded_sequences_v1') or
+            contract.get('shape_policy')!=('bounded_sequences_v1' if shape_bounds else None) or
             contract.get('causal') is not causal or
             struct.pack('f',contract['scale'])!=struct.pack('f',scale)):
         raise ValueError('automatic JVP policy differs from the resident forward generation')

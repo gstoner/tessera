@@ -314,7 +314,8 @@ def CheckpointJVPOp : Op<Tessera_Attn_Dialect, "checkpoint_jvp", [Pure]> {
       AnyRankedTensor:$d_query, AnyRankedTensor:$d_key, AnyRankedTensor:$d_value,
       Variadic<AnyRankedTensor>:$bias_operands,
       F32Attr:$scale, BoolAttr:$causal);
-  let results = (outs AnyRankedTensor:$d_output);
+  let results = (outs AnyRankedTensor:$d_output,
+                      Optional<AnyRankedTensor>:$d_row_lse);
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }

@@ -5,6 +5,26 @@ owner: Apple backend
 target: apple_gpu
 last_updated: 2026-10-09
 ---
+
+## PUBLIC-NATIVE-JVP-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Public JVP projects native JIT intent into an independent Graph AD owner;
+caller graph/constraints and active input roles are preserved. Typed paired
+O/LSE derivatives now traverse Graph/Schedule/Tile/LLVM-PTX with checked
+C++ ownership of O, LSE, dO and dLSE; value-only dLSE is exact zero.
+26 named RTX5070 public cases pass; the combined adjacent resident lane
+passes 84 cases. Six production-compiler contract cases, 106 adjacent JVP
+unit cases and 312 diagnostic/pass/public-transform gates pass.
+Two fresh six-profile packets show maximum absolute error 6.167596078299198e-7;
+resident/host completed-call ratios are 1.187–1.300, so no speedup is claimed.
+The parent full unit suite finished with two existing scaled_matmul batching
+and transpose closure failures; no full CI pass is claimed.
+Evidence: benchmarks/baselines/public_saved_lse_jvp_20261009/README.md.
+Follow-up required: Metal public native JVP and saved-LSE products need exact Mac proof. Reference certificates and request mocks do not establish Apple parity.
+
+Plan: docs/audit/compiler/native_public_jvp_integration_plan.md.
+
 ## SM120-RESIDENT-ATTENTION-FORWARD-20261009
 
 Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
@@ -14161,3 +14181,8 @@ Not applicable to Metal physical scheduling: the native selector is
 explicitly SM120-only. Host compiler parity keeps Apple softmax policy serial.
 No Apple device proof is transferred. Existing compiler-owned JIT execution
 and wider AD/composition obligations remain required follow-ups.
+
+## ATTENTION-JVP-SCHEMA-RECONCILE-20261011
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Not applicable to apple execution: these schema IDs describe the SM120 attention JVP contract. Existing apple target and runtime ABIs are unchanged; no device parity is inferred.

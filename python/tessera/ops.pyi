@@ -230,6 +230,7 @@ def flash_attn(
     params: Optional[FlashParams] = ...,
     deterministic: Optional[Determinism] = ...,
     attn_bias: Optional[Tensor] = ...,
+    bias: Optional[Tensor] = ...,
     lse_checkpoint: None = ...,
 ) -> Tensor: ...
 @overload
@@ -246,6 +247,7 @@ def flash_attn(
     params: Optional[FlashParams] = ...,
     deterministic: Optional[Determinism] = ...,
     attn_bias: Optional[Tensor] = ...,
+    bias: Optional[Tensor] = ...,
     lse_checkpoint: Literal["saved"],
 ) -> Tuple[Tensor, Tensor]: ...
 def varlen_sdpa(

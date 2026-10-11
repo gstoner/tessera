@@ -218,3 +218,7 @@ AD/workload status excerpts are archived; they are not additional queues.
 ## Current five-slice evidence
 
 `FIVE_SLICE_STATUS_20261007.md` records the scoped native boundaries, owning-device receipts and incomplete delivery gates after PR 892. It does not declare general backend closure.
+
+## Public native JVP integration
+
+- `native_public_jvp_integration_plan.md`: [scoped acceptance plan](native_public_jvp_integration_plan.md) for public native Graph AD ownership and saved-LSE JVP integration; global order remains in the integrated plan.

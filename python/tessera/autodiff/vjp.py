@@ -1430,7 +1430,7 @@ def vjp_linear_attn_state(
 @_vjp("flash_attn")
 def vjp_flash_attn(dout, Q, K, V, *bias_positional, scale=None, causal=False,
                    dropout_p=0.0, seed=None, attn_bias=None, lse_checkpoint=None,
-                   _output_index=0, **_):
+                   _output_index=0, bias=None, **_):
     """Adjoint of standard scaled-dot-product attention (numpy reference path).
 
     Forward: ``S = scale * QK^T (+ attn_bias);  P = softmax(S);  O = PV``.
@@ -1470,7 +1470,13 @@ def vjp_flash_attn(dout, Q, K, V, *bias_positional, scale=None, causal=False,
             "seed=... (with deterministic=True) to make the mask replayable."
         )
 
+    if bias is not None:
+        if attn_bias is not None:
+            raise ValueError("flash_attn accepts only one of bias and attn_bias")
+        attn_bias = bias
     bias_pos = bias_positional[0] if bias_positional else None
+    if bias_pos is not None and attn_bias is not None:
+        raise ValueError("attention VJP bias must have one operand source")
     bias = bias_pos if bias_pos is not None else attn_bias
 
     d = Q.shape[-1]

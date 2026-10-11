@@ -585,7 +585,8 @@ class AutodiffForwardPass
         return signalPassFailure();
       }
       auto fn=forwards.front();
-      if (!fn.getBody().hasOneBlock() || (fn.getNumArguments()!=3 && fn.getNumArguments()!=4) || fn.getNumResults()!=1 ||
+      if (!fn.getBody().hasOneBlock() || (fn.getNumArguments()!=3 && fn.getNumArguments()!=4) ||
+          (fn.getNumResults()!=1 && fn.getNumResults()!=2) ||
           fn.getBody().front().getOperations().size()!=2) {
         fn.emitError("attention JVP export requires one direct attention operation");
         return signalPassFailure();
@@ -981,6 +982,12 @@ class AutodiffForwardPass
         contract["schema"] = bias ? 4 : 3;
         contract["shape_bounds"] = std::move(capacities);
         contract["shape_policy"] = "bounded_sequences_v1";
+      }
+      if (op->getNumResults() == 2) {
+        // Preserve 1/2 static and 3/4 bounded output-only contracts.
+        // Saved-LSE schema 5 is specifically bounded; 6 is static.
+        contract["schema"] = module->hasAttr("tessera.attention_shape_bounds") ? 5 : 6;
+        contract["saved_lse"] = true;
       }
       std::string text; llvm::raw_string_ostream os(text); os<<llvm::json::Value(std::move(contract)); os.flush();
       module->setAttr("tessera.autodiff.attention_jvp_contract",mlir::StringAttr::get(&getContext(),text));

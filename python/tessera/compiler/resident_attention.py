@@ -527,8 +527,11 @@ class ResidentAttentionTape:
                            shape_bounds=self._shape_bounds))
             if f'tessera.attention_checkpoint_identity = "{self.contract_digest}"' not in package.arena_ir:
                 raise ValueError("resident JVP product differs from its captured forward generation")
+            from .native_storage_contract import read_tensor_contract
+            manifest = read_tensor_contract(package)
+            self._jvp_saved_lse = any(row.get("name") == "dlse" for row in manifest["arguments"])
             names = ('q','k','v','primal','lse','dq','dk','dv') + (
-                ('bias','dbias') if self._has_bias else ()) + ('tangent','scratch')
+                ('bias','dbias') if self._has_bias else ()) + ('tangent',) + (('dlse',) if self._jvp_saved_lse else ()) + ('scratch',)
             if self._shape_bounds:
                 names+=('query_size','key_size')
             signature = inspect.Signature([inspect.Parameter(n,inspect.Parameter.POSITIONAL_ONLY) for n in names])
@@ -551,12 +554,13 @@ class ResidentAttentionTape:
             try:
                 result = _Buffer(self,self.shapes[3])
                 extra=(self._bias,dbias) if self._has_bias else ()
+                lse_result = (_Buffer(self,self.shapes[4]),) if getattr(self,"_jvp_saved_lse",False) else ()
                 scalars=(self.dims[3],self.dims[4]) if self._shape_bounds else ()
-                self._jvp_binding(*self._saved,dq,dk,dv,*extra,result,128,*scalars)
+                self._jvp_binding(*self._saved,dq,dk,dv,*extra,result,*lse_result,128,*scalars)
             except BaseException:
                 self._release(start)
                 raise
-            return _ReadOnly(result)
+            return (_ReadOnly(result), _ReadOnly(lse_result[0])) if lse_result else _ReadOnly(result)
 
     def _release(self, start=0):
         self.check(self.sync())

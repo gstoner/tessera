@@ -34,7 +34,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `batching_rule` | mixed | 523 | 524 | 1 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
 | `transpose_rule` | mixed | 523 | 524 | 1 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
 | `sharding_rule` | mixed | 463 | 524 | 61 | primitive contract axis; open means partial or planned, not necessarily missing API support | Prioritize model-facing collectives, layout, memory, and optimizer rows. |
-| `lowering_rule` | mixed | 521 | 524 | 3 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
+| `lowering_rule` | mixed | 421 | 524 | 103 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
 | `backend_kernel` | mixed | 100 | 524 | 424 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. |
 
 ## Compiler Integration Evidence

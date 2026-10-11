@@ -17,7 +17,7 @@
 | `batching_rule` | 1 | 523 |
 | `transpose_rule` | 1 | 523 |
 | `sharding_rule` | 61 | 463 |
-| `lowering_rule` | 3 | 521 |
+| `lowering_rule` | 103 | 421 |
 | `backend_kernel` | 424 | 100 |
 
 ## Backend Proof By Target
@@ -46,55 +46,55 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S2 | `reduction` | 16 | — | — | — | — | 16 |
 | S2 | `comparison` | 6 | — | — | — | — | 6 |
 | S2 | `numeric_helper` | 15 | — | — | — | — | 15 |
-| S5 | `control_flow` | 7 | — | — | — | — | — |
-| S7 | `attention` | 30 | — | — | 16 | 1 | 30 |
-| S7 | `position_encoding` | 3 | — | — | — | — | 3 |
-| S7 | `normalization` | 12 | — | — | — | — | 12 |
+| S5 | `control_flow` | 7 | — | — | — | 3 | — |
+| S7 | `attention` | 30 | — | — | 16 | 3 | 30 |
+| S7 | `position_encoding` | 3 | — | — | — | 1 | 3 |
+| S7 | `normalization` | 12 | — | — | — | 1 | 12 |
 | S7 | `memory` | 3 | — | — | — | — | 1 |
 | S7 | `geometric_algebra` | 17 | — | — | — | — | 17 |
-| S10 | `optimizer` | 5 | — | — | — | — | 4 |
+| S10 | `optimizer` | 5 | — | — | — | 3 | 4 |
 | S10 | `schedule` | 8 | — | — | — | — | — |
-| S10 | `grad_transform` | 7 | — | — | — | — | — |
-| S11 | `loss` | 29 | — | — | — | — | 29 |
+| S10 | `grad_transform` | 7 | — | — | — | 7 | — |
+| S11 | `loss` | 29 | — | — | — | 9 | 29 |
 | S11 | `rl_loss` | 4 | — | — | — | — | 4 |
-| M6 | `ebm` | 15 | — | — | 7 | — | 15 |
+| M6 | `ebm` | 15 | — | — | 7 | 2 | 15 |
 | S15 | `data` | 11 | — | — | — | — | — |
 | S15 | `tokenizer` | 5 | — | — | — | — | — |
 | other | `acceptance_verification` | 4 | — | — | — | — | 4 |
 | other | `aot` | 6 | — | — | — | — | — |
-| other | `collective` | 10 | — | — | — | — | 10 |
+| other | `collective` | 10 | — | — | — | 6 | 10 |
 | other | `conformance` | 4 | — | — | — | — | — |
 | other | `contraction` | 4 | — | — | — | — | 4 |
-| other | `diffusion` | 2 | — | — | — | — | 2 |
+| other | `diffusion` | 2 | — | — | — | 2 | 2 |
 | other | `diffusion_schedule` | 2 | — | — | — | — | — |
 | other | `elementwise` | 51 | — | — | — | — | 51 |
-| other | `extension` | 6 | — | — | — | — | — |
+| other | `extension` | 6 | — | — | — | 6 | — |
 | other | `functional_optimizer_step` | 11 | — | — | — | — | 11 |
 | other | `fused_epilogue` | 1 | — | — | — | — | 1 |
-| other | `indexing` | 15 | — | — | — | — | 15 |
-| other | `layout_transform` | 19 | — | — | — | — | 18 |
+| other | `indexing` | 15 | — | — | — | 1 | 15 |
+| other | `layout_transform` | 19 | — | — | — | 3 | 18 |
 | other | `linalg_decomposition` | 5 | — | — | 5 | — | 5 |
 | other | `linalg_function` | 5 | — | — | 5 | — | 5 |
 | other | `linalg_multilinear` | 2 | — | — | 2 | — | 2 |
 | other | `linalg_solver` | 3 | — | — | 3 | — | 3 |
 | other | `logical` | 8 | — | — | — | — | 8 |
 | other | `loop_nest` | 13 | 1 | 1 | 2 | — | 13 |
-| other | `model_layer` | 4 | — | — | — | — | 4 |
+| other | `model_layer` | 4 | — | — | — | 3 | 4 |
 | other | `moe` | 1 | — | — | 1 | — | 1 |
 | other | `moe_transport` | 2 | — | — | 2 | — | 2 |
-| other | `numerics` | 1 | — | — | — | — | — |
-| other | `pooling` | 4 | — | — | — | — | 4 |
+| other | `numerics` | 1 | — | — | — | 1 | — |
+| other | `pooling` | 4 | — | — | — | 4 | 4 |
 | other | `projection` | 1 | — | — | — | — | 1 |
-| other | `quantization` | 8 | — | — | — | — | 7 |
+| other | `quantization` | 8 | — | — | — | 6 | 7 |
 | other | `quantize` | 9 | — | — | — | — | 9 |
 | other | `random_mask` | 1 | — | — | — | — | 1 |
 | other | `random_source` | 4 | — | — | — | — | 4 |
-| other | `recurrent` | 3 | — | — | — | — | 3 |
-| other | `rng` | 18 | — | — | — | — | 14 |
-| other | `rotary_embedding` | 2 | — | — | — | — | 2 |
+| other | `recurrent` | 3 | — | — | — | 3 | 3 |
+| other | `rng` | 18 | — | — | — | 18 | 14 |
+| other | `rotary_embedding` | 2 | — | — | — | 1 | 2 |
 | other | `segment_reduce` | 2 | — | — | — | — | 2 |
 | other | `serialization` | 6 | — | — | — | — | — |
-| other | `sharding` | 3 | — | — | — | — | 3 |
+| other | `sharding` | 3 | — | — | — | 3 | 3 |
 | other | `sort` | 3 | — | — | — | — | 3 |
 | other | `sparse` | 4 | — | — | 1 | — | 4 |
 | other | `spectral` | 14 | — | — | 14 | — | 14 |
@@ -103,8 +103,8 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | other | `state_tree` | 10 | — | — | — | — | — |
 | other | `state_update` | 6 | — | — | 2 | — | 6 |
 | other | `stencil` | 8 | — | — | — | — | 8 |
-| other | `transform` | 11 | — | — | — | — | — |
-| other | `vision` | 4 | — | — | — | — | 4 |
+| other | `transform` | 11 | — | — | — | 11 | — |
+| other | `vision` | 4 | — | — | — | 4 | 4 |
 
 ## Roll-up by sprint
 
@@ -121,6 +121,6 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 
 ## Closure trajectory
 
-* `lowering_rule` is closed project-wide today (0 open across all categories) — the multi-axis category-based hardening pass from Sprint A1+ landed this.
+* `lowering_rule` has 103 open rows. 100 are Graph-less Python references that used to read `complete` off a category or per-name rule; with no Graph IR op there is nothing for a decomposition to be consumed by, so each row records `metadata.lowering_rule_reason` (GRAPHLESS-LOWERING-1, 2026-10-11). The rest are named exceptions in `test_s_series_status_dashboard.py`.
 * `backend_kernel` is a conservative registry-level compatibility axis, not the architecture completion signal.  Read **Backend Proof By Target** for ROCm/x86/Apple/NVIDIA status.
 * `batching_rule` / `transpose_rule` / `sharding_rule` are the closable axes today.  A category-by-category promotion sprint should focus on the rows above with `priority ≤ 50`.

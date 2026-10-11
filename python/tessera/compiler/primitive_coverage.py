@@ -2697,10 +2697,105 @@ _BACKEND_KERNEL_NOT_APPLICABLE_BY_NAME: frozenset[str] = frozenset({
 })
 
 
-def _apply_category_overrides(
-    contract: dict[str, str], category: str | None,
+#: Graph-less public primitives the tracer nonetheless lowers to a Graph IR op.
+#: Each value is the op the named ``trace.Tracer.record_*`` method appends;
+#: `test_graphless_lowering_rule_gate.py` traces every entry and asserts it.
+#: These rows carry ``graph_name=None`` because their Graph op is a region
+#: container emitted by the tracer, not an `op_catalog` OpSpec.
+_TRACED_GRAPH_LOWERINGS: dict[str, str] = {
+    "fori_loop":  "tessera.control_for",    # Tracer.record_for_loop
+    "cond":       "tessera.control_if",     # Tracer.record_cond
+    "while_loop": "tessera.control_while",  # Tracer.record_while
+    "scan":       "tessera.control_scan",   # Tracer.record_scan
+}
+
+#: Graph-less GA/EBM rows whose Graph-level op lives in a domain dialect rather
+#: than `op_catalog` (`src/solvers/{ebm,clifford}/lib/Dialect/*/*Ops.td`).  The
+#: value is the ODS op mnemonic plus, where one op serves several rows, the
+#: semantic attribute that selects this row.  `test_graphless_lowering_rule_gate`
+#: asserts each op is declared in its ODS file.  The ``*_langevin_sample``
+#: drivers are deliberately absent: they are loops over ``langevin_step`` with
+#: no op of their own.
+_DIALECT_GRAPH_LOWERINGS: dict[str, str] = {
+    "clifford_integral":          "tessera_clifford.integral",
+    "ebm_energy":                 "tessera_ebm.energy",
+    "ebm_decode_init":            "tessera_ebm.decode_init",
+    "ebm_partition_exact":        'tessera_ebm.partition_z method="exact"',
+    "ebm_partition_monte_carlo":  'tessera_ebm.partition_z method="monte_carlo"',
+    "ebm_partition_ais":          'tessera_ebm.partition_z method="annealed"',
+    "ebm_sphere_langevin_step":   'tessera_ebm.langevin_step manifold="sphere"',
+    "ebm_bivector_langevin_step": 'tessera_ebm.langevin_step manifold="bivector"',
+}
+
+#: Recorded on a row's ``metadata["lowering_rule_reason"]`` when the row has no
+#: Graph IR op to lower to and its ``lowering_rule`` is therefore left open.
+GRAPHLESS_LOWERING_REASON = (
+    "no Graph IR op: graph_name is None, no op_catalog OpSpec, no traced Graph "
+    "op and no domain-dialect op (_TRACED_GRAPH_LOWERINGS / "
+    "_DIALECT_GRAPH_LOWERINGS); a decomposition claim "
+    "has no consumer (Decision #29), so the Python reference does not lower"
+)
+
+
+def _has_graph_lowering(name: str, graph_name: str | None) -> bool:
+    """Whether a row has a Graph IR op a ``lowering_rule`` claim can refer to.
+
+    Evidence, in order: the row's own ``graph_name``; an `op_catalog` OpSpec
+    under the public name (the GA4/EBM `_planned` rows skip the OpSpec import
+    but the op exists); a tracer emission recorded in
+    ``_TRACED_GRAPH_LOWERINGS``; or a domain-dialect op recorded in
+    ``_DIALECT_GRAPH_LOWERINGS``.
+    """
+    if graph_name is not None:
+        return True
+    from .op_catalog import graph_name_for
+
+    if graph_name_for(name) is not None:
+        return True
+    return name in _TRACED_GRAPH_LOWERINGS or name in _DIALECT_GRAPH_LOWERINGS
+
+
+def _record_graphless_lowering(
+    metadata: dict[str, object], contract: dict[str, str], withheld: str | None,
 ) -> None:
+    """Settle a Graph-less row's ``lowering_rule`` and record why.
+
+    Only when the final status is still open: a per-name override that later
+    closes the axis carries its own justification.  A row whose Graph IR
+    disposition is ``runtime_only`` (owned by a host/runtime subsystem by
+    design, e.g. ``memory_read``) closes as the terminal ``host_runtime``
+    instead -- that is the same statement on the contract axis.  Otherwise the
+    row stays open with the reason, and the sibling metadata claim
+    ``graph_ir_lowering="registered"`` ("a dedicated Graph IR op exists, or it
+    decomposes through catalog ops") -- the same overstatement one field over
+    -- moves to ``stub_required``.
+    """
+    if withheld is None or contract.get("lowering_rule") not in {"planned", "partial"}:
+        return
+    if metadata.get("graph_ir_lowering") == "runtime_only":
+        contract["lowering_rule"] = "not_applicable"  # -> host_runtime
+        return
+    metadata["lowering_rule_reason"] = withheld
+    if metadata.get("graph_ir_lowering") == "registered":
+        metadata["graph_ir_lowering"] = "stub_required"
+
+
+def _apply_category_overrides(
+    contract: dict[str, str], category: str | None, *, has_graph_lowering: bool,
+) -> str | None:
     """In-place promote each axis based on `category` and per-axis tables.
+
+    Returns ``GRAPHLESS_LOWERING_REASON`` when ``has_graph_lowering`` is false,
+    else ``None``; the caller records it on the row if ``lowering_rule`` is
+    still open once every override has run.
+
+    ``lowering_rule`` (2026-10-11, GRAPHLESS-LOWERING-1): the category table
+    says each family "decomposes" to catalog ops, but a row with no Graph IR
+    op has nothing that decomposition is consumed by.  Measured: 132
+    ``graph_name=None`` rows read ``complete`` off the category alone, and 101
+    of them had no Graph op by any route (e.g. ``wasserstein_distance``, a
+    numpy ``np.sort`` reference); ``pipeline_gates`` legality admitted them.
+    The keyword is required so every call site decides.
 
     Override rules per axis:
       sharding_rule / batching_rule / transpose_rule / lowering_rule  →
@@ -2710,7 +2805,7 @@ def _apply_category_overrides(
       Never downgrade `complete` or `not_applicable`.
     """
     if category is None:
-        return
+        return None
 
     def _promote(axis: str, table: dict[str, str], overridable: frozenset[str]) -> None:
         if contract.get(axis) not in overridable:
@@ -2735,7 +2830,9 @@ def _apply_category_overrides(
     # transpose_rule (2026-05-22): widened in lockstep — the
     # S-series sprint #2 (transpose) follows the same shape as #1.
     _promote("transpose_rule", _TRANSPOSE_RULE_BY_CATEGORY, frozenset({"planned", "partial"}))
-    _promote("lowering_rule",  _LOWERING_RULE_BY_CATEGORY,  frozenset({"planned", "partial"}))
+    withheld = None if has_graph_lowering else GRAPHLESS_LOWERING_REASON
+    if has_graph_lowering or _LOWERING_RULE_BY_CATEGORY.get(category) != "complete":
+        _promote("lowering_rule", _LOWERING_RULE_BY_CATEGORY, frozenset({"planned", "partial"}))
     _promote("backend_kernel", _BACKEND_KERNEL_BY_CATEGORY, frozenset({"planned"}))
     # Partial-and-planned axes (semantic axes start at partial by default)
     semantic_overridable = frozenset({"planned", "partial"})
@@ -2752,6 +2849,7 @@ def _apply_category_overrides(
             contract["vjp"] = "not_applicable"
         if contract.get("jvp") == "planned":
             contract["jvp"] = "not_applicable"
+    return withheld
 
 
 def _apply_per_name_overrides(contract: dict[str, str], name: str) -> None:
@@ -2836,7 +2934,10 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         # Apply multi-axis category classifier before per-name overrides
         # so explicit overrides always win over the category default.
         category = _EXISTING_CATEGORIES.get(name, spec.lowering)
-        _apply_category_overrides(contract_status, category)
+        _apply_category_overrides(
+            contract_status, category,
+            has_graph_lowering=_has_graph_lowering(name, spec.graph_name),
+        )
         _apply_effect_overrides(contract_status, spec.effect)
         _apply_per_name_overrides(contract_status, name)
         contract_status.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
@@ -2923,7 +3024,8 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         contract_status = _existing_contracts(
             effect, vjp_complete=has_vjp, jvp_complete=has_jvp
         )
-        _apply_category_overrides(contract_status, lowering)
+        # Supplemental rows are stamped graph_name=f"tessera.{name}" below.
+        _apply_category_overrides(contract_status, lowering, has_graph_lowering=True)
         _apply_effect_overrides(contract_status, effect)
         _apply_per_name_overrides(contract_status, name)
         contract_status.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
@@ -3261,11 +3363,12 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "score_matching_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         "vlb_loss": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete"},
         # EDM preconditioning / σ-weight: closed-form elementwise scalings that
-        # decompose through sqrt/log/div (which lower + transpose) — so
-        # transpose_rule / lowering_rule close `complete`, matching the
-        # scalar-math/loss convention (cf. softplus, mse_loss).
-        "edm_precondition": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete", "transpose_rule": "complete", "lowering_rule": "complete"},
-        "edm_loss_weight": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete", "transpose_rule": "complete", "lowering_rule": "complete"},
+        # decompose through sqrt/log/div (which transpose) — so transpose_rule
+        # closes `complete`. lowering_rule does NOT (GRAPHLESS-LOWERING-1,
+        # 2026-10-11): neither has a Graph op, and the `tessera.edm_*`
+        # structured-compute lanes dispatch straight back to this reference.
+        "edm_precondition": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete", "transpose_rule": "complete"},
+        "edm_loss_weight": {"math_semantics": "complete", "shape_rule": "complete", "dtype_layout_rule": "complete", "transpose_rule": "complete"},
         # Noise-schedule partition / discretization are host-side config that
         # emit σ boundaries — not tensors in the autodiff/SPMD data path, so the
         # differentiation and sharding axes are not_applicable by construction.
@@ -3344,7 +3447,9 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         # Apply the multi-axis category classifier (sharding_rule / batching /
         # transpose / math / shape / dtype / lowering / tests); per-name
         # overrides in `contract_overrides` (next line) still win.
-        _apply_category_overrides(contract, category)
+        lowering_withheld = _apply_category_overrides(
+            contract, category, has_graph_lowering=_has_graph_lowering(name, None),
+        )
         _apply_per_name_overrides(contract, name)
         contract.update(contract_overrides.get(name, {}))
         contract.update(_EXISTING_CONTRACT_OVERRIDES.get(name, {}))
@@ -3364,6 +3469,7 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         # Per-name override wins over category default.
         if name in _GRAPH_IR_LOWERING_OVERRIDES:
             metadata["graph_ir_lowering"] = _GRAPH_IR_LOWERING_OVERRIDES[name]
+        _record_graphless_lowering(metadata, contract, lowering_withheld)
         if category == "conformance":
             metadata["model_manifest"] = "examples.conformance.s8_tiny_models.manifest"
         if all(
@@ -4079,7 +4185,10 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
             promoted["vjp"] = "complete"
         if _existing_op_has_jvp(entry.name, registered_jvps) and promoted.get("jvp") == "planned":
             promoted["jvp"] = "complete"
-        _apply_category_overrides(promoted, entry.category)
+        lowering_withheld = _apply_category_overrides(
+            promoted, entry.category,
+            has_graph_lowering=_has_graph_lowering(entry.name, entry.graph_name),
+        )
         _apply_effect_overrides(promoted, entry.effect or "pure")
         _apply_per_name_overrides(promoted, entry.name)
         promoted.update(_EXISTING_CONTRACT_OVERRIDES.get(entry.name, {}))
@@ -4097,6 +4206,7 @@ def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
         new_metadata = dict(entry.metadata)
         if category_gir and "graph_ir_lowering" not in new_metadata:
             new_metadata["graph_ir_lowering"] = category_gir
+        _record_graphless_lowering(new_metadata, promoted, lowering_withheld)
         metadata_changed = new_metadata != dict(entry.metadata)
         if promoted != entry.contract_status or metadata_changed:
             entry = PrimitiveCoverage(

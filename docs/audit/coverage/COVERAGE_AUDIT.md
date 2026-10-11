@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-04
+last_updated: 2026-10-11
 audit_role: theme
 ---
 
@@ -78,6 +78,58 @@ operation has meaningful value semantics. Add performance packets only for
 native/fused paths whose selection or promotion depends on timing. Host-only
 metadata constructors, serialization, and structural transforms should not be
 forced into artificial kernel benchmarks.
+
+**Graph-less rows no longer claim `lowering_rule: complete`
+(GRAPHLESS-LOWERING-1, 2026-10-11).** The category table
+`_LOWERING_RULE_BY_CATEGORY` stamped `complete` on any family it said
+"decomposes" to catalog ops. Measured on the Mac before the fix: 134 of 524
+rows had `graph_name=None` and `lowering_rule=complete`, 132 of them from the
+category table alone (e.g. `wasserstein_distance`, an `np.sort` numpy
+reference no tracer sees; `ctc_loss`, `triplet_loss`, `vmap`, `switch`,
+`max_pool`, the `rng_*` key/sampler helpers). `pipeline_gates` legality reads
+this axis and admitted them. `_apply_category_overrides` now takes a required
+`has_graph_lowering`, and only promotes `lowering_rule` to `complete` when the
+row has a Graph op: its own `graph_name`, an `op_catalog` OpSpec (the GA4/EBM
+`_planned` rows), a tracer emission (`_TRACED_GRAPH_LOWERINGS`:
+`fori_loop`/`cond`/`while_loop`/`scan` → `tessera.control_*`), or a
+domain-dialect op (`_DIALECT_GRAPH_LOWERINGS`: `tessera_ebm.energy` /
+`decode_init` / `partition_z` / `langevin_step`, `tessera_clifford.integral`).
+Each table entry is checked against the tracer or the ODS file by
+`test_graphless_lowering_rule_gate.py`. **100 rows reopened** (94 `partial`, 6
+`planned`); each carries `metadata.lowering_rule_reason`, and its
+`graph_ir_lowering` moves from `registered` to `stub_required` (the same claim
+one field over). `memory_read` / `memory_write` / `memory_evict`, whose Graph
+IR disposition is already `runtime_only`, close as the terminal `host_runtime`
+instead. The S-series dashboard reports the count instead of "closed
+project-wide". The two explicit per-name `complete` claims on Graph-less rows
+(`edm_precondition` / `edm_loss_weight`) are withdrawn too. Note what the
+`{x86,rocm,apple_gpu}_structured_compute_compiled` lanes are: a hand-built
+artifact naming `tessera.<op>` that `runtime.py` (`_STRUCTURED_COMPUTE_OPS`)
+dispatches straight back to the numpy reference (`losses.ctc_loss`,
+`ops.image_resize`, `D.edm_precondition`, …) — execution-compare evidence,
+not a lowering. Re-promote a reopened row by giving it a Graph op, not by
+editing the category table.
+
+Checked in the same pass, **not changed here** (recorded for follow-up), on the
+100 reopened rows:
+
+- `sharding_rule` is `complete` on 96 of them, from the category table. No
+  per-primitive consumer reads this axis (`python/tessera/sharding.py` never
+  consults the registry), so for a Graph-less row it states a rule nothing
+  propagates. Same overstatement class.
+- `transpose_rule` is `complete` on 65 of them, 26 of which have no `complete`
+  `vjp`: those rows claim a linear transpose with no registered VJP to derive it from.
+- `shape_rule` / `batching_rule` are `complete` on all 100, but both axes
+  already carry `AXIS_CONSUMER_WAIVERS` in `test_governance_declarations.py`
+  for every row (no consumer anywhere), so they are a known registry-wide
+  debt, not specific to Graph-less rows.
+- `math_semantics` / `dtype_layout_rule` / `tests` are justified by the Python
+  reference and its tests.
+- The seven supplemental public ops are stamped `graph_name=f"tessera.{name}"`
+  whether or not that op exists, so they pass this gate by construction.
+  Three have no `op_catalog` OpSpec (`depthwise_conv1d`, `online_softmax`,
+  `online_softmax_state`) yet read `lowering_rule: complete`; the three Block
+  AttnRes ops are already reopened by name, and `selective_ssm` has an OpSpec.
 
 ## VLM status
 

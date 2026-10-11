@@ -345,7 +345,19 @@ def render_markdown(
     # Section 5: closure trajectory note.
     lines.append("## Closure trajectory")
     lines.append("")
-    lines.append("* `lowering_rule` is closed project-wide today (0 open across all categories) — the multi-axis category-based hardening pass from Sprint A1+ landed this.")
+    lowering_open = sum(_as_int(row["lowering_rule_open"]) for row in rows)
+    graphless_open = sum(
+        1 for entry in all_primitive_coverages().values()
+        if "lowering_rule_reason" in entry.metadata
+    )
+    lines.append(
+        f"* `lowering_rule` has {lowering_open} open rows. "
+        f"{graphless_open} are Graph-less Python references that used to read "
+        "`complete` off a category or per-name rule; with no Graph IR op there is "
+        "nothing for a decomposition to be consumed by, so each row records "
+        "`metadata.lowering_rule_reason` (GRAPHLESS-LOWERING-1, 2026-10-11). "
+        "The rest are named exceptions in `test_s_series_status_dashboard.py`."
+    )
     lines.append("* `backend_kernel` is a conservative registry-level compatibility axis, not the architecture completion signal.  Read **Backend Proof By Target** for ROCm/x86/Apple/NVIDIA status.")
     lines.append("* `batching_rule` / `transpose_rule` / `sharding_rule` are the closable axes today.  A category-by-category promotion sprint should focus on the rows above with `priority ≤ 50`.")
     lines.append("")

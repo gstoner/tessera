@@ -206,7 +206,12 @@ def main():
                         default=("fp32", "e8m0"))
     parser.add_argument("--mxfp4-shapes", nargs="+", default=("17,64,19", "256,128,80", "256,128,160"),
                         help="positive M,K,N exact packed-K32 diagnostic rows")
+    parser.add_argument("--provider-source", type=Path,
+                        help="actual native_program_runtime.cpp used for a matched baseline provider")
+    parser.add_argument("--provider-source-revision", default="working_tree")
     options = parser.parse_args()
+    if options.provider_source is not None and not options.provider_source.is_file():
+        parser.error("provider source snapshot does not exist")
     mx_shapes = [tuple(map(int, row.split(","))) for row in options.mxfp4_shapes]
     if any(len(row) != 3 or min(row) <= 0 or row[1] % 32 for row in mx_shapes):
         parser.error("MXFP4 shapes require positive M,K,N with K divisible by 32")
@@ -266,8 +271,24 @@ def main():
         "tests/unit/test_native_mxfp4_residual_gate.py",
         "tests/device/rocm/test_mxfp4_residual_native_execution.py",
     ])
+    paths.extend([
+        "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/ProgramHostTransportPolicy.h",
+        "tests/unit/test_rocm_program_host_transport_policy.py",
+        "tests/device/rocm/test_public_typed_scaled_primal.py",
+    ])
     paths.append(str(Path(__file__).relative_to(Path.cwd())))
+    runtime_source = Path("src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp")
+    policy_header = Path("src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/ProgramHostTransportPolicy.h")
+    # Frontend/compiler pins are shared; the baseline provider may be built
+    # from a revision-owned source snapshot rather than the current policy.
+    paths.remove(str(runtime_source))
+    paths.remove(str(policy_header))
+    provider_sources = {"native_program_runtime.cpp": digest(options.provider_source or runtime_source)}
+    if options.provider_source is None:
+        provider_sources["ProgramHostTransportPolicy.h"] = digest(policy_header)
     packet = {
+        "provider_build_sources": provider_sources,
+        "provider_source_revision": options.provider_source_revision,
         "schema": "tessera.native_encoded_scaled_gate.packet.v1",
         "scale_vjp_schedule": options.scale_vjp_schedule, "architecture": runtime._rocm_live_arch(), "device": name.value.decode(),
         "hip_runtime_version_raw": runtime_version.value, "device_index": device.value, "device_uuid_hex": bytes(uuid).hex(),

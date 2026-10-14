@@ -75,6 +75,7 @@ def main():
             "source_sha256":{p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in [
                "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp",
                "python/tessera/compiler/native_scaled_program.py",
+               "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/ProgramHostTransportPolicy.h",
                "python/tessera/compiler/rocm_typed_scaled_native.py",
                "tests/unit/test_native_mxfp4_residual_gate.py",
                "tests/device/rocm/test_mxfp4_residual_native_execution.py",

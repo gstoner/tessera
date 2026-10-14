@@ -1,5 +1,6 @@
 // Program execution owns bytes and lifetime, never numerical kernel bodies.
 #include "native_program_runtime.h"
+#include "ProgramHostTransportPolicy.h"
 #include <hip/hip_runtime.h>
 #include <algorithm>
 #include <array>
@@ -314,13 +315,12 @@ extern "C" int tessera_rocm_program_prepare(
   for (uint32_t i = arguments; i < buffers; ++i)
     if (contract[i].ownership == 2)
       outputTotal += contract[i].bytes;
-  // Owning gfx1201 transfer measurements favor pinned staging for moderate
-  // uploads. Bound default locked memory and retain explicit mode overrides.
-  const char *pinnedMode = std::getenv("TESSERA_ROCM_PROGRAM_PINNED");
-  const bool automaticPinned = arch == "gfx1201" &&
-      inputTotal >= 256 * 1024 && inputTotal <= 8 * 1024 * 1024 &&
-      outputTotal <= 8 * 1024 * 1024;
-  p->pinned = pinnedMode ? !std::strcmp(pinnedMode, "1") : automaticPinned;
+  // Owning gfx1201 evidence attributes paired-output cost to pageable
+  // upload/readback. Select by total traffic while preserving slab bounds,
+  // explicit attribution overrides and transport-specific pool identity.
+  p->pinned = tessera::rocm::usePinnedProgramHostTransport(
+      arch, inputTotal, outputTotal,
+      std::getenv("TESSERA_ROCM_PROGRAM_PINNED"));
   p->cacheKey = programKey(arch, arguments, buffers, contract, steps, plan);
   keyValue(p->cacheKey, p->pinned);
   p->pinnedReadbackBytes = outputTotal;

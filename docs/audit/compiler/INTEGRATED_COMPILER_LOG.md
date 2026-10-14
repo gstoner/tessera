@@ -12179,3 +12179,32 @@ M256 attribution gap. The five compiler slices remain open.
 Evidence: benchmarks/baselines/mxfp4_residual_gate_20261014/README.md,
 gfx1201.json, transport_abba.json.
 <!-- entry-fields:end -->
+
+### 2026-10-14 — native gfx1201 combined-traffic staging
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending; sync ROCM-PROGRAM-TRAFFIC-20261014.
+
+Outcome: Native C++ pinned selection counts upload plus readback, retaining
+the 256 KiB threshold, both 8 MiB slab limits, explicit overrides and checked
+cache/lifetime identity. 18 compiled boundary/overflow/architecture cases,
+87 focused host cases and 82 gfx1201 FP8/MXFP8/MXFP4 device cases pass.
+The output-dominated cache regression fails the old provider as intended.
+Final balanced packets use identical native build settings and preserve all
+compiler programs/images. M256/K128/N80 public JVP changes from
+3.677–4.152 ms to 1.279–1.298 ms; N160 primal changes from
+3.430–3.467 ms to 1.984–2.093 ms. Native event scopes remain separate.
+
+The broad lane recorded 26,100 passed and two failed cast-spec assertions.
+Catalog-only casts now retain the tracer's established f16/f32/f64 spelling;
+canonical Graph IR stays unchanged. Original assertions remain, concrete/
+value-less parity coverage is stronger, and 209 host plus 13 device follow-up
+cases pass. Required broad validation is rerun after documents are stable.
+
+Remaining: Broad delivery/CI/review, unselected-control wall-time variance,
+small-traffic thresholds and repeated warm Graph admission cost. Generic
+layouts/dynamic identity, higher AD and the original Radiance kernel gap
+remain open. All four backend queues are assessed.
+
+Evidence: benchmarks/baselines/mxfp4_host_transport_20261014/README.md.
+<!-- entry-fields:end -->

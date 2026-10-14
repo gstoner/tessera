@@ -373,6 +373,11 @@ class TraceBuilder:
                 for value in tracer_args], ir_kwargs)
             out_shapes = tuple(tuple(map(int, value.shape)) for value in inferred)
             dtypes = tuple(value.dtype for value in inferred)
+            if cast_types_only:
+                # Tracer output specs use the same float element spellings as
+                # concrete NumPy tracing. Graph IR still canonicalizes them.
+                dtypes = tuple({"fp16": "f16", "fp32": "f32", "fp64": "f64"}.get(dtype, dtype)
+                               for dtype in dtypes)
             values = (None,) * len(inferred)
         elif tracer_args and all(t.value is not None for t in tracer_args):
             def _concrete(x: Any) -> Any:

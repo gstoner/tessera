@@ -12101,7 +12101,7 @@ Evidence: benchmarks/baselines/native_scaled_tensor_gate_20261014/README.md.
 ### 2026-10-14 — encoded scaled residuals and routing review fixes
 
 Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
-PRs: pending; sync ENCODED-SCALED-RESIDUAL-20261014.
+PRs: [#944](https://github.com/gstoner/tessera/pull/944); sync ENCODED-SCALED-RESIDUAL-20261014.
 
 Outcome: encoded primal products remain recomputed residual coefficients
 for requested continuous scale/gate derivatives. Native requested-activity

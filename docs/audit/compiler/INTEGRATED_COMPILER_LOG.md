@@ -12150,3 +12150,82 @@ Sibling backend physical consumers are not applicable to this gfx1201 lane.
 
 Evidence: benchmarks/baselines/continuous_scale_wave_20261014/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-14 — native exact MXFP4 residual gate
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending; sync MXFP4-RESIDUAL-GATE-20261014.
+
+Outcome: The named packed E2M1/E4M3 K32 product descends through native MLIR
+Schedule/Tile and gfx1201 FP8 WMMA, preserving the BF16 product store before
+an exact widening member and F32 gate. Checked ABI/lifetime binding executes
+ordinary public primal, gate-only JVP and reverse without Python arithmetic
+or kernel reconstruction. Rounded product roots remain inactive; explicit
+row-scale AD through the cast is rejected. 370 focused host gates and 11
+audit gates pass. Six native package and three public gfx1201 cases pass;
+four FP8/MXFP8 public controls also pass.
+
+Separate captured product/cast/gate, program-event and public timings have
+matched source/binary pins. M256/K128 product is about 16.6 us for N80/N160.
+A transport ABBA experiment localizes the public latency discontinuity to
+pageable versus pinned upload/readback; N80 public JVP is 4.850–5.124 ms
+pageable versus 1.322–1.485 ms pinned. Default policy is unchanged.
+All four backend queues are assessed; no sibling physical proof transfers.
+
+Remaining: Broad unit validation, review and publication; bounded transport
+policy evaluation, dynamic/layout/scale/higher AD and the original Radiance
+M256 attribution gap. The five compiler slices remain open.
+
+Evidence: benchmarks/baselines/mxfp4_residual_gate_20261014/README.md,
+gfx1201.json, transport_abba.json.
+<!-- entry-fields:end -->
+
+### 2026-10-14 — native gfx1201 combined-traffic staging
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending; sync ROCM-PROGRAM-TRAFFIC-20261014.
+
+Outcome: Native C++ pinned selection counts upload plus readback, retaining
+the 256 KiB threshold, both 8 MiB slab limits, explicit overrides and checked
+cache/lifetime identity. 18 compiled boundary/overflow/architecture cases,
+87 focused host cases and 82 gfx1201 FP8/MXFP8/MXFP4 device cases pass.
+The output-dominated cache regression fails the old provider as intended.
+Final balanced packets use identical native build settings and preserve all
+compiler programs/images. M256/K128/N80 public JVP changes from
+3.677–4.152 ms to 1.279–1.298 ms; N160 primal changes from
+3.430–3.467 ms to 1.984–2.093 ms. Native event scopes remain separate.
+
+The broad lane recorded 26,100 passed and two failed cast-spec assertions.
+Catalog-only casts now retain the tracer's established f16/f32/f64 spelling;
+canonical Graph IR stays unchanged. Original assertions remain, concrete/
+value-less parity coverage is stronger, and 209 host plus 13 device follow-up
+cases pass. Final host WSL validation passes 26,124 cases, with 7,568
+architecture/environment skips and 874 slow cases deselected. The skipped
+cases are not exact-device evidence.
+
+Remaining: CI/review/merge, unselected-control wall-time variance,
+small-traffic thresholds and repeated warm Graph admission cost. Generic
+layouts/dynamic identity, higher AD and the original Radiance kernel gap
+remain open. All four backend queues are assessed.
+
+Evidence: benchmarks/baselines/mxfp4_host_transport_20261014/README.md.
+<!-- entry-fields:end -->
+
+### 2026-10-14 — exact MXFP4 reserved-scale ingress correction
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: [#946](https://github.com/gstoner/tessera/pull/946); sync MXFP4-RESERVED-SCALE-20261014.
+
+Outcome: The exact MXFP4 oracle and immutable compiler-derived scale input
+roles reject reserved E8M0 byte 255 before prepare/update. Inspection mutation
+cannot bypass it; invalid warm frames retain the prior generation. Valid packed
+E2M1 byte 255 and generic MXFP8 scales remain unchanged. 382 focused host gates,
+63 gfx1201 device cases, Ruff and focused mypy pass. The fresh post-review
+packet preserves every compiler program and member image.
+
+Remaining: Corrected-head CI/review, warm host admission cost, broader
+layouts/dynamic/AD and original Radiance kernel attribution. All four backend
+queues are assessed; there is no sibling physical support transfer.
+
+Evidence: benchmarks/baselines/mxfp4_host_transport_20261014/post_review.json.
+<!-- entry-fields:end -->

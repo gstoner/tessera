@@ -1366,12 +1366,14 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         severity="error",
         summary=(
             "tile.fragment_scaled_accumulate requires rank-1 f32 scales for "
-            "fp32 or signless i8 scales for e8m0, and positive scale_n."
+            "fp32, signless i8 scales for e8m0, or f32 row/i8 RHS scales "
+            "for the exact MXFP4 contract, and positive scale_n."
         ),
         fix_hint=(
             "Pass the row-major [rows, groups] and [groups, ceil(cols/scale_n)] "
             "scale buffers flattened to rank 1, with scale_n >= 1 and the "
-            "matching explicit scale_format (fp32 or e8m0)."
+            "matching explicit scale_format (fp32, e8m0, or "
+            "mxfp4_row_fp32_rhs_e8m0 with lhs [rows] and RHS [groups, cols])."
         ),
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1",
         sprint="ROCM-FP8-BLOCKSCALE-1",

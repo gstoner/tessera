@@ -1,0 +1,35 @@
+{
+  "compiler": "/opt/rocm/bin/amdclang++",
+  "compiler_version": "AMD clang version 23.0.0git (https://github.com/ROCm/llvm-project.git 8f497e0992fb7513f7f78a6f6b6f1056c375e961)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/rocm/core-10.0/lib/llvm/bin\n",
+  "flags": [
+    "-std=c++17",
+    "-O2",
+    "-fPIC",
+    "-shared",
+    "-D__HIP_PLATFORM_AMD__"
+  ],
+  "include_roots": [
+    "/opt/rocm/include",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip"
+  ],
+  "libraries": [
+    "tessera_rocm_native_image",
+    "amdhip64"
+  ],
+  "image_cache_sha256": "d0b0a6eac32e58d812b9c78ac3c972c82a03cc75976b2673652b26d68fed5045",
+  "shared_sources": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "e9a76f3ac03dd6758e699891e501a84488e9fca2b9e44e4fd3dfdc4c83e19ad3",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "21555db0e7a4c7092d871dcae3172a6ee9776361110107bea731a3f4b2599c4e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/MovementPhysicalSpan.h": "6516084ee88c87f5d3280ece25e0abd2b2f3b8d29f01945fef982d0186120080"
+  },
+  "baseline": {
+    "source_commit": "690f403a7",
+    "native_program_runtime.cpp": "a8dc4b41f67bea2370b2857926af6a88b70886957db29c9aa4ca528cc418b230",
+    "provider_sha256": "a8fec2bffe2c91b93c1b55095fa55d82999719182e261a9f165392744cd2f3b5"
+  },
+  "candidate": {
+    "native_program_runtime.cpp": "af375dc4245568d7c45831ce2b5f42f811c272f8476985622bba9766895f1aaf",
+    "ProgramHostTransportPolicy.h": "990cfba9ea7bec25e3683c0235487c22b5e1dd955e90452db51ab8647863086b",
+    "provider_sha256": "fdd72b93a7bab484447fe5a70270a0de065c3dfd301430dd863ce1a8774fdaec"
+  }
+}

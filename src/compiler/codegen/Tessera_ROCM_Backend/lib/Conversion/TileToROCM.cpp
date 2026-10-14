@@ -184,7 +184,16 @@ static FailureOr<Value> materializeFragmentPack(
     elementTy = Float8E5M2Type::get(builder.getContext());
   else
     elementTy = builder.getF16Type();
-  if (memrefTy.getElementType() != elementTy) {
+  auto storage = view->getAttrOfType<StringAttr>("tile.storage_contract");
+  bool packedMXFP4 = storage && storage.getValue() == "e2m1_packed_k_to_e4m3";
+  if (packedMXFP4 && (role != "b" || inputDType != "e4m3" ||
+      physical.family != tessera_rocm::FragmentFamily::RDNA4WMMA ||
+      memory.getOrder() != "row_major" || memory.getSpace() != "gmem" ||
+      !memrefTy.getElementType().isSignlessInteger(8))) {
+    op->emitError("ROCM_FRAGMENT_SOURCE_TYPE: packed E2M1 requires RDNA4 E4M3 B fragments and global K-major bytes");
+    return failure();
+  }
+  if (memrefTy.getElementType() != elementTy && !packedMXFP4) {
     op->emitError("ROCM_FRAGMENT_SOURCE_TYPE: source element type does not "
                   "match the architecture MMA descriptor");
     return failure();
@@ -365,7 +374,7 @@ static FailureOr<Value> materializeFragmentPack(
     fragment = amdgpu::GlobalTransposeLoadOp::create(builder, loc, vectorTy,
                                                      globalBase,
                                                      ValueRange{addr});
-  } else if (!kIsContiguous || haveBounds) {
+  } else if (!kIsContiguous || haveBounds || packedMXFP4) {
     // A bounded fragment is scalarized even when K is contiguous. The ROCm
     // GPU-to-LLVM pipeline does not legalize vector.create_mask/maskedload;
     // emitting them left an index cast and vector op at LLVM translation.
@@ -387,9 +396,46 @@ static FailureOr<Value> materializeFragmentPack(
       Value index = arith::AddIOp::create(
           builder, loc, linear,
           arith::MulIOp::create(builder, loc, cj, stride));
+      Value logicalK;
+      if (packedMXFP4) {
+        // Honor a supplied logical linear base, including its lane and
+        // partition offsets, before mapping the packed K axis to bytes.
+        logicalK = arith::DivUIOp::create(builder, loc, index, leadingDim);
+        Value logicalCol = arith::RemUIOp::create(builder, loc, index, leadingDim);
+        Value halfK = arith::DivUIOp::create(builder, loc, logicalK,
+            arith::ConstantIndexOp::create(builder, loc, 2));
+        index = arith::AddIOp::create(builder, loc,
+            arith::MulIOp::create(builder, loc, halfK, leadingDim), logicalCol);
+      }
+      auto loadElement = [&](Value address) -> Value {
+        Value loaded = memref::LoadOp::create(builder, loc, base, ValueRange{address});
+        if (!packedMXFP4) return loaded;
+        Value raw = arith::ExtUIOp::create(builder, loc, builder.getI32Type(), loaded);
+        auto ci = [&](int64_t value) -> Value {
+          return arith::ConstantIntOp::create(builder, loc, value, 32);
+        };
+        Value parity = arith::RemUIOp::create(builder, loc, logicalK,
+            arith::ConstantIndexOp::create(builder, loc, 2));
+        Value shift = arith::MulIOp::create(builder, loc,
+            arith::IndexCastOp::create(builder, loc, builder.getI32Type(), parity), ci(4));
+        Value nibble = arith::AndIOp::create(builder, loc,
+            arith::ShRUIOp::create(builder, loc, raw, shift), ci(15));
+        Value magnitude = arith::AndIOp::create(builder, loc, nibble, ci(7));
+        Value bits = ci(0);
+        const int64_t e4m3[] = {0,0x30,0x38,0x3c,0x40,0x44,0x48,0x4c};
+        for (int64_t code = 1; code < 8; ++code)
+          bits = arith::SelectOp::create(builder, loc,
+              arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq,
+                                   magnitude, ci(code)), ci(e4m3[code]), bits);
+        bits = arith::OrIOp::create(builder, loc, bits,
+            arith::ShLIOp::create(builder, loc,
+                arith::AndIOp::create(builder, loc, nibble, ci(8)), ci(4)));
+        return arith::BitcastOp::create(builder, loc, elementTy,
+            arith::TruncIOp::create(builder, loc, builder.getI8Type(), bits));
+      };
       Value element;
       if (!haveBounds) {
-        element = memref::LoadOp::create(builder, loc, base, ValueRange{index});
+        element = loadElement(index);
       } else {
         Value fastOk = arith::CmpIOp::create(
             builder, loc, arith::CmpIPredicate::slt,
@@ -399,7 +445,7 @@ static FailureOr<Value> materializeFragmentPack(
         // select on the loaded value alone still performs the load.
         Value safe =
             arith::SelectOp::create(builder, loc, inBounds, index, zeroIdx);
-        element = memref::LoadOp::create(builder, loc, base, ValueRange{safe});
+        element = loadElement(safe);
         element = arith::SelectOp::create(builder, loc, inBounds, element,
                                           zeroScalar);
       }
@@ -1801,10 +1847,11 @@ struct ConvertFragmentScaledAccumulate
           arith::CmpIOp::create(rewriter, loc, slt, col, adaptor.getCols());
       Value safeRow = arith::SelectOp::create(rewriter, loc, rowOk, row, c0);
       Value safeCol = arith::SelectOp::create(rewriter, loc, colOk, col, c0);
-      Value lhsIndex = arith::AddIOp::create(
+      const bool exactMXFP4 = op.getScaleFormat() == "mxfp4_row_fp32_rhs_e8m0";
+      Value lhsIndex = exactMXFP4 ? safeRow : Value(arith::AddIOp::create(
           rewriter, loc,
           arith::MulIOp::create(rewriter, loc, safeRow, adaptor.getGroups()),
-          lhsGroupBase);
+          lhsGroupBase));
       Value rhsIndex = arith::AddIOp::create(
           rewriter, loc, rhsGroupBase,
           arith::DivUIOp::create(rewriter, loc, safeCol, scaleN));
@@ -1821,7 +1868,14 @@ struct ConvertFragmentScaledAccumulate
       Value a = vector::ExtractOp::create(rewriter, loc, acc,
                                           ArrayRef<int64_t>{i});
       Value scaled;
-      if (op.getScaleFormat() == "e8m0") {
+      if (exactMXFP4) {
+        Value exponent = arith::ExtUIOp::create(rewriter, loc, rewriter.getI32Type(), rhsScale);
+        Value bits = arith::ShLIOp::create(rewriter, loc, exponent,
+            arith::ConstantIntOp::create(rewriter, loc, 23, 32));
+        Value factor = arith::BitcastOp::create(rewriter, loc, rewriter.getF32Type(), bits);
+        Value scale = arith::MulFOp::create(rewriter, loc, lhsScale, factor);
+        scaled = arith::MulFOp::create(rewriter, loc, p, scale);
+      } else if (op.getScaleFormat() == "e8m0") {
         scaled = scaleE8M0(p, lhsScale, rhsScale);
       } else {
         Value scale = arith::MulFOp::create(rewriter, loc, lhsScale, rhsScale);

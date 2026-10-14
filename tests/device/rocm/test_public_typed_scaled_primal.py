@@ -38,15 +38,15 @@ def test_public_fp8_primal(shape,nk,monkeypatch):
 from tessera.dtype import Dtype
 encoded_byte = Dtype("uint8", allow_planned_gated=True)
 
-def mxfp8(a:ts.Tensor["M","K","fp8_e4m3"], b:ts.Tensor["K","N","fp8_e4m3"],
-          sa:ts.Tensor["M","G",encoded_byte], sb:ts.Tensor["G","N",encoded_byte]):
+def mxfp8(a:ts.Tensor["M","K","fp8_e4m3"], b:ts.Tensor["K","N","fp8_e4m3"],  # noqa: F821 - Tessera symbolic dimensions and dtype spellings
+          sa:ts.Tensor["M","G",encoded_byte], sb:ts.Tensor["G","N",encoded_byte]):  # noqa: F821 - Tessera symbolic dimensions and dtype spellings
     import tessera as ts
     return ts.ops.scaled_matmul(a,b,sa,sb,
         numeric_policy={"accum":"fp32","execution_mode":"exact_per_block"},
         scale_layout={"granularity":"block","block":[1,32],"format":"e8m0"})
 
-def mxfp8_nk(a:ts.Tensor["M","K","fp8_e4m3"], b:ts.Tensor["N","K","fp8_e4m3"],
-             sa:ts.Tensor["M","G",encoded_byte], sb:ts.Tensor["G","N",encoded_byte]):
+def mxfp8_nk(a:ts.Tensor["M","K","fp8_e4m3"], b:ts.Tensor["N","K","fp8_e4m3"],  # noqa: F821 - Tessera symbolic dimensions and dtype spellings
+             sa:ts.Tensor["M","G",encoded_byte], sb:ts.Tensor["G","N",encoded_byte]):  # noqa: F821 - Tessera symbolic dimensions and dtype spellings
     import tessera as ts
     return ts.ops.scaled_matmul(a,b,sa,sb,transposeB=True,
         numeric_policy={"accum":"fp32","execution_mode":"exact_per_block"},
@@ -87,9 +87,11 @@ def test_public_mxfp8_primal(shape,nk,monkeypatch):
     monkeypatch.setattr(subprocess,"run",forbidden)
     np.testing.assert_allclose(fn(a,b,sa-np.uint8(1),sb),expected*.5,rtol=4e-5,atol=1e-4)
 
-@pytest.mark.parametrize("shape,selected_mode",[((17,19,256),"0"),((200,129,1536),"1")])
+@pytest.mark.parametrize("shape,selected_mode",[((17,19,256),"0"),((200,129,1536),"1"),
+                                               ((256,256,32),"1")])
 def test_native_auto_transfer_reuses_selected_mode(shape,selected_mode,monkeypatch):
-    import ctypes as c,json
+    import ctypes as c
+    import json
     from tessera import runtime
     from tessera.compiler.native_scaled_program import NativeScaledProgram,PreparedScaledProgram
     assert runtime._rocm_live_arch()=="gfx1201"

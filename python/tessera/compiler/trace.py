@@ -355,13 +355,16 @@ class TraceBuilder:
         scaled_types_only = graph_name == "tessera.scaled_matmul" and (
             not self.evaluate_catalog_outputs or not tracer_args
             or not all(value.value is not None for value in tracer_args))
+        cast_types_only = graph_name == "tessera.cast" and (
+            not self.evaluate_catalog_outputs or not tracer_args
+            or not all(value.value is not None for value in tracer_args))
         reshape_shape = ir_kwargs.get("shape")
         reshape_types_only = (graph_name == "tessera.reshape"
             and isinstance(reshape_shape, (tuple, list))
             and all(type(dim) is int and dim > 0 for dim in reshape_shape)
             and (not self.evaluate_catalog_outputs or not tracer_args
                  or not all(value.value is not None for value in tracer_args)))
-        if physical_movement or attention_types_only or scaled_types_only or reshape_types_only or graph_name in {"tessera.nvfp4_requantize","tessera.mxfp4_folded_storage"}:
+        if physical_movement or attention_types_only or scaled_types_only or cast_types_only or reshape_types_only or graph_name in {"tessera.nvfp4_requantize","tessera.mxfp4_folded_storage"}:
             # Catalog-owned result contracts avoid host arithmetic during tracing,
             # including attention output/row-LSE and packed conversion results.
             from .graph_ir import _infer_result_types, tensor_ir_type
@@ -370,6 +373,11 @@ class TraceBuilder:
                 for value in tracer_args], ir_kwargs)
             out_shapes = tuple(tuple(map(int, value.shape)) for value in inferred)
             dtypes = tuple(value.dtype for value in inferred)
+            if cast_types_only:
+                # Tracer output specs use the same float element spellings as
+                # concrete NumPy tracing. Graph IR still canonicalizes them.
+                dtypes = tuple({"fp16": "f16", "fp32": "f32", "fp64": "f64"}.get(dtype, dtype)
+                               for dtype in dtypes)
             values = (None,) * len(inferred)
         elif tracer_args and all(t.value is not None for t in tracer_args):
             def _concrete(x: Any) -> Any:

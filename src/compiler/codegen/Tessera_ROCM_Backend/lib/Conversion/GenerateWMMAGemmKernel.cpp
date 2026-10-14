@@ -146,6 +146,7 @@ struct WmmaGemmRequest {
   bool runtimeMN = false, runtimeK = false, wholeM = false, wholeN = false;
   bool foldedFullK = false, foldedWaveGuard = false, foldedVectorScales = false;
   bool foldedCuMode = false, foldedPacked = false;
+  bool exactMXFP4 = false;
   int64_t foldedPrefetch = 0;
   std::string rasterOrder = "row_major";
   int64_t rasterGroup = 1;
@@ -298,6 +299,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   // ROCM-FP8-BLOCKSCALE-1: a block-scaled body takes (A, B, lhs_scale,
   // rhs_scale, D, M, N, K); the caller admits it on the typed route only.
   const bool scaled = scaleK > 0;
+  const bool exactMXFP4 = gpuFunc->hasAttr("tessera.rocm.exact_mxfp4");
   auto aOrientation = gpuFunc->getAttrOfType<BoolAttr>("tessera.rocm.transposeA");
   const bool aTransposed = aOrientation && aOrientation.getValue();
   const bool partialScaleGroup = scaled && staticK > 0 && staticK % scaleK != 0;
@@ -746,6 +748,9 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                              bounded || partialScaleGroup, bTileLayout, dynamicColMajor)
               : makeTileView(bb, l, B, k0, colOrigin[ni], linearBase, K, N, N,
                              bounded || partialScaleGroup, bTileLayout);
+      if (exactMXFP4)
+        view.getDefiningOp()->setAttr("tile.storage_contract",
+            bb.getStringAttr("e2m1_packed_k_to_e4m3"));
       bf[ni] = packFragment(bb, l, view, bFragmentTy);
     }
     SmallVector<Value> next(mt * nt);
@@ -3097,6 +3102,51 @@ struct GenerateWMMAGemmKernelPass
       requests.push_back(std::move(request));
     }
 
+    // Scheduled exact MXFP4 enters before the architecture consumer, just
+    // like the existing portable FP8 producer. It never goes through Python.
+    SmallVector<tessera::tile::ScaledMatmulKernelOp> exactMXFP4Kernels;
+    module.walk([&](tessera::tile::ScaledMatmulKernelOp op) {
+      auto profile = op->getAttrOfType<StringAttr>("physical_contract");
+      if (profile && profile.getValue() == "rocm_mxfp4_w4a8_exact_v1")
+        exactMXFP4Kernels.push_back(op);
+    });
+    for (auto kernel : exactMXFP4Kernels) {
+      Operation *op = kernel.getOperation();
+      auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+      auto epilogue = op->getAttrOfType<tessera::tile::TileEpilogueAttr>("epilogue");
+      auto partial = op->getAttrOfType<DictionaryAttr>("partial_accumulator");
+      auto combine = partial ? partial.getAs<StringAttr>("combine") : StringAttr{};
+      auto scope = partial ? partial.getAs<StringAttr>("schedule_scope") : StringAttr{};
+      auto motion = partial ? partial.getAs<StringAttr>("cross_step_motion") : StringAttr{};
+      auto integer = [&](StringRef key) -> int64_t {
+        auto value = op->getAttrOfType<IntegerAttr>(key);
+        return value ? value.getInt() : 0;
+      };
+      int64_t m=integer("tessera.problem_m"), n=integer("tessera.problem_n"),
+              k=integer("tessera.problem_k");
+      auto parent = op->getParentOfType<func::FuncOp>();
+      if (!viaTile || !parent || !desc || !epilogue || !combine || !scope || !motion ||
+          op->getNumOperands()!=8 || desc.getFamily()!="wmma" ||
+          desc.getM()!=16 || desc.getN()!=16 || desc.getK()!=16 || desc.getKBlocks()!=2 ||
+          desc.getAType()!="e4m3_raw_u8" || desc.getBType()!="e2m1_packed_u8" ||
+          desc.getAccType()!="f32" || desc.getScaleBlockK()!=32 ||
+          desc.getScaleFormat()!="e8m0" || epilogue.getOutputType()!="bf16" ||
+          epilogue.getBias() || epilogue.getActivation()!="none" ||
+          combine.getValue()!="scale_outer_product_then_add" ||
+          scope.getValue()!="scale_group" || motion.getValue()!="forbid" ||
+          m<=0 || n<=0 || k<=0 || k%32) {
+        op->emitError("exact MXFP4 Tile differs from its K32 packed BF16 contract");
+        return signalPassFailure();
+      }
+      WmmaGemmRequest request;
+      request.anchor=request.eraseOwner=op; request.name=parent.getSymName().str();
+      request.dtype="e4m3"; request.output="bf16"; request.portableABI=true;
+      request.exactMXFP4=true; request.staticM=m; request.staticN=n; request.staticK=k;
+      request.scaleK=32; request.scaleN=1; request.kBlocks=2;
+      request.scaleFormat="mxfp4_row_fp32_rhs_e8m0";
+      requests.push_back(std::move(request));
+    }
+
     // ROCM-FP8-BLOCKSCALE-1: the logical W8A8 block-scale contract on the
     // typed route. Only the contract Graph->Schedule DERIVED is consumed
     // here; every other scaled kernel (the MX physical packages, a logical
@@ -3206,6 +3256,54 @@ struct GenerateWMMAGemmKernelPass
       request.staticM = *staticM;
       request.staticN = *staticN;
       request.staticK = *staticK;
+      requests.push_back(std::move(request));
+    }
+
+    // Exact W4A8 retains its K32 partial boundary and BF16 store. The
+    // physical contract fixes one 16x16 wave and packed K-axis nibble storage.
+    SmallVector<Operation *> exactMXFP4Directives;
+    module.walk([&](Operation *op) {
+      auto profile = op->getAttrOfType<StringAttr>("physical_contract");
+      if (op->getName().getStringRef() == "tessera_rocm.scaled_wmma_gemm" &&
+          profile && profile.getValue() == "rocm_mxfp4_w4a8_exact_v1")
+        exactMXFP4Directives.push_back(op);
+    });
+    for (Operation *op : exactMXFP4Directives) {
+      auto text = [&](StringRef key) -> StringRef {
+        auto value = op->getAttrOfType<StringAttr>(key);
+        return value ? value.getValue() : StringRef();
+      };
+      auto integer = [&](StringRef key) -> int64_t {
+        auto value = op->getAttrOfType<IntegerAttr>(key);
+        return value ? value.getInt() : 0;
+      };
+      auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+      auto policyText = [&](StringRef key) -> StringRef {
+        auto value = policy ? policy.getAs<StringAttr>(key) : StringAttr();
+        return value ? value.getValue() : StringRef();
+      };
+      int64_t m = integer("m"), n = integer("n"), k = integer("k");
+      if (!viaTile || text("name").empty() || m <= 0 || n <= 0 || k <= 0 || k % 32 ||
+          integer("instruction_k") != 16 || integer("scale_k") != 32 ||
+          integer("macro_k") != 32 || text("scale_format") != "e8m0" ||
+          text("output") != "bf16" ||
+          text("abi") != "a_b_lhs_scale_rhs_scale_d_m_n_k" ||
+          text("package_abi") != "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1" ||
+          text("partial_combine") != "scale_outer_product_then_add" ||
+          text("k_step_schedule") != "isolated_scale_group" ||
+          policyText("storage") != "e4m3_raw_u8" ||
+          policyText("accum") != "f32" || policyText("execution_mode") != "exact_per_block") {
+        op->emitError("exact MXFP4 Target differs from its K32 packed BF16 contract");
+        return signalPassFailure();
+      }
+      WmmaGemmRequest request;
+      request.anchor = request.eraseOwner = op;
+      request.name = text("name").str();
+      request.dtype = "e4m3"; request.output = "bf16";
+      request.portableABI = true; request.exactMXFP4 = true;
+      request.staticM = m; request.staticN = n; request.staticK = k;
+      request.scaleK = 32; request.scaleN = 1; request.kBlocks = 2;
+      request.scaleFormat = "mxfp4_row_fp32_rhs_e8m0";
       requests.push_back(std::move(request));
     }
 
@@ -4023,7 +4121,7 @@ struct GenerateWMMAGemmKernelPass
         bStoreTy = T.bElem == "e4m3"
                        ? static_cast<Type>(Float8E4M3FNType::get(b.getContext()))
                        : static_cast<Type>(Float8E5M2Type::get(b.getContext()));
-      if (request.foldedPacked)
+      if (request.foldedPacked || request.exactMXFP4)
         bStoreTy = i8Ty; // Packed E2M1 containers are integer bytes.
       auto bAbTy = MemRefType::get({ShapedType::kDynamic}, bStoreTy);
       auto dTy = MemRefType::get({ShapedType::kDynamic}, outputTy);
@@ -4035,7 +4133,7 @@ struct GenerateWMMAGemmKernelPass
       if (scaled) {
         auto scaleTy = MemRefType::get(
             {ShapedType::kDynamic}, request.scaleFormat == "e8m0" ? i8Ty : f32Ty);
-        auto referenceTy = request.foldedFullK
+        auto referenceTy = request.foldedFullK || request.exactMXFP4
             ? MemRefType::get({ShapedType::kDynamic}, i8Ty) : scaleTy;
         argTys.append({scaleTy, referenceTy});
       }
@@ -4045,6 +4143,8 @@ struct GenerateWMMAGemmKernelPass
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc.setKernel(true);
+      if (request.exactMXFP4)
+        gpuFunc->setAttr("tessera.rocm.exact_mxfp4", b.getUnitAttr());
       if (request.foldedFullK)
         gpuFunc->setAttr("llvm.passthrough", b.getArrayAttr({
             b.getArrayAttr({b.getStringAttr("target-features"),
@@ -4217,6 +4317,7 @@ struct GenerateWMMAGemmKernelPass
       } else if (scaled) {
         gpuFunc->setAttr("tessera.rocm.block_scale_contract",
                          b.getStringAttr(
+                             request.exactMXFP4 ? "rocm_mxfp4_w4a8_exact_v1" :
                              request.scaleFormat == "e8m0"
                                  ? (request.bTransposed
                                         ? "rocm_mxfp8_e4m3_e8m0_k32_nk_v1"

@@ -6,6 +6,73 @@ target: apple_gpu
 last_updated: 2026-10-14
 ---
 
+## MXFP4-RESERVED-SCALE-20261014 — PR946 review correction
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Exact MXFP4 rejects reserved RHS E8M0 byte 255 in the independent oracle and
+checked host ingress, before native preparation/update. Immutable input-role
+bindings are derived from the verified compiler program; mutating inspection
+metadata cannot disable the guard. Rejected updates retain the prior output
+generation. Packed E2M1 byte 255 remains valid, and generic MXFP8 E8M0 semantics
+are unchanged. No kernel, native ABI, schedule or numerical policy changes.
+Validation: 382 focused host gates, 63 exact gfx1201 device cases, Ruff and
+focused mypy pass. post_review.json pins current sources and preserves every
+primal/JVP/reverse compiler program and member image. Original balanced
+packets remain revision-bound at b816e2680 before this ingress correction.
+
+Not applicable to apple physical execution: this named gfx1201 encoded-scale contract is not transferred. Shared host validation infrastructure remains assessed.
+
+## ROCM-PROGRAM-TRAFFIC-20261014 — active engineering
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+The native program provider selects gfx1201 pinned staging from upload plus
+readback traffic at the existing 256 KiB threshold. Both 8 MiB slab limits,
+explicit overrides, generation/lifetime checks and transport-specific cache
+identity remain intact. No kernel, Graph/Schedule/Tile semantics or ABI changes.
+Eighteen compiled native policy gates cover thresholds, overflow, sibling
+architecture defaults and overrides; 87 focused host gates pass. A new
+output-dominated MXFP8 cache test distinguishes this rule from input-only
+selection. Final balanced packets preserve all compiler images/programs:
+M256/K128/N80 public JVP is 3.677–4.152 ms versus 1.279–1.298 ms;
+N160 public primal is 3.430–3.467 ms versus 1.984–2.093 ms.
+Unselected control wall-time variation and warm Graph admission cost remain
+follow-up required; no broad speedup or five-slice closure claim.
+Evidence: benchmarks/baselines/mxfp4_host_transport_20261014/README.md.
+The broad lane's two cast-spec spelling failures were repaired in code;
+209 focused gates and 13 post-fix device cases pass.
+
+Not applicable to Metal execution: this HIP host-transfer policy does not alter Apple packages or buffers.
+
+## MXFP4-RESIDUAL-GATE-20261014 — active engineering
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+The exact `rocm_mxfp4_w4a8_exact_v1` Graph contract now executes as a
+compiler-owned scaled product, BF16 store, exact BF16-to-F32 widening member
+and F32 tensor gate. MLIR owns Schedule/Tile, packed E2M1 decode, FP8 WMMA,
+mixed row-F32/RHS-E8 scaling, native image and checked buffer lifetime.
+The Python layer admits and binds the named profile; its independent eager
+oracle is used for frontend certification, not native arithmetic or codegen.
+Conflicting scale/numeric policies are rejected. Product rounding remains
+observable; only gate derivatives are admitted. Native forward/reverse
+requests for the row scale through this BF16 boundary are rejected.
+
+Host WSL: 370 focused package, rounding, inactive-role, registry and pass
+metadata gates pass. Exact gfx1201: six direct primal/reverse package cases
+and three public primal/JVP/reverse cases pass at M,K,N = (7,32,5),
+(17,64,19), (256,128,80), including changed encoded values, warm compiler
+exclusion and retained outputs. Four existing FP8/MXFP8 public controls also
+pass. No generic FP4/uint8 storage or differentiation promotion.
+
+Correctness-gated FP8/MXFP8/MXFP4 member, program-event and completed public
+timings are recorded separately in
+`benchmarks/baselines/mxfp4_residual_gate_20261014/gfx1201.json`.
+M=256 N=80/160 rows characterize the new exact residual route; they do not
+close the original Radiance per-column attribution gap or promote a schedule.
+General layouts, dynamic identity, broader AD and model-quality remain open.
+
+Not applicable to Apple physical execution: this gfx1201 WMMA profile has no Metal package. Shared cast typing/verifiers are assessed; Apple public packed residual and AD parity remains follow-up required.
+
+
 ## CONTINUOUS-SCALE-WAVE-20261014
 
 Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.

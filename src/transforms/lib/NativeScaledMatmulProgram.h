@@ -19,6 +19,15 @@
 #include "NativeScaledCarrier.h"
 
 namespace tessera {
+static bool isNativeExactMXFP4Product(mlir::Operation *op) {
+  auto product = mlir::dyn_cast<ScaledMatmulOp>(op);
+  auto profile = product ? op->getAttrOfType<mlir::StringAttr>("physical_contract")
+                         : mlir::StringAttr{};
+  auto output = product ? mlir::dyn_cast<mlir::RankedTensorType>(
+      product->getResult(0).getType()) : mlir::RankedTensorType{};
+  return profile && profile.getValue() == "rocm_mxfp4_w4a8_exact_v1" &&
+      output && output.getElementType().isBF16();
+}
 static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, bool primal = false, bool reverse = false) {
   using namespace mlir;
   if (primal && hasNativeNVFP4Graph(module))
@@ -114,7 +123,8 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       auto type = dyn_cast<RankedTensorType>(value.getType());
       if (!definition || definition->getBlock() != &root.getBody().front() ||
           definition->getNumResults() != 1 || !type || !type.hasStaticShape() ||
-          !type.getElementType().isF32() || type.getEncoding() ||
+          (!type.getElementType().isF32() && !isNativeExactMXFP4Product(definition)) ||
+          type.getEncoding() ||
           type.getRank() < 1 || type.getRank() > 8)
         return root.emitError("scaled transpose dependency requires static native f32 SSA");
       if (!dependencies.insert(definition).second) return success();
@@ -229,7 +239,8 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       }
       hasScaledProduct |= isa<ScaledMatmulOp, tensor::GenerateOp>(&op);
     } else {
-      if (!isa<ScaledMatmulOp, AddOp, MulOp, TransposeOp, BroadcastOp, ReduceOp, ReshapeOp>(op) || op.getNumResults() != 1)
+      if ((!isa<ScaledMatmulOp, AddOp, MulOp, TransposeOp, BroadcastOp, ReduceOp, ReshapeOp>(op) &&
+           !isNativeScaledWideningCast(&op)) || op.getNumResults() != 1)
         return op.emitError("scaled JVP program needs scaled products and admitted native carriers");
       if (isa<MulOp>(op) && !isPointwiseProduct(&op))
         return op.emitError("scaled pointwise product requires exact same-shaped f32 storage");
@@ -404,6 +415,8 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
             AddOp::getOperationName().str() : ops[index]->getName().getStringRef().str()},
         {"inputs", std::move(inputs)},
         {"output", cast<IntegerAttr>(step.get("output")).getInt()}};
+    if (isNativeExactMXFP4Product(ops[index]))
+      manifestStep["physical_contract"] = "rocm_mxfp4_w4a8_exact_v1";
     if (isNativeFloatingScaledProduct(ops[index])) {
       auto product = cast<ScaledMatmulOp>(ops[index]);
       auto block = product.getScaleLayoutAttr().getAs<ArrayAttr>("block");

@@ -49,7 +49,7 @@ inline mlir::LogicalResult verifyStructuredReductionCarrier(mlir::Operation *op)
       !type || type.getNumInputs() != inputs.getInt()+2 || type.getNumResults() != 0 ||
       !type.getInput(inputs.getInt()+1).isInteger(64))
     return op->emitOpError("structured reduction kernel lost its native buffer/scalar ABI");
-  unsigned bytes = 0, floats = 0;
+  unsigned bytes = 0, floats = 0, bfloats = 0;
   for (unsigned i = 0; i < unsigned(inputs.getInt()+1); ++i) {
     auto memref = dyn_cast<MemRefType>(type.getInput(i));
     if (!memref || memref.getShape() != ArrayRef<int64_t>{ShapedType::kDynamic} ||
@@ -60,13 +60,18 @@ inline mlir::LogicalResult verifyStructuredReductionCarrier(mlir::Operation *op)
     if (i < inputs.getInt()) {
       bytes += memref.getElementType().isSignlessInteger(8);
       floats += memref.getElementType().isF32();
+      bfloats += memref.getElementType().isBF16();
     }
   }
   auto role = op->getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint");
   bool continuousWave = wave && role &&
       (role.getValue() == "lhs_scale" || role.getValue() == "rhs_scale") &&
       kernel.getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint") == role;
-  if (!(carrier ? (floats==1 && bytes==0 && !wave) :
+  auto castKind = op->getAttrOfType<StringAttr>("tessera.native.cast");
+  bool widening = castKind && castKind.getValue() == "bf16_to_f32" &&
+      kernel.getAttrOfType<StringAttr>("tessera.native.cast") == castKind;
+  if (!(carrier ? (bytes==0 && !wave &&
+                   (floats==1 || (bfloats==1 && widening))) :
         ((bytes == 2 && floats == 2) ||
          (floats == 4 && (!wave || continuousWave)))))
     return op->emitOpError("structured scaled reduction requires checked E4M3/f32 or role-bound four-f32 inputs");

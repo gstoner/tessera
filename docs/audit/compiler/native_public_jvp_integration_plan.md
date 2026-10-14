@@ -250,3 +250,34 @@ residual integration and M256 attribution remain follow-up required.
 
 Focused host/drift delivery gates pass; full CI and review remain pending. This named scheduling
 step does not close the five-slice compiler goal.
+
+## MXFP4-RESIDUAL-GATE-20261014 — active engineering
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+The exact `rocm_mxfp4_w4a8_exact_v1` Graph contract now executes as a
+compiler-owned scaled product, BF16 store, exact BF16-to-F32 widening member
+and F32 tensor gate. MLIR owns Schedule/Tile, packed E2M1 decode, FP8 WMMA,
+mixed row-F32/RHS-E8 scaling, native image and checked buffer lifetime.
+The Python layer admits and binds the named profile; its independent eager
+oracle is used for frontend certification, not native arithmetic or codegen.
+Conflicting scale/numeric policies are rejected. Product rounding remains
+observable; only gate derivatives are admitted. Native forward/reverse
+requests for the row scale through this BF16 boundary are rejected.
+
+Host WSL: 370 focused package, rounding, inactive-role, registry and pass
+metadata gates pass. Exact gfx1201: six direct primal/reverse package cases
+and three public primal/JVP/reverse cases pass at M,K,N = (7,32,5),
+(17,64,19), (256,128,80), including changed encoded values, warm compiler
+exclusion and retained outputs. Four existing FP8/MXFP8 public controls also
+pass. No generic FP4/uint8 storage or differentiation promotion.
+
+Correctness-gated FP8/MXFP8/MXFP4 member, program-event and completed public
+timings are recorded separately in
+`benchmarks/baselines/mxfp4_residual_gate_20261014/gfx1201.json`.
+M=256 N=80/160 rows characterize the new exact residual route; they do not
+close the original Radiance per-column attribution gap or promote a schedule.
+General layouts, dynamic identity, broader AD and model-quality remain open.
+
+Exact-device execution is proved for this named gate-only profile. The five
+compiler slices, general producer retirement, dynamic/layout coverage,
+higher derivatives and the Radiance M256 attribution gap remain open.

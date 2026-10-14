@@ -2455,7 +2455,8 @@ private:
       mlir::Operation *clone = builder.clone(*op, map);
       clones.push_back(clone);
       if (exportScaledTranspose && requestedRoles && !requestedRoles.empty() &&
-          mlir::isa<tessera::ScaledMatmulOp>(op) &&
+          (mlir::isa<tessera::ScaledMatmulOp>(op) ||
+           tessera::isNativeScaledWideningCast(op)) &&
           !llvm::any_of(op->getOperands(), dependsOnRequested))
         inactiveScaledResiduals.insert(clone);
       auto residualIt = residualValues.find(op);

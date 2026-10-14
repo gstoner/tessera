@@ -4277,7 +4277,8 @@ def _shape_scaled_matmul(operands, attrs):
     if type(transpose_a) is not bool or type(transpose_b) is not bool:
         raise ValueError("scaled_matmul transpose attributes must be boolean")
     packed=physical=="rocm_mxfp4_w4a8_packed_folded_prefill_v1"
-    output="bf16" if packed else "fp32"
+    exact_mxfp4 = physical == "rocm_mxfp4_w4a8_exact_v1"
+    output="bf16" if packed or exact_mxfp4 else "fp32"
     if a.rank is None or b.rank is None:
         return tensor_ir_type(("*",),output)
     if attrs.get("batching") == "broadcast":
@@ -4355,6 +4356,32 @@ def _shape_scaled_matmul(operands, attrs):
         raise ValueError("scaled_matmul batching policy is unknown")
     if a.rank!=2 or b.rank!=2:
         raise ValueError("scaled_matmul frontend requires rank-two operands")
+    if exact_mxfp4:
+        # Preserve the existing BF16 store boundary. Symbolic decoration-time
+        # extents defer physical validation until concrete specialization;
+        # they must still carry the product/cast/gate semantic result types.
+        if (transpose_a or transpose_b or sa.rank != 1 or sb.rank != 2 or
+                a.dtype not in {None, "uint8"} or b.dtype not in {None, "uint8"} or
+                sa.dtype not in {None, "fp32"} or sb.dtype not in {None, "uint8"}):
+            raise ValueError("exact MXFP4 requires ui8 matrices/E8M0 scales and fp32 row scales")
+        m, k = a.shape
+        half_k, n = b.shape
+        def concrete(dim):
+            try:
+                return int(dim)
+            except (TypeError, ValueError):
+                return None
+        sizes = [concrete(dim) for dim in (m, k, half_k, n, *sa.shape, *sb.shape)]
+        if any(size is not None and size <= 0 for size in sizes):
+            raise ValueError("exact MXFP4 requires positive physical extents")
+        cm, ck, cp, cn, cs, cg, cb = sizes
+        if ((ck is not None and ck % 32) or
+                (ck is not None and cp is not None and cp * 2 != ck) or
+                (cm is not None and cs is not None and cm != cs) or
+                (ck is not None and cg is not None and cg != ck // 32) or
+                (cn is not None and cb is not None and cn != cb)):
+            raise ValueError("exact MXFP4 physical matrix/scale shapes differ")
+        return tensor_ir_type((m, n), "bf16")
     if packed:
         try:
             m,k=map(int,a.shape);n,half_k=map(int,b.shape)

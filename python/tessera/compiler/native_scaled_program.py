@@ -112,7 +112,7 @@ class NativeScaledProgram:
             elif step["operation"] == "tessera.transpose":
                 if len(step["inputs"]) != 1 or len(member["scalars"]) != 1:
                     raise ValueError("native result permutation has an invalid scalar ABI")
-            elif step["operation"] in {"tessera.broadcast", "tessera.reduce", "tessera.reshape"}:
+            elif step["operation"] in {"tessera.broadcast", "tessera.reduce", "tessera.reshape", "tessera.cast"}:
                 if (step.get("lowering") != "structured_f32_carrier"
                         or len(step["inputs"]) != 1 or len(member["scalars"]) != 1):
                     raise ValueError("native scaled carrier has an invalid scalar ABI")
@@ -247,7 +247,17 @@ class NativeScaledProgram:
                         raise ValueError("native scaled independent batch differs from physical planes")
                 elif (output_buffer["shape"] != [m,n] or lhs["shape"] not in ([m,k],[k,m])):
                     raise ValueError("native scaled runtime extents differ from typed storage")
-                if output_buffer["storage"]!="f32" or (batching not in ("independent_rhs","shared_lhs","broadcast") and rhs["shape"] not in ([k,n],[n,k])):
+                exact_mxfp4 = step.get("physical_contract") == "rocm_mxfp4_w4a8_exact_v1"
+                if exact_mxfp4:
+                    sa, sb = (buffers[slot] for slot in step["inputs"][2:])
+                    if (batching is not None or step.get("transposeA",False) or
+                            k % 32 or lhs["shape"] != [m,k] or rhs["shape"] != [k//2,n] or
+                            lhs["storage"] != "ui8" or rhs["storage"] != "ui8" or
+                            sa["shape"] != [m] or sa["storage"] != "f32" or
+                            sb["shape"] != [k//32,n] or sb["storage"] != "ui8" or
+                            output_buffer["storage"] != "bf16" or output_buffer["bytes"] != m*n*2):
+                        raise ValueError("native exact MXFP4 physical storage differs")
+                elif output_buffer["storage"]!="f32" or (batching not in ("independent_rhs","shared_lhs","broadcast") and rhs["shape"] not in ([k,n],[n,k])):
                     raise ValueError("native scaled runtime extents differ from typed storage")
             elif step["operation"] == "tensor.generate":
                 captured = [buffers[slot] for slot in step["inputs"]]
@@ -290,16 +300,20 @@ class NativeScaledProgram:
                     member["scalars"] != [output_buffer["elements"]] or
                     member["geometry"] != [(output_buffer["elements"]-1)//256+1,1,1,256,1,1]):
                     raise ValueError("native result permutation axes/storage/count/geometry differ")
-            elif step["operation"] in {"tessera.broadcast", "tessera.reduce", "tessera.reshape"}:
+            elif step["operation"] in {"tessera.broadcast", "tessera.reduce", "tessera.reshape", "tessera.cast"}:
                 source = buffers[step["inputs"][0]]
                 shape, result_shape = source["shape"], output_buffer["shape"]
-                if (source["storage"] != "f32" or output_buffer["storage"] != "f32"
+                widening = step["operation"] == "tessera.cast"
+                if (source["storage"] != ("bf16" if widening else "f32") or output_buffer["storage"] != "f32"
                         or member.get("scale_adjoint_schedule") != "serial_tensor_carrier"
                         or not 1 <= len(shape) <= 8 or not 1 <= len(result_shape) <= 8
                         or member["scalars"] != [output_buffer["elements"]]
                         or member["geometry"] != [(output_buffer["elements"]-1)//128+1,1,1,128,1,1]):
                     raise ValueError("native scaled carrier storage/count/geometry differs")
-                if step["operation"] == "tessera.reshape":
+                if widening:
+                    if (shape != result_shape or source["bytes"]*2 != output_buffer["bytes"]):
+                        raise ValueError("native BF16 widening must preserve shape and double storage bytes")
+                elif step["operation"] == "tessera.reshape":
                     if source["elements"] != output_buffer["elements"] or source["bytes"] != output_buffer["bytes"]:
                         raise ValueError("native scaled reshape must preserve element count and bytes")
                 elif step["operation"] == "tessera.broadcast":
@@ -422,7 +436,10 @@ def _package_native_scaled(graph_ir: str, *, target: str = "rocm_gfx1201", prima
             f"{selection}={index}}},tessera-graph-to-schedule" +
             ("{scale-transpose-wave=true}" if scale_transpose_wave else
              "{scale-transpose-auto=true}" if scale_transpose_auto else "") + ",tessera-schedule-to-tile,")
-        if project_image_identity and family == "matmul":
+        # The exact MXFP4 residual retains its static packed-image contract;
+        # existing shape-free FP8 identity projection does not cover it.
+        if (project_image_identity and family == "matmul" and
+                step.get("physical_contract") != "rocm_mxfp4_w4a8_exact_v1"):
             target_ir = compile_pipeline(prefix +
                 "tessera-rocm-executable{family=matmul input=tile output=target arch=gfx1201})")
             staging = re.findall(r'\bstaging\s*=\s*"(global|lds)"', target_ir)
@@ -501,6 +518,9 @@ class _StorageSpec:
 def _storage_numpy_dtype(storage):
     if storage == "f8E4M3FN": return np.dtype("uint8")
     if storage == "f32": return np.dtype("float32")
+    if storage == "bf16":
+        import ml_dtypes
+        return np.dtype(ml_dtypes.bfloat16)
     if storage.startswith("ui"): return np.dtype(f"uint{storage[2:]}")
     if storage.startswith("i"): return np.dtype(f"int{storage[1:]}")
     return None
@@ -516,6 +536,7 @@ class _BoundScaledABI:
     argument_count: int
     storage: tuple[_StorageSpec, ...]
     outputs: tuple[int, ...]
+    reserved_e8m0_inputs: tuple[int, ...]
 
 def _marshal_scaled_abi(package):
     package.validate()
@@ -532,10 +553,16 @@ def _marshal_scaled_abi(package):
                         len(m["inputs"]),len(m["scalars"]),
                         (c.c_uint32*6)(*m["inputs"]),m["output"],
                         (c.c_uint32*6)(*m["geometry"]),(c.c_int64*8)(*m["scalars"]))
+    reserved_scales = tuple(sorted({
+        step["inputs"][3] for step in program["steps"]
+        if step.get("physical_contract") == "rocm_mxfp4_w4a8_exact_v1"
+    }))
+    if any(slot >= program["argument_count"] for slot in reserved_scales):
+        raise ValueError("exact MXFP4 scale validation requires an original input binding")
     return _BoundScaledABI(buffers, steps, blobs, entries, program["argument_count"],
         tuple(_StorageSpec(tuple(row["shape"]),row["storage"],row["bytes"],
                            _storage_numpy_dtype(row["storage"])) for row in rows),
-        tuple(program["outputs"]))
+        tuple(program["outputs"]), reserved_scales)
 
 @lru_cache(maxsize=_BINDING_ENTRIES)
 def _cached_scaled_abi(package):
@@ -626,7 +653,7 @@ class PreparedScaledProgram:
         if len(inputs) != count:
             raise ValueError("native scaled program argument count differs")
         arrays = []
-        for value, contract in zip(inputs,self._binding.storage[:count]):
+        for slot, (value, contract) in enumerate(zip(inputs,self._binding.storage[:count])):
             array = np.asarray(value)
             storage = contract.storage
             if storage == "f8E4M3FN" and str(array.dtype) == "float8_e4m3fn":
@@ -635,6 +662,8 @@ class PreparedScaledProgram:
             if dtype is None or array.dtype != dtype or array.shape != contract.shape or array.nbytes != contract.bytes:
                 raise ValueError("native scaled input storage/shape/layout differs")
             array = pack_host_view(self.lib, array)
+            if slot in self._binding.reserved_e8m0_inputs and int(array.max()) == 255:
+                raise RuntimeError("MXFP4 E8M0 scale code 255 is reserved")
             arrays.append(array)
         return arrays, (c.c_void_p*count)(*(a.ctypes.data for a in arrays)), (c.c_uint64*count)(*(a.nbytes for a in arrays))
 

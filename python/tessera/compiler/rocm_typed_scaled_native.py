@@ -24,7 +24,7 @@ def requests_composed_typed_scaled(module):
     products=0
     permutations=0
     for op in fn.body:
-        if op.op_name in {"tessera.add", "tessera.broadcast"}:continue
+        if op.op_name in {"tessera.add", "tessera.broadcast", "tessera.cast"}:continue
         if op.op_name == "tessera.mul":
             permutations+=1
             continue
@@ -33,7 +33,10 @@ def requests_composed_typed_scaled(module):
             continue
         if op.op_name!="tessera.scaled_matmul" or len(op.operands)!=4:return False
         lhs=arguments.get(op.operands[0].removeprefix("%"))
-        if lhs is None or lhs.dtype!="fp8_e4m3" or op.kwargs.get("physical_contract"):return False
+        exact_mx = op.kwargs.get("physical_contract") == "rocm_mxfp4_w4a8_exact_v1"
+        if lhs is None or (lhs.dtype != "uint8" if exact_mx else
+                           lhs.dtype != "fp8_e4m3" or op.kwargs.get("physical_contract")):
+            return False
         products+=1
     return products>=2 or (products>=1 and permutations>=1)
 
@@ -80,7 +83,48 @@ class _LogicalScaleShape:
     def n_groups(self):
         return (self.n+self.scale_n-1)//self.scale_n
 
+def _exact_mxfp4_contract(module):
+    """Admission for the named packed K32 profile; arithmetic stays native."""
+    if len(module.functions) != 1:
+        return None
+    fn = module.functions[0]
+    if len(fn.body) != 1 or len(fn.args) != 4 or len(fn.result_types) != 1:
+        return None
+    op = fn.body[0]
+    if (op.op_name != "tessera.scaled_matmul" or len(op.operands) != 4
+            or len(set(op.operands)) != 4 or len(op.result_names) != 1
+            or fn.return_values != ["%" + op.result_names[0]]
+            or op.kwargs.get("physical_contract") != "rocm_mxfp4_w4a8_exact_v1"
+            or op.kwargs.get("numeric_policy") != {"accum": "fp32", "execution_mode": "exact_per_block"}
+            or op.kwargs.get("scale_layout") != {"granularity": "block", "block": [1, 32], "format": "e8m0"}
+            or op.kwargs.get("transposeA", False) is not False
+            or op.kwargs.get("transposeB", False) is not False
+            or op.kwargs.get("batching") is not None):
+        return None
+    args = {a.name: a.ir_type for a in fn.args}
+    if set(v.removeprefix("%") for v in op.operands) != set(args):
+        return None
+    from .graph_ir import _shape_scaled_matmul
+    types = [args[v.removeprefix("%")] for v in op.operands]
+    try:
+        expected = _shape_scaled_matmul(types, op.kwargs)
+    except (ValueError, TypeError):
+        return None
+    if str(expected) != str(fn.result_types[0]):
+        return None
+    m, k = map(int, types[0].shape)
+    n = int(types[1].shape[1])
+    if max(m*n, m*k, k*n) > 2**31-1:
+        return None
+    return (_LogicalScaleShape(m, n, k, 32, 1, "kn", "bf16"), "e8m0",
+            [v.removeprefix("%") for v in op.operands], op.result_names[0])
+
+
 def contract(module, *, semantic_only=False):
+    if semantic_only:
+        exact = _exact_mxfp4_contract(module)
+        if exact is not None:
+            return exact
     floating = semantic_only and requests_floating_scaled(module)
     if not requests_typed_scaled(module) and not floating:return None
     fn=module.functions[0];op=fn.body[0]
@@ -381,6 +425,8 @@ def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=F
     names = {arg.name: arg for arg in fn.args}
     values = {("%" + name): arg.ir_type for name, arg in names.items()}
     scales: set[str] = set()
+    rounded_roots: set[str] = set()
+    rounded_results: set[str] = set()
     used: set[str] = set()
     roots = {("%"+name): {name} for name in names}
     expected = fn.result_types[0]
@@ -390,7 +436,9 @@ def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=F
         if len(op.result_names) != 1 or any(v not in values for v in op.operands):
             return False
         result = op.inferred_type
-        if result is None or result.dtype != "fp32":
+        exact_mx = (op.op_name == "tessera.scaled_matmul" and
+                    op.kwargs.get("physical_contract") == "rocm_mxfp4_w4a8_exact_v1")
+        if result is None or result.dtype != ("bf16" if exact_mx else "fp32"):
             return False
         if op.op_name == "tessera.scaled_matmul":
             if len(op.operands) != 4:
@@ -416,9 +464,19 @@ def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=F
                     or (requests_floating_scaled(member) and not floating_reverse)):
                 return False
             eligible = op.operands if floating_reverse and requests_floating_scaled(member) else op.operands[2:]
-            scales.update(name for value in eligible for name in roots[value])
+            if exact_mx:
+                rounded_roots.update(name for value in op.operands for name in roots[value])
+                rounded_results.add("%"+op.result_names[0])
+            else:
+                scales.update(name for value in eligible for name in roots[value])
             used.update(v.removeprefix("%") for v in op.operands
                         if v.removeprefix("%") in names)
+        elif op.op_name == "tessera.cast":
+            if (len(op.operands) != 1 or op.operands[0] not in rounded_results
+                    or values[op.operands[0]].dtype != "bf16"
+                    or values[op.operands[0]].shape != result.shape
+                    or op.kwargs != {"dtype": "fp32"} or op.numeric_policy is not None):
+                return False
         elif op.op_name in {"tessera.add", "tessera.mul"}:
             if (len(op.operands) != 2 or op.kwargs or op.numeric_policy is not None
                     or any(str(values[v]) != str(result) for v in op.operands)):
@@ -466,6 +524,6 @@ def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=F
             and fn.return_values == ["%" + fn.body[-1].result_names[0]]
             and used == set(names)
             and all(type(i) is int and 0 <= i < len(fn.args)
-                    and fn.args[i].name in scales and fn.args[i].ir_type.dtype == "fp32"
+                    and fn.args[i].name in scales - rounded_roots and fn.args[i].ir_type.dtype == "fp32"
                     for i in wrt_indices)
             and len(set(wrt_indices)) == len(wrt_indices))

@@ -2,8 +2,17 @@
 #pragma once
 
 namespace tessera {
+static bool isNativeScaledWideningCast(mlir::Operation *op) {
+  if (!mlir::isa<CastOp>(op) || op->getNumOperands() != 1 ||
+      op->getNumResults() != 1) return false;
+  auto input = mlir::dyn_cast<mlir::RankedTensorType>(op->getOperand(0).getType());
+  auto output = mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
+  return input && output && input.getElementType().isBF16() &&
+      output.getElementType().isF32() && input.getShape() == output.getShape();
+}
 static bool isNativeScaledCarrier(mlir::Operation *op) {
-  return mlir::isa<BroadcastOp, ReduceOp, ReshapeOp>(op);
+  return mlir::isa<BroadcastOp, ReduceOp, ReshapeOp>(op) ||
+      isNativeScaledWideningCast(op);
 }
 
 static mlir::LogicalResult expandNativeScaledCarrier(mlir::Operation *op) {
@@ -11,9 +20,10 @@ static mlir::LogicalResult expandNativeScaledCarrier(mlir::Operation *op) {
   if (!isNativeScaledCarrier(op)) return failure();
   auto input = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
   auto output = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  bool widening = isNativeScaledWideningCast(op);
   if (!input || !output || !input.hasStaticShape() || !output.hasStaticShape() ||
       input.getEncoding() || output.getEncoding() ||
-      !input.getElementType().isF32() || !output.getElementType().isF32() ||
+      (!input.getElementType().isF32() && !widening) || !output.getElementType().isF32() ||
       input.getRank() < 1 || input.getRank() > 8 ||
       output.getRank() < 1 || output.getRank() > 8 ||
       output.getNumElements() <= 0 || output.getNumElements() > INT32_MAX)
@@ -52,6 +62,12 @@ static mlir::LogicalResult expandNativeScaledCarrier(mlir::Operation *op) {
   OpBuilder b(op);
   auto generator = tensor::GenerateOp::create(b, op->getLoc(), output, ValueRange{},
       [&](OpBuilder &g, Location loc, ValueRange indices) {
+    if (widening) {
+      Value element = tensor::ExtractOp::create(g, loc, source, indices);
+      tensor::YieldOp::create(g, loc,
+          arith::ExtFOp::create(g, loc, g.getF32Type(), element));
+      return;
+    }
     Value zeroIndex = arith::ConstantIndexOp::create(g, loc, 0);
     Value one = arith::ConstantIndexOp::create(g, loc, 1);
     Value upper = arith::ConstantIndexOp::create(g, loc, reduce ? input.getDimSize(axis) : 1);
@@ -98,7 +114,7 @@ static mlir::LogicalResult expandNativeScaledCarrier(mlir::Operation *op) {
     });
     tensor::YieldOp::create(g, loc, loop.getResult(0));
   });
-  generator->setAttr("tessera.native.scaled_carrier", b.getStringAttr(reduce ? "sum" : reshape ? "reshape" : "broadcast"));
+  generator->setAttr("tessera.native.scaled_carrier", b.getStringAttr(widening ? "cast_bf16_f32" : reduce ? "sum" : reshape ? "reshape" : "broadcast"));
   op->getResult(0).replaceAllUsesWith(generator.getResult());
   op->erase();
   return success();

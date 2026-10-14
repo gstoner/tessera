@@ -57,18 +57,21 @@ def test_native_widening_refuses_semantic_changes(bad):
 
 
 @pytest.mark.parametrize("storage",["f16","bf16"])
-def test_tracer_binds_positional_cast_dtype_as_attribute(storage):
+@pytest.mark.parametrize("evaluate", [False, True])
+def test_tracer_binds_positional_cast_dtype_as_attribute(storage, evaluate):
     import numpy as np
     import tessera as ts
     from tessera.compiler.trace import trace
     dtype=np.float16 if storage=="f16" else pytest.importorskip("ml_dtypes").bfloat16
     def call(a):return ts.ops.sqrt(ts.ops.cast(a,"fp32"))
-    graph=trace(call,np.ones((3,17),dtype))
+    graph=trace(call,np.ones((3,17),dtype),evaluate_catalog_outputs=evaluate)
     # Positional dtype is an attribute, not an additional tensor edge.
     assert [op.op_name for op in graph.body]==["tessera.cast","tessera.sqrt"]
     cast=graph.body[0]
     assert len(cast.operands)==1 and cast.kwargs["dtype"]=="fp32"
     assert graph.output_specs[0][1]=="f32"
+    assert cast.result_type == "tensor<3x17xf32>"
+    assert graph.body[1].operand_types == ["tensor<3x17xf32>"]
 
 
 @pytest.mark.parametrize("target",["x86","apple_gpu","nvidia"])

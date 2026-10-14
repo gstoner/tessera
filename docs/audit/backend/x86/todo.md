@@ -1,11 +1,37 @@
 ---
-last_updated: 2026-10-09
+last_updated: 2026-10-14
 audit_role: plan
 plan_state: open
 owner: x86 backend
 target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
+
+## NATIVE-PACKAGE-COMPILER-ADMISSION-20261014
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Shared contract: canonical admission accepts a validated materialized GPU
+image and its matching checked launch ABI as compiler evidence. Target,
+architecture, binary format, hashes, entry and ABI linkage are revalidated.
+All other operation, legality, numerical and runtime gates retain their
+existing authority; a non-executable bundle cannot become executable.
+Dashboard generation remains host invariant.
+Not applicable to x86 compiler admission: AVX-512 keeps its existing
+host compiler policy. Focused shared tests verify that the GPU package
+context does not override it. No CPU execution or timing claim transfers.
+
+
+## SM120-BOUNDED-SAVED-LSE-20261011
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Shared contracts: native Graph sequence projection, paired saved-LSE ABI and
+context-aware CUDA benchmark binding. No Python math/Tile lowering is added.
+Not applicable to AVX-512 physical execution: bounded projection
+explicitly requires nvidia_sm120/sm_120 and the native launch repair belongs
+to CUDA. Existing CPU packages and their ABI remain unchanged. No CPU execution
+or timing is inferred. Follow-up required for a separately verified native x86
+bounded saved-LSE consumer; general AD integration remains open.
+
 
 ## GFX1201-RETAINED-PUBLIC-JVP-20261009
 

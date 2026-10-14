@@ -967,8 +967,8 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
                     size_t nbuf, const int64_t* dims, size_t ndim) {
     // 7 dims: full-shape bias (or none); 9: batch/head-broadcast bias (BiasB,
     // BiasH); 11: every bias axis physical (BiasB, BiasH, BiasQ, BiasK). The
-    // kernel bakes the physical extents in; these scalars size and validate
-    // the host copy only.
+    // static kernel bakes physical extents in; bounded kernels also consume
+    // these scalar arguments for runtime physical-bias indexing.
     if ((ndim != 7 && ndim != 9 && ndim != 11) || !name) return 5;
     const bool hasSavedLse = std::strstr(name, "_lse_") != nullptr;
     if ((!hasSavedLse && nbuf != 4 && nbuf != 5) ||
@@ -1027,12 +1027,12 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
         for (size_t i = 0; i < outputIndex; ++i)
             if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) { rc = 3; break; }
     if (!rc) {
-        long long args64[7];
-        for (int i = 0; i < 7; ++i) args64[i] = dims[i];
-        void* args[13] = {};
+        long long args64[11];
+        for (size_t i = 0; i < ndim; ++i) args64[i] = dims[i];
+        void* args[17] = {};
         size_t arg = 0;
         for (size_t i = 0; i < nbuf; ++i) args[arg++] = &device[i];
-        for (int i = 0; i < 7; ++i) args[arg++] = &args64[i];
+        for (size_t i = 0; i < ndim; ++i) args[arg++] = &args64[i];
         unsigned grid = (unsigned)((oElements + 127) / 128);
         if (grid == 0 || grid > 0x7fffffffU ||
             !cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0), "cuLaunchKernel") ||
@@ -1315,11 +1315,11 @@ int invokeAttentionBackward(CUfunction fn, const char* kernelName,
         for (size_t i=0;i<outputBase;++i)
             if (!cuOk(cuMemcpyHtoD(device[i],buffers[i],sizes[i]), "cuMemcpyHtoD")) { rc=3; break; }
     if (!rc) {
-        long long args64[7]; for(int i=0;i<7;++i) args64[i]=dims[i];
-        void* args[19] = {};
+        long long args64[11]; for(size_t i=0;i<ndim;++i) args64[i]=dims[i];
+        void* args[23] = {};
         size_t arg=0;
         for(size_t i=0;i<nbuf;++i) args[arg++]=&device[i];
-        for(int i=0;i<7;++i) args[arg++]=&args64[i];
+        for(size_t i=0;i<ndim;++i) args[arg++]=&args64[i];
         const __uint128_t wideElements = (__uint128_t)(qBytes/elementBytes) + kBytes/elementBytes + vBytes/elementBytes + (hasBiasGradient ? biasBytes/4 : 0);
     if (wideElements > (size_t)0x7fffffffU*128) return 5;
     const size_t elements = (size_t)wideElements;
@@ -1391,12 +1391,12 @@ int invokeAttentionBackwardResident(CUfunction fn, const char* kernelName,
     CUdeviceptr device[12] = {};
     for (size_t i=0;i<nbuf;++i)
         device[i]=reinterpret_cast<CUdeviceptr>(buffers[i]);
-    long long args64[7];
-    for (int i=0;i<7;++i) args64[i]=dims[i];
-    void* args[19] = {};
+    long long args64[11];
+    for (size_t i=0;i<ndim;++i) args64[i]=dims[i];
+    void* args[23] = {};
     size_t arg=0;
     for (size_t i=0;i<nbuf;++i) args[arg++]=&device[i];
-    for (int i=0;i<7;++i) args[arg++]=&args64[i];
+    for (size_t i=0;i<ndim;++i) args[arg++]=&args64[i];
     const __uint128_t wideElements = (__uint128_t)(qBytes/elementBytes) + kBytes/elementBytes + vBytes/elementBytes + (hasBiasGradient ? biasBytes/4 : 0);
     if (wideElements > (size_t)0x7fffffffU*128) return 5;
     const size_t elements = (size_t)wideElements;
@@ -2792,13 +2792,14 @@ int invokeResident(const char* name, void** buffers, size_t nbuf,
         CUdeviceptr o=reinterpret_cast<CUdeviceptr>(buffers[3 + size_t(hasBias)]);
         CUdeviceptr lse=hasSavedLse
             ? reinterpret_cast<CUdeviceptr>(buffers[4 + size_t(hasBias)]) : CUdeviceptr{};
-        long long args64[7]={B,Hq,Hkv,Sq,Sk,D,Dv};
-        void* args[13]={&q,&k,&v};
+        long long args64[11] = {};
+        for (size_t i=0;i<ndim;++i) args64[i]=dims[i];
+        void* args[17]={&q,&k,&v};
         size_t arg=3;
         if(hasBias) args[arg++]=&bias;
         args[arg++]=&o;
         if(hasSavedLse) args[arg++]=&lse;
-        for(size_t i=0;i<7;++i) args[arg++]=&args64[i];
+        for(size_t i=0;i<ndim;++i) args[arg++]=&args64[i];
         const size_t outputs=(size_t)B*(size_t)Hq*(size_t)Sq*(size_t)Dv;
         const unsigned grid=(unsigned)((outputs+127)/128);
         return cuOk(cuLaunchKernel(fn,grid,1,1,128,1,1,0,

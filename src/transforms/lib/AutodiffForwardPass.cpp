@@ -22,6 +22,7 @@
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "NativeStorageJVP.h"
 #include "NativeScaledMatmulProgram.h"
+#include "NativeAttentionProjection.h"
 #include "llvm/Support/JSON.h"
 
 namespace tessera {
@@ -576,6 +577,15 @@ class AutodiffForwardPass
     if (emitStorageChild && forwards.size() != 1) {
       module.emitError("native storage JVP requires exactly one forward request to generate its child");
       return signalPassFailure();
+    }
+
+    if (module->hasAttr("tessera.attention_sequence_bounds")) {
+      if (!exportAttentionJVP || forwards.size() != 1) {
+        module.emitError("bounded attention projection requires one native attention JVP export");
+        return signalPassFailure();
+      }
+      if (mlir::failed(projectBoundedAttentionEntry(module, forwards.front())))
+        return signalPassFailure();
     }
 
     if (exportAttentionJVP) {

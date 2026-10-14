@@ -47,6 +47,7 @@ from tessera.compiler import backend_manifest as _bm
 from tessera.compiler import capabilities as _cap
 from tessera.compiler import execution_matrix as _em
 from tessera.compiler import primitive_coverage as _pc
+from tessera.compiler.native_artifact import NativeImageArtifact, LaunchDescriptor
 
 
 # --- Gate names + status enum --------------------------------------------
@@ -55,7 +56,7 @@ from tessera.compiler import primitive_coverage as _pc
 GATE_LEGALITY = "legality"
 #: Target IR / backend lowering pass produces an artifact.
 GATE_CODEGEN = "codegen"
-#: Backend compiler binary is present at the pinned version.
+#: Backend compilation is available, or a checked native GPU package exists.
 GATE_TOOLCHAIN = "toolchain"
 #: Backend can produce a linked / loadable runtime artifact.
 GATE_LINK = "link"
@@ -418,24 +419,65 @@ _EVALUATORS = {
 
 # --- Public API ----------------------------------------------------------
 
-def evaluate(target: str, op_name: Optional[str] = None) -> tuple[GateResult, ...]:
-    """Evaluate all seven gates for ``(target, op_name)`` in canonical order.
+def _native_package_toolchain(
+    target: str,
+    native_image: NativeImageArtifact | None,
+    launch_descriptor: LaunchDescriptor | None,
+) -> GateResult | None:
+    """Resolve GPU compiler admission from an already materialized package.
 
-    Returns a tuple of seven results, one per gate. Each gate is evaluated
-    independently — short-circuiting is done by the *caller* via
-    :func:`first_failing_gate`. The reason: the dashboard wants to show every
-    gate's status, even after the first failure (so e.g. NVIDIA shows
-    ``codegen=pass / toolchain=fail / runtime_abi=fail`` instead of just
-    ``toolchain=fail / rest=not_evaluated``).
+    Native artifact validation owns hashes, entry points, pipeline registration
+    and ABI linkage. This changes no operation, runtime or numerical gate.
+    Apple/x86 retain their existing host compiler policy.
+    """
+    family = _normalize_target(target)
+    if _DASHBOARD_DETERMINISTIC or family not in ("nvidia", "rocm"):
+        return None
+    if native_image is None and launch_descriptor is None:
+        return None
+    if not isinstance(native_image, NativeImageArtifact) or not isinstance(launch_descriptor, LaunchDescriptor):
+        return GateResult(GATE_TOOLCHAIN, STATUS_FAIL, "native compiler evidence requires an image and launch descriptor")
+    try:
+        image = NativeImageArtifact.from_dict(native_image.to_dict())
+        descriptor = LaunchDescriptor.from_dict(launch_descriptor.to_dict())
+        descriptor.validate_image(image)
+        if image.target != target:
+            raise ValueError("native image target differs from the compile request")
+        expected_arch = target.removeprefix(family + "_").replace("_", "")
+        architectures = {expected_arch}
+        # Existing native CUDA images use architecture-specific "a" variants.
+        # This is an image target variant, not a different frontend target.
+        if target in ("nvidia_sm90", "nvidia_sm100", "nvidia_sm120"):
+            architectures.add(expected_arch + "a")
+        if image.architecture.replace("_", "") not in architectures:
+            raise ValueError("native image architecture differs from the compile request")
+        formats = ("ptx", "cubin") if family == "nvidia" else ("hsaco",)
+        if image.binary_format not in formats:
+            raise ValueError("native image format differs from the requested GPU backend")
+    except (TypeError, ValueError) as exc:
+        return GateResult(GATE_TOOLCHAIN, STATUS_FAIL, f"invalid native compiler evidence: {exc}")
+    return GateResult(
+        GATE_TOOLCHAIN, STATUS_PASS,
+        f"validated {image.binary_format} native image and launch ABI; compiler/toolchain fingerprints retained",
+    )
 
-    Sub-target names like ``nvidia_sm90`` / ``rocm_gfx942`` are normalized to
-    their family (``nvidia`` / ``rocm``) so callers can pass either form.
+
+def evaluate(
+    target: str, op_name: Optional[str] = None, *,
+    native_image: NativeImageArtifact | None = None,
+    launch_descriptor: LaunchDescriptor | None = None,
+) -> tuple[GateResult, ...]:
+    """Evaluate all seven gates in canonical order.
+
+    Without a package, toolchain admission probes the live compiler as before.
+    A checked native GPU image and its ABI can instead substantiate compiler
+    admission for packaged compilation/replay. Every other gate still resolves
+    its original operation/target truth. Dashboard mode remains host invariant.
     """
     norm = _normalize_target(target)
-    # Codegen / link / numerical inspect the per-arch manifest entries; pass
-    # the *original* target to those so e.g. ``nvidia_sm90`` matches one
-    # specific manifest row instead of the aggregated family.
+    package_gate = _native_package_toolchain(target, native_image, launch_descriptor)
     return tuple(
+        package_gate if g == GATE_TOOLCHAIN and package_gate is not None else
         _EVALUATORS[g](norm if g in _FAMILY_LEVEL_GATES else target, op_name)
         for g in GATE_ORDER
     )
@@ -447,11 +489,14 @@ _FAMILY_LEVEL_GATES = frozenset({
 
 
 def first_failing_gate(
-    target: str, op_name: Optional[str] = None
+    target: str, op_name: Optional[str] = None, *,
+    native_image: NativeImageArtifact | None = None,
+    launch_descriptor: LaunchDescriptor | None = None,
 ) -> Optional[GateResult]:
     """Return the first ``status == "fail"`` gate, or ``None`` if every gate
     is ``pass`` / ``not_evaluated`` / ``not_applicable``."""
-    for result in evaluate(target, op_name):
+    for result in evaluate(target, op_name, native_image=native_image,
+                           launch_descriptor=launch_descriptor):
         if result.status == STATUS_FAIL:
             return result
     return None

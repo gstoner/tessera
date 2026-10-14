@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-09
+last_updated: 2026-10-14
 audit_role: reference
 ---
 
@@ -11980,7 +11980,7 @@ run1.json, run2.json, device-tests.txt.
 ### 2026-10-09 — retained checked GFX1201 public JVP plan
 
 Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
-PRs: pending; sync GFX1201-RETAINED-PUBLIC-JVP-20261009.
+PRs: #935 (merged); sync GFX1201-RETAINED-PUBLIC-JVP-20261009.
 
 Outcome: One caller-owned sealed native program retains C++ buffers,
 generations and module ownership. Warm binding avoids repeated serialized
@@ -11998,4 +11998,76 @@ composition, wider quantized AD and the larger five-slice obligations.
 
 Evidence: benchmarks/baselines/retained_public_scaled_jvp_20261009/README.md,
 control1.json, candidate1.json, candidate2.json, control2.json.
+<!-- entry-fields:end -->
+
+### 2026-10-11 — bounded public saved-LSE JVP and broadcast launch ABI
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+Shared: AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+PRs: pending; sync SM120-BOUNDED-SAVED-LSE-20261011.
+
+Outcome: Public sequence bounds now cross a shared verified native MLIR
+projection before forward or reverse AD. Paired O/LSE/dO/dLSE execute through
+Graph AD, Schedule, Tile and LLVM/PTX while preserving schemas 1–6. Serialized
+replay, inactive/value/bias roles, capacity guards and independent old outputs
+pass on the RTX5070. Generic host/resident attention forward/backward argument
+vectors now carry all physical bias scalars; the discovered resident driver
+crash is reproduced by the packet and repaired in the native provider.
+428 matching-compiler, schema, artifact and registry tests and 74 exact-device
+RTX 5070 tests pass. Two fresh
+30-profile packets retain identical sealed program/image/binding identities
+and all 22 source/four binary pins match. Maximum error is 7.1888e-7.
+After review, both packets were regenerated. Forward event medians span
+8.303–56.553 us, JVP dispatch medians 10.967–26.872 us, and completed
+resident capture+JVP medians 5.093–7.285 ms. These are characterization,
+not promotion evidence.
+No speedup, generic AD closure or sibling hardware parity is claimed.
+Current W1.1 census distinguishes migrated SM120 Schedule/Tile entries from
+retained pre-SM120 tensor constructors; global retirement remains open.
+
+Remaining: Host preparation/ownership overhead, wider storage/masks,
+general compositions, higher-order transforms, W1.1 producer retirement,
+quantized routes and the wider five-slice programs. All four backend plans
+record an architecture-specific outcome.
+
+Evidence: benchmarks/baselines/bounded_saved_lse_jvp_20261011/README.md,
+run1.json and run2.json; tests/device/nvidia/test_bounded_saved_lse_jvp.py.
+<!-- entry-fields:end -->
+
+
+### 2026-10-14 — checked native package compiler admission
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+Shared: FRONTEND-IR-MEDIUM-1.
+PRs: pending; sync NATIVE-PACKAGE-COMPILER-ADMISSION-20261014.
+
+Outcome: The broad unit lane exposed a legacy tool-presence rejection after
+successful LLVM-native ROCm packaging. Canonical admission now accepts the
+validated image/descriptor pair as compiler evidence while preserving every
+other gate and the bundle's executable status. Stale hashes, target or
+architecture mismatches, missing descriptors and wrong formats are refused.
+Host-invariant dashboards and Apple/x86 compiler policies are unchanged.
+A real RTX 5070 ragged FP16 package admits and executes numerically with nvcc
+hidden and compiler subprocesses forbidden. The device fixture's M/K/N order
+was corrected; the runtime's original shape guard correctly rejected it.
+
+Candidate validation: A matching LLVM/MLIR 23.1.1 rebuild on Tajasaurus
+passes 77 ingest/package/numerical/shared admission cases on gfx1201.
+
+Validation: The final fully provisioned Super-Bear WSL non-slow unit lane
+passes 26,041 cases, with 7,568 skips and no failures. Ruff, focused mypy,
+shared audit/registry gates, compiler-plan links and generated-doc drift pass.
+
+Review repair: Unit physical bias axes remain fixed even when the trace
+sequence is one. Six compiler regressions fail on the original tool and
+pass on the matching rebuild. 381 focused compiler/registry cases, 81
+adjacent/JVP device cases and six compact/generic reverse cases pass.
+Both 30-profile packets were refreshed with matching revised source/tools.
+
+Remaining: Exact-head CI review. This does not close general backend routing,
+performance promotion, broader AD or W1.1 retirement.
+
+Evidence: tests/unit/test_native_package_pipeline_gates.py,
+tests/unit/test_rocm_nvfp4_ingest_package.py and
+tests/device/nvidia/test_native_package_pipeline_gates.py.
 <!-- entry-fields:end -->

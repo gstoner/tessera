@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-27
+last_updated: 2026-10-11
 audit_role: reference
 ---
 
@@ -206,7 +206,7 @@ Source checks superseding the archived August census:
 |---|---|
 | `src/compiler/ir/TileOps.cpp::MMAOp::verify` filters data operands, rejects unknown fragment types and calls `verifyMMAFromTypes`. Its separate tensor-value lane checks rank, types, arity and accumulator compatibility. | No permissive bare-fragment branch remains to delete. W1.1 owns eventual tensor-value lane retirement after its actual callers migrate. |
 | `GenerateWMMAGemmKernel.cpp` constructs parameterized A/B/accumulator fragment types; its typed view/pack/zero/MMA chain is a real producer. | The inventory's “zero typed C++ producers” premise is obsolete. Preserve the existing typed ROCm path and its regression gates. |
-| `src/transforms/lib/TileIRLoweringPass.cpp` still has two `OperationState(..., "tile.mma")` tensor-valued construction sites. | W1.1 / IR-NATIVE-FOUNDATION-1 F2: migrate both to the logical/typed boundary and prove NVIDIA lowering before removing the value lane. Constructor-site presence was checked; this is not a new device execution result. |
+| October 11 source refresh: `TileIRLoweringPass.cpp` retains two tensor-valued `tile.mma` constructors, registered only for `smVersion < 120`. SM120 standalone/canonical entries delegate to native Graph/Schedule/Tile after verified recovery. | W1.1 / IR-NATIVE-FOUNDATION-1 F2: retain older-target consumer proof and general producer composition work. These are no longer two unmigrated SM120 entries; the global tensor-value lane remains gated. This is a source census, not fresh device execution evidence; see the current census in W1_1_TYPING_DESIGN.md. |
 | The typing design's completion ledger retains NVIDIA producer/Target proof and the separately checked tensor lane as its residuals. | Keep `W1_1_TYPING_DESIGN.md` live. The old inventory is historical; no plan closure or native capability promotion follows. |
 
 

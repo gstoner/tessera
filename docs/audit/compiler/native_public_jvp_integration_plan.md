@@ -2,7 +2,7 @@
 audit_role: plan
 plan_state: landing
 owner: Compiler frontend and AD
-last_updated: 2026-10-09
+last_updated: 2026-10-14
 ---
 
 # Public native JVP integration
@@ -141,8 +141,9 @@ tessera.native_attention_jvp_program.v3.
 
 The combined ABI orders tensor outputs tangent, dlse before scratch and
 query_size/key_size scalars. All four backend queues are assessed under
-ATTENTION-JVP-SCHEMA-RECONCILE-20261011. Exact-device evidence for the combined
-bounded saved-LSE route remains a separate SM120 gate.
+ATTENTION-JVP-SCHEMA-RECONCILE-20261011. The named combined
+bounded saved-LSE SM120 gate is now proved under SM120-BOUNDED-SAVED-LSE-20261011;
+broader storage, masks and compositions remain separate gates.
 
 Validation: 624 focused native compiler, portable artifact/runtime, public
 JVP, bounded/bias and registry/audit tests pass with a freshly built
@@ -150,3 +151,40 @@ LLVM/MLIR 23.1.1 compiler on Tajasaurus. The 24-case schema matrix includes
 inactive score/value-only paths and rejection of colliding schema numbers.
 Ruff passes. These are compiler/ABI checks, not SM120 numerical evidence
 for the newly combined route.
+
+
+## Public bounded saved-LSE execution (2026-10-11)
+
+The explicit JIT JVP program now accepts sequence_bounds. Python supplies
+positive Sq/Sk capacities while retaining its original static traced Graph;
+the shared native MLIR projection checks and constructs symbolic sequence
+types before either forward or reverse AD. Schema 5 means bounded saved-LSE
+specifically. Schema 6 and output-only schemas 1–4 are unchanged.
+
+Fresh matching native compiler checks cover the public request, capacity
+rejection, schema selection, dynamic LSE, ordering, artifact replay and prior
+reverse projection. RTX5070 numerical execution covers (9,11) and (17,129)
+capacities, inactive/value-only/bias-only activity, repeated shapes and old
+generations. Generic host/resident forward and backward launches retain all
+11 logical/physical scalars for dynamic broadcast bias; seven-scalar full
+shape kernels remain valid.
+
+Two fresh 30-profile packets have identical sealed package/image/binding
+identities and all 22 source/four binary pins match. Maximum absolute error is
+7.188786748102416e-7. Forward CUDA-event medians span 7.606–55.883 us; JVP
+preloaded dispatch medians span 8.964–10.885 us. Completed resident capture+JVP
+medians span 4.955–6.159 ms, leaving host preparation/ownership overhead open.
+No kernel speedup, promotion, generic AD or sibling device closure is claimed.
+All four architecture queues are assessed under the shared synchronization key.
+
+Evidence: benchmarks/baselines/bounded_saved_lse_jvp_20261011/README.md.
+
+
+## Scratch reconciliation — 2026-10-14
+
+Merged PRs 933–941 are the integration baseline. Historical scratch mirrors
+were reconciled and pruned; unique scaled-multiply/prototype overlays remain
+in recovery commits rather than active worktrees. The scaled-multiply carrier
+remains follow-up required: port it onto the current main use-after-free repair,
+then run native compilation, numerical, registry and benchmark gates before
+landing. It is not included in bounded saved-LSE closure evidence.

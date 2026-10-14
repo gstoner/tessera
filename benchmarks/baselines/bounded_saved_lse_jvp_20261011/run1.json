@@ -1,0 +1,1789 @@
+{
+  "schema": "tessera.bounded_saved_lse_jvp.packet.v1",
+  "architecture": "sm_120",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "git_base": "1be764ca63a4ee32b23ba8fe1f916dcfd97410ed",
+  "route": "Python frontend -> typed Graph AD -> Schedule -> Tile -> LLVM/PTX -> checked CUDA ABI",
+  "sequence_bounds": [
+    17,
+    129
+  ],
+  "rows": [
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        4,
+        3
+      ],
+      "biased": false,
+      "activity": [
+        "k",
+        "v",
+        "q"
+      ],
+      "schema": 5,
+      "program_digest": "a5c1be764e4a59606efa028fbceca73a4a85dd4336ff18120d0c52c9957c9c9e",
+      "forward_image_digest": "063aad55d8677ed4d32993298ac428c42a681ce2d70dde0999605294b4a73fa8",
+      "jvp_binding_digest": "0d74cd132a89b32297a2ca148d953da24d666b306b80851c39b1e3374745ba56",
+      "compile_wall_ms": 1585.9333970001899,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 6.300979293882847e-09,
+      "forward_device_event_samples_ms": [
+        0.01812399923801422,
+        0.017107000574469566,
+        0.01621999964118004
+      ],
+      "forward_device_event_median_ms": 0.017107000574469566,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.02317499928176403,
+          0.027816999703645706,
+          0.025136500597000122,
+          0.021524500101804733,
+          0.027783500030636787
+        ],
+        "device_dispatch_median_ms": 0.025136500597000122,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.4649269999390526,
+        0.31122100017455523,
+        0.31792099980521016
+      ],
+      "checked_jvp_completed_median_ms": 0.31792099980521016,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.142636999811657,
+        6.252904000120907,
+        5.8821349998652295
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.142636999811657
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        4,
+        4,
+        3
+      ],
+      "biased": false,
+      "activity": [
+        "k",
+        "v",
+        "q"
+      ],
+      "schema": 5,
+      "program_digest": "a5c1be764e4a59606efa028fbceca73a4a85dd4336ff18120d0c52c9957c9c9e",
+      "forward_image_digest": "063aad55d8677ed4d32993298ac428c42a681ce2d70dde0999605294b4a73fa8",
+      "jvp_binding_digest": "0d74cd132a89b32297a2ca148d953da24d666b306b80851c39b1e3374745ba56",
+      "compile_wall_ms": 1585.9333970001899,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 6.922966888645021e-08,
+      "forward_device_event_samples_ms": [
+        0.010453999973833561,
+        0.02316099964082241,
+        0.011807000264525414
+      ],
+      "forward_device_event_median_ms": 0.011807000264525414,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.022935500368475914,
+          0.025526000186800957,
+          0.028653500601649284,
+          0.02174999937415123,
+          0.028056999668478966
+        ],
+        "device_dispatch_median_ms": 0.025526000186800957,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3919189998669026,
+        0.41454800020801486,
+        0.3828889998658269
+      ],
+      "checked_jvp_completed_median_ms": 0.3919189998669026,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.276303000049666,
+        6.212536000020918,
+        5.844656000135728
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.212536000020918
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        9,
+        11,
+        4,
+        3
+      ],
+      "biased": false,
+      "activity": [
+        "k",
+        "v",
+        "q"
+      ],
+      "schema": 5,
+      "program_digest": "a5c1be764e4a59606efa028fbceca73a4a85dd4336ff18120d0c52c9957c9c9e",
+      "forward_image_digest": "063aad55d8677ed4d32993298ac428c42a681ce2d70dde0999605294b4a73fa8",
+      "jvp_binding_digest": "0d74cd132a89b32297a2ca148d953da24d666b306b80851c39b1e3374745ba56",
+      "compile_wall_ms": 1585.9333970001899,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 2.1363181135214404e-07,
+      "forward_device_event_samples_ms": [
+        0.025150999426841736,
+        0.02125299908220768,
+        0.01674100011587143
+      ],
+      "forward_device_event_median_ms": 0.02125299908220768,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.02687150053679943,
+          0.02810000069439411,
+          0.022904500365257263,
+          0.0223229993134737,
+          0.027461500838398933
+        ],
+        "device_dispatch_median_ms": 0.02687150053679943,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3553499996087339,
+        0.3847389998554718,
+        0.35778000028585666
+      ],
+      "checked_jvp_completed_median_ms": 0.35778000028585666,
+      "resident_capture_jvp_completed_samples_ms": [
+        5.942451999999321,
+        5.380017999868869,
+        6.019170999934431
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.942451999999321
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        17,
+        129,
+        4,
+        3
+      ],
+      "biased": false,
+      "activity": [
+        "k",
+        "v",
+        "q"
+      ],
+      "schema": 5,
+      "program_digest": "a5c1be764e4a59606efa028fbceca73a4a85dd4336ff18120d0c52c9957c9c9e",
+      "forward_image_digest": "063aad55d8677ed4d32993298ac428c42a681ce2d70dde0999605294b4a73fa8",
+      "jvp_binding_digest": "0d74cd132a89b32297a2ca148d953da24d666b306b80851c39b1e3374745ba56",
+      "compile_wall_ms": 1585.9333970001899,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 6.124463443057948e-07,
+      "forward_device_event_samples_ms": [
+        0.04864700138568878,
+        0.04907099902629852,
+        0.04905800148844719
+      ],
+      "forward_device_event_median_ms": 0.04905800148844719,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.026244500651955605,
+          0.022554999217391014,
+          0.020932499319314957,
+          0.028063999488949776,
+          0.024475999176502228
+        ],
+        "device_dispatch_median_ms": 0.024475999176502228,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.4546870000012859,
+        0.34967999999935273,
+        0.41720800027178484
+      ],
+      "checked_jvp_completed_median_ms": 0.41720800027178484,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.0647999998764135,
+        10.660337999979674,
+        5.52124499972706
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.0647999998764135
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        17,
+        1,
+        4,
+        3
+      ],
+      "biased": false,
+      "activity": [
+        "k",
+        "v",
+        "q"
+      ],
+      "schema": 5,
+      "program_digest": "a5c1be764e4a59606efa028fbceca73a4a85dd4336ff18120d0c52c9957c9c9e",
+      "forward_image_digest": "063aad55d8677ed4d32993298ac428c42a681ce2d70dde0999605294b4a73fa8",
+      "jvp_binding_digest": "0d74cd132a89b32297a2ca148d953da24d666b306b80851c39b1e3374745ba56",
+      "compile_wall_ms": 1585.9333970001899,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 7.727066986262798e-09,
+      "forward_device_event_samples_ms": [
+        0.01973400078713894,
+        0.020695000886917114,
+        0.01637299917638302
+      ],
+      "forward_device_event_median_ms": 0.01973400078713894,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.014876999892294407,
+          0.016404999420046806,
+          0.01917250081896782,
+          0.013632499612867832,
+          0.016358500346541405
+        ],
+        "device_dispatch_median_ms": 0.016358500346541405,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3940490000786667,
+        0.32052100004875683,
+        0.3935189997719135
+      ],
+      "checked_jvp_completed_median_ms": 0.3935189997719135,
+      "resident_capture_jvp_completed_samples_ms": [
+        5.760508000093978,
+        5.481236999912653,
+        5.398737000177789
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.481236999912653
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        1,
+        129,
+        4,
+        3
+      ],
+      "biased": false,
+      "activity": [
+        "k",
+        "v",
+        "q"
+      ],
+      "schema": 5,
+      "program_digest": "a5c1be764e4a59606efa028fbceca73a4a85dd4336ff18120d0c52c9957c9c9e",
+      "forward_image_digest": "063aad55d8677ed4d32993298ac428c42a681ce2d70dde0999605294b4a73fa8",
+      "jvp_binding_digest": "0d74cd132a89b32297a2ca148d953da24d666b306b80851c39b1e3374745ba56",
+      "compile_wall_ms": 1585.9333970001899,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 8.389003358644231e-08,
+      "forward_device_event_samples_ms": [
+        0.047922998666763306,
+        0.047958001494407654,
+        0.047648001462221146
+      ],
+      "forward_device_event_median_ms": 0.047922998666763306,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.016426999121904373,
+          0.015542999841272831,
+          0.015438999980688095,
+          0.01709599979221821,
+          0.014677000232040882
+        ],
+        "device_dispatch_median_ms": 0.015542999841272831,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3606199998102966,
+        0.3136909999739146,
+        0.3416899999137968
+      ],
+      "checked_jvp_completed_median_ms": 0.3416899999137968,
+      "resident_capture_jvp_completed_samples_ms": [
+        5.617031999918254,
+        5.355627999961143,
+        5.3871790000812325
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.3871790000812325
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        4,
+        3
+      ],
+      "biased": false,
+      "activity": [
+        "v"
+      ],
+      "schema": 5,
+      "program_digest": "efb1ff1caf32fe5cdf95316cafedeffe8db38ffa91eaa3c432431c2b0e9549ee",
+      "forward_image_digest": "6a84f44bcb20cc70cfa037703cf0daf87fc82c8a7238967756f1ae1e623181f3",
+      "jvp_binding_digest": "23634abc6941909d30786523f0414bfb3bb8f487417419008e36aa07c2561627",
+      "compile_wall_ms": 1103.8407770001868,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.1088559404015541e-08,
+      "forward_device_event_samples_ms": [
+        0.01774200052022934,
+        0.015955999493598938,
+        0.013004000298678875
+      ],
+      "forward_device_event_median_ms": 0.015955999493598938,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.016367999836802483,
+          0.01575149968266487,
+          0.015980500727891922,
+          0.013968500308692455,
+          0.015384499914944172
+        ],
+        "device_dispatch_median_ms": 0.01575149968266487,
+        "resources": {
+          "registers": 38,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 512,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3412210003261862,
+        0.3164310001011472,
+        0.30974099990999093
+      ],
+      "checked_jvp_completed_median_ms": 0.3164310001011472,
+      "resident_capture_jvp_completed_samples_ms": [
+        5.666500999723212,
+        5.3338489997258876,
+        5.19693299975188
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.3338489997258876
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        4,
+        4,
+        3
+      ],
+      "biased": false,
+      "activity": [
+        "v"
+      ],
+      "schema": 5,
+      "program_digest": "efb1ff1caf32fe5cdf95316cafedeffe8db38ffa91eaa3c432431c2b0e9549ee",
+      "forward_image_digest": "6a84f44bcb20cc70cfa037703cf0daf87fc82c8a7238967756f1ae1e623181f3",
+      "jvp_binding_digest": "23634abc6941909d30786523f0414bfb3bb8f487417419008e36aa07c2561627",
+      "compile_wall_ms": 1103.8407770001868,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 6.922966888645021e-08,
+      "forward_device_event_samples_ms": [
+        0.015657000243663788,
+        0.010107999667525291,
+        0.011652999557554722
+      ],
+      "forward_device_event_median_ms": 0.011652999557554722,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.011164000257849693,
+          0.016872499138116837,
+          0.01763799972832203,
+          0.014081999659538269,
+          0.015533500351011753
+        ],
+        "device_dispatch_median_ms": 0.015533500351011753,
+        "resources": {
+          "registers": 38,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 512,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3811090000453987,
+        0.3139209998153092,
+        0.30609099985667854
+      ],
+      "checked_jvp_completed_median_ms": 0.3139209998153092,
+      "resident_capture_jvp_completed_samples_ms": [
+        5.274843000279361,
+        5.233923000105278,
+        5.006928000057087
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.233923000105278
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        9,
+        11,
+        4,
+        3
+      ],
+      "biased": false,
+      "activity": [
+        "v"
+      ],
+      "schema": 5,
+      "program_digest": "efb1ff1caf32fe5cdf95316cafedeffe8db38ffa91eaa3c432431c2b0e9549ee",
+      "forward_image_digest": "6a84f44bcb20cc70cfa037703cf0daf87fc82c8a7238967756f1ae1e623181f3",
+      "jvp_binding_digest": "23634abc6941909d30786523f0414bfb3bb8f487417419008e36aa07c2561627",
+      "compile_wall_ms": 1103.8407770001868,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 2.1363181135214404e-07,
+      "forward_device_event_samples_ms": [
+        0.011983999982476234,
+        0.014127999544143677,
+        0.015261000022292137
+      ],
+      "forward_device_event_median_ms": 0.014127999544143677,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.01634399965405464,
+          0.01602949947118759,
+          0.015436000190675259,
+          0.016242999583482742,
+          0.015713000670075417
+        ],
+        "device_dispatch_median_ms": 0.01602949947118759,
+        "resources": {
+          "registers": 38,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 512,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3881890002048749,
+        0.43667800036928384,
+        0.3677499998957501
+      ],
+      "checked_jvp_completed_median_ms": 0.3881890002048749,
+      "resident_capture_jvp_completed_samples_ms": [
+        5.377139000302122,
+        5.479654999817285,
+        5.209132999880239
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.377139000302122
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        17,
+        129,
+        4,
+        3
+      ],
+      "biased": false,
+      "activity": [
+        "v"
+      ],
+      "schema": 5,
+      "program_digest": "efb1ff1caf32fe5cdf95316cafedeffe8db38ffa91eaa3c432431c2b0e9549ee",
+      "forward_image_digest": "6a84f44bcb20cc70cfa037703cf0daf87fc82c8a7238967756f1ae1e623181f3",
+      "jvp_binding_digest": "23634abc6941909d30786523f0414bfb3bb8f487417419008e36aa07c2561627",
+      "compile_wall_ms": 1103.8407770001868,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 6.124463443057948e-07,
+      "forward_device_event_samples_ms": [
+        0.047926001250743866,
+        0.04758400097489357,
+        0.05636199936270714
+      ],
+      "forward_device_event_median_ms": 0.047926001250743866,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.01525299996137619,
+          0.016107000410556793,
+          0.01544100046157837,
+          0.014842499978840351,
+          0.012692499905824661
+        ],
+        "device_dispatch_median_ms": 0.01525299996137619,
+        "resources": {
+          "registers": 38,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 512,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3774599999815109,
+        0.3741390000868705,
+        0.32107100014400203
+      ],
+      "checked_jvp_completed_median_ms": 0.3741390000868705,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.486276000032376,
+        6.911814999966737,
+        6.478916999640205
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.486276000032376
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        17,
+        1,
+        4,
+        3
+      ],
+      "biased": false,
+      "activity": [
+        "v"
+      ],
+      "schema": 5,
+      "program_digest": "efb1ff1caf32fe5cdf95316cafedeffe8db38ffa91eaa3c432431c2b0e9549ee",
+      "forward_image_digest": "6a84f44bcb20cc70cfa037703cf0daf87fc82c8a7238967756f1ae1e623181f3",
+      "jvp_binding_digest": "23634abc6941909d30786523f0414bfb3bb8f487417419008e36aa07c2561627",
+      "compile_wall_ms": 1103.8407770001868,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.1612428352236748e-08,
+      "forward_device_event_samples_ms": [
+        0.011787000112235546,
+        0.016301000490784645,
+        0.015351000241935253
+      ],
+      "forward_device_event_median_ms": 0.015351000241935253,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.01870100013911724,
+          0.017697999253869057,
+          0.01531749963760376,
+          0.015626000240445137,
+          0.01735999993979931
+        ],
+        "device_dispatch_median_ms": 0.01735999993979931,
+        "resources": {
+          "registers": 38,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 512,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3256810000493715,
+        0.33183999994435,
+        0.30106099984550383
+      ],
+      "checked_jvp_completed_median_ms": 0.3256810000493715,
+      "resident_capture_jvp_completed_samples_ms": [
+        5.611732000033953,
+        5.193992999920738,
+        5.264260999865655
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.264260999865655
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        1,
+        129,
+        4,
+        3
+      ],
+      "biased": false,
+      "activity": [
+        "v"
+      ],
+      "schema": 5,
+      "program_digest": "efb1ff1caf32fe5cdf95316cafedeffe8db38ffa91eaa3c432431c2b0e9549ee",
+      "forward_image_digest": "6a84f44bcb20cc70cfa037703cf0daf87fc82c8a7238967756f1ae1e623181f3",
+      "jvp_binding_digest": "23634abc6941909d30786523f0414bfb3bb8f487417419008e36aa07c2561627",
+      "compile_wall_ms": 1103.8407770001868,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 8.389003358644231e-08,
+      "forward_device_event_samples_ms": [
+        0.04841199889779091,
+        0.0479310005903244,
+        0.046897999942302704
+      ],
+      "forward_device_event_median_ms": 0.0479310005903244,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.015508499927818775,
+          0.016389500349760056,
+          0.014911499805748463,
+          0.014987500384449959,
+          0.019276000559329987
+        ],
+        "device_dispatch_median_ms": 0.015508499927818775,
+        "resources": {
+          "registers": 38,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 512,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3505999998196785,
+        0.2972719998979301,
+        0.32124099971042597
+      ],
+      "checked_jvp_completed_median_ms": 0.32124099971042597,
+      "resident_capture_jvp_completed_samples_ms": [
+        5.386506999911944,
+        5.402377999871533,
+        4.995069999949919
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.386506999911944
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "k",
+        "v",
+        "q",
+        "bias"
+      ],
+      "schema": 5,
+      "program_digest": "adaed9b0d47adf05297c90affe3f4348d8a8026e479e78982087aea7fba3e276",
+      "forward_image_digest": "e40a810d4f28af38dfd35b911d77927137bc22f68e1e4bd0bbe0cf0bc87bdd12",
+      "jvp_binding_digest": "f71d3d9d85cc8a8db4910979baff88d1291b55f768417f797c60a1156ebc9405",
+      "compile_wall_ms": 1121.0789849997127,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 6.300979293882847e-09,
+      "forward_device_event_samples_ms": [
+        0.017549000680446625,
+        0.02179799973964691,
+        0.024792000651359558
+      ],
+      "forward_device_event_median_ms": 0.02179799973964691,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.013828500173985958,
+          0.023343000560998917,
+          0.022392500191926956,
+          0.020454000681638718,
+          0.029080500826239586
+        ],
+        "device_dispatch_median_ms": 0.022392500191926956,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.44149800032755593,
+        0.3913290001946734,
+        0.3913089999514341
+      ],
+      "checked_jvp_completed_median_ms": 0.3913290001946734,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.759790000160137,
+        6.050438999864127,
+        6.158206000236532
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.158206000236532
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        4,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "k",
+        "v",
+        "q",
+        "bias"
+      ],
+      "schema": 5,
+      "program_digest": "adaed9b0d47adf05297c90affe3f4348d8a8026e479e78982087aea7fba3e276",
+      "forward_image_digest": "e40a810d4f28af38dfd35b911d77927137bc22f68e1e4bd0bbe0cf0bc87bdd12",
+      "jvp_binding_digest": "f71d3d9d85cc8a8db4910979baff88d1291b55f768417f797c60a1156ebc9405",
+      "compile_wall_ms": 1121.0789849997127,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 8.714945165522181e-08,
+      "forward_device_event_samples_ms": [
+        0.017176000401377678,
+        0.027972999960184097,
+        0.01722100004553795
+      ],
+      "forward_device_event_median_ms": 0.01722100004553795,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.022075500339269638,
+          0.02268500067293644,
+          0.021717999130487442,
+          0.02637699991464615,
+          0.02153100073337555
+        ],
+        "device_dispatch_median_ms": 0.022075500339269638,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.41941800009226426,
+        0.3860790002363501,
+        0.39975899971977924
+      ],
+      "checked_jvp_completed_median_ms": 0.39975899971977924,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.372111000018776,
+        6.058688999928563,
+        5.836295000335667
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.058688999928563
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        9,
+        11,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "k",
+        "v",
+        "q",
+        "bias"
+      ],
+      "schema": 5,
+      "program_digest": "adaed9b0d47adf05297c90affe3f4348d8a8026e479e78982087aea7fba3e276",
+      "forward_image_digest": "e40a810d4f28af38dfd35b911d77927137bc22f68e1e4bd0bbe0cf0bc87bdd12",
+      "jvp_binding_digest": "f71d3d9d85cc8a8db4910979baff88d1291b55f768417f797c60a1156ebc9405",
+      "compile_wall_ms": 1121.0789849997127,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 2.146280015935531e-07,
+      "forward_device_event_samples_ms": [
+        0.01674799993634224,
+        0.015495000407099724,
+        0.01574699953198433
+      ],
+      "forward_device_event_median_ms": 0.01574699953198433,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.025005999952554703,
+          0.024850500747561455,
+          0.02373250015079975,
+          0.028160499408841133,
+          0.026808999478816986
+        ],
+        "device_dispatch_median_ms": 0.025005999952554703,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.4801360000783461,
+        0.44011699992552167,
+        0.41366799996467307
+      ],
+      "checked_jvp_completed_median_ms": 0.44011699992552167,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.158407000384614,
+        6.476388000010047,
+        6.41395000002376
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.41395000002376
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        17,
+        129,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "k",
+        "v",
+        "q",
+        "bias"
+      ],
+      "schema": 5,
+      "program_digest": "adaed9b0d47adf05297c90affe3f4348d8a8026e479e78982087aea7fba3e276",
+      "forward_image_digest": "e40a810d4f28af38dfd35b911d77927137bc22f68e1e4bd0bbe0cf0bc87bdd12",
+      "jvp_binding_digest": "f71d3d9d85cc8a8db4910979baff88d1291b55f768417f797c60a1156ebc9405",
+      "compile_wall_ms": 1121.0789849997127,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 7.188786748102416e-07,
+      "forward_device_event_samples_ms": [
+        0.053741998970508575,
+        0.05278100073337555,
+        0.05295899882912636
+      ],
+      "forward_device_event_median_ms": 0.05295899882912636,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.02587199956178665,
+          0.025951499119400978,
+          0.021984999999403954,
+          0.024776499718427658,
+          0.0244315005838871
+        ],
+        "device_dispatch_median_ms": 0.024776499718427658,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.5806429999211105,
+        0.35045000004174653,
+        0.3467299998192175
+      ],
+      "checked_jvp_completed_median_ms": 0.35045000004174653,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.930704999831505,
+        6.5808550002657284,
+        6.431058000089251
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.5808550002657284
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        17,
+        1,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "k",
+        "v",
+        "q",
+        "bias"
+      ],
+      "schema": 5,
+      "program_digest": "adaed9b0d47adf05297c90affe3f4348d8a8026e479e78982087aea7fba3e276",
+      "forward_image_digest": "e40a810d4f28af38dfd35b911d77927137bc22f68e1e4bd0bbe0cf0bc87bdd12",
+      "jvp_binding_digest": "f71d3d9d85cc8a8db4910979baff88d1291b55f768417f797c60a1156ebc9405",
+      "compile_wall_ms": 1121.0789849997127,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.4371610401742174e-08,
+      "forward_device_event_samples_ms": [
+        0.012494999915361404,
+        0.031610000878572464,
+        0.01603199914097786
+      ],
+      "forward_device_event_median_ms": 0.01603199914097786,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.024697499349713326,
+          0.025790000334382057,
+          0.022489499300718307,
+          0.025949500501155853,
+          0.0239850003272295
+        ],
+        "device_dispatch_median_ms": 0.024697499349713326,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.4323480002312863,
+        0.39297000012084027,
+        0.44105799997851136
+      ],
+      "checked_jvp_completed_median_ms": 0.4323480002312863,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.3679300001240335,
+        5.958131999705074,
+        6.181055000070046
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.181055000070046
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        1,
+        129,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "k",
+        "v",
+        "q",
+        "bias"
+      ],
+      "schema": 5,
+      "program_digest": "adaed9b0d47adf05297c90affe3f4348d8a8026e479e78982087aea7fba3e276",
+      "forward_image_digest": "e40a810d4f28af38dfd35b911d77927137bc22f68e1e4bd0bbe0cf0bc87bdd12",
+      "jvp_binding_digest": "f71d3d9d85cc8a8db4910979baff88d1291b55f768417f797c60a1156ebc9405",
+      "compile_wall_ms": 1121.0789849997127,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 4.255657479745878e-07,
+      "forward_device_event_samples_ms": [
+        0.055612001568078995,
+        0.05673399940133095,
+        0.05655299872159958
+      ],
+      "forward_device_event_median_ms": 0.05655299872159958,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.02301649935543537,
+          0.026149500161409378,
+          0.024344999343156815,
+          0.02684449963271618,
+          0.02837350033223629
+        ],
+        "device_dispatch_median_ms": 0.026149500161409378,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.511746000029234,
+        0.3436899996813736,
+        0.34629999981916626
+      ],
+      "checked_jvp_completed_median_ms": 0.34629999981916626,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.664361999810353,
+        6.734981000136031,
+        6.266764000429248
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.664361999810353
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "v"
+      ],
+      "schema": 5,
+      "program_digest": "75e19ff47c5d61524f830a7156e5977fcf1323eb3503e9720d12b55b84eb0f53",
+      "forward_image_digest": "0f5c71ce01fb9ed15bda7f12d19724460ed112969498347cd0f6e65751c9de03",
+      "jvp_binding_digest": "82d4f512b0f76c18273d1667475f8e9f347dd851ee38c48caf29fa719a4260b3",
+      "compile_wall_ms": 1129.6851310003149,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 9.778887033462524e-09,
+      "forward_device_event_samples_ms": [
+        0.02082500047981739,
+        0.017223000526428223,
+        0.02346700057387352
+      ],
+      "forward_device_event_median_ms": 0.02082500047981739,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.015328999608755112,
+          0.013453000225126743,
+          0.01251049991697073,
+          0.013073500245809555,
+          0.015374000184237957
+        ],
+        "device_dispatch_median_ms": 0.013453000225126743,
+        "resources": {
+          "registers": 39,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 512,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3957490002903796,
+        0.35166999987268355,
+        0.3543599996191915
+      ],
+      "checked_jvp_completed_median_ms": 0.3543599996191915,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.392530000084662,
+        10.103144999902725,
+        6.132067000180541
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.392530000084662
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        4,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "v"
+      ],
+      "schema": 5,
+      "program_digest": "75e19ff47c5d61524f830a7156e5977fcf1323eb3503e9720d12b55b84eb0f53",
+      "forward_image_digest": "0f5c71ce01fb9ed15bda7f12d19724460ed112969498347cd0f6e65751c9de03",
+      "jvp_binding_digest": "82d4f512b0f76c18273d1667475f8e9f347dd851ee38c48caf29fa719a4260b3",
+      "compile_wall_ms": 1129.6851310003149,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 8.714945165522181e-08,
+      "forward_device_event_samples_ms": [
+        0.015290999785065651,
+        0.008857999928295612,
+        0.010347000323235989
+      ],
+      "forward_device_event_median_ms": 0.010347000323235989,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.012092499993741512,
+          0.008926000446081161,
+          0.01090100035071373,
+          0.011397000402212143,
+          0.014399000443518162
+        ],
+        "device_dispatch_median_ms": 0.011397000402212143,
+        "resources": {
+          "registers": 39,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 512,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.36746000023413217,
+        0.36304900004324736,
+        0.33384000016667414
+      ],
+      "checked_jvp_completed_median_ms": 0.36304900004324736,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.051399000170932,
+        5.9360920004110085,
+        5.716139000014664
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.9360920004110085
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        9,
+        11,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "v"
+      ],
+      "schema": 5,
+      "program_digest": "75e19ff47c5d61524f830a7156e5977fcf1323eb3503e9720d12b55b84eb0f53",
+      "forward_image_digest": "0f5c71ce01fb9ed15bda7f12d19724460ed112969498347cd0f6e65751c9de03",
+      "jvp_binding_digest": "82d4f512b0f76c18273d1667475f8e9f347dd851ee38c48caf29fa719a4260b3",
+      "compile_wall_ms": 1129.6851310003149,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 2.146280015935531e-07,
+      "forward_device_event_samples_ms": [
+        0.009690999984741211,
+        0.0110470000654459,
+        0.01145699992775917
+      ],
+      "forward_device_event_median_ms": 0.0110470000654459,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.011478500440716743,
+          0.010966500267386436,
+          0.01221499964594841,
+          0.010653000324964523,
+          0.010678499937057495
+        ],
+        "device_dispatch_median_ms": 0.010966500267386436,
+        "resources": {
+          "registers": 39,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 512,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3841689999717346,
+        0.3348510003888805,
+        0.3397499999664433
+      ],
+      "checked_jvp_completed_median_ms": 0.3397499999664433,
+      "resident_capture_jvp_completed_samples_ms": [
+        5.882212999949843,
+        5.671489999713231,
+        5.738019000091299
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.738019000091299
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        17,
+        129,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "v"
+      ],
+      "schema": 5,
+      "program_digest": "75e19ff47c5d61524f830a7156e5977fcf1323eb3503e9720d12b55b84eb0f53",
+      "forward_image_digest": "0f5c71ce01fb9ed15bda7f12d19724460ed112969498347cd0f6e65751c9de03",
+      "jvp_binding_digest": "82d4f512b0f76c18273d1667475f8e9f347dd851ee38c48caf29fa719a4260b3",
+      "compile_wall_ms": 1129.6851310003149,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 7.188786748102416e-07,
+      "forward_device_event_samples_ms": [
+        0.05199600011110306,
+        0.05203400179743767,
+        0.051920000463724136
+      ],
+      "forward_device_event_median_ms": 0.05199600011110306,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.012993499636650085,
+          0.010937499813735485,
+          0.011455999687314034,
+          0.011455000378191471,
+          0.011870999820530415
+        ],
+        "device_dispatch_median_ms": 0.011455999687314034,
+        "resources": {
+          "registers": 39,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 512,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.37386899975899723,
+        0.3427209999244951,
+        0.383958999918832
+      ],
+      "checked_jvp_completed_median_ms": 0.37386899975899723,
+      "resident_capture_jvp_completed_samples_ms": [
+        5.907803999889438,
+        5.558252999890101,
+        5.679479999798787
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.679479999798787
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        17,
+        1,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "v"
+      ],
+      "schema": 5,
+      "program_digest": "75e19ff47c5d61524f830a7156e5977fcf1323eb3503e9720d12b55b84eb0f53",
+      "forward_image_digest": "0f5c71ce01fb9ed15bda7f12d19724460ed112969498347cd0f6e65751c9de03",
+      "jvp_binding_digest": "82d4f512b0f76c18273d1667475f8e9f347dd851ee38c48caf29fa719a4260b3",
+      "compile_wall_ms": 1129.6851310003149,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.4371610401742174e-08,
+      "forward_device_event_samples_ms": [
+        0.008508999831974506,
+        0.011857000179588795,
+        0.01056700013577938
+      ],
+      "forward_device_event_median_ms": 0.01056700013577938,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.015464000403881073,
+          0.012829000130295753,
+          0.01090299990028143,
+          0.011039500124752522,
+          0.012497000396251678
+        ],
+        "device_dispatch_median_ms": 0.012497000396251678,
+        "resources": {
+          "registers": 39,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 512,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.4755069999191619,
+        0.34803999960786314,
+        0.38109899969640537
+      ],
+      "checked_jvp_completed_median_ms": 0.38109899969640537,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.340290000025561,
+        5.6720409997979,
+        5.553383999995276
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.6720409997979
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        1,
+        129,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "v"
+      ],
+      "schema": 5,
+      "program_digest": "75e19ff47c5d61524f830a7156e5977fcf1323eb3503e9720d12b55b84eb0f53",
+      "forward_image_digest": "0f5c71ce01fb9ed15bda7f12d19724460ed112969498347cd0f6e65751c9de03",
+      "jvp_binding_digest": "82d4f512b0f76c18273d1667475f8e9f347dd851ee38c48caf29fa719a4260b3",
+      "compile_wall_ms": 1129.6851310003149,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 4.255657479745878e-07,
+      "forward_device_event_samples_ms": [
+        0.05561500042676926,
+        0.05551199987530708,
+        0.05685900151729584
+      ],
+      "forward_device_event_median_ms": 0.05561500042676926,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.01187950000166893,
+          0.011021999642252922,
+          0.011035500094294548,
+          0.01162050012499094,
+          0.010464499704539776
+        ],
+        "device_dispatch_median_ms": 0.011035500094294548,
+        "resources": {
+          "registers": 39,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 512,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.5339549998097937,
+        0.3852189997815003,
+        0.39718900006846525
+      ],
+      "checked_jvp_completed_median_ms": 0.39718900006846525,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.182946000080847,
+        5.638651000026584,
+        5.597112000032212
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.638651000026584
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "bias"
+      ],
+      "schema": 5,
+      "program_digest": "6d1eb27ebff032e0bdaa22076205bdde49a4207c8d46ece1921e35d1befa3149",
+      "forward_image_digest": "5f306b7b6b7c66ffc91ef9dc1c1d1bf724867a29f410e56f619d7c0ff4b8678d",
+      "jvp_binding_digest": "e5e5a29505f97934a4216427614a023476e9e277ebe97209c151c9accf45044c",
+      "compile_wall_ms": 1150.7944649997626,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 9.778887033462524e-09,
+      "forward_device_event_samples_ms": [
+        0.013005999848246574,
+        0.01917799934744835,
+        0.0187120009213686
+      ],
+      "forward_device_event_median_ms": 0.0187120009213686,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.01570950075984001,
+          0.016180500388145447,
+          0.014635000377893448,
+          0.014744499698281288,
+          0.013275999575853348
+        ],
+        "device_dispatch_median_ms": 0.014744499698281288,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.3913390000889194,
+        0.4746060003526509,
+        0.34176999997725943
+      ],
+      "checked_jvp_completed_median_ms": 0.3913390000889194,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.1709359997621505,
+        6.149075999928755,
+        5.875554000340344
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.149075999928755
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        4,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "bias"
+      ],
+      "schema": 5,
+      "program_digest": "6d1eb27ebff032e0bdaa22076205bdde49a4207c8d46ece1921e35d1befa3149",
+      "forward_image_digest": "5f306b7b6b7c66ffc91ef9dc1c1d1bf724867a29f410e56f619d7c0ff4b8678d",
+      "jvp_binding_digest": "e5e5a29505f97934a4216427614a023476e9e277ebe97209c151c9accf45044c",
+      "compile_wall_ms": 1150.7944649997626,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 8.714945165522181e-08,
+      "forward_device_event_samples_ms": [
+        0.01725500077009201,
+        0.015809999778866768,
+        0.01082799956202507
+      ],
+      "forward_device_event_median_ms": 0.015809999778866768,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.015697000548243523,
+          0.014690499752759933,
+          0.014609499834477901,
+          0.012874499894678593,
+          0.01521500013768673
+        ],
+        "device_dispatch_median_ms": 0.014690499752759933,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.37595899993903004,
+        0.334399999701418,
+        0.3295510000498325
+      ],
+      "checked_jvp_completed_median_ms": 0.334399999701418,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.071919000078196,
+        6.479257000137295,
+        5.740327999774308
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.071919000078196
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        9,
+        11,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "bias"
+      ],
+      "schema": 5,
+      "program_digest": "6d1eb27ebff032e0bdaa22076205bdde49a4207c8d46ece1921e35d1befa3149",
+      "forward_image_digest": "5f306b7b6b7c66ffc91ef9dc1c1d1bf724867a29f410e56f619d7c0ff4b8678d",
+      "jvp_binding_digest": "e5e5a29505f97934a4216427614a023476e9e277ebe97209c151c9accf45044c",
+      "compile_wall_ms": 1150.7944649997626,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 2.146280015935531e-07,
+      "forward_device_event_samples_ms": [
+        0.010772000066936016,
+        0.018681999295949936,
+        0.017392000183463097
+      ],
+      "forward_device_event_median_ms": 0.017392000183463097,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.01509649958461523,
+          0.014151999726891518,
+          0.013532999902963638,
+          0.015893500298261642,
+          0.012966999784111977
+        ],
+        "device_dispatch_median_ms": 0.014151999726891518,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.39371899993057013,
+        0.3475909998087445,
+        0.3612400000747584
+      ],
+      "checked_jvp_completed_median_ms": 0.3612400000747584,
+      "resident_capture_jvp_completed_samples_ms": [
+        7.595856000079948,
+        6.549126000209071,
+        6.835706000401842
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.835706000401842
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        17,
+        129,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "bias"
+      ],
+      "schema": 5,
+      "program_digest": "6d1eb27ebff032e0bdaa22076205bdde49a4207c8d46ece1921e35d1befa3149",
+      "forward_image_digest": "5f306b7b6b7c66ffc91ef9dc1c1d1bf724867a29f410e56f619d7c0ff4b8678d",
+      "jvp_binding_digest": "e5e5a29505f97934a4216427614a023476e9e277ebe97209c151c9accf45044c",
+      "compile_wall_ms": 1150.7944649997626,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 7.188786748102416e-07,
+      "forward_device_event_samples_ms": [
+        0.05199899896979332,
+        0.05173100158572197,
+        0.052595000714063644
+      ],
+      "forward_device_event_median_ms": 0.05199899896979332,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.014240000396966934,
+          0.014346499927341938,
+          0.014699500054121017,
+          0.014671499840915203,
+          0.013299000449478626
+        ],
+        "device_dispatch_median_ms": 0.014346499927341938,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.4294680002203677,
+        0.4007890001958003,
+        0.3390499996385188
+      ],
+      "checked_jvp_completed_median_ms": 0.4007890001958003,
+      "resident_capture_jvp_completed_samples_ms": [
+        8.346895000158838,
+        5.858145000274817,
+        6.103108000388602
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.103108000388602
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        17,
+        1,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "bias"
+      ],
+      "schema": 5,
+      "program_digest": "6d1eb27ebff032e0bdaa22076205bdde49a4207c8d46ece1921e35d1befa3149",
+      "forward_image_digest": "5f306b7b6b7c66ffc91ef9dc1c1d1bf724867a29f410e56f619d7c0ff4b8678d",
+      "jvp_binding_digest": "e5e5a29505f97934a4216427614a023476e9e277ebe97209c151c9accf45044c",
+      "compile_wall_ms": 1150.7944649997626,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.4371610401742174e-08,
+      "forward_device_event_samples_ms": [
+        0.02561499923467636,
+        0.011171000078320503,
+        0.01445899996906519
+      ],
+      "forward_device_event_median_ms": 0.01445899996906519,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.01641549915075302,
+          0.013377999886870384,
+          0.014879499562084675,
+          0.015285000205039978,
+          0.014368499629199505
+        ],
+        "device_dispatch_median_ms": 0.014879499562084675,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.4265880002094491,
+        0.3453409999565338,
+        0.39893800021673087
+      ],
+      "checked_jvp_completed_median_ms": 0.39893800021673087,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.1603859999195265,
+        5.944102000285056,
+        6.283942999743886
+      ],
+      "resident_capture_jvp_completed_median_ms": 6.1603859999195265
+    },
+    {
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        1,
+        129,
+        4,
+        3
+      ],
+      "biased": true,
+      "activity": [
+        "bias"
+      ],
+      "schema": 5,
+      "program_digest": "6d1eb27ebff032e0bdaa22076205bdde49a4207c8d46ece1921e35d1befa3149",
+      "forward_image_digest": "5f306b7b6b7c66ffc91ef9dc1c1d1bf724867a29f410e56f619d7c0ff4b8678d",
+      "jvp_binding_digest": "e5e5a29505f97934a4216427614a023476e9e277ebe97209c151c9accf45044c",
+      "compile_wall_ms": 1150.7944649997626,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 4.255657479745878e-07,
+      "forward_device_event_samples_ms": [
+        0.056637998670339584,
+        0.05547599866986275,
+        0.05542699992656708
+      ],
+      "forward_device_event_median_ms": 0.05547599866986275,
+      "jvp_preloaded_device_dispatch": {
+        "device_dispatch_samples_ms": [
+          0.014257499948143959,
+          0.014483500272035599,
+          0.016631999984383583,
+          0.013831499963998795,
+          0.01244600024074316
+        ],
+        "device_dispatch_median_ms": 0.014257499948143959,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "checked_jvp_completed_samples_ms": [
+        0.43354699982955935,
+        0.3363199998602795,
+        0.3370210001776286
+      ],
+      "checked_jvp_completed_median_ms": 0.3370210001776286,
+      "resident_capture_jvp_completed_samples_ms": [
+        6.1566060003315215,
+        5.906942000365234,
+        5.861176000053092
+      ],
+      "resident_capture_jvp_completed_median_ms": 5.906942000365234
+    }
+  ],
+  "source_sha256": {
+    "python/tessera/runtime.py": "d4f74b4f7d1f881c269f6e28d898213870fd8fa7b4ef23256142137e5a45bfbf",
+    "python/tessera/compiler/jit.py": "28b8d635a18fac6587a1a8f85cdb225acd45c78a445b2a06efc5d7ccd2d19a20",
+    "python/tessera/compiler/graph_ir.py": "25095e62d7f487dae698bf3c5c9047209af685a63817379e428e3c380dd17852",
+    "python/tessera/compiler/native_attention_program.py": "c2ec15496a38afcc4428ff19388f85476d1d2a8a4b9fe700ebeeef28338a640f",
+    "python/tessera/compiler/native_attention_jvp.py": "bb16f1aee36f6e7f53ac442ddcc17ad4085d16b59158b6db8860ee58e6aeb92d",
+    "python/tessera/compiler/native_attention_jvp_artifact.py": "ea900af8c9ee25ea3f4006aa3e5690e4279909ba3e874c30a149d9c55fb9cda9",
+    "python/tessera/compiler/native_gpu_storage.py": "8000ba36daa01ebf9f7a2c6566b79ce4b583b56eb82187bdca92402d4d1190d2",
+    "python/tessera/compiler/native_storage_contract.py": "542adf4e4bd695ca2661da5202f90fb3139073d757bff7d8c5b0e9f040e3ce5f",
+    "python/tessera/compiler/resident_attention.py": "27cbc9ccad56cb9ef2080a4c2588b63f24f90306a0e7721a1e3a8f4482d20372",
+    "python/tessera/compiler/nvidia_native.py": "47eab23cb98222448ed2dcea2b81219c413b77a8c308e62a65efc3f8d0d51c52",
+    "src/compiler/ir/AttentionADContract.h": "3b63c59d3af4d17da70a7860e66bf6ee244522e605c796dba44f8048e2e53c67",
+    "src/transforms/lib/NativeAttentionProjection.h": "476a17a42f7b198ee1b44a99dc8b444b71c1a302a378623d34cb481173ac028f",
+    "src/transforms/lib/AutodiffForwardPass.cpp": "97e87bf7ac19c083fd4d79ce2bc8e5de58433451ea68ecf165cf2f2fe5d7fab6",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "b39b484730aca4fb41550602264a06893b1d1da7481121da7d9a72607fc0f807",
+    "src/compiler/programming_model/lib/NativeAttentionJvp.h": "4bcc094933ae371d4880d2be9a9d05e34dd8908e9229da4c77b89cb612a0e390",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "63e207d1fa072d59ab086dcdf5a6fdf120eecc9988e86840070c03e43bf0c092",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_gemm.cpp": "c5260d215618eef55564d97cdba50615efed759a3c40466244aadbd15ce07f08",
+    "benchmarks/record_jit_attention_program.py": "0817dd4ff2d139e67848c90a58dc7422cc7881d959a2aa306cc740619ebf1500",
+    "benchmarks/record_device_ring_protocol.py": "6a7dc13b0caefb6c09cde8723f68faad4e2d882479e3a1ad1d5b43019b6152c4",
+    "benchmarks/nvidia/record_bounded_saved_lse_jvp.py": "bc78e047a1743e22f5435992e326a0739fd1e559069b5de12330b3412c267547",
+    "tests/device/nvidia/test_bounded_saved_lse_jvp.py": "f4fd38540dddc42a7a4609f013ad85b7e7413fbcf8905de6cc77eba23998f1fc",
+    "tests/device/nvidia/test_resident_attention_forward.py": "c4700a3bec9b6b3b2e9fb4965b235560bfdde09c65ed560a1322ac294d40948f"
+  },
+  "binary_sha256": {
+    "TESSERA_OPT": "112ed6a57cf167ae6697321e7051726f1ca05f83f726253fc2cd01d9c63280d3",
+    "TESSERA_NVIDIA_OPT": "a4a511376db74c3c80de5db7ab5bd9d97eaf9e15f04e890f931853a33bdaae4c",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "0d1dbf70aba853fca56fa20ddf84cd25d72d0fdbebb222cc1c929bbccea854cf",
+    "TESSERA_NVIDIA_GEMM_LIB": "5e21e47fd7b9dfa22ce777f3c82b3274901beccc4c180d1fd4fb078caa2dcc0f"
+  },
+  "timing_scope": {
+    "forward": "preloaded native descriptor CUDA-event dispatch window",
+    "jvp": "preloaded raw native CUDA-event dispatch window; actual 128-thread block",
+    "checked": "synchronous resident capture/JVP or JVP only; includes allocations and binding, excludes input upload, download and close"
+  },
+  "claim": "named bounded paired O/LSE/dO/dLSE correctness and overhead characterization; no speedup or generic closure"
+}

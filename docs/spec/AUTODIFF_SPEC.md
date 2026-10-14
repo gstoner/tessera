@@ -2,7 +2,7 @@
 status: Normative (Tier 2 first-slice)
 classification: Spec
 authority: Programming Guide Ch.7 supersedes; this doc specifies the v1 implementation
-last_updated: 2026-07-14
+last_updated: 2026-10-14
 ---
 
 # Tessera Autodiff — v1 Spec
@@ -489,11 +489,25 @@ new public frontend operation or a claim that arbitrary attention variants work.
 
 For an isolated `@jit(target="nvidia_sm120", autodiff="forward", wrt=(...))`
 attention function, `compile_native_attention_jvp(*shape_examples, compiler=...,
-llvm_bin=...)` returns a program. `program.capture(q, k, v)` owns resident forward
+llvm_bin=..., sequence_bounds=None)` returns a program. `program.capture(q, k, v)` owns resident forward
 O/LSE; `frame.jvp(*tangents)` takes only the requested tangents in `wrt` order.
-At least one of Q/K must be active. Captures must be closed (or used as context
+At least one input must be active; value-only paired LSE has an exact-zero
+LSE tangent. Captures must be closed (or used as context
 managers). This explicit JIT compilation entry does not change generic `jvp`
 dispatch or support attention composed with arbitrary surrounding operations.
+
+An optional `sequence_bounds=(Sq_capacity, Sk_capacity)` requests a
+native MLIR projection of the isolated static attention trace before forward
+or reverse AD. The Python binding supplies capacities and preserves the caller's
+Graph types. Native verification retains fixed batch/head/feature dimensions,
+physical bias broadcast axes, direct input/result roles and positive sequence
+capacities. The sealed program reuses its images across actual positive sequence
+sizes within those capacities; capture checks the envelope before launch.
+Paired saved-LSE JVP uses Graph AD schema 5 for bounded sequences and schema 6
+for static sequences. Its runtime outputs are O, LSE, dO and dLSE, with the
+tangent tensor slots preceding scratch and actual Sq/Sk scalar arguments.
+This named SM120 f32 contract does not imply generic composition, higher-order
+AD or sibling-backend execution.
 
 `compile_persistent_device_tape` accepts reverse JIT requests and returns split
 native products; the lower-level `materialize_persistent_tape` also accepts native
@@ -579,3 +593,7 @@ Native reverse entry checks source constraints before capture and clears stale
 execution receipts. Cross-backend host ordering proof does not establish sibling
 physical scale-map execution.
 Evidence: benchmarks/baselines/rocm_deep_leading_map_20261007/README.md.
+
+A bounded attention bias extent of one stays a physical broadcast axis,
+even when the traced logical sequence length is also one. Equality with
+that trace does not establish a dynamic bias-storage dimension.

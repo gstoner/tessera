@@ -1,9 +1,38 @@
 ---
-last_updated: 2026-10-09
+last_updated: 2026-10-14
 audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+
+## NATIVE-PACKAGE-COMPILER-ADMISSION-20261014
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Shared contract: canonical admission accepts a validated materialized GPU
+image and its matching checked launch ABI as compiler evidence. Target,
+architecture, binary format, hashes, entry and ABI linkage are revalidated.
+All other operation, legality, numerical and runtime gates retain their
+existing authority; a non-executable bundle cannot become executable.
+Dashboard generation remains host invariant.
+Host package parity validated for the actual NVFP4 ingest HSACO contract
+with the legacy hipcc PATH probe hidden. Matching LLVM/MLIR compilation still
+produces the checked image. Candidate parity validated on Tajasaurus / RX 9070 XT / gfx1201:
+77 ingest, package, exact-device numerical and shared admission tests pass
+with a freshly rebuilt LLVM/MLIR 23.1.1 compiler after the WSL reboot. No HIP math or physical schedule changes.
+
+
+## SM120-BOUNDED-SAVED-LSE-20261011
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Shared contracts: native Graph sequence projection, paired saved-LSE ABI and
+context-aware CUDA benchmark binding. No Python math/Tile lowering is added.
+Not applicable to gfx1151/gfx1201 physical execution: the shared
+attention projection explicitly requires nvidia_sm120/sm_120, and the native
+argument-vector repair is in the CUDA provider. Existing ROCm AD, schedules,
+HIP ABI and image keys are unchanged. No NVIDIA numerical/timing result is
+transferred. Follow-up required for a separately verified HIP bounded
+saved-LSE program; ROCm route/performance and quantized obligations remain open.
+
 
 ## GFX1201-RETAINED-PUBLIC-JVP-20261009
 

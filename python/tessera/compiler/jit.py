@@ -2625,21 +2625,30 @@ class JitFn:
             owner.close()
             raise
 
-    def compile_native_attention_jvp(self, *args, compiler, llvm_bin, **kwargs):
+    def compile_native_attention_jvp(self, *args, compiler, llvm_bin, sequence_bounds=None, **kwargs):
         """Compile an isolated Q/K/V attention JVP from this JIT function's trace.
 
         The returned program captures resident CUDA inputs and accepts only the
-        requested tangent arguments. General JIT graphs remain unsupported.
+        requested tangent arguments. sequence_bounds requests native Sq/Sk
+        projection; Python retains the traced static tensor types. General JIT
+        graphs remain unsupported.
         """
         import re
         from .native_attention_program import compile_attention_program
         request = self.differentiation_request
         if request is None or request.mode != "forward" or normalize_target_kind(self.target) != "nvidia_sm120":
             raise TesseraJitError("native attention JVP requires forward autodiff on exact nvidia_sm120")
+        if sequence_bounds is not None:
+            if (not isinstance(sequence_bounds, (tuple, list)) or len(sequence_bounds) != 2
+                    or any(type(x) is not int or x <= 0 for x in sequence_bounds)):
+                raise TesseraJitError("attention sequence bounds require positive Sq/Sk capacities")
         module = self._specialized_autodiff_module(args, kwargs)
         from dataclasses import replace
         module = replace(module, module_attrs={**module.module_attrs,
                          "tessera.target": '"nvidia_sm120"', "tessera.arch": '"sm_120"'})
+        if sequence_bounds is not None:
+            module = replace(module, module_attrs={**module.module_attrs,
+                "tessera.attention_sequence_bounds": "array<i64: " + ", ".join(map(str, sequence_bounds)) + ">"})
         source = re.sub(r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir())
         return compile_attention_program(source, request.wrt_indices, compiler=compiler, llvm_bin=llvm_bin,
                                          input_names=tuple(inspect.signature(self._fn).parameters))

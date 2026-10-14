@@ -3,8 +3,44 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-10-09
+last_updated: 2026-10-14
 ---
+
+## NATIVE-PACKAGE-COMPILER-ADMISSION-20261014
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Shared contract: canonical admission accepts a validated materialized GPU
+image and its matching checked launch ABI as compiler evidence. Target,
+architecture, binary format, hashes, entry and ABI linkage are revalidated.
+All other operation, legality, numerical and runtime gates retain their
+existing authority; a non-executable bundle cannot become executable.
+Dashboard generation remains host invariant.
+Parity validated for a real ragged FP16-to-FP32 RTX 5070 package:
+after compilation, nvcc is hidden and compiler subprocesses are forbidden;
+canonical admission and native numerical execution still pass. CUDA launch
+and Schedule/Tile contracts are unchanged by this admission repair.
+
+
+## SM120-BOUNDED-SAVED-LSE-20261011
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Shared contracts: native Graph sequence projection, paired saved-LSE ABI and
+context-aware CUDA benchmark binding. No Python math/Tile lowering is added.
+Parity validated on RTX 5070 / sm_120 / CUDA 13.3 for the named f32
+causal GQA envelope. Public JVP accepts sequence_bounds; one native MLIR
+projection is shared by forward and reverse AD, preserving static frontend
+types and schema 5/6 meanings. Paired O/LSE/dO/dLSE execute and survive
+serialized, compiler-free replay across (9,11) and (17,129) sequence capacities,
+inactive value/bias roles and independent old result generations.
+The generic host/resident forward and backward launchers now carry all 11
+physical/logical dimension scalars for dynamic broadcast bias; legacy seven
+scalar/full-shape kernels retain their contract.
+Evidence: benchmarks/baselines/bounded_saved_lse_jvp_20261011/README.md.
+Recorded by benchmarks/nvidia/record_bounded_saved_lse_jvp.py.
+Remaining: wider storage, masks/composition, higher-order AD, W1.1 producer
+retirement, quantized routes and performance promotion. This named gate does
+not close the five-slice program.
+
 
 ## GFX1201-RETAINED-PUBLIC-JVP-20261009
 

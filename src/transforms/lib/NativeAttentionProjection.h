@@ -45,9 +45,11 @@ inline mlir::LogicalResult projectBoundedAttentionEntry(mlir::ModuleOp module,ml
   if (op->getNumOperands()==4) {
     auto bias=mlir::cast<mlir::RankedTensorType>(op->getOperand(3).getType());
     llvm::SmallVector<unsigned> axes;
-    bool logical=bias.getShape()==llvm::ArrayRef<int64_t>({q.getDimSize(0),q.getDimSize(1),q.getDimSize(2),k.getDimSize(2)});
-    if (logical || bias.getDimSize(2)!=1) axes.push_back(2);
-    if (logical || bias.getDimSize(3)!=1) axes.push_back(3);
+    // A unit physical extent remains broadcast even when the traced logical
+    // sequence is also one. Equality with that trace cannot prove a dynamic
+    // bias axis; preserve the caller's declared storage extent.
+    if (bias.getDimSize(2)!=1) axes.push_back(2);
+    if (bias.getDimSize(3)!=1) axes.push_back(3);
     op->getOperand(3).setType(project(bias,axes));
   }
   for (auto result:op->getResults()) result.setType(project(result.getType(),{2}));

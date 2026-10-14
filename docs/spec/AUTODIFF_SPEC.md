@@ -593,3 +593,7 @@ Native reverse entry checks source constraints before capture and clears stale
 execution receipts. Cross-backend host ordering proof does not establish sibling
 physical scale-map execution.
 Evidence: benchmarks/baselines/rocm_deep_leading_map_20261007/README.md.
+
+A bounded attention bias extent of one stays a physical broadcast axis,
+even when the traced logical sequence length is also one. Equality with
+that trace does not establish a dynamic bias-storage dimension.

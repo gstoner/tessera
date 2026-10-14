@@ -31,7 +31,9 @@ launches additionally prove key/query/full-shape physical bias indexing.
 Tests: tests/device/nvidia/test_bounded_saved_lse_jvp.py and the adjacent
 public-native JVP/bounded forward/backward suites. Focused compiler/schema,
 portable artifact and diagnostic/pass registry coverage is recorded separately.
-74 exact-device tests and 428 focused compiler/registry tests pass.
+The original gate passed 74 device and 428 compiler/registry cases.
+After review, 81 adjacent/JVP device cases, six compact/generic reverse
+trace-at-one cases and 381 focused compiler/schema/registry cases pass.
 
 ## Two fresh packets
 
@@ -45,10 +47,10 @@ all 22 source pins match current source, and all four binary pins match.
 | Measurement | run1 | run2 |
 | --- | --- | --- |
 | Maximum absolute error | 7.1888e-7 | 7.1888e-7 |
-| Forward CUDA-event median range | 7.606–55.883 us | 7.774–55.617 us |
-| JVP CUDA-event median range | 8.964–10.885 us | 9.042–10.401 us |
-| Checked JVP completion median range | 0.295–0.401 ms | 0.302–0.386 ms |
-| Resident capture+JVP completion median range | 5.029–6.159 ms | 4.955–6.063 ms |
+| Forward CUDA-event median range | 10.347–56.553 us | 8.303–55.541 us |
+| JVP CUDA-event median range | 10.967–26.872 us | 13.115–16.796 us |
+| Checked JVP completion median range | 0.314–0.440 ms | 0.312–0.450 ms |
+| Resident capture+JVP completion median range | 5.234–6.836 ms | 5.093–7.285 ms |
 
 Forward timing uses the preloaded native descriptor CUDA-event window.
 JVP timing uses a preloaded raw CUDA-event dispatch window, with the actual
@@ -106,3 +108,21 @@ See full-unit-tests-20261014.txt. Skipped rows are not physical-backend proof.
 The lean Tajasaurus broad sweep is not used as a passing gate: it lacks some
 unit dependencies and exposes generic-target/partial-compiler assumptions.
 The explicit 77-case candidate gfx1201 lane above is its physical authority.
+
+
+## Review repair — physical unit bias extents
+
+The original projection made a unit bias extent dynamic when it equaled a
+trace-at-one logical sequence. The repair preserves every declared unit
+physical bias axis. All six new forward/reverse compiler cases fail against
+the original compiler and pass after the matching rebuild. Six serialized
+public JVP and six compact/generic reverse device cases replay larger shapes
+without compiler recovery and compare against independent FP64 oracles.
+
+Both packets were regenerated after this repair and match the revised
+22-source/four-binary identities. Timings remain characterization only.
+The 26,041-case broad host receipt precedes this review repair; the focused
+381-case lane and 87 NVIDIA cases are its final matching-compiler proof.
+The rebuilt gfx1201 host passes 97 combined cases, including 20 native SM120
+Graph projection tests; the ROCm physical/package lane remains the explicit
+77-case subset. No NVIDIA device evidence transfers to AMD.

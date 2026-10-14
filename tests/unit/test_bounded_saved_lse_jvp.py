@@ -86,3 +86,39 @@ def test_native_forward_projection_rejects_invalid_capacity(bounds):
     with pytest.raises(RuntimeError, match="projection|capacity"):
         run_tessera_opt(tool, source(bounds=bounds),
                        "--tessera-autodiff-forward=export-attention-jvp")
+
+
+@pytest.mark.compiler_route
+@pytest.mark.parametrize("sq,sk,expected", [
+    (1, 4, [1, 2, 1, -1]),
+    (3, 1, [1, 2, -1, 1]),
+    (1, 1, [1, 2, 1, 1]),
+])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_trace_at_one_preserves_physical_bias_extent(sq, sk, expected, reverse):
+    tool = find_tessera_opt()
+    if tool is None:
+        pytest.skip("matching native compiler required")
+    text = source(True)
+    text = (text.replace("1x2x4x6", f"1x2x{sq}x{sk}")
+                .replace("1x2x4x8", f"1x2x{sq}x8")
+                .replace("1x1x6x8", f"1x1x{sk}x8")
+                .replace("1x2x4xf32", f"1x2x{sq}xf32"))
+    if reverse:
+        from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+        # Paired checkpoint reverse consumes O and retains LSE as a residual.
+        plain = graph(False, False, True).replace(
+            'tessera.arch = "sm_120"',
+            'tessera.arch = "sm_120", tessera.attention_sequence_bounds = array<i64: 9, 11>')
+        plain = (plain.replace('tessera.autodiff = "forward"', 'tessera.autodiff = "reverse"')
+                      .replace("1x2x4x6", f"1x2x{sq}x{sk}")
+                      .replace("1x2x4x8", f"1x2x{sq}x8")
+                      .replace("1x1x6x8", f"1x1x{sk}x8"))
+        artifact = lower_generated_checkpoint(plain, backward=True, prune_inactive=True)
+        assert artifact.bias_shape == tuple(-(1 << 63) if d == -1 else d for d in expected)
+    else:
+        product = run_tessera_opt(tool, text, "--tessera-autodiff-forward=export-attention-jvp")
+        fields = re.findall(r'tessera\.autodiff\.attention_jvp_contract = "((?:\\.|[^"\\])*)"', product)
+        contract = json.loads(_decode_image(fields[0]))
+        assert contract["schema"] == 5
+        assert contract["bias_shape"] == expected

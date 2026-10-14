@@ -12017,8 +12017,10 @@ crash is reproduced by the packet and repaired in the native provider.
 RTX 5070 tests pass. Two fresh
 30-profile packets retain identical sealed program/image/binding identities
 and all 22 source/four binary pins match. Maximum error is 7.1888e-7.
-Forward event medians span 7.606–55.883 us, JVP dispatch medians 8.964–10.885 us,
-and completed resident capture+JVP medians 4.955–6.159 ms.
+After review, both packets were regenerated. Forward event medians span
+8.303–56.553 us, JVP dispatch medians 10.967–26.872 us, and completed
+resident capture+JVP medians 5.093–7.285 ms. These are characterization,
+not promotion evidence.
 No speedup, generic AD closure or sibling hardware parity is claimed.
 Current W1.1 census distinguishes migrated SM120 Schedule/Tile entries from
 retained pre-SM120 tensor constructors; global retirement remains open.
@@ -12056,7 +12058,13 @@ Validation: The final fully provisioned Super-Bear WSL non-slow unit lane
 passes 26,041 cases, with 7,568 skips and no failures. Ruff, focused mypy,
 shared audit/registry gates, compiler-plan links and generated-doc drift pass.
 
-Remaining: Publication and exact-head CI review. This does not close general backend routing,
+Review repair: Unit physical bias axes remain fixed even when the trace
+sequence is one. Six compiler regressions fail on the original tool and
+pass on the matching rebuild. 381 focused compiler/registry cases, 81
+adjacent/JVP device cases and six compact/generic reverse cases pass.
+Both 30-profile packets were refreshed with matching revised source/tools.
+
+Remaining: Exact-head CI review. This does not close general backend routing,
 performance promotion, broader AD or W1.1 retirement.
 
 Evidence: tests/unit/test_native_package_pipeline_gates.py,

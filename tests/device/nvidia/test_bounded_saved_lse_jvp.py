@@ -175,3 +175,45 @@ def test_bounded_broadcast_bias_direct_forward_backward_launch_abi(resident, bia
                 for name, wanted in wants.items():
                     actual = session.download(buffers[name]) if resident else buffers[name]
                     np.testing.assert_allclose(actual, wanted, rtol=4e-5, atol=3e-6)
+
+
+@pytest.mark.parametrize("trace,broadcast", [((1, 4), "query"), ((3, 1), "key"), ((1, 1), "both")])
+@pytest.mark.parametrize("activity", [("k", "v", "q", "bias"), ("bias",)])
+def test_trace_at_one_bias_replays_larger_sequences(trace, broadcast, activity, monkeypatch):
+    if not nvidia_cuda_host_ready():
+        pytest.skip("exact SM120 CUDA host required")
+
+    def physical_inputs(sq, sk):
+        values, seeds = inputs(sq, sk, True, activity)
+        shape = (1, 2, 1 if broadcast in {"query", "both"} else sq,
+                 1 if broadcast in {"key", "both"} else sk)
+        rng = np.random.default_rng(20261014 + sq * 31 + sk)
+        values["bias"] = rng.normal(0, .2, shape).astype(np.float32)
+        if "bias" in activity:
+            seeds["bias"] = rng.normal(0, .1, shape).astype(np.float32)
+        return values, seeds
+
+    fn = function(True, activity)
+    traced, _ = physical_inputs(*trace)
+    program = fn.compile_native_attention_jvp(
+        *traced.values(), compiler=Path(os.environ["TESSERA_OPT"]),
+        llvm_bin=Path(os.environ["LLVM_BIN"]), sequence_bounds=(9, 11))
+    program = NativeAttentionJVPProgram.from_json(program.to_json(),
+                                                  expected_digest=program.program_digest)
+    identity = program.program_digest
+    with NvidiaDeviceSession() as session:
+        monkeypatch.setattr(subprocess, "run",
+            lambda *a, **k: pytest.fail("compiler recovery during trace-at-one replay"))
+        try:
+            for sq, sk in (trace, (3, 5), (9, 11), (1, 11), (9, 1)):
+                values, seeds = physical_inputs(sq, sk)
+                expected = reference(values, seeds)
+                with program.capture(*(session.upload(value) for value in values.values())) as frame:
+                    tangent = frame.jvp(*(session.upload(seeds[name]) for name in activity))
+                    for actual, wanted in zip((*frame.primal, *tangent),
+                                              (*expected[0], *expected[1]), strict=True):
+                        np.testing.assert_allclose(download(session, actual), wanted,
+                                                   rtol=4e-5, atol=3e-6)
+                assert program.program_digest == identity
+        finally:
+            fn.close_native_storage()

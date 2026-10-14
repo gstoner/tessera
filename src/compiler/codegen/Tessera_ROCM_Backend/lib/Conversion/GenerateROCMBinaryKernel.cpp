@@ -253,8 +253,11 @@ struct GenerateROCMBinaryKernelPass
         auto type = typeAttr ? dyn_cast<FunctionType>(typeAttr.getValue()) : FunctionType{};
         auto output = type && type.getNumResults() == 1 ?
             dyn_cast<RankedTensorType>(type.getResult(0)) : RankedTensorType{};
+        auto operation = member.getAs<StringAttr>("operation");
         if (!output || !output.hasStaticShape() || !output.getElementType().isF32() ||
-            kindStr != "add" || !storeTy.isF32() || output.getNumElements() <= 0) {
+            (kindStr != "add" && kindStr != "mul") || !operation ||
+            operation.getValue() != (kindStr == "add" ? "tessera.add" : "tessera.mul") ||
+            !storeTy.isF32() || output.getNumElements() <= 0) {
           module.emitError("native scaled program sum needs static f32 storage");
           return signalPassFailure();
         }

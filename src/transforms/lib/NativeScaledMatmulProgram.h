@@ -6,6 +6,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include <limits>
 #include <functional>
@@ -52,6 +53,17 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
     return type && type.getElementType().isF32() &&
            sum.getFastmath() == arith::FastMathFlags::none;
   };
+  // A pointwise tensor product is linear in either operand independently.
+  // Keep its exact same-shaped f32 storage contract separate from block scaling.
+  auto isPointwiseProduct = [](Operation *op) {
+    if (!isa<MulOp>(op) || op->getNumOperands() != 2 || op->getNumResults() != 1 ||
+        op->hasAttr("scalar") || op->hasAttr("numeric_policy")) return false;
+    auto type = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    return type && type.hasStaticShape() && !type.getEncoding() &&
+           type.getElementType().isF32() && type.getRank() >= 1 &&
+           type.getRank() <= 8 && type.getNumElements() > 0 &&
+           op->getOperand(0).getType() == type && op->getOperand(1).getType() == type;
+  };
   if (reverse) {
     auto forwardRef = root->getAttrOfType<FlatSymbolRefAttr>("tessera.autodiff.forward");
     auto forward = forwardRef ? dyn_cast_or_null<func::FuncOp>(
@@ -64,7 +76,11 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
         root.getNumArguments() != forward.getNumArguments() + 1)
       return root.emitError("scaled transpose export needs explicit scale roles and one output seed");
     llvm::SmallDenseSet<int64_t> floatingArguments;
+    llvm::SmallDenseSet<Value> floatingRootVisits;
     std::function<void(Value)> collectFloatingRoots = [&](Value value) {
+      // Shared SSA coefficients are a DAG. Visit each value once rather than
+      // expanding every path through a repeated pointwise product.
+      if (!floatingRootVisits.insert(value).second) return;
       if (auto argument = dyn_cast<BlockArgument>(value)) {
         if (argument.getOwner() == &forward.getBody().front())
           floatingArguments.insert(argument.getArgNumber());
@@ -72,7 +88,8 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       }
       Operation *producer = value.getDefiningOp();
       if (producer && producer->getBlock() == &forward.getBody().front() &&
-          (isNativeScaledCarrier(producer) || isa<TransposeOp>(producer)))
+          (isNativeScaledCarrier(producer) || isa<TransposeOp>(producer) ||
+           isScaleSum(producer) || isPointwiseProduct(producer)))
         for (Value operand : producer->getOperands()) collectFloatingRoots(operand);
     };
     forward.walk([&](ScaledMatmulOp product) {
@@ -80,6 +97,10 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
         if (!product.isLinearInOperand(index)) continue;
         collectFloatingRoots(product->getOperand(index));
       }
+    });
+    forward.walk([&](MulOp product) {
+      if (!isPointwiseProduct(product)) return;
+      for (Value operand : product->getOperands()) collectFloatingRoots(operand);
     });
     std::function<LogicalResult(Value)> visitDependency =
         [&](Value value) -> LogicalResult {
@@ -111,7 +132,8 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
           return root.emitError("scaled transpose dependency lost its native adjoint seed");
         llvm::append_range(captures,used);
         adjointSeeds[definition]=used[seed.getInt()];
-      } else if (isNativeFloatingScaledProduct(definition) || isScaleSum(definition)) {
+      } else if (isNativeFloatingScaledProduct(definition) || isScaleSum(definition) ||
+                 isPointwiseProduct(definition)) {
         llvm::append_range(captures,definition->getOperands());
       } else if (isNativeScaledCarrier(definition) ||
                  (isa<TransposeOp>(definition) && transposePermutation(definition))) {
@@ -134,6 +156,13 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
               return cotangentLineage.lookup(capture);
             }))
           return root.emitError("scaled transpose sum mixes residual and cotangent roles");
+      } else if (isPointwiseProduct(definition)) {
+        unsigned seeds = llvm::count_if(captures, [&](Value capture) {
+          return cotangentLineage.lookup(capture);
+        });
+        if (seeds > 1)
+          return root.emitError("scaled transpose pointwise product must remain linear in its cotangent");
+        cotangent = seeds == 1;
       } else if (isNativeScaledCarrier(definition) || isa<TransposeOp>(definition)) {
         cotangent=cotangentLineage.lookup(captures.front());
         if (cotangent && isa<TransposeOp>(definition)) cotangentPermutations.insert(definition);
@@ -151,7 +180,7 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       if (!definition || definition->getBlock() != &root.getBody().front() ||
           definition->getNumResults() != 1 ||
           (!isa<tensor::GenerateOp, TransposeOp>(definition) &&
-           !isScaleSum(definition) && !isNativeScaledCarrier(definition)))
+           !isScaleSum(definition) && !isPointwiseProduct(definition) && !isNativeScaledCarrier(definition)))
         return root.emitError("scaled transpose needs native scale reductions and their sums");
       gradientForValue[value] = role;
       if (failed(visitDependency(value))) return failure();
@@ -200,8 +229,10 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       }
       hasScaledProduct |= isa<ScaledMatmulOp, tensor::GenerateOp>(&op);
     } else {
-      if (!isa<ScaledMatmulOp, AddOp, TransposeOp, BroadcastOp, ReduceOp, ReshapeOp>(op) || op.getNumResults() != 1)
-        return op.emitError("scaled JVP program needs scaled products, native sums and result permutations");
+      if (!isa<ScaledMatmulOp, AddOp, MulOp, TransposeOp, BroadcastOp, ReduceOp, ReshapeOp>(op) || op.getNumResults() != 1)
+        return op.emitError("scaled JVP program needs scaled products and admitted native carriers");
+      if (isa<MulOp>(op) && !isPointwiseProduct(&op))
+        return op.emitError("scaled pointwise product requires exact same-shaped f32 storage");
       if (isa<TransposeOp>(op)) {
         auto type = dyn_cast<RankedTensorType>(op.getOperand(0).getType());
         auto axes = transposePermutation(&op);
@@ -210,7 +241,7 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
           return op.emitError("scaled result permutation requires static unencoded rank-1..8 f32 storage");
         auto *producer = op.getOperand(0).getDefiningOp();
         if (!producer || producer->getBlock() != &root.getBody().front() ||
-            !isa<ScaledMatmulOp, AddOp, TransposeOp, ReshapeOp>(producer))
+            !isa<ScaledMatmulOp, AddOp, MulOp, TransposeOp, ReshapeOp>(producer))
           return op.emitError("scaled result permutation must retain a native computed producer");
       }
       llvm::append_range(capturedInputs[&op], op.getOperands());
@@ -498,7 +529,7 @@ static mlir::LogicalResult projectNativeScaledMatmulMember(
   module->setAttr("tessera.autodiff.scaled_program_witness",
                   b.getStringAttr(witness));
   auto target = module->getAttrOfType<StringAttr>("tessera.target");
-  if ((kind == "tessera.add" || kind == "tessera.transpose") &&
+  if ((kind == "tessera.add" || kind == "tessera.mul" || kind == "tessera.transpose") &&
       target && target.getValue() == "rocm") {
     llvm::SmallVector<Attribute> bindings;
     for (unsigned arg = 0; arg < child.getNumArguments(); ++arg)

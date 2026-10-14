@@ -18,6 +18,7 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
   auto operation = member.getAs<StringAttr>("operation");
   if (product && (!operation || operation.getValue() != "tensor.generate") &&
       (!operation || (operation.getValue() != "tessera.add" &&
+                      operation.getValue() != "tessera.mul" &&
                       operation.getValue() != "tessera.transpose")))
     return tensor::GenerateOp{};
   if (operation && operation.getValue() == "tessera.transpose") {
@@ -35,13 +36,15 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
         return mod.emitError("native inverse cotangent has an unexpected Schedule member"), failure();
     return tensor::GenerateOp{};
   }
-  if (operation && operation.getValue() == "tessera.add") {
+  if (operation && (operation.getValue() == "tessera.add" || operation.getValue() == "tessera.mul")) {
     // Accumulated scale contributions use the ordinary native sum lane.
     // This reduction-specific projection must not claim that sum member.
     auto functions = llvm::to_vector(mod.getOps<func::FuncOp>());
     if (functions.size() != 1 || !functions[0].getBody().hasOneBlock() ||
         functions[0].getNumArguments() != 2 || functions[0].getNumResults() != 1 ||
-        !isa<tessera::AddOp>(functions[0].getBody().front().front()) ||
+        !(operation.getValue() == "tessera.add" ?
+            isa<tessera::AddOp>(functions[0].getBody().front().front()) :
+            isa<tessera::MulOp>(functions[0].getBody().front().front())) ||
         !isa<func::ReturnOp>(functions[0].getBody().front().back()))
       return mod.emitError("native scale sum lost its isolated Graph member"), failure();
     for (Operation &op : functions[0].getBody().front())

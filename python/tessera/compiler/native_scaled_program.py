@@ -116,7 +116,7 @@ class NativeScaledProgram:
                 if (step.get("lowering") != "structured_f32_carrier"
                         or len(step["inputs"]) != 1 or len(member["scalars"]) != 1):
                     raise ValueError("native scaled carrier has an invalid scalar ABI")
-            elif step["operation"] == "tessera.add":
+            elif step["operation"] in {"tessera.add", "tessera.mul"}:
                 if len(step["inputs"]) != 2 or len(member["scalars"]) != 1:
                     raise ValueError("native scaled sum has an invalid scalar ABI")
             elif step["operation"] == "tensor.generate" and kind == "scale_vjp":
@@ -325,6 +325,14 @@ class NativeScaledProgram:
                         raise ValueError("native residual product captures a cotangent")
                 elif operation == "tensor.generate":
                     seeded = True
+                elif operation == "tessera.mul":
+                    flags = [slot in cotangent_slots for slot in step["inputs"]]
+                    if all(flags):
+                        raise ValueError("native reverse pointwise product is nonlinear in its cotangent")
+                    seeded = any(flags)
+                    role = step.get("gradient_argument")
+                    if role is not None and (type(role) is not int or role not in roles or not seeded):
+                        raise ValueError("native pointwise gradient lost its requested role")
                 elif operation == "tessera.add":
                     flags = [slot in cotangent_slots for slot in step["inputs"]]
                     if any(flags) and not all(flags):

@@ -1,0 +1,57 @@
+{
+  "host": "Super-Bear",
+  "compiler_sha256": "15ad9f25ce2893754665e72fed22b525b3799d63fa07c043bcdc2c8ca73ed168",
+  "header_sha256": "760105ba9ed963d3af520e49304154d95c456d6eb17c1876801471dbbae7c4a3",
+  "rows": [
+    {
+      "depth": 8,
+      "export_wall_seconds": 0.015865997000219068,
+      "input_sha256": "6492bea8a6677579b57efd845c1817ea77386aafc5ab8abfca5a4eb765670856",
+      "output_sha256": "3e8c433c3aa95a1bc9c4bbb7082c3def69c854c62b28bcfc15dbcb5843b7ea06",
+      "identical_export": true
+    },
+    {
+      "depth": 16,
+      "export_wall_seconds": 0.015227310999762267,
+      "input_sha256": "5fe6cb3608fab90491fa2aad377d25ae8848fc51ce0ea0cc51e2b03b7768231d",
+      "output_sha256": "13f47fbc442e864ede98d60fb825ad720b2783846397b51b4a569c992841dd7b",
+      "identical_export": true
+    },
+    {
+      "depth": 24,
+      "export_wall_seconds": 0.015251810000336263,
+      "input_sha256": "9e74ae9e24a61d9672660d6cde3cc4319927d34c5136210806d73913fe462eb6",
+      "output_sha256": "87da06157abf50fcb77a4cfa720f5a0372036b69b80271a13d185a857bfad979",
+      "identical_export": true
+    },
+    {
+      "depth": 32,
+      "export_wall_seconds": 0.01768685099978029,
+      "input_sha256": "06d92d6a5aa67915283a4fc20632a896ee786092f66aa85f58c319b4ed3ea99f",
+      "output_sha256": "e9e778d87fe02df80da50248eb46e2030b2fec75bb9d2ca688e4cdb40c8afabf"
+    }
+  ],
+  "scope": "fresh-process native reverse export wall time; no image generation, kernel or public call speedup claim",
+  "control": {
+    "compiler_sha256": "8380df2bda10b90bb47d114d969eb5b0c80e89292ff1adbe43c61c1c407e17d5",
+    "header_sha256": "3727721923775f08bd4a097f61bf52fb61c7bea6d52bca01ecd00f8ecf794d40",
+    "rows": [
+      {
+        "depth": 8,
+        "export_wall_seconds": 0.015640192999853753,
+        "output_sha256": "3e8c433c3aa95a1bc9c4bbb7082c3def69c854c62b28bcfc15dbcb5843b7ea06"
+      },
+      {
+        "depth": 16,
+        "export_wall_seconds": 0.0434593150002911,
+        "output_sha256": "13f47fbc442e864ede98d60fb825ad720b2783846397b51b4a569c992841dd7b"
+      },
+      {
+        "depth": 24,
+        "export_wall_seconds": 7.2190841829997225,
+        "output_sha256": "87da06157abf50fcb77a4cfa720f5a0372036b69b80271a13d185a857bfad979"
+      }
+    ],
+    "host": "Super-Bear"
+  }
+}

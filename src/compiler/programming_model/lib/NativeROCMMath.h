@@ -5,7 +5,7 @@ namespace {
 static StringRef rocmMathKind(Operation *op) {
   return llvm::StringSwitch<StringRef>(op->getName().getStringRef())
       .Case("tessera.sqrt", "sqrt").Case("tessera.exp", "exp")
-      .Case("tessera.add", "add").Case("tessera.div", "div")
+      .Case("tessera.add", "add").Case("tessera.div", "div").Case("tessera.mul", "mul")
       .Case("tessera.cumsum", "sum").Case("tessera.cummax", "max")
       .Default("");
 }
@@ -15,7 +15,7 @@ static bool rocmMathScan(Operation *op) {
 }
 static bool rocmMathBinary(Operation *op) {
   auto n = op->getName().getStringRef();
-  return n == "tessera.add" || n == "tessera.div";
+  return n == "tessera.add" || n == "tessera.div" || n == "tessera.mul";
 }
 static FailureOr<DictionaryAttr> rocmMathContract(Operation *op) {
   auto mod = op->getParentOfType<ModuleOp>();

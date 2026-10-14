@@ -103,16 +103,19 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
       !type || !type.hasStaticShape() || !type.getElementType().isF32() ||
       type.getNumElements() <= 0 || type.getNumElements() > INT32_MAX)
     return mod.emitError("native scale transpose lost its static f32 generated reduction"), failure();
-  unsigned bytes = 0, floats = 0;
+  unsigned bytes = 0, floats = 0, bfloats = 0;
   for (Type input : funcs[0].getArgumentTypes()) {
     auto tensor = dyn_cast<RankedTensorType>(input);
     if (!tensor || !tensor.hasStaticShape() || tensor.getEncoding())
       return mod.emitError("native scale transpose requires contiguous static tensor storage"), failure();
     bytes += isa<Float8E4M3FNType>(tensor.getElementType());
     floats += tensor.getElementType().isF32();
+    bfloats += tensor.getElementType().isBF16();
   }
   bool matrix = !carrier && (product || role.getValue() == "lhs_matrix" || role.getValue() == "rhs_matrix");
-  if ((carrier && floats != 1) || (!carrier && ((matrix && floats != 4) || (!matrix && !((bytes == 2 && floats == 2) || floats == 4)))))
+  auto carrierKind = generator->getAttrOfType<StringAttr>("tessera.native.scaled_carrier");
+  bool widening = carrierKind && carrierKind.getValue() == "cast_bf16_f32";
+  if ((carrier && !(floats == 1 || (widening && bfloats == 1))) || (!carrier && ((matrix && floats != 4) || (!matrix && !((bytes == 2 && floats == 2) || floats == 4)))))
     return mod.emitError("native scaled adjoint captured storage differs from its matrix/scale role"), failure();
   bool valid = true;
   generator.getBody().walk([&](Operation *op) {
@@ -122,7 +125,7 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
     if (auto extract = dyn_cast<tensor::ExtractOp>(op)) {
       auto input = dyn_cast<BlockArgument>(extract.getTensor());
       valid &= input && input.getOwner() == &funcs[0].getBody().front();
-      if (isa<Float8E4M3FNType>(extract.getType()))
+      if (isa<Float8E4M3FNType>(extract.getType()) || extract.getType().isBF16())
         for (auto *user : extract.getResult().getUsers())
           valid &= isa<arith::ExtFOp>(user) && user->getResult(0).getType().isF32();
     }
@@ -222,7 +225,10 @@ static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected,
     auto tensor = dyn_cast<RankedTensorType>(type);
     return tensor && tensor.getElementType().isF32();
   });
-  state.addAttribute("numeric_policy", b.getStringAttr(carrier
+  auto carrierKind = generator->getAttrOfType<StringAttr>("tessera.native.scaled_carrier");
+  bool widening = carrierKind && carrierKind.getValue() == "cast_bf16_f32";
+  state.addAttribute("numeric_policy", b.getStringAttr(widening
+      ? "bf16 to f32;exact widening" : carrier
       ? "f32 carrier;exact broadcast or compensated_fp32 sum" : product
       ? "f32 coefficients;fp32 scaled product;exact_per_block"
       : floating ? "f32 coefficients;fp32 scaled adjoint;exact_per_block"
@@ -378,6 +384,10 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
   state.addAttribute("input_count", b.getI64IntegerAttr(func.getNumArguments()));
   state.addAttribute("workgroup_size", width);
   state.addAttribute("algorithm", algorithm);
+  auto originalCarrier = generator->getAttrOfType<StringAttr>("tessera.native.scaled_carrier");
+  bool widening = originalCarrier && originalCarrier.getValue() == "cast_bf16_f32";
+  if (widening)
+    state.addAttribute("tessera.native.cast", b.getStringAttr("bf16_to_f32"));
   bool continuousWave = wave && llvm::all_of(func.getArgumentTypes(), [](Type type) {
     return cast<RankedTensorType>(type).getElementType().isF32();
   });
@@ -400,6 +410,8 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
   inputs.push_back(b.getI64Type());
   auto kernel = gpu::GPUFuncOp::create(b, generator.getLoc(), name, b.getFunctionType(inputs, {}));
   kernel.setKernel(true); // Canonical inherent property survives GPU-to-LLVM lowering.
+  if (widening)
+    kernel->setAttr("tessera.native.cast", b.getStringAttr("bf16_to_f32"));
   if (continuousWave)
     kernel->setAttr("tessera.autodiff.scale_adjoint", role);
   b.setInsertionPointToStart(&kernel.getBody().front());
@@ -429,7 +441,8 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
   Value value = mapping.lookup(yield.getValue());
   auto carrierKind = generator->getAttrOfType<StringAttr>("tessera.native.scaled_carrier");
   bool copyCarrier = carrierKind &&
-      (carrierKind.getValue()=="broadcast" || carrierKind.getValue()=="reshape");
+      (carrierKind.getValue()=="broadcast" || carrierKind.getValue()=="reshape" ||
+       carrierKind.getValue()=="cast_bf16_f32");
   if (!copyCarrier) {
   auto reduction = value.getDefiningOp<scf::ForOp>();
   auto zero = reduction && reduction.getNumResults() == 1
@@ -489,7 +502,7 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
       offset = arith::AddIOp::create(b, loc,
           arith::MulIOp::create(b, loc, offset, arith::ConstantIndexOp::create(b, loc, dim)), index);
     Value loaded = memref::LoadOp::create(b, loc, arg, ValueRange{offset});
-    if (logical.getElementType().isF32()) {
+    if (logical.getElementType().isF32() || logical.getElementType().isBF16()) {
       extract.getResult().replaceAllUsesWith(loaded);
     } else {
       Value decoded = decodeNativeE4M3FN(b, loc, loaded);

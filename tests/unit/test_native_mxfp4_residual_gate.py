@@ -70,3 +70,26 @@ def test_value_less_cast_tracing_uses_catalog_result_dtype(positional,dtype,elem
         return ts.ops.cast(value,dtype) if positional else ts.ops.cast(value,dtype=dtype)
     traced=trace(cast_value,((2,3),"bf16"),evaluate_catalog_outputs=False)
     assert traced.body[-1].result_type==f"tensor<2x3x{element}>"
+
+@pytest.mark.skipif(not os.environ.get("TESSERA_OPT"),reason="matching native compiler required")
+@pytest.mark.parametrize("mode",["primal","reverse"])
+def test_native_mxfp4_gate_program_preserves_bf16_intermediate_and_cast(mode):
+    import json
+    from tessera.compiler.native_scaled_program import (
+        package_native_scaled_primal,package_native_scaled_vjp)
+    owner,values=typed_case()
+    graph=owner._specialized_autodiff_module(values,{})
+    graph.module_attrs.update({"tessera.target":'"rocm"',"tessera.arch":'"gfx1201"'})
+    builder=package_native_scaled_primal if mode=="primal" else package_native_scaled_vjp
+    package=builder(graph.to_mlir(target="rocm_gfx1201",canonical=True))
+    manifest=json.loads(package.program_json)
+    product=next(step for step in manifest["steps"] if step["operation"]=="tessera.scaled_matmul")
+    cast=next(step for step in manifest["steps"] if step["operation"]=="tessera.cast")
+    source=manifest["buffers"][product["output"]]
+    output=manifest["buffers"][cast["output"]]
+    assert source["storage"]=="bf16" and source["bytes"]==17*19*2
+    assert output["storage"]=="f32" and output["bytes"]==17*19*4
+    assert cast["inputs"]==[product["output"]]
+    assert source["last_read"]>=cast["step"]
+    package.validate()
+

@@ -1094,14 +1094,16 @@ LogicalResult FragmentScaledAccumulateOp::verify() {
         "TILE_FRAGMENT_SCALED_ACCUMULATE_TYPE: accumulates a stated f32 "
         "accumulator fragment");
   const bool e8m0 = getScaleFormat() == "e8m0";
-  if (!e8m0 && getScaleFormat() != "fp32")
+  const bool mxfp4 = getScaleFormat() == "mxfp4_row_fp32_rhs_e8m0";
+  if (!e8m0 && !mxfp4 && getScaleFormat() != "fp32")
     return emitOpError("TILE_FRAGMENT_SCALED_ACCUMULATE_SCALE: scale_format "
                        "must be fp32 or e8m0");
   for (Value scale : {getLhsScale(), getRhsScale()}) {
     auto type = dyn_cast<MemRefType>(scale.getType());
     if (!type || type.getRank() != 1 ||
-        (e8m0 ? !type.getElementType().isSignlessInteger(8)
-              : !type.getElementType().isF32()))
+        ((e8m0 || (mxfp4 && scale == getRhsScale()))
+             ? !type.getElementType().isSignlessInteger(8)
+             : !type.getElementType().isF32()))
       return emitOpError(
           "TILE_FRAGMENT_SCALED_ACCUMULATE_SCALE: scales must be rank-1 "
           "f32 for fp32 or signless i8 for e8m0 (row-major [rows, groups] "

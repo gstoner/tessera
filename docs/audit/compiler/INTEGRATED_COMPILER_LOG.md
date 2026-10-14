@@ -12150,3 +12150,32 @@ Sibling backend physical consumers are not applicable to this gfx1201 lane.
 
 Evidence: benchmarks/baselines/continuous_scale_wave_20261014/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-14 — native exact MXFP4 residual gate
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending; sync MXFP4-RESIDUAL-GATE-20261014.
+
+Outcome: The named packed E2M1/E4M3 K32 product descends through native MLIR
+Schedule/Tile and gfx1201 FP8 WMMA, preserving the BF16 product store before
+an exact widening member and F32 gate. Checked ABI/lifetime binding executes
+ordinary public primal, gate-only JVP and reverse without Python arithmetic
+or kernel reconstruction. Rounded product roots remain inactive; explicit
+row-scale AD through the cast is rejected. 370 focused host gates and 11
+audit gates pass. Six native package and three public gfx1201 cases pass;
+four FP8/MXFP8 public controls also pass.
+
+Separate captured product/cast/gate, program-event and public timings have
+matched source/binary pins. M256/K128 product is about 16.6 us for N80/N160.
+A transport ABBA experiment localizes the public latency discontinuity to
+pageable versus pinned upload/readback; N80 public JVP is 4.850–5.124 ms
+pageable versus 1.322–1.485 ms pinned. Default policy is unchanged.
+All four backend queues are assessed; no sibling physical proof transfers.
+
+Remaining: Broad unit validation, review and publication; bounded transport
+policy evaluation, dynamic/layout/scale/higher AD and the original Radiance
+M256 attribution gap. The five compiler slices remain open.
+
+Evidence: benchmarks/baselines/mxfp4_residual_gate_20261014/README.md,
+gfx1201.json, transport_abba.json.
+<!-- entry-fields:end -->

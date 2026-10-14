@@ -31,9 +31,16 @@ def check(actual, expected):
     return max(errors)
 
 
-def record(fmt):
+def record(fmt, shape=None):
     ta, tb, prefix, out_axes = False, False, (), 0
-    if fmt == "continuous":
+    if fmt == "mxfp4":
+        from tests.unit.test_native_mxfp4_residual_gate import typed_case as mx_case
+        from tests.device.rocm.test_mxfp4_residual_native_execution import frame, coefficient
+        owner, _ = mx_case(shape)
+        values, direction = frame(shape)
+        directions = (None, None, None, None, direction)
+        evaluate = lambda frame: coefficient(frame)*frame[4]
+    elif fmt == "continuous":
         from tests.unit.test_native_scaled_multiply_carrier import case
         from tests.device.rocm.test_native_scaled_tensor_gate_execution import oracle
         owner, _, values, directions = case("reverse", shape=(7, 37, 19))
@@ -64,6 +71,11 @@ def record(fmt):
     cotangent = np.random.default_rng(61194).uniform(-.5,.5,expected[0].shape).astype(np.float32)
     gradients = []
     for role in active:
+        if fmt == "mxfp4":
+            # Independent exact coefficient, after the required BF16 store.
+            # Gate-only derivatives are linear; no derivative crosses rounding.
+            gradients.append(coefficient(values)*cotangent)
+            continue
         gradient = np.empty(values[role].shape, np.float64)
         for index in np.ndindex(gradient.shape):
             plus, minus = list(values), list(values)
@@ -146,7 +158,9 @@ def record(fmt):
         owner.close_native_storage()
     program = json.loads(package.program_json)
     return {
-        "data_format": "fp32" if fmt == "continuous" else "fp8_e4m3", "scale_format": "fp32" if fmt == "continuous" else fmt, "transposeA": ta, "transposeB": tb, "map_prefix": list(prefix),
+        "data_format": "mxfp4_w4a8_exact" if fmt == "mxfp4" else "fp32" if fmt == "continuous" else "fp8_e4m3",
+        "physical_contract": "rocm_mxfp4_w4a8_exact_v1" if fmt == "mxfp4" else None,
+        "scale_format": "fp32" if fmt == "continuous" else "e8m0" if fmt == "mxfp4" else fmt, "transposeA": ta, "transposeB": tb, "map_prefix": list(prefix),
         "out_axes": out_axes, "active_indices": list(active),
         "raw_input_shapes": [list(value.shape) for value in values],
         "correctness": "independent_fp64_before_and_after_every_timing_domain",
@@ -188,9 +202,14 @@ def main():
     parser.add_argument("--scale-vjp-schedule",
                         choices=("serial_per_scale_element", "wave_per_scale_element", "auto"),
                         default="serial_per_scale_element")
-    parser.add_argument("--formats", nargs="+", choices=("fp32", "e8m0", "continuous"),
+    parser.add_argument("--formats", nargs="+", choices=("fp32", "e8m0", "continuous", "mxfp4"),
                         default=("fp32", "e8m0"))
+    parser.add_argument("--mxfp4-shapes", nargs="+", default=("17,64,19", "256,128,80", "256,128,160"),
+                        help="positive M,K,N exact packed-K32 diagnostic rows")
     options = parser.parse_args()
+    mx_shapes = [tuple(map(int, row.split(","))) for row in options.mxfp4_shapes]
+    if any(len(row) != 3 or min(row) <= 0 or row[1] % 32 for row in mx_shapes):
+        parser.error("MXFP4 shapes require positive M,K,N with K divisible by 32")
     os.environ["TESSERA_ROCM_SCALE_VJP_SCHEDULE"] = options.scale_vjp_schedule
     if runtime._rocm_live_arch() != "gfx1201":
         raise RuntimeError("owning gfx1201 required")
@@ -239,6 +258,14 @@ def main():
         "tests/unit/test_native_scaled_multiply_carrier.py",
         "tests/device/rocm/test_native_scaled_tensor_gate_execution.py",
     ])
+    paths.extend([
+        "python/tessera/compiler/graph_ir.py", "python/tessera/compiler/trace.py",
+        "python/tessera/compiler/rocm_nvfp4_program.py", "src/transforms/lib/NativeScaledCarrier.h",
+        "src/compiler/ir/TileOps.cpp",
+        "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp",
+        "tests/unit/test_native_mxfp4_residual_gate.py",
+        "tests/device/rocm/test_mxfp4_residual_native_execution.py",
+    ])
     paths.append(str(Path(__file__).relative_to(Path.cwd())))
     packet = {
         "schema": "tessera.native_encoded_scaled_gate.packet.v1",
@@ -260,8 +287,9 @@ def main():
         "claim": "named exact-device correctness and latency characterization; no generic AD closure or performance promotion",
     }
     for fmt in options.formats:
-        packet["rows"].append(record(fmt))
-        print("measured", len(packet["rows"]), flush=True)
+        for shape in mx_shapes if fmt == "mxfp4" else (None,):
+            packet["rows"].append(record(fmt, shape))
+            print("measured", len(packet["rows"]), flush=True)
     options.output.parent.mkdir(parents=True, exist_ok=True)
     options.output.write_text(json.dumps(packet, indent=2)+"\n")
 

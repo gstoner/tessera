@@ -242,13 +242,37 @@ def runtime_artifact(program):
 
 def reference_scaled_matmul(a,b,scale_a,scale_b,*,physical_contract,numeric_policy,scale_layout,
                             transposeA=False,transposeB=False,batching=None):
-    """CPU oracle for the named folded physical profile; never used by JIT."""
+    """CPU oracle for named physical profiles; native packages own execution."""
     if type(transposeA) is not bool or type(transposeB) is not bool:
         raise ValueError("scaled_matmul transpose attributes must be boolean")
     if transposeA or transposeB or batching is not None:
         raise ValueError("packed folded reference requires no transpose or batching")
     import numpy as np
     import ml_dtypes
+    if physical_contract == "rocm_mxfp4_w4a8_exact_v1":
+        if (numeric_policy != {"accum": "fp32", "execution_mode": "exact_per_block"}
+                or scale_layout != {"granularity": "block", "block": [1, 32], "format": "e8m0"}):
+            raise ValueError("exact MXFP4 reference requires its declared K32 numerical contract")
+        from .graph_ir import _shape_scaled_matmul
+        values = [np.asarray(v) for v in (a, b, scale_a, scale_b)]
+        _shape_scaled_matmul([tensor_ir_type(v.shape, str(v.dtype)) for v in values],
+                             {"physical_contract": physical_contract})
+        a, b, scale_a, scale_b = values
+        decoded_a = a.view(ml_dtypes.float8_e4m3fn).astype(np.float64)
+        codes = np.empty((a.shape[1], b.shape[1]), np.uint8)
+        codes[::2] = b & np.uint8(15)
+        codes[1::2] = b >> np.uint8(4)
+        magnitude = np.array([0, .5, 1, 1.5, 2, 3, 4, 6], np.float64)
+        decoded_b = magnitude[codes & np.uint8(7)] * np.where(codes & np.uint8(8), -1., 1.)
+        result = np.zeros((a.shape[0], b.shape[1]), np.float32)
+        for group in range(a.shape[1] // 32):
+            block = slice(group * 32, (group + 1) * 32)
+            # This physical profile reserves E8 code zero for a zero block.
+            factor = np.where(scale_b[group] == 0, 0.,
+                              np.ldexp(np.ones(b.shape[1]), scale_b[group].astype(np.int32) - 127))
+            partial = (decoded_a[:, block] @ decoded_b[block, :]) * scale_a.astype(np.float64)[:, None] * factor
+            result += partial.astype(np.float32)
+        return result.astype(ml_dtypes.bfloat16)
     from .rocm_mxfp4 import convert_weight_layout,MXFP4_GFX12_FRAGMENT_LAYOUT_V1,MXFP4_CHECKPOINT_LAYOUT_V1,folded_weights
     from .rocm_mxfp4_folded import prepare_folded_weights
     from .rocm_nvfp4_resident import _activation_inputs

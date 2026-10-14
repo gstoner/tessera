@@ -97,3 +97,61 @@ def test_native_mxfp4_gate_program_preserves_bf16_intermediate_and_cast(mode):
     assert source["last_read"]>=cast["step"]
     package.validate()
 
+
+
+def test_public_admission_keeps_exact_mxfp4_rounding_roots_inactive():
+    import copy
+    from tessera.compiler.rocm_typed_scaled_native import (
+        requests_composed_typed_scaled, supports_composed_scaled_primal,
+        supports_composed_scale_jvp, supports_scaled_reverse)
+    owner, values = typed_case()
+    graph = owner._specialized_autodiff_module(values, {})
+    before = copy.deepcopy(graph)
+    assert requests_composed_typed_scaled(graph)
+    assert supports_composed_scaled_primal(graph)
+    assert supports_composed_scale_jvp(graph, (4,))
+    assert supports_scaled_reverse(graph, (4,))
+    for role in range(4):
+        assert not supports_composed_scale_jvp(graph, (role,))
+        assert not supports_scaled_reverse(graph, (role,))
+    assert graph == before
+
+
+@pytest.mark.parametrize("attribute,value", [
+    ("physical_contract", "rocm_mxfp4_w4a8_packed_folded_prefill_v1"),
+    ("numeric_policy", {"accum": "fp32", "execution_mode": "approximate"}),
+    ("scale_layout", {"granularity": "per_tensor", "block": [1, 32], "format": "e8m0"}),
+])
+def test_public_mxfp4_admission_rejects_conflicting_physical_semantics(attribute, value):
+    from tessera.compiler.rocm_typed_scaled_native import supports_composed_scaled_primal
+    owner, values = typed_case()
+    graph = owner._specialized_autodiff_module(values, {})
+    graph.functions[0].body[0].kwargs[attribute] = value
+    assert not supports_composed_scaled_primal(graph)
+
+
+@pytest.mark.skipif(not os.environ.get("TESSERA_OPT"), reason="matching native compiler required")
+@pytest.mark.parametrize("mode", ["forward", "reverse"])
+def test_native_mxfp4_export_rejects_active_row_scale_through_rounding(mode):
+    from tessera.compiler.native_scaled_program import package_native_scaled_jvp, package_native_scaled_vjp
+    _, values = typed_case()
+    owner = ts.jit(target="rocm_gfx1201", autodiff=mode, wrt=("sa",))(gated)
+    graph = owner._specialized_autodiff_module(values, {})
+    graph.module_attrs.update({"tessera.target": '"rocm"', "tessera.arch": '"gfx1201"'})
+    builder = package_native_scaled_jvp if mode == "forward" else package_native_scaled_vjp
+    with pytest.raises(RuntimeError, match="cast|derivative|scaled JVP"):
+        builder(graph.to_mlir(target="rocm_gfx1201", canonical=True))
+
+
+def test_exact_mxfp4_oracle_preserves_bf16_store_before_widening():
+    import ml_dtypes
+    from tessera.compiler.rocm_nvfp4_program import reference_scaled_matmul
+    owner, values = typed_case((1, 32, 1))
+    args = list(values[:4])
+    args[2] = np.array([1.003], np.float32)
+    attrs = owner._specialized_autodiff_module(values, {}).functions[0].body[0].kwargs
+    result = reference_scaled_matmul(*args, **attrs)
+    assert result.dtype == np.dtype(ml_dtypes.bfloat16)
+    expected = np.float32(16) * args[2][0]
+    assert result.astype(np.float32)[0, 0] != expected
+    assert result[0, 0] == ml_dtypes.bfloat16(expected)

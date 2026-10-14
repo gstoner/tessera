@@ -90,3 +90,50 @@ def test_native_exact_mxfp4_coefficient_gate(shape,mode,monkeypatch):
             prepared.read(generation)
         monkeypatch.setattr(subprocess,"run",original_run)
 
+
+
+@pytest.mark.parametrize("shape", [(7, 32, 5), (17, 64, 19), (256, 128, 80)])
+def test_public_exact_mxfp4_gate_primal_jvp_reverse(shape, monkeypatch):
+    import copy
+    from tessera.autodiff import jvp
+    assert runtime._rocm_live_arch() == "gfx1201"
+    owner, _ = typed_case(shape)
+    values, cot = frame(shape)
+    directions = (None, None, None, None, cot)
+    try:
+        actual = owner(*values)
+        np.testing.assert_array_equal(actual, coefficient(values) * values[4])
+        assert owner._native_descriptor_last_receipt["execution_kind"] == "native_gpu"
+        graph = copy.deepcopy(owner.graph_ir)
+        request = owner.differentiation_request
+        forward = jvp(owner, values, directions)
+        np.testing.assert_array_equal(forward[0], actual)
+        np.testing.assert_array_equal(forward[1], coefficient(values) * cot)
+        assert owner.last_jvp_execution["execution_kind"] == "native_gpu"
+        backward = owner.native_backward(*values, out_cotangents=cot)
+        assert len(backward) == 1
+        np.testing.assert_array_equal(backward[0], coefficient(values) * cot)
+        assert owner.last_backward_execution["execution_kind"] == "native_gpu"
+        assert owner.graph_ir == graph
+        assert owner.differentiation_request is request
+        retained = tuple(v.copy() for v in forward)
+        def forbidden(*args, **kwargs):
+            raise AssertionError("warm public MXFP4 call invoked compiler")
+        monkeypatch.setattr(subprocess, "run", forbidden)
+        changed = list(values)
+        changed[0] = np.bitwise_xor(values[0], np.uint8(128))
+        changed[1] = np.bitwise_xor(values[1], np.uint8(136))
+        changed[2] = values[2] * np.float32(.5)
+        changed[4] = values[4] * np.float32(-.5)
+        np.testing.assert_array_equal(owner(*changed), coefficient(changed) * changed[4])
+        repeated = jvp(owner, tuple(changed), directions)
+        np.testing.assert_array_equal(repeated[0], coefficient(changed) * changed[4])
+        np.testing.assert_array_equal(repeated[1], coefficient(changed) * cot)
+        np.testing.assert_array_equal(owner.native_backward(*changed, out_cotangents=cot)[0],
+                                      coefficient(changed) * cot)
+        for got, old in zip(forward, retained, strict=True):
+            np.testing.assert_array_equal(got, old)
+        assert owner.graph_ir == graph
+        assert owner.differentiation_request is request
+    finally:
+        owner.close_native_storage()

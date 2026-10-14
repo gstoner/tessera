@@ -8,19 +8,31 @@ scope: ROCm backend implementation and exact-device proof
 ## MXFP4-RESIDUAL-GATE-20261014 — active engineering
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
-The existing exact MXFP4 physical contract now retains BF16 product shape
-through typed frontend capture. Symbolic decoration defers physical extent
-checks; concrete packed K, row-scale and E8M0 scale dimensions are checked.
-Value-less cast tracing uses the canonical catalog result dtype rather than
-copying its input dtype. Seven MXFP4 typing/negative/native-Graph tests and
-eight shared positional/keyword cast cases are part of a 91-pass host
-frontend/registry lane; 23 owning Apple execution tests skip on WSL.
-This is frontend/Graph proof only. No MXFP4 residual JIT execution, numerical
-derivative or timing claim is made. Requested-activity handling, BF16 program
-storage, a native widening cast member, image/ABI binding, exact gfx1201
-numerics and isolated FP8/MXFP8/MXFP4 comparisons remain required.
+The exact `rocm_mxfp4_w4a8_exact_v1` Graph contract now executes as a
+compiler-owned scaled product, BF16 store, exact BF16-to-F32 widening member
+and F32 tensor gate. MLIR owns Schedule/Tile, packed E2M1 decode, FP8 WMMA,
+mixed row-F32/RHS-E8 scaling, native image and checked buffer lifetime.
+The Python layer admits and binds the named profile; its independent eager
+oracle is used for frontend certification, not native arithmetic or codegen.
+Conflicting scale/numeric policies are rejected. Product rounding remains
+observable; only gate derivatives are admitted. Native forward/reverse
+requests for the row scale through this BF16 boundary are rejected.
 
-Follow-up required: the existing exact gfx1201 product stores BF16. Preserve that rounding boundary before native widening and a FP32 gate; do not silently change its output or scale/numeric policy. gfx1151 has no new execution claim.
+Host WSL: 370 focused package, rounding, inactive-role, registry and pass
+metadata gates pass. Exact gfx1201: six direct primal/reverse package cases
+and three public primal/JVP/reverse cases pass at M,K,N = (7,32,5),
+(17,64,19), (256,128,80), including changed encoded values, warm compiler
+exclusion and retained outputs. Four existing FP8/MXFP8 public controls also
+pass. No generic FP4/uint8 storage or differentiation promotion.
+
+Correctness-gated FP8/MXFP8/MXFP4 member, program-event and completed public
+timings are recorded separately in
+`benchmarks/baselines/mxfp4_residual_gate_20261014/gfx1201.json`.
+M=256 N=80/160 rows characterize the new exact residual route; they do not
+close the original Radiance per-column attribution gap or promote a schedule.
+General layouts, dynamic identity, broader AD and model-quality remain open.
+
+Parity validated on RX9070XT/gfx1201 for the named static envelope. gfx1151 has no FP8 WMMA and no execution claim; physical parity requires its own consumer.
 
 
 ## CONTINUOUS-SCALE-WAVE-20261014

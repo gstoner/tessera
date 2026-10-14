@@ -1,0 +1,24 @@
+diff --git b/src/transforms/lib/NativeScaledMatmulProgram.h a/src/transforms/lib/NativeScaledMatmulProgram.h
+index 5fa2e4161..4d09a22a0 100644
+--- b/src/transforms/lib/NativeScaledMatmulProgram.h
++++ a/src/transforms/lib/NativeScaledMatmulProgram.h
+@@ -6,7 +6,6 @@
+ #include "mlir/IR/SymbolTable.h"
+ #include "mlir/Transforms/RegionUtils.h"
+ #include "llvm/ADT/SetVector.h"
+-#include "llvm/ADT/DenseSet.h"
+ #include "llvm/ADT/SmallPtrSet.h"
+ #include <limits>
+ #include <functional>
+@@ -76,11 +75,7 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module,
+         root.getNumArguments() != forward.getNumArguments() + 1)
+       return root.emitError("scaled transpose export needs explicit scale roles and one output seed");
+     llvm::SmallDenseSet<int64_t> floatingArguments;
+-    llvm::SmallDenseSet<Value> floatingRootVisits;
+     std::function<void(Value)> collectFloatingRoots = [&](Value value) {
+-      // Shared SSA coefficients are a DAG. Visit each value once rather than
+-      // expanding every path through a repeated pointwise product.
+-      if (!floatingRootVisits.insert(value).second) return;
+       if (auto argument = dyn_cast<BlockArgument>(value)) {
+         if (argument.getOwner() == &forward.getBody().front())
+           floatingArguments.insert(argument.getArgNumber());

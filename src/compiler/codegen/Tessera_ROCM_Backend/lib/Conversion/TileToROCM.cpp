@@ -2752,7 +2752,7 @@ struct LowerTileToROCMPass
         valid &= tile->getAttr("output_storage") == c.get("output_storage");
         if (scan) valid &= tile->getAttr("inclusive") == BoolAttr::get(fn.getContext(), true);
         valid &= scan ? (kind.getValue() == "sum" || kind.getValue() == "max") :
-            binary ? (kind.getValue() == "add" || kind.getValue() == "div") :
+            binary ? (kind.getValue() == "add" || kind.getValue() == "div" || kind.getValue() == "mul") :
             (kind.getValue() == "sqrt" || kind.getValue() == "exp");
         if (!scan) valid &= tile->getAttr("family") == StringAttr::get(
             fn.getContext(), binary ? "binary" : kind.getValue() == "exp" ? "transcendental" : "unary");

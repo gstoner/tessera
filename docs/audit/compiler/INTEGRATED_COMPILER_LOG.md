@@ -7,6 +7,9 @@ audit_role: reference
 
 
 
+
+
+
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -12070,4 +12073,27 @@ performance promotion, broader AD or W1.1 retirement.
 Evidence: tests/unit/test_native_package_pipeline_gates.py,
 tests/unit/test_rocm_nvfp4_ingest_package.py and
 tests/device/nvidia/test_native_package_pipeline_gates.py.
+<!-- entry-fields:end -->
+
+### 2026-10-14 — native FP32 scaled-product tensor gate
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending; sync NATIVE-SCALED-TENSOR-GATE-20261014.
+
+Outcome: recovered unique carrier work is selectively ported onto merged
+PR942 main. Native MLIR admits exact same-shaped FP32 multiplication members
+and verifies cotangent linearity, bindings and buffer last-read lifetimes.
+329 final compiler/program/registry/recorder tests and eight gfx1201 numerical,
+activity, transpose, warm execution and retained-generation cases pass.
+Two fresh device packets retain identical source/binary/program/member pins.
+Maximum absolute error is 2.572921015131513e-9.
+Public JVP medians are 1.113088/1.069234 ms; native interleaved program events
+are 27.633032/27.445782 us. Captured member timings remain a separate schedule.
+All four architecture queues are assessed; no performance promotion claimed.
+A shared-DAG visited set eliminates repeated root traversal: depth-32 export
+passes after a pre-repair 10-second timeout, with smaller export bytes unchanged.
+
+Remaining: encoded FP8/MXFP8/MXFP4, mapping/dynamic/general composition,
+higher-order AD and sibling exact-device integration remain open.
+Evidence: benchmarks/baselines/native_scaled_tensor_gate_20261014/README.md.
 <!-- entry-fields:end -->

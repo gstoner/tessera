@@ -25,6 +25,9 @@ def requests_composed_typed_scaled(module):
     permutations=0
     for op in fn.body:
         if op.op_name in {"tessera.add", "tessera.broadcast"}:continue
+        if op.op_name == "tessera.mul":
+            permutations+=1
+            continue
         if op.op_name=="tessera.transpose":
             permutations+=1
             continue
@@ -43,7 +46,7 @@ def requests_floating_scaled(module):
     args = {arg.name: arg.ir_type for arg in fn.args}
     products = 0
     for op in fn.body:
-        if op.op_name in {"tessera.add", "tessera.transpose", "tessera.broadcast", "tessera.reshape"}:
+        if op.op_name in {"tessera.add", "tessera.mul", "tessera.transpose", "tessera.broadcast", "tessera.reshape"}:
             if len(op.result_names) == 1 and op.inferred_type is not None:
                 args[op.result_names[0]] = op.inferred_type
             continue
@@ -416,10 +419,12 @@ def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=F
             scales.update(name for value in eligible for name in roots[value])
             used.update(v.removeprefix("%") for v in op.operands
                         if v.removeprefix("%") in names)
-        elif op.op_name == "tessera.add":
+        elif op.op_name in {"tessera.add", "tessera.mul"}:
             if (len(op.operands) != 2 or op.kwargs or op.numeric_policy is not None
                     or any(str(values[v]) != str(result) for v in op.operands)):
                 return False
+            if op.op_name == "tessera.mul":
+                scales.update(name for value in op.operands for name in roots[value])
         elif op.op_name == "tessera.reshape":
             if (len(op.operands) != 1 or op.numeric_policy is not None
                     or set(op.kwargs) - {"shape"}):

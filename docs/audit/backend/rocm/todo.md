@@ -5,6 +5,22 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NATIVE-SCALED-TENSOR-GATE-20261014
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Shared contracts: a same-shaped static unencoded FP32 multiplication member
+in the native scaled-product SSA program; cotangent linearity, captured
+dependencies, checked member bindings and last-read lifetime validation.
+Shared SSA root collection visits each value once; depth-32 export has a
+red/green regression with smaller exported witnesses byte-identical.
+Native MLIR and the ROCm backend own Schedule/Tile/LLVM image generation.
+The current main use-after-free and bounded attention fixes are retained.
+Existing generic capability and manifest execution claims are unchanged.
+Evidence: benchmarks/baselines/native_scaled_tensor_gate_20261014/README.md.
+
+Parity validated for eight named RX 9070 XT/gfx1201 primal/JVP/VJP device cases and two fresh correctness-gated timing packets. Follow-up required for gfx1151 execution, encoded FP8/MXFP8/MXFP4, batching, dynamic/general composition and public overhead. No global AD or standalone multiplication closure is claimed.
+
+
 ## NATIVE-PACKAGE-COMPILER-ADMISSION-20261014
 
 Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.

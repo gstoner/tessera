@@ -171,9 +171,9 @@ shape kernels remain valid.
 
 Two fresh 30-profile packets have identical sealed package/image/binding
 identities and all 22 source/four binary pins match. Maximum absolute error is
-7.188786748102416e-7. Forward CUDA-event medians span 7.606–55.883 us; JVP
-preloaded dispatch medians span 8.964–10.885 us. Completed resident capture+JVP
-medians span 4.955–6.159 ms, leaving host preparation/ownership overhead open.
+7.188786748102416e-7. Final post-review forward CUDA-event medians span 8.303–56.553 us; JVP
+preloaded dispatch medians span 10.967–26.872 us. Completed resident capture+JVP
+medians span 5.093–7.285 ms, leaving host preparation/ownership overhead open.
 No kernel speedup, promotion, generic AD or sibling device closure is claimed.
 All four architecture queues are assessed under the shared synchronization key.
 
@@ -188,3 +188,16 @@ in recovery commits rather than active worktrees. The scaled-multiply carrier
 remains follow-up required: port it onto the current main use-after-free repair,
 then run native compilation, numerical, registry and benchmark gates before
 landing. It is not included in bounded saved-LSE closure evidence.
+
+## Named FP32 tensor gate — 2026-10-14
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Shared contracts: a same-shaped static unencoded FP32 multiplication member
+in the native scaled-product SSA program; cotangent linearity, captured
+dependencies, checked member bindings and last-read lifetime validation.
+Native MLIR and the ROCm backend own Schedule/Tile/LLVM image generation.
+The current main use-after-free and bounded attention fixes are retained.
+Existing generic capability and manifest execution claims are unchanged.
+Evidence: benchmarks/baselines/native_scaled_tensor_gate_20261014/README.md.
+
+Parity validated for eight named RX 9070 XT/gfx1201 primal/JVP/VJP device cases and two fresh correctness-gated timing packets. Follow-up required for gfx1151 execution, encoded FP8/MXFP8/MXFP4, batching, dynamic/general composition and public overhead. No global AD or standalone multiplication closure is claimed.

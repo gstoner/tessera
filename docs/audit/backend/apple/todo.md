@@ -6,6 +6,22 @@ target: apple_gpu
 last_updated: 2026-10-14
 ---
 
+## NATIVE-SCALED-TENSOR-GATE-20261014
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Shared contracts: a same-shaped static unencoded FP32 multiplication member
+in the native scaled-product SSA program; cotangent linearity, captured
+dependencies, checked member bindings and last-read lifetime validation.
+Shared SSA root collection visits each value once; depth-32 export has a
+red/green regression with smaller exported witnesses byte-identical.
+Native MLIR and the ROCm backend own Schedule/Tile/LLVM image generation.
+The current main use-after-free and bounded attention fixes are retained.
+Existing generic capability and manifest execution claims are unchanged.
+Evidence: benchmarks/baselines/native_scaled_tensor_gate_20261014/README.md.
+
+Follow-up required for an owning Apple scaled-product multiplication program. The shared native emitter explicitly admits only rocm/gfx1201 and the math member lowering is ROCm-specific; Metal/Apple CPU execution and their ABI remain unchanged. No Apple numerical proof transfers.
+
+
 ## NATIVE-PACKAGE-COMPILER-ADMISSION-20261014
 
 Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.

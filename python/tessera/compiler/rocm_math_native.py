@@ -31,7 +31,7 @@ def math_abi(info):
     return MATH_ABIS[key]
 
 
-OPS = frozenset("tessera."+x for x in ("sqrt","exp","add","div","cumsum","cummax"))
+OPS = frozenset("tessera."+x for x in ("sqrt","exp","add","div","mul","cumsum","cummax"))
 
 
 def requests_math(module):
@@ -109,7 +109,7 @@ def _info(tile):
 def _validate_info(info):
     shape, names, roles = info["shape"], info["bindings"], info["roles"]
     family, kind = info["family"], info["kind"]
-    allowed = {"unary":{"sqrt","exp"}, "binary":{"add","div"}, "scan":{"sum","max"}}
+    allowed = {"unary":{"sqrt","exp"}, "binary":{"add","div","mul"}, "scan":{"sum","max"}}
     arity = 2 if family == "binary" else 1
     if (family not in allowed or kind not in allowed[family]
             or info["architecture"] not in {"gfx1151","gfx1201"}

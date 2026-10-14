@@ -240,7 +240,7 @@ struct ProjectROCMKernelIdentityPass
             ((contractKind.getValue() == "sum" && kind.getValue() == "cumsum") ||
              (contractKind.getValue() == "max" && kind.getValue() == "cummax")) :
             kind == contractKind && (family == "scalar_binary" ?
-                (kind.getValue() == "add" || kind.getValue() == "div") :
+                (kind.getValue() == "add" || kind.getValue() == "div" || kind.getValue() == "mul") :
                 (kind.getValue() == "sqrt" || kind.getValue() == "exp"));
         for (NamedAttribute attr : kernel->getAttrs())
           if (attr.getName() != "name" && attr.getName() != "kind" &&

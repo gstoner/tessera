@@ -178,7 +178,15 @@ static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected,
     auto tensor = dyn_cast<RankedTensorType>(type);
     return tensor && tensor.getElementType().isF32();
   });
-  if (automatic && !floatingInputs) {
+  // The program request applies only to scale adjoints. Recomputed products,
+  // matrix adjoints and movement carriers keep their own serial Schedule.
+  auto role = generator->getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint");
+  bool scaleAdjoint = role &&
+      (role.getValue() == "lhs_scale" || role.getValue() == "rhs_scale") &&
+      !generator->hasAttr("tessera.native.scaled_product") &&
+      !generator->hasAttr("tessera.native.scaled_carrier");
+  wave &= scaleAdjoint;
+  if (automatic && !floatingInputs && scaleAdjoint) {
     auto type = cast<RankedTensorType>(generator.getType());
     // Named low-cardinality FP8 scale gradients: a wave exposes independent
     // column contributions while retaining each original K-group dot.
@@ -186,8 +194,6 @@ static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected,
     wave = type.getNumElements() <= 128 &&
            nativeScaleContributionSpan(generator) >= 4;
   }
-  if (wave && floatingInputs)
-    return generator.emitError("native floating scaled adjoint wave scheduling requires separate admission");
   if (generator->hasAttr("schedule.artifact_hash"))
     return generator.emitError("native scale transpose is already scheduled");
   OpBuilder b(mod.getContext());
@@ -343,7 +349,12 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
   auto algorithm = knobs ? knobs.getAs<StringAttr>("algorithm") : StringAttr{};
   auto accumulation = knobs ? knobs.getAs<StringAttr>("outer_accumulation") : StringAttr{};
   bool wave = algorithm && algorithm.getValue() == "wave_per_scale_element";
-  if (!accumulation || accumulation.getValue() != "compensated_fp32" ||
+  auto role = generator->getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint");
+  bool scaleAdjoint = role &&
+      (role.getValue() == "lhs_scale" || role.getValue() == "rhs_scale") &&
+      !generator->hasAttr("tessera.native.scaled_product") &&
+      !generator->hasAttr("tessera.native.scaled_carrier");
+  if ((wave && !scaleAdjoint) || !accumulation || accumulation.getValue() != "compensated_fp32" ||
       generator->getAttrOfType<StringAttr>("schedule.outer_accumulation") != accumulation ||
       !width || width.getInt() != threads.getInt() || !algorithm ||
       generator->getAttrOfType<StringAttr>("schedule.algorithm") != algorithm ||
@@ -367,6 +378,11 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
   state.addAttribute("input_count", b.getI64IntegerAttr(func.getNumArguments()));
   state.addAttribute("workgroup_size", width);
   state.addAttribute("algorithm", algorithm);
+  bool continuousWave = wave && llvm::all_of(func.getArgumentTypes(), [](Type type) {
+    return cast<RankedTensorType>(type).getElementType().isF32();
+  });
+  if (continuousWave)
+    state.addAttribute("tessera.autodiff.scale_adjoint", role);
   state.addAttribute("artifact_hash", hash);
   state.addRegion();
   Operation *carrier = b.create(state);
@@ -384,6 +400,8 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
   inputs.push_back(b.getI64Type());
   auto kernel = gpu::GPUFuncOp::create(b, generator.getLoc(), name, b.getFunctionType(inputs, {}));
   kernel.setKernel(true); // Canonical inherent property survives GPU-to-LLVM lowering.
+  if (continuousWave)
+    kernel->setAttr("tessera.autodiff.scale_adjoint", role);
   b.setInsertionPointToStart(&kernel.getBody().front());
   auto loc = generator.getLoc();
   Value c128 = arith::ConstantIndexOp::create(b, loc, 128);

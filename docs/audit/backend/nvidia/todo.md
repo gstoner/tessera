@@ -6,6 +6,23 @@ target: nvidia_sm120
 last_updated: 2026-10-14
 ---
 
+## CONTINUOUS-SCALE-WAVE-20261014
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+Native Schedule classifies each program member: explicit wave requests apply
+to lhs/rhs scale adjoints; continuous products, matrix gradients and movement
+carriers retain serial geometry. Four-FP32 wave members carry matching scale
+roles on the Tile wrapper and its sealed GPU body. Shared Tile/Target
+verification and package validation preserve those roles and checked geometry.
+Automatic selection and the serial default are unchanged.
+Evidence: benchmarks/baselines/continuous_scale_wave_20261014/README.md.
+
+Not applicable to NVIDIA physical scheduling: this selector and
+structured consumer require rocm/gfx1201. CUDA producer/attention Schedule,
+PTX images and stream ownership are unchanged. Follow-up required for an
+owning NVIDIA scaled residual consumer; no AMD execution proof transfers.
+
+
 ## ENCODED-SCALED-RESIDUAL-20261014
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

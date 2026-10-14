@@ -260,8 +260,8 @@ class NativeScaledProgram:
                     output_buffer["storage"] != "f32" or
                     sorted(row["storage"] for row in captured) not in
                         (["f32"] * 4, ["f32", "f32", "f8E4M3FN", "f8E4M3FN"]) or
-                    (all(row["storage"] == "f32" for row in captured) and
-                     schedule != "serial_per_scale_element") or
+                    (schedule == "wave_per_scale_element" and
+                     step["gradient_role"] not in {"lhs_scale", "rhs_scale"}) or
                     (step["gradient_role"] in {"lhs_matrix", "rhs_matrix"} and
                      any(row["storage"] != "f32" for row in captured)) or
                     member["geometry"] != geometry):

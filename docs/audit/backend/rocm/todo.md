@@ -5,6 +5,28 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## CONTINUOUS-SCALE-WAVE-20261014
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+Native Schedule classifies each program member: explicit wave requests apply
+to lhs/rhs scale adjoints; continuous products, matrix gradients and movement
+carriers retain serial geometry. Four-FP32 wave members carry matching scale
+roles on the Tile wrapper and its sealed GPU body. Shared Tile/Target
+verification and package validation preserve those roles and checked geometry.
+Automatic selection and the serial default are unchanged.
+Evidence: benchmarks/baselines/continuous_scale_wave_20261014/README.md.
+
+Parity validated on RX9070XT/gfx1201: 30 compiler/selector cases, 12 public
+FP32/FP8/MXFP8 gate cases and 40 continuous mapped/seed/lifetime cases pass.
+Four isolated serial/wave/wave/serial packets retain matched source/binary
+pins and identical primal/JVP images. The named continuous reverse program
+event window changes from 36.564–36.685 us to 25.009–25.152 us; public latency
+is separately 1.812–1.852 ms versus 1.767–1.802 ms. No general public speedup
+or default promotion. gfx1151 wave execution is not applicable: the native
+structured consumer still requires gfx1201. Wider dynamic/higher AD, MXFP4
+residual integration and M256 attribution remain follow-up required.
+
+
 ## ENCODED-SCALED-RESIDUAL-20261014
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

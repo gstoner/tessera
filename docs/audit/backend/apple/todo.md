@@ -6,6 +6,24 @@ target: apple_gpu
 last_updated: 2026-10-14
 ---
 
+## CONTINUOUS-SCALE-WAVE-20261014
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+Native Schedule classifies each program member: explicit wave requests apply
+to lhs/rhs scale adjoints; continuous products, matrix gradients and movement
+carriers retain serial geometry. Four-FP32 wave members carry matching scale
+roles on the Tile wrapper and its sealed GPU body. Shared Tile/Target
+verification and package validation preserve those roles and checked geometry.
+Automatic selection and the serial default are unchanged.
+Evidence: benchmarks/baselines/continuous_scale_wave_20261014/README.md.
+
+Not applicable to Apple physical scheduling: the native structured
+consumer requires rocm/gfx1201 and HIP ownership. Metal/Apple CPU retain
+their existing reduction and checked ABI routes. Follow-up required for
+owning Apple continuous scale-adjoint execution; no AMD timing or numerical
+proof transfers.
+
+
 ## ENCODED-SCALED-RESIDUAL-20261014
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

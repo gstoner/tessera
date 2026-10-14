@@ -12078,7 +12078,7 @@ tests/device/nvidia/test_native_package_pipeline_gates.py.
 ### 2026-10-14 — native FP32 scaled-product tensor gate
 
 Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
-PRs: pending; sync NATIVE-SCALED-TENSOR-GATE-20261014.
+PRs: [#943](https://github.com/gstoner/tessera/pull/943); sync NATIVE-SCALED-TENSOR-GATE-20261014.
 
 Outcome: recovered unique carrier work is selectively ported onto merged
 PR942 main. Native MLIR admits exact same-shaped FP32 multiplication members

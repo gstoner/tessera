@@ -12128,7 +12128,7 @@ Evidence: benchmarks/baselines/native_encoded_scaled_gate_20261014/README.md.
 ### 2026-10-14 — member-specific continuous scale-wave admission
 
 Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
-PRs: pending; sync CONTINUOUS-SCALE-WAVE-20261014.
+PRs: [#945](https://github.com/gstoner/tessera/pull/945); sync CONTINUOUS-SCALE-WAVE-20261014.
 
 Outcome: Native Schedule preserves serial products/matrix adjoints/carriers
 and applies explicit wave requests to scale adjoints only. Matching scale

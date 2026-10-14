@@ -2,7 +2,7 @@
 
 Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
 Synchronization key: CONTINUOUS-SCALE-WAVE-20261014.
-Based on merged PR944; this packet characterizes the next native scheduling slice.
+Based on merged PR944. Published in [PR945](https://github.com/gstoner/tessera/pull/945).
 
 Native Graph-to-Schedule applies an explicit scale-wave request to lhs/rhs
 scale adjoints only. Continuous products, matrix gradients and movement

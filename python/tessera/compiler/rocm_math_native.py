@@ -31,7 +31,9 @@ def math_abi(info):
     return MATH_ABIS[key]
 
 
-OPS = frozenset("tessera."+x for x in ("sqrt","exp","add","div","mul","cumsum","cummax"))
+# Public isolated recipes retain their proved envelope. Multiplication is a
+# compiler-owned scaled-program member, decoded by _validate_info below.
+OPS = frozenset("tessera."+x for x in ("sqrt","exp","add","div","cumsum","cummax"))
 
 
 def requests_math(module):

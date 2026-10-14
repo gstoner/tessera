@@ -12097,3 +12097,30 @@ Remaining: encoded FP8/MXFP8/MXFP4, mapping/dynamic/general composition,
 higher-order AD and sibling exact-device integration remain open.
 Evidence: benchmarks/baselines/native_scaled_tensor_gate_20261014/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-14 — encoded scaled residuals and routing review fixes
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending; sync ENCODED-SCALED-RESIDUAL-20261014.
+
+Outcome: encoded primal products remain recomputed residual coefficients
+for requested continuous scale/gate derivatives. Native requested-activity
+analysis visits shared values once, unsigned inactive slots retain valid
+Graph types, and encoded members replay their original physical policy.
+Differentiated owners also execute the native primal. Standalone scalar/
+tensor multiplication keeps its prior route while private program members
+retain native multiplication. Real frontend routing has six red/green
+regressions on gfx1151/gfx1201.
+3483 fully provisioned host AD/registry tests and 47 RTX5070 sibling tests
+pass. Fresh final-source non-slow WSL execution records 26,072 passed,
+7,568 skipped and no failures. Four encoded gfx1201 cases cover activity order, changed raw codes/
+scales, warm no-compiler calls and old output generations. Twelve compiler
+cases cover native products and explicit coded-storage derivative refusal.
+Balanced serial/wave/wave/serial packets separate completed primal/JVP/VJP,
+interleaved program events and grouped member events, with matched pins.
+Wave remains explicit and experimental; the serial default is unchanged.
+
+Remaining: FP4 encoded coefficients, wider/mapped/transposed/dynamic and
+higher-order AD, general wave admission and sibling physical envelopes.
+Evidence: benchmarks/baselines/native_encoded_scaled_gate_20261014/README.md.
+<!-- entry-fields:end -->

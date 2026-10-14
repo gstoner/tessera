@@ -2244,9 +2244,10 @@ class JitFn:
             return _JIT_FALLBACK
         from .rocm_typed_scaled_native import requests_composed_typed_scaled, requests_floating_scaled
         floating = requests_floating_scaled(self.graph_ir)
-        if self.differentiation_request is not None and not floating:
+        composed_typed = requests_composed_typed_scaled(self.graph_ir)
+        if self.differentiation_request is not None and not (floating or composed_typed):
             return _JIT_FALLBACK
-        if not (requests_composed_typed_scaled(self.graph_ir) or floating or
+        if not (composed_typed or floating or
                 (self._frontend_output_permutation is not None and
                  self._frontend_output_permutation != tuple(range(len(self._frontend_output_permutation))))):
             return _JIT_FALLBACK

@@ -2415,6 +2415,29 @@ private:
     // Recompute the forward ops inside the backward body (clones), so each
     // adjoint's `getX()` resolves to a value that lives in this function.
     llvm::SmallVector<mlir::Operation *> clones;
+    llvm::SmallPtrSet<mlir::Operation *, 8> inactiveScaledResiduals;
+    auto requestedRoles = fwd->getAttrOfType<mlir::ArrayAttr>(
+        "tessera.autodiff.wrt_indices");
+    // Native scaled export has an explicit requested-gradient signature.
+    // An encoded primal independent of those inputs remains a recomputed
+    // coefficient; it does not owe an adjoint for its discrete code storage.
+    llvm::DenseMap<mlir::Value, bool> requestedDependencyCache;
+    std::function<bool(mlir::Value)> dependsOnRequested = [&](mlir::Value value) {
+      auto cached = requestedDependencyCache.find(value);
+      if (cached != requestedDependencyCache.end()) return cached->second;
+      if (auto arg = mlir::dyn_cast<mlir::BlockArgument>(value)) {
+        if (arg.getOwner() != &fwdBlock) return true; // region capture: conservative
+        return llvm::any_of(requestedRoles, [&](mlir::Attribute role) {
+          auto index = mlir::dyn_cast<mlir::IntegerAttr>(role);
+          return !index || index.getInt() == arg.getArgNumber();
+        });
+      }
+      auto *producer = value.getDefiningOp();
+      if (!producer || producer->getNumRegions()) return true;
+      bool dependent = llvm::any_of(producer->getOperands(), dependsOnRequested);
+      requestedDependencyCache[value] = dependent;
+      return dependent;
+    };
     unsigned residualArgument = nIn + nRes;
     for (mlir::Operation *op : forwardOps) {
       // Recompute-all can preserve a stopped primal only when its operand is
@@ -2431,6 +2454,10 @@ private:
       }
       mlir::Operation *clone = builder.clone(*op, map);
       clones.push_back(clone);
+      if (exportScaledTranspose && requestedRoles && !requestedRoles.empty() &&
+          mlir::isa<tessera::ScaledMatmulOp>(op) &&
+          !llvm::any_of(op->getOperands(), dependsOnRequested))
+        inactiveScaledResiduals.insert(clone);
       auto residualIt = residualValues.find(op);
       if (residualIt != residualValues.end()) {
         llvm::SmallVector<mlir::Value> values;
@@ -2482,7 +2509,8 @@ private:
           residualOwner &&
           (residualOwner.getValue() == "scf_if" ||
            residualOwner.getValue() == "scf_while");
-      if (failed(differentiateOperation(op, outCotans, builder, cotan)))
+      if (!inactiveScaledResiduals.contains(op) &&
+          failed(differentiateOperation(op, outCotans, builder, cotan)))
         return mlir::failure();
       // Re-check emptiness: differentiateOperation can create a use of this
       // clone that did not exist when the decision was latched. A dynamically
@@ -2507,7 +2535,17 @@ private:
               llvm::isa<mlir::FloatType>(elem)
                   ? (mlir::TypedAttr)mlir::FloatAttr::get(elem, 0.0)
                   : (mlir::TypedAttr)mlir::IntegerAttr::get(elem, 0);
-          if (shaped.hasStaticShape()) {
+          if (exportScaledTranspose && mlir::isa<mlir::IntegerType>(elem) &&
+              !mlir::cast<mlir::IntegerType>(elem).isSignless()) {
+            // arith.constant forbids signed/unsigned integer storage. These
+            // inactive slots keep the paired signature total and are removed
+            // by the checked requested-gradient native projection.
+            mlir::OperationState state(fwd.getLoc(), "tessera.custom_adjoint_call");
+            state.addOperands(bwdBlock->getArgument(i));
+            state.addTypes(ty);
+            state.addAttribute("name", builder.getStringAttr("zeros_like"));
+            zero = builder.create(state)->getResult(0);
+          } else if (shaped.hasStaticShape()) {
             zero = builder.create<mlir::arith::ConstantOp>(
                 fwd.getLoc(), mlir::DenseElementsAttr::get(shaped, z));
           } else {

@@ -6635,18 +6635,24 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
             dtypes=("fp8_e4m3","fp4_e2m1","bf16"),
             feature_flags=("compiler_owned_hsaco","explicit_folded_policy",
                            "typed_fp8_exact_blockscale","native_shared_rhs_batch","native_independent_rhs_batch",
-                           "native_shared_lhs_batch","native_scale_jvp"),
+                           "native_shared_lhs_batch","native_scale_jvp","native_continuous_scale_gate_vjp"),
             shape_envelope="named resident packed checkpoint chain M>64/N16/K64; "
                 "typed static E4M3 rank-two or named shared-RHS/independent-RHS/shared-LHS batches with fp32/E8M0 scales, "
-                "no transposeA, KN/NK RHS, whole K scale groups and f32 output",
-            execute_compare_fixture="tests/device/rocm/test_public_typed_scaled_primal.py",
+                "no transposeA, KN/NK RHS, whole K scale groups and f32 output; "
+                "named E4M3 tensor gate M17/K256/N19 with KN RHS and f32 output; "
+                "fp32 K128/N128 or E8M0 K32/N1 scales; continuous scale/gate roles only",
+            execute_compare_fixture="tests/device/rocm/test_native_encoded_scaled_gate_execution.py",
             benchmark_json="benchmarks/baselines/rocm_independent_scaled_batch_20261007/timings.json",
             notes="Graph/Schedule/Tile/Target/LLVM packed folded checkpoint consumer retains "
                   "its separate resident ingest proof. Typed FP8/MXFP8 public primal and "
                   "f32 scale-JVP programs execute through native ownership; shared RHS "
                   "batch*row flattening and independent/shared-LHS z-plane offsets are compiler-owned "
                   "with logical rank-three capacity guards. Dynamic/nested/composed batching "
-                  "and transpose AD remain open."))
+                  "and transpose AD remain open. Named rank-two encoded primal/JVP/VJP tensor gates "
+                  "preserve policy, raw storage and requested continuous roles. E8M0 accepts "
+                  "gate-only derivatives; coded matrices/exponents remain non-differentiable. "
+                  "Legacy primitive/batch conformance: tests/device/rocm/test_public_typed_scaled_primal.py. "
+                  "Gate timing: benchmarks/baselines/native_encoded_scaled_gate_20261014/README.md."))
     if op_name == "mxfp4_folded_storage":
         entries.append(BackendKernelEntry(
             target="rocm_gfx1201",status=_DEVICE_VERIFIED_JIT_STATUS,dtypes=("fp4_e2m1",),

@@ -115,3 +115,21 @@ def test_native_math_registries_name_exact_device_proof(target,kind):
     assert entries[0].execute_compare_fixture=="tests/device/rocm/test_native_math_package_jit.py"
     row=lookup(target,"rocm_math_native_descriptor")
     assert row.evidence_target==target and row.op_family=="math"
+
+
+@pytest.mark.parametrize("target", ["rocm_gfx1151", "rocm_gfx1201"])
+@pytest.mark.parametrize("expression", ["x * 2.0", "2.0 * x", "x * y"])
+def test_standalone_multiply_keeps_existing_route(target, expression):
+    import tessera as ts
+
+    signature = 'x: ts.Tensor["M", "N", "fp32"]'
+    values = (np.ones((3, 17), np.float32),)
+    if "y" in expression:
+        signature += ', y: ts.Tensor["M", "N", "fp32"]'
+        values += (np.full((3, 17), 2, np.float32),)
+    source = "def f(" + signature + "):\n    return " + expression + "\n"
+    owner = ts.from_text(source, target=target)
+    graph = owner._specialized_autodiff_module(values, {})
+    assert graph.functions[0].body[-1].op_name == "tessera.mul"
+    assert not math_native.requests_math(graph)
+    assert not math_native.supports_math(graph)

@@ -207,7 +207,12 @@ def test_named_manifest_proof_is_exact_architecture():
             for row in pipeline_gates._manifest_entries("nvfp4_requantize",target))
 
 
-def test_canonical_compile_admits_verified_descriptor(package):
+def test_canonical_compile_admits_verified_descriptor(package, monkeypatch):
+    from tessera.compiler import pipeline_gates
+    real_which = pipeline_gates.shutil.which
+    monkeypatch.setattr(pipeline_gates.shutil, "which",
+        lambda name, *args, **kwargs: None if name == "hipcc" else
+        real_which(name, *args, **kwargs))
     from tessera.compiler.canonical_compile import canonical_compile
     from tessera.compiler.rocm_nvfp4_ingest_native import build_nvfp4_ingest_graph
     module=build_nvfp4_ingest_graph(7,64,[0,3,7],numeric_policy=nvfp4_requantization_policy())
@@ -215,3 +220,11 @@ def test_canonical_compile_admits_verified_descriptor(package):
     assert compiled.executable,compiled.reason
     assert compiled.launch_descriptor.abi_id==package.native.descriptor.abi_id
     assert compiled.to_runtime_artifact().native_image==compiled.native_image
+    assert compiled.program_executable
+    assert compiled.gate_results == pipeline_gates.evaluate(
+        compiled.target, compiled.primary_op,
+        native_image=compiled.native_image,
+        launch_descriptor=compiled.launch_descriptor)
+    gate = next(g for g in compiled.gate_results if g.gate == pipeline_gates.GATE_TOOLCHAIN)
+    assert gate.status == pipeline_gates.STATUS_PASS
+    assert "validated hsaco native image" in gate.detail

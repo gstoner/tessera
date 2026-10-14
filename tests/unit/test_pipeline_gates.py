@@ -54,6 +54,9 @@ def test_module_is_pure_aggregator():
         "tessera.compiler.backend_manifest",
         "tessera.compiler.execution_matrix",
         "tessera.compiler.capabilities",
+        # Checked native images/ABI are upstream compiler evidence, not a
+        # substitute for operation, runtime or numerical capability truth.
+        "tessera.compiler.native_artifact",
         # stdlib + typing
         "__future__", "dataclasses", "pathlib", "typing",
         # ``platform`` is the audit-fix-required arm64 probe (2026-05-31);

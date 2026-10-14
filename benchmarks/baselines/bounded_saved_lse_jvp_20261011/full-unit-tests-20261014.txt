@@ -1,0 +1,3 @@
+Host: Super-Bear WSL; matching LLVM/MLIR 23.1.1 tools and configured host SDKs.
+Command: python -m pytest tests/unit -m "not slow" -q -n 4 --timeout=180
+26041 passed, 7568 skipped, 11 warnings in 607.28s (0:10:07)

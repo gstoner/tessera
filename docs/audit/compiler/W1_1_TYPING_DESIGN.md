@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-02
+last_updated: 2026-10-11
 audit_role: reference
 owning_plan_item: W1.1
 ---
@@ -9,8 +9,9 @@ owning_plan_item: W1.1
 The [archived typing inventory](archive/W1_1_TYPING_INVENTORY.md) records the
 original scoping. This design's completion ledger and the
 [current source census](MLIR_NATIVE_FOUNDATION_SURVEY.md#typing-inventory-replacement--2026-09-04)
-replace its stale counts for active work. The remaining tensor-valued NVIDIA
-producer migration is not closed by archiving the inventory.
+replace its stale counts for active work. Archiving the inventory did not
+close producer migration; the October 11 source census below distinguishes
+migrated SM120 routes from retained older-target constructors.
 
 Status truth stays `INTEGRATED_COMPILER_PLAN.md` + `docs/audit/generated/`
 (Decision #26). Sections 1–4 retain the measurements that selected the design;
@@ -885,10 +886,12 @@ W1.1 shared-contract completion ledger:
 1. A `tile.mma` whose operand types disagree fails **type** verification, with no
    producer chase.
 2. The §2 K-loop fixture — accumulator as `scf.for` `iter_args` — verifies and
-   lowers on the typed ROCm path. **2026-09-28:** the existing NVIDIA structural conversion now has exact sm_120 numerical proof for zero, one, two and four K panels; see [the packet](../../../benchmarks/baselines/frontend_residual_fragments_20260928/README.md). The two tensor-valued producers remain open.
+   lowers on the typed ROCm path. **2026-09-28:** the existing NVIDIA structural conversion now has exact sm_120 numerical proof for zero, one, two and four K panels; see [the packet](../../../benchmarks/baselines/frontend_residual_fragments_20260928/README.md). That historical producer status is superseded by the October 11 source census below.
 3. **Closed.** `MMAOp::verify()` has no permissive bare-fragment branch.
-4. ROCm and Python producers use the typed/logical boundary. NVIDIA's final two
-   tensor producers remain the architecture-owned open item.
+4. ROCm and Python producers use the typed/logical boundary. Named SM120
+   standalone/canonical producers now delegate to native Schedule/Tile.
+   Retained older-target constructors and general producer composition remain
+   architecture-owned open work.
 5. Apple has no unexplained `AnyType` on true primitives. NVIDIA's generic
    Target base and CUDA-enabled proof remain independently gated; x86 is the
    reference shape.
@@ -960,3 +963,28 @@ completion remains unproven; the objective remains active.
 Static Graph A=[B,K,M], SFa=[B,ceil(K/16),M] with transposeA=true and shared rank-two B/SFb lowers without flattening physical A storage across batch boundaries. The physical Schedule records shared_rhs_rows and batch count/rows in its semantic digest. Tile's batch-aware ten-argument NVFP4 ABI supplies flattened M plus BatchRows/BatchCount. The native target computes batch and local row tile from blockY; A/SFa/output pointers receive per-batch offsets, B/SFb retain their shared base. Orientation-aware code/scale loads use local M. Independent-RHS batches retain B/SFb offsets. Untransposed shared batches retain their existing compact route.
 
 The runtime validates batch policy, integer scalar equality, grid capacity, logical orientation and physical packed/scale buffer shapes before launch. This is a static primal product contract; it does not declare general batching, linear-transpose differentiation or asynchronous lifetime closure.
+
+
+## Current producer source census — 2026-10-11
+
+Owner W1.1 / E2E-REAL-6. This census corrects constructor counts; it adds no
+physical execution or performance claim.
+
+TileIRLoweringPass.cpp retains two tensor-valued tile.mma construction sites,
+in LowerMatmulToTileMMA and LowerKReductionAddToTileMMA. Their patterns are
+registered only when smVersion < 120. With sm=120, standalone matmul delegates
+to GraphToSchedule and ScheduleToTile; canonical K-reduction input first
+requires whole-function replay equivalence before the same native route.
+That route owns tile.view storage, typed fragments and accumulator lineage.
+SM120 NVIDIA lowering still refuses arbitrary tensor-valued MMA inputs.
+
+The retained constructors therefore do not represent two unmigrated SM120
+entries. Their older-target consumers remain independently gated. Arbitrary
+or dynamic noncanonical producers, general composition, Target wrapper review
+and external asynchronous lifetime remain open; the separately verified
+tensor-value lane cannot be removed globally on this census alone.
+
+Structural coverage: tests/unit/test_sm120_legacy_scheduled_producer.py.
+The existing October 8 named device proof is recorded in
+benchmarks/baselines/nvidia_w11_current_head_20261008/README.md; it is historical
+exact-device evidence, not a new numerical run of this source census.

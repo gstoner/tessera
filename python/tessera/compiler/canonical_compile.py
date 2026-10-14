@@ -1063,8 +1063,11 @@ def _result_from_bundle(
     behave exactly as before. The whole-program answer
     (``program_executable``) is gated component-by-component."""
     target = bundle.request.target
-    gate_results = _pg.evaluate(target, primary_op)
-    first_fail = _pg.first_failing_gate(target, primary_op)
+    gate_results = _pg.evaluate(
+        target, primary_op, native_image=bundle.native_image,
+        launch_descriptor=bundle.launch_descriptor,
+    )
+    first_fail = next((gate for gate in gate_results if gate.status == _pg.STATUS_FAIL), None)
 
     if bundle.executable and first_fail is None:
         executable = True
@@ -1093,10 +1096,14 @@ def _result_from_bundle(
     for op in comps:
         if not op:
             continue
-        cfail = _pg.first_failing_gate(target, op)
+        cfail = (first_fail if op == primary_op else
+                 _pg.first_failing_gate(
+                     target, op, native_image=bundle.native_image,
+                     launch_descriptor=bundle.launch_descriptor,
+                 ))
         if cfail is not None:
             blockers.append((op, cfail.gate))
-    program_executable = bool(bundle.executable) and not blockers
+    program_executable = bool(bundle.executable) and first_fail is None and not blockers
     metadata = dict(compile_metadata or {})
 
     return CompileResult(
@@ -1173,6 +1180,10 @@ def canonical_compile(
     executable artifact" AND "no audit gate fails." When ``executable`` is
     False, ``reason`` leads with the audit-named first failing gate so the
     diagnostic is actionable.
+
+    A materialized GPU image supplies its checked image/ABI context to the
+    toolchain gate. It does not waive legality, runtime or numerical gates,
+    or make a bundle marked non-executable executable.
 
     No new compiler logic lives here — this is a *pure composition* of the
     existing surfaces. Audit recommendation C's whole point: one place to

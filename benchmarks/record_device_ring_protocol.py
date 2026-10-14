@@ -149,7 +149,7 @@ def compile_image(tool: Path, backend: str, source: str, directory: Path, *, chi
 
 
 class Device:
-    def __init__(self, backend):
+    def __init__(self, backend, *, use_current_context=False):
         self.cuda = backend == 'nvidia'
         self.lib = ct.CDLL('libcuda.so.1' if self.cuda else 'libamdhip64.so')
         def bind(name, args, cuda_name=None):
@@ -175,9 +175,16 @@ class Device:
         self.check(bind('hipInit', [U], 'cuInit')(0))
         if self.cuda:
             self.context = P()
-            create = getattr(self.lib, 'cuCtxCreate_v2')
-            create.argtypes = [ct.POINTER(P), U, ct.c_int]
-            self.check(create(ct.byref(self.context), 0, 0))
+            if use_current_context:
+                current = getattr(self.lib, 'cuCtxGetCurrent')
+                current.argtypes, current.restype = [ct.POINTER(P)], ct.c_int
+                self.check(current(ct.byref(self.context)))
+                if not self.context.value:
+                    raise RuntimeError("timing requires the caller's current CUDA context")
+            else:
+                create = getattr(self.lib, 'cuCtxCreate_v2')
+                create.argtypes = [ct.POINTER(P), U, ct.c_int]
+                self.check(create(ct.byref(self.context), 0, 0))
             self.htod = bind('', [P, P, S], 'cuMemcpyHtoD_v2')
             self.dtoh = bind('', [P, P, S], 'cuMemcpyDtoH_v2')
         else:

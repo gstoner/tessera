@@ -12124,3 +12124,29 @@ Remaining: FP4 encoded coefficients, wider/mapped/transposed/dynamic and
 higher-order AD, general wave admission and sibling physical envelopes.
 Evidence: benchmarks/baselines/native_encoded_scaled_gate_20261014/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-14 — member-specific continuous scale-wave admission
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: [#945](https://github.com/gstoner/tessera/pull/945); sync CONTINUOUS-SCALE-WAVE-20261014.
+
+Outcome: Native Schedule preserves serial products/matrix adjoints/carriers
+and applies explicit wave requests to scale adjoints only. Matching scale
+roles survive the Tile wrapper and sealed GPU body; checked four-FP32 wave
+storage and package geometry are verified. Automatic selection remains
+unchanged. Four matrix-orientation regressions fail on the published compiler.
+Matching LLVM/MLIR builds and 30 selector/compiler, 12 public gfx1201 gate
+and 40 mapped/seed/lifetime cases pass. Four balanced packets retain matched
+source/binary pins and unchanged primal/JVP images. Separate continuous
+reverse program event windows are 36.564–36.685 us serial versus
+25.009–25.152 us wave; public calls are 1.812–1.852 ms versus
+1.767–1.802 ms. FP8/MXFP8 are evaluated in the same packets.
+
+Remaining: Full CI, review and merge. The focused host suite passes 3,281
+cases, 12 audit/recorder gates pass, and generated drift and owner links pass.
+Serial stays default. MXFP4 residual AD, wider dynamic/higher derivatives,
+general ROCm route/performance and all five-slice obligations remain open.
+Sibling backend physical consumers are not applicable to this gfx1201 lane.
+
+Evidence: benchmarks/baselines/continuous_scale_wave_20261014/README.md.
+<!-- entry-fields:end -->

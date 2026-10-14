@@ -62,9 +62,14 @@ inline mlir::LogicalResult verifyStructuredReductionCarrier(mlir::Operation *op)
       floats += memref.getElementType().isF32();
     }
   }
+  auto role = op->getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint");
+  bool continuousWave = wave && role &&
+      (role.getValue() == "lhs_scale" || role.getValue() == "rhs_scale") &&
+      kernel.getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint") == role;
   if (!(carrier ? (floats==1 && bytes==0 && !wave) :
-        ((bytes == 2 && floats == 2) || (floats == 4 && !wave))))
-    return op->emitOpError("structured scaled reduction requires checked E4M3/f32 or serial four-f32 inputs");
+        ((bytes == 2 && floats == 2) ||
+         (floats == 4 && (!wave || continuousWave)))))
+    return op->emitOpError("structured scaled reduction requires checked E4M3/f32 or role-bound four-f32 inputs");
   return success();
 }
 } // namespace tessera

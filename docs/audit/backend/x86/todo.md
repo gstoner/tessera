@@ -7,6 +7,23 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## CONTINUOUS-SCALE-WAVE-20261014
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+Native Schedule classifies each program member: explicit wave requests apply
+to lhs/rhs scale adjoints; continuous products, matrix gradients and movement
+carriers retain serial geometry. Four-FP32 wave members carry matching scale
+roles on the Tile wrapper and its sealed GPU body. Shared Tile/Target
+verification and package validation preserve those roles and checked geometry.
+Automatic selection and the serial default are unchanged.
+Evidence: benchmarks/baselines/continuous_scale_wave_20261014/README.md.
+
+Not applicable to x86 physical scheduling: the named consumer requires
+rocm/gfx1201 and a HIP wave ABI. Existing CPU/AVX512 reductions retain their
+own schedules and ownership. Follow-up required for native x86 scaled
+residual integration; no AMD numerical or timing proof transfers.
+
+
 ## ENCODED-SCALED-RESIDUAL-20261014
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

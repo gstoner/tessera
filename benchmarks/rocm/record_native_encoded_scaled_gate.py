@@ -33,15 +33,22 @@ def check(actual, expected):
 
 def record(fmt):
     ta, tb, prefix, out_axes = False, False, (), 0
-    owner, values, directions = typed_case(fmt)
-    tangent = np.zeros_like(typed_oracle(values, fmt))
+    if fmt == "continuous":
+        from tests.unit.test_native_scaled_multiply_carrier import case
+        from tests.device.rocm.test_native_scaled_tensor_gate_execution import oracle
+        owner, _, values, directions = case("reverse", shape=(7, 37, 19))
+        evaluate = lambda frame: oracle(frame, False, False)
+    else:
+        owner, values, directions = typed_case(fmt)
+        evaluate = lambda frame: typed_oracle(frame, fmt)
+    tangent = np.zeros_like(evaluate(values))
     for slot, direction in enumerate(directions):
         if direction is None:
             continue
         frame = list(values)
         frame[slot] = direction
-        tangent += typed_oracle(frame, fmt)
-    expected = (typed_oracle(values, fmt), tangent)
+        tangent += evaluate(frame)
+    expected = (evaluate(values), tangent)
     active = tuple(index for index, direction in enumerate(directions) if direction is not None)
     seeds = directions
     start = time.perf_counter()
@@ -64,7 +71,7 @@ def record(fmt):
             minus[role] = values[role].astype(np.float64)
             plus[role][index] += .0001
             minus[role][index] -= .0001
-            gradient[index] = np.sum(cotangent * (typed_oracle(plus,fmt)-typed_oracle(minus,fmt))) / .0002
+            gradient[index] = np.sum(cotangent * (evaluate(plus)-evaluate(minus))) / .0002
         gradients.append(gradient)
     backward = owner.native_backward(*values, out_cotangents=cotangent)
     error = max(error, check(backward, gradients))
@@ -139,7 +146,7 @@ def record(fmt):
         owner.close_native_storage()
     program = json.loads(package.program_json)
     return {
-        "data_format": "fp8_e4m3", "scale_format": fmt, "transposeA": ta, "transposeB": tb, "map_prefix": list(prefix),
+        "data_format": "fp32" if fmt == "continuous" else "fp8_e4m3", "scale_format": "fp32" if fmt == "continuous" else fmt, "transposeA": ta, "transposeB": tb, "map_prefix": list(prefix),
         "out_axes": out_axes, "active_indices": list(active),
         "raw_input_shapes": [list(value.shape) for value in values],
         "correctness": "independent_fp64_before_and_after_every_timing_domain",
@@ -181,6 +188,8 @@ def main():
     parser.add_argument("--scale-vjp-schedule",
                         choices=("serial_per_scale_element", "wave_per_scale_element", "auto"),
                         default="serial_per_scale_element")
+    parser.add_argument("--formats", nargs="+", choices=("fp32", "e8m0", "continuous"),
+                        default=("fp32", "e8m0"))
     options = parser.parse_args()
     os.environ["TESSERA_ROCM_SCALE_VJP_SCHEDULE"] = options.scale_vjp_schedule
     if runtime._rocm_live_arch() != "gfx1201":
@@ -225,6 +234,11 @@ def main():
         "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp",
     ])
     paths.extend(["python/tessera/compiler/capabilities.py", "python/tessera/compiler/backend_manifest.py"])
+    paths.extend([
+        "src/compiler/ir/include/Tessera/IR/StructuredReductionContract.h",
+        "tests/unit/test_native_scaled_multiply_carrier.py",
+        "tests/device/rocm/test_native_scaled_tensor_gate_execution.py",
+    ])
     paths.append(str(Path(__file__).relative_to(Path.cwd())))
     packet = {
         "schema": "tessera.native_encoded_scaled_gate.packet.v1",
@@ -245,7 +259,7 @@ def main():
         },
         "claim": "named exact-device correctness and latency characterization; no generic AD closure or performance promotion",
     }
-    for fmt in ("fp32", "e8m0"):
+    for fmt in options.formats:
         packet["rows"].append(record(fmt))
         print("measured", len(packet["rows"]), flush=True)
     options.output.parent.mkdir(parents=True, exist_ok=True)

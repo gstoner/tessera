@@ -19,7 +19,9 @@ cases, including an output-dominated MXFP8 case that fails the preserved
 baseline's mode/cache assertion. 87 focused package/policy gates pass.
 The required broad lane found two tracer element-spelling regressions; the
 implementation is repaired while the original f32 assertion is retained.
-209 cast/native-MXFP4/dtype gates and 13 post-fix device cases pass.
+209 cast/native-MXFP4/dtype gates and 13 post-fix device cases pass. The final
+host WSL unit lane passes 26,124 cases, with 7,568 environment/architecture
+skips and 874 slow cases deselected. Skips provide no hardware proof.
 
 ## Matched experiment
 

@@ -12199,9 +12199,11 @@ The broad lane recorded 26,100 passed and two failed cast-spec assertions.
 Catalog-only casts now retain the tracer's established f16/f32/f64 spelling;
 canonical Graph IR stays unchanged. Original assertions remain, concrete/
 value-less parity coverage is stronger, and 209 host plus 13 device follow-up
-cases pass. Required broad validation is rerun after documents are stable.
+cases pass. Final host WSL validation passes 26,124 cases, with 7,568
+architecture/environment skips and 874 slow cases deselected. The skipped
+cases are not exact-device evidence.
 
-Remaining: Broad delivery/CI/review, unselected-control wall-time variance,
+Remaining: CI/review/merge, unselected-control wall-time variance,
 small-traffic thresholds and repeated warm Graph admission cost. Generic
 layouts/dynamic identity, higher AD and the original Radiance kernel gap
 remain open. All four backend queues are assessed.

@@ -5,6 +5,24 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## MXFP4-RESIDUAL-GATE-20261014 — active engineering
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+The existing exact MXFP4 physical contract now retains BF16 product shape
+through typed frontend capture. Symbolic decoration defers physical extent
+checks; concrete packed K, row-scale and E8M0 scale dimensions are checked.
+Value-less cast tracing uses the canonical catalog result dtype rather than
+copying its input dtype. Seven MXFP4 typing/negative/native-Graph tests and
+eight shared positional/keyword cast cases are part of a 91-pass host
+frontend/registry lane; 23 owning Apple execution tests skip on WSL.
+This is frontend/Graph proof only. No MXFP4 residual JIT execution, numerical
+derivative or timing claim is made. Requested-activity handling, BF16 program
+storage, a native widening cast member, image/ABI binding, exact gfx1201
+numerics and isolated FP8/MXFP8/MXFP4 comparisons remain required.
+
+Follow-up required: the existing exact gfx1201 product stores BF16. Preserve that rounding boundary before native widening and a FP32 gate; do not silently change its output or scale/numeric policy. gfx1151 has no new execution claim.
+
+
 ## CONTINUOUS-SCALE-WAVE-20261014
 
 Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.

@@ -6,6 +6,29 @@ target: nvidia_sm120
 last_updated: 2026-10-14
 ---
 
+## ENCODED-SCALED-RESIDUAL-20261014
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Native MLIR retains encoded primal products as residual coefficients when
+they do not depend on requested continuous inputs. Requested dependency
+analysis is memoized; inactive unsigned slots use existing zeros-like Graph
+calls and are removed by requested-gradient program projection. Encoded
+members keep their original numeric/storage policy through Schedule/Tile.
+Differentiated typed JIT owners now execute the compiled primal too.
+Standalone multiplication retains its existing public route; new native
+multiplication packaging stays inside the verified scaled program.
+Capability/manifest entries link the exact named conformance envelope.
+Fresh final-source host WSL unit gates: 26,072 passed, 7,568 skipped; no failures.
+Evidence: benchmarks/baselines/native_encoded_scaled_gate_20261014/README.md.
+Recorded by benchmarks/rocm/record_native_encoded_scaled_gate.py.
+
+Parity validated for 47 RTX5070 bounded saved-LSE/resident reverse cases
+after rebuilding the shared paired-AD passes. The new requested-activity and
+unsigned-zero behavior is gated to native scaled transpose export, whose
+consumer admits rocm/gfx1201. Follow-up required for an owning SM120 encoded
+tensor-gate consumer; no HIP schedule or timing result transfers.
+
+
 ## NATIVE-SCALED-TENSOR-GATE-20261014
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

@@ -53,6 +53,32 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
         return mod.emitError("native scale sum has an unexpected Schedule member"), failure();
     return tensor::GenerateOp{};
   }
+  if (operation && operation.getValue() == "tessera.scaled_matmul") {
+    // A reverse dependency can recompute an encoded primal. Its isolated
+    // original Graph belongs to the ordinary scaled-product Schedule route.
+    auto functions = llvm::to_vector(mod.getOps<func::FuncOp>());
+    if (functions.size() == 1 && functions[0].getBody().hasOneBlock() &&
+        isa<tessera::ScaledMatmulOp>(functions[0].getBody().front().front())) {
+      if (functions[0].getNumArguments() != 4 || functions[0].getNumResults() != 1 ||
+          !isa<func::ReturnOp>(functions[0].getBody().front().back()))
+        return mod.emitError("native residual product lost its isolated Graph member"), failure();
+      Operation *product = &functions[0].getBody().front().front();
+      for (Operation &op : functions[0].getBody().front()) {
+        if (&op == product || isa<func::ReturnOp>(op) ||
+            op.getName().getStringRef() == "schedule.artifact")
+          continue;
+        // Graph-to-Schedule inserts the checked replay node before Tile
+        // projection calls this selector a second time.
+        if (op.getName().getStringRef() == "schedule.matmul" &&
+            op.getNumOperands() == 1 && op.getNumResults() == 1 &&
+            op.getOperand(0) == product->getResult(0) &&
+            op.getResult(0).getType() == product->getResult(0).getType())
+          continue;
+        return mod.emitError("native residual product has an unexpected Schedule member"), failure();
+      }
+      return tensor::GenerateOp{};
+    }
+  }
   auto target = mod->getAttrOfType<StringAttr>("tessera.target");
   auto arch = mod->getAttrOfType<StringAttr>("tessera.arch");
   auto funcs = llvm::to_vector(mod.getOps<func::FuncOp>());

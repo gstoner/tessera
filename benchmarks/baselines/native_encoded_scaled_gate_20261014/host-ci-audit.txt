@@ -1,0 +1,8 @@
+0 bash scripts/check_generated_docs.sh exit 0
+1 /home/angstorms/scratch/compiler-tools-venv-20261014/bin/python -m tessera.compiler.audit claim_lint exit 0
+2 /home/angstorms/scratch/compiler-tools-venv-20261014/bin/python -m tessera.cli.surface_audit --surface=examples --check exit 0
+3 /home/angstorms/scratch/compiler-tools-venv-20261014/bin/python -m tessera.cli.surface_audit --surface=benchmarks --check exit 0
+4 /home/angstorms/scratch/compiler-tools-venv-20261014/bin/python -m tessera.cli.surface_audit --surface=research --check exit 0
+5 /home/angstorms/scratch/compiler-tools-venv-20261014/bin/python -m tessera.cli.surface_audit --surface=tools --check exit 0
+6 /home/angstorms/scratch/compiler-tools-venv-20261014/bin/python -m tessera.cli.surface_audit --surface=tests --check exit 0
+7 /home/angstorms/scratch/compiler-tools-venv-20261014/bin/python -m tessera.cli.claim_lint --check exit 0

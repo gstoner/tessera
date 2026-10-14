@@ -132,7 +132,7 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
           return root.emitError("scaled transpose dependency lost its native adjoint seed");
         llvm::append_range(captures,used);
         adjointSeeds[definition]=used[seed.getInt()];
-      } else if (isNativeFloatingScaledProduct(definition) || isScaleSum(definition) ||
+      } else if (isa<ScaledMatmulOp>(definition) || isScaleSum(definition) ||
                  isPointwiseProduct(definition)) {
         llvm::append_range(captures,definition->getOperands());
       } else if (isNativeScaledCarrier(definition) ||

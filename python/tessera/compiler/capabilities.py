@@ -917,9 +917,12 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                 graph_only_dtypes=("fp32",),
                 reason="Named static packed folded gfx1201 checkpoint consumer; typed E4M3FN "
                        "exact fp32 block-scale products, static shared-RHS/independent-RHS/shared-LHS leading-prefix batches "
-                       "and f32 scale JVP native programs. f32 matrices are admitted as typed Graph "
-                       "storage for native matrix/scale reverse programs only; ordinary f32 primal "
-                       "packaging remains artifact-only. "
+                       "and f32 scale JVP native programs. Named rank-two E4M3 tensor gates execute "
+                       "native primal/JVP/VJP for continuous fp32 scales/gates, with E8M0 "
+                       "gate-only derivatives; encoded storage derivatives are refused. "
+                       "Conformance: tests/device/rocm/test_native_encoded_scaled_gate_execution.py. "
+                       "f32 matrices remain typed Graph storage for named native primal/JVP/reverse "
+                       "programs; generic dispatch requires its own proof. "
                        "Other dtype/layout/dynamic and general AD profiles require separate proof"),
             "tessera.mxfp4_folded_storage": OpCapability(
                 "tessera.mxfp4_folded_storage","ready",dtypes=("uint8",),ranks=(2,),

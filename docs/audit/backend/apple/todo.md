@@ -6,6 +6,29 @@ target: apple_gpu
 last_updated: 2026-10-14
 ---
 
+## ENCODED-SCALED-RESIDUAL-20261014
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Native MLIR retains encoded primal products as residual coefficients when
+they do not depend on requested continuous inputs. Requested dependency
+analysis is memoized; inactive unsigned slots use existing zeros-like Graph
+calls and are removed by requested-gradient program projection. Encoded
+members keep their original numeric/storage policy through Schedule/Tile.
+Differentiated typed JIT owners now execute the compiled primal too.
+Standalone multiplication retains its existing public route; new native
+multiplication packaging stays inside the verified scaled program.
+Capability/manifest entries link the exact named conformance envelope.
+Fresh final-source host WSL unit gates: 26,072 passed, 7,568 skipped; no failures.
+Evidence: benchmarks/baselines/native_encoded_scaled_gate_20261014/README.md.
+Recorded by benchmarks/rocm/record_native_encoded_scaled_gate.py.
+
+Not applicable to Apple execution: the new activity/unsigned-zero behavior
+is gated to native scaled transpose export and its consumer admits only
+rocm/gfx1201. Shared host IR/registry gates pass; Metal/Apple CPU ownership
+and dispatch are unchanged. Follow-up required for an owning Apple encoded
+tensor-gate consumer; no physical numerical or timing proof transfers.
+
+
 ## NATIVE-SCALED-TENSOR-GATE-20261014
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

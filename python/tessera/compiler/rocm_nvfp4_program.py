@@ -258,6 +258,8 @@ def reference_scaled_matmul(a,b,scale_a,scale_b,*,physical_contract,numeric_poli
         _shape_scaled_matmul([tensor_ir_type(v.shape, str(v.dtype)) for v in values],
                              {"physical_contract": physical_contract})
         a, b, scale_a, scale_b = values
+        if int(scale_b.max()) == 255:
+            raise RuntimeError("MXFP4 E8M0 scale code 255 is reserved")
         decoded_a = a.view(ml_dtypes.float8_e4m3fn).astype(np.float64)
         codes = np.empty((a.shape[1], b.shape[1]), np.uint8)
         codes[::2] = b & np.uint8(15)

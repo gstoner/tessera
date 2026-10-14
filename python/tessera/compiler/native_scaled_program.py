@@ -536,6 +536,7 @@ class _BoundScaledABI:
     argument_count: int
     storage: tuple[_StorageSpec, ...]
     outputs: tuple[int, ...]
+    reserved_e8m0_inputs: tuple[int, ...]
 
 def _marshal_scaled_abi(package):
     package.validate()
@@ -552,10 +553,16 @@ def _marshal_scaled_abi(package):
                         len(m["inputs"]),len(m["scalars"]),
                         (c.c_uint32*6)(*m["inputs"]),m["output"],
                         (c.c_uint32*6)(*m["geometry"]),(c.c_int64*8)(*m["scalars"]))
+    reserved_scales = tuple(sorted({
+        step["inputs"][3] for step in program["steps"]
+        if step.get("physical_contract") == "rocm_mxfp4_w4a8_exact_v1"
+    }))
+    if any(slot >= program["argument_count"] for slot in reserved_scales):
+        raise ValueError("exact MXFP4 scale validation requires an original input binding")
     return _BoundScaledABI(buffers, steps, blobs, entries, program["argument_count"],
         tuple(_StorageSpec(tuple(row["shape"]),row["storage"],row["bytes"],
                            _storage_numpy_dtype(row["storage"])) for row in rows),
-        tuple(program["outputs"]))
+        tuple(program["outputs"]), reserved_scales)
 
 @lru_cache(maxsize=_BINDING_ENTRIES)
 def _cached_scaled_abi(package):
@@ -646,7 +653,7 @@ class PreparedScaledProgram:
         if len(inputs) != count:
             raise ValueError("native scaled program argument count differs")
         arrays = []
-        for value, contract in zip(inputs,self._binding.storage[:count]):
+        for slot, (value, contract) in enumerate(zip(inputs,self._binding.storage[:count])):
             array = np.asarray(value)
             storage = contract.storage
             if storage == "f8E4M3FN" and str(array.dtype) == "float8_e4m3fn":
@@ -655,6 +662,8 @@ class PreparedScaledProgram:
             if dtype is None or array.dtype != dtype or array.shape != contract.shape or array.nbytes != contract.bytes:
                 raise ValueError("native scaled input storage/shape/layout differs")
             array = pack_host_view(self.lib, array)
+            if slot in self._binding.reserved_e8m0_inputs and int(array.max()) == 255:
+                raise RuntimeError("MXFP4 E8M0 scale code 255 is reserved")
             arrays.append(array)
         return arrays, (c.c_void_p*count)(*(a.ctypes.data for a in arrays)), (c.c_uint64*count)(*(a.nbytes for a in arrays))
 

@@ -87,3 +87,17 @@ command must pass `--provider-source <preserved-native_program_runtime.cpp>
 Both use `--formats fp32 e8m0 mxfp4`. Set
 `TESSERA_ROCM_NATIVE_MOVEMENT_LIB` to the corresponding provider and leave
 `TESSERA_ROCM_PROGRAM_PINNED` unset.
+
+## PR946 review correction
+
+The balanced packets above are frozen at commit `b816e2680`. Review identified
+reserved E8M0 byte 255, rejected by the older exact MXFP4 route. The new oracle
+and immutable native-program host binding now reject it before prepare/update.
+Valid packed E2M1 byte 255 and generic MXFP8 scale behavior are unchanged.
+Warm rejected frames do not invalidate retained native output generations.
+
+[Post-review packet](post_review.json) pins corrected sources, repeats all
+five valid-frame profiles, and retains identical compiler programs/images.
+It characterizes the added ingress validation; it is not another matched
+baseline/candidate experiment. 382 focused host and 63 owning device cases,
+Ruff and focused mypy pass. Broad CI is rerun on the corrected PR head.

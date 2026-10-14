@@ -137,3 +137,57 @@ def test_public_exact_mxfp4_gate_primal_jvp_reverse(shape, monkeypatch):
         assert owner.differentiation_request is request
     finally:
         owner.close_native_storage()
+
+
+@pytest.mark.parametrize("kind", ["primal", "jvp", "reverse"])
+def test_public_exact_mxfp4_rejects_reserved_scale_and_recovers(kind, monkeypatch):
+    from tessera.autodiff import jvp
+    assert runtime._rocm_live_arch() == "gfx1201"
+    owner, _ = typed_case((7, 32, 5))
+    values, cot = frame((7, 32, 5))
+    def call(frame_values):
+        if kind == "primal":
+            return (owner(*frame_values),)
+        if kind == "jvp":
+            return jvp(owner, tuple(frame_values), (None, None, None, None, cot))
+        return owner.native_backward(*frame_values, out_cotangents=cot)
+    try:
+        valid = call(values)
+        retained = tuple(value.copy() for value in valid)
+        def forbidden(*args, **kwargs):
+            raise AssertionError("warm reserved-scale validation invoked compiler")
+        monkeypatch.setattr(subprocess, "run", forbidden)
+        bad = list(values)
+        padded = np.full((values[3].shape[0], values[3].shape[1]*2), 127, np.uint8)
+        bad[3] = padded[:, ::2]
+        bad[3][0, 0] = 255
+        with pytest.raises(RuntimeError, match="E8M0 scale code 255 is reserved"):
+            call(bad)
+        recovered = call(values)
+        for actual, expected in zip(recovered, retained, strict=True):
+            np.testing.assert_array_equal(actual, expected)
+        for actual, expected in zip(valid, retained, strict=True):
+            np.testing.assert_array_equal(actual, expected)
+    finally:
+        owner.close_native_storage()
+
+
+def test_prepared_exact_mxfp4_invalid_update_keeps_previous_generation():
+    assert runtime._rocm_live_arch() == "gfx1201"
+    owner, _ = typed_case((7, 32, 5))
+    values, _ = frame((7, 32, 5))
+    graph = owner._specialized_autodiff_module(values, {})
+    graph.module_attrs.update({"tessera.target": '"rocm"', "tessera.arch": '"gfx1201"'})
+    package = package_native_scaled_primal(graph.to_mlir(target="rocm_gfx1201", canonical=True))
+    with PreparedScaledProgram(package, values,
+            runtime_library=os.environ["TESSERA_ROCM_NATIVE_MOVEMENT_LIB"]) as prepared:
+        generation, _ = prepared.invoke()
+        expected = prepared.read(generation)[0]
+        invalid = list(values)
+        invalid[3] = np.full_like(values[3], 255)
+        with pytest.raises(RuntimeError, match="E8M0 scale code 255 is reserved"):
+            prepared.update(invalid)
+        np.testing.assert_array_equal(prepared.read(generation)[0], expected)
+        prepared.update(values)
+        updated, _ = prepared.invoke()
+        np.testing.assert_array_equal(prepared.read(updated)[0], expected)

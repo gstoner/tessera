@@ -5,6 +5,22 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## MXFP4-RESERVED-SCALE-20261014 — PR946 review correction
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Exact MXFP4 rejects reserved RHS E8M0 byte 255 in the independent oracle and
+checked host ingress, before native preparation/update. Immutable input-role
+bindings are derived from the verified compiler program; mutating inspection
+metadata cannot disable the guard. Rejected updates retain the prior output
+generation. Packed E2M1 byte 255 remains valid, and generic MXFP8 E8M0 semantics
+are unchanged. No kernel, native ABI, schedule or numerical policy changes.
+Validation: 382 focused host gates, 63 exact gfx1201 device cases, Ruff and
+focused mypy pass. post_review.json pins current sources and preserves every
+primal/JVP/reverse compiler program and member image. Original balanced
+packets remain revision-bound at b816e2680 before this ingress correction.
+
+Parity validated for exact gfx1201 ingress and retained-generation safety; gfx1151 has no new physical claim.
+
 ## ROCM-PROGRAM-TRAFFIC-20261014 — active engineering
 
 Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

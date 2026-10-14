@@ -155,3 +155,73 @@ def test_exact_mxfp4_oracle_preserves_bf16_store_before_widening():
     expected = np.float32(16) * args[2][0]
     assert result.astype(np.float32)[0, 0] != expected
     assert result[0, 0] == ml_dtypes.bfloat16(expected)
+
+
+@pytest.mark.skipif(not os.environ.get("TESSERA_OPT"), reason="matching native compiler required")
+@pytest.mark.parametrize("mode", ["primal", "forward", "reverse"])
+def test_exact_mxfp4_reserved_scale_rejected_before_native_update(mode):
+    import ctypes
+    from tessera.compiler.native_scaled_program import (
+        PreparedScaledProgram, _scaled_abi_binding,
+        package_native_scaled_primal, package_native_scaled_jvp, package_native_scaled_vjp)
+    owner, values = typed_case((7, 32, 5))
+    if mode == "forward":
+        owner = ts.jit(target="rocm_gfx1201", autodiff="forward", wrt=("gate",))(gated)
+    graph = owner._specialized_autodiff_module(values, {})
+    graph.module_attrs.update({"tessera.target": '"rocm"', "tessera.arch": '"gfx1201"'})
+    builder = {"primal": package_native_scaled_primal, "forward": package_native_scaled_jvp,
+               "reverse": package_native_scaled_vjp}[mode]
+    package = builder(graph.to_mlir(target="rocm_gfx1201", canonical=True))
+    prepared = PreparedScaledProgram.__new__(PreparedScaledProgram)
+    prepared.package = package
+    prepared._program = None
+    prepared._binding = _scaled_abi_binding(package)
+    prepared.handle = ctypes.c_uint64(0)
+    class ForbiddenUpload:
+        def tessera_rocm_program_update(self, *args):
+            raise AssertionError("reserved input reached native upload")
+    prepared.lib = ForbiddenUpload()
+    inputs = (*values, np.ones_like(values[4])) if mode != "primal" else values
+    prepared._inputs(inputs)
+    bad = list(inputs)
+    bad[3] = values[3].copy()
+    bad[3][0, 0] = 255
+    # The public inspection snapshot cannot disable the immutable ABI guard.
+    prepared.program["steps"].clear()
+    with pytest.raises(RuntimeError, match="E8M0 scale code 255 is reserved"):
+        prepared.update(bad)
+    valid = list(inputs)
+    valid[1] = np.full_like(values[1], 255)  # Two valid negative E2M1 nibbles.
+    prepared._inputs(valid)
+
+
+def test_exact_mxfp4_oracle_rejects_reserved_scale_but_accepts_packed_255():
+    from tessera.compiler.rocm_nvfp4_program import reference_scaled_matmul
+    owner, values = typed_case((7, 32, 5))
+    attrs = owner._specialized_autodiff_module(values, {}).functions[0].body[0].kwargs
+    valid = list(values[:4])
+    valid[1] = np.full_like(valid[1], 255)
+    result = reference_scaled_matmul(*valid, **attrs)
+    np.testing.assert_array_equal(result.astype(np.float32), np.full((7, 5), -192, np.float32))
+    bad = list(values[:4])
+    bad[3] = np.full_like(bad[3], 255)
+    with pytest.raises(RuntimeError, match="E8M0 scale code 255 is reserved"):
+        reference_scaled_matmul(*bad, **attrs)
+
+
+@pytest.mark.skipif(not os.environ.get("TESSERA_OPT"), reason="matching native compiler required")
+def test_reserved_mxfp8_scale_semantics_are_not_changed_by_exact_mxfp4_guard():
+    from tessera.compiler.native_scaled_program import (
+        PreparedScaledProgram, _scaled_abi_binding, package_native_scaled_primal)
+    from tests.unit.test_native_encoded_scaled_gate import typed_case as encoded_case
+    owner, values, _ = encoded_case("e8m0", mode=None)
+    graph = owner._specialized_autodiff_module(values, {})
+    graph.module_attrs.update({"tessera.target": '"rocm"', "tessera.arch": '"gfx1201"'})
+    package = package_native_scaled_primal(graph.to_mlir(target="rocm_gfx1201", canonical=True))
+    prepared = PreparedScaledProgram.__new__(PreparedScaledProgram)
+    prepared._binding = _scaled_abi_binding(package)
+    prepared.lib = object()
+    assert prepared._binding.reserved_e8m0_inputs == ()
+    frame = list(values)
+    frame[3] = np.full_like(frame[3], 255)
+    prepared._inputs(frame)

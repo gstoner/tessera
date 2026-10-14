@@ -12210,3 +12210,22 @@ remain open. All four backend queues are assessed.
 
 Evidence: benchmarks/baselines/mxfp4_host_transport_20261014/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-14 — exact MXFP4 reserved-scale ingress correction
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: [#946](https://github.com/gstoner/tessera/pull/946); sync MXFP4-RESERVED-SCALE-20261014.
+
+Outcome: The exact MXFP4 oracle and immutable compiler-derived scale input
+roles reject reserved E8M0 byte 255 before prepare/update. Inspection mutation
+cannot bypass it; invalid warm frames retain the prior generation. Valid packed
+E2M1 byte 255 and generic MXFP8 scales remain unchanged. 382 focused host gates,
+63 gfx1201 device cases, Ruff and focused mypy pass. The fresh post-review
+packet preserves every compiler program and member image.
+
+Remaining: Corrected-head CI/review, warm host admission cost, broader
+layouts/dynamic/AD and original Radiance kernel attribution. All four backend
+queues are assessed; there is no sibling physical support transfer.
+
+Evidence: benchmarks/baselines/mxfp4_host_transport_20261014/post_review.json.
+<!-- entry-fields:end -->

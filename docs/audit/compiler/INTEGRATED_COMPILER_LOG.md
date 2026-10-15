@@ -12395,6 +12395,7 @@ and the other original five-slice obligations. No sibling physical proof transfe
 Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_20261015/README.md,
 timing.json, affected-tests.txt, program-tests.txt and public-permutation-tests.txt;
 docs/spec/ir/sm120_paired_tensor_program_contract.md.
+<!-- entry-fields:end -->
 
 ### 2026-10-15 — NVFP4 ingest quality on captured model inputs
 

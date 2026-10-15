@@ -5,6 +5,20 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## W11-TENSOR-RHS-JVP-20261015 — frozen full regression
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+
+The clean fc712bfd6 public paired artifact/replay source passes the full
+non-slow tests/unit gate on Super-Bear WSL: 26,269 passed, 7,700 skipped and
+876 deselected. LLVM/MLIR23.1.1 and the owning RTX5070 provider/device are
+recorded; this is not a sibling hardware certificate. Earlier red partitioned
+results remain historical. The separate precision-policy prototype is not
+part of this frozen source or certificate.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.
+
+
 ## W11-TENSOR-RHS-JVP-20261015 — public artifact dispatch
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.

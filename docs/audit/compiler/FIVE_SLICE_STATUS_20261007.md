@@ -1773,3 +1773,13 @@ temporary preparation. Active-source/A+B derivatives, generic dynamic/resident
 AD, wider encoded/fused producers and aggregate five-slice closure remain open.
 This closes a named delivery gap, not the generic producer reconstruction task.
 Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.
+
+## Frozen public paired replay full-unit gate — 2026-10-15
+
+Clean revision fc712bfd6 passes the complete non-slow tests/unit command on
+Super-Bear WSL: 26,269 passed, 7,700 skipped, 876 deselected. The packet retains
+source/compiler/provider/device identities and the raw log. This is separate
+from earlier fleet/ROCm receipts and is not summed with focused gates.
+The isolated normalization precision-policy candidate is not part of this
+frozen source. No overall five-slice or sibling hardware closure is declared.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.

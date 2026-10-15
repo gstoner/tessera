@@ -65,3 +65,14 @@ and raw alternating order to earlier v3 replay timing fields. Initial v3 timing
 and diagnostic profile are preserved separately. Source/compiler/provider/image
 identities and raw member/program/host samples are retained; final benchmark
 source hashes match the frozen runtime files.
+
+## Frozen full non-slow regression
+
+The clean fc712bfd6 source passes the complete tests/unit non-slow command on
+Super-Bear WSL: 26,269 passed, 7,700 skipped, 876 deselected in 2017.89 seconds.
+The source/tool/provider/device receipt and compressed raw log are retained.
+This is a source-bound host/owning-RTX5070 regression certificate, not additional
+ROCm/Apple or AVX-512 physical proof. It does not sum earlier focused counts.
+ROCm compiler environment is unset in this lane; sibling owning receipts remain
+separate. The isolated normalization accumulator-policy prototype is outside
+this frozen source and is not certified by this result.

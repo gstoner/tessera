@@ -24,10 +24,12 @@ unchanged. General producer, dynamic/resident and reverse AD remain open.
 Normal CMake compiler builds and 78 owning source/policy checks pass, including
 direct signed-zero/NaN producer storage checks. The pre-synchronization focused
 gate passes 754 cases. PR950 is integrated and all three matching compiler tools
-build. The synchronized full sweep has 26,628 passes and two audit-drift
-failures, repaired by 770 passing recorder/ODS audit checks. A fresh full-suite
-certificate and publication CI remain open; earlier full-suite results retain
-their original source scopes.
+build. Frozen synchronized 3659a2b45 passes the full non-slow unit suite:
+26,630 passed, 7,678 skipped, 876 deselected in 2017.98 seconds. The original
+two audit-drift failures and repair history remain recorded. A fresh owning
+attention control run passes 35 tests; publication-timings.json records the
+matching compiler/runtime host and device measurements. Publication CI remains
+open; earlier full-suite results retain their original source scopes.
 
 Contract: docs/spec/ir/source_active_row_jvp.md.
 Evidence: benchmarks/baselines/sm120_active_source_jvp_runtime_20261015/README.md.

@@ -12595,11 +12595,17 @@ frozen full sweep has 26,628 passes and two audit-drift failures. Recorder
 naming and five explicit ODS pins repair those failures; 770 audit checks pass.
 All four backend queues distinguish this exact RTX 5070 route from siblings.
 
-Remaining: fresh repaired-source full-suite and publication gates; general
+Remaining: publication CI; general
 producer/accumulator, dynamic/resident and reverse AD envelopes; independent
 sibling physical consumers. No aggregate five-slice or performance promotion.
 
 Evidence: benchmarks/baselines/sm120_active_source_jvp_runtime_20261015/README.md,
 full-unit-951658503.json, full-unit-951658503.log.gz and audit-repair-tests.txt;
 docs/spec/ir/source_active_row_jvp.md.
+Validation update: frozen synchronized 3659a2b45 passes 26,630 non-slow
+unit tests (7,678 skipped, 876 deselected) in 2017.98 seconds on Super-Bear.
+The final owning attention controls pass 35 tests. Matching compiler/runtime
+publication timing and the green raw full-suite log are retained in the packet.
+Publication CI remains required; broader envelope obligations remain open.
+
 <!-- entry-fields:end -->

@@ -30,20 +30,26 @@ LLVM/MLIR 23.1.1; CUDA 13.3. All three normal CMake compiler targets
 (tessera-opt, tessera-nvidia-opt and tessera-rocm-opt) built successfully.
 The CUDA owner library was built separately from the integrated runtime sources.
 
-Latest normal-build benchmark compiler SHA256:
-81a98c3b282d27138b7417b03097cac03fceb10813ce2156ddd2d5f305eb266f.
+Latest synchronized benchmark compiler SHA256:
+4933ce714af733dfdf8f4bb7eb1461c65ac979852822e5b41741a9f98a246f4a.
 Native owner SHA256:
 2f51cf156777a470b803fc9ed8c5f3eb3a9396d0802651d49c7ecc8ec99ee689.
-normal-build-timings.json records raw executable hashes separately from the
+publication-timings.json records raw executable hashes separately from the
 dependency-aware compiler identity, plus the live GPU UUID and source hashes.
-The saved FP16 fixture was recaptured with this compiler. See
+normal-build-timings.json and the saved FP16 fixture retain the earlier
+81a98c3b compiler epoch; they are not the synchronized build certificate. See
 docs/spec/ir/source_active_row_jvp.md for the exact envelope.
 
 ## Validation
 
-Final focused gate: **754 passed in 224.84 seconds** on host WSL using the
-normal-build compiler above. Owning documentation regeneration and Ruff on all
-18 changed Python files passed. This is not a full-unit certificate.
+Frozen synchronized source **3659a2b457f27835f033bc1c2f6fa735f2194f53**
+passes the full non-slow unit gate on host WSL: **26,630 passed, 7,678 skipped,
+876 deselected, 11 warnings in 2017.98 seconds**. Source remained clean and
+unchanged through the run. full-unit-3659a2b45.json records the exact commands,
+tool/runtime hashes and GPU; the compressed raw log is retained. The preceding
+audit/routing gate passes 778 checks. Ruff and the zero-error mypy ratchet pass.
+The final attention checkpoint controls pass **35 tests in 44.60 seconds**
+on this same source and owning GPU; their raw log is retained.
 
 - Latest normal-build durable repository tests: 78 passed. FP16/BF16, argument-role
   permutations, minimal/ragged rows, numerical public JVP and standalone replay,
@@ -70,7 +76,7 @@ precision tests are in `tests/unit/test_normalization_frontend_policy.py`.
 
 ## Matched host-overhead experiment
 
-`normal-build-timings.json` records seven samples, five completed calls per host sample and
+`publication-timings.json` records seven samples, five completed calls per host sample and
 alternating mode order. All modes retain the same live native owner and image
 identities. The full-certificate control clears only the pure validation cache;
 it does not clear a CUDA module/allocation cache. Correctness is checked before
@@ -79,10 +85,10 @@ stage events are separately recorded. No competing GPU test/benchmark ran.
 
 | Storage | MNK | Public JVP us | Cached portable replay us | Full certificate replay us |
 | --- | --- | ---: | ---: | ---: |
-| FP16 | 17,19,35 | 770.709 | 768.545 | 2789.661 |
-| BF16 | 17,19,35 | 710.579 | 775.145 | 2778.782 |
-| FP16 | 129,33,257 | 882.446 | 889.232 | 2894.633 |
-| BF16 | 129,33,257 | 861.126 | 872.963 | 2925.076 |
+| FP16 | 17,19,35 | 847.278 | 854.779 | 2890.900 |
+| BF16 | 17,19,35 | 756.597 | 779.410 | 2827.671 |
+| FP16 | 129,33,257 | 888.917 | 888.792 | 2930.118 |
+| BF16 | 129,33,257 | 851.672 | 889.772 | 2913.185 |
 
 This measures certificate/host overhead, not a kernel speedup. No physical
 schedule or FP8/MXFP8/MXFP4 route is promoted by these results. Larger-row native
@@ -90,8 +96,8 @@ execution remains producer dominated.
 
 ## Remaining delivery gates
 
-Complete final registry/generated-document gates, synchronize with merged main,
-and run the full non-slow unit suite on the frozen synchronized source.
+Merged main through PR950 is integrated. Frozen full-unit and owning-device
+gates above are complete. Publication CI remains a delivery gate.
 General producer, dynamic/resident and reverse admission remain follow-ups.
 Apple, x86 and ROCm need their own physical consumers and architecture-specific
 execution certificates; shared frontend correctness does not establish parity.
@@ -122,5 +128,6 @@ shipped compiler consumers. Both complete audit files pass: 770 checks.
 
 full-unit-951658503.json and the compressed raw log retain the original failed
 sweep without relabeling it green. The repair changes documentation and audit
-expectations; compiler/runtime/numerical code is unchanged. A fresh frozen
-full-suite run and publication CI remain required.
+expectations; compiler/runtime/numerical code is unchanged. The fresh frozen
+3659a2b45 run above passes both repaired audits and the complete non-slow suite.
+Publication CI remains required.

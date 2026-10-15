@@ -7,15 +7,14 @@ Reference date for staleness: **2026-10-15**.
 ## Headline
 
 - **163** docs catalogued across the canonical doc tree.
-- **161** carry a `last_updated:` marker; **2** are undated (invisible to the freshness audit until tagged).
-- **31** updated within the last 30 days.
+- **162** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **32** updated within the last 30 days.
 - **67** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
 
 These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-form `Last updated:` line to participate in the audit.  Until tagged, the freshness signal is unavailable.
 
-- `docs/spec/ir/sm120_paired_tensor_program_contract.md`
 - `docs/reference/tessera_frontend_lanes.md`
 
 ## Per-root inventory
@@ -48,7 +47,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `VALIDATION_SPINE.md` | Normative | 2026-08-02 | 74 | ✓ |
 | `VALUE_TARGET_IR_CONTRACT.md` | Normative | 2026-06-04 | 133 | ✓ |
 | `ir/sm120_activation_schedule_tile_contract.md` | - | 2026-10-15 | 0 | ✓ |
-| `ir/sm120_paired_tensor_program_contract.md` | - | _undated_ | - | _body_ |
+| `ir/sm120_paired_tensor_program_contract.md` | - | 2026-10-15 | 0 | ✓ |
 
 ### `docs/guides/`
 

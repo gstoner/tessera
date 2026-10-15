@@ -1,0 +1,13 @@
+{
+  "revision": "264e1a0f74d853c948ed28a466f71c6e35929d01",
+  "architecture": "gfx1201",
+  "binary_sha256": {
+    "TESSERA_OPT": "81b32f8c2cfb35d98783bb0ea359962b2305523455da06b2cf39fae9d809d3be",
+    "TESSERA_ROCM_OPT": "209eab432c0e27a5d87584c371611d1b44c023b93280db47b25ff175b3afb99a"
+  },
+  "modified_sources": [
+    "docs/spec/ir/sm120_paired_tensor_program_contract.md",
+    "python/tessera/compiler/autodiff_proof.py",
+    "tests/unit/test_native_relu_tangent.py"
+  ]
+}

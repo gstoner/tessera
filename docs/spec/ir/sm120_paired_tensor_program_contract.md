@@ -1,3 +1,7 @@
+---
+last_updated: 2026-10-15
+---
+
 # SM120 static paired tensor program contract
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.

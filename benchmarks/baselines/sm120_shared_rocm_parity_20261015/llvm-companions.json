@@ -1,0 +1,34 @@
+{
+  "mlir-opt": {
+    "path": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/mlir-opt",
+    "sha256": "62a18523fcec89907cd9b0eade4d5976c549d11f85697089766242406ed1c271"
+  },
+  "mlir-translate": {
+    "path": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/mlir-translate",
+    "sha256": "1ab0beb342311021e062480166403962d6981ac1e63162947cd80eb5ecb3a80d"
+  },
+  "llc": {
+    "path": "/usr/lib/llvm-23/bin/llc",
+    "sha256": "81554da92c973d14b3505f8b6ce30eb66d307cbf76c662bf76478e6b5d3bfad6"
+  },
+  "llvm-link": {
+    "path": "/usr/lib/llvm-23/bin/llvm-link",
+    "sha256": "16ced40d94d8e4af05f55d01608d1cb8f89cdc8c7ebf501dd3651588175fd3b5"
+  },
+  "clang": {
+    "path": "/usr/lib/llvm-23/bin/clang",
+    "sha256": "c3173b796451cb86760f76aa6445ff7ef19dae42a9805ac4ba1a06a146f2991d"
+  },
+  "clang++": {
+    "path": "/usr/lib/llvm-23/bin/clang",
+    "sha256": "c3173b796451cb86760f76aa6445ff7ef19dae42a9805ac4ba1a06a146f2991d"
+  },
+  "llvm-objdump": {
+    "path": "/usr/lib/llvm-23/bin/llvm-objdump",
+    "sha256": "052e6befc297a160ed37c756de35c3de3f828b3dc3aaad44c32e3014c1d25d35"
+  },
+  "FileCheck": {
+    "path": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/FileCheck",
+    "sha256": "478e4aaa799568bc87d0904e169a5f67aeaf2fc76d2a69a2cda96ae36a89359f"
+  }
+}

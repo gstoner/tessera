@@ -1,0 +1,45 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+___________ test_every_native_tangent_has_an_authored_proof_contract ___________
+
+    def test_every_native_tangent_has_an_authored_proof_contract():
+>       assert _ir_tangent_classes() <= set(DERIVATIVE_PROOF_MATRIX)
+E       AssertionError: assert frozenset({'a..., 'dct', ...}) <= {'add', 'all_...', 'dct', ...}
+E         
+E         Extra items in the left set:
+E         'relu'
+
+tests/unit/test_autodiff_proof_matrix.py:21: AssertionError
+_____________________ test_docs_dated_passes_on_clean_tree _____________________
+
+    def test_docs_dated_passes_on_clean_tree():
+        chk = _load_checker()
+>       assert chk._check_docs_dated() == []
+E       AssertionError: assert ['docs/spec/i..._contract.md'] == []
+E         
+E         Left contains one more item: 'docs/spec/ir/sm120_paired_tensor_program_contract.md'
+E         Use -v to get more diff
+
+tests/unit/test_check_spec_sync.py:36: AssertionError
+______________________ test_main_exit_zero_on_clean_tree _______________________
+
+    def test_main_exit_zero_on_clean_tree():
+        chk = _load_checker()
+>       assert chk.main() == 0
+E       AssertionError: assert 1 == 0
+E        +  where 1 = <function main at 0x7a2374ae3b60>()
+E        +    where <function main at 0x7a2374ae3b60> = <module 'check_spec_sync' from '/home/angstorms/scratch/jvp-schema-reconcile-20261011/scripts/check_spec_sync.py'>.main
+
+tests/unit/test_check_spec_sync.py:41: AssertionError
+----------------------------- Captured stderr call -----------------------------
+[check_spec_sync] FAIL
+
+  - docs missing a last_updated marker (not in the freshness allow-list):
+    ['docs/spec/ir/sm120_paired_tensor_program_contract.md']
+  Add YAML frontmatter `last_updated: YYYY-MM-DD` to the doc, or extend _KNOWN_UNDATED_DOCS in tests/unit/test_docs_freshness.py.
+
+=========================== short test summary info ============================
+FAILED tests/unit/test_autodiff_proof_matrix.py::test_every_native_tangent_has_an_authored_proof_contract
+FAILED tests/unit/test_check_spec_sync.py::test_docs_dated_passes_on_clean_tree
+FAILED tests/unit/test_check_spec_sync.py::test_main_exit_zero_on_clean_tree
+3 failed in 0.28s

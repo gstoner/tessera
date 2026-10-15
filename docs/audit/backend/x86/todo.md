@@ -8,6 +8,9 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 ## W11-TENSOR-RHS-JVP-20261015 — native paired execution
 
+Integration follow-through: ReLU now has an authored derivative proof contract and a native JVP/adjoint directional-duality witness. The paired specification has its required date. All 53 proof/spec/freshness guards pass without weakening admission. Not applicable to AVX-512 physical execution: the shared mathematical registry and specification date repair add no x86 ABI or target admission. Native x86 composed AD remains follow-up required.
+Evidence: benchmarks/baselines/sm120_shared_rocm_parity_20261015/README.md.
+
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
 Synchronization key: W11-TENSOR-RHS-JVP-20261015.
 Native v7 tensor export outlines the actual RHS-linear paired Graph SSA,

@@ -7,6 +7,9 @@ last_updated: 2026-10-15
 ---
 ## W11-TENSOR-RHS-JVP-20261015 — native paired execution
 
+Integration follow-through: ReLU now has an authored derivative proof contract and a native JVP/adjoint directional-duality witness. The paired specification has its required date. All 53 proof/spec/freshness guards pass without weakening admission. Follow-up required: the frozen 264e1a0f broad NVIDIA sweep is still being reconciled. The proof/date repair changes no CUDA arithmetic or native owner ABI; prior source-pinned RTX5070 numerical/timing evidence remains separate.
+Evidence: benchmarks/baselines/sm120_shared_rocm_parity_20261015/README.md.
+
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
 Synchronization key: W11-TENSOR-RHS-JVP-20261015.
 Native v7 tensor export outlines the actual RHS-linear paired Graph SSA,

@@ -51,6 +51,37 @@ def test_native_relu_forward_emitted_ir_matches_independent_oracle(tool, storage
 
 
 @pytest.mark.compiler_route
+def test_native_relu_directional_derivative_and_reverse_duality(tool):
+    from tessera.compiler.autodiff_proof import (
+        DERIVATIVE_PROOF_MATRIX,
+        ProofKind,
+        assert_directional_close,
+        assert_forward_reverse_duality,
+        central_directional_difference,
+    )
+
+    rng = np.random.default_rng(151077)
+    x = rng.uniform(0.25, 2.0, (3, 8))
+    x[:, ::2] *= -1
+    direction = rng.normal(size=x.shape)
+    cotangent = rng.normal(size=x.shape)
+    source = graph("f64", "3x8")
+    paired = run_tessera_opt(tool, source, "--tessera-autodiff-forward")
+    _, tangent = _parse_functions(paired)["relu__jvp"].run([x, direction])
+    reverse_source = source.replace("forward", "reverse")
+    reverse = run_tessera_opt(tool, reverse_source, "--tessera-autodiff-paired")
+    (input_cotangent,) = _parse_functions(reverse)["relu__bwd"].run([x, cotangent])
+    finite = central_directional_difference(lambda value: np.maximum(value, 0), (x,), (direction,))
+    assert_directional_close(tangent, finite, rtol=1e-10, atol=1e-11)
+    assert_forward_reverse_duality(
+        tangent, cotangent, (direction,), (input_cotangent,), rtol=1e-12, atol=1e-12
+    )
+    contract = DERIVATIVE_PROOF_MATRIX["relu"]
+    assert contract.kind is ProofKind.DIRECTIONAL_AND_DUALITY
+    assert "signed zeros" in contract.boundary_policy and "NaN" in contract.boundary_policy
+
+
+@pytest.mark.compiler_route
 @pytest.mark.parametrize("storage", ["i32", "f8E4M3FN", "complex<f32>"])
 def test_relu_tangent_does_not_admit_new_storage_domains(tool, storage):
     with pytest.raises(RuntimeError):

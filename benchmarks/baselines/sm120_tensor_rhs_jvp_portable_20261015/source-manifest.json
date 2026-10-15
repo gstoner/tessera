@@ -1,0 +1,11 @@
+{
+  "final_source_sha256": {
+    "python/tessera/compiler/prepared_nvidia_tensor_jvp.py": "fc68c9a1925638cac84c4f64f144495774e7074bde734c4bd5def0bb8b248be8",
+    "python/tessera/compiler/portable_nvidia_tensor_jvp.py": "f8ba4345a54f67eb7cd40932acc8a93e6e017d8e4088410a4deaf7bfbd9678fa",
+    "benchmarks/nvidia/benchmark_tensor_rhs_jvp.py": "46dd83976bb369c7fc78e07f68ec5756e3c098ad94c2485280f9058f7dd2131e",
+    "tests/unit/test_native_sm120_rhs_jvp_program.py": "e9077994c6f40b9ef3d1cbc97d8a036a1f535dfe461f37189c651b09902bb6fe"
+  },
+  "measurement_source": "timings.json:source_sha256",
+  "post_measurement_changes": "Explicit union annotation in portable restore; hardware-free plan validation assertions in tests. Runtime arithmetic, images and benchmark unchanged.",
+  "final_gate": "338 tests passed; mypy two source files passed"
+}

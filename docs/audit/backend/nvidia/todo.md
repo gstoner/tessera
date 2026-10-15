@@ -5,6 +5,19 @@ owner: NVIDIA backend
 target: nvidia_sm120
 last_updated: 2026-10-15
 ---
+
+## W11-TENSOR-RHS-JVP-20261015 — portable paired replay
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+
+Parity validated on RTX 5070: explicit prepared manifest/replay now uses a
+separate paired schema, preserving primal v1–v6. Fresh-process FP16/BF16
+replay disables compiler/package/member launch paths; 31 paired cases pass.
+Six numerical/timing cases retain separate stage/program/host clocks.
+Generic public paired artifact dispatch and active-source AD remain open.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_portable_20261015/README.md.
+
 ## W11-TENSOR-RHS-JVP-20261015 — native paired execution
 
 Integration follow-through: ReLU now has an authored derivative proof contract and a native JVP/adjoint directional-duality witness. The paired specification has its required date. All 53 proof/spec/freshness guards pass without weakening admission. Follow-up required: the frozen 264e1a0f broad NVIDIA sweep is reconciled by the explicit repaired failure set recorded below. The proof/date repair changes no CUDA arithmetic or native owner ABI; prior source-pinned RTX5070 numerical/timing evidence remains separate.
@@ -21,7 +34,7 @@ Python authors no derivative program and submits no member kernels.
 Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_20261015/README.md;
 docs/spec/ir/sm120_paired_tensor_program_contract.md.
 
-Parity validated on RTX5070: 666 affected regressions pass; 26 final program cases cover the registered row producers/mappings and lifetimes; four public dtype/role-permutation controls pass. Six source-pinned timing cases separate captured member/program, compile/prepare and completed frontend time (6.46-51.85 us program, 0.725-0.884 ms warm public call). Maximum error is below 4.8e-6. Active-source/A+B, composed reverse, dynamic/resident roots, portable paired replay and encoded/fused envelopes remain open. Default serial ReLU is unchanged; no speedup or five-slice closure claim.
+Parity validated on RTX5070: 666 affected regressions pass; 26 final program cases cover the registered row producers/mappings and lifetimes; four public dtype/role-permutation controls pass. Six source-pinned timing cases separate captured member/program, compile/prepare and completed frontend time (6.46-51.85 us program, 0.725-0.884 ms warm public call). Maximum error is below 4.8e-6. Active-source/A+B, composed reverse, dynamic/resident roots, generic public paired artifact dispatch and encoded/fused envelopes remain open. Default serial ReLU is unchanged; no speedup or five-slice closure claim.
 
 ## W11-RELU-AD-20261015 — native Graph tangent integration
 

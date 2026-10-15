@@ -4,6 +4,18 @@ audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+
+## W11-TENSOR-RHS-JVP-20261015 — portable paired replay
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+
+Not applicable to rocm execution: this schema serializes only the static
+SM120 two-output native owner. No sibling provider, physical schedule or
+target admission changes. Future parity requires its own native ABI and
+exact-device proof; NVIDIA timings do not establish sibling support.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_portable_20261015/README.md.
+
 ## W11-TENSOR-RHS-JVP-20261015 — native paired execution
 
 Integration follow-through: ReLU now has an authored derivative proof contract and a native JVP/adjoint directional-duality witness. The paired specification has its required date. All 53 proof/spec/freshness guards pass without weakening admission. Parity validated on owning RX9070XT/gfx1201: rebuilt LLVM/MLIR 23.1.1 core/ROCm tools pass 463 combined shared and existing NVFP4 route/ownership/lifetime/replay guards. This does not admit the new SM120 paired program on HIP or transfer CUDA timings; gfx1151 physical proof is separate.

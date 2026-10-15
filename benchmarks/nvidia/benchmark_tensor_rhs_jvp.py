@@ -40,6 +40,7 @@ def record(storage, shape):
             errors.append(float(np.max(np.abs(actual - reference))))
         return errors
 
+    replay = None
     try:
         start = time.perf_counter_ns()
         first = fn.native_jvp(a, b, tangents=(db,))
@@ -49,6 +50,8 @@ def record(storage, shape):
         owner = next(iter(fn._native_prepared_jvp_calls.values()))
         for _ in range(3):
             check(fn.native_jvp(a, b, tangents=(db,)))
+        from tessera.compiler.prepared_nvidia_tensor_jvp import PreparedTensorJVP
+        portable = json.dumps(owner.manifest())
         scratch = owner.scratch_stats()
         samples = []
         for _ in range(5):
@@ -71,6 +74,21 @@ def record(storage, shape):
             completed.append((time.perf_counter_ns() - start) / 1e6 / 8)
             check(outputs)
         assert owner.scratch_stats() == scratch
+        # A matching prepare acquires a new native lease. Finish all original
+        # owner timing before preparing replay; the old handle is then stale.
+        start = time.perf_counter_ns()
+        replay = PreparedTensorJVP.from_manifest(json.loads(portable))
+        replay_prepare_ms = (time.perf_counter_ns() - start) / 1e6
+        check(replay((a, b, db)))
+        replay_samples = []
+        for _ in range(5):
+            start = time.perf_counter_ns()
+            for _ in range(8):
+                replay_outputs = replay((a, b, db))
+            replay_samples.append((time.perf_counter_ns() - start) / 1e6 / 8)
+            check(replay_outputs)
+        replay_profile = replay.profile(repeats=128, captured=True)
+        check(replay_profile["outputs"])
         for actual, old in zip(first, saved, strict=True):
             np.testing.assert_array_equal(actual, old)
         for actual, old in zip((a, b, db), originals, strict=True):
@@ -87,6 +105,11 @@ def record(storage, shape):
             "stage_medians_ms": [median(s["stage_ms"][i] for s in samples) for i in range(len(owner.members))],
             "completed_public_call_samples_ms": completed,
             "completed_public_call_median_ms": median(completed),
+            "replay_prepare_ms": replay_prepare_ms,
+            "portable_manifest_bytes": len(portable.encode()),
+            "completed_prepared_replay_samples_ms": replay_samples,
+            "completed_prepared_replay_median_ms": median(replay_samples),
+            "replay_device_profile": {k: v for k, v in replay_profile.items() if k != "outputs"},
             "scratch": scratch,
             "receipt": dict(fn.last_jvp_execution),
             "native_program": owner.plan,
@@ -102,6 +125,8 @@ def record(storage, shape):
             ],
         }
     finally:
+        if replay is not None:
+            replay.close()
         for owner in fn._native_prepared_jvp_calls.values():
             owner.close()
 
@@ -123,11 +148,12 @@ def main():
         "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h",
         "python/tessera/compiler/native_sm120_tensor_program.py",
         "python/tessera/compiler/prepared_nvidia_tensor_jvp.py",
+        "python/tessera/compiler/portable_nvidia_tensor_jvp.py",
         "python/tessera/compiler/jit.py",
         str(Path(__file__).relative_to(Path.cwd())),
     ]
     packet = {
-        "schema": "tessera.benchmark.tensor_rhs_jvp.v1",
+        "schema": "tessera.benchmark.tensor_rhs_jvp.v2",
         "device": device,
         "scope": "named static public RHS-only JVP; no active-source, reverse, dynamic or sibling proof",
         "source_sha256": {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in files},

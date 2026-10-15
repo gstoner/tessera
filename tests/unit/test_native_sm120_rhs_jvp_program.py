@@ -37,6 +37,12 @@ def test_native_paired_tensor_ssa_retains_shared_edge_and_two_owned_outputs(stor
     value = re.search(r'tessera.native.sm120_tensor_program_json = "([^"]+)"', ir)
     assert value is not None
     plan = json.loads(base64.b64decode(value[1], validate=True))
+    from tessera.compiler.portable_nvidia_tensor_jvp import validate_plan
+    assert validate_plan(json.dumps(plan)) == plan
+    malformed = json.loads(json.dumps(plan))
+    malformed["buffers"][4]["last_read"] = 2
+    with pytest.raises(ValueError, match="lifetime"):
+        validate_plan(json.dumps(malformed))
     assert plan["schema"] == "tessera.native.sm120_tensor_program.v7"
     assert plan["kind"] == "paired_jvp"
     assert plan["role_indices"] == [0, 1, 2]
@@ -236,3 +242,103 @@ def test_paired_owner_preserves_each_registered_coefficient_and_row_mapping(stor
             np.testing.assert_allclose(actual, reference, rtol=2e-5, atol=2e-5)
     finally:
         owner.close()
+
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+def test_paired_tensor_portable_fresh_process_without_compiler(storage, tmp_path):
+    import os
+    import subprocess
+    import sys
+    import numpy as np
+    import ml_dtypes
+    from tessera import runtime as rt
+    from tessera.compiler.prepared_nvidia_tensor_jvp import PreparedTensorJVP
+
+    if find_tessera_opt() is None or rt._nvidia_device_name() != "sm_120":
+        pytest.skip("requires owning RTX5070 and production compiler")
+    dtype = np.dtype(np.float16 if storage == "f16" else ml_dtypes.bfloat16)
+    rng = np.random.default_rng(151070)
+    values = (rng.uniform(-1, 1, (7, 32)).astype(dtype),
+              rng.uniform(-0.25, 0.25, (32, 9)).astype(dtype),
+              rng.uniform(-0.125, 0.125, (32, 9)).astype(dtype))
+    owner = PreparedTensorJVP(graph(storage))
+    try:
+        expected = owner(values)
+        data = owner.manifest()
+    finally:
+        owner.close()
+    (tmp_path / "program.json").write_text(json.dumps(data))
+    np.savez(tmp_path / "inputs.npz", **{str(i): v.view(np.uint16) for i, v in enumerate(values)})
+    script = """
+import json, sys
+from pathlib import Path
+import numpy as np
+import ml_dtypes
+from tessera import runtime as rt
+from tessera.compiler.prepared_nvidia_tensor_jvp import PreparedTensorJVP
+import tessera.compiler.native_sm120_tensor_program as exporter
+import tessera.compiler.nvidia_native as native
+
+def forbidden(*args, **kwargs):
+    raise AssertionError("portable replay attempted compiler or Python member launch")
+exporter.run_tessera_opt = forbidden
+exporter.export_native_sm120_tensor_jvp = forbidden
+native.package_scheduled_matmul = forbidden
+native.package_scheduled_kernel = forbidden
+rt._submit_nvidia_sm120_native = forbidden
+folder = Path(sys.argv[1])
+dtype = np.dtype(np.float16 if sys.argv[2] == "f16" else ml_dtypes.bfloat16)
+with np.load(folder / "inputs.npz") as loaded:
+    values = tuple(loaded[str(i)].view(dtype) for i in range(3))
+owner = PreparedTensorJVP.from_manifest(json.loads((folder / "program.json").read_text()))
+try:
+    outputs = owner(values)
+    retained = tuple(v.copy() for v in outputs)
+    owner(values)
+    for value, saved in zip(outputs, retained, strict=True):
+        np.testing.assert_array_equal(value, saved)
+    assert not np.shares_memory(*outputs)
+    np.savez(folder / "outputs.npz", primal=outputs[0], tangent=outputs[1])
+finally:
+    owner.close()
+"""
+    env = {**os.environ, "TESSERA_OPT": "/unavailable/compiler", "TESSERA_ROCM_OPT": "/unavailable/compiler"}
+    result = subprocess.run([sys.executable, "-c", script, str(tmp_path), storage],
+                            env=env, text=True, capture_output=True, timeout=120)
+    assert result.returncode == 0, result.stdout + result.stderr
+    with np.load(tmp_path / "outputs.npz") as replay:
+        for name, value in zip(("primal", "tangent"), expected, strict=True):
+            np.testing.assert_array_equal(replay[name], value)
+
+
+def test_paired_tensor_portable_rejects_resealed_lifetime_and_wrong_schema():
+    import copy
+    from tessera import runtime as rt
+    from tessera.compiler.prepared_nvidia_tensor_jvp import PreparedTensorJVP
+    from tessera.compiler.portable_nvidia_tensor_jvp import digest
+    from tessera.compiler.native_sm120_tensor_program import validate_native_tensor_plan
+    if find_tessera_opt() is None or rt._nvidia_device_name() != "sm_120":
+        pytest.skip("requires owning RTX5070 and production compiler")
+    owner = PreparedTensorJVP(graph())
+    try:
+        data = owner.manifest()
+    finally:
+        owner.close()
+    with pytest.raises(ValueError, match="schema"):
+        validate_native_tensor_plan(data["plan_json"])
+    for edit in ("lifetime", "role", "shape", "output", "member"):
+        bad = copy.deepcopy(data)
+        plan = json.loads(bad["plan_json"])
+        if edit == "lifetime":
+            plan["buffers"][4]["last_read"] = 2
+        elif edit == "role":
+            plan["role_indices"] = [0, 1, 1]
+        elif edit == "shape":
+            plan["buffers"][2]["shape"] = [32, 8]
+        elif edit == "output":
+            plan["outputs"] = [5, 5]
+        else:
+            bad["artifacts"][0]["graph_ir"] += "// changed"
+        bad["plan_json"] = json.dumps(plan)
+        bad["contract_digest"] = digest({k: v for k, v in bad.items() if k != "contract_digest"})
+        with pytest.raises(ValueError):
+            PreparedTensorJVP.from_manifest(bad)

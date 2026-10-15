@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import ctypes as ct
 import hashlib
+from dataclasses import asdict
 import os
 import weakref
 import numpy as np
@@ -61,7 +62,6 @@ class PreparedTensorJVP:
     """Static native producer coefficient shared by primal and RHS tangent."""
 
     def __init__(self, source):
-        from tessera import runtime as rt
         from . import nvidia_native as native
 
         self.native = export_native_sm120_tensor_jvp(source)
@@ -75,6 +75,15 @@ class PreparedTensorJVP:
             )(artifact, pipeline_name="tessera-nvidia-pipeline-sm120")
             for step, artifact in zip(self.plan["steps"], artifacts, strict=True)
         )
+        self.artifacts = artifacts
+        self._bind(source)
+
+    def _bind(self, source):
+        from tessera import runtime as rt
+        from .portable_nvidia_tensor_jvp import validate_members
+
+        artifacts = self.artifacts
+        validate_members(self.native.plan_json, artifacts, self.members)
         self._snapshot = (self.native.plan_json, copy.deepcopy(self.members), copy.deepcopy(self.plan))
         lib = rt._load_nvidia_ptx_launch()
         symbols = ("prepare", "invoke", "profile", "close", "scratch_stats")
@@ -182,6 +191,32 @@ class PreparedTensorJVP:
             "tile_program_digest": digest("".join(a.tile_ir for a in artifacts)),
             "image_digests": [p.image.image_digest for p in self.members],
         }
+
+    def manifest(self):
+        """Serialize trusted native images and witnesses; no device pointers."""
+        from .nvidia_tensor_rhs import NvidiaNormRhsProgram
+        from .portable_nvidia_tensor_jvp import digest
+        self._guard()
+        data = {
+            "schema": "tessera.nvidia.tensor_rhs_jvp.v1",
+            "plan_json": self.native.plan_json,
+            "artifacts": [asdict(a) for a in self.artifacts],
+            "members": [NvidiaNormRhsProgram.runtime_artifact(p).to_dict() for p in self.members],
+        }
+        return copy.deepcopy({**data, "contract_digest": digest(data)})
+
+    @classmethod
+    def from_manifest(cls, data):
+        """Prepare serialized paired images without a compiler invocation."""
+        from .portable_nvidia_tensor_jvp import restore
+        native, artifacts, members = restore(data)
+        result = cls.__new__(cls)
+        result.native = native
+        result.plan = native.manifest
+        result.artifacts = artifacts
+        result.members = members
+        result._bind(result.plan["source_graph_ir"])
+        return result
 
     def _check(self, status):
         if status:

@@ -66,3 +66,21 @@ completed frontend calls and compile/prepare time remain different metrics.
 `close` retires the owned stream/modules; returned host arrays stay valid.
 Portable v7 replay and borrowed resident input/stream contracts are not
 introduced by this host-frame ABI.
+
+## Portable prepared paired replay — 2026-10-15
+
+The distinct tessera.nvidia.tensor_rhs_jvp.v1 container retains the native v7
+plan, scheduled member metadata and image/descriptor artifacts in order.
+PreparedTensorJVP.manifest() exports the trusted native package;
+PreparedTensorJVP.from_manifest() validates and prepares it without a compiler.
+No primal schema changes. This explicit prepared API is separate from generic
+RuntimeArtifact dispatch. It requires the matching prebuilt native provider.
+
+Validation recomputes root roles, SSA edges, both output identities, private
+lifetimes and bytes, checks Graph/Schedule/Tile/Target/image provenance and
+existing producer/consumer ABI shape/layout rules. Digests are integrity checks,
+not executable authentication. A matching native prepare replaces the cached
+lease; older handles must not be invoked or profiled afterward.
+
+Exact-device proof and separate timing domains are recorded in
+benchmarks/baselines/sm120_tensor_rhs_jvp_portable_20261015/README.md.

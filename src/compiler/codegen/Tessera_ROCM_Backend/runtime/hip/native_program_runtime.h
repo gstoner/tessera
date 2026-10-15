@@ -7,7 +7,8 @@ extern "C" {
 #endif
 // All kernel buffer arguments use the flattened rank-one memref ABI:
 // allocated, aligned, offset=0, elements, stride=1; scalars follow buffers.
-// Slots are SSA IDs: arguments first, then one fresh output for each step.
+// Slots are SSA IDs: arguments first, then each step's fresh results.
+// The original preparation API below requires exactly one result per step.
 typedef struct {
   uint64_t bytes;
   uint64_t elements;
@@ -27,6 +28,21 @@ typedef struct {
   uint32_t geometry[6]; // grid x/y/z, block x/y/z.
   int64_t scalars[8];
 } TesseraRocmProgramStep;
+// Additive multi-result ABI. Inputs precede every output in the flattened
+// kernel memref arguments. Output slots follow the compiler's SSA result order;
+// the runtime independently derives and checks all write/read lifetimes.
+typedef struct {
+  const void *image;
+  uint64_t image_bytes;
+  const char *entry;
+  uint32_t input_count;
+  uint32_t scalar_count;
+  uint32_t inputs[6];
+  uint32_t output_count;
+  uint32_t outputs[7];
+  uint32_t geometry[6];
+  int64_t scalars[8];
+} TesseraRocmProgramMultiOutputStep;
 // Status matches other prepared HIP owners:
 // 1 contract, 2 identity, 3 image, 4 allocation, 5 copy, 6 launch,
 // 7 completion, 8 lease, 9 cleanup, 10 state, 12 exception.
@@ -35,6 +51,13 @@ int tessera_rocm_program_prepare(
     const char *architecture, uint32_t argument_count, uint32_t buffer_count,
     const TesseraRocmProgramBuffer *buffers, uint32_t step_count,
     const TesseraRocmProgramStep *steps, const void *const *inputs,
+    const uint64_t *input_bytes, uint64_t *handle);
+// At most seven total memrefs per step, with one or more fresh outputs.
+// The original one-result ABI above retains its layout and admission behavior.
+int tessera_rocm_program_prepare_multi_output(
+    const char *architecture, uint32_t argument_count, uint32_t buffer_count,
+    const TesseraRocmProgramBuffer *buffers, uint32_t step_count,
+    const TesseraRocmProgramMultiOutputStep *steps, const void *const *inputs,
     const uint64_t *input_bytes, uint64_t *handle);
 // Pack a checked positive-stride read-only host view into compact borrowed
 // destination storage. This performs byte movement only, before HIP upload.

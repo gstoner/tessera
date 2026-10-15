@@ -10887,3 +10887,12 @@ x86: `target="x86"` refuses like every native target; `target="cpu"` (the refere
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
 
 Not applicable to native x86 execution in this slice: shared frontend result inference and the eager oracle do not supply a compiled CPU producer. Capability remains unsupported; no CPU execution or timing evidence is transferred.
+
+
+## NVFP4-PUBLIC-EXPAND-20261015
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to native x86 execution: no CPU package or byte-storage promotion is added. The shared JIT allocation change is guarded by the gfx1201 expansion ABI; x86 expansion remains unsupported and no CPU proof is inferred.
+
+Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.

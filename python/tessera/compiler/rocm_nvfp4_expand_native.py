@@ -47,7 +47,7 @@ def _contract(tile, target):
     return names, n, k, offsets, digest, entry
 
 
-def _descriptor(image, info, graph, schedule, tile):
+def _descriptor(image, info, graph_digest, schedule_ir_digest, tile_ir_digest):
     names, n, k, offsets, digest, entry = info
     shapes = ((n, k // 2), (n, k // 16), (len(offsets) - 1,), (n, k), (k // 16, n))
     dtypes = ("uint8", "fp8_e4m3", "fp64", "fp8_e4m3", "fp32")
@@ -69,8 +69,8 @@ def _descriptor(image, info, graph, schedule, tile):
             "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
             "numeric_policy": nvfp4_expansion_policy(), "row_offsets": list(offsets),
             "shape_nk": [n, k], "schedule_digest": digest,
-            "graph_digest": _digest(graph), "schedule_ir_digest": _digest(schedule),
-            "tile_ir_digest": _digest(tile),
+            "graph_digest": graph_digest, "schedule_ir_digest": schedule_ir_digest,
+            "tile_ir_digest": tile_ir_digest,
             "ownership": "private_outputs_distinct_readonly_inputs",
         })
 
@@ -92,7 +92,7 @@ class NVFP4ExpansionPackage:
         info = _contract(native.tile_ir, native.target_ir)
         if re.findall(r'\bhash = "([0-9a-f]{64})"', self.schedule_ir) != [info[-2]]:
             raise ValueError("NVFP4 expansion Schedule record digest differs")
-        expected = _descriptor(image, info, self.graph_ir, self.schedule_ir, native.tile_ir)
+        expected = _descriptor(image, info, _digest(self.graph_ir), _digest(self.schedule_ir), _digest(native.tile_ir))
         if desc != expected:
             raise ValueError("NVFP4 expansion descriptor differs from native contract")
 
@@ -114,7 +114,7 @@ def package_nvfp4_expansion(graph: str | GraphIRModule):
         target_ir_digest=_digest(target), binary_format="hsaco", payload=binary,
         entry_points=(NativeEntryPoint(info[-1], NVFP4_EXPAND_ABI),),
         device_libraries=libraries, compile_state=state)
-    desc = _descriptor(image, info, source, schedule, tile)
+    desc = _descriptor(image, info, _digest(source), _digest(schedule), _digest(tile))
     package = NVFP4ExpansionPackage(
         source, schedule, ROCMNativePackage(tile, target, backend, image, desc))
     package.validate()
@@ -171,3 +171,97 @@ def build_nvfp4_expansion_graph(n: int, k: int, row_offsets, *, numeric_policy):
             ["codes","scales","globals","values","scale_plane"])})
     return GraphIRModule([fn],module_attrs={
         "tessera.target":json.dumps("rocm_gfx1201"),"tessera.arch":json.dumps("gfx1201")})
+
+
+def supports_nvfp4_expansion(module):
+    """Recognize the semantic operation; native verification owns admission."""
+    return (len(module.functions) == 1 and len(module.functions[0].body) == 1
+            and module.functions[0].body[0].op_name == "tessera.nvfp4_expand")
+
+
+def project_nvfp4_expansion_graph(module):
+    from copy import deepcopy
+
+    if not supports_nvfp4_expansion(module):
+        raise ValueError("NVFP4 expansion requires one isolated semantic Graph operation")
+    source = deepcopy(module)
+    for key, value in (("tessera.target", "rocm_gfx1201"), ("tessera.arch", "gfx1201")):
+        existing = source.module_attrs.get(key)
+        if existing is not None and json.loads(existing) != value:
+            raise ValueError("NVFP4 expansion Graph target/architecture conflicts")
+        source.module_attrs[key] = json.dumps(value)
+    fn = source.functions[0]
+    op = fn.body[0]
+    names = [arg.name for arg in fn.args] + op.result_names
+    if (len(fn.args) != 3 or len(op.result_names) != 2 or len(set(names)) != 5
+            or fn.return_values != ["%" + name for name in op.result_names]):
+        raise ValueError("NVFP4 expansion argument/result ownership differs")
+    existing = fn.fn_attrs.get("tessera.bindings")
+    if existing is not None and json.loads(existing) != names:
+        raise ValueError("NVFP4 expansion bindings conflict with operand/result lineage")
+    fn.fn_attrs["tessera.bindings"] = json.dumps(names)
+    return source
+
+
+def expansion_runtime_artifact(package):
+    from tessera.runtime import RuntimeArtifact
+
+    package.validate()
+    return RuntimeArtifact(
+        graph_ir=package.graph_ir, schedule_ir=package.schedule_ir,
+        tile_ir=package.native.tile_ir, target_ir=package.native.target_ir,
+        native_image=package.native.image, launch_descriptor=package.native.descriptor,
+        metadata={"target": "rocm_gfx1201", "compiler_path": "canonical_rocm_nvfp4_expand",
+                  "executable": True, "execution_kind": "native_gpu"})
+
+
+def validate_expansion_runtime_artifact(artifact):
+    NVFP4ExpansionPackage(artifact.graph_ir, artifact.schedule_ir, ROCMNativePackage(
+        artifact.tile_ir, artifact.target_ir, "", artifact.native_image,
+        artifact.launch_descriptor)).validate()
+
+
+def submit_nvfp4_expansion(image, desc, buffers, scalars, stream):
+    """Common runtime checked host-buffer ABI; private device output storage."""
+    import ml_dtypes
+    import numpy as np
+
+    if scalars or stream is not None:
+        raise ValueError("NVFP4 expansion has no scalars and completes on the HIP default stream")
+    desc.validate_image(image)
+    if (image.target != "rocm_gfx1201" or image.architecture != "gfx1201"
+            or image.binary_format != "hsaco" or desc.abi_id != NVFP4_EXPAND_ABI):
+        raise ValueError("NVFP4 expansion requires its exact gfx1201 HSACO ABI")
+    ordered = sorted(desc.buffers, key=lambda b: b.ordinal)
+    names = tuple(b.name for b in ordered)
+    info = desc.provenance
+    n, k = info["shape_nk"]
+    offsets = tuple(info["row_offsets"])
+    if (type(n) is not int or type(k) is not int or n <= 0 or k <= 0 or k % 16
+            or n > (2**63-1) // k or len(names) != 5 or len(set(names)) != 5
+            or len(offsets) < 2 or any(type(x) is not int for x in offsets)
+            or offsets[0] != 0 or offsets[-1] != n
+            or any(a >= b for a, b in zip(offsets, offsets[1:]))):
+        raise ValueError("NVFP4 expansion descriptor geometry/binding contract changed")
+    contract = names, n, k, offsets, info["schedule_digest"], desc.entry_symbol
+    expected = _descriptor(image, contract, info["graph_digest"],
+                           info["schedule_ir_digest"], info["tile_ir_digest"])
+    if desc != expected or set(buffers) != set(names):
+        raise ValueError("NVFP4 expansion descriptor/bindings differ from native ABI")
+    codes, scales, globals_, _ = checked_expansion_inputs(
+        *(buffers[name] for name in names[:3]), row_offsets=offsets,
+        numeric_policy=nvfp4_expansion_policy())
+    if codes.shape != (n, k // 2):
+        raise ValueError("NVFP4 expansion inputs differ from compiled shape")
+    inputs = [codes, scales, globals_]
+    outputs = [np.asarray(buffers[name]) for name in names[3:]]
+    for output, shape, dtype in zip(outputs, ((n, k), (k // 16, n)),
+                                    (ml_dtypes.float8_e4m3fn, np.float32)):
+        if (output.shape != shape or output.dtype != np.dtype(dtype)
+                or not output.flags.c_contiguous or not output.flags.writeable):
+            raise ValueError("NVFP4 expansion output shape/storage/writeability differs from ABI")
+    for i, output in enumerate(outputs):
+        if any(np.shares_memory(output, other) for other in inputs + outputs[:i]):
+            raise ValueError("NVFP4 expansion outputs must not alias inputs or one another")
+    arrays = [np.ascontiguousarray(x) for x in inputs] + outputs
+    return _execute_arrays(image, desc, arrays)

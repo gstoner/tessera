@@ -12404,3 +12404,25 @@ unsupported. No packed consumer or overall compiler closure is claimed.
 
 Evidence: benchmarks/baselines/gfx1201_nvfp4_native_expand_20261015/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-15 — public native NVFP4 expansion and portable replay
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync NVFP4-PUBLIC-EXPAND-20261015.
+
+Outcome: The ordinary Python frontend and canonical driver now package the
+registered two-result expansion through native Graph/Schedule/Tile/ROCm/LLVM.
+Checked runtime replay verifies Graph/Schedule/Tile/image/descriptor lineage,
+finite nonnegative E4M3 scales, finite positive globals, FP32 scale range and
+private writable outputs. Cold/warm JIT, JSON replay and fresh-process replay
+without compiler tools execute bitwise on gfx1201 with the eager oracle disabled.
+Pinned original Qwen3 gate/up checkpoint weights also pass both output checks.
+Producer-only device graph windows and completed host calls are recorded separately.
+
+Remaining: The public operation is isolated/static. Multi-output SSA ownership,
+native whole-sequence execution and resident K16 consumer integration remain open;
+generic HIP program ownership currently assumes one fresh result per step.
+No default-route promotion, sibling execution or full-model quality closure.
+
+Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.
+<!-- entry-fields:end -->

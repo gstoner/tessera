@@ -65,7 +65,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | msa_index_scores | 1 | gfx1151 | - |
 | multi_head_attention | 1 | gfx1151 | - |
 | mxfp4_folded_storage | 6 | - | - |
-| nvfp4_expand | 6 | - | gfx1201 |
+| nvfp4_expand | 6 | - | - |
 | nvfp4_requantize | 6 | - | - |
 | qkv_projection | 1 | gfx1151 | - |
 | rfft | 1 | - | - |
@@ -129,7 +129,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | istft | ready | complete | missing | missing | - | - | bf16,fp16,fp32,complex64 |
 | kv_cache.read | ready | complete | missing | missing | - | - | fp32 |
 | mxfp4_folded_storage | ready | complete | missing | missing | - | - | uint8 |
-| nvfp4_expand | artifact_only | complete | missing | missing | - | - | uint8,nvfp4,fp8_e4m3,fp32,fp64 |
+| nvfp4_expand | ready | complete | missing | missing | - | - | uint8 |
 | nvfp4_requantize | ready | complete | missing | missing | - | - | uint8 |
 | rfft | ready | complete | missing | missing | - | - | fp32,complex64 |
 | scaled_matmul | ready | complete | missing | missing | - | - | uint8,fp8_e4m3 |

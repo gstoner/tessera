@@ -5017,6 +5017,9 @@ def _submit_rocm_gfx1151_native(
         GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
     )
 
+    from tessera.compiler.rocm_nvfp4_expand_native import NVFP4_EXPAND_ABI,submit_nvfp4_expansion
+    if descriptor.abi_id == NVFP4_EXPAND_ABI:
+        return submit_nvfp4_expansion(image,descriptor,buffers,scalars,ingest_stream)
     from tessera.compiler.rocm_nvfp4_ingest_native import NVFP4_INGEST_ABI,submit_nvfp4_ingest
     if descriptor.abi_id == NVFP4_INGEST_ABI:
         return submit_nvfp4_ingest(image,descriptor,buffers,scalars,ingest_stream)
@@ -6581,8 +6584,9 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         return
 
     from tessera.compiler.rocm_nvfp4_ingest_native import NVFP4_INGEST_ABI
+    from tessera.compiler.rocm_nvfp4_expand_native import NVFP4_EXPAND_ABI
     from tessera.compiler.rocm_mxfp4_storage_native import MXFP4_STORAGE_ABI
-    if target == "rocm_gfx1201" and abi_id in {NVFP4_INGEST_ABI,MXFP4_STORAGE_ABI}:
+    if target == "rocm_gfx1201" and abi_id in {NVFP4_EXPAND_ABI,NVFP4_INGEST_ABI,MXFP4_STORAGE_ABI}:
         if target not in _native_launchers:
             register_native_launcher(target,binary_formats=("hsaco",),
                 submit=_submit_rocm_gfx1151_native)
@@ -35791,6 +35795,14 @@ def _launch_native_descriptor(
                 return receipt
             except (ValueError, TypeError, RuntimeError) as exc:
                 raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH", str(exc)) from exc
+        from tessera.compiler.rocm_nvfp4_expand_native import (
+            NVFP4_EXPAND_ABI,validate_expansion_runtime_artifact)
+        if descriptor.abi_id == NVFP4_EXPAND_ABI:
+            try:
+                validate_expansion_runtime_artifact(artifact)
+            except (ValueError,TypeError,KeyError,AttributeError) as exc:
+                raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
+                    f"NVFP4 expansion artifact lineage differs: {exc}") from exc
         from tessera.compiler.rocm_nvfp4_ingest_native import (
             NVFP4_INGEST_ABI,validate_ingest_runtime_artifact)
         if descriptor.abi_id == NVFP4_INGEST_ABI:

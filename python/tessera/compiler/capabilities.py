@@ -1223,9 +1223,10 @@ def _with_nvfp4_ingest_state(target: TargetCapability) -> TargetCapability:
         from dataclasses import replace
         ops = dict(target.supported_ops)
         ops["tessera.nvfp4_expand"] = OpCapability(
-            "tessera.nvfp4_expand", "artifact_only",
-            dtypes=("uint8", "nvfp4", "fp8_e4m3", "fp32", "fp64"), ranks=(2,),
-            reason="Native K16 expansion contract; checked execution and composition in progress")
+            "tessera.nvfp4_expand", "ready",
+            dtypes=("uint8",), ranks=(2,),
+            reason="Exact gfx1201 K16 expansion outputs are bitwise device-proved; "
+                   "checked five-buffer JIT/replay integration; resident composition remains open")
         return replace(target, supported_ops=ops)
     from dataclasses import replace
     ops=dict(target.supported_ops)

@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 298 |
+| ``complete`` | 299 |
 | ``runnable_reference`` | 29 |
-| ``artifact_only`` | 1 |
+| ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
 | **total** | **362** |
 
-## complete (298)
+## complete (299)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -261,6 +261,7 @@ each row into a single E2E tier.
 | ``dequantize_fp6`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
 | ``dequantize_fp8`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
 | ``dequantize_nvfp4`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
+| ``nvfp4_expand`` | quantize | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``nvfp4_requantize`` | quantize | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``quantize_fp4`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
 | ``quantize_fp6`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
@@ -367,12 +368,6 @@ each row into a single E2E tier.
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``game_mex`` | segment_reduce | public | public | registered | partial | reference | ready | none |
 | ``game_coalition_marginal`` | spectral | public | public | registered | partial | reference | ready | none |
-
-## artifact_only (1)
-
-| Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
-|---|---|---|---|---|---|---|---|---|
-| ``nvfp4_expand`` | quantize | public | public | registered | partial | artifact_only | artifact_only | none |
 
 ## partial (34)
 

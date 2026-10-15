@@ -14924,3 +14924,12 @@ NVIDIA: NVIDIA targets refuse at decoration. Not run on The-Super-Bear; the chan
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
 
 Not applicable to SM120 physical execution in this slice: the shared catalog and shape inference register a semantic operation, while NVIDIA capability explicitly remains unsupported. A separate native producer, checked ABI and RTX 5070 proof would be required.
+
+
+## NVFP4-PUBLIC-EXPAND-20261015
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to SM120 execution: the new common runtime branch is restricted to the gfx1201 expansion ABI, including its FP8 output allocation. NVIDIA expansion remains unsupported. No RTX 5070 numerical or timing proof is transferred; the queued W1.1/attention programs remain independently owned.
+
+Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.

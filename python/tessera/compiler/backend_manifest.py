@@ -2812,6 +2812,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("kv_cache_read", "rocm_gfx1201"): "tests/unit/test_public_movement_frontend.py",
 
     ("mxfp4_folded_storage", "rocm_gfx1201"): "tests/unit/test_rocm_mxfp4_storage_native.py",
+    ("nvfp4_expand", "rocm_gfx1201"): "tests/unit/test_rocm_nvfp4_expansion_jit.py",
     ("nvfp4_requantize", "rocm_gfx1201"): "tests/unit/test_rocm_nvfp4_ingest_package.py",
     # The Philox Langevin MSL kernel vs the numpy Philox reference on Metal
     # (hardware_apple_gpu; surfaced when the op entered the catalog, ODS
@@ -6620,12 +6621,15 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # gfx1151/CDNA. This does not promote general uint8 or other NVFP4 policies.
     if op_name == "nvfp4_expand":
         entries.append(BackendKernelEntry(
-            target="rocm_gfx1201", status=_ARTIFACT_STATUS,
+            target="rocm_gfx1201", status=_DEVICE_VERIFIED_JIT_STATUS,
             dtypes=("nvfp4", "fp8_e4m3", "fp32", "fp64"),
-            feature_flags=("source_preserving_expansion",),
+            feature_flags=("source_preserving_expansion", "compiler_owned_hsaco", "native_jit_replay"),
             shape_envelope="static positive N/K16; ordered projection boundaries",
-            notes="Native Graph/Schedule/Tile/ROCm generator implemented; checked package, "
-                  "exact-device numerical proof and resident consumer composition remain in progress.",
+            execute_compare_fixture="tests/unit/test_rocm_nvfp4_expansion_jit.py",
+            benchmark_json="benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/gfx1201.json",
+            notes="Exact gfx1201 cold/warm public JIT and serialized replay are bitwise device-proved "
+                  "with the eager oracle disabled. Native Graph/Schedule/Tile/ROCm/LLVM owns arithmetic; "
+                  "checked five-buffer import and output ownership. Resident consumer composition remains open.",
         ))
 
     if op_name == "nvfp4_requantize":

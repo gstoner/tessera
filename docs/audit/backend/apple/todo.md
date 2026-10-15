@@ -14480,3 +14480,12 @@ Apple: `apple_cpu` refuses; for `apple_gpu` a body routed to the Phase-F tracer 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
 
 Not applicable to Metal execution in this slice: the shared semantic operation and eager reference do not provide an Apple lowering. Capability remains unsupported; no Metal numerical or timing evidence is claimed.
+
+
+## NVFP4-PUBLIC-EXPAND-20261015
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to Metal execution: common frontend/runtime changes recognize an exact gfx1201 ABI only. Apple expansion remains unsupported, and existing Apple JIT/AD obligations require their own native program and Mac proof.
+
+Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.

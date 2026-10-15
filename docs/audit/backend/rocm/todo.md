@@ -17434,4 +17434,13 @@ ROCm: `target="rocm"` refuses, and a verifier failure caused by a dropped call n
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
 
-Implementation in progress for gfx1201: the new semantic operation has a strict K16, two-result Graph contract and native Schedule/Tile/ROCm GPU lowering. Codes preserve signed zero; the scale policy declares one f64-product-to-f32 rounding. The checked standalone five-buffer package now passes bitwise owning-device output/rounding tests and producer-only graph/host timing. Public JIT, serialized replay, resident producer/consumer composition, real checkpoint parity and model-quality gates remain open. Evidence: benchmarks/baselines/gfx1201_nvfp4_native_expand_20261015/README.md. gfx1151 has no physical producer or transferred evidence.
+Implementation in progress for gfx1201: the new semantic operation has a strict K16, two-result Graph contract and native Schedule/Tile/ROCm GPU lowering. Codes preserve signed zero; the scale policy declares one f64-product-to-f32 rounding. The checked standalone five-buffer package now passes bitwise owning-device output/rounding tests and producer-only graph/host timing. Public JIT, serialized replay (including a fresh process without compiler tools), and pinned checkpoint expansion are now bitwise device-proved. Resident producer/consumer composition and representative model-quality gates remain open. Evidence: benchmarks/baselines/gfx1201_nvfp4_native_expand_20261015/README.md. gfx1151 has no physical producer or transferred evidence.
+
+
+## NVFP4-PUBLIC-EXPAND-20261015
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+
+Exact gfx1201 public @jit and serialized replay now execute the two-result expansion without eager arithmetic. Pinned checkpoint gate/up and synthetic K16/K48/K80 outputs are bitwise checked; host and device timing remain separate. Capability readiness is restricted to the named packed-byte ingress. Next: multi-output SSA ownership in the native HIP owner and a compiled resident K16 matmul chain. Existing gfx1151 and unrelated cache/schedule obligations remain open.
+
+Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.

@@ -5,6 +5,21 @@ owner: NVIDIA backend
 target: nvidia_sm120
 last_updated: 2026-10-15
 ---
+## W11-TENSOR-RHS-JVP-20261015 — native paired execution
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+Native v7 tensor export outlines the actual RHS-linear paired Graph SSA,
+retains original/paired Graph witnesses and shared-edge last-use through both
+matmul reads, and exports two returned f32 output IDs. Independently compiled
+Schedule/Tile/LLVM/PTX members bind to a distinct sealed C++ program owner.
+The public named RMSNorm -> ReLU -> matmul RHS JVP now executes for f16/BF16;
+Python authors no derivative program and submits no member kernels.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_20261015/README.md;
+docs/spec/ir/sm120_paired_tensor_program_contract.md.
+
+Parity validated on RTX5070: 666 affected regressions pass; 26 final program cases cover the registered row producers/mappings and lifetimes; four public dtype/role-permutation controls pass. Six source-pinned timing cases separate captured member/program, compile/prepare and completed frontend time (6.46-51.85 us program, 0.725-0.884 ms warm public call). Maximum error is below 4.8e-6. Active-source/A+B, composed reverse, dynamic/resident roots, portable paired replay and encoded/fused envelopes remain open. Default serial ReLU is unchanged; no speedup or five-slice closure claim.
+
 ## W11-RELU-AD-20261015 — native Graph tangent integration
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
@@ -17,7 +32,7 @@ three independent FP32 composed directional oracles and four target provenance
 guards. Graph IR proof does not imply an executable native AD package.
 Evidence: benchmarks/baselines/native_relu_ad_20261015/README.md.
 
-Parity validated for existing primal producer and saved-LSE attention controls on RTX 5070: 150 tests pass against the rebuilt LLVM/MLIR 23.1.1 compiler. Public composed JVP/VJP execution remains open. Native paired-SSA multi-output outlining, member lowering and checked output/scratch ownership are required next; no new physical AD or timing claim.
+Parity validated for existing primal producer and saved-LSE attention controls on RTX 5070: 150 tests pass against the rebuilt LLVM/MLIR 23.1.1 compiler. This checkpoint had no public composed execution. W11-TENSOR-RHS-JVP-20261015 above now proves the named static RHS JVP; active-source and composed VJP execution remain open.
 
 ## W11-RELU-FLAT-20261015 — optional native activation schedule
 

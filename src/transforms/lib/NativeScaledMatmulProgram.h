@@ -28,12 +28,14 @@ static bool isNativeExactMXFP4Product(mlir::Operation *op) {
   return profile && profile.getValue() == "rocm_mxfp4_w4a8_exact_v1" &&
       output && output.getElementType().isBF16();
 }
-static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, bool primal = false, bool reverse = false) {
+static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, bool primal = false, bool reverse = false, llvm::StringRef originalSource = {}) {
   using namespace mlir;
   if (primal && hasNativeNVFP4Graph(module))
     return emitNativeNVFP4Program(module);
   if (primal && hasNativeSM120TensorGraph(module))
     return emitNativeSM120TensorProgram(module);
+  if (!primal && !reverse && hasNativeSM120TensorGraph(module))
+    return emitNativeSM120TensorProgram(module,true,originalSource);
   if (module->hasAttr("tessera.autodiff.scaled_program"))
     return module.emitError("scaled JVP program export already exists");
   llvm::SmallVector<func::FuncOp> roots;

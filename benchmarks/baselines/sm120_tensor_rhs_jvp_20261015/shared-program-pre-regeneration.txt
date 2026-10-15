@@ -1,0 +1,57 @@
+..................................sss................................... [ 62%]
+................F....................F....s                              [100%]
+=================================== FAILURES ===================================
+_______________________ test_dashboard_matches_live_data _______________________
+
+    def test_dashboard_matches_live_data():
+        """The on-disk dashboard must equal what render_dashboard() produces from
+        the current matrix. Any drift means someone changed the matrix without
+        regenerating, or hand-edited the generated file."""
+        live = EM.render_dashboard()
+        disk = DASHBOARD.read_text()
+        if live != disk:
+            # Surface a useful diff hint in the failure message.
+            live_lines = live.splitlines()
+            disk_lines = disk.splitlines()
+            first_diff = next((i for i in range(min(len(live_lines), len(disk_lines)))
+                               if live_lines[i] != disk_lines[i]), min(len(live_lines), len(disk_lines)))
+>           pytest.fail(
+                f"Runtime execution matrix dashboard drift at line {first_diff + 1}: "
+                f"on-disk has {disk_lines[first_diff] if first_diff < len(disk_lines) else '<EOF>'!r}, "
+                f"live has {live_lines[first_diff] if first_diff < len(live_lines) else '<EOF>'!r}. "
+                "Regenerate with `python3 -c 'from tessera.compiler.execution_matrix "
+                "import write_dashboard; write_dashboard()'`.")
+E           Failed: Runtime execution matrix dashboard drift at line 95: on-disk has '| `nvidia_sm120` | `nvidia_softmax_compiled` | `nvidia_softmax_compiled` | `native_gpu` | `cuda_runtime` | NVIDIA sm_120 stable row-softmax emitted as compiler-owned PTX (f32/f16/bf16 storage, f32 max/sum reduction; one block per flattened row), nvcc-compiled and launched through runtime.launch(). |', live has '| `nvidia_sm120` | `nvidia_sm120_tensor_jvp_compiled` | `nvidia_tensor_rhs_jvp_program` | `native_gpu` | `cuda_runtime` | Named static fp16/BF16 RMSNorm -> ReLU -> matmul RHS-only JVP: native paired SSA outlines one shared producer prefix and two typed-fragment consumers, then one sealed C++ owner returns independently owned f32 primal/tangent arrays. Active-source, dynamic, resident-root, general reverse and encoded-operand AD remain outside this proof. |'. Regenerate with `python3 -c 'from tessera.compiler.execution_matrix import write_dashboard; write_dashboard()'`.
+
+tests/unit/test_runtime_execution_matrix.py:109: Failed
+__________________________ test_csv_matches_live_data __________________________
+
+    def test_csv_matches_live_data() -> None:
+        """The canonical CSV must match the live source scan.  This is the
+        drift gate — regenerate with the audit CLI when it fails."""
+        if not CSV_DASHBOARD.exists():
+            pytest.skip("CSV not generated yet")
+        live = render_csv()
+        on_disk = CSV_DASHBOARD.read_text()
+        if live == on_disk:
+            return
+        live_lines = live.splitlines()
+        disk_lines = on_disk.splitlines()
+        first_diff = next(
+            (i for i, (l, d) in enumerate(zip(live_lines, disk_lines))
+             if l != d),
+            min(len(live_lines), len(disk_lines)),
+        )
+>       pytest.fail(
+            f"Runtime ABI CSV drift at line {first_diff + 1}: "
+            f"on-disk has {disk_lines[first_diff]!r}, live has "
+            f"{live_lines[first_diff]!r}.  Regenerate with "
+            f"`python -m tessera.compiler.audit runtime_abi --write`."
+        )
+E       Failed: Runtime ABI CSV drift at line 762: on-disk has 'nvidia,tessera_nvidia_matmul_prepare,nvidia_matmul_prepare,,src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h', live has 'nvidia,tessera_nvidia_matmul_profile,nvidia_matmul_profile,,src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp'.  Regenerate with `python -m tessera.compiler.audit runtime_abi --write`.
+
+tests/unit/test_runtime_abi_audit.py:195: Failed
+=========================== short test summary info ============================
+FAILED tests/unit/test_runtime_execution_matrix.py::test_dashboard_matches_live_data
+FAILED tests/unit/test_runtime_abi_audit.py::test_csv_matches_live_data - Fai...
+2 failed, 109 passed, 4 skipped in 7.00s

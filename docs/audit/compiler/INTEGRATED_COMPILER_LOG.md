@@ -12366,3 +12366,28 @@ Evidence: benchmarks/baselines/native_relu_ad_20261015/README.md,
 before/route-census.json, after/route-census.json, shared-tests.txt,
 sm120-controls.txt and validation.json.
 <!-- entry-fields:end -->
+
+
+### 2026-10-15 — native SM120 paired tensor RHS execution
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync W11-TENSOR-RHS-JVP-20261015.
+
+Outcome: actual native RHS-linear JVP SSA now outlines to v7 tensor members
+with shared-edge lifetime through both matmul consumers and two returned IDs.
+Native Schedule/Tile/LLVM/PTX packages execute through a sealed C++ program
+owner with checked roles, capacity, context, leases and transactional output
+readback. The named f16/BF16 public RMSNorm -> ReLU -> matmul RHS JVP executes
+without Python member submission. 666 affected regressions, 26 subsequent
+program cases and four public role-permutation controls pass. Six exact
+RTX5070 timing cases have separate captured program/member and public wall
+regions; no comparison/default promotion is claimed. All four queues assessed.
+
+Remaining: active-source/A+B derivative consumers, composed reverse, dynamic
+and borrowed resident roots, portable paired replay, encoded/fused envelopes,
+and the other original five-slice obligations. No sibling physical proof transfer.
+
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_20261015/README.md,
+timing.json, affected-tests.txt, program-tests.txt and public-permutation-tests.txt;
+docs/spec/ir/sm120_paired_tensor_program_contract.md.
+<!-- entry-fields:end -->

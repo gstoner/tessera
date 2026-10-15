@@ -2964,6 +2964,29 @@ class JitFn:
         for index, tangent in tangent_inputs.items():
             if index >= len(primal_inputs) or primal_inputs[index].shape != tangent.shape:
                 raise TesseraJitError("native JVP primal and tangent shapes must match")
+        if len(graph_ops)>1 and normalize_target_kind(self.target)=="nvidia_sm120" and not resident_attention:
+            from .prepared_nvidia_tensor_jvp import PreparedTensorJVP, candidate as tensor_jvp_candidate
+            if tensor_jvp_candidate(traced_module,request.wrt_indices):
+                import copy
+                projected=copy.deepcopy(traced_module)
+                projected.module_attrs.update({"tessera.target":'"nvidia_sm120"',"tessera.arch":'"sm_120"'})
+                source_ir=projected.to_mlir(target="nvidia_sm120",canonical=True)
+                key=("native_sm120_tensor_rhs_jvp",source_ir)
+                if self._native_prepared_jvp_pid is None:self._native_prepared_jvp_pid=os.getpid()
+                try:
+                    with self._native_prepared_jvp_lock:
+                        owner=self._native_prepared_jvp_calls.get(key)
+                        if owner is None:
+                            owner=PreparedTensorJVP(source_ir)
+                            if len(self._native_prepared_jvp_calls)>=8:
+                                retired=next(iter(self._native_prepared_jvp_calls))
+                                self._native_prepared_jvp_calls.pop(retired).close()
+                            self._native_prepared_jvp_calls[key]=owner
+                        outputs=owner((*primal_inputs,*(tangent_inputs[i] for i in request.wrt_indices)))
+                        self.last_jvp_execution={**owner.receipt,"frontend_authority":"tracer"}
+                        return outputs
+                except (ValueError,RuntimeError) as exc:
+                    raise TesseraJitError(str(exc)) from exc
         if len(graph_ops) != 1:
             from .rocm_typed_scaled_native import supports_composed_scale_jvp
             if (normalize_target_kind(self.target) not in {"rocm", "rocm_gfx1201"}

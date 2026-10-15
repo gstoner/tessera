@@ -5,6 +5,21 @@ owner: Apple backend
 target: apple_gpu
 last_updated: 2026-10-15
 ---
+## W11-TENSOR-RHS-JVP-20261015 — native paired execution
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+Native v7 tensor export outlines the actual RHS-linear paired Graph SSA,
+retains original/paired Graph witnesses and shared-edge last-use through both
+matmul reads, and exports two returned f32 output IDs. Independently compiled
+Schedule/Tile/LLVM/PTX members bind to a distinct sealed C++ program owner.
+The public named RMSNorm -> ReLU -> matmul RHS JVP now executes for f16/BF16;
+Python authors no derivative program and submits no member kernels.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_20261015/README.md;
+docs/spec/ir/sm120_paired_tensor_program_contract.md.
+
+Follow-up required for native Metal paired consumers. The export dispatch and new owner are exact SM120; no Apple ABI, arithmetic, capabilities or physical schedule changes. Shared IR/ABI registries are assessed; CUDA execution is not Apple proof.
+
 ## W11-RELU-AD-20261015 — native Graph tangent integration
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.

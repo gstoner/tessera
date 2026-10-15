@@ -16,7 +16,7 @@ def _plan(ir):
     if len(matches)!=1:
         raise ValueError("native tensor export requires one program record")
     text=base64.b64decode(matches[0],validate=True).decode()
-    if json.loads(text).get("schema") not in {"tessera.native.sm120_tensor_program.v1","tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v3","tessera.native.sm120_tensor_program.v4","tessera.native.sm120_tensor_program.v5","tessera.native.sm120_tensor_program.v6"}:
+    if json.loads(text).get("schema") not in {"tessera.native.sm120_tensor_program.v1","tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v3","tessera.native.sm120_tensor_program.v4","tessera.native.sm120_tensor_program.v5","tessera.native.sm120_tensor_program.v6","tessera.native.sm120_tensor_program.v7"}:
         raise ValueError("native tensor program schema differs")
     return text
 
@@ -39,6 +39,7 @@ class NativeSM120TensorGraph:
     plan_json:str
     tool:Path
     compiler_identity:str
+    paired:bool=False
 
     @property
     def manifest(self):
@@ -50,7 +51,7 @@ class NativeSM120TensorGraph:
         if _tool_digest(self.tool)!=self.compiler_identity:
             raise RuntimeError("native tensor compiler changed after export")
         ir=run_tessera_opt(self.tool,self.source_ir,
-            f"--tessera-autodiff-forward=export-scaled-primal=true select-scaled-member={index}")
+            f"--tessera-autodiff-forward={'export-scaled-program' if self.paired else 'export-scaled-primal'}=true select-scaled-member={index}")
         if ir!=self.manifest["member_graphs"][index]:
             raise ValueError("native tensor member differs from captured program")
         return ir
@@ -71,7 +72,7 @@ class NativeSM120TensorGraph:
             storage=lhs["storage"]
             dtype={"f16":"fp16","bf16":"bf16"}[storage]
             artifact: ScheduledKernelArtifact | ScheduledMatmulArtifact
-            if index<len(plan["steps"])-1:
+            if plan["steps"][index]["operation"]!="tessera.matmul":
                 operation=plan["steps"][index]["operation"]
                 softmax=operation=="tessera.softmax"
                 kinds={"tessera.softmax":"softmax", "tessera.layer_norm":"layernorm",
@@ -135,6 +136,21 @@ def export_native_sm120_tensor_graph(source,*,tool=None):
     if _tool_digest(tool)!=identity:
         raise RuntimeError("native tensor compiler changed during export")
     return NativeSM120TensorGraph(source,ir,_plan(ir),tool,identity)
+
+
+def export_native_sm120_tensor_jvp(source,*,tool=None):
+    """Compile actual frontend Graph into the native paired tensor contract."""
+    if not isinstance(source,str):
+        raise TypeError("native paired tensor export requires frontend Graph MLIR")
+    tool=find_tessera_opt() if tool is None else tool
+    if tool is None:raise RuntimeError("native tensor JVP requires matching compiler")
+    identity=_tool_digest(tool)
+    ir=run_tessera_opt(tool,source,"--tessera-autodiff-forward=export-scaled-program=true")
+    if _tool_digest(tool)!=identity:raise RuntimeError("native tensor compiler changed during export")
+    result=NativeSM120TensorGraph(source,ir,_plan(ir),tool,identity,True)
+    if result.manifest["schema"]!="tessera.native.sm120_tensor_program.v7":
+        raise ValueError("native tensor JVP schema differs")
+    return result
 
 
 def validate_native_tensor_plan(text):

@@ -545,6 +545,12 @@ class AutodiffForwardPass
 
   void runOnOperation() override {
     mlir::ModuleOp module = getOperation();
+    std::string originalProgramSource;
+    if (exportScaledProgram) {
+      llvm::raw_string_ostream stream(originalProgramSource);
+      module.print(stream); stream.flush();
+      originalProgramSource += "\n";
+    }
     llvm::SmallVector<mlir::func::FuncOp> forwards;
     llvm::SmallVector<mlir::func::FuncOp> emittedHVPs;
     module.walk([&](mlir::func::FuncOp func) {
@@ -1019,7 +1025,7 @@ class AutodiffForwardPass
       std::string text; llvm::raw_string_ostream os(text); os<<llvm::json::Value(std::move(contract)); os.flush();
       module->setAttr("tessera.autodiff.attention_jvp_contract",mlir::StringAttr::get(&getContext(),text));
     }
-    if (exportScaledProgram && mlir::failed(emitNativeScaledMatmulProgram(module))) {
+    if (exportScaledProgram && mlir::failed(emitNativeScaledMatmulProgram(module,false,false,originalProgramSource))) {
       signalPassFailure();
       return;
     }

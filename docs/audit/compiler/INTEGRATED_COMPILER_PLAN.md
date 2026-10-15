@@ -405,7 +405,7 @@ Current increment: checked rank-four broadcast saved-LSE packages and private ta
   independent parity, allocation ownership, zero spills, and separate
   producer/consumer event times. Generic legacy tensor-valued Tile producers
   remain open.
-- Latest: [2026-10-15 — native ReLU tangent and producer AD integration](INTEGRATED_COMPILER_LOG.md#2026-10-15--native-relu-tangent-and-producer-ad-integration)
+- Latest: [2026-10-15 — native SM120 paired tensor RHS execution](INTEGRATED_COMPILER_LOG.md#2026-10-15--native-sm120-paired-tensor-rhs-execution)
 - Integration follow-through: zero-error Python type gate restored; bounded frontend lifetime, strict metadata and native stage lineage guards have 125 focused WSL regressions. General producer composition and wider dtype/layout/AD envelopes remain open.
 - Current RHS increment: static fp16/BF16 RMSNorm KxN output feeds typed matmul B through checked row-major packages. Exact RTX 5070 complete/ragged cases validate private resident lifetime and separate producer/consumer dispatch windows. FP8, MXFP8 and MXFP4 remain mandatory before strategy/default selection.
 - Census recheck (2026-10-02): both historical tensor/async-copy constructors
@@ -418,7 +418,7 @@ Current increment: checked rank-four broadcast saved-LSE packages and private ta
 
 - Current physical increment: native Schedule/Tile row-major RHS views gather into typed B fragments on SM120. Named LHS normalization/softmax producers preserve C/F RHS storage through ordinary JIT, resident execution and portable replay with FP16/BF16 exact-device proof. General producer/layout integration remains open. [Evidence](../../../benchmarks/baselines/nvidia_lhs_rhs_layout_20261006/README.md).
 
-- Current increment (2026-10-14, sync W11-RELU-PRODUCER-20261014): the named ordinary frontend RMSNorm -> ReLU -> matmul retains separate f16/bf16 stores and typed fragments. Twenty-eight new RTX 5070 tests and a six-case separated timing packet pass. Captured timing and explicit flat activation mapping are recorded by W11-RELU-FLAT-20261015. Native ReLU paired-Graph differentiation is recorded by W11-RELU-AD-20261015; public composed AD execution and general producer/layout closure remain open. [Evidence](../../../benchmarks/baselines/sm120_norm_relu_matmul_20261014/README.md).
+- Current increment (2026-10-14, sync W11-RELU-PRODUCER-20261014): the named ordinary frontend RMSNorm -> ReLU -> matmul retains separate f16/bf16 stores and typed fragments. Twenty-eight new RTX 5070 tests and a six-case separated timing packet pass. Captured timing and explicit flat activation mapping are recorded by W11-RELU-FLAT-20261015. Native ReLU paired-Graph differentiation is recorded by W11-RELU-AD-20261015; the named static RHS JVP now executes through W11-TENSOR-RHS-JVP-20261015. Active-source/composed reverse and general producer/layout closure remain open. [Evidence](../../../benchmarks/baselines/sm120_norm_relu_matmul_20261014/README.md).
 
 ### W3.3
 

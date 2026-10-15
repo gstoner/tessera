@@ -69,9 +69,12 @@ entry symbol and native parameter layout. Existing RHS-only frames are unchanged
 One C++ owner prepares modules, stages three host roots, launches the three
 native stages on its private stream, and publishes both outputs only after
 completion. It rejects shape, stride, dtype, alias, context and lifetime
-mismatches. Profiling reuses the last completed native snapshot and requires the
-same root addresses and a live generation lease. It separates each stage from
-the composed device event. External launch streams are not accepted.
+mismatches. Profiling requires the same root addresses and a live generation
+lease, then refreshes all host root contents and completes one warmup invocation
+before opening event/capture windows. In-place mutations are therefore reflected
+in the returned profiled outputs. Staging and warmup are excluded from device
+timing; each stage is separate from the composed device event. External launch
+streams are not accepted.
 
 The native `tessera.native.sm120_active_source_outline.v1` record remains
 `artifact_only`: an outline alone is not executable. The compiled portable

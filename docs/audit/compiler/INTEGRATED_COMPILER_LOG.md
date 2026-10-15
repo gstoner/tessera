@@ -12608,4 +12608,9 @@ The final owning attention controls pass 35 tests. Matching compiler/runtime
 publication timing and the green raw full-suite log are retained in the packet.
 Publication CI remains required; broader envelope obligations remain open.
 
+PR951 review: 28 added cases reproduce narrower-policy and stale-profile
+root bugs on the prior code/provider. The corrected eager admission and native
+root refresh pass 436 affected checks; a rebuilt-provider benchmark passes all
+four cases. Original frozen full-suite proof retains its source scope.
+
 <!-- entry-fields:end -->

@@ -184,6 +184,7 @@ class PreparedActiveSourceJVP:
         return outputs
 
     def profile(self, values, *, repeats=20, captured=True):
+        """Refresh same-address roots outside device timing, then profile the program."""
         if type(repeats) is not int or not 0 < repeats < 2**31 or type(captured) is not bool:
             raise ValueError("source-active profile options differ")
         roots, outputs, views = self._frame(values)

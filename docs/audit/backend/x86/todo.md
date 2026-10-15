@@ -12,6 +12,11 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
 Synchronization key: W11-ACTIVE-SOURCE-20261015.
 
+PR951 review: shared eager normalization rejects explicitly narrower
+accumulators, matching native admission. This is shared semantic validation;
+the NVIDIA profiling correction does not change this backend's physical ABI
+or establish new exact-device parity.
+
 Follow-up required for public composed package execution. Shared canonical
 matmul output_dtype inference and explicit eager RMSNorm precision apply;
 new generic scalar Tile view bounds are structurally checked, but LLVM helper

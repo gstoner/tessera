@@ -32,7 +32,7 @@ The CUDA owner library was built separately from the integrated runtime sources.
 
 Latest synchronized benchmark compiler SHA256:
 4933ce714af733dfdf8f4bb7eb1461c65ac979852822e5b41741a9f98a246f4a.
-Native owner SHA256:
+Frozen 3659a2b45 native owner SHA256:
 2f51cf156777a470b803fc9ed8c5f3eb3a9396d0802651d49c7ecc8ec99ee689.
 publication-timings.json records raw executable hashes separately from the
 dependency-aware compiler identity, plus the live GPU UUID and source hashes.
@@ -131,3 +131,30 @@ sweep without relabeling it green. The repair changes documentation and audit
 expectations; compiler/runtime/numerical code is unchanged. The fresh frozen
 3659a2b45 run above passes both repaired audits and the complete non-slow suite.
 Publication CI remains required.
+
+
+## PR951 review corrections
+
+Both findings reproduce on the original code/provider: 28 new regression cases
+fail (four narrower eager accumulator policies and 24 in-place root mutations,
+covering FP16/BF16, argument permutations, all three roots and captured/direct
+profiling). review-before.txt retains this counterexample run.
+
+Eager normalization now rejects an explicit accumulator with fewer significand
+bits than storage, matching native policy admission. Source-active profiling
+requires the existing live frame, refreshes all host root contents, and completes
+one warmup invocation before opening event/capture windows. Returned outputs
+reflect in-place mutation; staging/warmup are excluded from device timing.
+The native ABI and compiler images are unchanged.
+
+The integrated native owner was rebuilt from current repository sources.
+All 436 affected policy, source/RHS device, diagnostic and pass-metadata checks
+pass in 55.76 seconds; Ruff passes. review-after.txt retains the test run.
+review-fixed-timings.json records a fresh four-case independent-oracle benchmark
+with the rebuilt provider, keeping same-owner host costs separate from captured
+stage/program events. Its runtime SHA256 is:
+7325c8fd152b817022fa7861591dea269d598254216a04217bad6cb7385c2b51.
+
+The 26,630-pass frozen full-unit certificate above remains scoped to 3659a2b45.
+It does not certify these later review corrections; publication CI must pass
+on the updated PR head.

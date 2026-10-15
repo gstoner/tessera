@@ -11,6 +11,11 @@ last_updated: 2026-10-15
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
 Synchronization key: W11-ACTIVE-SOURCE-20261015.
 
+PR951 review: shared eager normalization rejects explicitly narrower
+accumulators, matching native admission. Source-active profiling refreshes
+same-address host roots and warms up before device timing; 24 owning-device
+mutation regressions pass within the 436-check review gate.
+
 Native static FP16/BF16 source-active RMSNorm (explicit FP32 accumulator) ->
 ReLU -> plain FP32-output matmul JVP executes through the actual traced Graph,
 native AD SSA, sealed two-result Schedule/Tile producer, typed fragments,

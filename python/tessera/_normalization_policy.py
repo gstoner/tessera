@@ -19,6 +19,8 @@ def working_array(value, policy):
         raise ValueError('normalization numeric_policy requires floating accumulation')
     width, bits = precision[storage]
     accum_width, accum_bits = precision[accum]
+    if accum_bits < bits:
+        raise ValueError('normalization accumulator is narrower than storage')
     if accum_bits > bits:
         if accum_width <= width:
             raise ValueError('normalization accumulator cannot be represented by widening storage')

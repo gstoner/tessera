@@ -107,6 +107,9 @@ extern "C" int tessera_nvidia_active_source_program_profile(uint64_t handle,int 
     if (!tensorProgramView(views[i],owner.buffers[i]) || views[i].data!=owner.lastInputs[i].data)
       return bad("active source profiling roots differ from native snapshot");
   if (!tensorProgramOutputs(owner,views+3) || !tensorProgramFrameAliases(views) || !tensorProgramContext(owner)) return 1;
+  // Addresses identify the frame, not immutable contents. Refresh and warm up
+  // all supplied roots before the event/capture windows.
+  if (invokeTensorProgram(owner,views)) return 1;
   bool status=measureLaunches(owner.stream,repeats,bool(captured),[&](){return submitTensorProgram(owner);},programMs);
   if (status) status=submitTensorProgram(owner,repeats,stageMs,bool(captured));
   if (status) status=readTensorProgram(owner,views+3);

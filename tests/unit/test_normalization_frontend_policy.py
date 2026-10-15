@@ -52,3 +52,13 @@ def test_omitted_policy_retains_existing_eager_precision(storage):
     working=x.astype(np.float32)
     expected=(working/np.sqrt(np.mean(working*working,axis=-1,keepdims=True)+1e-5)).astype(storage)
     np.testing.assert_array_equal(ts.ops.rmsnorm(x),expected)
+
+
+@pytest.mark.parametrize('storage,accum',[
+    (np.float16,'bf16'), (np.float32,'fp16'),
+    (np.float32,'bf16'), (np.float64,'fp32'),
+])
+def test_narrower_explicit_accumulator_is_rejected(storage,accum):
+    x=np.ones((2,8),dtype=storage)
+    with pytest.raises(ValueError,match='narrower than storage'):
+        ts.ops.rmsnorm(x,numeric_policy={'accum':accum})

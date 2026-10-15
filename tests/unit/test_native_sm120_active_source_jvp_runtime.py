@@ -349,3 +349,22 @@ def test_producer_preserves_declared_storage_relu_semantics(storage,profile,owni
         else:np.testing.assert_array_equal(primal.view(np.uint16)[1],expected)
         np.testing.assert_array_equal(tangent.view(np.uint16),np.zeros_like(source,dtype=np.uint16))
     finally:fn.close_native_storage()
+
+
+@pytest.mark.parametrize('root_index',[0,1,2])
+@pytest.mark.parametrize('captured',[False,True])
+def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+    fn,original,_,_,_,_,permuted=package
+    roots=tuple(x.copy() for x in original)
+    fn.native_jvp(*roots[:2],tangents=(roots[2],))
+    owner=next(iter(fn._native_prepared_jvp_calls.values()))
+    stats=owner.scratch_stats()
+    pointer=roots[root_index].ctypes.data
+    roots[root_index][...] = roots[root_index]*-0.5+0.25
+    assert roots[root_index].ctypes.data==pointer
+    a,b=(roots[1],roots[0]) if permuted else roots[:2]
+    expected,budgets=oracle(a,b,roots[2])
+    outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+    check(outputs,expected,budgets)
+    assert timing['program_ms']>=0 and all(x>=0 for x in timing['stage_ms'])
+    assert owner.scratch_stats()==stats

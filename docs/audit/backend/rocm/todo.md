@@ -10,6 +10,11 @@ scope: ROCm backend implementation and exact-device proof
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
 Synchronization key: W11-ACTIVE-SOURCE-20261015.
 
+PR951 review: shared eager normalization rejects explicitly narrower
+accumulators, matching native admission. This is shared semantic validation;
+the NVIDIA profiling correction does not change this backend's physical ABI
+or establish new exact-device parity.
+
 Follow-up required independently on gfx1201 and gfx1151. Shared canonical
 matmul output_dtype inference and explicit eager RMSNorm precision apply. The
 new scalar Tile views and two-result row Schedule contract have only an SM120

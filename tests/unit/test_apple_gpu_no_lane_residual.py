@@ -65,7 +65,7 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
     {
         # Explicit ROCm/SM120 packed profiles have no Metal consumer.
         # Owning Apple physical lowering remains a documented follow-up.
-        "scaled_matmul", "nvfp4_requantize", "mxfp4_folded_storage",
+        "scaled_matmul", "nvfp4_requantize", "nvfp4_expand", "mxfp4_folded_storage",
         # Coalition-lattice family (GAME_THEORY_PLAN.md G1): Python reference
         # tier by plan. The Apple GPU lane is a named later phase — G5 puts
         # boltzmann_value on the shipped online-softmax MSL emitter and the

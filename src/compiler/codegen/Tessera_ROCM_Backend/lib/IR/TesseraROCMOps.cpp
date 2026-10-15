@@ -129,3 +129,16 @@ mlir::LogicalResult MXFP4FoldedStorageOp::verify() {
 mlir::LogicalResult StructuredReductionOp::verify() {
   return tessera::verifyStructuredReductionCarrier(getOperation());
 }
+
+mlir::LogicalResult NVFP4ExpandOp::verify() {
+  if (getArch() != "gfx1201")
+    return emitOpError("NVFP4 expansion currently requires gfx1201");
+  if (failed(mlir::tessera_contract::verifyNVFP4ExpandPolicy(
+        getOperation(),getNumericPolicy())) ||
+      failed(mlir::tessera_contract::verifyNVFP4ExpandExtents(
+        getOperation(),getN(),getK(),getRowOffsets())))
+    return mlir::failure();
+  if (getScheduleHash().size() != 64 || getName().empty())
+    return emitOpError("NVFP4 expansion requires a hashed Schedule and entry symbol");
+  return mlir::success();
+}

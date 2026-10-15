@@ -1,0 +1,395 @@
+{
+  "architecture": "gfx1201",
+  "scope": "native GPU-IR rounding microprobe only; not Graph/Schedule or NVFP4 production execution",
+  "source_sha256": "0ecaf5a148bcf411ab2e8a89ca8bcae171ce69024ad282adc4eccce7b69ad5cd",
+  "compiler_sha256": "d3ca49c2182ac8f14b5988469f52d9ab4dffb3accdb90ff49c37ccdbda040803",
+  "mlir_opt_sha256": "62a18523fcec89907cd9b0eade4d5976c549d11f85697089766242406ed1c271",
+  "image_sha256": "36032c962acb4f82dbf3690585f9e709255c5c5dbd1e35e37143302de3fc57bb",
+  "cases": [
+    {
+      "scale": 1.0,
+      "global_value": 0.0,
+      "expected_bits": 0,
+      "native_bits": 0
+    },
+    {
+      "scale": 1.0,
+      "global_value": -0.0,
+      "expected_bits": 2147483648,
+      "native_bits": 2147483648
+    },
+    {
+      "scale": -0.0,
+      "global_value": 1.0,
+      "expected_bits": 2147483648,
+      "native_bits": 2147483648
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 1,
+      "native_bits": 1
+    },
+    {
+      "scale": 0.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 0,
+      "native_bits": 0
+    },
+    {
+      "scale": 1.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 2,
+      "native_bits": 2
+    },
+    {
+      "scale": 2.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 2,
+      "native_bits": 2
+    },
+    {
+      "scale": 3.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 4,
+      "native_bits": 4
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.1754943508222875e-38,
+      "expected_bits": 8388608,
+      "native_bits": 8388608
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.1754942807573643e-38,
+      "expected_bits": 8388608,
+      "native_bits": 8388608
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.1754941406275179e-38,
+      "expected_bits": 8388606,
+      "native_bits": 8388606
+    },
+    {
+      "scale": 1.0,
+      "global_value": 3.4028234663852886e+38,
+      "expected_bits": 2139095039,
+      "native_bits": 2139095039
+    },
+    {
+      "scale": 1.0,
+      "global_value": 3.4028235677973362e+38,
+      "expected_bits": 2139095039,
+      "native_bits": 2139095039
+    },
+    {
+      "scale": 1.0,
+      "global_value": 3.4028235677973366e+38,
+      "expected_bits": 2139095040,
+      "native_bits": 2139095040
+    },
+    {
+      "scale": 1.0,
+      "global_value": -1.401298464324817e-45,
+      "expected_bits": 2147483649,
+      "native_bits": 2147483649
+    },
+    {
+      "scale": 448.0,
+      "global_value": 7.595588094610019e+35,
+      "expected_bits": 2139095039,
+      "native_bits": 2139095039
+    },
+    {
+      "scale": 2.5,
+      "global_value": 1.0000000596046448,
+      "expected_bits": 1075838977,
+      "native_bits": 1075838977
+    },
+    {
+      "scale": 0.5,
+      "global_value": 7.006492321624085e-46,
+      "expected_bits": 0,
+      "native_bits": 0
+    },
+    {
+      "scale": 1.0,
+      "global_value": 0.0,
+      "expected_bits": 0,
+      "native_bits": 0
+    },
+    {
+      "scale": 1.0,
+      "global_value": -0.0,
+      "expected_bits": 2147483648,
+      "native_bits": 2147483648
+    },
+    {
+      "scale": -0.0,
+      "global_value": 1.0,
+      "expected_bits": 2147483648,
+      "native_bits": 2147483648
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 1,
+      "native_bits": 1
+    },
+    {
+      "scale": 0.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 0,
+      "native_bits": 0
+    },
+    {
+      "scale": 1.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 2,
+      "native_bits": 2
+    },
+    {
+      "scale": 2.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 2,
+      "native_bits": 2
+    },
+    {
+      "scale": 3.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 4,
+      "native_bits": 4
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.1754943508222875e-38,
+      "expected_bits": 8388608,
+      "native_bits": 8388608
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.1754942807573643e-38,
+      "expected_bits": 8388608,
+      "native_bits": 8388608
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.1754941406275179e-38,
+      "expected_bits": 8388606,
+      "native_bits": 8388606
+    },
+    {
+      "scale": 1.0,
+      "global_value": 3.4028234663852886e+38,
+      "expected_bits": 2139095039,
+      "native_bits": 2139095039
+    },
+    {
+      "scale": 1.0,
+      "global_value": 3.4028235677973362e+38,
+      "expected_bits": 2139095039,
+      "native_bits": 2139095039
+    },
+    {
+      "scale": 1.0,
+      "global_value": 3.4028235677973366e+38,
+      "expected_bits": 2139095040,
+      "native_bits": 2139095040
+    },
+    {
+      "scale": 1.0,
+      "global_value": -1.401298464324817e-45,
+      "expected_bits": 2147483649,
+      "native_bits": 2147483649
+    },
+    {
+      "scale": 448.0,
+      "global_value": 7.595588094610019e+35,
+      "expected_bits": 2139095039,
+      "native_bits": 2139095039
+    },
+    {
+      "scale": 2.5,
+      "global_value": 1.0000000596046448,
+      "expected_bits": 1075838977,
+      "native_bits": 1075838977
+    },
+    {
+      "scale": 0.5,
+      "global_value": 7.006492321624085e-46,
+      "expected_bits": 0,
+      "native_bits": 0
+    },
+    {
+      "scale": 1.0,
+      "global_value": 0.0,
+      "expected_bits": 0,
+      "native_bits": 0
+    },
+    {
+      "scale": 1.0,
+      "global_value": -0.0,
+      "expected_bits": 2147483648,
+      "native_bits": 2147483648
+    },
+    {
+      "scale": -0.0,
+      "global_value": 1.0,
+      "expected_bits": 2147483648,
+      "native_bits": 2147483648
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 1,
+      "native_bits": 1
+    },
+    {
+      "scale": 0.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 0,
+      "native_bits": 0
+    },
+    {
+      "scale": 1.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 2,
+      "native_bits": 2
+    },
+    {
+      "scale": 2.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 2,
+      "native_bits": 2
+    },
+    {
+      "scale": 3.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 4,
+      "native_bits": 4
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.1754943508222875e-38,
+      "expected_bits": 8388608,
+      "native_bits": 8388608
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.1754942807573643e-38,
+      "expected_bits": 8388608,
+      "native_bits": 8388608
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.1754941406275179e-38,
+      "expected_bits": 8388606,
+      "native_bits": 8388606
+    },
+    {
+      "scale": 1.0,
+      "global_value": 3.4028234663852886e+38,
+      "expected_bits": 2139095039,
+      "native_bits": 2139095039
+    },
+    {
+      "scale": 1.0,
+      "global_value": 3.4028235677973362e+38,
+      "expected_bits": 2139095039,
+      "native_bits": 2139095039
+    },
+    {
+      "scale": 1.0,
+      "global_value": 3.4028235677973366e+38,
+      "expected_bits": 2139095040,
+      "native_bits": 2139095040
+    },
+    {
+      "scale": 1.0,
+      "global_value": -1.401298464324817e-45,
+      "expected_bits": 2147483649,
+      "native_bits": 2147483649
+    },
+    {
+      "scale": 448.0,
+      "global_value": 7.595588094610019e+35,
+      "expected_bits": 2139095039,
+      "native_bits": 2139095039
+    },
+    {
+      "scale": 2.5,
+      "global_value": 1.0000000596046448,
+      "expected_bits": 1075838977,
+      "native_bits": 1075838977
+    },
+    {
+      "scale": 0.5,
+      "global_value": 7.006492321624085e-46,
+      "expected_bits": 0,
+      "native_bits": 0
+    },
+    {
+      "scale": 1.0,
+      "global_value": 0.0,
+      "expected_bits": 0,
+      "native_bits": 0
+    },
+    {
+      "scale": 1.0,
+      "global_value": -0.0,
+      "expected_bits": 2147483648,
+      "native_bits": 2147483648
+    },
+    {
+      "scale": -0.0,
+      "global_value": 1.0,
+      "expected_bits": 2147483648,
+      "native_bits": 2147483648
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 1,
+      "native_bits": 1
+    },
+    {
+      "scale": 0.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 0,
+      "native_bits": 0
+    },
+    {
+      "scale": 1.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 2,
+      "native_bits": 2
+    },
+    {
+      "scale": 2.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 2,
+      "native_bits": 2
+    },
+    {
+      "scale": 3.5,
+      "global_value": 1.401298464324817e-45,
+      "expected_bits": 4,
+      "native_bits": 4
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.1754943508222875e-38,
+      "expected_bits": 8388608,
+      "native_bits": 8388608
+    },
+    {
+      "scale": 1.0,
+      "global_value": 1.1754942807573643e-38,
+      "expected_bits": 8388608,
+      "native_bits": 8388608
+    }
+  ],
+  "mismatch_count": 0
+}

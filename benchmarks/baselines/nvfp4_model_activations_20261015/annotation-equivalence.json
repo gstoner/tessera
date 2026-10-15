@@ -1,0 +1,27 @@
+{
+  "measurement_revision": "eeaebfff6d1431952379ee2aeb2e892ea8f4554d",
+  "scope": "Only typing imports, local annotations and identity typing.cast calls removed for comparison; no numerical or kernel code changes.",
+  "sources": [
+    {
+      "source": "benchmarks/rocm/benchmark_rocm_nvfp4_checkpoint.py",
+      "measurement_sha256": "e43e8a50cefa95e68df6f770fe8c7ff8dd968e1a92679fc5b83d87dabc6db8c1",
+      "final_sha256": "9c6b1a5650eee59ca85625684ca8377d846340fef6f145a7d21ea5539e0416ab",
+      "normalized_ast_sha256": "7b7cc3128863a2abba97a42539e2227640a93835efa87a25567001cb096f6b15",
+      "equivalent": true
+    },
+    {
+      "source": "benchmarks/rocm/benchmark_gfx1201_checkpoint_formats.py",
+      "measurement_sha256": "f183416620bef85ca476903518f7874f42afd3bd4fc806fb036a181d466c2f2c",
+      "final_sha256": "284dca7b5aae9627c42e11b10bcb03b1b2a6dbd2096436b1347c5794960a75fa",
+      "normalized_ast_sha256": "f9b55313310a03f0d99b9a80d15dbb24df8abd89ff34739ad0298fa8b822a968",
+      "equivalent": true
+    },
+    {
+      "source": "benchmarks/rocm/capture_qwen3_layer0_activations.py",
+      "measurement_sha256": "e074978d0875cf7e41b2d6654566f36fe7f5f233949c4e5038e6de6193d34fe2",
+      "final_sha256": "0187f276ff23cc58e8c95ee830d02d8bf9e0d673fd0c4e8c21d81a44a7cd2755",
+      "normalized_ast_sha256": "a5222e632ff05c06b4589572068abcc307e1dd880c2e16b3db1d9d535b43e7a0",
+      "equivalent": true
+    }
+  ]
+}

@@ -1875,6 +1875,7 @@ class JitFn:
         matmul = (target == "nvidia_sm120" and self.differentiation_request is None
                   and (supports_f16_matmul(self.graph_ir) or supports_bf16_matmul(self.graph_ir)))
         from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest, NVFP4_INGEST_ABI
+        from .rocm_nvfp4_expand_native import supports_nvfp4_expansion, NVFP4_EXPAND_ABI
         from .rocm_mxfp4_storage_native import supports_mxfp4_storage, MXFP4_STORAGE_ABI
         from .rocm_native import (
             requests_paged_kv_read, requests_moe_dispatch,
@@ -1892,7 +1893,7 @@ class JitFn:
         from .rocm_typed_scaled_native import requests_typed_scaled
         typed_scaled = target == "rocm_gfx1201" and requests_typed_scaled(self.graph_ir)
         checkpoint = target == "rocm_gfx1201" and (
-            supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
+            supports_nvfp4_expansion(self.graph_ir) or supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
         if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4 and not typed_scaled and not rocm_matmul:
             return _JIT_FALLBACK
         if self.differentiation_request is not None:
@@ -2162,7 +2163,7 @@ class JitFn:
                     or tuple(descriptor.provenance.get("shape",()))!=attention_contract[1]):
                 raise ValueError("attention descriptor differs from its typed frontend contract")
             scalars=dict(zip(scalar_names,(*attention_contract[1], *bias_shape),strict=True))
-        elif descriptor.abi_id not in {NVFP4_INGEST_ABI, MXFP4_STORAGE_ABI} or descriptor.scalars:
+        elif descriptor.abi_id not in {NVFP4_EXPAND_ABI, NVFP4_INGEST_ABI, MXFP4_STORAGE_ABI} or descriptor.scalars:
             raise ValueError("checkpoint compilation did not produce its complete static ABI")
         bindings = sorted(descriptor.buffers, key=lambda item: item.ordinal)
         inputs = [item for item in bindings if item.direction == "input"]
@@ -2217,6 +2218,9 @@ class JitFn:
                 raise ValueError("host tensor call requires fully static output guards")
             dtype = {"uint8": np.uint8, "fp64": np.float64, "fp32": np.float32,
                      **({"fp16": np.float16} if matmul or nvidia_softmax else {})}.get(output.dtype)
+            if dtype is None and descriptor.abi_id == NVFP4_EXPAND_ABI and output.dtype == "fp8_e4m3":
+                import ml_dtypes
+                dtype = ml_dtypes.float8_e4m3fn
             if dtype is None and nvidia_softmax and output.dtype == "bf16":
                 import ml_dtypes
                 dtype = ml_dtypes.bfloat16
@@ -2340,7 +2344,7 @@ class JitFn:
         if not supports_resident_trace(self.graph_ir):
             return _JIT_FALLBACK
         if self.differentiation_request is not None:
-            raise ValueError("resident lossy checkpoint program has no differentiation contract")
+            raise ValueError("resident checkpoint program has no differentiation contract")
         import hashlib
         import numpy as np
         bound=self._rocm_nvfp4_call_signature.bind(*args,**kwargs)
@@ -2410,8 +2414,12 @@ class JitFn:
 
     def native_nvfp4_packages(self):
         program=self._rocm_nvfp4_last_program
-        return () if program is None else (
-            program.native.ingest.native,program.native.storage.native,program.native.consumer.package)
+        if program is None:
+            return ()
+        from .rocm_nvfp4_source_frontend import TracedSourceNVFP4Program
+        if isinstance(program, TracedSourceNVFP4Program):
+            return (program.native.producer.native, program.native.consumer)
+        return (program.native.ingest.native,program.native.storage.native,program.native.consumer.package)
 
 
     def _try_nvidia_lhs_call(self, args, kwargs):
@@ -3650,7 +3658,29 @@ class JitFn:
             ),
         }
         if self._rocm_nvfp4_last_program is not None:
-            target_decision["rocm_gfx1201"] = "canonical_rocm_nvfp4_program; three ordered native packages"
+            target_decision["rocm_gfx1201"] = f"canonical_rocm_nvfp4_program; {len(self.native_nvfp4_packages())} ordered native packages"
+            packages = self.native_nvfp4_packages()
+            receipts = self._rocm_nvfp4_last_receipts
+            if len(receipts) == len(packages) and all(
+                    r.get("ok") and r.get("execution_kind") == "native_gpu" for r in receipts):
+                import json
+                from .rocm_nvfp4_source_frontend import TracedSourceNVFP4Program
+                program = self._rocm_nvfp4_last_program
+                if isinstance(program, TracedSourceNVFP4Program):
+                    schedules: tuple[str, ...] = (program.native.producer.schedule_ir, program.native.consumer_schedule_ir)
+                else:
+                    schedules = (program.native.ingest.schedule_ir, program.native.storage.schedule_ir,
+                                 program.native.consumer.schedule_ir)
+                ir_hashes = {"graph_ir": _cr.hash_ir_text(program.graph_ir)}
+                for layer, values in (
+                    ("schedule_ir", [_cr.hash_ir_text(s) for s in schedules]),
+                    ("tile_ir", [_cr.hash_ir_text(p.tile_ir) for p in packages]),
+                    ("target_ir", [p.image.target_ir_digest for p in packages]),
+                ):
+                    ir_hashes[layer] = _cr.hash_ir_text(json.dumps(values, separators=(",", ":")))
+                plan_hash = self.runtime_artifact().artifact_hash
+                target_decision["rocm_gfx1201"] += "; native_packages.executable=True; stage_hashes=ordered"
+
         if self._nvidia_lhs_last_program is not None:
             target_decision["nvidia_sm120"] = "canonical_nvidia_lhs_program; ordered checked native packages"
             receipts = self._nvidia_lhs_last_receipts

@@ -357,6 +357,7 @@ _SPECS = [
     OpSpec("quantize_fp4", "tessera.quantize_fp4", 1, 1, lowering="quantize"),
     OpSpec("dequantize_fp4", "tessera.dequantize_fp4", 2, 2, lowering="quantize"),
     OpSpec("quantize_nvfp4", "tessera.quantize_nvfp4", 1, 1, lowering="quantize"),
+    OpSpec("nvfp4_expand", "tessera.nvfp4_expand", 3, 3, lowering="quantize", shape_rule="nvfp4_expand"),
     OpSpec("nvfp4_requantize", "tessera.nvfp4_requantize", 3, 3, lowering="quantize", shape_rule="nvfp4_requantize"),
     OpSpec("mxfp4_folded_storage", "tessera.mxfp4_folded_storage", 2, 2, lowering="layout_transform", shape_rule="mxfp4_folded_storage"),
     OpSpec("dequantize_nvfp4", "tessera.dequantize_nvfp4", 2, 2, lowering="quantize"),
@@ -1129,6 +1130,7 @@ COMPUTE_FLOAT_DTYPE = "fp32"
 #: The declared vocabulary. `graph_ir` implements each name; a rule named here
 #: with no implementation (or vice versa) is a drift-gated error.
 SHAPE_RULE_NAMES = frozenset({
+    "nvfp4_expand",
     "nvfp4_requantize",
     "mxfp4_folded_storage",
     "scaled_matmul",

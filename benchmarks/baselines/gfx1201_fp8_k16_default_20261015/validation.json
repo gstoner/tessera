@@ -1,0 +1,66 @@
+{
+  "schema": "tessera.gfx1201.k16_native_default_validation.v1",
+  "measurement_revision": "92a1fcc02401e9677867c81e162b7f5d49e7d0ba",
+  "native_compiler_source_revision": "8873a4b64badcfa205d6702779823999656bba05",
+  "source_sha256": {
+    "benchmarks/baselines/gfx1201_fp8_k16_default_20261015/probe.py": "a2d7161fd81fb399c40a704aca5f81608f44c14ddc3f6f28dbb1fd7633570719",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "378f52f073dac798fc39b567c20478a155c3c060a5848656de77ea3c4e756282",
+    "python/tessera/compiler/rocm_fp8_blockscale.py": "430a298fe4c84942eef535d169c1a4e723bc4289d92b9ebee0238f5d03969fca"
+  },
+  "binary_sha256": {
+    "TESSERA_OPT": "d3ca49c2182ac8f14b5988469f52d9ab4dffb3accdb90ff49c37ccdbda040803",
+    "TESSERA_ROCM_OPT": "8c726af6384c0d323b108ea0eae2726d4ab66f2692af72806a57f9208cc9d455",
+    "TESSERA_ROCM_NATIVE_IMAGE_LIB": "d0b0a6eac32e58d812b9c78ac3c972c82a03cc75976b2673652b26d68fed5045",
+    "TESSERA_ROCM_NATIVE_MOVEMENT_LIB": "0b539c63f8163057d37f9e7584bd86dd76080a9c5ded7fce52ec022381799eeb"
+  },
+  "gates": {
+    "compiler_red": {
+      "failed": 3,
+      "passed": 5
+    },
+    "compiler_and_drift_green": 431,
+    "existing_device_controls": 102,
+    "filtered_device_cases": 16,
+    "new_unique_device_cases": 12,
+    "filtered_overlap_with_existing": 4,
+    "diagnostic_native_rows": 3,
+    "legacy_byte_identical_profiles": [
+      "K32",
+      "K128"
+    ],
+    "final_delivery": 27,
+    "generated_docs": 33,
+    "ruff": "passed",
+    "graphify": "AST refresh complete; archival warnings retained"
+  },
+  "scope": {
+    "native_fix": "implicit register panel choice only; explicit divisibility checks remain",
+    "consumer": "native FP8 Graph/Schedule/Tile/Target/LLVM/HSACO",
+    "expansion": "host-side diagnostic only, synthetic binary-exact globals",
+    "native_nvfp4_expansion": "open",
+    "model_quality_acceptance": "open",
+    "selector_promotion": false,
+    "sibling_backends": "queue assessment only; no new physical claims"
+  },
+  "evidence_sha256": {
+    "630996baf332a5704ac8dbdce57150cd7fe121414266c1179e27fd42c79429e1.s.xz": "e1d2d1fd27ac4fe0d0a4125f468e16db43ee79661b60843d9162c650a62275af",
+    "8a2032a84742f4cf59c18f0fa03aa99f6f6756d1e6ca6f1af6a4a2c064baae63.s.xz": "de78f2f128bf20c92050aba6260e01897d3eeba03cccf1a37d48e14f0bc99c59",
+    "README.md": "0e9b45ec572a25e4b8d73b41352e4707f0af6fbc89fe2e5f85a134a80fd5805e",
+    "build.txt.xz": "e9c7abe787dc612609eed1845ab95d344bbf7a2316b37f034d0390791452e53d",
+    "claims.txt": "bf5d4cc729d2f06fb82724680faf43ff5f4cc73c5b1e461c791adc0ca27049b1",
+    "compiler-green.txt": "5014cbbc1cb46ed973fab142a3ccee0d5fd28d7095e3f09359b8209867433abc",
+    "compiler-red.txt": "e8ceecdf25fc5f86ff294b8e9e09df558156ccfffd6db84f7bf7a9ad24379e2f",
+    "delivery-tests.txt": "bb61f10ab6968ea96bfb3ef2b3575dee72babe212f32c0f1feb4909536f45c66",
+    "e8c2cfdfdcbd54871e8543f4b49a086ddfbc0486f7979e27b0c5df4fcacb1376.s.xz": "197f64a10ddacea8a2ac2377f24d117a9fc47b3bca2efc7eba0425c268e15a99",
+    "existing-device-controls.txt": "a922343fcfda778a7931ae11c3a8b4413201d09d9fd4754d242e085a374e8803",
+    "generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "graphify.txt": "e6742e72d4ca9bc3968208c770e4e645332303ecae13ac93ecffc6ee2370dae9",
+    "legacy-image-identity.json": "57f345418d5c00b9da7dedf9c0a7877ac446574b60d6c3127e871975ec8fdba8",
+    "odd-device-cases.txt": "7e63e63f312e14b4e70a77d991fbe2da14d67ccf25bb8e4804212fdff535e882",
+    "plan.txt": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+    "probe.py": "a2d7161fd81fb399c40a704aca5f81608f44c14ddc3f6f28dbb1fd7633570719",
+    "ruff.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "source-k16-control.json": "bb0ffada8ee1d375c76f95cba0375e64a4f70b70beb2955f714c8a2c1a3748cd",
+    "source-k16-control.txt": "34386105b1e3c587181f4fd6cde988bcf8f72a2916e0c632256808561d6dc212"
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "schema": "tessera.rocm.native_multi_output_owner.diagnostic.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "shape_mnk": [
+    19,
+    17,
+    48
+  ],
+  "correctness": "independent_nibble_oracle_before_and_after_timing",
+  "max_abs_error": 0.0,
+  "no_intermediate_host_transfer": true,
+  "public_jit_composition": false,
+  "import_once_execution": false,
+  "compiler_sha256": "3958d87d982485537ffb13ec8e8357c2c94e6270ff2b62c102bdf055b1db929a",
+  "provider_sha256": "de758b6adcc89762ef3b7f96f47a9e08be1bd64c0d4470c3aad048c7bce22106",
+  "plan_sha256": "521c9895e605e33481a0c539153ee6660f2be575e998207f9506759c92949b5e",
+  "source_graph_sha256": "29b890ae9d309450058142efe5e630e331eea4adf035afe2617bbcc77e70d861",
+  "image_payload_sha256": [
+    "014ae11c40660e630f232fe397747395b96c77ec8a7818ad8191247187434f7e",
+    "6aa9054c3f345f0f7a9831b2fe0fd98dd004927cd3ec791c63b8e761b41d4919"
+  ],
+  "member_event_graph_dispatch_samples_ms": [
+    [
+      0.003966756630688906,
+      0.006372366566210985
+    ],
+    [
+      0.0039611272513866425,
+      0.006372915115207434
+    ],
+    [
+      0.003925289027392864,
+      0.006376825738698244
+    ]
+  ],
+  "member_event_graph_dispatch_median_ms": [
+    0.0039611272513866425,
+    0.006372915115207434
+  ],
+  "member_repeats": 4096,
+  "completed_native_invoke_samples_ms": [
+    0.428317,
+    0.490927,
+    0.459777
+  ],
+  "completed_native_invoke_median_ms": 0.459777,
+  "timing_scope": "per-member captured HIP graphs; native invoke excludes prepare/uploads/readback"
+}

@@ -135,6 +135,41 @@ Evidence: benchmarks/baselines/sm120_relu_flat_20261015/README.md;
 docs/spec/ir/sm120_activation_schedule_tile_contract.md.
 No default performance promotion or five-slice closure claim.
 
+## NVFP4-NATIVE-MULTI-OUTPUT-20261015 — native producer/product ownership
+
+Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+
+Ordinary static FP32 JIT and compiler-free serialized replay now execute the
+same native two-stage program, including fresh-process replay and changed
+weight contents on warm calls. Compile reports retain ordered Schedule/Tile/
+Target fingerprints. The parent artifact must name exact gfx1201 before
+provider access. Original pinned Qwen3 gate/up weights with captured M256
+inputs pass the independent FP32 arithmetic bound; all three execution modes
+produce identical bytes. This is a layer-0 projection gate, not full-model
+quality acceptance. Prepared import-once execution remains the efficient
+explicit ownership API; the full frame exceeds the 128 MiB idle-cache budget.
+Evidence: benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md.
+
+Prepared execution now consumes the native two-stage manifest through the
+additive multi-result owner. Normal Python capture, FP32/BF16 output and
+permuted-root device tests pass. Native partial-root updates invalidate
+transitive dependents; consumer-only execution checks readiness before launch.
+Import-once weights stay resident across activation-only updates. Original
+single-result ABI/public primal/JVP regressions pass with the new provider.
+Matched synthetic timing separates stage graph dispatch, native enqueue/event
+and completed update/invoke/read. Broader shapes/composition, bounded frames and model-quality acceptance
+remain open; the named static public/checkpoint gate is recorded above. This does not promote a physical schedule.
+Native MLIR outlines source-preserving expansion and the exact K16 FP8
+product from actual Graph SSA, retaining original roles and two private
+producer results. Schema v3 is static source-preserving expansion; v1 lossy
+static and v2 lossy bounded semantics remain unchanged. An additive multi-result
+HIP preparation ABI independently derives all lifetimes. Diagnostic gfx1201
+execution passes ragged K16/K48/K80 cases without intermediate host transfers.
+Bounded source-preserving frames, wider model-quality acceptance and
+performance promotion remain follow-up required. gfx1151 receives no FP8 WMMA admission.
+Evidence: benchmarks/baselines/rocm_native_multi_output_20261015/README.md.
+
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 
@@ -616,6 +651,39 @@ Parity validated for this gfx1201 continuous FP32 chain and forward derivative. 
 
 
 
+## NVFP4-CHECKPOINT-K16-20261015 — source-preserving consumer control
+
+Owner ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Synchronization key: NVFP4-CHECKPOINT-K16-20261015.
+Captured-input source/checkpoint identities match the earlier FP8/MXFP8/MXFP4 packet. Host expansion retains K16 source weights with only FP32 scale rounding; it is diagnostic, not a new production NVFP4 decoder. Owning RX9070XT/gfx1201 parity validated for two native LDS K16 consumers: M128/M256 share one image, zero arithmetic-bound violations, source native RMS 6.23% at M256 and separate 1.332 ms device-dispatch / 19.896 ms host timing. The native source-preserving producer and resident composition remain follow-up required.
+Full-model quality acceptance, native packed transport and strategy promotion remain open; the cross-packet quality characterization is not a controlled timing A/B.
+Evidence: benchmarks/baselines/nvfp4_checkpoint_k16_20261015/README.md.
+
+## ROCM-K16-SCALE-GROUPS-20261015 — legal native group defaults
+
+Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-NVFP4-INGEST-1.
+Synchronization key: ROCM-K16-SCALE-GROUPS-20261015.
+Implicit native register defaults now use one panel for odd K16 instruction groups; explicit divisibility checks remain. Existing K32/K128 Tile/Target/HSACO images are byte-identical to the reference. Parity validated on owning gfx1201: 431 focused guards, 102 existing device controls, and 16 filtered cases (12 new, four overlapping controls) pass. Three synthetic source-preserving K16 FP8 controls pass separate graph-dispatch/host timing checks. gfx1151 has no FP8 WMMA and is not admitted by this change.
+Native NVFP4 expansion, packed transport and model-quality acceptance remain follow-up required. The host expansion control is diagnostic only.
+Evidence: benchmarks/baselines/gfx1201_fp8_k16_default_20261015/README.md.
+
+## NVFP4-MODEL-ACTIVATIONS-20261015 — captured-input quality evidence
+
+Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6.
+Synchronization key: NVFP4-MODEL-ACTIVATIONS-20261015.
+The optional CPU reference captures pinned BF16 Qwen3 layer-0 MLP inputs;
+all executed parameters are loaded and repeat capture is bitwise identical.
+The benchmark validates capture bytes/provenance before GPU/network work and
+now verifies exact HTTP Content-Range identity. 45 source/input guards pass.
+Identical captured inputs drive 18 native gfx1201 FP8/MXFP8/MXFP4 arms.
+Decoded-weight projection RMS at M256 is 6.08% shipped NVFP4, 7.42% direct
+MXFP4 and 9.74% after ingest, against the selected BF16 checkpoint. These
+are projection proxies, not full-model accuracy or NVIDIA execution proof.
+The two source tensor identities match the older checkpoint controls.
+Evidence: benchmarks/baselines/nvfp4_model_activations_20261015/README.md.
+
+Parity validated on RX9070XT/gfx1201 for native ingest and all 18 physical format arms, with independent numerical bounds and separate resident-event/host regions. The converter returns bitwise reference codes/exponents and bounded f64 loss statistics. Full-model/representative-corpus quality acceptance and wider dynamic/layout/composition remain follow-up required; no selector/default promotion. ISA artifacts deduplicate losslessly from 18 files to seven images.
+
 ## ROCM-NVFP4-SOURCE-MIDPOINTS-20261009
 
 Owner ROCM-NVFP4-INGEST-1. Native MLIR compares absolute source values against
@@ -753,9 +821,9 @@ No image, kernel, dtype, operation or ABI changes are introduced.
 
 ## Current actions — five-slice integration
 
-Current as of 2026-10-14. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
+Current as of 2026-10-15. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
 
-ROCM-NVFP4-INGEST-1: model-quality acceptance and wider dynamic/layout/AD envelopes. ROCM-FP8-BLOCKSCALE-1: broader W8A8 short/ragged-K and MXFP4 M256 attribution. E2E-REAL-6: general paged-KV layouts, launch overhead and wider cache families. gfx1151/gfx1201 unary, matmul and native-math warm package reuse have owning-host proof; remaining cache families need per-envelope evidence.
+ROCM-NVFP4-INGEST-1: captured BF16-model input projection evidence now supplements the synthetic controls; representative-corpus/full-model quality acceptance and wider dynamic/layout/AD envelopes remain open. ROCM-FP8-BLOCKSCALE-1: broader W8A8 short/ragged-K and MXFP4 M256 attribution. E2E-REAL-6: general paged-KV layouts, launch overhead and wider cache families. gfx1151/gfx1201 unary, matmul and native-math warm package reuse have owning-host proof; remaining cache families need per-envelope evidence.
 
 Named gfx1201 leading/scalar primal, scale JVP/VJP, transposed A and partial K32 groups are proved. Actual-image packaging and bounded version-query reuse are proved in recorded envelopes; they are not pending builds.
 
@@ -765,9 +833,10 @@ batching/transpose suite failures are superseded by the source-bound
 26,072-pass, 7,568-skip full WSL result in
 benchmarks/baselines/native_encoded_scaled_gate_20261014/host-full-unit.txt.
 That receipt does not validate later changes or establish generic capability
-closure. The current FP8 Target/image/public-route candidate still requires
-its own terminal broad result, final documentation/Graphify gates and
-reviewable PR delivery.
+closure. The FP8 Target/image/public-route a21c24725 candidate has successful
+reported non-skipped CI, including unit, compiler-route, audit and the required
+fan-in. PR948 remains open pending merge. This later model-input quality
+slice has separate source/device receipts and still requires focused delivery.
 
 Evidence ledger: ../../compiler/FIVE_SLICE_STATUS_20261007.md. Superseded active notes: archive/compiler_slice_integration_checkpoints_20261007.md.
 
@@ -17525,3 +17594,19 @@ Parity validated (host-free hook behaviour): on Tajasarus (gfx1201) and Princess
 Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Shared change: `@jit(target=<native>)` now raises `JIT_UNLOWERED_OP_NATIVE_TARGET` at decoration when the body calls a `tessera.ops` callable the AST Graph IR front end dropped (no `op_catalog` OpSpec, or a spelling it does not resolve). Before, the call left an empty `func.func` body, the effect joined to `top` so no tracer captured it, and `JitFn.__call__` returned eager numpy with `last_fallback_reason` None and no artifact. The dropped spellings ride on `GraphIRModule.frontend_unlowered_calls` so the refusal survives Graph IR cache hits; resolution is by object identity, so aliases count. No target and `target="cpu"` keep the eager reference path. Non-`tessera.ops` calls (numpy, user helpers) are out of scope and still fall back eagerly: recorded follow-up, not closed. Test: `tests/unit/test_jit_unlowered_op_native_target.py`.
 
 ROCm: `target="rocm"` refuses, and a verifier failure caused by a dropped call nested under a catalogued op is now reported as the dropped op instead of `GRAPH_IR_UNRESOLVED_OPERAND`. Not run on gfx1151 or gfx1201. Follow-up required: one sweep per ROCm box to confirm no lane relied on the eager fallback.
+
+
+## NVFP4-NATIVE-EXPAND-20261015
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+
+Implementation in progress for gfx1201: the new semantic operation has a strict K16, two-result Graph contract and native Schedule/Tile/ROCm GPU lowering. Codes preserve signed zero; the scale policy declares one f64-product-to-f32 rounding. The checked standalone five-buffer package now passes bitwise owning-device output/rounding tests and producer-only graph/host timing. Public JIT, serialized replay (including a fresh process without compiler tools), and pinned checkpoint expansion are now bitwise device-proved. Resident producer/consumer composition and representative model-quality gates remain open. Evidence: benchmarks/baselines/gfx1201_nvfp4_native_expand_20261015/README.md. gfx1151 has no physical producer or transferred evidence.
+
+
+## NVFP4-PUBLIC-EXPAND-20261015
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+
+Exact gfx1201 public @jit and serialized replay now execute the two-result expansion without eager arithmetic. Pinned checkpoint gate/up and synthetic K16/K48/K80 outputs are bitwise checked; host and device timing remain separate. Capability readiness is restricted to the named packed-byte ingress. Next: multi-output SSA ownership in the native HIP owner and a compiled resident K16 matmul chain. Existing gfx1151 and unrelated cache/schedule obligations remain open.
+
+Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.

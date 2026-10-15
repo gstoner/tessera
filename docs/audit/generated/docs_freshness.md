@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-15**.
 
 ## Headline
 
-- **165** docs catalogued across the canonical doc tree.
-- **163** carry a `last_updated:` marker; **2** are undated (invisible to the freshness audit until tagged).
-- **33** updated within the last 30 days.
+- **166** docs catalogued across the canonical doc tree.
+- **164** carry a `last_updated:` marker; **2** are undated (invisible to the freshness audit until tagged).
+- **35** updated within the last 30 days.
 - **67** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -40,7 +40,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `MEMORY_MODEL_SPEC.md` | Normative | 2026-05-22 | 146 | ✓ |
 | `NATIVE_ARTIFACT_SPEC.md` | Normative | 2026-07-19 | 88 | ✓ |
 | `PRODUCTION_COMPILER_PLAN.md` | Ratified | 2026-06-05 | 132 | ✓ |
-| `PYTHON_API_SPEC.md` | Normative | 2026-07-23 | 84 | ✓ |
+| `PYTHON_API_SPEC.md` | Normative | 2026-10-15 | 0 | ✓ |
 | `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 89 | ✓ |
 | `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 146 | ✓ |
 | `TARGET_IR_SPEC.md` | Normative | 2026-08-24 | 52 | ✓ |
@@ -48,6 +48,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `VALIDATION_SPINE.md` | Normative | 2026-08-02 | 74 | ✓ |
 | `VALUE_TARGET_IR_CONTRACT.md` | Normative | 2026-06-04 | 133 | ✓ |
 | `ir/normalization_ad_accumulator_policy.md` | - | 2026-10-15 | 0 | ✓ |
+| `ir/rocm_nvfp4_source_preserving_program.md` | - | 2026-10-15 | 0 | ✓ |
 | `ir/sm120_activation_schedule_tile_contract.md` | - | 2026-10-15 | 0 | ✓ |
 | `ir/sm120_paired_tensor_program_contract.md` | - | 2026-10-15 | 0 | ✓ |
 | `ir/source_active_row_jvp.md` | - | _undated_ | - | _body_ |

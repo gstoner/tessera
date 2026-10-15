@@ -1,0 +1,127 @@
+FFF.....                                                                 [100%]
+=================================== FAILURES ===================================
+____________ test_implicit_panels_fit_an_odd_instruction_group[16] _____________
+
+scale_k = 16
+
+    @pytest.mark.compiler_route
+    @pytest.mark.parametrize("scale_k", [16, 48, 80])
+    def test_implicit_panels_fit_an_odd_instruction_group(scale_k):
+>       automatic = _kernel(scale_k)
+                    ^^^^^^^^^^^^^^^^
+
+tests/unit/test_rocm_scale_group_default.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_rocm_scale_group_default.py:27: in _kernel
+    return run_tessera_opt(tool, tile, "--generate-wmma-gemm-kernel=" + options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/nvfp4-model-quality-20261015/measurement-tools/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  func.func @w8a8_blockscale(%arg0: tensor<7...ufferization.to_tensor %alloc : memref<7x19xbf16> to tensor<7x19xbf16>\n    return %14 : tensor<7x19xbf16>\n  }\n}\n\n'
+option = '--generate-wmma-gemm-kernel=via-tile=true'
+
+    def run_tessera_opt(tool: Path, source: str, option: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", option],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                f"scheduled compiler boundary {option} failed: "
+                + (result.stderr.strip() or str(result.returncode))
+            )
+E           RuntimeError: scheduled compiler boundary --generate-wmma-gemm-kernel=via-tile=true failed: <stdin>:26:5: error: ROCM_FP8_BLOCKSCALE_CONTRACT: scale-group-panels=2 must divide the group's 1 instruction panels
+E               tile.scaled_matmul_kernel %2, %5, %8, %11, %13, %c7_i64, %c19_i64, %c32_i64 {epilogue = #tile.epilogue<bias = false, activation = "none", output = "bf16">, mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1, scale_k = 16, scale_fmt = "fp32">, numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}, partial_accumulator = {combine = "scale_outer_product_then_add", cross_step_motion = "forbid", init = "zero", instruction_steps = 1 : i64, schedule_scope = "scale_group", scope = "scale_group"}, physical_contract = "rocm_fp8_w8a8_blockscale_nk_v1", staging = "global", tessera.canonical_k_loop = true, tessera.macro_tile_m = 16 : i64, tessera.macro_tile_n = 16 : i64, tessera.pipeline_depth = 1 : i64, tessera.problem_k = 32 : i64, tessera.problem_m = 7 : i64, tessera.problem_n = 19 : i64, tessera.raster_group = 1 : i64, tessera.raster_order = "row_major", tessera.scale_block_n = 1 : i64, tessera.schedule_hash = "6412c74efcf0489cce8f14fa041a47a441b117fa3f9f13288f2af6a8f6fb6348", tessera.tile_k = 16 : i64, tessera.tile_m = 16 : i64, tessera.tile_n = 16 : i64, warps = 1 : i64} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+E               ^
+E           <stdin>:26:5: note: see current operation: "tile.scaled_matmul_kernel"(%3, %7, %11, %15, %19, %20, %21, %22) {epilogue = #tile.epilogue<bias = false, activation = "none", output = "bf16">, mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1, scale_k = 16, scale_fmt = "fp32">, numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}, partial_accumulator = {combine = "scale_outer_product_then_add", cross_step_motion = "forbid", init = "zero", instruction_steps = 1 : i64, schedule_scope = "scale_group", scope = "scale_group"}, physical_contract = "rocm_fp8_w8a8_blockscale_nk_v1", staging = "global", tessera.canonical_k_loop = true, tessera.macro_tile_m = 16 : i64, tessera.macro_tile_n = 16 : i64, tessera.pipeline_depth = 1 : i64, tessera.problem_k = 32 : i64, tessera.problem_m = 7 : i64, tessera.problem_n = 19 : i64, tessera.raster_group = 1 : i64, tessera.raster_order = "row_major", tessera.scale_block_n = 1 : i64, tessera.schedule_hash = "6412c74efcf0489cce8f14fa041a47a441b117fa3f9f13288f2af6a8f6fb6348", tessera.tile_k = 16 : i64, tessera.tile_m = 16 : i64, tessera.tile_n = 16 : i64, warps = 1 : i64} : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64) -> ()
+
+python/tessera/compiler/scheduled_matmul.py:1044: RuntimeError
+____________ test_implicit_panels_fit_an_odd_instruction_group[48] _____________
+
+scale_k = 48
+
+    @pytest.mark.compiler_route
+    @pytest.mark.parametrize("scale_k", [16, 48, 80])
+    def test_implicit_panels_fit_an_odd_instruction_group(scale_k):
+>       automatic = _kernel(scale_k)
+                    ^^^^^^^^^^^^^^^^
+
+tests/unit/test_rocm_scale_group_default.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_rocm_scale_group_default.py:27: in _kernel
+    return run_tessera_opt(tool, tile, "--generate-wmma-gemm-kernel=" + options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/nvfp4-model-quality-20261015/measurement-tools/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  func.func @w8a8_blockscale(%arg0: tensor<7...ufferization.to_tensor %alloc : memref<7x19xbf16> to tensor<7x19xbf16>\n    return %14 : tensor<7x19xbf16>\n  }\n}\n\n'
+option = '--generate-wmma-gemm-kernel=via-tile=true'
+
+    def run_tessera_opt(tool: Path, source: str, option: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", option],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                f"scheduled compiler boundary {option} failed: "
+                + (result.stderr.strip() or str(result.returncode))
+            )
+E           RuntimeError: scheduled compiler boundary --generate-wmma-gemm-kernel=via-tile=true failed: <stdin>:26:5: error: ROCM_FP8_BLOCKSCALE_CONTRACT: scale-group-panels=2 must divide the group's 3 instruction panels
+E               tile.scaled_matmul_kernel %2, %5, %8, %11, %13, %c7_i64, %c19_i64, %c96_i64 {epilogue = #tile.epilogue<bias = false, activation = "none", output = "bf16">, mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 3, scale_k = 48, scale_fmt = "fp32">, numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}, partial_accumulator = {combine = "scale_outer_product_then_add", cross_step_motion = "forbid", init = "zero", instruction_steps = 3 : i64, schedule_scope = "scale_group", scope = "scale_group"}, physical_contract = "rocm_fp8_w8a8_blockscale_nk_v1", staging = "global", tessera.canonical_k_loop = true, tessera.macro_tile_m = 16 : i64, tessera.macro_tile_n = 16 : i64, tessera.pipeline_depth = 1 : i64, tessera.problem_k = 96 : i64, tessera.problem_m = 7 : i64, tessera.problem_n = 19 : i64, tessera.raster_group = 1 : i64, tessera.raster_order = "row_major", tessera.scale_block_n = 1 : i64, tessera.schedule_hash = "4d497cc39b7b34a3fce7edfb934293c287ac215be5b79b1f921b4479fb2659e6", tessera.tile_k = 16 : i64, tessera.tile_m = 16 : i64, tessera.tile_n = 16 : i64, warps = 1 : i64} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+E               ^
+E           <stdin>:26:5: note: see current operation: "tile.scaled_matmul_kernel"(%3, %7, %11, %15, %19, %20, %21, %22) {epilogue = #tile.epilogue<bias = false, activation = "none", output = "bf16">, mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 3, scale_k = 48, scale_fmt = "fp32">, numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}, partial_accumulator = {combine = "scale_outer_product_then_add", cross_step_motion = "forbid", init = "zero", instruction_steps = 3 : i64, schedule_scope = "scale_group", scope = "scale_group"}, physical_contract = "rocm_fp8_w8a8_blockscale_nk_v1", staging = "global", tessera.canonical_k_loop = true, tessera.macro_tile_m = 16 : i64, tessera.macro_tile_n = 16 : i64, tessera.pipeline_depth = 1 : i64, tessera.problem_k = 96 : i64, tessera.problem_m = 7 : i64, tessera.problem_n = 19 : i64, tessera.raster_group = 1 : i64, tessera.raster_order = "row_major", tessera.scale_block_n = 1 : i64, tessera.schedule_hash = "4d497cc39b7b34a3fce7edfb934293c287ac215be5b79b1f921b4479fb2659e6", tessera.tile_k = 16 : i64, tessera.tile_m = 16 : i64, tessera.tile_n = 16 : i64, warps = 1 : i64} : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64) -> ()
+
+python/tessera/compiler/scheduled_matmul.py:1044: RuntimeError
+____________ test_implicit_panels_fit_an_odd_instruction_group[80] _____________
+
+scale_k = 80
+
+    @pytest.mark.compiler_route
+    @pytest.mark.parametrize("scale_k", [16, 48, 80])
+    def test_implicit_panels_fit_an_odd_instruction_group(scale_k):
+>       automatic = _kernel(scale_k)
+                    ^^^^^^^^^^^^^^^^
+
+tests/unit/test_rocm_scale_group_default.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_rocm_scale_group_default.py:27: in _kernel
+    return run_tessera_opt(tool, tile, "--generate-wmma-gemm-kernel=" + options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/nvfp4-model-quality-20261015/measurement-tools/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  func.func @w8a8_blockscale(%arg0: tensor<7...ufferization.to_tensor %alloc : memref<7x19xbf16> to tensor<7x19xbf16>\n    return %14 : tensor<7x19xbf16>\n  }\n}\n\n'
+option = '--generate-wmma-gemm-kernel=via-tile=true'
+
+    def run_tessera_opt(tool: Path, source: str, option: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", option],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                f"scheduled compiler boundary {option} failed: "
+                + (result.stderr.strip() or str(result.returncode))
+            )
+E           RuntimeError: scheduled compiler boundary --generate-wmma-gemm-kernel=via-tile=true failed: <stdin>:26:5: error: ROCM_FP8_BLOCKSCALE_CONTRACT: scale-group-panels=2 must divide the group's 5 instruction panels
+E               tile.scaled_matmul_kernel %2, %5, %8, %11, %13, %c7_i64, %c19_i64, %c160_i64 {epilogue = #tile.epilogue<bias = false, activation = "none", output = "bf16">, mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 5, scale_k = 80, scale_fmt = "fp32">, numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}, partial_accumulator = {combine = "scale_outer_product_then_add", cross_step_motion = "forbid", init = "zero", instruction_steps = 5 : i64, schedule_scope = "scale_group", scope = "scale_group"}, physical_contract = "rocm_fp8_w8a8_blockscale_nk_v1", staging = "global", tessera.canonical_k_loop = true, tessera.macro_tile_m = 16 : i64, tessera.macro_tile_n = 16 : i64, tessera.pipeline_depth = 1 : i64, tessera.problem_k = 160 : i64, tessera.problem_m = 7 : i64, tessera.problem_n = 19 : i64, tessera.raster_group = 1 : i64, tessera.raster_order = "row_major", tessera.scale_block_n = 1 : i64, tessera.schedule_hash = "b2ad5dd5b32bf41b00c700baa86c3e58ef0dd0b2bc091beabe48f51043b51e61", tessera.tile_k = 16 : i64, tessera.tile_m = 16 : i64, tessera.tile_n = 16 : i64, warps = 1 : i64} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+E               ^
+E           <stdin>:26:5: note: see current operation: "tile.scaled_matmul_kernel"(%3, %7, %11, %15, %19, %20, %21, %22) {epilogue = #tile.epilogue<bias = false, activation = "none", output = "bf16">, mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 5, scale_k = 80, scale_fmt = "fp32">, numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}, partial_accumulator = {combine = "scale_outer_product_then_add", cross_step_motion = "forbid", init = "zero", instruction_steps = 5 : i64, schedule_scope = "scale_group", scope = "scale_group"}, physical_contract = "rocm_fp8_w8a8_blockscale_nk_v1", staging = "global", tessera.canonical_k_loop = true, tessera.macro_tile_m = 16 : i64, tessera.macro_tile_n = 16 : i64, tessera.pipeline_depth = 1 : i64, tessera.problem_k = 160 : i64, tessera.problem_m = 7 : i64, tessera.problem_n = 19 : i64, tessera.raster_group = 1 : i64, tessera.raster_order = "row_major", tessera.scale_block_n = 1 : i64, tessera.schedule_hash = "b2ad5dd5b32bf41b00c700baa86c3e58ef0dd0b2bc091beabe48f51043b51e61", tessera.tile_k = 16 : i64, tessera.tile_m = 16 : i64, tessera.tile_n = 16 : i64, warps = 1 : i64} : (!llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64) -> ()
+
+python/tessera/compiler/scheduled_matmul.py:1044: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_rocm_scale_group_default.py::test_implicit_panels_fit_an_odd_instruction_group[16]
+FAILED tests/unit/test_rocm_scale_group_default.py::test_implicit_panels_fit_an_odd_instruction_group[48]
+FAILED tests/unit/test_rocm_scale_group_default.py::test_implicit_panels_fit_an_odd_instruction_group[80]
+3 failed, 5 passed in 0.70s

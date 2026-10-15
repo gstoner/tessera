@@ -1,0 +1,169 @@
+{
+  "schema": "tessera.lossless_isa_index.v1",
+  "normalization": "Only the temporary object-file pathname header changes; original bytes reconstruct exactly.",
+  "packet_sha256": "cf06b907787e72fb8081f10e06ddf8d1246aeb4375722004c19bc8165a3022c8",
+  "entries": [
+    {
+      "original_file": "quality-formats_128_24576_4096_fp8_k128_n128.s",
+      "original_sha256": "4cefc7b1fc9f832e64940b4ad2a4267c89f9d2bc38a5a3f7d53d7302186d6870",
+      "image_sha256": "88d61aae4cbc75e55679e16a7854c53bfdc3f66c657b95cc1ab7c310f6ac2ab2",
+      "canonical_file": "isa/88d61aae4cbc75e55679e16a7854c53bfdc3f66c657b95cc1ab7c310f6ac2ab2.s.xz",
+      "canonical_sha256": "7a530e0bb48188b273e678ce58075551c8e708732ba7c83d257c59418f402677",
+      "original_header": "/tmp/tmpx9znz2ld.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-88d61aae4cbc75e55679e16a7854c53bfdc3f66c657b95cc1ab7c310f6ac2ab2.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_128_24576_4096_fp8_k32_n1_control.s",
+      "original_sha256": "5f4858983ab5e45b1dc0962e3ab79ad560fb60ee0326b40b055b8a59af0ef0a9",
+      "image_sha256": "5d99359c149c6c359425649dd1ef1bed660f9350a46c3de1d84e87a10a6316b4",
+      "canonical_file": "isa/5d99359c149c6c359425649dd1ef1bed660f9350a46c3de1d84e87a10a6316b4.s.xz",
+      "canonical_sha256": "9583f6be6cc70242cc9f296db8d8c2cdae12293cc8ccffa2d75394717490af31",
+      "original_header": "/tmp/tmpslmsinz6.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-5d99359c149c6c359425649dd1ef1bed660f9350a46c3de1d84e87a10a6316b4.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_128_24576_4096_mxfp8_k32_n1.s",
+      "original_sha256": "ec15610fc6c284ab8d6d14515010c40c59b2e809a7dc4a28ff09f138cfc7b039",
+      "image_sha256": "dc92d7e1643c0fc2069cc1f015d4290df5e28052c52382e22bee09d4daf15bcd",
+      "canonical_file": "isa/dc92d7e1643c0fc2069cc1f015d4290df5e28052c52382e22bee09d4daf15bcd.s.xz",
+      "canonical_sha256": "4fbdb102af879366feb5531d4a8bf4ca26b33f553c2580d9737117fca6b4ad24",
+      "original_header": "/tmp/tmpxoz51sy4.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-dc92d7e1643c0fc2069cc1f015d4290df5e28052c52382e22bee09d4daf15bcd.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_128_24576_4096_mxfp4_folded.s",
+      "original_sha256": "75fd869bfed63a408e79d1936014f9498ea98e22f26409cf4cd0edabcf9ca324",
+      "image_sha256": "999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4",
+      "canonical_file": "isa/999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4.s.xz",
+      "canonical_sha256": "0e992a21d8fe039e32d0bdbdc4c6058fa511b5a2f84ff9e833dc7fe5a24f14e7",
+      "original_header": "/tmp/tmpp1uhb4wu.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_128_24576_4096_mxfp4_nvfp4_ingested.s",
+      "original_sha256": "fb97d884c380b212d21705990cf381b1f79b37a1d5e9f764c03a605496429329",
+      "image_sha256": "999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4",
+      "canonical_file": "isa/999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4.s.xz",
+      "canonical_sha256": "0e992a21d8fe039e32d0bdbdc4c6058fa511b5a2f84ff9e833dc7fe5a24f14e7",
+      "original_header": "/tmp/tmpwpbrt994.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_128_24576_4096_mxfp4_direct_joint_sse.s",
+      "original_sha256": "9aaefb4d7e90a0ac21833967475967bbc75f87fffa61aa6dbc5f601e546b1fc4",
+      "image_sha256": "999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4",
+      "canonical_file": "isa/999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4.s.xz",
+      "canonical_sha256": "0e992a21d8fe039e32d0bdbdc4c6058fa511b5a2f84ff9e833dc7fe5a24f14e7",
+      "original_header": "/tmp/tmpicl0k875.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_128_24576_4096_mxfp4_folded_native_packed.s",
+      "original_sha256": "936cb66f406a401a618a81fd48bbad9b315bb39407b55e4fa6f76ac668f4b2d3",
+      "image_sha256": "f7ef7ca7452be8b6ebfa7330c9c6fb91c382a1e6f1f903b652c7b6872526554d",
+      "canonical_file": "isa/f7ef7ca7452be8b6ebfa7330c9c6fb91c382a1e6f1f903b652c7b6872526554d.s.xz",
+      "canonical_sha256": "f90259c89b5a79801900f5a1476fc5b387cc3fbafaaaa95a8ff63aea7fea21ec",
+      "original_header": "/tmp/tmp96e4fikb.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-f7ef7ca7452be8b6ebfa7330c9c6fb91c382a1e6f1f903b652c7b6872526554d.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_128_24576_4096_mxfp4_nvfp4_ingested_native_packed.s",
+      "original_sha256": "dcfd6d2379a0e8c22ce048e44bc1fcdcf178552b12c03331fbc2ba2f77672bd3",
+      "image_sha256": "f7ef7ca7452be8b6ebfa7330c9c6fb91c382a1e6f1f903b652c7b6872526554d",
+      "canonical_file": "isa/f7ef7ca7452be8b6ebfa7330c9c6fb91c382a1e6f1f903b652c7b6872526554d.s.xz",
+      "canonical_sha256": "f90259c89b5a79801900f5a1476fc5b387cc3fbafaaaa95a8ff63aea7fea21ec",
+      "original_header": "/tmp/tmpdk61xqva.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-f7ef7ca7452be8b6ebfa7330c9c6fb91c382a1e6f1f903b652c7b6872526554d.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_128_24576_4096_mxfp4_direct_joint_sse_native_packed.s",
+      "original_sha256": "feb453b8b194e8a19591990282471db794175867a1e8d89e29207c885fc24c31",
+      "image_sha256": "f7ef7ca7452be8b6ebfa7330c9c6fb91c382a1e6f1f903b652c7b6872526554d",
+      "canonical_file": "isa/f7ef7ca7452be8b6ebfa7330c9c6fb91c382a1e6f1f903b652c7b6872526554d.s.xz",
+      "canonical_sha256": "f90259c89b5a79801900f5a1476fc5b387cc3fbafaaaa95a8ff63aea7fea21ec",
+      "original_header": "/tmp/tmpg_i576oz.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-f7ef7ca7452be8b6ebfa7330c9c6fb91c382a1e6f1f903b652c7b6872526554d.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_256_24576_4096_fp8_k128_n128.s",
+      "original_sha256": "af1a9c4ae84aa4f32471bcbebcf4814045823726ab02f9a98681ed0dc9b7783a",
+      "image_sha256": "88d61aae4cbc75e55679e16a7854c53bfdc3f66c657b95cc1ab7c310f6ac2ab2",
+      "canonical_file": "isa/88d61aae4cbc75e55679e16a7854c53bfdc3f66c657b95cc1ab7c310f6ac2ab2.s.xz",
+      "canonical_sha256": "7a530e0bb48188b273e678ce58075551c8e708732ba7c83d257c59418f402677",
+      "original_header": "/tmp/tmpnuivkjf0.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-88d61aae4cbc75e55679e16a7854c53bfdc3f66c657b95cc1ab7c310f6ac2ab2.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_256_24576_4096_fp8_k32_n1_control.s",
+      "original_sha256": "2ed223bad42d55c55535dc05649c25d91e3ea6c4e1f14d62642a1f9aa249a4f9",
+      "image_sha256": "5d99359c149c6c359425649dd1ef1bed660f9350a46c3de1d84e87a10a6316b4",
+      "canonical_file": "isa/5d99359c149c6c359425649dd1ef1bed660f9350a46c3de1d84e87a10a6316b4.s.xz",
+      "canonical_sha256": "9583f6be6cc70242cc9f296db8d8c2cdae12293cc8ccffa2d75394717490af31",
+      "original_header": "/tmp/tmp1w8jtr8a.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-5d99359c149c6c359425649dd1ef1bed660f9350a46c3de1d84e87a10a6316b4.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_256_24576_4096_mxfp8_k32_n1.s",
+      "original_sha256": "d51afe797798490553f4961e3f5a1e3967d84b27297eee73c148d094535c20ed",
+      "image_sha256": "dc92d7e1643c0fc2069cc1f015d4290df5e28052c52382e22bee09d4daf15bcd",
+      "canonical_file": "isa/dc92d7e1643c0fc2069cc1f015d4290df5e28052c52382e22bee09d4daf15bcd.s.xz",
+      "canonical_sha256": "4fbdb102af879366feb5531d4a8bf4ca26b33f553c2580d9737117fca6b4ad24",
+      "original_header": "/tmp/tmp55rkmbwj.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-dc92d7e1643c0fc2069cc1f015d4290df5e28052c52382e22bee09d4daf15bcd.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_256_24576_4096_mxfp4_folded.s",
+      "original_sha256": "1b112a90fefeeddf880df328fcd0b0d743a4ffa5fe1a9879d15e44f14664002b",
+      "image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "canonical_file": "isa/1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161.s.xz",
+      "canonical_sha256": "88479e94d311a898000a9564cc2accc3e2999f81ebbec5981a493c269124731c",
+      "original_header": "/tmp/tmprj070c88.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_256_24576_4096_mxfp4_nvfp4_ingested.s",
+      "original_sha256": "88b61d67e362f5f8049334013a8d2aecf565026dc8c9c2fe6003a7a62eb27890",
+      "image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "canonical_file": "isa/1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161.s.xz",
+      "canonical_sha256": "88479e94d311a898000a9564cc2accc3e2999f81ebbec5981a493c269124731c",
+      "original_header": "/tmp/tmpwo_05kbg.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_256_24576_4096_mxfp4_direct_joint_sse.s",
+      "original_sha256": "ad2b0ebe3dcd15852e762a45c9f97bc6488ac128ac6be0fea957c4e216dbb2f7",
+      "image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "canonical_file": "isa/1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161.s.xz",
+      "canonical_sha256": "88479e94d311a898000a9564cc2accc3e2999f81ebbec5981a493c269124731c",
+      "original_header": "/tmp/tmpjhyr3gfg.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_256_24576_4096_mxfp4_folded_native_packed.s",
+      "original_sha256": "f79300abf94e7285bd9b7539fbfc59f1ea3220d503111238b59ce5fb63af3588",
+      "image_sha256": "b3dba5367308f29d4429051d91e0cf863add01e21b778355c8da8cc7a7958c73",
+      "canonical_file": "isa/b3dba5367308f29d4429051d91e0cf863add01e21b778355c8da8cc7a7958c73.s.xz",
+      "canonical_sha256": "1b3e1d171b1207204de9e86a97706b9ff27be6a97314adf52f12f2a5dc85e593",
+      "original_header": "/tmp/tmph97onpsb.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-b3dba5367308f29d4429051d91e0cf863add01e21b778355c8da8cc7a7958c73.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_256_24576_4096_mxfp4_nvfp4_ingested_native_packed.s",
+      "original_sha256": "ee35045609935e4e9d0fb99728b7c6a36d8c9da3497681ebe33f8f3004744b60",
+      "image_sha256": "b3dba5367308f29d4429051d91e0cf863add01e21b778355c8da8cc7a7958c73",
+      "canonical_file": "isa/b3dba5367308f29d4429051d91e0cf863add01e21b778355c8da8cc7a7958c73.s.xz",
+      "canonical_sha256": "1b3e1d171b1207204de9e86a97706b9ff27be6a97314adf52f12f2a5dc85e593",
+      "original_header": "/tmp/tmpf_p9un54.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-b3dba5367308f29d4429051d91e0cf863add01e21b778355c8da8cc7a7958c73.hsaco:\tfile format elf64-amdgpu"
+    },
+    {
+      "original_file": "quality-formats_256_24576_4096_mxfp4_direct_joint_sse_native_packed.s",
+      "original_sha256": "0db3e1ac4f52054ae7734b69f8bbd410d2c66af89a3ef785998a108972e4ba6e",
+      "image_sha256": "b3dba5367308f29d4429051d91e0cf863add01e21b778355c8da8cc7a7958c73",
+      "canonical_file": "isa/b3dba5367308f29d4429051d91e0cf863add01e21b778355c8da8cc7a7958c73.s.xz",
+      "canonical_sha256": "1b3e1d171b1207204de9e86a97706b9ff27be6a97314adf52f12f2a5dc85e593",
+      "original_header": "/tmp/tmpba9eo1a5.hsaco:\tfile format elf64-amdgpu",
+      "canonical_header": "image-b3dba5367308f29d4429051d91e0cf863add01e21b778355c8da8cc7a7958c73.hsaco:\tfile format elf64-amdgpu"
+    }
+  ]
+}

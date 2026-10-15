@@ -1,0 +1,63 @@
+{
+  "schema": "tessera.nvfp4_model_activation_validation.v1",
+  "measurement_revision": "eeaebfff6d1431952379ee2aeb2e892ea8f4554d",
+  "base_revision": "a21c24725dd6ccebacef5eb38b5cdb0f3a466c10",
+  "device": {
+    "architecture": "gfx1201",
+    "name": "AMD Radeon RX 9070 XT",
+    "host": "tajasarus"
+  },
+  "compiler_sha256": "256acc966923792e487ab8da63183ace49ea2ef385fc71cb15076bec34fd060d",
+  "environment": {
+    "python": "3.14.4",
+    "numpy": "2.5.4",
+    "torch_present": false
+  },
+  "gates": {
+    "input_guards_passed": 45,
+    "audit_tests_passed": 19,
+    "native_format_arms": 18,
+    "generated_docs": 33,
+    "mypy_source_files": 4,
+    "historical_checkpoint_identity": "exact_match",
+    "source_identity": "measurement source hashes; three annotation-only changes recorded separately",
+    "isa": "18 original disassemblies reconstructed from 7 unique image artifacts"
+  },
+  "scope": {
+    "quality": "projection proxy on captured BF16 model inputs; full-model acceptance remains open",
+    "consumer_edge": "checked host readback; consumer uploads converted native results",
+    "native_ingest_correctness": "bitwise packed codes/exponents and independent bounded f64 loss statistics",
+    "sibling_architectures": "plan assessment only; no device evidence transferred"
+  },
+  "files_sha256": {
+    "README.md": "7d634081c09b75be09e3c5703a174ddd0fa0cd13e6758e3330c96df854d4410a",
+    "annotation-equivalence.json": "af9a78c4b2b0756c504344edf1987c9b366273b4b78b24cb7f2b016b877cc664",
+    "audit-tests.txt": "82307027379c2be9addf6c8bb7403e8d4de6be9c975b5ba1f9c35d82dcd39b55",
+    "benchmark.txt": "f8bf14f88c782a0905bddf98f629e0b0576c9de538c0b68f28e6a7152048fdf3",
+    "capture.txt": "6aaf34f4cbfcfccd71c5343c5f102f0ea6eca228fcec0dce32f55a3214a80bdc",
+    "claims.txt": "b7cabb6c341cf801ecd49c4d47463f73b43c581493a32da0645833c891959021",
+    "final-input-tests.txt": "ddda981c696ecfe0d06a27dfced17d4d320cf83c4c2636683a362fcc66bfc0b1",
+    "generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "graphify.txt": "bf143d3f9fb42925762184f5ae4f4fe42dd56e0bda0792906718576b24cd1a85",
+    "input-tests.txt": "12e5331e4520a7082478b46c2e6eb889405d7a5d20130df49f2f7752bf109514",
+    "inputs.json": "9a69db317efd758b52975424b1b1778c64826cb308317f9c95fc58252b2ba418",
+    "inputs.npz": "bd77bea8b923703a924b12be44a7dfb667a027a7b898a41d7d248b0532952c17",
+    "isa/1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161.s.xz": "9f27a44646f2fb91d64990f936cb760fa51ff5d300d8a5624fb1916f3ee7eb20",
+    "isa/5d99359c149c6c359425649dd1ef1bed660f9350a46c3de1d84e87a10a6316b4.s.xz": "c824e248e60ee08c6171d7042c93b32858b329e441f413ec6031d8b495dbba2b",
+    "isa/88d61aae4cbc75e55679e16a7854c53bfdc3f66c657b95cc1ab7c310f6ac2ab2.s.xz": "776c9ced1161cbcdc91b8b766d403f87cff1f76b04695381b7c370c104add8aa",
+    "isa/999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4.s.xz": "a0c7ad7604d709d70f50491ebffd4c5c68870de945e7dacefd38bd9a109daa6f",
+    "isa/b3dba5367308f29d4429051d91e0cf863add01e21b778355c8da8cc7a7958c73.s.xz": "4b6388f801a3b5bbe6e9fbcd1bd71dd8c04699620bdf799f002ddf2261736c5d",
+    "isa/dc92d7e1643c0fc2069cc1f015d4290df5e28052c52382e22bee09d4daf15bcd.s.xz": "0ae9d6607884721b54e70701748fa911f9423c84626200e176d229e30bd2946e",
+    "isa/f7ef7ca7452be8b6ebfa7330c9c6fb91c382a1e6f1f903b652c7b6872526554d.s.xz": "be0567e856c00459c00103da89ef7b80959472f0a4fa1285fd01ba41333d594b",
+    "isa-index.json": "39bc817210a4abc78fab9e2e4fb85b40da98170656d55ae901e03f359e7b568b",
+    "mypy.txt": "71144743c83babea384888a735db0c4daba3d4d7b7942b6839984bd5c21b52bb",
+    "plan.txt": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+    "pr948-state.json": "0cca7aef0ee9b1910897e9c8d22bbe1a62d0d7c9f4493523a8726057240fd223",
+    "quality-formats.json": "cf06b907787e72fb8081f10e06ddf8d1246aeb4375722004c19bc8165a3022c8",
+    "range-red.txt": "835de53eefb0a35da07b7b065e15204f43cc66ae7856431406f3fcc5a8c96c44",
+    "reference-packages.txt": "244cec0d25e3c9871f5df60b9fd60924a92935c7fc61e13f7aa89c9ecdc6a6ba",
+    "ruff.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "surface-claims.txt": "bf5d4cc729d2f06fb82724680faf43ff5f4cc73c5b1e461c791adc0ca27049b1",
+    "verify_isa.py": "d02783b140efa5054907815f56106335f1b6448fb5df829d9c11d9b17f6be0c1"
+  }
+}

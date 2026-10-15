@@ -137,6 +137,27 @@ Evidence: benchmarks/baselines/sm120_relu_flat_20261015/README.md;
 docs/spec/ir/sm120_activation_schedule_tile_contract.md.
 No default performance promotion or five-slice closure claim.
 
+## NVFP4-NATIVE-MULTI-OUTPUT-20261015 — native producer/product ownership
+
+Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+
+The shared JIT/replay update recognizes the exact gfx1201 source-preserving
+program and records two ordered native members. Not applicable to apple
+physical execution: no target admission, emitter, runtime provider or schedule
+is changed for this backend. Metadata cannot relabel ROCm evidence as sibling
+proof; original-checkpoint execution is gfx1201-only.
+
+The follow-on prepared binding adds HIP partial-root updates and dependency-
+checked stage ranges. Not applicable to apple execution: its native provider,
+public dispatch and schedule are unchanged. No sibling hardware result is
+inferred from gfx1201 owner/FP32/BF16 proof.
+Not applicable to apple physical execution: the additive owner ABI is
+HIP-only and the named native MLIR program requires explicit gfx1201.
+Prior schemas remain intact; no sibling numerical, runtime ABI or selector
+change. Sibling hardware parity is not claimed. A future source-preserving
+route requires its own lowering, ownership contract and exact-device proof.
+
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 
@@ -540,6 +561,39 @@ Evidence: benchmarks/baselines/gfx1201_continuous_ssa_chain_20261009/README.md.
 Not applicable to Metal physical lowering: this continuous chain is gfx1201-only. Apple producer/JIT/AD parity remains separate.
 
 
+
+## NVFP4-CHECKPOINT-K16-20261015 — source-preserving consumer control
+
+Owner ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Synchronization key: NVFP4-CHECKPOINT-K16-20261015.
+Captured-input source/checkpoint identities match the earlier FP8/MXFP8/MXFP4 packet. Host expansion retains K16 source weights with only FP32 scale rounding; it is diagnostic, not a new production NVFP4 decoder. Not applicable to Metal physical execution: no Apple route, ABI, arithmetic, dtype or selector change. Captured BF16 CPU prefix values and ROCm execution are not Apple proof.
+Full-model quality acceptance, native packed transport and strategy promotion remain open; the cross-packet quality characterization is not a controlled timing A/B.
+Evidence: benchmarks/baselines/nvfp4_checkpoint_k16_20261015/README.md.
+
+## ROCM-K16-SCALE-GROUPS-20261015 — legal native group defaults
+
+Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-NVFP4-INGEST-1.
+Synchronization key: ROCM-K16-SCALE-GROUPS-20261015.
+Implicit native register defaults now use one panel for odd K16 instruction groups; explicit divisibility checks remain. Existing K32/K128 Tile/Target/HSACO images are byte-identical to the reference. Not applicable to Metal physical execution: no Apple lowering, storage, ABI, capability or selector changes. Shared contract diagnostics keep their existing registrations; no ROCm proof is transferred.
+Native NVFP4 expansion, packed transport and model-quality acceptance remain follow-up required. The host expansion control is diagnostic only.
+Evidence: benchmarks/baselines/gfx1201_fp8_k16_default_20261015/README.md.
+
+## NVFP4-MODEL-ACTIVATIONS-20261015 — captured-input quality evidence
+
+Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6.
+Synchronization key: NVFP4-MODEL-ACTIVATIONS-20261015.
+The optional CPU reference captures pinned BF16 Qwen3 layer-0 MLP inputs;
+all executed parameters are loaded and repeat capture is bitwise identical.
+The benchmark validates capture bytes/provenance before GPU/network work and
+now verifies exact HTTP Content-Range identity. 45 source/input guards pass.
+Identical captured inputs drive 18 native gfx1201 FP8/MXFP8/MXFP4 arms.
+Decoded-weight projection RMS at M256 is 6.08% shipped NVFP4, 7.42% direct
+MXFP4 and 9.74% after ingest, against the selected BF16 checkpoint. These
+are projection proxies, not full-model accuracy or NVIDIA execution proof.
+The two source tensor identities match the older checkpoint controls.
+Evidence: benchmarks/baselines/nvfp4_model_activations_20261015/README.md.
+
+Not applicable to Metal physical execution: the capture uses an external CPU reference and the measured packages target gfx1201. No Apple dtype, operation, ABI, schedule, performance or quality admission changes. Shared benchmark-source metadata is assessed; Metal evaluation needs its own executor/evidence.
 
 ## ROCM-NVFP4-SOURCE-MIDPOINTS-20261009
 
@@ -14572,3 +14626,19 @@ Not applicable to apple execution: the guard matches only the NVIDIA dialect, RO
 Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Shared change: `@jit(target=<native>)` now raises `JIT_UNLOWERED_OP_NATIVE_TARGET` at decoration when the body calls a `tessera.ops` callable the AST Graph IR front end dropped (no `op_catalog` OpSpec, or a spelling it does not resolve). Before, the call left an empty `func.func` body, the effect joined to `top` so no tracer captured it, and `JitFn.__call__` returned eager numpy with `last_fallback_reason` None and no artifact. The dropped spellings ride on `GraphIRModule.frontend_unlowered_calls` so the refusal survives Graph IR cache hits; resolution is by object identity, so aliases count. No target and `target="cpu"` keep the eager reference path. Non-`tessera.ops` calls (numpy, user helpers) are out of scope and still fall back eagerly: recorded follow-up, not closed. Test: `tests/unit/test_jit_unlowered_op_native_target.py`.
 
 Apple: `apple_cpu` refuses; for `apple_gpu` a body routed to the Phase-F tracer (trace-deferred or control flow) is left to the tracer, which fails as `JIT_APPLE_GPU_TRACE_FAILED` instead of returning an eager value; straight-line `apple_gpu` bodies refuse. Decoration-only change, no Metal execution claimed; Mac `tests/unit -m "not slow"` sweep recorded in the PR.
+
+
+## NVFP4-NATIVE-EXPAND-20261015
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to Metal execution in this slice: the shared semantic operation and eager reference do not provide an Apple lowering. Capability remains unsupported; no Metal numerical or timing evidence is claimed.
+
+
+## NVFP4-PUBLIC-EXPAND-20261015
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to Metal execution: common frontend/runtime changes recognize an exact gfx1201 ABI only. Apple expansion remains unsupported, and existing Apple JIT/AD obligations require their own native program and Mac proof.
+
+Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.

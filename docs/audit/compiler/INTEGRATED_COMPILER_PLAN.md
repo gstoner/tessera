@@ -145,9 +145,22 @@ the next action's host requirement; it is not a live fleet-availability claim.
   shipped NVFP4 and 18.03% from direct BF16-to-MXFP4. Both the ingested and
   direct MXFP4 values execute through the same native package and match their
   decoded-weight references exactly. This one projection with synthetic FP8
-  activations exposes material added conversion error; broader quality and
+  activations exposes material added conversion error. The later captured-model
+  study records 256x4096 real BF16 model inputs and 18 native format arms;
+  decoded-weight projection RMS is 6.08% shipped, 7.42% direct and 9.74%
+  ingested at M256. Full-model/representative-corpus quality acceptance and
   selector promotion remain open.
-- Latest: [2026-10-09 — source-unit NVFP4 midpoint comparisons](INTEGRATED_COMPILER_LOG.md#2026-10-09--source-unit-nvfp4-midpoint-comparisons)
+- Native source-preserving K16 expansion now has bitwise gfx1201 proof through
+  ordinary public JIT, warm image reuse and serialized/fresh-process replay;
+  original pinned checkpoint gate/up weights preserve both output planes.
+  Native multi-output SSA ownership now has a static source-preserving program
+  and diagnostic gfx1201 producer/product proof without intermediate host IO.
+  Prepared native ownership now supports import-once expansion and activation-only
+  updates with native dependency checks, including normal frontend capture and
+  FP32/BF16 outputs. Ordinary static FP32 JIT, compiler-free replay and the original Qwen3
+  projection now have exact-device proof through both native stages.
+  Remaining: bounded frames, wider composition and model-quality acceptance.
+- Latest: [2026-10-15 — public native NVFP4 checkpoint composition](INTEGRATED_COMPILER_LOG.md#2026-10-15--public-native-nvfp4-checkpoint-composition)
 
 ### ROCM-SPLIT-K-1
 
@@ -205,7 +218,7 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   **Open:** the remaining short-K / N = 1024 whole-M shapes and K = 1536 ragged rows; the `[K, N]` weight on the register panel; AITER's split-K buckets unmeasured; gfx1151 edge-row store before/after device-clock timing remains unavailable.
 - Depends on: —
 - Start: device
-- Latest: [2026-10-06 — gfx1201 native MXFP8 long-K selector trial](INTEGRATED_COMPILER_LOG.md#2026-10-06--gfx1201-native-mxfp8-long-k-selector-trial)
+- Latest: [2026-10-15 — gfx1201 native K16 scale-group default](INTEGRATED_COMPILER_LOG.md#2026-10-15--gfx1201-native-k16-scale-group-default)
 
 ### ROCM-MXFP4-W4A8-1
 

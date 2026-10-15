@@ -3231,6 +3231,48 @@ LogicalResult tessera::tile::NVFP4RequantizeKernelOp::verify() {
   return success();
 }
 
+LogicalResult tessera::tile::NVFP4ExpandKernelOp::verify() {
+  auto c = getContract();
+  auto n = c.getAs<IntegerAttr>("n"), k = c.getAs<IntegerAttr>("k");
+  if (!n || !k || failed(mlir::tessera_contract::verifyNVFP4ExpandExtents(
+          getOperation(),n.getInt(),k.getInt(),c.getAs<ArrayAttr>("row_offsets"))) ||
+      failed(mlir::tessera_contract::verifyNVFP4ExpandPolicy(
+          getOperation(),c.getAs<DictionaryAttr>("numeric_policy"))))
+    return failure();
+  for (auto [key,value] : {
+      std::pair<StringRef,StringRef>{"arch","gfx1201"},
+      {"target","rocm_gfx1201"},{"layout","row_major"},
+      {"ownership","private_outputs_distinct_readonly_inputs"},
+      {"scale_storage","e4m3_bits"}}) {
+    auto attr = c.getAs<StringAttr>(key);
+    if (!attr || attr.getValue() != value)
+      return emitOpError("conversion memory/target contract changed");
+  }
+  auto bindings = c.getAs<ArrayAttr>("bindings");
+  if (!bindings || bindings.size() != 5 ||
+      getArtifactHash() != mlir::tessera_contract::nvfp4ContractHash(c))
+    return emitOpError("conversion contract hash or binding count changed");
+  auto fn = (*this)->getParentOfType<func::FuncOp>();
+  if (getInputs().size() != 5 || !fn || !fn.getBody().hasOneBlock() ||
+      fn.getNumArguments() != 5 || fn.getNumResults() ||
+      fn.getBody().front().getOperations().size() != 2 ||
+      !isa<func::ReturnOp>(fn.getBody().front().back()))
+    return emitOpError("conversion requires an isolated five-buffer entry");
+  for (unsigned i = 0; i < 5; ++i) {
+    auto type = dyn_cast<MemRefType>(getInputs()[i].getType());
+    bool isDouble = i == 2;
+    bool isFloat = i == 4;
+    if (getInputs()[i] != fn.getArgument(i) || !type ||
+        type.getShape() != ArrayRef<int64_t>{ShapedType::kDynamic} ||
+        !type.getLayout().isIdentity() || type.getMemorySpaceAsInt() != 0 ||
+        !(isDouble ? type.getElementType().isF64() :
+          isFloat ? type.getElementType().isF32() :
+                    type.getElementType().isSignlessInteger(8)))
+      return emitOpError("conversion buffer lineage, element type or layout changed");
+  }
+  return success();
+}
+
 LogicalResult tessera::tile::MXFP4FoldedStorageKernelOp::verify() {
   auto c = getContract();
   auto n = c.getAs<IntegerAttr>("n"), k = c.getAs<IntegerAttr>("k");

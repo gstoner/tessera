@@ -1,0 +1,10 @@
+{
+  "python/tessera/compiler/rocm_nvfp4_expansion_program.py": "e8f8ddd7c6413fb9e1ca2e2ca241c686ad134c137d549f864921cf539de184dc",
+  "python/tessera/compiler/native_scaled_program.py": "8654bf38d76d899029b6f38ba9491bbb9d462b1f9fb4d8cd3da781e4b1de5320",
+  "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "0bb2dcde600b2094582399405381db67895cae1157bdbcd2f52fa9f79b4ff56b",
+  "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "67084a38ccad5b33977b119336151087329badf9dd754872a3c8ce04976298fc",
+  "src/transforms/lib/NativeNVFP4Program.h": "7a6e82dd20bc86497832a87e4fa06f285786308c84f66bf24459ce8923594812",
+  "tests/device/rocm/test_prepared_nvfp4_expansion_program.py": "3b8f9d8197cfac2bc45490fba6b87d69861806dabb4c27fa44f9c75dbb731635",
+  "tests/unit/test_native_nvfp4_expansion_program.py": "c4533585df93502d752785b982968507c591d95603d095ab4da45aea5a0c8fdb",
+  "benchmarks/rocm/benchmark_nvfp4_prepared_expansion.py": "a098c948abfd63b56de5f1bd020236db0ff5faf81311cad9de34fdbbca36b97e"
+}

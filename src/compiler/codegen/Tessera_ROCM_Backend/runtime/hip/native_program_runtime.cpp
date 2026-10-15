@@ -26,6 +26,7 @@ struct Stage {
   std::array<int64_t, 8> scalars{};
   std::array<void *, 43> argv{};
   std::array<unsigned, 6> geometry{};
+  std::vector<uint32_t> inputs, outputs;
 };
 struct Program {
   std::string cacheKey;
@@ -42,6 +43,7 @@ struct Program {
   std::vector<void *> buffers;
   std::vector<std::vector<unsigned char>> snapshots;
   std::vector<Stage> stages;
+  std::vector<unsigned char> initialized;
   std::vector<unsigned char> readback;
   std::vector<hipEvent_t> events;
   std::vector<hipGraph_t> graphs;
@@ -66,9 +68,20 @@ bool cacheEnabled() {
 template<class T> void keyValue(std::string &key, const T &value) {
   key.append(reinterpret_cast<const char *>(&value), sizeof(value));
 }
+uint32_t outputCount(const TesseraRocmProgramStep &) { return 1; }
+uint32_t outputCount(const TesseraRocmProgramMultiOutputStep &s) {
+  return s.output_count;
+}
+uint32_t outputSlot(const TesseraRocmProgramStep &s, uint32_t) {
+  return s.output;
+}
+uint32_t outputSlot(const TesseraRocmProgramMultiOutputStep &s, uint32_t i) {
+  return s.outputs[i];
+}
+template<class Step>
 std::string programKey(const std::string &arch, uint32_t arguments,
                        uint32_t buffers, const TesseraRocmProgramBuffer *contract,
-                       uint32_t steps, const TesseraRocmProgramStep *plan) {
+                       uint32_t steps, const Step *plan) {
   // Exact bytes, not caller pointers or a collision-prone hash. Input values
   // are uploaded on every acquire; only immutable image/ABI ownership is reused.
   std::string key = arch;
@@ -84,7 +97,10 @@ std::string programKey(const std::string &arch, uint32_t arguments,
     keyValue(key,p.image_bytes);
     key.append(static_cast<const char *>(p.image), p.image_bytes);
     size_t length = std::strlen(p.entry); keyValue(key,length); key.append(p.entry,length);
-    keyValue(key,p.input_count); keyValue(key,p.scalar_count); keyValue(key,p.output);
+    keyValue(key,p.input_count); keyValue(key,p.scalar_count);
+    const uint32_t outputs = outputCount(p);
+    keyValue(key,outputs);
+    for (uint32_t j=0;j<outputs;++j) keyValue(key,outputSlot(p,j));
     for (unsigned j=0;j<p.input_count;++j) keyValue(key,p.inputs[j]);
     for (unsigned j=0;j<p.scalar_count;++j) keyValue(key,p.scalars[j]);
     for (unsigned j=0;j<6;++j) keyValue(key,p.geometry[j]);
@@ -165,88 +181,23 @@ int upload(Program &p, const void *const *inputs, const uint64_t *bytes) {
     }
   }
   if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
+  p.initialized.assign(p.contract.size(), 0);
+  std::fill_n(p.initialized.begin(), p.arguments, 1);
   p.ready = true;
   return 0;
 }
 } // namespace
 
-extern "C" int tessera_rocm_program_pack_host_view(
-    const void *source, uint64_t sourceSpan, uint32_t rank,
-    const uint64_t *shape, const uint64_t *strides, uint32_t itemBytes,
-    void *destination, uint64_t destinationBytes) {
-  constexpr uint64_t limit = INT64_MAX;
-  if (!source || !destination || !shape || !strides || rank < 1 || rank > 32 ||
-      !itemBytes || itemBytes > 8 || sourceSpan > limit ||
-      destinationBytes > limit) return 1;
-  uint64_t count = 1, span = itemBytes;
-  for (uint32_t axis = 0; axis < rank; ++axis) {
-    if (!shape[axis] || shape[axis] > limit || !strides[axis] ||
-        strides[axis] % itemBytes || strides[axis] > limit ||
-        count > limit / shape[axis]) return 1;
-    count *= shape[axis];
-    if (shape[axis] - 1 > (limit - span) / strides[axis]) return 1;
-    span += (shape[axis] - 1) * strides[axis];
-  }
-  if (count > limit / itemBytes || count * itemBytes != destinationBytes ||
-      span > sourceSpan) return 1;
-  uintptr_t src = reinterpret_cast<uintptr_t>(source);
-  uintptr_t dst = reinterpret_cast<uintptr_t>(destination);
-  if (src > UINTPTR_MAX - sourceSpan || dst > UINTPTR_MAX - destinationBytes ||
-      (src < dst + destinationBytes && dst < src + sourceSpan)) return 1;
-  const auto *input = static_cast<const unsigned char *>(source);
-  auto *output = static_cast<unsigned char *>(destination);
-  // Collapse an actually contiguous suffix; singleton axes contribute no
-  // offset. The validated total byte count bounds every block multiplication.
-  uint32_t prefix = rank;
-  uint64_t blockBytes = itemBytes;
-  while (prefix && (shape[prefix-1] == 1 || strides[prefix-1] == blockBytes)) {
-    blockBytes *= shape[--prefix];
-  }
-  if (!prefix) {
-    std::memcpy(output, input, destinationBytes);
-    return 0;
-  }
-  const uint64_t columns = shape[prefix-1];
-  const uint64_t rows = destinationBytes / blockBytes / columns;
-  for (uint64_t row = 0; row < rows; ++row) {
-    uint64_t remaining = row, offset = 0;
-    for (uint32_t axis = prefix-1; axis-- > 0;) {
-      offset += (remaining % shape[axis]) * strides[axis];
-      remaining /= shape[axis];
-    }
-    auto *outRow = output + row * columns * blockBytes;
-    const auto *inRow = input + offset;
-    // Fixed-width memcpy keeps unaligned byte inputs legal while avoiding a
-    // dynamic libc call for each interleaved scalar. Only storage is moved.
-    auto fixed = [&](auto width) {
-      constexpr size_t bytes = decltype(width)::value;
-      for (uint64_t column = 0; column < columns; ++column)
-        std::memcpy(outRow + column * bytes,
-                    inRow + column * strides[prefix-1], bytes);
-    };
-    switch (blockBytes) {
-    case 1: fixed(std::integral_constant<size_t, 1>{}); break;
-    case 2: fixed(std::integral_constant<size_t, 2>{}); break;
-    case 4: fixed(std::integral_constant<size_t, 4>{}); break;
-    case 8: fixed(std::integral_constant<size_t, 8>{}); break;
-    default:
-      for (uint64_t column = 0; column < columns; ++column)
-        std::memcpy(outRow + column * blockBytes,
-                    inRow + column * strides[prefix-1], blockBytes);
-    }
-  }
-  return 0;
-}
-
-extern "C" int tessera_rocm_program_prepare(
+template<class Step>
+static int prepareProgram(
     const char *architecture, uint32_t arguments, uint32_t buffers,
     const TesseraRocmProgramBuffer *contract, uint32_t steps,
-    const TesseraRocmProgramStep *plan, const void *const *inputs,
+    const Step *plan, const void *const *inputs,
     const uint64_t *inputBytes, uint64_t *handle) try {
   if (handle) *handle = 0;
   if (!handle || !architecture || !contract || !plan || !inputs || !inputBytes ||
       !arguments || arguments > 128 || !steps || steps > 128 ||
-      buffers != arguments + steps || buffers > 256) return 1;
+      buffers <= arguments || buffers > 256) return 1;
   if (getpid() != process) return 2;
   std::string arch(architecture);
   if (arch != "gfx1201" && arch != "gfx1151") return 1;
@@ -260,23 +211,29 @@ extern "C" int tessera_rocm_program_prepare(
         b.bytes / b.elements > 8 || b.elements > uint64_t(INT64_MAX) ||
         b.reserved || b.ownership > 2 ||
         (i < arguments ? b.ownership != 0 || b.first_write != -1 :
-         b.ownership == 0 || b.first_write != int64_t(i - arguments)) ||
+         b.ownership == 0 || b.first_write < 0 || b.first_write >= int64_t(steps)) ||
         b.bytes > (uint64_t(1) << 31) - total) return 1;
     total += b.bytes;
     if (i < arguments && (!inputs[i] || inputBytes[i] != b.bytes)) return 1;
     if (b.ownership == 2) ++returned;
-    if (i >= arguments) reads[i] = i - arguments;
   }
   if (!returned) return 1;
+  uint32_t nextOutput = arguments;
   for (uint32_t i = 0; i < steps; ++i) {
     const auto &s = plan[i];
+    const uint32_t outputs = outputCount(s);
     if (!s.image || s.image_bytes < 4 || s.image_bytes > (uint64_t(1) << 28) ||
         std::memcmp(s.image, "\177ELF", 4) || !s.entry || !*s.entry ||
         !s.input_count || s.input_count > 6 || s.scalar_count > 8 ||
-        s.output != arguments + i) return 1;
+        !outputs || outputs > 7 || s.input_count + outputs > 7) return 1;
     for (uint32_t j = 0; j < s.input_count; ++j) {
-      if (s.inputs[j] >= s.output) return 1;
+      if (s.inputs[j] >= nextOutput) return 1;
       reads[s.inputs[j]] = i;
+    }
+    for (uint32_t j = 0; j < outputs; ++j) {
+      if (nextOutput >= buffers || outputSlot(s,j) != nextOutput ||
+          contract[nextOutput].first_write != int64_t(i)) return 1;
+      reads[nextOutput++] = i;
     }
     uint64_t block = 1;
     for (uint32_t j = 0; j < 6; ++j) {
@@ -287,6 +244,7 @@ extern "C" int tessera_rocm_program_prepare(
       }
     }
   }
+  if (nextOutput != buffers) return 1;
   for (uint32_t i = 0; i < buffers; ++i) {
     if (contract[i].ownership == 2) reads[i] = steps;
     if (contract[i].last_read != reads[i]) return 1;
@@ -366,8 +324,13 @@ extern "C" int tessera_rocm_program_prepare(
   }
   for (uint32_t i = 0; i < steps; ++i) {
     auto &s = owned.stages[i]; size_t arg = 0;
-    for (uint32_t j = 0; j <= plan[i].input_count; ++j) {
-      uint32_t slot = j < plan[i].input_count ? plan[i].inputs[j] : plan[i].output;
+    s.inputs.assign(plan[i].inputs, plan[i].inputs + plan[i].input_count);
+    s.outputs.clear();
+    for (uint32_t j = 0; j < outputCount(plan[i]); ++j)
+      s.outputs.push_back(outputSlot(plan[i], j));
+    for (uint32_t j = 0; j < plan[i].input_count + outputCount(plan[i]); ++j) {
+      uint32_t slot = j < plan[i].input_count ? plan[i].inputs[j] :
+          outputSlot(plan[i],j - plan[i].input_count);
       auto &r = s.refs[j];
       r = {owned.buffers[slot], owned.buffers[slot], 0,
            int64_t(contract[slot].elements), 1};
@@ -382,6 +345,92 @@ extern "C" int tessera_rocm_program_prepare(
   return 0;
 } catch (...) { return 12; }
 
+
+extern "C" int tessera_rocm_program_pack_host_view(
+    const void *source, uint64_t sourceSpan, uint32_t rank,
+    const uint64_t *shape, const uint64_t *strides, uint32_t itemBytes,
+    void *destination, uint64_t destinationBytes) {
+  constexpr uint64_t limit = INT64_MAX;
+  if (!source || !destination || !shape || !strides || rank < 1 || rank > 32 ||
+      !itemBytes || itemBytes > 8 || sourceSpan > limit ||
+      destinationBytes > limit) return 1;
+  uint64_t count = 1, span = itemBytes;
+  for (uint32_t axis = 0; axis < rank; ++axis) {
+    if (!shape[axis] || shape[axis] > limit || !strides[axis] ||
+        strides[axis] % itemBytes || strides[axis] > limit ||
+        count > limit / shape[axis]) return 1;
+    count *= shape[axis];
+    if (shape[axis] - 1 > (limit - span) / strides[axis]) return 1;
+    span += (shape[axis] - 1) * strides[axis];
+  }
+  if (count > limit / itemBytes || count * itemBytes != destinationBytes ||
+      span > sourceSpan) return 1;
+  uintptr_t src = reinterpret_cast<uintptr_t>(source);
+  uintptr_t dst = reinterpret_cast<uintptr_t>(destination);
+  if (src > UINTPTR_MAX - sourceSpan || dst > UINTPTR_MAX - destinationBytes ||
+      (src < dst + destinationBytes && dst < src + sourceSpan)) return 1;
+  const auto *input = static_cast<const unsigned char *>(source);
+  auto *output = static_cast<unsigned char *>(destination);
+  // Collapse an actually contiguous suffix; singleton axes contribute no
+  // offset. The validated total byte count bounds every block multiplication.
+  uint32_t prefix = rank;
+  uint64_t blockBytes = itemBytes;
+  while (prefix && (shape[prefix-1] == 1 || strides[prefix-1] == blockBytes)) {
+    blockBytes *= shape[--prefix];
+  }
+  if (!prefix) {
+    std::memcpy(output, input, destinationBytes);
+    return 0;
+  }
+  const uint64_t columns = shape[prefix-1];
+  const uint64_t rows = destinationBytes / blockBytes / columns;
+  for (uint64_t row = 0; row < rows; ++row) {
+    uint64_t remaining = row, offset = 0;
+    for (uint32_t axis = prefix-1; axis-- > 0;) {
+      offset += (remaining % shape[axis]) * strides[axis];
+      remaining /= shape[axis];
+    }
+    auto *outRow = output + row * columns * blockBytes;
+    const auto *inRow = input + offset;
+    // Fixed-width memcpy keeps unaligned byte inputs legal while avoiding a
+    // dynamic libc call for each interleaved scalar. Only storage is moved.
+    auto fixed = [&](auto width) {
+      constexpr size_t bytes = decltype(width)::value;
+      for (uint64_t column = 0; column < columns; ++column)
+        std::memcpy(outRow + column * bytes,
+                    inRow + column * strides[prefix-1], bytes);
+    };
+    switch (blockBytes) {
+    case 1: fixed(std::integral_constant<size_t, 1>{}); break;
+    case 2: fixed(std::integral_constant<size_t, 2>{}); break;
+    case 4: fixed(std::integral_constant<size_t, 4>{}); break;
+    case 8: fixed(std::integral_constant<size_t, 8>{}); break;
+    default:
+      for (uint64_t column = 0; column < columns; ++column)
+        std::memcpy(outRow + column * blockBytes,
+                    inRow + column * strides[prefix-1], blockBytes);
+    }
+  }
+  return 0;
+}
+
+extern "C" int tessera_rocm_program_prepare(
+    const char *architecture, uint32_t arguments, uint32_t buffers,
+    const TesseraRocmProgramBuffer *contract, uint32_t steps,
+    const TesseraRocmProgramStep *plan, const void *const *inputs,
+    const uint64_t *inputBytes, uint64_t *handle) {
+  return prepareProgram(architecture, arguments, buffers, contract, steps,
+                        plan, inputs, inputBytes, handle);
+}
+extern "C" int tessera_rocm_program_prepare_multi_output(
+    const char *architecture, uint32_t arguments, uint32_t buffers,
+    const TesseraRocmProgramBuffer *contract, uint32_t steps,
+    const TesseraRocmProgramMultiOutputStep *plan, const void *const *inputs,
+    const uint64_t *inputBytes, uint64_t *handle) {
+  return prepareProgram(architecture, arguments, buffers, contract, steps,
+                        plan, inputs, inputBytes, handle);
+}
+
 extern "C" int tessera_rocm_program_update(
     uint64_t handle, const void *const *inputs, const uint64_t *bytes) try {
   if (getpid() != process) return 2;
@@ -393,8 +442,64 @@ extern "C" int tessera_rocm_program_update(
   return upload(p, inputs, bytes);
 } catch (...) { return 12; }
 
-extern "C" int tessera_rocm_program_invoke(
-    uint64_t handle, uint32_t repeats, uint64_t *generation, float *elapsed) try {
+// Partial root uploads preserve unaffected SSA values, but invalidate every
+// transitive dependent result. Complete admission precedes any state change.
+extern "C" int tessera_rocm_program_update_slots(
+    uint64_t handle, uint32_t count, const uint32_t *slots,
+    const void *const *inputs, const uint64_t *bytes) try {
+  if (!count || !slots || !inputs || !bytes) return 1;
+  if (getpid() != process) return 2;
+  auto &pool = state(); std::lock_guard<std::mutex> guard(pool.mutex);
+  auto it = pool.programs.find(handle); if (it == pool.programs.end()) return 1;
+  auto &p = *it->second;
+  if (!identity(p)) return 2;
+  if (p.poisoned || !p.ready) return 10;
+  if (count > p.arguments) return 1;
+  std::vector<unsigned char> changed(p.contract.size(), 0);
+  for (uint32_t i = 0; i < count; ++i) {
+    if (slots[i] >= p.arguments || changed[slots[i]] ||
+        !inputs[i] || bytes[i] != p.contract[slots[i]].bytes) return 1;
+    changed[slots[i]] = 1;
+  }
+  auto initialized = p.initialized;
+  for (auto &stage : p.stages) {
+    bool invalid = false;
+    for (auto slot : stage.inputs) invalid |= changed[slot] != 0;
+    if (invalid)
+      for (auto slot : stage.outputs) {
+        changed[slot] = 1;
+        initialized[slot] = 0;
+      }
+  }
+  std::vector<std::vector<unsigned char>> next(count);
+  if (!p.pinned)
+    for (uint32_t i = 0; i < count; ++i) {
+      auto *begin = static_cast<const unsigned char *>(inputs[i]);
+      next[i].assign(begin, begin + bytes[i]);
+    }
+  if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
+  p.poisoned = true; p.ready = false; p.output = false;
+  for (uint32_t i = 0; i < count; ++i) {
+    auto slot = slots[i];
+    const void *source;
+    if (p.pinned) {
+      auto *destination = static_cast<unsigned char *>(p.pinnedInputs) + p.inputOffsets[slot];
+      std::memcpy(destination, inputs[i], bytes[i]); source = destination;
+    } else {
+      p.snapshots[slot] = std::move(next[i]); source = p.snapshots[slot].data();
+    }
+    if (hipMemcpyAsync(p.buffers[slot], source, bytes[i],
+                      hipMemcpyHostToDevice, p.stream) != hipSuccess) return 5;
+  }
+  if (hipStreamSynchronize(p.stream) != hipSuccess) return 7;
+  p.initialized = std::move(initialized);
+  p.ready = true; p.poisoned = false;
+  return 0;
+} catch (...) { return 12; }
+
+static int invokeRange(
+    uint64_t handle, uint32_t first, uint32_t count, bool full,
+    uint32_t repeats, uint64_t *generation, float *elapsed) try {
   if (generation) *generation = 0;
   if (elapsed) *elapsed = 0;
   if (!generation || !repeats || repeats > 1048576) return 1;
@@ -404,6 +509,14 @@ extern "C" int tessera_rocm_program_invoke(
   auto &p = *it->second;
   if (!identity(p)) return 2;
   if (p.poisoned || !p.ready || p.generation == UINT64_MAX) return 10;
+  if (full) { first = 0; count = p.stages.size(); }
+  if (!count || first >= p.stages.size() || count > p.stages.size() - first) return 1;
+  auto initialized = p.initialized;
+  for (uint32_t i = first; i < first + count; ++i) {
+    for (auto slot : p.stages[i].inputs)
+      if (!initialized[slot]) return 10;
+    for (auto slot : p.stages[i].outputs) initialized[slot] = 1;
+  }
   p.output = false;
   hipEvent_t begin{}, end{};
   if (elapsed) {
@@ -415,10 +528,12 @@ extern "C" int tessera_rocm_program_invoke(
   }
   int status = 0;
   for (uint32_t i = 0; i < repeats && !status; ++i)
-    for (auto &s : p.stages)
+    for (uint32_t member = first; member < first + count; ++member) {
+      auto &s = p.stages[member];
       if (hipModuleLaunchKernel(s.function, s.geometry[0], s.geometry[1], s.geometry[2],
           s.geometry[3], s.geometry[4], s.geometry[5], 0, p.stream, s.argv.data(),
           nullptr) != hipSuccess) { status = 6; break; }
+    }
   if (!status && elapsed && hipEventRecord(end, p.stream) != hipSuccess) status = 6;
   // Completion precedes event destruction, output publication and any readback.
   if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
@@ -429,9 +544,23 @@ extern "C" int tessera_rocm_program_invoke(
   }
   if (status) { p.poisoned = true; return status; }
   if (elapsed) *elapsed /= repeats;
-  p.output = true; *generation = ++p.generation;
+  p.initialized = std::move(initialized);
+  p.output = true;
+  for (uint32_t slot = 0; slot < p.contract.size(); ++slot)
+    if (p.contract[slot].ownership == 2 && !p.initialized[slot]) p.output = false;
+  *generation = ++p.generation;
   return 0;
 } catch (...) { return 12; }
+
+extern "C" int tessera_rocm_program_invoke(
+    uint64_t handle, uint32_t repeats, uint64_t *generation, float *elapsed) {
+  return invokeRange(handle, 0, 0, true, repeats, generation, elapsed);
+}
+extern "C" int tessera_rocm_program_invoke_range(
+    uint64_t handle, uint32_t first, uint32_t count, uint32_t repeats,
+    uint64_t *generation, float *elapsed) {
+  return invokeRange(handle, first, count, false, repeats, generation, elapsed);
+}
 
 // Diagnostic member windows run the immutable SSA members in prefix order.
 // Repetition of a pure member writes the same fresh output; consumers only run
@@ -494,6 +623,7 @@ extern "C" int tessera_rocm_program_profile_members(
       p.events.pop_back();
     }
   }
+  p.initialized.assign(p.contract.size(), 1);
   p.poisoned = false; p.output = true; *generation = ++p.generation;
   return 0;
 } catch (...) { return 12; }

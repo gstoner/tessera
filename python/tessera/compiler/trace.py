@@ -364,7 +364,7 @@ class TraceBuilder:
             and all(type(dim) is int and dim > 0 for dim in reshape_shape)
             and (not self.evaluate_catalog_outputs or not tracer_args
                  or not all(value.value is not None for value in tracer_args)))
-        if physical_movement or attention_types_only or scaled_types_only or cast_types_only or reshape_types_only or graph_name in {"tessera.nvfp4_requantize","tessera.mxfp4_folded_storage"}:
+        if physical_movement or attention_types_only or scaled_types_only or cast_types_only or reshape_types_only or graph_name in {"tessera.nvfp4_expand","tessera.nvfp4_requantize","tessera.mxfp4_folded_storage"}:
             # Catalog-owned result contracts avoid host arithmetic during tracing,
             # including attention output/row-LSE and packed conversion results.
             from .graph_ir import _infer_result_types, tensor_ir_type

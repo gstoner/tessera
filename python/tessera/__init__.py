@@ -3805,6 +3805,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         dq = _ms.dequantize(q).astype(np.float32)
         return dq, np.asarray(q.scales, np.float32)
 
+    def nvfp4_expand(codes, scales, projection_globals, *, row_offsets, numeric_policy):
+        """Expand E2M1 codes exactly; round the projection scale product once."""
+        from .compiler.nvfp4_expansion import reference_nvfp4_expand
+        return reference_nvfp4_expand(codes, scales, projection_globals,
+            row_offsets=row_offsets, numeric_policy=numeric_policy)
+
     def nvfp4_requantize(codes, scales, projection_globals, *, row_offsets, numeric_policy):
         """Explicit joint-SSE checkpoint conversion, returning codes/scales/loss."""
         from .compiler.rocm_nvfp4_ingest import reference_nvfp4_requantize
@@ -5155,6 +5161,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "quantize_fp4": quantize_fp4,
         "dequantize_fp4": dequantize_fp4,
         "quantize_nvfp4": quantize_nvfp4,
+        "nvfp4_expand": nvfp4_expand,
         "nvfp4_requantize": nvfp4_requantize,
         "mxfp4_folded_storage": mxfp4_folded_storage,
         "scaled_matmul": scaled_matmul,
@@ -5804,6 +5811,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         quantize_fp4=quantize_fp4,
         dequantize_fp4=dequantize_fp4,
         quantize_nvfp4=quantize_nvfp4,
+        nvfp4_expand=nvfp4_expand,
         nvfp4_requantize=nvfp4_requantize,
         mxfp4_folded_storage=mxfp4_folded_storage,
         scaled_matmul=scaled_matmul,

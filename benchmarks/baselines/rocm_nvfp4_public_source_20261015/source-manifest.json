@@ -1,0 +1,8 @@
+{
+  "python/tessera/compiler/rocm_nvfp4_source_frontend.py": "3d70d73f61bb5887f7ea461a0558f6ec6a3813557f36d962d087ce2b9861be38",
+  "python/tessera/compiler/rocm_nvfp4_program.py": "a50940ef305d45a4d5caeb2e999b77460d3ef9bf5a013d66ed585a9c4b5ab6c0",
+  "python/tessera/compiler/jit.py": "a5854daad59e0c2a018187ff23a6316535b849b924fc355337b6c099a61f2dc9",
+  "python/tessera/runtime.py": "9080072dd29dec32e45397ee931e2990ced75530907962daefb3911d39a899cb",
+  "tests/device/rocm/test_public_nvfp4_source_program.py": "b8d765a0009b85c68845736fe68dd168457381d3c829776476dc339bf31e4997",
+  "benchmarks/rocm/benchmark_nvfp4_original_composed.py": "9e14955f7f19632a29767d1de1b911545f65f860cb25a389c209a742c5fb2244"
+}

@@ -10,6 +10,7 @@ from pathlib import Path
 import socket
 import statistics
 import time
+from typing import Any
 import numpy as np
 from tessera import runtime as rt
 from tessera.compiler import rocm_mxfp4 as mx,rocm_nvfp4_ingest as ingest
@@ -24,6 +25,10 @@ ROOT=Path(__file__).resolve().parents[2]
 def measure(args):
     if args.windows<3 or not args.m or any(m<=64 for m in args.m):
         raise ValueError("at least three timing windows and M>64 required")
+    activation_pool=activation_metadata=None
+    if getattr(args,"activations",None) is not None:
+        from benchmarks.rocm.checkpoint_activations import load_capture
+        activation_pool,activation_metadata=load_capture(args.activations,args.m)
     os.environ["TESSERA_OPT"]=str(args.compiler.resolve())
     if rt._rocm_live_arch()!="gfx1201":
         raise RuntimeError("checkpoint formats require exact live gfx1201")
@@ -38,6 +43,23 @@ def measure(args):
     sources=[item["source"] for item in loaded]
     projections=[item["projection"] for item in loaded]
     base=np.concatenate([np.asarray(item["bf16"],np.float32) for item in loaded])
+    quality_references={}
+    if activation_pool is not None:
+        if activation_pool.shape[1]!=base.shape[1]:raise ValueError("captured activation K differs from checkpoint")
+        actual=np.asarray(activation_pool[:max(args.m)],np.float64)
+        quality_references["bf16_original"]=actual@base.astype(np.float64).T
+        # Independent diagnostic decode, before activation quantization or folding.
+        levels=np.asarray([0,.5,1,1.5,2,3,4,6,-0.,-.5,-1,-1.5,-2,-3,-4,-6],np.float64)
+        shipped=[]
+        for projection in projections:
+            packed=projection.packed_codes
+            values=np.empty((packed.shape[0],packed.shape[1]*2),np.float64)
+            values[:,0::2]=levels[packed&15];values[:,1::2]=levels[packed>>4]
+            values*=np.repeat(projection.e4m3_scales.astype(np.float64)*projection.global_scale,16,axis=1)
+            shipped.append(actual@values.T)
+            del values
+        quality_references["nvfp4_shipped"]=np.concatenate(shipped,axis=1)
+        del shipped
     # Keep source identities and independent globals; free BF16/raw duplication.
     del loaded
     started=time.perf_counter()
@@ -55,7 +77,7 @@ def measure(args):
             *ingested.shape,ingested.row_offsets,
             numeric_policy=ingest.nvfp4_requantization_policy()))
         native_compile_ms=(time.perf_counter()-started)*1e3
-        events=[]
+        events: list[float]=[]
         converted=execute_nvfp4_ingest(conversion,source_codes,source_scales,
             source_globals,event_samples=events)
         def verify_conversion(output):
@@ -103,19 +125,23 @@ def measure(args):
     direct_codes,direct_scales,direct_values=checkpoint._direct_bf16_to_mxfp4(base)
     direct_ms=(time.perf_counter()-started)*1e3
     direct_quality=checkpoint._relative_rms(base,direct_values)
+    if activation_pool is not None:quality_references["mxfp4_direct"]=actual@direct_values.T
     del direct_values
     ingested_values=mx.exact_weights(mx.unpack_e2m1_codes(ingested.packed_codes),ingested.scale_exponents)
     ingested_quality=checkpoint._relative_rms(base,ingested_values)
+    if activation_pool is not None:quality_references["mxfp4_ingested"]=actual@ingested_values.T
     del ingested_values
     packed=dict(mxfp4_nvfp4_ingested=(ingested.packed_codes,ingested.scale_exponents),
                 mxfp4_direct_joint_sse=(mx.pack_e2m1_codes(direct_codes),direct_scales))
     del direct_codes
-    packet=dict(schema="tessera.gfx1201.checkpoint_format_gate.v1",
+    packet: dict[str,Any]=dict(schema="tessera.gfx1201.checkpoint_format_gate.v1",
         architecture="gfx1201",device=name.value.decode(),device_ordinal=ordinal.value,host=socket.gethostname(),
         compiler_sha256=hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
         source_checkpoints=sources,projection_names=list(ingested.projection_names),
         projection_row_offsets=list(ingested.row_offsets),
-        source_activation="seeded synthetic f32; not captured model activations",
+        source_activation=("seeded synthetic f32; not captured model activations" if activation_pool is None else
+                           "pinned BF16 original model layer-0 MLP inputs; upstream CPU reference"),
+        activation_source=activation_metadata,model_quality_acceptance=False,
         host_ingest_ms=ingest_ms,host_direct_mxfp4_ms=direct_ms,native_ingest=native_ingest,
         ingested_weight_error=ingested_quality,direct_joint_weight_error=direct_quality,
         ingest_numeric_policy=ingested.numeric_policy(),
@@ -123,7 +149,7 @@ def measure(args):
         scale_scope="standard E8M0 MXFP8; folded MXFP4 named legacy zero-block and approximate E4M3 expansion",
         timing_scope="resident graph device execution/dispatch; checked host staging/transfer/sync separately",
         rows=[])
-    files=(__file__,formats.__file__,checkpoint.__file__,
+    files=(__file__,formats.__file__,checkpoint.__file__,ROOT/"benchmarks/rocm/checkpoint_activations.py",
         ROOT/"python/tessera/compiler/rocm_nvfp4_ingest.py",
         ROOT/"python/tessera/compiler/rocm_nvfp4_ingest_native.py",
         ROOT/"python/tessera/compiler/graph_ir.py",
@@ -146,9 +172,19 @@ def measure(args):
     clock=DeviceClock(hip,args.compiler,args.llvm_bin)
     try:
         for m in args.m:
-            a=np.random.default_rng(args.seed+m).normal(size=(m,base.shape[1])).astype(np.float32)
+            a=(np.random.default_rng(args.seed+m).normal(size=(m,base.shape[1])).astype(np.float32)
+               if activation_pool is None else activation_pool[:m])
             row=formats.run_operands(a,base.T,args,hip,clock,packed_weights=packed)
             row["activation_sha256"]=hashlib.sha256(a.tobytes()).hexdigest()
+            if quality_references:
+                original=quality_references["bf16_original"][:m]
+                shipped=quality_references["nvfp4_shipped"][:m]
+                row["original_model_projection_quality"]={
+                    "scope":"same captured BF16 model inputs; diagnostic f64 products before activation quantization/folding; not native timings or full-model accuracy",
+                    "nvfp4_shipped_vs_bf16":checkpoint._relative_rms(original,shipped),
+                    "mxfp4_direct_vs_bf16":checkpoint._relative_rms(original,quality_references["mxfp4_direct"][:m]),
+                    "mxfp4_ingested_vs_bf16":checkpoint._relative_rms(original,quality_references["mxfp4_ingested"][:m]),
+                    "ingested_vs_shipped":checkpoint._relative_rms(shipped,quality_references["mxfp4_ingested"][:m])}
             row["source_weight_sha256"]=hashlib.sha256(base.tobytes()).hexdigest()
             packet["rows"].append(row)
             args.output.write_text(json.dumps(packet,indent=2,allow_nan=False)+"\n")
@@ -168,6 +204,7 @@ if __name__=="__main__":
     parser.add_argument("--llvm-bin",type=Path,required=True)
     parser.add_argument("--output",type=Path,required=True)
     parser.add_argument("--m",type=int,nargs="+",default=[128,256])
+    parser.add_argument("--activations",type=Path,help="Pinned real model capture .npz and same-stem .json")
     parser.add_argument("--include-native-packed",action="store_true")
     parser.add_argument("--native-ingest",action="store_true")
     parser.add_argument("--windows",type=int,default=3)

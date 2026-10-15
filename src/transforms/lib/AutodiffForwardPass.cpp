@@ -546,6 +546,19 @@ class AutodiffForwardPass
 
   void runOnOperation() override {
     mlir::ModuleOp module = getOperation();
+    // Select an existing native export without differentiating its parent a
+    // second time. The projection verifies typed member lineage/body seals.
+    if (exportScaledProgram && selectScaledMember >= 0 &&
+        module->hasAttr("tessera.native.sm120_tensor_program")) {
+      if (exportScaledPrimal || emitStorageChild || exportHVP || exportAttentionJVP) {
+        module.emitError("existing SM120 member projection conflicts with another export");
+        return signalPassFailure();
+      }
+      if (mlir::failed(mlir::verify(module)) ||
+          mlir::failed(projectNativeScaledMatmulMember(module, selectScaledMember)))
+        signalPassFailure();
+      return;
+    }
     std::string originalProgramSource;
     if (exportScaledProgram) {
       llvm::raw_string_ostream stream(originalProgramSource);

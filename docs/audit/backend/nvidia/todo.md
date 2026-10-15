@@ -5,6 +5,30 @@ owner: NVIDIA backend
 target: nvidia_sm120
 last_updated: 2026-10-15
 ---
+
+## W11-ACTIVE-SOURCE-20261015 — source-active row JVP packages
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-ACTIVE-SOURCE-20261015.
+
+Native static FP16/BF16 source-active RMSNorm (explicit FP32 accumulator) ->
+ReLU -> plain FP32-output matmul JVP executes through the actual traced Graph,
+native AD SSA, sealed two-result Schedule/Tile producer, typed fragments,
+NVIDIA Target/LLVM/NVVM images and one checked C++ owner. Public native_jvp
+exports a distinct portable source-active schema. Compiler-free fresh-process
+replay, original argument permutations, minimal/ragged rows, live-owner reuse,
+changed root values and pre-provider artifact rejection have RTX5070 proof.
+
+The native outline remains artifact_only. Existing RHS v7 numbering/ABI is
+unchanged. General producer, dynamic/resident and reverse AD remain open.
+Normal CMake compiler builds and 78 owning source/policy checks pass, including
+direct signed-zero/NaN producer storage checks. Final drift, synchronization and
+full-unit delivery gates remain open; the earlier normalization full-suite
+result does not certify this new source.
+
+Contract: docs/spec/ir/source_active_row_jvp.md.
+Evidence: benchmarks/baselines/sm120_active_source_jvp_runtime_20261015/README.md.
+
 ## NORM-AD-ACCUM-20261015 — native normalization derivative precision
 
 Owner AD-FWD-CORE-1 / AD-HIGHER-1 / NUMPOL-CARRIER-1.

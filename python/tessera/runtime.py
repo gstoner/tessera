@@ -35541,6 +35541,7 @@ def _executor_table():
         "x86_deltanet_bwd_compiled": _execute_x86_compiled_deltanet_backward,
         "rocm_rope_compiled": _execute_rocm_compiled_rope,
         "nvidia_tensor_rhs_jvp_program": _execute_nvidia_tensor_jvp_program_artifact,
+        "nvidia_active_source_jvp_program": _execute_nvidia_tensor_jvp_program_artifact,
         "nvidia_lhs_program": _execute_nvidia_lhs_program_artifact,
     "nvidia_rhs_program": _execute_nvidia_rhs_program_artifact,
         "rocm_nvfp4_program": _execute_rocm_nvfp4_program_artifact,

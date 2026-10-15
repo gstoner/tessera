@@ -2851,6 +2851,11 @@ def _shape_matmul_2d(operand_types: List[IRType], attrs: Optional[Dict[str, Any]
     from ..dtype import _LOW_PRECISION
     if (lhs.dtype in _LOW_PRECISION) or (rhs.dtype in _LOW_PRECISION):
         dtype = "fp32"
+    if attrs is not None and attrs.get("output_dtype") is not None:
+        output_dtype = str(attrs["output_dtype"]).lower()
+        if output_dtype not in {"fp16", "fp32"}:
+            raise ValueError("matmul output_dtype must be fp16 or fp32")
+        dtype = output_dtype
     if lhs.rank == 2 and rhs.rank == 2:
         return tensor_ir_type((lhs.shape[0], rhs.shape[1]), dtype, layout=lhs.layout)
     return tensor_ir_type(("*",), dtype, layout=lhs.layout)

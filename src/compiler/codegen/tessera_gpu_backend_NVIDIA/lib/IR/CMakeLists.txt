@@ -11,8 +11,12 @@ add_mlir_library(TesseraNVIDIAIR
 
   DEPENDS
     TesseraNVIDIATableGen
+    TesseraTileIRTableGen
 
   LINK_LIBS PUBLIC
+    TesseraIR
+    MLIRFuncDialect
+    MLIRLLVMDialect
     MLIRIR
     MLIRSupport
 )

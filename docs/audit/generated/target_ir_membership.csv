@@ -27,6 +27,7 @@ nvidia,func,no-contract,,
 nvidia,kernel_call,requires,accuracy arch covers determinism provenance,tolerance tolerance_rel
 nvidia,inline_ptx,requires,accuracy arch covers determinism,tolerance tolerance_rel
 nvidia,profiler_probe,optional-only,,accum arch dst_space dtype_ab dtype_c epilogue src_space
+nvidia,row_region_kernel,requires,arch storage,
 rocm,memcpy,optional-only,,dst_space src_space
 rocm,async_copy,optional-only,,dst_space src_space
 rocm,wait,optional-only,,dst_space src_space

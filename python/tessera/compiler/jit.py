@@ -2967,18 +2967,20 @@ class JitFn:
                 raise TesseraJitError("native JVP primal and tangent shapes must match")
         if len(graph_ops)>1 and normalize_target_kind(self.target)=="nvidia_sm120" and not resident_attention:
             from .prepared_nvidia_tensor_jvp import PreparedTensorJVP, candidate as tensor_jvp_candidate
-            if tensor_jvp_candidate(traced_module,request.wrt_indices):
+            from .prepared_nvidia_active_source import PreparedActiveSourceJVP, candidate as active_source_candidate
+            source_active = active_source_candidate(traced_module, request.wrt_indices)
+            if source_active or tensor_jvp_candidate(traced_module,request.wrt_indices):
                 import copy
                 projected=copy.deepcopy(traced_module)
                 projected.module_attrs.update({"tessera.target":'"nvidia_sm120"',"tessera.arch":'"sm_120"'})
                 source_ir=projected.to_mlir(target="nvidia_sm120",canonical=True)
-                key=("native_sm120_tensor_rhs_jvp",source_ir)
+                key=("native_sm120_active_source_jvp" if source_active else "native_sm120_tensor_rhs_jvp",source_ir)
                 if self._native_prepared_jvp_pid is None:self._native_prepared_jvp_pid=os.getpid()
                 try:
                     with self._native_prepared_jvp_lock:
                         owner=self._native_prepared_jvp_calls.get(key)
                         if owner is None:
-                            owner=PreparedTensorJVP(source_ir)
+                            owner=(PreparedActiveSourceJVP if source_active else PreparedTensorJVP)(source_ir)
                             if len(self._native_prepared_jvp_calls)>=8:
                                 retired=next(iter(self._native_prepared_jvp_calls))
                                 self._native_prepared_jvp_calls.pop(retired).close()
@@ -3120,7 +3122,7 @@ class JitFn:
     def native_jvp_runtime_artifact(self):
         """Return the last static SM120 paired tensor JVP executable artifact.
 
-        Its input ABI is primal_0, primal_1, tangent_<RHS argument index>.
+        Its input ABI is primal_0, primal_1, tangent_<active original argument index>.
         Other derivative families retain their existing package APIs.
         """
         artifact = getattr(self, "_native_jvp_artifact", None)

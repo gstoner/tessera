@@ -6,6 +6,22 @@ owner: x86 backend
 target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
+
+## W11-ACTIVE-SOURCE-20261015 — source-active row JVP packages
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-ACTIVE-SOURCE-20261015.
+
+Follow-up required for public composed package execution. Shared canonical
+matmul output_dtype inference and explicit eager RMSNorm precision apply;
+new generic scalar Tile view bounds are structurally checked, but LLVM helper
+execution and RTX5070 packages are not an x86 public JVP package certificate.
+The prior normalization arithmetic full-unit evidence retains its original
+source scope.
+
+Contract: docs/spec/ir/source_active_row_jvp.md.
+Evidence: benchmarks/baselines/sm120_active_source_jvp_runtime_20261015/README.md.
+
 ## NORM-AD-ACCUM-20261015 — native normalization derivative precision
 
 Owner AD-FWD-CORE-1 / AD-HIGHER-1 / NUMPOL-CARRIER-1.

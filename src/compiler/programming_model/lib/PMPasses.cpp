@@ -1,3 +1,4 @@
+#include "NativeRowSchedule.h"
 //===- PMPasses.cpp — Programming Model v1.1 passes and pipelines ---------===//
 //
 // Library-owned pass bodies. Previously these lived in
@@ -3209,6 +3210,9 @@ struct GraphToSchedulePass
       if (failed(scheduleNativeSparse(mod))) signalPassFailure();
       return;
     }
+    bool nativeRowSelected = false;
+    if (failed(row_region::schedule(mod,nativeRowSelected))) return signalPassFailure();
+    if (nativeRowSelected) return;
     bool scaleTransposeSelected = false;
     if (scaleTransposeWave && scaleTransposeAuto) {
       mod.emitError("scale transpose cannot request both explicit wave and automatic schedules");
@@ -4236,6 +4240,9 @@ struct ScheduleToTilePass
       if (failed(lowerCooperativeSSD(mod, ssdGPU))) signalPassFailure();
       return;
     }
+    bool nativeRowSelected = false;
+    if (failed(row_region::lower(mod,nativeRowSelected))) return signalPassFailure();
+    if (nativeRowSelected) return;
     bool scaleTransposeSelected = false;
     if (failed(lowerNativeScaleTranspose(mod, scaleTransposeSelected))) return signalPassFailure();
     if (scaleTransposeSelected) return;

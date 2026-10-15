@@ -1,6 +1,10 @@
 // Compiler-owned outlining of actual SM120 tensor producer/matmul Graph edges.
 #pragma once
 #include "mlir/IR/Verifier.h"
+#include "mlir/Parser/Parser.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "llvm/Support/SHA256.h"
+#include <cmath>
 
 namespace tessera {
 static bool hasNativeSM120TensorGraph(mlir::ModuleOp module) {
@@ -39,6 +43,8 @@ static mlir::func::FuncOp cloneNativeSM120TensorMember(
   child->removeAttr("tessera.native.sm120_tensor_member");
   return child;
 }
+
+#include "NativeSM120ActiveSourceProgram.h"
 
 static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module, bool paired = false,
     llvm::StringRef originalSource = {}) {
@@ -81,6 +87,8 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module, b
         SymbolTable::lookupSymbolIn(module,parentRef)) : func::FuncOp{};
     auto wrt = parent ? parent->getAttrOfType<ArrayAttr>("tessera.autodiff.wrt_indices") : ArrayAttr{};
     auto role = wrt && wrt.size() == 1 ? dyn_cast<IntegerAttr>(wrt[0]) : IntegerAttr{};
+    if (parent && rhs && role && role.getInt() != rhs.getArgNumber())
+      return emitNativeSM120ActiveSourceOutline(module,root,parent,originalSource);
     if (!parent || parent.getNumArguments() != 2 || parent.getNumResults() != 1 ||
         !rhs || rhs.getOwner() != &root.getBody().front() || rhs.getArgNumber() >= 2 ||
         !role || role.getInt() != rhs.getArgNumber() ||
@@ -400,6 +408,8 @@ static mlir::LogicalResult projectNativeSM120TensorMember(mlir::ModuleOp module,
   auto lineage = member ? member->getAttrOfType<IntegerAttr>("tessera.native.sm120_tensor_member") : IntegerAttr{};
   if (!member || !lineage || lineage.getInt() != index)
     return module.emitError("SM120 tensor member lineage differs");
+  if (member->hasAttr("tessera.native.sm120_row_producer") &&
+      failed(verifyNativeSM120RowOutline(member))) return failure();
   auto child = cloneNativeSM120TensorMember(member,index);
   module.getBody()->clear(); module.getBody()->push_back(child);
   module->removeAttr("tessera.native.sm120_tensor_program");

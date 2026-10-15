@@ -43,8 +43,8 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 |---|---|---:|---:|---:|---|---|
 | `Verifier coverage` | closed | 294 | 294 | 0 | real=294 | No action unless this row reopens. |
 | `Direct test evidence` | mixed | 413 | 528 | 115 | covered_by_family=29, directly_tested=420, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
-| `Runtime execution matrix` | closed | 283 | 283 | 0 | apple_cpu=2, apple_gpu=24, cpu=7, nvidia_sm120=59, rocm=96, rocm_gfx1151=2, rocm_gfx1201=6, x86=87 | Add rows only when a launch path actually executes. |
-| `Runtime ABI symbols` | mixed | 676 | 1007 | 331 | apple=723, nvidia=52, rocm=67, x86=165 | Reduce stub-only ABI rows where a backend claims native execution. |
+| `Runtime execution matrix` | closed | 284 | 284 | 0 | apple_cpu=2, apple_gpu=24, cpu=7, nvidia_sm120=60, rocm=96, rocm_gfx1151=2, rocm_gfx1201=6, x86=87 | Add rows only when a launch path actually executes. |
+| `Runtime ABI symbols` | mixed | 681 | 1012 | 331 | apple=723, nvidia=57, rocm=67, x86=165 | Reduce stub-only ABI rows where a backend claims native execution. |
 | `Audited repo surfaces` | mixed | 39 | 69 | 30 | archived=4, compile_only=20, runnable=39, runnable_optional=2, scaffold=4 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
 
 ## Code Generation Pathways
@@ -59,7 +59,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `NVIDIA SM80` | open | 0 | 79 | 79 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=79, other=0, missing_target_row=449; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
 | `NVIDIA SM90` | open | 0 | 112 | 112 | manifest: exact_verified=0, implementation_present=0, reference=2, artifact_or_planned=110, other=0, missing_target_row=416; runtime_paths: executable=0/0 (no runtime rows) | Keep compile/artifact evidence separate from SM120 exact-device execution. |
 | `NVIDIA SM100` | open | 0 | 79 | 79 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=79, other=0, missing_target_row=449; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
-| `NVIDIA SM120` | mixed | 71 | 141 | 70 | manifest: exact_verified=71, implementation_present=0, reference=0, artifact_or_planned=70, other=0, missing_target_row=387; runtime_paths: executable=59/59 (nvidia_sm120=59) | Promote artifact rows with SM120 execute-and-compare evidence. |
+| `NVIDIA SM120` | mixed | 71 | 141 | 70 | manifest: exact_verified=71, implementation_present=0, reference=0, artifact_or_planned=70, other=0, missing_target_row=387; runtime_paths: executable=60/60 (nvidia_sm120=60) | Promote artifact rows with SM120 execute-and-compare evidence. |
 
 ## Open Work Summary
 

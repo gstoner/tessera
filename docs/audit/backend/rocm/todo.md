@@ -4,6 +4,21 @@ audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+
+## W11-ACTIVE-SOURCE-20261015 — source-active row JVP packages
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-ACTIVE-SOURCE-20261015.
+
+Follow-up required independently on gfx1201 and gfx1151. Shared canonical
+matmul output_dtype inference and explicit eager RMSNorm precision apply. The
+new scalar Tile views and two-result row Schedule contract have only an SM120
+physical consumer here; no HIP producer route or sibling device result is
+implied. Retain the owning ROCm ingest, route and performance obligations.
+
+Contract: docs/spec/ir/source_active_row_jvp.md.
+Evidence: benchmarks/baselines/sm120_active_source_jvp_runtime_20261015/README.md.
+
 ## NORM-AD-ACCUM-20261015 — native normalization derivative precision
 
 Owner AD-FWD-CORE-1 / AD-HIGHER-1 / NUMPOL-CARRIER-1.

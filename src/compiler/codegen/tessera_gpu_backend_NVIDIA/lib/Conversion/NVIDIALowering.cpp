@@ -1,3 +1,6 @@
+#include "Tessera/IR/TileBufferViewContract.h"
+#include "Tessera/IR/RowRegionContract.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "tessera/gpu/BackendRegistration.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Dialect/Tile/TileEpilogue.h"
@@ -5522,6 +5525,28 @@ struct LowerTileToNVIDIAPass
     module->setAttr("tessera.nvidia.arch",
                     moduleBuilder.getStringAttr(archStringForSM(smVersion)));
 
+    SmallVector<tessera::tile::RowRegionKernelOp> rowKernels;
+    for (auto kernel : module.getOps<tessera::tile::RowRegionKernelOp>()) rowKernels.push_back(kernel);
+    if (!rowKernels.empty()) {
+      if (smVersion != 120 || rowKernels.size() != 1 || module.getBody()->getOperations().size() != 1) {
+        module.emitError("native row region requires an isolated SM120 Target projection");
+        return signalPassFailure();
+      }
+      auto kernel = rowKernels.front();
+      if (failed(tessera::row_region::verifyKernel(kernel))) return signalPassFailure();
+      OpBuilder b(kernel);
+      OperationState state(kernel.getLoc(),"tessera_nvidia.row_region_kernel");
+      state.addAttributes(kernel->getAttrs()); state.addRegion();
+      auto *target = b.create(state);
+      target->getRegion(0).takeBody(kernel->getRegion(0));
+      auto function = cast<LLVM::LLVMFuncOp>(target->getRegion(0).front().front());
+      target->setAttr("tile_body_hash",kernel->getAttr("body_hash"));
+      if (failed(tessera::tile::lowerScalarBufferAccesses(function))) return signalPassFailure();
+      target->setAttr("body_hash",b.getStringAttr(tessera::row_region::digest(function)));
+      kernel.erase();
+      if (failed(tessera::row_region::verifyKernel(target))) return signalPassFailure();
+      return;
+    }
     // Preserve a tuple codomain as a product of scalar proof operations.  The
     // scalar materializer below remains the sole place that implements the
     // mixed-radix arithmetic; this expansion only preserves product structure.
@@ -6731,7 +6756,7 @@ struct LowerNVIDIAToNVVMPass
   }
 
   void getDependentDialects(DialectRegistry &registry) const final {
-    registry.insert<arith::ArithDialect, LLVM::LLVMDialect, math::MathDialect,
+    registry.insert<gpu::GPUDialect, tessera::tile::TesseraTileDialect, arith::ArithDialect, LLVM::LLVMDialect, math::MathDialect,
                     NVVM::NVVMDialect, scf::SCFDialect>();
   }
 
@@ -6771,6 +6796,30 @@ struct LowerNVIDIAToNVVMPass
           return;
         }
         continue;
+      }
+      if (auto row = dyn_cast<tessera::nvidia::RowRegionKernelOp>(op)) {
+        if (failed(tessera::row_region::verifyKernel(op))) return signalPassFailure();
+        auto fn = cast<LLVM::LLVMFuncOp>(op->getRegion(0).front().front());
+        SmallVector<Operation *> ids;
+        fn.walk([&](Operation *child) { if (isa<gpu::ThreadIdOp,gpu::BlockIdOp,gpu::BlockDimOp>(child)) ids.push_back(child); });
+        for (Operation *id : ids) {
+          OpBuilder b(id); Value value;
+          if (auto thread = dyn_cast<gpu::ThreadIdOp>(id)) {
+            if (thread.getDimension()!=gpu::Dimension::x) return signalPassFailure();
+            value=NVVM::ThreadIdXOp::create(b,id->getLoc(),b.getI32Type());
+          } else if (auto block=dyn_cast<gpu::BlockIdOp>(id)) {
+            if (block.getDimension()!=gpu::Dimension::x) return signalPassFailure();
+            value=NVVM::BlockIdXOp::create(b,id->getLoc(),b.getI32Type());
+          } else {
+            auto dimension=cast<gpu::BlockDimOp>(id);
+            if (dimension.getDimension()!=gpu::Dimension::x) return signalPassFailure();
+            value=NVVM::BlockDimXOp::create(b,id->getLoc(),b.getI32Type());
+          }
+          Value index=arith::IndexCastOp::create(b,id->getLoc(),b.getIndexType(),value);
+          id->getResult(0).replaceAllUsesWith(index); id->erase();
+        }
+        fn->setAttr("nvvm.kernel",UnitAttr::get(module.getContext()));
+        fn->moveBefore(op); op->erase(); continue;
       }
       // Real NVVM emission for the fragment-typed mma_sync contract; the abstract
       // marker form falls through to the void-marker path below.

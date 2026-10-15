@@ -1,3 +1,5 @@
+#include "Tessera/IR/TileBufferViewContract.h"
+#include "Tessera/IR/RowRegionContract.h"
 #include "Tessera/IR/StaticPermutationContract.h"
 #include "Tessera/IR/NVFP4IngestContract.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -3280,4 +3282,11 @@ mlir::LogicalResult tessera::tile::TransposeKernelOp::verify() {
       !getOperand(2).getType().isSignlessInteger(64))
     return emitOpError("requires compact positive rank-1..8 f32 shapes, a unique axis permutation and pointer/pointer/i64 ABI");
   return mlir::success();
+}
+
+namespace tessera::tile {
+mlir::LogicalResult BufferViewOp::verify() { return verifyScalarBufferView(getOperation()); }
+mlir::LogicalResult LoadElementOp::verify() { return verifyScalarBufferView(getOperation()); }
+mlir::LogicalResult StoreElementOp::verify() { return verifyScalarBufferView(getOperation()); }
+mlir::LogicalResult RowRegionKernelOp::verify() { return row_region::verifyKernel(getOperation()); }
 }

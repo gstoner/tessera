@@ -487,9 +487,16 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             x = x._data
         return x / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)
 
-    def rmsnorm(x, gamma=None, eps: float = 1e-5):
-        y = _rmsnorm(x, eps=eps)
-        return y if gamma is None else y * np.asarray(gamma)
+    def rmsnorm(x, gamma=None, eps: float = 1e-5, *, numeric_policy=None):
+        if numeric_policy is None:
+            y = _rmsnorm(x, eps=eps)
+            return y if gamma is None else y * np.asarray(gamma)
+        from ._normalization_policy import working_array
+        working, storage = working_array(x, numeric_policy)
+        y = _rmsnorm(working, eps=eps)
+        if gamma is not None:
+            y = y * np.asarray(gamma, dtype=working.dtype)
+        return y.astype(storage)
 
     def rmsnorm_safe(x, eps: float = 1e-6):
         return _rmsnorm(x, eps=eps)
@@ -6180,7 +6187,10 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
             #      width, so the op's internals never run at fp16/bf16.
             #   2. STORE BACK whenever the result widened, regardless of the
             #      input's width.
-            if _is_reduced(want):
+            explicit_norm_policy = (
+                fn.__name__ == "rmsnorm" and kwargs.get("numeric_policy") is not None
+            )
+            if _is_reduced(want) and not explicit_norm_policy:
                 out = fn(
                     *[_promote(a) for a in args],
                     **{k: _promote(v) for k, v in kwargs.items()},

@@ -5,6 +5,22 @@ owner: Apple backend
 target: apple_gpu
 last_updated: 2026-10-15
 ---
+
+## W11-ACTIVE-SOURCE-20261015 — source-active row JVP packages
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-ACTIVE-SOURCE-20261015.
+
+Follow-up required. Shared canonical matmul output_dtype inference and
+explicit eager RMSNorm precision apply. The separate Apple encode wrapper
+rejects explicit numeric_policy until its Metal contract is implemented;
+provider-free tests verify that boundary. New target-neutral scalar Tile views
+have no Apple package consumer or exact Mac execution certificate in this slice.
+NVIDIA images and timings do not establish Apple parity.
+
+Contract: docs/spec/ir/source_active_row_jvp.md.
+Evidence: benchmarks/baselines/sm120_active_source_jvp_runtime_20261015/README.md.
+
 ## NORM-AD-ACCUM-20261015 — native normalization derivative precision
 
 Owner AD-FWD-CORE-1 / AD-HIGHER-1 / NUMPOL-CARRIER-1.

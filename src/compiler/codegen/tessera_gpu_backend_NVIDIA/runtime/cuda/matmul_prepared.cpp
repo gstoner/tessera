@@ -1,3 +1,4 @@
+#include "tessera_nvidia_active_source_program.h"
 // Native ownership of checked static/bounded Schedule/Tile/LLVM SM120 matmul images.
 // No source/kernel reconstruction; synchronous host storage is copied into a
 // context-owned scratch. Each handle pins one module and physical ABI;
@@ -984,12 +985,14 @@ namespace {
 struct TensorProgramStage {
   CUmodule module = nullptr;
   CUfunction function = nullptr;
-  int64_t inputs[2]{}, output = 0;
+  int64_t inputs[2]{}, output = 0, secondOutput = -1;
   bool matmul = false;
   unsigned gridX = 0, gridY = 1;
   std::array<int64_t,3> dims{};
 };
 struct TensorProgramOwner {
+  bool sourceActive = false;
+  std::array<TesseraNvidiaMatmulHostView,3> lastInputs{};
   CUcontext context = nullptr;
   unsigned long long identity = 0;
   CUstream stream = nullptr;
@@ -1046,10 +1049,14 @@ bool submitTensorProgram(TensorProgramOwner &owner, int repeats=1,
   for (size_t i=0;i<owner.stages.size();++i) {
     auto &stage=owner.stages[i];
     CUdeviceptr input=owner.arena->base+owner.offsets[stage.inputs[0]];
-    CUdeviceptr other=stage.matmul ? owner.arena->base+owner.offsets[stage.inputs[1]] : 0;
+    CUdeviceptr other=(stage.matmul || stage.secondOutput>=0) ? owner.arena->base+owner.offsets[stage.inputs[1]] : 0;
     CUdeviceptr output=owner.arena->base+owner.offsets[stage.output];
+    CUdeviceptr second=stage.secondOutput>=0 ? owner.arena->base+owner.offsets[stage.secondOutput] : 0;
     void *args[6]={};
-    if (stage.matmul) {
+    if (stage.secondOutput>=0) {
+      args[0]=&input;args[1]=&other;args[2]=&output;args[3]=&second;
+      args[4]=&stage.dims[0];args[5]=&stage.dims[1];
+    } else if (stage.matmul) {
       args[0]=&input; args[1]=&other; args[2]=&output;
       for (int j=0;j<3;++j) args[3+j]=&stage.dims[j];
     } else {
@@ -1079,6 +1086,34 @@ bool readTensorProgram(TensorProgramOwner &owner, const TesseraNvidiaMatmulHostV
     std::memcpy(outputs[i].data,host+owner.offsets[id],owner.buffers[id].bytes);
   }
   return true;
+}
+bool tensorProgramFrameAliases(const TesseraNvidiaMatmulHostView *views) {
+  for (size_t i=3;i<5;++i) for (size_t j=0;j<3;++j) {
+    uintptr_t a=reinterpret_cast<uintptr_t>(views[i].data),b=reinterpret_cast<uintptr_t>(views[j].data);
+    if (a<b+views[j].bytes && b<a+views[i].bytes) return bad("paired tensor output aliases an input"),false;
+  }
+  return true;
+}
+int invokeTensorProgram(TensorProgramOwner &owner,const TesseraNvidiaMatmulHostView *views) {
+  for (size_t i=0;i<3;++i)
+    if (!tensorProgramView(views[i],owner.buffers[i])) return bad("paired tensor input shape/stride/storage mismatch");
+  if (!tensorProgramOutputs(owner,views+3)) return 1;
+  if (!tensorProgramFrameAliases(views)) return 1;
+  if (!tensorProgramContext(owner)) return 1;
+  owner.generation=0;
+  if (!owner.arena->grow(owner.bytes) || !owner.arena->growHost(owner.bytes)) return 1;
+  ++owner.arena->generation;
+  auto *host=static_cast<unsigned char *>(owner.arena->host);
+  for (size_t i=0;i<3;++i) std::memcpy(host+owner.offsets[i],views[i].data,views[i].bytes);
+  bool status=true;
+  for (size_t i=0;i<3 && status;++i)
+    status=ok(cuMemcpyHtoDAsync(owner.arena->base+owner.offsets[i],host+owner.offsets[i],views[i].bytes,owner.stream),"upload paired tensor root");
+  if (status) status=submitTensorProgram(owner);
+  if (status) status=readTensorProgram(owner,views+3);
+  if (!status) { const std::string saved=error;cuStreamSynchronize(owner.stream);error=saved;return 1; }
+  owner.generation=owner.arena->generation;owner.base=owner.arena->base;
+  for (size_t i=0;i<3;++i) owner.lastInputs[i]=views[i];
+  return 0;
 }
 }
 extern "C" int tessera_nvidia_tensor_program_prepare(
@@ -1163,34 +1198,14 @@ extern "C" int tessera_nvidia_tensor_program_invoke(uint64_t handle,
     const TesseraNvidiaMatmulHostView *views,size_t count) {
   error.clear();if (getpid()!=process) return bad("tensor program cannot cross fork");
   std::lock_guard<std::mutex> lock(mutex);auto found=tensorPrograms.find(handle);
-  if (found==tensorPrograms.end() || !views || count!=5) return bad("paired tensor host frame mismatch");
-  auto &owner=*found->second;
-  for (size_t i=0;i<3;++i)
-    if (!tensorProgramView(views[i],owner.buffers[i])) return bad("paired tensor input shape/stride/storage mismatch");
-  if (!tensorProgramOutputs(owner,views+3)) return 1;
-  for (size_t i=3;i<5;++i) for (size_t j=0;j<3;++j) {
-    uintptr_t a=reinterpret_cast<uintptr_t>(views[i].data),b=reinterpret_cast<uintptr_t>(views[j].data);
-    if (a<b+views[j].bytes && b<a+views[i].bytes) return bad("paired tensor output aliases an input");
-  }
-  if (!tensorProgramContext(owner)) return 1;
-  owner.generation=0;
-  if (!owner.arena->grow(owner.bytes) || !owner.arena->growHost(owner.bytes)) return 1;
-  ++owner.arena->generation;
-  auto *host=static_cast<unsigned char *>(owner.arena->host);
-  for (size_t i=0;i<3;++i) std::memcpy(host+owner.offsets[i],views[i].data,views[i].bytes);
-  bool status=true;
-  for (size_t i=0;i<3 && status;++i)
-    status=ok(cuMemcpyHtoDAsync(owner.arena->base+owner.offsets[i],host+owner.offsets[i],views[i].bytes,owner.stream),"upload paired tensor root");
-  if (status) status=submitTensorProgram(owner);
-  if (status) status=readTensorProgram(owner,views+3);
-  if (!status) { const std::string saved=error;cuStreamSynchronize(owner.stream);error=saved;return 1; }
-  owner.generation=owner.arena->generation;owner.base=owner.arena->base;return 0;
+  if (found==tensorPrograms.end() || found->second->sourceActive || !views || count!=5) return bad("paired tensor host frame mismatch");
+  return invokeTensorProgram(*found->second,views);
 }
 extern "C" int tessera_nvidia_tensor_program_profile(uint64_t handle,int repeats,int captured,
     float *stageMs,size_t count,float *programMs,const TesseraNvidiaMatmulHostView *outputs,size_t outputCount) {
   error.clear();if (getpid()!=process) return bad("tensor program cannot cross fork");
   std::lock_guard<std::mutex> lock(mutex);auto found=tensorPrograms.find(handle);
-  if (found==tensorPrograms.end()) return bad("paired tensor profiling owner is closed");
+  if (found==tensorPrograms.end() || found->second->sourceActive) return bad("paired tensor profiling owner is closed");
   auto &owner=*found->second;
   if (!outputs || outputCount!=2 || !stageMs || !programMs || count!=owner.stages.size() ||
       (captured!=0 && captured!=1) || repeats<=0 || repeats>(captured?4096:1000000) ||
@@ -1207,12 +1222,14 @@ extern "C" int tessera_nvidia_tensor_program_profile(uint64_t handle,int repeats
 extern "C" int tessera_nvidia_tensor_program_scratch_stats(uint64_t handle,size_t *capacity,size_t *allocations) {
   error.clear();if (getpid()!=process) return bad("tensor program cannot cross fork");
   std::lock_guard<std::mutex> lock(mutex);auto found=tensorPrograms.find(handle);
-  if (found==tensorPrograms.end() || !capacity || !allocations) return bad("invalid paired tensor scratch query");
+  if (found==tensorPrograms.end() || found->second->sourceActive || !capacity || !allocations) return bad("invalid paired tensor scratch query");
   *capacity=found->second->arena->capacity;*allocations=found->second->arena->allocations;return 0;
 }
 extern "C" int tessera_nvidia_tensor_program_close(uint64_t handle) {
   error.clear();if (getpid()!=process) return bad("tensor program cannot cross fork");
   std::lock_guard<std::mutex> lock(mutex);auto found=tensorPrograms.find(handle);
-  if (found==tensorPrograms.end()) return bad("paired tensor owner is closed or unknown");
+  if (found==tensorPrograms.end() || found->second->sourceActive) return bad("paired tensor owner is closed or unknown");
   tensorPrograms.erase(found);return 0;
 }
+
+#include "active_source_owner.inc"

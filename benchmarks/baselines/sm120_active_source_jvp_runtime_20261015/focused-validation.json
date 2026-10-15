@@ -1,0 +1,11 @@
+{
+  "host": "Super-Bear WSL",
+  "source_parent": "ca7c47098cfdd01c65ad5d13291f0b0bda83f6b4",
+  "result": "754 passed",
+  "duration_seconds": 224.84,
+  "suite": "diagnostics,pass metadata,op/dtype registries,ABI,execution matrix,audit,verifier/generated registry,source-active replay,frontend policy,Tile views",
+  "compiler_sha256": "81a98c3b282d27138b7417b03097cac03fceb10813ce2156ddd2d5f305eb266f",
+  "full_unit_state": "pending synchronized frozen source",
+  "ruff": "18 changed Python files passed",
+  "generated_docs": "owning generator --write succeeded"
+}

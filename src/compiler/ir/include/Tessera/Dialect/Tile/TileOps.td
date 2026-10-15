@@ -1597,6 +1597,46 @@ def Tile_PipelineDepthsAttr
   let genVerifyDecl = 1;
 }
 
+
+// Scalar buffer views carry storage, access and physical order in the SSA
+// type. These are distinct from cooperative fragment !tile.tile handles.
+def Tile_BufferViewType : Tile_Type<"BufferView", "buffer_view"> {
+  let parameters = (ins "::mlir::Type":$elementType,
+      StringRefParameter<"">:$access, StringRefParameter<"">:$order);
+  let assemblyFormat = "`<` $elementType `,` $access `,` $order `>`";
+  let genVerifyDecl = 1;
+}
+def Tile_BufferViewOp : Tile_Op<"buffer_view", [Pure]> {
+  let summary = "Typed rank-two physical buffer view with runtime bounds and pitch";
+  let arguments = (ins AnyType:$base, I64:$rows, I64:$columns, I64:$leading_dim);
+  let results = (outs Tile_BufferViewType:$result);
+  let assemblyFormat = "$base `,` $rows `,` $columns `,` $leading_dim attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+def Tile_LoadElementOp : Tile_Op<"load_element", [MemoryEffects<[MemRead]>]> {
+  let summary = "Load one storage-typed element, returning positive zero outside logical bounds";
+  let arguments = (ins Tile_BufferViewType:$view, I64:$row, I64:$column);
+  let results = (outs AnyFloat:$result);
+  let assemblyFormat = "$view `[` $row `,` $column `]` attr-dict `:` type($view) `->` type($result)";
+  let hasVerifier = 1;
+}
+def Tile_StoreElementOp : Tile_Op<"store_element", [MemoryEffects<[MemWrite]>]> {
+  let summary = "Store one storage-typed element, masking out-of-bounds coordinates";
+  let arguments = (ins Tile_BufferViewType:$view, I64:$row, I64:$column, AnyFloat:$value);
+  let assemblyFormat = "$value `,` $view `[` $row `,` $column `]` attr-dict `:` type($value) `,` type($view)";
+  let hasVerifier = 1;
+}
+def Tile_RowRegionKernelOp : Tile_Op<"row_region_kernel",
+    [SingleBlock, NoTerminator, SymbolTable, RecursiveMemoryEffects]> {
+  let summary = "Sealed native multi-result scalar/reduction row body";
+  let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$rows,
+      I64Attr:$columns, TypeAttr:$storage, I64Attr:$workgroup_size,
+      I64Attr:$schema, StrAttr:$source_hash, StrAttr:$artifact_hash, StrAttr:$body_hash);
+  let regions = (region AnyRegion:$body);
+  let assemblyFormat = "attr-dict-with-keyword $body";
+  let hasVerifier = 1;
+}
+
 #endif // TESSERA_TILE_OPS
 
 // Bounded RDNA4 physical 2:4 fragment contract; not a dense matmul alias.

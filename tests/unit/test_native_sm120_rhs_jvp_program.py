@@ -193,7 +193,9 @@ def test_public_native_rhs_jvp_uses_sealed_program_not_python_member_launches(st
 
 @pytest.mark.compiler_route
 def test_native_paired_tensor_does_not_mislabel_active_source_derivatives():
-    with pytest.raises(RuntimeError, match="RHS-linear"):
+    # This storage-precision/flat-ReLU graph remains outside the new static
+    # explicit-FP32 source-active contract; require its specific diagnostic.
+    with pytest.raises(RuntimeError, match="explicit-fp32 RMSNorm/ReLU JVP"):
         export(graph(wrt=0))
 
 

@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from .prepared_nvidia_tensor_jvp import PreparedTensorJVP
 
 from .portable_nvidia_tensor_jvp import digest, restore
+from .portable_nvidia_active_source import SCHEMA as ACTIVE_SCHEMA, COMPILER_PATH as ACTIVE_PATH, restore as restore_active
 
 _lock = threading.RLock()
 _live: weakref.WeakValueDictionary[tuple[int, str], PreparedTensorJVP] = weakref.WeakValueDictionary()
@@ -29,7 +30,7 @@ def _validated_plan(data):
         if plan is not None:
             _certificates.move_to_end(signature)
             return plan
-        native, _, _ = restore(data)
+        native, _, _ = (restore_active(data) if data.get("schema") == ACTIVE_SCHEMA else restore(data))
         plan = native.manifest
         if len(_certificates) >= _CERTIFICATE_LIMIT:
             _certificates.popitem(last=False)
@@ -53,12 +54,14 @@ def runtime_artifact(owner):
         return cached
     manifest = owner.manifest()
     plan = owner.plan
-    names = ["primal_0", "primal_1", f"tangent_{plan['role_indices'][1]}"]
+    active = manifest["schema"] == ACTIVE_SCHEMA
+    path = ACTIVE_PATH if active else "nvidia_sm120_tensor_jvp_compiled"
+    names = ["primal_0", "primal_1", f"tangent_{plan['role_indices'][0 if active else 1]}"]
     artifact = rt.RuntimeArtifact(
         graph_ir=plan["source_graph_ir"],
         metadata={
             "target": "nvidia_sm120",
-            "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+            "compiler_path": path,
             "execution_kind": "native_gpu",
             "runtime_status": "ready",
             "executable": True,
@@ -75,6 +78,7 @@ def runtime_artifact(owner):
 def execute(artifact, args):
     from tessera import runtime as rt
     from .prepared_nvidia_tensor_jvp import PreparedTensorJVP
+    from .prepared_nvidia_active_source import PreparedActiveSourceJVP
 
     metadata = artifact.metadata or {}
     if metadata.get("target") != "nvidia_sm120":
@@ -83,7 +87,11 @@ def execute(artifact, args):
     if not isinstance(data, dict):
         raise ValueError("paired tensor artifact requires a program manifest")
     plan = _validated_plan(data)  # Validate all witnesses before provider access.
-    names = ["primal_0", "primal_1", f"tangent_{plan['role_indices'][1]}"]
+    active = data["schema"] == ACTIVE_SCHEMA
+    path = ACTIVE_PATH if active else "nvidia_sm120_tensor_jvp_compiled"
+    if metadata.get("compiler_path") != path:
+        raise ValueError("paired tensor parent compiler path differs")
+    names = ["primal_0", "primal_1", f"tangent_{plan['role_indices'][0 if active else 1]}"]
     if artifact.graph_ir != plan["source_graph_ir"] or metadata.get("arg_names") != names:
         raise ValueError("paired tensor parent Graph/argument ABI differs")
     if isinstance(args, Mapping):
@@ -99,22 +107,32 @@ def execute(artifact, args):
     with _lock:
         owner = _live.get((os.getpid(), data["contract_digest"]))
         if owner is None or not owner._finalizer.alive:
-            owner = PreparedTensorJVP.from_manifest(copy.deepcopy(data))
+            owner = (PreparedActiveSourceJVP if active else PreparedTensorJVP).from_manifest(copy.deepcopy(data))
             owned = True
         else:
             owned = False
         assert owner is not None
         try:
             outputs = owner(values)
-            receipts = tuple({
-                "ok": True, "execution_kind": "native_gpu",
-                "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
-                "evidence_target": "nvidia_sm120",
-                "native_call_binding": "prepared_cpp_tensor_program",
-                "member": step["member"],
-                "image_digest": package.image.image_digest,
-                "descriptor_digest": package.descriptor.descriptor_digest,
-            } for step, package in zip(plan["steps"], owner.members, strict=True))
+            if active:
+                receipts = tuple({
+                    "ok": True, "execution_kind": "native_gpu", "compiler_path": path,
+                    "evidence_target": "nvidia_sm120",
+                    "native_call_binding": "prepared_cpp_active_source_program",
+                    "member": step["member"], "image_digest": record["image_digest"],
+                    "descriptor_digest": record["member_digest"], "abi": copy.deepcopy(record["abi"]),
+                } for step, record in zip(plan["steps"], data["members"], strict=True))
+            else:
+                assert isinstance(owner, PreparedTensorJVP)
+                receipts = tuple({
+                    "ok": True, "execution_kind": "native_gpu",
+                    "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+                    "evidence_target": "nvidia_sm120",
+                    "native_call_binding": "prepared_cpp_tensor_program",
+                    "member": step["member"],
+                    "image_digest": package.image.image_digest,
+                    "descriptor_digest": package.descriptor.descriptor_digest,
+                } for step, package in zip(plan["steps"], owner.members, strict=True))
             return rt.NativeProgramExecution(outputs, receipts)
         finally:
             if owned:

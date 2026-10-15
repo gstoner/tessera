@@ -153,9 +153,14 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Native source-preserving K16 expansion now has bitwise gfx1201 proof through
   ordinary public JIT, warm image reuse and serialized/fresh-process replay;
   original pinned checkpoint gate/up weights preserve both output planes.
-  Remaining: multi-output native SSA ownership and resident consumer composition,
-  native launch-sequence ownership and representative model-quality acceptance.
-- Latest: [2026-10-15 — public native NVFP4 expansion and portable replay](INTEGRATED_COMPILER_LOG.md#2026-10-15--public-native-nvfp4-expansion-and-portable-replay)
+  Native multi-output SSA ownership now has a static source-preserving program
+  and diagnostic gfx1201 producer/product proof without intermediate host IO.
+  Prepared native ownership now supports import-once expansion and activation-only
+  updates with native dependency checks, including normal frontend capture and
+  FP32/BF16 outputs. Ordinary static FP32 JIT, compiler-free replay and the original Qwen3
+  projection now have exact-device proof through both native stages.
+  Remaining: bounded frames, wider composition and model-quality acceptance.
+- Latest: [2026-10-15 — public native NVFP4 checkpoint composition](INTEGRATED_COMPILER_LOG.md#2026-10-15--public-native-nvfp4-checkpoint-composition)
 
 ### ROCM-SPLIT-K-1
 

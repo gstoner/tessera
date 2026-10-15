@@ -65,6 +65,9 @@ def consumer_module_attrs():
 
 
 def supports_resident_trace(module):
+    from .rocm_nvfp4_source_frontend import supports_source_trace
+    if supports_source_trace(module):
+        return True
     return (len(module.functions)==1 and len(module.functions[0].body)==3
         and [op.op_name for op in module.functions[0].body]==[
             "tessera.nvfp4_requantize","tessera.mxfp4_folded_storage","tessera.scaled_matmul"])
@@ -85,6 +88,9 @@ def _preserve_operation(actual,expected):
 
 def package_traced_resident(module):
     """Verify the complete Graph before splitting its native stage functions."""
+    from .rocm_nvfp4_source_frontend import supports_source_trace, package_traced_source
+    if supports_source_trace(module):
+        return package_traced_source(module)
     module=deepcopy(module)
     if not supports_resident_trace(module):
         raise ValueError("resident frontend requires conversion, storage and scaled matmul")
@@ -212,6 +218,9 @@ class TracedNVFP4Program:
 
 
 def program_from_manifest(data):
+    from .rocm_nvfp4_source_frontend import SCHEMA, source_program_from_manifest
+    if isinstance(data, dict) and data.get("schema") == SCHEMA:
+        return source_program_from_manifest(data)
     if not isinstance(data,dict) or set(data)!={"schema","native_program","argument_names",
             "role_indices","graph_ir","contract_digest"}:
         raise ValueError("resident frontend manifest fields differ")

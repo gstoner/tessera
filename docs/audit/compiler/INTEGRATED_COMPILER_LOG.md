@@ -10,6 +10,9 @@ audit_role: reference
 
 
 
+
+
+
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -12425,4 +12428,73 @@ generic HIP program ownership currently assumes one fresh result per step.
 No default-route promotion, sibling execution or full-model quality closure.
 
 Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-15 — native NVFP4 multiple-result producer/product ownership
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: queued after PR949; sync NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+
+Outcome: native MLIR outlines expansion and exact K16 FP8 product with two
+private results and compiler-derived lifetimes. The additive HIP preparation
+ABI verifies every result/lifetime. Ragged gfx1201 cases agree with an
+independent nibble oracle before/after separate member graph-dispatch timing.
+All four queues assessed; prior program schemas remain intact.
+
+Remaining: public composed JIT/prepared binding, import-once/partial updates,
+bounded source-preserving frames, model quality and broader five-slice gates.
+
+Evidence: benchmarks/baselines/rocm_native_multi_output_20261015/README.md;
+tests/unit/test_native_nvfp4_expansion_program.py;
+tests/device/rocm/test_native_multi_output_owner.py.
+<!-- entry-fields:end -->
+
+
+### 2026-10-15 — prepared native NVFP4 import-once ownership
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: queued after PR949; sync NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+
+Outcome: normal Python capture feeds the native two-stage expansion/product
+partition and checked prepared HIP binding. FP32/BF16 outputs and permuted
+roots execute on gfx1201 with eager numerical oracles forbidden in capture.
+Partial-root updates invalidate actual transitive SSA dependents; consumer-only
+ranges require initialized external inputs. Import-once weights remain resident
+across activation updates. One frozen-source 800-case native/prepared/public primal/JVP/audit/registry
+gate passes. Matched synthetic packets separate host, native events with
+enqueue gaps and per-member graph dispatch. All sibling queues assessed.
+
+Remaining: ordinary composed public JIT and compiler-free serialized replay,
+original checkpoint composition, bounded source-preserving frames, model
+quality and the remaining five-slice obligations. No matmul schedule promotion.
+
+Evidence: benchmarks/baselines/rocm_nvfp4_prepared_expansion_20261015/README.md;
+tests/device/rocm/test_prepared_nvfp4_expansion_program.py.
+<!-- entry-fields:end -->
+
+
+### 2026-10-15 — public native NVFP4 checkpoint composition
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: queued after PR949; sync NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+
+Outcome: ordinary JIT and compiler-free portable replay use the native
+source-preserving two-stage program. Changed host weight bytes reimport;
+fresh-process replay disables compiler paths and eager numerical oracles.
+Compile reports carry ordered native stage hashes. Parent target relabeling
+rejects before provider access. A frozen 829-case gate passes on gfx1201.
+
+Original pinned Qwen3 gate/up weights at M256/N24576/K4096 match an independent
+FP32 bound, with identical output bytes across JIT/replay/prepared modes.
+Projection RMS vs the BF16 reference is 6.23%; shipped-weight projection RMS
+is 6.08%. Host calls and member graph windows remain separate. The full frame
+exceeds the native idle-cache budget; prepared ownership avoids that reacquire
+and full weight upload. All sibling queues are assessed without proof transfer.
+
+Remaining: bounded/wider composition, model-quality acceptance, wider ROCm
+performance obligations and the remaining NVIDIA five-slice work.
+
+Evidence: benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md;
+tests/device/rocm/test_public_nvfp4_source_program.py.
 <!-- entry-fields:end -->

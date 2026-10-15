@@ -1,0 +1,8 @@
+{
+  "src/transforms/lib/NativeNVFP4Program.h": "7a6e82dd20bc86497832a87e4fa06f285786308c84f66bf24459ce8923594812",
+  "python/tessera/compiler/native_nvfp4_program.py": "7e151eaa95b328f21e8c5cb3f92e88c87ff2f0be647d8c4f7130163f68a7b22b",
+  "tests/unit/test_native_nvfp4_expansion_program.py": "eb69ae9e51d55f7c0379f1e7ff05901add9b4db7caec1cdde001f38cc541f4f7",
+  "tests/device/rocm/test_native_multi_output_owner.py": "779f39d398f4c5a63694ee34e9f1128b9c2979b60b78b3bd4341810f10ad7603",
+  "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "014485f08a145395017bbd1be9b09b1f086db5e950dc040e875cb618bc02785f",
+  "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "d103394df42194f260c5e7795f89dfc3297738c29d76e0dbeae6e144742c7752"
+}

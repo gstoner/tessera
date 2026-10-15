@@ -7,6 +7,28 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## NVFP4-NATIVE-MULTI-OUTPUT-20261015 — native producer/product ownership
+
+Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+
+The shared JIT/replay update recognizes the exact gfx1201 source-preserving
+program and records two ordered native members. Not applicable to x86
+physical execution: no target admission, emitter, runtime provider or schedule
+is changed for this backend. Metadata cannot relabel ROCm evidence as sibling
+proof; original-checkpoint execution is gfx1201-only.
+
+The follow-on prepared binding adds HIP partial-root updates and dependency-
+checked stage ranges. Not applicable to x86 execution: its native provider,
+public dispatch and schedule are unchanged. No sibling hardware result is
+inferred from gfx1201 owner/FP32/BF16 proof.
+Not applicable to x86 physical execution: the additive owner ABI is
+HIP-only and the named native MLIR program requires explicit gfx1201.
+Prior schemas remain intact; no sibling numerical, runtime ABI or selector
+change. Sibling hardware parity is not claimed. A future source-preserving
+route requires its own lowering, ownership contract and exact-device proof.
+
+
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 
 CI documentation synchronization: the marker-aware standalone dashboard now participates in the standard generated-doc registry. Its two generated summaries refresh automatically while authored prose is preserved. No x86 capability, numerical policy, ABI or physical execution claim changes.

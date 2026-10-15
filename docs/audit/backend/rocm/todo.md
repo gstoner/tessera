@@ -5,6 +5,42 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NVFP4-NATIVE-MULTI-OUTPUT-20261015 — native producer/product ownership
+
+Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+
+Ordinary static FP32 JIT and compiler-free serialized replay now execute the
+same native two-stage program, including fresh-process replay and changed
+weight contents on warm calls. Compile reports retain ordered Schedule/Tile/
+Target fingerprints. The parent artifact must name exact gfx1201 before
+provider access. Original pinned Qwen3 gate/up weights with captured M256
+inputs pass the independent FP32 arithmetic bound; all three execution modes
+produce identical bytes. This is a layer-0 projection gate, not full-model
+quality acceptance. Prepared import-once execution remains the efficient
+explicit ownership API; the full frame exceeds the 128 MiB idle-cache budget.
+Evidence: benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md.
+
+Prepared execution now consumes the native two-stage manifest through the
+additive multi-result owner. Normal Python capture, FP32/BF16 output and
+permuted-root device tests pass. Native partial-root updates invalidate
+transitive dependents; consumer-only execution checks readiness before launch.
+Import-once weights stay resident across activation-only updates. Original
+single-result ABI/public primal/JVP regressions pass with the new provider.
+Matched synthetic timing separates stage graph dispatch, native enqueue/event
+and completed update/invoke/read. Broader shapes/composition, bounded frames and model-quality acceptance
+remain open; the named static public/checkpoint gate is recorded above. This does not promote a physical schedule.
+Native MLIR outlines source-preserving expansion and the exact K16 FP8
+product from actual Graph SSA, retaining original roles and two private
+producer results. Schema v3 is static source-preserving expansion; v1 lossy
+static and v2 lossy bounded semantics remain unchanged. An additive multi-result
+HIP preparation ABI independently derives all lifetimes. Diagnostic gfx1201
+execution passes ragged K16/K48/K80 cases without intermediate host transfers.
+Bounded source-preserving frames, wider model-quality acceptance and
+performance promotion remain follow-up required. gfx1151 receives no FP8 WMMA admission.
+Evidence: benchmarks/baselines/rocm_native_multi_output_20261015/README.md.
+
+
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 
 CI documentation synchronization: the marker-aware standalone dashboard now participates in the standard generated-doc registry. Its two generated summaries refresh automatically while authored prose is preserved. This repairs stale exact-ROCm row counts; numerical admission and physical schedules are unchanged.

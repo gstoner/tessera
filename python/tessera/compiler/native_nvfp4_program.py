@@ -16,7 +16,7 @@ def _plan_json(ir: str) -> str:
     if len(matches) != 1:
         raise ValueError("native NVFP4 export requires one compiler program record")
     text = base64.b64decode(matches[0], validate=True).decode()
-    if json.loads(text).get("schema") not in {"tessera.native.nvfp4_program.v1", "tessera.native.nvfp4_program.v2"}:
+    if json.loads(text).get("schema") not in {"tessera.native.nvfp4_program.v1", "tessera.native.nvfp4_program.v2", "tessera.native.nvfp4_program.v3"}:
         raise ValueError("unsupported native NVFP4 program schema")
     return text
 
@@ -35,8 +35,8 @@ class NativeNVFP4GraphProgram:
         return json.loads(self.plan_json)
 
     def project_member(self, index: int) -> str:
-        if type(index) is not int or index not in (0, 1, 2):
-            raise ValueError("native NVFP4 member index must be 0, 1 or 2")
+        if type(index) is not int or not 0 <= index < len(self.manifest["steps"]):
+            raise ValueError("native NVFP4 member index is outside its compiler program")
         if _tool_digest(self.tool) != self.compiler_identity:
             raise RuntimeError("native NVFP4 compiler changed after program export")
         ir = run_tessera_opt(

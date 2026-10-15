@@ -1,0 +1,82 @@
+{
+  "schema": "tessera.gfx1201.nvfp4_prepared_import_once.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "shape_mnk": [
+    200,
+    2048,
+    1536
+  ],
+  "input_kind": "synthetic_exact_dyadic_scales",
+  "model_quality_acceptance": false,
+  "public_jit_composition": false,
+  "frontend_capture": true,
+  "compile_package_ms": 440.320734,
+  "prepare_upload_ms": 47.610777,
+  "initial_import_completed_host_ms": 0.203834,
+  "initial_import_native_event_ms": 0.06600899994373322,
+  "member_graph_dispatch_samples_ms": [
+    [
+      0.01932518742978573,
+      0.054079819470644
+    ],
+    [
+      0.01620086282491684,
+      0.049063216894865036
+    ],
+    [
+      0.01626020483672619,
+      0.049018438905477524
+    ]
+  ],
+  "member_repeats": 608,
+  "completed_update_invoke_read_samples_ms": {
+    "full_update_all_stages": [
+      1.642214,
+      1.298375,
+      1.239662
+    ],
+    "activation_update_consumer_only": [
+      0.61171,
+      0.534461,
+      0.608655
+    ]
+  },
+  "completed_update_invoke_read_median_ms": {
+    "full_update_all_stages": 1.298375,
+    "activation_update_consumer_only": 0.608655
+  },
+  "native_event_with_enqueue_samples_ms": {
+    "full_update_all_stages": [
+      0.06859800219535828,
+      0.0698779970407486,
+      0.07023800164461136
+    ],
+    "activation_update_consumer_only": [
+      0.05291900038719177,
+      0.05299900099635124,
+      0.05607900023460388
+    ]
+  },
+  "per_call_upload_bytes": {
+    "full_update_all_stages": 2153488,
+    "activation_update_consumer_only": 384000
+  },
+  "provider_sha256": "d7db3beec9131b0e3d2861ead1dca6b0ede0e5ec29105eb3fe18d0a77418e867",
+  "program_sha256": "135829d08c4a97d2c01fec940c2c2fd6d80618c5d7dd3e271084c7ba567c76fa",
+  "compiler_sha256": "3958d87d982485537ffb13ec8e8357c2c94e6270ff2b62c102bdf055b1db929a",
+  "images": [
+    "e91ff90c56f9125f7def06975477e7191311a3fd60c025b3c184094d9efe6624",
+    "786ec43768624c39a8930f842b81e51378414b10c5b5ccf4710a3a2ce039aa24"
+  ],
+  "binding_digest": "3f86c7c8d41ef079f873349a1f39e42068760d4e7a4602f1f622e341863cd7c4",
+  "source_sha256": {
+    "benchmarks/rocm/benchmark_nvfp4_prepared_expansion.py": "a098c948abfd63b56de5f1bd020236db0ff5faf81311cad9de34fdbbca36b97e",
+    "python/tessera/compiler/rocm_nvfp4_expansion_program.py": "e8f8ddd7c6413fb9e1ca2e2ca241c686ad134c137d549f864921cf539de184dc",
+    "python/tessera/compiler/native_scaled_program.py": "8654bf38d76d899029b6f38ba9491bbb9d462b1f9fb4d8cd3da781e4b1de5320",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "0bb2dcde600b2094582399405381db67895cae1157bdbcd2f52fa9f79b4ff56b",
+    "src/transforms/lib/NativeNVFP4Program.h": "7a6e82dd20bc86497832a87e4fa06f285786308c84f66bf24459ce8923594812"
+  },
+  "correctness": "bitwise_fp32_independent_nibble_oracle_before_and_after_each_window",
+  "timing_scope": "host includes boundary/upload/invoke/read; native event includes enqueue gaps; graph windows include graph dispatch"
+}

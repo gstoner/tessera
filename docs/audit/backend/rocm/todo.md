@@ -5,6 +5,35 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
+
+Owner E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+Native WMMA Target IR retains rhs_storage, validates both OCP formats and
+keeps the pair in physical image identity. The generator checks typed-fragment
+consistency. Mixed LDS now preserves RHS zeros, vector/shared allocation and
+fragment types, fixing a real pre-existing type mismatch and wrong-format path.
+The unsplit gfx1201 route reuses images across shapes for register K-unroll
+1/2/4/8 and LDS K-unroll 1. 577 focused gates pass under the five-backend configuration, including 90 owning-device
+FP8/FP16/BF16 numerical launches. The source-pinned 60-case FP8 packet has twenty
+pairing/recipe images, warm image reuse and zero error on seeded finite inputs.
+New-shape package wall times are 33.35–55.50 ms; HIP-event batch means
+3.68–13.00 us; completed host launches 0.567–0.747 ms. Event regions may
+include CPU enqueue gaps; no pure-kernel, speedup or default selection claim.
+The generic scheduled launch validates the live HIP architecture after argument
+checks and before acquisition/allocation; 83 guard/dispatch gates pass.
+Ordinary textual FP8 @jit now reaches canonical native packages for both generic
+and explicit gfx1201 targets. Twenty-four public format/shape replays pass
+numerical/IR/receipt checks; FP16/BF16 public sibling calls also pass.
+Twelve packet rows record warm public calls at 0.851–0.904 ms, separately
+from image-primed first calls and event/host-launch regions. Integer public
+wrapping semantics remain unchanged. The available-lane regression group
+passes 230 tests (113 skips); focused mypy and Ruff pass.
+Evidence: benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md.
+Larger/dynamic/layout and split-K FP8 envelopes, general attention cache keys
+and public compiler admission costs remain open.
+
+Parity validated on exact gfx1201. gfx1151 has no FP8 WMMA. Its separate Princess-Luna FP16/BF16 LDS proof passes six cases and rejects a relabeled gfx1201 image; no FP8 or timing claim is transferred.
+
 ## W11-RELU-PRODUCER-20261014 — active engineering
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

@@ -12255,3 +12255,35 @@ backend queues are assessed; no speedup or complete W1.1 closure claim.
 Evidence: benchmarks/baselines/sm120_norm_relu_matmul_20261014/README.md,
 guarded.json (matching CI options and final descriptor guard); docs/spec/ir/sm120_activation_schedule_tile_contract.md.
 <!-- entry-fields:end -->
+
+### 2026-10-14 — native mixed FP8 Target image identity
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync ROCM-FP8-TARGET-IDENTITY-20261014.
+
+Outcome: Native Target IR retains both FP8 storage formats before image
+projection. Mixed LDS staging preserves independent RHS zeros, vector/LDS
+storage and fragment types. Twenty pairing/recipe images serve sixty FP8
+shape cases; register unroll 1/2/4/8 and LDS unroll 1 pass on owning gfx1201.
+577 focused gates pass under the five-backend build, with ninety owning gfx1201
+FP8/FP16/BF16 numerical launches. Six separate gfx1151 LDS cases pass on
+Princess-Luna. A relabeled image now refuses at the live-architecture guard;
+83 dispatch/guard gates pass.
+Ordinary textual FP8 now reaches canonical native packages on gfx1201:
+both target aliases, all four storage pairs, shape replay, immutable inputs
+and retained outputs pass. FP16/BF16 public siblings pass. The final available
+lane group passes 230 tests (113 skips) with AVX-512 runtime execution.
+Warm public calls record 0.851–0.904 ms; first-call samples are image-primed.
+Integer public wrapping semantics are retained.
+Shape-bound Schedule/Tile provenance remains separate from physical image keys.
+
+Remaining: larger/dynamic/layout and split-K FP8, general attention keys,
+public admission costs, wider public dtype/layout/AD contracts and owning gfx1151
+public frontend proof beyond the executed LDS package cases.
+No pure-kernel latency, speedup or broad five-slice closure claim.
+All four backend queues are assessed; no architecture evidence is transferred.
+
+Evidence: benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md,
+gfx1201.json; source/binary/Target/Tile/HSACO identities and separate event,
+package and completed-host timing regions.
+<!-- entry-fields:end -->

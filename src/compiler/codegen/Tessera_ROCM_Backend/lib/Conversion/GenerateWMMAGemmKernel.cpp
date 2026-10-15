@@ -1240,6 +1240,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   // 4->5 for fp8/int8, 2->3 for int4. Expressed in ELEMENTS that is
   // 32/bitwidth -- 2 f16, 4 fp8, 8 int4 -- so the knob counts dwords and the
   // element count follows the storage.
+  Type rhsStore = cast<MemRefType>(gpuFunc.getArgument(1).getType()).getElementType();
   const int64_t bits = T.store.getIntOrFloatBitWidth();
   const int64_t padElems = ldsPadDwords * 32 / bits;
   const int64_t ldsStride = 16 + padElems;
@@ -1255,7 +1256,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   // that the padding existed for (10e) is exactly what it removes.
   const int64_t ldsBElems = ldsBRowMajor ? 16 * wgN : wgN * ldsStride;
   Value ldsB = gpuFunc.addWorkgroupAttribution(
-      MemRefType::get({nbuf * ldsBElems}, T.store,
+      MemRefType::get({nbuf * ldsBElems}, rhsStore,
                       MemRefLayoutAttrInterface(), ws),
       loc);
   // `known_block_size` is an INHERENT property of gpu.func: set it through the
@@ -1325,12 +1326,15 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       vecW = 1;  // an unaligned forced width would scatter across rows
   }
   auto vecTy = VectorType::get({vecW}, T.store);
+  auto rhsVecTy = VectorType::get({vecW}, rhsStore);
 
   Value scalarZero =
       T.isInt ? b.create<arith::ConstantOp>(loc, T.store,
                                             b.getIntegerAttr(T.store, 0))
               : b.create<arith::ConstantOp>(loc, T.store,
                                             b.getFloatAttr(T.store, 0.0));
+
+  Value rhsZero = b.create<arith::ConstantOp>(loc, rhsStore, b.getZeroAttr(rhsStore));
 
   Value tx = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
   Value waveId = b.create<arith::DivUIOp>(loc, tx, c32);
@@ -1411,7 +1415,8 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   auto aFragmentTy = tessera::tile::FragmentType::get(
       ctx, 16, 16, 16, fragmentElem, fragmentAcc, "a", "row_major", "wmma");
   auto bFragmentTy = tessera::tile::FragmentType::get(
-      ctx, 16, 16, 16, fragmentElem, fragmentAcc, "b", "col_major", "wmma");
+      ctx, 16, 16, 16, T.bElem.empty() ? fragmentElem : StringRef(T.bElem),
+      fragmentAcc, "b", "col_major", "wmma");
   auto accFragmentTy = tessera::tile::FragmentType::get(
       ctx, 16, 16, 16, fragmentAcc, fragmentAcc, "acc", "row_major", "wmma");
   auto ldsViewStrided = [&](OpBuilder &bb, Location l, Value base, Value row,
@@ -1688,7 +1693,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       if (ldsCopyElide) {
         for (int64_t q = 0; q < depthB; ++q)
           for (int64_t i = 0; i < vecW; ++i)
-            kb.create<memref::StoreOp>(l, scalarZero, ldsB,
+            kb.create<memref::StoreOp>(l, rhsZero, ldsB,
                                        ValueRange{dstOf(kb, l, gb[q], i)});
         return;
       }
@@ -1704,7 +1709,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
         }
         for (int64_t i = 0; i < depthB; ++i) {
           Value v =
-              kb.create<arith::SelectOp>(l, in[i], raw[i], scalarZero);
+              kb.create<arith::SelectOp>(l, in[i], raw[i], rhsZero);
           Value d = dstOf(kb, l, gb[i], 0);
           if (out) { out->bVals.push_back(v); out->bDsts.push_back(d); }
           else kb.create<memref::StoreOp>(l, v, ldsB, ValueRange{d});
@@ -1713,7 +1718,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
         Value allWhole = gb[0].whole;
         for (int64_t i = 1; i < depthB; ++i)
           allWhole = kb.create<arith::AndIOp>(l, allWhole, gb[i].whole);
-        SmallVector<Type> vtys(depthB, vecTy);
+        SmallVector<Type> vtys(depthB, rhsVecTy);
         auto ifOp = kb.create<scf::IfOp>(l, TypeRange(vtys), allWhole,
                                          /*addThenBlock=*/true,
                                          /*addElseBlock=*/true);
@@ -1722,7 +1727,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           kb.setInsertionPointToStart(ifOp.thenBlock());
           SmallVector<Value> v(depthB);
           for (int64_t i = 0; i < depthB; ++i)
-            v[i] = kb.create<vector::LoadOp>(l, vecTy, B,
+            v[i] = kb.create<vector::LoadOp>(l, rhsVecTy, B,
                                              ValueRange{gb[i].logical});
           kb.create<scf::YieldOp>(l, v);
         }
@@ -1731,7 +1736,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
           kb.setInsertionPointToStart(ifOp.elseBlock());
           SmallVector<Value> v(depthB);
           for (int64_t q = 0; q < depthB; ++q) {
-            Value acc = kb.create<vector::BroadcastOp>(l, vecTy, scalarZero);
+            Value acc = kb.create<vector::BroadcastOp>(l, rhsVecTy, rhsZero);
             for (int64_t i = 0; i < vecW; ++i) {
               Value off = ci(i);
               Value in = kb.create<arith::AndIOp>(
@@ -1743,7 +1748,7 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                   ValueRange{kb.create<arith::SelectOp>(
                       l, in, kb.create<arith::AddIOp>(l, gb[q].logical, off),
                       c0)});
-              e1 = kb.create<arith::SelectOp>(l, in, e1, scalarZero);
+              e1 = kb.create<arith::SelectOp>(l, in, e1, rhsZero);
               acc = kb.create<vector::InsertOp>(l, e1, acc,
                                                 ArrayRef<int64_t>{i});
             }
@@ -3798,10 +3803,18 @@ struct GenerateWMMAGemmKernelPass
         // already selects FP8_BF8 / BF8_FP8 from them. Both are 8 bits, so the
         // register format and the packing are unchanged -- only the selected
         // instruction differs.
-        if (auto mma = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma"))
-          if (mma.getAType() != mma.getBType() &&
-              (mma.getBType() == "e4m3" || mma.getBType() == "e5m2"))
-            T.bElem = mma.getBType().str();
+        auto mma = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
+        auto rhs = op->getAttrOfType<StringAttr>("rhs_storage");
+        if (rhs && ((rhs.getValue() != "e4m3" && rhs.getValue() != "e5m2") ||
+                    (mma && rhs.getValue() != mma.getBType()))) {
+          op->emitError("FP8 rhs_storage must preserve the typed RHS fragment format");
+          return signalPassFailure();
+        }
+        if (rhs)
+          T.bElem = rhs.getValue().str();
+        else if (mma && mma.getAType() != mma.getBType() &&
+                 (mma.getBType() == "e4m3" || mma.getBType() == "e5m2"))
+          T.bElem = mma.getBType().str();
         if (!viaTile) {
           op->emitError("generate-wmma-gemm-kernel: FP8 storage ('")
               << dt << "') is a typed-route contract (via-tile=true); the "

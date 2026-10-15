@@ -1523,7 +1523,9 @@ def canonical_compile_options(
         )
 
         from .rocm_math_native import supports_math
-        resolved["package_native"] = (supports_native_package(module) or supports_math(module)) and native_packaging_available()
+        from .scheduled_matmul import supports_scheduled_matmul
+        resolved["package_native"] = (supports_native_package(module) or supports_math(module)
+            or supports_scheduled_matmul(module, target=target_kind)) and native_packaging_available()
     if target_kind == "rocm_gfx1201" and "package_native" not in resolved:
         from .rocm_native import native_packaging_available, supports_paged_kv_read, requests_softmax
         from .scheduled_kernel import supports_scheduled_kernel
@@ -1532,7 +1534,9 @@ def canonical_compile_options(
         from .rocm_mxfp4_storage_native import supports_mxfp4_storage
         from .rocm_math_native import supports_math
         from .rocm_typed_scaled_native import supports_typed_scaled
+        from .scheduled_matmul import supports_scheduled_matmul
         resolved["package_native"] = (
+            supports_scheduled_matmul(module, target=target_kind) or
             supports_typed_scaled(module) or supports_nvfp4_ingest(module) or supports_mxfp4_storage(module)
             or supports_paged_kv_read(module) or supports_math(module)
             or (requests_softmax(module) and supports_scheduled_kernel(module,target=target_kind))

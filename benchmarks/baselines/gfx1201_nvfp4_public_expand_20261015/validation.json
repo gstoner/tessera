@@ -40,6 +40,12 @@
     "graphify": {
       "status": "updated",
       "log": "graphify.log"
+    },
+    "review_api_spec_ods": {
+      "passed": 779,
+      "log": "review-green.log",
+      "before": "review-red.log.xz",
+      "scope": "API spec, ODS completeness/consumer pins and spec synchronization"
     }
   },
   "source_identity": "all measured Python, native C++ and tool hashes verified before commit"

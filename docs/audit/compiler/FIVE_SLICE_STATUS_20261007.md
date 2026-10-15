@@ -7,7 +7,7 @@ audit_role: reference
 
 This is an evidence ledger, not a closure declaration. The original
 PR895–903 stack is historical delivery context; later changes through merged
-PR946 extend the source and proof below. Older entries retain their original
+PR947 extend the source and proof below. Older entries retain their original
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
 
@@ -19,16 +19,17 @@ proved envelopes and remaining work are:
 | Slice | Latest additional proof | Remaining requirement |
 | --- | --- | --- |
 | GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; the checkpoint quality distinction in the original row remains authoritative. | Broader layouts/composition and original-model quality acceptance. |
-| NVIDIA W1.1 | Compact resident two-sided and bounded producer routes, plus single-sided normalization/softmax chains, have owning RTX 5070 receipts under sm120_single_sided_resident_tensor_20261009. | Generic producer/accumulator reconstruction, mixed or pitched resident entry, wider composition and resident AD; pending PR947 is not merged evidence. |
+| NVIDIA W1.1 | Compact resident two-sided and bounded producer routes, plus single-sided normalization/softmax chains, have owning RTX 5070 receipts under sm120_single_sided_resident_tensor_20261009. | Generic producer/accumulator reconstruction, mixed or pitched resident entry, wider composition and resident AD; Merged PR947 adds the named RMSNorm -> ReLU -> matmul storage boundary and its separately recorded RTX 5070 proof. |
 | NVIDIA saved-LSE forward | The bounded saved-LSE package preserves O/LSE through native sequence projection, schema 5/6 and compiler-free replay; see bounded_saved_lse_jvp_20261011. | Wider storage/masks, nested/composed output and general attention integration. |
 | NVIDIA attention backward | Bounded paired JVP/reverse, broadcast physical bias extents, trace-at-one replay and retained generations are covered by bounded_saved_lse_jvp_20261011; static resident reverse has its own sm120_resident_attention_vjp_20261009 receipt. | Dynamic/composed resident reverse, broader AD and independent performance promotion. |
-| ROCm routes/performance | The current FP8 candidate records independent RHS formats, shape-independent unsplit images, ordinary textual JIT, 60 gfx1201 cases and separate gfx1151 LDS proof in rocm_fp8_shape_cache_20261014. | Candidate delivery/terminal broad gate; wider image families/layouts, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution. |
+| ROCm routes/performance | The current FP8 candidate records independent RHS formats, shape-independent unsplit images, ordinary textual JIT, 60 gfx1201 cases and separate gfx1151 LDS proof in rocm_fp8_shape_cache_20261014. | Candidate delivery; wider image families/layouts, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution. |
 
 The historical red full-unit results below are superseded for their merged
 source by the 26,072-pass, 7,568-skip WSL receipt in
 benchmarks/baselines/native_encoded_scaled_gate_20261014/host-full-unit.txt.
-This is not a full-suite certificate for the current FP8 candidate. Its fresh
-host lane is running with the matching five-backend LLVM/MLIR 23.1.1 build.
+This is not a full-suite certificate for the current FP8 candidate. Its frozen integrated host lane passes 28,493 tests (5,320 skips) with the
+matching five-backend LLVM/MLIR 23.1.1 build. Subsequent profile/fixture
+repairs have separate focused and owning-device gates; see the FP8 packet.
 No old failure is represented as a current blocker without reproduction.
 Historical generic capability and physical-performance gaps remain open
 unless a later owning receipt explicitly covers them.
@@ -52,9 +53,11 @@ not constitute a production lowering.
 The aggregate is not ready to claim full completion. Deliver reviewable
 slices against merged main, synchronize affected owning builds, and run
 registry/lifecycle, regression and generated-document/Graphify gates.
-The source-bound 26,072-pass receipt supersedes the old red sweep; it does
-not certify the later FP8 candidate. Require that candidate's terminal
-broad result and preserve every remaining capability/performance gate.
+The earlier 26,072-pass receipt supersedes the historical red sweep. The
+integrated FP8 checkpoint subsequently passes 28,493 unit cases; after the
+profile repair, supplemental gates pass 432 cases on gfx1201 and 630 cases
+on RTX 5070. Their source/binary scopes remain separate. Preserve every
+remaining capability/performance gate and require final publication CI.
 
 All four backend queues carry architecture-specific synchronization entries.
 Apple and x86 assessments do not constitute new physical execution proof.

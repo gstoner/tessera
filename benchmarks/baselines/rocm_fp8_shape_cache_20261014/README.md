@@ -149,3 +149,69 @@ These are event windows that may include enqueue gaps, not pure kernel or
 completed public-call latency, and no speedup/default selection is claimed.
 The packet's worktree hash binds its measured working state; the companion's
 six source and two compiler hashes bind the code, not later documentation edits.
+
+### Integration onto merged PR947
+
+PR947 is merged at 43c57caac44f3af1e57211bf5575994b37950f79. The ROCm
+candidate is rebased onto that main. Existing packets above retain their
+original source/binary fingerprints and recorded working-state identities;
+they are not relabeled as post-merge measurements. The just-started
+old-base full run was deliberately interrupted when this merge unblocked
+integration (2,920 passed, 1,865 skipped); it is not a passing full gate.
+A matching integrated compiler rebuild and fresh evidence/gates are required.
+
+### Post-merge integrated certificates
+
+[post947-gfx1201.json](post947-gfx1201.json) records the integrated five-backend
+LLVM/MLIR 23.1.1 build on revision 94caaf2ddbb61f547609e4925c084fe16790f25e:
+60 seeded finite FP8 cases pass with zero maximum error, retaining twenty
+pairing/physical-recipe images across three shapes. New-shape warm package
+costs span 31.20–49.94 ms; event-window medians span 3.75–12.62 us; completed
+host-launch medians span 0.594–0.884 ms. These remain distinct timing domains,
+with possible CPU enqueue gaps inside event windows; no speedup or default
+promotion is claimed.
+
+[post947-gfx1151.json](post947-gfx1151.json) and its
+[package bundle](post947-gfx1151-packages.json) independently bind the fresh
+integrated compiler to six FP16/BF16 LDS launches on Princess-Luna. Maximum
+error is below 4.8e-7, images are reused across shapes, and a relabeled gfx1201
+image is rejected. No gfx1151 FP8 or timing claim is added.
+
+[post947-full-unit.txt](post947-full-unit.txt) records 28,493 passes, 5,320
+skips and 874 deselections in 1,121.51 seconds for the frozen integrated
+candidate. Its [start manifest](post947-full-unit-manifest.txt) records the
+revision, tracked diff digest and toolchain context. This is the broad gate
+before the subsequent exact-profile alias and prepared-fixture repairs.
+It does not certify later source merely because that source is compatible.
+
+The subsequent native/Python profile repair preserves compiler-owned module
+spelling for sm_120 and zen5_avx512 while emitting the existing canonical
+ISTFT contract. Other/partial profiles remain rejected. The owning gfx1201
+[post-alias gate](post-alias-gates.txt) passes 432 cases, with 37 owning-gfx1151
+skips; it includes numerical ISTFT, native JVP, independent FP8 contracts,
+cache capacity/lifetime and diagnostic/pass registry checks after rebuilding.
+Existing measurement packets retain their actual compiler hashes; they are
+not relabeled as measurements of this later profile-only build.
+
+### Owning SM120 integration after profile repair
+
+[sm120-integration.json](sm120-integration.json) and
+[its terminal test log](sm120-integration-tests.txt) record 630 passing cases
+and six skips on Super-Bear's RTX 5070. Source and compiler/provider hashes,
+exact test command, device UUID and LLVM/MLIR 23.1.1 tool paths are recorded.
+The custom prefix provides MLIR tools; the matching Ubuntu 23.1.1 companions
+provide clang/llc/llvm-link. The explicit owning-device proof flag is enabled.
+The only skips are two x86 spectral provider cases, two foreign ROCm cases,
+and two rank-two cases with no batch transform.
+
+Coverage includes the repaired public ISTFT primal/JVP finite difference,
+new exact-profile alias preservation/refusal tests, scheduled activation,
+saved-LSE public forward/backward and trace-at-one replay, resident/prepared
+ownership, native NVFP4 and required diagnostic/pass registry gates. Four
+prepared reverse JSON/NPZ pairs are compiled in temporary storage and verified
+against independent FP64 gradients before replay; tests no longer depend on
+missing untracked local numerical fixtures. Earlier tool-path/fixture failures
+are repaired without skipping the owning lane or weakening numerical checks.
+This final explicit-source certificate supersedes the earlier isolated shared
+control receipt for current integration claims. No new timing, speedup or
+universal W1.1/attention closure is asserted.

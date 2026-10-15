@@ -360,3 +360,49 @@ def test_conflicting_or_partial_native_target_profile_is_not_retargeted(profile)
     with pytest.raises(ValueError, match="target profile"):
         plugins.istft_jvp_contract_from_paired_ir(
             named, target="rocm", architecture="gfx1201")
+
+
+@pytest.mark.parametrize("target,arch,module_arch", [
+    ("x86", "zen5_avx512", "zen5_avx512"),
+    ("nvidia_sm120", "sm120", "sm_120"),
+])
+def test_frontend_profile_alias_preserves_module_and_contract(
+    target, arch, module_arch, monkeypatch
+):
+    from tessera.compiler import scheduled_matmul
+
+    _, paired, *_ = _paired((4, 5), 8, dict(hop=4), ("spectrum",))
+    module_target, canonical_arch = plugins._module_profile(target, arch)
+    expected = plugins.istft_jvp_contract_from_paired_ir(
+        paired, target=target, architecture=arch)
+    named = paired.replace(
+        "module attributes {",
+        f'module attributes {{tessera.target = "{module_target}", tessera.arch = "{module_arch}", ',
+        1,
+    )
+    real_run = scheduled_matmul.run_tessera_opt
+    observed = []
+
+    def capture(tool, source, option):
+        observed.append(source)
+        return real_run(tool, source, option)
+
+    monkeypatch.setattr(scheduled_matmul, "run_tessera_opt", capture)
+    actual = plugins.istft_jvp_contract_from_paired_ir(
+        named, target=target, architecture=arch)
+    assert observed == [named]
+    assert actual == expected
+    assert actual["arch"] == canonical_arch
+
+
+@pytest.mark.parametrize("module_arch", ["sm_121", "sm_100", "gfx1201"])
+def test_nvidia_profile_alias_does_not_admit_another_architecture(module_arch):
+    _, paired, *_ = _paired((4, 5), 8, dict(hop=4), ("spectrum",))
+    named = paired.replace(
+        "module attributes {",
+        f'module attributes {{tessera.target = "nvidia_sm120", tessera.arch = "{module_arch}", ',
+        1,
+    )
+    with pytest.raises(ValueError, match="target profile differs"):
+        plugins.istft_jvp_contract_from_paired_ir(
+            named, target="nvidia_sm120", architecture="sm120")

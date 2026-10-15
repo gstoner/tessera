@@ -7,6 +7,22 @@ scope: ROCm backend implementation and exact-device proof
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 
+Integrated PR947 checkpoint: the frozen five-backend LLVM/MLIR 23.1.1
+candidate passes the full non-slow unit gate (28,493 passed / 5,320 skipped /
+874 deselected). post947-full-unit.txt and its manifest bind that source.
+Afterward, the native/Python exact-profile alias repair passes 432 focused
+cases on rebuilt gfx1201 tools (37 owning-gfx1151 skips). The independent
+SM120 integration gate passes 630 cases (six legitimate skips), including
+public ISTFT, saved-LSE forward/backward, resident/prepared ownership, NVFP4
+and producer routes. Prepared reverse tests now generate complete current
+native/oracle fixtures in temporary storage. These supplemental gates are
+separate from the earlier frozen broad certificate.
+Fresh post947 FP8 evidence retains 60 zero-error cases and twenty images;
+Princess-Luna independently passes six LDS cases and architecture refusal.
+Old timing packets keep their original compiler/source hashes. No general
+performance promotion or aggregate five-slice closure is claimed.
+
+
 Owner E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
 Native WMMA Target IR retains rhs_storage, validates both OCP formats and
 keeps the pair in physical image identity. The generator checks typed-fragment

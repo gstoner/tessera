@@ -1,0 +1,44 @@
+94caaf2ddbb61f547609e4925c084fe16790f25e
+64d4747b5c41f5789c1680aa395d17a486105bb90b40cee48917d7a820dccee2  -
+LLVM (http://llvm.org/):
+  LLVM version 23.1.1
+  Optimized build with assertions.
+LLVM (http://llvm.org/):
+  LLVM version 23.1.1
+  Optimized build with assertions.
+WSL environment detected.
+=====================
+HSA System Attributes
+=====================
+Runtime Version:         1.21
+Runtime Ext Version:     1.30
+System Timestamp Freq.:  1000.000000MHz
+Sig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)
+Machine Model:           LARGE
+System Endianness:       LITTLE
+Mwaitx:                  DISABLED
+XNACK enabled:           NO
+DMAbuf Support:          YES
+VMM Support:             YES
+Fabric Support:          NO
+
+==========
+HSA Agents
+==========
+*******
+Agent 1
+*******
+  Name:                    AMD Ryzen 7 9800X3D 8-Core Processor
+  Uuid:                    CPU-XX
+  Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor
+  Vendor Name:             CPU
+  Feature:                 None specified
+  Profile:                 FULL_PROFILE
+  Float Round Mode:        NEAR
+  Max Queue Number:        0(0x0)
+  Queue Min Size:          0(0x0)
+  Queue Max Size:          0(0x0)
+  Queue Type:              MULTI
+  Node:                    0
+  Device Type:             CPU
+  Cache Info:

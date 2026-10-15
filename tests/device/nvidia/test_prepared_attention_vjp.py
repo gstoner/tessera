@@ -16,6 +16,30 @@ ARTIFACTS=ROOT/"benchmarks/baselines/nvidia_public_attention_vjp_20261006/artifa
 pytestmark=pytest.mark.skipif(os.environ.get("TESSERA_NVIDIA_DEVICE_PROOF")!="1",
                               reason="requires owning RTX5070 proof lane")
 
+@pytest.fixture(scope="module", autouse=True)
+def generated_prepared_fixtures(tmp_path_factory):
+    """Compile complete current-source fixtures; never depend on local packets."""
+    import sys
+    from benchmarks.nvidia.benchmark_public_attention_vjp import run as public_run
+
+    directory = tmp_path_factory.mktemp("native-prepared-attention-vjp")
+    cases = (
+        (("q", "k", "v"), ("q",), 5, False, None),
+        (("v", "k", "q"), ("q", "k", "v"), 129, True, None),
+        (("bias", "v", "q", "k"), ("bias", "v", "k", "q"),
+         5, True, (1, 4, 1, 1)),
+        (("bias", "v", "q", "k"), ("bias",), 5, False, (1, 4, 1, 1)),
+    )
+    for order, wrt, sk, causal, bias_shape in cases:
+        row = public_run(order, wrt, sk, causal, directory, bias_shape)
+        assert row["correctness"] == "independent_fp64_gradients"
+        assert (directory / row["artifact"]).is_file()
+        assert (directory / row["inputs"]).is_file()
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(sys.modules[__name__], "ARTIFACTS", directory)
+        yield
+
+
 @pytest.mark.parametrize("case",["qkv_q_5_0","vkq_q_k_v_129_1","biasvqk_bias_v_k_q_5_1_1x4x1x1"])
 def test_matched_native_reverse(case):
     row=run(ARTIFACTS/(case+".json"),3)

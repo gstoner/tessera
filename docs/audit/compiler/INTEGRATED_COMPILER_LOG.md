@@ -12277,6 +12277,16 @@ Warm public calls record 0.851–0.904 ms; first-call samples are image-primed.
 Integer public wrapping semantics are retained.
 Shape-bound Schedule/Tile provenance remains separate from physical image keys.
 
+Integrated onto merged PR947: the frozen broad gate passes 28,493 cases
+(5,320 skips, 874 deselections). Its source/diff/toolchain manifest remains
+separate from later repairs. Native ISTFT exact-profile alias preservation
+and complete temporary prepared-reverse fixtures pass 432 supplemental
+cases on rebuilt gfx1201 tools and 630 cases on owning RTX 5070, including
+saved-LSE forward/backward, resident/prepared ownership, NVFP4 and producer
+regressions. Six NVIDIA skips are explicitly scoped. Fresh post947 FP8 and
+independent gfx1151 LDS packets retain their actual source/compiler hashes.
+Sibling queues now summarize their own assessment and link the owning proof.
+
 Remaining: larger/dynamic/layout and split-K FP8, general attention keys,
 public admission costs, wider public dtype/layout/AD contracts and owning gfx1151
 public frontend proof beyond the executed LDS package cases.

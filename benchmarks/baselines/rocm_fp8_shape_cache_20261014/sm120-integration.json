@@ -1,0 +1,104 @@
+{
+  "status": "exact_sm120_integrated_native_regression",
+  "architecture": "sm120",
+  "source_revision": "94caaf2ddbb61f547609e4925c084fe16790f25e",
+  "tracked_diff_sha256": "2c3a4e01b5f3bea0342e4646462c517c0b9325a0aacfe6a5ce799074ff5f0bbd",
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "952b0e2980e01a90d8cc24ab56f470051826983eb64cf4be3e625e01cc893120",
+    "python/tessera/compiler/driver.py": "b2c7a759d69c81e8b1e22a565be44b2f96f31a2663073aeb2be5681f57323952",
+    "python/tessera/compiler/native_jvp_plugins.py": "ee94939f1429de9134d7e4dbf69e61b22a3b4adc13e8a3fb875895a5461281fc",
+    "python/tessera/compiler/native_gpu_storage.py": "8000ba36daa01ebf9f7a2c6566b79ce4b583b56eb82187bdca92402d4d1190d2",
+    "python/tessera/compiler/native_attention_program.py": "c2ec15496a38afcc4428ff19388f85476d1d2a8a4b9fe700ebeeef28338a640f",
+    "python/tessera/runtime.py": "48a616361135b71fde0669a17dc1ca5bf187cbaf3643c9e6b4f195f25883e4fd",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "72541ba5daeb6ab2d6cfa8e804dc61aa127385158c40e80ddb6daf61830ce0a4",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_fft.cu": "8eece314b79f3f14756b1980a11f89e718e45dbd689d3dcc2ade20115a378df5",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_fft.h": "86def9804cc412b883d06b6faf6d46e979cbec53a5c1a55a6d7888bd502e10e3",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_spectral.cu": "983b98a7e80c518d0a5a622cbe21d7d3e7b82367a532985ae1fa18d43b92596f",
+    "tests/unit/test_istft_jvp_ir_contract.py": "ec30cead18a3c5459160cd8bb700e67db0e338faee7af4d77326c0c5e0e51fa5",
+    "tests/unit/test_diagnostic_code_registry.py": "3fab53eadf4021edb7e6bd8edf5780a06274fef8fb0feff4c1f0216131d53881",
+    "tests/unit/test_pass_metadata.py": "577eaab760456617afb7d7b0bc4ef7f24b505765efa522f75ae6a60c84b2e15c",
+    "tests/device/nvidia/test_spectral_jvp.py": "004e7ab90db422f03776b4dc2938d422941bffaf3e19062f2e977316771fb1e1",
+    "tests/unit/test_sm120_scheduled_activation.py": "2595eeeaffcd250cc388f4d69cebe288d2788c1d2a2cc5a421dc1ffc0d7bb652",
+    "tests/device/nvidia/test_public_attention_forward.py": "33c5855df7e13a0a1d90a7977aeae7e24c778497a6b4e347e15d99b1eecf2fb3",
+    "tests/device/nvidia/test_jit_multiresult_attention_vjp.py": "bced77b93fbaf3a50df141da3493800427d8ac555dd15de83c9cf3eadcb5ec36",
+    "tests/device/nvidia/test_bounded_saved_lse_jvp.py": "f4fd38540dddc42a7a4609f013ad85b7e7413fbcf8905de6cc77eba23998f1fc",
+    "tests/device/nvidia/test_degenerate_bounded_attention_vjp.py": "3a39667577564e920fbc30822e61ac51b75f5d9bc7bc36beb414072123fc6134",
+    "tests/device/nvidia/test_prepared_attention_jvp.py": "50122cebf8e4f399ee694e0b7a6efd6ea85f2d875dd71d698139ebbcf165038a",
+    "tests/device/nvidia/test_prepared_attention_vjp.py": "50aab8c7632599059e2ea2554b2124265cf825500b0dd09f15519d47e1637888",
+    "tests/device/nvidia/test_resident_attention_jvp.py": "d16b40b23a6738e1538b891630cca7de61536a420a1a85d9183fe72fbaafbbf0",
+    "tests/device/nvidia/test_resident_attention_vjp.py": "58a476f748190a1635c99cfb1fcad58305c90b3b41915f42ea551492c87b7c0c",
+    "tests/device/nvidia/test_nvfp4_tensor_jit.py": "ee9fee70c634a5e9ac61e29b4db00aaf8683b0e927f8f9c7448a69334cf98e51"
+  },
+  "binary_sha256": {
+    "TESSERA_OPT": "e8894340e0c8ad5fbe3b5a1bf3270e4d8574ac102d164158bbc9199b86daaada",
+    "TESSERA_NVIDIA_OPT": "c105db113ecd3a31bb11a6fd7a18c610d19c8bfc640c48a5fc747c74d0922365",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "5032dee8d0d29f4a3a16c724b92c6f42a455b871304b9db98919b515a9966b0e",
+    "TESSERA_NVIDIA_FFT_LIB": "12897fd6271c8b224b472c1f06785ba2a732e0a448e2dbaff9931b1d8ba61a8c"
+  },
+  "tools": {
+    "mlir-opt": {
+      "path": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/mlir-opt",
+      "sha256": "62a18523fcec89907cd9b0eade4d5976c549d11f85697089766242406ed1c271",
+      "version": [
+        "LLVM (http://llvm.org/):",
+        "  LLVM version 23.1.1",
+        "  Optimized build with assertions."
+      ]
+    },
+    "mlir-translate": {
+      "path": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/mlir-translate",
+      "sha256": "1ab0beb342311021e062480166403962d6981ac1e63162947cd80eb5ecb3a80d",
+      "version": [
+        "LLVM (http://llvm.org/):",
+        "  LLVM version 23.1.1",
+        "  Optimized build with assertions."
+      ]
+    },
+    "llc": {
+      "path": "/usr/lib/llvm-23/bin/llc",
+      "sha256": "81554da92c973d14b3505f8b6ce30eb66d307cbf76c662bf76478e6b5d3bfad6",
+      "version": [
+        "Ubuntu LLVM version 23.1.1",
+        "  Optimized build.",
+        "  Default target: x86_64-pc-linux-gnu"
+      ]
+    },
+    "llvm-link": {
+      "path": "/usr/lib/llvm-23/bin/llvm-link",
+      "sha256": "16ced40d94d8e4af05f55d01608d1cb8f89cdc8c7ebf501dd3651588175fd3b5",
+      "version": [
+        "Ubuntu LLVM version 23.1.1",
+        "  Optimized build."
+      ]
+    },
+    "clang": {
+      "path": "/usr/lib/llvm-23/bin/clang",
+      "sha256": "c3173b796451cb86760f76aa6445ff7ef19dae42a9805ac4ba1a06a146f2991d",
+      "version": [
+        "Ubuntu clang version 23.1.1 (++20260901122211+5340f7cc8814-1~exp1~20260901122222.63)",
+        "Target: x86_64-pc-linux-gnu",
+        "Thread model: posix"
+      ]
+    }
+  },
+  "gpu_report": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "test_command": "python -m pytest -q -ra tests/unit/test_istft_jvp_ir_contract.py tests/unit/test_diagnostic_code_registry.py tests/unit/test_pass_metadata.py tests/device/nvidia/test_spectral_jvp.py tests/unit/test_sm120_scheduled_activation.py tests/device/nvidia/test_public_attention_forward.py tests/device/nvidia/test_jit_multiresult_attention_vjp.py tests/device/nvidia/test_bounded_saved_lse_jvp.py tests/device/nvidia/test_degenerate_bounded_attention_vjp.py tests/device/nvidia/test_prepared_attention_jvp.py tests/device/nvidia/test_prepared_attention_vjp.py tests/device/nvidia/test_resident_attention_jvp.py tests/device/nvidia/test_resident_attention_vjp.py tests/device/nvidia/test_nvfp4_tensor_jit.py",
+  "environment": {
+    "TESSERA_NVIDIA_DEVICE_PROOF": "1",
+    "TESSERA_LLVM_BIN": "/usr/lib/llvm-23/bin",
+    "LLVM_BIN": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin",
+    "MLIR_OPT": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/mlir-opt",
+    "MLIR_TRANSLATE": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/mlir-translate",
+    "LLC": "/usr/lib/llvm-23/bin/llc",
+    "LLVM_LINK": "/usr/lib/llvm-23/bin/llvm-link"
+  },
+  "result": "630 passed, 6 skipped, 5 warnings",
+  "skips": {
+    "x86_spectral_provider_unavailable": 2,
+    "foreign_rocm_device": 2,
+    "rank_two_has_no_batch_transform": 2
+  },
+  "log_sha256": "d511aa33821c1492a742cc95ac8e4a0f7d5eb59147e9ed57fd60b5978fd17d6d",
+  "prepared_reverse_fixtures": "Four complete JSON/NPZ pairs compiled from current source in pytest temporary storage and checked against independent FP64 gradients before replay. No untracked baseline inputs required.",
+  "timing_claim": false
+}

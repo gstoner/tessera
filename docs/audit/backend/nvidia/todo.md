@@ -8,72 +8,28 @@ last_updated: 2026-10-14
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 
-Owner E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
-Native WMMA Target IR retains rhs_storage, validates both OCP formats and
-keeps the pair in physical image identity. The generator checks typed-fragment
-consistency. Mixed LDS now preserves RHS zeros, vector/shared allocation and
-fragment types, fixing a real pre-existing type mismatch and wrong-format path.
-The unsplit gfx1201 route reuses images across shapes for register K-unroll
-1/2/4/8 and LDS K-unroll 1. 577 focused gates pass under the five-backend configuration, including 90 owning-device
-FP8/FP16/BF16 numerical launches. The source-pinned 60-case FP8 packet has twenty
-pairing/recipe images, warm image reuse and zero error on seeded finite inputs.
-New-shape package wall times are 33.35–55.50 ms; HIP-event batch means
-3.68–13.00 us; completed host launches 0.567–0.747 ms. Event regions may
-include CPU enqueue gaps; no pure-kernel, speedup or default selection claim.
-The generic scheduled launch validates the live HIP architecture after argument
-checks and before acquisition/allocation; 83 guard/dispatch gates pass.
-Ordinary textual FP8 @jit now reaches canonical native packages for both generic
-and explicit gfx1201 targets. Twenty-four public format/shape replays pass
-numerical/IR/receipt checks; FP16/BF16 public sibling calls also pass.
-Twelve packet rows record warm public calls at 0.851–0.904 ms, separately
-from image-primed first calls and event/host-launch regions. Integer public
-wrapping semantics remain unchanged. The available-lane regression group
-passes 230 tests (113 skips); focused mypy and Ruff pass.
-Evidence: benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md.
-Larger/dynamic/layout and split-K FP8 envelopes, general attention cache keys
-and public compiler admission costs remain open.
-
-ISTFT profile integration — ODS-WIRE-2 / E2E-REAL-6:
-the broad exact-device run reproduced a public JVP failure caused by
-rejecting an already matching compiler-owned target profile. Matching
-profiles are now retained unchanged; conflicting or partial profiles remain
-rejected. Four profile cases are red/green, and the 63-case ISTFT contract
-lane passes with the exact gfx1201 spectral provider. The new
-istft-profile.json receipt pins sources/provider and finite-difference test
-log. This changes profile validation only, with no kernel, operation, dtype
-or ABI change. Host-free x86/gfx1151/gfx1201/SM120 profile gates pass; no
-sibling GPU execution or timing is inferred.
-
-Broad-lane repairs preserve the physical contracts: FP32 host-free fixtures
-pin gfx1151; exact gfx1151 WMMA fixtures check the actual selected device;
-the serializer is explicitly MLIR_OPT from the matching LLVM/MLIR 23.1.1
-build. Macro-K recipes remain distinct image keys. Cache clear/capacity
-testing runs in a fresh process so other owners retain their live leases.
-MoE tests probe compiler/device/toolkit availability instead of a separate
-shipped WMMA library. Eighty-one repair gates pass (14 architecture or
-environment skips). All three unchanged gfx1151 recurrence images execute
-on Princess-Luna with zero error; this is separate from gfx1201 evidence.
-
-The bounded-N BF16 resident Graph projection now updates its complete
-inferred result tuple as well as the singular type, fixing malformed traced
-SSA at the return. Exact gfx1201 public numerical/capacity checks pass.
-An idle correctness-gated M128/K256/N<=256 packet reuses one package for
-N128/256 and records 100 producer/consumer event samples each:
-8.48/10.76 us and 11.36/14.36 us medians respectively. Event windows may
-include enqueue gaps; no public-call latency or speedup is claimed.
-Sources/binaries and both owning-device receipts are pinned in
+Owner E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1; profile integration ODS-WIRE-2.
+Synchronization key: ROCM-FP8-TARGET-IDENTITY-20261014.
+The owning ROCm queue and source-bound evidence are authoritative for the
+independent RHS format, mixed LDS, image-key and public-JIT changes:
+[ROCm queue](../rocm/todo.md) and
 benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md.
-No sibling schedule, operation, dtype or runtime ABI is changed.
 
+ROCm physical FP8 schedules and image keys are not CUDA schedules. Shared
+frontend-control parity passes 29 scheduled-activation tests on the owning
+RTX 5070 with an explicit candidate Python import path. The public ISTFT JVP
+probe additionally reproduced an sm_120/sm120 mismatch: native Schedule now
+accepts the existing frontend spelling, preserves the authored module, and
+retains canonical sm120 in the serialized product contract. Other architecture
+profiles remain refused. Prepared reverse fixtures are generated from current
+native source and an independent FP64 oracle in temporary storage, rather than
+requiring untracked local JSON/NPZ pairs. The combined owning-device regression
+passes 630 tests, with six explicitly recorded skips for unavailable sibling
+spectral providers and rank-two batch transforms. sm120-integration.json and
+sm120-integration-tests.txt pin the source, compiler/provider binaries and
+matching LLVM/MLIR 23.1.1 tools. No ROCm-to-CUDA timing claim or broad
+W1.1/attention closure is inferred.
 
-
-CUDA image projection and physical schedules are unchanged. Shared FP8 dtype
-names remain unchanged. Shared Python admission/control parity is validated
-separately on Super-Bear's RTX 5070 (sm_120): 28 scheduled-activation tests
-pass with only the candidate jit.py/driver.py overlaid on PR947's Python
-tree and its matching compiler/runtime. sm120-shared-control.json pins both
-overlaid sources, compiler/provider binaries and the log. This is a shared
-control regression receipt, with no ROCm-to-CUDA numerical or timing claim.
 
 ## W11-RELU-PRODUCER-20261014 — active engineering
 

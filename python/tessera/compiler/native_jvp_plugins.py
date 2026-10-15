@@ -547,9 +547,16 @@ def istft_jvp_contract_from_paired_ir(
     named_target = re.search(r'tessera\.target\s*=\s*"([^"]*)"', header_line)
     named_arch = re.search(r'tessera\.arch\s*=\s*"([^"]*)"', header_line)
     has_profile = "tessera.target" in header_line or "tessera.arch" in header_line
+    # The native Schedule consumer canonicalizes these exact profile aliases.
+    # Preserve the frontend's module spelling; never retarget its architecture.
+    accepted_arches = {module_arch}
+    if (module_target, module_arch) == ("nvidia_sm120", "sm120"):
+        accepted_arches.add("sm_120")
+    elif (module_target, module_arch) == ("x86", "zen5-avx512"):
+        accepted_arches.add("zen5_avx512")
     if has_profile and (
         named_target is None or named_arch is None
-        or named_target.group(1) != module_target or named_arch.group(1) != module_arch
+        or named_target.group(1) != module_target or named_arch.group(1) not in accepted_arches
     ):
         raise ValueError("native ISTFT JVP paired IR target profile differs from the requested exact profile")
     profile = f'tessera.target = "{module_target}", tessera.arch = "{module_arch}"'

@@ -2143,7 +2143,8 @@ static LogicalResult scheduleIstftJvps(ModuleOp mod, OpBuilder &builder) {
                (configuredArch == "gfx1151" || configuredArch == "gfx1201")) {
       target = "rocm";
       arch = configuredArch;
-    } else if (configuredTarget == "nvidia_sm120" && configuredArch == "sm120") {
+    } else if (configuredTarget == "nvidia_sm120" &&
+               (configuredArch == "sm120" || configuredArch == "sm_120")) {
       target = "nvidia_sm120";
       arch = "sm120";
     } else {

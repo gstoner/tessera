@@ -3995,6 +3995,14 @@ struct GenerateWMMAGemmKernelPass
       // refusal names what it cannot emit; none falls back to an unscaled
       // GEMM, which would run and silently drop every block's scale.
       const bool scaled = request.scaleK > 0;
+      // Keep the measured two-panel default where it divides the logical
+      // group. Legal K16/odd-panel groups need one panel per inner step.
+      // Explicit requests retain their divisibility contract; hasValue()
+      // survives pass cloning, unlike command-line occurrence counts.
+      int effectiveScaleGroupPanels = scaleGroupPanels;
+      if (scaled && !scaleGroupPanels.hasValue() &&
+          (request.scaleK / T.fragK) % kDefaultScaleGroupPanels != 0)
+        effectiveScaleGroupPanels = 1;
       if (scaled) {
         const int64_t iterationK = T.fragK * std::max<int64_t>(T.kBlocks, 1) *
                                    std::max<int64_t>(int64_t(kUnroll), 1);
@@ -4020,10 +4028,10 @@ struct GenerateWMMAGemmKernelPass
                     .str();
         else if (request.scaleN <= 0)
           why = "the weight scale's N block must be positive";
-        else if (scaleGroupPanels < 0 ||
-                 (scaleGroupPanels > 0 &&
-                  (request.scaleK / T.fragK) % scaleGroupPanels != 0))
-          why = (Twine("scale-group-panels=") + Twine(int(scaleGroupPanels)) +
+        else if (effectiveScaleGroupPanels < 0 ||
+                 (effectiveScaleGroupPanels > 0 &&
+                  (request.scaleK / T.fragK) % effectiveScaleGroupPanels != 0))
+          why = (Twine("scale-group-panels=") + Twine(effectiveScaleGroupPanels) +
                  " must divide the group's " +
                  Twine(request.scaleK / T.fragK) + " instruction panels")
                     .str();
@@ -4339,7 +4347,7 @@ struct GenerateWMMAGemmKernelPass
                                         ? "rocm_fp8_w8a8_blockscale_nk_v1"
                                         : "rocm_fp8_w8a8_blockscale_v1")));
         gpuFunc->setAttr("tessera.rocm.scale_group_panels",
-                         b.getI64IntegerAttr(scaleGroupPanels));
+                         b.getI64IntegerAttr(effectiveScaleGroupPanels));
         gpuFunc->setAttr("tessera.rocm.scale_k",
                          b.getI64IntegerAttr(request.scaleK));
         gpuFunc->setAttr("tessera.rocm.scale_n",
@@ -4350,7 +4358,7 @@ struct GenerateWMMAGemmKernelPass
                         request.rasterGroup, request.staticM, request.staticN,
                         request.staticK, kUnroll, schedGroups, /*splitK=*/1,
                         /*sliceK=*/0, request.scaleK, request.scaleN,
-                        request.bTransposed, scaleGroupPanels, request.scaleFormat);
+                        request.bTransposed, effectiveScaleGroupPanels, request.scaleFormat);
         if (request.staticK == 0 && request.scaleK == 128 &&
             request.scaleFormat == "fp32")
           specializeShortScaledK(gpuFunc);

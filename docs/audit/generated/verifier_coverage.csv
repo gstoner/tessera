@@ -181,6 +181,7 @@ src/compiler/ir/TesseraOps.td,MorScatterOp,1,1,real
 src/compiler/ir/TesseraOps.td,MulOp,1,1,real
 src/compiler/ir/TesseraOps.td,MultiHeadAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,NTKRopeOp,1,1,real
+src/compiler/ir/TesseraOps.td,NVFP4ExpandOp,1,1,real
 src/compiler/ir/TesseraOps.td,NVFP4RequantizeOp,1,1,real
 src/compiler/ir/TesseraOps.td,NativeSparseAttnFusedOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeOp,1,1,real

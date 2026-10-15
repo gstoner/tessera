@@ -1657,6 +1657,16 @@ def ROCM_NVFP4RequantizeOp : TesseraROCM_Op<"nvfp4_requantize"> {
   let hasVerifier = 1;
 }
 
+
+def ROCM_NVFP4ExpandOp : TesseraROCM_Op<"nvfp4_expand"> {
+  let summary = "Native exact E2M1 expansion with f64-to-f32 K16 scale rounding";
+  let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$n, I64Attr:$k,
+      I64ArrayAttr:$row_offsets, ROCM_NVFP4IngestPolicyAttr:$numeric_policy,
+      StrAttr:$schedule_hash);
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
 def ROCM_MXFP4FoldedStorageOp : TesseraROCM_Op<"mxfp4_folded_storage"> {
   let summary = "Native lossless MXFP4 fragment-byte and row-reference storage bridge";
   let arguments = (ins StrAttr:$name, I64Attr:$n, I64Attr:$k, StrAttr:$arch,

@@ -411,6 +411,39 @@ Not applicable to AVX-512 physical lowering: this dispatches only to gfx1201. Na
 
 
 
+## NVFP4-CHECKPOINT-K16-20261015 — source-preserving consumer control
+
+Owner ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Synchronization key: NVFP4-CHECKPOINT-K16-20261015.
+Captured-input source/checkpoint identities match the earlier FP8/MXFP8/MXFP4 packet. Host expansion retains K16 source weights with only FP32 scale rounding; it is diagnostic, not a new production NVFP4 decoder. Not applicable to AVX-512 physical execution: no x86 route, ABI, arithmetic, dtype or selector change. CPU reference preparation is not Tessera x86 code-generation proof.
+Full-model quality acceptance, native packed transport and strategy promotion remain open; the cross-packet quality characterization is not a controlled timing A/B.
+Evidence: benchmarks/baselines/nvfp4_checkpoint_k16_20261015/README.md.
+
+## ROCM-K16-SCALE-GROUPS-20261015 — legal native group defaults
+
+Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-NVFP4-INGEST-1.
+Synchronization key: ROCM-K16-SCALE-GROUPS-20261015.
+Implicit native register defaults now use one panel for odd K16 instruction groups; explicit divisibility checks remain. Existing K32/K128 Tile/Target/HSACO images are byte-identical to the reference. Not applicable to AVX-512 physical execution: no x86 lowering, storage, ABI, capability or selector changes. No ROCm proof or timing is transferred.
+Native NVFP4 expansion, packed transport and model-quality acceptance remain follow-up required. The host expansion control is diagnostic only.
+Evidence: benchmarks/baselines/gfx1201_fp8_k16_default_20261015/README.md.
+
+## NVFP4-MODEL-ACTIVATIONS-20261015 — captured-input quality evidence
+
+Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6.
+Synchronization key: NVFP4-MODEL-ACTIVATIONS-20261015.
+The optional CPU reference captures pinned BF16 Qwen3 layer-0 MLP inputs;
+all executed parameters are loaded and repeat capture is bitwise identical.
+The benchmark validates capture bytes/provenance before GPU/network work and
+now verifies exact HTTP Content-Range identity. 45 source/input guards pass.
+Identical captured inputs drive 18 native gfx1201 FP8/MXFP8/MXFP4 arms.
+Decoded-weight projection RMS at M256 is 6.08% shipped NVFP4, 7.42% direct
+MXFP4 and 9.74% after ingest, against the selected BF16 checkpoint. These
+are projection proxies, not full-model accuracy or NVIDIA execution proof.
+The two source tensor identities match the older checkpoint controls.
+Evidence: benchmarks/baselines/nvfp4_model_activations_20261015/README.md.
+
+Not applicable to Tessera AVX-512 physical execution: Torch CPU generates reference inputs, not an x86 compiler package. No x86 dtype, operation, ABI, schedule or timing claim changes. Shared benchmark metadata/provenance checks are assessed independently of native CPU proof.
+
 ## ROCM-NVFP4-SOURCE-MIDPOINTS-20261009
 
 Owner ROCM-NVFP4-INGEST-1. Native MLIR compares absolute source values against
@@ -10847,3 +10880,19 @@ Not applicable to x86 execution: no x86 lane matches the hook's NVIDIA/ROCm patt
 Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Shared change: `@jit(target=<native>)` now raises `JIT_UNLOWERED_OP_NATIVE_TARGET` at decoration when the body calls a `tessera.ops` callable the AST Graph IR front end dropped (no `op_catalog` OpSpec, or a spelling it does not resolve). Before, the call left an empty `func.func` body, the effect joined to `top` so no tracer captured it, and `JitFn.__call__` returned eager numpy with `last_fallback_reason` None and no artifact. The dropped spellings ride on `GraphIRModule.frontend_unlowered_calls` so the refusal survives Graph IR cache hits; resolution is by object identity, so aliases count. No target and `target="cpu"` keep the eager reference path. Non-`tessera.ops` calls (numpy, user helpers) are out of scope and still fall back eagerly: recorded follow-up, not closed. Test: `tests/unit/test_jit_unlowered_op_native_target.py`.
 
 x86: `target="x86"` refuses like every native target; `target="cpu"` (the reference lane) is unchanged. No AVX-512 execution evidence is claimed or affected.
+
+
+## NVFP4-NATIVE-EXPAND-20261015
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to native x86 execution in this slice: shared frontend result inference and the eager oracle do not supply a compiled CPU producer. Capability remains unsupported; no CPU execution or timing evidence is transferred.
+
+
+## NVFP4-PUBLIC-EXPAND-20261015
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to native x86 execution: no CPU package or byte-storage promotion is added. The shared JIT allocation change is guarded by the gfx1201 expansion ABI; x86 expansion remains unsupported and no CPU proof is inferred.
+
+Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.

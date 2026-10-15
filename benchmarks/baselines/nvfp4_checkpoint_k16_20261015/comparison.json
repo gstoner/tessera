@@ -1,0 +1,57 @@
+{
+  "scope": "source/input-matched cross-packet characterization; compiler epochs and physical/activation strategies differ; not a controlled performance A/B",
+  "earlier_packet": "benchmarks/baselines/nvfp4_model_activations_20261015/quality-formats.json",
+  "earlier_packet_sha256": "cf06b907787e72fb8081f10e06ddf8d1246aeb4375722004c19bc8165a3022c8",
+  "rows": [
+    {
+      "shape_mnk": [
+        128,
+        24576,
+        4096
+      ],
+      "activation_sha256": "4121a9eb1145e8a31abafc1441316fc7edd5f1ae2c2037901f0e8cea35680584",
+      "shipped_weight_projection_error": {
+        "max_abs": 0.17450456863707853,
+        "relative_rms": 0.06085112243132119
+      },
+      "source_preserving_native_error": {
+        "max_abs": 0.17052851103653666,
+        "relative_rms": 0.06234876606704475
+      },
+      "earlier_ingested_weight_projection_error": {
+        "relative_rms_error": 0.09748003860296627,
+        "sqnr_db": 20.22168615005568,
+        "max_abs_error": 0.20057774899032665
+      },
+      "earlier_ingested_native_error": {
+        "max_abs": 0.2117214014797355,
+        "relative_rms": 0.099002959562448
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        24576,
+        4096
+      ],
+      "activation_sha256": "2f8585a601aeb7c412b4e7c7f69d0aa23eb40139c06ff364e148545e13f3922c",
+      "shipped_weight_projection_error": {
+        "max_abs": 0.17450456863707853,
+        "relative_rms": 0.06080168033274925
+      },
+      "source_preserving_native_error": {
+        "max_abs": 0.17052851103653666,
+        "relative_rms": 0.062307438843641746
+      },
+      "earlier_ingested_weight_projection_error": {
+        "relative_rms_error": 0.09736654960138079,
+        "sqnr_db": 20.23180439809341,
+        "max_abs_error": 0.2571972773948801
+      },
+      "earlier_ingested_native_error": {
+        "max_abs": 0.2577137019438851,
+        "relative_rms": 0.09887485642636802
+      }
+    }
+  ]
+}

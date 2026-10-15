@@ -1875,6 +1875,7 @@ class JitFn:
         matmul = (target == "nvidia_sm120" and self.differentiation_request is None
                   and (supports_f16_matmul(self.graph_ir) or supports_bf16_matmul(self.graph_ir)))
         from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest, NVFP4_INGEST_ABI
+        from .rocm_nvfp4_expand_native import supports_nvfp4_expansion, NVFP4_EXPAND_ABI
         from .rocm_mxfp4_storage_native import supports_mxfp4_storage, MXFP4_STORAGE_ABI
         from .rocm_native import (
             requests_paged_kv_read, requests_moe_dispatch,
@@ -1892,7 +1893,7 @@ class JitFn:
         from .rocm_typed_scaled_native import requests_typed_scaled
         typed_scaled = target == "rocm_gfx1201" and requests_typed_scaled(self.graph_ir)
         checkpoint = target == "rocm_gfx1201" and (
-            supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
+            supports_nvfp4_expansion(self.graph_ir) or supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
         if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4 and not typed_scaled and not rocm_matmul:
             return _JIT_FALLBACK
         if self.differentiation_request is not None:
@@ -2162,7 +2163,7 @@ class JitFn:
                     or tuple(descriptor.provenance.get("shape",()))!=attention_contract[1]):
                 raise ValueError("attention descriptor differs from its typed frontend contract")
             scalars=dict(zip(scalar_names,(*attention_contract[1], *bias_shape),strict=True))
-        elif descriptor.abi_id not in {NVFP4_INGEST_ABI, MXFP4_STORAGE_ABI} or descriptor.scalars:
+        elif descriptor.abi_id not in {NVFP4_EXPAND_ABI, NVFP4_INGEST_ABI, MXFP4_STORAGE_ABI} or descriptor.scalars:
             raise ValueError("checkpoint compilation did not produce its complete static ABI")
         bindings = sorted(descriptor.buffers, key=lambda item: item.ordinal)
         inputs = [item for item in bindings if item.direction == "input"]
@@ -2217,6 +2218,9 @@ class JitFn:
                 raise ValueError("host tensor call requires fully static output guards")
             dtype = {"uint8": np.uint8, "fp64": np.float64, "fp32": np.float32,
                      **({"fp16": np.float16} if matmul or nvidia_softmax else {})}.get(output.dtype)
+            if dtype is None and descriptor.abi_id == NVFP4_EXPAND_ABI and output.dtype == "fp8_e4m3":
+                import ml_dtypes
+                dtype = ml_dtypes.float8_e4m3fn
             if dtype is None and nvidia_softmax and output.dtype == "bf16":
                 import ml_dtypes
                 dtype = ml_dtypes.bfloat16

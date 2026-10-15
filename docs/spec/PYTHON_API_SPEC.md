@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Normative
-last_updated: 2026-07-23
+last_updated: 2026-10-15
 ---
 
 # Tessera Python API Specification
@@ -2224,6 +2224,39 @@ conversion is unavailable because packed bytes are not logical values.
 Named rank-two/shared-RHS/independent-RHS profiles return an f32 ndarray;
 general vmap, dynamic batches, transpose, AD and sibling physical bindings
 remain separate work.
+
+### nvfp4_expand
+
+tessera.ops.nvfp4_expand(codes, scales, projection_globals, *, row_offsets,
+numeric_policy) is the source-preserving K16 checkpoint expansion operation.
+The three inputs are packed uint8 codes [N,K/2], E4M3 scales [N,K/16], and
+float64 projection globals [P]. N and K are positive static dimensions with
+K divisible by 16. Each byte stores the low nibble first. row_offsets is a
+strictly increasing integer list of P+1 boundaries, beginning at zero and
+ending at N; each projection uses its own global.
+
+The two results are E4M3 values [N,K] and a float32 scale plane [K/16,N].
+All sixteen E2M1 codes, including signed zero, are represented exactly in the
+first result. Scale products are evaluated in float64 and rounded once to
+float32 with round-to-nearest, ties-to-even; the whole transformation must not
+be described as lossless. Scales must be finite and nonnegative (signed zero
+is allowed), and globals must be finite and positive. The checked import
+rejects float32 product overflow and a positive product that rounds to zero;
+nonzero float32 subnormals remain admitted.
+
+numeric_policy must exactly match the explicit source-preserving expansion
+policy returned by tessera.compiler.nvfp4_expansion.nvfp4_expansion_policy().
+An authored conflicting policy is rejected, never replaced by normalization.
+This operation is distinct from the lossy K16-to-K32 nvfp4_requantize conversion.
+
+On exact gfx1201, ordinary @jit and serialized replay use native Graph,
+Schedule, Tile, ROCm Target IR and LLVM lowering plus the checked five-buffer
+ABI. Replay can execute without compiler tools. The numerical NumPy reference
+is an eager oracle, not a native execution fallback. Other native targets,
+dynamic shapes/layouts, differentiation of encoded inputs, and composition
+with a resident matmul require their own contracts and proof. This named
+packed-byte ingress does not promote general uint8 Graph computation or
+establish full-model quality acceptance.
 
 ### nvfp4_requantize
 

@@ -567,6 +567,8 @@ def compile_graph_module(
             paged_contract = nvidia_native._paged_kv_contract(module)
         from .rocm_nvfp4_ingest_native import (
             supports_nvfp4_ingest,project_nvfp4_ingest_graph)
+        from .rocm_nvfp4_expand_native import (
+            supports_nvfp4_expansion,project_nvfp4_expansion_graph)
         from .rocm_mxfp4_storage_native import supports_mxfp4_storage,project_mxfp4_storage_graph
         from .rocm_math_native import supports_math, lower_math_graph
         from .rocm_typed_scaled_native import supports_typed_scaled, lower_typed_scaled
@@ -576,6 +578,9 @@ def compile_graph_module(
         elif target_kind in {"rocm_gfx1151", "rocm_gfx1201"} and supports_math(module):
             scheduled_math_recipe = lower_math_graph(module, target_kind)
             graph_text = scheduled_math_recipe.graph_ir
+        elif target_kind=="rocm_gfx1201" and supports_nvfp4_expansion(module):
+            scheduled_checkpoint_storage_module=project_nvfp4_expansion_graph(module)
+            graph_text=scheduled_checkpoint_storage_module.to_mlir(target=target_kind,canonical=True)
         elif target_kind=="rocm_gfx1201" and (supports_nvfp4_ingest(module) or supports_mxfp4_storage(module)):
             projector=project_nvfp4_ingest_graph if supports_nvfp4_ingest(module) else project_mxfp4_storage_graph
             scheduled_checkpoint_storage_module=projector(module)
@@ -976,7 +981,11 @@ def compile_graph_module(
         elif scheduled_checkpoint_storage_module is not None:
             from .rocm_nvfp4_ingest_native import package_nvfp4_ingest_graph
             from .rocm_mxfp4_storage_native import package_mxfp4_storage_graph,supports_mxfp4_storage
-            if supports_mxfp4_storage(scheduled_checkpoint_storage_module):
+            from .rocm_nvfp4_expand_native import package_nvfp4_expansion,supports_nvfp4_expansion
+            if supports_nvfp4_expansion(scheduled_checkpoint_storage_module):
+                ingest_package=package_nvfp4_expansion(scheduled_checkpoint_storage_module)
+                package_kind="nvfp4_expand"
+            elif supports_mxfp4_storage(scheduled_checkpoint_storage_module):
                 ingest_package=package_mxfp4_storage_graph(scheduled_checkpoint_storage_module)
                 package_kind="mxfp4_folded_storage"
             else:
@@ -1177,7 +1186,7 @@ def compile_graph_module(
                     "dtype": x86_package.descriptor.buffers[0].dtype,
                     "op_family": package_kind,
                     "work_item": (
-                        "ROCM-NVFP4-INGEST-1" if package_kind in {"nvfp4_requantize","mxfp4_folded_storage"} else
+                        "ROCM-NVFP4-INGEST-1" if package_kind in {"nvfp4_expand","nvfp4_requantize","mxfp4_folded_storage"} else
                         "E2E-REAL-3"
                         if scheduled_matmul_artifact is not None
                         else "E2E-REAL-5A"
@@ -1530,6 +1539,7 @@ def canonical_compile_options(
         from .rocm_native import native_packaging_available, supports_paged_kv_read, requests_softmax
         from .scheduled_kernel import supports_scheduled_kernel
         from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest
+        from .rocm_nvfp4_expand_native import supports_nvfp4_expansion
 
         from .rocm_mxfp4_storage_native import supports_mxfp4_storage
         from .rocm_math_native import supports_math
@@ -1537,7 +1547,7 @@ def canonical_compile_options(
         from .scheduled_matmul import supports_scheduled_matmul
         resolved["package_native"] = (
             supports_scheduled_matmul(module, target=target_kind) or
-            supports_typed_scaled(module) or supports_nvfp4_ingest(module) or supports_mxfp4_storage(module)
+            supports_typed_scaled(module) or supports_nvfp4_expansion(module) or supports_nvfp4_ingest(module) or supports_mxfp4_storage(module)
             or supports_paged_kv_read(module) or supports_math(module)
             or (requests_softmax(module) and supports_scheduled_kernel(module,target=target_kind))
         ) and native_packaging_available()

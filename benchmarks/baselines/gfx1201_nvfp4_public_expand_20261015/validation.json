@@ -1,0 +1,57 @@
+{
+  "note": "separate gates overlap; counts are not a unique-test total",
+  "checks": {
+    "route_and_registry": {
+      "passed": 393,
+      "log": "final-route-registry.log"
+    },
+    "delivery": {
+      "passed": 524,
+      "log": "delivery-tests.log"
+    },
+    "w8a8_and_k16": {
+      "passed": 122,
+      "log": "final-w8a8-k16-regression.log"
+    },
+    "generated_docs": {
+      "passed": 33,
+      "log": "generated-check.log"
+    },
+    "sibling_eager_refusal": {
+      "passed": 4,
+      "log": "sibling-refusal.log"
+    },
+    "ruff": {
+      "status": "passed",
+      "log": "ruff.log"
+    },
+    "mypy": {
+      "status": "passed",
+      "log": "mypy.log"
+    },
+    "compiler_plan": {
+      "status": "passed",
+      "log": "plan.log"
+    },
+    "claim_lint": {
+      "status": "passed",
+      "log": "claims.log"
+    },
+    "graphify": {
+      "status": "updated",
+      "log": "graphify.log"
+    },
+    "review_api_spec_ods": {
+      "passed": 779,
+      "log": "review-green.log",
+      "before": "review-red.log.xz",
+      "scope": "API spec, ODS completeness/consumer pins and spec synchronization"
+    }
+  },
+  "source_identity": "all measured Python, native C++ and tool hashes verified before commit",
+  "apple_no_lane_ci_repair": {
+    "red_failed": 2,
+    "focused_green_passed": 793,
+    "scope": "explicit Apple unsupported residual classification; no Metal route"
+  }
+}

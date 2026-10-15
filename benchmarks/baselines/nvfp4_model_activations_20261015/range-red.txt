@@ -1,0 +1,76 @@
+FFFF.                                                                    [100%]
+=================================== FAILURES ===================================
+_____ test_checkpoint_range_rejects_mislabeled_equal_length_payload[None] ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x76e5c2296fd0>
+content_range = None
+
+    @pytest.mark.parametrize("content_range",[None,"bytes 0-3/16","bytes 4-7/7","invalid"])
+    def test_checkpoint_range_rejects_mislabeled_equal_length_payload(monkeypatch,content_range):
+        import io
+        class Response(io.BytesIO):
+            status=206
+            headers={} if content_range is None else {"Content-Range":content_range}
+        monkeypatch.setattr(recorder.urllib.request,"urlopen",lambda *a,**k:Response(b"ABCD"))
+>       with pytest.raises(RuntimeError,match="Content-Range"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE RuntimeError
+
+tests/unit/test_nvfp4_checkpoint_recorder.py:187: Failed
+_ test_checkpoint_range_rejects_mislabeled_equal_length_payload[bytes 0-3/16] __
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x76e5c2297ce0>
+content_range = 'bytes 0-3/16'
+
+    @pytest.mark.parametrize("content_range",[None,"bytes 0-3/16","bytes 4-7/7","invalid"])
+    def test_checkpoint_range_rejects_mislabeled_equal_length_payload(monkeypatch,content_range):
+        import io
+        class Response(io.BytesIO):
+            status=206
+            headers={} if content_range is None else {"Content-Range":content_range}
+        monkeypatch.setattr(recorder.urllib.request,"urlopen",lambda *a,**k:Response(b"ABCD"))
+>       with pytest.raises(RuntimeError,match="Content-Range"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE RuntimeError
+
+tests/unit/test_nvfp4_checkpoint_recorder.py:187: Failed
+__ test_checkpoint_range_rejects_mislabeled_equal_length_payload[bytes 4-7/7] __
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x76e5c2145370>
+content_range = 'bytes 4-7/7'
+
+    @pytest.mark.parametrize("content_range",[None,"bytes 0-3/16","bytes 4-7/7","invalid"])
+    def test_checkpoint_range_rejects_mislabeled_equal_length_payload(monkeypatch,content_range):
+        import io
+        class Response(io.BytesIO):
+            status=206
+            headers={} if content_range is None else {"Content-Range":content_range}
+        monkeypatch.setattr(recorder.urllib.request,"urlopen",lambda *a,**k:Response(b"ABCD"))
+>       with pytest.raises(RuntimeError,match="Content-Range"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE RuntimeError
+
+tests/unit/test_nvfp4_checkpoint_recorder.py:187: Failed
+____ test_checkpoint_range_rejects_mislabeled_equal_length_payload[invalid] ____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x76e5c21806b0>
+content_range = 'invalid'
+
+    @pytest.mark.parametrize("content_range",[None,"bytes 0-3/16","bytes 4-7/7","invalid"])
+    def test_checkpoint_range_rejects_mislabeled_equal_length_payload(monkeypatch,content_range):
+        import io
+        class Response(io.BytesIO):
+            status=206
+            headers={} if content_range is None else {"Content-Range":content_range}
+        monkeypatch.setattr(recorder.urllib.request,"urlopen",lambda *a,**k:Response(b"ABCD"))
+>       with pytest.raises(RuntimeError,match="Content-Range"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE RuntimeError
+
+tests/unit/test_nvfp4_checkpoint_recorder.py:187: Failed
+=========================== short test summary info ============================
+FAILED tests/unit/test_nvfp4_checkpoint_recorder.py::test_checkpoint_range_rejects_mislabeled_equal_length_payload[None]
+FAILED tests/unit/test_nvfp4_checkpoint_recorder.py::test_checkpoint_range_rejects_mislabeled_equal_length_payload[bytes 0-3/16]
+FAILED tests/unit/test_nvfp4_checkpoint_recorder.py::test_checkpoint_range_rejects_mislabeled_equal_length_payload[bytes 4-7/7]
+FAILED tests/unit/test_nvfp4_checkpoint_recorder.py::test_checkpoint_range_rejects_mislabeled_equal_length_payload[invalid]
+4 failed, 1 passed, 14 deselected in 0.21s

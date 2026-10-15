@@ -12312,3 +12312,117 @@ Evidence: benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md,
 gfx1201.json; source/binary/Target/Tile/HSACO identities and separate event,
 package and completed-host timing regions.
 <!-- entry-fields:end -->
+
+### 2026-10-15 — NVFP4 ingest quality on captured model inputs
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync NVFP4-MODEL-ACTIVATIONS-20261015.
+
+Outcome: actual pinned BF16 Qwen3 layer-0 MLP inputs replace synthetic rows
+for an optional checkpoint comparison. The upstream CPU reference loads all
+executed parameters and captures twice identically; Torch is absent from the
+native measurement environment. 45 input/provenance guards and 18 native
+RX9070XT format arms pass. Decoded-weight projection RMS at M256 is 6.08%
+shipped NVFP4, 7.42% direct MXFP4 and 9.74% after ingest against BF16. Native
+arithmetic, quantization/folding and timing regions remain separate. Exact
+Content-Range validation rejects same-length wrong tensor bytes; historical
+checkpoint source fingerprints match. All four backend plans are assessed.
+
+Remaining: full-model/representative-corpus quality acceptance, broader
+layout/dynamic/composition, physical performance attribution and promotion.
+These projection proxies do not prove model accuracy or sibling execution.
+
+Evidence: benchmarks/baselines/nvfp4_model_activations_20261015/README.md,
+inputs.json, inputs.npz, quality-formats.json, input-tests.txt and isa-index.json.
+<!-- entry-fields:end -->
+
+### 2026-10-15 — gfx1201 native K16 scale-group default
+
+Owner: [ROCM-FP8-BLOCKSCALE-1](INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1)
+PRs: pending; sync ROCM-K16-SCALE-GROUPS-20261015.
+
+Outcome: native automatic panel selection now covers legal odd instruction
+groups while preserving explicit override refusals. K16/K48/K80 have red/green
+compiler regressions; 431 focused guards, 102 existing owning device controls
+and 16 filtered cases pass (12 new plus four overlapping controls). Legacy
+K32/K128 Tile/Target/HSACO images are byte-identical to the preserved reference.
+Three source-preserving synthetic K16 controls pass independent FP64 bounds
+with separate HIP graph execution/dispatch and checked host timing. All four
+backend queues distinguish this gfx1201 repair from sibling physical claims.
+
+Remaining: native NVFP4 expansion, packed four-bit transport and model-quality
+acceptance; wider W8A8 short/ragged coverage and MXFP4 attribution remain open.
+No Python backend selector, default performance promotion or full program closure.
+
+Evidence: benchmarks/baselines/gfx1201_fp8_k16_default_20261015/README.md,
+compiler-red.txt, compiler-green.txt, existing-device-controls.txt,
+odd-device-cases.txt, source-k16-control.json and legacy-image-identity.json.
+<!-- entry-fields:end -->
+
+### 2026-10-15 — checkpoint-preserving native K16 consumer control
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: [#949](https://github.com/gstoner/tessera/pull/949); sync NVFP4-CHECKPOINT-K16-20261015.
+
+Outcome: real checkpoint and captured model-input identities match the earlier
+three-format packet. Source-preserving host expansion has 2.68e-8 relative
+weight error from FP32 scale rounding; native LDS K16 consumers pass independent
+f32/BF16 bounds at M128 and M256 and share one image. At M256 native projection
+RMS is 6.23% against BF16, with separately recorded 1.332 ms graph execution/
+dispatch and 19.896 ms completed host time. The earlier ingested arm has 9.89%
+RMS on matching inputs, but this cross-epoch characterization is not a timing
+A/B or an isolated dtype comparison. Input/control guards pass 51 cases.
+
+Remaining: implement a compiler-owned source-preserving producer and resident
+composition, preserving source K16 scales/globals and declared FP32 rounding;
+evaluate packed storage and full-model quality. No default promotion, sibling
+physical proof transfer or five-slice completion claim.
+
+Evidence: benchmarks/baselines/nvfp4_checkpoint_k16_20261015/README.md,
+checkpoint-k16.json, comparison.json and final-input-tests.txt.
+<!-- entry-fields:end -->
+
+### 2026-10-15 — native source-preserving NVFP4 expansion primitive
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: [#949](https://github.com/gstoner/tessera/pull/949); sync NVFP4-NATIVE-EXPAND-20261015.
+
+Outcome: A distinct registered Graph operation infers exact FP8 code and FP32
+K16 scale-plane outputs. Native Graph/Schedule/Tile/ROCm/LLVM lowering preserves
+E2M1 signed zeros and applies the declared FP64-product-to-FP32 rounding.
+The checked five-buffer package rejects invalid source scales/globals, preserves
+private output ownership, and verifies artifact/descriptor lineage.
+53 focused cases and 326 registry gates pass, plus 353 delivery tests.
+Exact gfx1201 bitwise output checks cover K16/K48/K80 and rounding boundaries.
+Producer-only synthetic measurements separate device graph, completed host-buffer
+calls and compilation. The packet retains raw clock/event windows and native ISA.
+
+Remaining: Ordinary public JIT and serialized replay, resident consumer
+composition, native whole-sequence ownership, real checkpoint parity and model
+quality acceptance. The capability remains artifact_only; sibling targets remain
+unsupported. No packed consumer or overall compiler closure is claimed.
+
+Evidence: benchmarks/baselines/gfx1201_nvfp4_native_expand_20261015/README.md.
+<!-- entry-fields:end -->
+
+### 2026-10-15 — public native NVFP4 expansion and portable replay
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: [#949](https://github.com/gstoner/tessera/pull/949); sync NVFP4-PUBLIC-EXPAND-20261015.
+
+Outcome: The ordinary Python frontend and canonical driver now package the
+registered two-result expansion through native Graph/Schedule/Tile/ROCm/LLVM.
+Checked runtime replay verifies Graph/Schedule/Tile/image/descriptor lineage,
+finite nonnegative E4M3 scales, finite positive globals, FP32 scale range and
+private writable outputs. Cold/warm JIT, JSON replay and fresh-process replay
+without compiler tools execute bitwise on gfx1201 with the eager oracle disabled.
+Pinned original Qwen3 gate/up checkpoint weights also pass both output checks.
+Producer-only device graph windows and completed host calls are recorded separately.
+
+Remaining: The public operation is isolated/static. Multi-output SSA ownership,
+native whole-sequence execution and resident K16 consumer integration remain open;
+generic HIP program ownership currently assumes one fresh result per step.
+No default-route promotion, sibling execution or full-model quality closure.
+
+Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.
+<!-- entry-fields:end -->

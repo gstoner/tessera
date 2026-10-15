@@ -1,0 +1,42 @@
+{
+  "scope": "independent cold processes; before/after default native Tile/Target/HSACO identities for established even scale groups",
+  "source_revision": "92a1fcc02401e9677867c81e162b7f5d49e7d0ba",
+  "tools": {
+    "before": {
+      "core_sha256": "256acc966923792e487ab8da63183ace49ea2ef385fc71cb15076bec34fd060d",
+      "rocm_sha256": "c0acf827191a1330f04ddb2670128e9f246328e45eb3a940ea66acda54ee16f2"
+    },
+    "after": {
+      "core_sha256": "d3ca49c2182ac8f14b5988469f52d9ab4dffb3accdb90ff49c37ccdbda040803",
+      "rocm_sha256": "8c726af6384c0d323b108ea0eae2726d4ab66f2692af72806a57f9208cc9d455"
+    }
+  },
+  "rows": [
+    {
+      "scale_k": 32,
+      "before": {
+        "image": "3378e83c73264e2b4ff3e31510df44b358fa3ee919dce1ecbad0547579ec2daa",
+        "tile": "d5385fe3254444b6ee8e7e8982e547159f0a419b9e418afbc91b1e77fda13c6e",
+        "target": "7e2ce92a32f3ab6859e1565cdc0a1bfb811bc8ecb0a92830a086cade077a2f73"
+      },
+      "after": {
+        "image": "3378e83c73264e2b4ff3e31510df44b358fa3ee919dce1ecbad0547579ec2daa",
+        "tile": "d5385fe3254444b6ee8e7e8982e547159f0a419b9e418afbc91b1e77fda13c6e",
+        "target": "7e2ce92a32f3ab6859e1565cdc0a1bfb811bc8ecb0a92830a086cade077a2f73"
+      }
+    },
+    {
+      "scale_k": 128,
+      "before": {
+        "image": "4d2017f7d6f1c2e5fd7d28656093886d40f681819d85d4ba62cb6195d6b28b27",
+        "tile": "d6f749541c2c604462957aed72e2d4ce3412e28cd6c3213d82b1e37306d5747e",
+        "target": "175d917c832dbca128da84cb4560bf33be96b6e96b4b3c2ac3818b6f3075ac72"
+      },
+      "after": {
+        "image": "4d2017f7d6f1c2e5fd7d28656093886d40f681819d85d4ba62cb6195d6b28b27",
+        "tile": "d6f749541c2c604462957aed72e2d4ce3412e28cd6c3213d82b1e37306d5747e",
+        "target": "175d917c832dbca128da84cb4560bf33be96b6e96b4b3c2ac3818b6f3075ac72"
+      }
+    }
+  ]
+}

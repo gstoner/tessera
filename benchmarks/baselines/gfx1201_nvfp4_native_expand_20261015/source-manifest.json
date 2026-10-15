@@ -1,0 +1,34 @@
+{
+  "captured_at_utc": "2026-10-15T11:24:10.848805+00:00",
+  "base_commit": "f163805e1f7ce683906b5e1c6a17aa6ae5081f24",
+  "source_sha256": {
+    "benchmarks/rocm/benchmark_nvfp4_native_expansion.py": "e44678a0bebf9e8624f45300fafb50f0bd25fee75b20135a96c65af8fe6a8cc4",
+    "python/tessera/__init__.py": "a09298c1c83db67f51575b43e08dd7012b7433d6cd2d75c293f40744523e9731",
+    "python/tessera/compiler/backend_manifest.py": "63ec17bf7bf893df55b7b2879cdcb4415c6717c184ecb2e4aa7f1f2e48097c73",
+    "python/tessera/compiler/capabilities.py": "b485d16c34697a62a91c791bc5e28a92d49d4c5defae6cf4e1568d3c783226b8",
+    "python/tessera/compiler/graph_ir.py": "695a816b9573e53679b36d777438b5c86a55f574cf777498f1fdd3acd1e54f5b",
+    "python/tessera/compiler/nvfp4_expansion.py": "09f4ebef6129f86f90b661b7fe2a1945a8cb7f058cd70f185b2ee05d614973e2",
+    "python/tessera/compiler/op_catalog.py": "1b6b63cf5cfa1bff61bf0f39bdc8feba5f0d386a0e97a50b516d0ad2e3ec50e6",
+    "python/tessera/compiler/rocm_nvfp4_expand_native.py": "0a40bec43f7cb7fac72f5471e668d786d6985cc7ba1feef848d8cac71a2145e8",
+    "python/tessera/compiler/trace.py": "6899b555f7edbf968f5e8c299357c8bd0051dbad01d2b3ccbabd59518641504c",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "fe87be73314fc1d4377ddb0c43397b9b1dbc3518e2ae2392bbc7e8f7b9f471f6",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp": "3d0bf1f71d51a25da30e2ac6bc9da5328be6ebc9ff4489c2c18072352f39b671",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Expand.h": "1f505862a5ca0ae836cca39271475b38a615abeec2ad47f45cb5ef817dc59783",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "a98bed937b2d0ffffe4bb7f99ecec34cd540e9bb7aa61b40c04188dff8ea3cee",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/TesseraROCMOps.cpp": "3c454d4b2a3308d8d9b24c0b55a6a6c6993b49787291f5e773551960c294c734",
+    "src/compiler/ir/TesseraOps.cpp": "1ab67c1474fc25e9d194e0028c9ca924ccb2d0c2f1f5b4901aef6e2cc5a366a7",
+    "src/compiler/ir/TesseraOps.td": "58bc373f8239fb6f147dc63fc20a55be8d9cd8710cb912d8087c8a229ae82f08",
+    "src/compiler/ir/TileOps.cpp": "e887600dbc7f8201ba99a5ac29094073ea0c2b8ab751485bfe7c43410a80dfea",
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "df933d869b7a731cdc6f5d700af67876a7747d76fa8455db806ed01515ba1c11",
+    "src/compiler/ir/include/Tessera/IR/NVFP4IngestContract.h": "021dfb99294cb01e4e4d6eba8ab42306802afcba24240ad95fa112078ac1d4f7",
+    "src/compiler/programming_model/lib/NativeNVFP4Ingest.h": "fe0c8d212b643b9b880f98fc11f124703fba23297c3fd0f52c4586db4bdc5a32",
+    "tests/device/rocm/test_native_nvfp4_expand.py": "bc66719b3df44cd707c20c9220b80ea5997d97cf17ce600dce7175f2837bbf0e",
+    "tests/unit/test_nvfp4_expansion_reference.py": "8904a4c65c08e186c858f1d8f7da28a6fdcdb8c0601a7652cd58e4a77428267a",
+    "tests/unit/test_rocm_graph_nvfp4_expand.py": "5219d3e8d843f9583f362806e832a9d236e642410d62114931baf0614c1ba0fa"
+  },
+  "tools_sha256": {
+    "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/tools/tessera-opt/tessera-opt": "31c9347afcdce5a44601f174b77a07be624db6637d18c0c5baf787de5ca93c49",
+    "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "a4f6c40594ca164bc7b9692cab1529c1a59b1ae1c68e7fdd38fb4a9e89f2e630"
+  },
+  "state": "working source manifest; checked native primitive, public JIT and resident composition remain open"
+}

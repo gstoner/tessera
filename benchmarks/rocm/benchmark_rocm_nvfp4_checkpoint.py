@@ -11,12 +11,14 @@ from dataclasses import replace
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import statistics
 import subprocess
 import time
 import urllib.request
+from typing import cast
 
 import ml_dtypes
 import numpy as np
@@ -46,8 +48,13 @@ def _fetch_range(url: str, start: int, end: int) -> bytes:
     with urllib.request.urlopen(request, timeout=120) as response:
         if response.status != 206:
             raise RuntimeError(f"checkpoint server ignored byte range: HTTP {response.status}")
-        data = response.read()
+        content_range = response.headers.get("Content-Range", "")
+        match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+|\*)", content_range)
+        if (match is None or int(match[1]) != start or int(match[2]) != end
+                or (match[3] != "*" and int(match[3]) <= end)):
+            raise RuntimeError(f"checkpoint Content-Range differs from request: {content_range!r}")
         expected = end - start + 1
+        data = response.read(expected + 1)
         if len(data) != expected:
             raise RuntimeError(f"checkpoint range length {len(data)} != {expected}")
         return data
@@ -123,8 +130,8 @@ def _load_projection(tensor: str = TENSOR):
     started = time.perf_counter()
     q_index, q_index_bytes = _get_json(_url(NVFP4_REPO, NVFP4_REVISION, "model.safetensors.index.json"))
     bf_index, bf_index_bytes = _get_json(_url(BF16_REPO, BF16_REVISION, "model.safetensors.index.json"))
-    q_map = q_index["weight_map"]
-    bf_map = bf_index["weight_map"]
+    q_map = cast(dict[str, str], q_index["weight_map"])
+    bf_map = cast(dict[str, str], bf_index["weight_map"])
     prefix = tensor.removesuffix(".weight")
     q_names = (tensor, prefix + ".weight_scale", prefix + ".weight_scale_2")
     q_shards = sorted({q_map[name] for name in q_names})
@@ -245,7 +252,7 @@ def _native_checkpoint_ingest(projections, reference):
     start = time.perf_counter()
     validate(native_ingest.execute_nvfp4_ingest(package, codes, scales, globals_))
     checked_host_ms = (time.perf_counter() - start) * 1000.0
-    samples = []
+    samples: list[float] = []
     outputs = native_ingest.execute_nvfp4_ingest(
         package, codes, scales, globals_, event_samples=samples)
     packed, exponents = validate(outputs)

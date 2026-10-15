@@ -30,6 +30,7 @@
 #include <limits>
 #include <cstdlib>
 #include "NativeNVFP4Ingest.h"
+#include "NativeNVFP4Expand.h"
 #include "NativeMXFP4Storage.h"
 
 using namespace mlir;
@@ -106,6 +107,7 @@ struct GenerateROCMFpQuantKernelPass
     module.walk([&](Operation *op) {
       if (op->getName().getStringRef() == "tessera_rocm.fpquant" ||
           op->getName().getStringRef() == "tessera_rocm.nvfp4_requantize" ||
+          op->getName().getStringRef() == "tessera_rocm.nvfp4_expand" ||
           op->getName().getStringRef() == "tessera_rocm.mxfp4_folded_storage")
         directives.push_back(op);
     });
@@ -118,6 +120,12 @@ struct GenerateROCMFpQuantKernelPass
       }
       if (op->getName().getStringRef() == "tessera_rocm.nvfp4_requantize") {
         if (failed(emitNativeNVFP4Ingest(module, op)))
+          return signalPassFailure();
+        op->erase();
+        continue;
+      }
+      if (op->getName().getStringRef() == "tessera_rocm.nvfp4_expand") {
+        if (failed(emitNativeNVFP4Expand(module,op)))
           return signalPassFailure();
         op->erase();
         continue;

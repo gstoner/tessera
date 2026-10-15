@@ -16,10 +16,10 @@ a bounded uint8/int8 x86 package does not promote unsigned frontend storage.
 Use the canonical dtype vocabulary, serialized artifact and owning-device
 packet to resolve the supported envelope.
 
-- Operators: **361**
+- Operators: **362**
 - TSOL operators: **51**
-- Operator/logical-dtype rows: **978**
-- Rows retaining at least one compiler/evidence gap: **393**
+- Operator/logical-dtype rows: **984**
+- Rows retaining at least one compiler/evidence gap: **395**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states
@@ -275,6 +275,7 @@ for the complete per-dtype and per-target matrix.
 | `dequantize_fp6` | quantize | no | fp32,fp6_e2m3 | direct_test,physical,tile |
 | `dequantize_fp8` | quantize | no | fp32,fp8_e4m3 | direct_test,physical,tile |
 | `dequantize_nvfp4` | quantize | no | fp32,nvfp4 | direct_test,physical,tile |
+| `nvfp4_expand` | quantize | no | bf16,fp32,fp64,fp8_e4m3,nvfp4,uint8 | direct_test,physical,tile |
 | `nvfp4_requantize` | quantize | no | bf16,fp64,fp8_e4m3,nvfp4,uint8 | direct_test,physical,tile |
 | `quantize_fp4` | quantize | no | fp32,fp4_e2m1 | direct_test,physical,tile |
 | `quantize_fp6` | quantize | no | fp32,fp6_e2m3 | direct_test,physical,tile |

@@ -2828,6 +2828,27 @@ struct LowerTileToROCMPass
       state.addAttribute("schedule_hash", hash);
       b.create(state); fn.erase();
     }
+
+    SmallVector<tessera::tile::NVFP4ExpandKernelOp> expandKernels;
+    getOperation().walk([&](tessera::tile::NVFP4ExpandKernelOp op) {
+      expandKernels.push_back(op);
+    });
+    for (auto kernel : expandKernels) {
+      if (arch != "gfx1201") {
+        kernel.emitError("NVFP4 expansion is currently gfx1201 only");
+        return signalPassFailure();
+      }
+      auto fn = kernel->getParentOfType<func::FuncOp>();
+      auto contract = kernel.getContract();
+      OpBuilder b(getOperation().getContext());
+      b.setInsertionPointToEnd(getOperation().getBody());
+      OperationState state(kernel.getLoc(),"tessera_rocm.nvfp4_expand");
+      state.addAttribute("name",b.getStringAttr(fn.getSymName()));
+      for (StringRef attr : {"n","k","row_offsets","arch","numeric_policy"})
+        state.addAttribute(attr,contract.get(attr));
+      state.addAttribute("schedule_hash",kernel->getAttr("artifact_hash"));
+      b.create(state);fn.erase();
+    }
     SmallVector<tessera::tile::NVFP4RequantizeKernelOp> ingestKernels;
     getOperation().walk([&](tessera::tile::NVFP4RequantizeKernelOp op) {
       ingestKernels.push_back(op);

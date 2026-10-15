@@ -1,3 +1,7 @@
+---
+last_updated: 2026-10-15
+---
+
 # Native source-preserving NVFP4 program
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.

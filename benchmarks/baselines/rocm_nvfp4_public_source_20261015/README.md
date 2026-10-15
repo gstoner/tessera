@@ -88,3 +88,13 @@ documents and the compiler-plan gate pass. Initial reruns exposed missing and
 stale provider environment settings after WSL restart; the final gate explicitly
 sets MULTI_OUTPUT, NATIVE_IMAGE and NATIVE_MOVEMENT to the recorded partial
 program provider. Red/configured/final logs are retained separately.
+
+## PR950 CI specification-date repair
+
+The first-head full unit lane reports 21,748 passes, 9,793 skips and three
+failures, all identifying the missing last_updated frontmatter in
+rocm_nvfp4_source_preserving_program.md. Adding its authored date fixes the
+spec synchronization and freshness gates: 28 focused tests pass. No allow-list,
+numerical implementation, runtime ABI or physical schedule changes. The owning
+generator refreshes documentation; required CI must pass again on the repaired
+head. Red CI and focused repair logs are retained separately.

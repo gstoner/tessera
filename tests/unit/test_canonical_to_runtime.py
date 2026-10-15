@@ -115,11 +115,13 @@ def test_launch_trusts_canonical_first_failing_gate_for_nvidia():
     assert response["first_failing_gate_detail"] == result.first_failing_gate.detail
 
 
-def test_launch_trusts_canonical_first_failing_gate_for_rocm():
+def test_launch_trusts_canonical_first_failing_gate_for_rocm(monkeypatch):
     # Canonical (toolchain-not-assumed) contract — deterministic so it holds on
     # both the Apple dev box and the Ubuntu ROCm 7.2.4 box (where hipcc is
     # live-present and the live named blocker is instead ``link``). Covers both
     # the compile-time gate and launch's re-derivation under one context.
+    # Pin the host-free FP32 capability row; the live gfx1201 has a different contract.
+    monkeypatch.setenv("TESSERA_ROCM_CHIP", "gfx1151")
     from tessera.compiler import pipeline_gates as pg
     with pg.deterministic_host_for_dashboard():
         result = canonical_compile(_tiny_matmul_module(), target="rocm")
@@ -160,10 +162,12 @@ def test_legacy_artifact_still_uses_b2_rederive():
 
 # ---- Trust path is honest: ok==False still ok==False ----
 
-def test_canonical_artifact_runtime_status_stays_honest():
+def test_canonical_artifact_runtime_status_stays_honest(monkeypatch):
     """Adding the canonical answer must not silently flip ok=True or rewrite
     the runtime_status enum. The audit-named gate is an *additional*
     channel."""
+    # Pin the host-free FP32 capability row; the live gfx1201 has a different contract.
+    monkeypatch.setenv("TESSERA_ROCM_CHIP", "gfx1151")
     for target in ("nvidia_sm90", "rocm"):
         result = canonical_compile(_tiny_matmul_module(), target=target)
         artifact = result.to_runtime_artifact()

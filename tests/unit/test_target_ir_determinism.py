@@ -42,12 +42,15 @@ def _emit(target_kind: str, source: str = _MATMUL_SOFTMAX) -> str:
 
 
 @pytest.mark.parametrize("target_kind", _TARGETS)
-def test_target_ir_emission_is_byte_deterministic(target_kind: str) -> None:
+def test_target_ir_emission_is_byte_deterministic(target_kind: str, monkeypatch) -> None:
     """Two *independent* lowerings of the same source render identical IR text.
 
     Independent runs (not ``to_mlir()`` twice on one object) catch nondeterminism
     in the lowering passes themselves — set/dict iteration, hash-ordered naming.
     """
+    # The host-free FP32 snapshot belongs to the gfx1151 capability row.
+    if target_kind == "rocm":
+        monkeypatch.setenv("TESSERA_ROCM_CHIP", "gfx1151")
     first = _emit(target_kind)
     second = _emit(target_kind)
     assert first == second, (

@@ -177,7 +177,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | - | 2026-09-07 | 37 | ✓ |
 | `compiler/EGGROLL_SUPPORT_PLAN.md` | - | 2026-09-07 | 37 | ✓ |
 | `compiler/EVALUATOR_PLAN.md` | - | 2026-10-06 | 8 | ✓ |
-| `compiler/FIVE_SLICE_STATUS_20261007.md` | - | 2026-10-09 | 5 | ✓ |
+| `compiler/FIVE_SLICE_STATUS_20261007.md` | - | 2026-10-14 | 0 | ✓ |
 | `compiler/FORGE_ASSESSMENT.md` | - | 2026-09-07 | 37 | ✓ |
 | `compiler/FRONTEND_GRAPH_SCHEDULE_REVIEW.md` | - | 2026-08-02 | 73 | ✓ |
 | `compiler/FRONT_END_LOWERING_ASSESSMENT.md` | - | 2026-09-03 | 41 | ✓ |

@@ -339,11 +339,11 @@ def test_native_rocm_stft_product_matches_linearization():
 
 
 @pytest.mark.hardware_rocm
-def test_native_gfx1201_refuses_non_spectral_jvp_families():
+def test_native_gfx1201_refuses_unadmitted_reduction_jvp():
     from tessera import runtime
     from tessera._jit_boundary import TesseraJitError
     if runtime._tessera_opt_path() is None or runtime._rocm_live_arch() != "gfx1201":
         pytest.skip("exact gfx1201 compiler/device required")
     x = np.ones((5, 64), np.float32)
-    with pytest.raises(TesseraJitError, match="admitted only for spectral_compound"):
+    with pytest.raises(TesseraJitError, match="gfx1201 requires an exact family admission; rejected 'reduce'"):
         _rocm_sum.native_jvp(x, tangents=x)

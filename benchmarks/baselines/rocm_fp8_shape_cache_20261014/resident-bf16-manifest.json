@@ -1,0 +1,18 @@
+{
+  "owning_work": "E2E-REAL-6 / FRONTEND-IR-MEDIUM-1",
+  "source_sha256": {
+    "python/tessera/compiler/resident_rocm_norm_matmul.py": "8f40644885e57beb3880aeaf2d20caf2e4f4a67737c1b5fad7f9ccb22c4580f8",
+    "python/tessera/runtime.py": "359fbb4428930a29fd3cfb1d1025413b0a36f115272bca180f4a03d3935054ca",
+    "python/tessera/compiler/scheduled_matmul.py": "4e2b78ed9265dd03cf5e45bc0d4748e584b653fd514e718f5ed12bce1c0a0e00",
+    "python/tessera/compiler/graph_ir.py": "a028263681eca0f627d381a9fcffbd9506f914897148ef940fbaf1bf6a3c26e6",
+    "python/tessera/compiler/jit.py": "952b0e2980e01a90d8cc24ab56f470051826983eb64cf4be3e625e01cc893120",
+    "benchmarks/rocm/benchmark_gfx1201_resident_norm_matmul.py": "86ba7526e9f094b4c0fe5078f0fe9dd988d18f334b3ece4296b81fa6ab65433c"
+  },
+  "binary_sha256": {
+    "TESSERA_OPT": "242c95da1cf804c47a04d57e815cb9a74b678ed71a360451091b9e966caf4aab",
+    "TESSERA_ROCM_OPT": "bc7577eb6d9026594f33dcd7ba1433da0287d6a7e1b995d76a538b9590d31491"
+  },
+  "packet_sha256": "745861969c0a7522aecfbc38cf1a399794e0e87c2e6a8ed9efc3844cf124f1df",
+  "command": "python benchmarks/rocm/benchmark_gfx1201_resident_norm_matmul.py --dtype bf16 --dynamic-n --warmup 25 --iterations 100",
+  "timing_scope": "Separate producer/consumer HIP event windows; may contain enqueue gaps. No completed-call latency, pure-kernel speedup or selector promotion claim."
+}

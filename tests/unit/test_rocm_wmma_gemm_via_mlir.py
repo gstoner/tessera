@@ -210,7 +210,12 @@ def _oracle(hip, oracle_lib, A, B):
     return rc, D
 
 
+@pytest.mark.hardware_rocm
 def test_target_ir_wmma_gemm_matches_numpy_and_oracle():
+    from tessera import runtime as rt
+    if rt._rocm_live_arch() != "gfx1151":
+        pytest.skip("this gfx1151 WMMA fragment fixture requires its owning device")
+    assert CHIP == "gfx1151", "gfx1151 execution must use its owning compile target"
     tool = tessera_opt_path()
     if tool is None:
         pytest.skip("build tessera-opt: ninja -C build tessera-opt")

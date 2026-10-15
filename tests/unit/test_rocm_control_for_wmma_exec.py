@@ -141,7 +141,12 @@ def _launch(hip, hsaco, carry, W):
 
 
 @pytest.mark.parametrize("it", [1, 2, 3])
+@pytest.mark.hardware_rocm
 def test_control_for_wmma_executes_on_gfx1151(it):
+    from tessera import runtime as rt
+    if rt._rocm_live_arch() != "gfx1151":
+        pytest.skip("this gfx1151 WMMA fragment fixture requires its owning device")
+    assert CHIP == "gfx1151", "gfx1151 execution must use its owning compile target"
     require_tessera_opt()
     hip = _load_hip()
     if hip is None:

@@ -43,6 +43,13 @@ a relabeled gfx1201 image refused on the live gfx1151 device. Packages were
 cross-compiled on Tajasaurus and executed with the pinned candidate runtime.
 [sibling_packages.json](sibling_packages.json) stores each image only once.
 
+[sm120-shared-control.json](sm120-shared-control.json) records a separate
+Super-Bear RTX 5070 regression: 28 scheduled-activation tests pass with the
+candidate jit.py/driver.py overlaid on PR947's Python tree and its matching
+compiler/runtime. The primary checkout stays unchanged. The receipt pins
+both overlaid files, binaries and the test log; it adds no timing claim.
+
+
 ## Compiler boundary
 
 Typed Graph IR -> native Schedule replay -> Tile -> ROCm Target
@@ -97,3 +104,48 @@ set PYTHONPATH and the ROCm environment, then run:
 
 The executor verifies numerical agreement, unchanged inputs, one image per
 storage across shapes, and refusal of a relabeled image. It makes no timing claim.
+
+### Broad-lane ISTFT profile repair
+
+[istft-profile.json](istft-profile.json) and
+[istft-profile-tests.txt](istft-profile-tests.txt) record 63 passing ISTFT
+contract cases after four matching-profile cases failed against the original
+guard. The public gfx1201 primal/JVP cases compare with the eager reference
+and finite differences. Matching compiler-owned profiles are preserved;
+conflicting and partial profiles are refused. The exact gfx1201 spectral
+provider is built from the pinned existing HIP sources, separate from the
+five-backend compiler build. No kernel or ABI changed and no timing is claimed.
+
+### Frozen broad-run integration repair
+
+The first complete gfx1201 host sweep reports 28,418 passes, 5,330 skips and
+31 failures; it is not a passing gate. The targeted repair lane passes
+81 tests, with 14 architecture/environment skips. Eleven assembly failures
+came from the ROCm development serializer; all 25 architecture-fragment
+checks pass with MLIR_OPT pointing to matching LLVM/MLIR 23.1.1.
+FP32 snapshots now pin their actual gfx1151 capability row. Owning gfx1151
+tests check the live GPU before compiling. The cache test stays inside one
+macro-K recipe and separately asserts that differing k_blocks remain distinct;
+it does not erase physical policy to manufacture reuse. A fresh process tests
+global clear/capacity behavior without invalidating another owner's leases.
+
+[gfx1151-control.json](gfx1151-control.json) records three recurrence images
+cross-compiled by the current matching compiler and executed on Princess-Luna:
+zero maximum error for all three. [gfx1151-control-packages.json](gfx1151-control-packages.json)
+retains their byte-identical images, generated-source hashes and launch helper.
+This remains independent of the gfx1201 proof and makes no timing claim.
+Reproduce on a matching current gfx1151 build with
+pytest -q tests/unit/test_rocm_control_for_wmma_exec.py.
+
+[resident-bf16-dynamic-n.json](resident-bf16-dynamic-n.json), bound by
+[resident-bf16-manifest.json](resident-bf16-manifest.json), records the repaired
+public-traced BF16 bounded-N resident route. Updating the complete inferred
+result tuple fixes the previously malformed SSA return without changing
+native arithmetic. One M128/K256/N<=256 package handles N128 and N256.
+All outputs pass the independent FP32 RMSNorm/materialized-BF16/matmul oracle
+before recording 100 samples after 25 warmups. Producer/consumer HIP-event
+medians are 8.48/10.76 us for N128 and 11.36/14.36 us for N256.
+These are event windows that may include enqueue gaps, not pure kernel or
+completed public-call latency, and no speedup/default selection is claimed.
+The packet's worktree hash binds its measured working state; the companion's
+six source and two compiler hashes bind the code, not later documentation edits.

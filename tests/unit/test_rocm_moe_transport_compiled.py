@@ -44,8 +44,12 @@ def _plan(seed=41, tokens=12, experts=4, top_k=2, capacity=5):
 def _expect_native():
     """The transport ops run natively iff tessera-opt is built AND a usable AMD
     GPU is present (else the executor falls back to the stdlib oracle)."""
+    # These compiled gather/scatter/f32 kernels do not use the separate
+    # shipped WMMA library probed by _rocm_wmma_runtime_available.
+    from tests._support.environment import native_storage_lane_available
     return (rt._tessera_opt_path() is not None
-            and rt._rocm_wmma_runtime_available())
+            and native_storage_lane_available("rocm")
+            and rt._rocm_live_arch() in {"gfx1151", "gfx1201"})
 
 
 def test_rocm_moe_dispatch_runtime_matches_dispatch_plan_oracle():

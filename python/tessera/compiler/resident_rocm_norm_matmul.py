@@ -594,6 +594,7 @@ def _with_bounded_dynamic_n(matmul_module: Any, rhs: Any, bound: int) -> Any:
     op.operand_types[1] = str(dynamic_rhs)
     op.result_type = str(dynamic_output)
     op.inferred_type = dynamic_output
+    op.inferred_types = (dynamic_output,)
     op.kwargs["shape_bounds"] = [m, bound, k]
     return module
 

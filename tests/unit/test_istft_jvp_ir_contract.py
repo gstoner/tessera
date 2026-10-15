@@ -196,12 +196,12 @@ def test_reduced_precision_window_is_refused_while_types_disagree():
         )
 
 
-def test_a_profile_already_on_the_module_is_refused():
+def test_a_partial_profile_already_on_the_module_is_refused():
     _, paired, *_ = _paired((4, 5), 8, dict(hop=4), ("spectrum",))
     tagged = paired.replace(
         "module attributes {", 'module attributes {tessera.target = "x86", ', 1
     )
-    with pytest.raises(ValueError, match="already names a target profile"):
+    with pytest.raises(ValueError, match="target profile differs"):
         plugins.istft_jvp_contract_from_paired_ir(
             tagged, target="x86", architecture="zen5_avx512"
         )
@@ -329,3 +329,34 @@ def test_the_profile_is_injected_into_any_module_header(header):
         header + "\n" + rest, target="rocm", architecture="gfx1201"
     )
     assert (contract["target"], contract["arch"]) == ("rocm", "gfx1201")
+
+
+@pytest.mark.parametrize("target,arch", _PROFILES)
+def test_matching_native_target_profile_is_preserved(target, arch):
+    _, paired, *_ = _paired((4, 5), 8, dict(hop=4), ("spectrum",))
+    module_target, module_arch = plugins._module_profile(target, arch)
+    named = paired.replace(
+        "module attributes {",
+        f'module attributes {{tessera.target = "{module_target}", tessera.arch = "{module_arch}", ',
+        1,
+    )
+    expected = plugins.istft_jvp_contract_from_paired_ir(
+        paired, target=target, architecture=arch)
+    actual = plugins.istft_jvp_contract_from_paired_ir(
+        named, target=target, architecture=arch)
+    assert actual == expected
+    assert f'tessera.arch = "{module_arch}"' in named
+
+
+@pytest.mark.parametrize("profile", [
+    'tessera.target = "rocm", tessera.arch = "gfx1151"',
+    'tessera.target = "x86", tessera.arch = "gfx1201"',
+    'tessera.target = "rocm"',
+    'tessera.arch = "gfx1201"',
+])
+def test_conflicting_or_partial_native_target_profile_is_not_retargeted(profile):
+    _, paired, *_ = _paired((4, 5), 8, dict(hop=4), ("spectrum",))
+    named = paired.replace("module attributes {", f"module attributes {{{profile}, ", 1)
+    with pytest.raises(ValueError, match="target profile"):
+        plugins.istft_jvp_contract_from_paired_ir(
+            named, target="rocm", architecture="gfx1201")

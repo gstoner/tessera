@@ -148,7 +148,8 @@ def test_gfx1151_packed_weight_upload_rejects_physical_fp8_bytes() -> None:
 
 
 @pytest.mark.parametrize("storage", ("fp8_e4m3", "fp8_e5m2"))
-def test_gfx1151_runtime_builder_rejects_fp8_and_bf8_by_name(storage: str) -> None:
+def test_gfx1151_runtime_builder_rejects_fp8_and_bf8_by_name(storage: str, monkeypatch) -> None:
+    monkeypatch.setenv("TESSERA_ROCM_CHIP", "gfx1151")
     with pytest.raises(ValueError, match="ROCM_TILE_UNSUPPORTED_DTYPE"):
         rt._build_compiled_gemm_hsaco(1, 1, storage)
 

@@ -89,7 +89,10 @@ _REGEN = (
 
 
 @pytest.mark.parametrize("name,target_kind,source", _FIXTURES, ids=_IDS)
-def test_target_ir_matches_golden(name: str, target_kind: str, source: str) -> None:
+def test_target_ir_matches_golden(name: str, target_kind: str, source: str, monkeypatch) -> None:
+    # The host-free FP32 snapshot belongs to the gfx1151 capability row.
+    if target_kind == "rocm":
+        monkeypatch.setenv("TESSERA_ROCM_CHIP", "gfx1151")
     emitted = _emit(target_kind, source)
     path = _golden_path(name, target_kind)
 

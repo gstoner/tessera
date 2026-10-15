@@ -18,7 +18,9 @@ module measured {
 """
 
 
-def test_measured_schedule_changes_physical_schedule_and_tile_ir() -> None:
+def test_measured_schedule_changes_physical_schedule_and_tile_ir(monkeypatch) -> None:
+    # This host-free FP32 schedule fixture targets gfx1151 capability.
+    monkeypatch.setenv("TESSERA_ROCM_CHIP", "gfx1151")
     module = lower_text_to_graph_ir(SOURCE)
     result = TuningResult(
         config=TuningConfig(64, 32, 16, 2, 3),

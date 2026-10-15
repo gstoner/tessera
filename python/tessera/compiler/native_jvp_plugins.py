@@ -544,10 +544,20 @@ def istft_jvp_contract_from_paired_ir(
         raise ValueError("native ISTFT JVP paired IR has no module")
     line_end = paired_jvp_ir.find("\n", header.start())
     header_line = paired_jvp_ir[header.start(): line_end if line_end >= 0 else None]
-    if "tessera.target =" in header_line or "tessera.arch =" in header_line:
-        raise ValueError("native ISTFT JVP paired IR already names a target profile")
+    named_target = re.search(r'tessera\.target\s*=\s*"([^"]*)"', header_line)
+    named_arch = re.search(r'tessera\.arch\s*=\s*"([^"]*)"', header_line)
+    has_profile = "tessera.target" in header_line or "tessera.arch" in header_line
+    if has_profile and (
+        named_target is None or named_arch is None
+        or named_target.group(1) != module_target or named_arch.group(1) != module_arch
+    ):
+        raise ValueError("native ISTFT JVP paired IR target profile differs from the requested exact profile")
     profile = f'tessera.target = "{module_target}", tessera.arch = "{module_arch}"'
-    if header.group(1):
+    if has_profile:
+        # A public frontend may already annotate the exact native profile.
+        # Preserve that compiler-owned module; never rewrite it to another target.
+        scheduled_input = paired_jvp_ir
+    elif header.group(1):
         rest = paired_jvp_ir[header.end():]
         separator = "" if rest.lstrip().startswith("}") else ", "
         scheduled_input = paired_jvp_ir[: header.end()] + profile + separator + rest

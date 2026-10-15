@@ -33,7 +33,47 @@ Evidence: benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md.
 Larger/dynamic/layout and split-K FP8 envelopes, general attention cache keys
 and public compiler admission costs remain open.
 
-Not applicable to CUDA image projection or physical schedules. Shared FP8 dtype names remain unchanged; no NVIDIA device proof is transferred.
+ISTFT profile integration — ODS-WIRE-2 / E2E-REAL-6:
+the broad exact-device run reproduced a public JVP failure caused by
+rejecting an already matching compiler-owned target profile. Matching
+profiles are now retained unchanged; conflicting or partial profiles remain
+rejected. Four profile cases are red/green, and the 63-case ISTFT contract
+lane passes with the exact gfx1201 spectral provider. The new
+istft-profile.json receipt pins sources/provider and finite-difference test
+log. This changes profile validation only, with no kernel, operation, dtype
+or ABI change. Host-free x86/gfx1151/gfx1201/SM120 profile gates pass; no
+sibling GPU execution or timing is inferred.
+
+Broad-lane repairs preserve the physical contracts: FP32 host-free fixtures
+pin gfx1151; exact gfx1151 WMMA fixtures check the actual selected device;
+the serializer is explicitly MLIR_OPT from the matching LLVM/MLIR 23.1.1
+build. Macro-K recipes remain distinct image keys. Cache clear/capacity
+testing runs in a fresh process so other owners retain their live leases.
+MoE tests probe compiler/device/toolkit availability instead of a separate
+shipped WMMA library. Eighty-one repair gates pass (14 architecture or
+environment skips). All three unchanged gfx1151 recurrence images execute
+on Princess-Luna with zero error; this is separate from gfx1201 evidence.
+
+The bounded-N BF16 resident Graph projection now updates its complete
+inferred result tuple as well as the singular type, fixing malformed traced
+SSA at the return. Exact gfx1201 public numerical/capacity checks pass.
+An idle correctness-gated M128/K256/N<=256 packet reuses one package for
+N128/256 and records 100 producer/consumer event samples each:
+8.48/10.76 us and 11.36/14.36 us medians respectively. Event windows may
+include enqueue gaps; no public-call latency or speedup is claimed.
+Sources/binaries and both owning-device receipts are pinned in
+benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md.
+No sibling schedule, operation, dtype or runtime ABI is changed.
+
+
+
+CUDA image projection and physical schedules are unchanged. Shared FP8 dtype
+names remain unchanged. Shared Python admission/control parity is validated
+separately on Super-Bear's RTX 5070 (sm_120): 28 scheduled-activation tests
+pass with only the candidate jit.py/driver.py overlaid on PR947's Python
+tree and its matching compiler/runtime. sm120-shared-control.json pins both
+overlaid sources, compiler/provider binaries and the log. This is a shared
+control regression receipt, with no ROCm-to-CUDA numerical or timing claim.
 
 ## W11-RELU-PRODUCER-20261014 — active engineering
 
@@ -564,13 +604,21 @@ No image, kernel, dtype, operation or ABI changes are introduced.
 
 ## Current actions — five-slice integration
 
-Current as of 2026-10-08. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
+Current as of 2026-10-14. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
 
 W1.1: arbitrary producer composition, accumulator lineage, wider resident layouts and asynchronous lifetime. E2E-REAL-6: dynamic/nested/composed attention AD, asynchronous residual ownership and broader quantized envelopes. Existing static saved-LSE/native backward and twelve canonical producer rows have owning RTX 5070 proof.
 
 Named gfx1201 leading/scalar primal, scale JVP/VJP, transposed A and partial K32 groups are proved. Actual-image packaging and bounded version-query reuse are proved in recorded envelopes; they are not pending builds.
 
-General dynamic/nonleading/composed maps, other scale widths/layouts, storage derivatives and generic closure remain open. Delivery requires reviewable PRs, final generated-doc/Graphify gates and a fresh full-suite result. The last full suite still has two generic batching/transpose closure failures.
+General dynamic/nonleading/composed maps, other scale widths/layouts, storage
+derivatives and generic closure remain open. The historical two generic
+batching/transpose suite failures are superseded by the source-bound
+26,072-pass, 7,568-skip full WSL result in
+benchmarks/baselines/native_encoded_scaled_gate_20261014/host-full-unit.txt.
+That receipt does not validate later changes or establish generic capability
+closure. The current FP8 Target/image/public-route candidate still requires
+its own terminal broad result, final documentation/Graphify gates and
+reviewable PR delivery.
 
 Evidence ledger: ../../compiler/FIVE_SLICE_STATUS_20261007.md. Superseded active notes: archive/compiler_slice_integration_checkpoints_20261007.md.
 

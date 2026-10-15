@@ -42,11 +42,11 @@ class PreparedLhsCall(PreparedMatmulCall):
         pp = pd.provenance
         norm = pp["kind"] in {"rmsnorm", "layernorm"}
         activation = pp["kind"] == "relu"
-        policy = ("sm120_activation_serial_rows" if activation else "sm120_norm_" + pp["schedule"] + "_rows" if norm
+        policy = (("sm120_activation_flat_elements" if pp["schedule"] == "flat_128" else "sm120_activation_serial_rows") if activation else "sm120_norm_" + pp["schedule"] + "_rows" if norm
                   else ("sm120_softmax_cooperative_128_rows" if pp["schedule"] == "cooperative_128"
                         else "sm120_softmax_thread_per_row_128"))
         scalar_names = ("Rows", "Columns") if norm or activation else ("Rows", "K")
-        if (pp["schedule"] not in {"serial", "cooperative_128"}
+        if (pp["schedule"] not in ({"serial", "flat_128"} if activation else {"serial", "cooperative_128"})
                 or pd.geometry != LaunchGeometry(policy=policy)
                 or pd.workspace != WorkspaceRequirement()
                 or pd.dynamic_local_memory_bytes or pd.dynamic_local_memory_expression
@@ -54,6 +54,20 @@ class PreparedLhsCall(PreparedMatmulCall):
                 or tuple(s.name for s in sorted(pd.scalars, key=lambda s:s.ordinal)) != scalar_names
                 or any(s.dtype != "int64" for s in pd.scalars)):
             raise ValueError("prepared tensor producer geometry/scalar ABI differs")
+        # The old prepared provider accepted any ReLU prefix and used a row
+        # grid. Negotiate the new mapping before it can create/allocate an owner.
+        stages=(*(program.producer_chain or (producer,)), *program.rhs_chain)
+        if any(stage.descriptor.provenance.get("kind") == "relu" and
+               stage.descriptor.provenance.get("schedule") == "flat_128" for stage in stages):
+            from tessera.runtime import _load_nvidia_ptx_launch
+            provider=_load_nvidia_ptx_launch()
+            probe=getattr(provider,"tessera_nvidia_matmul_supports_flat_activation",None)
+            if probe is None:
+                raise ValueError("flat ReLU requires an updated native prepared provider")
+            probe.argtypes=[]
+            probe.restype=ct.c_int
+            if probe()!=1:
+                raise ValueError("flat ReLU requires an updated native prepared provider")
         artifact = NvidiaNormRhsProgram.runtime_artifact(consumer)
         if program.native_plan_json is not None:
             names=tuple(item.name for item in sorted(descriptor.buffers,key=lambda b:b.ordinal)

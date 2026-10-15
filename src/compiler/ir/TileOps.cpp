@@ -2128,10 +2128,10 @@ LogicalResult ActivationKernelOp::verify() {
   if (!arch || arch.getValue() != "sm_120" ||
       (str("storage") != "f16" && str("storage") != "bf16") ||
       str("accum") != "f32" || str("kind") != "relu" ||
-      str("schedule") != "serial" || str("nan_mode") != "propagate" ||
+      (str("schedule") != "serial" && str("schedule") != "flat_128") || str("nan_mode") != "propagate" ||
       str("zero_mode") != (str("storage") == "f16" ? "positive" : "preserve") ||
       !axis || axis.getInt() != -1 || !threads || threads.getInt() != 128)
-    return emitOpError("requires SM120 f16/bf16 serial ReLU, 128 threads and propagated NaNs");
+    return emitOpError("requires SM120 f16/bf16 serial|flat_128 ReLU, 128 threads and propagated NaNs");
   return success();
 }
 

@@ -5,6 +5,21 @@ owner: NVIDIA backend
 target: nvidia_sm120
 last_updated: 2026-10-15
 ---
+## W11-RELU-FLAT-20261015 — optional native activation schedule
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Synchronization key: W11-RELU-FLAT-20261015.
+Native Graph/Schedule/Tile carries explicit serial or flat_128 ReLU;
+NVIDIA LLVM/NVVM maps adjacent stored elements to adjacent warp lanes.
+The FP16/BF16 NaN-payload and signed-zero policy is unchanged. Hashed
+symbols and descriptor geometry distinguish mappings. Native launchers
+use checked element capacity; prepared providers negotiate flat support
+before owner allocation. Serial remains the default and A/B control.
+Parity validated on RTX5070: 668 affected tests pass (one Darwin-only skip), including 46 activation cases, bounded/resident/DAG/portable ownership and public/prepared attention forward/reverse controls. The final 12-case standalone and six-case composed ABBA packet is source-pinned in sm120_relu_flat_20261015/matched.json. Follow-up required: publication CI; serial remains the default because singleton/short and program/host results do not establish broad non-regression.
+Evidence: benchmarks/baselines/sm120_relu_flat_20261015/README.md;
+docs/spec/ir/sm120_activation_schedule_tile_contract.md.
+No default performance promotion or five-slice closure claim.
+
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 

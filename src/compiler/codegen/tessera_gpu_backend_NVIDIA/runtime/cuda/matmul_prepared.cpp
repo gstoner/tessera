@@ -85,6 +85,7 @@ struct RowProducer {
   CUmodule module = nullptr;
   CUfunction function = nullptr;
   bool cooperative = false;
+  bool flat = false;
 };
 struct Owner {
   CUcontext context = nullptr;
@@ -95,7 +96,7 @@ struct Owner {
   CUfunction producer = nullptr;
   std::vector<RowProducer> followingProducers, rhsProducers;
   CUdeviceptr producerScratch = 0, rhsEdge = 0, rhsScratch = 0, ownedLhsEdge = 0, ownedResult = 0;
-  bool cooperativeProducer = false, invoked = false, rowSymbol = false;
+  bool cooperativeProducer = false, flatProducer = false, invoked = false, rowSymbol = false;
   int dynamicAxes = 0, storage = 0;
   bool macro = false;
   bool bias = false, residual = false, rowB = false, halfOutput = false;
@@ -196,8 +197,9 @@ bool submit(Owner &owner, const std::array<CUdeviceptr, 5> &buffers,
         return bad("prepared producer chain lost disjoint scratch"), false;
       CUfunction function = index == 0 ? owner.producer : owner.followingProducers[index - 1].function;
       bool cooperative = index == 0 ? owner.cooperativeProducer : owner.followingProducers[index - 1].cooperative;
+      bool flat = index == 0 ? owner.flatProducer : owner.followingProducers[index - 1].flat;
       void *producerArgs[] = {&source, &destination, &rows, &columns};
-      if (!launch(function,unsigned(cooperative ? rows : (rows + 127) / 128),
+      if (!launch(function,unsigned(cooperative ? rows : ((flat ? rows * columns : rows) + 127) / 128),
           1,128,producerArgs,"launch prepared tensor producer")) return false;
       source = destination;
     }
@@ -214,7 +216,7 @@ bool submit(Owner &owner, const std::array<CUdeviceptr, 5> &buffers,
         return bad("prepared RHS chain lost disjoint scratch"), false;
       auto &stage = owner.rhsProducers[index];
       void *producerArgs[] = {&source, &destination, &rows, &columns};
-      if (!launch(stage.function,unsigned(stage.cooperative ? rows : (rows + 127) / 128),
+      if (!launch(stage.function,unsigned(stage.cooperative ? rows : ((stage.flat ? rows * columns : rows) + 127) / 128),
           1,128,producerArgs,"launch prepared RHS tensor producer")) return false;
       source = destination;
     }
@@ -312,6 +314,9 @@ extern "C" int tessera_nvidia_matmul_set_dynamic_axes(uint64_t handle, int axes)
 }
 // Attach exactly one compiler-owned shape-preserving row producer before use.
 // Both pointer ABIs are retained by one synchronous owner; no edge escapes.
+// A new flat symbol must never reach an older prefix-only prepared launcher.
+extern "C" int tessera_nvidia_matmul_supports_flat_activation() { return 1; }
+
 static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
     const char *entry, int cooperative, bool append, bool rhs = false) {
   error.clear();
@@ -345,6 +350,7 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
                     std::strncmp(entry, layer.c_str(), layer.size()) == 0;
   const std::string relu = "tessera_tile_activation_relu_" + type + "_";
   const bool activation = std::strncmp(entry, relu.c_str(), relu.size()) == 0;
+  const bool flat = activation && std::strstr(entry, "_flat_128_") != nullptr;
   const bool softmaxSerial = softmax == entry;
   const bool softmaxCooperative = softmax + "_cooperative_128" == entry;
   const bool expectedCooperative = norm
@@ -397,7 +403,7 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
         cuModuleUnload(module); return 1;
       }
       try {
-        owner.rhsProducers.push_back(RowProducer{module,function,bool(cooperative)});
+        owner.rhsProducers.push_back(RowProducer{module,function,bool(cooperative),flat});
       } catch (...) {
         if (replacement) cuMemFree(replacement);
         throw;
@@ -431,7 +437,7 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
         cuModuleUnload(module); return 1;
       }
       try {
-        owner.followingProducers.push_back(RowProducer{module, function, bool(cooperative)});
+        owner.followingProducers.push_back(RowProducer{module, function, bool(cooperative),flat});
       } catch (...) {
         if (scratch) cuMemFree(scratch);
         throw;
@@ -440,6 +446,7 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
     } else {
       owner.producerModule = module; owner.producer = function;
       owner.cooperativeProducer = cooperative;
+      owner.flatProducer = flat;
     }
     return 0;
   } catch (...) {

@@ -5,6 +5,21 @@ owner: Apple backend
 target: apple_gpu
 last_updated: 2026-10-15
 ---
+## W11-RELU-FLAT-20261015 — optional native activation schedule
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Synchronization key: W11-RELU-FLAT-20261015.
+Native Graph/Schedule/Tile carries explicit serial or flat_128 ReLU;
+NVIDIA LLVM/NVVM maps adjacent stored elements to adjacent warp lanes.
+The FP16/BF16 NaN-payload and signed-zero policy is unchanged. Hashed
+symbols and descriptor geometry distinguish mappings. Native launchers
+use checked element capacity; prepared providers negotiate flat support
+before owner allocation. Serial remains the default and A/B control.
+Not applicable to Metal physical execution: this policy requires the existing SM120 half-storage activation ABI. No Apple capability, dtype, ABI or physical schedule changes; shared IR drift gates remain required.
+Evidence: benchmarks/baselines/sm120_relu_flat_20261015/README.md;
+docs/spec/ir/sm120_activation_schedule_tile_contract.md.
+No default performance promotion or five-slice closure claim.
+
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 

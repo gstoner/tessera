@@ -12312,3 +12312,25 @@ Evidence: benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md,
 gfx1201.json; source/binary/Target/Tile/HSACO identities and separate event,
 package and completed-host timing regions.
 <!-- entry-fields:end -->
+
+### 2026-10-15 — optional native SM120 flat activation mapping
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync W11-RELU-FLAT-20261015.
+
+Outcome: Explicit serial/flat_128 Graph/Schedule/Tile identity and symbols,
+native LLVM/NVVM arithmetic and matching native direct/resident/prepared
+grids. Provider feature negotiation prevents older prefix-only launchers
+from using a serial grid, before owner allocation. The initial 46-case
+RTX5070 gate passes exhaustive payloads, composed numerics, unchanged norm/
+consumer images, retained outputs and two-sided bounded replay.
+Serial remains the default.
+
+Remaining: Final matched packet, affected producer/attention/registry gates,
+publication CI and broader producer/AD/five-slice obligations. Single-column
+regression and program enqueue noise prevent default promotion.
+All four queues assessed; no FP8/MXFP8/MXFP4 or sibling proof transferred.
+
+Evidence: benchmarks/baselines/sm120_relu_flat_20261015/README.md;
+docs/spec/ir/sm120_activation_schedule_tile_contract.md.
+<!-- entry-fields:end -->

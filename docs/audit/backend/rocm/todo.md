@@ -4,6 +4,21 @@ audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+## W11-RELU-FLAT-20261015 — optional native activation schedule
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Synchronization key: W11-RELU-FLAT-20261015.
+Native Graph/Schedule/Tile carries explicit serial or flat_128 ReLU;
+NVIDIA LLVM/NVVM maps adjacent stored elements to adjacent warp lanes.
+The FP16/BF16 NaN-payload and signed-zero policy is unchanged. Hashed
+symbols and descriptor geometry distinguish mappings. Native launchers
+use checked element capacity; prepared providers negotiate flat support
+before owner allocation. Serial remains the default and A/B control.
+Not applicable to gfx1151/gfx1201 physical execution: no HIP emitter or WMMA policy changes. Shared IR drift gates remain required; FP8/MXFP8/MXFP4 and W8A8 obligations retain their owning evidence.
+Evidence: benchmarks/baselines/sm120_relu_flat_20261015/README.md;
+docs/spec/ir/sm120_activation_schedule_tile_contract.md.
+No default performance promotion or five-slice closure claim.
+
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 

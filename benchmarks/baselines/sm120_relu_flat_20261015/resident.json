@@ -1,0 +1,39 @@
+{
+  "scope": "native direct-resident flat activation invocation, exhaustive storage and stream ordering; no timing claim",
+  "cases": [
+    {
+      "storage": "f16",
+      "shape": [
+        257,
+        257
+      ],
+      "unique_patterns": 65536,
+      "mismatches": 0,
+      "source_unchanged": true,
+      "foreign_stream_refused": "resident SM120 CUDA buffer producer stream must match the explicit launch stream (buffer 0)",
+      "rejected_launch_preserved_output": true,
+      "image_digest": "8b4ead0e072dbd11c1a8aad727456c0f1ae2397dd2322e0210ead3ee6b3d1372"
+    },
+    {
+      "storage": "bf16",
+      "shape": [
+        257,
+        257
+      ],
+      "unique_patterns": 65536,
+      "mismatches": 0,
+      "source_unchanged": true,
+      "foreign_stream_refused": "resident SM120 CUDA buffer producer stream must match the explicit launch stream (buffer 0)",
+      "rejected_launch_preserved_output": true,
+      "image_digest": "3150be56d258544bb23a59fac5284a58afb8ae359d06e9c31b0b261ec6483acc"
+    }
+  ],
+  "source_sha256": {
+    "python/tessera/runtime.py": "48a616361135b71fde0669a17dc1ca5bf187cbaf3643c9e6b4f195f25883e4fd",
+    "python/tessera/compiler/nvidia_native.py": "3e2999a1e13487bb4cbd5b0f21a0a558214b40b79c58d8ade83ea8017ad29852",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "cb8fd489e916d62dcfb74e5fc19f1743b822986c616275ff0be4c53ce7e90a70",
+    "tests/unit/test_sm120_coalesced_activation.py": "7429af7424151a17875d1ce594efe8a341c6771cce39bf73182ecfbcfe0e99c6"
+  },
+  "provider_sha256": "9e4ea937dabebe65e0858700474fbdd763949a5330d781703cb9b9030d82594b",
+  "script_source": "from pathlib import Path\nimport hashlib,json,os\nimport numpy as np\nimport ml_dtypes\nfrom tessera import runtime as rt\nfrom tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession\nfrom tests.unit.test_sm120_coalesced_activation import activation_package\nassert rt._nvidia_device_name()==\"sm_120\"\nrows=[]\nfor storage,dtype,emask,fmask in ((\"f16\",np.float16,0x7c00,0x3ff),(\"bf16\",ml_dtypes.bfloat16,0x7f80,0x7f)):\n shape=(257,257)\n artifact,package=activation_package(storage,shape,\"flat_128\")\n bits=np.resize(np.arange(65536,dtype=np.uint16),shape)\n expected=bits.copy()\n nan=((bits & emask)==emask) & ((bits & fmask)!=0)\n negative=((bits & 0x8000)!=0) & ~nan\n if storage==\"bf16\":negative &= (bits & 0x7fff)!=0\n expected[negative]=0\n with NvidiaDeviceSession() as session, NvidiaDeviceSession() as foreign:\n  source=session.upload(bits.view(dtype))\n  output=session.upload(np.full(shape,0x5a5a,np.uint16).view(dtype))\n  bindings={artifact.input_name:source,artifact.output_name:output}\n  rt._submit_nvidia_sm120_native(package.image,package.descriptor,bindings,\n      {\"Rows\":shape[0],\"Columns\":shape[1]},session.stream)\n  actual=session.download(output)\n  np.testing.assert_array_equal(actual.view(np.uint16),expected)\n  np.testing.assert_array_equal(session.download(source).view(np.uint16),bits)\n  try:\n   rt._submit_nvidia_sm120_native(package.image,package.descriptor,bindings,\n       {\"Rows\":shape[0],\"Columns\":shape[1]},foreign.stream)\n  except (ValueError,RuntimeError) as exc:\n   assert \"stream\" in str(exc).lower(),str(exc)\n   refusal=str(exc)\n  else:raise AssertionError(\"foreign producer stream unexpectedly accepted\")\n  np.testing.assert_array_equal(session.download(output).view(np.uint16),expected)\n rows.append({\"storage\":storage,\"shape\":list(shape),\"unique_patterns\":65536,\"mismatches\":0,\"source_unchanged\":True,\"foreign_stream_refused\":refusal,\"rejected_launch_preserved_output\":True,\"image_digest\":package.image.image_digest})\n print(json.dumps(rows[-1]),flush=True)\npacket={\"scope\":\"native direct-resident flat activation invocation, exhaustive storage and stream ordering; no timing claim\",\"cases\":rows,\"source_sha256\":{p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in [\"python/tessera/runtime.py\",\"python/tessera/compiler/nvidia_native.py\",\"src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp\",\"tests/unit/test_sm120_coalesced_activation.py\"]},\"provider_sha256\":hashlib.sha256(Path(os.environ[\"TESSERA_NVIDIA_PTX_LAUNCH_LIB\"]).read_bytes()).hexdigest(),\"script_source\":Path(__file__).read_text()}\nPath(\"/home/angstorms/scratch/sm120-relu-coalescing-20261014/resident-flat.json\").write_text(json.dumps(packet,indent=2)+\"\\n\")\n"
+}

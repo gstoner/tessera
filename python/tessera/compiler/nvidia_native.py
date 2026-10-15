@@ -3738,16 +3738,19 @@ def _validate_scheduled_relu_descriptor(descriptor: LaunchDescriptor) -> None:
     provenance = descriptor.provenance
     storage = provenance.get("storage")
     digest = provenance.get("schedule_digest")
+    schedule = provenance.get("schedule")
+    suffix = "_flat_128" if schedule == "flat_128" else ""
+    geometry = "sm120_activation_flat_elements" if schedule == "flat_128" else "sm120_activation_serial_rows"
     abis = {"f16": SM120_RELU_F16_ABI, "bf16": SM120_RELU_BF16_ABI}
     if (not isinstance(storage, str) or storage not in abis or not isinstance(digest, str)
             or re.fullmatch(r"[0-9a-f]{64}", digest) is None
             or descriptor.abi_id != abis[storage]
             or provenance.get("kind") != "relu"
-            or provenance.get("schedule") != "serial"
+            or not isinstance(schedule, str) or schedule not in {"serial", "flat_128"}
             or provenance.get("nan_mode") != "propagate"
             or provenance.get("zero_mode") != ("positive" if storage == "f16" else "preserve")
-            or descriptor.entry_symbol != f"tessera_tile_activation_relu_{storage}_{digest[:10]}"
-            or descriptor.geometry != LaunchGeometry(policy="sm120_activation_serial_rows")):
+            or descriptor.entry_symbol != f"tessera_tile_activation_relu_{storage}{suffix}_{digest[:10]}"
+            or descriptor.geometry != LaunchGeometry(policy=geometry)):
         raise ValueError("SM120 activation schedule/entry/geometry/numerical ABI mismatch")
 
 
@@ -3761,7 +3764,7 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
             or storage is None or artifact.storage != storage
             or artifact.accum != "f32" or artifact.workgroup_size != 128
             or artifact.family not in {"softmax", "reduce", "norm", "activation"}
-            or artifact.schedule not in {"serial", "cooperative_128"}):
+            or artifact.schedule not in ({"serial", "flat_128"} if activation else {"serial", "cooperative_128"})):
         raise ValueError("unsupported NVIDIA scheduled unary contract")
     shape, output_shape = artifact.input_shape, artifact.output_shape
     if not shape or any(type(d) is not int or d <= 0 for d in shape):
@@ -3777,15 +3780,16 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     if activation:
         if (artifact.kind != "relu" or storage not in {"f16","bf16"}
                 or len(shape) != 2 or output_shape != shape or artifact.axis != -1
-                or artifact.keepdims is not False or artifact.schedule != "serial"
+                or artifact.keepdims is not False or artifact.schedule not in {"serial", "flat_128"}
                 or artifact.epsilon != 0.0):
             raise ValueError("unsupported NVIDIA scheduled ReLU contract")
-        entry = f"tessera_tile_activation_relu_{storage}_{artifact.schedule_digest[:10]}"
+        suffix = "_flat_128" if artifact.schedule == "flat_128" else ""
+        entry = f"tessera_tile_activation_relu_{storage}{suffix}_{artifact.schedule_digest[:10]}"
         abi = SM120_RELU_F16_ABI if storage == "f16" else SM120_RELU_BF16_ABI
         scalar_names = ("Rows", "Columns")
-        geometry = "sm120_activation_serial_rows"
+        geometry = "sm120_activation_flat_elements" if artifact.schedule == "flat_128" else "sm120_activation_serial_rows"
         nan_mode = "propagate"
-        required = {"kind": '\"relu\"', "schedule": '\"serial\"', "nan_mode": '\"propagate\"'}
+        required = {"kind": '\"relu\"', "schedule": f'"{artifact.schedule}"', "nan_mode": '\"propagate\"'}
         required["zero_mode"] = '"positive"' if storage == "f16" else '"preserve"'
     elif norm:
         if (artifact.kind not in {"rmsnorm", "layernorm"} or artifact.axis != -1

@@ -3803,7 +3803,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="Static primal fp16/BF16 normalization/softmax and standalone ReLU LHS members -> fp16/fp32 matmul "
                "with native epilogues through checked Graph/Schedule/Tile/PTX packages. "
                "The named RMSNorm -> ReLU -> matmul route retains two private half-storage stores; "
-               "ReLU uses a serial 128-thread row launch, propagated NaNs, f16 positive zero and bf16 signed zero. "
+               "ReLU uses a serial row or explicit flat_128 element launch with 128 threads, propagated NaNs, f16 positive zero and bf16 signed zero. "
                "Portable argument/shape/numerical lineage is validated before allocation; host inputs, "
                "one owned CUDA stream, host output. Existing normalization proof remains in "
                "tests/device/nvidia/test_lhs_tensor_jit.py. No dynamic/composed AD or FP8/MXFP8/MXFP4 support is inferred.",

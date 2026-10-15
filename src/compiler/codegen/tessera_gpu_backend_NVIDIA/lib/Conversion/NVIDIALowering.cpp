@@ -2241,16 +2241,22 @@ static LogicalResult materializeSm120ActivationKernel(
       NVVM::BlockIdXOp::create(builder, loc, i32));
   Value thread = arith::ExtUIOp::create(builder, loc, i64,
       NVVM::ThreadIdXOp::create(builder, loc, i32));
+  bool flat = op->getAttrOfType<StringAttr>("schedule").getValue() == "flat_128";
   Value row = addI64(builder, loc,
       mulI64(builder, loc, block, i64Constant(builder, loc, 128)), thread);
-  auto active = scf::IfOp::create(builder, loc, lessI64(builder, loc, row, inputs[2]), false);
+  auto active = scf::IfOp::create(builder, loc, lessI64(builder, loc, row, flat ? mulI64(builder, loc, inputs[2], inputs[3]) : inputs[2]), false);
   {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(active.thenBlock());
     Value start = i64Constant(builder, loc, 0), step = i64Constant(builder, loc, 1);
-    auto loop = scf::ForOp::create(builder, loc, start, inputs[3], step);
-    builder.setInsertionPointToStart(loop.getBody());
-    Value linear = addI64(builder, loc, mulI64(builder, loc, row, inputs[3]), loop.getInductionVar());
+    // Flat maps adjacent lanes to adjacent stored elements; serial remains a
+    // separately hashed control. Both preserve the exact storage select below.
+    Value linear = row;
+    if (!flat) {
+      auto loop = scf::ForOp::create(builder, loc, start, inputs[3], step);
+      builder.setInsertionPointToStart(loop.getBody());
+      linear = addI64(builder, loc, mulI64(builder, loc, row, inputs[3]), loop.getInductionVar());
+    }
     Value source = LLVM::GEPOp::create(builder, loc, inputs[0].getType(), element,
         inputs[0], ValueRange{linear});
     Value output = LLVM::GEPOp::create(builder, loc, inputs[1].getType(), element,

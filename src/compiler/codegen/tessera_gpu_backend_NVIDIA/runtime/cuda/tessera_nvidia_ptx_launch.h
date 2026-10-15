@@ -94,6 +94,7 @@ int tessera_nvidia_matmul_profile_lhs_resident_ordered(uint64_t handle,
     int repeats, float *stage_ms, size_t stage_count, float *program_ms);
 // CUDA-event profiles of the last successful host frame. Rejects stale shared
 // arena leases. Stage windows group repeated kernels and are not additive.
+int tessera_nvidia_matmul_supports_flat_activation(void);
 int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
     float *stage_ms, size_t stage_count, float *program_ms,
     TesseraNvidiaMatmulHostView *output);

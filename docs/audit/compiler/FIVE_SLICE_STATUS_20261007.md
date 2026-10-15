@@ -1730,3 +1730,19 @@ half results only for NVIDIA SM120; sibling FP32 result gates are preserved.
 Dynamic/composed/nested tuple and half saved-LSE/AD integration remain open.
 110 final claim/generated-registry/audit/runtime ABI cases and all 32 generated-document drift checks pass.
 Evidence: benchmarks/baselines/sm120_resident_attention_forward_20261009/README.md.
+
+
+## Optional native ReLU schedule — 2026-10-15
+
+The W1.1 named route now has an explicit flat_128 Schedule/Tile policy beside
+the serial default, checked symbols/geometry, native direct/resident/prepared
+grids and provider negotiation before allocation. Owning RTX5070 validation
+passes 668 affected tests (one Apple-only skip), including exhaustive FP16/
+BF16 storage, native producer and bounded/two-sided resident ownership,
+portable replay, and public/prepared attention forward/reverse controls.
+Registry/document gates pass 243 tests; 33 generated documents are in sync.
+Final matched timing is recorded separately in
+benchmarks/baselines/sm120_relu_flat_20261015/README.md.
+Single-column regression and noisy program enqueue windows prevent default
+promotion. Wider storage/layout/AD and all original five-slice obligations
+remain open. This pending slice does not relabel PR947/948 receipts.

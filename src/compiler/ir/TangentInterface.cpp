@@ -1,13 +1,18 @@
+#include "Tessera/IR/NormalizationAD.h"
 //===- TangentInterface.cpp - Graph IR JVP implementations -----*- C++ -*-===//
 
 #include "Tessera/IR/TesseraOps.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "AttentionADContract.h"
 #include "Tessera/IR/AttentionTangentZero.h"
 
 namespace tessera {
+using normalization_ad::normalizationWorkType;
+using normalization_ad::normalizationCast;
+using normalization_ad::normalizationGuard;
 
 llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
@@ -389,24 +394,31 @@ llvm::SmallVector<mlir::Value> LayerNormOp::buildTangent(
   if (!type || type.getRank() < 1)
     return {};
   auto loc = getLoc();
+  auto storageType = type;
+  type = normalizationWorkType(getOperation(), storageType);
+  if (!type) return {};
+  auto element = type.getElementType();
+  normalizationGuard(builder, loc, getX(), tangents[0]);
+  auto x = normalizationCast(builder, loc, getX(), element);
+  auto dx = normalizationCast(builder, loc, tangents[0], element);
   auto [center, inverse] = buildNormalizationStats(
-      builder, loc, getX(), type, getEpsAttr(), /*centered=*/true);
-  mlir::Value centerB = broadcastLastAxis(builder, loc, type, center, getX());
-  mlir::Value inverseB = broadcastLastAxis(builder, loc, type, inverse, getX());
+      builder, loc, x, type, getEpsAttr(), /*centered=*/true);
+  mlir::Value centerB = broadcastLastAxis(builder, loc, type, center, x);
+  mlir::Value inverseB = broadcastLastAxis(builder, loc, type, inverse, x);
   mlir::Value normalized = builder.create<MulOp>(
       loc, type,
-      builder.create<SubOp>(loc, type, getX(), centerB).getResult(),
+      builder.create<SubOp>(loc, type, x, centerB).getResult(),
       inverseB).getResult();
-  mlir::Value meanDx = reduceMeanLastAxis(builder, loc, type, tangents[0]);
+  mlir::Value meanDx = reduceMeanLastAxis(builder, loc, type, dx);
   mlir::Value dxCentered = builder.create<SubOp>(
-      loc, type, tangents[0],
-      broadcastLastAxis(builder, loc, type, meanDx, getX())).getResult();
+      loc, type, dx,
+      broadcastLastAxis(builder, loc, type, meanDx, x)).getResult();
   mlir::Value meanProjected = reduceMeanLastAxis(
       builder, loc, type,
-      builder.create<MulOp>(loc, type, tangents[0], normalized).getResult());
+      builder.create<MulOp>(loc, type, dx, normalized).getResult());
   mlir::Value correction = builder.create<MulOp>(
       loc, type, normalized,
-      broadcastLastAxis(builder, loc, type, meanProjected, getX())).getResult();
+      broadcastLastAxis(builder, loc, type, meanProjected, x)).getResult();
   mlir::Value result = builder.create<MulOp>(
       loc, type,
       builder.create<SubOp>(loc, type, dxCentered, correction).getResult(),
@@ -414,59 +426,64 @@ llvm::SmallVector<mlir::Value> LayerNormOp::buildTangent(
   if (!getAffine().empty())
     result = builder.create<MulOp>(
         loc, type, result,
-        broadcastChannel(builder, loc, type, getAffine().front(), getX()))
+        broadcastChannel(builder, loc, type, normalizationCast(builder, loc, getAffine().front(), element), x))
                  .getResult();
   if (tangents.size() > 1 && tangents[1])
     result = addIfPresent(
         builder, loc, type, result,
         builder.create<MulOp>(
             loc, type, normalized,
-            broadcastChannel(builder, loc, type, tangents[1], getX()))
+            broadcastChannel(builder, loc, type, normalizationCast(builder, loc, tangents[1], element), x))
             .getResult());
   if (tangents.size() > 2 && tangents[2])
     result = addIfPresent(
         builder, loc, type, result,
-        broadcastChannel(builder, loc, type, tangents[2], getX()));
-  return {result};
+        broadcastChannel(builder, loc, type, normalizationCast(builder, loc, tangents[2], element), x));
+  return {normalizationCast(builder, loc, result, storageType.getElementType())};
 }
+
 
 llvm::SmallVector<mlir::Value> RmsNormOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
-  if (tangents.empty() || !tangents[0])
-    return {};
-  auto type = mlir::dyn_cast<mlir::RankedTensorType>(getX().getType());
-  if (!type || type.getRank() < 1)
-    return {};
+  if (tangents.empty() || !tangents[0]) return {};
+  auto storage = mlir::dyn_cast<mlir::RankedTensorType>(getX().getType());
+  if (!storage || storage.getRank() < 1) return {};
+  auto type = normalizationWorkType(getOperation(), storage);
+  if (!type) return {};
   auto loc = getLoc();
+  auto element = type.getElementType();
+  normalizationGuard(builder, loc, getX(), tangents[0]);
+  auto x = normalizationCast(builder, loc, getX(), element);
+  auto dx = normalizationCast(builder, loc, tangents[0], element);
   auto [unused, inverse] = buildNormalizationStats(
-      builder, loc, getX(), type, getEpsAttr(), /*centered=*/false);
+      builder, loc, x, type, getEpsAttr(), /*centered=*/false);
   (void)unused;
-  mlir::Value inverseB = broadcastLastAxis(builder, loc, type, inverse, getX());
+  mlir::Value inverseB = broadcastLastAxis(builder, loc, type, inverse, x);
   mlir::Value normalized =
-      builder.create<MulOp>(loc, type, getX(), inverseB).getResult();
+      builder.create<MulOp>(loc, type, x, inverseB).getResult();
   mlir::Value meanProjected = reduceMeanLastAxis(
       builder, loc, type,
-      builder.create<MulOp>(loc, type, tangents[0], normalized).getResult());
+      builder.create<MulOp>(loc, type, dx, normalized).getResult());
   mlir::Value correction = builder.create<MulOp>(
       loc, type, normalized,
-      broadcastLastAxis(builder, loc, type, meanProjected, getX())).getResult();
+      broadcastLastAxis(builder, loc, type, meanProjected, x)).getResult();
   mlir::Value result = builder.create<MulOp>(
       loc, type,
-      builder.create<SubOp>(loc, type, tangents[0], correction).getResult(),
+      builder.create<SubOp>(loc, type, dx, correction).getResult(),
       inverseB).getResult();
   if (!getAffine().empty())
     result = builder.create<MulOp>(
         loc, type, result,
-        broadcastChannel(builder, loc, type, getAffine().front(), getX()))
-                 .getResult();
+        broadcastChannel(builder, loc, type,
+          normalizationCast(builder, loc, getAffine().front(), element), x)).getResult();
   if (tangents.size() > 1 && tangents[1])
     result = addIfPresent(
         builder, loc, type, result,
         builder.create<MulOp>(
             loc, type, normalized,
-            broadcastChannel(builder, loc, type, tangents[1], getX()))
-            .getResult());
-  return {result};
+            broadcastChannel(builder, loc, type,
+              normalizationCast(builder, loc, tangents[1], element), x)).getResult());
+  return {normalizationCast(builder, loc, result, storage.getElementType())};
 }
 
 llvm::SmallVector<mlir::Value> DropoutOp::buildTangent(

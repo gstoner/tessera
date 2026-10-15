@@ -1,0 +1,55 @@
+{
+  "owner": "AD-FWD-CORE-1 / AD-HIGHER-1 / NUMPOL-CARRIER-1",
+  "synchronization_key": "NORM-AD-ACCUM-20261015",
+  "base_revision": "ee1da56df12fe628f4e86694ee5447fb337e7470",
+  "source_files_sha256": {
+    "src/compiler/ir/TangentInterface.cpp": "eac3f5a171814eb6769442680d4d6bcb8d09bc644fe1e9127f6ac68464f70df6",
+    "src/compiler/ir/AdjointInterface.cpp": "09599a0669c4cf0ed193bea4d527d9f809583f58af9e6e63750fe21e8f6d5ab3",
+    "src/transforms/lib/TesseraToLinalgPass.cpp": "06555b7a40a462cf28002b46a97e096fec9cbd7e4ce5988e22e5f487a75d3412",
+    "src/transforms/lib/AutodiffForwardPass.cpp": "0192e626d55fdc0e14b9b571817b7f91129fbc58979163d745a06cbeec73355f",
+    "src/compiler/ir/include/Tessera/IR/NumericPolicyAccumulator.h": "a437bd8d5485c68cd11f32290f6ab2c00cfa36ff92e503f7d68a48c3d09e0e64",
+    "src/compiler/ir/include/Tessera/IR/NormalizationAD.h": "438c94ce564fdf29dd19fbee9e6b0c2ad59f031166b46643c8007f0fbae82c02",
+    "src/compiler/ir/CMakeLists.txt": "7d1531d0153cd5c6ec57dc6b6bb7b081c53db5285358bbcda5d6e2da1482860e",
+    "python/tessera/compiler/pass_metadata.py": "36c22a698c8503fde191f6025895c9e19aca25c4933e6df4ca131a600b7cbdb9",
+    "tests/unit/test_native_normalization_accumulator_policy.py": "78189b74105aa34bbc9825ef5615af59ab2128336bda4e677e5c4e4b5abe1fe5",
+    "tests/unit/test_autodiff_paired_cpu_oracle.py": "b0def3e1b1c2ba9665a6049471f3ce194104ed3d76e937bbff2ccf90b2e8b06c",
+    "docs/spec/ir/normalization_ad_accumulator_policy.md": "d455dbb247144332fc723caf3ad84f87f57e9c9db638f1938b8615931f3d0012",
+    "docs/audit/backend/nvidia/todo.md": "795ec061b385817c842412a33cbae5f771a9356b7ff1c7a5a5a55894710045b6",
+    "docs/audit/backend/rocm/todo.md": "9dbc96158de74202115a6dcf1f97751bb0d85ff119218b32ec1f2270c23d2b5a",
+    "docs/audit/backend/apple/todo.md": "41e8f216bd1690b629ca7976329796a963f6b9e9b0c92a47dce2adedd4f86495",
+    "docs/audit/backend/x86/todo.md": "d1a7eb5771a81c0b6daedd29b03c15797d9d3579eb2087388e559dab59a76acd"
+  },
+  "integrated_compiler_sha256": "d15181ff8cdceb73f45067f32cfe065ca63591441f752f2d0efb6872db2b667a",
+  "compiler_version": "LLVM/MLIR 23.1.1 optimized, assertions enabled",
+  "host": "Super-Bear WSL",
+  "execution_scope": "Generic Graph -> linalg -> LLVM native CPU object execution; no GPU Schedule/Tile execution or speedup claim",
+  "integrated_gates": {
+    "focused": "693 passed, 7 skipped in 25.96s",
+    "documentation": "33 passed in 0.99s",
+    "ruff": "passed",
+    "compiler_plan": "passed",
+    "claim_lint": "public and all-surface clean"
+  },
+  "historical_isolated_gate": {
+    "result": "489 passed, 5 skipped in 22.20s",
+    "compiler_sha256": "318aa2cafc347403871a1b0e8c6860575733fe569500883b28521101643f40df",
+    "scope": "earlier isolated compiler; not the integrated CMake tool"
+  },
+  "original_red_control": {
+    "compiler_sha256": "d994705917e4d43b6c1d34ca02ad9c91b292c6f649c10e35a93d9a1266da43c3",
+    "log": "formal-baseline-red.log.xz",
+    "defect": "explicit FP32-accumulator FP16-storage RMSNorm derivative computes zero rather than +/-0.015625 at source magnitude 64"
+  },
+  "remaining": [
+    "Conservative reverse-mode NUMPOL-CARRIER-1 provenance debt",
+    "Multi-result native Schedule/Tile active-source producer route",
+    "Exact-device CUDA/HIP/Metal package integration and performance evidence"
+  ],
+  "log_sha256": {
+    "integrated-cmake-build.log.xz": "692a21a8c65f65c4887ddd7e4306809df0a7c6a1646dbc4980f6b2f873e5e950",
+    "integrated-focused-gates.log.xz": "c3c451f6453cf1dd62d69a6efbe2419b71ad02f2d52efa5dbcf89f7551b7bfc9",
+    "integrated-documentation-gates.log.xz": "98b87a426170195a3033917c45011c18c485a6ac0cf9fb9d81ed06dc6ea9e16f",
+    "formal-baseline-red.log.xz": "49e8b8ac95591d9d6c5ff47bdd4978ad89d05277080a82d09c20a726921c9855",
+    "frozen-candidate-focused-gates.log.xz": "4c650b966fa97253c935f330f62b1bf99a2c19ca57ae6188177075670ebabf1c"
+  }
+}

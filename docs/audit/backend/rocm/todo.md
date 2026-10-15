@@ -4,6 +4,24 @@ audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+## NORM-AD-ACCUM-20261015 — native normalization derivative precision
+
+Owner AD-FWD-CORE-1 / AD-HIGHER-1 / NUMPOL-CARRIER-1.
+Synchronization key: NORM-AD-ACCUM-20261015.
+
+Native RMSNorm/LayerNorm JVP/VJP preserve explicitly wider accumulator
+working types and round returned storage values after derivative arithmetic.
+Dynamic leading seed extents are guarded before reads; distinct permuted
+affine root arguments retain their original derivative roles.
+Unspecified accumulator behavior is preserved. Conservative reverse-mode
+numeric-policy provenance debt remains open.
+
+Follow-up required on gfx1201/gfx1151: shared AD arithmetic changes do not provide HIP producer packages or architecture-specific evidence; retain existing ROCm route/performance obligations.
+
+Contract: docs/spec/ir/normalization_ad_accumulator_policy.md.
+Evidence: benchmarks/baselines/native_normalization_ad_accum_20261015/README.md.
+
+
 
 ## W11-TENSOR-RHS-JVP-20261015 — frozen full regression
 

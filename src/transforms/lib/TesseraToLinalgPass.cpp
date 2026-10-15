@@ -1,3 +1,4 @@
+#include "Tessera/IR/NumericPolicyAccumulator.h"
 //===- TesseraToLinalgPass.cpp --------------------------------------------===//
 // Phase 0–1 of the production MLIR/LLVM compiler
 // (docs/spec/PRODUCTION_COMPILER_PLAN.md).
@@ -2608,48 +2609,8 @@ struct AdamBackwardLowering : public RewritePattern {
 //: Significand bits including the implicit leading one — the same notion
 //: IRContractLegalityPass compares, so the two passes cannot disagree about
 //: which accumulator is "more precise".
-static unsigned accumSignificandBits(FloatType type) {
-  return llvm::APFloat::semanticsPrecision(type.getFloatSemantics());
-}
-
-//: Outcome of reading `numeric_policy.accum` against the storage element type.
-enum class AccumRealizability {
-  //: No policy, no accum, or an accumulator no more precise than storage —
-  //: nothing to widen, and the lowering is unchanged.
-  NoWidening,
-  //: Strictly wider in BITS: a plain extf/truncf pair expresses it.
-  Widen,
-  //: More precise but not wider in bits (bf16 storage, fp16 accum). No cast
-  //: expresses it and substituting fp32 would over-deliver precision the
-  //: program did not ask for, so this lane cannot provide it.
-  Unrealizable,
-};
-
-static AccumRealizability
-readAccumulator(Operation *op, Type storageElem, FloatType &widened) {
-  widened = nullptr;
-  auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
-  if (!policy) return AccumRealizability::NoWidening;
-  auto accum = policy.getAs<StringAttr>("accum");
-  if (!accum) return AccumRealizability::NoWidening;
-  auto storageFloat = dyn_cast<FloatType>(storageElem);
-  if (!storageFloat) return AccumRealizability::NoWidening;
-  MLIRContext *ctx = op->getContext();
-  FloatType accumType =
-      llvm::StringSwitch<FloatType>(accum.getValue())
-          .Case("fp64", Float64Type::get(ctx))
-          .Case("fp32", Float32Type::get(ctx))
-          .Case("fp16", Float16Type::get(ctx))
-          .Case("bf16", BFloat16Type::get(ctx))
-          .Default(nullptr);
-  if (!accumType) return AccumRealizability::NoWidening;
-  if (accumSignificandBits(accumType) <= accumSignificandBits(storageFloat))
-    return AccumRealizability::NoWidening;
-  if (accumType.getWidth() <= storageFloat.getWidth())
-    return AccumRealizability::Unrealizable;
-  widened = accumType;
-  return AccumRealizability::Widen;
-}
+using tessera::numeric_policy::AccumRealizability;
+using tessera::numeric_policy::readAccumulator;
 
 //: Emit the refusal for the unrealizable case, in one place so the three
 //: normalization lowerings cannot word it differently.
@@ -2685,6 +2646,32 @@ static Value castElementwiseTo(PatternRewriter &rewriter, Location loc,
                         : arith::TruncFOp::create(b, l, to, v).getResult();
       });
 }
+
+
+// Isolated candidate: native float cast bridge required by policy-aware AD.
+struct NativeADFloatCastLowering : public RewritePattern {
+  NativeADFloatCastLowering(MLIRContext *ctx)
+      : RewritePattern("tessera.cast", 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op,
+      PatternRewriter &rewriter) const override {
+    if (op->getNumOperands() != 1 || op->getNumResults() != 1 ||
+        op->hasAttr("numeric_policy")) return failure();
+    auto input = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+    auto output = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!input || !output || input.getShape() != output.getShape() ||
+        input.getEncoding() || output.getEncoding()) return failure();
+    auto from = dyn_cast<FloatType>(input.getElementType());
+    auto to = dyn_cast<FloatType>(output.getElementType());
+    auto admitted = [](FloatType t) {
+      return t && (t.isF16() || t.isBF16() || t.isF32() || t.isF64());
+    };
+    if (!admitted(from) || !admitted(to) ||
+        (from != to && from.getWidth() == to.getWidth())) return failure();
+    rewriter.replaceOp(op, castElementwiseTo(
+        rewriter, op->getLoc(), output, op->getOperand(0)));
+    return success();
+  }
+};
 
 // tessera.softmax (over `axis`, default innermost) → numerically-stable
 // decomposition:  m = max(x); e = exp(x - m); y = e / sum(e).  Composes the
@@ -3190,6 +3177,7 @@ public:
   void runOnOperation() override {
     MLIRContext *ctx = &getContext();
     RewritePatternSet patterns(ctx);
+    patterns.add<NativeADFloatCastLowering>(ctx);
     patterns.add<AdjointZerosLowering>(ctx);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.add", BinaryKind::Add);
     patterns.add<BinaryEltwiseLowering>(ctx, "tessera.sub", BinaryKind::Sub);

@@ -94,13 +94,31 @@ class _Interp:
             raise AssertionError(f"cannot resolve dynamic result shape {tokens}")
 
         for line in self.body:
+            if line.startswith("cf.assert "):
+                condition = _SSA.findall(line)[0]
+                message = re.search(r'"([^"]*)"', line)
+                assert message, f"malformed assertion: {line}"
+                assert bool(env[condition]), message.group(1)
+                continue
             lhs, rhs = line.split(" = ", 1)
             destinations = _SSA.findall(lhs)
             dst = destinations[0]
             head = rhs.split(" : ", 1)[0]
             op = head.split()[0]
             operands = _SSA.findall(head)
-            if op == "arith.constant":
+            if op == "arith.constant" and rhs.endswith(" : index"):
+                match = re.fullmatch(r"arith.constant (-?\d+) : index", rhs)
+                assert match, f"unsupported scalar constant: {line}"
+                env[dst] = np.asarray(int(match.group(1)), dtype=np.int64)
+            elif op == "tensor.dim":
+                value, axis = (env[name] for name in operands)
+                env[dst] = np.asarray(value.shape[int(axis)], dtype=np.int64)
+            elif op == "arith.cmpi":
+                assert head.startswith("arith.cmpi eq,"), (
+                    f"unsupported integer comparison: {line}"
+                )
+                env[dst] = np.asarray(env[operands[0]] == env[operands[1]])
+            elif op == "arith.constant":
                 val = float(_DENSE.search(rhs).group(1))
                 dims = tuple(int(d) for d in _DIMS.search(rhs).group(1).split("x"))
                 env[dst] = np.full(dims, val, dtype=np.float32)
@@ -435,7 +453,7 @@ def _parse_functions(mlir: str) -> dict[str, _Interp]:
             s = lines[i].strip()
             if s.startswith("return"):
                 rets = _SSA.findall(s.split(" : ", 1)[0])
-            elif " = " in s:
+            elif " = " in s or s.startswith("cf.assert "):
                 body.append(s)
             i += 1
         funcs[name] = _Interp(arg_names, body, rets)
@@ -1343,3 +1361,27 @@ def test_gradient_accumulation_reused_input():
     dx2, dw2 = funcs["loss__bwd"].run([x, w, 2.0 * np.ones((4, 16), np.float32)])
     np.testing.assert_allclose(dx2, 2.0 * dx1, rtol=1e-4, atol=1e-5)
     np.testing.assert_allclose(dw2, 2.0 * dw1, rtol=1e-4, atol=1e-5)
+
+
+@pytest.mark.parametrize("seed_rows", [2, 3])
+def test_interpreter_enforces_dynamic_normalization_seed_guard(seed_rows):
+    source = """
+module {
+  func.func @guard(%x: tensor<?x5xf32>, %dx: tensor<?x5xf32>) -> tensor<?x5xf32> {
+    %c0 = arith.constant 0 : index
+    %m = tensor.dim %x, %c0 : tensor<?x5xf32>
+    %dm = tensor.dim %dx, %c0 : tensor<?x5xf32>
+    %ok = arith.cmpi eq, %m, %dm : index
+    cf.assert %ok, "normalization derivative seed shape must match primal"
+    return %dx : tensor<?x5xf32>
+  }
+}
+"""
+    interpreter = _parse_functions(source)["guard"]
+    x = np.zeros((2, 5), dtype=np.float32)
+    seed = np.ones((seed_rows, 5), dtype=np.float32)
+    if seed_rows != 2:
+        with pytest.raises(AssertionError, match="seed shape must match primal"):
+            interpreter.run([x, seed])
+    else:
+        np.testing.assert_array_equal(interpreter.run([x, seed])[0], seed)

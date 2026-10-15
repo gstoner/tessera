@@ -6,6 +6,24 @@ owner: x86 backend
 target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
+## NORM-AD-ACCUM-20261015 — native normalization derivative precision
+
+Owner AD-FWD-CORE-1 / AD-HIGHER-1 / NUMPOL-CARRIER-1.
+Synchronization key: NORM-AD-ACCUM-20261015.
+
+Native RMSNorm/LayerNorm JVP/VJP preserve explicitly wider accumulator
+working types and round returned storage values after derivative arithmetic.
+Dynamic leading seed extents are guarded before reads; distinct permuted
+affine root arguments retain their original derivative roles.
+Unspecified accumulator behavior is preserved. Conservative reverse-mode
+numeric-policy provenance debt remains open.
+
+Native LLVM object numerical proof covers the generated functions. Public JIT package integration remains follow-up required; do not infer full x86 package parity.
+
+Contract: docs/spec/ir/normalization_ad_accumulator_policy.md.
+Evidence: benchmarks/baselines/native_normalization_ad_accum_20261015/README.md.
+
+
 
 ## W11-TENSOR-RHS-JVP-20261015 — frozen full regression
 

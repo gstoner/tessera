@@ -8,6 +8,7 @@
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
@@ -538,7 +539,7 @@ class AutodiffForwardPass
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<tessera::attn::TesseraAttnDialect,
                     tessera::tile::TesseraTileDialect>();
-    registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
+    registry.insert<mlir::cf::ControlFlowDialect, mlir::arith::ArithDialect, mlir::func::FuncDialect,
                     mlir::scf::SCFDialect, mlir::tensor::TensorDialect,
                     mlir::math::MathDialect, mlir::gpu::GPUDialect, mlir::LLVM::LLVMDialect, mlir::memref::MemRefDialect>();
   }
@@ -645,6 +646,40 @@ class AutodiffForwardPass
             relu.getX().getType() == relu.getY().getType() &&
             ret.getOperand(0) == relu.getY();
       }
+
+      // Direct row normalization derives all symbolic leading extents from x.
+      // Keep the reduction/channel extent static and affine operands explicit.
+      bool symbolicNormalization = false;
+      if (forward.getNumResults() == 1 &&
+          forward.getBody().front().getOperations().size() == 2) {
+        auto &op = forward.getBody().front().front();
+        auto ret = mlir::dyn_cast<mlir::func::ReturnOp>(
+            forward.getBody().front().back());
+        if (mlir::isa<RmsNormOp, LayerNormOp>(op) &&
+            op.getNumOperands() == forward.getNumArguments() &&
+            op.getNumResults() == 1 && ret && ret.getNumOperands() == 1 &&
+            ret.getOperand(0) == op.getResult(0)) {
+          auto x = mlir::dyn_cast<mlir::RankedTensorType>(
+              op.getOperand(0).getType());
+          bool valid = x && x.getRank() == 2 && !x.getEncoding() &&
+              !x.isDynamicDim(1) && x.getDimSize(1) > 0 &&
+              op.getResult(0).getType() == x;
+          llvm::SmallDenseSet<unsigned> directArguments;
+          for (auto [index, value] : llvm::enumerate(op.getOperands())) {
+            auto argument = mlir::dyn_cast<mlir::BlockArgument>(value);
+            valid &= argument &&
+                argument.getOwner() == &forward.getBody().front() &&
+                directArguments.insert(argument.getArgNumber()).second;
+            if (index == 0 || !valid) continue;
+            auto channel = mlir::dyn_cast<mlir::RankedTensorType>(value.getType());
+            valid &= channel && channel.getRank() == 1 &&
+                channel.hasStaticShape() && !channel.getEncoding() &&
+                channel.getDimSize(0) == x.getDimSize(1) &&
+                channel.getElementType() == x.getElementType();
+          }
+          symbolicNormalization = valid;
+        }
+      }
       bool boundedAttentionExport = false;
       if (exportAttentionJVP) {
         auto &attention = forward.getBody().front().front();
@@ -665,7 +700,7 @@ class AutodiffForwardPass
         bool admissibleTensor =
             tensor && (tensor.hasStaticShape() ||
                        (boundedAttentionExport && !tensor.getEncoding() && tensor.getElementType().isF32()) ||
-                       (symbolicRelu && !tensor.getEncoding() &&
+                       ((symbolicRelu || symbolicNormalization) && !tensor.getEncoding() &&
                         (tensor.getElementType().isF16() || tensor.getElementType().isBF16() ||
                          tensor.getElementType().isF32() || tensor.getElementType().isF64()))) &&
             mlir::isa<mlir::FloatType, mlir::IntegerType, mlir::ComplexType>(

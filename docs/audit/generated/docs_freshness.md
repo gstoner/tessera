@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-15**.
 
 ## Headline
 
-- **163** docs catalogued across the canonical doc tree.
-- **162** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **32** updated within the last 30 days.
+- **164** docs catalogued across the canonical doc tree.
+- **163** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **33** updated within the last 30 days.
 - **67** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -46,6 +46,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `TILE_IR.md` | Normative | 2026-10-02 | 13 | ✓ |
 | `VALIDATION_SPINE.md` | Normative | 2026-08-02 | 74 | ✓ |
 | `VALUE_TARGET_IR_CONTRACT.md` | Normative | 2026-06-04 | 133 | ✓ |
+| `ir/normalization_ad_accumulator_policy.md` | - | 2026-10-15 | 0 | ✓ |
 | `ir/sm120_activation_schedule_tile_contract.md` | - | 2026-10-15 | 0 | ✓ |
 | `ir/sm120_paired_tensor_program_contract.md` | - | 2026-10-15 | 0 | ✓ |
 

@@ -124,7 +124,8 @@ def _assert_structure(package, shape: BlockScaleShape, *, k_unroll: int,
     # Each group site issues `step` panels straight-line (the rest of the
     # group walks the inner loop), and every panel is one MMA per fragment.
     group = shape.scale_k // 16
-    step = group if group_panels == 0 else min(2 if group_panels < 0 else group_panels, group)
+    default_step = 2 if group % 2 == 0 else 1
+    step = group if group_panels == 0 else min(default_step if group_panels < 0 else group_panels, group)
     mmas = len(re.findall(r"tile\.mma ", text))
     assert mmas == 2 * per_path * step, (mmas, per_path, step)
     # The weight layout reaches the fragment source: [N, K] is read K-major.
@@ -134,6 +135,13 @@ def _assert_structure(package, shape: BlockScaleShape, *, k_unroll: int,
 
 
 SHAPES = [
+    # Odd instruction-panel scale groups use the native one-panel default.
+    (BlockScaleShape(7, 19, 32, 16, 1), 1, -1),
+    (BlockScaleShape(7, 19, 96, 48, 1), 1, -1),
+    (BlockScaleShape(7, 19, 160, 80, 1), 1, -1),
+    (BlockScaleShape(7, 19, 32, 16, 1, "nk"), 1, -1),
+    (BlockScaleShape(7, 19, 96, 48, 1, "nk"), 1, -1),
+    (BlockScaleShape(7, 19, 160, 80, 1, "nk"), 1, -1),
     # (shape, k_unroll, scale_group_panels) -- ragged M/N, one to four groups,
     # N blocks of 128, 16 and 1, a 2-group iteration with its one-group
     # remainder, the whole-group straight-line body (0) and an inner loop of

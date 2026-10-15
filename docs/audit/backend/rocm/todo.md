@@ -5,6 +5,22 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NVFP4-NATIVE-MULTI-OUTPUT-20261015 — native producer/product ownership
+
+Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+Native MLIR outlines source-preserving expansion and the exact K16 FP8
+product from actual Graph SSA, retaining original roles and two private
+producer results. Schema v3 is static source-preserving expansion; v1 lossy
+static and v2 lossy bounded semantics remain unchanged. An additive multi-result
+HIP preparation ABI independently derives all lifetimes. Diagnostic gfx1201
+execution passes ragged K16/K48/K80 cases without intermediate host transfers.
+Public composed JIT/prepared binding, import-once/partial activation updates,
+bounded source-preserving frames, full checkpoint/model quality and performance
+promotion remain follow-up required. gfx1151 receives no FP8 WMMA admission.
+Evidence: benchmarks/baselines/rocm_native_multi_output_20261015/README.md.
+
+
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 
 CI documentation synchronization: the marker-aware standalone dashboard now participates in the standard generated-doc registry. Its two generated summaries refresh automatically while authored prose is preserved. This repairs stale exact-ROCm row counts; numerical admission and physical schedules are unchanged.

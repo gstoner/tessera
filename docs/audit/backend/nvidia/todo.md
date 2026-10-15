@@ -6,6 +6,17 @@ target: nvidia_sm120
 last_updated: 2026-10-15
 ---
 
+## NVFP4-NATIVE-MULTI-OUTPUT-20261015 — native producer/product ownership
+
+Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+Not applicable to nvidia physical execution: the additive owner ABI is
+HIP-only and the named native MLIR program requires explicit gfx1201.
+Prior schemas remain intact; no sibling numerical, runtime ABI or selector
+change. Sibling hardware parity is not claimed. A future source-preserving
+route requires its own lowering, ownership contract and exact-device proof.
+
+
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 
 CI documentation synchronization: the marker-aware standalone dashboard now participates in the standard generated-doc registry. Its two generated summaries refresh automatically while authored prose is preserved. No nvidia capability, numerical policy, ABI or physical execution claim changes.

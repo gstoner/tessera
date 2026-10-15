@@ -10,6 +10,9 @@ audit_role: reference
 
 
 
+
+
+
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -12425,4 +12428,24 @@ generic HIP program ownership currently assumes one fresh result per step.
 No default-route promotion, sibling execution or full-model quality closure.
 
 Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-15 — native NVFP4 multiple-result producer/product ownership
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: queued after PR949; sync NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+
+Outcome: native MLIR outlines expansion and exact K16 FP8 product with two
+private results and compiler-derived lifetimes. The additive HIP preparation
+ABI verifies every result/lifetime. Ragged gfx1201 cases agree with an
+independent nibble oracle before/after separate member graph-dispatch timing.
+All four queues assessed; prior program schemas remain intact.
+
+Remaining: public composed JIT/prepared binding, import-once/partial updates,
+bounded source-preserving frames, model quality and broader five-slice gates.
+
+Evidence: benchmarks/baselines/rocm_native_multi_output_20261015/README.md;
+tests/unit/test_native_nvfp4_expansion_program.py;
+tests/device/rocm/test_native_multi_output_owner.py.
 <!-- entry-fields:end -->

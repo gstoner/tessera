@@ -155,3 +155,147 @@ def test_multi_output_ssa_admission(lib, package, bad):
     finally:
         if handle.value:
             assert lib.tessera_rocm_program_close(handle) == 0
+
+
+@pytest.mark.parametrize("mnk", [(1, 7, 16), (19, 17, 48), (33, 23, 80)])
+def test_native_expansion_product_private_edges(lib, mnk):
+    """Execute the native compiler's two-stage SSA plan without intermediate IO."""
+    from tessera.compiler.native_nvfp4_program import export_native_nvfp4_program
+    from tessera.compiler.rocm_fp8_blockscale import (
+        BlockScaleProgram, BlockScaleShape, package_blockscale,
+    )
+    from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
+    from tests.unit.test_native_nvfp4_expansion_program import source_graph
+
+    m, n, k = mnk
+    program = export_native_nvfp4_program(source_graph(m, n, k))
+    manifest = program.manifest
+    producer = package_nvfp4_expansion(program.project_member(0)).native
+    consumer_graph = program.project_member(1)
+    tool = find_tessera_opt()
+    schedule = run_tessera_opt(tool, consumer_graph, "--tessera-graph-to-schedule")
+    tile = run_tessera_opt(tool, schedule, "--tessera-schedule-to-tile")
+    consumer = package_blockscale(BlockScaleProgram(
+        BlockScaleShape(m, n, k, 16, 1, "nk", "f32"),
+        "w8a8_blockscale", consumer_graph, schedule, tile))
+    rng = np.random.default_rng(m + k)
+    codes = rng.integers(0, 256, (n, k // 2), dtype=np.uint8)
+    scales = rng.choice([.5, 1., 2., 4.], (n, k // 16)).astype(ml_dtypes.float8_e4m3fn)
+    globals_ = np.array([.25, .125], np.float64)
+    a = rng.integers(-3, 4, (m, k)).astype(ml_dtypes.float8_e4m3fn)
+    sa = rng.choice([.5, 1., 2.], (m, k // 16)).astype(np.float32)
+    roots = [codes, scales, globals_, a, sa]
+    # Independent nibble decode and mathematical product; no producer oracle.
+    levels = np.array([0, .5, 1, 1.5, 2, 3, 4, 6, -0., -.5, -1, -1.5, -2, -3, -4, -6], np.float64)
+    weights = np.empty((n, k), np.float64)
+    weights[:, 0::2] = levels[codes & 15]
+    weights[:, 1::2] = levels[codes >> 4]
+    global_rows = np.where(np.arange(n) < 3, globals_[0], globals_[1])
+    plane = (scales.astype(np.float64) * global_rows[:, None]).astype(np.float32)
+    weights *= np.repeat(plane.astype(np.float64), 16, axis=1)
+    activation = a.astype(np.float64) * np.repeat(sa.astype(np.float64), 16, axis=1)
+    expected = activation @ weights.T
+    contracts = (_Buffer * len(manifest["buffers"]))()
+    for i, b in enumerate(manifest["buffers"]):
+        elements = int(np.prod(b["shape"]))
+        contracts[i] = _Buffer(b["bytes"], elements, b["first_write"], b["last_read"],
+                               {"readonly_input": 0, "private_scratch": 1, "returned_output": 2}[b["ownership"]], 0)
+    steps = (MultiOutputStep * 2)()
+    blobs, entries = [], []
+    for index, package_ in enumerate((producer, consumer)):
+        descriptor = package_.descriptor
+        blobs.append(C.create_string_buffer(package_.image.payload))
+        entries.append(descriptor.entry_symbol.encode())
+        step = steps[index]
+        step.image, step.image_bytes = C.cast(blobs[-1], C.c_void_p), len(package_.image.payload)
+        step.entry = entries[-1]
+        inputs, outputs = manifest["steps"][index]["inputs"], manifest["steps"][index]["outputs"]
+        step.input_count, step.output_count = len(inputs), len(outputs)
+        step.inputs[:len(inputs)], step.outputs[:len(outputs)] = inputs, outputs
+        if index == 0:
+            step.geometry[:] = (*descriptor.geometry.grid, *descriptor.geometry.workgroup)
+        else:
+            bm, bn = descriptor.provenance["macro_tile"]
+            step.geometry[:] = ((n + bn - 1) // bn, (m + bm - 1) // bm, 1,
+                                *descriptor.provenance["workgroup"])
+            step.scalar_count = 3
+            step.scalars[:3] = (m, n, k)
+    pointers = (C.c_void_p * 5)(*[v.ctypes.data for v in roots])
+    sizes = (C.c_uint64 * 5)(*[v.nbytes for v in roots])
+    handle, generation = C.c_uint64(), C.c_uint64()
+    status = lib.tessera_rocm_program_prepare_multi_output(
+        b"gfx1201", 5, len(contracts), contracts, 2, steps, pointers, sizes, C.byref(handle))
+    try:
+        assert status == 0 and handle.value
+        assert lib.tessera_rocm_program_invoke(handle, 1, C.byref(generation), None) == 0
+        output = np.full((m, n), np.nan, np.float32)
+        slots = (C.c_uint32 * 1)(manifest["output"])
+        destinations = (C.c_void_p * 1)(output.ctypes.data)
+        bytes_ = (C.c_uint64 * 1)(output.nbytes)
+        assert lib.tessera_rocm_program_read_many(
+            handle, generation, 1, slots, destinations, bytes_) == 0
+        np.testing.assert_allclose(output.astype(np.float64), expected, rtol=1e-6, atol=1e-6)
+
+        evidence_dir = os.environ.get("TESSERA_MULTI_OUTPUT_EVIDENCE_DIR")
+        if evidence_dir:
+            import hashlib
+            import json
+            from pathlib import Path
+            import statistics
+            import time
+
+            lib.tessera_rocm_program_profile_members.argtypes = [
+                C.c_uint64, C.c_uint32, C.c_uint32, C.POINTER(C.c_uint64), C.POINTER(C.c_float)]
+            lib.tessera_rocm_program_profile_members.restype = C.c_int
+            samples = []
+            host_ms = []
+            repeats = 4096
+            for _ in range(3):
+                times = (C.c_float * 2)()
+                assert lib.tessera_rocm_program_profile_members(
+                    handle, repeats, 2, C.byref(generation), times) == 0
+                assert all(np.isfinite(x) and x > 0 for x in times)
+                samples.append(list(times))
+                start = time.perf_counter_ns()
+                assert lib.tessera_rocm_program_invoke(
+                    handle, 1, C.byref(generation), None) == 0
+                host_ms.append((time.perf_counter_ns() - start) / 1e6)
+            assert lib.tessera_rocm_program_read_many(
+                handle, generation, 1, slots, destinations, bytes_) == 0
+            np.testing.assert_allclose(output.astype(np.float64), expected, rtol=1e-6, atol=1e-6)
+            hip = rt._load_hip_for_launch()
+            ordinal, device_name = C.c_int(), C.create_string_buffer(256)
+            assert hip.hipGetDevice(C.byref(ordinal)) == 0
+            assert hip.hipDeviceGetName(device_name, len(device_name), ordinal.value) == 0
+            sha = lambda data: hashlib.sha256(data).hexdigest()
+            packet = {
+                "schema": "tessera.rocm.native_multi_output_owner.diagnostic.v1",
+                "architecture": rt._rocm_live_arch(), "device": device_name.value.decode(),
+                "shape_mnk": list(mnk), "correctness": "independent_nibble_oracle_before_and_after_timing",
+                "max_abs_error": float(np.max(np.abs(output.astype(np.float64) - expected))),
+                "no_intermediate_host_transfer": True,
+                "public_jit_composition": False, "import_once_execution": False,
+                "compiler_sha256": sha(tool.read_bytes()),
+                "provider_sha256": sha(Path(os.environ["TESSERA_ROCM_MULTI_OUTPUT_LIB"]).read_bytes()),
+                "plan_sha256": sha(program.plan_json.encode()),
+                "source_graph_sha256": sha(program.source_ir.encode()),
+                "image_payload_sha256": [p.image.payload_digest for p in (producer, consumer)],
+                "member_event_graph_dispatch_samples_ms": samples,
+                "member_event_graph_dispatch_median_ms": [
+                    statistics.median(x[i] for x in samples) for i in range(2)],
+                "member_repeats": repeats,
+                "completed_native_invoke_samples_ms": host_ms,
+                "completed_native_invoke_median_ms": statistics.median(host_ms),
+                "timing_scope": "per-member captured HIP graphs; native invoke excludes prepare/uploads/readback",
+            }
+            destination = Path(evidence_dir)
+            destination.mkdir(parents=True, exist_ok=True)
+            (destination / ("x".join(map(str, mnk)) + ".json")).write_text(json.dumps(packet, indent=2) + "\n")
+
+        # The producer's two outputs are native private storage, never returned.
+        private_slots = (C.c_uint32 * 1)(5)
+        assert lib.tessera_rocm_program_read_many(
+            handle, generation, 1, private_slots, destinations, bytes_) != 0
+    finally:
+        if handle.value:
+            assert lib.tessera_rocm_program_close(handle) == 0

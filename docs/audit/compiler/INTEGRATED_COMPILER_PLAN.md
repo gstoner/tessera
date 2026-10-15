@@ -157,9 +157,10 @@ the next action's host requirement; it is not a live fleet-availability claim.
   and diagnostic gfx1201 producer/product proof without intermediate host IO.
   Prepared native ownership now supports import-once expansion and activation-only
   updates with native dependency checks, including normal frontend capture and
-  FP32/BF16 outputs. Remaining: ordinary composed JIT/serialized replay,
-  original-checkpoint composed proof, bounded frames and model-quality acceptance.
-- Latest: [2026-10-15 — prepared native NVFP4 import-once ownership](INTEGRATED_COMPILER_LOG.md#2026-10-15--prepared-native-nvfp4-import-once-ownership)
+  FP32/BF16 outputs. Ordinary static FP32 JIT, compiler-free replay and the original Qwen3
+  projection now have exact-device proof through both native stages.
+  Remaining: bounded frames, wider composition and model-quality acceptance.
+- Latest: [2026-10-15 — public native NVFP4 checkpoint composition](INTEGRATED_COMPILER_LOG.md#2026-10-15--public-native-nvfp4-checkpoint-composition)
 
 ### ROCM-SPLIT-K-1
 

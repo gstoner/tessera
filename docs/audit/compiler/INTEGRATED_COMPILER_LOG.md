@@ -12472,3 +12472,29 @@ quality and the remaining five-slice obligations. No matmul schedule promotion.
 Evidence: benchmarks/baselines/rocm_nvfp4_prepared_expansion_20261015/README.md;
 tests/device/rocm/test_prepared_nvfp4_expansion_program.py.
 <!-- entry-fields:end -->
+
+
+### 2026-10-15 — public native NVFP4 checkpoint composition
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: queued after PR949; sync NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+
+Outcome: ordinary JIT and compiler-free portable replay use the native
+source-preserving two-stage program. Changed host weight bytes reimport;
+fresh-process replay disables compiler paths and eager numerical oracles.
+Compile reports carry ordered native stage hashes. Parent target relabeling
+rejects before provider access. A frozen 829-case gate passes on gfx1201.
+
+Original pinned Qwen3 gate/up weights at M256/N24576/K4096 match an independent
+FP32 bound, with identical output bytes across JIT/replay/prepared modes.
+Projection RMS vs the BF16 reference is 6.23%; shipped-weight projection RMS
+is 6.08%. Host calls and member graph windows remain separate. The full frame
+exceeds the native idle-cache budget; prepared ownership avoids that reacquire
+and full weight upload. All sibling queues are assessed without proof transfer.
+
+Remaining: bounded/wider composition, model-quality acceptance, wider ROCm
+performance obligations and the remaining NVIDIA five-slice work.
+
+Evidence: benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md;
+tests/device/rocm/test_public_nvfp4_source_program.py.
+<!-- entry-fields:end -->

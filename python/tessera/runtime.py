@@ -147,6 +147,9 @@ class NativeProgramExecution:
 
 def _execute_rocm_nvfp4_program_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
     from .compiler.prepared_rocm_nvfp4_program import resolve_program
+    if (artifact.metadata or {}).get("target") != "rocm_gfx1201":
+        raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
+                                    "native NVFP4 program requires exact gfx1201 parent target")
     program=resolve_program(artifact)
     if isinstance(args,Mapping):
         output,receipts=program.execute(**args)

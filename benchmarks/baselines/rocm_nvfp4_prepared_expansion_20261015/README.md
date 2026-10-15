@@ -61,3 +61,12 @@ checkpoint composed validation, bounded source-preserving frames and full-model
 quality acceptance remain open. This pure SSA ownership protocol does not
 establish transactional recurrent-state behavior for ReplaySSM. No Apple,
 NVIDIA or gfx1151 physical proof is inferred.
+
+
+## Subsequent public/checkpoint proof
+
+The later source under
+[rocm_nvfp4_public_source_20261015](../rocm_nvfp4_public_source_20261015/README.md)
+proves ordinary static FP32 JIT, compiler-free replay and the original
+checkpoint projection through both native stages. This packet retains its
+earlier source/binary scope and measurements.

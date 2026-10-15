@@ -69,9 +69,36 @@ dependencies. Failed device completion retains the existing quarantine and
 explicit-close behavior. Profiling all pure SSA members restores all outputs'
 readiness; it does not change numerical policy.
 
-The prepared API supports FP32 and BF16 stores. Ordinary composed public JIT
-and serialized compiler-free replay remain follow-up work; this prepared API
-does not imply either has landed.
+The prepared API supports FP32 and BF16 stores. The named ordinary public
+JIT/replay envelope currently returns FP32; it is described below.
 
 These ranges apply to the admitted pure SSA members. They do not establish
 transactional semantics for recurrent SSM checkpoints or other state effects.
+
+
+## Ordinary JIT and portable replay
+
+A five-host-input Python function containing exactly nvfp4_expand followed by
+the exact K16 scaled_matmul reaches this same native v3 partition through the
+canonical checkpoint program dispatcher. The current ordinary frontend result
+is FP32. Each call consumes all current input contents: warm image/package reuse
+never assumes that host checkpoint arrays are immutable. Explicit import-once
+reuse belongs to the prepared owner.
+
+Portable schema tessera.rocm.nvfp4_source_frontend_program.v1 retains the native
+program, both original member Graph/Schedule/Tile/Target witnesses, static
+checked Target, projected image/descriptors and original Python argument names.
+It is separate from the older lossy frontend/resident schemas. Restoration
+validates the complete frame and digest without compiler tools or Graph
+reconstruction. Digests check integrity, not origin authentication; native
+artifacts must come from a trusted compiler/storage source.
+
+The runtime checks exact parent target, Graph and argument bindings before
+provider access. Compile reports expose the original Graph hash plus ordered
+member Schedule/Tile/Target hashes and the portable artifact hash. These are
+separate native modules, not one monolithic lowered IR.
+
+Fresh-process tests disable both compiler paths and eager numerical oracles.
+Original checkpoint validation additionally checks source identities and
+captured model inputs; full-model quality, bounded frames and wider composition
+remain open.

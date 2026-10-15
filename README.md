@@ -90,6 +90,15 @@ native MLIR folds widening into loads. This is a bounded route, with
 general composition, dynamic layouts and AD remain active work.
 
 
+On RX 9070 XT / gfx1201, an explicit NVFP4 expansion followed by a K16
+block-scaled FP8 matmul now executes through ordinary host-input JIT and portable
+native replay. The compiler owns both stages and their private device edge;
+prepared execution can import weights once and update only activations.
+[Original-checkpoint evidence](benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md)
+covers one Qwen3 layer-0 gate/up projection with FP32 output, not full-model
+accuracy or general NVFP4 support.
+
+
 Support is specific to the operation, shape, dtype, layout, target and execution
 route. Consult the linked evidence before treating a whole backend or domain as
 supported.

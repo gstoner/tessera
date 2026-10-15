@@ -12,6 +12,12 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
 Synchronization key: NVFP4-NATIVE-MULTI-OUTPUT-20261015.
 
+The shared JIT/replay update recognizes the exact gfx1201 source-preserving
+program and records two ordered native members. Not applicable to x86
+physical execution: no target admission, emitter, runtime provider or schedule
+is changed for this backend. Metadata cannot relabel ROCm evidence as sibling
+proof; original-checkpoint execution is gfx1201-only.
+
 The follow-on prepared binding adds HIP partial-root updates and dependency-
 checked stage ranges. Not applicable to x86 execution: its native provider,
 public dispatch and schedule are unchanged. No sibling hardware result is

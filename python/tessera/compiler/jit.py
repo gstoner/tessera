@@ -2344,7 +2344,7 @@ class JitFn:
         if not supports_resident_trace(self.graph_ir):
             return _JIT_FALLBACK
         if self.differentiation_request is not None:
-            raise ValueError("resident lossy checkpoint program has no differentiation contract")
+            raise ValueError("resident checkpoint program has no differentiation contract")
         import hashlib
         import numpy as np
         bound=self._rocm_nvfp4_call_signature.bind(*args,**kwargs)
@@ -2414,8 +2414,12 @@ class JitFn:
 
     def native_nvfp4_packages(self):
         program=self._rocm_nvfp4_last_program
-        return () if program is None else (
-            program.native.ingest.native,program.native.storage.native,program.native.consumer.package)
+        if program is None:
+            return ()
+        from .rocm_nvfp4_source_frontend import TracedSourceNVFP4Program
+        if isinstance(program, TracedSourceNVFP4Program):
+            return (program.native.producer.native, program.native.consumer)
+        return (program.native.ingest.native,program.native.storage.native,program.native.consumer.package)
 
 
     def _try_nvidia_lhs_call(self, args, kwargs):
@@ -3613,7 +3617,29 @@ class JitFn:
             ),
         }
         if self._rocm_nvfp4_last_program is not None:
-            target_decision["rocm_gfx1201"] = "canonical_rocm_nvfp4_program; three ordered native packages"
+            target_decision["rocm_gfx1201"] = f"canonical_rocm_nvfp4_program; {len(self.native_nvfp4_packages())} ordered native packages"
+            packages = self.native_nvfp4_packages()
+            receipts = self._rocm_nvfp4_last_receipts
+            if len(receipts) == len(packages) and all(
+                    r.get("ok") and r.get("execution_kind") == "native_gpu" for r in receipts):
+                import json
+                from .rocm_nvfp4_source_frontend import TracedSourceNVFP4Program
+                program = self._rocm_nvfp4_last_program
+                if isinstance(program, TracedSourceNVFP4Program):
+                    schedules: tuple[str, ...] = (program.native.producer.schedule_ir, program.native.consumer_schedule_ir)
+                else:
+                    schedules = (program.native.ingest.schedule_ir, program.native.storage.schedule_ir,
+                                 program.native.consumer.schedule_ir)
+                ir_hashes = {"graph_ir": _cr.hash_ir_text(program.graph_ir)}
+                for layer, values in (
+                    ("schedule_ir", [_cr.hash_ir_text(s) for s in schedules]),
+                    ("tile_ir", [_cr.hash_ir_text(p.tile_ir) for p in packages]),
+                    ("target_ir", [p.image.target_ir_digest for p in packages]),
+                ):
+                    ir_hashes[layer] = _cr.hash_ir_text(json.dumps(values, separators=(",", ":")))
+                plan_hash = self.runtime_artifact().artifact_hash
+                target_decision["rocm_gfx1201"] += "; native_packages.executable=True; stage_hashes=ordered"
+
         if self._nvidia_lhs_last_program is not None:
             target_decision["nvidia_sm120"] = "canonical_nvidia_lhs_program; ordered checked native packages"
             receipts = self._nvidia_lhs_last_receipts

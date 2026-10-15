@@ -38,3 +38,12 @@ quality acceptance remain open. No sibling hardware or promotion claim.
 
 Final focused native/ABI/device/audit/registry gate: 359 passed. The source
 manifest binds the measured files and compiler/provider identities in packets.
+
+
+## Subsequent public/checkpoint proof
+
+The later source under
+[rocm_nvfp4_public_source_20261015](../rocm_nvfp4_public_source_20261015/README.md)
+proves ordinary static FP32 JIT, compiler-free replay and the original
+checkpoint projection through both native stages. This packet retains its
+earlier source/binary scope and measurements.

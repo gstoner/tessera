@@ -262,6 +262,9 @@ def test_scan_parses_every_ods_form() -> None:
         "schedule.activation",
         "tile.activation_kernel",
         "tessera_rocm.structured_reduction",
+        "tessera.nvfp4_expand",
+        "tile.nvfp4_expand_kernel",
+        "tessera_rocm.nvfp4_expand",
         "tessera_rocm.swmmac",
         "tile.tmem.store",                 # dotted mnemonic
         "tessera.neighbors.halo.region",   # dotted dialect name
@@ -279,11 +282,15 @@ def test_scan_parses_every_ods_form() -> None:
 #: 618 -> 663: 45 unique x86 Graph op records added to the post-#875 baseline.
 # 673 -> 674: native compact tile.transpose_kernel result materialization.
 #: 673 -> 674: native tile.transpose_kernel carrier with Schedule/ROCm consumers.
-_DECLARED_OP_RECORDS = 676
+#: 676 -> 679: native NVFP4 expansion Graph, Tile and ROCm Target records.
+_DECLARED_OP_RECORDS = 679
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:
     assert _TIERS["tessera.matmul"] == "compiler"
+    for name in ("tessera.nvfp4_expand", "tile.nvfp4_expand_kernel",
+                 "tessera_rocm.nvfp4_expand"):
+        assert _TIERS[name] == "compiler"
     assert _TIERS["tessera_rocm.swmmac"] == "compiler"
     assert _TIERS["tile.structured_reduction_kernel"] == "compiler"
     assert _TIERS["tile.transpose_kernel"] == "compiler"

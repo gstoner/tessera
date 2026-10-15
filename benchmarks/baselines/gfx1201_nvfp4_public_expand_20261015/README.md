@@ -73,3 +73,14 @@ cases and 122 final W8A8/K16 owning-device/default cases. All 33 generated docs
 are in sync. Ruff, typing, compiler-plan ownership, claim lint and Graphify
 update pass. Exact command scopes and logs are described by validation.json
 and the permanent test files. These counts must not be summed as unique tests.
+
+## Review follow-up
+
+Both review findings reproduced before repair: nvfp4_expand was absent from
+the public Python API specification, and the ODS gate still expected 676
+records after three native declarations raised the total to 679.
+The API now documents inputs/results, exact-code and rounded-scale semantics,
+validation, native replay and the remaining integration boundaries. The ODS
+gate pins all three new records and requires real compiler consumers for each.
+The full API/spec/ODS synchronization set passes 779 cases. The before/after
+logs are retained separately; numerical source and benchmark hashes are unchanged.

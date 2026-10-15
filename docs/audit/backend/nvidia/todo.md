@@ -22,9 +22,10 @@ changed root values and pre-provider artifact rejection have RTX5070 proof.
 The native outline remains artifact_only. Existing RHS v7 numbering/ABI is
 unchanged. General producer, dynamic/resident and reverse AD remain open.
 Normal CMake compiler builds and 78 owning source/policy checks pass, including
-direct signed-zero/NaN producer storage checks. Final drift, synchronization and
-full-unit delivery gates remain open; the earlier normalization full-suite
-result does not certify this new source.
+direct signed-zero/NaN producer storage checks. The pre-synchronization focused
+gate passes 754 cases. PR950 is integrated; matching compiler rebuild,
+synchronized regression and publication gates remain open. The earlier
+normalization full-suite result does not certify this new source.
 
 Contract: docs/spec/ir/source_active_row_jvp.md.
 Evidence: benchmarks/baselines/sm120_active_source_jvp_runtime_20261015/README.md.
@@ -41,7 +42,7 @@ affine root arguments retain their original derivative roles.
 Unspecified accumulator behavior is preserved. Conservative reverse-mode
 numeric-policy provenance debt remains open.
 
-Follow-up required: actual active-source derivative SSA needs a multi-result Schedule/Tile producer and additive CUDA owner. Existing paired v7 RHS-only packages and exact-device evidence are unchanged.
+Historical follow-up at the normalization checkpoint: active-source derivative SSA needed a multi-result Schedule/Tile producer and additive CUDA owner. W11-ACTIVE-SOURCE-20261015 above now provides the named static source-active route; general composed/reverse/resident AD remains open. Existing paired v7 RHS-only contracts are unchanged.
 
 Contract: docs/spec/ir/normalization_ad_accumulator_policy.md.
 Evidence: benchmarks/baselines/native_normalization_ad_accum_20261015/README.md.

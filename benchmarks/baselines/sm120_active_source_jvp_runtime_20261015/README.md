@@ -1,3 +1,7 @@
+---
+last_updated: 2026-10-15
+---
+
 # Source-active SM120 JVP and portable replay
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.

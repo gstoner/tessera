@@ -7,15 +7,14 @@ Reference date for staleness: **2026-10-15**.
 ## Headline
 
 - **166** docs catalogued across the canonical doc tree.
-- **164** carry a `last_updated:` marker; **2** are undated (invisible to the freshness audit until tagged).
-- **35** updated within the last 30 days.
+- **165** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **36** updated within the last 30 days.
 - **67** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
 
 These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-form `Last updated:` line to participate in the audit.  Until tagged, the freshness signal is unavailable.
 
-- `docs/spec/ir/source_active_row_jvp.md`
 - `docs/reference/tessera_frontend_lanes.md`
 
 ## Per-root inventory
@@ -51,7 +50,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `ir/rocm_nvfp4_source_preserving_program.md` | - | 2026-10-15 | 0 | ✓ |
 | `ir/sm120_activation_schedule_tile_contract.md` | - | 2026-10-15 | 0 | ✓ |
 | `ir/sm120_paired_tensor_program_contract.md` | - | 2026-10-15 | 0 | ✓ |
-| `ir/source_active_row_jvp.md` | - | _undated_ | - | _body_ |
+| `ir/source_active_row_jvp.md` | - | 2026-10-15 | 0 | ✓ |
 
 ### `docs/guides/`
 

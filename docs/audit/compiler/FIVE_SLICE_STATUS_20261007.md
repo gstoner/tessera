@@ -7,24 +7,23 @@ audit_role: reference
 
 This is an evidence ledger, not a closure declaration. The original
 PR895–903 stack is historical delivery context; later changes through merged
-PR948 extend the source and proof below. PR949 contains the additional
-native/public NVFP4 expansion slice; its publication checks are tracked on GitHub. Older entries retain their original
+PR950 extend the source and proof below. PR949 and PR950 deliver native/public
+NVFP4 expansion and source-preserving multi-output ownership. Older entries retain their original
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
 
 ## Current reconciliation — 2026-10-15
 
 
-Queued after PR949 on codex/rocm-native-multi-output-owner, the source-preserving
+Merged PR950 (2e8e2cfab) delivers the source-preserving
 program now carries actual Graph SSA through two native members and checked
 private ownership. Its frozen gate passes 829 cases. Original pinned Qwen3
 M256 gate/up projections pass the FP32 arithmetic bound and produce identical
 bytes through ordinary JIT, compiler-free replay and prepared import-once
 execution. Full checkpoint frames exceed the 128 MiB idle-allocation budget;
 the packet separates that host boundary from native graph-dispatch timings.
-PR949's required checks are green on a6b78d082; it remains open pending the
-user's merge decision. The subsequent queued source still requires its own
-publication CI. None of these gates closes the aggregate five-slice objective.
+PR949 and PR950 are merged. Their publication waits are closed; the pending
+NVIDIA branch has separate source-bound validation and publication gates. None of these gates closes the aggregate five-slice objective.
 Evidence: benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md.
 
 The original five requirements remain open as an aggregate. Their current
@@ -32,8 +31,8 @@ proved envelopes and remaining work are:
 
 | Slice | Latest additional proof | Remaining requirement |
 | --- | --- | --- |
-| GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; nvfp4_model_activations_20261015 adds actual BF16 model layer inputs, 18 native format arms and separately labeled decoded-weight projection error. Source-preserving K16 consumers now pass on identical captured inputs (6.23% native RMS at M256; one shared native image), with separate device/host costs; see nvfp4_checkpoint_k16_20261015. PR949 adds native expansion plus ordinary public JIT, serialized/fresh-process replay without compiler tools, and bitwise pinned-checkpoint output proof under gfx1201_nvfp4_public_expand_20261015. | The queued native multi-output branch proves resident source-preserving composition, import-once ownership, ordinary static FP32 JIT and compiler-free replay with original checkpoint inputs; see rocm_nvfp4_public_source_20261015. Bounded/wider composition and representative-corpus/full-model quality acceptance remain open. |
-| NVIDIA W1.1 | Named static FP16/BF16 producer-prefix/RHS-only JVP now exports a public two-output RuntimeArtifact and replays without a compiler on RTX 5070; see sm120_tensor_rhs_jvp_runtime_20261015. Earlier resident/primal receipts retain their recorded scope. | Generic producer/accumulator reconstruction, mixed or pitched resident entry, wider composition and resident AD; Merged PR947 adds the named RMSNorm -> ReLU -> matmul storage boundary and its separately recorded RTX 5070 proof. |
+| GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; nvfp4_model_activations_20261015 adds actual BF16 model layer inputs, 18 native format arms and separately labeled decoded-weight projection error. Source-preserving K16 consumers now pass on identical captured inputs (6.23% native RMS at M256; one shared native image), with separate device/host costs; see nvfp4_checkpoint_k16_20261015. PR949 adds native expansion plus ordinary public JIT, serialized/fresh-process replay without compiler tools, and bitwise pinned-checkpoint output proof under gfx1201_nvfp4_public_expand_20261015. | Merged PR950 proves resident source-preserving composition, import-once ownership, ordinary static FP32 JIT and compiler-free replay with original checkpoint inputs; see rocm_nvfp4_public_source_20261015. Bounded/wider composition and representative-corpus/full-model quality acceptance remain open. |
+| NVIDIA W1.1 | The pending NVIDIA branch adds native static FP16/BF16 active-source RMSNorm -> ReLU -> matmul JVP through Graph/Schedule/Tile/NVIDIA/LLVM-PTX, a checked three-stage owner and compiler-free paired replay. The pre-synchronization normal-build gate passes 754 cases; see sm120_active_source_jvp_runtime_20261015. Prior RHS-only proof retains its own source scope. Earlier resident/primal receipts retain their recorded scope. | Generic producer/accumulator reconstruction, mixed or pitched resident entry, wider composition and resident AD; Merged PR947 adds the named RMSNorm -> ReLU -> matmul storage boundary and its separately recorded RTX 5070 proof. |
 | NVIDIA saved-LSE forward | The bounded saved-LSE package preserves O/LSE through native sequence projection, schema 5/6 and compiler-free replay; see bounded_saved_lse_jvp_20261011. | Wider storage/masks, nested/composed output and general attention integration. |
 | NVIDIA attention backward | Bounded paired JVP/reverse, broadcast physical bias extents, trace-at-one replay and retained generations are covered by bounded_saved_lse_jvp_20261011; static resident reverse has its own sm120_resident_attention_vjp_20261009 receipt. | Dynamic/composed resident reverse, broader AD and independent performance promotion. |
 | ROCm routes/performance | The current FP8 candidate records independent RHS formats, shape-independent unsplit images, ordinary textual JIT, 60 gfx1201 cases and separate gfx1151 LDS proof in rocm_fp8_shape_cache_20261014. | PR948 candidate delivery is merged. Wider image families/layouts, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution remain open. |

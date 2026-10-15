@@ -150,7 +150,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
   decoded-weight projection RMS is 6.08% shipped, 7.42% direct and 9.74%
   ingested at M256. Full-model/representative-corpus quality acceptance and
   selector promotion remain open.
-- Latest: [2026-10-15 — NVFP4 ingest quality on captured model inputs](INTEGRATED_COMPILER_LOG.md#2026-10-15--nvfp4-ingest-quality-on-captured-model-inputs)
+- Latest: [2026-10-15 — checkpoint-preserving native K16 consumer control](INTEGRATED_COMPILER_LOG.md#2026-10-15--checkpoint-preserving-native-k16-consumer-control)
 
 ### ROCM-SPLIT-K-1
 

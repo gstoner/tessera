@@ -485,6 +485,14 @@ Parity validated for this gfx1201 continuous FP32 chain and forward derivative. 
 
 
 
+## NVFP4-CHECKPOINT-K16-20261015 — source-preserving consumer control
+
+Owner ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Synchronization key: NVFP4-CHECKPOINT-K16-20261015.
+Captured-input source/checkpoint identities match the earlier FP8/MXFP8/MXFP4 packet. Host expansion retains K16 source weights with only FP32 scale rounding; it is diagnostic, not a new production NVFP4 decoder. Owning RX9070XT/gfx1201 parity validated for two native LDS K16 consumers: M128/M256 share one image, zero arithmetic-bound violations, source native RMS 6.23% at M256 and separate 1.332 ms device-dispatch / 19.896 ms host timing. The native source-preserving producer and resident composition remain follow-up required.
+Full-model quality acceptance, native packed transport and strategy promotion remain open; the cross-packet quality characterization is not a controlled timing A/B.
+Evidence: benchmarks/baselines/nvfp4_checkpoint_k16_20261015/README.md.
+
 ## ROCM-K16-SCALE-GROUPS-20261015 — legal native group defaults
 
 Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-NVFP4-INGEST-1.

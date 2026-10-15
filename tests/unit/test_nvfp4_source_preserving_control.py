@@ -64,3 +64,10 @@ def test_source_storage_and_invalid_scale_planes_reject(kind):
         scales[0, 0] = np.nan
     with pytest.raises((TypeError, ValueError)):
         expand_projection_control([NVFP4Projection("gate", codes, scales, 0.125)])
+
+
+def test_negative_zero_scale_is_retained_by_the_reference_control():
+    source = projection()
+    scales = np.full(source.e4m3_scales.shape, -0.0, dtype=ml_dtypes.float8_e4m3fn)
+    _, expanded = expand_projection_control([NVFP4Projection("gate", source.packed_codes, scales, 0.125)])
+    np.testing.assert_array_equal(expanded.view(np.uint32), np.full(expanded.shape, 0x80000000, np.uint32))

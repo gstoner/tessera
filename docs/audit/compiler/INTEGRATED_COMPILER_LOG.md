@@ -12358,3 +12358,26 @@ Evidence: benchmarks/baselines/gfx1201_fp8_k16_default_20261015/README.md,
 compiler-red.txt, compiler-green.txt, existing-device-controls.txt,
 odd-device-cases.txt, source-k16-control.json and legacy-image-identity.json.
 <!-- entry-fields:end -->
+
+### 2026-10-15 — checkpoint-preserving native K16 consumer control
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync NVFP4-CHECKPOINT-K16-20261015.
+
+Outcome: real checkpoint and captured model-input identities match the earlier
+three-format packet. Source-preserving host expansion has 2.68e-8 relative
+weight error from FP32 scale rounding; native LDS K16 consumers pass independent
+f32/BF16 bounds at M128 and M256 and share one image. At M256 native projection
+RMS is 6.23% against BF16, with separately recorded 1.332 ms graph execution/
+dispatch and 19.896 ms completed host time. The earlier ingested arm has 9.89%
+RMS on matching inputs, but this cross-epoch characterization is not a timing
+A/B or an isolated dtype comparison. Input/control guards pass 51 cases.
+
+Remaining: implement a compiler-owned source-preserving producer and resident
+composition, preserving source K16 scales/globals and declared FP32 rounding;
+evaluate packed storage and full-model quality. No default promotion, sibling
+physical proof transfer or five-slice completion claim.
+
+Evidence: benchmarks/baselines/nvfp4_checkpoint_k16_20261015/README.md,
+checkpoint-k16.json, comparison.json and final-input-tests.txt.
+<!-- entry-fields:end -->

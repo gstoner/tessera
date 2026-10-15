@@ -411,6 +411,14 @@ Not applicable to AVX-512 physical lowering: this dispatches only to gfx1201. Na
 
 
 
+## NVFP4-CHECKPOINT-K16-20261015 — source-preserving consumer control
+
+Owner ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Synchronization key: NVFP4-CHECKPOINT-K16-20261015.
+Captured-input source/checkpoint identities match the earlier FP8/MXFP8/MXFP4 packet. Host expansion retains K16 source weights with only FP32 scale rounding; it is diagnostic, not a new production NVFP4 decoder. Not applicable to AVX-512 physical execution: no x86 route, ABI, arithmetic, dtype or selector change. CPU reference preparation is not Tessera x86 code-generation proof.
+Full-model quality acceptance, native packed transport and strategy promotion remain open; the cross-packet quality characterization is not a controlled timing A/B.
+Evidence: benchmarks/baselines/nvfp4_checkpoint_k16_20261015/README.md.
+
 ## ROCM-K16-SCALE-GROUPS-20261015 — legal native group defaults
 
 Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-NVFP4-INGEST-1.

@@ -1,0 +1,72 @@
+{
+  "schema": "tessera.nvfp4_checkpoint_k16_validation.v1",
+  "measurement_revision": "6511429a7566c3c8b8a1f6aa0fc9ab7d67553018",
+  "native_compiler_source_revision": "8873a4b64badcfa205d6702779823999656bba05",
+  "device": {
+    "architecture": "gfx1201",
+    "name": "AMD Radeon RX 9070 XT"
+  },
+  "source_sha256": {
+    "benchmarks/rocm/benchmark_nvfp4_source_preserving_control.py": "fbf46aa7d642541c22ddba7d075481f2d432e9b8374ba7b397ee79e68986792d",
+    "benchmarks/rocm/benchmark_gfx1201_three_formats.py": "6fa36ec1e151c66f81b6dc745d9d0bba775072df288fd6db894b6696f6a97407",
+    "benchmarks/rocm/benchmark_rocm_nvfp4_checkpoint.py": "9c6b1a5650eee59ca85625684ca8377d846340fef6f145a7d21ea5539e0416ab",
+    "python/tessera/compiler/rocm_fp8_blockscale.py": "430a298fe4c84942eef535d169c1a4e723bc4289d92b9ebee0238f5d03969fca",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "72541ba5daeb6ab2d6cfa8e804dc61aa127385158c40e80ddb6daf61830ce0a4",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "378f52f073dac798fc39b567c20478a155c3c060a5848656de77ea3c4e756282",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "9754db9854521001c05087989690e942d37ff30848d0eb3638762af75df78f55"
+  },
+  "binary_sha256": {
+    "TESSERA_OPT": "d3ca49c2182ac8f14b5988469f52d9ab4dffb3accdb90ff49c37ccdbda040803",
+    "TESSERA_ROCM_OPT": "8c726af6384c0d323b108ea0eae2726d4ab66f2692af72806a57f9208cc9d455",
+    "TESSERA_ROCM_NATIVE_IMAGE_LIB": "d0b0a6eac32e58d812b9c78ac3c972c82a03cc75976b2673652b26d68fed5045",
+    "TESSERA_ROCM_NATIVE_MOVEMENT_LIB": "0b539c63f8163057d37f9e7584bd86dd76080a9c5ded7fce52ec022381799eeb"
+  },
+  "gates": {
+    "native_model_input_shapes": 2,
+    "shared_native_images": 1,
+    "native_rounding_probe_lanes": 64,
+    "unique_rounding_scenarios": 18,
+    "rounding_mismatches": 0,
+    "control_cases": 18,
+    "combined_input_guards": 51,
+    "delivery_guards": 37,
+    "final_doc_guards": 19,
+    "generated_documents": 33,
+    "ruff": "passed",
+    "mypy_source_files": 1,
+    "graphify": "AST refresh complete; archival warnings retained",
+    "measurement_torch_present": false
+  },
+  "scope": {
+    "source_expansion": "host diagnostic only; native producer remains open",
+    "native_consumer": "owning gfx1201 LDS FP8 K16 packages",
+    "rounding_probe": "GPU-IR leaf only; registered producer needs its own end-to-end proof",
+    "quality": "layer-0 projection proxy on captured inputs; full-model acceptance open",
+    "comparison": "input/source matched across compiler epochs; not controlled timing A/B",
+    "strategy_promotion": false,
+    "sibling_physical_claims": "none"
+  },
+  "evidence_sha256": {
+    "README.md": "25263980e1a8e956985c55f1593a73c4688b7b32458b5da3bef95755a54522c7",
+    "benchmark-terminal.json": "61570fda6986fcd6f707e9ddb1a791dc8a00cb96543a5b3a54152eb946886bd6",
+    "benchmark.txt": "fafacfd2204a5a9948ba7b59a3cf115a7854549796acfa8153d438be66ebca03",
+    "checkpoint-k16.json": "b1be15d7ef30d29f336aaaac05e05eaad7974334c4a33183863490b1c3091ab7",
+    "claims.txt": "bf5d4cc729d2f06fb82724680faf43ff5f4cc73c5b1e461c791adc0ca27049b1",
+    "comparison.json": "68f35c14b7ed3e7436e1462b7e1a1e4a4f822f1e4b526c1a5f0cd3e8e228c677",
+    "d718b90ab60f5cd9ca2a6b95515c4ee412e8db9771127ceff7479d9900d26ad4.s.xz": "f3e40a99e9f0504b317e95a2eeada5028439e399488f452ebdd3e2a42c6b6f4e",
+    "delivery-tests.txt": "e770128b197f525b36a574413b49fa39636729653724b34791e23b1c59e33ba5",
+    "final-doc-tests.txt": "3568f0508cf800472d62c5b42420fedd09850a6e047b61d4a61e70c83766cc62",
+    "final-input-tests.txt": "755908e158fd3f671988d4aeb217c50aa09e5a73c014505e950b52673fe837b1",
+    "final-ruff.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "graphify.txt": "5f1c645b0b492d769c4d6849d596981bfdf21fc1d0f8e59a36dc665251ddf568",
+    "initial-input-tests.txt": "7fb6472ebbd4c2076c14b39e2a58e20626276b5a548320384d0312495a083214",
+    "mypy.txt": "5d4b6d285b77932e3d08212c3b4974d0a803f98ec60408ac6ccf6a063fa6c19e",
+    "plan.txt": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+    "rounding-probe.json": "bf6729257d3016587d333ef1ccdeb05d91ae3a048b61d894df33a6ad8c1e7a5f",
+    "rounding-probe.mlir": "0ecaf5a148bcf411ab2e8a89ca8bcae171ce69024ad282adc4eccce7b69ad5cd",
+    "rounding-probe.txt": "66ec0da9b172e96cc67383c9426b69661f7bc27e5fb31ae157517cc7b823c0c4",
+    "rounding_probe.py": "76bf4478b4ec095fb163e87d5b0920255582f9227cc81255806043b81b8d0dd9",
+    "ruff.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  }
+}

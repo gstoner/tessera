@@ -22,6 +22,12 @@ Follow-up required for Metal or Apple CPU package integration. Generic linalg/LL
 Contract: docs/spec/ir/normalization_ad_accumulator_policy.md.
 Evidence: benchmarks/baselines/native_normalization_ad_accum_20261015/README.md.
 
+Frozen 861f4ad6b passes the full non-slow unit gate on Super-Bear WSL:
+26,392 passed, 7,676 skipped and 876 deselected. Matching LLVM/MLIR 23.1.1
+core/ROCm tools and the repaired missing-optimizer lit gate are recorded in
+the packet. This is host/compiler proof for the committed arithmetic fix;
+later isolated candidates retain separate certificates.
+
 
 
 ## W11-TENSOR-RHS-JVP-20261015 — frozen full regression

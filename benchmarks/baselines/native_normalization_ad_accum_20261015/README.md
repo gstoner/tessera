@@ -29,3 +29,22 @@ can still leave conservative NUMPOL-CARRIER-1 provenance debt.
 
 Contract: docs/spec/ir/normalization_ad_accumulator_policy.md.
 The original five-slice aggregate remains open.
+
+
+## Frozen full-unit gate
+
+The clean committed source 861f4ad6bd5cf693f2249572fbce4f1feb5fe2b4 passes the
+full non-slow tests/unit gate on Super-Bear WSL: 26,392 passed, 7,676 skipped,
+876 deselected and 11 warnings in 1983.33 seconds. LLVM/MLIR is 23.1.1 with
+assertions; core and matching ROCm optimizer hashes are in full-unit-repair.json.
+Raw logs and both source/environment fingerprints are retained beside it.
+
+The initial run had one failing pytest gate: all configured ROCm lit fixtures
+invoked a missing tessera-rocm-opt. Building that target fixed the command;
+the exact gate passed and the complete suite was rerun. This also enabled
+additional compiler coverage. Source and tests were unchanged between runs.
+
+This certificate covers the committed arithmetic fix. The later isolated
+explicit-policy Schedule extension and active-source outline have separate
+source/compiler epochs. It is host/compiler evidence, with no new sibling
+GPU execution or physical performance promotion.

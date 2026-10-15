@@ -1,0 +1,15 @@
+{
+  "revision": "861f4ad6bd5cf693f2249572fbce4f1feb5fe2b4",
+  "dirty": "",
+  "compiler_sha256": "d15181ff8cdceb73f45067f32cfe065ca63591441f752f2d0efb6872db2b667a",
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests/unit",
+    "-q",
+    "-m",
+    "not slow"
+  ],
+  "pid": 862814
+}

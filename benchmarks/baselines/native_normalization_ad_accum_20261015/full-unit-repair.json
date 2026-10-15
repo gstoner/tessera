@@ -1,0 +1,29 @@
+{
+  "source_revision": "861f4ad6bd5cf693f2249572fbce4f1feb5fe2b4",
+  "scope": "full non-slow tests/unit on clean committed normalization AD source, Super-Bear WSL",
+  "result": {
+    "passed": 26392,
+    "skipped": 7676,
+    "deselected": 876,
+    "warnings": 11,
+    "elapsed_seconds": 1983.33
+  },
+  "initial_result": {
+    "failed": 1,
+    "passed": 26371,
+    "skipped": 7696,
+    "deselected": 876
+  },
+  "initial_failure": "all ROCm lit fixtures invoked an absent tessera-rocm-opt; CMake had generated the site before that target was built",
+  "repair": "built matching tessera-rocm-opt with unchanged source; exact pytest lit gate passed; full suite rerun",
+  "compiler_sha256": "d15181ff8cdceb73f45067f32cfe065ca63591441f752f2d0efb6872db2b667a",
+  "rocm_opt_sha256": "f62f3f541e33a68eb545b80d374d009f94178045a1bcd122ec62e24621da3b62",
+  "isolated_candidates_included": false,
+  "test_state_weakened": false,
+  "logs_sha256": {
+    "full-unit-frozen-861f4ad6b.log.xz": "9ff63db9e48ed2448e5a12e7e40b25586f75af8ca11671745808d140d4a981c1",
+    "full-unit-frozen-rocm-built-861f4ad6b.log.xz": "a02b791bdedf126c92d78f031402203df09d1da8a5e5ce386be2ef0a73528a53",
+    "full-unit-source-861f4ad6b.json": "a2baa48c4f58dd25955bc56340ec1bfb3f8c333b0afa9a0f7a266389f172e1a1",
+    "full-unit-source-rocm-built-861f4ad6b.json": "f316cb2fe3d3c97605b79496229a19c474532e342220bdfc12d690bc02e86580"
+  }
+}

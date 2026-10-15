@@ -60,6 +60,14 @@ joins the standard 33-document drift gate; numerical/runtime scope is unchanged.
 
 ## Delivery gates
 
+NORM-AD-ACCUM-20261015: frozen 861f4ad6b passes the full non-slow unit gate
+(26,392 passed, 7,676 skipped, 876 deselected) on Super-Bear WSL after building
+the missing matching ROCm optimizer and rerunning the complete suite.
+Evidence: benchmarks/baselines/native_normalization_ad_accum_20261015/README.md.
+This validates the committed normalization derivative arithmetic slice; the
+native multi-result producer and wider five-slice obligations remain open.
+
+
 The aggregate is not ready to claim full completion. Deliver reviewable
 slices against merged main, synchronize affected owning builds, and run
 registry/lifecycle, regression and generated-document/Graphify gates.

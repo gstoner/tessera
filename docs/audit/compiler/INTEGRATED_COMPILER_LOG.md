@@ -12362,7 +12362,7 @@ odd-device-cases.txt, source-k16-control.json and legacy-image-identity.json.
 ### 2026-10-15 — checkpoint-preserving native K16 consumer control
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: pending; sync NVFP4-CHECKPOINT-K16-20261015.
+PRs: [#949](https://github.com/gstoner/tessera/pull/949); sync NVFP4-CHECKPOINT-K16-20261015.
 
 Outcome: real checkpoint and captured model-input identities match the earlier
 three-format packet. Source-preserving host expansion has 2.68e-8 relative
@@ -12385,7 +12385,7 @@ checkpoint-k16.json, comparison.json and final-input-tests.txt.
 ### 2026-10-15 — native source-preserving NVFP4 expansion primitive
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: pending; sync NVFP4-NATIVE-EXPAND-20261015.
+PRs: [#949](https://github.com/gstoner/tessera/pull/949); sync NVFP4-NATIVE-EXPAND-20261015.
 
 Outcome: A distinct registered Graph operation infers exact FP8 code and FP32
 K16 scale-plane outputs. Native Graph/Schedule/Tile/ROCm/LLVM lowering preserves
@@ -12408,7 +12408,7 @@ Evidence: benchmarks/baselines/gfx1201_nvfp4_native_expand_20261015/README.md.
 ### 2026-10-15 — public native NVFP4 expansion and portable replay
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: pending; sync NVFP4-PUBLIC-EXPAND-20261015.
+PRs: [#949](https://github.com/gstoner/tessera/pull/949); sync NVFP4-PUBLIC-EXPAND-20261015.
 
 Outcome: The ordinary Python frontend and canonical driver now package the
 registered two-result expansion through native Graph/Schedule/Tile/ROCm/LLVM.

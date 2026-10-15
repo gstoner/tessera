@@ -7,7 +7,8 @@ audit_role: reference
 
 This is an evidence ledger, not a closure declaration. The original
 PR895–903 stack is historical delivery context; later changes through merged
-PR947 extend the source and proof below. Older entries retain their original
+PR948 extend the source and proof below. PR949 contains the additional
+native/public NVFP4 expansion slice; its publication checks are tracked on GitHub. Older entries retain their original
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
 
@@ -18,16 +19,16 @@ proved envelopes and remaining work are:
 
 | Slice | Latest additional proof | Remaining requirement |
 | --- | --- | --- |
-| GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; nvfp4_model_activations_20261015 adds actual BF16 model layer inputs, 18 native format arms and separately labeled decoded-weight projection error. Source-preserving K16 consumers now pass on identical captured inputs (6.23% native RMS at M256; one shared native image), with separate device/host costs; see nvfp4_checkpoint_k16_20261015. | Broader layouts/composition and representative-corpus/full-model quality acceptance; the two authored input sequences do not establish it. |
+| GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; nvfp4_model_activations_20261015 adds actual BF16 model layer inputs, 18 native format arms and separately labeled decoded-weight projection error. Source-preserving K16 consumers now pass on identical captured inputs (6.23% native RMS at M256; one shared native image), with separate device/host costs; see nvfp4_checkpoint_k16_20261015. PR949 adds native expansion plus ordinary public JIT, serialized/fresh-process replay without compiler tools, and bitwise pinned-checkpoint output proof under gfx1201_nvfp4_public_expand_20261015. | Native multi-output ownership and a resident source-preserving producer-to-K16-consumer chain; broader layouts/composition and representative-corpus/full-model quality acceptance remain open. |
 | NVIDIA W1.1 | Compact resident two-sided and bounded producer routes, plus single-sided normalization/softmax chains, have owning RTX 5070 receipts under sm120_single_sided_resident_tensor_20261009. | Generic producer/accumulator reconstruction, mixed or pitched resident entry, wider composition and resident AD; Merged PR947 adds the named RMSNorm -> ReLU -> matmul storage boundary and its separately recorded RTX 5070 proof. |
 | NVIDIA saved-LSE forward | The bounded saved-LSE package preserves O/LSE through native sequence projection, schema 5/6 and compiler-free replay; see bounded_saved_lse_jvp_20261011. | Wider storage/masks, nested/composed output and general attention integration. |
 | NVIDIA attention backward | Bounded paired JVP/reverse, broadcast physical bias extents, trace-at-one replay and retained generations are covered by bounded_saved_lse_jvp_20261011; static resident reverse has its own sm120_resident_attention_vjp_20261009 receipt. | Dynamic/composed resident reverse, broader AD and independent performance promotion. |
-| ROCm routes/performance | The current FP8 candidate records independent RHS formats, shape-independent unsplit images, ordinary textual JIT, 60 gfx1201 cases and separate gfx1151 LDS proof in rocm_fp8_shape_cache_20261014. | Candidate delivery; wider image families/layouts, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution. |
+| ROCm routes/performance | The current FP8 candidate records independent RHS formats, shape-independent unsplit images, ordinary textual JIT, 60 gfx1201 cases and separate gfx1151 LDS proof in rocm_fp8_shape_cache_20261014. | PR948 candidate delivery is merged. Wider image families/layouts, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution remain open. |
 
 The historical red full-unit results below are superseded for their merged
 source by the 26,072-pass, 7,568-skip WSL receipt in
 benchmarks/baselines/native_encoded_scaled_gate_20261014/host-full-unit.txt.
-This is not a full-suite certificate for the current FP8 candidate. Its frozen integrated host lane passes 28,493 tests (5,320 skips) with the
+This is not a full-suite certificate for PR949 or subsequent source. Its frozen integrated host lane passes 28,493 tests (5,320 skips) with the
 matching five-backend LLVM/MLIR 23.1.1 build. Subsequent profile/fixture
 repairs have separate focused and owning-device gates; see the FP8 packet.
 No old failure is represented as a current blocker without reproduction.
@@ -53,7 +54,7 @@ and registers the actually executed public matmul/GEMM profile on gfx1151.
 The fixture passes eight gfx1151 and 24 gfx1201 cases; f16/bf16 are proved on
 both and FP8 pairs only on gfx1201. Shared NVIDIA controls pass 75 cases.
 General capability/layout/dynamic/AD and physical-performance gates remain.
-The a21c24725 post-review head has all reported non-skipped CI checks successful, including unit, compiler-route, audit and validate-required. PR948 remains open; this is a delivery wait, not an unproved test failure.
+The a21c24725 post-review head passed all reported non-skipped CI checks, including unit, compiler-route, audit and validate-required. PR948 merged as 145dc5680 on 2026-10-15; its delivery wait is closed. PR949 is synchronized with that main and has separate owning-device and focused regression receipts; its [publication checks](https://github.com/gstoner/tessera/pull/949/checks) are authoritative for delivery readiness.
 The first review head passed compiler-route proof and audit but found one
 stale partial-dashboard summary in unit CI. Its marker-aware renderer now
 joins the standard 33-document drift gate; numerical/runtime scope is unchanged.

@@ -79,3 +79,12 @@ Remaining: bounded/wider composition, representative model-quality acceptance,
 and wider five-slice performance/NVIDIA obligations. Native target relabeling
 rejects before provider access. No gfx1151, CUDA or Apple evidence is inferred,
 and no default numerical/physical strategy is promoted.
+
+## Post-PR949 synchronization
+
+Merged main 51749071b without compiler/runtime source changes. The focused
+owning-device plus audit/diagnostic/pass gate passes 353 cases. All 33 generated
+documents and the compiler-plan gate pass. Initial reruns exposed missing and
+stale provider environment settings after WSL restart; the final gate explicitly
+sets MULTI_OUTPUT, NATIVE_IMAGE and NATIVE_MOVEMENT to the recorded partial
+program provider. Red/configured/final logs are retained separately.

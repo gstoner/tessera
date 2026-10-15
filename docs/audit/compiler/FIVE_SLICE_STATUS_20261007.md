@@ -1746,3 +1746,14 @@ benchmarks/baselines/sm120_relu_flat_20261015/README.md.
 Single-column regression and noisy program enqueue windows prevent default
 promotion. Wider storage/layout/AD and all original five-slice obligations
 remain open. This pending slice does not relabel PR947/948 receipts.
+
+
+Captured profiling follow-through retains the same optional schedule and
+native images. The last validated host frame now has native per-call graphs,
+with lease/context checks and bounded node counts. 681 owning RTX5070 tests
+pass (one Apple-only skip). At M,K,N=129,256,33, captured program medians are
+about 45.7 us serial and 6.1 us flat for both FP16/BF16. This is a device-graph
+domain, not a completed public-call speedup. Profile setup/priming/cleanup wall
+time and inference wall remain separate in the captured.json packet.
+Persistent graphs, captured borrowed-root profiling, wider storage/AD and
+the full original objective remain open.

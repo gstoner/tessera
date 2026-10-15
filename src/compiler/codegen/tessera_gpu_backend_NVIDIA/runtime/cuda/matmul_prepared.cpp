@@ -163,29 +163,66 @@ bool view(Owner &owner, int dtype, int rank, int64_t x, int64_t y, bool column) 
   owner.bytes[index] = expected.bytes;
   return true;
 }
+// Captures borrow the validated owner frame only while its mutex is held.
+// No graph survives this call or follows an arena resize/generation change.
+template <typename Launch>
+bool measureLaunches(CUstream stream, int repeats, bool captured,
+                     Launch launchOnce, float *milliseconds) {
+  CUevent start = nullptr, end = nullptr;
+  CUgraph graph = nullptr;
+  CUgraphExec executable = nullptr;
+  bool status = ok(cuEventCreate(&start,0),"create profile start event") &&
+                ok(cuEventCreate(&end,0),"create profile end event");
+  if (status && captured) {
+    status = ok(cuStreamBeginCapture(stream,CU_STREAM_CAPTURE_MODE_THREAD_LOCAL),
+                "begin prepared profile capture");
+    if (status) {
+      for (int i=0; status && i<repeats; ++i) status = launchOnce();
+      // End even an invalidated capture before draining or retiring resources.
+      const std::string saved = error;
+      CUresult ended = cuStreamEndCapture(stream,&graph);
+      if (status) status = ok(ended,"end prepared profile capture");
+      else error = saved;
+    }
+    if (status)
+      status = ok(cuGraphInstantiate(&executable,graph,0),"instantiate prepared profile");
+    if (status)
+      status = ok(cuGraphLaunch(executable,stream),"prime prepared profile graph") &&
+               ok(cuStreamSynchronize(stream),"complete profile graph prime");
+  }
+  if (status) status = ok(cuEventRecord(start,stream),"record profile start");
+  if (status && captured)
+    status = ok(cuGraphLaunch(executable,stream),"launch prepared profile graph");
+  else if (status)
+    for (int i=0; status && i<repeats; ++i) status = launchOnce();
+  float elapsed = 0;
+  status = status && ok(cuEventRecord(end,stream),"record profile end") &&
+           ok(cuEventSynchronize(end),"complete profile") &&
+           ok(cuEventElapsedTime(&elapsed,start,end),"profile elapsed time");
+  const std::string saved = error;
+  if (!status) cuStreamSynchronize(stream);
+  bool retired = true;
+  if (executable) retired = ok(cuGraphExecDestroy(executable),"retire profile executable") && retired;
+  if (graph) retired = ok(cuGraphDestroy(graph),"retire profile graph") && retired;
+  if (start) retired = ok(cuEventDestroy(start),"retire profile start event") && retired;
+  if (end) retired = ok(cuEventDestroy(end),"retire profile end event") && retired;
+  if (!status) error = saved;
+  if (status && retired) *milliseconds = elapsed / repeats;
+  return status && retired;
+}
+
 // Host-staged and resident execution share the same sealed member kernel ABIs.
 bool submit(Owner &owner, const std::array<CUdeviceptr, 5> &buffers,
             CUdeviceptr edge, std::array<int64_t, 3> dims, CUstream stream, int64_t rhsLeading = 0,
-            int repeats = 1, float *stageTimes = nullptr) {
+            int repeats = 1, float *stageTimes = nullptr, bool captureStages = false) {
   size_t timingIndex = 0;
   auto launch = [&](CUfunction function, unsigned x, unsigned y, unsigned threads,
                     void **args, const char *message) {
     if (!stageTimes)
       return ok(cuLaunchKernel(function,x,y,1,threads,1,1,0,stream,args,nullptr),message);
-    CUevent start = nullptr, end = nullptr;
-    bool status = ok(cuEventCreate(&start,0),"create stage start event") &&
-                  ok(cuEventCreate(&end,0),"create stage end event") &&
-                  ok(cuEventRecord(start,stream),"record stage start");
-    for (int i = 0; status && i < repeats; ++i)
-      status = ok(cuLaunchKernel(function,x,y,1,threads,1,1,0,stream,args,nullptr),message);
-    float elapsed = 0;
-    status = status && ok(cuEventRecord(end,stream),"record stage end") &&
-             ok(cuEventSynchronize(end),"synchronize stage end") &&
-             ok(cuEventElapsedTime(&elapsed,start,end),"stage elapsed time");
-    if (start) cuEventDestroy(start);
-    if (end) cuEventDestroy(end);
-    if (status) stageTimes[timingIndex++] = elapsed / repeats;
-    return status;
+    return measureLaunches(stream,repeats,captureStages,[&]() {
+      return ok(cuLaunchKernel(function,x,y,1,threads,1,1,0,stream,args,nullptr),message);
+    },&stageTimes[timingIndex++]);
   };
   if (owner.producer) {
     int64_t rows = dims[0], columns = dims[2];
@@ -580,9 +617,9 @@ extern "C" int tessera_nvidia_matmul_invoke(
   return 0;
 }
 
-extern "C" int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
+static int profileFrame(uint64_t handle, int repeats,
     float *stageMs, size_t stageCount, float *programMs,
-    TesseraNvidiaMatmulHostView *output) {
+    TesseraNvidiaMatmulHostView *output, bool captured) {
   error.clear();
   if (getpid() != process) return bad("prepared profiling cannot cross fork");
   std::lock_guard<std::mutex> lock(mutex);
@@ -591,7 +628,9 @@ extern "C" int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
   Owner &owner = *found->second;
   const size_t stages = size_t(bool(owner.producer)) + owner.followingProducers.size() +
                         owner.rhsProducers.size() + 1;
-  if (!stageMs || !programMs || !output || repeats <= 0 || repeats > 1000000 || stageCount != stages)
+  if (!stageMs || !programMs || !output || repeats <= 0 ||
+      repeats > (captured ? 4096 : 1000000) || stageCount != stages ||
+      (captured && stages > 65536 / size_t(repeats)))
     return bad("prepared profiling stage/count ABI mismatch");
   if (!owner.hostGeneration || owner.hostGeneration != owner.arena->generation ||
       owner.hostBase != owner.arena->base)
@@ -611,23 +650,12 @@ extern "C" int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
   if ((context && context != owner.context) ||
       !ok(cuCtxGetId(owner.context,&identity),"profiling context identity") || identity != owner.identity)
     return bad("prepared profiling context changed");
-  CUevent start = nullptr, end = nullptr;
-  bool status = ok(cuEventCreate(&start,0),"create program start event") &&
-                ok(cuEventCreate(&end,0),"create program end event") &&
-                ok(cuEventRecord(start,owner.stream),"record program start");
-  for (int i = 0; status && i < repeats; ++i)
-    status = submit(owner,owner.buffers,owner.hostEdge,owner.activeDims,owner.stream);
-  float elapsed = 0;
-  status = status && ok(cuEventRecord(end,owner.stream),"record program end") &&
-           ok(cuEventSynchronize(end),"synchronize program end") &&
-           ok(cuEventElapsedTime(&elapsed,start,end),"program elapsed time");
-  if (start) cuEventDestroy(start);
-  if (end) cuEventDestroy(end);
-  if (status) {
-    *programMs = elapsed / repeats;
+  bool status = measureLaunches(owner.stream,repeats,captured,[&]() {
+    return submit(owner,owner.buffers,owner.hostEdge,owner.activeDims,owner.stream);
+  },programMs);
+  if (status)
     status = submit(owner,owner.buffers,owner.hostEdge,owner.activeDims,owner.stream,
-                    0,repeats,stageMs);
-  }
+                    0,repeats,stageMs,captured);
   if (status)
     status = ok(cuMemcpyDtoH(output->data,owner.buffers[owner.count-1],bytes),
                 "copy profiled output");
@@ -639,6 +667,20 @@ extern "C" int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
     return 1;
   }
   return 0;
+}
+
+// Legacy enqueue-event ABI remains unchanged.
+extern "C" int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
+    float *stageMs, size_t stageCount, float *programMs,
+    TesseraNvidiaMatmulHostView *output) {
+  return profileFrame(handle,repeats,stageMs,stageCount,programMs,output,false);
+}
+
+// Distinct symbol prevents old enqueue loops from being mislabeled as capture.
+extern "C" int tessera_nvidia_matmul_profile_captured(uint64_t handle, int repeats,
+    float *stageMs, size_t stageCount, float *programMs,
+    TesseraNvidiaMatmulHostView *output) {
+  return profileFrame(handle,repeats,stageMs,stageCount,programMs,output,true);
 }
 
 // The final view is the caller's private edge allocation; the earlier views

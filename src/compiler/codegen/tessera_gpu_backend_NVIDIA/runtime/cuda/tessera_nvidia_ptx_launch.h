@@ -98,6 +98,11 @@ int tessera_nvidia_matmul_supports_flat_activation(void);
 int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
     float *stage_ms, size_t stage_count, float *program_ms,
     TesseraNvidiaMatmulHostView *output);
+// Per-call CUDA graphs of the same checked frame, at most 4096 repeats and
+// 65536 member nodes. Graph setup/prime/retirement is outside event timing.
+int tessera_nvidia_matmul_profile_captured(uint64_t handle, int repeats,
+    float *stage_ms, size_t stage_count, float *program_ms,
+    TesseraNvidiaMatmulHostView *output);
 int tessera_nvidia_matmul_close(uint64_t handle);
 int tessera_nvidia_matmul_scratch_stats(uint64_t handle,
     size_t *capacity, size_t *allocations);

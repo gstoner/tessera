@@ -1,0 +1,81 @@
+{
+  "base_revision": "4a22a407bf70c1875bc48d57686abf2a82dc8b5c",
+  "scope": "per-call captured last-host-frame profiling; no IR/arithmetic/default inference change",
+  "source_sha256": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "50dd1fc40362ad1b268c74035532274e81008e0b425ba865ad131f1d3449b2db",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "87090fda4455012637c7c425dfc7e3c731e6e2cad2305757cecd0bc1ce712f25",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "dfaa7f29c584991e13aa6d481f55bd792b8bd1583f60b84f6257e62ee1ee6ac2",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "cb8fd489e916d62dcfb74e5fc19f1743b822986c616275ff0be4c53ce7e90a70",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "d54b0dc8ca5af884ab1aa4bd69cbd778038f18b87b6f9a0b6fde7c9e69277d13",
+    "src/compiler/ir/TileOps.cpp": "41adce40fe5e248316fa545f5a476b5ade79175cbe2076719ec06bf377b80c32",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "05f13abc39e38cd217dd164689b40fb67edfd4a171dd1a73492f9dd13d3fd4c4",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "8fbcc638c0691aadaa469de3174138f99e964b6ed9056b02888db8bf1cf0a626",
+    "src/transforms/lib/NativeSM120TensorProgram.h": "6a0ff7e51cf45d73b14daa71e21684ea4f2c7a1b56aaf69932f4430415264e01",
+    "python/tessera/compiler/native_sm120_tensor_program.py": "17d33a1ee8ce11402814eb1c5c54116d8560abb553d74ae52e86ef24c3156242",
+    "python/tessera/compiler/nvidia_native.py": "3e2999a1e13487bb4cbd5b0f21a0a558214b40b79c58d8ade83ea8017ad29852",
+    "python/tessera/compiler/nvidia_tensor_lhs.py": "9e8641da7afaead9a53209ae22470c6668821f9971c52cb5c9a9c0b4c5958316",
+    "python/tessera/compiler/nvidia_tensor_dag.py": "a9d16470cb19feed6bcf5bbbb949a56b5171cddb120cf27099d072cf73fa6d2f",
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "a4ea2d5df53ab50ec574db3a17766ff7c4c6fa6eed2c410fad73f2e3f5375939",
+    "python/tessera/compiler/backend_manifest.py": "4eac8c2f927e178dcf104c21e4c00637c53d7d6b57306205a901e766b0fb6efc",
+    "python/tessera/compiler/execution_matrix.py": "d1fb68e02513056621433e1a80afa14db3be50b883025d3bcc0985ce0846c978",
+    "python/tessera/runtime.py": "48a616361135b71fde0669a17dc1ca5bf187cbaf3643c9e6b4f195f25883e4fd",
+    "tests/unit/test_sm120_coalesced_activation.py": "7429af7424151a17875d1ce594efe8a341c6771cce39bf73182ecfbcfe0e99c6",
+    "tests/unit/test_nvidia_captured_lhs_profile.py": "3cd191426bdf33bee41e33b1cf9d0b078b671d3239671a1ccf85d11e0c69e73f",
+    "tests/unit/test_sm120_scheduled_activation.py": "2595eeeaffcd250cc388f4d69cebe288d2788c1d2a2cc5a421dc1ffc0d7bb652",
+    "benchmarks/nvidia/benchmark_relu_schedule.py": "10c36a36ab6a2f9b21138e8555d4c1450d71e53e012280122b40f1a525d50cec",
+    "benchmarks/nvidia/relu_capture_probe.cpp": "8f8b99ca9cece0c77726fa9805d3fe89ec80de6d161812cb0ed9d57230d628ea"
+  },
+  "binary_sha256": {
+    "TESSERA_OPT": "0f9abf6d2917b74fd7700cb6b6d077f0108587a50eb38bd5bca1061a9db2499c",
+    "TESSERA_NVIDIA_OPT": "bad7652472d6364322cb629e9fb28751c9df804e84a07d1e6f0db801c9e6e578",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "a963d7b0ef9d2197e2bf79b0650d14d148d0ad9c7a5428fe43c10bfa1530b9d8"
+  },
+  "gates": {
+    "affected": {
+      "passed": 681,
+      "skipped": 1,
+      "skip": "Darwin-only Apple case"
+    },
+    "captured_cases": 13,
+    "red_cases_before_API": 11,
+    "focused_mypy": "passed",
+    "ruff": "passed",
+    "delivery": {
+      "passed": 264,
+      "skipped": 1,
+      "deselected": 65
+    },
+    "generated_docs_in_sync": 33,
+    "compiler_plan": "passed",
+    "public_claims": "passed",
+    "surface_claims": "passed",
+    "graphify": "AST update complete",
+    "host_attribution": "200 numerically correct warm calls; subprocess creation forbidden; scratch unchanged"
+  },
+  "lifetime": "no retained graph; owner/context/generation protected; capture ended and submissions drained on error",
+  "node_limits": {
+    "repeats": 4096,
+    "members_total": 65536
+  },
+  "open": [
+    "publication CI after parent synchronization",
+    "captured borrowed-root profiling and persistent inference graphs",
+    "original five-slice requirements"
+  ],
+  "evidence_sha256": {
+    "captured.json": "8dd0e5d829475aeae8a66195ae9f97d13d60846204c3370a3491911aabdfb5b8",
+    "captured-affected-tests.txt": "f2e8529ef1746292a061734ae1ba6889ea725724dd3a34c2689394661eb780f8",
+    "captured-mypy.txt": "5d4b6d285b77932e3d08212c3b4974d0a803f98ec60408ac6ccf6a063fa6c19e",
+    "captured-red-tests.txt": "7d3027214f0f98a0f0f42d36f1ea0744ae9fb1cfebbde983d19d4fbdb664da38",
+    "captured-delivery-tests.txt": "41403c30ac3c1baf734e477dc13b26291dcc9a19ee4ae4d5c35f200fb3e5b0c2",
+    "captured-generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "captured-graphify.txt": "c6559e2564b85877f013e03a118ccb94d38d08d1b96e4fe10bb2ab8c00b3042f",
+    "host-attribution.json": "169d8bf5b0d7ee7449c8ce71ffe6513b9ce92b267aafb9e5c3b5f57a12ecab0f"
+  },
+  "runtime_build": {
+    "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "kind": "host-only C++17 shared library linked to CUDA driver; no device arithmetic source changed",
+    "flags": "-shared -fPIC -O2 -pthread",
+    "cuda_toolkit": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Tue_Jun_09_02:43:40_PM_PDT_2026\nCuda compilation tools, release 13.3, V13.3.73\nBuild cuda_13.3.r13.3/compiler.38244171_0"
+  }
+}

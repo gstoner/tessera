@@ -1,0 +1,274 @@
+FFFFFFFFFFF                                                              [100%]
+=================================== FAILURES ===================================
+_ test_captured_profile_reuses_valid_frame_without_retaining_graphs[False-serial-f16] _
+
+sm120 = None, storage = 'f16', mode = 'serial', bounded = False
+
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    @pytest.mark.parametrize("mode",["serial","flat_128"])
+    @pytest.mark.parametrize("bounded",[False,True])
+    def test_captured_profile_reuses_valid_frame_without_retaining_graphs(sm120,storage,mode,bounded):
+        p,initial,dtype=program(storage,mode,bounded)
+        owner=PreparedLhsCall(p)
+        rng=np.random.default_rng(151051)
+        retained=[]
+        try:
+            shapes=((17,64,19),(33,96,35),(7,32,9),(17,64,19)) if bounded else ((17,64,19),)*2
+            for shape in shapes:
+                m,k,n=shape
+                a=rng.uniform(-1,1,(m,k)).astype(dtype)
+                b=rng.uniform(-.25,.25,(k,n)).astype(dtype)
+                expected=oracle(a,b)
+                output,_=owner((a,b))
+                before=owner.scratch_stats()
+                for repeats in (7,17):
+>                   profile=owner.profile(repeats=repeats,captured=True)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: PreparedLhsCall.profile() got an unexpected keyword argument 'captured'
+
+tests/unit/test_nvidia_captured_lhs_profile.py:47: TypeError
+_ test_captured_profile_reuses_valid_frame_without_retaining_graphs[False-serial-bf16] _
+
+sm120 = None, storage = 'bf16', mode = 'serial', bounded = False
+
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    @pytest.mark.parametrize("mode",["serial","flat_128"])
+    @pytest.mark.parametrize("bounded",[False,True])
+    def test_captured_profile_reuses_valid_frame_without_retaining_graphs(sm120,storage,mode,bounded):
+        p,initial,dtype=program(storage,mode,bounded)
+        owner=PreparedLhsCall(p)
+        rng=np.random.default_rng(151051)
+        retained=[]
+        try:
+            shapes=((17,64,19),(33,96,35),(7,32,9),(17,64,19)) if bounded else ((17,64,19),)*2
+            for shape in shapes:
+                m,k,n=shape
+                a=rng.uniform(-1,1,(m,k)).astype(dtype)
+                b=rng.uniform(-.25,.25,(k,n)).astype(dtype)
+                expected=oracle(a,b)
+                output,_=owner((a,b))
+                before=owner.scratch_stats()
+                for repeats in (7,17):
+>                   profile=owner.profile(repeats=repeats,captured=True)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: PreparedLhsCall.profile() got an unexpected keyword argument 'captured'
+
+tests/unit/test_nvidia_captured_lhs_profile.py:47: TypeError
+_ test_captured_profile_reuses_valid_frame_without_retaining_graphs[False-flat_128-f16] _
+
+sm120 = None, storage = 'f16', mode = 'flat_128', bounded = False
+
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    @pytest.mark.parametrize("mode",["serial","flat_128"])
+    @pytest.mark.parametrize("bounded",[False,True])
+    def test_captured_profile_reuses_valid_frame_without_retaining_graphs(sm120,storage,mode,bounded):
+        p,initial,dtype=program(storage,mode,bounded)
+        owner=PreparedLhsCall(p)
+        rng=np.random.default_rng(151051)
+        retained=[]
+        try:
+            shapes=((17,64,19),(33,96,35),(7,32,9),(17,64,19)) if bounded else ((17,64,19),)*2
+            for shape in shapes:
+                m,k,n=shape
+                a=rng.uniform(-1,1,(m,k)).astype(dtype)
+                b=rng.uniform(-.25,.25,(k,n)).astype(dtype)
+                expected=oracle(a,b)
+                output,_=owner((a,b))
+                before=owner.scratch_stats()
+                for repeats in (7,17):
+>                   profile=owner.profile(repeats=repeats,captured=True)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: PreparedLhsCall.profile() got an unexpected keyword argument 'captured'
+
+tests/unit/test_nvidia_captured_lhs_profile.py:47: TypeError
+_ test_captured_profile_reuses_valid_frame_without_retaining_graphs[False-flat_128-bf16] _
+
+sm120 = None, storage = 'bf16', mode = 'flat_128', bounded = False
+
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    @pytest.mark.parametrize("mode",["serial","flat_128"])
+    @pytest.mark.parametrize("bounded",[False,True])
+    def test_captured_profile_reuses_valid_frame_without_retaining_graphs(sm120,storage,mode,bounded):
+        p,initial,dtype=program(storage,mode,bounded)
+        owner=PreparedLhsCall(p)
+        rng=np.random.default_rng(151051)
+        retained=[]
+        try:
+            shapes=((17,64,19),(33,96,35),(7,32,9),(17,64,19)) if bounded else ((17,64,19),)*2
+            for shape in shapes:
+                m,k,n=shape
+                a=rng.uniform(-1,1,(m,k)).astype(dtype)
+                b=rng.uniform(-.25,.25,(k,n)).astype(dtype)
+                expected=oracle(a,b)
+                output,_=owner((a,b))
+                before=owner.scratch_stats()
+                for repeats in (7,17):
+>                   profile=owner.profile(repeats=repeats,captured=True)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: PreparedLhsCall.profile() got an unexpected keyword argument 'captured'
+
+tests/unit/test_nvidia_captured_lhs_profile.py:47: TypeError
+_ test_captured_profile_reuses_valid_frame_without_retaining_graphs[True-serial-f16] _
+
+sm120 = None, storage = 'f16', mode = 'serial', bounded = True
+
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    @pytest.mark.parametrize("mode",["serial","flat_128"])
+    @pytest.mark.parametrize("bounded",[False,True])
+    def test_captured_profile_reuses_valid_frame_without_retaining_graphs(sm120,storage,mode,bounded):
+        p,initial,dtype=program(storage,mode,bounded)
+        owner=PreparedLhsCall(p)
+        rng=np.random.default_rng(151051)
+        retained=[]
+        try:
+            shapes=((17,64,19),(33,96,35),(7,32,9),(17,64,19)) if bounded else ((17,64,19),)*2
+            for shape in shapes:
+                m,k,n=shape
+                a=rng.uniform(-1,1,(m,k)).astype(dtype)
+                b=rng.uniform(-.25,.25,(k,n)).astype(dtype)
+                expected=oracle(a,b)
+                output,_=owner((a,b))
+                before=owner.scratch_stats()
+                for repeats in (7,17):
+>                   profile=owner.profile(repeats=repeats,captured=True)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: PreparedLhsCall.profile() got an unexpected keyword argument 'captured'
+
+tests/unit/test_nvidia_captured_lhs_profile.py:47: TypeError
+_ test_captured_profile_reuses_valid_frame_without_retaining_graphs[True-serial-bf16] _
+
+sm120 = None, storage = 'bf16', mode = 'serial', bounded = True
+
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    @pytest.mark.parametrize("mode",["serial","flat_128"])
+    @pytest.mark.parametrize("bounded",[False,True])
+    def test_captured_profile_reuses_valid_frame_without_retaining_graphs(sm120,storage,mode,bounded):
+        p,initial,dtype=program(storage,mode,bounded)
+        owner=PreparedLhsCall(p)
+        rng=np.random.default_rng(151051)
+        retained=[]
+        try:
+            shapes=((17,64,19),(33,96,35),(7,32,9),(17,64,19)) if bounded else ((17,64,19),)*2
+            for shape in shapes:
+                m,k,n=shape
+                a=rng.uniform(-1,1,(m,k)).astype(dtype)
+                b=rng.uniform(-.25,.25,(k,n)).astype(dtype)
+                expected=oracle(a,b)
+                output,_=owner((a,b))
+                before=owner.scratch_stats()
+                for repeats in (7,17):
+>                   profile=owner.profile(repeats=repeats,captured=True)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: PreparedLhsCall.profile() got an unexpected keyword argument 'captured'
+
+tests/unit/test_nvidia_captured_lhs_profile.py:47: TypeError
+_ test_captured_profile_reuses_valid_frame_without_retaining_graphs[True-flat_128-f16] _
+
+sm120 = None, storage = 'f16', mode = 'flat_128', bounded = True
+
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    @pytest.mark.parametrize("mode",["serial","flat_128"])
+    @pytest.mark.parametrize("bounded",[False,True])
+    def test_captured_profile_reuses_valid_frame_without_retaining_graphs(sm120,storage,mode,bounded):
+        p,initial,dtype=program(storage,mode,bounded)
+        owner=PreparedLhsCall(p)
+        rng=np.random.default_rng(151051)
+        retained=[]
+        try:
+            shapes=((17,64,19),(33,96,35),(7,32,9),(17,64,19)) if bounded else ((17,64,19),)*2
+            for shape in shapes:
+                m,k,n=shape
+                a=rng.uniform(-1,1,(m,k)).astype(dtype)
+                b=rng.uniform(-.25,.25,(k,n)).astype(dtype)
+                expected=oracle(a,b)
+                output,_=owner((a,b))
+                before=owner.scratch_stats()
+                for repeats in (7,17):
+>                   profile=owner.profile(repeats=repeats,captured=True)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: PreparedLhsCall.profile() got an unexpected keyword argument 'captured'
+
+tests/unit/test_nvidia_captured_lhs_profile.py:47: TypeError
+_ test_captured_profile_reuses_valid_frame_without_retaining_graphs[True-flat_128-bf16] _
+
+sm120 = None, storage = 'bf16', mode = 'flat_128', bounded = True
+
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    @pytest.mark.parametrize("mode",["serial","flat_128"])
+    @pytest.mark.parametrize("bounded",[False,True])
+    def test_captured_profile_reuses_valid_frame_without_retaining_graphs(sm120,storage,mode,bounded):
+        p,initial,dtype=program(storage,mode,bounded)
+        owner=PreparedLhsCall(p)
+        rng=np.random.default_rng(151051)
+        retained=[]
+        try:
+            shapes=((17,64,19),(33,96,35),(7,32,9),(17,64,19)) if bounded else ((17,64,19),)*2
+            for shape in shapes:
+                m,k,n=shape
+                a=rng.uniform(-1,1,(m,k)).astype(dtype)
+                b=rng.uniform(-.25,.25,(k,n)).astype(dtype)
+                expected=oracle(a,b)
+                output,_=owner((a,b))
+                before=owner.scratch_stats()
+                for repeats in (7,17):
+>                   profile=owner.profile(repeats=repeats,captured=True)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   TypeError: PreparedLhsCall.profile() got an unexpected keyword argument 'captured'
+
+tests/unit/test_nvidia_captured_lhs_profile.py:47: TypeError
+__ test_captured_profile_rejects_stale_lease_and_does_not_break_sibling[f16] ___
+
+sm120 = None, storage = 'f16'
+
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    def test_captured_profile_rejects_stale_lease_and_does_not_break_sibling(sm120,storage):
+        p,values,_=program(storage,"flat_128")
+        first,second=PreparedLhsCall(p),PreparedLhsCall(p)
+        try:
+            first(values)
+>           first.profile(repeats=7,captured=True)
+E           TypeError: PreparedLhsCall.profile() got an unexpected keyword argument 'captured'
+
+tests/unit/test_nvidia_captured_lhs_profile.py:66: TypeError
+__ test_captured_profile_rejects_stale_lease_and_does_not_break_sibling[bf16] __
+
+sm120 = None, storage = 'bf16'
+
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    def test_captured_profile_rejects_stale_lease_and_does_not_break_sibling(sm120,storage):
+        p,values,_=program(storage,"flat_128")
+        first,second=PreparedLhsCall(p),PreparedLhsCall(p)
+        try:
+            first(values)
+>           first.profile(repeats=7,captured=True)
+E           TypeError: PreparedLhsCall.profile() got an unexpected keyword argument 'captured'
+
+tests/unit/test_nvidia_captured_lhs_profile.py:66: TypeError
+__________ test_capture_profile_bounds_and_old_provider_are_explicit ___________
+
+sm120 = None
+
+    def test_capture_profile_bounds_and_old_provider_are_explicit(sm120):
+        p,values,_=program("f16","serial")
+        owner=PreparedLhsCall(p)
+        try:
+            owner(values)
+            for repeats in (0,-1,True,4097):
+                with pytest.raises(ValueError):
+>                   owner.profile(repeats=repeats,captured=True)
+E                   TypeError: PreparedLhsCall.profile() got an unexpected keyword argument 'captured'
+
+tests/unit/test_nvidia_captured_lhs_profile.py:84: TypeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_nvidia_captured_lhs_profile.py::test_captured_profile_reuses_valid_frame_without_retaining_graphs[False-serial-f16]
+FAILED tests/unit/test_nvidia_captured_lhs_profile.py::test_captured_profile_reuses_valid_frame_without_retaining_graphs[False-serial-bf16]
+FAILED tests/unit/test_nvidia_captured_lhs_profile.py::test_captured_profile_reuses_valid_frame_without_retaining_graphs[False-flat_128-f16]
+FAILED tests/unit/test_nvidia_captured_lhs_profile.py::test_captured_profile_reuses_valid_frame_without_retaining_graphs[False-flat_128-bf16]
+FAILED tests/unit/test_nvidia_captured_lhs_profile.py::test_captured_profile_reuses_valid_frame_without_retaining_graphs[True-serial-f16]
+FAILED tests/unit/test_nvidia_captured_lhs_profile.py::test_captured_profile_reuses_valid_frame_without_retaining_graphs[True-serial-bf16]
+FAILED tests/unit/test_nvidia_captured_lhs_profile.py::test_captured_profile_reuses_valid_frame_without_retaining_graphs[True-flat_128-f16]
+FAILED tests/unit/test_nvidia_captured_lhs_profile.py::test_captured_profile_reuses_valid_frame_without_retaining_graphs[True-flat_128-bf16]
+FAILED tests/unit/test_nvidia_captured_lhs_profile.py::test_captured_profile_rejects_stale_lease_and_does_not_break_sibling[f16]
+FAILED tests/unit/test_nvidia_captured_lhs_profile.py::test_captured_profile_rejects_stale_lease_and_does_not_break_sibling[bf16]
+FAILED tests/unit/test_nvidia_captured_lhs_profile.py::test_capture_profile_bounds_and_old_provider_are_explicit
+11 failed in 17.23s

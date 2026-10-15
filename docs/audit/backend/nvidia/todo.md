@@ -9,6 +9,13 @@ last_updated: 2026-10-15
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Synchronization key: W11-RELU-FLAT-20261015.
+Captured-profile follow-through: the native last-host-frame profiler now
+measures complete program and member CUDA graphs with per-call graph lifetime,
+context/lease guards and bounded node counts. 681 owning RTX5070 regressions
+pass (one Apple-only skip), including 13 captured frame/lease cases.
+Captured, enqueue-event, profiling-overhead and inference-wall metrics are
+separate in sm120_relu_flat_20261015/captured.json. Captured borrowed-root
+profiling, persistent inference graphs and default selection remain open.
 Native Graph/Schedule/Tile carries explicit serial or flat_128 ReLU;
 NVIDIA LLVM/NVVM maps adjacent stored elements to adjacent warp lanes.
 The FP16/BF16 NaN-payload and signed-zero policy is unchanged. Hashed

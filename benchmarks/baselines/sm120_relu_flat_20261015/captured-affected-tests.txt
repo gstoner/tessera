@@ -1,0 +1,19 @@
+........................................................................ [ 10%]
+........................................................................ [ 21%]
+........................................................................ [ 31%]
+........................................................................ [ 42%]
+........................................................................ [ 52%]
+........................................................................ [ 63%]
+........................................................................ [ 73%]
+........................................................................ [ 84%]
+...............................................s........................ [ 95%]
+..................................                                       [100%]
+=============================== warnings summary ===============================
+tests/device/nvidia/test_prepared_attention_vjp.py::test_fork_rejects_before_inherited_lock_or_cuda
+  /home/angstorms/scratch/sm120-relu-producer-20261014/tests/device/nvidia/test_prepared_attention_vjp.py:96: DeprecationWarning: This process (pid=639070) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    read,write=os.pipe();pid=os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/_support/apple.py:34: hardware_apple_gpu requires a Darwin host
+681 passed, 1 skipped, 1 warning in 105.57s (0:01:45)

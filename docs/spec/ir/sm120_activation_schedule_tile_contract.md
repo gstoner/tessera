@@ -67,7 +67,7 @@ separation, context identity and retained-output checks remain in force.
 Schedule mutation gates plus exact RTX 5070 public-JIT/bitwise/numerical cases.
 The packet is `benchmarks/baselines/sm120_norm_relu_matmul_20261014/guarded.json`.
 Only the recorded static named envelope has this slice's exact-device proof.
-Symbolic frontend metadata, additional producer/AD envelopes, captured whole-program
+Symbolic frontend metadata, additional producer/AD envelopes, captured borrowed-root resident
 measurement and default activation selection remain open. Sibling backends need
 their own physical consumers and owning-device proof.
 
@@ -93,3 +93,36 @@ and native program/host timing remain separate. Single-column regressions
 and program enqueue noise preclude default-selection claims. See
 benchmarks/baselines/sm120_relu_flat_20261015/README.md for final packet and
 delivery gates. Wider storage/AD/architectures remain independent obligations.
+
+
+## Captured host-frame profiling
+
+PreparedLhsCall.profile(captured=True) is a measurement API for the last
+successful host frame; it does not change inference submission or select a
+different kernel. It calls the distinct native
+tessera_nvidia_matmul_profile_captured symbol. Older providers are rejected
+instead of reporting enqueue timing as captured timing.
+
+Native validation retains the original context, output shape/storage,
+generation and shared-arena lease checks before graph creation. While holding
+the owner mutex, each call captures, instantiates and primes a graph of the
+complete sealed producer/consumer sequence, then measures one graph replay.
+Member graphs use the same launch arguments and checked geometry. No graph
+survives the call or an allocation/active-shape change. Error paths end an
+active capture, drain submissions and invalidate the frame on failure.
+Counts are bounded to 4096 repetitions and 65536 total member nodes.
+
+Returned timing_domain is cuda_graph_batch for capture and
+native_enqueue_event for the unchanged default. Captured event averages
+exclude graph creation, priming, retirement and output download; they include
+device graph dispatch. The benchmark separately records the completed profile
+call wall time, which includes setup and extra calibration execution, and
+ordinary completed prepared inference time. These metrics are not
+interchangeable. Captured borrowed-root resident profiling and persistent
+inference graphs require separate contracts.
+
+The subsequent owning RTX5070 regression passes 681 tests (one Darwin-only
+skip), including 13 new captured-profile cases: static/bounded FP16/BF16
+serial/flat frames, two-sided programs, retained outputs, stale leases,
+sibling recovery, limits and old-provider behavior. Native arithmetic/IR and
+kernel images are unchanged by this profiling extension.

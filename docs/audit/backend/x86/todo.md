@@ -10,6 +10,11 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Synchronization key: W11-RELU-FLAT-20261015.
+Captured-profile assessment: not applicable to x86 physical execution.
+The new API is CUDA-only measurement of a sealed NVIDIA host frame; it adds no
+x86 runtime entry, arithmetic or timing claim. Shared runtime-ABI and
+generated-view gates assess the added native symbol without transferring
+physical results.
 Native Graph/Schedule/Tile carries explicit serial or flat_128 ReLU;
 NVIDIA LLVM/NVVM maps adjacent stored elements to adjacent warp lanes.
 The FP16/BF16 NaN-payload and signed-zero policy is unchanged. Hashed

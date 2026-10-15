@@ -12326,8 +12326,16 @@ RTX5070 gate passes exhaustive payloads, composed numerics, unchanged norm/
 consumer images, retained outputs and two-sided bounded replay.
 Serial remains the default.
 
-Remaining: Final matched packet, affected producer/attention/registry gates,
-publication CI and broader producer/AD/five-slice obligations. Single-column
+Captured-profile follow-through: native per-call CUDA graphs now measure the
+sealed last host frame while holding its lease/context ownership. 681
+RTX5070 regressions pass (one Apple-only skip), including 13 capture cases
+across storage, bounded/two-sided replay, retained outputs, stale leases and
+old providers. The packet separates device graph/event, profile setup wall
+and completed inference wall. This changes profiling transport, not native
+arithmetic or inference selection.
+
+Remaining: Publication CI after parent synchronization, captured borrowed-root
+profiling, persistent inference graphs and broader producer/AD/five-slice obligations. Single-column
 regression and program enqueue noise prevent default promotion.
 All four queues assessed; no FP8/MXFP8/MXFP4 or sibling proof transferred.
 

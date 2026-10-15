@@ -1,0 +1,72 @@
+{
+  "scope": "instrumented warm prepared call attribution, not latency or throughput comparison",
+  "storage": "f16",
+  "shape_mkn": [
+    129,
+    256,
+    33
+  ],
+  "calls": 200,
+  "instrumented_wall_seconds": 0.05980322899995372,
+  "max_abs_error": 3.814697265625e-06,
+  "subprocess_reentry": "forbidden; all warm calls completed",
+  "native_scratch_stats_before_after": [
+    166144,
+    1
+  ],
+  "rows": [
+    {
+      "file": "/home/angstorms/scratch/sm120-relu-producer-20261014/python/tessera/compiler/prepared_nvidia_lhs.py",
+      "line": 131,
+      "function": "__call__",
+      "primitive_calls": 200,
+      "calls": 200,
+      "self_seconds": 0.0019874750000000003,
+      "cumulative_seconds": 0.05933191
+    },
+    {
+      "file": "/home/angstorms/scratch/sm120-relu-producer-20261014/python/tessera/compiler/prepared_nvidia_matmul.py",
+      "line": 179,
+      "function": "__call__",
+      "primitive_calls": 200,
+      "calls": 200,
+      "self_seconds": 0.043981669,
+      "cumulative_seconds": 0.050211345000000004
+    },
+    {
+      "file": "/home/angstorms/scratch/sm120-relu-producer-20261014/python/tessera/compiler/prepared_nvidia_lhs.py",
+      "line": 149,
+      "function": "<genexpr>",
+      "primitive_calls": 800,
+      "calls": 800,
+      "self_seconds": 0.00021377,
+      "cumulative_seconds": 0.00021377
+    },
+    {
+      "file": "/home/angstorms/scratch/sm120-relu-producer-20261014/python/tessera/compiler/prepared_nvidia_matmul.py",
+      "line": 194,
+      "function": "<genexpr>",
+      "primitive_calls": 600,
+      "calls": 600,
+      "self_seconds": 8.555700000000001e-05,
+      "cumulative_seconds": 8.555700000000001e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/sm120-relu-producer-20261014/python/tessera/compiler/prepared_nvidia_matmul.py",
+      "line": 164,
+      "function": "_check",
+      "primitive_calls": 200,
+      "calls": 200,
+      "self_seconds": 4.7980000000000005e-05,
+      "cumulative_seconds": 4.7980000000000005e-05
+    }
+  ],
+  "source_sha256": {
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "a4ea2d5df53ab50ec574db3a17766ff7c4c6fa6eed2c410fad73f2e3f5375939",
+    "python/tessera/compiler/prepared_nvidia_matmul.py": "d3c48363721feedbf1d636d626c292aaed64f0198ec43251895dd3caf1d8d703",
+    "python/tessera/compiler/nvidia_tensor_lhs.py": "9e8641da7afaead9a53209ae22470c6668821f9971c52cb5c9a9c0b4c5958316",
+    "python/tessera/compiler/nvidia_native.py": "3e2999a1e13487bb4cbd5b0f21a0a558214b40b79c58d8ade83ea8017ad29852"
+  },
+  "provider_sha256": "a963d7b0ef9d2197e2bf79b0650d14d148d0ad9c7a5428fe43c10bfa1530b9d8",
+  "script_source": "from pathlib import Path\nimport cProfile,hashlib,json,os,pstats,subprocess,time\nimport numpy as np\nfrom tests.unit.test_sm120_scheduled_activation import _frontend_program\nfrom tessera.compiler.nvidia_tensor_lhs import package_traced_lhs\nfrom tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall\nfrom tessera import runtime as rt\nassert rt._nvidia_device_name()==\"sm_120\"\n_,values,public=_frontend_program(np.float16,(129,256,33))\ngraph,_=public._trace_frontend_capture(values,{})\nprogram=package_traced_lhs(graph,activation_schedule=\"flat_128\")\nowner=PreparedLhsCall(program)\na,b=values;wide=a.astype(np.float32)\nnormalized=(wide/np.sqrt(np.mean(wide*wide,axis=-1,keepdims=True)+np.float32(1e-5))).astype(np.float16)\nexpected=np.maximum(0,normalized).astype(np.float32) @ b.astype(np.float32)\ntry:\n for _ in range(25):owner(values)\n output,_=owner(values)\n np.testing.assert_allclose(output,expected,atol=.003,rtol=.003)\n before=owner.scratch_stats()\n old_run,old_popen=subprocess.run,subprocess.Popen\n def forbidden(*args,**kwargs):raise AssertionError(\"warm prepared call attempted subprocess/compilation\")\n subprocess.run=forbidden;subprocess.Popen=forbidden\n profiler=cProfile.Profile()\n try:\n  start=time.perf_counter();profiler.enable()\n  for _ in range(200):output,_=owner(values)\n  profiler.disable();wall=time.perf_counter()-start\n finally:\n  subprocess.run=old_run;subprocess.Popen=old_popen\n np.testing.assert_allclose(output,expected,atol=.003,rtol=.003)\n assert owner.scratch_stats()==before\n rows=[]\n for (filename,line,function),(primitive,total,self_seconds,cumulative,callers) in pstats.Stats(profiler).stats.items():\n  if \"tessera/\" in filename:\n   rows.append({\"file\":filename,\"line\":line,\"function\":function,\"primitive_calls\":primitive,\"calls\":total,\"self_seconds\":self_seconds,\"cumulative_seconds\":cumulative})\n rows.sort(key=lambda r:r[\"cumulative_seconds\"],reverse=True)\n packet={\"scope\":\"instrumented warm prepared call attribution, not latency or throughput comparison\",\"storage\":\"f16\",\"shape_mkn\":[129,256,33],\"calls\":200,\"instrumented_wall_seconds\":wall,\"max_abs_error\":float(np.max(np.abs(output-expected))),\"subprocess_reentry\":\"forbidden; all warm calls completed\",\"native_scratch_stats_before_after\":list(before),\"rows\":rows[:30],\"source_sha256\":{p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in (\"python/tessera/compiler/prepared_nvidia_lhs.py\",\"python/tessera/compiler/prepared_nvidia_matmul.py\",\"python/tessera/compiler/nvidia_tensor_lhs.py\",\"python/tessera/compiler/nvidia_native.py\")},\"provider_sha256\":hashlib.sha256(Path(os.environ[\"TESSERA_NVIDIA_PTX_LAUNCH_LIB\"]).read_bytes()).hexdigest(),\"script_source\":Path(__file__).read_text()}\n Path(\"/home/angstorms/scratch/sm120-relu-coalescing-20261014/host-attribution.json\").write_text(json.dumps(packet,indent=2)+\"\\n\")\n for row in rows[:10]:print(row[\"function\"],row[\"calls\"],round(row[\"self_seconds\"]*1000,3),round(row[\"cumulative_seconds\"]*1000,3),flush=True)\nfinally:owner.close()\n"
+}

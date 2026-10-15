@@ -48,6 +48,13 @@ not constitute a production lowering.
 | NVIDIA attention backward | Compiler-generated paired AD, private residual generation, reordered gradient requests, prepared native ownership and replay. Expanded paired timing on RTX 5070: `benchmarks/baselines/nvidia_paired_attention_cost_20261007/README.md`. Explicit static LSE cotangent packages, compiler-free replay and host/resident/event proof: `benchmarks/baselines/nvidia_lse_cotangent_package_20261007/README.md`. Compact/bias-gradient extension: `benchmarks/baselines/nvidia_lse_cotangent_gradient_roles_20261007/README.md`. Native semantic O/LSE differentiation: `benchmarks/baselines/nvidia_multiresult_attention_ad_20261007/README.md`. Public JIT two-result VJP and private residual ownership: `benchmarks/baselines/nvidia_jit_multiresult_owner_20261007/README.md` (72 cases; 600 timing windows). | General dynamic/nested/composed multi-result AD, automatic external-consumer lifetime tracking and broader batching/transpose closure. Explicit static asynchronous capture/backward with registered consumer streams is proved in nvidia_attention_async_owner_20261008. Native paired AD already saves O/LSE; standalone recompute benchmarking is not the current paired policy. |
 | ROCm route/performance closure | Native math and movement on gfx1151/gfx1201, image identity reuse for declared packed envelopes, FP8/MXFP8/MXFP4 guarded vector-scale evaluation. `benchmarks/baselines/rocm_native_math_20261006/README.md`, `rocm_packed_image_identity_20261006/README.md`, `gfx1201_packed_vector_scales_20261006/README.md`. | Paged-KV layouts outside the positive-stride static f32 envelope, broader image-key families, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution. Measured guarded gains do not close these programs. Current-source gfx1201 ingest/movement rerun: `benchmarks/baselines/gfx1201_current_source_revalidation_20261007/README.md`; gfx1151 matching-source math/movement revalidation is recorded below; broader family revalidation remains open. |
 
+The PR948 review additionally binds generic JIT caches to the resolved target
+and registers the actually executed public matmul/GEMM profile on gfx1151.
+The fixture passes eight gfx1151 and 24 gfx1201 cases; f16/bf16 are proved on
+both and FP8 pairs only on gfx1201. Shared NVIDIA controls pass 75 cases.
+General capability/layout/dynamic/AD and physical-performance gates remain.
+First-head CI passed; post-review CI is still required.
+
 ## Delivery gates
 
 The aggregate is not ready to claim full completion. Deliver reviewable

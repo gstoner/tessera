@@ -1,0 +1,36 @@
+{
+  "status": "resolved_target_and_exact_numerical_profile_review_fix",
+  "pre_review_revision": "6c1ab58885ada59645c0489a8d0fa5ce789fc2ef",
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "9a6dcfdc07895fa9c16beee3d651af9d69a86d3f4c3b8acb4eff021a5aa53ca6",
+    "python/tessera/compiler/backend_manifest.py": "ff0c0552d30c99f653efc155c5e59f7ec25d4d38e5a60a91c51bda00a9c9e6d6",
+    "python/tessera/compiler/capabilities.py": "7f9baea00301ee4f67cb88e1f2a4a49e4a39df8f18fe07d1ed47be28d5c6e0c5",
+    "tests/unit/test_jit_canonical_compile.py": "94e50fb14c070734f73b1fabccc79b0ad3698800d146b35a7aec610a3c5e0be8",
+    "tests/unit/test_rocm_public_matmul.py": "f9b69414aedbe2039033407769fb65dc1145da9ba6f48e5580ce3f1d610a8f78"
+  },
+  "results": {
+    "before_cache_fix": "four architecture-switch cases fail",
+    "after_cache_fix": "68 passed, 32 architecture skips",
+    "gfx1201_public_and_host_cache": "35 passed, 24 foreign-architecture skips",
+    "gfx1151_public": "8 passed, 40 foreign/unsupported-FP8 skips; isolated marker warning",
+    "registries": "167 passed, 5 environment skips",
+    "conformance_and_docs": "168 passed; 32 generated documents in sync",
+    "nvidia_shared_control": "75 passed on exact RTX5070"
+  },
+  "logs_sha256": {
+    "review-cache-gates.txt": "8737deddfd4c7bcad70e6184b9003ad90f6c4ad990d96a26e5b1aca9f0d6fe58",
+    "gfx1201-public-tests.txt": "3c621ef9bd82d91cdf9d5501535682aa6cb63decf3cd654ef7c26f9f2583efa0",
+    "gfx1151-public-tests.txt": "27a1075ef33473ee58a105b8a518772752c5e954386231dcdac0ae926ba2b2fd",
+    "review-registry-gates.txt": "a8fea41bc64eb92e8dda409a0c2bd314455715ec295a69a8709791e70efd333f",
+    "review-conformance-doc-gates.txt": "f3f725507b6f15de3b0cf31edaf93c0fa2f35d71bf2374974c5a4b22cc66a70a"
+  },
+  "scope": "The numerical fixture admits only native static compact rank-two fp16/bf16 to f32 on gfx1151; gfx1201 also executes all four OCP FP8 pairs. Broader gfx1151 capability remains artifact_only. Host-only switching is not real multi-GPU execution.",
+  "timing_claim": false,
+  "cache_gate_source_sha256": {
+    "python/tessera/compiler/jit.py": "9a6dcfdc07895fa9c16beee3d651af9d69a86d3f4c3b8acb4eff021a5aa53ca6",
+    "tests/unit/test_jit_canonical_compile.py": "94e50fb14c070734f73b1fabccc79b0ad3698800d146b35a7aec610a3c5e0be8",
+    "python/tessera/compiler/backend_manifest.py": "bb286d10db0bd263c1d6d192eeefa68e0ade2783d7b7ef5f7b2ff8da3d8e6f7d",
+    "python/tessera/compiler/capabilities.py": "8c67bdf735eb56a8956b8c9cb94f4adf12897bf8efa39b8115ad7efcca2763c4"
+  },
+  "source_epoch_note": "The 68-case cache gate precedes the exact numerical-profile registration: its JIT/test hashes are final, while manifest/capabilities still match pre-review 6c1ab5888. The 35-case gfx1201, eight-case gfx1151 and 167-case registry gates validate the final source_sha256 profile. Physical compiler/ROCm runtime source is unchanged."
+}

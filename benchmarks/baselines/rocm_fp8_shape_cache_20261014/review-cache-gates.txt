@@ -1,0 +1,6 @@
+..............................................ssssssssssssssssssssssssss [ 72%]
+ssss............ss..........                                             [100%]
+=========================== short test summary info ============================
+SKIPPED [30] tests/unit/test_rocm_fp8_target_identity.py:92: requires the owning architecture
+SKIPPED [2] tests/unit/test_rocm_matmul_shape_key.py:59: requires explicit gfx1151 device proof gate
+68 passed, 32 skipped in 18.14s

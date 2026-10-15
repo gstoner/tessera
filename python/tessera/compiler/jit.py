@@ -2019,7 +2019,10 @@ class JitFn:
                     return array
                 call.close()
                 del self._native_prepared_movement_calls[signature]
-        key = hashlib.sha256(module.to_mlir(target=target if rocm_matmul else self.target, canonical=True).encode()).hexdigest()
+        # Semantic Graph IR omits the physical target. A generic ROCm JIT may
+        # select another architecture while retaining identical Graph bytes.
+        semantic_ir = module.to_mlir(target=target if rocm_matmul else self.target, canonical=True)
+        key = hashlib.sha256((target + "\0" + semantic_ir).encode()).hexdigest()
         compiled = self._native_descriptor_specializations.get(key)
         if compiled is None:
             compiled = canonical_compile(module, target=target,

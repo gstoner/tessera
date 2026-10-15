@@ -35,8 +35,8 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | `nvidia_sm90` | 112 | 0 | 0 | 2 | 110 | 0 | 416 |
 | `nvidia_sm100` | 79 | 0 | 0 | 0 | 79 | 0 | 449 |
 | `nvidia_sm120` | 141 | 71 | 0 | 0 | 70 | 0 | 387 |
-| `rocm_gfx1151` | 8 | 8 | 0 | 0 | 0 | 0 | 520 |
-| `rocm_gfx1201` | 10 | 10 | 0 | 0 | 0 | 0 | 518 |
+| `rocm_gfx1151` | 10 | 10 | 0 | 0 | 0 | 0 | 518 |
+| `rocm_gfx1201` | 12 | 12 | 0 | 0 | 0 | 0 | 516 |
 
 ## Per-category breakdown
 

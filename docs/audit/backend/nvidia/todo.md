@@ -8,6 +8,8 @@ last_updated: 2026-10-14
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 
+Review synchronization: the shared descriptor key includes its resolved target. Seventy-five producer/public-attention cases pass on the owning RTX5070 after this change, with current source/compiler/provider pins in sm120-review-control.json. The new ROCm exact numerical entries do not change CUDA capability, storage, ABI or physical schedules. Outcome: shared-control parity validated; no timing transfer.
+
 Owner E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1; profile integration ODS-WIRE-2.
 Synchronization key: ROCM-FP8-TARGET-IDENTITY-20261014.
 The owning ROCm queue and source-bound evidence are authoritative for the

@@ -12287,9 +12287,16 @@ regressions. Six NVIDIA skips are explicitly scoped. Fresh post947 FP8 and
 independent gfx1151 LDS packets retain their actual source/compiler hashes.
 Sibling queues now summarize their own assessment and link the owning proof.
 
+PR948 review namespaces identical semantic Graphs by resolved physical target;
+four architecture-switch cases are red/green. Exact-target numerical fixture
+registration closes the named gfx1151 public static fp16/bf16-to-f32 admission
+gap without promoting its broader artifact-only capability. Eight owning
+public cases on gfx1151 and 24 on gfx1201 pass; the latter include all OCP
+FP8 pairs. Registry guards pass 167 cases and shared RTX5070 controls pass 75.
+First-head CI is green; the review head still requires combined CI.
+
 Remaining: larger/dynamic/layout and split-K FP8, general attention keys,
-public admission costs, wider public dtype/layout/AD contracts and owning gfx1151
-public frontend proof beyond the executed LDS package cases.
+public admission costs and wider public dtype/layout/AD contracts.
 No pure-kernel latency, speedup or broad five-slice closure claim.
 All four backend queues are assessed; no architecture evidence is transferred.
 

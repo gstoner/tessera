@@ -7,6 +7,10 @@ scope: ROCm backend implementation and exact-device proof
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 
+PR948 review correction: the generic JIT specialization key now includes the resolved physical target as well as semantic Graph bytes. Four host-only architecture-switch regressions fail before the fix and pass afterward, including both switch directions and warm reuse. They do not claim live multi-GPU switching.
+
+Owning public execution additionally exposed the missing gfx1151 numerical declaration for a ready native package. Exact matmul/GEMM manifest/fixture rows now cover static compact fp16/bf16-to-f32 on gfx1151 and gfx1201, plus all four OCP FP8 pairs only on gfx1201. Broader gfx1151 artifact-only capability statuses stay unchanged. The new fixture passes eight owning-gfx1151 cases (40 foreign/unsupported-FP8 skips) and 24 owning-gfx1201 cases. Warm shape reuse, immutable inputs, retained outputs and Graph/Schedule/Tile/Target/image ancestry pass. The separate gfx1151 public packet has eight native calls and maximum error below 3.6e-7. Registry/execution/numerical guards pass 167 tests; shared NVIDIA controls pass 75. No pure-kernel timing or strategy promotion is asserted.
+
 Integrated PR947 checkpoint: the frozen five-backend LLVM/MLIR 23.1.1
 candidate passes the full non-slow unit gate (28,493 passed / 5,320 skipped /
 874 deselected). post947-full-unit.txt and its manifest bind that source.

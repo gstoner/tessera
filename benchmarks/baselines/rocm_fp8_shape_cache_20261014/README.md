@@ -215,3 +215,40 @@ are repaired without skipping the owning lane or weakening numerical checks.
 This final explicit-source certificate supersedes the earlier isolated shared
 control receipt for current integration claims. No new timing, speedup or
 universal W1.1/attention closure is asserted.
+
+### PR948 review: target namespaces and exact public profiles
+
+The descriptor cache now namespaces semantic Graph bytes by the resolved
+physical target. Four host-only switch cases fail on the original key and
+pass after repair: f16/bf16, both gfx1151/gfx1201 orders, repeat hits and an
+unsupported-architecture fallback. No actual two-GPU process switch is claimed.
+[review-profile.json](review-profile.json) binds source and gate logs.
+
+The owning gfx1151 frontend initially produced a ready native image but was
+blocked by the missing exact-target numerical fixture declaration. Scoped
+matmul/GEMM manifest entries now name the real public execute-compare fixture;
+the canonical numerical gate is unchanged, and the broader gfx1151 capability
+retains artifact-only status for its unproved storage/layout/AD envelope.
+
+[The public gfx1151 packet](gfx1151-public-jit.json) records eight native
+frontend calls through current matching compiler binaries, three shapes and
+warm replay per f16/bf16 storage. Maximum error is below 3.6e-7, unchanged
+inputs and retained outputs pass, and each storage reuses its physical image.
+The packet includes exact compiler/source hashes and the complete reproducer.
+[The owning fixture](gfx1151-public-tests.txt) passes eight cases covering
+matmul/GEMM and generic/exact targets, with 40 foreign/unsupported-FP8 skips;
+its isolated pytest root emits a marker-registration warning, not a skipped
+owning lane. The primary user checkout is untouched.
+
+[The gfx1201 gate](gfx1201-public-tests.txt) passes 35 cases: 24 owning public
+profiles including all four OCP FP8 pairs, plus eleven canonical JIT controls.
+Twenty-four foreign-architecture cases skip. The [registry gate](review-registry-gates.txt)
+passes 167 tests (five environment skips), including operation/dtype/manifest,
+execution/numerical and existing artifact-only invariants. [The NVIDIA control](sm120-review-control.json)
+passes 75 producer/public-attention cases on the owning RTX5070, with a
+[terminal log](sm120-review-control-tests.txt). No timing claim is added.
+
+[First-head CI](ci-6c1ab5888.json) records every required Validate lane passing
+for 6c1ab5888. That CI does not certify the subsequent review repair; the new
+head requires its own CI. Earlier packets keep their original source/binary
+identities and are not relabeled as post-review measurements.

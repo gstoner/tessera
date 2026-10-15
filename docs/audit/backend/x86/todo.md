@@ -9,6 +9,8 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
 
+Review synchronization: physical targets namespace the ROCm/SM120 descriptor cache; x86 does not enter that dispatcher. Exact ROCm numerical fixture declarations leave broad capability/artifact guards and x86 policies unchanged. Outcome: not applicable to x86 arithmetic; shared operation/dtype/manifest gates pass 167 tests (five environment skips).
+
 Owner E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1; profile integration ODS-WIRE-2.
 Synchronization key: ROCM-FP8-TARGET-IDENTITY-20261014.
 The owning ROCm queue and source-bound evidence are authoritative for the

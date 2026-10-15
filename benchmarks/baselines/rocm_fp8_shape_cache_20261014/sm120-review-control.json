@@ -1,0 +1,20 @@
+{
+  "status": "exact_sm120_shared_descriptor_review_regression",
+  "result": "75 passed",
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "9a6dcfdc07895fa9c16beee3d651af9d69a86d3f4c3b8acb4eff021a5aa53ca6",
+    "python/tessera/compiler/backend_manifest.py": "ff0c0552d30c99f653efc155c5e59f7ec25d4d38e5a60a91c51bda00a9c9e6d6",
+    "python/tessera/compiler/capabilities.py": "7f9baea00301ee4f67cb88e1f2a4a49e4a39df8f18fe07d1ed47be28d5c6e0c5",
+    "tests/unit/test_sm120_scheduled_activation.py": "2595eeeaffcd250cc388f4d69cebe288d2788c1d2a2cc5a421dc1ffc0d7bb652",
+    "tests/device/nvidia/test_public_attention_forward.py": "33c5855df7e13a0a1d90a7977aeae7e24c778497a6b4e347e15d99b1eecf2fb3"
+  },
+  "binary_sha256": {
+    "tessera-opt": "e8894340e0c8ad5fbe3b5a1bf3270e4d8574ac102d164158bbc9199b86daaada",
+    "tessera-nvidia-opt": "c105db113ecd3a31bb11a6fd7a18c610d19c8bfc640c48a5fc747c74d0922365",
+    "ptx_provider": "5032dee8d0d29f4a3a16c724b92c6f42a455b871304b9db98919b515a9966b0e"
+  },
+  "gpu_report": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "test_command": "python -m pytest -q -ra tests/unit/test_sm120_scheduled_activation.py tests/device/nvidia/test_public_attention_forward.py",
+  "log_sha256": "9c79cf03f3ac9f80d94e1bc1bbd055d5199545564f2151c98d05ffe867c6c42b",
+  "timing_claim": false
+}

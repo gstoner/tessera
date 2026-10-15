@@ -5,6 +5,20 @@ owner: NVIDIA backend
 target: nvidia_sm120
 last_updated: 2026-10-15
 ---
+## W11-RELU-AD-20261015 — native Graph tangent integration
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-RELU-AD-20261015.
+Native MLIR ReLU now implements TangentInterface by reusing its strict-positive
+adjoint predicate; real f16/bf16/f32/f64 storage and a direct symbolic ReLU
+contract are covered. The named RMSNorm -> ReLU -> matmul now emits active
+A/B/A+B paired Graph IR in f16 and bf16. Shared gates pass 469 tests, including
+three independent FP32 composed directional oracles and four target provenance
+guards. Graph IR proof does not imply an executable native AD package.
+Evidence: benchmarks/baselines/native_relu_ad_20261015/README.md.
+
+Parity validated for existing primal producer and saved-LSE attention controls on RTX 5070: 150 tests pass against the rebuilt LLVM/MLIR 23.1.1 compiler. Public composed JVP/VJP execution remains open. Native paired-SSA multi-output outlining, member lowering and checked output/scratch ownership are required next; no new physical AD or timing claim.
+
 ## W11-RELU-FLAT-20261015 — optional native activation schedule
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
@@ -83,7 +97,7 @@ post-matmul epilogue, whose original fixture remains registered. Generated
 execution/conformance/coverage views are refreshed; sibling physical claims
 and all operation/dtype/ABI definitions are unchanged.
 
-Parity validated on RTX 5070/sm_120 for the named static f16/bf16 producer chain at M,K,N=(7,32,9), (17,64,19), (129,256,33). Follow-up required: captured measurement, coalesced ReLU row mapping, symbolic frontend metadata and broader producer/AD coverage.
+Parity validated on RTX 5070/sm_120 for the named static f16/bf16 producer chain at M,K,N=(7,32,9), (17,64,19), (129,256,33). Captured measurement and explicit coalesced mapping are recorded in W11-RELU-FLAT-20261015 above. Follow-up required: symbolic frontend metadata and broader producer/AD execution coverage.
 
 ## MXFP4-RESERVED-SCALE-20261014 — PR946 review correction
 

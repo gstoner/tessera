@@ -6,6 +6,20 @@ owner: x86 backend
 target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
+## W11-RELU-AD-20261015 — native Graph tangent integration
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-RELU-AD-20261015.
+Native MLIR ReLU now implements TangentInterface by reusing its strict-positive
+adjoint predicate; real f16/bf16/f32/f64 storage and a direct symbolic ReLU
+contract are covered. The named RMSNorm -> ReLU -> matmul now emits active
+A/B/A+B paired Graph IR in f16 and bf16. Shared gates pass 469 tests, including
+three independent FP32 composed directional oracles and four target provenance
+guards. Graph IR proof does not imply an executable native AD package.
+Evidence: benchmarks/baselines/native_relu_ad_20261015/README.md.
+
+Follow-up required for composed AVX-512 AD consumers; no x86 physical execution, ABI, schedule or performance claim changes. Shared Graph transformation and provenance guards are assessed without transferring CUDA proof.
+
 ## W11-RELU-FLAT-20261015 — optional native activation schedule
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

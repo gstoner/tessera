@@ -198,7 +198,7 @@ class _Interp:
                 inner = np.sqrt(2.0 / np.pi) * (x + 0.044715 * x**3)
                 env[dst] = (0.5 * x * (1.0 + np.tanh(inner))).astype(np.float32)
             elif op == "tessera.relu":
-                env[dst] = np.maximum(env[operands[0]], 0).astype(np.float32)
+                env[dst] = np.maximum(env[operands[0]], 0).astype(env[operands[0]].dtype)
             elif op == "tessera.rmsnorm":
                 x = env[operands[0]]
                 eps_match = re.search(r"eps = ([-0-9.eE+]+)", rhs)
@@ -232,7 +232,7 @@ class _Interp:
             elif op == "tessera.masked_fill":
                 value = float(re.search(r"value = ([-0-9.eE+]+)", rhs).group(1))
                 env[dst] = np.where(env[operands[1]], env[operands[0]], value).astype(
-                    np.float32)
+                    env[operands[0]].dtype)
             elif op == "tessera.normalization_stats":
                 assert len(destinations) == 2
                 x = env[operands[0]]

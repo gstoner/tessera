@@ -1,0 +1,148 @@
+{
+  "scope": "current-source named RMSNorm->ReLU->matmul public AD route census; no new AD execution claim",
+  "cases": [
+    {
+      "storage": "f16",
+      "wrt": [
+        "b"
+      ],
+      "primal_execution": "native_gpu",
+      "paired_ir": {
+        "status": "emitted",
+        "file": "f16_b_paired.mlir",
+        "sha256": "9b648ddeb912f433b9505094c065bfc498d70cd052c6137adb31402650a7f44a"
+      },
+      "public_jvp": {
+        "status": "refused",
+        "type": "TesseraJitError",
+        "message": "native JVP requires one operation or an admitted scaled product/sum Graph"
+      },
+      "public_vjp": {
+        "status": "refused",
+        "type": "TesseraJitError",
+        "message": "NVIDIA SM120 native backward requires one registered Graph op"
+      }
+    },
+    {
+      "storage": "f16",
+      "wrt": [
+        "a"
+      ],
+      "primal_execution": "native_gpu",
+      "paired_ir": {
+        "status": "emitted",
+        "file": "f16_a_paired.mlir",
+        "sha256": "c8c21c8dcd064c8384c0d3eac9242dc6741d23d1af766d12bcd9d3b14d5e5ed3"
+      },
+      "public_jvp": {
+        "status": "refused",
+        "type": "TesseraJitError",
+        "message": "native JVP requires one operation or an admitted scaled product/sum Graph"
+      },
+      "public_vjp": {
+        "status": "refused",
+        "type": "TesseraJitError",
+        "message": "NVIDIA SM120 native backward requires one registered Graph op"
+      }
+    },
+    {
+      "storage": "f16",
+      "wrt": [
+        "a",
+        "b"
+      ],
+      "primal_execution": "native_gpu",
+      "paired_ir": {
+        "status": "emitted",
+        "file": "f16_ab_paired.mlir",
+        "sha256": "e93c8dcdc6eb70fe98715378f838afff424bbfbab3635d724435719460abf974"
+      },
+      "public_jvp": {
+        "status": "refused",
+        "type": "TesseraJitError",
+        "message": "native JVP requires one operation or an admitted scaled product/sum Graph"
+      },
+      "public_vjp": {
+        "status": "refused",
+        "type": "TesseraJitError",
+        "message": "NVIDIA SM120 native backward requires one registered Graph op"
+      }
+    },
+    {
+      "storage": "bf16",
+      "wrt": [
+        "b"
+      ],
+      "primal_execution": "native_gpu",
+      "paired_ir": {
+        "status": "emitted",
+        "file": "bf16_b_paired.mlir",
+        "sha256": "5f8da81584da814522e0b91123404fb66048badcdffe3168e1ad5317186da3b7"
+      },
+      "public_jvp": {
+        "status": "refused",
+        "type": "TesseraJitError",
+        "message": "native JVP requires one operation or an admitted scaled product/sum Graph"
+      },
+      "public_vjp": {
+        "status": "refused",
+        "type": "TesseraJitError",
+        "message": "NVIDIA SM120 native backward requires one registered Graph op"
+      }
+    },
+    {
+      "storage": "bf16",
+      "wrt": [
+        "a"
+      ],
+      "primal_execution": "native_gpu",
+      "paired_ir": {
+        "status": "emitted",
+        "file": "bf16_a_paired.mlir",
+        "sha256": "768d30433da3651c84b5d07243fc5db9f1fb84fad62bdc39328d1d760f568298"
+      },
+      "public_jvp": {
+        "status": "refused",
+        "type": "TesseraJitError",
+        "message": "native JVP requires one operation or an admitted scaled product/sum Graph"
+      },
+      "public_vjp": {
+        "status": "refused",
+        "type": "TesseraJitError",
+        "message": "NVIDIA SM120 native backward requires one registered Graph op"
+      }
+    },
+    {
+      "storage": "bf16",
+      "wrt": [
+        "a",
+        "b"
+      ],
+      "primal_execution": "native_gpu",
+      "paired_ir": {
+        "status": "emitted",
+        "file": "bf16_ab_paired.mlir",
+        "sha256": "0a46d53e8e8120bc8c92f7661c4376dcae06c6cfd284ea2e6ec96af9db85ed0e"
+      },
+      "public_jvp": {
+        "status": "refused",
+        "type": "TesseraJitError",
+        "message": "native JVP requires one operation or an admitted scaled product/sum Graph"
+      },
+      "public_vjp": {
+        "status": "refused",
+        "type": "TesseraJitError",
+        "message": "NVIDIA SM120 native backward requires one registered Graph op"
+      }
+    }
+  ],
+  "source_sha256": {
+    "src/compiler/ir/TesseraOps.td": "5da80523cc2a36d1aa4b033afe4c6629712f28e9741d63f270a97417ed39aafb",
+    "src/compiler/ir/TangentInterface.cpp": "ec6c89881423cf1264b9216e1ba563d018842820446fe455a70c692458350334",
+    "src/compiler/ir/AdjointInterface.cpp": "a4effbf11497ba1235023788704d6c41fe938ef44eacf92d4a9a40f437e59d6a",
+    "python/tessera/compiler/jit.py": "9a6dcfdc07895fa9c16beee3d651af9d69a86d3f4c3b8acb4eff021a5aa53ca6",
+    "python/tessera/compiler/native_jvp_plugins.py": "ee94939f1429de9134d7e4dbf69e61b22a3b4adc13e8a3fb875895a5461281fc"
+  },
+  "compiler_sha256": "b1c64d1611f0c266cfa2275ffaba045f6a1709118605dbbc7687e722a2b80f62",
+  "script_source": "from pathlib import Path\nimport hashlib,json,os,traceback\nimport numpy as np\nimport ml_dtypes\nimport tessera as ts\nfrom tessera import runtime as rt\nassert rt._nvidia_device_name()==\"sm_120\"\nOUT=Path(\"/home/angstorms/scratch/sm120-producer-ad-20261015/after\")\nOUT.mkdir(parents=True,exist_ok=True)\ndef product(a,b):\n    normalized=ts.ops.rmsnorm(a,eps=1e-5)\n    edge=ts.ops.relu(normalized)\n    return ts.ops.matmul(edge,b,output_dtype=\"fp32\")\nrows=[]\nfor storage,dtype in ((\"f16\",np.float16),(\"bf16\",ml_dtypes.bfloat16)):\n rng=np.random.default_rng(151061)\n a=rng.uniform(.1,1,(7,32)).astype(dtype)\n a[:,::2]*=-1\n b=rng.uniform(-.25,.25,(32,9)).astype(dtype)\n plain=ts.jit(target=\"nvidia_sm120\")(product)\n value=plain(a,b)\n assert plain.execution_kind==\"native_gpu\"\n for wrt in ((\"b\",),(\"a\",),(\"a\",\"b\")):\n  forward=ts.jit(target=\"nvidia_sm120\",autodiff=\"forward\",wrt=wrt)(product)\n  row={\"storage\":storage,\"wrt\":list(wrt),\"primal_execution\":plain.execution_kind}\n  try:\n   ir=forward.compiled_jvp_ir(a,b)\n   filename=f\"{storage}_{''.join(wrt)}_paired.mlir\"\n   (OUT/filename).write_text(ir)\n   row[\"paired_ir\"]={\"status\":\"emitted\",\"file\":filename,\"sha256\":hashlib.sha256(ir.encode()).hexdigest()}\n  except Exception as exc:\n   row[\"paired_ir\"]={\"status\":\"refused\",\"type\":type(exc).__name__,\"message\":str(exc)}\n  try:\n   seeds=tuple(np.full_like(a if name==\"a\" else b,.125) for name in wrt)\n   primal,tangent=forward.native_jvp(a,b,tangents=seeds)\n   row[\"public_jvp\"]={\"status\":\"executed\",\"receipt\":forward.last_jvp_execution}\n  except Exception as exc:\n   row[\"public_jvp\"]={\"status\":\"refused\",\"type\":type(exc).__name__,\"message\":str(exc)}\n  reverse=ts.jit(target=\"nvidia_sm120\",autodiff=\"reverse\",wrt=wrt)(product)\n  try:\n   gradients=reverse.native_backward(a,b,out_cotangents=np.ones_like(value))\n   row[\"public_vjp\"]={\"status\":\"executed\",\"receipt\":reverse.last_backward_execution}\n  except Exception as exc:\n   row[\"public_vjp\"]={\"status\":\"refused\",\"type\":type(exc).__name__,\"message\":str(exc)}\n  rows.append(row)\n  print(json.dumps(row),flush=True)\nfiles=[\"src/compiler/ir/TesseraOps.td\",\"src/compiler/ir/TangentInterface.cpp\",\"src/compiler/ir/AdjointInterface.cpp\",\"python/tessera/compiler/jit.py\",\"python/tessera/compiler/native_jvp_plugins.py\"]\npacket={\"scope\":\"current-source named RMSNorm->ReLU->matmul public AD route census; no new AD execution claim\",\"cases\":rows,\"source_sha256\":{p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in files},\"compiler_sha256\":hashlib.sha256(Path(os.environ[\"TESSERA_OPT\"]).read_bytes()).hexdigest(),\"script_source\":Path(__file__).read_text()}\n(OUT/\"route-census.json\").write_text(json.dumps(packet,indent=2)+\"\\n\")\n"
+}

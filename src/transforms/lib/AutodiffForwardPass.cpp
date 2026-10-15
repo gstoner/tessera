@@ -626,6 +626,19 @@ class AutodiffForwardPass
         forward.emitError("tessera-autodiff-forward: requires one defined block");
         return signalPassFailure();
       }
+      // This direct pointwise product needs no extent-dependent constants,
+      // broadcasting or zero materialization. Keep symbolic admission tied to
+      // that verified dataflow; other dynamic families retain their contracts.
+      bool symbolicRelu = false;
+      if (forward.getNumArguments() == 1 && forward.getNumResults() == 1 &&
+          forward.getBody().front().getOperations().size() == 2) {
+        auto relu = mlir::dyn_cast<ReluOp>(forward.getBody().front().front());
+        auto ret = mlir::dyn_cast<mlir::func::ReturnOp>(forward.getBody().front().back());
+        symbolicRelu = relu && ret && ret.getNumOperands() == 1 &&
+            relu.getX() == forward.getArgument(0) &&
+            relu.getX().getType() == relu.getY().getType() &&
+            ret.getOperand(0) == relu.getY();
+      }
       bool boundedAttentionExport = false;
       if (exportAttentionJVP) {
         auto &attention = forward.getBody().front().front();
@@ -645,7 +658,10 @@ class AutodiffForwardPass
         auto tensor = mlir::dyn_cast<mlir::RankedTensorType>(type);
         bool admissibleTensor =
             tensor && (tensor.hasStaticShape() ||
-                       (boundedAttentionExport && !tensor.getEncoding() && tensor.getElementType().isF32())) &&
+                       (boundedAttentionExport && !tensor.getEncoding() && tensor.getElementType().isF32()) ||
+                       (symbolicRelu && !tensor.getEncoding() &&
+                        (tensor.getElementType().isF16() || tensor.getElementType().isBF16() ||
+                         tensor.getElementType().isF32() || tensor.getElementType().isF64()))) &&
             mlir::isa<mlir::FloatType, mlir::IntegerType, mlir::ComplexType>(
                 tensor.getElementType());
         bool controlScalar =
@@ -653,7 +669,8 @@ class AutodiffForwardPass
         if (!admissibleTensor && !controlScalar) {
           forward.emitError(
               "tessera-autodiff-forward: requires static ranked numeric "
-              "tensors plus nondifferentiable integer/index control scalars");
+              "tensors, an admitted symbolic derivative envelope, or "
+              "nondifferentiable integer/index control scalars");
           return signalPassFailure();
         }
       }

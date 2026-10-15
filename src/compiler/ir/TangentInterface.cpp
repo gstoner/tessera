@@ -561,6 +561,23 @@ llvm::SmallVector<mlir::Value> StopGradientOp::buildTangent(
               : llvm::SmallVector<mlir::Value>{};
 }
 
+// ReLU's diagonal real Jacobian is self-adjoint. Reuse the native reverse
+// rule so sign, zero and NaN-mask conventions cannot drift between modes.
+// Encoded/complex/integer storage needs an explicit derivative domain.
+llvm::SmallVector<mlir::Value> ReluOp::buildTangent(
+    mlir::OpBuilder &builder, mlir::ValueRange tangents) {
+  if (tangents.size() != 1 || !tangents[0] ||
+      tangents[0].getType() != getX().getType())
+    return {};
+  auto type = mlir::dyn_cast<mlir::RankedTensorType>(getX().getType());
+  if (!type) return {};
+  mlir::Type element = type.getElementType();
+  if (!element.isF16() && !element.isBF16() &&
+      !element.isF32() && !element.isF64())
+    return {};
+  return buildAdjoint(builder, tangents);
+}
+
 llvm::SmallVector<mlir::Value> TanhOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
   if (tangents.size() != 1 || !tangents[0])

@@ -12342,3 +12342,27 @@ All four queues assessed; no FP8/MXFP8/MXFP4 or sibling proof transferred.
 Evidence: benchmarks/baselines/sm120_relu_flat_20261015/README.md;
 docs/spec/ir/sm120_activation_schedule_tile_contract.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-15 — native ReLU tangent and producer AD integration
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync W11-RELU-AD-20261015.
+
+Outcome: native ReLU TangentInterface reuses the strict-positive adjoint rule;
+real half/BF16/f32/f64 and direct symbolic Graph envelopes are numerically
+checked. Native active-A/B/A+B paired Graph now emits for the named half/BF16
+RMSNorm -> ReLU -> matmul. 469 shared checks and 150 owning RTX 5070 producer
+and saved-LSE forward/reverse controls pass. Independent FP32 directional
+oracles validate all three activity choices. All four backend plans distinguish
+shared Graph proof from missing physical composed AD consumers.
+
+Remaining: native multi-output paired-program outlining, complete derivative
+member Schedule/Tile lowering, checked shared-buffer and output ownership,
+public composed JVP/VJP execution, benchmarking and general producer closure.
+No new performance/default selection or five-slice completion claim.
+
+Evidence: benchmarks/baselines/native_relu_ad_20261015/README.md,
+before/route-census.json, after/route-census.json, shared-tests.txt,
+sm120-controls.txt and validation.json.
+<!-- entry-fields:end -->

@@ -1688,7 +1688,7 @@ def Tessera_SoftmaxOp : Tessera_UnaryPureTangentOp<"softmax", "Softmax over an e
 def Tessera_GeluOp : Tessera_UnaryPureOp<"gelu", "Gaussian error linear unit"> {
   let hasVerifier = 1;
 }
-def Tessera_ReluOp : Tessera_UnaryPureOp<"relu", "Rectified linear unit"> {
+def Tessera_ReluOp : Tessera_UnaryPureTangentOp<"relu", "Rectified linear unit"> {
   let hasVerifier = 1;
 }
 def Tessera_SigmoidOp : Op<

@@ -4,6 +4,20 @@ audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+## W11-RELU-AD-20261015 — native Graph tangent integration
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-RELU-AD-20261015.
+Native MLIR ReLU now implements TangentInterface by reusing its strict-positive
+adjoint predicate; real f16/bf16/f32/f64 storage and a direct symbolic ReLU
+contract are covered. The named RMSNorm -> ReLU -> matmul now emits active
+A/B/A+B paired Graph IR in f16 and bf16. Shared gates pass 469 tests, including
+three independent FP32 composed directional oracles and four target provenance
+guards. Graph IR proof does not imply an executable native AD package.
+Evidence: benchmarks/baselines/native_relu_ad_20261015/README.md.
+
+Follow-up required for composed gfx1151/gfx1201 AD consumers; no HIP/WMMA arithmetic, image-key or runtime ABI change. Shared Graph transformation and provenance guards are assessed; encoded scale-product admissions retain their independent contracts.
+
 ## W11-RELU-FLAT-20261015 — optional native activation schedule
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

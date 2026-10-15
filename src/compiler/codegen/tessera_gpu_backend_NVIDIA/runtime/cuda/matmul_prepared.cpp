@@ -343,12 +343,14 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
   const std::string softmax = "tessera_tile_softmax_" + type;
   const bool norm = std::strncmp(entry, rms.c_str(), rms.size()) == 0 ||
                     std::strncmp(entry, layer.c_str(), layer.size()) == 0;
+  const std::string relu = "tessera_tile_activation_relu_" + type + "_";
+  const bool activation = std::strncmp(entry, relu.c_str(), relu.size()) == 0;
   const bool softmaxSerial = softmax == entry;
   const bool softmaxCooperative = softmax + "_cooperative_128" == entry;
   const bool expectedCooperative = norm
       ? bool(std::strstr(entry, "_cooperative_128_"))
       : softmaxCooperative;
-  if ((!norm && !softmaxSerial && !softmaxCooperative) ||
+  if ((!activation && !norm && !softmaxSerial && !softmaxCooperative) ||
       expectedCooperative != bool(cooperative) ||
       (rhs ? owner.dims[2] : owner.dims[0]) > (1LL << 31) / (rhs ? owner.dims[1] : owner.dims[2]))
     return bad("prepared tensor producer ABI or geometry mismatch");

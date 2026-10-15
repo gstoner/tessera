@@ -12229,3 +12229,29 @@ queues are assessed; there is no sibling physical support transfer.
 
 Evidence: benchmarks/baselines/mxfp4_host_transport_20261014/post_review.json.
 <!-- entry-fields:end -->
+
+### 2026-10-14 — native SM120 ReLU producer storage integration
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync W11-RELU-PRODUCER-20261014.
+Shared: FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+
+Outcome: Ordinary textual frontend RMSNorm -> ReLU -> matmul now outlines
+actual native MLIR members with two checked f16/bf16 private stores. Explicit
+activation Schedule/Tile policy preserves propagated NaNs and the eager
+dtype-specific zero rule. Native NVIDIA/LLVM/PTX and distinct checked row ABIs
+execute the named envelope; Python does not compute intermediate tensors.
+Twenty-eight new RTX 5070 route, public-JIT, bitwise/numerical and descriptor cases pass;
+225 existing producer/bounded/DAG/JIT regressions, 547 registry/audit gates,
+Ruff and focused five-file mypy pass. PR946 merged main is the base.
+
+Remaining: The 129x256x33 serial ReLU event region is about 43 us versus
+roughly 9–13 us for neighboring stages. Captured measurement and coalesced
+activation mapping remain open. Event regions can include enqueue gaps;
+public/prepared wall time is separate. Symbolic frontend metadata, wider
+producer/layout/AD coverage and sibling physical proof remain open. All four
+backend queues are assessed; no speedup or complete W1.1 closure claim.
+
+Evidence: benchmarks/baselines/sm120_norm_relu_matmul_20261014/README.md,
+guarded.json (matching CI options and final descriptor guard); docs/spec/ir/sm120_activation_schedule_tile_contract.md.
+<!-- entry-fields:end -->

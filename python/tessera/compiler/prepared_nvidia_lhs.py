@@ -41,10 +41,11 @@ class PreparedLhsCall(PreparedMatmulCall):
         pd = producer.descriptor
         pp = pd.provenance
         norm = pp["kind"] in {"rmsnorm", "layernorm"}
-        policy = ("sm120_norm_" + pp["schedule"] + "_rows" if norm
+        activation = pp["kind"] == "relu"
+        policy = ("sm120_activation_serial_rows" if activation else "sm120_norm_" + pp["schedule"] + "_rows" if norm
                   else ("sm120_softmax_cooperative_128_rows" if pp["schedule"] == "cooperative_128"
                         else "sm120_softmax_thread_per_row_128"))
-        scalar_names = ("Rows", "Columns") if norm else ("Rows", "K")
+        scalar_names = ("Rows", "Columns") if norm or activation else ("Rows", "K")
         if (pp["schedule"] not in {"serial", "cooperative_128"}
                 or pd.geometry != LaunchGeometry(policy=policy)
                 or pd.workspace != WorkspaceRequirement()

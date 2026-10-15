@@ -2226,6 +2226,49 @@ static LogicalResult materializeSm120ReduceKernel(
 // performs every reduction in f32 before rounding the normalized value back to
 // the declared storage type. Epsilon is embedded in the immutable PTX image,
 // leaving the launch ABI as X/O/Rows/Columns.
+// Preserve the standalone store with propagated NaNs and the dtype-specific zero rule.
+static LogicalResult materializeSm120ActivationKernel(
+    tessera::tile::ActivationKernelOp kernel, OpBuilder &builder) {
+  if (failed(kernel.verify())) return failure();
+  Operation *op = kernel.getOperation();
+  Location loc = op->getLoc();
+  auto inputs = kernel.getInputs();
+  auto storage = op->getAttrOfType<StringAttr>("storage");
+  Type element = storage.getValue() == "f16" ? Type(builder.getF16Type()) :
+                                                    Type(builder.getBF16Type());
+  Type i32 = builder.getI32Type(), i64 = builder.getI64Type();
+  Value block = arith::ExtUIOp::create(builder, loc, i64,
+      NVVM::BlockIdXOp::create(builder, loc, i32));
+  Value thread = arith::ExtUIOp::create(builder, loc, i64,
+      NVVM::ThreadIdXOp::create(builder, loc, i32));
+  Value row = addI64(builder, loc,
+      mulI64(builder, loc, block, i64Constant(builder, loc, 128)), thread);
+  auto active = scf::IfOp::create(builder, loc, lessI64(builder, loc, row, inputs[2]), false);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(active.thenBlock());
+    Value start = i64Constant(builder, loc, 0), step = i64Constant(builder, loc, 1);
+    auto loop = scf::ForOp::create(builder, loc, start, inputs[3], step);
+    builder.setInsertionPointToStart(loop.getBody());
+    Value linear = addI64(builder, loc, mulI64(builder, loc, row, inputs[3]), loop.getInductionVar());
+    Value source = LLVM::GEPOp::create(builder, loc, inputs[0].getType(), element,
+        inputs[0], ValueRange{linear});
+    Value output = LLVM::GEPOp::create(builder, loc, inputs[1].getType(), element,
+        inputs[1], ValueRange{linear});
+    Value loaded = LLVM::LoadOp::create(builder, loc, element, source, 2);
+    Value wide = LLVM::FPExtOp::create(builder, loc, builder.getF32Type(), loaded);
+    Value zero = arith::ConstantFloatOp::create(builder, loc, builder.getF32Type(), APFloat(0.0f));
+    Value negative = arith::CmpFOp::create(builder, loc,
+        storage.getValue() == "f16" ? arith::CmpFPredicate::OLE : arith::CmpFPredicate::OLT, wide, zero);
+    // Retain the original NaN payload; f16 canonicalizes zero and bf16 preserves its sign.
+    Value storedZero = LLVM::FPTruncOp::create(builder, loc, element, zero);
+    Value result = arith::SelectOp::create(builder, loc, negative, storedZero, loaded);
+    LLVM::StoreOp::create(builder, loc, result, output, 2);
+  }
+  op->erase();
+  return success();
+}
+
 static LogicalResult materializeSm120NormKernel(
     tessera::tile::NormKernelOp kernel, OpBuilder &builder) {
   Operation *op = kernel.getOperation();
@@ -5509,6 +5552,7 @@ struct LowerTileToNVIDIAPass
           name == "tessera_nvidia.macro_cta_matmul" ||
           name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
           name == "tile.materialize_composed_layout" ||
+          name == "tile.activation_kernel" ||
           name == "tile.reduce_kernel" || name == "tile.norm_kernel" ||
           name == "tile.cuda_intrinsic_kernel" ||
           name == "tile.packed_store" ||
@@ -5790,6 +5834,16 @@ struct LowerTileToNVIDIAPass
                 cast<tessera::tile::ReduceKernelOp>(op), builder))) {
           if (smVersion < kConsumerBlackwellSM)
             op->emitError("tile.reduce_kernel currently requires sm_120");
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
+
+      if (isTileOp(op, "tile.activation_kernel")) {
+        if (smVersion != kConsumerBlackwellSM ||
+            failed(materializeSm120ActivationKernel(
+                cast<tessera::tile::ActivationKernelOp>(op), builder))) {
           signalPassFailure();
           return;
         }

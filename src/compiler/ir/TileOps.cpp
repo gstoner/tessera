@@ -2109,6 +2109,32 @@ LogicalResult ScanKernelOp::verify() {
   return success();
 }
 
+LogicalResult ActivationKernelOp::verify() {
+  if (getInputs().size() != 4 ||
+      !isa<LLVM::LLVMPointerType>(getInputs()[0].getType()) ||
+      !isa<LLVM::LLVMPointerType>(getInputs()[1].getType()) ||
+      !getInputs()[2].getType().isInteger(64) ||
+      !getInputs()[3].getType().isInteger(64))
+    return emitOpError("requires source, destination, rows and columns as ptr, ptr, i64, i64");
+  auto op = getOperation();
+  auto str = [&](StringRef key) -> StringRef {
+    auto attr = op->getAttrOfType<StringAttr>(key);
+    return attr ? attr.getValue() : StringRef{};
+  };
+  auto module = op->getParentOfType<ModuleOp>();
+  auto arch = module ? module->getAttrOfType<StringAttr>("tessera.arch") : StringAttr{};
+  auto axis = op->getAttrOfType<IntegerAttr>("axis");
+  auto threads = op->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
+  if (!arch || arch.getValue() != "sm_120" ||
+      (str("storage") != "f16" && str("storage") != "bf16") ||
+      str("accum") != "f32" || str("kind") != "relu" ||
+      str("schedule") != "serial" || str("nan_mode") != "propagate" ||
+      str("zero_mode") != (str("storage") == "f16" ? "positive" : "preserve") ||
+      !axis || axis.getInt() != -1 || !threads || threads.getInt() != 128)
+    return emitOpError("requires SM120 f16/bf16 serial ReLU, 128 threads and propagated NaNs");
+  return success();
+}
+
 LogicalResult NormKernelOp::verify() {
   if (getInputs().size() != 5)
     return emitOpError("expects source, destination, rows, columns, and epsilon");

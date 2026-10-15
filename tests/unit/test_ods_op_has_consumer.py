@@ -259,6 +259,8 @@ def test_scan_parses_every_ods_form() -> None:
         "tile.mxfp4_folded_storage_kernel",
         "tile.structured_reduction_kernel",
         "tile.transpose_kernel",
+        "schedule.activation",
+        "tile.activation_kernel",
         "tessera_rocm.structured_reduction",
         "tessera_rocm.swmmac",
         "tile.tmem.store",                 # dotted mnemonic
@@ -277,7 +279,7 @@ def test_scan_parses_every_ods_form() -> None:
 #: 618 -> 663: 45 unique x86 Graph op records added to the post-#875 baseline.
 # 673 -> 674: native compact tile.transpose_kernel result materialization.
 #: 673 -> 674: native tile.transpose_kernel carrier with Schedule/ROCm consumers.
-_DECLARED_OP_RECORDS = 674
+_DECLARED_OP_RECORDS = 676
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:

@@ -12,7 +12,7 @@ from . import nvidia_native as native
 from .graph_ir import GraphIRModule,GraphIRFunction,IRArg,IROp,tensor_ir_type
 from .scheduled_matmul import find_tessera_opt,_SM120_SCHEDULED_MATMUL_PREFIX
 
-PRODUCERS={"tessera.rmsnorm":"rmsnorm","tessera.layer_norm":"layernorm","tessera.softmax":"softmax"}
+PRODUCERS={"tessera.rmsnorm":"rmsnorm","tessera.layer_norm":"layernorm","tessera.softmax":"softmax","tessera.relu":"relu"}
 
 
 def _digest(value):
@@ -96,13 +96,16 @@ def _checked_semantics(semantics):
     if not isinstance(pa,dict) or not isinstance(ca,dict):
         raise ValueError("LHS attributes must be dictionaries")
     pa,ca=dict(sorted(pa.items())),dict(sorted(ca.items()))
-    if s["producer"]=="tessera.softmax":
+    if s["producer"]=="tessera.relu":
+        if pa:
+            raise ValueError("LHS ReLU requires its storage-preserving native contract")
+    elif s["producer"]=="tessera.softmax":
         if set(pa)-{"axis"} or pa.get("axis",-1)!=-1:
             raise ValueError("LHS softmax requires the last-axis native contract")
     elif (set(pa)-{"eps","gamma","beta"} or pa.get("gamma") is not None or pa.get("beta") is not None):
         raise ValueError("LHS normalization needs a separate affine/axis contract")
     eps=pa.get("eps",1e-5)
-    if s["producer"]!="tessera.softmax" and (
+    if s["producer"] not in {"tessera.softmax","tessera.relu"} and (
         type(eps) not in (int,float) or not math.isfinite(eps) or eps<=0):
         raise ValueError("LHS normalization epsilon must be finite and positive")
     if (set(ca)-{"output_dtype","activation","bias","residual","rhs_storage_order"}
@@ -260,7 +263,7 @@ def package_traced_lhs(module, *, producer_schedule=None, softmax_schedule=None,
     if fn.structured_cfg is not None and fn.structured_cfg.digest!=recover_structured_cfg(fn.body).digest:
         raise ValueError("LHS CFG differs from semantic operations")
     if producer_schedule is not None:
-        if p.op_name=="tessera.softmax" or producer_schedule not in {"serial","cooperative_128"}:
+        if p.op_name not in {"tessera.rmsnorm","tessera.layer_norm"} or producer_schedule not in {"serial","cooperative_128"}:
             raise ValueError("explicit Schedule policy requires a normalization")
         p.kwargs={**p.kwargs,"schedule":producer_schedule}
     if softmax_schedule is not None:
@@ -350,7 +353,7 @@ class TracedLhsProgram:
         p=self.edge.producer.descriptor.provenance
         if p.get("kind")!=PRODUCERS[self.semantics["producer"]]:
             raise ValueError("LHS producer kind differs")
-        if p["kind"]!="softmax":
+        if p["kind"] in {"rmsnorm","layernorm"}:
             eps=self.semantics["producer_attrs"].get("eps",1e-5)
             if p.get("epsilon")!=struct.unpack("f",struct.pack("f",eps))[0]:
                 raise ValueError("LHS producer epsilon differs")
@@ -431,7 +434,9 @@ class TracedLhsProgram:
             p=package.descriptor.provenance
             if plan["steps"][index]["operation"]!=policy["producer"] or p.get("kind")!=PRODUCERS[policy["producer"]]:
                 raise ValueError("LHS producer kind differs")
-            if p["kind"]!="softmax" and p.get("epsilon")!=struct.unpack("f",struct.pack("f",policy["producer_attrs"].get("eps",1e-5)))[0]:
+            if p["kind"] == "relu":
+                native._validate_scheduled_relu_descriptor(package.descriptor)
+            if p["kind"] in {"rmsnorm","layernorm"} and p.get("epsilon")!=struct.unpack("f",struct.pack("f",policy["producer_attrs"].get("eps",1e-5)))[0]:
                 raise ValueError("LHS producer epsilon differs")
         cp=self.edge.consumer.descriptor.provenance
         epilogue=cp.get("epilogue")

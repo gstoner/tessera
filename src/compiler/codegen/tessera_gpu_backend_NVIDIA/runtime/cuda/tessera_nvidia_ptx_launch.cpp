@@ -96,6 +96,21 @@ size_t softmaxElementBytes(const char* name) {
 }
 constexpr const char* kTileReducePrefix = "tessera_tile_reduce_";
 constexpr const char* kTileNormPrefix = "tessera_tile_norm_";
+// The activation shares only the four-argument row launch, never norm arithmetic.
+bool isTileActivation(const char* name) {
+    if (!name) return false;
+    for (const char* prefix : {"tessera_tile_activation_relu_f16_",
+                               "tessera_tile_activation_relu_bf16_"}) {
+        const size_t n = std::strlen(prefix);
+        if (std::strncmp(name, prefix, n) != 0 || std::strlen(name + n) != 10) continue;
+        bool valid = true;
+        for (const char* p = name + n; *p; ++p)
+            valid &= (*p >= '0' && *p <= '9') || (*p >= 'a' && *p <= 'f');
+        if (valid) return true;
+    }
+    return false;
+}
+
 constexpr const char* kTileAttentionPrefix = "tessera_tile_attention_";
 constexpr const char* kTileAttentionBackwardPrefix =
     "tessera_tile_attention_backward_";
@@ -1693,7 +1708,7 @@ int benchmarkUnary(CUfunction fn, const char* name, void** buffers,
     const bool softmax = softmaxElementBytes(name) != 0;
     const bool norm =
         std::strncmp(name, kTileNormPrefix, std::strlen(kTileNormPrefix)) == 0;
-    const bool rowwise = softmax || norm;
+    const bool rowwise = softmax || norm || isTileActivation(name);
     if ((rowwise && ndim != 2) || (!rowwise && ndim != 3)) return 5;
     const bool narrow = std::strcmp(name, kTileSoftmaxF16) == 0 ||
         std::strcmp(name, kTileSoftmaxBf16) == 0 ||
@@ -2649,7 +2664,8 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
             fn, buffers, nbuf, dims, ndim, narrow ? 2 : 4,
             std::strstr(kernel_name, "_cooperative_128") != nullptr);
     }
-    if (std::strncmp(kernel_name, kTileNormPrefix,
+    if (isTileActivation(kernel_name) ||
+        std::strncmp(kernel_name, kTileNormPrefix,
                      std::strlen(kTileNormPrefix)) == 0) {
         const bool narrow = std::strstr(kernel_name, "_f16_") != nullptr ||
                             std::strstr(kernel_name, "_bf16_") != nullptr;
@@ -2697,7 +2713,8 @@ int invokeResident(const char* name, void** buffers, size_t nbuf,
     std::lock_guard<std::mutex> lock(g_mu);
     CUfunction fn = getFunctionLocked(name);
     if (!fn) return g_ptx.count(name) ? 3 : 4;
-    if (std::strncmp(name, kTileNormPrefix, std::strlen(kTileNormPrefix)) == 0) {
+    if (isTileActivation(name) ||
+        std::strncmp(name, kTileNormPrefix, std::strlen(kTileNormPrefix)) == 0) {
         if (nbuf != 2 || ndim != 2 || dims[0] <= 0 || dims[1] <= 0 ||
             dims[0] >= (1LL << 31) || dims[1] >= (1LL << 31) ||
             dims[0] > (1LL << 31) / dims[1]) return 5;
@@ -2950,7 +2967,8 @@ int tessera_nvidia_ptx_benchmark(const char* kernel_name, void** buffers,
         std::strcmp(kernel_name, kNvfp4GemmEmitted) == 0)
         return benchmarkNvfp4(fn, buffers, num_buffers, dims, num_dims,
                               warmup, repetitions, latency_ms);
-    if (std::strncmp(kernel_name, "tessera_tile_softmax_", 21) == 0 ||
+    if (isTileActivation(kernel_name) ||
+        std::strncmp(kernel_name, "tessera_tile_softmax_", 21) == 0 ||
         std::strncmp(kernel_name, "tessera_tile_reduce_", 20) == 0 ||
         std::strncmp(kernel_name, kTileNormPrefix,
                      std::strlen(kTileNormPrefix)) == 0)

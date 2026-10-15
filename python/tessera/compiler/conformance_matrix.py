@@ -133,7 +133,10 @@ CONFORMANCE_OPS: tuple[ConformanceOp, ...] = (
         name="matmul_relu",
         component_ops=("matmul", "relu"),
         fusion_targets=frozenset({"nvidia_sm120"}),
-        notes="fused Tile accumulator epilogue on nvidia_sm120; composes elsewhere",
+        notes="fused Tile accumulator epilogue on nvidia_sm120; composes elsewhere. "
+              "This post-matmul row is distinct from the SM120 f16/bf16 standalone ReLU "
+              "producer member in canonical_nvidia_lhs_program, whose native Schedule/Tile "
+              "and public numerical fixture is tests/unit/test_sm120_scheduled_activation.py.",
     ),
     ConformanceOp(
         name="softmax",

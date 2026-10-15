@@ -122,6 +122,8 @@ SM120_SOFTMAX_F32_ABI = "tessera.nvidia.softmax.x_o_rows_k.f32.v1"
 SM120_REDUCE_F16_ABI = "tessera.nvidia.reduce.x_o_outer_axis_inner.f16_f32acc.v2"
 SM120_REDUCE_BF16_ABI = "tessera.nvidia.reduce.x_o_outer_axis_inner.bf16_f32acc.v3"
 SM120_REDUCE_F32_ABI = "tessera.nvidia.reduce.x_o_outer_axis_inner.f32_f32acc.v2"
+SM120_RELU_F16_ABI = "tessera.nvidia.relu.x_o_rows_columns.f16.v1"
+SM120_RELU_BF16_ABI = "tessera.nvidia.relu.x_o_rows_columns.bf16.v1"
 SM120_NORM_F16_ABI = "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1"
 SM120_NORM_BF16_ABI = "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1"
 SM120_NORM_F32_ABI = "tessera.nvidia.norm.x_o_rows_columns.f32_f32acc.v1"
@@ -323,6 +325,7 @@ class NVIDIANativeTensorProgram:
         producer_abis = {
             "rmsnorm": SM120_NORM_F16_ABI if storage == "f16" else SM120_NORM_BF16_ABI,
             "layernorm": SM120_NORM_F16_ABI if storage == "f16" else SM120_NORM_BF16_ABI,
+            "relu": SM120_RELU_F16_ABI if storage == "f16" else SM120_RELU_BF16_ABI,
             "softmax": SM120_SOFTMAX_F16_ABI if storage == "f16" else SM120_SOFTMAX_BF16_ABI,
         }
         if not isinstance(producer_kind, str):
@@ -356,6 +359,8 @@ class NVIDIANativeTensorProgram:
                 raise ValueError("tensor program requires canonical replayed Schedule/Tile packages")
             if "completion" not in package.descriptor.ordering.synchronization:
                 raise ValueError("tensor program edge requires producer completion before consumption")
+        if producer_kind == "relu":
+            _validate_scheduled_relu_descriptor(self.producer.descriptor)
         producer_provenance = self.producer.descriptor.provenance
         if (producer_abi is None
                 or self.producer.descriptor.abi_id != producer_abi
@@ -893,13 +898,15 @@ def package_scheduled_tensor_matmul(
         and producer_artifact.kind in {"rmsnorm", "layernorm"}
     ) or (
         producer_artifact.family == "softmax" and producer_artifact.kind == "softmax"
+    ) or (
+        producer_artifact.family == "activation" and producer_artifact.kind == "relu"
     )
     if (producer_artifact.target != "nvidia_sm120"
             or not supported_producer
             or producer_artifact.dtype not in {"fp16", "bf16"}
             or producer_artifact.storage != ("f16" if producer_artifact.dtype == "fp16" else "bf16")
             or producer_artifact.output_shape != producer_artifact.input_shape):
-        raise ValueError("producer must be shape-preserving fp16/bf16 RMSNorm, LayerNorm, or softmax Schedule artifact")
+        raise ValueError("producer must be shape-preserving fp16/bf16 RMSNorm, LayerNorm, softmax, or ReLU Schedule artifact")
     storage = "f16" if producer_artifact.dtype == "fp16" else "bf16"
     if (consumer_artifact.target != "nvidia_sm120"
             or consumer_artifact.storage != storage
@@ -3726,15 +3733,34 @@ def _mlir_f32_bits(text: str) -> bytes:
     return struct.pack("f", value)
 
 
+def _validate_scheduled_relu_descriptor(descriptor: LaunchDescriptor) -> None:
+    """Bind every ReLU launch path to the same immutable numerical row policy."""
+    provenance = descriptor.provenance
+    storage = provenance.get("storage")
+    digest = provenance.get("schedule_digest")
+    abis = {"f16": SM120_RELU_F16_ABI, "bf16": SM120_RELU_BF16_ABI}
+    if (not isinstance(storage, str) or storage not in abis or not isinstance(digest, str)
+            or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            or descriptor.abi_id != abis[storage]
+            or provenance.get("kind") != "relu"
+            or provenance.get("schedule") != "serial"
+            or provenance.get("nan_mode") != "propagate"
+            or provenance.get("zero_mode") != ("positive" if storage == "f16" else "preserve")
+            or descriptor.entry_symbol != f"tessera_tile_activation_relu_{storage}_{digest[:10]}"
+            or descriptor.geometry != LaunchGeometry(policy="sm120_activation_serial_rows")):
+        raise ValueError("SM120 activation schedule/entry/geometry/numerical ABI mismatch")
+
+
 def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANativePackage:
     """Consume the native scheduled unary launch envelope without Graph re-entry."""
     artifact.validate()
     softmax = artifact.family == "softmax"
+    activation = artifact.family == "activation"
     storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}.get(artifact.dtype)
     if (artifact.target != "nvidia_sm120" or artifact.architecture != "sm_120"
             or storage is None or artifact.storage != storage
             or artifact.accum != "f32" or artifact.workgroup_size != 128
-            or artifact.family not in {"softmax", "reduce", "norm"}
+            or artifact.family not in {"softmax", "reduce", "norm", "activation"}
             or artifact.schedule not in {"serial", "cooperative_128"}):
         raise ValueError("unsupported NVIDIA scheduled unary contract")
     shape, output_shape = artifact.input_shape, artifact.output_shape
@@ -3748,7 +3774,20 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     # and today the only reader of provenance["nan_mode"] is a device test
     # (Decision #29 -- a declaration whose sole consumer is a test).
     nan_mode: str | None = None
-    if norm:
+    if activation:
+        if (artifact.kind != "relu" or storage not in {"f16","bf16"}
+                or len(shape) != 2 or output_shape != shape or artifact.axis != -1
+                or artifact.keepdims is not False or artifact.schedule != "serial"
+                or artifact.epsilon != 0.0):
+            raise ValueError("unsupported NVIDIA scheduled ReLU contract")
+        entry = f"tessera_tile_activation_relu_{storage}_{artifact.schedule_digest[:10]}"
+        abi = SM120_RELU_F16_ABI if storage == "f16" else SM120_RELU_BF16_ABI
+        scalar_names = ("Rows", "Columns")
+        geometry = "sm120_activation_serial_rows"
+        nan_mode = "propagate"
+        required = {"kind": '\"relu\"', "schedule": '\"serial\"', "nan_mode": '\"propagate\"'}
+        required["zero_mode"] = '"positive"' if storage == "f16" else '"preserve"'
+    elif norm:
         if (artifact.kind not in {"rmsnorm", "layernorm"} or artifact.axis != -1
                 or output_shape != shape or artifact.schedule not in {"serial","cooperative_128"}
                 or artifact.keepdims is not False or type(artifact.epsilon) is not float
@@ -3805,7 +3844,7 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
         if not re.search(pattern, artifact.tile_ir) or not re.search(pattern, artifact.schedule_ir):
             raise ValueError(f"NVIDIA scheduled unary policy disagrees on {field}")
     # Require the Schedule wrapper to retain the input/output shape contract.
-    for dims, element in ((shape, storage), (output_shape, storage if softmax or norm else "f32")):
+    for dims, element in ((shape, storage), (output_shape, storage if softmax or norm or activation else "f32")):
         tensor = "tensor<" + "".join(f"{d}x" for d in dims) + element + ">"
         if tensor not in artifact.schedule_ir:
             raise ValueError("NVIDIA scheduled unary shape disagrees with Schedule IR")
@@ -3837,7 +3876,7 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=entry, abi_id=abi,
         buffers=(BufferBinding(0, artifact.input_name, "input", artifact.dtype, len(shape), "row_major", 4 if storage == "f32" else 2),
-                 BufferBinding(1, artifact.output_name, "output", artifact.dtype if softmax or norm else "fp32", len(output_shape), "row_major", 2 if (softmax or norm) and storage != "f32" else 4)),
+                 BufferBinding(1, artifact.output_name, "output", artifact.dtype if softmax or norm or activation else "fp32", len(output_shape), "row_major", 2 if (softmax or norm or activation) and storage != "f32" else 4)),
         scalars=tuple(ScalarArgument(i + 2, name, "int64") for i, name in enumerate(scalar_names)),
         shape_guards=tuple(ShapeGuard(name, dim, "eq", value)
                            for name, dims in ((artifact.input_name, shape), (artifact.output_name, output_shape))
@@ -3850,10 +3889,13 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
                     "axis": artifact.axis, "kind": artifact.kind, "keepdims": artifact.keepdims,
                     "epsilon": artifact.epsilon,
                     **({"nan_mode": nan_mode} if nan_mode is not None else {}),
+                    **({"zero_mode": "positive" if storage == "f16" else "preserve"} if activation else {}),
                     "graph_ir_digest": hashlib.sha256(artifact.graph_ir.encode()).hexdigest(),
                     "schedule_ir_digest": hashlib.sha256(artifact.schedule_ir.encode()).hexdigest(),
                     "schedule_digest": artifact.schedule_digest, "tile_ir_digest": artifact.tile_digest},
     )
+    if activation:
+        _validate_scheduled_relu_descriptor(descriptor)
     return NVIDIANativePackage(artifact.tile_ir, lowered, ptx, image, descriptor)
 
 
@@ -4882,6 +4924,8 @@ __all__ = [
     "SM120_REDUCE_F16_ABI",
     "SM120_REDUCE_BF16_ABI",
     "SM120_REDUCE_F32_ABI",
+    "SM120_RELU_F16_ABI",
+    "SM120_RELU_BF16_ABI",
     "SM120_NORM_F16_ABI",
     "SM120_NORM_BF16_ABI",
     "SM120_NORM_F32_ABI",

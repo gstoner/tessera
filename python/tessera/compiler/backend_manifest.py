@@ -2641,9 +2641,9 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
     },
     "relu": {
         "dtypes": ("fp16", "bf16", "fp32", "fp8_e4m3", "fp8_e5m2"),
-        "feature_flags": ("mma_sync", "fused_epilogue", "cuda"),
-        "shape_envelope": "ReLU applied to the f32 accumulator of a rank-2 f16/bf16 mma.sync matmul; aligned or ragged positive M/N/K",
-        "notes": "ReLU is compiled into the canonical sm_120 mma.sync accumulator epilogue and executes without an intermediate global-memory tensor.",
+        "feature_flags": ("mma_sync", "fused_epilogue", "scheduled_activation", "cuda"),
+        "shape_envelope": "Standalone Schedule/Tile ReLU member: static row-major rank-2 f16/bf16, positive rows/columns, serial 128-thread row launch; also the existing rank-2 matmul accumulator epilogue",
+        "notes": "Standalone f16/bf16 ReLU preserves a materialized storage boundary before typed matmul fragments, including RMSNorm -> ReLU -> matmul through canonical_nvidia_lhs_program. NaNs propagate; f16 zero is positive and bf16 zero preserves its sign. FP32/FP8 entries retain only the existing matmul-epilogue envelope; no standalone promotion. The fused accumulator route remains separately proved by tests/device/nvidia/test_matmul_relu.py.",
     },
     "dsa_block_sparse_attention": {
         "dtypes": ("fp32",),
@@ -3420,7 +3420,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     },
     ("gated_deltanet", "nvidia_sm120"): "tests/device/nvidia/test_training_autodiff_native.py",
     ("fused_epilogue", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
-    ("relu", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
+    ("relu", "nvidia_sm120"): "tests/unit/test_sm120_scheduled_activation.py",
     ("matmul_relu", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
     ("matmul_softmax", "nvidia_sm120"): "tests/device/nvidia/test_matmul_softmax.py",
     ("kv_cache_read", "nvidia_sm120"): "tests/device/nvidia/test_kv_cache.py",

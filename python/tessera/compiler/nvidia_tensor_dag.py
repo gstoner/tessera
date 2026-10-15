@@ -165,18 +165,20 @@ def validate(program):
         pp=p.descriptor.provenance
         if step["operation"]!=policy["producer"] or pp.get("kind")!=PRODUCERS[policy["producer"]]:
             raise ValueError("tensor DAG producer semantic kind differs")
-        if pp["kind"]!="softmax" and pp.get("epsilon")!=struct.unpack("f",struct.pack(
+        if pp["kind"] == "relu":
+            native._validate_scheduled_relu_descriptor(p.descriptor)
+        if pp["kind"] in {"rmsnorm","layernorm"} and pp.get("epsilon")!=struct.unpack("f",struct.pack(
                 "f",policy["producer_attrs"].get("eps",1e-5)))[0]:
             raise ValueError("tensor DAG producer epsilon differs")
         from .native_artifact import LaunchGeometry, WorkspaceRequirement
-        norm=pp["kind"]!="softmax";storage="f16" if program.edge.dtype=="fp16" else "bf16"
-        abi=(native.SM120_NORM_F16_ABI if storage=="f16" else native.SM120_NORM_BF16_ABI) if norm else (
+        norm=pp["kind"] in {"rmsnorm","layernorm"};activation=pp["kind"]=="relu";storage="f16" if program.edge.dtype=="fp16" else "bf16"
+        abi=(native.SM120_RELU_F16_ABI if storage=="f16" else native.SM120_RELU_BF16_ABI) if activation else (native.SM120_NORM_F16_ABI if storage=="f16" else native.SM120_NORM_BF16_ABI) if norm else (
             native.SM120_SOFTMAX_F16_ABI if storage=="f16" else native.SM120_SOFTMAX_BF16_ABI)
         schedule=pp.get("schedule")
-        geometry=("sm120_norm_"+str(schedule)+"_rows" if norm else
+        geometry=("sm120_activation_serial_rows" if activation else "sm120_norm_"+str(schedule)+"_rows" if norm else
                   "sm120_softmax_cooperative_128_rows" if schedule=="cooperative_128" else
                   "sm120_softmax_thread_per_row_128")
-        scalar_names=("Rows","Columns") if norm else ("Rows","K")
+        scalar_names=("Rows","Columns") if norm or activation else ("Rows","K")
         if (p.descriptor.abi_id!=abi or pp.get("route")!="canonical_scheduled_tile_consumer" or
                 schedule not in {"serial","cooperative_128"} or
                 p.descriptor.geometry!=LaunchGeometry(policy=geometry) or

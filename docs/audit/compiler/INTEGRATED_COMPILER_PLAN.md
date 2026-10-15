@@ -155,9 +155,11 @@ the next action's host requirement; it is not a live fleet-availability claim.
   original pinned checkpoint gate/up weights preserve both output planes.
   Native multi-output SSA ownership now has a static source-preserving program
   and diagnostic gfx1201 producer/product proof without intermediate host IO.
-  Remaining: public composed JIT/prepared binding, import-once/activation-only
-  updates, bounded source-preserving frames and model-quality acceptance.
-- Latest: [2026-10-15 — native NVFP4 multiple-result producer/product ownership](INTEGRATED_COMPILER_LOG.md#2026-10-15--native-nvfp4-multiple-result-producerproduct-ownership)
+  Prepared native ownership now supports import-once expansion and activation-only
+  updates with native dependency checks, including normal frontend capture and
+  FP32/BF16 outputs. Remaining: ordinary composed JIT/serialized replay,
+  original-checkpoint composed proof, bounded frames and model-quality acceptance.
+- Latest: [2026-10-15 — prepared native NVFP4 import-once ownership](INTEGRATED_COMPILER_LOG.md#2026-10-15--prepared-native-nvfp4-import-once-ownership)
 
 ### ROCM-SPLIT-K-1
 

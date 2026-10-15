@@ -26,6 +26,7 @@ struct Stage {
   std::array<int64_t, 8> scalars{};
   std::array<void *, 43> argv{};
   std::array<unsigned, 6> geometry{};
+  std::vector<uint32_t> inputs, outputs;
 };
 struct Program {
   std::string cacheKey;
@@ -42,6 +43,7 @@ struct Program {
   std::vector<void *> buffers;
   std::vector<std::vector<unsigned char>> snapshots;
   std::vector<Stage> stages;
+  std::vector<unsigned char> initialized;
   std::vector<unsigned char> readback;
   std::vector<hipEvent_t> events;
   std::vector<hipGraph_t> graphs;
@@ -179,6 +181,8 @@ int upload(Program &p, const void *const *inputs, const uint64_t *bytes) {
     }
   }
   if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
+  p.initialized.assign(p.contract.size(), 0);
+  std::fill_n(p.initialized.begin(), p.arguments, 1);
   p.ready = true;
   return 0;
 }
@@ -320,6 +324,10 @@ static int prepareProgram(
   }
   for (uint32_t i = 0; i < steps; ++i) {
     auto &s = owned.stages[i]; size_t arg = 0;
+    s.inputs.assign(plan[i].inputs, plan[i].inputs + plan[i].input_count);
+    s.outputs.clear();
+    for (uint32_t j = 0; j < outputCount(plan[i]); ++j)
+      s.outputs.push_back(outputSlot(plan[i], j));
     for (uint32_t j = 0; j < plan[i].input_count + outputCount(plan[i]); ++j) {
       uint32_t slot = j < plan[i].input_count ? plan[i].inputs[j] :
           outputSlot(plan[i],j - plan[i].input_count);
@@ -434,8 +442,64 @@ extern "C" int tessera_rocm_program_update(
   return upload(p, inputs, bytes);
 } catch (...) { return 12; }
 
-extern "C" int tessera_rocm_program_invoke(
-    uint64_t handle, uint32_t repeats, uint64_t *generation, float *elapsed) try {
+// Partial root uploads preserve unaffected SSA values, but invalidate every
+// transitive dependent result. Complete admission precedes any state change.
+extern "C" int tessera_rocm_program_update_slots(
+    uint64_t handle, uint32_t count, const uint32_t *slots,
+    const void *const *inputs, const uint64_t *bytes) try {
+  if (!count || !slots || !inputs || !bytes) return 1;
+  if (getpid() != process) return 2;
+  auto &pool = state(); std::lock_guard<std::mutex> guard(pool.mutex);
+  auto it = pool.programs.find(handle); if (it == pool.programs.end()) return 1;
+  auto &p = *it->second;
+  if (!identity(p)) return 2;
+  if (p.poisoned || !p.ready) return 10;
+  if (count > p.arguments) return 1;
+  std::vector<unsigned char> changed(p.contract.size(), 0);
+  for (uint32_t i = 0; i < count; ++i) {
+    if (slots[i] >= p.arguments || changed[slots[i]] ||
+        !inputs[i] || bytes[i] != p.contract[slots[i]].bytes) return 1;
+    changed[slots[i]] = 1;
+  }
+  auto initialized = p.initialized;
+  for (auto &stage : p.stages) {
+    bool invalid = false;
+    for (auto slot : stage.inputs) invalid |= changed[slot] != 0;
+    if (invalid)
+      for (auto slot : stage.outputs) {
+        changed[slot] = 1;
+        initialized[slot] = 0;
+      }
+  }
+  std::vector<std::vector<unsigned char>> next(count);
+  if (!p.pinned)
+    for (uint32_t i = 0; i < count; ++i) {
+      auto *begin = static_cast<const unsigned char *>(inputs[i]);
+      next[i].assign(begin, begin + bytes[i]);
+    }
+  if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
+  p.poisoned = true; p.ready = false; p.output = false;
+  for (uint32_t i = 0; i < count; ++i) {
+    auto slot = slots[i];
+    const void *source;
+    if (p.pinned) {
+      auto *destination = static_cast<unsigned char *>(p.pinnedInputs) + p.inputOffsets[slot];
+      std::memcpy(destination, inputs[i], bytes[i]); source = destination;
+    } else {
+      p.snapshots[slot] = std::move(next[i]); source = p.snapshots[slot].data();
+    }
+    if (hipMemcpyAsync(p.buffers[slot], source, bytes[i],
+                      hipMemcpyHostToDevice, p.stream) != hipSuccess) return 5;
+  }
+  if (hipStreamSynchronize(p.stream) != hipSuccess) return 7;
+  p.initialized = std::move(initialized);
+  p.ready = true; p.poisoned = false;
+  return 0;
+} catch (...) { return 12; }
+
+static int invokeRange(
+    uint64_t handle, uint32_t first, uint32_t count, bool full,
+    uint32_t repeats, uint64_t *generation, float *elapsed) try {
   if (generation) *generation = 0;
   if (elapsed) *elapsed = 0;
   if (!generation || !repeats || repeats > 1048576) return 1;
@@ -445,6 +509,14 @@ extern "C" int tessera_rocm_program_invoke(
   auto &p = *it->second;
   if (!identity(p)) return 2;
   if (p.poisoned || !p.ready || p.generation == UINT64_MAX) return 10;
+  if (full) { first = 0; count = p.stages.size(); }
+  if (!count || first >= p.stages.size() || count > p.stages.size() - first) return 1;
+  auto initialized = p.initialized;
+  for (uint32_t i = first; i < first + count; ++i) {
+    for (auto slot : p.stages[i].inputs)
+      if (!initialized[slot]) return 10;
+    for (auto slot : p.stages[i].outputs) initialized[slot] = 1;
+  }
   p.output = false;
   hipEvent_t begin{}, end{};
   if (elapsed) {
@@ -456,10 +528,12 @@ extern "C" int tessera_rocm_program_invoke(
   }
   int status = 0;
   for (uint32_t i = 0; i < repeats && !status; ++i)
-    for (auto &s : p.stages)
+    for (uint32_t member = first; member < first + count; ++member) {
+      auto &s = p.stages[member];
       if (hipModuleLaunchKernel(s.function, s.geometry[0], s.geometry[1], s.geometry[2],
           s.geometry[3], s.geometry[4], s.geometry[5], 0, p.stream, s.argv.data(),
           nullptr) != hipSuccess) { status = 6; break; }
+    }
   if (!status && elapsed && hipEventRecord(end, p.stream) != hipSuccess) status = 6;
   // Completion precedes event destruction, output publication and any readback.
   if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
@@ -470,9 +544,23 @@ extern "C" int tessera_rocm_program_invoke(
   }
   if (status) { p.poisoned = true; return status; }
   if (elapsed) *elapsed /= repeats;
-  p.output = true; *generation = ++p.generation;
+  p.initialized = std::move(initialized);
+  p.output = true;
+  for (uint32_t slot = 0; slot < p.contract.size(); ++slot)
+    if (p.contract[slot].ownership == 2 && !p.initialized[slot]) p.output = false;
+  *generation = ++p.generation;
   return 0;
 } catch (...) { return 12; }
+
+extern "C" int tessera_rocm_program_invoke(
+    uint64_t handle, uint32_t repeats, uint64_t *generation, float *elapsed) {
+  return invokeRange(handle, 0, 0, true, repeats, generation, elapsed);
+}
+extern "C" int tessera_rocm_program_invoke_range(
+    uint64_t handle, uint32_t first, uint32_t count, uint32_t repeats,
+    uint64_t *generation, float *elapsed) {
+  return invokeRange(handle, first, count, false, repeats, generation, elapsed);
+}
 
 // Diagnostic member windows run the immutable SSA members in prefix order.
 // Repetition of a pure member writes the same fresh output; consumers only run
@@ -535,6 +623,7 @@ extern "C" int tessera_rocm_program_profile_members(
       p.events.pop_back();
     }
   }
+  p.initialized.assign(p.contract.size(), 1);
   p.poisoned = false; p.output = true; *generation = ++p.generation;
   return 0;
 } catch (...) { return 12; }

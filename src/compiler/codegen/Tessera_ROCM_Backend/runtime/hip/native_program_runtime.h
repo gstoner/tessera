@@ -70,6 +70,17 @@ int tessera_rocm_program_pack_host_view(
 // A failed device operation poisons the owner; close is then required.
 int tessera_rocm_program_update(uint64_t handle, const void *const *inputs,
                                const uint64_t *input_bytes);
+// Update distinct original roots only. Transitive SSA dependents become invalid;
+// unaffected private results stay resident. Malformed frames change no state.
+int tessera_rocm_program_update_slots(
+    uint64_t handle, uint32_t count, const uint32_t *slots,
+    const void *const *inputs, const uint64_t *bytes);
+// Execute an explicit contiguous stage range only when every external
+// dependency is initialized. Successful completion publishes a new generation;
+// readback additionally requires all declared returned outputs to be ready.
+int tessera_rocm_program_invoke_range(
+    uint64_t handle, uint32_t first, uint32_t count, uint32_t repeats,
+    uint64_t *generation, float *elapsed_ms);
 // Complete sequence and repetition loops execute in native C++ on a private
 // stream. Optional HIP event interval includes native enqueue gaps, not Python.
 int tessera_rocm_program_invoke(uint64_t handle, uint32_t repeats,

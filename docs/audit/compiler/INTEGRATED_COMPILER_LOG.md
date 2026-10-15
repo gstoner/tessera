@@ -12449,3 +12449,26 @@ Evidence: benchmarks/baselines/rocm_native_multi_output_20261015/README.md;
 tests/unit/test_native_nvfp4_expansion_program.py;
 tests/device/rocm/test_native_multi_output_owner.py.
 <!-- entry-fields:end -->
+
+
+### 2026-10-15 — prepared native NVFP4 import-once ownership
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: queued after PR949; sync NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+
+Outcome: normal Python capture feeds the native two-stage expansion/product
+partition and checked prepared HIP binding. FP32/BF16 outputs and permuted
+roots execute on gfx1201 with eager numerical oracles forbidden in capture.
+Partial-root updates invalidate actual transitive SSA dependents; consumer-only
+ranges require initialized external inputs. Import-once weights remain resident
+across activation updates. One frozen-source 800-case native/prepared/public primal/JVP/audit/registry
+gate passes. Matched synthetic packets separate host, native events with
+enqueue gaps and per-member graph dispatch. All sibling queues assessed.
+
+Remaining: ordinary composed public JIT and compiler-free serialized replay,
+original checkpoint composition, bounded source-preserving frames, model
+quality and the remaining five-slice obligations. No matmul schedule promotion.
+
+Evidence: benchmarks/baselines/rocm_nvfp4_prepared_expansion_20261015/README.md;
+tests/device/rocm/test_prepared_nvfp4_expansion_program.py.
+<!-- entry-fields:end -->

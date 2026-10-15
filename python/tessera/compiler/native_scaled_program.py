@@ -16,7 +16,7 @@ import re
 import shutil
 import subprocess
 import numpy as np
-from typing import Any
+from typing import Any, Protocol
 
 def _manifest(text: str, name: str) -> dict:
     values = re.findall(r'\b' + re.escape(name) + r'\s*=\s*"([A-Za-z0-9+/=]+)"', text)
@@ -600,19 +600,35 @@ def pack_host_view(lib, array):
     return packed
 
 
+class _PreparedProgramPackage(Protocol):
+    @property
+    def program_json(self) -> str: ...
+    @property
+    def graph_ir(self) -> str: ...
+    def validate(self) -> None: ...
+
+
 class PreparedScaledProgram:
     """One native owner; all member execution and private storage are in C++."""
-    def __init__(self, package: NativeScaledProgram, inputs, *, runtime_library: str):
-        self._binding = _scaled_abi_binding(package)
+    _prepare_symbol = "tessera_rocm_program_prepare"
+    _step_type: type[c.Structure] = _Step
+
+    def _bind_abi(self, package):
+        return _scaled_abi_binding(package)
+
+    def __init__(self, package: _PreparedProgramPackage, inputs, *, runtime_library: str):
+        self._binding = self._bind_abi(package)
         self.package = package
         # Each owner has its own metadata snapshot; caller mutations cannot
         # corrupt the shared immutable ctypes binding or another owner.
         self._program = None
         self.lib = c.CDLL(runtime_library)
         self.handle = c.c_uint64()
-        self.lib.tessera_rocm_program_prepare.argtypes = [
+        prepare = getattr(self.lib, self._prepare_symbol)
+        prepare.argtypes = [
             c.c_char_p, c.c_uint32, c.c_uint32, c.POINTER(_Buffer), c.c_uint32,
-            c.POINTER(_Step), c.POINTER(c.c_void_p), c.POINTER(c.c_uint64), c.POINTER(c.c_uint64)]
+            c.POINTER(self._step_type), c.POINTER(c.c_void_p), c.POINTER(c.c_uint64), c.POINTER(c.c_uint64)]
+        prepare.restype = c.c_int
         self.lib.tessera_rocm_program_update.argtypes = [
             c.c_uint64, c.POINTER(c.c_void_p), c.POINTER(c.c_uint64)]
         self.lib.tessera_rocm_program_invoke.argtypes = [
@@ -629,7 +645,7 @@ class PreparedScaledProgram:
         rows = self._binding.storage
         buffers, steps = self._binding.buffers, self._binding.steps
         arrays, addresses, sizes = self._inputs(inputs)
-        code = self.lib.tessera_rocm_program_prepare(
+        code = prepare(
             b"gfx1201",self._binding.argument_count,len(rows),buffers,len(steps),
             steps,addresses,sizes,c.byref(self.handle))
         if code:

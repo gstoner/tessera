@@ -11,6 +11,11 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 
 Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
 Synchronization key: NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+
+The follow-on prepared binding adds HIP partial-root updates and dependency-
+checked stage ranges. Not applicable to x86 execution: its native provider,
+public dispatch and schedule are unchanged. No sibling hardware result is
+inferred from gfx1201 owner/FP32/BF16 proof.
 Not applicable to x86 physical execution: the additive owner ABI is
 HIP-only and the named native MLIR program requires explicit gfx1201.
 Prior schemas remain intact; no sibling numerical, runtime ABI or selector

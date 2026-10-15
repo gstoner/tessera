@@ -35,5 +35,43 @@ intermediates cannot be read as returned outputs. Existing ordered submission,
 generation-checked transactional readback and teardown rules remain.
 
 The owning-device fixture executes compiler-derived plans through the native
-ABI directly. Public composed JIT/prepared binding, import-once weights and
-partial activation updates remain separate work.
+ABI directly. Ordinary composed public JIT and serialized replay remain separate work.
+The prepared ownership extension is described below.
+
+## Prepared execution and persistent expansion
+
+The prepared binding consumes this same native v3 manifest and existing native
+member descriptors. It retains the static checked Target witness separately
+from the native shape-independent image projection. It validates the native
+buffer shapes, storage, role permutation, write/read lifetimes and both member
+bindings before loading a provider. Input codes/scales/globals receive the same
+checked expansion boundary as the isolated public operation.
+
+Preparation copies all five roots into native ownership. import_weights runs
+only the producer. invoke_consumer runs only the product after native readiness
+checks. update_activations copies only the activation and activation-scale
+roots; both expanded weight buffers remain resident. Full update retains its
+original meaning and invalidates every intermediate.
+
+The additive update_slots ABI admits distinct original input slots and exact
+byte sizes before state changes. It propagates invalidation through actual SSA
+edges stored at preparation. Invalid frames preserve the previous generation.
+The invoke_range ABI admits a nonempty contiguous stage range only if all
+external operands are initialized. Success records initialized results and a
+new generation, but readback additionally requires every returned output to be
+ready. A producer-only generation cannot publish an uninitialized product.
+A weight update invalidates both expansion outputs and downstream products;
+consumer-only launch then rejects until the producer executes again.
+
+Cached allocation acquisition resets readiness and uploads the new caller's
+roots. No private value from a prior session can satisfy the new session's
+dependencies. Failed device completion retains the existing quarantine and
+explicit-close behavior. Profiling all pure SSA members restores all outputs'
+readiness; it does not change numerical policy.
+
+The prepared API supports FP32 and BF16 stores. Ordinary composed public JIT
+and serialized compiler-free replay remain follow-up work; this prepared API
+does not imply either has landed.
+
+These ranges apply to the admitted pure SSA members. They do not establish
+transactional semantics for recurrent SSM checkpoints or other state effects.

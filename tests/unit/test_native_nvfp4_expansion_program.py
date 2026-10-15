@@ -6,7 +6,7 @@ from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
 from tests.unit.test_rocm_graph_nvfp4_expand import POLICY
 
 
-def source_graph(m=19, n=7, k=48, roles=(0, 1, 2, 3, 4)):
+def source_graph(m=19, n=7, k=48, roles=(0, 1, 2, 3, 4), output="f32"):
     types = [f"tensor<{n}x{k//2}xi8>", f"tensor<{n}x{k//16}xf8E4M3FN>",
              "tensor<2xf64>", f"tensor<{m}x{k}xf8E4M3FN>", f"tensor<{m}x{k//16}xf32>"]
     physical = [""] * 5
@@ -14,7 +14,7 @@ def source_graph(m=19, n=7, k=48, roles=(0, 1, 2, 3, 4)):
         physical[slot] = types[role]
     args = ", ".join(f"%arg{i}: {t}" for i, t in enumerate(physical))
     codes, scales, globals_, a, sa = (f"%arg{i}" for i in roles)
-    b, sb, out = f"tensor<{n}x{k}xf8E4M3FN>", f"tensor<{k//16}x{n}xf32>", f"tensor<{m}x{n}xf32>"
+    b, sb, out = f"tensor<{n}x{k}xf8E4M3FN>", f"tensor<{k//16}x{n}xf32>", f"tensor<{m}x{n}x{output}>"
     return f'''module attributes {{tessera.target = "rocm_gfx1201", tessera.arch = "gfx1201"}} {{
  func.func @source_product({args}) -> {out} {{
  %b, %sb = "tessera.nvfp4_expand"({codes}, {scales}, {globals_}) {{

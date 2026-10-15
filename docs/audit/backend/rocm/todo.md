@@ -9,15 +9,26 @@ scope: ROCm backend implementation and exact-device proof
 
 Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
 Synchronization key: NVFP4-NATIVE-MULTI-OUTPUT-20261015.
+
+Prepared execution now consumes the native two-stage manifest through the
+additive multi-result owner. Normal Python capture, FP32/BF16 output and
+permuted-root device tests pass. Native partial-root updates invalidate
+transitive dependents; consumer-only execution checks readiness before launch.
+Import-once weights stay resident across activation-only updates. Original
+single-result ABI/public primal/JVP regressions pass with the new provider.
+Matched synthetic timing separates stage graph dispatch, native enqueue/event
+and completed update/invoke/read. Ordinary composed JIT and serialized replay,
+larger original-checkpoint proof, bounded frames and model-quality acceptance
+remain open. This does not promote a physical schedule.
 Native MLIR outlines source-preserving expansion and the exact K16 FP8
 product from actual Graph SSA, retaining original roles and two private
 producer results. Schema v3 is static source-preserving expansion; v1 lossy
 static and v2 lossy bounded semantics remain unchanged. An additive multi-result
 HIP preparation ABI independently derives all lifetimes. Diagnostic gfx1201
 execution passes ragged K16/K48/K80 cases without intermediate host transfers.
-Public composed JIT/prepared binding, import-once/partial activation updates,
-bounded source-preserving frames, full checkpoint/model quality and performance
-promotion remain follow-up required. gfx1151 receives no FP8 WMMA admission.
+Ordinary composed public JIT/serialized replay, bounded source-preserving
+frames, full checkpoint/model quality and performance promotion remain
+follow-up required. gfx1151 receives no FP8 WMMA admission.
 Evidence: benchmarks/baselines/rocm_native_multi_output_20261015/README.md.
 
 

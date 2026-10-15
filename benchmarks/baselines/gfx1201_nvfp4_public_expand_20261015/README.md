@@ -84,3 +84,12 @@ validation, native replay and the remaining integration boundaries. The ODS
 gate pins all three new records and requires real compiler consumers for each.
 The full API/spec/ODS synchronization set passes 779 cases. The before/after
 logs are retained separately; numerical source and benchmark hashes are unchanged.
+
+### CI Apple residual classification correction
+
+The full CPU lane exposed two failing residual-census assertions because the
+new gfx1201-only operation was absent from the explicit Apple no-lane set.
+Both failures reproduce before the declaration repair; the focused Apple,
+operator foundation and ODS consumer gate passes 793 tests afterward.
+This records unsupported Metal execution, not a new Apple route. Numerical
+kernels, runtime ABI and measured source/image identities are unchanged.

@@ -48,5 +48,10 @@
       "scope": "API spec, ODS completeness/consumer pins and spec synchronization"
     }
   },
-  "source_identity": "all measured Python, native C++ and tool hashes verified before commit"
+  "source_identity": "all measured Python, native C++ and tool hashes verified before commit",
+  "apple_no_lane_ci_repair": {
+    "red_failed": 2,
+    "focused_green_passed": 793,
+    "scope": "explicit Apple unsupported residual classification; no Metal route"
+  }
 }

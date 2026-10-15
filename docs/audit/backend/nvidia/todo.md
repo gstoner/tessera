@@ -23,9 +23,11 @@ The native outline remains artifact_only. Existing RHS v7 numbering/ABI is
 unchanged. General producer, dynamic/resident and reverse AD remain open.
 Normal CMake compiler builds and 78 owning source/policy checks pass, including
 direct signed-zero/NaN producer storage checks. The pre-synchronization focused
-gate passes 754 cases. PR950 is integrated; matching compiler rebuild,
-synchronized regression and publication gates remain open. The earlier
-normalization full-suite result does not certify this new source.
+gate passes 754 cases. PR950 is integrated and all three matching compiler tools
+build. The synchronized full sweep has 26,628 passes and two audit-drift
+failures, repaired by 770 passing recorder/ODS audit checks. A fresh full-suite
+certificate and publication CI remain open; earlier full-suite results retain
+their original source scopes.
 
 Contract: docs/spec/ir/source_active_row_jvp.md.
 Evidence: benchmarks/baselines/sm120_active_source_jvp_runtime_20261015/README.md.

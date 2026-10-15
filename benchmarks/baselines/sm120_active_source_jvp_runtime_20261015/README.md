@@ -95,3 +95,32 @@ and run the full non-slow unit suite on the frozen synchronized source.
 General producer, dynamic/resident and reverse admission remain follow-ups.
 Apple, x86 and ROCm need their own physical consumers and architecture-specific
 execution certificates; shared frontend correctness does not establish parity.
+
+## Reproduce the recorder
+
+Recorded by benchmarks/nvidia/benchmark_active_source_jvp.py. Configure matching
+TESSERA_OPT, TESSERA_NVIDIA_OPT and TESSERA_NVIDIA_PTX_LAUNCH_LIB paths, then run
+from the repository root on the owning SM120 host:
+
+```sh
+PYTHONPATH=python:. python benchmarks/nvidia/benchmark_active_source_jvp.py \
+  --output ~/scratch/source-active-jvp/timings.json
+```
+
+The mandatory output argument keeps generated packets in the selected scratch
+location. The recorder queries and checks the actual GPU before measurement.
+
+## Synchronized full-suite audit repair
+
+Frozen 951658503 on Super-Bear WSL completed the full non-slow tests/unit
+command: 26,628 passed, 7,678 skipped, 876 deselected and two failed in
+2010.33 seconds. Both failures were audit drift: the new recorder was unnamed
+and the ODS record-count pin lacked the five new shipped operations.
+The recorder now has the reproduction entry above; the ODS scan explicitly
+pins all five names and the exact count of 684. All five classify as having
+shipped compiler consumers. Both complete audit files pass: 770 checks.
+
+full-unit-951658503.json and the compressed raw log retain the original failed
+sweep without relabeling it green. The repair changes documentation and audit
+expectations; compiler/runtime/numerical code is unchanged. A fresh frozen
+full-suite run and publication CI remain required.

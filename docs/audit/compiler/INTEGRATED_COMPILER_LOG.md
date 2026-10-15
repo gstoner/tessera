@@ -12579,3 +12579,27 @@ performance obligations and the remaining NVIDIA five-slice work.
 Evidence: benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md;
 tests/device/rocm/test_public_nvfp4_source_program.py.
 <!-- entry-fields:end -->
+
+### 2026-10-15 — native source-active row JVP packages
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync W11-ACTIVE-SOURCE-20261015.
+
+Outcome: actual frontend RMSNorm/ReLU/source-tangent SSA now crosses native
+Graph/AD/Schedule/typed scalar Tile views/NVIDIA/LLVM-PTX into one checked
+three-stage, two-output C++ owner. FP16/BF16 public JVP and compiler-free
+portable replay retain private edge ownership, permuted roots and storage
+semantics, including BF16 negative zero and NaN selection. All three normal
+compiler tools build after PR950 integration. 754 focused checks pass; the
+frozen full sweep has 26,628 passes and two audit-drift failures. Recorder
+naming and five explicit ODS pins repair those failures; 770 audit checks pass.
+All four backend queues distinguish this exact RTX 5070 route from siblings.
+
+Remaining: fresh repaired-source full-suite and publication gates; general
+producer/accumulator, dynamic/resident and reverse AD envelopes; independent
+sibling physical consumers. No aggregate five-slice or performance promotion.
+
+Evidence: benchmarks/baselines/sm120_active_source_jvp_runtime_20261015/README.md,
+full-unit-951658503.json, full-unit-951658503.log.gz and audit-repair-tests.txt;
+docs/spec/ir/source_active_row_jvp.md.
+<!-- entry-fields:end -->

@@ -6,6 +6,27 @@ target: nvidia_sm120
 last_updated: 2026-10-14
 ---
 
+## W11-RELU-PRODUCER-20261014 — active engineering
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+The next named producer is RMSNorm -> ReLU -> matmul, retaining separate
+f16/bf16 normalization and activation stores before typed matmul fragments.
+Native MLIR now authors the explicit activation Schedule/Tile launch contract,
+SSA member outlining and private-buffer lifetime metadata. Package bindings
+use a distinct ReLU ABI, serial 128-thread row geometry and propagated NaNs;
+ReLU does not inherit a normalization epsilon. Its zero rule is explicit:
+f16 canonicalizes zero, while bf16 preserves its sign, matching eager execution.
+Twenty-eight new route/public-JIT/bitwise/numerical/descriptor cases pass on RTX 5070. The
+six-case packet records separate event-stage, event-program and completed host
+timing domains; event regions may include enqueue gaps. No speedup or complete
+W1.1 closure claim. See docs/spec/ir/sm120_activation_schedule_tile_contract.md
+and benchmarks/baselines/sm120_norm_relu_matmul_20261014/README.md.
+A shared descriptor guard rejects forged numerical/schedule/storage policy
+before composed or prepared allocation; final guarded.json preserves every
+native program, image, PTX and Tile identity.
+
+Parity validated on RTX 5070/sm_120 for the named static f16/bf16 producer chain at M,K,N=(7,32,9), (17,64,19), (129,256,33). Follow-up required: captured measurement, coalesced ReLU row mapping, symbolic frontend metadata and broader producer/AD coverage.
+
 ## MXFP4-RESERVED-SCALE-20261014 — PR946 review correction
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

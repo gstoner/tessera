@@ -3164,6 +3164,8 @@ def _submit_nvidia_sm120_native(
         SM120_REDUCE_F16_ABI,
         SM120_REDUCE_BF16_ABI,
         SM120_REDUCE_F32_ABI,
+        SM120_RELU_F16_ABI,
+        SM120_RELU_BF16_ABI,
         SM120_NORM_F16_ABI,
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
@@ -3247,6 +3249,8 @@ def _submit_nvidia_sm120_native(
         SM120_REDUCE_F16_ABI,
         SM120_REDUCE_BF16_ABI,
         SM120_REDUCE_F32_ABI,
+        SM120_RELU_F16_ABI,
+        SM120_RELU_BF16_ABI,
         SM120_NORM_F16_ABI,
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
@@ -3308,6 +3312,13 @@ def _submit_nvidia_sm120_native(
         "bf16": SM120_SOFTMAX_BF16_ABI,
         "f32": SM120_SOFTMAX_F32_ABI,
     }
+    activation_storage_abis = {"f16": SM120_RELU_F16_ABI, "bf16": SM120_RELU_BF16_ABI}
+    if descriptor.abi_id in activation_storage_abis.values():
+        from tessera.compiler.nvidia_native import _validate_scheduled_relu_descriptor
+        try:
+            _validate_scheduled_relu_descriptor(descriptor)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
     if descriptor.abi_id in softmax_storage_abis.values():
         storage = descriptor.provenance.get("storage")
         strategy = descriptor.provenance.get("schedule")
@@ -3336,6 +3347,7 @@ def _submit_nvidia_sm120_native(
                 or stream is None):
             raise RuntimeError("resident SM120 packages require all CUDA buffers and an explicit stream")
         is_rmsnorm = entry.startswith("tessera_tile_norm_")
+        is_resident_activation = descriptor.abi_id in activation_storage_abis.values()
         is_resident_softmax = descriptor.abi_id in softmax_storage_abis.values()
         epilogue = descriptor.provenance.get("epilogue", {})
         if not isinstance(epilogue, Mapping):
@@ -3348,7 +3360,7 @@ def _submit_nvidia_sm120_native(
             SM120_ATTN_F32_ABI, SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI,
         }
         is_saved_lse_backward = descriptor.abi_id in {SM120_ATTN_BWD_LSE_COMPACT_F32_ABI, SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI, SM120_ATTN_BWD_LSE_F32_ABI, SM120_ATTN_BWD_LSE_BIAS_F32_ABI, SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI}
-        if not (is_rmsnorm or is_resident_softmax or is_matmul
+        if not (is_rmsnorm or is_resident_activation or is_resident_softmax or is_matmul
                 or is_native_attention or is_saved_lse_backward):
             raise RuntimeError(
                 "resident SM120 launch is limited to RMSNorm, softmax, scheduled matmul, "
@@ -3418,6 +3430,7 @@ def _submit_nvidia_sm120_native(
         SM120_REDUCE_BF16_ABI,
         SM120_REDUCE_F32_ABI,
     }
+    activation_abis = {SM120_RELU_F16_ABI, SM120_RELU_BF16_ABI}
     norm_abis = {
         SM120_NORM_F16_ABI,
         SM120_NORM_BF16_ABI,
@@ -3453,7 +3466,7 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI,
         SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI,
     }
-    unary_abis = softmax_abis | reduction_abis | norm_abis
+    unary_abis = softmax_abis | reduction_abis | norm_abis | activation_abis
     moe_abis = set(SM120_MOE_ABIS)
     training_abis = set(SM120_TRAINING_ABIS)
     if descriptor.abi_id == SM120_DYNAMIC_EXPR_SMEM_ABI:
@@ -3867,7 +3880,7 @@ def _submit_nvidia_sm120_native(
             if x.size != rows * k or tuple(output.shape) != expected_output:
                 raise RuntimeError("SM120 softmax X/O shapes disagree with Rows/K scalars")
             dimensions = (rows, k)
-        elif descriptor.abi_id in norm_abis:
+        elif descriptor.abi_id in norm_abis | activation_abis:
             rows, columns = (int(cast(int, scalars[name])) for name in ("Rows", "Columns"))
             if x.size != rows * columns or tuple(output.shape) != tuple(x.shape):
                 raise RuntimeError("SM120 norm X/O shapes disagree with Rows/Columns scalars")
@@ -6790,6 +6803,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_REDUCE_F16_ABI,
         SM120_REDUCE_BF16_ABI,
         SM120_REDUCE_F32_ABI,
+        SM120_RELU_F16_ABI,
+        SM120_RELU_BF16_ABI,
         SM120_NORM_F16_ABI,
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
@@ -6861,6 +6876,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_REDUCE_F16_ABI,
                 SM120_REDUCE_BF16_ABI,
                 SM120_REDUCE_F32_ABI,
+                SM120_RELU_F16_ABI,
+                SM120_RELU_BF16_ABI,
                 SM120_NORM_F16_ABI,
                 SM120_NORM_BF16_ABI,
                 SM120_NORM_F32_ABI,

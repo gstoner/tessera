@@ -1623,6 +1623,24 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     return failure();
 
   StringRef opName = op->getName().getStringRef();
+  if (opName == "tessera.relu") {
+    if (!nvidia || input != output || input.getRank() != 2 || input.getEncoding() ||
+        (schedule.storage != "f16" && schedule.storage != "bf16") ||
+        !llvm::all_of(input.getShape(), [](int64_t d) { return d > 0; }))
+      return failure();
+    for (NamedAttribute attr : op->getAttrs()) {
+      if (attr.getName().getValue() == "schedule.artifact_hash") continue;
+      auto effect = dyn_cast<StringAttr>(attr.getValue());
+      if (attr.getName().getValue() != "tessera.effect_kind" ||
+          !effect || effect.getValue() != "pure") return failure();
+    }
+    schedule.family = "activation";
+    schedule.kind = "relu";
+    schedule.rows = input.getDimSize(0);
+    schedule.columns = input.getDimSize(1);
+    schedule.workgroupSize = 128;
+    return schedule;
+  }
   if (opName == "tessera.rmsnorm" || opName == "tessera.rmsnorm_safe" || opName == "tessera.layer_norm") {
     auto eps = op->getAttrOfType<FloatAttr>("eps");
     auto axis = op->getAttrOfType<IntegerAttr>("axis");
@@ -1750,6 +1768,8 @@ static std::string semanticKernelDigest(const SemanticKernelSchedule &schedule) 
        Twine(schedule.workgroupSize) + ";exp=" + schedule.expMode +
        ";ftz=0;schedule=" + schedule.reductionSchedule + ";nan=propagate")
           .str();
+  if (schedule.family == "activation")
+    contract += schedule.storage == "f16" ? ";zero_mode=positive" : ";zero_mode=preserve";
   if (schedule.family == "norm") {
     contract += ";epsilon_bits=" + Twine(llvm::APFloat(static_cast<float>(schedule.epsilon)).bitcastToAPInt().getZExtValue()).str();
   }
@@ -3479,7 +3499,8 @@ struct GraphToSchedulePass
       // x86 normalization is claimed only for an isolated native-package
       // request (the module names its launch bindings); a norm inside any
       // other x86 program passes through unchanged, as before.
-      if (name == "tessera.softmax" || name == "tessera.reduce" ||
+      if ((name == "tessera.relu" && target == "nvidia_sm120") ||
+          name == "tessera.softmax" || name == "tessera.reduce" ||
           (norm && (target == "nvidia_sm120" ||
                     (target == "rocm" && architecture == "gfx1201" &&
                      name == "tessera.rmsnorm") ||
@@ -3497,6 +3518,7 @@ struct GraphToSchedulePass
       op->setAttr("schedule.artifact_hash", builder.getStringAttr(digest));
       builder.setInsertionPointAfter(op);
       OperationState state(op->getLoc(),
+                           selected->family == "activation" ? "schedule.activation" :
                            selected->family == "norm" ? "schedule.norm" :
                            selected->family == "softmax" ? "schedule.softmax"
                                                          : "schedule.reduce");
@@ -3509,7 +3531,12 @@ struct GraphToSchedulePass
       state.addAttribute("axis", builder.getI64IntegerAttr(selected->axis));
       state.addAttribute("workgroup_size",
                          builder.getI64IntegerAttr(selected->workgroupSize));
-      if (selected->family == "norm") {
+      if (selected->family == "activation") {
+        state.addAttribute("kind", builder.getStringAttr(selected->kind));
+        state.addAttribute("schedule", builder.getStringAttr("serial"));
+        state.addAttribute("nan_mode", builder.getStringAttr("propagate"));
+        state.addAttribute("zero_mode", builder.getStringAttr(selected->storage == "f16" ? "positive" : "preserve"));
+      } else if (selected->family == "norm") {
         state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
         state.addAttribute("kind", builder.getStringAttr(selected->kind));
         state.addAttribute("epsilon", builder.getF32FloatAttr(selected->epsilon));
@@ -5268,10 +5295,11 @@ struct ScheduleToTilePass
     SmallVector<Operation *> scheduledKernels;
     mod.walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
-      if (name == "schedule.softmax" || name == "schedule.reduce" || name == "schedule.norm")
+      if (name == "schedule.activation" || name == "schedule.softmax" || name == "schedule.reduce" || name == "schedule.norm")
         scheduledKernels.push_back(op);
     });
     for (Operation *scheduled : scheduledKernels) {
+      bool isActivation = scheduled->getName().getStringRef() == "schedule.activation";
       bool isNorm = scheduled->getName().getStringRef() == "schedule.norm";
       bool isSoftmax = scheduled->getName().getStringRef() == "schedule.softmax";
       Operation *graph = scheduled->getOperand(0).getDefiningOp();
@@ -5283,9 +5311,10 @@ struct ScheduleToTilePass
       auto selected = getSemanticKernelSchedule(graph);
       auto hash = scheduled->getAttrOfType<StringAttr>("artifact_hash");
       if (failed(selected) || !hash || semanticKernelDigest(*selected) != hash.getValue() ||
+          (isActivation && selected->family != "activation") ||
           (isSoftmax && selected->family != "softmax") ||
           (isNorm && selected->family != "norm") ||
-          (!isSoftmax && !isNorm && selected->family != "reduce")) {
+          (!isActivation && !isSoftmax && !isNorm && selected->family != "reduce")) {
         scheduled->emitError(
             "scheduled decision does not match the retained Graph kernel contract");
         return signalPassFailure();
@@ -5307,7 +5336,11 @@ struct ScheduleToTilePass
                      attrString("accum") != selected->accum ||
                      attrInt("axis") != selected->axis ||
                      attrInt("workgroup_size") != selected->workgroupSize;
-      if (isNorm) {
+      if (isActivation) {
+        altered = altered || attrString("kind") != "relu" ||
+                  attrString("schedule") != "serial" || attrString("nan_mode") != "propagate" ||
+                  attrString("zero_mode") != (selected->storage == "f16" ? "positive" : "preserve");
+      } else if (isNorm) {
         auto eps = scheduled->getAttrOfType<FloatAttr>("epsilon");
         altered = altered || attrString("kind") != selected->kind ||
                   attrString("schedule") != selected->reductionSchedule ||
@@ -5356,7 +5389,7 @@ struct ScheduleToTilePass
           return signalPassFailure();
         }
         // Preserve the established runtime launch symbols and serial schedule.
-        std::string name = isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + (selected->reductionSchedule == "serial" ? "_" : "_cooperative_128_") + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage +
+        std::string name = isActivation ? (Twine("tessera_tile_activation_relu_") + selected->storage + "_" + hash.getValue().take_front(10)).str() : isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + (selected->reductionSchedule == "serial" ? "_" : "_cooperative_128_") + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage +
             (selected->reductionSchedule == "serial" ? "" : "_cooperative_128")).str() :
             (Twine("tessera_tile_reduce_") + selected->kind + "_" + selected->storage + "_" + selected->reductionSchedule).str();
         if (SymbolTable::lookupSymbolIn(mod, name)) {
@@ -5367,7 +5400,7 @@ struct ScheduleToTilePass
         auto ptr = LLVM::LLVMPointerType::get(&getContext());
         auto i64 = builder.getI64Type();
         SmallVector<Type> inputs{ptr, ptr, i64, i64};
-        if (!isSoftmax && !isNorm) inputs.push_back(i64);
+        if (!isActivation && !isSoftmax && !isNorm) inputs.push_back(i64);
         auto type = LLVM::LLVMFunctionType::get(
             LLVM::LLVMVoidType::get(&getContext()), inputs, false);
         OpBuilder mb(mod.getBody(), mod.getBody()->end());
@@ -5375,12 +5408,15 @@ struct ScheduleToTilePass
         kernel->setAttr("nvvm.kernel", mb.getUnitAttr());
         Block *entry = kernel.addEntryBlock(mb);
         OpBuilder kb(entry, entry->begin());
-        OperationState state(loc, isNorm ? "tile.norm_kernel" : isSoftmax ? "tile.softmax_kernel" : "tile.reduce_kernel");
+        OperationState state(loc, isActivation ? "tile.activation_kernel" : isNorm ? "tile.norm_kernel" : isSoftmax ? "tile.softmax_kernel" : "tile.reduce_kernel");
         state.addOperands(entry->getArguments());
         if (isNorm) state.addOperands(kb.create<arith::ConstantOp>(loc, kb.getF32FloatAttr(selected->epsilon)).getResult());
         for (StringRef key : {"storage", "accum", "axis"})
           state.addAttribute(key, scheduled->getAttr(key));
-        if (isNorm) {
+        if (isActivation) {
+          for (StringRef key : {"kind", "schedule", "nan_mode", "zero_mode"})
+            state.addAttribute(key, scheduled->getAttr(key));
+        } else if (isNorm) {
           state.addAttribute("schedule", scheduled->getAttr("schedule"));
           state.addAttribute("kind", scheduled->getAttr("kind"));
           state.addAttribute("affine", kb.getBoolAttr(false));

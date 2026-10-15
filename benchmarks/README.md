@@ -29,6 +29,8 @@ See the [review of math, linalg, energy, Clifford, autodiff and operator suites]
 
 ## Native compiler integration recorders
 
+- `nvidia/benchmark_norm_relu_matmul.py`: RTX 5070 ordinary frontend RMSNorm -> ReLU -> matmul packages with explicit f16/bf16 stores, native member/program CUDA-event regions and separate prepared/public wall times. Event regions can include enqueue gaps. Evidence: `baselines/sm120_norm_relu_matmul_20261014/`.
+
 - `nvidia/benchmark_native_producer_chain.py`: RTX 5070 static two/three-producer Graph→Schedule→Tile packages; independent numerical checks, per-stage CUDA events and prepared program wall time. Evidence: `baselines/nvidia_native_producer_chain_20261008/`.
 - `nvidia/benchmark_prepared_attention_staging_ab.py`: alternating fresh-process control/candidate attention staging comparison, with correctness checks and separate device-event and host-wall measurements. Evidence: `baselines/nvidia_prepared_attention_staging_20261008/ab_packet.json`.
 

@@ -74,15 +74,20 @@ class NativeSM120TensorGraph:
             if index<len(plan["steps"])-1:
                 operation=plan["steps"][index]["operation"]
                 softmax=operation=="tessera.softmax"
-                kind="softmax" if softmax else "layernorm" if operation=="tessera.layer_norm" else "rmsnorm"
+                kinds={"tessera.softmax":"softmax", "tessera.layer_norm":"layernorm",
+                       "tessera.rmsnorm":"rmsnorm", "tessera.relu":"relu"}
+                if operation not in kinds:
+                    raise ValueError("unsupported native tensor producer operation")
+                kind=kinds[operation]
+                activation=kind=="relu"
                 mode=_string("schedule",tile,"serial")
                 from .nvidia_native import _mlir_f32_bits
-                epsilon=0.0 if softmax else struct.unpack("f",
+                epsilon=0.0 if softmax or activation else struct.unpack("f",
                     _mlir_f32_bits(_one(r'tessera.norm_epsilon = ([^ ]+) : f32',tile)))[0]
                 shape=tuple(lhs["shape"])
                 artifact=ScheduledKernelArtifact(
                     graph,schedule,tile,"nvidia_sm120","sm_120",entry,
-                    "softmax" if softmax else "norm",kind,"source","edge",
+                    "activation" if activation else "softmax" if softmax else "norm",kind,"source","edge",
                     shape,tuple(output["shape"]),dtype,storage,"f32",
                     -1,False,shape[0],shape[1],1,1,1,
                     int(_one(r'tessera.workgroup_size = (\d+) : i64',tile)),
@@ -190,7 +195,7 @@ def validate_native_tensor_plan(text):
                 any(type(v) is not int for v in [*step["inputs"],*step["outputs"]])):
             raise ValueError("native tensor member SSA differs")
         if step["operation"] not in (
-                {"tessera.rmsnorm","tessera.layer_norm","tessera.softmax"} if index<len(steps)-1 else {"tessera.matmul"}):
+                {"tessera.rmsnorm","tessera.layer_norm","tessera.softmax","tessera.relu"} if index<len(steps)-1 else {"tessera.matmul"}):
             raise ValueError("native tensor member operation differs")
     buffers=plan["buffers"]
     if not isinstance(buffers,list) or len(buffers)!=count+len(steps):

@@ -1028,6 +1028,14 @@ def Tile_ScanKernelOp : Tile_Op<"scan_kernel"> {
   let hasVerifier = 1;
 }
 
+def Tile_ActivationKernelOp : Tile_Op<"activation_kernel"> {
+  let summary = "Storage-preserving SM120 row activation launch";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 // Launch-level unweighted row normalization. Inputs are source, destination,
 // flattened row count, row width, and epsilon.
 def Tile_NormKernelOp : Tile_Op<"norm_kernel"> {

@@ -127,6 +127,18 @@ def Schedule_SoftmaxOp : Op<ScheduleDialect, "softmax", [Pure]> {
   let hasVerifier = 1;
 }
 
+// W1.1: preserve a standalone activation store on a producer edge.
+def Schedule_ActivationOp : Op<ScheduleDialect, "activation", [Pure]> {
+  let summary = "Scheduled storage-preserving SM120 row activation";
+  let arguments = (ins AnyType:$subject, StrAttr:$artifact_hash,
+                       StrAttr:$arch, StrAttr:$storage, StrAttr:$accum,
+                       StrAttr:$kind, I64Attr:$axis, I64Attr:$workgroup_size,
+                       StrAttr:$schedule, StrAttr:$nan_mode, StrAttr:$zero_mode);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+  let hasVerifier = 1;
+}
+
 def Schedule_NormOp : Op<ScheduleDialect, "norm", [Pure]> {
   let summary = "Scheduled unweighted row normalization with immutable epsilon";
   let arguments = (ins AnyType:$subject, StrAttr:$artifact_hash,

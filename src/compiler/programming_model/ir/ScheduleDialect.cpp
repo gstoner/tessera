@@ -319,6 +319,23 @@ LogicalResult SoftmaxOp::verify() {
   return success();
 }
 
+LogicalResult ActivationOp::verify() {
+  if (failed(verifyContentAddressedKernel(*this, getSubject(), getScheduled(),
+          getArtifactHash(), getArch(), getStorage(), getAccum(), getWorkgroupSize())))
+    return failure();
+  auto type = dyn_cast<RankedTensorType>(getSubject().getType());
+  if (!type || type.getRank() != 2 || !type.hasStaticShape() || type.getEncoding() ||
+      !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0; }) ||
+      getArch() != "sm_120" || getWorkgroupSize() != 128 ||
+      (getStorage() != "f16" && getStorage() != "bf16") ||
+      (getStorage() == "f16" ? !type.getElementType().isF16() : !type.getElementType().isBF16()) ||
+      getAccum() != "f32" || getKind() != "relu" || getAxis() != -1 ||
+      getSchedule() != "serial" || getNanMode() != "propagate" ||
+      getZeroMode() != (getStorage() == "f16" ? "positive" : "preserve"))
+    return emitOpError("requires static rank-two SM120 f16/bf16 serial ReLU with propagated NaNs");
+  return success();
+}
+
 LogicalResult NormOp::verify() {
   if (failed(verifyContentAddressedKernel(*this, getSubject(), getScheduled(),
           getArtifactHash(), getArch(), getStorage(), getAccum(), getWorkgroupSize())))

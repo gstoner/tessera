@@ -1,0 +1,604 @@
+{
+  "binary_sha256": {
+    "TESSERA_NVIDIA_OPT": "c105db113ecd3a31bb11a6fd7a18c610d19c8bfc640c48a5fc747c74d0922365",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "5032dee8d0d29f4a3a16c724b92c6f42a455b871304b9db98919b515a9966b0e",
+    "TESSERA_OPT": "15f16b17ccc0f045e59707c036259bdafb2dbb1a73d81b2cdcba3ad11e47c2be"
+  },
+  "cases": [
+    {
+      "correctness": "passed_before_timing",
+      "device_grouped_stage_medians_ms": {
+        "matmul": 0.008857280015945435,
+        "relu": 0.009103680029511452,
+        "rmsnorm": 0.008618880063295364
+      },
+      "device_grouped_stage_samples_ms": [
+        [
+          0.007621759548783302,
+          0.008980480022728443,
+          0.00829728040844202
+        ],
+        [
+          0.008618880063295364,
+          0.009353600442409515,
+          0.008857280015945435
+        ],
+        [
+          0.008984319865703583,
+          0.009156160056591034,
+          0.008863680064678192
+        ],
+        [
+          0.00845663994550705,
+          0.008373759686946869,
+          0.009427200071513653
+        ],
+        [
+          0.008909760043025017,
+          0.009103680029511452,
+          0.008000959642231464
+        ]
+      ],
+      "device_program_median_ms": 0.024740800261497498,
+      "device_program_samples_ms": [
+        0.027070719748735428,
+        0.024551041424274445,
+        0.02426335960626602,
+        0.024740800261497498,
+        0.02498016133904457
+      ],
+      "entries": [
+        "tessera_tile_norm_rmsnorm_f16_4381f5a90d",
+        "tessera_tile_activation_relu_f16_a9f10fa2e9",
+        "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel"
+      ],
+      "images": [
+        "82d1a4803f7b1071eb250e1e406a04653f7eacd32139f7350363ae2fe963dd55",
+        "fb5adb89f8576c02dd7d119e2b10caf11376a866494326de25dae3fe47c06ee5",
+        "6ba1c12f3c54afc8f7000a8cb53951ffcc43359e77d189ab53a92c8dc5e3d81c"
+      ],
+      "max_abs_error": 2.384185791015625e-07,
+      "package_ms": 1436.6981409984874,
+      "prepared_host_median_ms": 0.24099681999359746,
+      "prepared_host_samples_ms": [
+        0.24271671994938515,
+        0.24099681999359746,
+        0.23650506998819765,
+        0.2399837999837473,
+        0.24265071995614562
+      ],
+      "program_digest": "e5318ebcac37c1a7220e89eb8b9e00e218e1e6df15b889d87a64f50e165d3ecb",
+      "ptx_sha256": [
+        "7c5d2169d14c6efdea8014e0f11fe2c23564e0cab9c452f8cfa5af4689834855",
+        "efb3f626c690965c78f79d30b5044893e910b5aae8791f631dd4cd049a609c45",
+        "15a1d6eb8a51df13de3c9e397a69ef5027a2844766a1c66e0143dd1b43ca2b08"
+      ],
+      "public_jit_median_ms": 0.63071802003833,
+      "public_jit_samples_ms": [
+        0.642121720011346,
+        0.6304142300359672,
+        0.6270696900173789,
+        0.63071802003833,
+        0.7295088899991242
+      ],
+      "scratch_stats": [
+        2048,
+        1
+      ],
+      "shape_mkn": [
+        7,
+        32,
+        9
+      ],
+      "storage": "f16",
+      "tile_ir_sha256": [
+        "6698254002161811f96fb12741346cf18a28763825a0db6f65a7ffe1cd20d769",
+        "d1ac4ea7998041d70eb3dd8e2d84e6266ffc62f9787eb56ee6dc6e4d569f2b53",
+        "35c227cf8762a2f4367467d2171ff0b3bc148cb12baf3fc625e1a4fb7fddcad7"
+      ]
+    },
+    {
+      "correctness": "passed_before_timing",
+      "device_grouped_stage_medians_ms": {
+        "matmul": 0.00960640050470829,
+        "relu": 0.00922400038689375,
+        "rmsnorm": 0.009722880087792873
+      },
+      "device_grouped_stage_samples_ms": [
+        [
+          0.009801600128412247,
+          0.008884480223059654,
+          0.011741440743207932
+        ],
+        [
+          0.009722880087792873,
+          0.009060800075531006,
+          0.008314560167491436
+        ],
+        [
+          0.009344959631562233,
+          0.00922400038689375,
+          0.00960640050470829
+        ],
+        [
+          0.009296960197389126,
+          0.010112639516592026,
+          0.009979840368032455
+        ],
+        [
+          0.010127680376172066,
+          0.009824000298976898,
+          0.009244800545275211
+        ]
+      ],
+      "device_program_median_ms": 0.028187520802021027,
+      "device_program_samples_ms": [
+        0.028196800500154495,
+        0.028187520802021027,
+        0.02951519936323166,
+        0.027163200080394745,
+        0.027456318959593773
+      ],
+      "entries": [
+        "tessera_tile_norm_rmsnorm_bf16_debe4557d3",
+        "tessera_tile_activation_relu_bf16_4cc5e7a87e",
+        "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel"
+      ],
+      "images": [
+        "94bb4a5d9b7a77c2b36cab26551ca3d318f482890b8a271c3584785579f913e9",
+        "432722cc01d2a90b6fcf0778e7154e6195ff7a5af9a01a0347eb8b74cd384a52",
+        "92d82e12d56489e48643b052f5f4aab02c18bfe4f294eef95cae989c05b704dd"
+      ],
+      "max_abs_error": 1.1920928955078125e-07,
+      "package_ms": 1209.9794750029105,
+      "prepared_host_median_ms": 0.30858671001624316,
+      "prepared_host_samples_ms": [
+        0.2872856099565979,
+        0.3099658300197916,
+        0.30746167998586316,
+        0.30858671001624316,
+        0.3095789100188995
+      ],
+      "program_digest": "555fbd413244eeea4a2697360d6c5dabb2b8e3dec1a33f2dfd1459e5212c09e7",
+      "ptx_sha256": [
+        "2cf0c38a9a6e79da0965120b0277af3ea4909ee5493d744699979e4c3f674acf",
+        "2502f83979e79fd1c0c459cfa0010257b3a4d3a6bac2358aeb91d4102087a837",
+        "5e04a839473789820db22de9be32270997d372d90efdcb567c377ae3cfee3f02"
+      ],
+      "public_jit_median_ms": 0.6944745699729538,
+      "public_jit_samples_ms": [
+        0.7000245299423113,
+        0.6927430699579418,
+        0.6944745699729538,
+        0.7011470499855932,
+        0.6532309099566191
+      ],
+      "scratch_stats": [
+        2048,
+        1
+      ],
+      "shape_mkn": [
+        7,
+        32,
+        9
+      ],
+      "storage": "bf16",
+      "tile_ir_sha256": [
+        "d9b75b0a3ac430acaf6a2cade548a6b742777ce6b6d2c89e19fdf30f91bc25ca",
+        "7098e1cb22990e7c762a6feae33d06175237b370c96b18b53751288c1c8731d5",
+        "97533f240b4b96e6992b16b1e9a9999b2ca4c2d98aa16106bdda18a3732750d7"
+      ]
+    },
+    {
+      "correctness": "passed_before_timing",
+      "device_grouped_stage_medians_ms": {
+        "matmul": 0.008175680413842201,
+        "relu": 0.009204479865729809,
+        "rmsnorm": 0.010066240094602108
+      },
+      "device_grouped_stage_samples_ms": [
+        [
+          0.009976319968700409,
+          0.010194560512900352,
+          0.008779839612543583
+        ],
+        [
+          0.0104755200445652,
+          0.009457919746637344,
+          0.008776959963142872
+        ],
+        [
+          0.010009599849581718,
+          0.008409600704908371,
+          0.008083519525825977
+        ],
+        [
+          0.010353920049965382,
+          0.009204479865729809,
+          0.008175680413842201
+        ],
+        [
+          0.010066240094602108,
+          0.009166399948298931,
+          0.00776768010109663
+        ]
+      ],
+      "device_program_median_ms": 0.026270398870110512,
+      "device_program_samples_ms": [
+        0.026270398870110512,
+        0.026445118710398674,
+        0.0268742386251688,
+        0.026164159178733826,
+        0.02533023990690708
+      ],
+      "entries": [
+        "tessera_tile_norm_rmsnorm_f16_83876a17bb",
+        "tessera_tile_activation_relu_f16_61f2439893",
+        "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel"
+      ],
+      "images": [
+        "231267938ddc92ff320e704f08913840fd564e28adbfcc07bb29cee08cdc73c6",
+        "8c78dc49d7751019260a49042d36f88930a3018388cbf617393fecc171cba399",
+        "27c3038591aaa6ef137341b42f591236f4b13b070eca087cd8888b5e1341aa8c"
+      ],
+      "max_abs_error": 5.960464477539062e-07,
+      "package_ms": 1220.6143450021045,
+      "prepared_host_median_ms": 0.25325529000838287,
+      "prepared_host_samples_ms": [
+        0.25325529000838287,
+        0.2653625100356294,
+        0.2573926399782067,
+        0.243365209971671,
+        0.24454604004858993
+      ],
+      "program_digest": "628c09601b70ad3c709d3175e75e95f16476e4ef69f2957859e79f3a033aabfc",
+      "ptx_sha256": [
+        "dfb2f855de594e19ce524dd8cec4eba5f06df2936cd6d0f61071c06fedd012a7",
+        "0de7eb5115777b5de2c0a0eb0335d8762f6cb17e8412d75bc6ed98674a8ffd63",
+        "7e3bf8860dd8941d90e1e7e3f2c833004d6987228d94203cafb2f1097c0e7a6d"
+      ],
+      "public_jit_median_ms": 0.6381444499857025,
+      "public_jit_samples_ms": [
+        0.6445610899390886,
+        0.63465161001659,
+        0.6381444499857025,
+        0.6396782599767903,
+        0.6350228100200184
+      ],
+      "scratch_stats": [
+        8704,
+        1
+      ],
+      "shape_mkn": [
+        17,
+        64,
+        19
+      ],
+      "storage": "f16",
+      "tile_ir_sha256": [
+        "5e7cf7edc3522ba08033f8b263fc876ae6c5c23fe2660647098773239a3e0cf4",
+        "fca8439529e4bbe4ef44538c0567567252bcb4794a0d8685d94e9c222bb6cceb",
+        "9f9c86e9307c0990e195f57dc4a810630fab65773c5506fee692ac1a39bc1c14"
+      ]
+    },
+    {
+      "correctness": "passed_before_timing",
+      "device_grouped_stage_medians_ms": {
+        "matmul": 0.009615680202841759,
+        "relu": 0.009856640361249447,
+        "rmsnorm": 0.011161279864609241
+      },
+      "device_grouped_stage_samples_ms": [
+        [
+          0.011161279864609241,
+          0.009856640361249447,
+          0.009103040210902691
+        ],
+        [
+          0.011098879389464855,
+          0.010793279856443405,
+          0.01000415999442339
+        ],
+        [
+          0.011654720641672611,
+          0.009572800248861313,
+          0.009615680202841759
+        ],
+        [
+          0.011543040163815022,
+          0.009903039783239365,
+          0.009307200089097023
+        ],
+        [
+          0.010490239597856998,
+          0.009743359871208668,
+          0.009619839489459991
+        ]
+      ],
+      "device_program_median_ms": 0.029592959210276604,
+      "device_program_samples_ms": [
+        0.031087679788470268,
+        0.029592959210276604,
+        0.027751998975872993,
+        0.027723200619220734,
+        0.029695359990000725
+      ],
+      "entries": [
+        "tessera_tile_norm_rmsnorm_bf16_a555f07f83",
+        "tessera_tile_activation_relu_bf16_b41330c251",
+        "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel"
+      ],
+      "images": [
+        "8d3a6ee7c3e935fd1ea5a876048b98beb71756eb600337d74879f82794cc1266",
+        "65e03f18a8585b96ae7416a88c83f5379fefb4ab2845af18af1702d486684ee9",
+        "1c372c5e873b57011df792268e0d79dd75bf2b97f2ceaf55f99d645c492a4145"
+      ],
+      "max_abs_error": 2.384185791015625e-07,
+      "package_ms": 1202.583318001416,
+      "prepared_host_median_ms": 0.26070275001984555,
+      "prepared_host_samples_ms": [
+        0.26070275001984555,
+        0.25987195993366186,
+        0.2641589999984717,
+        0.25875735002045985,
+        0.2615300600155024
+      ],
+      "program_digest": "7085af4fc1af9defd6a458ca17842e9e0872a544f776f2b2826686448e5c7021",
+      "ptx_sha256": [
+        "ff582404f44a446ebfa83f2dc958e8e7dd76ec62f47e2ba42ac5ecda2279e861",
+        "b32862adf0a3b3cfce0b850efcefce8c8abaedf2566b081d3d0c75ae939f7ac2",
+        "36794111998dc67dd279847cac100ec54f4d56839e20b06ed9834dc0db8f8621"
+      ],
+      "public_jit_median_ms": 0.6380061399977421,
+      "public_jit_samples_ms": [
+        0.6709945400507422,
+        0.6344334100140259,
+        0.6400585699884687,
+        0.636826120025944,
+        0.6380061399977421
+      ],
+      "scratch_stats": [
+        8704,
+        1
+      ],
+      "shape_mkn": [
+        17,
+        64,
+        19
+      ],
+      "storage": "bf16",
+      "tile_ir_sha256": [
+        "3405f836d56e2ea6a61ba5378fc8f20bcd543ab386a2bed8da0e871717586b78",
+        "d9f78f394c8e9bd1269071c994654efc42a7efeb9434f043da1b557ab2b2f165",
+        "075c28c5c40a32246df2172652600580fc0a7d4215acafef5e0c38b3dbe0ca0b"
+      ]
+    },
+    {
+      "correctness": "passed_before_timing",
+      "device_grouped_stage_medians_ms": {
+        "matmul": 0.010010559111833572,
+        "relu": 0.04296671971678734,
+        "rmsnorm": 0.009239040315151215
+      },
+      "device_grouped_stage_samples_ms": [
+        [
+          0.009203840047121048,
+          0.04296671971678734,
+          0.00958144012838602
+        ],
+        [
+          0.009239040315151215,
+          0.04329855740070343,
+          0.010461759753525257
+        ],
+        [
+          0.009131199680268764,
+          0.042953282594680786,
+          0.009610239416360855
+        ],
+        [
+          0.010464639402925968,
+          0.043033599853515625,
+          0.010010559111833572
+        ],
+        [
+          0.010017280466854572,
+          0.04296224191784859,
+          0.011141120456159115
+        ]
+      ],
+      "device_program_median_ms": 0.053477440029382706,
+      "device_program_samples_ms": [
+        0.05373087897896767,
+        0.05328992009162903,
+        0.053183041512966156,
+        0.053477440029382706,
+        0.053602881729602814
+      ],
+      "entries": [
+        "tessera_tile_norm_rmsnorm_f16_cooperative_128_5c5d40621f",
+        "tessera_tile_activation_relu_f16_a2ced34447",
+        "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel"
+      ],
+      "images": [
+        "8cf217e3dd31fcdf94488649a9d9b2ad7c5a53feb20f23a6dea35059ada1f60d",
+        "9759d64b302e45bc92eaedf89373e23738a269497ce4291cbb90f9d0c0fd7510",
+        "fc8b1853585b0bc0a9838f3617b57c1753cc38cd0134bf0c5c4b3e574cb1fda4"
+      ],
+      "max_abs_error": 2.86102294921875e-06,
+      "package_ms": 1214.9928850049037,
+      "prepared_host_median_ms": 0.3079685899865581,
+      "prepared_host_samples_ms": [
+        0.31445281994820107,
+        0.3079685899865581,
+        0.3074386600201251,
+        0.3094938999856822,
+        0.3068023600644665
+      ],
+      "program_digest": "567709bb860bd4b809ea6f3c25d4cae2056e98b719b6fa9626bcafb259f4d31e",
+      "ptx_sha256": [
+        "68d2da293dc0711dff7f2616b86a13703e92a18ea3ac75294dc7ea056108222e",
+        "08c8063b58ab54bc5f8ef1077a229d9d87c5f1fa11046af70c620242ba8c60d8",
+        "c46de9a11d36baacdac5db0442f656dce81503a2727f99420b2552f11b0517bc"
+      ],
+      "public_jit_median_ms": 0.7015331000002334,
+      "public_jit_samples_ms": [
+        0.7096851700043771,
+        0.7015331000002334,
+        0.6997236700408394,
+        0.6979696599591989,
+        0.7630093299667351
+      ],
+      "scratch_stats": [
+        166144,
+        1
+      ],
+      "shape_mkn": [
+        129,
+        256,
+        33
+      ],
+      "storage": "f16",
+      "tile_ir_sha256": [
+        "79bd2c68b6329e6aad9e83e8846b0c96fc38abf5e4c92f52987c263441bcff00",
+        "346b5d02b42ee17dfb3f85ccf29f101f53bd2d45fb621c096641a981a56afdf1",
+        "ea571d87f7e7718e64230db8427b80c4f7494699bccdbd77a98ab312aaf50783"
+      ]
+    },
+    {
+      "correctness": "passed_before_timing",
+      "device_grouped_stage_medians_ms": {
+        "matmul": 0.010523519478738308,
+        "relu": 0.04301663860678673,
+        "rmsnorm": 0.012754240073263645
+      },
+      "device_grouped_stage_samples_ms": [
+        [
+          0.010076160542666912,
+          0.04298624023795128,
+          0.010523519478738308
+        ],
+        [
+          0.012703679502010345,
+          0.04301663860678673,
+          0.010498239658772945
+        ],
+        [
+          0.016077760607004166,
+          0.04289279878139496,
+          0.009510720148682594
+        ],
+        [
+          0.014335999265313148,
+          0.0433167964220047,
+          0.012638079933822155
+        ],
+        [
+          0.012754240073263645,
+          0.043344639241695404,
+          0.01095168013125658
+        ]
+      ],
+      "device_program_median_ms": 0.05373343825340271,
+      "device_program_samples_ms": [
+        0.05373343825340271,
+        0.054678402841091156,
+        0.05400703847408295,
+        0.05324191972613335,
+        0.05310976132750511
+      ],
+      "entries": [
+        "tessera_tile_norm_rmsnorm_bf16_cooperative_128_f8c0cd3fe3",
+        "tessera_tile_activation_relu_bf16_e0edef35d5",
+        "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel"
+      ],
+      "images": [
+        "8d23643406ed0636e0445e711b52307a4f60d7a1f071d16a3b9f6afa30d232ec",
+        "87a6cd426591a2f7b1695d08b8d979631177573a2e12bbe2cf1436ebdd69264e",
+        "58f6f84459424ba9ae7d6838946fef422440e028752ff87dce5d37d27c089932"
+      ],
+      "max_abs_error": 1.430511474609375e-06,
+      "package_ms": 1224.2541809973773,
+      "prepared_host_median_ms": 0.3059802699863212,
+      "prepared_host_samples_ms": [
+        0.3090946800512029,
+        0.3059802699863212,
+        0.30663586003356613,
+        0.3013585100416094,
+        0.30188923999958206
+      ],
+      "program_digest": "3c6b8806bdf443380a7e361d055910a0e3339a380eb079973a1f65539e4818d7",
+      "ptx_sha256": [
+        "250e8cc3b65e3c37d5a1eaf242e2165a11bf0ba8219c4c108e358e4a45226158",
+        "905650cd36bb37f982ebeb7a9ff4b801bc055e1f5e1c4238f20a0cc54f92edbe",
+        "4e30021bcb9561733e439ea520de822e1cbb44ecb3bc6ad044bf187d1194ca89"
+      ],
+      "public_jit_median_ms": 0.6820181300281547,
+      "public_jit_samples_ms": [
+        0.6933955099520972,
+        0.680435909962398,
+        0.6820181300281547,
+        0.6811639099760214,
+        0.6900856900028884
+      ],
+      "scratch_stats": [
+        166144,
+        1
+      ],
+      "shape_mkn": [
+        129,
+        256,
+        33
+      ],
+      "storage": "bf16",
+      "tile_ir_sha256": [
+        "1dfcb35c12d7a99d635200f52144549835de89b92d06b198b863542034f3a519",
+        "e70b7096f0346ac49646935124e64f9583e267c0a62c8a8a6bd267781e2fe34e",
+        "6a5444b36199e6fbbf66b7c45d7cd2683124dcda2096c04af61a71ebe1960abc"
+      ]
+    }
+  ],
+  "compiler_configuration": {
+    "TESSERA_BUILD_CLIFFORD_BACKEND": true,
+    "TESSERA_BUILD_EBM_BACKEND": true,
+    "TESSERA_BUILD_NVIDIA_BACKEND": true,
+    "TESSERA_BUILD_ROCM_BACKEND": true,
+    "TESSERA_BUILD_X86_BACKEND": true
+  },
+  "gpu_reported": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "method": {
+    "device_grouped_stage_definition": "CUDA event mean per member; isolated repeated stage groups",
+    "device_program_definition": "CUDA event mean for the complete three-member native program",
+    "package_definition": "first traced Graph package wall time in this recorder process",
+    "performance_comparison_claim": false,
+    "prepared_host_definition": "completed prepared host call including binding, copies and synchronization",
+    "public_jit_definition": "completed warm public JIT call including admission, binding, copies and synchronization",
+    "repetitions": 100,
+    "samples": 5,
+    "selector_changed": false,
+    "warmup": 10
+  },
+  "schema": "tessera.nvidia.norm_relu_matmul_benchmark.v1",
+  "source_revision": "73c72667a70e85505112ec51526945151c1e7c99",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_norm_relu_matmul.py": "aa7d30288d4496cf72df61091425a0175a4b1c22694e461f2d062598f15c2d35",
+    "python/tessera/compiler/native_sm120_tensor_program.py": "17d33a1ee8ce11402814eb1c5c54116d8560abb553d74ae52e86ef24c3156242",
+    "python/tessera/compiler/nvidia_native.py": "f84f075b63146301ea0e1972bd18debeb3424f34e49ecd01ca65b645a36a2456",
+    "python/tessera/compiler/nvidia_tensor_dag.py": "ed8fa06c4088c4ae18c4f62c0e4eb8704eb3cf16e472b013639455e2b09be3cd",
+    "python/tessera/compiler/nvidia_tensor_lhs.py": "4f8756f65f255996ee140dec5290034180360a6d1c69ea7dd6e5d42d471be9f2",
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "addd847d102b3a370a11840924c9aee843eeeb1173312faabd3250504173695b",
+    "python/tessera/runtime.py": "d71ef7c4f9e91dff9abe46d43a774521c2ab9daa139e71dddd2111eb22a3a2fd",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "9982419b3783e1143bd2081b6c29a8121984173462a5e967f0ba2a6762fb44b8",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "ae9a803e2272f0e3070671e95bb2022da32c471a0eb699076ba9276bdcf85aff",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "15ccf66479368c68f8976c376208abeb265c124b310daa840c1ec60ee0e6ed22",
+    "src/compiler/ir/TileOps.cpp": "2782850ce695b67c158caefe0b1ff6af18862d436f65b6be2659c11267061f17",
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "4f385616c158586d68778781119b811857169eaf7fe2f96be6a233d5f49e7fc2",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "adc6266361cf47d52e11800c6633500b8f6c868b68b476eda6b97e91d2936533",
+    "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "7fc5d62c2d9af80c9edffd12e4196f241350e79f0a1ccb7f421451926e3fbc8a",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "153f512123aa6d376221da141fa84517e7a96a4c9cb77d83fe6531958e34ecfb",
+    "src/transforms/lib/NativeSM120TensorProgram.h": "6a0ff7e51cf45d73b14daa71e21684ea4f2c7a1b56aaf69932f4430415264e01"
+  },
+  "source_state": "sha256_pinned_working_tree",
+  "sync_key": "W11-RELU-PRODUCER-20261014",
+  "work_item": "W1.1"
+}

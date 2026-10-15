@@ -10,6 +10,21 @@ static bool hasNativeSM120TensorGraph(mlir::ModuleOp module) {
   module.walk([&](mlir::Operation *op) {
     auto name = op->getName().getStringRef();
     found |= name == "tessera.rmsnorm" || name == "tessera.layer_norm" || name == "tessera.softmax";
+    // ReLU selects this exporter only as an upstream ordinary matmul
+    // producer. A post-product activation must keep its own export route.
+    if (name == "tessera.matmul") {
+      for (unsigned i = 0; i < 2 && i < op->getNumOperands(); ++i) {
+        mlir::Value value = op->getOperand(i);
+        while (mlir::Operation *producer = value.getDefiningOp()) {
+          auto kind = producer->getName().getStringRef();
+          if (producer->getNumOperands() != 1) break;
+          if (kind == "tessera.relu") { found = true; break; }
+          if (kind != "tessera.rmsnorm" && kind != "tessera.layer_norm" &&
+              kind != "tessera.softmax") break;
+          value = producer->getOperand(0);
+        }
+      }
+    }
   });
   return found;
 }
@@ -59,7 +74,7 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
   for (Operation *producer : ArrayRef<Operation *>(ops).drop_back()) {
     auto name = producer->getName().getStringRef();
     Value input = producer->getNumOperands() == 1 ? producer->getOperand(0) : Value{};
-    if ((name != "tessera.rmsnorm" && name != "tessera.layer_norm" && name != "tessera.softmax") ||
+    if ((name != "tessera.rmsnorm" && name != "tessera.layer_norm" && name != "tessera.softmax" && name != "tessera.relu") ||
         !input || producer->getNumResults() != 1 ||
         input.getType() != producer->getResult(0).getType() || !origins.count(input))
       return root.emitError("SM120 tensor producers must preserve storage and topological SSA lineage");

@@ -175,3 +175,23 @@ def test_native_checkpoint_conversion_checks_outputs_before_timing(monkeypatch, 
         assert witness["resident_event_ms_median"] == 0.2
         assert witness["route"].startswith("GraphIR->ScheduleIR->TileIR")
         assert calls == [False, True]
+
+
+@pytest.mark.parametrize("content_range",[None,"bytes 0-3/16","bytes 4-7/7","invalid"])
+def test_checkpoint_range_rejects_mislabeled_equal_length_payload(monkeypatch,content_range):
+    import io
+    class Response(io.BytesIO):
+        status=206
+        headers={} if content_range is None else {"Content-Range":content_range}
+    monkeypatch.setattr(recorder.urllib.request,"urlopen",lambda *a,**k:Response(b"ABCD"))
+    with pytest.raises(RuntimeError,match="Content-Range"):
+        recorder._fetch_range("https://example.test/pinned",4,7)
+
+
+def test_checkpoint_range_accepts_exact_content_identity(monkeypatch):
+    import io
+    class Response(io.BytesIO):
+        status=206
+        headers={"Content-Range":"bytes 4-7/16"}
+    monkeypatch.setattr(recorder.urllib.request,"urlopen",lambda *a,**k:Response(b"ABCD"))
+    assert recorder._fetch_range("https://example.test/pinned",4,7)==b"ABCD"

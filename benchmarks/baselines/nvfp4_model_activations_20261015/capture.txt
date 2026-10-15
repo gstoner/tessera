@@ -1,0 +1,9 @@
+loading pinned BF16 self_attn.q_proj.weight
+loading pinned BF16 self_attn.k_proj.weight
+loading pinned BF16 self_attn.v_proj.weight
+loading pinned BF16 self_attn.o_proj.weight
+loading pinned BF16 self_attn.q_norm.weight
+loading pinned BF16 self_attn.k_norm.weight
+loading pinned BF16 input_layernorm.weight
+loading pinned BF16 post_attention_layernorm.weight
+{"shape": [256, 4096], "activation_sha256": "2f8585a601aeb7c412b4e7c7f69d0aa23eb40139c06ff364e148545e13f3922c", "reference": "torch_cpu_bfloat16_eager"}

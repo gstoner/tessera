@@ -11,6 +11,7 @@ from dataclasses import replace
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import socket
 import statistics
@@ -46,8 +47,13 @@ def _fetch_range(url: str, start: int, end: int) -> bytes:
     with urllib.request.urlopen(request, timeout=120) as response:
         if response.status != 206:
             raise RuntimeError(f"checkpoint server ignored byte range: HTTP {response.status}")
-        data = response.read()
+        content_range = response.headers.get("Content-Range", "")
+        match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+|\*)", content_range)
+        if (match is None or int(match[1]) != start or int(match[2]) != end
+                or (match[3] != "*" and int(match[3]) <= end)):
+            raise RuntimeError(f"checkpoint Content-Range differs from request: {content_range!r}")
         expected = end - start + 1
+        data = response.read(expected + 1)
         if len(data) != expected:
             raise RuntimeError(f"checkpoint range length {len(data)} != {expected}")
         return data

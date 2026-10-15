@@ -3,10 +3,12 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-10-14
+last_updated: 2026-10-15
 ---
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
+
+CI documentation synchronization: the marker-aware standalone dashboard now participates in the standard generated-doc registry. Its two generated summaries refresh automatically while authored prose is preserved. No apple capability, numerical policy, ABI or physical execution claim changes.
 
 Review synchronization: resolved physical targets now namespace the shared descriptor cache. Apple never enters this ROCm/SM120 dispatcher, and the new exact ROCm numerical fixture does not change Metal admission, arithmetic or ABI. Outcome: not applicable to Apple physical execution.
 

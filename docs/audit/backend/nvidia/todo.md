@@ -3,10 +3,12 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-10-14
+last_updated: 2026-10-15
 ---
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
+
+CI documentation synchronization: the marker-aware standalone dashboard now participates in the standard generated-doc registry. Its two generated summaries refresh automatically while authored prose is preserved. No nvidia capability, numerical policy, ABI or physical execution claim changes.
 
 Review synchronization: the shared descriptor key includes its resolved target. Seventy-five producer/public-attention cases pass on the owning RTX5070 after this change, with current source/compiler/provider pins in sm120-review-control.json. The new ROCm exact numerical entries do not change CUDA capability, storage, ABI or physical schedules. Outcome: shared-control parity validated; no timing transfer.
 

@@ -1,11 +1,13 @@
 ---
-last_updated: 2026-10-14
+last_updated: 2026-10-15
 audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
+
+CI documentation synchronization: the marker-aware standalone dashboard now participates in the standard generated-doc registry. Its two generated summaries refresh automatically while authored prose is preserved. This repairs stale exact-ROCm row counts; numerical admission and physical schedules are unchanged.
 
 PR948 review correction: the generic JIT specialization key now includes the resolved physical target as well as semantic Graph bytes. Four host-only architecture-switch regressions fail before the fix and pass afterward, including both switch directions and warm reuse. They do not claim live multi-GPU switching.
 

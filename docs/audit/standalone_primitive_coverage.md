@@ -227,8 +227,8 @@ Exact-target backend-manifest rows:
 | `nvidia_sm80` | 78 | `artifact_only` 42, `planned` 36 |
 | `nvidia_sm90` | 102 | `artifact_only` 42, `planned` 60 |
 | `rocm` | 331 | `device_verified_abi` 3, `device_verified_jit` 316, `artifact_only` 1, `planned` 11 |
-| `rocm_gfx1151` | 8 | `device_verified_jit` 8 |
-| `rocm_gfx1201` | 10 | `device_verified_jit` 10 |
+| `rocm_gfx1151` | 10 | `device_verified_jit` 10 |
+| `rocm_gfx1201` | 12 | `device_verified_jit` 12 |
 | `x86` | 325 | `device_verified_jit` 274, `fused` 42, `reference` 9 |
 
 Current open queues derived from the same sources:

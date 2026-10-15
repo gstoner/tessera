@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-15",
+  "base_head": "1ee72aaa850221ad51411494910d459ac82b6448",
+  "scope": "documentation-generation repair only; runtime and physical compiler sources unchanged",
+  "prior_ci": {
+    "run_id": 38683473935,
+    "unit_job_id": 116252967934,
+    "unit_failed": 1,
+    "unit_passed": 21664,
+    "unit_skipped": 9782,
+    "failure": "stale standalone compiler summary; compiler-route, lint and audit passed"
+  },
+  "validation": {
+    "focused_tests": {
+      "passed": 57,
+      "deselected": 65
+    },
+    "full_dashboard_registry_tests": {
+      "passed": 106
+    },
+    "generated_documents_in_sync": 33,
+    "ruff": "passed",
+    "focused_mypy": "passed",
+    "compiler_plan": "passed",
+    "public_claim_lint": "passed",
+    "surface_claim_lint": "passed",
+    "graphify_update": "passed"
+  },
+  "source_sha256": {
+    "python/tessera/compiler/generated_docs.py": "6a94c3ef0b06310987dab2c490b330e80d95cf04ae0788de9b075398257b0bec",
+    "tests/unit/test_generated_docs_registry.py": "01ab7da09b968aa9e03c34057de321ed4fe09b4524f2e7db8021d3147e376457",
+    "docs/audit/standalone_primitive_coverage.md": "2e82cdb0a713773a470d35fc92a50896e4a868c97e43e6265eea9989dc7a4114"
+  },
+  "log_sha256": {
+    "dashboard-focused-tests.txt": "35377e495bbfa7709f108018736ca71eb341c28e6c91709b5d5a69d876c21c50",
+    "dashboard-full-registry-tests.txt": "535971cef31f7ecc6219e13212be3505ec8669eabdc1decb6bf2cf62988e4339",
+    "dashboard-generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d"
+  },
+  "limits": "These host WSL gates do not substitute for fresh required CI on the repair head. No new device or performance claim."
+}

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-14
+last_updated: 2026-10-15
 audit_role: reference
 ---
 
@@ -12294,6 +12294,14 @@ gap without promoting its broader artifact-only capability. Eight owning
 public cases on gfx1151 and 24 on gfx1201 pass; the latter include all OCP
 FP8 pairs. Registry guards pass 167 cases and shared RTX5070 controls pass 75.
 First-head CI is green; the review head still requires combined CI.
+
+CI on 1ee72aaa8 passed production compiler-route proof, lint and audit, but
+one unit drift check found stale standalone-dashboard compiler counts
+(21,664 other cases passed). The marker-aware owner is now registered in
+the standard generated-doc fleet, which checks 33 documents including that
+partial view. A red/green regression proves stale blocks are repaired while
+authored prose is preserved; the full dashboard/registry group passes 106.
+No numerical gate, compiler arithmetic or hardware claim is weakened.
 
 Remaining: larger/dynamic/layout and split-K FP8, general attention keys,
 public admission costs and wider public dtype/layout/AD contracts.

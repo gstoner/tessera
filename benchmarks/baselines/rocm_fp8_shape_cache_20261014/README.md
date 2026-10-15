@@ -252,3 +252,22 @@ passes 75 producer/public-attention cases on the owning RTX5070, with a
 for 6c1ab5888. That CI does not certify the subsequent review repair; the new
 head requires its own CI. Earlier packets keep their original source/binary
 identities and are not relabeled as post-review measurements.
+
+### CI partial-dashboard follow-up — 2026-10-15
+
+The 1ee72aaa8 CI run passes production compiler-route proof, lint and audit;
+unit records one stale standalone compiler summary, with 21,664 other passes.
+The ordinary generator previously covered 32 complete views and missed this
+partial authored dashboard. Its existing marker-aware renderer is now in the
+same registry, so the standard write/check commands cover 33 documents and
+preserve all prose outside the two generated blocks. A new red/green test
+checks actual drift detection, repair and authored-prose preservation. The
+complete standalone/registry group passes 106 cases. No runtime or numerical
+assertion is removed, and no new hardware/performance claim is added. The
+updated CI head must still pass all required lanes before merge.
+
+Final host WSL checks: 57 focused tests pass (65 slow cases deselected), all
+33 generated documents are in sync, Ruff/focused mypy and both claim-lint
+checks pass. [The repair receipt](dashboard-repair.json) pins the sources
+and logs; [the complete 106-case group](dashboard-full-registry-tests.txt)
+was run before the final explanatory documentation edits.

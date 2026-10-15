@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-14
+last_updated: 2026-10-15
 audit_role: reference
 ---
 
@@ -11,7 +11,7 @@ PR947 extend the source and proof below. Older entries retain their original
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
 
-## Current reconciliation — 2026-10-14
+## Current reconciliation — 2026-10-15
 
 The original five requirements remain open as an aggregate. Their current
 proved envelopes and remaining work are:
@@ -54,6 +54,9 @@ The fixture passes eight gfx1151 and 24 gfx1201 cases; f16/bf16 are proved on
 both and FP8 pairs only on gfx1201. Shared NVIDIA controls pass 75 cases.
 General capability/layout/dynamic/AD and physical-performance gates remain.
 First-head CI passed; post-review CI is still required.
+The first review head passed compiler-route proof and audit but found one
+stale partial-dashboard summary in unit CI. Its marker-aware renderer now
+joins the standard 33-document drift gate; numerical/runtime scope is unchanged.
 
 ## Delivery gates
 

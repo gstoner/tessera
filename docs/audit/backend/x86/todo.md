@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-14
+last_updated: 2026-10-15
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -8,6 +8,8 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
 ## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
+
+CI documentation synchronization: the marker-aware standalone dashboard now participates in the standard generated-doc registry. Its two generated summaries refresh automatically while authored prose is preserved. No x86 capability, numerical policy, ABI or physical execution claim changes.
 
 Review synchronization: physical targets namespace the ROCm/SM120 descriptor cache; x86 does not enter that dispatcher. Exact ROCm numerical fixture declarations leave broad capability/artifact guards and x86 policies unchanged. Outcome: not applicable to x86 arithmetic; shared operation/dtype/manifest gates pass 167 tests (five environment skips).
 

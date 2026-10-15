@@ -62,3 +62,13 @@ Only the recorded static named envelope has this slice's exact-device proof.
 Symbolic frontend metadata, additional producer/AD envelopes, captured kernel
 measurement and activation schedule tuning remain open. Sibling backends need
 their own physical consumers and owning-device proof.
+
+## Execution and coverage registration
+
+The nvidia_sm120 ReLU backend-manifest row distinguishes this standalone
+f16/bf16 producer from its existing accumulator-epilogue formats. The actual
+public composition uses canonical_nvidia_lhs_program / nvidia_lhs_program;
+the execution matrix names its private stores and serial activation launch.
+Its numerical fixture is tests/unit/test_sm120_scheduled_activation.py.
+The matmul_relu conformance row and tests/device/nvidia/test_matmul_relu.py
+continue to prove the separate fused post-matmul envelope.

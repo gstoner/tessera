@@ -245,3 +245,21 @@ def test_composed_relu_rejects_forged_numerical_descriptor(tool, field, value):
     # Validation must reject before native owner allocation or attachment.
     with pytest.raises(ValueError, match="numerical ABI mismatch"):
         PreparedLhsCall(broken)
+
+
+def test_relu_producer_execution_registration_keeps_epilogue_proof_separate():
+    from tessera.compiler import backend_manifest as bm, conformance_matrix as cm
+    from tessera.compiler.execution_matrix import lookup
+
+    fixture = "tests/unit/test_sm120_scheduled_activation.py"
+    row = next(item for item in bm.manifest_for("relu") if item.target == "nvidia_sm120")
+    assert "scheduled_activation" in row.feature_flags
+    assert row.execute_compare_fixture == fixture
+    assert bm._NUMERICAL_FIXTURES[("matmul_relu", "nvidia_sm120")] == (
+        "tests/device/nvidia/test_matmul_relu.py")
+    execution = lookup("nvidia_sm120", "canonical_nvidia_lhs_program")
+    assert execution.executable and execution.executor_id == "nvidia_lhs_program"
+    assert execution.numerical_fixture == fixture and execution.evidence_target == "nvidia_sm120"
+    assert cm._numerical_check_present("relu", "nvidia_sm120")
+    for sibling in ("nvidia_sm80", "nvidia_sm90", "nvidia_sm100"):
+        assert not cm._numerical_check_present("relu", sibling)

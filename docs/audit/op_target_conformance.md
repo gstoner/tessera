@@ -67,7 +67,7 @@ Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDI
 
 ## `matmul_relu`
 
-_fused Tile accumulator epilogue on nvidia_sm120; composes elsewhere_
+_fused Tile accumulator epilogue on nvidia_sm120; composes elsewhere. This post-matmul row is distinct from the SM120 f16/bf16 standalone ReLU producer member in canonical_nvidia_lhs_program, whose native Schedule/Tile and public numerical fixture is tests/unit/test_sm120_scheduled_activation.py._
 
 **Composition:** `matmul`, `relu`.  Fused-single-kernel targets: nvidia_sm120.
 

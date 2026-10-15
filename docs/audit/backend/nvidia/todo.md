@@ -25,6 +25,13 @@ A shared descriptor guard rejects forged numerical/schedule/storage policy
 before composed or prepared allocation; final guarded.json preserves every
 native program, image, PTX and Tile identity.
 
+Review correction: the SM120 manifest and canonical_nvidia_lhs_program
+execution row now name the materialized f16/bf16 ReLU producer and its exact
+test fixture. Conformance distinguishes this producer from the fused
+post-matmul epilogue, whose original fixture remains registered. Generated
+execution/conformance/coverage views are refreshed; sibling physical claims
+and all operation/dtype/ABI definitions are unchanged.
+
 Parity validated on RTX 5070/sm_120 for the named static f16/bf16 producer chain at M,K,N=(7,32,9), (17,64,19), (129,256,33). Follow-up required: captured measurement, coalesced ReLU row mapping, symbolic frontend metadata and broader producer/AD coverage.
 
 ## MXFP4-RESERVED-SCALE-20261014 — PR946 review correction

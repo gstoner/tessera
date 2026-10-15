@@ -1151,7 +1151,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "loads + launches it. Interleaved-pair RoPE over "
                             "[M, D] (one workgroup per row); f32/f16/bf16",
     "rocm_nvfp4_program": "Checked native checkpoint conversion/storage/packed matmul on one owned HIP stream",
-    "nvidia_lhs_program": "Checked native LHS normalization/softmax and complete matmul epilogue on one owned CUDA stream",
+    "nvidia_lhs_program": "Checked native LHS normalization/softmax/ReLU producer members and complete matmul epilogue on one owned CUDA stream",
     "nvidia_rhs_program": "Checked native RMSNorm/LayerNorm RHS and typed matmul packages on one owned CUDA stream",
     "nvidia_mma":           "NVIDIA GPU (consumer Blackwell sm_120) warp-level "
                             "mma.sync GEMM via the shipped libtessera_nvidia_gemm.so "
@@ -3800,12 +3800,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="nvidia_sm120", compiler_path="canonical_nvidia_lhs_program",
         execution_kind="native_gpu", executable=True, executor_id="nvidia_lhs_program",
         runtime_status="success", execution_mode="cuda_runtime", owns_stream=True,
-        reason="Static primal fp16/BF16 RMSNorm/LayerNorm/softmax LHS -> fp16/fp32 matmul with native epilogues through two checked "
-               "Graph/Schedule/Tile/PTX packages. Portable argument/shape/epsilon lineage "
-               "is validated before allocation; host inputs, one owned CUDA stream, host output. "
-               "No dynamic/composed AD or FP8/MXFP8/MXFP4 support is inferred.",
-        numerical_fixture="tests/device/nvidia/test_lhs_tensor_jit.py",
-        evidence_target="nvidia_sm120", proof_build=".build-sm120-w1-1",
+        reason="Static primal fp16/BF16 normalization/softmax and standalone ReLU LHS members -> fp16/fp32 matmul "
+               "with native epilogues through checked Graph/Schedule/Tile/PTX packages. "
+               "The named RMSNorm -> ReLU -> matmul route retains two private half-storage stores; "
+               "ReLU uses a serial 128-thread row launch, propagated NaNs, f16 positive zero and bf16 signed zero. "
+               "Portable argument/shape/numerical lineage is validated before allocation; host inputs, "
+               "one owned CUDA stream, host output. Existing normalization proof remains in "
+               "tests/device/nvidia/test_lhs_tensor_jit.py. No dynamic/composed AD or FP8/MXFP8/MXFP4 support is inferred.",
+        numerical_fixture="tests/unit/test_sm120_scheduled_activation.py",
+        evidence_target="nvidia_sm120", proof_build="LLVM/MLIR23.1.1+CUDA13.3+RTX5070",
         device_proof="device_verified_jit"),
     ("nvidia_sm120", "canonical_nvidia_rhs_program"): ExecutionRow(
         target="nvidia_sm120", compiler_path="canonical_nvidia_rhs_program",

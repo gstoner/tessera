@@ -24,6 +24,13 @@ A shared descriptor guard rejects forged numerical/schedule/storage policy
 before composed or prepared allocation; final guarded.json preserves every
 native program, image, PTX and Tile identity.
 
+Review correction: the SM120 manifest and canonical_nvidia_lhs_program
+execution row now name the materialized f16/bf16 ReLU producer and its exact
+test fixture. Conformance distinguishes this producer from the fused
+post-matmul epilogue, whose original fixture remains registered. Generated
+execution/conformance/coverage views are refreshed; sibling physical claims
+and all operation/dtype/ABI definitions are unchanged.
+
 Not applicable to rocm physical execution: this initial activation Schedule and row-launch ABI require sm_120; no sibling schedule or device proof is transferred. Shared typed IR verifier and registry drift gates remain required.
 
 ## MXFP4-RESERVED-SCALE-20261014 — PR946 review correction

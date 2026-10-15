@@ -1,0 +1,2216 @@
+{
+  "schema": "tessera.benchmark.tensor_rhs_jvp.v3",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "scope": "named static public RHS-only JVP; no active-source, reverse, dynamic or sibling proof",
+  "source_sha256": {
+    "src/transforms/lib/NativeSM120TensorProgram.h": "0366f2e5060cda2d44f2db121fd6ce66d075bef10f932f67a12a7d1d99826f57",
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "8f3722f087f6e5913df41c7b4c5c9979a78db690a6016205960392235a468c90",
+    "src/transforms/lib/AutodiffForwardPass.cpp": "b42bf0328c1ce6c782925e64e9907915c6d83298bc2fa234634ee434bb3005f7",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "180ae290399f39ef965bd3d6fa70fbe484fd6a31c1944fd34dcf0deed2a90623",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "d60df4559b3d8ee9e3bc75ecadfb942884ffcd1c46fffd48e556aacb42836a90",
+    "python/tessera/compiler/native_sm120_tensor_program.py": "7d8b4360316e1dd4c7fdde67e7863f0976a7b8e22aded73564d3e5f4bbd8e075",
+    "python/tessera/compiler/prepared_nvidia_tensor_jvp.py": "67c3040a551d735f57f6f0b663b075504d7e964bc5effbc498f9e9c4c82da842",
+    "python/tessera/compiler/portable_nvidia_tensor_jvp.py": "f8ba4345a54f67eb7cd40932acc8a93e6e017d8e4088410a4deaf7bfbd9678fa",
+    "python/tessera/compiler/nvidia_tensor_jvp_runtime.py": "29cbf0a116221c5a0e2873883859a4777226c0868522c8bdb9a021342c8dab9d",
+    "python/tessera/runtime.py": "e01304d1cf7f483844dcf7ceef2e26178cef77e4a4d988bdd70743ca2c28ac04",
+    "python/tessera/compiler/jit.py": "c8fb1694f646f8eaa8cc6a48b271575ab9f9ab464c51a8e471d6b8c02f7e601a",
+    "benchmarks/nvidia/benchmark_tensor_rhs_jvp.py": "80bd95889889e659342018ce94b42069cacd4161004052dd89c330779c38212e"
+  },
+  "binary_sha256": {
+    "TESSERA_OPT": "d994705917e4d43b6c1d34ca02ad9c91b292c6f649c10e35a93d9a1266da43c3",
+    "TESSERA_NVIDIA_OPT": "bad7652472d6364322cb629e9fb28751c9df804e84a07d1e6f0db801c9e6e578",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "efbb6b9a17309ee36eb50be3791e252fb7c96f0e9cffe3d2d01f7449e557894b"
+  },
+  "cases": [
+    {
+      "storage": "f16",
+      "shape_mkn": [
+        7,
+        32,
+        9
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error_primal_tangent": [
+        1.1920928955078125e-07,
+        5.960464477539063e-08
+      ],
+      "first_compile_prepare_call_ms": 1480.045997,
+      "device_timing_domain": "cuda_graph_batch",
+      "device_samples": [
+        {
+          "program_ms": 0.0062454999424517155,
+          "stage_ms": [
+            0.0027844998985528946,
+            0.0019859999883919954,
+            0.0009442499722354114,
+            0.0009640000062063336
+          ],
+          "profile_call_host_ms": 13.577884
+        },
+        {
+          "program_ms": 0.006484500132501125,
+          "stage_ms": [
+            0.003006499959155917,
+            0.0017800000496208668,
+            0.001002499950118363,
+            0.0014032500330358744
+          ],
+          "profile_call_host_ms": 6.276881
+        },
+        {
+          "program_ms": 0.006755500100553036,
+          "stage_ms": [
+            0.0028425001073628664,
+            0.001975500024855137,
+            0.000971500005107373,
+            0.0013472499558702111
+          ],
+          "profile_call_host_ms": 7.227703
+        },
+        {
+          "program_ms": 0.006326749920845032,
+          "stage_ms": [
+            0.00279999990016222,
+            0.0018427500035613775,
+            0.000959250028245151,
+            0.0009774999925866723
+          ],
+          "profile_call_host_ms": 6.282911
+        },
+        {
+          "program_ms": 0.006718750111758709,
+          "stage_ms": [
+            0.0029899999499320984,
+            0.0017907499568536878,
+            0.0013825000496581197,
+            0.0009467499912716448
+          ],
+          "profile_call_host_ms": 6.380151
+        }
+      ],
+      "device_program_median_ms": 0.006484500132501125,
+      "stage_medians_ms": [
+        0.0028425001073628664,
+        0.0018427500035613775,
+        0.000971500005107373,
+        0.0009774999925866723
+      ],
+      "completed_public_call_samples_ms": [
+        0.843552875,
+        0.748942625,
+        0.767868875,
+        0.7383375,
+        0.7631025
+      ],
+      "completed_public_call_median_ms": 0.7631025,
+      "completed_runtime_artifact_samples_ms": [
+        4.85097875,
+        3.29457975,
+        3.329736,
+        3.274728125,
+        3.269857125
+      ],
+      "completed_runtime_artifact_median_ms": 3.29457975,
+      "runtime_artifact_hash": "039f20efe12fd45c52a8eaa20d043caf460df9d31c7e6ceca8dd90cfebf6d1de",
+      "runtime_component_receipts": [
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_0",
+          "image_digest": "6b95517cf13faa7f3e4122c9d719b58570cc988b78b7f7c6a088df823088686a",
+          "descriptor_digest": "0ede86787d28f9201788ddfa85c1fa462fa4cd9926ceb25c61d01b746b16f2a0"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_1",
+          "image_digest": "55b511045157c642d7c19f2c8c8d245924838f67a4d8bcdf9d96b7e9bddf81d2",
+          "descriptor_digest": "c73265de6ee7ada7a3bcc82b6072c1b4d554065b3c156b2c71225c3e59fc94f6"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_2",
+          "image_digest": "cd63535288a5fa2dc18c5cc87d136751032b08f67b684f096de3c9b93e789d33",
+          "descriptor_digest": "1ec5e497005bdfaf5815ddc41738e299955a99f4b7fee8de36a0f18b3f70e626"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_3",
+          "image_digest": "cd63535288a5fa2dc18c5cc87d136751032b08f67b684f096de3c9b93e789d33",
+          "descriptor_digest": "0449787b71edaef52cbfb01ea7b398d72e8ce820c184877d7827da995dfecbc8"
+        }
+      ],
+      "replay_prepare_ms": 6.712013,
+      "portable_manifest_bytes": 130400,
+      "completed_prepared_replay_samples_ms": [
+        0.268954125,
+        0.286944375,
+        0.336990625,
+        0.274850375,
+        0.374877
+      ],
+      "completed_prepared_replay_median_ms": 0.286944375,
+      "replay_device_profile": {
+        "timing_domain": "cuda_graph_batch",
+        "program_ms": 0.0062489998526871204,
+        "stage_ms": [
+          0.002787250094115734,
+          0.0018195000011473894,
+          0.0011065000435337424,
+          0.0009652500157244503
+        ]
+      },
+      "scratch": {
+        "capacity_bytes": 3584,
+        "allocation_count": 1
+      },
+      "receipt": {
+        "execution_kind": "native_gpu",
+        "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "family": "tensor_rhs_jvp_program",
+        "native_call_binding": "prepared_cpp_tensor_program",
+        "native_program_digest": "e549855c94ea5c6760c15506d7e38f98ac22c775ab3b82b21b919f6fabeebeb2",
+        "source_graph_ir_digest": "eda5f5b3641f113db6ad64ba2ba5adc5888791929bfda67cbc4e37867221a81c",
+        "paired_jvp_ir_digest": "f068c322046b2f21c1c2f89983c6a41826cd17d48403218d91a19308b2f32a65",
+        "schedule_program_digest": "bf94224b1abb488def0fd4aaad86c04cd7d486d39276ef06d78c38e694829b2d",
+        "tile_program_digest": "51bc017e4cfb6f40617fe6f61c6b07f4f24d2aad84fd1cf8540a23cc6bde2c0d",
+        "image_digests": [
+          "6b95517cf13faa7f3e4122c9d719b58570cc988b78b7f7c6a088df823088686a",
+          "55b511045157c642d7c19f2c8c8d245924838f67a4d8bcdf9d96b7e9bddf81d2",
+          "cd63535288a5fa2dc18c5cc87d136751032b08f67b684f096de3c9b93e789d33",
+          "cd63535288a5fa2dc18c5cc87d136751032b08f67b684f096de3c9b93e789d33"
+        ],
+        "artifact_hash": "039f20efe12fd45c52a8eaa20d043caf460df9d31c7e6ceca8dd90cfebf6d1de",
+        "frontend_authority": "tracer"
+      },
+      "native_program": {
+        "buffers": [
+          {
+            "bytes": 448,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              7,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 576,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": "readonly_input",
+            "shape": [
+              32,
+              9
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 576,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 3,
+            "ownership": "readonly_input",
+            "shape": [
+              32,
+              9
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 448,
+            "first_write": 0,
+            "id": 3,
+            "last_read": 1,
+            "ownership": "private_scratch",
+            "shape": [
+              7,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 448,
+            "first_write": 1,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "private_scratch",
+            "shape": [
+              7,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 252,
+            "first_write": 2,
+            "id": 5,
+            "last_read": 4,
+            "ownership": "returned_output",
+            "shape": [
+              7,
+              9
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 252,
+            "first_write": 3,
+            "id": 6,
+            "last_read": 4,
+            "ownership": "returned_output",
+            "shape": [
+              7,
+              9
+            ],
+            "storage": "f32"
+          }
+        ],
+        "kind": "paired_jvp",
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<7x32xf16>) -> tensor<7x32xf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<7x32xf16>) -> tensor<7x32xf16>\n    return %0 : tensor<7x32xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<7x32xf16>) -> tensor<7x32xf16> {\n    %0 = tessera.relu %arg0 {tessera.effect_kind = \"pure\"} : (tensor<7x32xf16>) -> tensor<7x32xf16>\n    return %0 : tensor<7x32xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<7x32xf16>, %arg1: tensor<32x9xf16>) -> tensor<7x9xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<7x32xf16>, tensor<32x9xf16>) -> tensor<7x9xf32>\n    return %0 : tensor<7x9xf32>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<7x32xf16>, %arg1: tensor<32x9xf16>) -> tensor<7x9xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {rhs_storage_order = \"row_major\"} : (tensor<7x32xf16>, tensor<32x9xf16>) -> tensor<7x9xf32>\n    return %0 : tensor<7x9xf32>\n  }\n}\n\n"
+        ],
+        "output": 5,
+        "outputs": [
+          5,
+          6
+        ],
+        "paired_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @product(%arg0: tensor<7x32xf16>, %arg1: tensor<32x9xf16>) -> tensor<7x9xf32> attributes {tessera.autodiff = \"forward\", tessera.autodiff.jvp = @product__jvp, tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"bc06e0f096d1b6c2ee50984eb5077c4cd597214e79da7f33196d5541be44c1cd\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<7x32xf16>) -> tensor<7x32xf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<7x32xf16>) -> tensor<7x32xf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<7x32xf16>, tensor<32x9xf16>) -> tensor<7x9xf32>\n    return %2 : tensor<7x9xf32>\n  }\n  func.func private @product__jvp(%arg0: tensor<7x32xf16>, %arg1: tensor<32x9xf16>, %arg2: tensor<32x9xf16>) -> (tensor<7x9xf32>, tensor<7x9xf32>) attributes {tessera.autodiff.forward = @product, tessera.autodiff.role = \"jvp\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<7x32xf16>) -> tensor<7x32xf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<7x32xf16>) -> tensor<7x32xf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<7x32xf16>, tensor<32x9xf16>) -> tensor<7x9xf32>\n    %3 = tessera.matmul %1, %arg2 : (tensor<7x32xf16>, tensor<32x9xf16>) -> tensor<7x9xf32>\n    return %2, %3 : tensor<7x9xf32>, tensor<7x9xf32>\n  }\n}\n\n",
+        "role_indices": [
+          0,
+          1,
+          2
+        ],
+        "root": "product__jvp",
+        "schema": "tessera.native.sm120_tensor_program.v7",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @product(%arg0: tensor<7x32xf16>, %arg1: tensor<32x9xf16>) -> tensor<7x9xf32> attributes {tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"bc06e0f096d1b6c2ee50984eb5077c4cd597214e79da7f33196d5541be44c1cd\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<7x32xf16>) -> tensor<7x32xf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<7x32xf16>) -> tensor<7x32xf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<7x32xf16>, tensor<32x9xf16>) -> tensor<7x9xf32>\n    return %2 : tensor<7x9xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "product__jvp__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              3
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              3
+            ],
+            "member": "product__jvp__tensor_member_1",
+            "operation": "tessera.relu",
+            "outputs": [
+              4
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              4,
+              1
+            ],
+            "member": "product__jvp__tensor_member_2",
+            "operation": "tessera.matmul",
+            "outputs": [
+              5
+            ],
+            "step": 2
+          },
+          {
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "product__jvp__tensor_member_3",
+            "operation": "tessera.matmul",
+            "outputs": [
+              6
+            ],
+            "step": 3
+          }
+        ]
+      },
+      "member_ir_digests": [
+        {
+          "tile": "cf688a087e5eb529ec63fe3d94dbc178f843686ffa3a98f73c9d6c7ccfe59814",
+          "target": "961f7812c2c5471de27a0c9d213efc5f0a72062681db153d02b2cff9821b39f5",
+          "backend": "7c5d2169d14c6efdea8014e0f11fe2c23564e0cab9c452f8cfa5af4689834855",
+          "image": "6b95517cf13faa7f3e4122c9d719b58570cc988b78b7f7c6a088df823088686a",
+          "descriptor": "0ede86787d28f9201788ddfa85c1fa462fa4cd9926ceb25c61d01b746b16f2a0"
+        },
+        {
+          "tile": "1c92b6d8690b0271e1834cef7834d674191c79b81b9b14d6385280bd4b5ed103",
+          "target": "2280d208bb05e5d254fc985716362f586b3c38edadbff317a4d49bef623df9a2",
+          "backend": "efb3f626c690965c78f79d30b5044893e910b5aae8791f631dd4cd049a609c45",
+          "image": "55b511045157c642d7c19f2c8c8d245924838f67a4d8bcdf9d96b7e9bddf81d2",
+          "descriptor": "c73265de6ee7ada7a3bcc82b6072c1b4d554065b3c156b2c71225c3e59fc94f6"
+        },
+        {
+          "tile": "976e1d91a7324d81d8c3522c81e129c2e1ecb769c925b8f30eab3c0b34669c2e",
+          "target": "ca6864abc7372cd6db4b64fba6d176916dd0158825ab7cf0ceb1f04d3d60b004",
+          "backend": "ef9c96fc9426e37c7bc65ce90210ad44112bd8eb7f800b4685e10b588c510b7d",
+          "image": "cd63535288a5fa2dc18c5cc87d136751032b08f67b684f096de3c9b93e789d33",
+          "descriptor": "1ec5e497005bdfaf5815ddc41738e299955a99f4b7fee8de36a0f18b3f70e626"
+        },
+        {
+          "tile": "976e1d91a7324d81d8c3522c81e129c2e1ecb769c925b8f30eab3c0b34669c2e",
+          "target": "ca6864abc7372cd6db4b64fba6d176916dd0158825ab7cf0ceb1f04d3d60b004",
+          "backend": "ef9c96fc9426e37c7bc65ce90210ad44112bd8eb7f800b4685e10b588c510b7d",
+          "image": "cd63535288a5fa2dc18c5cc87d136751032b08f67b684f096de3c9b93e789d33",
+          "descriptor": "0449787b71edaef52cbfb01ea7b398d72e8ce820c184877d7827da995dfecbc8"
+        }
+      ]
+    },
+    {
+      "storage": "f16",
+      "shape_mkn": [
+        17,
+        48,
+        19
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error_primal_tangent": [
+        2.384185791015625e-07,
+        1.7881393432617188e-07
+      ],
+      "first_compile_prepare_call_ms": 1115.610283,
+      "device_timing_domain": "cuda_graph_batch",
+      "device_samples": [
+        {
+          "program_ms": 0.00906550046056509,
+          "stage_ms": [
+            0.004049249924719334,
+            0.0024022499565035105,
+            0.0012507500359788537,
+            0.0012267499696463346
+          ],
+          "profile_call_host_ms": 8.145055
+        },
+        {
+          "program_ms": 0.009057999588549137,
+          "stage_ms": [
+            0.004038999788463116,
+            0.002372249960899353,
+            0.001471000025048852,
+            0.0022895000874996185
+          ],
+          "profile_call_host_ms": 7.765522
+        },
+        {
+          "program_ms": 0.008987000212073326,
+          "stage_ms": [
+            0.004010249860584736,
+            0.002655500080436468,
+            0.0013362499885261059,
+            0.0015264999819919467
+          ],
+          "profile_call_host_ms": 7.930574
+        },
+        {
+          "program_ms": 0.009073999710381031,
+          "stage_ms": [
+            0.004224750213325024,
+            0.002432500012218952,
+            0.0011762500507757068,
+            0.001474000047892332
+          ],
+          "profile_call_host_ms": 7.806465
+        },
+        {
+          "program_ms": 0.008762500248849392,
+          "stage_ms": [
+            0.004040500149130821,
+            0.0023742499761283398,
+            0.001222750055603683,
+            0.0012019999558106065
+          ],
+          "profile_call_host_ms": 7.169693
+        }
+      ],
+      "device_program_median_ms": 0.009057999588549137,
+      "stage_medians_ms": [
+        0.004040500149130821,
+        0.0024022499565035105,
+        0.0012507500359788537,
+        0.001474000047892332
+      ],
+      "completed_public_call_samples_ms": [
+        0.778495,
+        0.762432625,
+        0.745692625,
+        0.73961275,
+        0.746965
+      ],
+      "completed_public_call_median_ms": 0.746965,
+      "completed_runtime_artifact_samples_ms": [
+        3.2997285,
+        3.733994125,
+        3.426136125,
+        3.389832375,
+        3.540992625
+      ],
+      "completed_runtime_artifact_median_ms": 3.426136125,
+      "runtime_artifact_hash": "7336c016a9aad2ea59d4d8207b9cce2ffc71bc2bcf31e3edcb7dd214d43a1ccf",
+      "runtime_component_receipts": [
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_0",
+          "image_digest": "b4535e9eb64001d9242c2b773e301f995d976390f2f15ba62102378721ca591f",
+          "descriptor_digest": "005d110bbb6a84c70c17aacea39d7af03d148fcef87d207607d8627dc0209688"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_1",
+          "image_digest": "6fa03f507dad3a3f371ccdb6f04192aedf2ac89727bf5a2acd6d32ccad44366c",
+          "descriptor_digest": "90247abe7108f53fdbc464e7375a8a71376de6d14d6d7c70c6196ca01f432293"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_2",
+          "image_digest": "a2b072e53b803fac2a2a33657ed506b9ea7ccc32ebac207320a01d9c34d1d0bb",
+          "descriptor_digest": "4e88be39989209b023262cead1438cfb9074b301af4f2fad8b8fe38efc6a2f5b"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_3",
+          "image_digest": "a2b072e53b803fac2a2a33657ed506b9ea7ccc32ebac207320a01d9c34d1d0bb",
+          "descriptor_digest": "1789d01bdfe24ba3af31fdc16b529879a9f4275047dd557d874deb4ac2c51d03"
+        }
+      ],
+      "replay_prepare_ms": 6.384782,
+      "portable_manifest_bytes": 130707,
+      "completed_prepared_replay_samples_ms": [
+        0.3136455,
+        0.2707505,
+        0.277336875,
+        0.30548925,
+        0.26396175
+      ],
+      "completed_prepared_replay_median_ms": 0.277336875,
+      "replay_device_profile": {
+        "timing_domain": "cuda_graph_batch",
+        "program_ms": 0.00906474981456995,
+        "stage_ms": [
+          0.004287749994546175,
+          0.002648750087246299,
+          0.001476750010624528,
+          0.0011667499784380198
+        ]
+      },
+      "scratch": {
+        "capacity_bytes": 12544,
+        "allocation_count": 1
+      },
+      "receipt": {
+        "execution_kind": "native_gpu",
+        "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "family": "tensor_rhs_jvp_program",
+        "native_call_binding": "prepared_cpp_tensor_program",
+        "native_program_digest": "6e048d375ce1fa5c21532a4c0247e43bbccceb4df8989f7ceb495c41943d4a4a",
+        "source_graph_ir_digest": "600d82e367e09c779e8a8af2942c947fe00ba51c4f8fa952c7d1ad35a213a129",
+        "paired_jvp_ir_digest": "6401a5c5dad59526fd3b792da2c26f12a45b59ba8fdee671991f0c4f1cab6611",
+        "schedule_program_digest": "356058ec9bffc2b7fb5af5ebc23e35a3d771126acacb45e835a9a2bc96caf61c",
+        "tile_program_digest": "10d67b5796f453d79301fa7a75a846cad59b15b4034ab5218fd56725a7611e52",
+        "image_digests": [
+          "b4535e9eb64001d9242c2b773e301f995d976390f2f15ba62102378721ca591f",
+          "6fa03f507dad3a3f371ccdb6f04192aedf2ac89727bf5a2acd6d32ccad44366c",
+          "a2b072e53b803fac2a2a33657ed506b9ea7ccc32ebac207320a01d9c34d1d0bb",
+          "a2b072e53b803fac2a2a33657ed506b9ea7ccc32ebac207320a01d9c34d1d0bb"
+        ],
+        "artifact_hash": "7336c016a9aad2ea59d4d8207b9cce2ffc71bc2bcf31e3edcb7dd214d43a1ccf",
+        "frontend_authority": "tracer"
+      },
+      "native_program": {
+        "buffers": [
+          {
+            "bytes": 1632,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1824,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": "readonly_input",
+            "shape": [
+              48,
+              19
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1824,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 3,
+            "ownership": "readonly_input",
+            "shape": [
+              48,
+              19
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1632,
+            "first_write": 0,
+            "id": 3,
+            "last_read": 1,
+            "ownership": "private_scratch",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1632,
+            "first_write": 1,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "private_scratch",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1292,
+            "first_write": 2,
+            "id": 5,
+            "last_read": 4,
+            "ownership": "returned_output",
+            "shape": [
+              17,
+              19
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 1292,
+            "first_write": 3,
+            "id": 6,
+            "last_read": 4,
+            "ownership": "returned_output",
+            "shape": [
+              17,
+              19
+            ],
+            "storage": "f32"
+          }
+        ],
+        "kind": "paired_jvp",
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<17x48xf16>) -> tensor<17x48xf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x48xf16>) -> tensor<17x48xf16>\n    return %0 : tensor<17x48xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<17x48xf16>) -> tensor<17x48xf16> {\n    %0 = tessera.relu %arg0 {tessera.effect_kind = \"pure\"} : (tensor<17x48xf16>) -> tensor<17x48xf16>\n    return %0 : tensor<17x48xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<17x48xf16>, %arg1: tensor<48x19xf16>) -> tensor<17x19xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<17x48xf16>, tensor<48x19xf16>) -> tensor<17x19xf32>\n    return %0 : tensor<17x19xf32>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<17x48xf16>, %arg1: tensor<48x19xf16>) -> tensor<17x19xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {rhs_storage_order = \"row_major\"} : (tensor<17x48xf16>, tensor<48x19xf16>) -> tensor<17x19xf32>\n    return %0 : tensor<17x19xf32>\n  }\n}\n\n"
+        ],
+        "output": 5,
+        "outputs": [
+          5,
+          6
+        ],
+        "paired_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @product(%arg0: tensor<17x48xf16>, %arg1: tensor<48x19xf16>) -> tensor<17x19xf32> attributes {tessera.autodiff = \"forward\", tessera.autodiff.jvp = @product__jvp, tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"bc06e0f096d1b6c2ee50984eb5077c4cd597214e79da7f33196d5541be44c1cd\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x48xf16>) -> tensor<17x48xf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<17x48xf16>) -> tensor<17x48xf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x48xf16>, tensor<48x19xf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n  func.func private @product__jvp(%arg0: tensor<17x48xf16>, %arg1: tensor<48x19xf16>, %arg2: tensor<48x19xf16>) -> (tensor<17x19xf32>, tensor<17x19xf32>) attributes {tessera.autodiff.forward = @product, tessera.autodiff.role = \"jvp\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x48xf16>) -> tensor<17x48xf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<17x48xf16>) -> tensor<17x48xf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x48xf16>, tensor<48x19xf16>) -> tensor<17x19xf32>\n    %3 = tessera.matmul %1, %arg2 : (tensor<17x48xf16>, tensor<48x19xf16>) -> tensor<17x19xf32>\n    return %2, %3 : tensor<17x19xf32>, tensor<17x19xf32>\n  }\n}\n\n",
+        "role_indices": [
+          0,
+          1,
+          2
+        ],
+        "root": "product__jvp",
+        "schema": "tessera.native.sm120_tensor_program.v7",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @product(%arg0: tensor<17x48xf16>, %arg1: tensor<48x19xf16>) -> tensor<17x19xf32> attributes {tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"bc06e0f096d1b6c2ee50984eb5077c4cd597214e79da7f33196d5541be44c1cd\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x48xf16>) -> tensor<17x48xf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<17x48xf16>) -> tensor<17x48xf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x48xf16>, tensor<48x19xf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "product__jvp__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              3
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              3
+            ],
+            "member": "product__jvp__tensor_member_1",
+            "operation": "tessera.relu",
+            "outputs": [
+              4
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              4,
+              1
+            ],
+            "member": "product__jvp__tensor_member_2",
+            "operation": "tessera.matmul",
+            "outputs": [
+              5
+            ],
+            "step": 2
+          },
+          {
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "product__jvp__tensor_member_3",
+            "operation": "tessera.matmul",
+            "outputs": [
+              6
+            ],
+            "step": 3
+          }
+        ]
+      },
+      "member_ir_digests": [
+        {
+          "tile": "d53c534da95043590ca12a459a6ff9cb25526167ddbe714587dc0689c727df18",
+          "target": "cfe5c3fac522eb6bba028e1be25fc454fbc824848467b45d09b4f819e61f6f73",
+          "backend": "292677ff6e52e8510bdd5a44340543eff77fbf8e56b069e73f6ca5e80b6e802c",
+          "image": "b4535e9eb64001d9242c2b773e301f995d976390f2f15ba62102378721ca591f",
+          "descriptor": "005d110bbb6a84c70c17aacea39d7af03d148fcef87d207607d8627dc0209688"
+        },
+        {
+          "tile": "d3596e3b3dd6afe320858760fda4dbc0da16116f9929d5b42b692e20f578f4fa",
+          "target": "8ae2641049663e5343f2d2bc37d53b28efe48928fb4afd94c1b5fc122f75286b",
+          "backend": "9b68490c04548a9efdcbfebfc28caaf5624ba22a5a914b6f21ff2c42a62f917b",
+          "image": "6fa03f507dad3a3f371ccdb6f04192aedf2ac89727bf5a2acd6d32ccad44366c",
+          "descriptor": "90247abe7108f53fdbc464e7375a8a71376de6d14d6d7c70c6196ca01f432293"
+        },
+        {
+          "tile": "aef3c5b8c5dd9acb2ecf5c2774e312f5cefb369f075f360c5cfb671e508d7adb",
+          "target": "bab2b1aea3de9409d4e6434c753ebcc2c6c9634d8f6850f6299754bd40769d43",
+          "backend": "7358dec4abb3f5a02c67564b413e157845f783d237ae761335f73c45ace5c39b",
+          "image": "a2b072e53b803fac2a2a33657ed506b9ea7ccc32ebac207320a01d9c34d1d0bb",
+          "descriptor": "4e88be39989209b023262cead1438cfb9074b301af4f2fad8b8fe38efc6a2f5b"
+        },
+        {
+          "tile": "aef3c5b8c5dd9acb2ecf5c2774e312f5cefb369f075f360c5cfb671e508d7adb",
+          "target": "bab2b1aea3de9409d4e6434c753ebcc2c6c9634d8f6850f6299754bd40769d43",
+          "backend": "7358dec4abb3f5a02c67564b413e157845f783d237ae761335f73c45ace5c39b",
+          "image": "a2b072e53b803fac2a2a33657ed506b9ea7ccc32ebac207320a01d9c34d1d0bb",
+          "descriptor": "1789d01bdfe24ba3af31fdc16b529879a9f4275047dd557d874deb4ac2c51d03"
+        }
+      ]
+    },
+    {
+      "storage": "f16",
+      "shape_mkn": [
+        129,
+        256,
+        33
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error_primal_tangent": [
+        4.76837158203125e-06,
+        2.0265579223632812e-06
+      ],
+      "first_compile_prepare_call_ms": 1074.530808,
+      "device_timing_domain": "cuda_graph_batch",
+      "device_samples": [
+        {
+          "program_ms": 0.05181724950671196,
+          "stage_ms": [
+            0.0014972500503063202,
+            0.04130125045776367,
+            0.004696500021964312,
+            0.0047912499867379665
+          ],
+          "profile_call_host_ms": 30.370205
+        },
+        {
+          "program_ms": 0.051806751638650894,
+          "stage_ms": [
+            0.0016159999649971724,
+            0.041256748139858246,
+            0.004763999953866005,
+            0.004829249810427427
+          ],
+          "profile_call_host_ms": 29.773224
+        },
+        {
+          "program_ms": 0.051816001534461975,
+          "stage_ms": [
+            0.0015707500278949738,
+            0.041290998458862305,
+            0.004939999897032976,
+            0.005071249790489674
+          ],
+          "profile_call_host_ms": 29.828434
+        },
+        {
+          "program_ms": 0.051837749779224396,
+          "stage_ms": [
+            0.0013107500271871686,
+            0.041547250002622604,
+            0.004655499942600727,
+            0.005083750002086163
+          ],
+          "profile_call_host_ms": 29.544693
+        },
+        {
+          "program_ms": 0.05202300101518631,
+          "stage_ms": [
+            0.0012984999921172857,
+            0.041549500077962875,
+            0.004696750082075596,
+            0.004827000200748444
+          ],
+          "profile_call_host_ms": 29.944634
+        }
+      ],
+      "device_program_median_ms": 0.05181724950671196,
+      "stage_medians_ms": [
+        0.0014972500503063202,
+        0.04130125045776367,
+        0.004696750082075596,
+        0.004829249810427427
+      ],
+      "completed_public_call_samples_ms": [
+        0.8681715,
+        0.777241375,
+        0.792996375,
+        0.80202775,
+        0.889244125
+      ],
+      "completed_public_call_median_ms": 0.80202775,
+      "completed_runtime_artifact_samples_ms": [
+        3.4690525,
+        3.960131,
+        3.727698,
+        3.31314725,
+        4.03172725
+      ],
+      "completed_runtime_artifact_median_ms": 3.727698,
+      "runtime_artifact_hash": "2837907efaefd1f05b4f59cca3410d8269e8ed60dc4bb7a4caab163247d7830a",
+      "runtime_component_receipts": [
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_0",
+          "image_digest": "8e369c3a788da107e05eae78f4f19a8c081fde68e4d8dc6335505cf3e5234ff8",
+          "descriptor_digest": "547691a1d80c1b8b00edd5093d0f81378b3a5fc8de0ad3c454540e40db3cc7d0"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_1",
+          "image_digest": "c349c730d5c8c18f9fd6303693f9678234fe93e44beaeee3aff177843038203e",
+          "descriptor_digest": "65e596f66f85560d54fe899abfeaee5f4f3f769217eb459a1afd59d3186aae40"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_2",
+          "image_digest": "a8f58a193fafc551bebb24bee62b9160ab9a0ed841a9d9f97b1854fc3c6f3193",
+          "descriptor_digest": "9b1ba410d6a026fc1842d319732d8408d35aae4a0e7efe033df8336a2193c5a7"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_3",
+          "image_digest": "a8f58a193fafc551bebb24bee62b9160ab9a0ed841a9d9f97b1854fc3c6f3193",
+          "descriptor_digest": "5e10d985c8d3c50d7703f558f071d1e36b2b229bc2c6ed22c8295b94979fc97b"
+        }
+      ],
+      "replay_prepare_ms": 6.521363,
+      "portable_manifest_bytes": 137721,
+      "completed_prepared_replay_samples_ms": [
+        0.31080425,
+        0.3648845,
+        0.3225455,
+        0.313216875,
+        0.307635625
+      ],
+      "completed_prepared_replay_median_ms": 0.313216875,
+      "replay_device_profile": {
+        "timing_domain": "cuda_graph_batch",
+        "program_ms": 0.05185624957084656,
+        "stage_ms": [
+          0.0012779999524354935,
+          0.041499000042676926,
+          0.004655750002712011,
+          0.004830250050872564
+        ]
+      },
+      "scratch": {
+        "capacity_bytes": 266240,
+        "allocation_count": 1
+      },
+      "receipt": {
+        "execution_kind": "native_gpu",
+        "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "family": "tensor_rhs_jvp_program",
+        "native_call_binding": "prepared_cpp_tensor_program",
+        "native_program_digest": "0fc8cedef74b42ec5488bfd1c02021209840da67b94c5de519686b5cb2987ddc",
+        "source_graph_ir_digest": "49f9d7c474724de427ca7782f5fc98c083d36296b53a4702cbce2dbdfbc73621",
+        "paired_jvp_ir_digest": "18fbb958fe6a48c76e94945f7b821fa5ea75778b117668ff75419b0c15e8cb26",
+        "schedule_program_digest": "29ba311415b2fbfdaf0f2673dc5b02b1b06e62c2be1b1cceb9af3ee712e88883",
+        "tile_program_digest": "99fdac8070eded759031b8daed6c973b13785774a753774f1cd6c4cc7458e17e",
+        "image_digests": [
+          "8e369c3a788da107e05eae78f4f19a8c081fde68e4d8dc6335505cf3e5234ff8",
+          "c349c730d5c8c18f9fd6303693f9678234fe93e44beaeee3aff177843038203e",
+          "a8f58a193fafc551bebb24bee62b9160ab9a0ed841a9d9f97b1854fc3c6f3193",
+          "a8f58a193fafc551bebb24bee62b9160ab9a0ed841a9d9f97b1854fc3c6f3193"
+        ],
+        "artifact_hash": "2837907efaefd1f05b4f59cca3410d8269e8ed60dc4bb7a4caab163247d7830a",
+        "frontend_authority": "tracer"
+      },
+      "native_program": {
+        "buffers": [
+          {
+            "bytes": 66048,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              129,
+              256
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 16896,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": "readonly_input",
+            "shape": [
+              256,
+              33
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 16896,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 3,
+            "ownership": "readonly_input",
+            "shape": [
+              256,
+              33
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 66048,
+            "first_write": 0,
+            "id": 3,
+            "last_read": 1,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              256
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 66048,
+            "first_write": 1,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              256
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 17028,
+            "first_write": 2,
+            "id": 5,
+            "last_read": 4,
+            "ownership": "returned_output",
+            "shape": [
+              129,
+              33
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 17028,
+            "first_write": 3,
+            "id": 6,
+            "last_read": 4,
+            "ownership": "returned_output",
+            "shape": [
+              129,
+              33
+            ],
+            "storage": "f32"
+          }
+        ],
+        "kind": "paired_jvp",
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x256xf16>) -> tensor<129x256xf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x256xf16>) -> tensor<129x256xf16>\n    return %0 : tensor<129x256xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x256xf16>) -> tensor<129x256xf16> {\n    %0 = tessera.relu %arg0 {tessera.effect_kind = \"pure\"} : (tensor<129x256xf16>) -> tensor<129x256xf16>\n    return %0 : tensor<129x256xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<129x256xf16>, %arg1: tensor<256x33xf16>) -> tensor<129x33xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<129x256xf16>, tensor<256x33xf16>) -> tensor<129x33xf32>\n    return %0 : tensor<129x33xf32>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<129x256xf16>, %arg1: tensor<256x33xf16>) -> tensor<129x33xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {rhs_storage_order = \"row_major\"} : (tensor<129x256xf16>, tensor<256x33xf16>) -> tensor<129x33xf32>\n    return %0 : tensor<129x33xf32>\n  }\n}\n\n"
+        ],
+        "output": 5,
+        "outputs": [
+          5,
+          6
+        ],
+        "paired_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @product(%arg0: tensor<129x256xf16>, %arg1: tensor<256x33xf16>) -> tensor<129x33xf32> attributes {tessera.autodiff = \"forward\", tessera.autodiff.jvp = @product__jvp, tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"bc06e0f096d1b6c2ee50984eb5077c4cd597214e79da7f33196d5541be44c1cd\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x256xf16>) -> tensor<129x256xf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<129x256xf16>) -> tensor<129x256xf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x256xf16>, tensor<256x33xf16>) -> tensor<129x33xf32>\n    return %2 : tensor<129x33xf32>\n  }\n  func.func private @product__jvp(%arg0: tensor<129x256xf16>, %arg1: tensor<256x33xf16>, %arg2: tensor<256x33xf16>) -> (tensor<129x33xf32>, tensor<129x33xf32>) attributes {tessera.autodiff.forward = @product, tessera.autodiff.role = \"jvp\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x256xf16>) -> tensor<129x256xf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<129x256xf16>) -> tensor<129x256xf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x256xf16>, tensor<256x33xf16>) -> tensor<129x33xf32>\n    %3 = tessera.matmul %1, %arg2 : (tensor<129x256xf16>, tensor<256x33xf16>) -> tensor<129x33xf32>\n    return %2, %3 : tensor<129x33xf32>, tensor<129x33xf32>\n  }\n}\n\n",
+        "role_indices": [
+          0,
+          1,
+          2
+        ],
+        "root": "product__jvp",
+        "schema": "tessera.native.sm120_tensor_program.v7",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @product(%arg0: tensor<129x256xf16>, %arg1: tensor<256x33xf16>) -> tensor<129x33xf32> attributes {tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"bc06e0f096d1b6c2ee50984eb5077c4cd597214e79da7f33196d5541be44c1cd\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x256xf16>) -> tensor<129x256xf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<129x256xf16>) -> tensor<129x256xf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x256xf16>, tensor<256x33xf16>) -> tensor<129x33xf32>\n    return %2 : tensor<129x33xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "product__jvp__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              3
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              3
+            ],
+            "member": "product__jvp__tensor_member_1",
+            "operation": "tessera.relu",
+            "outputs": [
+              4
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              4,
+              1
+            ],
+            "member": "product__jvp__tensor_member_2",
+            "operation": "tessera.matmul",
+            "outputs": [
+              5
+            ],
+            "step": 2
+          },
+          {
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "product__jvp__tensor_member_3",
+            "operation": "tessera.matmul",
+            "outputs": [
+              6
+            ],
+            "step": 3
+          }
+        ]
+      },
+      "member_ir_digests": [
+        {
+          "tile": "4594ae0e1b1ad89bfd49bf85e5682b78397dbc5bbfc7d240af0eacc6d4a407bc",
+          "target": "795a2d8f263fdf7c39feb3678992a54e8be5acf8187c036e134547e4bc1d4f68",
+          "backend": "68d2da293dc0711dff7f2616b86a13703e92a18ea3ac75294dc7ea056108222e",
+          "image": "8e369c3a788da107e05eae78f4f19a8c081fde68e4d8dc6335505cf3e5234ff8",
+          "descriptor": "547691a1d80c1b8b00edd5093d0f81378b3a5fc8de0ad3c454540e40db3cc7d0"
+        },
+        {
+          "tile": "ef9bf977eb96916a5a84296bafd2a2ba84faf78a751a7f0c080f7b44ae701a16",
+          "target": "de6e98812134cc34e43532aae6a6f8ca1d196ee56c458edb08d811f48addc598",
+          "backend": "08c8063b58ab54bc5f8ef1077a229d9d87c5f1fa11046af70c620242ba8c60d8",
+          "image": "c349c730d5c8c18f9fd6303693f9678234fe93e44beaeee3aff177843038203e",
+          "descriptor": "65e596f66f85560d54fe899abfeaee5f4f3f769217eb459a1afd59d3186aae40"
+        },
+        {
+          "tile": "411459de000efbf5a442cd1e0de7d1c7007d8fd2dfe3ea33a4bbee8cb6e9b530",
+          "target": "dfda3fb0f786459c73ea40e266cc712af0a937df2ef283eee747522645a96412",
+          "backend": "538e3d2c2c6e83602a9ede77388c3d51d2850cb38f2fd52d3783664fab281251",
+          "image": "a8f58a193fafc551bebb24bee62b9160ab9a0ed841a9d9f97b1854fc3c6f3193",
+          "descriptor": "9b1ba410d6a026fc1842d319732d8408d35aae4a0e7efe033df8336a2193c5a7"
+        },
+        {
+          "tile": "411459de000efbf5a442cd1e0de7d1c7007d8fd2dfe3ea33a4bbee8cb6e9b530",
+          "target": "dfda3fb0f786459c73ea40e266cc712af0a937df2ef283eee747522645a96412",
+          "backend": "538e3d2c2c6e83602a9ede77388c3d51d2850cb38f2fd52d3783664fab281251",
+          "image": "a8f58a193fafc551bebb24bee62b9160ab9a0ed841a9d9f97b1854fc3c6f3193",
+          "descriptor": "5e10d985c8d3c50d7703f558f071d1e36b2b229bc2c6ed22c8295b94979fc97b"
+        }
+      ]
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        7,
+        32,
+        9
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error_primal_tangent": [
+        1.1920928955078125e-07,
+        5.960464477539063e-08
+      ],
+      "first_compile_prepare_call_ms": 1095.095602,
+      "device_timing_domain": "cuda_graph_batch",
+      "device_samples": [
+        {
+          "program_ms": 0.00623275013640523,
+          "stage_ms": [
+            0.00279300007969141,
+            0.0017874999903142452,
+            0.000957750016823411,
+            0.0009582500206306577
+          ],
+          "profile_call_host_ms": 6.703423
+        },
+        {
+          "program_ms": 0.006266999989748001,
+          "stage_ms": [
+            0.0027840000111609697,
+            0.0018222499638795853,
+            0.0011247500078752637,
+            0.0009532499825581908
+          ],
+          "profile_call_host_ms": 5.921791
+        },
+        {
+          "program_ms": 0.006259500049054623,
+          "stage_ms": [
+            0.003000749973580241,
+            0.0018019999843090773,
+            0.0012069999938830733,
+            0.0009655000176280737
+          ],
+          "profile_call_host_ms": 6.018231
+        },
+        {
+          "program_ms": 0.006233499851077795,
+          "stage_ms": [
+            0.0029949999880045652,
+            0.001752499956637621,
+            0.0009567500092089176,
+            0.0009717500070109963
+          ],
+          "profile_call_host_ms": 6.105291
+        },
+        {
+          "program_ms": 0.006244500167667866,
+          "stage_ms": [
+            0.0027627500239759684,
+            0.0017950000474229455,
+            0.0013830000534653664,
+            0.0009552499977871776
+          ],
+          "profile_call_host_ms": 6.108141
+        }
+      ],
+      "device_program_median_ms": 0.006244500167667866,
+      "stage_medians_ms": [
+        0.00279300007969141,
+        0.0017950000474229455,
+        0.0011247500078752637,
+        0.0009582500206306577
+      ],
+      "completed_public_call_samples_ms": [
+        0.769259,
+        0.725725,
+        0.734427625,
+        0.733310125,
+        0.71460875
+      ],
+      "completed_public_call_median_ms": 0.733310125,
+      "completed_runtime_artifact_samples_ms": [
+        3.64935775,
+        3.852209625,
+        3.391172375,
+        3.3094785,
+        3.282606
+      ],
+      "completed_runtime_artifact_median_ms": 3.391172375,
+      "runtime_artifact_hash": "76245745a1b850106fae0eaf40cdb737eb02fc762324c66b5c835ec9b42af657",
+      "runtime_component_receipts": [
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_0",
+          "image_digest": "2e46d4d7a7ac5781bddcaf126ca896300ddd9d12004a1ff90d778320172012b9",
+          "descriptor_digest": "aa804691b47f92686885357e55a681138a9c8e87512de00d2ae64e78b3758c6e"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_1",
+          "image_digest": "0edbbb4a5fa5cde901248ef45486c8fd14378a170d31f02634077d1298a265ac",
+          "descriptor_digest": "64942cca6ab8467fed87db59116d7590830144f5d782c5b5bdb8f488c0de528c"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_2",
+          "image_digest": "2b4ce8cdc4e1dc76f57357e13ee7de12439e93f673ce9ca41762229ffbcd9cc5",
+          "descriptor_digest": "5cac1543ac424bf10f3929b8aa5e0032c186dedbe80eca4eda53218a64dfdc52"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_3",
+          "image_digest": "2b4ce8cdc4e1dc76f57357e13ee7de12439e93f673ce9ca41762229ffbcd9cc5",
+          "descriptor_digest": "3626233fe599b4493f0d764c777f743af4911633712fdecc805e0974512e2c1e"
+        }
+      ],
+      "replay_prepare_ms": 6.344142,
+      "portable_manifest_bytes": 130674,
+      "completed_prepared_replay_samples_ms": [
+        0.245124125,
+        0.30866175,
+        0.263252875,
+        0.269903125,
+        0.270548
+      ],
+      "completed_prepared_replay_median_ms": 0.269903125,
+      "replay_device_profile": {
+        "timing_domain": "cuda_graph_batch",
+        "program_ms": 0.00688875000923872,
+        "stage_ms": [
+          0.00304200011305511,
+          0.00203399988822639,
+          0.0011367499828338623,
+          0.0009587500244379044
+        ]
+      },
+      "scratch": {
+        "capacity_bytes": 3584,
+        "allocation_count": 1
+      },
+      "receipt": {
+        "execution_kind": "native_gpu",
+        "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "family": "tensor_rhs_jvp_program",
+        "native_call_binding": "prepared_cpp_tensor_program",
+        "native_program_digest": "7490892f7a70cd5cab577e3053747dd8afc834dcb456d739e3cc464037c8291a",
+        "source_graph_ir_digest": "e354d362c8dd654cc0ac6cc0e9f368070254dd47944828e8a15061195c424288",
+        "paired_jvp_ir_digest": "ae9aa2aa2534389996e9943123648cc204f5cc82130ecfe2e8f06994740f3fa4",
+        "schedule_program_digest": "eda76bd5c5435cbf8ed2368994baab89b37f8a8d9f7168efdf975ec56a88be1c",
+        "tile_program_digest": "b38f7abf96422a0df539d6b0f99a4f2fbbadd09fd8210a7e5cda6b2ddb9932c6",
+        "image_digests": [
+          "2e46d4d7a7ac5781bddcaf126ca896300ddd9d12004a1ff90d778320172012b9",
+          "0edbbb4a5fa5cde901248ef45486c8fd14378a170d31f02634077d1298a265ac",
+          "2b4ce8cdc4e1dc76f57357e13ee7de12439e93f673ce9ca41762229ffbcd9cc5",
+          "2b4ce8cdc4e1dc76f57357e13ee7de12439e93f673ce9ca41762229ffbcd9cc5"
+        ],
+        "artifact_hash": "76245745a1b850106fae0eaf40cdb737eb02fc762324c66b5c835ec9b42af657",
+        "frontend_authority": "tracer"
+      },
+      "native_program": {
+        "buffers": [
+          {
+            "bytes": 448,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              7,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 576,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": "readonly_input",
+            "shape": [
+              32,
+              9
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 576,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 3,
+            "ownership": "readonly_input",
+            "shape": [
+              32,
+              9
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 448,
+            "first_write": 0,
+            "id": 3,
+            "last_read": 1,
+            "ownership": "private_scratch",
+            "shape": [
+              7,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 448,
+            "first_write": 1,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "private_scratch",
+            "shape": [
+              7,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 252,
+            "first_write": 2,
+            "id": 5,
+            "last_read": 4,
+            "ownership": "returned_output",
+            "shape": [
+              7,
+              9
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 252,
+            "first_write": 3,
+            "id": 6,
+            "last_read": 4,
+            "ownership": "returned_output",
+            "shape": [
+              7,
+              9
+            ],
+            "storage": "f32"
+          }
+        ],
+        "kind": "paired_jvp",
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<7x32xbf16>) -> tensor<7x32xbf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<7x32xbf16>) -> tensor<7x32xbf16>\n    return %0 : tensor<7x32xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<7x32xbf16>) -> tensor<7x32xbf16> {\n    %0 = tessera.relu %arg0 {tessera.effect_kind = \"pure\"} : (tensor<7x32xbf16>) -> tensor<7x32xbf16>\n    return %0 : tensor<7x32xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<7x32xbf16>, %arg1: tensor<32x9xbf16>) -> tensor<7x9xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<7x32xbf16>, tensor<32x9xbf16>) -> tensor<7x9xf32>\n    return %0 : tensor<7x9xf32>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<7x32xbf16>, %arg1: tensor<32x9xbf16>) -> tensor<7x9xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {rhs_storage_order = \"row_major\"} : (tensor<7x32xbf16>, tensor<32x9xbf16>) -> tensor<7x9xf32>\n    return %0 : tensor<7x9xf32>\n  }\n}\n\n"
+        ],
+        "output": 5,
+        "outputs": [
+          5,
+          6
+        ],
+        "paired_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @product(%arg0: tensor<7x32xbf16>, %arg1: tensor<32x9xbf16>) -> tensor<7x9xf32> attributes {tessera.autodiff = \"forward\", tessera.autodiff.jvp = @product__jvp, tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"bc06e0f096d1b6c2ee50984eb5077c4cd597214e79da7f33196d5541be44c1cd\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<7x32xbf16>) -> tensor<7x32xbf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<7x32xbf16>) -> tensor<7x32xbf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<7x32xbf16>, tensor<32x9xbf16>) -> tensor<7x9xf32>\n    return %2 : tensor<7x9xf32>\n  }\n  func.func private @product__jvp(%arg0: tensor<7x32xbf16>, %arg1: tensor<32x9xbf16>, %arg2: tensor<32x9xbf16>) -> (tensor<7x9xf32>, tensor<7x9xf32>) attributes {tessera.autodiff.forward = @product, tessera.autodiff.role = \"jvp\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<7x32xbf16>) -> tensor<7x32xbf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<7x32xbf16>) -> tensor<7x32xbf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<7x32xbf16>, tensor<32x9xbf16>) -> tensor<7x9xf32>\n    %3 = tessera.matmul %1, %arg2 : (tensor<7x32xbf16>, tensor<32x9xbf16>) -> tensor<7x9xf32>\n    return %2, %3 : tensor<7x9xf32>, tensor<7x9xf32>\n  }\n}\n\n",
+        "role_indices": [
+          0,
+          1,
+          2
+        ],
+        "root": "product__jvp",
+        "schema": "tessera.native.sm120_tensor_program.v7",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @product(%arg0: tensor<7x32xbf16>, %arg1: tensor<32x9xbf16>) -> tensor<7x9xf32> attributes {tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"bc06e0f096d1b6c2ee50984eb5077c4cd597214e79da7f33196d5541be44c1cd\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<7x32xbf16>) -> tensor<7x32xbf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<7x32xbf16>) -> tensor<7x32xbf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<7x32xbf16>, tensor<32x9xbf16>) -> tensor<7x9xf32>\n    return %2 : tensor<7x9xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "product__jvp__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              3
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              3
+            ],
+            "member": "product__jvp__tensor_member_1",
+            "operation": "tessera.relu",
+            "outputs": [
+              4
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              4,
+              1
+            ],
+            "member": "product__jvp__tensor_member_2",
+            "operation": "tessera.matmul",
+            "outputs": [
+              5
+            ],
+            "step": 2
+          },
+          {
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "product__jvp__tensor_member_3",
+            "operation": "tessera.matmul",
+            "outputs": [
+              6
+            ],
+            "step": 3
+          }
+        ]
+      },
+      "member_ir_digests": [
+        {
+          "tile": "47093306ffb8776b47028f3f6ce6c8521a15aadefdf38fc088c0f546d3ea239b",
+          "target": "78b11409158e685c90ad892009eb21f157d7c4e1545481b7744bb560bf9248a2",
+          "backend": "2cf0c38a9a6e79da0965120b0277af3ea4909ee5493d744699979e4c3f674acf",
+          "image": "2e46d4d7a7ac5781bddcaf126ca896300ddd9d12004a1ff90d778320172012b9",
+          "descriptor": "aa804691b47f92686885357e55a681138a9c8e87512de00d2ae64e78b3758c6e"
+        },
+        {
+          "tile": "94a645a144644a58be4a0fc25ab0d38d8b8fa7a82bd40554d010780a12ec153c",
+          "target": "ae5fcc2d9824e29897e0f22575e6dff1a2aa4383925836ba530ccc04608576ec",
+          "backend": "2502f83979e79fd1c0c459cfa0010257b3a4d3a6bac2358aeb91d4102087a837",
+          "image": "0edbbb4a5fa5cde901248ef45486c8fd14378a170d31f02634077d1298a265ac",
+          "descriptor": "64942cca6ab8467fed87db59116d7590830144f5d782c5b5bdb8f488c0de528c"
+        },
+        {
+          "tile": "449969881ec17d665f63250fdd53b8435607438123734c6606c7881b08a2dd7b",
+          "target": "7faeb101791d8841f9316ca4b84c2f3ad62440f5b0daedf12a4316ee8985c6de",
+          "backend": "4d7710c2cc935cb892884aa96c7c7c077442396b41a2fa2612e751ca310f5647",
+          "image": "2b4ce8cdc4e1dc76f57357e13ee7de12439e93f673ce9ca41762229ffbcd9cc5",
+          "descriptor": "5cac1543ac424bf10f3929b8aa5e0032c186dedbe80eca4eda53218a64dfdc52"
+        },
+        {
+          "tile": "449969881ec17d665f63250fdd53b8435607438123734c6606c7881b08a2dd7b",
+          "target": "7faeb101791d8841f9316ca4b84c2f3ad62440f5b0daedf12a4316ee8985c6de",
+          "backend": "4d7710c2cc935cb892884aa96c7c7c077442396b41a2fa2612e751ca310f5647",
+          "image": "2b4ce8cdc4e1dc76f57357e13ee7de12439e93f673ce9ca41762229ffbcd9cc5",
+          "descriptor": "3626233fe599b4493f0d764c777f743af4911633712fdecc805e0974512e2c1e"
+        }
+      ]
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        17,
+        48,
+        19
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error_primal_tangent": [
+        1.1920928955078125e-07,
+        1.1920928955078125e-07
+      ],
+      "first_compile_prepare_call_ms": 1073.474954,
+      "device_timing_domain": "cuda_graph_batch",
+      "device_samples": [
+        {
+          "program_ms": 0.008704000152647495,
+          "stage_ms": [
+            0.004110999871045351,
+            0.00289424997754395,
+            0.0012142499908804893,
+            0.0012659999774768949
+          ],
+          "profile_call_host_ms": 8.836156
+        },
+        {
+          "program_ms": 0.008690999820828438,
+          "stage_ms": [
+            0.0040392498485744,
+            0.0031217499636113644,
+            0.0012184999650344253,
+            0.0017330000409856439
+          ],
+          "profile_call_host_ms": 8.322085
+        },
+        {
+          "program_ms": 0.009203500114381313,
+          "stage_ms": [
+            0.004036500118672848,
+            0.0023647500202059746,
+            0.0017647499917075038,
+            0.0012425000313669443
+          ],
+          "profile_call_host_ms": 8.105595
+        },
+        {
+          "program_ms": 0.009922999888658524,
+          "stage_ms": [
+            0.004027499817311764,
+            0.003059250069782138,
+            0.001227000029757619,
+            0.0014902499970048666
+          ],
+          "profile_call_host_ms": 8.096924
+        },
+        {
+          "program_ms": 0.008715500123798847,
+          "stage_ms": [
+            0.003998999949544668,
+            0.002389749977737665,
+            0.0014252499677240849,
+            0.0014977500541135669
+          ],
+          "profile_call_host_ms": 7.692252
+        }
+      ],
+      "device_program_median_ms": 0.008715500123798847,
+      "stage_medians_ms": [
+        0.004036500118672848,
+        0.00289424997754395,
+        0.001227000029757619,
+        0.0014902499970048666
+      ],
+      "completed_public_call_samples_ms": [
+        0.82195275,
+        0.751927625,
+        0.7691315,
+        0.740187625,
+        0.768385125
+      ],
+      "completed_public_call_median_ms": 0.768385125,
+      "completed_runtime_artifact_samples_ms": [
+        3.330916,
+        3.31000725,
+        3.27053725,
+        3.543618875,
+        3.717286625
+      ],
+      "completed_runtime_artifact_median_ms": 3.330916,
+      "runtime_artifact_hash": "3a606a116d5df8988bf101fdb9b1366367b89ccdd9d6954e25221691a43e98f0",
+      "runtime_component_receipts": [
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_0",
+          "image_digest": "72fa9b134dbfc857563ffd2181da598260edf278e230ee6bc9f87343e6fd561c",
+          "descriptor_digest": "0028a1967b4c63667d1fffa52a17d8a9400506a405521aebefa8736e67bec952"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_1",
+          "image_digest": "3bd1f7098199eea3edf1bfd0a919df99c12f51d8cc62ce67731c6975aa5e5e63",
+          "descriptor_digest": "1fa1723350a94669ecf818e8d08c2deb88c0036f117d6d74a46f6f69c76259a3"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_2",
+          "image_digest": "2067db4affcd8d6fe4b02f3d5dcbcac476cce6baaeb1437042bf161cf7d97392",
+          "descriptor_digest": "67065f242ccd2110f30ee7ed5fcf71f4f25a3f878af6ed6d5f42d48866b86f97"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_3",
+          "image_digest": "2067db4affcd8d6fe4b02f3d5dcbcac476cce6baaeb1437042bf161cf7d97392",
+          "descriptor_digest": "78352565ee9a53de2b2cec88bae19e4925217a7a7c54d74d851890498ef4ac7d"
+        }
+      ],
+      "replay_prepare_ms": 6.556692,
+      "portable_manifest_bytes": 130981,
+      "completed_prepared_replay_samples_ms": [
+        0.310466875,
+        0.278554375,
+        0.31288175,
+        0.314019375,
+        0.303235625
+      ],
+      "completed_prepared_replay_median_ms": 0.310466875,
+      "replay_device_profile": {
+        "timing_domain": "cuda_graph_batch",
+        "program_ms": 0.010518750175833702,
+        "stage_ms": [
+          0.004005500115454197,
+          0.0023765000514686108,
+          0.001532500027678907,
+          0.0014204999897629023
+        ]
+      },
+      "scratch": {
+        "capacity_bytes": 12544,
+        "allocation_count": 1
+      },
+      "receipt": {
+        "execution_kind": "native_gpu",
+        "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "family": "tensor_rhs_jvp_program",
+        "native_call_binding": "prepared_cpp_tensor_program",
+        "native_program_digest": "0f285b4e8f5209cdac7128fb71421ae03e7758b62762f80a52bcac2fa1dfd2db",
+        "source_graph_ir_digest": "2858f347a579862fa82036f565a81473599c92fd0acf977d55fc1ee8694bc755",
+        "paired_jvp_ir_digest": "e7a35f6b704765d57447b2116b281b519ce4b0e2537edb0f03ca99d36ed9ed46",
+        "schedule_program_digest": "af4fa568b1c1ed1de6016bfb4c1c26565160f7da28e9d139c705bf171ac42f01",
+        "tile_program_digest": "3dd210b68078b671b03bb26a3004abb96559f5479b7ecf5a647bcf12ae70d22b",
+        "image_digests": [
+          "72fa9b134dbfc857563ffd2181da598260edf278e230ee6bc9f87343e6fd561c",
+          "3bd1f7098199eea3edf1bfd0a919df99c12f51d8cc62ce67731c6975aa5e5e63",
+          "2067db4affcd8d6fe4b02f3d5dcbcac476cce6baaeb1437042bf161cf7d97392",
+          "2067db4affcd8d6fe4b02f3d5dcbcac476cce6baaeb1437042bf161cf7d97392"
+        ],
+        "artifact_hash": "3a606a116d5df8988bf101fdb9b1366367b89ccdd9d6954e25221691a43e98f0",
+        "frontend_authority": "tracer"
+      },
+      "native_program": {
+        "buffers": [
+          {
+            "bytes": 1632,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1824,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": "readonly_input",
+            "shape": [
+              48,
+              19
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1824,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 3,
+            "ownership": "readonly_input",
+            "shape": [
+              48,
+              19
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1632,
+            "first_write": 0,
+            "id": 3,
+            "last_read": 1,
+            "ownership": "private_scratch",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1632,
+            "first_write": 1,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "private_scratch",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1292,
+            "first_write": 2,
+            "id": 5,
+            "last_read": 4,
+            "ownership": "returned_output",
+            "shape": [
+              17,
+              19
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 1292,
+            "first_write": 3,
+            "id": 6,
+            "last_read": 4,
+            "ownership": "returned_output",
+            "shape": [
+              17,
+              19
+            ],
+            "storage": "f32"
+          }
+        ],
+        "kind": "paired_jvp",
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<17x48xbf16>) -> tensor<17x48xbf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x48xbf16>) -> tensor<17x48xbf16>\n    return %0 : tensor<17x48xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<17x48xbf16>) -> tensor<17x48xbf16> {\n    %0 = tessera.relu %arg0 {tessera.effect_kind = \"pure\"} : (tensor<17x48xbf16>) -> tensor<17x48xbf16>\n    return %0 : tensor<17x48xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<17x48xbf16>, %arg1: tensor<48x19xbf16>) -> tensor<17x19xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<17x48xbf16>, tensor<48x19xbf16>) -> tensor<17x19xf32>\n    return %0 : tensor<17x19xf32>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<17x48xbf16>, %arg1: tensor<48x19xbf16>) -> tensor<17x19xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {rhs_storage_order = \"row_major\"} : (tensor<17x48xbf16>, tensor<48x19xbf16>) -> tensor<17x19xf32>\n    return %0 : tensor<17x19xf32>\n  }\n}\n\n"
+        ],
+        "output": 5,
+        "outputs": [
+          5,
+          6
+        ],
+        "paired_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @product(%arg0: tensor<17x48xbf16>, %arg1: tensor<48x19xbf16>) -> tensor<17x19xf32> attributes {tessera.autodiff = \"forward\", tessera.autodiff.jvp = @product__jvp, tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"bc06e0f096d1b6c2ee50984eb5077c4cd597214e79da7f33196d5541be44c1cd\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x48xbf16>) -> tensor<17x48xbf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<17x48xbf16>) -> tensor<17x48xbf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x48xbf16>, tensor<48x19xbf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n  func.func private @product__jvp(%arg0: tensor<17x48xbf16>, %arg1: tensor<48x19xbf16>, %arg2: tensor<48x19xbf16>) -> (tensor<17x19xf32>, tensor<17x19xf32>) attributes {tessera.autodiff.forward = @product, tessera.autodiff.role = \"jvp\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x48xbf16>) -> tensor<17x48xbf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<17x48xbf16>) -> tensor<17x48xbf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x48xbf16>, tensor<48x19xbf16>) -> tensor<17x19xf32>\n    %3 = tessera.matmul %1, %arg2 : (tensor<17x48xbf16>, tensor<48x19xbf16>) -> tensor<17x19xf32>\n    return %2, %3 : tensor<17x19xf32>, tensor<17x19xf32>\n  }\n}\n\n",
+        "role_indices": [
+          0,
+          1,
+          2
+        ],
+        "root": "product__jvp",
+        "schema": "tessera.native.sm120_tensor_program.v7",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @product(%arg0: tensor<17x48xbf16>, %arg1: tensor<48x19xbf16>) -> tensor<17x19xf32> attributes {tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"bc06e0f096d1b6c2ee50984eb5077c4cd597214e79da7f33196d5541be44c1cd\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x48xbf16>) -> tensor<17x48xbf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<17x48xbf16>) -> tensor<17x48xbf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x48xbf16>, tensor<48x19xbf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "product__jvp__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              3
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              3
+            ],
+            "member": "product__jvp__tensor_member_1",
+            "operation": "tessera.relu",
+            "outputs": [
+              4
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              4,
+              1
+            ],
+            "member": "product__jvp__tensor_member_2",
+            "operation": "tessera.matmul",
+            "outputs": [
+              5
+            ],
+            "step": 2
+          },
+          {
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "product__jvp__tensor_member_3",
+            "operation": "tessera.matmul",
+            "outputs": [
+              6
+            ],
+            "step": 3
+          }
+        ]
+      },
+      "member_ir_digests": [
+        {
+          "tile": "bfba99794caca8e0d421b241626eb6c84bc71e465416cca3d5bba42c84e69b42",
+          "target": "34455951d1b06fa76dd789358e9c8e11b2bbf60a8a60abf05ab1f9aee442e4cc",
+          "backend": "ca5a95057b50e0841d3626efc4a1796b90d9ed795ad7479bec7c02e4a4df35fe",
+          "image": "72fa9b134dbfc857563ffd2181da598260edf278e230ee6bc9f87343e6fd561c",
+          "descriptor": "0028a1967b4c63667d1fffa52a17d8a9400506a405521aebefa8736e67bec952"
+        },
+        {
+          "tile": "d230581ebe6e22d9ce4316b3b2def966a5fad7e6c27e8057df3e5ec5d12e16d2",
+          "target": "e0433abc335ae1c51e866d63e160fb7ff3e6906812379844cd439d93596a5152",
+          "backend": "b7f74d85fb299c144214c0b0816232f647c12476a69bf095b552081fb102464d",
+          "image": "3bd1f7098199eea3edf1bfd0a919df99c12f51d8cc62ce67731c6975aa5e5e63",
+          "descriptor": "1fa1723350a94669ecf818e8d08c2deb88c0036f117d6d74a46f6f69c76259a3"
+        },
+        {
+          "tile": "2e95ea649624b6bed45d00ab39a2610466ba1eca2f938cb12485eac4d3e87610",
+          "target": "9a3ef2766f9ce31434c4d6bac42aa6e6a3e3e39febf9009592b62a5769bec3ea",
+          "backend": "e7c537a9c8360e5e68f9e34fda1452221be5550cce91cc7bccc11efd8c58c2d5",
+          "image": "2067db4affcd8d6fe4b02f3d5dcbcac476cce6baaeb1437042bf161cf7d97392",
+          "descriptor": "67065f242ccd2110f30ee7ed5fcf71f4f25a3f878af6ed6d5f42d48866b86f97"
+        },
+        {
+          "tile": "2e95ea649624b6bed45d00ab39a2610466ba1eca2f938cb12485eac4d3e87610",
+          "target": "9a3ef2766f9ce31434c4d6bac42aa6e6a3e3e39febf9009592b62a5769bec3ea",
+          "backend": "e7c537a9c8360e5e68f9e34fda1452221be5550cce91cc7bccc11efd8c58c2d5",
+          "image": "2067db4affcd8d6fe4b02f3d5dcbcac476cce6baaeb1437042bf161cf7d97392",
+          "descriptor": "78352565ee9a53de2b2cec88bae19e4925217a7a7c54d74d851890498ef4ac7d"
+        }
+      ]
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        129,
+        256,
+        33
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error_primal_tangent": [
+        1.430511474609375e-06,
+        7.152557373046875e-07
+      ],
+      "first_compile_prepare_call_ms": 1094.555292,
+      "device_timing_domain": "cuda_graph_batch",
+      "device_samples": [
+        {
+          "program_ms": 0.05212099850177765,
+          "stage_ms": [
+            0.0012469999492168427,
+            0.04149549826979637,
+            0.004951999988406897,
+            0.005021499935537577
+          ],
+          "profile_call_host_ms": 30.392124
+        },
+        {
+          "program_ms": 0.05210350081324577,
+          "stage_ms": [
+            0.0014957500388845801,
+            0.04157024994492531,
+            0.0048872497864067554,
+            0.005086749792098999
+          ],
+          "profile_call_host_ms": 29.859005
+        },
+        {
+          "program_ms": 0.05212099850177765,
+          "stage_ms": [
+            0.0017132499488070607,
+            0.0413067489862442,
+            0.00466324994340539,
+            0.004932750016450882
+          ],
+          "profile_call_host_ms": 29.634793
+        },
+        {
+          "program_ms": 0.05183349922299385,
+          "stage_ms": [
+            0.0017074999632313848,
+            0.04154299944639206,
+            0.00502825016155839,
+            0.004815250169485807
+          ],
+          "profile_call_host_ms": 29.815173
+        },
+        {
+          "program_ms": 0.05214349925518036,
+          "stage_ms": [
+            0.0013200000394135714,
+            0.04154850170016289,
+            0.004885499831289053,
+            0.005061499774456024
+          ],
+          "profile_call_host_ms": 29.687235
+        }
+      ],
+      "device_program_median_ms": 0.05212099850177765,
+      "stage_medians_ms": [
+        0.0014957500388845801,
+        0.04154299944639206,
+        0.0048872497864067554,
+        0.005021499935537577
+      ],
+      "completed_public_call_samples_ms": [
+        0.832189,
+        0.7690525,
+        0.783285125,
+        0.775913875,
+        0.790168875
+      ],
+      "completed_public_call_median_ms": 0.783285125,
+      "completed_runtime_artifact_samples_ms": [
+        3.49117375,
+        3.41110625,
+        3.45059125,
+        3.571920375,
+        3.53186
+      ],
+      "completed_runtime_artifact_median_ms": 3.49117375,
+      "runtime_artifact_hash": "76336334eef2d8fe383fbcff89a19a88bdc50194c23a91eedb2afd3443627b6a",
+      "runtime_component_receipts": [
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_0",
+          "image_digest": "3c2a8849b89cb9060ca0555792d57d08f1c98bb7ed53ba622c85ef2fb84d6a79",
+          "descriptor_digest": "ca9572a1670df685ea461304e226b6a50e18f8cbb7ccdad82eda038f273b5dcf"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_1",
+          "image_digest": "1c397576835069d785c5679e0279541c316ec102569d1f19761bbbf69086e1c3",
+          "descriptor_digest": "698f0ffe124c455856e4ff69b66412111974d080be1c1a3209a45c198068e4d1"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_2",
+          "image_digest": "c6608c107073ffac43dcba801638916d23c26bd59a05bbd24c328f5a60877fd7",
+          "descriptor_digest": "6c75bf2231089a47fc153acdb8e9d91b86336197dbac7a00c9d1056c9b705710"
+        },
+        {
+          "ok": true,
+          "execution_kind": "native_gpu",
+          "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+          "evidence_target": "nvidia_sm120",
+          "native_call_binding": "prepared_cpp_tensor_program",
+          "member": "product__jvp__tensor_member_3",
+          "image_digest": "c6608c107073ffac43dcba801638916d23c26bd59a05bbd24c328f5a60877fd7",
+          "descriptor_digest": "dd226fc32980ac8d0bf46b90db7afdb92e7db6aa0c97b5549498f8a4331d2e03"
+        }
+      ],
+      "replay_prepare_ms": 6.924923,
+      "portable_manifest_bytes": 137995,
+      "completed_prepared_replay_samples_ms": [
+        0.320231875,
+        0.304786875,
+        0.29656675,
+        0.31253925,
+        0.3358105
+      ],
+      "completed_prepared_replay_median_ms": 0.31253925,
+      "replay_device_profile": {
+        "timing_domain": "cuda_graph_batch",
+        "program_ms": 0.05203225091099739,
+        "stage_ms": [
+          0.0015697500202804804,
+          0.04252475127577782,
+          0.004702500067651272,
+          0.00482399994507432
+        ]
+      },
+      "scratch": {
+        "capacity_bytes": 266240,
+        "allocation_count": 1
+      },
+      "receipt": {
+        "execution_kind": "native_gpu",
+        "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "family": "tensor_rhs_jvp_program",
+        "native_call_binding": "prepared_cpp_tensor_program",
+        "native_program_digest": "c7f45d75838b15170a71ea121ccc7ca504e86331e5a66e87576865402abe47c3",
+        "source_graph_ir_digest": "32a1c4feb51d1cf3c224dcd8d752410b8a1de57c7014e685186c610b59909f20",
+        "paired_jvp_ir_digest": "1a7434d7e63eb7130c8f9fa21b750b1af0e48a97026d62fff3da85de16aa0d42",
+        "schedule_program_digest": "aa46c0056f9e9b7a6c6a266a5832f63d3ad992cd9f6423581aaebeb40f1129e6",
+        "tile_program_digest": "ece14df33185bd466d80917fc596f25d006c47fb857292f4b8c62e26e613b05d",
+        "image_digests": [
+          "3c2a8849b89cb9060ca0555792d57d08f1c98bb7ed53ba622c85ef2fb84d6a79",
+          "1c397576835069d785c5679e0279541c316ec102569d1f19761bbbf69086e1c3",
+          "c6608c107073ffac43dcba801638916d23c26bd59a05bbd24c328f5a60877fd7",
+          "c6608c107073ffac43dcba801638916d23c26bd59a05bbd24c328f5a60877fd7"
+        ],
+        "artifact_hash": "76336334eef2d8fe383fbcff89a19a88bdc50194c23a91eedb2afd3443627b6a",
+        "frontend_authority": "tracer"
+      },
+      "native_program": {
+        "buffers": [
+          {
+            "bytes": 66048,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              129,
+              256
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 16896,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": "readonly_input",
+            "shape": [
+              256,
+              33
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 16896,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 3,
+            "ownership": "readonly_input",
+            "shape": [
+              256,
+              33
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 66048,
+            "first_write": 0,
+            "id": 3,
+            "last_read": 1,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              256
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 66048,
+            "first_write": 1,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              256
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 17028,
+            "first_write": 2,
+            "id": 5,
+            "last_read": 4,
+            "ownership": "returned_output",
+            "shape": [
+              129,
+              33
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 17028,
+            "first_write": 3,
+            "id": 6,
+            "last_read": 4,
+            "ownership": "returned_output",
+            "shape": [
+              129,
+              33
+            ],
+            "storage": "f32"
+          }
+        ],
+        "kind": "paired_jvp",
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x256xbf16>) -> tensor<129x256xbf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x256xbf16>) -> tensor<129x256xbf16>\n    return %0 : tensor<129x256xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x256xbf16>) -> tensor<129x256xbf16> {\n    %0 = tessera.relu %arg0 {tessera.effect_kind = \"pure\"} : (tensor<129x256xbf16>) -> tensor<129x256xbf16>\n    return %0 : tensor<129x256xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<129x256xbf16>, %arg1: tensor<256x33xbf16>) -> tensor<129x33xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<129x256xbf16>, tensor<256x33xbf16>) -> tensor<129x33xf32>\n    return %0 : tensor<129x33xf32>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<129x256xbf16>, %arg1: tensor<256x33xbf16>) -> tensor<129x33xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {rhs_storage_order = \"row_major\"} : (tensor<129x256xbf16>, tensor<256x33xbf16>) -> tensor<129x33xf32>\n    return %0 : tensor<129x33xf32>\n  }\n}\n\n"
+        ],
+        "output": 5,
+        "outputs": [
+          5,
+          6
+        ],
+        "paired_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @product(%arg0: tensor<129x256xbf16>, %arg1: tensor<256x33xbf16>) -> tensor<129x33xf32> attributes {tessera.autodiff = \"forward\", tessera.autodiff.jvp = @product__jvp, tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"bc06e0f096d1b6c2ee50984eb5077c4cd597214e79da7f33196d5541be44c1cd\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x256xbf16>) -> tensor<129x256xbf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<129x256xbf16>) -> tensor<129x256xbf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x256xbf16>, tensor<256x33xbf16>) -> tensor<129x33xf32>\n    return %2 : tensor<129x33xf32>\n  }\n  func.func private @product__jvp(%arg0: tensor<129x256xbf16>, %arg1: tensor<256x33xbf16>, %arg2: tensor<256x33xbf16>) -> (tensor<129x33xf32>, tensor<129x33xf32>) attributes {tessera.autodiff.forward = @product, tessera.autodiff.role = \"jvp\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x256xbf16>) -> tensor<129x256xbf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<129x256xbf16>) -> tensor<129x256xbf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x256xbf16>, tensor<256x33xbf16>) -> tensor<129x33xf32>\n    %3 = tessera.matmul %1, %arg2 : (tensor<129x256xbf16>, tensor<256x33xbf16>) -> tensor<129x33xf32>\n    return %2, %3 : tensor<129x33xf32>, tensor<129x33xf32>\n  }\n}\n\n",
+        "role_indices": [
+          0,
+          1,
+          2
+        ],
+        "root": "product__jvp",
+        "schema": "tessera.native.sm120_tensor_program.v7",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @product(%arg0: tensor<129x256xbf16>, %arg1: tensor<256x33xbf16>) -> tensor<129x33xf32> attributes {tessera.autodiff = \"forward\", tessera.autodiff.wrt = [\"b\"], tessera.autodiff.wrt_indices = [1], tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"bc06e0f096d1b6c2ee50984eb5077c4cd597214e79da7f33196d5541be44c1cd\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x256xbf16>) -> tensor<129x256xbf16>\n    %1 = tessera.relu %0 {tessera.effect_kind = \"pure\"} : (tensor<129x256xbf16>) -> tensor<129x256xbf16>\n    %2 = tessera.matmul %1, %arg1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x256xbf16>, tensor<256x33xbf16>) -> tensor<129x33xf32>\n    return %2 : tensor<129x33xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "product__jvp__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              3
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              3
+            ],
+            "member": "product__jvp__tensor_member_1",
+            "operation": "tessera.relu",
+            "outputs": [
+              4
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              4,
+              1
+            ],
+            "member": "product__jvp__tensor_member_2",
+            "operation": "tessera.matmul",
+            "outputs": [
+              5
+            ],
+            "step": 2
+          },
+          {
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "product__jvp__tensor_member_3",
+            "operation": "tessera.matmul",
+            "outputs": [
+              6
+            ],
+            "step": 3
+          }
+        ]
+      },
+      "member_ir_digests": [
+        {
+          "tile": "12cbc9e6d1bf2f42699de7f1e40e1f3f3308f8224f484c2e056aef10097ac2e9",
+          "target": "7e513922f061025e2aeee722101cbb87a39ea0b7853b8bfcfe8e6ceb06616517",
+          "backend": "250e8cc3b65e3c37d5a1eaf242e2165a11bf0ba8219c4c108e358e4a45226158",
+          "image": "3c2a8849b89cb9060ca0555792d57d08f1c98bb7ed53ba622c85ef2fb84d6a79",
+          "descriptor": "ca9572a1670df685ea461304e226b6a50e18f8cbb7ccdad82eda038f273b5dcf"
+        },
+        {
+          "tile": "4d974eabff23066319b6c0448a8e09e0a092e659a3ba525177a4cca787033030",
+          "target": "14272bcac099ed0f0c37dee2374cb8e851bd585d236c78f45678e207146aabdc",
+          "backend": "905650cd36bb37f982ebeb7a9ff4b801bc055e1f5e1c4238f20a0cc54f92edbe",
+          "image": "1c397576835069d785c5679e0279541c316ec102569d1f19761bbbf69086e1c3",
+          "descriptor": "698f0ffe124c455856e4ff69b66412111974d080be1c1a3209a45c198068e4d1"
+        },
+        {
+          "tile": "a34eb88fd324c2c7595ef3ac120d139994e817125ec1c874e15260890a4a31ac",
+          "target": "539b682223118006228f6859b5a53066c2e7260097155116547a59d5710476aa",
+          "backend": "8a618db48a415550343842994a83a3f133007fabfe749fa2ba6c3d7931519ed7",
+          "image": "c6608c107073ffac43dcba801638916d23c26bd59a05bbd24c328f5a60877fd7",
+          "descriptor": "6c75bf2231089a47fc153acdb8e9d91b86336197dbac7a00c9d1056c9b705710"
+        },
+        {
+          "tile": "a34eb88fd324c2c7595ef3ac120d139994e817125ec1c874e15260890a4a31ac",
+          "target": "539b682223118006228f6859b5a53066c2e7260097155116547a59d5710476aa",
+          "backend": "8a618db48a415550343842994a83a3f133007fabfe749fa2ba6c3d7931519ed7",
+          "image": "c6608c107073ffac43dcba801638916d23c26bd59a05bbd24c328f5a60877fd7",
+          "descriptor": "dd226fc32980ac8d0bf46b90db7afdb92e7db6aa0c97b5549498f8a4331d2e03"
+        }
+      ]
+    }
+  ]
+}

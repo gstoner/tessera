@@ -191,6 +191,8 @@ class PreparedTensorJVP:
             "tile_program_digest": digest("".join(a.tile_ir for a in artifacts)),
             "image_digests": [p.image.image_digest for p in self.members],
         }
+        from .nvidia_tensor_jvp_runtime import register
+        register(self)
 
     def manifest(self):
         """Serialize trusted native images and witnesses; no device pointers."""

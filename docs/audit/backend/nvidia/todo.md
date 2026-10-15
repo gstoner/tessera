@@ -6,6 +6,26 @@ target: nvidia_sm120
 last_updated: 2026-10-15
 ---
 
+## W11-TENSOR-RHS-JVP-20261015 — public artifact dispatch
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+
+The previously declared paired executor now resolves in the runtime table.
+native_jvp_runtime_artifact exports the last static paired product;
+RuntimeArtifact JSON replay returns two independent arrays through the
+same native C++ owner, with named/positional three-root ABI and complete
+member receipts. Matching public replay borrows the live JIT lease.
+Parent Graph/target/argument changes reject before provider access.
+Fresh-process FP16/BF16 replay forbids compiler/package/member launches.
+The frozen owning-device gate passes 392 cases (eight environment-specific
+skips). Matched same-image RuntimeArtifact replay reduces completed host time
+from 3.358–3.582 ms to 0.898–1.066 ms through bounded validated-certificate
+reuse; this is host overhead reduction, not a native kernel speedup.
+Active-source/A+B derivatives and generic resident AD remain open.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.
+
+
 ## W11-TENSOR-RHS-JVP-20261015 — portable paired replay
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
@@ -15,7 +35,7 @@ Parity validated on RTX 5070: explicit prepared manifest/replay now uses a
 separate paired schema, preserving primal v1–v6. Fresh-process FP16/BF16
 replay disables compiler/package/member launch paths; 31 paired cases pass.
 Six numerical/timing cases retain separate stage/program/host clocks.
-Generic public paired artifact dispatch and active-source AD remain open.
+The subsequent public dispatch entry above closes this named artifact gap; active-source AD remains open.
 Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_portable_20261015/README.md.
 
 ## W11-TENSOR-RHS-JVP-20261015 — native paired execution
@@ -34,7 +54,7 @@ Python authors no derivative program and submits no member kernels.
 Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_20261015/README.md;
 docs/spec/ir/sm120_paired_tensor_program_contract.md.
 
-Parity validated on RTX5070: 666 affected regressions pass; 26 final program cases cover the registered row producers/mappings and lifetimes; four public dtype/role-permutation controls pass. Six source-pinned timing cases separate captured member/program, compile/prepare and completed frontend time (6.46-51.85 us program, 0.725-0.884 ms warm public call). Maximum error is below 4.8e-6. Active-source/A+B, composed reverse, dynamic/resident roots, generic public paired artifact dispatch and encoded/fused envelopes remain open. Default serial ReLU is unchanged; no speedup or five-slice closure claim.
+Parity validated on RTX5070: 666 affected regressions pass; 26 final program cases cover the registered row producers/mappings and lifetimes; four public dtype/role-permutation controls pass. Six source-pinned timing cases separate captured member/program, compile/prepare and completed frontend time (6.46-51.85 us program, 0.725-0.884 ms warm public call). Maximum error is below 4.8e-6. Active-source/A+B, composed reverse, dynamic/resident roots and encoded/fused envelopes remain open. Default serial ReLU is unchanged; no speedup or five-slice closure claim.
 
 ## W11-RELU-AD-20261015 — native Graph tangent integration
 

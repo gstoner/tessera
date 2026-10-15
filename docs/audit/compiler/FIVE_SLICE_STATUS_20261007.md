@@ -19,7 +19,7 @@ proved envelopes and remaining work are:
 | Slice | Latest additional proof | Remaining requirement |
 | --- | --- | --- |
 | GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; the checkpoint quality distinction in the original row remains authoritative. | Broader layouts/composition and original-model quality acceptance. |
-| NVIDIA W1.1 | Compact resident two-sided and bounded producer routes, plus single-sided normalization/softmax chains, have owning RTX 5070 receipts under sm120_single_sided_resident_tensor_20261009. | Generic producer/accumulator reconstruction, mixed or pitched resident entry, wider composition and resident AD; Merged PR947 adds the named RMSNorm -> ReLU -> matmul storage boundary and its separately recorded RTX 5070 proof. |
+| NVIDIA W1.1 | Named static FP16/BF16 producer-prefix/RHS-only JVP now exports a public two-output RuntimeArtifact and replays without a compiler on RTX 5070; see sm120_tensor_rhs_jvp_runtime_20261015. Earlier resident/primal receipts retain their recorded scope. | Generic producer/accumulator reconstruction, mixed or pitched resident entry, wider composition and resident AD; Merged PR947 adds the named RMSNorm -> ReLU -> matmul storage boundary and its separately recorded RTX 5070 proof. |
 | NVIDIA saved-LSE forward | The bounded saved-LSE package preserves O/LSE through native sequence projection, schema 5/6 and compiler-free replay; see bounded_saved_lse_jvp_20261011. | Wider storage/masks, nested/composed output and general attention integration. |
 | NVIDIA attention backward | Bounded paired JVP/reverse, broadcast physical bias extents, trace-at-one replay and retained generations are covered by bounded_saved_lse_jvp_20261011; static resident reverse has its own sm120_resident_attention_vjp_20261009 receipt. | Dynamic/composed resident reverse, broader AD and independent performance promotion. |
 | ROCm routes/performance | The current FP8 candidate records independent RHS formats, shape-independent unsplit images, ordinary textual JIT, 60 gfx1201 cases and separate gfx1151 LDS proof in rocm_fp8_shape_cache_20261014. | Candidate delivery; wider image families/layouts, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution. |
@@ -1757,3 +1757,19 @@ domain, not a completed public-call speedup. Profile setup/priming/cleanup wall
 time and inference wall remain separate in the captured.json packet.
 Persistent graphs, captured borrowed-root profiling, wider storage/AD and
 the full original objective remain open.
+
+## Public paired RHS JVP delivery — 2026-10-15
+
+W11-TENSOR-RHS-JVP-20261015 connects the previously declared paired executor
+to RuntimeArtifact launch, preserving the original two-output native owner and
+compiler-free public JSON replay. The frozen RTX 5070 lane passes 392 tests
+(eight environment-specific skips). Six same-image alternating windows reduce
+completed host replay from 3.358–3.582 ms to 0.898–1.066 ms by retaining only
+fully validated JSON certificates. Captured device program time remains a
+separate 6.33–52.03 us metric; no native kernel or sibling speedup is inferred.
+
+Public replay borrows a matching live JIT lease; standalone replay owns its
+temporary preparation. Active-source/A+B derivatives, generic dynamic/resident
+AD, wider encoded/fused producers and aggregate five-slice closure remain open.
+This closes a named delivery gap, not the generic producer reconstruction task.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.

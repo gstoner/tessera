@@ -3803,7 +3803,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         runtime_status="success",execution_mode="cuda_runtime",owns_stream=True,
         reason="Named static fp16/BF16 RMSNorm -> ReLU -> matmul RHS-only JVP: native paired SSA "
                "outlines one shared producer prefix and two typed-fragment consumers, then one sealed "
-               "C++ owner returns independently owned f32 primal/tangent arrays. Active-source, dynamic, "
+               "C++ owner returns independently owned f32 primal/tangent arrays. Public JVP export and compiler-free "
+               "RuntimeArtifact replay bind the same two-result ABI and preserve a live JIT lease. Active-source, dynamic, "
                "resident-root, general reverse and encoded-operand AD remain outside this proof.",
         numerical_fixture="tests/unit/test_native_sm120_rhs_jvp_program.py",
         evidence_target="nvidia_sm120",proof_build="LLVM/MLIR23.1.1+CUDA13.3+RTX5070",

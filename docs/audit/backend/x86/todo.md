@@ -7,6 +7,20 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## W11-TENSOR-RHS-JVP-20261015 — public artifact dispatch
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+
+Not applicable to x86 physical execution: the shared executor table
+only resolves the already-declared exact SM120 paired row. This adds no
+sibling admission, native ABI or schedule. Parent target validation
+prevents evidence relabeling. The bounded pure certificate cache retains no device allocation; it does
+not change sibling execution. Sibling composed AD remains follow-up required
+with its own native lowering and exact-device proof.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.
+
+
 ## W11-TENSOR-RHS-JVP-20261015 — portable paired replay
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.

@@ -73,6 +73,31 @@ def record(storage, shape):
                 outputs = fn.native_jvp(a, b, tangents=(db,))
             completed.append((time.perf_counter_ns() - start) / 1e6 / 8)
             check(outputs)
+        public_artifact = rt.RuntimeArtifact.from_json(fn.native_jvp_runtime_artifact().to_json())
+        from tessera.compiler import nvidia_tensor_jvp_runtime as binding
+        public_replay, full_validation = [], []
+        validation_order = []
+        cached_validate = binding._validated_plan
+        def revalidate(data):
+            return binding.restore(data)[0].manifest
+        try:
+            for window in range(6):
+                order = ("cached", "full") if window % 2 == 0 else ("full", "cached")
+                validation_order.append(list(order))
+                for mode in order:
+                    binding._validated_plan = cached_validate if mode == "cached" else revalidate
+                    start = time.perf_counter_ns()
+                    for _ in range(8):
+                        receipt = rt.launch(public_artifact, (a, b, db))
+                        if not receipt.get("ok"):
+                            raise RuntimeError(receipt)
+                    (public_replay if mode == "cached" else full_validation).append(
+                        (time.perf_counter_ns() - start) / 1e6 / 8)
+                    check(receipt["output"])
+        finally:
+            binding._validated_plan = cached_validate
+        # Warm ordinary JVP remains valid after RuntimeArtifact replay.
+        check(fn.native_jvp(a, b, tangents=(db,)))
         assert owner.scratch_stats() == scratch
         # A matching prepare acquires a new native lease. Finish all original
         # owner timing before preparing replay; the old handle is then stale.
@@ -105,6 +130,13 @@ def record(storage, shape):
             "stage_medians_ms": [median(s["stage_ms"][i] for s in samples) for i in range(len(owner.members))],
             "completed_public_call_samples_ms": completed,
             "completed_public_call_median_ms": median(completed),
+            "completed_runtime_artifact_samples_ms": public_replay,
+            "completed_runtime_artifact_median_ms": median(public_replay),
+            "revalidated_runtime_artifact_samples_ms": full_validation,
+            "revalidated_runtime_artifact_median_ms": median(full_validation),
+            "runtime_validation_ab_order": validation_order,
+            "runtime_artifact_hash": public_artifact.artifact_hash,
+            "runtime_component_receipts": receipt["component_receipts"],
             "replay_prepare_ms": replay_prepare_ms,
             "portable_manifest_bytes": len(portable.encode()),
             "completed_prepared_replay_samples_ms": replay_samples,
@@ -149,11 +181,13 @@ def main():
         "python/tessera/compiler/native_sm120_tensor_program.py",
         "python/tessera/compiler/prepared_nvidia_tensor_jvp.py",
         "python/tessera/compiler/portable_nvidia_tensor_jvp.py",
+        "python/tessera/compiler/nvidia_tensor_jvp_runtime.py",
+        "python/tessera/runtime.py",
         "python/tessera/compiler/jit.py",
         str(Path(__file__).relative_to(Path.cwd())),
     ]
     packet = {
-        "schema": "tessera.benchmark.tensor_rhs_jvp.v2",
+        "schema": "tessera.benchmark.tensor_rhs_jvp.v4",
         "device": device,
         "scope": "named static public RHS-only JVP; no active-source, reverse, dynamic or sibling proof",
         "source_sha256": {p: hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in files},

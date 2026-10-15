@@ -2850,6 +2850,7 @@ class JitFn:
         from .native_jvp_plugins import build_native_jvp_family_artifact
 
         self.last_jvp_execution = None
+        self._native_jvp_artifact = None
         prepared_pid = getattr(self, "_native_prepared_jvp_pid", None)
         if prepared_pid is not None and prepared_pid != os.getpid():
             raise RuntimeError("retained native JVP cannot cross fork")
@@ -2983,6 +2984,9 @@ class JitFn:
                                 self._native_prepared_jvp_calls.pop(retired).close()
                             self._native_prepared_jvp_calls[key]=owner
                         outputs=owner((*primal_inputs,*(tangent_inputs[i] for i in request.wrt_indices)))
+                        from .nvidia_tensor_jvp_runtime import runtime_artifact
+                        artifact = getattr(owner, "_public_runtime_artifact", None)
+                        self._native_jvp_artifact = artifact if artifact is not None else runtime_artifact(owner)
                         self.last_jvp_execution={**owner.receipt,"frontend_authority":"tracer"}
                         return outputs
                 except (ValueError,RuntimeError) as exc:
@@ -3112,6 +3116,18 @@ class JitFn:
         }
         primal, tangent = result["output"]
         return primal, tangent
+
+    def native_jvp_runtime_artifact(self):
+        """Return the last static SM120 paired tensor JVP executable artifact.
+
+        Its input ABI is primal_0, primal_1, tangent_<RHS argument index>.
+        Other derivative families retain their existing package APIs.
+        """
+        artifact = getattr(self, "_native_jvp_artifact", None)
+        if artifact is None:
+            raise TesseraJitError("no persisted native paired tensor JVP product from the last call")
+        import copy
+        return copy.deepcopy(artifact)
 
     def native_backward_runtime_artifact(self):
         """Return the persisted native-family reverse product after execution."""

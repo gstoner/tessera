@@ -161,9 +161,31 @@ def test_public_native_rhs_jvp_uses_sealed_program_not_python_member_launches(st
             assert fn.last_jvp_execution["execution_kind"] == "native_gpu"
             assert fn.last_jvp_execution["native_call_binding"] == "prepared_cpp_tensor_program"
             assert fn.last_jvp_execution["frontend_authority"] == "tracer"
+        artifact = fn.native_jvp_runtime_artifact()
+        assert artifact.artifact_hash == fn.last_jvp_execution["artifact_hash"]
+        assert artifact.metadata["arg_names"] == ["primal_0", "primal_1", "tangent_0" if permuted else "tangent_1"]
+        restored = rt.RuntimeArtifact.from_json(artifact.to_json())
+        roots = (*arguments, db)
+        receipt = rt.launch(restored, dict(zip(artifact.metadata["arg_names"], roots, strict=True)))
+        assert receipt["ok"] and receipt["execution_kind"] == "native_gpu", receipt
+        assert receipt["compiler_path"] == "nvidia_sm120_tensor_jvp_compiled"
+        assert len(receipt["component_receipts"]) == 4
+        for actual, reference in zip(receipt["output"], expected, strict=True):
+            np.testing.assert_allclose(actual, reference, rtol=2e-5, atol=2e-5)
+        artifact.metadata["arg_names"][0] = "changed_by_inspection"
+        assert fn.native_jvp_runtime_artifact().metadata["arg_names"][0] == "primal_0"
+        # Public replay must borrow the current owner, not invalidate its lease.
+        resumed = fn.native_jvp(*arguments, tangents=(db,))
+        for actual, reference in zip(resumed, expected, strict=True):
+            np.testing.assert_allclose(actual, reference, rtol=2e-5, atol=2e-5)
         assert len(fn._native_prepared_jvp_calls) == 1
         assert not np.shares_memory(retained[0][0], retained[1][0])
         assert not np.shares_memory(retained[0][1], retained[1][1])
+        from tessera.compiler.jit import TesseraJitError
+        with pytest.raises(TesseraJitError, match="shapes must match"):
+            fn.native_jvp(*arguments, tangents=(db[:, :-1],))
+        with pytest.raises(TesseraJitError, match="no persisted"):
+            fn.native_jvp_runtime_artifact()
     finally:
         for owner in fn._native_prepared_jvp_calls.values():
             owner.close()
@@ -264,8 +286,11 @@ def test_paired_tensor_portable_fresh_process_without_compiler(storage, tmp_path
     try:
         expected = owner(values)
         data = owner.manifest()
+        from tessera.compiler.nvidia_tensor_jvp_runtime import runtime_artifact
+        public_artifact = runtime_artifact(owner).to_json()
     finally:
         owner.close()
+    (tmp_path / "runtime.json").write_text(public_artifact)
     (tmp_path / "program.json").write_text(json.dumps(data))
     np.savez(tmp_path / "inputs.npz", **{str(i): v.view(np.uint16) for i, v in enumerate(values)})
     script = """
@@ -292,6 +317,13 @@ with np.load(folder / "inputs.npz") as loaded:
 owner = PreparedTensorJVP.from_manifest(json.loads((folder / "program.json").read_text()))
 try:
     outputs = owner(values)
+    artifact = rt.RuntimeArtifact.from_json((folder / "runtime.json").read_text())
+    receipt = rt.launch(artifact, values)
+    assert receipt["ok"] and receipt["execution_kind"] == "native_gpu", receipt
+    assert receipt["compiler_path"] == "nvidia_sm120_tensor_jvp_compiled"
+    assert len(receipt["component_receipts"]) == 4
+    for actual, expected in zip(receipt["output"], outputs, strict=True):
+        np.testing.assert_array_equal(actual, expected)
     retained = tuple(v.copy() for v in outputs)
     owner(values)
     for value, saved in zip(outputs, retained, strict=True):
@@ -342,3 +374,83 @@ def test_paired_tensor_portable_rejects_resealed_lifetime_and_wrong_schema():
         bad["contract_digest"] = digest({k: v for k, v in bad.items() if k != "contract_digest"})
         with pytest.raises(ValueError):
             PreparedTensorJVP.from_manifest(bad)
+
+def test_declared_paired_executor_is_registered():
+    from tessera import runtime as rt
+    assert "nvidia_tensor_rhs_jvp_program" in rt._executor_table()
+
+
+def test_paired_public_artifact_rejects_parent_changes_before_provider(monkeypatch):
+    import copy
+    from dataclasses import replace
+    from tessera import runtime as rt
+    from tessera.compiler.prepared_nvidia_tensor_jvp import PreparedTensorJVP
+    from tessera.compiler.nvidia_tensor_jvp_runtime import runtime_artifact
+    if find_tessera_opt() is None or rt._nvidia_device_name() != "sm_120":
+        pytest.skip("requires owning RTX5070 and production compiler")
+    owner = PreparedTensorJVP(graph())
+    try:
+        artifact = runtime_artifact(owner)
+    finally:
+        owner.close()
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("invalid public contract reached native provider")
+    monkeypatch.setattr(rt, "_load_nvidia_ptx_launch", forbidden)
+    for edit in ("graph", "names", "target"):
+        metadata = copy.deepcopy(artifact.metadata)
+        parent = artifact.graph_ir
+        if edit == "graph":
+            parent += "// changed"
+        elif edit == "names":
+            metadata["arg_names"] = ["primal_0", "primal_1", "tangent_0"]
+        else:
+            metadata["target"] = "rocm_gfx1201"
+        bad = replace(artifact, graph_ir=parent, metadata=metadata)
+        result = rt.launch(bad, ())
+        assert result["ok"] is False, result
+    result = rt.launch(artifact, (), stream=object())
+    assert result["ok"] is False and "owns" in result["reason"]
+
+def test_paired_public_certificate_cache_revalidates_changed_payload(monkeypatch):
+    import copy
+    from dataclasses import replace
+    import numpy as np
+    from tessera import runtime as rt
+    from tessera.compiler.prepared_nvidia_tensor_jvp import PreparedTensorJVP
+    from tessera.compiler import nvidia_tensor_jvp_runtime as binding
+    from tessera.compiler.portable_nvidia_tensor_jvp import digest
+    if find_tessera_opt() is None or rt._nvidia_device_name() != "sm_120":
+        pytest.skip("requires owning RTX5070 and production compiler")
+    owner = PreparedTensorJVP(graph())
+    values = (np.ones((7, 32), np.float16), np.ones((32, 9), np.float16), np.ones((32, 9), np.float16))
+    calls = []
+    original = binding.restore
+    def counted(data):
+        calls.append(1)
+        return original(data)
+    monkeypatch.setattr(binding, "restore", counted)
+    with binding._lock:
+        binding._certificates.clear()
+    try:
+        artifact = binding.runtime_artifact(owner)
+        for _ in range(2):
+            result = rt.launch(artifact, values)
+            assert result["ok"], result
+        assert len(calls) == 1
+        for reseal in (False, True):
+            metadata = copy.deepcopy(artifact.metadata)
+            program = metadata["native_program"]
+            plan = json.loads(program["plan_json"])
+            plan["buffers"][4]["last_read"] = 2
+            program["plan_json"] = json.dumps(plan)
+            if reseal:
+                program["contract_digest"] = digest({k: v for k, v in program.items() if k != "contract_digest"})
+            result = rt.launch(replace(artifact, metadata=metadata), values)
+            assert not result["ok"], result
+        assert len(calls) == 3
+        # Rejected certificates cannot evict or poison the valid warm owner.
+        assert rt.launch(artifact, values)["ok"]
+        assert len(calls) == 3
+    finally:
+        owner.close()

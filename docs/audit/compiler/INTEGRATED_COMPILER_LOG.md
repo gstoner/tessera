@@ -12498,3 +12498,25 @@ performance obligations and the remaining NVIDIA five-slice work.
 Evidence: benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md;
 tests/device/rocm/test_public_nvfp4_source_program.py.
 <!-- entry-fields:end -->
+
+
+### 2026-10-15 — gfx1201 native folded fragment read groups
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+PRs: pending; sync GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
+
+Outcome: Native Tile-to-ROCm carries the measured bulk-N fragment read policy
+as a declared, verified and image-keyed Target attribute. LLVM scheduling
+groups preserve typed fragments, arithmetic and workgroup barrier counts.
+The broader N4096 candidate was rejected by repeated regressions. The matching
+production compiler passes 378 focused checks and 40 RX9070XT numerical tests;
+14 selection/image checks preserve all ten excluded baseline images and two
+image-reuse classes. All four backend queues are assessed separately.
+
+Remaining: Frozen production timing/format and documentation gates before
+publication; broader MXFP4 M256/Radiance attribution, W8A8 short/ragged cases
+and general route/performance closure. No sibling physical parity is inferred.
+
+Evidence: benchmarks/baselines/gfx1201_folded_fragment_groups_20261015/README.md;
+docs/spec/ir/gfx1201_folded_fragment_schedule.md.
+<!-- entry-fields:end -->

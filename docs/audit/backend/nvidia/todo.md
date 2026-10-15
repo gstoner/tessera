@@ -6,6 +6,21 @@ target: nvidia_sm120
 last_updated: 2026-10-15
 ---
 
+## GFX1201-FOLDED-FRAGMENT-GROUPS-20261015 — native fragment read groups
+
+Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
+Synchronization key: GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
+
+Not applicable to nvidia physical scheduling: the new optional field and
+instruction grouping belong to the gfx1201 ROCm Target folded-prefill contract.
+Shared Graph/Schedule/Tile arithmetic, storage policy and runtime ABI are
+unchanged. No native schedule is transferred and no new nvidia device evidence
+or capability is claimed. Its existing owning queue remains in force.
+
+Contract: docs/spec/ir/gfx1201_folded_fragment_schedule.md.
+Evidence: benchmarks/baselines/gfx1201_folded_fragment_groups_20261015/README.md.
+
+
 ## NVFP4-NATIVE-MULTI-OUTPUT-20261015 — native producer/product ownership
 
 Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.

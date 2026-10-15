@@ -48,7 +48,24 @@ inline bool isValidFoldedW4A8Target(Operation *op, bool allowRuntimeMN) {
             op->getAttrOfType<BoolAttr>("whole_m") &&
             op->getAttrOfType<BoolAttr>("whole_n")
       : m > (packed ? 0 : 64) && n > 0 && !op->hasAttr("whole_m") && !op->hasAttr("whole_n");
-  return arch && arch.getValue() == "gfx1201" && shapeValid &&
+  bool fragmentScheduleValid = true;
+  if (Attribute hint = op->getAttr("fragment_read_schedule")) {
+    auto value = dyn_cast<StringAttr>(hint);
+    fragmentScheduleValid = !packed && value &&
+        value.getValue() == "k32_groups" &&
+        text("staging_prefetch") == "register_next_slab" &&
+        text("row_guard") == "cta";
+    if (runtimeMN) {
+      auto wm = op->getAttrOfType<BoolAttr>("whole_m");
+      auto wn = op->getAttrOfType<BoolAttr>("whole_n");
+      fragmentScheduleValid &= wm && wn && wm.getValue() && wn.getValue();
+    } else {
+      fragmentScheduleValid &= m % 256 == 0 && n >= 8192 && n % 64 == 0;
+    }
+    if (!runtimeK)
+      fragmentScheduleValid &= k >= 1024;
+  }
+  return fragmentScheduleValid && arch && arch.getValue() == "gfx1201" && shapeValid &&
       !op->hasAttr("runtime_shape") && kValid &&
       !text("name").empty() &&
       (packed || text("physical_contract") == "rocm_mxfp4_w4a8_folded_prefill_v1") &&

@@ -158,6 +158,10 @@ def package_folded_scaled_wmma_target_ir(
             "image_input_level": "target",
             "producer_kind": "native_mlir_typed_lds",
             "native_compiler_owned": True,
+            "fragment_read_schedule": (
+                _target_string_attr(operation, "fragment_read_schedule")
+                if re.search(r"\bfragment_read_schedule\s*=", operation) else "llvm_default"
+            ),
             "kernel_argument_layout": "expanded_memref",
             "authored_target_ir_sha256": authored_target_digest,
             "image_shape_policy": "runtime_mnk" if runtime_k else "runtime_mn_fixed_k" if runtime_mn else "static_mnk",

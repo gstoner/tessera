@@ -112,6 +112,7 @@ def test_receipt_distinguishes_hsaco_bytes_from_composite_image_identity() -> No
     assert receipt["selected_schedule"]["workgroup_mode"] == "cu"
     assert receipt["selected_schedule"]["raster_group_m"] == 4
     assert receipt["selected_schedule"]["staging_prefetch"] == "register_next_slab"
+    assert receipt["selected_schedule"]["fragment_read_schedule"] == "llvm_default"
     assert receipt["selected_schedule"]["epilogue_schedule"] == (
         "complete_tile_vector_scales"
     )

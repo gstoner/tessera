@@ -37,7 +37,7 @@ def _launch(package,a,scales,folded):
     assert result.get("ok") and result.get("execution_kind")=="native_gpu",result
     return output
 
-@pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+@pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128),(256,8192,1024)])
 @pytest.mark.parametrize("runtime_k",[False,True])
 def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
     assert rt._rocm_live_arch()=="gfx1201"
@@ -46,6 +46,8 @@ def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
         tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
     prov=package.descriptor.provenance
     assert prov["native_compiler_owned"] and prov["kernel_argument_layout"]=="expanded_memref"
+    expected_policy = "k32_groups" if m % 256 == 0 and n >= 8192 and n % 64 == 0 and k >= 1024 else "llvm_default"
+    assert prov["fragment_read_schedule"] == expected_policy
     assert package.image.pipeline_name=="tessera-lower-to-rocm"
     assert "gpu.binary" in package.backend_ir
     got=_launch(package,a,scales,folded)

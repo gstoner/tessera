@@ -5,6 +5,25 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## GFX1201-FOLDED-FRAGMENT-GROUPS-20261015 — native fragment read groups
+
+Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
+Synchronization key: GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
+
+Native Tile-to-ROCm selects an explicit, image-keyed K32 fragment-read
+schedule for unpacked folded prefill only in full-M256/N64, N>=8192, K>=1024
+problems. The first N>=4096 candidate was rejected after reproducible short-K
+regressions; excluded shapes retain baseline images. The Target field is ODS
+declared, verified and reported through readonly package provenance. LLVM
+scheduling groups add no workgroup barriers. Production compiler/device,
+image identity and format controls are being recorded before publication.
+gfx1151 has no schedule change; broader MXFP4/Radiance, W8A8 and route closure
+obligations remain open.
+
+Contract: docs/spec/ir/gfx1201_folded_fragment_schedule.md.
+Evidence: benchmarks/baselines/gfx1201_folded_fragment_groups_20261015/README.md.
+
+
 ## NVFP4-NATIVE-MULTI-OUTPUT-20261015 — native producer/product ownership
 
 Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.

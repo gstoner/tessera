@@ -146,6 +146,7 @@ struct WmmaGemmRequest {
   bool runtimeMN = false, runtimeK = false, wholeM = false, wholeN = false;
   bool foldedFullK = false, foldedWaveGuard = false, foldedVectorScales = false;
   bool foldedCuMode = false, foldedPacked = false;
+  bool foldedFragmentGroups = false;
   bool exactMXFP4 = false;
   int64_t foldedPrefetch = 0;
   std::string rasterOrder = "row_major";
@@ -2011,7 +2012,8 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
                                 bool foldedFullK = false,
                                 bool foldedWaveGuard = false,
                                 bool foldedVectorScales = false,
-                                StringRef scaleFormat = "fp32", bool foldedPacked = false) {
+                                StringRef scaleFormat = "fp32", bool foldedPacked = false,
+                                bool foldedFragmentGroups = false) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
@@ -2426,6 +2428,18 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
           mma.addTypes(accFragmentTy);
           partial[mi * nt + ni] = kb.create(mma)->getResult(0);
         }
+      if (foldedFragmentGroups && foldedFullK && prefetch == 1 &&
+          stagePanels == 4 && (p % 2) == 1) {
+        auto i32 = kb.getI32Type();
+        kb.create<ROCDL::SchedGroupBarrier>(
+            l, ROCDL::SchedGroupMaskAttr::get(
+                   kb.getContext(), ROCDL::SchedGroupMask::ds_read),
+            IntegerAttr::get(i32, mt + nt), IntegerAttr::get(i32, 0));
+        kb.create<ROCDL::SchedGroupBarrier>(
+            l, ROCDL::SchedGroupMaskAttr::get(
+                   kb.getContext(), ROCDL::SchedGroupMask::mfma_wmma),
+            IntegerAttr::get(i32, 2 * mt * nt), IntegerAttr::get(i32, 0));
+      }
     }
     if (groupStageReads) {
       // All of the stage's LDS fragment reads, then its WMMA chain (see
@@ -3556,6 +3570,7 @@ struct GenerateWMMAGemmKernelPass
       request.foldedVectorScales =
           packedVectorBand || epilogue == "complete_tile_vector_scales";
       request.foldedPrefetch = prefetch == "register_next_slab" ? 1 : 0;
+      request.foldedFragmentGroups = op->hasAttr("fragment_read_schedule");
       request.foldedCuMode = mode == "cu";
       request.rasterOrder = group ? "grouped_m" : "row_major";
       request.rasterGroup = group ? group : 1;
@@ -4334,7 +4349,8 @@ struct GenerateWMMAGemmKernelPass
             blockscalePrefetchMode, request.rasterOrder, request.rasterGroup,
             outputTy, request.runtimeMN, request.wholeM, request.wholeN,
             request.runtimeK, request.foldedFullK, request.foldedWaveGuard,
-            request.foldedVectorScales, request.scaleFormat, request.foldedPacked);
+            request.foldedVectorScales, request.scaleFormat, request.foldedPacked,
+            request.foldedFragmentGroups);
       } else if (scaled) {
         gpuFunc->setAttr("tessera.rocm.block_scale_contract",
                          b.getStringAttr(

@@ -4016,6 +4016,13 @@ struct LowerTileToROCMPass
                 builder.getStringAttr(rowBlocks >= 2 ? "cu" : "wgp"));
             state.addAttribute("staging_prefetch",
                                builder.getStringAttr("register_next_slab"));
+            // Experimental native policy: preserve old images outside the
+            // full-tile, bulk-N, longer-K band characterized on gfx1201.
+            if (problemM.getInt() % 256 == 0 &&
+                problemN.getInt() >= 8192 && problemN.getInt() % 64 == 0 &&
+                problemK.getInt() >= 1024)
+              state.addAttribute("fragment_read_schedule",
+                                 builder.getStringAttr("k32_groups"));
             state.addAttribute(
                 "epilogue_schedule",
                 builder.getStringAttr("complete_tile_vector_scales"));

@@ -35,7 +35,13 @@ All 53 proof/native-derivative/spec-sync/freshness cases pass after the repair.
 No compiler arithmetic, native ABI, physical mapping or selector changes in
 this repair. No test is weakened and no undated-document exception is added.
 The original broad NVIDIA sweep remains a separate source/environment-bound
-run; its terminal results must be inspected before claiming that lane green.
+run. Its terminal result is 26,021 passes, 7,867 skips, 876 deselections and
+74 failures. Four failures are the missing proof/date records; 67 explicitly
+raise for missing clang/llvm-objdump; three EBM launch receipts return failure
+under the same incomplete environment. All 74 cases pass after the repair and
+complete-tool overlay, including those launch receipts. Another 100 owning
+paired-program/proof/spec/audit cases pass on RTX5070. This is a red full sweep
+plus an exhaustive repaired failure-set gate, not a single green full sweep.
 
 ## Sibling assessment
 
@@ -55,8 +61,10 @@ executables and resolves missing companions to the installed LLVM 23.1.1
 package. llvm-companions.json pins every actual executable path and hash.
 All 21 gated-heap cases pass with that complete environment. No compiler
 source, test expectation or numerical policy is changed for this host repair.
-The still-running broad sweep keeps its original environment and source;
-failed materialization cases need explicit revalidation after it terminates.
+The completed broad sweep retains its original environment and source;
+failed-set-start.json pins every one of the 74 explicitly revalidated nodes
+to f2162522c and the complete tool overlay. The native compiler/provider
+binaries are unchanged by the proof/date repair.
 
 Final focused delivery gates pass 72 cases; all 33 generated documents are in
 sync. Ruff, the one-module type gate, compiler-plan links, claims and the AST

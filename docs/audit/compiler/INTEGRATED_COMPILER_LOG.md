@@ -12383,7 +12383,7 @@ program cases and four public role-permutation controls pass. Six exact
 RTX5070 timing cases have separate captured program/member and public wall
 regions; no comparison/default promotion is claimed. All four queues assessed.
 
-Integration gate: ReLU proof-matrix registration and the paired specification date are repaired after three minimal red cases. 53 proof/native directional-duality/spec/freshness checks pass. Matching core/ROCm tools rebuilt from the 264e1a0f compiler source pass 463 shared and owning gfx1201 NVFP4 route/ownership/lifetime cases. Apple/x86 have no physical ABI/admission changes; the broader frozen NVIDIA unit gate remains under reconciliation. Evidence: benchmarks/baselines/sm120_shared_rocm_parity_20261015/README.md.
+Integration gate: ReLU proof-matrix registration and the paired specification date are repaired after three minimal red cases. 53 proof/native directional-duality/spec/freshness checks pass. Matching core/ROCm tools rebuilt from the 264e1a0f compiler source pass 463 shared and owning gfx1201 NVFP4 route/ownership/lifetime cases. Apple/x86 have no physical ABI/admission changes; the frozen NVIDIA sweep records 26,021 passes and 74 failures, all 74 passing after repair/complete tools on f2162522c; another 100 owning program/proof/audit checks pass. This is partitioned evidence, not one green full sweep. Evidence: benchmarks/baselines/sm120_shared_rocm_parity_20261015/README.md.
 
 Remaining: active-source/A+B derivative consumers, composed reverse, dynamic
 and borrowed resident roots, portable paired replay, encoded/fused envelopes,

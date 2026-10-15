@@ -7,8 +7,8 @@ last_updated: 2026-10-15
 ---
 ## W11-TENSOR-RHS-JVP-20261015 — native paired execution
 
-Integration follow-through: ReLU now has an authored derivative proof contract and a native JVP/adjoint directional-duality witness. The paired specification has its required date. All 53 proof/spec/freshness guards pass without weakening admission. Follow-up required: the frozen 264e1a0f broad NVIDIA sweep is still being reconciled. The proof/date repair changes no CUDA arithmetic or native owner ABI; prior source-pinned RTX5070 numerical/timing evidence remains separate.
-Evidence: benchmarks/baselines/sm120_shared_rocm_parity_20261015/README.md.
+Integration follow-through: ReLU now has an authored derivative proof contract and a native JVP/adjoint directional-duality witness. The paired specification has its required date. All 53 proof/spec/freshness guards pass without weakening admission. Follow-up required: the frozen 264e1a0f broad NVIDIA sweep is reconciled by the explicit repaired failure set recorded below. The proof/date repair changes no CUDA arithmetic or native owner ABI; prior source-pinned RTX5070 numerical/timing evidence remains separate.
+Evidence: benchmarks/baselines/sm120_shared_rocm_parity_20261015/README.md. Broad NVIDIA reconciliation: the frozen sweep has 26,021 passes and 74 failures; all 74 pass on f2162522c with the proof/date repair and complete LLVM tools. A further 100 owning RTX5070 program/proof/audit checks pass. This is partitioned regression evidence, not a single green full-sweep certificate; no sibling physical result is inferred.
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
 Synchronization key: W11-TENSOR-RHS-JVP-20261015.

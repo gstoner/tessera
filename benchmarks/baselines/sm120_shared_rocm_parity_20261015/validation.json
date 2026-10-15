@@ -24,31 +24,62 @@
     "generated_docs": 33,
     "mypy_modules": 1,
     "ruff": "passed",
-    "graphify": "AST update completed; archival extractor warnings retained"
+    "graphify": "AST update completed; archival extractor warnings retained",
+    "full_unit_before": {
+      "revision": "264e1a0f74d853c948ed28a466f71c6e35929d01",
+      "passed": 26021,
+      "failed": 74,
+      "skipped": 7867,
+      "deselected": 876
+    },
+    "complete_failed_set_after": {
+      "revision": "f2162522c3943bef3acf3e7b70f57755b183731a",
+      "passed": 74,
+      "failed": 0
+    },
+    "owning_nvidia_final": 100,
+    "post_reconciliation_doc_tests": 19,
+    "post_reconciliation_generated_docs": 33,
+    "compiler_provider_binaries_unchanged": true
   },
   "scope": {
     "gfx1201": "existing NVFP4 route regression proof; not SM120 paired execution",
-    "nvidia": "new tool-environment proof, not a completed full-unit certificate",
+    "nvidia": "red frozen full sweep plus exhaustive repaired failure-set and final owning program gate; no single green full-sweep claim",
     "apple_x86": "shared proof/date assessment; no new physical evidence",
     "compiler_arithmetic": "unchanged by the integration repair"
   },
   "evidence_sha256": {
-    "README.md": "5ab9f6d58dabc96a089ac7531aac7256f33a28a8fed34689953e4b3ed163eb48",
+    "README.md": "7d0f044ba2be7bcf3020ac64f84de9e13d8244ee1a46fa57292d7eec459bd49d",
     "build.txt.xz": "5db37abf4f6a68c97622c4b4abcceac0c141c37c74464acc3db39c0cb0cfcdfb",
     "claims.txt": "bf5d4cc729d2f06fb82724680faf43ff5f4cc73c5b1e461c791adc0ca27049b1",
     "companion-green.txt": "79db8119c60cf829d2ab2443b8d39d5cbf6346741522a79978b81f9759d4d124",
     "companion-red.txt": "9d40ac7802c528142ccbd73c9835fac72085c9cba5305e42a913bd900eeb25d0",
     "delivery-tests.txt": "ccf8b819a44889bd1ea7c56449d49659da41e308ef5e3b6cb79d6ca0329d8a68",
+    "failed-set-after.txt": "e970e0cc5da2c6f011a6b01d3406ef76ffa716323d9200dd16614c7f6118e431",
+    "failed-set-start.json": "af3d0457bf9df2c9613ceb7abea617107fb45751969bee6554c8439dd190479f",
+    "failed-set-terminal.json": "5ee6a9b5886a869a1fc7efd56af1c564f649538f3bdc407de837701bf4ff4db1",
+    "full-unit-before-start.json": "22daab911ec6db61e553a37ced78cc00775ea4d35295895d5c818413962360c3",
+    "full-unit-before-terminal.json": "d1e24df1c1cfca62d800499ee899794ab8252263433e0e480bef7dd2796af745",
+    "full-unit-before.txt.xz": "3f3b73f5566fa1da606a742b9ec77e36ad25447d8e0f5e9e3d85f6f1b9f0f262",
     "generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
     "graphify.txt": "5f501a585e651780ed56a108cd78c1af44c07654036512b847b2dc4386f293e7",
     "llvm-companions.json": "2e1a49ae96c100b3ab4d075401042337df54309ef9aa6b8457919d1b003e5829",
     "mypy.txt": "5d4b6d285b77932e3d08212c3b4974d0a803f98ec60408ac6ccf6a063fa6c19e",
+    "owning-final.txt": "a321f1f53fa6550d6d0e0fc74c2e7a449f6681a78a4f27d0b4d540e6c4e04a92",
     "parity-start.json": "89175c3bba15b8bd3ba28fa1ec60250bbe777fcaaa923ffcf2f8495b4c9f59e9",
     "parity-terminal.json": "92f1d1b4e533a35d69fc0ec070e373676787cd284ce8807580652c1a0bb72c82",
     "parity-tests.txt": "7fc3c643b0c185b192d29a7560121e2604515c2d03dbfbb49ce266a8a90bf2c1",
     "plan.txt": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+    "reconciled-doc-tests.txt": "b90c6b927a42b09d27eec896db3c385e90dca7ce4e1ed1419c9e704149bd4e7e",
+    "reconciled-generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "reconciled-graphify.txt": "fb6c38b2bfaf9025f820ae07e751c1155253b0e6fc5cdd45e9f571a7e4cb104a",
     "registry-green.txt": "5e31ecacce46a9a7d1f9e405a46fd92fef88e7a41ad5e0825d5849defc3602b6",
     "registry-red.txt": "18171943397282884857f39f3d9bb40305db4247b6c5ce751e648569fe19f2e8",
     "ruff.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  "nvidia_repair_binary_sha256": {
+    "TESSERA_OPT": "d994705917e4d43b6c1d34ca02ad9c91b292c6f649c10e35a93d9a1266da43c3",
+    "TESSERA_NVIDIA_OPT": "bad7652472d6364322cb629e9fb28751c9df804e84a07d1e6f0db801c9e6e578",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "efbb6b9a17309ee36eb50be3791e252fb7c96f0e9cffe3d2d01f7449e557894b"
   }
 }

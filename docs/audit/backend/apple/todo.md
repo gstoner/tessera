@@ -8,7 +8,7 @@ last_updated: 2026-10-15
 ## W11-TENSOR-RHS-JVP-20261015 — native paired execution
 
 Integration follow-through: ReLU now has an authored derivative proof contract and a native JVP/adjoint directional-duality witness. The paired specification has its required date. All 53 proof/spec/freshness guards pass without weakening admission. Not applicable to Metal physical execution: the shared mathematical registry and specification date repair add no Metal ABI or target admission. Native Metal composed AD remains follow-up required.
-Evidence: benchmarks/baselines/sm120_shared_rocm_parity_20261015/README.md.
+Evidence: benchmarks/baselines/sm120_shared_rocm_parity_20261015/README.md. Broad NVIDIA reconciliation: the frozen sweep has 26,021 passes and 74 failures; all 74 pass on f2162522c with the proof/date repair and complete LLVM tools. A further 100 owning RTX5070 program/proof/audit checks pass. This is partitioned regression evidence, not a single green full-sweep certificate; no sibling physical result is inferred.
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
 Synchronization key: W11-TENSOR-RHS-JVP-20261015.

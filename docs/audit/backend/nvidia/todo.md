@@ -427,6 +427,14 @@ Not applicable to SM120 physical lowering: this admission feeds gfx1201 only. W1
 
 
 
+## ROCM-K16-SCALE-GROUPS-20261015 — legal native group defaults
+
+Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-NVFP4-INGEST-1.
+Synchronization key: ROCM-K16-SCALE-GROUPS-20261015.
+Implicit native register defaults now use one panel for odd K16 instruction groups; explicit divisibility checks remain. Existing K32/K128 Tile/Target/HSACO images are byte-identical to the reference. Not applicable to SM120 physical execution: only the ROCm generator default changes. No CUDA ABI, arithmetic, pass order, capability or selector changes; no gfx1201 timing is transferred.
+Native NVFP4 expansion, packed transport and model-quality acceptance remain follow-up required. The host expansion control is diagnostic only.
+Evidence: benchmarks/baselines/gfx1201_fp8_k16_default_20261015/README.md.
+
 ## NVFP4-MODEL-ACTIVATIONS-20261015 — captured-input quality evidence
 
 Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6.

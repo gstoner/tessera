@@ -208,7 +208,7 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   **Open:** the remaining short-K / N = 1024 whole-M shapes and K = 1536 ragged rows; the `[K, N]` weight on the register panel; AITER's split-K buckets unmeasured; gfx1151 edge-row store before/after device-clock timing remains unavailable.
 - Depends on: —
 - Start: device
-- Latest: [2026-10-06 — gfx1201 native MXFP8 long-K selector trial](INTEGRATED_COMPILER_LOG.md#2026-10-06--gfx1201-native-mxfp8-long-k-selector-trial)
+- Latest: [2026-10-15 — gfx1201 native K16 scale-group default](INTEGRATED_COMPILER_LOG.md#2026-10-15--gfx1201-native-k16-scale-group-default)
 
 ### ROCM-MXFP4-W4A8-1
 

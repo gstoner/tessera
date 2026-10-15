@@ -1,0 +1,14 @@
+Re-extracting code files in . (no LLM needed)...
+[graphify watch] 2972 file(s) not classified (no supported extension or shebang), skipped: .git, .gitignore, .keep, 08_mlir_gemm_tiled.mlir, 0_1_2_3_False_full.mlir, 0_False_None.mlir (+2966 more)
+  AST extraction: 18/18 uncached files (100%)
+  warning: 26 file(s) had syntax errors and may be partially extracted: archive/examples/advanced/EBT/Tessera_EBT_Package_v1/models/ebt/runtime/ebt_runner.h (first error at line 4, no symbols extracted), archive/examples/advanced/EBT/Tessera_EBT_Package_v2/models/ebt/runtime/ebt_runner.h (first error at line 4, no symbols extracted), archive/examples/advanced/EBT/Tessera_EBT_Package_v2_3/tools/tessera-ebt-opt/main.cpp (first error at line 8, no symbols extracted), archive/examples/advanced/EBT/Tessera_EBT_Package_v2_4/tools/tessera-ebt-opt/main.cpp (first error at line 13, 1 symbol(s) extracted), archive/examples/advanced/NeuralGCM/neuralgcm_tessera_port.py (first error at line 1634, 120 symbol(s) extracted) (+21 more)
+  warning: 207 code file(s) yielded no symbols (0.27 MB) — a data file, or source this extractor models no symbols for: archive/examples/advanced/Diffusion_LLM/pyproject.toml, archive/examples/advanced/Diffusion_LLM/tessera_diffusion_llm/inference/__init__.py, archive/examples/advanced/Diffusion_LLM/tessera_diffusion_llm/kernels/__init__.py, archive/examples/advanced/Diffusion_LLM/tessera_diffusion_llm/models/__init__.py, archive/examples/advanced/Diffusion_LLM/tessera_diffusion_llm/schedules/__init__.py (+202 more)
+[graphify watch] community set changed since labeling (3511 saved labels, 3623 communities now; renamed 1037 community(ies) by their hub). Run `graphify label` to refresh names with the LLM.
+[graphify] backed up curated graph (4 files) -> 2026-10-15/
+Graph has 95714 nodes (above 5000 limit). Building aggregated community view...
+graph.html written (aggregated: 3623 community nodes, 13713 cross-community edges)
+Tip: run with --obsidian for full node-level detail.
+[graphify watch] Rebuilt: 95714 nodes, 231625 edges, 3623 communities
+[graphify watch] graph.json, graph.html and GRAPH_REPORT.md updated in graphify-out
+Code graph updated. For doc/paper/image changes run /graphify --update in your AI assistant.
+Tip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction.

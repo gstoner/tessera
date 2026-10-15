@@ -12335,3 +12335,26 @@ These projection proxies do not prove model accuracy or sibling execution.
 Evidence: benchmarks/baselines/nvfp4_model_activations_20261015/README.md,
 inputs.json, inputs.npz, quality-formats.json, input-tests.txt and isa-index.json.
 <!-- entry-fields:end -->
+
+### 2026-10-15 — gfx1201 native K16 scale-group default
+
+Owner: [ROCM-FP8-BLOCKSCALE-1](INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1)
+PRs: pending; sync ROCM-K16-SCALE-GROUPS-20261015.
+
+Outcome: native automatic panel selection now covers legal odd instruction
+groups while preserving explicit override refusals. K16/K48/K80 have red/green
+compiler regressions; 431 focused guards, 102 existing owning device controls
+and 16 filtered cases pass (12 new plus four overlapping controls). Legacy
+K32/K128 Tile/Target/HSACO images are byte-identical to the preserved reference.
+Three source-preserving synthetic K16 controls pass independent FP64 bounds
+with separate HIP graph execution/dispatch and checked host timing. All four
+backend queues distinguish this gfx1201 repair from sibling physical claims.
+
+Remaining: native NVFP4 expansion, packed four-bit transport and model-quality
+acceptance; wider W8A8 short/ragged coverage and MXFP4 attribution remain open.
+No Python backend selector, default performance promotion or full program closure.
+
+Evidence: benchmarks/baselines/gfx1201_fp8_k16_default_20261015/README.md,
+compiler-red.txt, compiler-green.txt, existing-device-controls.txt,
+odd-device-cases.txt, source-k16-control.json and legacy-image-identity.json.
+<!-- entry-fields:end -->

@@ -485,6 +485,14 @@ Parity validated for this gfx1201 continuous FP32 chain and forward derivative. 
 
 
 
+## ROCM-K16-SCALE-GROUPS-20261015 — legal native group defaults
+
+Owner ROCM-FP8-BLOCKSCALE-1 / ROCM-NVFP4-INGEST-1.
+Synchronization key: ROCM-K16-SCALE-GROUPS-20261015.
+Implicit native register defaults now use one panel for odd K16 instruction groups; explicit divisibility checks remain. Existing K32/K128 Tile/Target/HSACO images are byte-identical to the reference. Parity validated on owning gfx1201: 431 focused guards, 102 existing device controls, and 16 filtered cases (12 new, four overlapping controls) pass. Three synthetic source-preserving K16 FP8 controls pass separate graph-dispatch/host timing checks. gfx1151 has no FP8 WMMA and is not admitted by this change.
+Native NVFP4 expansion, packed transport and model-quality acceptance remain follow-up required. The host expansion control is diagnostic only.
+Evidence: benchmarks/baselines/gfx1201_fp8_k16_default_20261015/README.md.
+
 ## NVFP4-MODEL-ACTIVATIONS-20261015 — captured-input quality evidence
 
 Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6.

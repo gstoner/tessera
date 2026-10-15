@@ -1,9 +1,94 @@
 ---
-last_updated: 2026-10-14
+last_updated: 2026-10-15
 audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+
+## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
+
+CI documentation synchronization: the marker-aware standalone dashboard now participates in the standard generated-doc registry. Its two generated summaries refresh automatically while authored prose is preserved. This repairs stale exact-ROCm row counts; numerical admission and physical schedules are unchanged.
+
+PR948 review correction: the generic JIT specialization key now includes the resolved physical target as well as semantic Graph bytes. Four host-only architecture-switch regressions fail before the fix and pass afterward, including both switch directions and warm reuse. They do not claim live multi-GPU switching.
+
+Owning public execution additionally exposed the missing gfx1151 numerical declaration for a ready native package. Exact matmul/GEMM manifest/fixture rows now cover static compact fp16/bf16-to-f32 on gfx1151 and gfx1201, plus all four OCP FP8 pairs only on gfx1201. Broader gfx1151 artifact-only capability statuses stay unchanged. The new fixture passes eight owning-gfx1151 cases (40 foreign/unsupported-FP8 skips) and 24 owning-gfx1201 cases. Warm shape reuse, immutable inputs, retained outputs and Graph/Schedule/Tile/Target/image ancestry pass. The separate gfx1151 public packet has eight native calls and maximum error below 3.6e-7. Registry/execution/numerical guards pass 167 tests; shared NVIDIA controls pass 75. No pure-kernel timing or strategy promotion is asserted.
+
+Integrated PR947 checkpoint: the frozen five-backend LLVM/MLIR 23.1.1
+candidate passes the full non-slow unit gate (28,493 passed / 5,320 skipped /
+874 deselected). post947-full-unit.txt and its manifest bind that source.
+Afterward, the native/Python exact-profile alias repair passes 432 focused
+cases on rebuilt gfx1201 tools (37 owning-gfx1151 skips). The independent
+SM120 integration gate passes 630 cases (six legitimate skips), including
+public ISTFT, saved-LSE forward/backward, resident/prepared ownership, NVFP4
+and producer routes. Prepared reverse tests now generate complete current
+native/oracle fixtures in temporary storage. These supplemental gates are
+separate from the earlier frozen broad certificate.
+Fresh post947 FP8 evidence retains 60 zero-error cases and twenty images;
+Princess-Luna independently passes six LDS cases and architecture refusal.
+Old timing packets keep their original compiler/source hashes. No general
+performance promotion or aggregate five-slice closure is claimed.
+
+
+Owner E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+Native WMMA Target IR retains rhs_storage, validates both OCP formats and
+keeps the pair in physical image identity. The generator checks typed-fragment
+consistency. Mixed LDS now preserves RHS zeros, vector/shared allocation and
+fragment types, fixing a real pre-existing type mismatch and wrong-format path.
+The unsplit gfx1201 route reuses images across shapes for register K-unroll
+1/2/4/8 and LDS K-unroll 1. 577 focused gates pass under the five-backend configuration, including 90 owning-device
+FP8/FP16/BF16 numerical launches. The source-pinned 60-case FP8 packet has twenty
+pairing/recipe images, warm image reuse and zero error on seeded finite inputs.
+New-shape package wall times are 33.35–55.50 ms; HIP-event batch means
+3.68–13.00 us; completed host launches 0.567–0.747 ms. Event regions may
+include CPU enqueue gaps; no pure-kernel, speedup or default selection claim.
+The generic scheduled launch validates the live HIP architecture after argument
+checks and before acquisition/allocation; 83 guard/dispatch gates pass.
+Ordinary textual FP8 @jit now reaches canonical native packages for both generic
+and explicit gfx1201 targets. Twenty-four public format/shape replays pass
+numerical/IR/receipt checks; FP16/BF16 public sibling calls also pass.
+Twelve packet rows record warm public calls at 0.851–0.904 ms, separately
+from image-primed first calls and event/host-launch regions. Integer public
+wrapping semantics remain unchanged. The available-lane regression group
+passes 230 tests (113 skips); focused mypy and Ruff pass.
+Evidence: benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md.
+Larger/dynamic/layout and split-K FP8 envelopes, general attention cache keys
+and public compiler admission costs remain open.
+
+ISTFT profile integration — ODS-WIRE-2 / E2E-REAL-6:
+the broad exact-device run reproduced a public JVP failure caused by
+rejecting an already matching compiler-owned target profile. Matching
+profiles are now retained unchanged; conflicting or partial profiles remain
+rejected. Four profile cases are red/green, and the 63-case ISTFT contract
+lane passes with the exact gfx1201 spectral provider. The new
+istft-profile.json receipt pins sources/provider and finite-difference test
+log. This changes profile validation only, with no kernel, operation, dtype
+or ABI change. Host-free x86/gfx1151/gfx1201/SM120 profile gates pass; no
+sibling GPU execution or timing is inferred.
+
+Broad-lane repairs preserve the physical contracts: FP32 host-free fixtures
+pin gfx1151; exact gfx1151 WMMA fixtures check the actual selected device;
+the serializer is explicitly MLIR_OPT from the matching LLVM/MLIR 23.1.1
+build. Macro-K recipes remain distinct image keys. Cache clear/capacity
+testing runs in a fresh process so other owners retain their live leases.
+MoE tests probe compiler/device/toolkit availability instead of a separate
+shipped WMMA library. Eighty-one repair gates pass (14 architecture or
+environment skips). All three unchanged gfx1151 recurrence images execute
+on Princess-Luna with zero error; this is separate from gfx1201 evidence.
+
+The bounded-N BF16 resident Graph projection now updates its complete
+inferred result tuple as well as the singular type, fixing malformed traced
+SSA at the return. Exact gfx1201 public numerical/capacity checks pass.
+An idle correctness-gated M128/K256/N<=256 packet reuses one package for
+N128/256 and records 100 producer/consumer event samples each:
+8.48/10.76 us and 11.36/14.36 us medians respectively. Event windows may
+include enqueue gaps; no public-call latency or speedup is claimed.
+Sources/binaries and both owning-device receipts are pinned in
+benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md.
+No sibling schedule, operation, dtype or runtime ABI is changed.
+
+
+
+Parity validated on exact gfx1201. gfx1151 has no FP8 WMMA. Its separate Princess-Luna FP16/BF16 LDS proof passes six cases and rejects a relabeled gfx1201 image; no FP8 or timing claim is transferred.
 
 ## W11-RELU-PRODUCER-20261014 — active engineering
 
@@ -537,13 +622,21 @@ No image, kernel, dtype, operation or ABI changes are introduced.
 
 ## Current actions — five-slice integration
 
-Current as of 2026-10-08. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
+Current as of 2026-10-14. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
 
 ROCM-NVFP4-INGEST-1: model-quality acceptance and wider dynamic/layout/AD envelopes. ROCM-FP8-BLOCKSCALE-1: broader W8A8 short/ragged-K and MXFP4 M256 attribution. E2E-REAL-6: general paged-KV layouts, launch overhead and wider cache families. gfx1151/gfx1201 unary, matmul and native-math warm package reuse have owning-host proof; remaining cache families need per-envelope evidence.
 
 Named gfx1201 leading/scalar primal, scale JVP/VJP, transposed A and partial K32 groups are proved. Actual-image packaging and bounded version-query reuse are proved in recorded envelopes; they are not pending builds.
 
-General dynamic/nonleading/composed maps, other scale widths/layouts, storage derivatives and generic closure remain open. Delivery requires reviewable PRs, final generated-doc/Graphify gates and a fresh full-suite result. The last full suite still has two generic batching/transpose closure failures.
+General dynamic/nonleading/composed maps, other scale widths/layouts, storage
+derivatives and generic closure remain open. The historical two generic
+batching/transpose suite failures are superseded by the source-bound
+26,072-pass, 7,568-skip full WSL result in
+benchmarks/baselines/native_encoded_scaled_gate_20261014/host-full-unit.txt.
+That receipt does not validate later changes or establish generic capability
+closure. The current FP8 Target/image/public-route candidate still requires
+its own terminal broad result, final documentation/Graphify gates and
+reviewable PR delivery.
 
 Evidence ledger: ../../compiler/FIVE_SLICE_STATUS_20261007.md. Superseded active notes: archive/compiler_slice_integration_checkpoints_20261007.md.
 

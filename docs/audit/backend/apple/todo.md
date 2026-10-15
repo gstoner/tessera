@@ -3,8 +3,28 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-10-14
+last_updated: 2026-10-15
 ---
+
+## ROCM-FP8-TARGET-IDENTITY-20261014 — active engineering
+
+CI documentation synchronization: the marker-aware standalone dashboard now participates in the standard generated-doc registry. Its two generated summaries refresh automatically while authored prose is preserved. No apple capability, numerical policy, ABI or physical execution claim changes.
+
+Review synchronization: resolved physical targets now namespace the shared descriptor cache. Apple never enters this ROCm/SM120 dispatcher, and the new exact ROCm numerical fixture does not change Metal admission, arithmetic or ABI. Outcome: not applicable to Apple physical execution.
+
+Owner E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1; profile integration ODS-WIRE-2.
+Synchronization key: ROCM-FP8-TARGET-IDENTITY-20261014.
+The owning ROCm queue and source-bound evidence are authoritative for the
+independent RHS format, mixed LDS, image-key and public-JIT changes:
+[ROCm queue](../rocm/todo.md) and
+benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md.
+
+Not applicable to Metal Target/image packaging: the FP8 admission branches
+are ROCm-only, and ISTFT profile aliases admit only the existing exact x86
+and SM120 profiles. No Apple kernel, ABI, dtype, schedule or execution claim
+changes. Shared registry/drift checks remain required; no new Apple numerical
+or timing evidence is inferred from the other hosts.
+
 
 ## W11-RELU-PRODUCER-20261014 — active engineering
 
@@ -526,13 +546,21 @@ No image, kernel, dtype, operation or ABI changes are introduced.
 
 ## Current actions — five-slice integration
 
-Current as of 2026-10-08. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
+Current as of 2026-10-14. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
 
 FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1: independent-scale primal/JVP/VJP, partial groups and scalar orientation need Metal-owned execution parity. Affected E2E-REAL-6 public compiler-owned JIT contracts require Mac numerical proof.
 
 Named gfx1201 leading/scalar primal, scale JVP/VJP, transposed A and partial K32 groups are proved. Actual-image packaging and bounded version-query reuse are proved in recorded envelopes; they are not pending builds.
 
-General dynamic/nonleading/composed maps, other scale widths/layouts, storage derivatives and generic closure remain open. Delivery requires reviewable PRs, final generated-doc/Graphify gates and a fresh full-suite result. The last full suite still has two generic batching/transpose closure failures.
+General dynamic/nonleading/composed maps, other scale widths/layouts, storage
+derivatives and generic closure remain open. The historical two generic
+batching/transpose suite failures are superseded by the source-bound
+26,072-pass, 7,568-skip full WSL result in
+benchmarks/baselines/native_encoded_scaled_gate_20261014/host-full-unit.txt.
+That receipt does not validate later changes or establish generic capability
+closure. The current FP8 Target/image/public-route candidate still requires
+its own terminal broad result, final documentation/Graphify gates and
+reviewable PR delivery.
 
 Evidence ledger: ../../compiler/FIVE_SLICE_STATUS_20261007.md. Superseded active notes: archive/compiler_slice_integration_checkpoints_20261007.md.
 

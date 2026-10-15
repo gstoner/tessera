@@ -4116,6 +4116,8 @@ struct LowerTileToROCMPass
         // `$dtype`, whose enum is the f16/bf16/int8/int4 matrix-core set.
         if (!fp8Storage)
           state.addAttribute("dtype", builder.getStringAttr(desc.getAType()));
+        else
+          state.addAttribute("rhs_storage", builder.getStringAttr(desc.getBType()));
         state.addAttribute("bias", builder.getBoolAttr(epilogue.getBias()));
         state.addAttribute("portable_abi", builder.getBoolAttr(true));
         state.addAttribute("output", builder.getStringAttr(epilogue.getOutputType()));

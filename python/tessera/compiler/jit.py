@@ -1843,12 +1843,22 @@ class JitFn:
     def _try_native_descriptor_call(self, args, kwargs):
         """Bind host tensors to a canonical compiler-owned static descriptor.
 
-        Admits static SM120 FP16/BF16 matmul, ROCm movement/row-softmax and
+        Admits static SM120 matmul, typed ROCm scheduled matmul, movement/row-softmax and
         gfx1201 checkpoint storage. Python
         allocates declared outputs; native Graph/Schedule/Tile owns arithmetic.
         Compilation and launch errors propagate once this operation is selected.
         """
         target = normalize_target_kind(self.target)
+        rocm_product = (self.differentiation_request is None
+                        and len(self.graph_ir.functions) == 1
+                        and len(self.graph_ir.functions[0].body) == 1
+                        and self.graph_ir.functions[0].body[0].op_name in {"tessera.matmul", "tessera.gemm"})
+        if target == "rocm" and rocm_product:
+            from tessera import runtime as rt
+            chip = rt._rocm_live_arch()
+            if chip in {"gfx1151", "gfx1201"}:
+                target = "rocm_" + chip
+        rocm_matmul = target in {"rocm_gfx1151", "rocm_gfx1201"} and rocm_product
         if target not in {"rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
             return _JIT_FALLBACK
         from .nvidia_native import supports_f16_matmul, supports_bf16_matmul
@@ -1883,7 +1893,7 @@ class JitFn:
         typed_scaled = target == "rocm_gfx1201" and requests_typed_scaled(self.graph_ir)
         checkpoint = target == "rocm_gfx1201" and (
             supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
-        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4 and not typed_scaled:
+        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4 and not typed_scaled and not rocm_matmul:
             return _JIT_FALLBACK
         if self.differentiation_request is not None:
             raise ValueError("native descriptor call has no differentiation contract")
@@ -1901,9 +1911,25 @@ class JitFn:
             from .prepared_attention_forward import input_signature
             input_signature(ordered)
         if not resident_attention and not all(isinstance(value, (np.ndarray, NVFP4Tensor)) if nvfp4 else isinstance(value, np.ndarray) for value in ordered):
-            if movement or matmul:
+            if movement or matmul or rocm_matmul:
                 return _JIT_FALLBACK
             raise TypeError("native descriptor JIT expects host tensor inputs")
+        if rocm_matmul:
+            # Storage/rank facts at frontend ingress, before tracing a request
+            # outside this native float-storage envelope. Integer public
+            # output semantics remain a separate frontend contract.
+            from .trace import _np_dtype_to_elem
+            function = self.graph_ir.functions[0]
+            roots = dict(zip((arg.name for arg in function.args), ordered, strict=True))
+            pair = [roots.get(name.removeprefix("%")) for name in function.body[0].operands[:2]]
+            arrays = [value for value in pair if isinstance(value, np.ndarray)]
+            if len(arrays) != 2 or any(value.ndim != 2 for value in arrays):
+                return _JIT_FALLBACK
+            storage_pair = tuple(_np_dtype_to_elem(value.dtype) for value in arrays)
+            fp8_pair = all(storage in {"fp8_e4m3", "fp8_e5m2"} for storage in storage_pair)
+            if storage_pair not in {("f16", "f16"), ("bf16", "bf16")} and not (
+                    target == "rocm_gfx1201" and fp8_pair):
+                return _JIT_FALLBACK
         prepared_attention = False
         if attention:
             attention_library = rt._load_nvidia_ptx_launch()
@@ -1940,6 +1966,10 @@ class JitFn:
                         raise ValueError("native NVFP4 matrix packing axis differs from the K axis")
                 elif not isinstance(value, np.ndarray):
                     raise ValueError("native NVFP4 scales require uint8 ndarray storage")
+        if rocm_matmul:
+            from .scheduled_matmul import supports_scheduled_matmul
+            if not supports_scheduled_matmul(module, target=target):
+                return _JIT_FALLBACK
         if native_math and not supports_math(module):
             raise ValueError("native math requires explicit f32 Graph computation and supported input storage")
         if attention and not (supports_attention(module) or supports_attention_lse(module)):
@@ -1989,7 +2019,10 @@ class JitFn:
                     return array
                 call.close()
                 del self._native_prepared_movement_calls[signature]
-        key = hashlib.sha256(module.to_mlir(target=self.target, canonical=True).encode()).hexdigest()
+        # Semantic Graph IR omits the physical target. A generic ROCm JIT may
+        # select another architecture while retaining identical Graph bytes.
+        semantic_ir = module.to_mlir(target=target if rocm_matmul else self.target, canonical=True)
+        key = hashlib.sha256((target + "\0" + semantic_ir).encode()).hexdigest()
         compiled = self._native_descriptor_specializations.get(key)
         if compiled is None:
             compiled = canonical_compile(module, target=target,
@@ -2068,7 +2101,7 @@ class JitFn:
             if tuple(item.name for item in declared)!=("M","N","K") or any(item.dtype!="int64" for item in declared):
                 raise ValueError("typed scaled primal scalar ABI differs")
             scalars={"M":shape.m,"N":shape.n,"K":shape.k}
-        elif matmul:
+        elif matmul or rocm_matmul:
             shape = descriptor.provenance.get("shape")
             declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
             if (descriptor.provenance.get("route") != "canonical_scheduled_tile_consumer"
@@ -2235,7 +2268,7 @@ class JitFn:
                 compiled, module, artifact, movement_contract, ordered=ordered)
         if attention_saved_lse:
             return tuple(arrays)
-        return arrays[0] if movement or softmax or matmul or attention or native_math or nvfp4 or typed_scaled else tuple(arrays)
+        return arrays[0] if movement or softmax or matmul or rocm_matmul or attention or native_math or nvfp4 or typed_scaled else tuple(arrays)
 
 
     def _try_rocm_composed_scaled_call(self,args,kwargs):

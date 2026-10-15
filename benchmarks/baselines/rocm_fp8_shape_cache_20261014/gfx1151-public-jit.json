@@ -1,0 +1,167 @@
+{
+  "status": "exact_gfx1151_public_jit_execution",
+  "architecture": "gfx1151",
+  "compiler_build_host": "Tajasaurus",
+  "execution_host": "Princess-Luna",
+  "coordinating_revision_before_review": "6c1ab58885ada59645c0489a8d0fa5ce789fc2ef",
+  "source_state": "working_tree_with_resolved_target_review_fix; exact hashes below",
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "9a6dcfdc07895fa9c16beee3d651af9d69a86d3f4c3b8acb4eff021a5aa53ca6",
+    "python/tessera/compiler/driver.py": "b2c7a759d69c81e8b1e22a565be44b2f96f31a2663073aeb2be5681f57323952",
+    "python/tessera/compiler/rocm_native.py": "32e93f2b4b9ff3e199ba8c6470b7020e2589503a5adb0b5cddc01a6638713119",
+    "python/tessera/runtime.py": "48a616361135b71fde0669a17dc1ca5bf187cbaf3643c9e6b4f195f25883e4fd",
+    "python/tessera/compiler/backend_manifest.py": "ff0c0552d30c99f653efc155c5e59f7ec25d4d38e5a60a91c51bda00a9c9e6d6",
+    "python/tessera/compiler/capabilities.py": "7f9baea00301ee4f67cb88e1f2a4a49e4a39df8f18fe07d1ed47be28d5c6e0c5",
+    "tests/unit/test_rocm_public_matmul.py": "f9b69414aedbe2039033407769fb65dc1145da9ba6f48e5580ce3f1d610a8f78"
+  },
+  "binary_sha256": {
+    "TESSERA_OPT": "256acc966923792e487ab8da63183ace49ea2ef385fc71cb15076bec34fd060d",
+    "TESSERA_ROCM_OPT": "c0acf827191a1330f04ddb2670128e9f246328e45eb3a940ea66acda54ee16f2"
+  },
+  "layout_library_sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+  "gpu_report": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            32                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    65476268(0x3e716ac) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    65476268(0x3e716ac) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    65476268(0x3e716ac) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    65476268(0x3e716ac) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1151                            \n  Uuid:                    GPU-ffffffffffffffff               \n  Marketing Name:          AMD Radeon(TM) 8060S Graphics      \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L2:                      2048(0x800) KB                     \n    L3:                      32768(0x8000) KB                   \n  Chip ID:                 5510(0x1586)                       \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2900                               \n  BDFID:                   50432                              \n  Internal Node ID:        1                                  \n  Compute Unit:            40                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          2                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 34                                 \n  SDMA engine uCode::      18                                 \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 3                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1151         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx11-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "script_sha256": "e73859eafc363eaaa868269da539681733840ca56a653e923d9da1848bb6e58e",
+  "script_source": "from pathlib import Path\nimport hashlib\nimport json\nimport os\nimport subprocess\nimport numpy as np\nimport ml_dtypes\nimport tessera as ts\nfrom tessera import runtime as rt\n\nroot = Path(__file__).resolve().parent\nassert Path(ts.__file__).resolve().is_relative_to(root / 'python')\nassert rt._rocm_live_arch() == rt._rocm_chip() == 'gfx1151'\nsource = 'def product(a, b):\\n    return tessera.ops.matmul(a, b, output_dtype=\"fp32\")\\n'\nrows, retained = [], []\nfor storage, dtype in [('fp16', np.float16), ('bf16', ml_dtypes.bfloat16)]:\n    public = ts.from_text(source, target='rocm')\n    prior = {}\n    for iteration, shape in enumerate([(16, 32, 16), (17, 31, 19), (48, 33, 16), (16, 32, 16)]):\n        m, k, n = shape\n        rng = np.random.default_rng(9481151 + iteration)\n        a = rng.uniform(-0.5, 0.5, (m, k)).astype(dtype)\n        b = rng.uniform(-0.5, 0.5, (k, n)).astype(dtype)\n        original_a, original_b = a.copy(), b.copy()\n        a.flags.writeable = b.flags.writeable = False\n        output = public(a, b)\n        expected = a.astype(np.float32) @ b.astype(np.float32)\n        np.testing.assert_allclose(output, expected, rtol=1e-4, atol=1e-3)\n        np.testing.assert_array_equal(a, original_a)\n        np.testing.assert_array_equal(b, original_b)\n        assert public.execution_kind == 'native_gpu'\n        assert public.compile_result.target == 'rocm_gfx1151'\n        receipt = public._native_descriptor_last_receipt\n        assert receipt['compiler_path'] == 'rocm_gfx1151_native_descriptor'\n        bundle = public.compile_bundle\n        assert 'schedule.matmul' in bundle.schedule.text\n        assert 'tile.matmul_kernel' in bundle.tile.text\n        assert 'tessera_rocm.wmma_gemm' in bundle.target_ir.text\n        if shape in prior:\n            assert public.compile_result is prior[shape]\n        prior[shape] = public.compile_result\n        retained.append((output, output.copy()))\n        rows.append({'storage':storage,'shape_mkn':list(shape),'replayed_existing_shape':iteration == 3,\n                     'correctness':'independent_f32_oracle_passed','max_abs_error':float(np.max(np.abs(output-expected))),\n                     'execution_kind':public.execution_kind,'compiler_path':receipt['compiler_path'],\n                     'image_digest':bundle.native_image.image_digest,\n                     'schedule_sha256':hashlib.sha256(bundle.schedule.text.encode()).hexdigest(),\n                     'tile_sha256':hashlib.sha256(bundle.tile.text.encode()).hexdigest(),\n                     'target_sha256':hashlib.sha256(bundle.target_ir.text.encode()).hexdigest()})\n        print(rows[-1], flush=True)\n    assert len(public._native_descriptor_specializations) == 3\nfor actual, original in retained:\n    np.testing.assert_array_equal(actual, original)\nsha = lambda p: hashlib.sha256(p.read_bytes()).hexdigest()\npaths = ['python/tessera/compiler/jit.py','python/tessera/compiler/driver.py','python/tessera/compiler/rocm_native.py','python/tessera/runtime.py','python/tessera/compiler/backend_manifest.py','python/tessera/compiler/capabilities.py','tests/unit/test_rocm_public_matmul.py']\npacket = {'status':'exact_gfx1151_public_jit_execution','architecture':rt._rocm_live_arch(),\n          'compiler_build_host':'Tajasaurus','execution_host':subprocess.check_output(['hostname'],text=True).strip(),\n          'coordinating_revision_before_review':'6c1ab58885ada59645c0489a8d0fa5ce789fc2ef',\n          'source_state':'working_tree_with_resolved_target_review_fix; exact hashes below',\n          'source_sha256':{p:sha(root/p) for p in paths},\n          'binary_sha256':{name:sha(Path(os.environ[name])) for name in ['TESSERA_OPT','TESSERA_ROCM_OPT']},\n          'layout_library_sha256':sha(root/'libtessera_layout_algebra.so'),\n          'gpu_report':subprocess.check_output(['/opt/rocm/bin/rocminfo'],text=True),\n          'script_sha256':sha(Path(__file__)), 'script_source':Path(__file__).read_text(), 'fixture_log_sha256':sha(root/'public-jit-tests.log'), 'fixture_result':'8 passed, 40 skipped; isolated-marker warning', 'rows':rows,\n          'cross_architecture_switch_scope':'Host-free regression probes both architecture-switch directions; this packet executes only the actual gfx1151 device.',\n          'timing_claim':False}\n(root/'public-jit.json').write_text(json.dumps(packet,indent=2)+'\\n')\nprint('eight exact-device public calls passed; shape replay reuses each cached specialization', flush=True)\n",
+  "fixture_log_sha256": "27a1075ef33473ee58a105b8a518772752c5e954386231dcdac0ae926ba2b2fd",
+  "fixture_result": "8 passed, 40 skipped; isolated-marker warning",
+  "rows": [
+    {
+      "storage": "fp16",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "replayed_existing_shape": false,
+      "correctness": "independent_f32_oracle_passed",
+      "max_abs_error": 2.384185791015625e-07,
+      "execution_kind": "native_gpu",
+      "compiler_path": "rocm_gfx1151_native_descriptor",
+      "image_digest": "e3bdba7747a16f7f00ea623b9c3ebb11a16c27d290d2daecf652bab130bca59d",
+      "schedule_sha256": "4c57066d945137ddbf3ef0c422c54e33de6ac275ed70804641af85ec249d6e5b",
+      "tile_sha256": "a5c8dee2cafaa63182f9f48314552b034ce13c631c81f68162d0a4bdbc5c2aa5",
+      "target_sha256": "f3957061cbec55ecc7c83e3321c5ff31adebcce2bc64a989754a50d0c8960da8"
+    },
+    {
+      "storage": "fp16",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "replayed_existing_shape": false,
+      "correctness": "independent_f32_oracle_passed",
+      "max_abs_error": 3.5762786865234375e-07,
+      "execution_kind": "native_gpu",
+      "compiler_path": "rocm_gfx1151_native_descriptor",
+      "image_digest": "e3bdba7747a16f7f00ea623b9c3ebb11a16c27d290d2daecf652bab130bca59d",
+      "schedule_sha256": "9a93459f761a2b0de91c7d48297579813be0c438f8a89b52deb64ede79c30098",
+      "tile_sha256": "52bf7c294a4d5367857f435692a7427775a42a931c28e96403a0ba45fc6051af",
+      "target_sha256": "f3957061cbec55ecc7c83e3321c5ff31adebcce2bc64a989754a50d0c8960da8"
+    },
+    {
+      "storage": "fp16",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "replayed_existing_shape": false,
+      "correctness": "independent_f32_oracle_passed",
+      "max_abs_error": 2.980232238769531e-07,
+      "execution_kind": "native_gpu",
+      "compiler_path": "rocm_gfx1151_native_descriptor",
+      "image_digest": "e3bdba7747a16f7f00ea623b9c3ebb11a16c27d290d2daecf652bab130bca59d",
+      "schedule_sha256": "1702a0694d0f16110563bde3edfada2739d65b798d413f609b5849b2a5c628c8",
+      "tile_sha256": "4963696470451ef89c1b2b02aca98be2f08b6984627bf7d906ee8a7906074caa",
+      "target_sha256": "f3957061cbec55ecc7c83e3321c5ff31adebcce2bc64a989754a50d0c8960da8"
+    },
+    {
+      "storage": "fp16",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "replayed_existing_shape": true,
+      "correctness": "independent_f32_oracle_passed",
+      "max_abs_error": 2.384185791015625e-07,
+      "execution_kind": "native_gpu",
+      "compiler_path": "rocm_gfx1151_native_descriptor",
+      "image_digest": "e3bdba7747a16f7f00ea623b9c3ebb11a16c27d290d2daecf652bab130bca59d",
+      "schedule_sha256": "4c57066d945137ddbf3ef0c422c54e33de6ac275ed70804641af85ec249d6e5b",
+      "tile_sha256": "a5c8dee2cafaa63182f9f48314552b034ce13c631c81f68162d0a4bdbc5c2aa5",
+      "target_sha256": "f3957061cbec55ecc7c83e3321c5ff31adebcce2bc64a989754a50d0c8960da8"
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "replayed_existing_shape": false,
+      "correctness": "independent_f32_oracle_passed",
+      "max_abs_error": 1.1920928955078125e-07,
+      "execution_kind": "native_gpu",
+      "compiler_path": "rocm_gfx1151_native_descriptor",
+      "image_digest": "484bbb47617d99333741696406d2f77086391d4b0114211c13d700426a5c372f",
+      "schedule_sha256": "2cd96d2baf66be98eeb6c2fab7ae977dffba95a4e1b3d738dcab6991eafe1bce",
+      "tile_sha256": "7b74cb1a29710f0c693805e6def8b9c402c37e3b0eb290daf02f7cb4f73a5697",
+      "target_sha256": "0177d3fe20fe658d24ebf93a8b1d716e7f8925e97d7b02d0ba10b4aaad4053e8"
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "replayed_existing_shape": false,
+      "correctness": "independent_f32_oracle_passed",
+      "max_abs_error": 1.1920928955078125e-07,
+      "execution_kind": "native_gpu",
+      "compiler_path": "rocm_gfx1151_native_descriptor",
+      "image_digest": "484bbb47617d99333741696406d2f77086391d4b0114211c13d700426a5c372f",
+      "schedule_sha256": "8cff643318638cb1dd7bd63e2b7be40fbb99d4ccefdc13a18dcafded13238062",
+      "tile_sha256": "d1d2a681a28698431b1a0d7fd24ddf3ae6b4a80ee27e2702ef1658fb5af137d8",
+      "target_sha256": "0177d3fe20fe658d24ebf93a8b1d716e7f8925e97d7b02d0ba10b4aaad4053e8"
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "replayed_existing_shape": false,
+      "correctness": "independent_f32_oracle_passed",
+      "max_abs_error": 1.1920928955078125e-07,
+      "execution_kind": "native_gpu",
+      "compiler_path": "rocm_gfx1151_native_descriptor",
+      "image_digest": "484bbb47617d99333741696406d2f77086391d4b0114211c13d700426a5c372f",
+      "schedule_sha256": "70a6d763b45dfbcfc48e602c7d2f2743af5853279555e86d27b2b4700b0270b4",
+      "tile_sha256": "8f9103e4d1e6f210245f453faa66cf1de1bf4ad266ca9ef11aaab99435895ec3",
+      "target_sha256": "0177d3fe20fe658d24ebf93a8b1d716e7f8925e97d7b02d0ba10b4aaad4053e8"
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "replayed_existing_shape": true,
+      "correctness": "independent_f32_oracle_passed",
+      "max_abs_error": 1.1920928955078125e-07,
+      "execution_kind": "native_gpu",
+      "compiler_path": "rocm_gfx1151_native_descriptor",
+      "image_digest": "484bbb47617d99333741696406d2f77086391d4b0114211c13d700426a5c372f",
+      "schedule_sha256": "2cd96d2baf66be98eeb6c2fab7ae977dffba95a4e1b3d738dcab6991eafe1bce",
+      "tile_sha256": "7b74cb1a29710f0c693805e6def8b9c402c37e3b0eb290daf02f7cb4f73a5697",
+      "target_sha256": "0177d3fe20fe658d24ebf93a8b1d716e7f8925e97d7b02d0ba10b4aaad4053e8"
+    }
+  ],
+  "cross_architecture_switch_scope": "Host-free regression probes both architecture-switch directions; this packet executes only the actual gfx1151 device.",
+  "timing_claim": false
+}

@@ -151,9 +151,11 @@ def test_compile_result_apple_cpu_carries_capability_keys():
     assert "apple_gpu_archive" in d
 
 
-def test_compile_result_non_apple_target_omits_capability_keys():
+def test_compile_result_non_apple_target_omits_capability_keys(monkeypatch):
     """A NVIDIA / CPU compile result has no Apple-capability keys —
     otherwise dashboards would render Apple flags on irrelevant rows."""
+    # Pin the host-free FP32 capability row; the live gfx1201 has a different contract.
+    monkeypatch.setenv("TESSERA_ROCM_CHIP", "gfx1151")
     from tessera.compiler.canonical_compile import canonical_compile
     for target in ("cpu", "nvidia_sm90", "rocm"):
         result = canonical_compile(_tiny_matmul_module(), target=target)

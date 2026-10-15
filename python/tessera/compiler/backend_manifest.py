@@ -2849,6 +2849,12 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     # gemm shares matmul's WMMA symbol (same tessera_rocm_wmma_gemm_f16) — the same
     # numerical proof covers it.
     ("gemm", "rocm"): "tests/unit/test_rocm_wmma_runtime_symbol.py",
+    # Ordinary compiler-owned packages have exact-architecture numerical proof;
+    # they do not depend on the separate shipped WMMA runtime symbol.
+    ("matmul", "rocm_gfx1151"): "tests/unit/test_rocm_public_matmul.py",
+    ("matmul", "rocm_gfx1201"): "tests/unit/test_rocm_public_matmul.py",
+    ("gemm", "rocm_gfx1151"): "tests/unit/test_rocm_public_matmul.py",
+    ("gemm", "rocm_gfx1201"): "tests/unit/test_rocm_public_matmul.py",
     # rocm flash_attn — the shipped `tessera_rocm_wmma_flash_attn_{f16,bf16}`
     # C-ABI symbols (libtessera_rocm_flash_attn.so) are dlopened and the FA-2
     # forward (both QK^T and P@V on 16x16x16 WMMA, online softmax, causal +
@@ -7004,6 +7010,24 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # numerical-correctness test. Replaces the conformance matrix's
     # filename/content heuristic with first-class manifest data.
     entries = _overlay_structured_compute_entries(op_name, entries)
+    if op_name in {"matmul", "gemm"}:
+        for architecture in ("gfx1151", "gfx1201"):
+            target = "rocm_" + architecture
+            entries = [entry for entry in entries if entry.target != target]
+            entries.append(BackendKernelEntry(
+                target=target, status=_DEVICE_VERIFIED_JIT_STATUS,
+                dtypes=("fp16", "bf16", "fp8_e4m3", "fp8_e5m2")
+                       if architecture == "gfx1201" else ("fp16", "bf16"),
+                feature_flags=("native_schedule", "checked_descriptor", "wmma"),
+                notes="Ordinary generic/exact ROCm JIT -> native Graph/Schedule/Tile/Target/LLVM "
+                      "and checked package, with exact-device numerical, shape-replay, "
+                      "immutable-input and retained-output proof. FP8 pairs require gfx1201. "
+                      "No shipped WMMA library dependency or sibling physical proof transfer.",
+                execute_compare_fixture=_NUMERICAL_FIXTURES[(op_name, target)],
+                shape_envelope="unfused static compact row-major rank-two operands, f32 output; "
+                               "fp16/bf16 on both architectures, four OCP FP8 pairs only gfx1201; "
+                               "aligned and ragged M/N/K",
+            ))
     entries = _attach_shared_mma_selections(op_name, entries)
     if op_name in {"sqrt","exp","add","div","cumsum","cummax"}:
         for target in ("rocm_gfx1151","rocm_gfx1201"):

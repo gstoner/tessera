@@ -87,3 +87,26 @@ def test_ci_coverage_renders_without_committed_files(tmp_path):
     assert gd.check(doc) is None
     assert not doc.md_path.exists()
     assert not doc.csv_path.exists()
+
+
+def test_partial_standalone_dashboard_is_checked_and_repaired(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from tessera.compiler import standalone_dashboard
+
+    path = tmp_path / "standalone.md"
+    authored = ("Authored scope stays here.", "Authored middle stays here.", "Authored policy stays here.")
+    path.write_text(
+        authored[0] + "\n" + standalone_dashboard.REGISTRY_START + "\nstale registry\n"
+        + standalone_dashboard.REGISTRY_END + "\n" + authored[1] + "\n"
+        + standalone_dashboard.COMPILER_START + "\nstale compiler\n"
+        + standalone_dashboard.COMPILER_END + "\n" + authored[2] + "\n"
+    )
+    monkeypatch.setattr(standalone_dashboard, "DASHBOARD_PATH", path)
+    doc = replace(gd.get("standalone_dashboard"), md_path=path)
+    assert gd.check(doc) is not None
+    assert gd.write(doc) == [path]
+    rendered = path.read_text()
+    assert all(paragraph in rendered for paragraph in authored)
+    assert standalone_dashboard.render_registry_summary() in rendered
+    assert standalone_dashboard.render_compiler_summary() in rendered
+    assert gd.check(doc) is None

@@ -129,3 +129,55 @@ def test_compile_result_to_dict_round_trips_on_jit_fn():
     assert "gates" in d
     assert "executable" in d
     assert "first_failing_gate" in d
+
+
+@pytest.mark.parametrize("storage", ["fp16", "bf16"])
+@pytest.mark.parametrize("architectures", [("gfx1151", "gfx1201"), ("gfx1201", "gfx1151")])
+def test_generic_rocm_cache_tracks_resolved_architecture(monkeypatch, storage, architectures):
+    """Probe specialization selection before any native artifact or launch."""
+    import numpy as np
+    from tessera import runtime
+    from tessera.compiler import canonical_compile as canonical
+    from tessera.compiler.jit import _JIT_FALLBACK
+
+    dtype = np.float16 if storage == "fp16" else pytest.importorskip("ml_dtypes").bfloat16
+    public = tessera.from_text(
+        'def product(a, b):\n    return tessera.ops.matmul(a, b, output_dtype="fp32")\n',
+        target="rocm",
+    )
+    selected = {"arch": architectures[0]}
+    compiled = []
+
+    class DescriptorSelected(RuntimeError):
+        pass
+
+    class Compilation:
+        executable = True
+
+        def __init__(self, target):
+            self.target = target
+
+        @property
+        def launch_descriptor(self):
+            raise DescriptorSelected(self.target)
+
+    def compile_for_target(module, *, target, **kwargs):
+        compiled.append((target, module.to_mlir(target=target, canonical=True)))
+        return Compilation(target)
+
+    monkeypatch.setattr(runtime, "_rocm_live_arch", lambda: selected["arch"])
+    monkeypatch.setattr(canonical, "canonical_compile", compile_for_target)
+    args = (np.ones((3, 8), dtype), np.ones((8, 5), dtype))
+    for architecture in (*architectures, *architectures):
+        selected["arch"] = architecture
+        with pytest.raises(DescriptorSelected) as probe:
+            public._try_native_descriptor_call(args, {})
+        assert str(probe.value) == "rocm_" + architecture
+    assert [target for target, _ in compiled] == ["rocm_" + arch for arch in architectures]
+    # The semantic IR deliberately has no physical target annotation: both
+    # architectures need separate packages even when these bytes are identical.
+    assert compiled[0][1] == compiled[1][1]
+    assert len(public._native_descriptor_specializations) == 2
+    selected["arch"] = "gfx1100"
+    assert public._try_native_descriptor_call(args, {}) is _JIT_FALLBACK
+    assert len(compiled) == 2

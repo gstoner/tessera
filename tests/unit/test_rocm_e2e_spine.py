@@ -345,10 +345,7 @@ def _fake_compile(tile_ir: str, *, family: str = "softmax", architecture: str = 
     assert (family, architecture) == ("softmax", "gfx1151")
     # The shape-free Target IR module the image is compiled from: the one
     # directive, named by its kernel identity (FOUNDATION-BATCH-2-2026-09-27).
-    target = (
-        'module {\n  tessera_rocm.softmax {dtype = "f32", '
-        'name = "tessera_rocm_softmax_fake"}\n}\n'
-    )
+    target = 'module {\n  tessera_rocm.softmax {dtype = "f32", name = "tessera_rocm_softmax_fake"}\n}\n'
     libraries = (
         DeviceLibraryRecord("rocm.ocml", "1" * 64, "compiler_driver"),
         DeviceLibraryRecord("rocm.ockl", "2" * 64, "compiler_driver"),
@@ -622,6 +619,17 @@ def test_rocm_attention_backward_optimized_contract_replays_dropout() -> None:
     assert supports_attention_backward(_attention_backward_module(dropout_p=0.25))
 
 
+@pytest.fixture(autouse=True)
+def exact_gfx1151_tests_require_selected_device(request):
+    """An enable flag does not make a gfx1201 run exact gfx1151 evidence."""
+    if request.node.name.startswith("test_exact_gfx1151"):
+        from tessera import runtime as rt
+
+        live = rt._rocm_live_arch()
+        if live != "gfx1151":
+            pytest.skip(f"requires selected gfx1151; active architecture is {live or 'unavailable'}")
+
+
 @pytest.mark.skipif(
     os.environ.get("TESSERA_ROCM_E2E_DEVICE_TEST") != "1",
     reason="set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact gfx1151 host",
@@ -878,9 +886,7 @@ def test_driver_joins_exact_gfx1151_native_package(monkeypatch) -> None:
 @_needs_compiler
 def test_canonical_gfx1151_selector_defaults_to_native_descriptor(monkeypatch) -> None:
     monkeypatch.setattr("tessera.compiler.rocm_native._compile_shape_free_tile_ir", _fake_compile)
-    monkeypatch.setattr(
-        "tessera.compiler.rocm_native.native_packaging_available", lambda: True
-    )
+    monkeypatch.setattr("tessera.compiler.rocm_native.native_packaging_available", lambda: True)
     module = _softmax_module()
     assert supports_native_package(module)
     assert native_package_kind(module) == "softmax"
@@ -895,15 +901,11 @@ def test_canonical_gfx1151_selector_defaults_to_native_descriptor(monkeypatch) -
     assert result.bundle.execution_kind == "native_gpu"
     assert result.native_image is not None
     assert result.launch_descriptor is not None
-    assert result.to_runtime_artifact().metadata["compiler_path"] == (
-        "rocm_gfx1151_native_descriptor"
-    )
+    assert result.to_runtime_artifact().metadata["compiler_path"] == ("rocm_gfx1151_native_descriptor")
 
 
 def test_canonical_gfx1151_selector_preserves_explicit_opt_out(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "tessera.compiler.rocm_native.native_packaging_available", lambda: True
-    )
+    monkeypatch.setattr("tessera.compiler.rocm_native.native_packaging_available", lambda: True)
     result = canonical_compile(
         _softmax_module(),
         target="rocm_gfx1151",
@@ -1125,19 +1127,29 @@ def test_rocm_moe_dispatch_rejects_schedule_and_tile_drift() -> None:
         replace(artifact, tile_ir=artifact.tile_ir + "\n").validate()
 
 
-@pytest.mark.parametrize(("family", "first", "second", "package_fn"), [
-    ("paged_kv", _paged_kv_module(start=3, end=10),
-     _paged_kv_module(start=4, end=8), package_paged_kv_read),
-    ("moe_dispatch", _moe_dispatch_module(tokens=7, slots=9, hidden=13),
-     _moe_dispatch_module(tokens=11, slots=5, hidden=17), package_moe_dispatch),
-])
+@pytest.mark.parametrize(
+    ("family", "first", "second", "package_fn"),
+    [
+        ("paged_kv", _paged_kv_module(start=3, end=10), _paged_kv_module(start=4, end=8), package_paged_kv_read),
+        (
+            "moe_dispatch",
+            _moe_dispatch_module(tokens=7, slots=9, hidden=13),
+            _moe_dispatch_module(tokens=11, slots=5, hidden=17),
+            package_moe_dispatch,
+        ),
+    ],
+)
 def test_gfx1151_direct_kernel_cache_reuses_image_across_shapes(
-    family, first, second, package_fn,
+    family,
+    first,
+    second,
+    package_fn,
 ) -> None:
     """Both native Tile producers take runtime extents and shape-free images.
     The distinct descriptor guards must still reflect each caller's shape.
     """
     from tessera.compiler import rocm_native
+
     if not rocm_native.native_packaging_available():
         pytest.skip("requires the executable ROCm compiler backend and AMD device libraries")
     rocm_native._cache.clear()

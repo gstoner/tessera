@@ -22,6 +22,8 @@ the canonical machine-readable artifact and the *only* thing the drift
 gate byte-compares; the Markdown is regenerated beside it but not
 byte-gated (cosmetic Markdown churn never reds CI).  Markdown-only docs
 are byte-gated on the Markdown until they grow a CSV.
+Marker-aware renderers also cover generated sections of authored dashboards;
+the renderer preserves prose outside its explicit generated blocks.
 
 One CLI drives the fleet::
 
@@ -162,6 +164,12 @@ def _r_conformance_csv() -> str:
 def _r_e2e() -> str:
     from . import e2e_coverage
     return e2e_coverage.render_markdown()
+
+
+def _r_standalone_dashboard() -> str:
+    from . import standalone_dashboard
+    # Refresh only marked blocks; authored scope/policy remains editable.
+    return standalone_dashboard.render_document()
 
 
 def _r_s_series() -> str:
@@ -605,6 +613,10 @@ REGISTRY: tuple[GeneratedDoc, ...] = (
     ),
     GeneratedDoc(
         "s_series_status", "op_coverage", _GEN / "s_series_status.md", _r_s_series,
+    ),
+    GeneratedDoc(
+        "standalone_dashboard", "op_coverage",
+        _AUDIT / "standalone_primitive_coverage.md", _r_standalone_dashboard,
     ),
     GeneratedDoc(
         "s_series_accelerator_proof", "op_coverage",

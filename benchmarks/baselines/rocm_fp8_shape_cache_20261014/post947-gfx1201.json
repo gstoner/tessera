@@ -1,0 +1,2945 @@
+{
+  "schema": "tessera.rocm.fp8_shape_cache.v1",
+  "status": "source_pinned_characterization",
+  "architecture": "gfx1201",
+  "compiler_configuration": {
+    "TESSERA_BUILD_NVIDIA_BACKEND": true,
+    "TESSERA_BUILD_ROCM_BACKEND": true,
+    "TESSERA_BUILD_X86_BACKEND": true,
+    "TESSERA_BUILD_EBM_BACKEND": true,
+    "TESSERA_BUILD_CLIFFORD_BACKEND": true
+  },
+  "gpu_report": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD Ryzen 7 9800X3D 8-Core Processor\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            16                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    30801556(0x1d5fe94) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    30801556(0x1d5fe94) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    30801556(0x1d5fe94) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    30801556(0x1d5fe94) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1201                            \n  Uuid:                    GPU-28d9e7efbf2ef716               \n  Marketing Name:          AMD Radeon RX 9070 XT              \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L3:                      65536(0x10000) KB                  \n  Chip ID:                 30032(0x7550)                      \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2400                               \n  BDFID:                   768                                \n  Internal Node ID:        1                                  \n  Compute Unit:            64                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          4                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 358                                \n  SDMA engine uCode::      0                                  \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    16577056(0xfcf220) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1201         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx12-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "source_revision": "94caaf2ddbb61f547609e4925c084fe16790f25e",
+  "source_sha256": {
+    "python/tessera/compiler/rocm_native.py": "32e93f2b4b9ff3e199ba8c6470b7020e2589503a5adb0b5cddc01a6638713119",
+    "python/tessera/runtime.py": "48a616361135b71fde0669a17dc1ca5bf187cbaf3643c9e6b4f195f25883e4fd",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "948acad8d329b18ecacfdf351eaf99d4d658776ccd710ef5ee7ad281a4f12fb7",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "9754db9854521001c05087989690e942d37ff30848d0eb3638762af75df78f55",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "67e919deb0b5c24bf82f55d4cf5b415db781d0401bf30731bfafad9f1a5584ce",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/TesseraROCMOps.cpp": "8801ba7f1d3bb88c40cb24cc1e116bec7cf1403180bcabf8aba405573916ee5d",
+    "benchmarks/rocm/benchmark_rocm_fp8_shape_cache.py": "b674ea6415d0b3986e38992797ca7b42e3dac2b4f6b91b2f4f7549036e329f6c"
+  },
+  "binary_sha256": {
+    "TESSERA_OPT": "f627c89aaa346878ac72d2ba22b3e957f2c03f1fb51cce8d81e8a10d444fa0de",
+    "TESSERA_ROCM_OPT": "41810538e9e130ce28789b70052ebdc1d47520f0fbf556baf65a53652f50a5d7",
+    "TESSERA_ROCM_NATIVE_IMAGE_LIB": "d0b0a6eac32e58d812b9c78ac3c972c82a03cc75976b2673652b26d68fed5045"
+  },
+  "method": {
+    "event": "resident HIP-event batches; CPU enqueue gaps possible",
+    "samples": 5,
+    "repetitions": 100,
+    "wall": "completed rt.launch; uploads/readback included",
+    "host_repetitions": 10,
+    "warmup": 10,
+    "package": "first package wall per shape, new shapes must reuse the physical image",
+    "public_jit": "completed frontend call; first call follows same-case image priming, not a cold compiler process; warm calls separate, default register recipe only",
+    "performance_comparison_claim": false
+  },
+  "rows": [
+    {
+      "public_jit_first_call_ms": 203.70240599731915,
+      "public_jit_completed_samples_ms": [
+        0.9498379004071467,
+        0.8433240996964741,
+        0.8536453999113292,
+        0.8487808001518715,
+        0.8600026994827203
+      ],
+      "public_jit_completed_median_ms": 0.8536453999113292,
+      "public_jit_execution_kind": "native_gpu",
+      "public_jit_image_digest": "9b055fed6da159b6a1683f0f7d7c020839f3651a7f4061900a991b87cf6ef9c4",
+      "public_jit_compiler_path": "rocm_gfx1201_native_descriptor",
+      "staging": "register",
+      "k_unroll": 1,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 338.95186600420857,
+      "compile_state": "cold",
+      "image_digest": "18ae3f54e4d1c990c395b251c5fb5c44da566605aa95af6cdb203523e340d4ed",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "6a1d8d5c762cabefe53579c2d0305d11979d2330e581daa256156f0ae08fab1e",
+      "hsaco_sha256": "f89c3a0d8cb2d82dff32a0f24e904a3983c8b0abac7d4fcb1250ac78e2b65265",
+      "device_event_samples_ms": [
+        0.0039034301042556764,
+        0.0037462401390075686,
+        0.0035604399442672728,
+        0.003687930107116699,
+        0.0037816300988197326
+      ],
+      "device_event_median_ms": 0.0037462401390075686,
+      "completed_launch_wall_samples_ms": [
+        3.8925033004488796,
+        0.5935206994763575,
+        0.5972651997581124,
+        0.590014999761479,
+        0.5900520998693537
+      ],
+      "completed_launch_wall_median_ms": 0.5935206994763575,
+      "max_abs_error": 0.0
+    },
+    {
+      "public_jit_first_call_ms": 97.96982099942397,
+      "public_jit_completed_samples_ms": [
+        0.9579076002410147,
+        1.185663099749945,
+        0.9874012001091614,
+        0.8419804995355662,
+        0.8267900004284456
+      ],
+      "public_jit_completed_median_ms": 0.9579076002410147,
+      "public_jit_execution_kind": "native_gpu",
+      "public_jit_image_digest": "9b055fed6da159b6a1683f0f7d7c020839f3651a7f4061900a991b87cf6ef9c4",
+      "public_jit_compiler_path": "rocm_gfx1201_native_descriptor",
+      "staging": "register",
+      "k_unroll": 1,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 48.23636100627482,
+      "compile_state": "warm_cache",
+      "image_digest": "18ae3f54e4d1c990c395b251c5fb5c44da566605aa95af6cdb203523e340d4ed",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "448dcd280b6002d94b281721a65aa35fe441ad2a177d02bef5d34c4649130e1b",
+      "hsaco_sha256": "f89c3a0d8cb2d82dff32a0f24e904a3983c8b0abac7d4fcb1250ac78e2b65265",
+      "device_event_samples_ms": [
+        0.009402160048484803,
+        0.009295759797096253,
+        0.009461060166358948,
+        0.009662249684333801,
+        0.009398459792137145
+      ],
+      "device_event_median_ms": 0.009402160048484803,
+      "completed_launch_wall_samples_ms": [
+        0.6400926999049261,
+        0.648090300092008,
+        0.6357466998451855,
+        0.647186599962879,
+        0.6618551000428852
+      ],
+      "completed_launch_wall_median_ms": 0.647186599962879,
+      "max_abs_error": 0.0
+    },
+    {
+      "public_jit_first_call_ms": 92.19955500157084,
+      "public_jit_completed_samples_ms": [
+        0.8749548003834207,
+        0.8692687995790038,
+        0.817652099794941,
+        0.8450745001027826,
+        0.8302989001094829
+      ],
+      "public_jit_completed_median_ms": 0.8450745001027826,
+      "public_jit_execution_kind": "native_gpu",
+      "public_jit_image_digest": "9b055fed6da159b6a1683f0f7d7c020839f3651a7f4061900a991b87cf6ef9c4",
+      "public_jit_compiler_path": "rocm_gfx1201_native_descriptor",
+      "staging": "register",
+      "k_unroll": 1,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 47.62464700615965,
+      "compile_state": "warm_cache",
+      "image_digest": "18ae3f54e4d1c990c395b251c5fb5c44da566605aa95af6cdb203523e340d4ed",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "46f26f806e411ad02ce5dc5502616c550724a25d3d433db6ad7e8cda6b62431d",
+      "hsaco_sha256": "f89c3a0d8cb2d82dff32a0f24e904a3983c8b0abac7d4fcb1250ac78e2b65265",
+      "device_event_samples_ms": [
+        0.008508149981498719,
+        0.008292440176010132,
+        0.008365049958229065,
+        0.008359450101852416,
+        0.008370350003242493
+      ],
+      "device_event_median_ms": 0.008365049958229065,
+      "completed_launch_wall_samples_ms": [
+        0.6775306996132713,
+        0.6445525003073271,
+        0.6283226997766178,
+        0.6285721996391658,
+        0.6246425000426825
+      ],
+      "completed_launch_wall_median_ms": 0.6285721996391658,
+      "max_abs_error": 0.0
+    },
+    {
+      "public_jit_first_call_ms": 191.13213399396045,
+      "public_jit_completed_samples_ms": [
+        1.000961899990216,
+        1.1108881997643039,
+        0.9708786994451657,
+        0.9006690997921396,
+        0.9020407000207342
+      ],
+      "public_jit_completed_median_ms": 0.9708786994451657,
+      "public_jit_execution_kind": "native_gpu",
+      "public_jit_image_digest": "d05d86075aef1d22a790cacbc0fb21deef0e04754d8638280384f1d4d83513ce",
+      "public_jit_compiler_path": "rocm_gfx1201_native_descriptor",
+      "staging": "register",
+      "k_unroll": 1,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 138.4545490000164,
+      "compile_state": "cold",
+      "image_digest": "1e4f8c342b4fc466d42e439ef1ee2cdb008a48ed32ebe62042280149a271ce16",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "0e129074fb087a8ab4e62061515114ebfc4b28b08a813c782457d02b95430311",
+      "hsaco_sha256": "e2c09561c903ac36ca2e72530011ca7792e25646248ecde77b42b478df7c87ec",
+      "device_event_samples_ms": [
+        0.006229249835014343,
+        0.006341949701309204,
+        0.0063021498918533325,
+        0.006279450058937073,
+        0.006563149690628052
+      ],
+      "device_event_median_ms": 0.0063021498918533325,
+      "completed_launch_wall_samples_ms": [
+        0.673726399691077,
+        0.8198825998988468,
+        0.863550600479357,
+        0.8484783000312746,
+        0.8008771001186687
+      ],
+      "completed_launch_wall_median_ms": 0.8198825998988468,
+      "max_abs_error": 0.0
+    },
+    {
+      "public_jit_first_call_ms": 94.52681700349785,
+      "public_jit_completed_samples_ms": [
+        1.1371303000487387,
+        1.1560271996131632,
+        1.112694699986605,
+        1.055459800409153,
+        0.9429685000213794
+      ],
+      "public_jit_completed_median_ms": 1.112694699986605,
+      "public_jit_execution_kind": "native_gpu",
+      "public_jit_image_digest": "d05d86075aef1d22a790cacbc0fb21deef0e04754d8638280384f1d4d83513ce",
+      "public_jit_compiler_path": "rocm_gfx1201_native_descriptor",
+      "staging": "register",
+      "k_unroll": 1,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 46.78470900398679,
+      "compile_state": "warm_cache",
+      "image_digest": "1e4f8c342b4fc466d42e439ef1ee2cdb008a48ed32ebe62042280149a271ce16",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "41802846afb3b1d46e1e61aaef6c6d392ec03187ed3f441a6622c69b166d682b",
+      "hsaco_sha256": "e2c09561c903ac36ca2e72530011ca7792e25646248ecde77b42b478df7c87ec",
+      "device_event_samples_ms": [
+        0.00934664011001587,
+        0.009347839951515198,
+        0.009333540201187134,
+        0.009242240190505981,
+        0.009456629753112794
+      ],
+      "device_event_median_ms": 0.00934664011001587,
+      "completed_launch_wall_samples_ms": [
+        0.7126511998649221,
+        0.6769446001271717,
+        0.7098287998815067,
+        0.6673638003121596,
+        0.6733857000654098
+      ],
+      "completed_launch_wall_median_ms": 0.6769446001271717,
+      "max_abs_error": 0.0
+    },
+    {
+      "public_jit_first_call_ms": 101.93001599691343,
+      "public_jit_completed_samples_ms": [
+        0.9053332003531978,
+        1.1358178002410568,
+        1.1170832003699616,
+        0.8421559003181756,
+        0.8743286001845263
+      ],
+      "public_jit_completed_median_ms": 0.9053332003531978,
+      "public_jit_execution_kind": "native_gpu",
+      "public_jit_image_digest": "d05d86075aef1d22a790cacbc0fb21deef0e04754d8638280384f1d4d83513ce",
+      "public_jit_compiler_path": "rocm_gfx1201_native_descriptor",
+      "staging": "register",
+      "k_unroll": 1,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 46.94187499990221,
+      "compile_state": "warm_cache",
+      "image_digest": "1e4f8c342b4fc466d42e439ef1ee2cdb008a48ed32ebe62042280149a271ce16",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "bb2669bc6284058b79671aa42e61c2a95931e7b6f787d0d0bef0d7871e1d6057",
+      "hsaco_sha256": "e2c09561c903ac36ca2e72530011ca7792e25646248ecde77b42b478df7c87ec",
+      "device_event_samples_ms": [
+        0.00844954013824463,
+        0.008368139863014221,
+        0.008459640145301818,
+        0.008650839924812317,
+        0.00841854989528656
+      ],
+      "device_event_median_ms": 0.00844954013824463,
+      "completed_launch_wall_samples_ms": [
+        0.618160000158241,
+        0.6725278995872941,
+        0.6403182000212837,
+        0.6490521001978777,
+        0.6286975003604311
+      ],
+      "completed_launch_wall_median_ms": 0.6403182000212837,
+      "max_abs_error": 0.0
+    },
+    {
+      "public_jit_first_call_ms": 189.21612499980256,
+      "public_jit_completed_samples_ms": [
+        0.896745399950305,
+        0.848402099654777,
+        0.8537945999705698,
+        0.8431968999502715,
+        0.8464392994937953
+      ],
+      "public_jit_completed_median_ms": 0.848402099654777,
+      "public_jit_execution_kind": "native_gpu",
+      "public_jit_image_digest": "9c3584693742d47a8112fb9dd985120d82e687d765a55b3ee42cd83857a2586f",
+      "public_jit_compiler_path": "rocm_gfx1201_native_descriptor",
+      "staging": "register",
+      "k_unroll": 1,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 139.21075399412075,
+      "compile_state": "cold",
+      "image_digest": "44e9f3ae92288c98b2c4eaaf6ca12c6d9551dafba14486a1a41d84bf85d531d9",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "5ca807c76c7e29eaa1136ff9e799e8d4edf91248b32b924e03d5d04ac01b73f9",
+      "hsaco_sha256": "f75709c078813254433412a786716cc323572c0488436b8760eaa1d1f83c5693",
+      "device_event_samples_ms": [
+        0.006291059851646423,
+        0.0062125599384307865,
+        0.0062366598844528194,
+        0.0063107597827911375,
+        0.00628305971622467
+      ],
+      "device_event_median_ms": 0.00628305971622467,
+      "completed_launch_wall_samples_ms": [
+        0.6392521005182061,
+        0.8299462002469227,
+        0.858629000140354,
+        0.969614499626914,
+        0.8665534995088819
+      ],
+      "completed_launch_wall_median_ms": 0.858629000140354,
+      "max_abs_error": 0.0
+    },
+    {
+      "public_jit_first_call_ms": 92.91533999930834,
+      "public_jit_completed_samples_ms": [
+        0.8871205005561933,
+        0.8521664996806066,
+        0.8463409998512361,
+        0.8478069001284894,
+        0.8505051999236457
+      ],
+      "public_jit_completed_median_ms": 0.8505051999236457,
+      "public_jit_execution_kind": "native_gpu",
+      "public_jit_image_digest": "9c3584693742d47a8112fb9dd985120d82e687d765a55b3ee42cd83857a2586f",
+      "public_jit_compiler_path": "rocm_gfx1201_native_descriptor",
+      "staging": "register",
+      "k_unroll": 1,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 49.6726320052403,
+      "compile_state": "warm_cache",
+      "image_digest": "44e9f3ae92288c98b2c4eaaf6ca12c6d9551dafba14486a1a41d84bf85d531d9",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "22f749a4575c87a0b709b8cebb14f8e7b19e0f4f64b3b8708bab1ddb7a54ecf4",
+      "hsaco_sha256": "f75709c078813254433412a786716cc323572c0488436b8760eaa1d1f83c5693",
+      "device_event_samples_ms": [
+        0.0060939699411392215,
+        0.006396170258522033,
+        0.006176159977912903,
+        0.006082760095596313,
+        0.006078959703445435
+      ],
+      "device_event_median_ms": 0.0060939699411392215,
+      "completed_launch_wall_samples_ms": [
+        0.6304998998530209,
+        0.6077136000385508,
+        0.6195426001795568,
+        0.6012379002640955,
+        0.6032178003806621
+      ],
+      "completed_launch_wall_median_ms": 0.6077136000385508,
+      "max_abs_error": 0.0
+    },
+    {
+      "public_jit_first_call_ms": 93.51304700248875,
+      "public_jit_completed_samples_ms": [
+        0.868341900059022,
+        0.866042599955108,
+        0.8553766994737089,
+        0.8627470000647008,
+        0.850187600008212
+      ],
+      "public_jit_completed_median_ms": 0.8627470000647008,
+      "public_jit_execution_kind": "native_gpu",
+      "public_jit_image_digest": "9c3584693742d47a8112fb9dd985120d82e687d765a55b3ee42cd83857a2586f",
+      "public_jit_compiler_path": "rocm_gfx1201_native_descriptor",
+      "staging": "register",
+      "k_unroll": 1,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 48.31791899778182,
+      "compile_state": "warm_cache",
+      "image_digest": "44e9f3ae92288c98b2c4eaaf6ca12c6d9551dafba14486a1a41d84bf85d531d9",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "0f57206670bf66fada6dfc1ba7d8f578ab8302734adf4aa00296ed12f07c2dfe",
+      "hsaco_sha256": "f75709c078813254433412a786716cc323572c0488436b8760eaa1d1f83c5693",
+      "device_event_samples_ms": [
+        0.008337749838829041,
+        0.008328350186347961,
+        0.008328239917755127,
+        0.008378139734268188,
+        0.008333849906921386
+      ],
+      "device_event_median_ms": 0.008333849906921386,
+      "completed_launch_wall_samples_ms": [
+        0.6325659996946342,
+        0.6403491999662947,
+        0.6452417001128197,
+        0.6694670999422669,
+        0.6694280004012398
+      ],
+      "completed_launch_wall_median_ms": 0.6452417001128197,
+      "max_abs_error": 0.0
+    },
+    {
+      "public_jit_first_call_ms": 189.59010700200452,
+      "public_jit_completed_samples_ms": [
+        0.9100092000153381,
+        0.8552344006602652,
+        0.8687809000548441,
+        0.8347144001163542,
+        0.8988584995677229
+      ],
+      "public_jit_completed_median_ms": 0.8687809000548441,
+      "public_jit_execution_kind": "native_gpu",
+      "public_jit_image_digest": "a52ad7e5417984c543cab7fa674abcdf58fc0bccb3be7d094351b1b4b692a396",
+      "public_jit_compiler_path": "rocm_gfx1201_native_descriptor",
+      "staging": "register",
+      "k_unroll": 1,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 139.05501100089168,
+      "compile_state": "cold",
+      "image_digest": "e01ba3c49b48fec8af6a87e8a0678323641a952dd395ba207fff7758d2ebf641",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "2e2f34392afbd5c08a2515cb6d4c260f75bf68ef3d3a96cbfd7363c510b9a4f0",
+      "hsaco_sha256": "574d89b6298b1566b85d3dcd27e564003afc012e48718e314a3365ea06f31df8",
+      "device_event_samples_ms": [
+        0.004203679859638214,
+        0.0042661699652671815,
+        0.00427166998386383,
+        0.004378870129585266,
+        0.004737269878387451
+      ],
+      "device_event_median_ms": 0.00427166998386383,
+      "completed_launch_wall_samples_ms": [
+        0.6063358996470924,
+        0.6109067006036639,
+        0.6116813005064614,
+        0.620716000412358,
+        0.6049320996680763
+      ],
+      "completed_launch_wall_median_ms": 0.6109067006036639,
+      "max_abs_error": 0.0
+    },
+    {
+      "public_jit_first_call_ms": 95.53489099926082,
+      "public_jit_completed_samples_ms": [
+        0.8880114000930917,
+        0.8487496997986455,
+        0.853216399991652,
+        0.844572699861601,
+        0.8460062999802176
+      ],
+      "public_jit_completed_median_ms": 0.8487496997986455,
+      "public_jit_execution_kind": "native_gpu",
+      "public_jit_image_digest": "a52ad7e5417984c543cab7fa674abcdf58fc0bccb3be7d094351b1b4b692a396",
+      "public_jit_compiler_path": "rocm_gfx1201_native_descriptor",
+      "staging": "register",
+      "k_unroll": 1,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 49.936627998249605,
+      "compile_state": "warm_cache",
+      "image_digest": "e01ba3c49b48fec8af6a87e8a0678323641a952dd395ba207fff7758d2ebf641",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "9ffe61b97ce6e33d3c91f142182ab4cfe4cf4411a39132613db8c5e71b9b7cb7",
+      "hsaco_sha256": "574d89b6298b1566b85d3dcd27e564003afc012e48718e314a3365ea06f31df8",
+      "device_event_samples_ms": [
+        0.009249140024185181,
+        0.009217039942741393,
+        0.009201040267944336,
+        0.009550840258598328,
+        0.009291139841079711
+      ],
+      "device_event_median_ms": 0.009249140024185181,
+      "completed_launch_wall_samples_ms": [
+        0.6365166998875793,
+        0.6452537003497127,
+        0.6462859004386701,
+        0.6537753004522528,
+        0.636645000486169
+      ],
+      "completed_launch_wall_median_ms": 0.6452537003497127,
+      "max_abs_error": 0.0
+    },
+    {
+      "public_jit_first_call_ms": 94.90138499677414,
+      "public_jit_completed_samples_ms": [
+        0.8730011999432463,
+        0.8682446998136584,
+        0.847279899608111,
+        0.8813207998173311,
+        0.8982062005088665
+      ],
+      "public_jit_completed_median_ms": 0.8730011999432463,
+      "public_jit_execution_kind": "native_gpu",
+      "public_jit_image_digest": "a52ad7e5417984c543cab7fa674abcdf58fc0bccb3be7d094351b1b4b692a396",
+      "public_jit_compiler_path": "rocm_gfx1201_native_descriptor",
+      "staging": "register",
+      "k_unroll": 1,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 46.95874900062336,
+      "compile_state": "warm_cache",
+      "image_digest": "e01ba3c49b48fec8af6a87e8a0678323641a952dd395ba207fff7758d2ebf641",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "9bb311f72b89cc460f961be2754c9ea0a2e3bb63e60d341eeb3513b82582cf34",
+      "hsaco_sha256": "574d89b6298b1566b85d3dcd27e564003afc012e48718e314a3365ea06f31df8",
+      "device_event_samples_ms": [
+        0.005627170205116272,
+        0.005401970148086548,
+        0.005597270131111145,
+        0.005768070220947266,
+        0.005653970241546631
+      ],
+      "device_event_median_ms": 0.005627170205116272,
+      "completed_launch_wall_samples_ms": [
+        0.6154136004624888,
+        0.6075801997212693,
+        0.5838910998136271,
+        0.6108866997237783,
+        0.604117499460699
+      ],
+      "completed_launch_wall_median_ms": 0.6075801997212693,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 2,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 132.80375599424588,
+      "compile_state": "cold",
+      "image_digest": "9c8060ef2d0bcf1b9be82cdcc032899abc66c5f4bb6fe6aa7ba867d5532e5233",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "6a1d8d5c762cabefe53579c2d0305d11979d2330e581daa256156f0ae08fab1e",
+      "hsaco_sha256": "9f1f1cc96e7e486078a181a8997ba948db7f50dba6dddcd6bb57fe079c711f55",
+      "device_event_samples_ms": [
+        0.006564459800720215,
+        0.006574649810791016,
+        0.006569259762763977,
+        0.006563259959220886,
+        0.006594359874725342
+      ],
+      "device_event_median_ms": 0.006569259762763977,
+      "completed_launch_wall_samples_ms": [
+        0.6725200000801124,
+        0.6376710000040475,
+        0.6529227997816633,
+        0.6908536997798365,
+        0.9006252003018744
+      ],
+      "completed_launch_wall_median_ms": 0.6725200000801124,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 2,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 33.48522399755893,
+      "compile_state": "warm_cache",
+      "image_digest": "9c8060ef2d0bcf1b9be82cdcc032899abc66c5f4bb6fe6aa7ba867d5532e5233",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "448dcd280b6002d94b281721a65aa35fe441ad2a177d02bef5d34c4649130e1b",
+      "hsaco_sha256": "9f1f1cc96e7e486078a181a8997ba948db7f50dba6dddcd6bb57fe079c711f55",
+      "device_event_samples_ms": [
+        0.009067749977111817,
+        0.00904774010181427,
+        0.009350150227546691,
+        0.009051839709281922,
+        0.009367340207099915
+      ],
+      "device_event_median_ms": 0.009067749977111817,
+      "completed_launch_wall_samples_ms": [
+        0.689032199443318,
+        0.6434552997234277,
+        0.6383202002325561,
+        0.6460383003286552,
+        0.6569757002580445
+      ],
+      "completed_launch_wall_median_ms": 0.6460383003286552,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 2,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 31.247061997419223,
+      "compile_state": "warm_cache",
+      "image_digest": "9c8060ef2d0bcf1b9be82cdcc032899abc66c5f4bb6fe6aa7ba867d5532e5233",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "46f26f806e411ad02ce5dc5502616c550724a25d3d433db6ad7e8cda6b62431d",
+      "hsaco_sha256": "9f1f1cc96e7e486078a181a8997ba948db7f50dba6dddcd6bb57fe079c711f55",
+      "device_event_samples_ms": [
+        0.009052940011024475,
+        0.008682439923286439,
+        0.008693550229072571,
+        0.008688240051269532,
+        0.00874534010887146
+      ],
+      "device_event_median_ms": 0.008693550229072571,
+      "completed_launch_wall_samples_ms": [
+        0.656391500524478,
+        0.6279931003518868,
+        0.616087800153764,
+        0.615153100079624,
+        0.6503999000415206
+      ],
+      "completed_launch_wall_median_ms": 0.6279931003518868,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 2,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 132.72429099743022,
+      "compile_state": "cold",
+      "image_digest": "47a9cfe8bc12705d1ae2b8347bd994cbbb08f2e9bc965ce949a49ccd1acd3238",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "0e129074fb087a8ab4e62061515114ebfc4b28b08a813c782457d02b95430311",
+      "hsaco_sha256": "c1d6ef3a4d0088f07d7fcd267f5a7642d5a3a8c12772556df5c2ef134d537a25",
+      "device_event_samples_ms": [
+        0.006746959686279297,
+        0.0071032500267028805,
+        0.00664605975151062,
+        0.007298060059547425,
+        0.0066922599077224735
+      ],
+      "device_event_median_ms": 0.006746959686279297,
+      "completed_launch_wall_samples_ms": [
+        0.6566504998772871,
+        0.6209093000506982,
+        0.6390926995663904,
+        0.6467327002610546,
+        0.6344977002299856
+      ],
+      "completed_launch_wall_median_ms": 0.6390926995663904,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 2,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 32.66662699752487,
+      "compile_state": "warm_cache",
+      "image_digest": "47a9cfe8bc12705d1ae2b8347bd994cbbb08f2e9bc965ce949a49ccd1acd3238",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "41802846afb3b1d46e1e61aaef6c6d392ec03187ed3f441a6622c69b166d682b",
+      "hsaco_sha256": "c1d6ef3a4d0088f07d7fcd267f5a7642d5a3a8c12772556df5c2ef134d537a25",
+      "device_event_samples_ms": [
+        0.005988759994506836,
+        0.00587116003036499,
+        0.005864959955215454,
+        0.006831859946250915,
+        0.005868160128593445
+      ],
+      "device_event_median_ms": 0.00587116003036499,
+      "completed_launch_wall_samples_ms": [
+        0.6284274997597095,
+        0.618393300101161,
+        0.6157603005704004,
+        0.5966559998341836,
+        0.6015646002197172
+      ],
+      "completed_launch_wall_median_ms": 0.6157603005704004,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 2,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 32.82929999841144,
+      "compile_state": "warm_cache",
+      "image_digest": "47a9cfe8bc12705d1ae2b8347bd994cbbb08f2e9bc965ce949a49ccd1acd3238",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "bb2669bc6284058b79671aa42e61c2a95931e7b6f787d0d0bef0d7871e1d6057",
+      "hsaco_sha256": "c1d6ef3a4d0088f07d7fcd267f5a7642d5a3a8c12772556df5c2ef134d537a25",
+      "device_event_samples_ms": [
+        0.008694260120391846,
+        0.008739550113677979,
+        0.008677859902381896,
+        0.00867475986480713,
+        0.008775650262832642
+      ],
+      "device_event_median_ms": 0.008694260120391846,
+      "completed_launch_wall_samples_ms": [
+        0.6819829002779443,
+        0.6566819996805862,
+        0.6301082001300529,
+        0.6112233000749256,
+        0.6713397997373249
+      ],
+      "completed_launch_wall_median_ms": 0.6566819996805862,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 2,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 129.9441820010543,
+      "compile_state": "cold",
+      "image_digest": "7c57f8e3cf8c476f67f69b648399693c82df58c2e522407797335dd92716ea5e",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "5ca807c76c7e29eaa1136ff9e799e8d4edf91248b32b924e03d5d04ac01b73f9",
+      "hsaco_sha256": "dab3fae00a3da3d79283207bfe22e865bf823c8b60f75cddb71011706dc3402c",
+      "device_event_samples_ms": [
+        0.006621149778366089,
+        0.0065947496891021725,
+        0.007197239995002746,
+        0.006856849789619446,
+        0.006659950017929077
+      ],
+      "device_event_median_ms": 0.006659950017929077,
+      "completed_launch_wall_samples_ms": [
+        0.6526972996653058,
+        0.656214799528243,
+        0.6361929998092819,
+        0.6230685001355596,
+        0.6397920995368622
+      ],
+      "completed_launch_wall_median_ms": 0.6397920995368622,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 2,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 33.199101002537645,
+      "compile_state": "warm_cache",
+      "image_digest": "7c57f8e3cf8c476f67f69b648399693c82df58c2e522407797335dd92716ea5e",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "22f749a4575c87a0b709b8cebb14f8e7b19e0f4f64b3b8708bab1ddb7a54ecf4",
+      "hsaco_sha256": "dab3fae00a3da3d79283207bfe22e865bf823c8b60f75cddb71011706dc3402c",
+      "device_event_samples_ms": [
+        0.009232239723205566,
+        0.009063230156898498,
+        0.009178839921951294,
+        0.009165840148925781,
+        0.00923753023147583
+      ],
+      "device_event_median_ms": 0.009178839921951294,
+      "completed_launch_wall_samples_ms": [
+        0.6747067993273959,
+        0.664639499882469,
+        0.645082499977434,
+        0.6729247004841454,
+        0.6599585001822561
+      ],
+      "completed_launch_wall_median_ms": 0.664639499882469,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 2,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 31.28601900243666,
+      "compile_state": "warm_cache",
+      "image_digest": "7c57f8e3cf8c476f67f69b648399693c82df58c2e522407797335dd92716ea5e",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "0f57206670bf66fada6dfc1ba7d8f578ab8302734adf4aa00296ed12f07c2dfe",
+      "hsaco_sha256": "dab3fae00a3da3d79283207bfe22e865bf823c8b60f75cddb71011706dc3402c",
+      "device_event_samples_ms": [
+        0.008631250262260437,
+        0.008384349942207336,
+        0.008532350063323974,
+        0.008525450229644776,
+        0.008662949800491333
+      ],
+      "device_event_median_ms": 0.008532350063323974,
+      "completed_launch_wall_samples_ms": [
+        0.6479139003204182,
+        0.6543160001456272,
+        0.6513546999485698,
+        0.6375678000040352,
+        0.663988300220808
+      ],
+      "completed_launch_wall_median_ms": 0.6513546999485698,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 2,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 133.33362500270596,
+      "compile_state": "cold",
+      "image_digest": "e374ff764f9883bd60e034d5948757d540382628a3fd9f0f12819bc970affec9",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "2e2f34392afbd5c08a2515cb6d4c260f75bf68ef3d3a96cbfd7363c510b9a4f0",
+      "hsaco_sha256": "fe76b2cf294cdad62e7ae86fbd429d10d6d14396e76051e70e58c78ee00845c5",
+      "device_event_samples_ms": [
+        0.006595060229301453,
+        0.006583859920501709,
+        0.0065361601114273075,
+        0.006573960185050964,
+        0.0065917599201202395
+      ],
+      "device_event_median_ms": 0.006583859920501709,
+      "completed_launch_wall_samples_ms": [
+        0.6756597002095077,
+        0.6313666999631096,
+        0.6504539000161458,
+        0.629838700115215,
+        0.6400466998456977
+      ],
+      "completed_launch_wall_median_ms": 0.6400466998456977,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 2,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 33.671571996819694,
+      "compile_state": "warm_cache",
+      "image_digest": "e374ff764f9883bd60e034d5948757d540382628a3fd9f0f12819bc970affec9",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "9ffe61b97ce6e33d3c91f142182ab4cfe4cf4411a39132613db8c5e71b9b7cb7",
+      "hsaco_sha256": "fe76b2cf294cdad62e7ae86fbd429d10d6d14396e76051e70e58c78ee00845c5",
+      "device_event_samples_ms": [
+        0.009067540168762206,
+        0.009083840250968932,
+        0.009098429679870606,
+        0.009142540097236633,
+        0.009504839777946472
+      ],
+      "device_event_median_ms": 0.009098429679870606,
+      "completed_launch_wall_samples_ms": [
+        0.6784078999771737,
+        0.653069099644199,
+        0.6610745993384626,
+        0.649030199565459,
+        0.6581028006621636
+      ],
+      "completed_launch_wall_median_ms": 0.6581028006621636,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 2,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 34.027717003482394,
+      "compile_state": "warm_cache",
+      "image_digest": "e374ff764f9883bd60e034d5948757d540382628a3fd9f0f12819bc970affec9",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "9bb311f72b89cc460f961be2754c9ea0a2e3bb63e60d341eeb3513b82582cf34",
+      "hsaco_sha256": "fe76b2cf294cdad62e7ae86fbd429d10d6d14396e76051e70e58c78ee00845c5",
+      "device_event_samples_ms": [
+        0.008808889985084533,
+        0.009090880155563355,
+        0.008692079782485962,
+        0.008692880272865295,
+        0.008698279857635499
+      ],
+      "device_event_median_ms": 0.008698279857635499,
+      "completed_launch_wall_samples_ms": [
+        0.6579170003533363,
+        0.6437127995013725,
+        0.636391499574529,
+        0.626391900004819,
+        0.6260412999836262
+      ],
+      "completed_launch_wall_median_ms": 0.636391499574529,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 4,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 138.9544699995895,
+      "compile_state": "cold",
+      "image_digest": "2f99b805f0e7f7a37ce16ccd451df29132285ab7e8b3e5344327787786dac7d2",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "6a1d8d5c762cabefe53579c2d0305d11979d2330e581daa256156f0ae08fab1e",
+      "hsaco_sha256": "2113e06578005560ebdbeb77607e17e3da3dc0bf005e3903b980ea67ff8c9a77",
+      "device_event_samples_ms": [
+        0.006548659801483154,
+        0.006467450261116028,
+        0.006590359807014465,
+        0.006473860144615174,
+        0.0064991599321365355
+      ],
+      "device_event_median_ms": 0.0064991599321365355,
+      "completed_launch_wall_samples_ms": [
+        0.6432989997847471,
+        0.6663770000159275,
+        0.6782191005186178,
+        0.6851455000287388,
+        0.6505812001705635
+      ],
+      "completed_launch_wall_median_ms": 0.6663770000159275,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 4,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 32.888073998037726,
+      "compile_state": "warm_cache",
+      "image_digest": "2f99b805f0e7f7a37ce16ccd451df29132285ab7e8b3e5344327787786dac7d2",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "448dcd280b6002d94b281721a65aa35fe441ad2a177d02bef5d34c4649130e1b",
+      "hsaco_sha256": "2113e06578005560ebdbeb77607e17e3da3dc0bf005e3903b980ea67ff8c9a77",
+      "device_event_samples_ms": [
+        0.008840039968490601,
+        0.008831830024719238,
+        0.008874040246009827,
+        0.008870139718055725,
+        0.0088646399974823
+      ],
+      "device_event_median_ms": 0.0088646399974823,
+      "completed_launch_wall_samples_ms": [
+        0.664669099933235,
+        0.645964199793525,
+        0.6480834003014024,
+        0.6472415996540803,
+        0.6534476997330785
+      ],
+      "completed_launch_wall_median_ms": 0.6480834003014024,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 4,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 32.31464399868855,
+      "compile_state": "warm_cache",
+      "image_digest": "2f99b805f0e7f7a37ce16ccd451df29132285ab7e8b3e5344327787786dac7d2",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "46f26f806e411ad02ce5dc5502616c550724a25d3d433db6ad7e8cda6b62431d",
+      "hsaco_sha256": "2113e06578005560ebdbeb77607e17e3da3dc0bf005e3903b980ea67ff8c9a77",
+      "device_event_samples_ms": [
+        0.008536940217018127,
+        0.00856253981590271,
+        0.008539239764213563,
+        0.008558040261268616,
+        0.008555740118026733
+      ],
+      "device_event_median_ms": 0.008555740118026733,
+      "completed_launch_wall_samples_ms": [
+        0.6640989995503332,
+        0.6063579006877262,
+        0.6558824999956414,
+        0.6238850997760892,
+        0.626388899399899
+      ],
+      "completed_launch_wall_median_ms": 0.626388899399899,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 4,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 140.65262299845926,
+      "compile_state": "cold",
+      "image_digest": "83cf0265b5fccdfdb648b5aa66c96e09b5e58e172d2fcaefa86af2cca2ec749e",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "0e129074fb087a8ab4e62061515114ebfc4b28b08a813c782457d02b95430311",
+      "hsaco_sha256": "6cb828a5e27a4b8931a766363e596a7c29dde543fb6a576ec4ae27651f051fdd",
+      "device_event_samples_ms": [
+        0.006576259732246399,
+        0.006550160050392151,
+        0.006560850143432617,
+        0.006682959794998169,
+        0.006563659906387329
+      ],
+      "device_event_median_ms": 0.006563659906387329,
+      "completed_launch_wall_samples_ms": [
+        0.660978499945486,
+        0.6541000002471264,
+        0.6373324002197478,
+        0.6149787994218059,
+        0.6465102000220213
+      ],
+      "completed_launch_wall_median_ms": 0.6465102000220213,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 4,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 33.59638600522885,
+      "compile_state": "warm_cache",
+      "image_digest": "83cf0265b5fccdfdb648b5aa66c96e09b5e58e172d2fcaefa86af2cca2ec749e",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "41802846afb3b1d46e1e61aaef6c6d392ec03187ed3f441a6622c69b166d682b",
+      "hsaco_sha256": "6cb828a5e27a4b8931a766363e596a7c29dde543fb6a576ec4ae27651f051fdd",
+      "device_event_samples_ms": [
+        0.0059847599267959595,
+        0.006049550175666809,
+        0.005957859754562378,
+        0.005769360065460205,
+        0.00591435968875885
+      ],
+      "device_event_median_ms": 0.005957859754562378,
+      "completed_launch_wall_samples_ms": [
+        0.617680000141263,
+        0.6191403997945599,
+        0.6148284999653697,
+        0.6071623996831477,
+        0.6099639002059121
+      ],
+      "completed_launch_wall_median_ms": 0.6148284999653697,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 4,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 33.43854700506199,
+      "compile_state": "warm_cache",
+      "image_digest": "83cf0265b5fccdfdb648b5aa66c96e09b5e58e172d2fcaefa86af2cca2ec749e",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "bb2669bc6284058b79671aa42e61c2a95931e7b6f787d0d0bef0d7871e1d6057",
+      "hsaco_sha256": "6cb828a5e27a4b8931a766363e596a7c29dde543fb6a576ec4ae27651f051fdd",
+      "device_event_samples_ms": [
+        0.008449400067329407,
+        0.008451899886131287,
+        0.00851410984992981,
+        0.008453099727630616,
+        0.00849610984325409
+      ],
+      "device_event_median_ms": 0.008453099727630616,
+      "completed_launch_wall_samples_ms": [
+        0.6417504002456553,
+        0.6453018999309279,
+        0.6642818996624555,
+        0.6327002993202768,
+        0.6609072996070608
+      ],
+      "completed_launch_wall_median_ms": 0.6453018999309279,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 4,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 143.24647300236393,
+      "compile_state": "cold",
+      "image_digest": "dd5673de7b25bb78c924924b8944179c3620426c3fee14929f11c5aafc4832f7",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "5ca807c76c7e29eaa1136ff9e799e8d4edf91248b32b924e03d5d04ac01b73f9",
+      "hsaco_sha256": "c58efbefa8ae55a1dc2fca7bb96bd06c7c1334a61cc7d215cdb79d753a157443",
+      "device_event_samples_ms": [
+        0.007580549716949463,
+        0.006749460101127624,
+        0.006571959853172302,
+        0.006621059775352478,
+        0.006650059819221497
+      ],
+      "device_event_median_ms": 0.006650059819221497,
+      "completed_launch_wall_samples_ms": [
+        0.6825351003499236,
+        0.6617018007091247,
+        0.6536932000017259,
+        0.6135038005595561,
+        0.635382500331616
+      ],
+      "completed_launch_wall_median_ms": 0.6536932000017259,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 4,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 35.181491999537684,
+      "compile_state": "warm_cache",
+      "image_digest": "dd5673de7b25bb78c924924b8944179c3620426c3fee14929f11c5aafc4832f7",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "22f749a4575c87a0b709b8cebb14f8e7b19e0f4f64b3b8708bab1ddb7a54ecf4",
+      "hsaco_sha256": "c58efbefa8ae55a1dc2fca7bb96bd06c7c1334a61cc7d215cdb79d753a157443",
+      "device_event_samples_ms": [
+        0.009079840183258057,
+        0.009062939882278442,
+        0.00914942979812622,
+        0.009225029945373536,
+        0.009186540246009827
+      ],
+      "device_event_median_ms": 0.00914942979812622,
+      "completed_launch_wall_samples_ms": [
+        0.6689865003863815,
+        0.6532884995976929,
+        0.6606417999137193,
+        0.667615400016075,
+        0.6599524000193924
+      ],
+      "completed_launch_wall_median_ms": 0.6606417999137193,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 4,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 33.64506100479048,
+      "compile_state": "warm_cache",
+      "image_digest": "dd5673de7b25bb78c924924b8944179c3620426c3fee14929f11c5aafc4832f7",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "0f57206670bf66fada6dfc1ba7d8f578ab8302734adf4aa00296ed12f07c2dfe",
+      "hsaco_sha256": "c58efbefa8ae55a1dc2fca7bb96bd06c7c1334a61cc7d215cdb79d753a157443",
+      "device_event_samples_ms": [
+        0.008495839834213257,
+        0.008502240180969239,
+        0.008520240187644959,
+        0.008560540080070496,
+        0.008724240064620971
+      ],
+      "device_event_median_ms": 0.008520240187644959,
+      "completed_launch_wall_samples_ms": [
+        0.6592124998860527,
+        0.6490091000159737,
+        0.6561160000273958,
+        0.6545598997035995,
+        0.8446387997537386
+      ],
+      "completed_launch_wall_median_ms": 0.6561160000273958,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 4,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 139.8934909957461,
+      "compile_state": "cold",
+      "image_digest": "ccc9835b3182f9c6846b9ff09356c3c65212241083004c66b8ad96c4d54a2753",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "2e2f34392afbd5c08a2515cb6d4c260f75bf68ef3d3a96cbfd7363c510b9a4f0",
+      "hsaco_sha256": "3c21a80b35ba997b2761eba8b6ed13986012ad6e4fe68bead1316e7a7986cddb",
+      "device_event_samples_ms": [
+        0.007296649813652039,
+        0.006549350023269653,
+        0.00658545970916748,
+        0.006656960248947143,
+        0.006563360095024109
+      ],
+      "device_event_median_ms": 0.00658545970916748,
+      "completed_launch_wall_samples_ms": [
+        0.6594079000933561,
+        0.6520138995256275,
+        0.6303756999841426,
+        0.6558615001267754,
+        0.6577471998753026
+      ],
+      "completed_launch_wall_median_ms": 0.6558615001267754,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 4,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 34.04060200409731,
+      "compile_state": "warm_cache",
+      "image_digest": "ccc9835b3182f9c6846b9ff09356c3c65212241083004c66b8ad96c4d54a2753",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "9ffe61b97ce6e33d3c91f142182ab4cfe4cf4411a39132613db8c5e71b9b7cb7",
+      "hsaco_sha256": "3c21a80b35ba997b2761eba8b6ed13986012ad6e4fe68bead1316e7a7986cddb",
+      "device_event_samples_ms": [
+        0.005849459767341613,
+        0.005961660146713257,
+        0.005856660008430481,
+        0.005995950102806092,
+        0.00587365984916687
+      ],
+      "device_event_median_ms": 0.00587365984916687,
+      "completed_launch_wall_samples_ms": [
+        0.657552300253883,
+        0.6210305000422522,
+        0.6346310998196714,
+        0.6130439003754873,
+        0.6124927997007035
+      ],
+      "completed_launch_wall_median_ms": 0.6210305000422522,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 4,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 32.89182099979371,
+      "compile_state": "warm_cache",
+      "image_digest": "ccc9835b3182f9c6846b9ff09356c3c65212241083004c66b8ad96c4d54a2753",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "9bb311f72b89cc460f961be2754c9ea0a2e3bb63e60d341eeb3513b82582cf34",
+      "hsaco_sha256": "3c21a80b35ba997b2761eba8b6ed13986012ad6e4fe68bead1316e7a7986cddb",
+      "device_event_samples_ms": [
+        0.008513739705085755,
+        0.008571739792823791,
+        0.008533139824867248,
+        0.008471739888191223,
+        0.008550639748573303
+      ],
+      "device_event_median_ms": 0.008533139824867248,
+      "completed_launch_wall_samples_ms": [
+        0.6789982006011996,
+        0.6432678994315211,
+        0.6434893999539781,
+        0.6609042000491172,
+        0.633765399834374
+      ],
+      "completed_launch_wall_median_ms": 0.6434893999539781,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 8,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 156.8286990004708,
+      "compile_state": "cold",
+      "image_digest": "eaea6a1538e760911219150bce316c0c2e77090e2c9274db4114ad4f693c74c9",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "6a1d8d5c762cabefe53579c2d0305d11979d2330e581daa256156f0ae08fab1e",
+      "hsaco_sha256": "644ccc0e9a6397c87411d11c0d4bcb9b86623d04ccda25d17e917e801c8f6c45",
+      "device_event_samples_ms": [
+        0.006465160250663757,
+        0.006305360198020935,
+        0.006326959729194641,
+        0.0063974601030349736,
+        0.0063894599676132206
+      ],
+      "device_event_median_ms": 0.0063894599676132206,
+      "completed_launch_wall_samples_ms": [
+        0.6667666995781474,
+        0.6730009998136666,
+        0.659919800091302,
+        0.6332654003927018,
+        0.6337382998026442
+      ],
+      "completed_launch_wall_median_ms": 0.659919800091302,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 8,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 33.98012999969069,
+      "compile_state": "warm_cache",
+      "image_digest": "eaea6a1538e760911219150bce316c0c2e77090e2c9274db4114ad4f693c74c9",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "448dcd280b6002d94b281721a65aa35fe441ad2a177d02bef5d34c4649130e1b",
+      "hsaco_sha256": "644ccc0e9a6397c87411d11c0d4bcb9b86623d04ccda25d17e917e801c8f6c45",
+      "device_event_samples_ms": [
+        0.008981940150260926,
+        0.008895930051803589,
+        0.008902729749679565,
+        0.00891103982925415,
+        0.009423930048942566
+      ],
+      "device_event_median_ms": 0.00891103982925415,
+      "completed_launch_wall_samples_ms": [
+        0.6489800995041151,
+        0.6483258002845105,
+        0.6592161000298802,
+        0.6181598997500259,
+        0.6379985999956261
+      ],
+      "completed_launch_wall_median_ms": 0.6483258002845105,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 8,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 32.4644070060458,
+      "compile_state": "warm_cache",
+      "image_digest": "eaea6a1538e760911219150bce316c0c2e77090e2c9274db4114ad4f693c74c9",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "46f26f806e411ad02ce5dc5502616c550724a25d3d433db6ad7e8cda6b62431d",
+      "hsaco_sha256": "644ccc0e9a6397c87411d11c0d4bcb9b86623d04ccda25d17e917e801c8f6c45",
+      "device_event_samples_ms": [
+        0.008812639713287353,
+        0.008506349921226501,
+        0.008813539743423462,
+        0.008380240201950074,
+        0.008411939740180969
+      ],
+      "device_event_median_ms": 0.008506349921226501,
+      "completed_launch_wall_samples_ms": [
+        0.644023300264962,
+        0.6241677001526114,
+        0.6470368003647309,
+        0.6411547001334839,
+        0.6481513999460731
+      ],
+      "completed_launch_wall_median_ms": 0.644023300264962,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 8,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 156.0196360005648,
+      "compile_state": "cold",
+      "image_digest": "4f00113acf5f7054170abe6b98c94feb902ac4924b1b524227000744bda7fd0a",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "0e129074fb087a8ab4e62061515114ebfc4b28b08a813c782457d02b95430311",
+      "hsaco_sha256": "72b598413764482a033e7ce2d357b6853a63cfca6b098f229a508e5226153c11",
+      "device_event_samples_ms": [
+        0.0063715499639511106,
+        0.006362059712409973,
+        0.006364160180091858,
+        0.006970850229263306,
+        0.006361550092697144
+      ],
+      "device_event_median_ms": 0.006364160180091858,
+      "completed_launch_wall_samples_ms": [
+        0.6977071003348101,
+        0.7320491000427864,
+        0.7000105004408397,
+        0.7044392004900146,
+        0.707620400498854
+      ],
+      "completed_launch_wall_median_ms": 0.7044392004900146,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 8,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 33.846803999040276,
+      "compile_state": "warm_cache",
+      "image_digest": "4f00113acf5f7054170abe6b98c94feb902ac4924b1b524227000744bda7fd0a",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "41802846afb3b1d46e1e61aaef6c6d392ec03187ed3f441a6622c69b166d682b",
+      "hsaco_sha256": "72b598413764482a033e7ce2d357b6853a63cfca6b098f229a508e5226153c11",
+      "device_event_samples_ms": [
+        0.009116730093955994,
+        0.009022539854049683,
+        0.009040240049362182,
+        0.009171630144119263,
+        0.009058730006217956
+      ],
+      "device_event_median_ms": 0.009058730006217956,
+      "completed_launch_wall_samples_ms": [
+        0.6866269999591168,
+        0.6707666005240753,
+        0.6352181000693236,
+        0.6587992997083347,
+        0.6434873001126107
+      ],
+      "completed_launch_wall_median_ms": 0.6587992997083347,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 8,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 34.317562996875495,
+      "compile_state": "warm_cache",
+      "image_digest": "4f00113acf5f7054170abe6b98c94feb902ac4924b1b524227000744bda7fd0a",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "bb2669bc6284058b79671aa42e61c2a95931e7b6f787d0d0bef0d7871e1d6057",
+      "hsaco_sha256": "72b598413764482a033e7ce2d357b6853a63cfca6b098f229a508e5226153c11",
+      "device_event_samples_ms": [
+        0.005731959939002991,
+        0.005778560042381286,
+        0.00571615993976593,
+        0.005678870081901551,
+        0.005703960061073304
+      ],
+      "device_event_median_ms": 0.00571615993976593,
+      "completed_launch_wall_samples_ms": [
+        0.6333841993182432,
+        0.589576100173872,
+        0.6249220998142846,
+        0.6079990998841822,
+        0.6028080002579372
+      ],
+      "completed_launch_wall_median_ms": 0.6079990998841822,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 8,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 157.0503210023162,
+      "compile_state": "cold",
+      "image_digest": "05cf80a11bb1d1f7eef05774045af2c73a6d8743de9dbec95b0240506c8a1ffe",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "5ca807c76c7e29eaa1136ff9e799e8d4edf91248b32b924e03d5d04ac01b73f9",
+      "hsaco_sha256": "1e1ee1e9099be5fbc16ed308def3fad537b08ccef6ac08a1d6a3391f32a37653",
+      "device_event_samples_ms": [
+        0.00622685968875885,
+        0.00622406005859375,
+        0.006243669986724853,
+        0.006221659779548645,
+        0.006276860237121582
+      ],
+      "device_event_median_ms": 0.00622685968875885,
+      "completed_launch_wall_samples_ms": [
+        0.6940931001736317,
+        0.6820934999268502,
+        0.674227399576921,
+        0.7427589000144508,
+        0.6911429001775105
+      ],
+      "completed_launch_wall_median_ms": 0.6911429001775105,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 8,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 33.93663899623789,
+      "compile_state": "warm_cache",
+      "image_digest": "05cf80a11bb1d1f7eef05774045af2c73a6d8743de9dbec95b0240506c8a1ffe",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "22f749a4575c87a0b709b8cebb14f8e7b19e0f4f64b3b8708bab1ddb7a54ecf4",
+      "hsaco_sha256": "1e1ee1e9099be5fbc16ed308def3fad537b08ccef6ac08a1d6a3391f32a37653",
+      "device_event_samples_ms": [
+        0.0088823401927948,
+        0.009675939679145812,
+        0.00914903998374939,
+        0.009371140003204347,
+        0.009434040188789367
+      ],
+      "device_event_median_ms": 0.009371140003204347,
+      "completed_launch_wall_samples_ms": [
+        0.7250875001773238,
+        0.679586600017501,
+        0.7018492004135624,
+        0.6473187997471541,
+        0.6896715000038967
+      ],
+      "completed_launch_wall_median_ms": 0.6896715000038967,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 8,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 34.37593000126071,
+      "compile_state": "warm_cache",
+      "image_digest": "05cf80a11bb1d1f7eef05774045af2c73a6d8743de9dbec95b0240506c8a1ffe",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "0f57206670bf66fada6dfc1ba7d8f578ab8302734adf4aa00296ed12f07c2dfe",
+      "hsaco_sha256": "1e1ee1e9099be5fbc16ed308def3fad537b08ccef6ac08a1d6a3391f32a37653",
+      "device_event_samples_ms": [
+        0.008410850167274475,
+        0.00863224983215332,
+        0.008641350269317626,
+        0.008398450016975402,
+        0.00853214979171753
+      ],
+      "device_event_median_ms": 0.00853214979171753,
+      "completed_launch_wall_samples_ms": [
+        1.0179003002122045,
+        0.900658900354756,
+        0.6900551998114679,
+        0.6248259000130929,
+        0.6467846993473358
+      ],
+      "completed_launch_wall_median_ms": 0.6900551998114679,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 8,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 158.67746000003535,
+      "compile_state": "cold",
+      "image_digest": "4c9b7ed7f095ee9750a85bbe57571c76faef3913fde24bd2d4dec273193e5c35",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "2e2f34392afbd5c08a2515cb6d4c260f75bf68ef3d3a96cbfd7363c510b9a4f0",
+      "hsaco_sha256": "28f4aecedfdde126e2d27a419af641b5602b67202c6b86c7936c1178b18f073e",
+      "device_event_samples_ms": [
+        0.006345760226249695,
+        0.006303849816322327,
+        0.0064103597402572635,
+        0.006314160227775574,
+        0.006321460008621216
+      ],
+      "device_event_median_ms": 0.006321460008621216,
+      "completed_launch_wall_samples_ms": [
+        0.6372992000251543,
+        0.6610405995161273,
+        0.6614393001655117,
+        0.6469631000072695,
+        0.6277015003433917
+      ],
+      "completed_launch_wall_median_ms": 0.6469631000072695,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 8,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 32.98826499667484,
+      "compile_state": "warm_cache",
+      "image_digest": "4c9b7ed7f095ee9750a85bbe57571c76faef3913fde24bd2d4dec273193e5c35",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        2,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "9ffe61b97ce6e33d3c91f142182ab4cfe4cf4411a39132613db8c5e71b9b7cb7",
+      "hsaco_sha256": "28f4aecedfdde126e2d27a419af641b5602b67202c6b86c7936c1178b18f073e",
+      "device_event_samples_ms": [
+        0.008989449739456177,
+        0.008999040126800537,
+        0.00923874020576477,
+        0.009124239683151245,
+        0.009102240204811096
+      ],
+      "device_event_median_ms": 0.009102240204811096,
+      "completed_launch_wall_samples_ms": [
+        0.6813733001763467,
+        0.6461044002207927,
+        0.661488499463303,
+        0.6730339999194257,
+        0.6640644001890905
+      ],
+      "completed_launch_wall_median_ms": 0.6640644001890905,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "register",
+      "k_unroll": 8,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 31.819935000385158,
+      "compile_state": "warm_cache",
+      "image_digest": "4c9b7ed7f095ee9750a85bbe57571c76faef3913fde24bd2d4dec273193e5c35",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        32,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "9bb311f72b89cc460f961be2754c9ea0a2e3bb63e60d341eeb3513b82582cf34",
+      "hsaco_sha256": "28f4aecedfdde126e2d27a419af641b5602b67202c6b86c7936c1178b18f073e",
+      "device_event_samples_ms": [
+        0.00884315013885498,
+        0.008477550148963928,
+        0.008689439892768859,
+        0.008443549871444703,
+        0.008605350255966187
+      ],
+      "device_event_median_ms": 0.008605350255966187,
+      "completed_launch_wall_samples_ms": [
+        0.6460222997702658,
+        0.5995746003463864,
+        0.6456575996708125,
+        0.636943599965889,
+        0.659906399960164
+      ],
+      "completed_launch_wall_median_ms": 0.6456575996708125,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "lds",
+      "k_unroll": 1,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 90.14911600388587,
+      "compile_state": "cold",
+      "image_digest": "aa0cd59396923f95d46f2bfe1e9e37a050b1994dda2ea289136a726506b1badb",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        128,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "6a1d8d5c762cabefe53579c2d0305d11979d2330e581daa256156f0ae08fab1e",
+      "hsaco_sha256": "4f05d989fee3ac26d11cb505c756c26cf8176206a58f931ed97b497918946ac4",
+      "device_event_samples_ms": [
+        0.009795039892196655,
+        0.009704530239105225,
+        0.009814239740371704,
+        0.009799839854240417,
+        0.009893940091133117
+      ],
+      "device_event_median_ms": 0.009799839854240417,
+      "completed_launch_wall_samples_ms": [
+        0.8938747996580787,
+        0.8765049999055918,
+        0.900322399684228,
+        0.8722176004084758,
+        0.8511093001288828
+      ],
+      "completed_launch_wall_median_ms": 0.8765049999055918,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "lds",
+      "k_unroll": 1,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 35.8166939986404,
+      "compile_state": "warm_cache",
+      "image_digest": "aa0cd59396923f95d46f2bfe1e9e37a050b1994dda2ea289136a726506b1badb",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        128,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "448dcd280b6002d94b281721a65aa35fe441ad2a177d02bef5d34c4649130e1b",
+      "hsaco_sha256": "4f05d989fee3ac26d11cb505c756c26cf8176206a58f931ed97b497918946ac4",
+      "device_event_samples_ms": [
+        0.010196139812469482,
+        0.010157439708709717,
+        0.010237040519714356,
+        0.01025583028793335,
+        0.010228630304336548
+      ],
+      "device_event_median_ms": 0.010228630304336548,
+      "completed_launch_wall_samples_ms": [
+        0.6858310000097845,
+        0.6796166999265552,
+        0.6878874999529216,
+        0.7157482999900822,
+        0.6716682000842411
+      ],
+      "completed_launch_wall_median_ms": 0.6858310000097845,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "lds",
+      "k_unroll": 1,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 31.631156998628285,
+      "compile_state": "warm_cache",
+      "image_digest": "aa0cd59396923f95d46f2bfe1e9e37a050b1994dda2ea289136a726506b1badb",
+      "entry": "tessera_rocm_matmul_4783c06bf351e8d0",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_f32.v1",
+      "workgroup": [
+        128,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "89165e79a2099eff624d9a9c7ededa1c3c66024daab498d21258090afb663412",
+      "tile_ir_sha256": "46f26f806e411ad02ce5dc5502616c550724a25d3d433db6ad7e8cda6b62431d",
+      "hsaco_sha256": "4f05d989fee3ac26d11cb505c756c26cf8176206a58f931ed97b497918946ac4",
+      "device_event_samples_ms": [
+        0.012672619819641113,
+        0.01253991961479187,
+        0.012622820138931274,
+        0.012516919374465942,
+        0.012668319940567017
+      ],
+      "device_event_median_ms": 0.012622820138931274,
+      "completed_launch_wall_samples_ms": [
+        0.7239228005346376,
+        0.6783483004255686,
+        0.6979565994697623,
+        0.7932862004963681,
+        0.9044825994351413
+      ],
+      "completed_launch_wall_median_ms": 0.7239228005346376,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "lds",
+      "k_unroll": 1,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 87.89481800340582,
+      "compile_state": "cold",
+      "image_digest": "8f4b8ef5180bc4ea1b7352e3912fce76caf9e7564fd95efbcf6f0de710f22e96",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        128,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "0e129074fb087a8ab4e62061515114ebfc4b28b08a813c782457d02b95430311",
+      "hsaco_sha256": "114c6062f92fe62ac143c2f368d71b4b8ae73e7b489eccb5990b6a13d415e867",
+      "device_event_samples_ms": [
+        0.009803239703178406,
+        0.009722229838371278,
+        0.009772130250930787,
+        0.009835730195045472,
+        0.009798030257225037
+      ],
+      "device_event_median_ms": 0.009798030257225037,
+      "completed_launch_wall_samples_ms": [
+        0.7079982002323959,
+        0.6757623006706126,
+        0.6895801998325624,
+        0.7052729000861291,
+        0.695571400137851
+      ],
+      "completed_launch_wall_median_ms": 0.695571400137851,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "lds",
+      "k_unroll": 1,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 33.99080999952275,
+      "compile_state": "warm_cache",
+      "image_digest": "8f4b8ef5180bc4ea1b7352e3912fce76caf9e7564fd95efbcf6f0de710f22e96",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        128,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "41802846afb3b1d46e1e61aaef6c6d392ec03187ed3f441a6622c69b166d682b",
+      "hsaco_sha256": "114c6062f92fe62ac143c2f368d71b4b8ae73e7b489eccb5990b6a13d415e867",
+      "device_event_samples_ms": [
+        0.010190039873123169,
+        0.010191229581832885,
+        0.01022104024887085,
+        0.010160239934921265,
+        0.010219830274581908
+      ],
+      "device_event_median_ms": 0.010191229581832885,
+      "completed_launch_wall_samples_ms": [
+        0.8681539002282079,
+        0.8835596003336832,
+        0.9016941003210377,
+        0.8852169004967436,
+        0.8806761004962027
+      ],
+      "completed_launch_wall_median_ms": 0.8835596003336832,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "lds",
+      "k_unroll": 1,
+      "lhs": "fp8_e4m3",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 32.31774600135395,
+      "compile_state": "warm_cache",
+      "image_digest": "8f4b8ef5180bc4ea1b7352e3912fce76caf9e7564fd95efbcf6f0de710f22e96",
+      "entry": "tessera_rocm_matmul_9ca706c5b308da54",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e4m3_e5m2_f32.v1",
+      "workgroup": [
+        128,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "aaffb4530b7546493779b435484f3d740577b3bce5ad6890f51a40553ea2e643",
+      "tile_ir_sha256": "bb2669bc6284058b79671aa42e61c2a95931e7b6f787d0d0bef0d7871e1d6057",
+      "hsaco_sha256": "114c6062f92fe62ac143c2f368d71b4b8ae73e7b489eccb5990b6a13d415e867",
+      "device_event_samples_ms": [
+        0.011938129663467406,
+        0.01191072940826416,
+        0.012016229629516602,
+        0.011925230026245117,
+        0.011942230463027954
+      ],
+      "device_event_median_ms": 0.011938129663467406,
+      "completed_launch_wall_samples_ms": [
+        0.677034799446119,
+        0.6789936000132002,
+        0.6680151003820356,
+        0.661349300207803,
+        0.6788983999285847
+      ],
+      "completed_launch_wall_median_ms": 0.677034799446119,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "lds",
+      "k_unroll": 1,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 86.34774000529433,
+      "compile_state": "cold",
+      "image_digest": "bf4bcf75fbd1a7c3730e016ce1e0cf5f2cdb9c963b9db2569ed298b39d4606c2",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        128,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "5ca807c76c7e29eaa1136ff9e799e8d4edf91248b32b924e03d5d04ac01b73f9",
+      "hsaco_sha256": "3d5023e1163d19fe6ba0ba0f2f31ff358a0f4f6ac2d5531f0efba5df83405ecf",
+      "device_event_samples_ms": [
+        0.0097292298078537,
+        0.009701740145683289,
+        0.009778929948806763,
+        0.009771530032157898,
+        0.009811139702796935
+      ],
+      "device_event_median_ms": 0.009771530032157898,
+      "completed_launch_wall_samples_ms": [
+        0.7153115002438426,
+        0.6995241994445678,
+        0.6620444997679442,
+        0.6322064000414684,
+        0.7028631000139285
+      ],
+      "completed_launch_wall_median_ms": 0.6995241994445678,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "lds",
+      "k_unroll": 1,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 32.115392001287546,
+      "compile_state": "warm_cache",
+      "image_digest": "bf4bcf75fbd1a7c3730e016ce1e0cf5f2cdb9c963b9db2569ed298b39d4606c2",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        128,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "22f749a4575c87a0b709b8cebb14f8e7b19e0f4f64b3b8708bab1ddb7a54ecf4",
+      "hsaco_sha256": "3d5023e1163d19fe6ba0ba0f2f31ff358a0f4f6ac2d5531f0efba5df83405ecf",
+      "device_event_samples_ms": [
+        0.010150740146636963,
+        0.010120329856872558,
+        0.01016113042831421,
+        0.010158230066299439,
+        0.010140340328216552
+      ],
+      "device_event_median_ms": 0.010150740146636963,
+      "completed_launch_wall_samples_ms": [
+        0.6465493999712635,
+        0.6525509998027701,
+        0.6462757999543101,
+        0.655790300515946,
+        0.6469359999755397
+      ],
+      "completed_launch_wall_median_ms": 0.6469359999755397,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "lds",
+      "k_unroll": 1,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e4m3",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 33.16685299796518,
+      "compile_state": "warm_cache",
+      "image_digest": "bf4bcf75fbd1a7c3730e016ce1e0cf5f2cdb9c963b9db2569ed298b39d4606c2",
+      "entry": "tessera_rocm_matmul_801ef372221c895c",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_e4m3_f32.v1",
+      "workgroup": [
+        128,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "57c95df92cdcc0aadfc6635a1322e3abc42f326e2a820e49e3032473aa85960d",
+      "tile_ir_sha256": "0f57206670bf66fada6dfc1ba7d8f578ab8302734adf4aa00296ed12f07c2dfe",
+      "hsaco_sha256": "3d5023e1163d19fe6ba0ba0f2f31ff358a0f4f6ac2d5531f0efba5df83405ecf",
+      "device_event_samples_ms": [
+        0.012562919855117798,
+        0.012571619749069214,
+        0.012856320142745972,
+        0.012564220428466798,
+        0.012515219449996949
+      ],
+      "device_event_median_ms": 0.012564220428466798,
+      "completed_launch_wall_samples_ms": [
+        0.6519639006000943,
+        0.6508976999612059,
+        0.6707164997351356,
+        0.6358644997817464,
+        0.6348264003463555
+      ],
+      "completed_launch_wall_median_ms": 0.6508976999612059,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "lds",
+      "k_unroll": 1,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        16,
+        32,
+        16
+      ],
+      "package_wall_ms": 90.44518299924675,
+      "compile_state": "cold",
+      "image_digest": "f24450127ecda00268c991d9c5c4da163ed90e2f0af6f2f815941af4139fdfb9",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        128,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "2e2f34392afbd5c08a2515cb6d4c260f75bf68ef3d3a96cbfd7363c510b9a4f0",
+      "hsaco_sha256": "846117d60b12a8c1ba091e56df18f86566ba9996006a6da8f13d6630d4f46bb5",
+      "device_event_samples_ms": [
+        0.009724040031433106,
+        0.010087130069732666,
+        0.00974502980709076,
+        0.010011630058288574,
+        0.009856039881706238
+      ],
+      "device_event_median_ms": 0.009856039881706238,
+      "completed_launch_wall_samples_ms": [
+        0.6447437001042999,
+        0.6772538006771356,
+        0.6571054000232834,
+        0.7051867003610823,
+        0.6725159997586161
+      ],
+      "completed_launch_wall_median_ms": 0.6725159997586161,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "lds",
+      "k_unroll": 1,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        17,
+        31,
+        19
+      ],
+      "package_wall_ms": 33.19582399853971,
+      "compile_state": "warm_cache",
+      "image_digest": "f24450127ecda00268c991d9c5c4da163ed90e2f0af6f2f815941af4139fdfb9",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        128,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "9ffe61b97ce6e33d3c91f142182ab4cfe4cf4411a39132613db8c5e71b9b7cb7",
+      "hsaco_sha256": "846117d60b12a8c1ba091e56df18f86566ba9996006a6da8f13d6630d4f46bb5",
+      "device_event_samples_ms": [
+        0.009780939817428589,
+        0.00987293004989624,
+        0.009845139980316163,
+        0.009878529906272889,
+        0.00986312985420227
+      ],
+      "device_event_median_ms": 0.00986312985420227,
+      "completed_launch_wall_samples_ms": [
+        0.6593307996809017,
+        0.6659150996711105,
+        0.6740668999555055,
+        0.633195300179068,
+        0.652308599819662
+      ],
+      "completed_launch_wall_median_ms": 0.6593307996809017,
+      "max_abs_error": 0.0
+    },
+    {
+      "staging": "lds",
+      "k_unroll": 1,
+      "lhs": "fp8_e5m2",
+      "rhs": "fp8_e5m2",
+      "shape_mkn": [
+        48,
+        33,
+        16
+      ],
+      "package_wall_ms": 31.201644000248052,
+      "compile_state": "warm_cache",
+      "image_digest": "f24450127ecda00268c991d9c5c4da163ed90e2f0af6f2f815941af4139fdfb9",
+      "entry": "tessera_rocm_matmul_a427e4d9b9998d72",
+      "abi_id": "tessera.rocm.matmul.a_b_o_m_n_k.e5m2_f32.v1",
+      "workgroup": [
+        128,
+        1,
+        1
+      ],
+      "grid": [
+        1,
+        2
+      ],
+      "correctness": "passed_before_timing",
+      "target_ir_sha256": "0058f4c4a49dd7f80a5d20e667bddb3ca194de31a5904b8cfdc9193919bc05e7",
+      "tile_ir_sha256": "9bb311f72b89cc460f961be2754c9ea0a2e3bb63e60d341eeb3513b82582cf34",
+      "hsaco_sha256": "846117d60b12a8c1ba091e56df18f86566ba9996006a6da8f13d6630d4f46bb5",
+      "device_event_samples_ms": [
+        0.01232720971107483,
+        0.011866919994354248,
+        0.012033120393753052,
+        0.01233551025390625,
+        0.011924109458923339
+      ],
+      "device_event_median_ms": 0.012033120393753052,
+      "completed_launch_wall_samples_ms": [
+        0.695097599964356,
+        0.6694470001093578,
+        0.627912899653893,
+        0.6622720000450499,
+        0.6650144001469016
+      ],
+      "completed_launch_wall_median_ms": 0.6650144001469016,
+      "max_abs_error": 0.0
+    }
+  ]
+}

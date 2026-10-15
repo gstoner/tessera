@@ -78,6 +78,11 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
     directive order A, B, D, M, N, K, optional bias. This physical attribute
     survives shape-independent projection and participates in image identity.
 
+    **FP8 storage.** numeric_policy.storage names the LHS OCP format.
+    rhs_storage names the RHS format (e4m3 or e5m2) on gfx1201; omission
+    preserves the legacy homogeneous-format directive. This physical field
+    survives image projection and selects the mixed-format WMMA instruction.
+
     **Fused epilogue.** `bias` (default false) appends a per-output-column bias
     operand (a `memref<?>` of length N, accumulator dtype) that is added to each
     accumulator element before the activation. `activation` (default `"none"`)
@@ -111,6 +116,7 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
                        DefaultValuedAttr<I64Attr, "1">:$split_k,
                        DefaultValuedAttr<StrAttr, "\"\"">:$split_k_reduction,
                        DefaultValuedAttr<I64Attr, "1">:$k_blocks,
+                       OptionalAttr<StrAttr>:$rhs_storage,
                        OptionalAttr<I64Attr>:$problem_k);
   let assemblyFormat = "attr-dict";
   let hasVerifier = 1;

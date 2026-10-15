@@ -1989,7 +1989,10 @@ def package_scheduled_matmul(
     shape_free_matmul = (
         arch in {"gfx1151", "gfx1201"} and staging in {"register", "lds"}
         and (split_k == 1 or (arch == "gfx1201" and staging == "register"))
-        and artifact.a_dtype in {"fp16", "bf16"}
+        and (artifact.a_dtype in {"fp16", "bf16"} or (
+            arch == "gfx1201" and split_k == 1
+            and artifact.a_dtype in {"fp8_e4m3", "fp8_e5m2"}
+        ))
     )
     (
         target_ir,
@@ -2118,7 +2121,7 @@ def package_scheduled_matmul(
             "bias": artifact.bias_name is not None,
             "activation": artifact.activation,
             "a_storage": artifact.storage,
-            "b_storage": artifact.storage,
+            "b_storage": {"fp8_e4m3": "e4m3", "fp8_e5m2": "e5m2"}.get(artifact.b_dtype, artifact.storage),
             "storage_container": "int8" if integer else artifact.storage,
             "output_storage": artifact.accum,
             "accum": artifact.accum,

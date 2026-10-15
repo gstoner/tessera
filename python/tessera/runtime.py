@@ -5517,6 +5517,15 @@ def _submit_rocm_gfx1151_native(
     hip = _load_hip_for_launch()
     if hip is None or hip.hipInit(0) != 0:
         raise RuntimeError("libamdhip64.so or a usable gfx1151 device is unavailable")
+    # Validate shape/dtype/ABI arguments first, then bind every generic
+    # scheduled launch to the calling thread's selected HIP device before
+    # provider/module acquisition or device allocations.
+    live_arch = _rocm_live_arch()
+    if image.target != "rocm_" + image.architecture or live_arch != image.architecture:
+        raise ValueError(
+            f"ROCm native image architecture {image.architecture!r} differs "
+            f"from the live GPU {live_arch or 'unavailable'!r}")
+
     if native_math and os.environ.get("TESSERA_ROCM_NATIVE_MATH", "1").lower() not in {"0", "off", "false"}:
         movement = _load_rocm_native_movement_runtime()
         if movement is not None and hasattr(movement, "tessera_rocm_math_launch"):

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-14
+last_updated: 2026-10-15
 audit_role: reference
 ---
 
@@ -12254,4 +12254,61 @@ backend queues are assessed; no speedup or complete W1.1 closure claim.
 
 Evidence: benchmarks/baselines/sm120_norm_relu_matmul_20261014/README.md,
 guarded.json (matching CI options and final descriptor guard); docs/spec/ir/sm120_activation_schedule_tile_contract.md.
+<!-- entry-fields:end -->
+
+### 2026-10-14 — native mixed FP8 Target image identity
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync ROCM-FP8-TARGET-IDENTITY-20261014.
+
+Outcome: Native Target IR retains both FP8 storage formats before image
+projection. Mixed LDS staging preserves independent RHS zeros, vector/LDS
+storage and fragment types. Twenty pairing/recipe images serve sixty FP8
+shape cases; register unroll 1/2/4/8 and LDS unroll 1 pass on owning gfx1201.
+577 focused gates pass under the five-backend build, with ninety owning gfx1201
+FP8/FP16/BF16 numerical launches. Six separate gfx1151 LDS cases pass on
+Princess-Luna. A relabeled image now refuses at the live-architecture guard;
+83 dispatch/guard gates pass.
+Ordinary textual FP8 now reaches canonical native packages on gfx1201:
+both target aliases, all four storage pairs, shape replay, immutable inputs
+and retained outputs pass. FP16/BF16 public siblings pass. The final available
+lane group passes 230 tests (113 skips) with AVX-512 runtime execution.
+Warm public calls record 0.851–0.904 ms; first-call samples are image-primed.
+Integer public wrapping semantics are retained.
+Shape-bound Schedule/Tile provenance remains separate from physical image keys.
+
+Integrated onto merged PR947: the frozen broad gate passes 28,493 cases
+(5,320 skips, 874 deselections). Its source/diff/toolchain manifest remains
+separate from later repairs. Native ISTFT exact-profile alias preservation
+and complete temporary prepared-reverse fixtures pass 432 supplemental
+cases on rebuilt gfx1201 tools and 630 cases on owning RTX 5070, including
+saved-LSE forward/backward, resident/prepared ownership, NVFP4 and producer
+regressions. Six NVIDIA skips are explicitly scoped. Fresh post947 FP8 and
+independent gfx1151 LDS packets retain their actual source/compiler hashes.
+Sibling queues now summarize their own assessment and link the owning proof.
+
+PR948 review namespaces identical semantic Graphs by resolved physical target;
+four architecture-switch cases are red/green. Exact-target numerical fixture
+registration closes the named gfx1151 public static fp16/bf16-to-f32 admission
+gap without promoting its broader artifact-only capability. Eight owning
+public cases on gfx1151 and 24 on gfx1201 pass; the latter include all OCP
+FP8 pairs. Registry guards pass 167 cases and shared RTX5070 controls pass 75.
+First-head CI is green; the review head still requires combined CI.
+
+CI on 1ee72aaa8 passed production compiler-route proof, lint and audit, but
+one unit drift check found stale standalone-dashboard compiler counts
+(21,664 other cases passed). The marker-aware owner is now registered in
+the standard generated-doc fleet, which checks 33 documents including that
+partial view. A red/green regression proves stale blocks are repaired while
+authored prose is preserved; the full dashboard/registry group passes 106.
+No numerical gate, compiler arithmetic or hardware claim is weakened.
+
+Remaining: larger/dynamic/layout and split-K FP8, general attention keys,
+public admission costs and wider public dtype/layout/AD contracts.
+No pure-kernel latency, speedup or broad five-slice closure claim.
+All four backend queues are assessed; no architecture evidence is transferred.
+
+Evidence: benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md,
+gfx1201.json; source/binary/Target/Tile/HSACO identities and separate event,
+package and completed-host timing regions.
 <!-- entry-fields:end -->

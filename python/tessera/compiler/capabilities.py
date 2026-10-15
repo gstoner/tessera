@@ -799,8 +799,10 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                 # GFX1201-PARITY slice 1b (2026-09-18).
                 dtypes=("bf16", "fp16", "fp32", "int8", "int32", "int4"),
                 reason=(
-                    "ROCm 7.2.4 RDNA 3.5 (Strix Halo APU) WMMA artifact; "
-                    "HIP execution gated on real gfx1151 silicon"
+                    "Broad storage declarations retain artifact-only status. The named "
+                    "static compact fp16/bf16-to-f32 native package has an exact "
+                    "gfx1151 manifest/execute-compare fixture; that scoped proof "
+                    "does not promote general fp32/integer/layout/AD execution"
                 ),
             ),
             **_ops(

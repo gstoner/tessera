@@ -121,7 +121,9 @@ def test_dynamic_and_fused_shapes_share_native_image(dtype, dynamic, fused):
     rocm_native._cache.clear()
     rocm_native._shape_free_targets.clear()
     packages = []
-    for m,k,n in ((32,32,24), (48,64,33)):
+    # Ragged K keeps both cases within one physical macro-K recipe.
+    # K32 -> K64 crosses k_blocks=1 -> 2 on gfx1201 and must not alias.
+    for m,k,n in ((32,33,24), (48,63,33)):
         graph = (_dynamic_module(target="rocm", bounds=(m,n,k), dtype=dtype,
                                  activation="relu" if fused else "none", bias=fused)
                  if dynamic else _module(target="rocm", shape=(m,k,n), dtype=dtype,
@@ -162,6 +164,23 @@ def test_dynamic_and_fused_shapes_share_native_image(dtype, dynamic, fused):
     reason="requires explicit exact-device proof gate",
 )
 def test_native_module_hit_keeps_per_launch_capacity_guards():
+    # Other public JIT objects may legitimately retain image leases. Test a
+    # global clear in a fresh process rather than evicting another owner's image.
+    import subprocess
+    import sys
+    from tessera import runtime as rt
+    if rt._load_rocm_native_image_runtime() is None:
+        pytest.skip("requires built native image lease library")
+    completed = subprocess.run(
+        [sys.executable, "-c",
+         "from tests.unit.test_rocm_matmul_shape_key import _check_native_module_capacity_guards; "
+         "_check_native_module_capacity_guards()"],
+        capture_output=True, text=True, check=False,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+def _check_native_module_capacity_guards():
     from tessera import runtime as rt
     from tests.unit.test_scheduled_matmul_consumers import _dynamic_module
     arch = "gfx1201" if os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") == "1" else "gfx1151"
@@ -193,3 +212,10 @@ def test_native_module_hit_keeps_per_launch_capacity_guards():
     assert rt._rocm_native_image_cache_stats() == after
     rt._clear_rocm_native_image_cache()
     assert rt._rocm_native_image_cache_stats()["unloads"]-after["unloads"] == 1
+
+
+def test_macro_k_blocks_remain_distinct_physical_image_keys():
+    source = _target(16, "a" * 64)
+    one = source.replace("k = 16 : i64", "k = 16 : i64, k_blocks = 1 : i64")
+    two = source.replace("k = 16 : i64", "k = 16 : i64, k_blocks = 2 : i64")
+    assert _project(one) != _project(two)

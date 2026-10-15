@@ -1,15 +1,38 @@
 ---
-last_updated: 2026-10-09
+last_updated: 2026-10-15
 audit_role: reference
 ---
 
 # Five compiler slices after PR 892: completion evidence
 
-This is an evidence ledger, not a closure declaration. The coordinated source
-is the published draft PR895–903 stack, with dependent engineering
-checkpoints on Super-Bear. GPU evidence remains architecture-specific. Individual packets
-bind their actual dirty source and compiler/runtime binaries; an older packet
-is not proof of every later source change.
+This is an evidence ledger, not a closure declaration. The original
+PR895–903 stack is historical delivery context; later changes through merged
+PR947 extend the source and proof below. Older entries retain their original
+revision-bound outcomes. An older packet does not validate later source,
+and a passing test lane does not close a wider capability envelope.
+
+## Current reconciliation — 2026-10-15
+
+The original five requirements remain open as an aggregate. Their current
+proved envelopes and remaining work are:
+
+| Slice | Latest additional proof | Remaining requirement |
+| --- | --- | --- |
+| GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; the checkpoint quality distinction in the original row remains authoritative. | Broader layouts/composition and original-model quality acceptance. |
+| NVIDIA W1.1 | Compact resident two-sided and bounded producer routes, plus single-sided normalization/softmax chains, have owning RTX 5070 receipts under sm120_single_sided_resident_tensor_20261009. | Generic producer/accumulator reconstruction, mixed or pitched resident entry, wider composition and resident AD; Merged PR947 adds the named RMSNorm -> ReLU -> matmul storage boundary and its separately recorded RTX 5070 proof. |
+| NVIDIA saved-LSE forward | The bounded saved-LSE package preserves O/LSE through native sequence projection, schema 5/6 and compiler-free replay; see bounded_saved_lse_jvp_20261011. | Wider storage/masks, nested/composed output and general attention integration. |
+| NVIDIA attention backward | Bounded paired JVP/reverse, broadcast physical bias extents, trace-at-one replay and retained generations are covered by bounded_saved_lse_jvp_20261011; static resident reverse has its own sm120_resident_attention_vjp_20261009 receipt. | Dynamic/composed resident reverse, broader AD and independent performance promotion. |
+| ROCm routes/performance | The current FP8 candidate records independent RHS formats, shape-independent unsplit images, ordinary textual JIT, 60 gfx1201 cases and separate gfx1151 LDS proof in rocm_fp8_shape_cache_20261014. | Candidate delivery; wider image families/layouts, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution. |
+
+The historical red full-unit results below are superseded for their merged
+source by the 26,072-pass, 7,568-skip WSL receipt in
+benchmarks/baselines/native_encoded_scaled_gate_20261014/host-full-unit.txt.
+This is not a full-suite certificate for the current FP8 candidate. Its frozen integrated host lane passes 28,493 tests (5,320 skips) with the
+matching five-backend LLVM/MLIR 23.1.1 build. Subsequent profile/fixture
+repairs have separate focused and owning-device gates; see the FP8 packet.
+No old failure is represented as a current blocker without reproduction.
+Historical generic capability and physical-performance gaps remain open
+unless a later owning receipt explicitly covers them.
 
 Required production boundary: Python/textual frontend -> typed semantic Graph
 MLIR -> verified differentiation/optimization -> Schedule MLIR -> Tile MLIR
@@ -25,20 +48,31 @@ not constitute a production lowering.
 | NVIDIA attention backward | Compiler-generated paired AD, private residual generation, reordered gradient requests, prepared native ownership and replay. Expanded paired timing on RTX 5070: `benchmarks/baselines/nvidia_paired_attention_cost_20261007/README.md`. Explicit static LSE cotangent packages, compiler-free replay and host/resident/event proof: `benchmarks/baselines/nvidia_lse_cotangent_package_20261007/README.md`. Compact/bias-gradient extension: `benchmarks/baselines/nvidia_lse_cotangent_gradient_roles_20261007/README.md`. Native semantic O/LSE differentiation: `benchmarks/baselines/nvidia_multiresult_attention_ad_20261007/README.md`. Public JIT two-result VJP and private residual ownership: `benchmarks/baselines/nvidia_jit_multiresult_owner_20261007/README.md` (72 cases; 600 timing windows). | General dynamic/nested/composed multi-result AD, automatic external-consumer lifetime tracking and broader batching/transpose closure. Explicit static asynchronous capture/backward with registered consumer streams is proved in nvidia_attention_async_owner_20261008. Native paired AD already saves O/LSE; standalone recompute benchmarking is not the current paired policy. |
 | ROCm route/performance closure | Native math and movement on gfx1151/gfx1201, image identity reuse for declared packed envelopes, FP8/MXFP8/MXFP4 guarded vector-scale evaluation. `benchmarks/baselines/rocm_native_math_20261006/README.md`, `rocm_packed_image_identity_20261006/README.md`, `gfx1201_packed_vector_scales_20261006/README.md`. | Paged-KV layouts outside the positive-stride static f32 envelope, broader image-key families, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution. Measured guarded gains do not close these programs. Current-source gfx1201 ingest/movement rerun: `benchmarks/baselines/gfx1201_current_source_revalidation_20261007/README.md`; gfx1151 matching-source math/movement revalidation is recorded below; broader family revalidation remains open. |
 
+The PR948 review additionally binds generic JIT caches to the resolved target
+and registers the actually executed public matmul/GEMM profile on gfx1151.
+The fixture passes eight gfx1151 and 24 gfx1201 cases; f16/bf16 are proved on
+both and FP8 pairs only on gfx1201. Shared NVIDIA controls pass 75 cases.
+General capability/layout/dynamic/AD and physical-performance gates remain.
+First-head CI passed; post-review CI is still required.
+The first review head passed compiler-route proof and audit but found one
+stale partial-dashboard summary in unit CI. Its marker-aware renderer now
+joins the standard 33-document drift gate; numerical/runtime scope is unchanged.
+
 ## Delivery gates
 
-The aggregate is not ready to claim full completion. Curate source and receipts
-into reviewable PR slices; synchronize matching builds for affected owning
-hosts; run relevant registry/lifecycle and regression gates; resolve genuine
-scaled-matmul batching and transpose closure failures without weakening them.
-The earlier full suite is not green; later focused lanes do not establish a
-fresh full-suite result. Generated documents and Graphify are refreshed in
-sequence; an active refresh is not a completed gate.
+The aggregate is not ready to claim full completion. Deliver reviewable
+slices against merged main, synchronize affected owning builds, and run
+registry/lifecycle, regression and generated-document/Graphify gates.
+The earlier 26,072-pass receipt supersedes the historical red sweep. The
+integrated FP8 checkpoint subsequently passes 28,493 unit cases; after the
+profile repair, supplemental gates pass 432 cases on gfx1201 and 630 cases
+on RTX 5070. Their source/binary scopes remain separate. Preserve every
+remaining capability/performance gate and require final publication CI.
 
 All four backend queues carry architecture-specific synchronization entries.
 Apple and x86 assessments do not constitute new physical execution proof.
 
-## Current FP8 projected-image candidate
+## Historical FP8 projected-image candidate — 2026-10-07
 
 GFX1201-PROJECTION-ATTRIBUTION-2026-10-07 is recorded separately in
 `benchmarks/baselines/gfx1201_m200_k1536_attribution_20261007/README.md`.
@@ -84,9 +118,9 @@ remain open. Evidence:
 benchmarks/baselines/gfx1151_current_source_revalidation_20261007/README.md.
 
 
-## Fresh full-unit gate
+## Historical full-unit gate — 2026-10-07
 
-The current non-slow unit lane finished on Super-Bear WSL with 21,694 passed,
+The 2026-10-07 non-slow unit lane finished on Super-Bear WSL with 21,694 passed,
 7,503 skipped, 874 deselected and three failures. Two are generic scaled_matmul
 batching/transpose closure; the third is the new unit packet citation, now
 corrected in tracked backend queues and checked separately. The closure

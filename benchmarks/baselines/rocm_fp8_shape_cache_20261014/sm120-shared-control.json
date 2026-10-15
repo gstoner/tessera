@@ -1,0 +1,20 @@
+{
+  "status": "exact_sm120_shared_control_regression",
+  "owning_work": "E2E-REAL-6 / W1.1",
+  "gpu_report": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "952b0e2980e01a90d8cc24ab56f470051826983eb64cf4be3e625e01cc893120",
+    "python/tessera/compiler/driver.py": "b2c7a759d69c81e8b1e22a565be44b2f96f31a2663073aeb2be5681f57323952"
+  },
+  "binary_sha256": {
+    "TESSERA_OPT": "15f16b17ccc0f045e59707c036259bdafb2dbb1a73d81b2cdcba3ad11e47c2be",
+    "TESSERA_NVIDIA_OPT": "c105db113ecd3a31bb11a6fd7a18c610d19c8bfc640c48a5fc747c74d0922365",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "5032dee8d0d29f4a3a16c724b92c6f42a455b871304b9db98919b515a9966b0e"
+  },
+  "test_command": "pytest -q tests/unit/test_sm120_scheduled_activation.py",
+  "result": "28 passed",
+  "log_sha256": "b12d71df185e7e91e37fcd184d9c3e0825fa1ccbc4b1c2e299439102d982c2a9",
+  "base_compiler_checkout": "f50b21d0a83dd84393b54c0aa60df5f6cfd6a515",
+  "method": "Isolated Python import tree overlays only candidate jit.py/driver.py onto PR947 Python sources; fresh process and owning RTX 5070 execution. Primary checkout unchanged.",
+  "timing_claim": false
+}

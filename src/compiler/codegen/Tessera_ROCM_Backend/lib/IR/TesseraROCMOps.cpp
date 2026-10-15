@@ -64,6 +64,16 @@ mlir::LogicalResult SWMMACOp::verify() {
 // ROCM-SPLIT-K-1: the slice count and the reduction order are semantic keys
 // (Decision #21a) and travel as a pair.
 mlir::LogicalResult WMMAGemmOp::verify() {
+  if (auto rhs = getOperation()->getAttrOfType<mlir::StringAttr>("rhs_storage")) {
+    auto policy = getOperation()->getAttrOfType<mlir::DictionaryAttr>("numeric_policy");
+    auto lhs = policy ? policy.getAs<mlir::StringAttr>("storage") : mlir::StringAttr{};
+    auto arch = getOperation()->getAttrOfType<mlir::StringAttr>("arch");
+    if (!arch || arch.getValue() != "gfx1201" || !lhs ||
+        (lhs.getValue() != "e4m3" && lhs.getValue() != "e5m2") ||
+        (rhs.getValue() != "e4m3" && rhs.getValue() != "e5m2"))
+      return emitOpError("rhs_storage requires gfx1201 canonical e4m3/e5m2 LHS and RHS FP8 formats");
+  }
+
   if (getKBlocks() < 1)
     return emitOpError("ROCM_WMMA_GEMM_SPLIT_K_BAD_CONTRACT: k_blocks must be positive");
   if (getSplitK() < 1)

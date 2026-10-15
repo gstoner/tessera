@@ -136,7 +136,9 @@ def test_nvidia_matmul_is_not_executable_and_names_first_failing_gate():
     assert "op_target_conformance.md" in result.reason
 
 
-def test_rocm_matmul_names_toolchain_gate():
+def test_rocm_matmul_names_toolchain_gate(monkeypatch):
+    # This host-free FP32 policy row belongs to gfx1151, regardless of the live GPU.
+    monkeypatch.setenv("TESSERA_ROCM_CHIP", "gfx1151")
     # Canonical (toolchain-not-assumed) contract, asserted under deterministic
     # mode so it holds on both the Apple dev box and the Ubuntu ROCm 7.2.4 box.
     # On a box with hipcc live-present the toolchain gate passes and the named

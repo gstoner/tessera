@@ -1,0 +1,11 @@
+.s.s.s.s.s.s.s.sssssssssssssssssssssssssssssssss                         [100%]
+=============================== warnings summary ===============================
+tests/unit/test_rocm_public_matmul.py:10
+  /home/gstoner/scratch/rocm-fp8-post947-proof-20261014/tests/unit/test_rocm_public_matmul.py:10: PytestUnknownMarkWarning: Unknown pytest.mark.hardware_rocm - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.hardware_rocm
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [24] tests/unit/test_rocm_public_matmul.py:28: requires the owning architecture
+SKIPPED [16] tests/unit/test_rocm_public_matmul.py:30: RDNA3.5 has no FP8 WMMA
+8 passed, 40 skipped, 1 warning in 5.83s

@@ -241,6 +241,7 @@ nonzero,pure,,1,1,0
 norm,pure,,1,1,0
 normalize_group_advantages,pure,,1,1,0
 ntk_rope,pure,,1,1,0
+nvfp4_expand,pure,,1,1,0
 nvfp4_requantize,pure,,1,1,0
 ordinal_logistic_loss,pure,,1,1,0
 pack,movement,,1,1,0

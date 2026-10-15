@@ -53,6 +53,44 @@ inline LogicalResult verifyNVFP4Extents(Operation *op, int64_t n, int64_t k,
     return op->emitError("NVFP4 ingest row boundaries must start at zero and end at N");
   return success();
 }
+
+// Codes are exact; the scale product is rounded once from f64 to f32.
+inline LogicalResult verifyNVFP4ExpandPolicy(Operation *op, DictionaryAttr policy) {
+  const std::pair<StringRef,StringRef> fields[] = {
+    {"execution_mode","source_preserving_expansion"},
+    {"source_format","nvfp4_e2m1_e4m3_k16"},
+    {"destination_format","fp8_e4m3_k16_f32_scales"},
+    {"source_scale_application","projection_global_times_e4m3"},
+    {"destination_code_selection","exact_e2m1_signed_zero"},
+    {"destination_scale_order","k_group_n"},
+    {"scale_rounding","f64_product_to_f32_rne"}};
+  if (!policy || policy.size() != 7)
+    return op->emitError("NVFP4 expansion requires its complete explicit numeric policy");
+  for (auto [key,value] : fields) {
+    auto attr = policy.getAs<StringAttr>(key);
+    if (!attr || attr.getValue() != value)
+      return op->emitError("NVFP4 expansion conflicting numeric policy field ") << key;
+  }
+  return success();
+}
+inline LogicalResult verifyNVFP4ExpandExtents(Operation *op, int64_t n,
+                                             int64_t k, ArrayAttr offsets) {
+  if (n <= 0 || k <= 0 || k % 16 ||
+      n > std::numeric_limits<int64_t>::max() / k)
+    return op->emitError("NVFP4 expansion requires representable positive N/K16 extents");
+  if (!offsets || offsets.size() < 2)
+    return op->emitError("NVFP4 expansion requires complete projection row boundaries");
+  int64_t previous = -1;
+  for (Attribute attr : offsets) {
+    auto value = dyn_cast<IntegerAttr>(attr);
+    if (!value || value.getInt() <= previous)
+      return op->emitError("NVFP4 expansion requires increasing integer row boundaries");
+    previous = value.getInt();
+  }
+  if (cast<IntegerAttr>(offsets[0]).getInt() != 0 || previous != n)
+    return op->emitError("NVFP4 expansion row boundaries must start at zero and end at N");
+  return success();
+}
 inline LogicalResult verifyMXFP4StorageExtents(Operation *op, int64_t n, int64_t k,
                                                StringAttr contract) {
   if (!contract || contract.getValue() !=

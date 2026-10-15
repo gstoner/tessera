@@ -26,10 +26,10 @@ each row into a single E2E tier.
 |---|---:|
 | ``complete`` | 298 |
 | ``runnable_reference`` | 29 |
-| ``artifact_only`` | 0 |
+| ``artifact_only`` | 1 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
-| **total** | **361** |
+| **total** | **362** |
 
 ## complete (298)
 
@@ -367,6 +367,12 @@ each row into a single E2E tier.
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``game_mex`` | segment_reduce | public | public | registered | partial | reference | ready | none |
 | ``game_coalition_marginal`` | spectral | public | public | registered | partial | reference | ready | none |
+
+## artifact_only (1)
+
+| Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
+|---|---|---|---|---|---|---|---|---|
+| ``nvfp4_expand`` | quantize | public | public | registered | partial | artifact_only | artifact_only | none |
 
 ## partial (34)
 

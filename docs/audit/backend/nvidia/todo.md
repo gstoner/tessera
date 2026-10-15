@@ -14917,3 +14917,10 @@ Fixture notes: `phase3/cuda13/nvidia_pipeline_alias.mlir` stays ungated (core al
 Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Shared change: `@jit(target=<native>)` now raises `JIT_UNLOWERED_OP_NATIVE_TARGET` at decoration when the body calls a `tessera.ops` callable the AST Graph IR front end dropped (no `op_catalog` OpSpec, or a spelling it does not resolve). Before, the call left an empty `func.func` body, the effect joined to `top` so no tracer captured it, and `JitFn.__call__` returned eager numpy with `last_fallback_reason` None and no artifact. The dropped spellings ride on `GraphIRModule.frontend_unlowered_calls` so the refusal survives Graph IR cache hits; resolution is by object identity, so aliases count. No target and `target="cpu"` keep the eager reference path. Non-`tessera.ops` calls (numpy, user helpers) are out of scope and still fall back eagerly: recorded follow-up, not closed. Test: `tests/unit/test_jit_unlowered_op_native_target.py`.
 
 NVIDIA: NVIDIA targets refuse at decoration. Not run on The-Super-Bear; the change is decoration-time Python, so no sm_120 lane is claimed. Follow-up required: one Super-Bear sweep to confirm no sm_120 test relied on the eager fallback through an uncatalogued op.
+
+
+## NVFP4-NATIVE-EXPAND-20261015
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to SM120 physical execution in this slice: the shared catalog and shape inference register a semantic operation, while NVIDIA capability explicitly remains unsupported. A separate native producer, checked ABI and RTX 5070 proof would be required.

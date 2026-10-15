@@ -17428,3 +17428,10 @@ Parity validated (host-free hook behaviour): on Tajasarus (gfx1201) and Princess
 Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Shared change: `@jit(target=<native>)` now raises `JIT_UNLOWERED_OP_NATIVE_TARGET` at decoration when the body calls a `tessera.ops` callable the AST Graph IR front end dropped (no `op_catalog` OpSpec, or a spelling it does not resolve). Before, the call left an empty `func.func` body, the effect joined to `top` so no tracer captured it, and `JitFn.__call__` returned eager numpy with `last_fallback_reason` None and no artifact. The dropped spellings ride on `GraphIRModule.frontend_unlowered_calls` so the refusal survives Graph IR cache hits; resolution is by object identity, so aliases count. No target and `target="cpu"` keep the eager reference path. Non-`tessera.ops` calls (numpy, user helpers) are out of scope and still fall back eagerly: recorded follow-up, not closed. Test: `tests/unit/test_jit_unlowered_op_native_target.py`.
 
 ROCm: `target="rocm"` refuses, and a verifier failure caused by a dropped call nested under a catalogued op is now reported as the dropped op instead of `GRAPH_IR_UNRESOLVED_OPERAND`. Not run on gfx1151 or gfx1201. Follow-up required: one sweep per ROCm box to confirm no lane relied on the eager fallback.
+
+
+## NVFP4-NATIVE-EXPAND-20261015
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+
+Implementation in progress for gfx1201: the new semantic operation has a strict K16, two-result Graph contract and native Schedule/Tile/ROCm GPU lowering. Codes preserve signed zero; the scale policy declares one f64-product-to-f32 rounding. The checked standalone five-buffer package now passes bitwise owning-device output/rounding tests and producer-only graph/host timing. Public JIT, serialized replay, resident producer/consumer composition, real checkpoint parity and model-quality gates remain open. Evidence: benchmarks/baselines/gfx1201_nvfp4_native_expand_20261015/README.md. gfx1151 has no physical producer or transferred evidence.

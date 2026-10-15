@@ -1625,6 +1625,16 @@ def Tile_NVFP4RequantizeKernelOp : Tile_Op<"nvfp4_requantize_kernel",
   let hasVerifier = 1;
 }
 
+def Tile_NVFP4ExpandKernelOp : Tile_Op<"nvfp4_expand_kernel",
+    [MemoryEffects<[MemRead, MemWrite]>]> {
+  let summary = "Five-buffer NVFP4 expansion with explicit scale rounding";
+  let arguments = (ins Variadic<AnyType>:$inputs, Tile_NVFP4IngestContractAttr:$contract,
+      StrAttr:$artifact_hash);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 def Tile_MXFP4FoldedStorageKernelOp : Tile_Op<"mxfp4_folded_storage_kernel",
     [MemoryEffects<[MemRead, MemWrite]>]> {
   let summary = "Four-buffer lossless MXFP4 storage bridge with isolated ownership";

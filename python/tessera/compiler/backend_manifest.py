@@ -6618,6 +6618,16 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # ROCM-NVFP4-INGEST-1: the six-buffer descriptor converter is proved
     # specifically on gfx1201. A family row would transfer that proof to
     # gfx1151/CDNA. This does not promote general uint8 or other NVFP4 policies.
+    if op_name == "nvfp4_expand":
+        entries.append(BackendKernelEntry(
+            target="rocm_gfx1201", status=_ARTIFACT_STATUS,
+            dtypes=("nvfp4", "fp8_e4m3", "fp32", "fp64"),
+            feature_flags=("source_preserving_expansion",),
+            shape_envelope="static positive N/K16; ordered projection boundaries",
+            notes="Native Graph/Schedule/Tile/ROCm generator implemented; checked package, "
+                  "exact-device numerical proof and resident consumer composition remain in progress.",
+        ))
+
     if op_name == "nvfp4_requantize":
         entries.append(BackendKernelEntry(
             target="rocm_gfx1201",

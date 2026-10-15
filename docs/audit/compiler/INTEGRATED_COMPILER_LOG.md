@@ -12381,3 +12381,26 @@ physical proof transfer or five-slice completion claim.
 Evidence: benchmarks/baselines/nvfp4_checkpoint_k16_20261015/README.md,
 checkpoint-k16.json, comparison.json and final-input-tests.txt.
 <!-- entry-fields:end -->
+
+### 2026-10-15 — native source-preserving NVFP4 expansion primitive
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync NVFP4-NATIVE-EXPAND-20261015.
+
+Outcome: A distinct registered Graph operation infers exact FP8 code and FP32
+K16 scale-plane outputs. Native Graph/Schedule/Tile/ROCm/LLVM lowering preserves
+E2M1 signed zeros and applies the declared FP64-product-to-FP32 rounding.
+The checked five-buffer package rejects invalid source scales/globals, preserves
+private output ownership, and verifies artifact/descriptor lineage.
+53 focused cases and 326 registry gates pass, plus 353 delivery tests.
+Exact gfx1201 bitwise output checks cover K16/K48/K80 and rounding boundaries.
+Producer-only synthetic measurements separate device graph, completed host-buffer
+calls and compilation. The packet retains raw clock/event windows and native ISA.
+
+Remaining: Ordinary public JIT and serialized replay, resident consumer
+composition, native whole-sequence ownership, real checkpoint parity and model
+quality acceptance. The capability remains artifact_only; sibling targets remain
+unsupported. No packed consumer or overall compiler closure is claimed.
+
+Evidence: benchmarks/baselines/gfx1201_nvfp4_native_expand_20261015/README.md.
+<!-- entry-fields:end -->

@@ -14,11 +14,11 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 428 | backend_pathway_owned=413, multi_gpu_deferred=15 | backend_codegen=413, distributed_validation=15 |
+| `backend_kernel` | 429 | backend_pathway_owned=414, multi_gpu_deferred=15 | backend_codegen=414, distributed_validation=15 |
 | `benchmark_evidence` | 2 | benchmark_required=2 | benchmarks=2 |
 | `sharding_rule` | 61 | local_layout_transform=2, multi_gpu_deferred=2, needs_mesh_or_domain_proof=50, single_device_identity=7 | compiler_middle_end=2, distributed_validation=2, primitive_registry=57 |
 | `target_ir` | 29 | architecture_evidence_gated=24, multi_gpu_deferred=4, single_gpu_promote=1 | backend_codegen=25, distributed_validation=4 |
-| `tile_ir` | 25 | architecture_evidence_gated=24, single_gpu_closeable=1 | backend_codegen=24, compiler_middle_end=1 |
+| `tile_ir` | 26 | architecture_evidence_gated=24, single_gpu_closeable=2 | backend_codegen=24, compiler_middle_end=2 |
 
 ## Rows
 
@@ -335,6 +335,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `dequantize_fp6` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dequantize_fp8` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dequantize_nvfp4` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `nvfp4_expand` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `nvfp4_requantize` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `quantize_fp4` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `quantize_fp6` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -567,5 +568,6 @@ test, ABI, and surface dashboards.
 | `tile_ir` | `ordinal_logistic_loss` | loss | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: the calibrated-decision-heads change ships the mathematical surface (definition-checked, VJP+JVP law-swept); a Tile IR lowering is a separate backend decision with its own device evidence. |
 | `tile_ir` | `soft_binned_ece` | loss | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: the calibrated-decision-heads change ships the mathematical surface (definition-checked, VJP+JVP law-swept); a Tile IR lowering is a separate backend decision with its own device evidence. |
 | `tile_ir` | `ntk_rope` | position_encoding | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
+| `tile_ir` | `nvfp4_expand` | quantize | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `game_mex` | segment_reduce | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
 | `tile_ir` | `game_coalition_marginal` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |

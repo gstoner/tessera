@@ -1,13 +1,15 @@
 // Typed checkpoint conversion ownership. Included in namespace tessera.
 namespace {
 static FailureOr<DictionaryAttr> nativeNVFP4Contract(Operation *graph) {
+  const bool expand = graph->getName().getStringRef() == "tessera.nvfp4_expand";
+  const unsigned results = expand ? 2 : 3;
   auto fn = graph->getParentOfType<func::FuncOp>();
   auto mod = graph->getParentOfType<ModuleOp>();
   auto target = mod->getAttrOfType<StringAttr>("tessera.target");
   auto arch = mod->getAttrOfType<StringAttr>("tessera.arch");
   if (!fn || !fn.getBody().hasOneBlock() || fn.getNumArguments() != 3 ||
-      fn.getNumResults() != 3 || graph->getNumOperands() != 3 ||
-      graph->getNumResults() != 3 || !target || !arch ||
+      fn.getNumResults() != results || graph->getNumOperands() != 3 ||
+      graph->getNumResults() != results || !target || !arch ||
       target.getValue() != "rocm_gfx1201" || arch.getValue() != "gfx1201" ||
       graph->getResultTypes() != fn.getResultTypes())
     return graph->emitError("NVFP4 ingest needs an isolated gfx1201 checkpoint entry"), failure();
@@ -26,7 +28,7 @@ static FailureOr<DictionaryAttr> nativeNVFP4Contract(Operation *graph) {
   if (!codes || !codes.hasStaticShape() || codes.getRank() != 2)
     return graph->emitError("NVFP4 ingest lost static packed shape"), failure();
   auto names = fn->getAttrOfType<ArrayAttr>("tessera.bindings");
-  if (!names || names.size() != 6)
+  if (!names || names.size() != 3 + results)
     return graph->emitError("NVFP4 ingest requires six launch binding names"), failure();
   llvm::SmallDenseSet<StringRef> seen;
   for (Attribute attr : names) {
@@ -49,7 +51,8 @@ static FailureOr<DictionaryAttr> nativeNVFP4Contract(Operation *graph) {
 static LogicalResult scheduleNativeNVFP4Ingest(ModuleOp mod) {
   SmallVector<Operation *> graphs;
   mod.walk([&](Operation *op) {
-    if (op->getName().getStringRef() == "tessera.nvfp4_requantize") graphs.push_back(op);
+    if (op->getName().getStringRef() == "tessera.nvfp4_requantize" ||
+        op->getName().getStringRef() == "tessera.nvfp4_expand") graphs.push_back(op);
   });
   for (Operation *graph : graphs) {
     auto c = nativeNVFP4Contract(graph); if (failed(c)) return failure();
@@ -63,7 +66,9 @@ static LogicalResult scheduleNativeNVFP4Ingest(ModuleOp mod) {
     graph->setAttr("schedule.artifact_hash",hash);
     OperationState state(graph->getLoc(),"schedule.artifact");
     state.addAttribute("hash",hash);state.addAttribute("arch",b.getStringAttr("gfx1201"));
-    state.addAttribute("shape_key",b.getStringAttr("family=nvfp4_requantize"));
+    state.addAttribute("shape_key",b.getStringAttr(
+        graph->getName().getStringRef() == "tessera.nvfp4_expand"
+          ? "family=nvfp4_expand" : "family=nvfp4_requantize"));
     state.addAttribute("contract",*c);b.create(state);
   }
   return success();
@@ -71,14 +76,17 @@ static LogicalResult scheduleNativeNVFP4Ingest(ModuleOp mod) {
 static LogicalResult lowerNativeNVFP4Ingest(ModuleOp mod) {
   SmallVector<schedule::ArtifactOp> records;
   mod.walk([&](schedule::ArtifactOp op) {
-    if (op.getShapeKey() == "family=nvfp4_requantize") records.push_back(op);
+    if (op.getShapeKey() == "family=nvfp4_requantize" ||
+        op.getShapeKey() == "family=nvfp4_expand") records.push_back(op);
   });
   for (auto record : records) {
     auto fn = record->getParentOfType<func::FuncOp>();
     if (!fn || !fn.getBody().hasOneBlock() || fn.getBody().front().getOperations().size() != 3)
       return record.emitError("NVFP4 Schedule lost its isolated Graph entry");
     Operation *graph = &fn.getBody().front().front();
-    if (graph->getName().getStringRef() != "tessera.nvfp4_requantize")
+    const bool expand = record.getShapeKey() == "family=nvfp4_expand";
+    if (graph->getName().getStringRef() !=
+        (expand ? "tessera.nvfp4_expand" : "tessera.nvfp4_requantize"))
       return record.emitError("NVFP4 Schedule lost its native producer");
     auto c = nativeNVFP4Contract(graph);if (failed(c)) return failure();
     auto ret = dyn_cast<func::ReturnOp>(fn.getBody().front().back());
@@ -89,15 +97,20 @@ static LogicalResult lowerNativeNVFP4Ingest(ModuleOp mod) {
         graph->getAttr("schedule.artifact_hash") != record->getAttr("hash"))
       return record.emitError("NVFP4 Schedule contract changed after hashing");
     OpBuilder b(mod.getContext());b.setInsertionPointToEnd(mod.getBody());
-    std::string entry = "tessera_nvfp4_ingest_" + record.getHash().take_front(16).str();
+    std::string entry = (expand ? "tessera_nvfp4_expand_" : "tessera_nvfp4_ingest_")
+        + record.getHash().take_front(16).str();
     if (SymbolTable::lookupSymbolIn(mod,entry)) return record.emitError("NVFP4 entry collision");
     auto bytes = MemRefType::get({ShapedType::kDynamic},b.getI8Type());
     auto doubles = MemRefType::get({ShapedType::kDynamic},b.getF64Type());
-    SmallVector<Type> types{bytes,bytes,doubles,bytes,bytes,doubles};
+    SmallVector<Type> types = expand
+        ? SmallVector<Type>{bytes,bytes,doubles,bytes,
+            MemRefType::get({ShapedType::kDynamic},b.getF32Type())}
+        : SmallVector<Type>{bytes,bytes,doubles,bytes,bytes,doubles};
     auto kernel = func::FuncOp::create(b,graph->getLoc(),entry,b.getFunctionType(types,{}));
     auto block = kernel.addEntryBlock();
     b.setInsertionPointToStart(block);
-    OperationState tile(graph->getLoc(),"tile.nvfp4_requantize_kernel");
+    OperationState tile(graph->getLoc(), expand
+        ? "tile.nvfp4_expand_kernel" : "tile.nvfp4_requantize_kernel");
     tile.addOperands(block->getArguments());tile.addAttribute("contract",*c);
     tile.addAttribute("artifact_hash",record->getAttr("hash"));b.create(tile);
     func::ReturnOp::create(b,graph->getLoc(),ValueRange{});

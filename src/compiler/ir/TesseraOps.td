@@ -3754,6 +3754,15 @@ def Tessera_NVFP4RequantizeOp : Op<Tessera_Dialect, "nvfp4_requantize", [Pure]> 
   let hasVerifier = 1;
 }
 
+def Tessera_NVFP4ExpandOp : Op<Tessera_Dialect, "nvfp4_expand", [Pure]> {
+  let summary = "NVFP4 K16 to exact FP8 codes and rounded FP32 scale plane";
+  let arguments = (ins TensorType:$codes, TensorType:$scales,
+      TensorType:$globals, I64ArrayAttr:$row_offsets, Tessera_NumericPolicyAttr:$numeric_policy);
+  let results = (outs TensorType:$values, TensorType:$scale_plane);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 def Tessera_MXFP4FoldedStorageOp : Op<Tessera_Dialect, "mxfp4_folded_storage", [Pure]> {
   let summary = "Lossless checkpoint-byte permutation and folded row-reference scale plane";
   let arguments = (ins TensorType:$codes, TensorType:$exponents, StrAttr:$storage_contract);

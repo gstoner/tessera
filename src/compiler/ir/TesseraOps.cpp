@@ -6248,6 +6248,46 @@ LogicalResult tessera::NVFP4RequantizeOp::verify() {
   return success();
 }
 
+LogicalResult tessera::NVFP4ExpandOp::verify() {
+  if (failed(mlir::tessera_contract::verifyNVFP4ExpandPolicy(
+          getOperation(), getNumericPolicy())))
+    return failure();
+  SmallVector<RankedTensorType> inputs, outputs;
+  for (Value value : getOperands()) {
+    auto type = dyn_cast<RankedTensorType>(value.getType());
+    if (!type || !type.hasStaticShape() || type.getEncoding())
+      return emitOpError("requires plain static checkpoint tensor operands");
+    inputs.push_back(type);
+  }
+  for (Value value : getResults()) {
+    auto type = dyn_cast<RankedTensorType>(value.getType());
+    if (!type || !type.hasStaticShape() || type.getEncoding())
+      return emitOpError("requires plain static checkpoint tensor results");
+    outputs.push_back(type);
+  }
+  if (inputs[0].getRank() != 2 || !inputs[0].getElementType().isInteger(8) ||
+      inputs[1].getRank() != 2 ||
+      !isa<Float8E4M3FNType>(inputs[1].getElementType()) ||
+      inputs[2].getRank() != 1 || !inputs[2].getElementType().isF64())
+    return emitOpError("requires packed byte [N,K/2], E4M3 [N,K/16], f64 projection globals");
+  int64_t n = inputs[0].getDimSize(0), packedK = inputs[0].getDimSize(1);
+  if (packedK <= 0 || packedK > std::numeric_limits<int64_t>::max()/2)
+    return emitOpError("packed K is outside representable extents");
+  int64_t k = packedK * 2;
+  if (failed(mlir::tessera_contract::verifyNVFP4ExpandExtents(
+          getOperation(), n, k, getRowOffsets())))
+    return failure();
+  auto matches = [](RankedTensorType type, ArrayRef<int64_t> shape) {
+    return type.getShape() == shape;
+  };
+  if (!matches(inputs[1], {n,k/16}) ||
+      inputs[2].getDimSize(0) != static_cast<int64_t>(getRowOffsets().size()-1) ||
+      !matches(outputs[0], {n,k}) || !isa<Float8E4M3FNType>(outputs[0].getElementType()) ||
+      !matches(outputs[1], {k/16,n}) || !outputs[1].getElementType().isF32())
+    return emitOpError("checkpoint conversion operand/result shapes or storage disagree");
+  return success();
+}
+
 LogicalResult tessera::MXFP4FoldedStorageOp::verify() {
   SmallVector<RankedTensorType> types;
   for (Value value : llvm::concat<Value>(getOperands(), getResults())) {

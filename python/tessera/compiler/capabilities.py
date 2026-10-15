@@ -1220,9 +1220,19 @@ def _with_nvfp4_ingest_state(target: TargetCapability) -> TargetCapability:
     # The catalog name alone must not inherit an unrelated backend's ready
     # default when no dtype was supplied by a dashboard/selector query.
     if target.name == "rocm_gfx1201":
-        return target
+        from dataclasses import replace
+        ops = dict(target.supported_ops)
+        ops["tessera.nvfp4_expand"] = OpCapability(
+            "tessera.nvfp4_expand", "artifact_only",
+            dtypes=("uint8", "nvfp4", "fp8_e4m3", "fp32", "fp64"), ranks=(2,),
+            reason="Native K16 expansion contract; checked execution and composition in progress")
+        return replace(target, supported_ops=ops)
     from dataclasses import replace
     ops=dict(target.supported_ops)
+    ops["tessera.nvfp4_expand"] = OpCapability(
+        "tessera.nvfp4_expand", "unsupported",
+        dtypes=("uint8", "nvfp4", "fp8_e4m3", "fp32", "fp64"), ranks=(2,),
+        reason="This sibling backend requires its own physical producer and device proof")
     ops["tessera.scaled_matmul"]=OpCapability(
         "tessera.scaled_matmul","artifact_only",dtypes=("uint8",),ranks=(2,),
         reason="Scaled Graph dialect is available; this public resident JIT profile requires "

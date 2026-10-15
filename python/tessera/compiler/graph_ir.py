@@ -371,6 +371,7 @@ def apply_presence_flags(
 # reference signature is caught rather than silently emitting a stale key.
 _KEYWORD_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     "tessera.scaled_matmul": ("scale_layout", "numeric_policy", "physical_contract", "transposeA", "transposeB", "batching"),
+    "tessera.nvfp4_expand": ("numeric_policy", "row_offsets"),
     "tessera.nvfp4_requantize": ("numeric_policy", "row_offsets"),
     "tessera.mxfp4_folded_storage": ("storage_contract",),
     "tessera.es_low_rank_correction": ("out_dim", "rank", "sigma"),
@@ -4446,6 +4447,24 @@ def _shape_mxfp4_folded_storage(operands, attrs):
             tensor_ir_type((k//32+1,n),"uint8"))
 
 
+def _shape_nvfp4_expand(operands, attrs):
+    if len(operands) != 3:
+        raise ValueError("NVFP4 expansion requires three checkpoint operands")
+    if operands[0].rank is None:
+        return (IRType("tensor<*xf8E4M3FN>", ("*",), "fp8_e4m3"),
+                IRType("tensor<*xf32>", ("*",), "fp32"))
+    if len(operands[0].shape) != 2:
+        raise ValueError("NVFP4 expansion requires rank-two packed codes")
+    try:
+        n, packed_k = map(int, operands[0].shape)
+    except (ValueError, TypeError):
+        raise ValueError("NVFP4 expansion requires static checkpoint extents") from None
+    if n <= 0 or packed_k <= 0 or packed_k % 8:
+        raise ValueError("NVFP4 expansion requires positive N/K16")
+    return (tensor_ir_type((n, 2 * packed_k), "fp8_e4m3"),
+            tensor_ir_type((packed_k // 8, n), "fp32"))
+
+
 def _shape_nvfp4_requantize(operands, attrs):
     if len(operands) != 3:
         raise ValueError("NVFP4 ingest requires three checkpoint operands")
@@ -4469,6 +4488,7 @@ def _shape_nvfp4_requantize(operands, attrs):
 
 
 _SHAPE_RULES = {
+    "nvfp4_expand": _shape_nvfp4_expand,
     "same_as_first": _shape_same_as_first,
     "nvfp4_requantize": _shape_nvfp4_requantize,
     "mxfp4_folded_storage": _shape_mxfp4_folded_storage,

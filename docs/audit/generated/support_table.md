@@ -288,6 +288,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `dequantize_fp6` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `dequantize_fp8` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `dequantize_nvfp4` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `nvfp4_expand` | quantize | public | public | registered | complete | partial | artifact_only | artifact_only | none |
 | `nvfp4_requantize` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `quantize_fp4` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `quantize_fp6` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -408,7 +409,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | optimizer | 2 | PPGCFCN· PPGCFCN· |
 | position_encoding | 2 | PPGCFCN· PPGCpRN· |
 | projection | 1 | PPGCFCN· |
-| quantize | 9 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| quantize | 10 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpAA· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | random_mask | 1 | PPGCFHN· |
 | random_source | 4 | PPGCFHN· PPGCFHN· PPGCFHN· PPGCFHN· |
 | reduction | 15 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |

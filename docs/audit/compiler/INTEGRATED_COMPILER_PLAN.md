@@ -150,7 +150,11 @@ the next action's host requirement; it is not a live fleet-availability claim.
   decoded-weight projection RMS is 6.08% shipped, 7.42% direct and 9.74%
   ingested at M256. Full-model/representative-corpus quality acceptance and
   selector promotion remain open.
-- Latest: [2026-10-15 — checkpoint-preserving native K16 consumer control](INTEGRATED_COMPILER_LOG.md#2026-10-15--checkpoint-preserving-native-k16-consumer-control)
+- Native source-preserving producer primitive: registered K16 Graph/Schedule/Tile/
+  ROCm lowering and checked standalone package now have bitwise gfx1201 proof.
+  Public JIT, serialized replay, resident consumer composition and real checkpoint/
+  model-quality gates remain open; the public capability stays artifact_only.
+- Latest: [2026-10-15 — native source-preserving NVFP4 expansion primitive](INTEGRATED_COMPILER_LOG.md#2026-10-15--native-source-preserving-nvfp4-expansion-primitive)
 
 ### ROCM-SPLIT-K-1
 

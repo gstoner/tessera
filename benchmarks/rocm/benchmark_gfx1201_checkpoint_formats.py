@@ -10,6 +10,7 @@ from pathlib import Path
 import socket
 import statistics
 import time
+from typing import Any
 import numpy as np
 from tessera import runtime as rt
 from tessera.compiler import rocm_mxfp4 as mx,rocm_nvfp4_ingest as ingest
@@ -76,7 +77,7 @@ def measure(args):
             *ingested.shape,ingested.row_offsets,
             numeric_policy=ingest.nvfp4_requantization_policy()))
         native_compile_ms=(time.perf_counter()-started)*1e3
-        events=[]
+        events: list[float]=[]
         converted=execute_nvfp4_ingest(conversion,source_codes,source_scales,
             source_globals,event_samples=events)
         def verify_conversion(output):
@@ -133,7 +134,7 @@ def measure(args):
     packed=dict(mxfp4_nvfp4_ingested=(ingested.packed_codes,ingested.scale_exponents),
                 mxfp4_direct_joint_sse=(mx.pack_e2m1_codes(direct_codes),direct_scales))
     del direct_codes
-    packet=dict(schema="tessera.gfx1201.checkpoint_format_gate.v1",
+    packet: dict[str,Any]=dict(schema="tessera.gfx1201.checkpoint_format_gate.v1",
         architecture="gfx1201",device=name.value.decode(),device_ordinal=ordinal.value,host=socket.gethostname(),
         compiler_sha256=hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
         source_checkpoints=sources,projection_names=list(ingested.projection_names),

@@ -145,9 +145,12 @@ the next action's host requirement; it is not a live fleet-availability claim.
   shipped NVFP4 and 18.03% from direct BF16-to-MXFP4. Both the ingested and
   direct MXFP4 values execute through the same native package and match their
   decoded-weight references exactly. This one projection with synthetic FP8
-  activations exposes material added conversion error; broader quality and
+  activations exposes material added conversion error. The later captured-model
+  study records 256x4096 real BF16 model inputs and 18 native format arms;
+  decoded-weight projection RMS is 6.08% shipped, 7.42% direct and 9.74%
+  ingested at M256. Full-model/representative-corpus quality acceptance and
   selector promotion remain open.
-- Latest: [2026-10-09 — source-unit NVFP4 midpoint comparisons](INTEGRATED_COMPILER_LOG.md#2026-10-09--source-unit-nvfp4-midpoint-comparisons)
+- Latest: [2026-10-15 — NVFP4 ingest quality on captured model inputs](INTEGRATED_COMPILER_LOG.md#2026-10-15--nvfp4-ingest-quality-on-captured-model-inputs)
 
 ### ROCM-SPLIT-K-1
 

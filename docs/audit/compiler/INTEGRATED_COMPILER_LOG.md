@@ -12312,3 +12312,26 @@ Evidence: benchmarks/baselines/rocm_fp8_shape_cache_20261014/README.md,
 gfx1201.json; source/binary/Target/Tile/HSACO identities and separate event,
 package and completed-host timing regions.
 <!-- entry-fields:end -->
+
+### 2026-10-15 — NVFP4 ingest quality on captured model inputs
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync NVFP4-MODEL-ACTIVATIONS-20261015.
+
+Outcome: actual pinned BF16 Qwen3 layer-0 MLP inputs replace synthetic rows
+for an optional checkpoint comparison. The upstream CPU reference loads all
+executed parameters and captures twice identically; Torch is absent from the
+native measurement environment. 45 input/provenance guards and 18 native
+RX9070XT format arms pass. Decoded-weight projection RMS at M256 is 6.08%
+shipped NVFP4, 7.42% direct MXFP4 and 9.74% after ingest against BF16. Native
+arithmetic, quantization/folding and timing regions remain separate. Exact
+Content-Range validation rejects same-length wrong tensor bytes; historical
+checkpoint source fingerprints match. All four backend plans are assessed.
+
+Remaining: full-model/representative-corpus quality acceptance, broader
+layout/dynamic/composition, physical performance attribution and promotion.
+These projection proxies do not prove model accuracy or sibling execution.
+
+Evidence: benchmarks/baselines/nvfp4_model_activations_20261015/README.md,
+inputs.json, inputs.npz, quality-formats.json, input-tests.txt and isa-index.json.
+<!-- entry-fields:end -->

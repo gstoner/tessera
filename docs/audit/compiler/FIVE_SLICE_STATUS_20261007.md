@@ -18,7 +18,7 @@ proved envelopes and remaining work are:
 
 | Slice | Latest additional proof | Remaining requirement |
 | --- | --- | --- |
-| GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; the checkpoint quality distinction in the original row remains authoritative. | Broader layouts/composition and original-model quality acceptance. |
+| GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; nvfp4_model_activations_20261015 adds actual BF16 model layer inputs, 18 native format arms and separately labeled decoded-weight projection error. | Broader layouts/composition and representative-corpus/full-model quality acceptance; the two authored input sequences do not establish it. |
 | NVIDIA W1.1 | Compact resident two-sided and bounded producer routes, plus single-sided normalization/softmax chains, have owning RTX 5070 receipts under sm120_single_sided_resident_tensor_20261009. | Generic producer/accumulator reconstruction, mixed or pitched resident entry, wider composition and resident AD; Merged PR947 adds the named RMSNorm -> ReLU -> matmul storage boundary and its separately recorded RTX 5070 proof. |
 | NVIDIA saved-LSE forward | The bounded saved-LSE package preserves O/LSE through native sequence projection, schema 5/6 and compiler-free replay; see bounded_saved_lse_jvp_20261011. | Wider storage/masks, nested/composed output and general attention integration. |
 | NVIDIA attention backward | Bounded paired JVP/reverse, broadcast physical bias extents, trace-at-one replay and retained generations are covered by bounded_saved_lse_jvp_20261011; static resident reverse has its own sm120_resident_attention_vjp_20261009 receipt. | Dynamic/composed resident reverse, broader AD and independent performance promotion. |
@@ -53,7 +53,7 @@ and registers the actually executed public matmul/GEMM profile on gfx1151.
 The fixture passes eight gfx1151 and 24 gfx1201 cases; f16/bf16 are proved on
 both and FP8 pairs only on gfx1201. Shared NVIDIA controls pass 75 cases.
 General capability/layout/dynamic/AD and physical-performance gates remain.
-First-head CI passed; post-review CI is still required.
+The a21c24725 post-review head has all reported non-skipped CI checks successful, including unit, compiler-route, audit and validate-required. PR948 remains open; this is a delivery wait, not an unproved test failure.
 The first review head passed compiler-route proof and audit but found one
 stale partial-dashboard summary in unit CI. Its marker-aware renderer now
 joins the standard 33-document drift gate; numerical/runtime scope is unchanged.

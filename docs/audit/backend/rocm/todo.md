@@ -485,6 +485,23 @@ Parity validated for this gfx1201 continuous FP32 chain and forward derivative. 
 
 
 
+## NVFP4-MODEL-ACTIVATIONS-20261015 — captured-input quality evidence
+
+Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6.
+Synchronization key: NVFP4-MODEL-ACTIVATIONS-20261015.
+The optional CPU reference captures pinned BF16 Qwen3 layer-0 MLP inputs;
+all executed parameters are loaded and repeat capture is bitwise identical.
+The benchmark validates capture bytes/provenance before GPU/network work and
+now verifies exact HTTP Content-Range identity. 45 source/input guards pass.
+Identical captured inputs drive 18 native gfx1201 FP8/MXFP8/MXFP4 arms.
+Decoded-weight projection RMS at M256 is 6.08% shipped NVFP4, 7.42% direct
+MXFP4 and 9.74% after ingest, against the selected BF16 checkpoint. These
+are projection proxies, not full-model accuracy or NVIDIA execution proof.
+The two source tensor identities match the older checkpoint controls.
+Evidence: benchmarks/baselines/nvfp4_model_activations_20261015/README.md.
+
+Parity validated on RX9070XT/gfx1201 for native ingest and all 18 physical format arms, with independent numerical bounds and separate resident-event/host regions. The converter returns bitwise reference codes/exponents and bounded f64 loss statistics. Full-model/representative-corpus quality acceptance and wider dynamic/layout/composition remain follow-up required; no selector/default promotion. ISA artifacts deduplicate losslessly from 18 files to seven images.
+
 ## ROCM-NVFP4-SOURCE-MIDPOINTS-20261009
 
 Owner ROCM-NVFP4-INGEST-1. Native MLIR compares absolute source values against
@@ -622,9 +639,9 @@ No image, kernel, dtype, operation or ABI changes are introduced.
 
 ## Current actions — five-slice integration
 
-Current as of 2026-10-14. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
+Current as of 2026-10-15. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
 
-ROCM-NVFP4-INGEST-1: model-quality acceptance and wider dynamic/layout/AD envelopes. ROCM-FP8-BLOCKSCALE-1: broader W8A8 short/ragged-K and MXFP4 M256 attribution. E2E-REAL-6: general paged-KV layouts, launch overhead and wider cache families. gfx1151/gfx1201 unary, matmul and native-math warm package reuse have owning-host proof; remaining cache families need per-envelope evidence.
+ROCM-NVFP4-INGEST-1: captured BF16-model input projection evidence now supplements the synthetic controls; representative-corpus/full-model quality acceptance and wider dynamic/layout/AD envelopes remain open. ROCM-FP8-BLOCKSCALE-1: broader W8A8 short/ragged-K and MXFP4 M256 attribution. E2E-REAL-6: general paged-KV layouts, launch overhead and wider cache families. gfx1151/gfx1201 unary, matmul and native-math warm package reuse have owning-host proof; remaining cache families need per-envelope evidence.
 
 Named gfx1201 leading/scalar primal, scale JVP/VJP, transposed A and partial K32 groups are proved. Actual-image packaging and bounded version-query reuse are proved in recorded envelopes; they are not pending builds.
 
@@ -634,9 +651,10 @@ batching/transpose suite failures are superseded by the source-bound
 26,072-pass, 7,568-skip full WSL result in
 benchmarks/baselines/native_encoded_scaled_gate_20261014/host-full-unit.txt.
 That receipt does not validate later changes or establish generic capability
-closure. The current FP8 Target/image/public-route candidate still requires
-its own terminal broad result, final documentation/Graphify gates and
-reviewable PR delivery.
+closure. The FP8 Target/image/public-route a21c24725 candidate has successful
+reported non-skipped CI, including unit, compiler-route, audit and the required
+fan-in. PR948 remains open pending merge. This later model-input quality
+slice has separate source/device receipts and still requires focused delivery.
 
 Evidence ledger: ../../compiler/FIVE_SLICE_STATUS_20261007.md. Superseded active notes: archive/compiler_slice_integration_checkpoints_20261007.md.
 

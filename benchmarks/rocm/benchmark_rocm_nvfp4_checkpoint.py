@@ -18,6 +18,7 @@ import statistics
 import subprocess
 import time
 import urllib.request
+from typing import cast
 
 import ml_dtypes
 import numpy as np
@@ -129,8 +130,8 @@ def _load_projection(tensor: str = TENSOR):
     started = time.perf_counter()
     q_index, q_index_bytes = _get_json(_url(NVFP4_REPO, NVFP4_REVISION, "model.safetensors.index.json"))
     bf_index, bf_index_bytes = _get_json(_url(BF16_REPO, BF16_REVISION, "model.safetensors.index.json"))
-    q_map = q_index["weight_map"]
-    bf_map = bf_index["weight_map"]
+    q_map = cast(dict[str, str], q_index["weight_map"])
+    bf_map = cast(dict[str, str], bf_index["weight_map"])
     prefix = tensor.removesuffix(".weight")
     q_names = (tensor, prefix + ".weight_scale", prefix + ".weight_scale_2")
     q_shards = sorted({q_map[name] for name in q_names})
@@ -251,7 +252,7 @@ def _native_checkpoint_ingest(projections, reference):
     start = time.perf_counter()
     validate(native_ingest.execute_nvfp4_ingest(package, codes, scales, globals_))
     checked_host_ms = (time.perf_counter() - start) * 1000.0
-    samples = []
+    samples: list[float] = []
     outputs = native_ingest.execute_nvfp4_ingest(
         package, codes, scales, globals_, event_samples=samples)
     packed, exponents = validate(outputs)

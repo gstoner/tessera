@@ -411,6 +411,23 @@ Not applicable to AVX-512 physical lowering: this dispatches only to gfx1201. Na
 
 
 
+## NVFP4-MODEL-ACTIVATIONS-20261015 — captured-input quality evidence
+
+Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6.
+Synchronization key: NVFP4-MODEL-ACTIVATIONS-20261015.
+The optional CPU reference captures pinned BF16 Qwen3 layer-0 MLP inputs;
+all executed parameters are loaded and repeat capture is bitwise identical.
+The benchmark validates capture bytes/provenance before GPU/network work and
+now verifies exact HTTP Content-Range identity. 45 source/input guards pass.
+Identical captured inputs drive 18 native gfx1201 FP8/MXFP8/MXFP4 arms.
+Decoded-weight projection RMS at M256 is 6.08% shipped NVFP4, 7.42% direct
+MXFP4 and 9.74% after ingest, against the selected BF16 checkpoint. These
+are projection proxies, not full-model accuracy or NVIDIA execution proof.
+The two source tensor identities match the older checkpoint controls.
+Evidence: benchmarks/baselines/nvfp4_model_activations_20261015/README.md.
+
+Not applicable to Tessera AVX-512 physical execution: Torch CPU generates reference inputs, not an x86 compiler package. No x86 dtype, operation, ABI, schedule or timing claim changes. Shared benchmark metadata/provenance checks are assessed independently of native CPU proof.
+
 ## ROCM-NVFP4-SOURCE-MIDPOINTS-20261009
 
 Owner ROCM-NVFP4-INGEST-1. Native MLIR compares absolute source values against

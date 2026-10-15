@@ -11,6 +11,7 @@ import inspect
 import json
 from pathlib import Path
 import socket
+from typing import cast
 import numpy as np
 import ml_dtypes
 from benchmarks.rocm import benchmark_rocm_nvfp4_checkpoint as checkpoint
@@ -37,7 +38,7 @@ class PinnedBF16Reader:
         self.repo = checkpoint.BF16_REPO
         self.revision = checkpoint.BF16_REVISION
         index, raw = checkpoint._get_json(checkpoint._url(self.repo, self.revision, "model.safetensors.index.json"))
-        self.weight_map = index["weight_map"]
+        self.weight_map = cast(dict[str, str], index["weight_map"])
         self.headers = {}
         self.provenance = {"repo": self.repo, "revision": self.revision, "index_sha256": digest(raw), "tensors": {}}
 

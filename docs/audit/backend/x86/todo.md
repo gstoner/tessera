@@ -7,6 +7,27 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## SM120-SAVED-LSE-STORAGE-20261016 — independent O and LSE storage
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Synchronization key: SM120-SAVED-LSE-STORAGE-20261016.
+
+PR954 merged as 7a95133351f6b58dbd24ac62160fd6651082bc6a after its final
+4cd5e2735 head passed CI and review. Its W1.1 source-active resident proof
+retains its own scope; all five broader completion rows remain open.
+
+Shared contracts: production tracing preserves the independent FP32 row-LSE
+result; native checkpoint verification and Schedule/Tile retain homogeneous
+Q/K/V storage and independently declared O storage. Three additive typed
+forward ABIs preserve the existing FP32 ABI and saved-LSE AD schemas 5
+(bounded) and 6 (static). No new dtype, operation, pass or diagnostic code is
+introduced. See docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+
+Follow-up required for an independent native CPU saved-LSE storage consumer.
+The common trace now retains the FP32 auxiliary; the new CUDA package and
+stream ownership are not applicable to AVX-512 execution. No CPU numerical
+or timing proof is inferred, and existing x86 work remains independently owned.
+
 ## W11-RESIDENT-SOURCE-20261016 — resident roots for source-active JVP
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.

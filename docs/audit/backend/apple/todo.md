@@ -6,6 +6,28 @@ target: apple_gpu
 last_updated: 2026-10-16
 ---
 
+## SM120-SAVED-LSE-STORAGE-20261016 — independent O and LSE storage
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Synchronization key: SM120-SAVED-LSE-STORAGE-20261016.
+
+PR954 merged as 7a95133351f6b58dbd24ac62160fd6651082bc6a after its final
+4cd5e2735 head passed CI and review. Its W1.1 source-active resident proof
+retains its own scope; all five broader completion rows remain open.
+
+Shared contracts: production tracing preserves the independent FP32 row-LSE
+result; native checkpoint verification and Schedule/Tile retain homogeneous
+Q/K/V storage and independently declared O storage. Three additive typed
+forward ABIs preserve the existing FP32 ABI and saved-LSE AD schemas 5
+(bounded) and 6 (static). No new dtype, operation, pass or diagnostic code is
+introduced. See docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+
+Follow-up required for Apple physical integration: the common trace fix
+preserves the semantic FP32 auxiliary, but the SM120 checkpoint owner and
+CUDA stream/byte-span ABI do not implement a Metal package. No Mac numerical
+or timing evidence is transferred. Existing Apple JIT/AD obligations remain
+open; the new half checkpoint physical contract rejects non-SM120 targets.
+
 ## W11-RESIDENT-SOURCE-20261016 — resident roots for source-active JVP
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.

@@ -12,6 +12,28 @@ NVFP4 expansion and source-preserving multi-output ownership. Older entries reta
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
 
+## Native saved-LSE storage integration — 2026-10-16
+
+PR954 is merged as 7a95133351f6b58dbd24ac62160fd6651082bc6a. Its final
+4cd5e2735 head passed every required check and clear automated review.
+Earlier pending-publication statements below describe their historical
+checkpoints and no longer block that delivered source-active resident slice.
+
+SM120-SAVED-LSE-STORAGE-20261016 now carries FP16/BF16 saved-LSE forward
+through the real public trace, native Graph/Schedule/Tile, NVIDIA Target,
+LLVM/NVVM/PTX and checked host/resident owners. LSE stays FP32 independently
+of primary storage. All 960 production compiler-route cases and 94 adjacent
+RTX5070 device cases pass without skips; 12 authored half-input/FP32-output
+cases also pass. Twenty-four packages replay numerically without compiler
+subprocesses. Twelve legacy FP32 raw Tile/Target/PTX images, entries and ABI
+IDs are unchanged. Full-unit, documentation and publication gates are active.
+
+This extends the forward-storage envelope only. Half-storage AD, generic
+producer integration, wider masks, dynamic/composed resident closure and
+representative performance/model-quality requirements remain open. Each
+sibling backend queue records its independent physical follow-up. All five
+remaining-requirement rows remain open.
+
 ## Delivery and next source-active integration — 2026-10-16
 
 PR953 merged as d6ea97e5dfb2a61db81ea6e5b43be18f1e9943fe. Its exact
@@ -67,7 +89,7 @@ FP16/BF16->FP32 and FP32->FP64, affine/permuted/static/dynamic cases and nonzero
 BF16 radial inputs. Twenty RTX5070 cases cover nonzero tiny-epsilon BF16
 through public host/resident, portable and event/captured profile routes.
 
-Frozen 46a5dd8da721055a51b672adde1eb6e534789c3b passes 26,889 non-slow unit passes (7,678 skips),
+Frozen 46a5dd8da721055a51b672adde1eb6e534789c3b records 26,889 non-slow unit passes (7,678 skips),
 912 required compiler-route passes and 416 owning RTX5070 passes, with no skips
 in either required proof lane. All phase source/tool/helper witnesses match.
 Eight timed packages also pass independent FP64 checks and standalone replay

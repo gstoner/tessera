@@ -242,3 +242,80 @@ def test_optional_strides_review_repair_has_separate_executed_device_evidence(tm
     assert len(cases) == 396
     omitted = [case for case in cases if "test_optional_strides_resident_jvp" in case.get("name", "")]
     assert len(omitted) == 48
+
+def test_rms_review_epoch_binds_native_numerics_packages_and_full_validation(tmp_path, monkeypatch):
+    from tessera import runtime as rt
+    from tessera.compiler.portable_nvidia_active_source import restore
+
+    prefix = "rms-review/"
+    validation = data(prefix + "corrected-validation.json.gz")
+    source = validation["source_before"]
+    assert validation["state"] == "passed" and validation["exit_code"] == 0
+    assert source == validation["source_after"] and not source["status"]
+    assert source["commit"] == "46a5dd8da721055a51b672adde1eb6e534789c3b"
+    assert source["tools"]["TESSERA_OPT"]["sha256"] != COMPILER
+    assert source["tools"]["TESSERA_NVIDIA_PTX_LAUNCH_LIB"]["sha256"] == PROVIDER
+    assert all(phase["exit_code"] == 0 and phase["source_before"] == phase["source_after"] == source
+               for phase in validation["phases"])
+    phases = {phase["phase"]: phase for phase in validation["phases"]}
+    assert phases["unit"]["passed"] == 26889
+    assert phases["unit"]["skipped"] == 7678
+    for phase in validation["phases"]:
+        assert hashlib.sha256(raw(prefix + phase["log"] + ".gz")).hexdigest() == phase["raw_log_sha256"]
+    assert hashlib.sha256(raw(prefix + "validate_corrected.py.txt.gz")).hexdigest() == source["helpers"]["validate_corrected.py"]
+    assert hashlib.sha256((PACKET / "capture_programs.py").read_bytes()).hexdigest() == source["helpers"]["capture_programs.py"]
+    assert b"32 failed" in raw(prefix + "tiny-epsilon-before.log.gz")
+    for lane, count in (("compiler-route", 912), ("device", 416)):
+        junit = raw(prefix + f"corrected-{lane}.xml.gz")
+        path = tmp_path / (lane + ".xml")
+        path.write_bytes(junit)
+        result = subprocess.run([sys.executable, str(ROOT / "scripts/ci_require_executed.py"), str(path)],
+                                capture_output=True, text=True, check=False)
+        assert result.returncode == 0, result.stdout + result.stderr
+        cases = ET.fromstring(junit).findall(".//testcase")  # noqa: S314
+        assert len(cases) == phases[lane]["passed"] == count
+        if lane == "compiler-route":
+            normalization = [case for case in cases if case.get("classname", "").endswith(
+                "test_native_normalization_accumulator_policy")]
+            assert len(normalization) == 153
+            assert sum("inverse_square_overflow" in case.get("name", "") for case in normalization) == 32
+        else:
+            assert sum("test_tiny_epsilon_nonzero_bf16" in case.get("name", "") for case in cases) == 20
+
+    timings = data(prefix + "corrected-timings.json.gz")
+    measured = timings["source_before"]
+    assert measured == timings["source_after"] and measured["commit"] == source["commit"]
+    assert measured["compiler_sha256"] == source["tools"]["TESSERA_OPT"]["sha256"]
+    assert measured["runtime_sha256"] == PROVIDER
+    assert timings["device_uuid"] == "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545"
+    snapshot = data(prefix + "source-snapshot.json.gz")
+    base = data(snapshot["base_snapshot"])
+    assert snapshot["commit"] == source["commit"]
+    assert not (set(snapshot["inherited"]) & set(snapshot["files"]))
+    files = {path: base["files"][path] for path in snapshot["inherited"]}
+    files.update(snapshot["files"])
+    assert set(files) == set(snapshot["sha256"])
+    for path, text in files.items():
+        assert hashlib.sha256(text.encode()).hexdigest() == snapshot["sha256"][path]
+    for path, digest in measured["files"].items():
+        assert snapshot["sha256"][path] == digest
+
+    index = json.loads((PACKET / prefix / "programs/index.json").read_text())
+    assert index["source_before"] == index["source_after"] == measured
+    assert len(index["rows"]) == len(timings["rows"]) == 8
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: pytest.fail("replay restoration invoked compiler"))
+    monkeypatch.setattr(rt, "_load_nvidia_ptx_launch", lambda: pytest.fail("restoration accessed provider"))
+    for row, captured in zip(timings["rows"], index["rows"], strict=True):
+        artifact = rt.RuntimeArtifact.from_json(raw(prefix + "programs/" + captured["artifact"]).decode())
+        assert artifact.artifact_hash == row["artifact_hash"] == captured["artifact_hash"]
+        _, _, members = restore(artifact.metadata["native_program"])
+        assert [member["image_digest"] for member in members] == row["image_digests"]
+        assert [member["abi"]["block_size"] for member in members] == [128, 32, 32]
+        assert captured["compiler_subprocesses_during_replay"] == 0 and captured["bitwise_host_resident_equal"]
+        for mode, samples in row["host_completed_samples_us"].items():
+            assert len(samples) == 7
+            assert all(math.isfinite(value) and value > 0 for value in samples)
+            assert statistics.median(samples) == pytest.approx(row["host_completed_medians_us"][mode])
+        for name in ("host_errors", "standalone_resident_errors"):
+            assert all(0 <= error["max_error_over_budget"] <= 1 for error in captured[name])
+

@@ -55,6 +55,29 @@ source-before/after witness and raw logs/JUnit are archived separately.
 The d1ba6e98d full-unit/benchmark certificate retains its original scope; no
 new timing or sibling physical parity is inferred from this metadata repair.
 
+### RMS numerical review follow-through — 2026-10-16
+
+The shared RMS JVP/VJP repair multiplies x by each inverse factor before
+the reductions, and scales epsilon by each inverse factor before applying the
+direction. It avoids materializing an overflowing inverse square when inverse
+is finite. Thirty-two native tiny-epsilon regressions reproduce NaNs before the
+repair; all 153 native LLVM precision cases now pass, including zero seeds in
+FP16/BF16->FP32 and FP32->FP64, affine/permuted/static/dynamic cases and nonzero
+BF16 radial inputs. Twenty RTX5070 cases cover nonzero tiny-epsilon BF16
+through public host/resident, portable and event/captured profile routes.
+
+Frozen 46a5dd8da721055a51b672adde1eb6e534789c3b passes 26,889 non-slow unit passes (7,678 skips),
+912 required compiler-route passes and 416 owning RTX5070 passes, with no skips
+in either required proof lane. All phase source/tool/helper witnesses match.
+Eight timed packages also pass independent FP64 checks and standalone replay
+with compiler subprocesses disabled. The latest same-owner resident comparison
+shows about 19–28% lower public latency at the larger synthetic M256 cases,
+and 40–57% higher latency at smaller cases. No default, quantized-route or
+sibling physical promotion follows. The earlier d1ba6e98d and e164fd4d8
+records retain their original source scope; they do not validate this changed
+arithmetic. The five-slice aggregate and wider integration gates remain open.
+Evidence: benchmarks/baselines/sm120_resident_source_jvp_20261016/rms-review/README.md.
+
 Contract: docs/spec/ir/source_active_row_jvp.md.
 
 ## GFX1201-FOLDED-INPUT-VIEWS-20261016 — preserve physical input row pitches

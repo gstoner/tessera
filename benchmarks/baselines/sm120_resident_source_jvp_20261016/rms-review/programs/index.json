@@ -1,0 +1,363 @@
+{
+  "device_uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "compute_capability": "12.0",
+  "source_before": {
+    "commit": "46a5dd8da721055a51b672adde1eb6e534789c3b",
+    "status": [],
+    "files": {
+      "python/tessera/compiler/jit.py": "7bc9e860691d87a6ddadc73034041546ea7c2a2dfb0e3a9935a47301edc4c0cb",
+      "python/tessera/compiler/prepared_nvidia_active_source.py": "34795f031a467ef054b1eec61d6edd81931f1f00630afe7ef0b3d273f34339a8",
+      "python/tessera/compiler/portable_nvidia_active_source.py": "cb529391fa03820fbe0cb8d97d292008a2f2d1c73b3155833b60e94b8411ff37",
+      "python/tessera/compiler/nvidia_tensor_jvp_runtime.py": "aa35fb99ca2152a4306bf63ab856e41d751a02ae4df7e8f7d6839df8de4058b0",
+      "src/compiler/ir/TangentInterface.cpp": "3a6785406922c47eeef91a64f1c80eed57e57ce4cfeb2475a158baf31a8cc417",
+      "src/compiler/ir/AdjointInterface.cpp": "587b7e7b654a7c74ef55ccbdaa063a710614592b7b66aa53ff75840c20400893",
+      "src/compiler/ir/include/Tessera/IR/NormalizationAD.h": "078cf0dc0b831c993058c91ccaebcb8189c81c1252090204bafa1d04c27633ef",
+      "src/compiler/programming_model/lib/NativeRowScalarizer.h": "e2126fa0740ac009f8d086a179ed8b1d9f2c40f33a369e0053a90770474233af",
+      "src/transforms/lib/NativeSM120ActiveSourceProgram.h": "1067bb851e401155eb907f4092ac417762fb35822121e1201450be916398ccb8",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "ae76b66a7266e74f4440e7c098ba93ac28aca3941fb50990391d19b817cd6363",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/active_source_owner.inc": "6a6c07097d1a93600a24e9c24394975101cab778564f68c27f2b66d4dc8252a9",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_active_source_program.h": "1767866890d6b830e6d1589c6fa10a20c609d50416d31d9af3998f75706ec53d",
+      "benchmarks/nvidia/benchmark_active_source_jvp.py": "4d43ff62d98f9bf2faa0398905ed546e10c2aa00dfcb0dfd2bf92a6a0aa99cbb",
+      "benchmarks/nvidia/active_source_jvp_reference.py": "620f748b1e5ab2f1eef00e2ef01e13b0e6aa76c7307665d6c2d1ee6933294628"
+    },
+    "compiler_sha256": "bb3f78bde782ddf792a28ca028b7588c4ee0d7b9e2077e6d13f8970dd00cc58c",
+    "runtime_sha256": "2800b55abad107a7af51df763d9b7b53767ac5f37a515f9841dfe6e4ae55e2e5"
+  },
+  "source_after": {
+    "commit": "46a5dd8da721055a51b672adde1eb6e534789c3b",
+    "status": [],
+    "files": {
+      "python/tessera/compiler/jit.py": "7bc9e860691d87a6ddadc73034041546ea7c2a2dfb0e3a9935a47301edc4c0cb",
+      "python/tessera/compiler/prepared_nvidia_active_source.py": "34795f031a467ef054b1eec61d6edd81931f1f00630afe7ef0b3d273f34339a8",
+      "python/tessera/compiler/portable_nvidia_active_source.py": "cb529391fa03820fbe0cb8d97d292008a2f2d1c73b3155833b60e94b8411ff37",
+      "python/tessera/compiler/nvidia_tensor_jvp_runtime.py": "aa35fb99ca2152a4306bf63ab856e41d751a02ae4df7e8f7d6839df8de4058b0",
+      "src/compiler/ir/TangentInterface.cpp": "3a6785406922c47eeef91a64f1c80eed57e57ce4cfeb2475a158baf31a8cc417",
+      "src/compiler/ir/AdjointInterface.cpp": "587b7e7b654a7c74ef55ccbdaa063a710614592b7b66aa53ff75840c20400893",
+      "src/compiler/ir/include/Tessera/IR/NormalizationAD.h": "078cf0dc0b831c993058c91ccaebcb8189c81c1252090204bafa1d04c27633ef",
+      "src/compiler/programming_model/lib/NativeRowScalarizer.h": "e2126fa0740ac009f8d086a179ed8b1d9f2c40f33a369e0053a90770474233af",
+      "src/transforms/lib/NativeSM120ActiveSourceProgram.h": "1067bb851e401155eb907f4092ac417762fb35822121e1201450be916398ccb8",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "ae76b66a7266e74f4440e7c098ba93ac28aca3941fb50990391d19b817cd6363",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/active_source_owner.inc": "6a6c07097d1a93600a24e9c24394975101cab778564f68c27f2b66d4dc8252a9",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_active_source_program.h": "1767866890d6b830e6d1589c6fa10a20c609d50416d31d9af3998f75706ec53d",
+      "benchmarks/nvidia/benchmark_active_source_jvp.py": "4d43ff62d98f9bf2faa0398905ed546e10c2aa00dfcb0dfd2bf92a6a0aa99cbb",
+      "benchmarks/nvidia/active_source_jvp_reference.py": "620f748b1e5ab2f1eef00e2ef01e13b0e6aa76c7307665d6c2d1ee6933294628"
+    },
+    "compiler_sha256": "bb3f78bde782ddf792a28ca028b7588c4ee0d7b9e2077e6d13f8970dd00cc58c",
+    "runtime_sha256": "2800b55abad107a7af51df763d9b7b53767ac5f37a515f9841dfe6e4ae55e2e5"
+  },
+  "scope": "same-package independent numerical and standalone resident replay; no timing claim",
+  "rows": [
+    {
+      "storage": "f16",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "permuted": false,
+      "artifact": "f16-m17-n19-k35.json.gz",
+      "artifact_hash": "177cd94f03ccb2f74f40df49e9f15d78eaf0d1dc2e2bd59636f7eded78e8463b",
+      "image_digests": [
+        "e54cf4f282cdbc973c96c48dfbedcfb9a12ff233f4d49657067a7f5abc62f4f1",
+        "8ec83d2c5afc14fbf54afac06765688b2fddc86931a283abd5bb5ee1abade26b",
+        "8ec83d2c5afc14fbf54afac06765688b2fddc86931a283abd5bb5ee1abade26b"
+      ],
+      "host_errors": [
+        {
+          "max_abs_error": 4.76837158203125e-07,
+          "max_error_over_budget": 0.0002274777942396968
+        },
+        {
+          "max_abs_error": 1.30385160446167e-07,
+          "max_error_over_budget": 0.00016255621477211758
+        }
+      ],
+      "standalone_resident_errors": [
+        {
+          "max_abs_error": 4.76837158203125e-07,
+          "max_error_over_budget": 0.0002274777942396968
+        },
+        {
+          "max_abs_error": 1.30385160446167e-07,
+          "max_error_over_budget": 0.00016255621477211758
+        }
+      ],
+      "bitwise_host_resident_equal": true,
+      "compiler_subprocesses_during_replay": 0,
+      "result_ownership": "two independent completed host f32 arrays"
+    },
+    {
+      "storage": "bf16",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "permuted": true,
+      "artifact": "bf16-m17-n19-k35.json.gz",
+      "artifact_hash": "29a5c7890f59a71300583e56a7dcba5b26b17de7b71203ecc77a1352c5df2bd7",
+      "image_digests": [
+        "a405ff89efebbf9a06a9dbc63f39d7e985bcb2741860391ec86aebc50ca29745",
+        "8024a7deec129a6e77ed0dd338085589f6ae8507d96a69a90ebdbfbbd96c1460",
+        "8024a7deec129a6e77ed0dd338085589f6ae8507d96a69a90ebdbfbbd96c1460"
+      ],
+      "host_errors": [
+        {
+          "max_abs_error": 2.086162567138672e-07,
+          "max_error_over_budget": 1.2162024148836903e-05
+        },
+        {
+          "max_abs_error": 6.146728992462158e-08,
+          "max_error_over_budget": 1.3897654643086744e-05
+        }
+      ],
+      "standalone_resident_errors": [
+        {
+          "max_abs_error": 2.086162567138672e-07,
+          "max_error_over_budget": 1.2162024148836903e-05
+        },
+        {
+          "max_abs_error": 6.146728992462158e-08,
+          "max_error_over_budget": 1.3897654643086744e-05
+        }
+      ],
+      "bitwise_host_resident_equal": true,
+      "compiler_subprocesses_during_replay": 0,
+      "result_ownership": "two independent completed host f32 arrays"
+    },
+    {
+      "storage": "f16",
+      "shape_mnk": [
+        129,
+        33,
+        257
+      ],
+      "permuted": false,
+      "artifact": "f16-m129-n33-k257.json.gz",
+      "artifact_hash": "c739142e74c5797b327c375cc38d8e62636de767f7949eaaf23e458af4376825",
+      "image_digests": [
+        "004ab3433dba0b467d4578732ef1a5fc103c9da3ddb93045520b997910d62afc",
+        "9d10bc47f08ca176558ed298326deb225d98ec641e16b69fab585c4d9ebbf820",
+        "9d10bc47f08ca176558ed298326deb225d98ec641e16b69fab585c4d9ebbf820"
+      ],
+      "host_errors": [
+        {
+          "max_abs_error": 0.0004467708058655262,
+          "max_error_over_budget": 0.03566122352389532
+        },
+        {
+          "max_abs_error": 7.998655564733781e-05,
+          "max_error_over_budget": 0.019827386180205728
+        }
+      ],
+      "standalone_resident_errors": [
+        {
+          "max_abs_error": 0.0004467708058655262,
+          "max_error_over_budget": 0.03566122352389532
+        },
+        {
+          "max_abs_error": 7.998655564733781e-05,
+          "max_error_over_budget": 0.019827386180205728
+        }
+      ],
+      "bitwise_host_resident_equal": true,
+      "compiler_subprocesses_during_replay": 0,
+      "result_ownership": "two independent completed host f32 arrays"
+    },
+    {
+      "storage": "bf16",
+      "shape_mnk": [
+        129,
+        33,
+        257
+      ],
+      "permuted": true,
+      "artifact": "bf16-m129-n33-k257.json.gz",
+      "artifact_hash": "7d635bfe788bb583836f444e7a82a2fd5ff22de03bb38a6c02fab298c52e783a",
+      "image_digests": [
+        "0e98636d8a5252c051b0914ddc465999ff94b22acf9beceeeda03e80119a202d",
+        "4f7a4a40e48a3fe040b67d8f863249d49c2e940ce6520111a438368c7b8a205f",
+        "4f7a4a40e48a3fe040b67d8f863249d49c2e940ce6520111a438368c7b8a205f"
+      ],
+      "host_errors": [
+        {
+          "max_abs_error": 2.0526349544525146e-06,
+          "max_error_over_budget": 1.7067162126859966e-05
+        },
+        {
+          "max_abs_error": 0.0009994897991418839,
+          "max_error_over_budget": 0.03661370477649462
+        }
+      ],
+      "standalone_resident_errors": [
+        {
+          "max_abs_error": 2.0526349544525146e-06,
+          "max_error_over_budget": 1.7067162126859966e-05
+        },
+        {
+          "max_abs_error": 0.0009994897991418839,
+          "max_error_over_budget": 0.03661370477649462
+        }
+      ],
+      "bitwise_host_resident_equal": true,
+      "compiler_subprocesses_during_replay": 0,
+      "result_ownership": "two independent completed host f32 arrays"
+    },
+    {
+      "storage": "f16",
+      "shape_mnk": [
+        256,
+        1024,
+        1536
+      ],
+      "permuted": false,
+      "artifact": "f16-m256-n1024-k1536.json.gz",
+      "artifact_hash": "a14d541762315dfd7bfbac0963f24775e1c02f422cb510ed2a4ca43d72a2971f",
+      "image_digests": [
+        "041b08d3b38f3ee295fce814068a0dcdc19cdc225e358f2ae3ebf8130394d492",
+        "d765718591db4956c1624db5d1b5eb40b8d266a22971a107e8ef9f79d1abffc0",
+        "d765718591db4956c1624db5d1b5eb40b8d266a22971a107e8ef9f79d1abffc0"
+      ],
+      "host_errors": [
+        {
+          "max_abs_error": 0.0018408699543215334,
+          "max_error_over_budget": 0.015624299406464563
+        },
+        {
+          "max_abs_error": 0.0006801815616199747,
+          "max_error_over_budget": 0.026873930081651228
+        }
+      ],
+      "standalone_resident_errors": [
+        {
+          "max_abs_error": 0.0018408699543215334,
+          "max_error_over_budget": 0.015624299406464563
+        },
+        {
+          "max_abs_error": 0.0006801815616199747,
+          "max_error_over_budget": 0.026873930081651228
+        }
+      ],
+      "bitwise_host_resident_equal": true,
+      "compiler_subprocesses_during_replay": 0,
+      "result_ownership": "two independent completed host f32 arrays"
+    },
+    {
+      "storage": "bf16",
+      "shape_mnk": [
+        256,
+        1024,
+        1536
+      ],
+      "permuted": true,
+      "artifact": "bf16-m256-n1024-k1536.json.gz",
+      "artifact_hash": "530d752368d2a1da39564ac87c36cd345ccc797a1554e002a892eebbb231cb20",
+      "image_digests": [
+        "cc4043e69cf9d1e9d122cbc1ec58165d9964b31c5cdb846f6d02dcf0f7d52767",
+        "389924b98139b864ed4f8f0e77b2fb54998fd4ff1314cd12bf4963569ab9ef68",
+        "389924b98139b864ed4f8f0e77b2fb54998fd4ff1314cd12bf4963569ab9ef68"
+      ],
+      "host_errors": [
+        {
+          "max_abs_error": 0.02394930273294449,
+          "max_error_over_budget": 0.03244260977415465
+        },
+        {
+          "max_abs_error": 0.003663422539830208,
+          "max_error_over_budget": 0.021511189632295986
+        }
+      ],
+      "standalone_resident_errors": [
+        {
+          "max_abs_error": 0.02394930273294449,
+          "max_error_over_budget": 0.03244260977415465
+        },
+        {
+          "max_abs_error": 0.003663422539830208,
+          "max_error_over_budget": 0.021511189632295986
+        }
+      ],
+      "bitwise_host_resident_equal": true,
+      "compiler_subprocesses_during_replay": 0,
+      "result_ownership": "two independent completed host f32 arrays"
+    },
+    {
+      "storage": "f16",
+      "shape_mnk": [
+        256,
+        1024,
+        2048
+      ],
+      "permuted": false,
+      "artifact": "f16-m256-n1024-k2048.json.gz",
+      "artifact_hash": "927002109b6f12646c31301ba3b0824ae40dc91b63f1afea6bc7b6769f6d4547",
+      "image_digests": [
+        "d2032868b6dbf7cbbdea2b92592dbb511492a992832d077b8e7c6c05e09385d1",
+        "83351980c070f21f7e6cd1af13e0ac306084fa19b3a44477b7681efb8d73cb33",
+        "83351980c070f21f7e6cd1af13e0ac306084fa19b3a44477b7681efb8d73cb33"
+      ],
+      "host_errors": [
+        {
+          "max_abs_error": 0.0023340878997260006,
+          "max_error_over_budget": 0.015413457747274324
+        },
+        {
+          "max_abs_error": 0.0007774919067742303,
+          "max_error_over_budget": 0.019699571575739365
+        }
+      ],
+      "standalone_resident_errors": [
+        {
+          "max_abs_error": 0.0023340878997260006,
+          "max_error_over_budget": 0.015413457747274324
+        },
+        {
+          "max_abs_error": 0.0007774919067742303,
+          "max_error_over_budget": 0.019699571575739365
+        }
+      ],
+      "bitwise_host_resident_equal": true,
+      "compiler_subprocesses_during_replay": 0,
+      "result_ownership": "two independent completed host f32 arrays"
+    },
+    {
+      "storage": "bf16",
+      "shape_mnk": [
+        256,
+        1024,
+        2048
+      ],
+      "permuted": true,
+      "artifact": "bf16-m256-n1024-k2048.json.gz",
+      "artifact_hash": "7c9415b26c0c70e28ef41b42e1fb0d097744f8d1f004473ec6e3566bebcefe0d",
+      "image_digests": [
+        "5c9b116475a4ca674673a6f37d95df19a53eaafedfe56eb2725bb229ee473830",
+        "244b6524a8be38fcb1d68e33d2dc292a02e90200ee6e06e7c4f76a05eb480882",
+        "244b6524a8be38fcb1d68e33d2dc292a02e90200ee6e06e7c4f76a05eb480882"
+      ],
+      "host_errors": [
+        {
+          "max_abs_error": 0.017203168710693717,
+          "max_error_over_budget": 0.01901840266256693
+        },
+        {
+          "max_abs_error": 0.004613511438947171,
+          "max_error_over_budget": 0.018996822857375813
+        }
+      ],
+      "standalone_resident_errors": [
+        {
+          "max_abs_error": 0.017203168710693717,
+          "max_error_over_budget": 0.01901840266256693
+        },
+        {
+          "max_abs_error": 0.004613511438947171,
+          "max_error_over_budget": 0.018996822857375813
+        }
+      ],
+      "bitwise_host_resident_equal": true,
+      "compiler_subprocesses_during_replay": 0,
+      "result_ownership": "two independent completed host f32 arrays"
+    }
+  ]
+}

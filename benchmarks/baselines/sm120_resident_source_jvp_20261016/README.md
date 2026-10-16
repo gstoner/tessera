@@ -1,5 +1,8 @@
 # SM120 resident source-active JVP — 2026-10-16
 
+Latest arithmetic implementation and proof: [RMS numerical review repair](rms-review/README.md).
+The parent timing/validation sections below retain their original d1ba6e98d scope.
+
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1. Synchronization key:
 W11-RESIDENT-SOURCE-20261016. Scope: the named static FP16/BF16
 RMSNorm(explicit FP32 accumulator) -> ReLU -> plain FP32 matmul source-active JVP.

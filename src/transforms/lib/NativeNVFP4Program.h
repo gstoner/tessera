@@ -124,28 +124,30 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
   constexpr StringLiteral rowBoundKey = "tessera.native.nvfp4_m_bound";
   auto rowBoundAttr = module->getAttrOfType<IntegerAttr>(rowBoundKey);
   bool boundedRows = module->hasAttr(rowBoundKey);
-  if (expansion && boundedRows)
-    return root.emitError("source-preserving NVFP4 program requires a static activation frame");
   int64_t activeRows = 0, rowBound = 0;
   std::string originalIR;
   if (boundedRows) {
     auto activation = dyn_cast<RankedTensorType>(roles[3].getType());
     auto scale = dyn_cast<RankedTensorType>(roles[4].getType());
-    auto output = dyn_cast<RankedTensorType>(ops[2]->getResult(0).getType());
+    auto output = dyn_cast<RankedTensorType>(product->getResult(0).getType());
     if (!rowBoundAttr || !rowBoundAttr.getType().isInteger(64) ||
         !activation || activation.getRank() != 2 ||
         !activation.hasStaticShape() || activation.getEncoding() ||
-        !scale || scale.getRank() != 1 || !scale.hasStaticShape() ||
+        !scale || scale.getRank() != (expansion ? 2 : 1) || !scale.hasStaticShape() ||
         scale.getEncoding() || !output || output.getRank() != 2 ||
-        !output.hasStaticShape() || output.getEncoding())
+        !output.hasStaticShape() || output.getEncoding() ||
+        !isa<FloatType, IntegerType>(output.getElementType()))
       return root.emitError("NVFP4 bounded rows require static unencoded capacity types and an i64 bound");
     activeRows = activation.getDimSize(0);
     rowBound = rowBoundAttr.getInt();
+    const int64_t outputBytes = output.getElementType().getIntOrFloatBitWidth() / 8;
     if (activeRows <= 0 || rowBound < activeRows ||
         activation.getDimSize(1) <= 0 ||
         rowBound > INT64_MAX / activation.getDimSize(1) ||
-        output.getDimSize(1) <= 0 ||
-        rowBound > INT64_MAX / output.getDimSize(1) / 2 ||
+        scale.getDimSize(0) != activeRows || output.getDimSize(0) != activeRows ||
+        (expansion && scale.getDimSize(1) != activation.getDimSize(1) / 16) ||
+        output.getDimSize(1) <= 0 || outputBytes <= 0 ||
+        rowBound > INT64_MAX / output.getDimSize(1) / outputBytes ||
         rowBound > INT64_MAX / 4)
       return root.emitError("NVFP4 bounded rows exceed their checked storage capacity");
     llvm::raw_string_ostream originalStream(originalIR);
@@ -158,7 +160,7 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
     root.getArgument(roleIndices[3]).setType(capacityType(activation));
     root.getArgument(roleIndices[4]).setType(capacityType(scale));
     Type result = capacityType(output);
-    ops[2]->getResult(0).setType(result);
+    product->getResult(0).setType(result);
     SmallVector<Type> capacityInputs;
     for (auto argument : root.getArguments())
       capacityInputs.push_back(argument.getType());
@@ -258,7 +260,12 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
   for (int64_t index : roleIndices) roleJSON.push_back(index);
   std::string rootIR; llvm::raw_string_ostream rootStream(rootIR);
   root.print(rootStream); rootStream.flush();
-  llvm::json::Object plan{{"schema", expansion ? "tessera.native.nvfp4_program.v3" : boundedRows ? "tessera.native.nvfp4_program.v2" : "tessera.native.nvfp4_program.v1"},
+  // v4 adds bounded source expansion. v1/v2 retain lossy static/bounded
+  // meanings and v3 remains static source expansion; no schema is repurposed.
+  const char *schema = expansion
+      ? (boundedRows ? "tessera.native.nvfp4_program.v4" : "tessera.native.nvfp4_program.v3")
+      : (boundedRows ? "tessera.native.nvfp4_program.v2" : "tessera.native.nvfp4_program.v1");
+  llvm::json::Object plan{{"schema", schema},
       {"root", root.getSymName().str()}, {"root_ir", rootIR},
       {"source_graph_ir", sourceIR + "\n"}, {"member_graphs", std::move(memberGraphs)},
       {"role_indices", std::move(roleJSON)}, {"buffers", std::move(bufferJSON)},
@@ -267,6 +274,21 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
     plan["active_m"] = activeRows;
     plan["m_bound"] = rowBound;
     plan["original_graph_ir"] = originalIR + "\n";
+    if (expansion) {
+      // Frame rows belong only to activation, its K16 scale matrix and the
+      // returned product. The two weight-expansion outputs remain static.
+      auto rowBytes = [&](Value value) -> int64_t {
+        auto type = cast<RankedTensorType>(value.getType());
+        return (type.getNumElements() / rowBound) *
+               (type.getElementType().getIntOrFloatBitWidth() / 8);
+      };
+      plan["row_frame"] = llvm::json::Object{
+          {"input_slots", llvm::json::Array{roleIndices[3], roleIndices[4]}},
+          {"output_slot", ids.lookup(ret.getOperand(0))},
+          {"row_strides_bytes", llvm::json::Array{
+              rowBytes(roles[3]), rowBytes(roles[4]), rowBytes(product->getResult(0))}},
+          {"consumer_step", int64_t(stageCount - 1)}};
+    }
   }
   std::string json; llvm::raw_string_ostream stream(json);
   stream << llvm::json::Value(std::move(plan)); stream.flush();

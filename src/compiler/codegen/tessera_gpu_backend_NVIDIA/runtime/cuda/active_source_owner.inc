@@ -129,3 +129,80 @@ extern "C" int tessera_nvidia_active_source_program_close(uint64_t handle) {
   if (found==tensorPrograms.end() || !found->second->sourceActive) return bad("active source owner is closed or unknown");
   tensorPrograms.erase(found);return 0;
 }
+
+namespace {
+int invokeActiveSourceResident(TensorProgramOwner &owner,
+    const TesseraNvidiaMatmulHostView *views, size_t count,
+    const uint64_t *producerStreams, size_t producerCount,
+    int repeats=0, bool captured=false, float *stageMs=nullptr, float *programMs=nullptr) {
+  if (!views || count!=5 || !producerStreams || producerCount!=3)
+    return bad("active source resident input frame mismatch");
+  if (!tensorProgramContext(owner)) return 1;
+  std::array<CUdeviceptr,7> bindings{};
+  for (size_t i=0;i<3;++i) {
+    if (!tensorProgramView(views[i],owner.buffers[i]))
+      return bad("active source resident input shape/stride/storage mismatch");
+    bindings[i]=reinterpret_cast<CUdeviceptr>(views[i].data);
+    if (!residentAllocation(bindings[i],views[i].bytes,owner.context))
+      return bad("active source resident allocation context or capacity mismatch");
+    if (owner.arena->base && bindings[i]<owner.arena->base+owner.arena->capacity &&
+        owner.arena->base<bindings[i]+views[i].bytes)
+      return bad("active source resident root aliases private scratch");
+  }
+  if (!tensorProgramOutputs(owner,views+3) || !tensorProgramFrameAliases(views)) return 1;
+  ProducerEvents ordering;
+  if (!ordering.wait(owner.context,owner.stream,producerStreams,producerCount)) return 1;
+  // A resident frame is not a host snapshot lease. Existing host profiling
+  // must not reinterpret these roots as the last successful host invocation.
+  owner.generation=0;
+  if (!owner.arena->grow(owner.bytes) || !owner.arena->growHost(owner.bytes)) return 1;
+  ++owner.arena->generation;
+  for (size_t i=3;i<bindings.size();++i)
+    bindings[i]=owner.arena->base+owner.offsets[i];
+  // This warmup also proves pending root writes complete before timed reads.
+  bool status=submitTensorProgram(owner,1,nullptr,false,bindings.data());
+  if (status && repeats) {
+    status=ok(cuStreamSynchronize(owner.stream),"complete resident source warmup");
+    if (status) status=measureLaunches(owner.stream,repeats,captured,[&]() {
+      return submitTensorProgram(owner,1,nullptr,false,bindings.data());
+    },programMs);
+    if (status) status=submitTensorProgram(owner,repeats,stageMs,captured,bindings.data());
+  }
+  if (status) status=readTensorProgram(owner,views+3);
+  if (!status) {
+    const std::string saved=error;
+    cuStreamSynchronize(owner.stream);
+    error=saved;
+    return 1;
+  }
+  return 0;
+}
+}
+extern "C" int tessera_nvidia_active_source_program_invoke_resident_inputs(
+    uint64_t handle,const TesseraNvidiaMatmulHostView *views,size_t count,
+    const uint64_t *producerStreams,size_t producerCount) {
+  error.clear();
+  if (getpid()!=process) return bad("active source program cannot cross fork");
+  std::lock_guard<std::mutex> lock(mutex);
+  auto found=tensorPrograms.find(handle);
+  if (found==tensorPrograms.end() || !found->second->sourceActive)
+    return bad("active source resident owner is closed or unknown");
+  return invokeActiveSourceResident(*found->second,views,count,producerStreams,producerCount);
+}
+extern "C" int tessera_nvidia_active_source_program_profile_resident_inputs(
+    uint64_t handle,const TesseraNvidiaMatmulHostView *views,size_t count,
+    const uint64_t *producerStreams,size_t producerCount,
+    int repeats,int captured,float *stageMs,size_t stageCount,float *programMs) {
+  error.clear();
+  if (getpid()!=process) return bad("active source program cannot cross fork");
+  std::lock_guard<std::mutex> lock(mutex);
+  auto found=tensorPrograms.find(handle);
+  if (found==tensorPrograms.end() || !found->second->sourceActive)
+    return bad("active source resident owner is closed or unknown");
+  if (repeats<=0 || repeats>(captured?4096:1000000) || (captured!=0 && captured!=1) ||
+      !stageMs || stageCount!=3 || !programMs ||
+      (captured && stageCount>65536/size_t(repeats)))
+    return bad("active source resident profiling count mismatch");
+  return invokeActiveSourceResident(*found->second,views,count,producerStreams,producerCount,
+                                   repeats,bool(captured),stageMs,programMs);
+}

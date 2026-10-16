@@ -6,6 +6,32 @@ target: nvidia_sm120
 last_updated: 2026-10-16
 ---
 
+## W11-RESIDENT-SOURCE-20261016 — resident roots for source-active JVP
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-RESIDENT-SOURCE-20261016.
+
+PR953 merged as d6ea97e5dfb2a61db81ea6e5b43be18f1e9943fe after all required
+checks and automated review passed. Its prior source-bound local evidence retains
+its own scope; the five-slice aggregate remains open.
+
+The named static FP16/BF16 RMSNorm -> ReLU -> plain FP32 matmul JVP now
+binds compact resident roots through the existing native three-stage owner.
+Family-specific typed frontend certification preserves original CUDA objects.
+Shared native CUDA capacity/context checks and producer-event ordering are reused;
+private edges and completed host F32 results remain owner-controlled. Existing
+host APIs, compiled members, source-active portable schema and RHS schemas are
+unchanged. The first 104 owning RTX5070 cases pass. The widened replay/alias lane passes
+110 cases and exposes two BF16 exact-radial derivative failures against the
+unchanged independent budget. Adjacent controls pass 504 cases with four
+documented skips. Native arithmetic investigation, frozen benchmarks and
+publication gates remain in progress; the numerical gate is not waived.
+
+Dynamic/pitched/mixed roots, resident results, generic producer reconstruction
+and reverse composition still require their own integration and proof.
+
+Contract: docs/spec/ir/source_active_row_jvp.md.
+
 ## GFX1201-FOLDED-INPUT-VIEWS-20261016 — preserve physical input row pitches
 
 Owner ROCM-MXFP4-W4A8-1 / LAYOUT-ALG-1.

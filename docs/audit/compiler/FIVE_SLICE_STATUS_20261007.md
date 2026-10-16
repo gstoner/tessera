@@ -12,6 +12,22 @@ NVFP4 expansion and source-preserving multi-output ownership. Older entries reta
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
 
+## Delivery and next source-active integration — 2026-10-16
+
+PR953 merged as d6ea97e5dfb2a61db81ea6e5b43be18f1e9943fe. Its exact
+cad673b2c head passed unit, audit, lint, production compiler-route proof and
+validate-required; automated review completed without findings. This closes
+that publication wait, without extending its physical/performance envelope.
+
+W11-RESIDENT-SOURCE-20261016 extends the named source-active JVP program to
+compact resident roots, native event ordering and completed host outputs.
+The first 104 device cases pass; the widened lane records 110 passes and two
+BF16 radial-derivative failures under the unchanged oracle. Adjacent controls
+pass 504 cases with four skips. Native arithmetic repair, frozen benchmarks
+and publication gates remain in progress. General producer reconstruction,
+dynamic/pitched/mixed roots, resident results and reverse composition remain
+open. The five remaining requirements below are not relabeled complete.
+
 ## Current reconciliation — 2026-10-16
 
 PR952 is merged as b361ecf42aca146aa9b47cbd156e601ffe3ce972; its publication

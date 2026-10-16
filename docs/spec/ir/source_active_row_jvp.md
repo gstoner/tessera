@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-15
+last_updated: 2026-10-16
 ---
 
 # Source-active normalization JVP packages
@@ -21,8 +21,9 @@ The producer retains the original normalization policy, working casts,
 statistics, reductions, comparison/masking and storage conversions. The
 [native normalization precision contract](normalization_ad_accumulator_policy.md)
 defines those arithmetic semantics. Unspecified accumulator behavior is not
-changed by this package. Fused epilogues, transposes, dynamic dimensions,
-resident roots and general reverse products need separate contracts.
+changed by this package. Fused epilogues, transposes, dynamic dimensions, mixed/pitched roots,
+resident results and general reverse products need separate contracts.
+The resident-root extension below preserves the named arithmetic envelope.
 
 The Python frontend supports explicit RMSNorm `numeric_policy` and preserves
 original storage before selecting wider eager arithmetic. Its result is rounded
@@ -90,6 +91,43 @@ third-party native code. A bounded pure certificate cache hashes the entire
 payload, including its integrity field. It owns no device allocation. A matching
 live JIT owner is borrowed; standalone replay owns and closes its native owner.
 Returned receipt dictionaries do not alias saved ABI records.
+
+## Completed resident-root calls
+
+The additive invoke_resident_inputs/profile_resident_inputs native APIs accept
+three compact read-only CUDA roots in original argument/seed order and return
+two independent completed host F32 outputs. They retain the existing compiled
+members, step ABI and portable schema. Older providers continue to serve host
+calls; resident calls require both new native symbols.
+
+Public JVP selects the owned Graph family after typed resident tracing, rather
+than assuming every CUDA root belongs to attention. Metadata-only structural
+certification retains the original AST/tracer topology; numerical authority
+comes from the native package and owning-device oracle. FP32-only attention
+admission and zero-dropout constraints remain unchanged. No root is coerced
+through NumPy or used for Python derivative/Tile construction.
+
+The owner queries each CUDA allocation's context, memory type and actual span.
+Read-only roots may alias; roots cannot overlap private scratch, and returned
+host outputs cannot overlap one another or an input. Every producer stream
+must be an explicit live CUDA handle. CUDA legacy/per-thread tokens 1/2 are
+accepted; zero and invalid low-address tokens are rejected before driver
+queries. This is a live-handle contract, not authentication of arbitrary
+third-party pointer metadata. Callers keep buffers and streams live until
+the synchronous native call returns.
+
+Native events order pending producer writes before reads on the private owner
+stream. Private producer edges retain their checked lifetime. Resident frames
+invalidate the prior host snapshot lease; a new host invocation restores it.
+Resident profiling refreshes the supplied roots and completes warmup before
+separate composed and per-stage event windows. Producer waits, warmup and host
+result readback are excluded from those device windows and remain in public
+completed-call timing. No asynchronous or resident-result lifetime is implied.
+
+The exact-device regression also primes allocations before delayed producer
+writes, so allocation synchronization cannot substitute for event ordering.
+Evidence and performance publication are in progress under
+W11-RESIDENT-SOURCE-20261016; this contract does not close generic W1.1 or AD.
 
 ## Backend assessment and evidence
 

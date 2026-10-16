@@ -6,6 +6,23 @@ target: apple_gpu
 last_updated: 2026-10-16
 ---
 
+## W11-RESIDENT-SOURCE-20261016 — resident roots for source-active JVP
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-RESIDENT-SOURCE-20261016.
+
+PR953 merged as d6ea97e5dfb2a61db81ea6e5b43be18f1e9943fe after all required
+checks and automated review passed. Its prior source-bound local evidence retains
+its own scope; the five-slice aggregate remains open.
+
+Not applicable to apple physical execution: Metal/AIR buffers do not implement the CUDA Array Interface or CUDA streams.
+The frontend dispatch change applies only to native SM120 CUDA roots and retains
+the existing attention storage gate. Native event/capacity helper reuse is confined
+to NVIDIA. No sibling schedule, ABI execution or device parity is claimed;
+existing sibling producer/AD package obligations remain open.
+
+Contract: docs/spec/ir/source_active_row_jvp.md.
+
 ## GFX1201-FOLDED-INPUT-VIEWS-20261016 — preserve physical input row pitches
 
 Owner ROCM-MXFP4-W4A8-1 / LAYOUT-ALG-1.

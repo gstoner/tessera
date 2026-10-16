@@ -2874,15 +2874,15 @@ class JitFn:
         tangent_values = tangents if isinstance(tangents, (tuple, list)) else (tangents,)
         if len(tangent_values) != len(request.wrt_indices):
             raise TesseraJitError("native_jvp requires one tangent per active input")
-        resident_attention=any(hasattr(value,"__cuda_array_interface__") for value in (*ordered,*tangent_values))
-        if resident_attention:
+        resident_frame=any(hasattr(value,"__cuda_array_interface__") for value in (*ordered,*tangent_values))
+        resident_attention=False
+        resident_source_active=False
+        if resident_frame:
             if normalize_target_kind(self.target)!="nvidia_sm120" or not all(
                     hasattr(value,"__cuda_array_interface__") for value in (*ordered,*tangent_values)):
                 raise TesseraJitError("resident attention AD requires all primal/tangent CUDA roots")
             resident_specs=self._resident_frontend_specs(ordered)
             tangent_specs=self._resident_frontend_specs(tangent_values)
-            if any(dtype!=np.dtype("float32") for _,dtype in (*resident_specs,*tangent_specs)):
-                raise TesseraJitError("resident attention AD requires fp32 storage")
         from .rocm_typed_scaled_native import (
             requests_typed_scaled, requests_composed_typed_scaled, requests_floating_scaled,
         )
@@ -2915,6 +2915,16 @@ class JitFn:
             traced_module = replace(traced_module,module_attrs={**traced_module.module_attrs,
                 "tessera.target": '"rocm"', "tessera.arch": '"' + _runtime._rocm_chip() + '"'})
         graph_ops = [op for fn in traced_module.functions for op in fn.body]
+        if resident_frame:
+            from .prepared_nvidia_active_source import candidate as active_source_candidate
+            resident_source_active=active_source_candidate(traced_module,request.wrt_indices)
+            resident_attention=(len(graph_ops)==1 and graph_ops[0].op_name in {
+                "tessera.flash_attn","tessera.attention"})
+            if not resident_source_active and not resident_attention:
+                raise TesseraJitError("resident JVP requires native attention or an admitted source-active Graph")
+            if resident_attention and any(
+                    dtype!=np.dtype("float32") for _,dtype in (*resident_specs,*tangent_specs)):
+                raise TesseraJitError("resident attention AD requires fp32 storage")
         permitted_effect_ops: tuple[str, ...] = ()
         if len(graph_ops) == 1 and graph_ops[0].op_name == "tessera.dropout":
             dropout = graph_ops[0]
@@ -2927,14 +2937,13 @@ class JitFn:
             if float(policy.get("dropout_p",0.0))==0.0:
                 permitted_effect_ops=("tessera.flash_attn",)
         resident_certificate=None
-        if resident_attention:
-            if (len(graph_ops)!=1 or graph_ops[0].op_name not in {"tessera.flash_attn","tessera.attention"}
-                    or float(graph_ops[0].kwargs.get("dropout_p",0.0))!=0.0):
+        if resident_frame:
+            if resident_attention and float(graph_ops[0].kwargs.get("dropout_p",0.0))!=0.0:
                 raise TesseraJitError("resident JVP requires one zero-dropout native attention Graph")
             from .frontend_authority import certify_resident_frontends
             resident_certificate=certify_resident_frontends(
                 legacy_module=self._ensure_legacy_graph_ir(),tracer_module=traced_module,
-                signature=resident_specs,graph_consumers=(graph_ops[0].op_name,))
+                signature=resident_specs,graph_consumers=tuple(op.op_name for op in graph_ops))
             self.last_frontend_differential=resident_certificate
         else:
             self.frontend_differential(
@@ -2955,7 +2964,10 @@ class JitFn:
         # The scaled program's checked native owner materializes primal and
         # tangent bytes. Keep alias views at this binding layer; other family
         # ABIs retain their existing compact host-frame contract.
-        if resident_attention:
+        if resident_source_active:
+            primal_inputs=list(ordered)
+            tangent_inputs=dict(zip(request.wrt_indices,tangent_values,strict=True))
+        elif resident_attention:
             from types import SimpleNamespace
             primal_inputs=[SimpleNamespace(shape=shape,dtype=dtype) for shape,dtype in resident_specs]
             tangent_inputs={index:SimpleNamespace(shape=shape,dtype=dtype)
@@ -2970,8 +2982,11 @@ class JitFn:
                 index: np.ascontiguousarray(np.asarray(value))
                 for index, value in zip(request.wrt_indices, tangent_values)
             }
-        for index, tangent in tangent_inputs.items():
-            if index >= len(primal_inputs) or primal_inputs[index].shape != tangent.shape:
+        for ordinal,(index,tangent) in enumerate(tangent_inputs.items()):
+            primal_shape=(resident_specs[index][0] if resident_source_active
+                          else primal_inputs[index].shape) if index < len(primal_inputs) else None
+            tangent_shape=tangent_specs[ordinal][0] if resident_source_active else tangent.shape
+            if primal_shape is None or primal_shape != tangent_shape:
                 raise TesseraJitError("native JVP primal and tangent shapes must match")
         if len(graph_ops)>1 and normalize_target_kind(self.target)=="nvidia_sm120" and not resident_attention:
             from .prepared_nvidia_tensor_jvp import PreparedTensorJVP, candidate as tensor_jvp_candidate

@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 import numpy as np
 import tessera as ts
+from tessera.compiler import native_attention_program
 from tessera.compiler import native_attention_vjp_runtime as candidate
 from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
 from tessera.compiler.prepared_attention_vjp import clear_prepared, prepared
@@ -39,6 +40,13 @@ def record(args):
     controls = {"parent": control.execute_family, "candidate": execute}
     folder = Path("benchmarks/baselines/sm120_saved_lse_half_backward_20261016/public-stage/benchmark")
     rows = []
+    compile_native = native_attention_program.compile_attention_vjp_program
+    compiled = {}
+    def compile_once(graph, active, **kwargs):
+        key = (graph, active, tuple(sorted((name, str(value)) for name, value in kwargs.items())))
+        if key not in compiled:
+            compiled[key] = compile_native(graph, active, **kwargs)
+        return compiled[key]
     for storage in ("f16", "bf16", "f32"):
         for sq, sk in ((3, 5), (7, 129)):
             path = folder / f'{"f16" if storage == "f32" else storage}-sq{sq}-sk{sk}-bias1-lse1-inputs.npz'
@@ -55,7 +63,9 @@ def record(args):
                         samples = {arm: {name: [] for name in ("completed_ms", "forward_event_ms", "backward_event_ms")}
                                    for arm in controls}
                         for arm, adapter in controls.items():
-                            with patch.object(candidate, "execute_family", adapter):
+                            # Both adapters receive the identical real compiler product.
+                            # Cold/warm receipt fields otherwise alter package identity.
+                            with patch.object(native_attention_program, "compile_attention_vjp_program", compile_once), patch.object(candidate, "execute_family", adapter):
                                 for _ in range(3):
                                     result = fn.native_backward(*roots[:-2], out_cotangents=roots[-2:])
                                 compare_results(result, oracle, wrt)
@@ -73,7 +83,7 @@ def record(args):
                                 # ABBA/BAAB windows balance order and drift. Preserve raw samples.
                                 order = ("parent", "candidate", "candidate", "parent")
                                 if trial % 2:
-                                    order = tuple(reversed(("candidate", "parent", "parent", "candidate")))
+                                    order = ("candidate", "parent", "parent", "candidate")
                                 for arm in order:
                                     with patch.object(candidate, "execute_family", controls[arm]):
                                         for _ in range(args.reps):
@@ -105,6 +115,7 @@ def record(args):
     after = source_snapshot()
     assert before == after
     packet = dict(schema="tessera.sm120_reverse_adapter_ab.v1", source_before=before, source_after=after,
+                  native_programs_compiled=len(compiled),
                   control_sha256=hashlib.sha256(args.control.read_bytes()).hexdigest(),
                   control_source=str(args.control), device=probe, rounds=args.rounds, reps=args.reps,
                   correctness="independent_fp64_before_and_after_each_window; retained_outputs_unchanged",

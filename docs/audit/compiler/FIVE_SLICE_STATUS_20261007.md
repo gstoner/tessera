@@ -26,24 +26,23 @@ and two BF16 radial failures under the unchanged oracle. A shared native
 weighted-residual RMS JVP/VJP repair, integrated through the verified producer
 outline and Schedule/Tile scalarizer, now passes all 336 resident cases across minimal/ragged shapes.
 The 504-pass/four-skip adjacent result retains its pre-arithmetic scope.
-All 121 shared native LLVM numerical cases pass without skips; frozen benchmarks and publication
-validation remain in progress. General producer reconstruction,
-dynamic/pitched/mixed roots, resident results and reverse composition remain
-open. The five remaining requirements below are not relabeled complete.
+Frozen d1ba6e98d validation is complete: 26,836 non-slow unit passes
+(7,678 skips), 880 required compiler-route passes with no skips and 348 owning
+RTX5070 device passes with no skips. All phase source/tool/helper witnesses
+match. Twelve device cases compare actual CUDA driver entries/grids/blocks
+with sealed geometry; eight timed packages replay with compiler subprocesses
+disabled and independent FP64 numerical comparisons. The shared native LLVM
+precision gate passes all 121 cases.
 
-## Source-active ABI geometry correction — 2026-10-16
-
-The clean c8a1f89a2 gate passes 26,834 non-slow unit cases (7,678 skipped),
-880 required compiler-route cases with no skips, and 336 owning-device cases.
-Its eight-profile timing and standalone replay records retain that source scope.
-
-Follow-through inspection found consumer geometry metadata declared 128 threads
-while the native owner actually launches 32. The corrected records now match
-the native row128/consumer32 geometry; twelve real-driver trace cases and
-85 portable/admission checks pass. Malformed consumer128 records are rejected
-before provider access. The native step ABI and portable schema numbering stay
-unchanged. Corrected-source measurements, full validation and publication remain
-in progress; the five-slice aggregate is not closed.
+Seven-window measurements retain separate device stages/program and public
+completed-call wall times. Resident roots reduce public latency 18–32% for
+the larger synthetic M256 cases, while smaller cases regress 45–61%.
+No default promotion, quantized-route change, sibling physical parity or
+aggregate closure follows. Generic/dynamic/pitched/mixed producers, resident
+results and reverse composition remain open.
+Evidence: benchmarks/baselines/sm120_resident_source_jvp_20261016/README.md.
+Publication CI remains pending; earlier red and pre-geometry records retain
+their original source scope.
 
 ## Current reconciliation — 2026-10-16
 

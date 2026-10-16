@@ -22,30 +22,28 @@ to NVIDIA; the additional shared AD arithmetic assessment follows below. No sibl
 existing sibling producer/AD package obligations remain open.
 
 
-The radial alias regression exposed cancellation in the shared RMSNorm
-derivative. An experimental shared native JVP/VJP helper preserves an explicit
-epsilon term using weighted residuals in the requested wider working type;
-unspecified/storage-typed behavior is retained. The verified SM120 producer
-outline and Schedule/Tile scalarizer consume finite scalar constants and add
-from the actual Graph body. The rebuilt RTX5070 lane passes all 336 resident
-cases across minimal/ragged shapes and both argument orders, with no skips.
-The exact-bit native LLVM gate passes all 121 JVP/VJP precision cases with no
-skips. Post-repair adjacent controls, publication and benchmark gates remain
-in progress. This is no sibling physical producer or performance proof.
+The shared native RMS derivative now preserves an explicit epsilon term
+using weighted residuals in the requested wider accumulator; storage-typed
+behavior is retained. The verified producer outline and Schedule/Tile scalarizer
+consume finite scalar constants and add from the actual Graph body.
 
+Frozen d1ba6e98d validation is complete: 26,836 non-slow unit passes
+(7,678 skips), 880 required compiler-route passes with no skips and 348 owning
+RTX5070 device passes with no skips. All phase source/tool/helper witnesses
+match. Twelve device cases compare actual CUDA driver entries/grids/blocks
+with sealed geometry; eight timed packages replay with compiler subprocesses
+disabled and independent FP64 numerical comparisons. The shared native LLVM
+precision gate passes all 121 cases.
 
-Portable geometry follow-through: member metadata now declares the actual
-128-thread row producer and 32-thread matmul consumers. Twelve owning RTX5070
-driver-interposition cases compare the real entry/grid/block sequence with
-the sealed metadata; 85 portable/admission checks pass. Resealed legacy-style
-128-thread consumer records are rejected before provider access. The native
-112-byte step ABI and portable schema numbering are unchanged. Native kernel
-code is unchanged; this is not sibling geometry or execution parity.
-
-The earlier c8a1f89a2 source passes 26,834 non-slow unit cases (7,678 skipped),
-880 required compiler-route cases without skips and 336 device cases. Those
-receipts retain their pre-geometry-correction scope; final corrected-source
-benchmark and publication gates remain in progress.
+Seven-window measurements retain separate device stages/program and public
+completed-call wall times. Resident roots reduce public latency 18–32% for
+the larger synthetic M256 cases, while smaller cases regress 45–61%.
+No default promotion, quantized-route change, sibling physical parity or
+aggregate closure follows. Generic/dynamic/pitched/mixed producers, resident
+results and reverse composition remain open.
+Evidence: benchmarks/baselines/sm120_resident_source_jvp_20261016/README.md.
+Publication CI remains pending; earlier red and pre-geometry records retain
+their original source scope.
 
 Contract: docs/spec/ir/source_active_row_jvp.md.
 

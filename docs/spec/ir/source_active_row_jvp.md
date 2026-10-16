@@ -126,7 +126,12 @@ completed-call timing. No asynchronous or resident-result lifetime is implied.
 
 The exact-device regression also primes allocations before delayed producer
 writes, so allocation synchronization cannot substitute for event ordering.
-Evidence and performance publication are in progress under
+The radial alias regression required the shared explicit-wider RMSNorm
+projection repair described by the normalization precision contract. All 336
+owning resident cases now pass, including minimal/ragged shapes and compiler-free fresh-process replay;
+the earlier 110-pass/two-failure result retains its pre-repair scope.
+The 121-case shared LLVM numerical gate also passes with no skips. Full regression, evidence and performance publication
+are in progress under
 W11-RESIDENT-SOURCE-20261016; this contract does not close generic W1.1 or AD.
 
 ## Backend assessment and evidence

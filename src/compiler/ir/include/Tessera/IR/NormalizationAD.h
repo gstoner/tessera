@@ -39,4 +39,45 @@ inline void normalizationGuard(mlir::OpBuilder &builder, mlir::Location loc,
   }
 }
 
+// Algebraically identical RMS projection with an explicit epsilon term.
+// Scaling x by inverse^2 before both reductions avoids x*dx overflow and
+// makes the two projections bitwise identical for an exactly radial seed.
+// Keep the existing unspecified/storage accumulator formula in its callers.
+inline mlir::Value stableRmsProjection(mlir::OpBuilder &builder,
+    mlir::Location loc, mlir::RankedTensorType type, mlir::Value x,
+    mlir::Value seed, mlir::Value inverse, mlir::FloatAttr epsilon) {
+  auto mul=[&](mlir::Value a,mlir::Value b) {
+    return builder.create<tessera::MulOp>(loc,type,a,b).getResult();
+  };
+  llvm::SmallVector<int64_t> statShape(type.getShape());
+  statShape.pop_back();
+  auto statType=mlir::RankedTensorType::get(
+      statShape,type.getElementType(),type.getEncoding());
+  llvm::SmallVector<mlir::Attribute> dimensions;
+  for (int64_t axis=0;axis+1<type.getRank();++axis)
+    dimensions.push_back(builder.getI64IntegerAttr(axis));
+  auto mean=[&](mlir::Value value) {
+    auto reduced=builder.create<tessera::ReduceOp>(loc,statType,value,
+        builder.getStringAttr("mean"),builder.getI64IntegerAttr(type.getRank()-1)).getResult();
+    return builder.create<tessera::BroadcastInDimOp>(
+        loc,type,reduced,x,builder.getArrayAttr(dimensions)).getY();
+  };
+  auto inverseSquared=mul(inverse,inverse);
+  auto weightedX=mul(x,inverseSquared);
+  auto varianceScaled=mean(mul(x,weightedX));
+  auto directionScaled=mean(mul(seed,weightedX));
+  auto residual=builder.create<tessera::SubOp>(
+      loc,type,mul(seed,varianceScaled),mul(x,directionScaled)).getResult();
+  auto scalarType=mlir::RankedTensorType::get({},type.getElementType());
+  auto scalar=builder.create<mlir::arith::ConstantOp>(loc,
+      mlir::DenseElementsAttr::get(scalarType,builder.getFloatAttr(
+          type.getElementType(),epsilon ? epsilon.getValueAsDouble() : 1.0e-5)));
+  auto epsilonLike=builder.create<tessera::BroadcastInDimOp>(
+      loc,type,scalar.getResult(),x,builder.getArrayAttr({})).getY();
+  auto epsilonDirection=mul(seed,mul(epsilonLike,inverseSquared));
+  auto corrected=builder.create<tessera::AddOp>(
+      loc,type,residual,epsilonDirection).getResult();
+  return mul(corrected,inverse);
+}
+
 }

@@ -21,14 +21,26 @@ Family-specific typed frontend certification preserves original CUDA objects.
 Shared native CUDA capacity/context checks and producer-event ordering are reused;
 private edges and completed host F32 results remain owner-controlled. Existing
 host APIs, compiled members, source-active portable schema and RHS schemas are
-unchanged. The first 104 owning RTX5070 cases pass. The widened replay/alias lane passes
-110 cases and exposes two BF16 exact-radial derivative failures against the
-unchanged independent budget. Adjacent controls pass 504 cases with four
-documented skips. Native arithmetic investigation, frozen benchmarks and
-publication gates remain in progress; the numerical gate is not waived.
+unchanged. The first 104 owning RTX5070 cases pass. The widened lane initially recorded
+110 passes and two BF16 radial failures under the unchanged oracle. The native
+repair now passes all 336 owning cases across three shapes. Earlier adjacent controls pass 504 cases
+with four skips; their pre-arithmetic source scope is retained. Full shared
+numerical, frozen benchmark and publication gates remain in progress.
 
 Dynamic/pitched/mixed roots, resident results, generic producer reconstruction
 and reverse composition still require their own integration and proof.
+
+
+The radial alias regression exposed cancellation in the shared RMSNorm
+derivative. An experimental shared native JVP/VJP helper preserves an explicit
+epsilon term using weighted residuals in the requested wider working type;
+unspecified/storage-typed behavior is retained. The verified SM120 producer
+outline and Schedule/Tile scalarizer consume finite scalar constants and add
+from the actual Graph body. The rebuilt RTX5070 lane passes all 336 resident
+cases across minimal/ragged shapes and both argument orders, with no skips.
+The exact-bit native LLVM gate passes all 121 JVP/VJP precision cases with no
+skips. Post-repair adjacent controls, publication and benchmark gates remain
+in progress. This is no sibling physical producer or performance proof.
 
 Contract: docs/spec/ir/source_active_row_jvp.md.
 

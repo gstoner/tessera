@@ -19,8 +19,20 @@ its own scope; the five-slice aggregate remains open.
 Not applicable to x86 physical execution: CPU memrefs and AVX-512 execution have no CUDA producer-stream contract.
 The frontend dispatch change applies only to native SM120 CUDA roots and retains
 the existing attention storage gate. Native event/capacity helper reuse is confined
-to NVIDIA. No sibling schedule, ABI execution or device parity is claimed;
+to NVIDIA; the additional shared AD arithmetic assessment follows below. No sibling schedule, ABI execution or device parity is claimed;
 existing sibling producer/AD package obligations remain open.
+
+
+The radial alias regression exposed cancellation in the shared RMSNorm
+derivative. An experimental shared native JVP/VJP helper preserves an explicit
+epsilon term using weighted residuals in the requested wider working type;
+unspecified/storage-typed behavior is retained. The verified SM120 producer
+outline and Schedule/Tile scalarizer consume finite scalar constants and add
+from the actual Graph body. The rebuilt RTX5070 lane passes all 336 resident
+cases across minimal/ragged shapes and both argument orders, with no skips.
+The exact-bit native LLVM gate passes all 121 JVP/VJP precision cases with no
+skips. Post-repair adjacent controls, publication and benchmark gates remain
+in progress. This is no sibling physical producer or performance proof.
 
 Contract: docs/spec/ir/source_active_row_jvp.md.
 

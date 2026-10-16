@@ -122,6 +122,12 @@ class RowScalarizer {
       Operation *op = value.getDefiningOp();
       auto name = op->getName().getStringRef();
       auto elem = cast<RankedTensorType>(value.getType()).getElementType();
+      if (name == "arith.constant") {
+        auto dense = op->getAttrOfType<DenseElementsAttr>("value");
+        result = constant(elem, dense.getSplatValue<APFloat>().convertToDouble());
+        cache[value] = result;
+        return result;
+      }
       Value lhs = scalar(op->getOperand(0), column, cache);
       if (name == "tessera.cast") result = convert(lhs, elem);
       else if (name == "tessera.broadcast_in_dim") result = lhs;
@@ -147,6 +153,7 @@ class RowScalarizer {
         Value rhs = scalar(op->getOperand(1), column, cache);
         if (name == "tessera.mul") result = arith::MulFOp::create(b, loc, lhs, rhs);
         else if (name == "tessera.sub") result = arith::SubFOp::create(b, loc, lhs, rhs);
+        else if (name == "tessera.add") result = arith::AddFOp::create(b, loc, lhs, rhs);
         else if (name == "tessera.masked_fill") {
           auto fill = op->getAttrOfType<FloatAttr>("value");
           result = arith::SelectOp::create(b, loc, rhs, lhs, constant(elem, fill.getValueAsDouble()));
@@ -176,11 +183,14 @@ public:
       StringRef name = op.getName().getStringRef();
       if (op.getNumRegions()) return reject();
       bool stats = name == "tessera.normalization_stats", reduce = name == "tessera.reduce";
+      bool scalarConstant = name == "arith.constant";
       if (op.getNumResults() != (stats ? 2 : 1)) return reject();
       for (Value result : op.getResults()) {
         auto t = dyn_cast<RankedTensorType>(result.getType());
         if (!t || t.getEncoding() || !t.hasStaticShape()) return reject();
-        if (stats || reduce) {
+        if (scalarConstant) {
+          if (t.getRank() != 0 || !t.getElementType().isF32()) return reject();
+        } else if (stats || reduce) {
           if (t.getShape() != ArrayRef<int64_t>{tensor.getDimSize(0)} || !t.getElementType().isF32()) return reject();
         } else if (t.getShape() != tensor.getShape() ||
                    (t.getElementType() != tensor.getElementType() && !t.getElementType().isF32() && !t.getElementType().isInteger(1))) return reject();
@@ -193,7 +203,11 @@ public:
         }
         return true;
       };
-      if (name == "tessera.rmsnorm") {
+      if (scalarConstant) {
+        auto dense = op.getAttrOfType<DenseElementsAttr>("value");
+        if (!only({"value"}) || op.getNumOperands() || !dense || !dense.isSplat() ||
+            !dense.getSplatValue<APFloat>().isFinite()) return reject();
+      } else if (name == "tessera.rmsnorm") {
         auto policy = op.getAttrOfType<DictionaryAttr>("numeric_policy");
         auto accum = policy ? policy.getAs<StringAttr>("accum") : StringAttr{};
         if (!only({"eps", "axis", "numeric_policy"}) || op.getNumOperands() != 1 ||
@@ -216,8 +230,12 @@ public:
       } else if (name == "tessera.broadcast_in_dim") {
         auto dims = op.getAttrOfType<ArrayAttr>("broadcast_dimensions");
         auto axis = dims && dims.size() == 1 ? dyn_cast<IntegerAttr>(dims[0]) : IntegerAttr{};
-        if (!only({"broadcast_dimensions"}) || op.getNumOperands() != 2 || !axis || axis.getInt() != 0 ||
-            cast<RankedTensorType>(op.getOperand(0).getType()).getRank() != 1) return reject();
+        if (!only({"broadcast_dimensions"}) || op.getNumOperands() != 2 || !dims)
+          return reject();
+        auto sourceType = dyn_cast<RankedTensorType>(op.getOperand(0).getType());
+        bool scalar = sourceType && sourceType.getRank() == 0 && dims.empty();
+        bool rowStat = sourceType && sourceType.getRank() == 1 && axis && axis.getInt() == 0;
+        if (!scalar && !rowStat) return reject();
       } else if (name == "tessera.cast") {
         if (!only({}) || op.getNumOperands() != 1) return reject();
         auto from = cast<RankedTensorType>(op.getOperand(0).getType()).getElementType();
@@ -231,7 +249,7 @@ public:
         if (!only({"value"}) || op.getNumOperands() != 2 || !op.getAttrOfType<FloatAttr>("value")) return reject();
       } else if (name == "tessera.relu") {
         if (!only({}) || op.getNumOperands() != 1) return reject();
-      } else if (name == "tessera.mul" || name == "tessera.sub") {
+      } else if (name == "tessera.mul" || name == "tessera.sub" || name == "tessera.add") {
         if (!only({}) || op.getNumOperands() != 2) return reject();
       } else return reject();
       if (auto axis = op.getAttrOfType<IntegerAttr>("axis"); axis && axis.getInt() != 1 && axis.getInt() != -1) return reject();

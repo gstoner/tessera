@@ -21,10 +21,13 @@ that publication wait, without extending its physical/performance envelope.
 
 W11-RESIDENT-SOURCE-20261016 extends the named source-active JVP program to
 compact resident roots, native event ordering and completed host outputs.
-The first 104 device cases pass; the widened lane records 110 passes and two
-BF16 radial-derivative failures under the unchanged oracle. Adjacent controls
-pass 504 cases with four skips. Native arithmetic repair, frozen benchmarks
-and publication gates remain in progress. General producer reconstruction,
+The first 104 device cases pass. The widened lane originally records 110 passes
+and two BF16 radial failures under the unchanged oracle. A shared native
+weighted-residual RMS JVP/VJP repair, integrated through the verified producer
+outline and Schedule/Tile scalarizer, now passes all 336 resident cases across minimal/ragged shapes.
+The 504-pass/four-skip adjacent result retains its pre-arithmetic scope.
+All 121 shared native LLVM numerical cases pass without skips; frozen benchmarks and publication
+validation remain in progress. General producer reconstruction,
 dynamic/pitched/mixed roots, resident results and reverse composition remain
 open. The five remaining requirements below are not relabeled complete.
 

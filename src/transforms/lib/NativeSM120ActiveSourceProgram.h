@@ -226,10 +226,19 @@ static mlir::LogicalResult emitNativeSM120ActiveSourceOutline(
         name != "tessera.cast" && name != "tessera.normalization_stats" &&
         name != "tessera.broadcast_in_dim" && name != "tessera.mul" &&
         name != "tessera.reduce" && name != "tessera.sub" &&
+        name != "tessera.add" && name != "arith.constant" &&
         name != "tessera.compare_scalar" && name != "tessera.masked_fill")
       return false;
     for (auto type : producer->getResultTypes()) {
       auto tensor = dyn_cast<RankedTensorType>(type);
+      if (name == "arith.constant") {
+        auto dense = producer->getAttrOfType<DenseElementsAttr>("value");
+        if (!tensor || tensor.getRank() != 0 || tensor.getEncoding() ||
+            !tensor.getElementType().isF32() || producer->getNumOperands() ||
+            !dense || !dense.isSplat() || !dense.getSplatValue<APFloat>().isFinite())
+          return false;
+        continue;
+      }
       if (!tensor || !tensor.hasStaticShape() || tensor.getEncoding() ||
           (tensor.getRank() != 1 && tensor.getRank() != 2) ||
           tensor.getDimSize(0) != m ||

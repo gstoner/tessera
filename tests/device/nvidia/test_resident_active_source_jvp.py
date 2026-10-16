@@ -19,13 +19,15 @@ def check(outputs, expected, budgets):
 
 
 @pytest.fixture(scope="module", params=[
-    (storage, permuted) for storage in ("f16", "bf16") for permuted in (False, True)
+    (storage, permuted, shape)
+    for storage in ("f16", "bf16") for permuted in (False, True)
+    for shape in ((1, 1, 1), (17, 19, 35), (129, 33, 257))
 ])
 def compiled(request):
     if rt._nvidia_device_name() != "sm_120":
         pytest.skip("owning RTX5070/SM120 required")
-    storage, permuted = request.param
-    a, b, da = inputs({"shape_mnk": (17, 19, 35), "storage": storage})
+    storage, permuted, shape = request.param
+    a, b, da = inputs({"shape_mnk": shape, "storage": storage})
     roots = (b, a, da) if permuted else (a, b, da)
     expected, budgets = oracle(a, b, da)
     fn = ts.jit(target="nvidia_sm120", autodiff="forward", wrt=("a",))(
@@ -107,7 +109,7 @@ def test_pending_resident_writes_order_before_public_replay_and_profile(
 
 
 @pytest.mark.parametrize("field", [
-    "capacity", "pointer", "dtype", "shape", "stride", "output-overlap", "input-output-overlap",
+    "capacity", "pointer", "dtype", "shape", "layout", "output-overlap", "input-output-overlap",
     "zero-stream", "invalid-stream",
 ])
 def test_native_resident_admission_preserves_outputs_on_bad_frames(compiled, field):
@@ -120,7 +122,7 @@ def test_native_resident_admission_preserves_outputs_on_bad_frames(compiled, fie
         for output in outputs:
             output.fill(91)
         if field == "capacity":
-            small = session.upload(np.zeros((1, 1), roots[0].dtype))
+            small = session.upload(np.zeros((1,), np.uint8))
             views[0].data = small.ptr
         elif field == "pointer":
             views[0].data = 0
@@ -128,8 +130,23 @@ def test_native_resident_admission_preserves_outputs_on_bad_frames(compiled, fie
             views[0].dtype = 1
         elif field == "shape":
             views[0].shape[0] += 1
-        elif field == "stride":
-            views[0].strides[0] += 2
+        elif field == "layout":
+            active_axes = [axis for axis in range(2) if views[0].shape[axis] > 1]
+            if active_axes:
+                views[0].strides[active_axes[0]] += 2
+            else:
+                # A 1x1 view has no strided access: changing either pitch is
+                # valid and must not invent an extra read span.
+                views[0].strides[0] += 4096
+                assert owner.lib.tessera_nvidia_active_source_program_invoke_resident_inputs(
+                    owner.handle, views, 5, streams, 3) == 0
+                role = owner.plan["role_indices"][0]
+                expected, budgets = oracle(roots[role], roots[1-role], roots[2])
+                check(outputs, expected, budgets)
+                for output in outputs:
+                    output.fill(91)
+                # Rank remains part of the physical frame even at unit extent.
+                views[0].rank = 1
         elif field == "output-overlap":
             views[4].data = views[3].data
         elif field == "input-output-overlap":

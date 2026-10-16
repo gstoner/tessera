@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-15
+last_updated: 2026-10-16
 ---
 
 # Normalization AD accumulator contract
@@ -27,6 +27,24 @@ the corresponding centered or RMS projection; affine gradients reduce
 the physical incoming cotangent times z, or the cotangent alone, across
 all leading axes. This defines the smooth derivative before the final
 storage conversion; no derivative of the quantization step is introduced.
+
+For an explicitly wider RMSNorm accumulator, the native derivative now uses
+an algebraically equivalent weighted-residual form to retain epsilon in radial
+directions. With r = inverse_rms, w = x*r*r, a = mean(x*w) and
+b = mean(direction*w), it computes
+r * ((direction*a - x*b) + direction*epsilon*r*r).
+The same helper serves JVP and the gamma-projected VJP direction. For a seed
+identical to x, the two residual products cancel and the epsilon term survives,
+rather than being lost by subtracting nearly equal large projection terms.
+All operations remain in the requested working type; this is no implicit
+FP64 promotion. Statistics, primal output, affine derivative terms and final
+storage conversion retain their contracts.
+
+The new finite scalar epsilon and addition travel through actual typed Graph
+SSA into the checked SM120 row outline, Schedule, scalar Tile body and native
+lowering. Body seals still bind the concrete operation graph. The numerical
+and architecture validation below must pass before publication; a prototype
+or a changed expression is not a precision certificate.
 
 An unspecified accumulator retains existing storage-typed Graph arithmetic.
 A BF16 storage / FP16 accumulator request is unrealizable, despite equal

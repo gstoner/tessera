@@ -163,7 +163,7 @@ class PreparedActiveSourceJVP:
         self.handle = handle.value
         self._pid = os.getpid()
         self._finalizer = weakref.finalize(self, lib.tessera_nvidia_active_source_program_close, self.handle)
-        self.receipt = {
+        self.receipt: dict[str, object] = {
             'family': 'tensor_active_source_jvp_program', 'execution_mode': 'cuda_runtime',
             'execution_kind': 'native_gpu', 'evidence_target': 'nvidia_sm120',
             'compiler_path': 'nvidia_sm120_active_source_jvp_compiled',

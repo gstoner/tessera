@@ -1,0 +1,9 @@
+{
+  "measured_source": "68c7e59300f195bf67507f9de57101840440bb7e",
+  "current_base_head": "68c7e59300f195bf67507f9de57101840440bb7e",
+  "frozen_source_files_unchanged": 27,
+  "production_source_diff": [],
+  "packet_and_document_cases": 18,
+  "packet_test_sha256": "ba8a5924cd5215f22dbe743650a13e576baf3c528f45722c421f072da49f4b51",
+  "scope": "post-measurement documentation/evidence gates; frozen broad compiler/device proof retains its own source"
+}

@@ -7,7 +7,7 @@ audit_role: reference
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
 Synchronization key: SM120-SAVED-LSE-HALF-BACKWARD-20261016.
-Status: static typed public owner candidate; final validation and publication remain open.
+Status: static typed public owner has frozen validation; required CI, review and delivery are tracked by the coordinating PR.
 
 ## Compiler foundation
 
@@ -59,7 +59,7 @@ private roots, O/LSE and gradient scratch, uses per-role byte widths and
 logical element counts for grids, orders producer streams before snapshots,
 and returns independent completed host gradient arrays.
 
-Ordinary `native_backward` supports static compact host roots or all-CUDA
+Ordinary `native_backward` supports static compact host roots or CUDA Array Interface
 roots, including requested gradient subsets and tuple primary/LSE seeds.
 Data matrices are never promoted to FP32 in Python. Bias/LSE roles stay FP32.
 Textually authored half inputs with FP32 primary output also execute through
@@ -86,7 +86,7 @@ scopes, not a replacement frozen full-source certificate. Cases cover causal
 and noncausal, batching/MHA/GQA, requested subsets, trace-at-one, long keys,
 Sq>Sk, bias and LSE seeds. Independent FP64 comparisons use identical stored
 inputs; delayed producer writes, held result generations and compiler-free
-warm calls/replay are checked. Final source-bound receipts remain active.
+warm calls/replay are checked. Frozen 68c7e59300 passes 26,022 non-slow unit cases (5,902 skipped), 1,061 required production compiler-route cases and 339 owning RTX5070 cases. Both compiler-route and device proof lanes have zero skips/failures; source/tool/provider witnesses remain unchanged. All twelve audit lanes pass. Thirty-two matched stored-value characterization rows and thirty-two fresh compiler-absent portable replays pass numerical checks. Evidence: benchmarks/baselines/sm120_saved_lse_half_backward_20261016/public-stage/README.md.
 
 `benchmarks/nvidia/record_typed_attention_backward.py` records alternating
 host/resident completed public calls and separate forward/backward CUDA event
@@ -95,5 +95,4 @@ u16 inputs, artifact identities, input hashes, per-role numerical errors,
 source/tool/provider pins and fresh-process compiler-free replay support
 reproduction. Event windows exclude snapshots/downloads and may include native
 dispatch gaps. No default or general speedup promotion follows from a timing
-sample. Final isolated measurements, full unit/compiler-route gates and CI/
-review are still required before publication. The five-slice goal remains open.
+sample. Frozen isolated measurements, full unit/compiler-route and audit gates are recorded. CI, review and delivery are tracked by the coordinating PR. The five-slice goal remains open.

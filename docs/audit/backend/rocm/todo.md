@@ -10,30 +10,29 @@ scope: ROCm backend implementation and exact-device proof
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
 Synchronization key: SM120-SAVED-LSE-HALF-BACKWARD-20261016.
 
-PR955 merged as 88cc58edf765f6c9799767ccef40cd5135997cbd after required checks
-and clear review on 2b7578ff1. The following native stage is frozen separately
-at 9b2159e655: 639 focused and 167 RTX5070 cases, zero skips/failures, unchanged
-source/tools. Evidence: sm120_saved_lse_half_backward_20261016/native-stage.
+Frozen 68c7e59300 passes 26,022 non-slow unit cases (5,902 skipped), 1,061 required
+production compiler-route cases and 339 owning RTX5070 cases. Both compiler-route and
+device proof lanes have zero skips/failures; source/tool/provider witnesses remain
+unchanged. All twelve audit lanes pass. Thirty-two matched stored-value characterization
+rows and thirty-two fresh compiler-absent portable replays pass numerical checks.
 
-Shared candidate contracts: original half reverse Graph -> native AD ->
-checkpoint/Schedule/Tile -> NVIDIA/LLVM-PTX; per-role typed backward descriptor,
-additive prepare_typed C ABI, and portable VJP v2 for half storage. FP32 v1 and
-existing JVP schemas5/6 retain their meanings. Native ownership uses correct
-byte widths/logical grids, producer-stream dependencies, private snapshots and
-independent completed host gradients. Half row correction remains FP32 P*dP;
-rounded saved O does not enter the reduction. Library/device discovery is
-separate from compiler-free package preparation and replay.
+Original half Graph -> native reverse AD -> checkpoint Schedule/Tile -> NVIDIA/LLVM-PTX
+now executes through the checked static public owner. Per-role dtype/width, producer
+streams, snapshots, output generations and requested subsets are checked. Half VJP v2 is
+additive; FP32 v1 and JVP schemas 5/6 meanings are unchanged. FP32 probability-based
+correction preserves the numerical contract independently of rounded half O. Optional
+ml_dtypes is required only for BF16 roles; precise bias-gradient storage refusal is
+restored.
 
-Follow-up required for rocm physical integration: half reverse semantic
-admission requires the exact SM120 target, and the new CUDA owner/typed VJP
-ABI does not implement the rocm runtime. Existing sibling storage consumers
-and physical schedules are unchanged. No NVIDIA numerical or timing proof
-is transferred; the rocm route needs its own native owner and owning-host proof.
+Evidence:
+benchmarks/baselines/sm120_saved_lse_half_backward_20261016/public-stage/README.md.
+Earlier 9b2159e655 native-stage receipts keep their original scope. CI/review and
+publication remain pending.
 
-Final isolated benchmarks, complete source-bound unit/compiler-route/device
-receipts, generated documentation, publication CI and review remain active.
-See docs/spec/SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md. All original five
-remaining-requirement rows stay open.
+Follow-up required for rocm physical integration: half reverse admission remains
+SM120-specific, and the typed CUDA owner does not implement this backend. Its existing
+storage/runtime consumers and physical schedules are unchanged. No NVIDIA execution or
+timing evidence transfers to rocm.
 
 
 ## SM120-SAVED-LSE-STORAGE-20261016 — independent O and LSE storage

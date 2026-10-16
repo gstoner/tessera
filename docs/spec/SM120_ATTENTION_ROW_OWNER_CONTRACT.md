@@ -49,7 +49,9 @@ seven logical dimensions, physical bias extents, frontend permutation, requested
 physical gradient order and storage/seed policies. Compiler-generated symbols
 encode storage, bias, seed, activity and block geometry. Actual compiled parameter
 widths, offsets and exact count are checked using the CUDA driver. The producer
-uses 32 threads; the consumer uses its sealed 64/128-thread geometry.
+uses exactly 32 threads; direct Tile verification rejects producer 64/128
+thread overrides as well. The consumer uses its sealed 64/128-thread geometry
+and rejects 32 threads.
 
 For exactly dV-only activity, preparation requires the row image triple to be
 absent. No row module, row allocation or row launch is required. Its verified

@@ -12819,3 +12819,20 @@ Remaining: exact-head CI, automatic policy, dynamic/layout/composition,
 and the full original five-slice completion audit. No sibling proof transfers.
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/public_program/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-16 — row producer thread ABI verification
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: #958; sync SM120-NATIVE-ROW-CORRECTION-20261016.
+Outcome: shared Tile verification now matches the native owner: producer 32 only,
+consumer 64/128. Twelve direct Tile cases bypass optional parent sealing and
+reproduce four invalid-producer acceptances before the fix. Rebuilt drivers pass
+420 focused checks, 116 owning RTX5070 public/prepared cases and 11 audit cases,
+all zero-skip. All four backend plans assessed. Generated legal geometry,
+arithmetic and runtime ABIs remain unchanged; frozen performance scope retained.
+The full required production lane passes 1237 cases with zero skips.
+Remaining: exact-head CI/review; original five-slice
+obligations remain active.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/thread_review/README.md.
+<!-- entry-fields:end -->

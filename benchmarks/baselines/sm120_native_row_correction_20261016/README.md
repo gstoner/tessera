@@ -12,6 +12,7 @@ Each subpacket retains its own measured source/tool witnesses and proof scope.
 - [schedule_target](schedule_target/README.md): native row producer and device proof.
 - [consumer](consumer/README.md): explicit residual backward and compact activity.
 - [prepared_owner](prepared_owner/README.md): diagnostic three-image native owner.
+- [thread_review](thread_review/README.md): exact Tile producer/consumer thread ABI correction.
 - [public_program](public_program/README.md): portable VJP v3, original JIT and public A/B.
 
 The public prepass is opt-in; tiny regressions remain. Dynamic/layout/composition

@@ -11,6 +11,12 @@ last_updated: 2026-10-16
 Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
 Synchronization key: SM120-NATIVE-ROW-CORRECTION-20261016.
 
+PR958 review correction: the shared Tile verifier now requires exactly 32
+threads for the row producer and 64/128 for its backward consumer. Direct
+Tile fixtures cover both storage types and all three thread sizes, without a
+sealed parent hash masking the operation check. This preserves the native
+owner ABI and the existing generated schedule. Owning SM120 regression proof is recorded in the linked thread-review packet.
+
 Implementation in progress. Private Graph/AD products compute an ordered FP32
 probability-weighted row correction and consume it in backward without rounded
 saved O or a duplicate dLSE subtraction. Source-pair lineage, frontend/activity

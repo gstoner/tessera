@@ -2384,8 +2384,11 @@ static LogicalResult verifyAttentionRowKernel(Operation *op, bool backward) {
       llvm::any_of(shape.asArrayRef(), [](int64_t x) { return x <= 0; }) || shape[1] % shape[2])
     return op->emitOpError("row correction requires positive B/Hq/Hkv/Sq/Sk/D/Dv and divisible query heads");
   if (!threads || !threads.getType().isInteger(64) ||
-      ((backward || threads.getInt() != 32) && threads.getInt() != 64 && threads.getInt() != 128))
-    return op->emitOpError("row correction block threads must be 32, 64 or 128");
+      (backward ? (threads.getInt() != 64 && threads.getInt() != 128)
+                : threads.getInt() != 32))
+    return op->emitOpError(backward
+        ? "row correction consumer block threads must be 64 or 128"
+        : "row correction producer block threads must be 32");
   int64_t expectedBytes = 4;
   for (unsigned axis : {0u, 1u, 3u}) {
     if (expectedBytes > std::numeric_limits<int64_t>::max() / shape[axis])

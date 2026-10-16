@@ -103,3 +103,29 @@ def test_source_layout_is_admitted_only_when_physical_contract_supports_it(layou
     else:
         with pytest.raises(RuntimeError, match='compact row-major'):
             lower(graph, '--tessera-graph-to-schedule')
+
+
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.parametrize("backward", [False, True])
+@pytest.mark.parametrize("threads", [32, 64, 128])
+def test_direct_tile_thread_contract_matches_native_owner(storage, backward, threads):
+    if backward:
+        from tests.unit.test_native_attention_backward_rows import stages as consumer_stages
+        _, _, tile = consumer_stages(storage=storage)
+    else:
+        _, _, tile = stages(storage)
+    # A directly authored Tile op has no sealed parent dictionary. Exercise
+    # the operation verifier itself instead of an unrelated Schedule hash guard.
+    signature = next(line for line in tile.splitlines() if "llvm.func @" in line)
+    signature = signature.split(" attributes ", 1)[0]
+    kernel = next(line for line in tile.splitlines()
+                  if "tile.attention_" in line and "_kernel" in line)
+    kernel = re.sub(r"block_threads = [0-9]+ : i64",
+                    f"block_threads = {threads} : i64", kernel)
+    direct = "module {\n" + signature + " {\n" + kernel + "\n    llvm.return\n  }\n}\n"
+    legal = threads in (64, 128) if backward else threads == 32
+    if legal:
+        assert "tile.attention_" in lower(direct, "--canonicalize")
+    else:
+        with pytest.raises(RuntimeError, match="row correction.*(threads|thread)"):
+            lower(direct, "--canonicalize")

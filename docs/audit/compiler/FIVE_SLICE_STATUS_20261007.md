@@ -33,8 +33,7 @@ broader M256/per-column, prepared/resident, view/AD or five-slice closure.
 The final guard's four-worker unit sweep completed with 28,594 passes,
 5,873 skips and three failures caused by the new specification's missing
 date. The date is repaired without an allow-list exception; the affected
-date/audit/view gate passes 58 cases. The full green publication gate is
-still pending at this checkpoint. Historical red and intentionally
+date/audit/view gate passes 58 cases. The later clean 6a9610363 gate passes 28,603 non-slow unit tests (5,873 skipped), 856 required production compiler-route cases with no skips and 49 owning gfx1201 numerical/admission cases. Source/compiler witnesses are unchanged; all 33 generated views are in sync. This closes the local gate, while GitHub publication CI remains pending at the checkpoint. Historical red and intentionally
 interrupted receipts remain source-bound in the packet.
 
 Evidence: benchmarks/baselines/gfx1201_folded_input_pitches_20261016/README.md.

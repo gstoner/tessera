@@ -40,5 +40,35 @@
     "compressed_sha256": "c61acd8de7ae6763913f75ecf6f02a39641c083b836dc7fc8be4d6d504eea461",
     "raw_bytes": 420,
     "compressed_bytes": 77
+  },
+  "full-unit.log.gz": {
+    "raw_sha256": "39908ab7e3378447b8e80ac0648c9b6f17d24bdd83b4ab0740d1f1763b8dd371",
+    "compressed_sha256": "6ec88f7b229a70f6bc85c59151aa56022af498bd5c8a48037d95c56b6659a0e4",
+    "raw_bytes": 45785,
+    "compressed_bytes": 4176
+  },
+  "final-admission-image-parity.json.gz": {
+    "raw_sha256": "39e5cc610dea21b38436adf10bb88dee03131248eaf11e33aefcf76fef3f56af",
+    "compressed_sha256": "6aa817d862bcfd67fa69cd383e1bb3b3a7bfc0c7629273a89ead962213ed2604",
+    "raw_bytes": 78785,
+    "compressed_bytes": 5274
+  },
+  "device-final.log.gz": {
+    "raw_sha256": "9b7b28384b772eea2e8870d455c60f33572798c95fc9b544facb2b0fc4a7ec4e",
+    "compressed_sha256": "cf664be8b64ccc10559eac560f61d207759bd49854289e8005d689cbb4c98b8d",
+    "raw_bytes": 100,
+    "compressed_bytes": 53
+  },
+  "compiler-route.log.gz": {
+    "raw_sha256": "a5c2480149c32be012152ec9e0d5bd11269388724c71b48ff9c7f8f5b991f34e",
+    "compressed_sha256": "135c0cd97f43c300f6588df3d5a4f5efc1526270506cb10c8c96bef83a68b379",
+    "raw_bytes": 1034,
+    "compressed_bytes": 135
+  },
+  "compiler-route-junit.xml.gz": {
+    "raw_sha256": "ae5bedd45f2c6dbdd87bd995518b73ccbccfd147b7dc4bdbe84fe04c281b375c",
+    "compressed_sha256": "85c4d57abe16f2d52447875232750095732a5062ec7bc0a064b3c6acc8942c46",
+    "raw_bytes": 135454,
+    "compressed_bytes": 9189
   }
 }

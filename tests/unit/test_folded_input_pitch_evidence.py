@@ -3,6 +3,8 @@ from pathlib import Path
 import gzip
 import hashlib
 import json
+import subprocess
+import sys
 
 import pytest
 
@@ -127,3 +129,42 @@ def test_incomplete_and_red_unit_history_is_retained_without_relabeling():
         assert hashlib.sha256(raw).hexdigest() == receipt["raw_log_sha256"]
     reason = json.loads((root / "before-encoding-guard/full-unit-interruption.json").read_text())
     assert "Intentionally interrupted" in reason["reason"]
+
+
+def test_final_local_gate_is_green_and_bound_to_the_observed_compiler():
+    receipt = json.loads((PACKET / "full-unit-validation.json").read_text())
+    raw = gzip.decompress((PACKET / "full-unit.log.gz").read_bytes())
+    assert receipt["state"] == "passed" and receipt["exit_code"] == 0
+    assert receipt["source_before"] == receipt["source_after"]
+    assert not receipt["source_before"]["status"]
+    assert receipt["revision"] == "6a9610363c2e70632b905deb0d57eb96ff143843"
+    assert receipt["summary"]["passed"] == 28603
+    assert receipt["summary"]["skipped"] == 5873
+    assert hashlib.sha256(raw).hexdigest() == receipt["raw_log_sha256"]
+    observed = load("final-admission-image-parity")
+    assert observed["source_before"] == observed["source_after"]
+    assert observed["source_before"]["commit"] == receipt["revision"]
+    assert observed["source_before"]["compiler_sha256"] == receipt["source_before"]["compiler_sha256"]
+    previous = load("encoding-guard-image-parity")
+    for key in ("cu_rows", "format_rows", "pitched_rows"):
+        assert observed[key] == previous[key]
+
+
+def test_required_compiler_route_and_owning_device_results_are_distinct(tmp_path):
+    validation = json.loads((PACKET / "release-validation.json").read_text())
+    junit = gzip.decompress((PACKET / validation["compiler_route"]["junit"]).read_bytes())
+    junit_path = tmp_path / "retained-compiler-route.xml"
+    junit_path.write_bytes(junit)
+    checked = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/ci_require_executed.py"), str(junit_path)],
+        capture_output=True, text=True, check=False,
+    )
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    route_log = gzip.decompress((PACKET / "compiler-route.log.gz").read_bytes())
+    assert b"856 passed" in route_log
+    assert validation["compiler_route"]["passed"] == 856
+    assert validation["compiler_route"]["skipped"] == 0
+    raw = gzip.decompress((PACKET / validation["gfx1201"]["log"]).read_bytes())
+    assert b"49 passed" in raw
+    assert validation["gfx1201"]["passed"] == 49
+    assert validation["generated_documents"] == 33

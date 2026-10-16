@@ -1,0 +1,30 @@
+{
+  "revision": "6a9610363c2e70632b905deb0d57eb96ff143843",
+  "compiler_sha256": "f6389df7178f32e50adb18da256fa338acc4dab4deee2e8e7045b436b7c20d22",
+  "unit": {
+    "passed": 28603,
+    "skipped": 5873,
+    "warnings": 11,
+    "pytest_elapsed_s": 419.17
+  },
+  "compiler_route": {
+    "passed": 856,
+    "skipped": 0,
+    "all_selected_executed": true,
+    "junit": "compiler-route-junit.xml.gz"
+  },
+  "gfx1201": {
+    "passed": 49,
+    "scope": "owning-host native numerical and admission regressions, including pitched CU mode",
+    "log": "device-final.log.gz"
+  },
+  "image_equivalence": {
+    "cu_rows": 22,
+    "format_rows": 12,
+    "pitched_rows": 80,
+    "observation": "final-admission-image-parity.json.gz"
+  },
+  "generated_documents": 33,
+  "mypy_errors": 0,
+  "status": "local_release_gates_passed; GitHub required checks pending"
+}

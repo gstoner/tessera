@@ -124,3 +124,23 @@ an allow-list exception. The repaired date/audit/view gate passes 58 tests.
 These are historical, source-bound results, not a claim that the final full
 gate has passed. The new native-view tests also join the required production
 compiler-route lane and reject a missing explicitly configured compiler.
+
+## Final local release gate
+
+Frozen 6a9610363c2e70632b905deb0d57eb96ff143843 completes the full non-slow
+unit lane: 28,603 passed, 5,873 skipped, 11 warnings. Source/working-tree,
+native compiler and product-tree witnesses are unchanged before/after.
+The raw compressed log and receipt preserve this exact source scope.
+
+The required host-free production compiler-route lane passes 856 cases;
+the CI execution checker confirms every selected test executed. The owning
+gfx1201 lane passes 49 numerical/admission regressions, now including pitched
+CU mode and K32 fragment groups. The final native preflight rejects misplaced
+scaled-contract tags without assertions while preserving empty-tag ordinary
+matmul. All 22 legacy CU, 12 format and 80 pitched/canonicalized image
+identities remain unchanged. All 33 generated documents are in sync.
+
+This green receipt supersedes the historical undated-document failure for
+its own source only. Later publication commits add evidence/docs/consumers;
+they do not change production compiler/runtime/recorder sources. Required
+GitHub checks still gate merge.

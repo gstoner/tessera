@@ -37,6 +37,10 @@ phase; no NVIDIA owner or timing result transfers to sibling execution.
 Native owner specification: docs/spec/SM120_ATTENTION_ROW_OWNER_CONTRACT.md.
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/prepared_owner/README.md.
 
+Follow-up required for x86: public v3 serialization and policy/cache identity are shared contract changes; the new physical owner remains SM120-specific. Its 71 device cases and public timings establish no x86 execution or performance result. Existing sibling selectors and physical ABIs are unchanged.
+
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/public_program/README.md.
+
 ## SM120-REVERSE-ARTIFACT-REUSE-20261016 — private compiled identity
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

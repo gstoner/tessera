@@ -12795,3 +12795,23 @@ native route selection. The complete original five-slice goal remains active.
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/prepared_owner/README.md.
 Spec: docs/spec/SM120_ATTENTION_ROW_OWNER_CONTRACT.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-16 — public native row program and original frontend timing
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-NATIVE-ROW-CORRECTION-20261016.
+Outcome: strict VJP v3 pins all forward/row/backward executable members,
+geometry, storage and native paired lineage, with compiler-free restoration.
+Original JIT/native reverse and resident ordered replay use the additive owner;
+exactly dV-only omits the producer. Policy participates in cache identity.
+71 RTX5070 device cases and 448 focused compatibility/registry/audit cases pass.
+Trace-at-one tests preserve equivalent static physical bias representations.
+Eight matched public A/B rows separate stage/device/public scopes: Sq7/17 Sk129
+improve completed public calls 1.67-4.97x and device windows 3.53-10.25x.
+Tiny regressions remain, so prepass is explicit and default inline is unchanged.
+All four backend queues assess the shared serialization/runtime contract.
+Remaining: broad required gates/CI, automatic policy, dynamic/layout/composition,
+and the full original five-slice completion audit. No sibling proof transfers.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/public_program/README.md.
+<!-- entry-fields:end -->

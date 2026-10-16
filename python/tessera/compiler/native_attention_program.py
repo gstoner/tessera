@@ -239,7 +239,7 @@ class AutomaticAttentionVJPFrame:
         self.close()
 
 
-def compile_attention_vjp_program(source, active, *, compiler, compact_gradients=False, compact_launch="packed_v1", compact_threads=128):
+def compile_attention_vjp_program(source, active, *, compiler, compact_gradients=False, compact_launch="packed_v1", compact_threads=128, row_correction=False):
     from pathlib import Path
     from .scheduled_matmul import find_tessera_opt
     selected = find_tessera_opt()
@@ -255,6 +255,13 @@ def compile_attention_vjp_program(source, active, *, compiler, compact_gradients
         raise ValueError("compact gradient output selection must be boolean")
     if not compact_gradients and (compact_launch != "packed_v1" or compact_threads != 128):
         raise ValueError("compact launch requires compact gradient outputs")
+    if type(row_correction) is not bool:
+        raise ValueError("row correction selection must be boolean")
+    if row_correction:
+        if not compact_gradients:
+            raise ValueError("row correction program requires native compact gradients")
+        from .native_attention_rows import compile_program
+        return compile_program(source,active,threads=compact_threads,launch=compact_launch)
     pair = package_generated_attention_checkpoint_pair(
         source, pipeline_name="tessera-nvidia-pipeline-sm120", prune_inactive=True,
         compact_gradients=compact_gradients, compact_launch=compact_launch, compact_threads=compact_threads)

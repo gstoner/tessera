@@ -42,9 +42,9 @@ rows are near parity and tiny FP16 completed-call time regresses about 4%.
 These are diagnostic owner scopes, not public frontend latency or default
 selection evidence.
 
-Follow-up required: complete executable-member serialization/provenance, strict
-portable validation, original public frontend stream/snapshot/generation and
-compiler-absent replay, then public-call benchmarks before native selection.
+Portable/public integration and measured explicit prepass selection are recorded
+below. Follow-up required: automatic policy selection, dynamic/layout/composition
+and wider reverse ownership envelopes.
 No global default or full five-slice closure is promoted.
 
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/consumer/README.md;
@@ -52,6 +52,10 @@ prior producer proof: benchmarks/baselines/sm120_native_row_correction_20261016/
 
 Native owner specification: docs/spec/SM120_ATTENTION_ROW_OWNER_CONTRACT.md.
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/prepared_owner/README.md.
+
+Public v3 integration parity validated on RTX5070: 71 device cases and 448 focused registry/compatibility cases pass. All executable members are pinned and compiler-free restored; original JIT, trace-at-one bias, resident streams and output retention pass. Eight public A/B rows show 1.67-4.97x completed-call and 3.53-10.25x device-window improvement for Sq7/17 Sk129; tiny regressions remain. Explicit prepass selection is available; default inline is unchanged. Automatic selection and broader dynamic/layout/composition closure remain open.
+
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/public_program/README.md.
 
 ## SM120-REVERSE-ARTIFACT-REUSE-20261016 — private compiled identity
 

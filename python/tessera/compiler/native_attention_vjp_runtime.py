@@ -12,7 +12,7 @@ import re
 import os
 import threading
 
-_cache: OrderedDict[tuple[str, tuple[int, ...], str, int, int, int, int],
+_cache: OrderedDict[tuple[str, tuple[int, ...], str, int, int, int, int, str],
                     tuple[str, str, str, dict[str, str], RuntimeArtifact]] = OrderedDict()
 _lock=threading.RLock()
 _LIMIT=96
@@ -91,20 +91,27 @@ def execute_family(*,source,target,ordered_inputs,arg_names,source_arg_names,
     compiler=find_tessera_opt()
     if compiler is None:raise ValueError("attention VJP requires the selected native compiler")
     st=Path(compiler).stat()
-    key=(source_graph_ir,active,str(Path(compiler).resolve()),st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns)
+    row_policy=os.environ.get("TESSERA_NVIDIA_ATTENTION_ROW_CORRECTION","inline")
+    if row_policy not in ("inline","prepass"):
+        raise ValueError("attention row correction policy must be inline or prepass")
+    key=(source_graph_ir,active,str(Path(compiler).resolve()),st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns,row_policy)
     with _lock:
         cached=_cache.get(key)
         if cached is None:
             graph=re.sub(r'=\s+(tessera\.[A-Za-z0-9_.]+)\(',r'= "\1"(',source_graph_ir)
-            program=compile_attention_vjp_program(graph,active,compiler=compiler,compact_gradients=True)
+            if row_policy=="prepass":
+                program=compile_attention_vjp_program(graph,active,compiler=compiler,compact_gradients=True,row_correction=True)
+            else:
+                program=compile_attention_vjp_program(graph,active,compiler=compiler,compact_gradients=True)
+            members=getattr(program,"members",(program.pair.forward,program.pair.backward))
             text=program.to_json()
             pin=program.program_digest
             proof=dict(
                 schedule_artifact_hash=hashlib.sha256("".join(
                     x.descriptor.provenance["schedule_digest"]
-                    for x in (program.pair.forward,program.pair.backward)).encode()).hexdigest(),
+                    for x in members).encode()).hexdigest(),
                 tile_program_digest=hashlib.sha256(
-                    (program.pair.forward.tile_ir+program.pair.backward.tile_ir).encode()).hexdigest(),
+                    "".join(x.tile_ir for x in members).encode()).hexdigest(),
                 state_lineage_digest=program.pair.contract_digest,
             )
             # The compiler owns the root/result roles; retain only immutable

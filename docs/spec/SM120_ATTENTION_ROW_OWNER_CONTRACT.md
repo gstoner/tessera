@@ -77,8 +77,29 @@ bit-identical forward PTX, alternating arm order, correctness checks outside the
 wall timing interval and separate stage/device/completed-call scopes. This is not
 a public @jit latency measurement and does not promote a global default.
 
-Complete all-member image/source-pair/policy provenance, strict new portable
-program validation, original frontend replay, output generations and public-call
-benchmarking remain required before route selection and the consolidated PR.
+All-member portable provenance, original frontend replay, output generations
+and public-call benchmarking are now recorded below. Broad gates/CI and
+automatic policy selection remain open.
 
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/prepared_owner/README.md.
+
+
+## Portable public program and selection
+
+VJP program schema v3 retains forward, optional correction and backward members.
+The row member is absent exactly for dV-only activity; otherwise all three image,
+ABI, native-policy, compiler/toolchain and source-pair identities must agree.
+The canonical pinned digest covers every executable member. Retained Tile and
+Target dictionaries are checked against regenerated descriptors without invoking
+a compiler. Full-shaped bias may be implicit in forward metadata; comparison
+uses its actual physical extent. Dynamic shapes are not admitted by this rule.
+
+The original synchronous JIT/native backward selects this program with
+`TESSERA_NVIDIA_ATTENTION_ROW_CORRECTION=prepass`; `inline` remains the default.
+Policy is part of compiler/prototype cache identity. Warm replay, resident ordered
+snapshots and fresh-process RuntimeArtifact restoration use the checked native
+owner. This does not introduce a row-program capture API or widen dynamic support.
+VJP v1/v2 and JVP schema 5 bounded / schema 6 static retain their meanings.
+
+Public proof and separate public/device/stage timings:
+benchmarks/baselines/sm120_native_row_correction_20261016/public_program/README.md.

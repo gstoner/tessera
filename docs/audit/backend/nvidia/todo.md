@@ -11,6 +11,18 @@ last_updated: 2026-10-15
 Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
 Synchronization key: GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
 
+Shared test discovery now honors explicit MLIR_OPT, then TESSERA_LLVM_BIN,
+then LLVM_BIN before legacy host fallbacks. A broken configured tool
+cannot silently switch dialect versions. This changes test tool selection,
+not nvidia lowering or physical execution; sibling device proof is unchanged.
+
+Regression follow-up: the frozen all-unit sweep records 26,635 passes and
+23 failures. Matching host MLIR/lit and runtime provider configuration plus
+the spec-date/historical-packet repairs pass all affected modules and
+registry/lifecycle gates (456 passed, 13 skipped). The failed original
+receipt is retained; a fresh all-unit green result is not claimed.
+No new nvidia physical schedule or device parity is inferred from this repair.
+
 The shared benchmark change is scoped to gfx1201: its optional independent
 Radiance arm uses explicit-stream capture and separate host/device timing.
 Not applicable to nvidia physical execution or runtime ABI; no comparator

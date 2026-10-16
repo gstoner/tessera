@@ -1,6 +1,7 @@
 """Host-free contracts for the matched gfx1201 MXFP4 benchmark."""
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -97,7 +98,7 @@ def test_rdna4_barrier_counter_uses_archived_split_barrier_opcodes() -> None:
     assert bench._count_rdna4_workgroup_barriers(isa) == 3
 
 
-def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None:
+def test_production_packet_preserves_original_source_and_results() -> None:
     packet = json.loads(EVIDENCE.read_text())
     assert packet["schema"] == "tessera.rocm.gfx1201_mxfp4_matched_benchmark.v1"
     assert packet["device"] == "AMD Radeon RX 9070 XT"
@@ -109,13 +110,9 @@ def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None
     # gfx1201_mxfp4_producer_relabel_20260924 proves the relabelled generator
     # builds the same timed kernels; do not relabel old GPU timings.
     assert source["generator_sha256"] == "abc96ab7746692768c5ef228a87a76968c8a34548faa66668f3ea00bff5ed0b5"
-    for key, path in (
-        (
-            "benchmark_sha256",
-            ROOT / "benchmarks/rocm/benchmark_gfx1201_mxfp4_production.py",
-        ),
-    ):
-        assert source[key] == hashlib.sha256(path.read_bytes()).hexdigest()
+    # These September timings retain their actual recorder bytes. The October
+    # explicit-stream extension has its own fresh source-bound graph packet.
+    assert source["benchmark_sha256"] == "1bd38025923af1e60c16ea3e9621c5dc851919f90a8f379ad3d1d0d3f9991837"
 
     by_case: dict[str, list[dict[str, object]]] = {}
     for row in packet["rows"]:
@@ -132,3 +129,25 @@ def test_production_packet_is_bound_to_current_generator_and_benchmark() -> None
         assert tessera["metadata"]["isa"]["s_barrier"] == expected_barriers
         assert tessera["metadata"]["resources"]["scratch_bytes"] == 0
         assert tessera["metadata"]["resources"]["spills"] is False
+
+
+@pytest.mark.parametrize("name", [
+    "radiance-fast-forward.json.gz", "radiance-fast-reverse.json.gz",
+    "radiance-legacy-epilogue-forward.json.gz", "radiance-legacy-epilogue-reverse.json.gz",
+])
+def test_current_captured_packets_bind_the_benchmark_sources(name: str) -> None:
+    path = ROOT / "benchmarks/baselines/gfx1201_folded_fragment_groups_20261015" / name
+    packet = json.loads(gzip.decompress(path.read_bytes()))
+    assert packet["schema"] == "tessera.rocm.folded_native_package.v1"
+    assert packet["architecture"] == "gfx1201"
+    assert packet["device"] == "AMD Radeon RX 9070 XT"
+    assert packet["dirty_worktree"] is False
+    assert packet["source_commit"] == "7ac37d9e2e65d0d0130f4dad2bd11029f663372e"
+    for relative in (
+        "benchmarks/rocm/benchmark_gfx1201_mxfp4_production.py",
+        "benchmarks/rocm/record_gfx1201_folded_native_package.py",
+        "benchmarks/rocm/folded_graph_windows.py",
+    ):
+        assert packet["source_sha256"][relative] == hashlib.sha256(
+            (ROOT / relative).read_bytes()
+        ).hexdigest()

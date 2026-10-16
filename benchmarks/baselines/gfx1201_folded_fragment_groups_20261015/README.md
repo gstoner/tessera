@@ -157,3 +157,24 @@ Reverse the two compiler paths and shape order for the control run. Compare
 named native/reference engines rather than the recorder's printed native/HIP
 ratio. Keep the old baseline immutable; its stale-source warning is expected
 in this controlled comparison. No sibling hardware proof is inferred.
+
+## Broad regression follow-up
+
+The source-frozen 4838909a4 all-unit run retained unchanged compiler hashes and
+clean source before/after: 26,635 passed, 23 failed, 7,353 skipped and 876
+deselected. Its original failed receipt is full-unit-initial-validation.json.
+The failures exposed the missing specification date, a historical recorder
+hash compared with today's edited file, a vendor-development MLIR selected
+instead of matching 23.1.1, missing lit import wiring, and unselected existing
+spectral/x86 providers. The September timing packet remains untouched. Fresh
+October captured packets bind current benchmark sources instead.
+
+All affected modules plus diagnostic/pass/lifecycle gates now pass: 456 passed
+and 13 skipped. Production source hashes remain identical to frozen7ac37;
+full-unit-repair-validation.json records actual tools/providers and the scope.
+This supplementary gate is not relabeled as a fresh green full-suite result.
+
+The durable shared resolver fix additionally reproduces five failures before
+repair and passes 464 checks (13 skips) with MLIR_OPT unset, selecting the
+configured toolchain directory. Existing infrastructure/cross-lane checks
+pass 54 cases. Explicit executable selection remains final.

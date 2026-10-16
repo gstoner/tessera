@@ -1,3 +1,7 @@
+---
+last_updated: 2026-10-15
+---
+
 # gfx1201 folded fragment read scheduling
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.

@@ -7,15 +7,14 @@ Reference date for staleness: **2026-10-15**.
 ## Headline
 
 - **164** docs catalogued across the canonical doc tree.
-- **162** carry a `last_updated:` marker; **2** are undated (invisible to the freshness audit until tagged).
-- **33** updated within the last 30 days.
+- **163** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **34** updated within the last 30 days.
 - **67** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
 
 These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-form `Last updated:` line to participate in the audit.  Until tagged, the freshness signal is unavailable.
 
-- `docs/spec/ir/gfx1201_folded_fragment_schedule.md`
 - `docs/reference/tessera_frontend_lanes.md`
 
 ## Per-root inventory
@@ -47,7 +46,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `TILE_IR.md` | Normative | 2026-10-02 | 13 | ✓ |
 | `VALIDATION_SPINE.md` | Normative | 2026-08-02 | 74 | ✓ |
 | `VALUE_TARGET_IR_CONTRACT.md` | Normative | 2026-06-04 | 133 | ✓ |
-| `ir/gfx1201_folded_fragment_schedule.md` | - | _undated_ | - | _body_ |
+| `ir/gfx1201_folded_fragment_schedule.md` | - | 2026-10-15 | 0 | ✓ |
 | `ir/rocm_nvfp4_source_preserving_program.md` | - | 2026-10-15 | 0 | ✓ |
 | `ir/sm120_activation_schedule_tile_contract.md` | - | 2026-10-14 | 1 | ✓ |
 

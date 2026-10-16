@@ -10,6 +10,18 @@ scope: ROCm backend implementation and exact-device proof
 Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
 Synchronization key: GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
 
+Shared test discovery now honors explicit MLIR_OPT, then TESSERA_LLVM_BIN,
+then LLVM_BIN before legacy host fallbacks. A broken configured tool
+cannot silently switch dialect versions. This changes test tool selection,
+not rocm lowering or physical execution; sibling device proof is unchanged.
+
+Regression follow-up: the frozen all-unit sweep records 26,635 passes and
+23 failures. Matching host MLIR/lit and runtime provider configuration plus
+the spec-date/historical-packet repairs pass all affected modules and
+registry/lifecycle gates (456 passed, 13 skipped). The failed original
+receipt is retained; a fresh all-unit green result is not claimed.
+The exact gfx1201 spectral provider and existing x86 image were selected explicitly.
+
 The optional independent Radiance comparison now shares the explicit-stream,
 all-three-copy poisoned-output graph protocol with native packages. Module
 bytes and declared source revision are distinguished; tuning inputs are

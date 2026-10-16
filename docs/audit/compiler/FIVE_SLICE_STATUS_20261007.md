@@ -15,16 +15,16 @@ and a passing test lane does not close a wider capability envelope.
 ## Current reconciliation — 2026-10-15
 
 
-Queued after PR949 on codex/rocm-native-multi-output-owner, the source-preserving
-program now carries actual Graph SSA through two native members and checked
+Merged PR950 (2e8e2cfab, 2026-10-15) delivers the source-preserving
+program with actual Graph SSA through two native members and checked
 private ownership. Its frozen gate passes 829 cases. Original pinned Qwen3
 M256 gate/up projections pass the FP32 arithmetic bound and produce identical
 bytes through ordinary JIT, compiler-free replay and prepared import-once
 execution. Full checkpoint frames exceed the 128 MiB idle-allocation budget;
 the packet separates that host boundary from native graph-dispatch timings.
-PR949's required checks are green on a6b78d082; it remains open pending the
-user's merge decision. The subsequent queued source still requires its own
-publication CI. None of these gates closes the aggregate five-slice objective.
+PR949 merged as 51749071b on 2026-10-15; its delivery wait is closed.
+PR950 merged as 2e8e2cfab the same day. PR951 remains open as last verified;
+the independent native folded scheduling slice still requires publication CI. None of these gates closes the aggregate five-slice objective.
 Evidence: benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md.
 
 The original five requirements remain open as an aggregate. Their current

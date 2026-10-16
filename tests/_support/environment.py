@@ -308,6 +308,29 @@ def require_native_storage_lane(backend: str) -> None:
         pytest.skip(f"this host has no {backend} device toolchain to package for")
 
 
+def _mlir_opt_path() -> Path | None:
+    """Keep auxiliary MLIR tools in the explicitly selected LLVM toolchain.
+
+    An explicit executable wins. Configured bin directories outrank unrelated
+    system/vendor installs, and a broken configured tool must not silently
+    select a different dialect version.
+    """
+    from tests._support import compiler_tool
+
+    if os.environ.get("MLIR_OPT"):
+        return _tool_path("MLIR_OPT")
+    for name in ("TESSERA_LLVM_BIN", "LLVM_BIN"):
+        if configured := os.environ.get(name):
+            path = Path(configured).expanduser() / "mlir-opt"
+            return path if path.is_file() and compiler_tool.is_runnable(path) else None
+    return _tool_path(
+        "MLIR_OPT",
+        "/usr/lib/llvm-23/bin/mlir-opt",
+        "/opt/rocm/core/lib/llvm/bin/mlir-opt",
+        "/opt/homebrew/opt/llvm@23/bin/mlir-opt",
+    )
+
+
 @dataclass(frozen=True)
 class CompilerToolchain:
     """Discovered host compiler tools; requirement checks skip consistently."""
@@ -325,12 +348,7 @@ class CompilerToolchain:
             # search orders is how a fixture and a test end up running
             # different binaries in the same session.
             tessera_opt=compiler_tool.tessera_opt_path(),
-            mlir_opt=_tool_path(
-                "MLIR_OPT",
-                "/usr/lib/llvm-23/bin/mlir-opt",
-                "/opt/rocm/core/lib/llvm/bin/mlir-opt",
-                "/opt/homebrew/opt/llvm@23/bin/mlir-opt",
-            ),
+            mlir_opt=_mlir_opt_path(),
             nvidia_opt=_tool_path(
                 "TESSERA_NVIDIA_OPT",
                 REPO_ROOT / "build-nvidia-cuda/src/compiler/codegen"

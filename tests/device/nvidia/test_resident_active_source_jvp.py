@@ -359,3 +359,53 @@ def test_optional_strides_resident_jvp_matches_independent_oracle(compiled, rout
             assert timing["program_ms"] > 0 and all(value > 0 for value in timing["stage_ms"])
         check(pair, expected, budgets)
         assert owner.receipt["input_binding"] == "cuda_resident_roots"
+
+
+def tiny_epsilon_product(a, b):
+    return ts.ops.matmul(ts.ops.relu(ts.ops.rmsnorm(
+        a, eps=1e-40, numeric_policy={"accum": "fp32"})), b, output_dtype="fp32")
+
+
+def tiny_epsilon_product_reversed(b, a):
+    return ts.ops.matmul(ts.ops.relu(ts.ops.rmsnorm(
+        a, eps=1e-40, numeric_policy={"accum": "fp32"})), b, output_dtype="fp32")
+
+
+@pytest.mark.parametrize("shape", [(1, 1, 1), (17, 19, 35)])
+@pytest.mark.parametrize("permuted", [False, True])
+@pytest.mark.parametrize("route", ["host", "resident", "portable", "events", "captured"])
+def test_tiny_epsilon_nonzero_bf16_source_jvp_matches_oracle(shape, permuted, route):
+    import ml_dtypes
+    if rt._nvidia_device_name() != "sm_120":
+        pytest.skip("owning RTX5070/SM120 required")
+    m, n, k = shape
+    a = np.full((m, k), 1e-30, dtype=ml_dtypes.bfloat16)
+    b = np.full((k, n), 1e10, dtype=ml_dtypes.bfloat16)
+    seed = a.copy()
+    roots = (b, a, seed) if permuted else (a, b, seed)
+    expected, budgets = oracle(a, b, seed, epsilon=1e-40)
+    assert all(np.all(value > 0) for value in expected)
+    fn = ts.jit(target="nvidia_sm120", autodiff="forward", wrt=("a",))(
+        tiny_epsilon_product_reversed if permuted else tiny_epsilon_product)
+    try:
+        check(fn.native_jvp(*roots[:2], tangents=(seed,)), expected, budgets)
+        if route == "host":
+            return
+        artifact = rt.RuntimeArtifact.from_json(fn.native_jvp_runtime_artifact().to_json())
+        owner = next(iter(fn._native_prepared_jvp_calls.values()))
+        with ExitStack() as stack:
+            sessions = [stack.enter_context(NvidiaDeviceSession()) for _ in roots]
+            values = tuple(Borrowed(session.upload(value))
+                           for session, value in zip(sessions, roots, strict=True))
+            if route == "resident":
+                result = fn.native_jvp(*values[:2], tangents=(values[2],))
+            elif route == "portable":
+                receipt = rt.launch(artifact, values)
+                assert receipt["ok"], receipt
+                result = receipt["output"]
+            else:
+                result, timing = owner.profile(values, repeats=3, captured=route == "captured")
+                assert timing["program_ms"] > 0
+            check(result, expected, budgets)
+    finally:
+        fn.close_native_storage()

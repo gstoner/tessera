@@ -40,8 +40,9 @@ inline void normalizationGuard(mlir::OpBuilder &builder, mlir::Location loc,
 }
 
 // Algebraically identical RMS projection with an explicit epsilon term.
-// Scaling x by inverse^2 before both reductions avoids x*dx overflow and
-// makes the two projections bitwise identical for an exactly radial seed.
+// Scale x by each inverse factor before the reductions: forming inverse^2
+// can overflow for finite inverse and a small positive epsilon. Preserve
+// bitwise-identical projections for an exactly radial seed.
 // Keep the existing unspecified/storage accumulator formula in its callers.
 inline mlir::Value stableRmsProjection(mlir::OpBuilder &builder,
     mlir::Location loc, mlir::RankedTensorType type, mlir::Value x,
@@ -62,8 +63,7 @@ inline mlir::Value stableRmsProjection(mlir::OpBuilder &builder,
     return builder.create<tessera::BroadcastInDimOp>(
         loc,type,reduced,x,builder.getArrayAttr(dimensions)).getY();
   };
-  auto inverseSquared=mul(inverse,inverse);
-  auto weightedX=mul(x,inverseSquared);
+  auto weightedX=mul(mul(x,inverse),inverse);
   auto varianceScaled=mean(mul(x,weightedX));
   auto directionScaled=mean(mul(seed,weightedX));
   auto residual=builder.create<tessera::SubOp>(
@@ -74,7 +74,10 @@ inline mlir::Value stableRmsProjection(mlir::OpBuilder &builder,
           type.getElementType(),epsilon ? epsilon.getValueAsDouble() : 1.0e-5)));
   auto epsilonLike=builder.create<tessera::BroadcastInDimOp>(
       loc,type,scalar.getResult(),x,builder.getArrayAttr({})).getY();
-  auto epsilonDirection=mul(seed,mul(epsilonLike,inverseSquared));
+  // epsilon*inverse is bounded for positive realizable epsilon; multiply
+  // by inverse again only after that scaling, never materialize inverse^2.
+  auto epsilonScaled=mul(mul(epsilonLike,inverse),inverse);
+  auto epsilonDirection=mul(seed,epsilonScaled);
   auto corrected=builder.create<tessera::AddOp>(
       loc,type,residual,epsilonDirection).getResult();
   return mul(corrected,inverse);

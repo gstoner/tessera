@@ -10,7 +10,6 @@ from __future__ import annotations
 import argparse
 import ctypes
 from contextlib import ExitStack
-from dataclasses import replace
 import hashlib
 import json
 import math
@@ -80,10 +79,18 @@ def compile_for_tool(compiler,a,a_scale,folded,**options):
         if previous is None:os.environ.pop("TESSERA_OPT",None)
         else:os.environ["TESSERA_OPT"]=previous
 
-def matching_reference_schedule(reference, selected, *, compare_workgroup_mode=False):
-    """Permit only the explicitly requested workgroup-mode experiment."""
+def matching_reference_receipts(reference, selected, *, compare_workgroup_mode=False,
+                                compare_fragment_read_policy=False):
+    """Match the complete native schedule, allowing only explicit experiments."""
+    reference = dict(reference["selected_schedule"])
+    selected = dict(selected["selected_schedule"])
+    # Missing means the native LLVM default, not an unspecified don't-care.
+    reference.setdefault("fragment_read_schedule", "llvm_default")
+    selected.setdefault("fragment_read_schedule", "llvm_default")
     if compare_workgroup_mode:
-        reference = replace(reference, workgroup_mode=selected.workgroup_mode)
+        reference["workgroup_mode"] = selected["workgroup_mode"]
+    if compare_fragment_read_policy:
+        reference["fragment_read_schedule"] = selected["fragment_read_schedule"]
     return reference == selected
 
 
@@ -94,7 +101,8 @@ def independent_output_snapshots(engines):
 
 def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
              reference_compiler=None,hip_graph_windows=False,radiance=None,
-             share_native_resident_frames=False,compare_native_workgroup_mode=False):
+             share_native_resident_frames=False,compare_native_workgroup_mode=False,
+             compare_native_fragment_read_policy=False):
     inputs=base._logical_inputs(case)
     folded=prepare_folded_weights(inputs["packed_row_major"],inputs["b_scale"],allow_approximate=True)
     if not folded.lossless:
@@ -122,8 +130,9 @@ def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
         reference=compile_for_tool(reference_compiler,inputs["a"],inputs["a_scale"],folded,
             runtime_k=runtime_k)
         reference_compile_ms=(time.perf_counter_ns()-start)/1e6
-        if not matching_reference_schedule(_schedule_from(reference.route_receipt),schedule,
-                compare_workgroup_mode=compare_native_workgroup_mode):
+        if not matching_reference_receipts(reference.route_receipt,program.route_receipt,
+                compare_workgroup_mode=compare_native_workgroup_mode,
+                compare_fragment_read_policy=compare_native_fragment_read_policy):
             raise RuntimeError("native reference uses a different physical schedule")
         packages["native_reference_control"]=reference.package
     engines=[]
@@ -231,7 +240,8 @@ def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
                     "correctness":"bracketed_and_plain_graphs_all_three_poisoned_outputs_bitwise_matched_before_timing",
                     "graph_over_ordinary_ratio":statistics.median(device)/
                         next(r["device_window_per_launch_median_ms"] for r in result if r["engine"]==engine.name)})
-        return {"native_reference_workgroup_mode_comparison":compare_native_workgroup_mode,
+        return {"native_reference_fragment_read_policy_comparison":compare_native_fragment_read_policy,
+            "native_reference_workgroup_mode_comparison":compare_native_workgroup_mode,
             "shared_native_resident_frames":resident_pool.report if resident_pool is not None else None,
             "shape_mnk":[case.m,case.n,case.k],"correctness":"bitwise_matched_and_sampled_independent_oracle",
             "frontend_receipt":program.route_receipt,"fold_lossless":folded.lossless,
@@ -291,6 +301,8 @@ def main():
     parser.add_argument("--hip-graph-windows",action="store_true",help="Also capture/replay checked resident packages without repeated host dispatch")
     parser.add_argument("--share-native-resident-frames",action="store_true")
     parser.add_argument("--compare-native-workgroup-mode",action="store_true")
+    parser.add_argument("--compare-native-fragment-read-policy",action="store_true",
+        help="Explicit fragment-policy experiment; other native schedule fields must match")
     parser.add_argument("--native-reference-opt",type=Path,
         help="Matching native reference compiler for interleaved schedule comparison")
     parser.add_argument("--native-runtime-k",action=argparse.BooleanOptionalAction,default=True,
@@ -303,8 +315,8 @@ def main():
     if args.trials<3: raise ValueError("at least three alternating trials required")
     if args.native_reference_opt is not None and not args.native_reference_opt.is_file():
         raise FileNotFoundError("native reference compiler does not exist")
-    if args.compare_native_workgroup_mode and args.native_reference_opt is None:
-        raise ValueError("workgroup-mode comparison requires a native reference compiler")
+    if (args.compare_native_workgroup_mode or args.compare_native_fragment_read_policy) and args.native_reference_opt is None:
+        raise ValueError("native schedule comparison requires a native reference compiler")
     reference_metadata=radiance_metadata(args.radiance_module,args.radiance_revision)
     if rt._rocm_live_arch()!="gfx1201":raise RuntimeError("owning gfx1201 required")
     hip=rt._load_hip_for_launch()
@@ -313,7 +325,7 @@ def main():
               if reference_metadata is not None else None)
     clock=DeviceClock(hip,args.tessera_opt,args.llvm_bin)
     try:
-        rows=[run_case(hip,clock,case,args.tessera_opt,args.trials,args.native_static_control,args.native_runtime_k,args.native_reference_opt,args.hip_graph_windows,radiance,args.share_native_resident_frames,args.compare_native_workgroup_mode) for case in
+        rows=[run_case(hip,clock,case,args.tessera_opt,args.trials,args.native_static_control,args.native_runtime_k,args.native_reference_opt,args.hip_graph_windows,radiance,args.share_native_resident_frames,args.compare_native_workgroup_mode,args.compare_native_fragment_read_policy) for case in
             (args.case or [base.Case("prefill",256,n,5120) for n in (4096,8192,16384)])]
     finally:clock.close()
     if reference_metadata is not None and base._sha256(
@@ -329,9 +341,13 @@ def main():
             base._sha256(args.native_reference_opt) if args.native_reference_opt else None),
         "timing_scope":"rotating_three_resident_copies; device windows include dispatch gaps; public launch includes transfers",
         "schedule_match":"matched native/HIP geometry, staging and epilogue; native instruction policy may differ; Radiance is independent",
-        "native_reference_schedule_match":("all fields except explicit workgroup mode"
-            if args.compare_native_workgroup_mode else "all schedule fields"),
+        "native_reference_schedule_match":("all fields except explicit workgroup mode and fragment policy"
+            if args.compare_native_workgroup_mode and args.compare_native_fragment_read_policy else
+            "all fields except explicit fragment policy" if args.compare_native_fragment_read_policy else
+            "all fields except explicit workgroup mode" if args.compare_native_workgroup_mode else
+            "all schedule fields"),
         "shared_native_resident_frames":args.share_native_resident_frames,
+        "native_reference_fragment_read_policy_comparison":args.compare_native_fragment_read_policy,
         "hip_graph_windows":args.hip_graph_windows,
         "graph_timing_scope":"GPU graph dispatch plus captured kernels and optional markers; capture/instantiate excluded",
         "profiler_counters":False,"radiance_comparison":radiance is not None,

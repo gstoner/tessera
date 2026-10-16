@@ -1,6 +1,5 @@
 """Benchmark ownership failures must not leak HIP roots or modules."""
 from ctypes import c_void_p
-from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -9,8 +8,7 @@ import pytest
 from benchmarks.rocm import benchmark_gfx1201_mxfp4_production as base
 from benchmarks.rocm import ablate_gfx1201_folded_load_schedule as ablate
 from benchmarks.rocm.folded_native_resident_frame import FoldedNativeFramePool
-from benchmarks.rocm.record_gfx1201_folded_native_package import matching_reference_schedule
-from tessera.compiler.rocm_mxfp4_folded import FoldedPrefillSchedule
+from benchmarks.rocm.record_gfx1201_folded_native_package import matching_reference_receipts
 
 
 class Copy:
@@ -88,14 +86,12 @@ def test_partial_rotation_allocation_releases_prior_copies(monkeypatch):
 
 
 def test_workgroup_comparison_permits_only_requested_mode_change():
-    schedule = FoldedPrefillSchedule()
-    other = replace(schedule, workgroup_mode="cu")
-    assert not matching_reference_schedule(other, schedule)
-    assert matching_reference_schedule(other, schedule, compare_workgroup_mode=True)
-    # Geometry and input staging must remain equal even when mode comparison is enabled.
-    assert not matching_reference_schedule(
-        replace(other, raster_group_m=2 if schedule.raster_group_m != 2 else 1), schedule,
-        compare_workgroup_mode=True)
+    schedule = {"selected_schedule": {"workgroup_mode": "wgp", "raster_group_m": 0}}
+    other = {"selected_schedule": {"workgroup_mode": "cu", "raster_group_m": 0}}
+    assert not matching_reference_receipts(other, schedule)
+    assert matching_reference_receipts(other, schedule, compare_workgroup_mode=True)
+    other["selected_schedule"]["raster_group_m"] = 2
+    assert not matching_reference_receipts(other, schedule, compare_workgroup_mode=True)
 
 
 def test_metadata_failure_releases_lease_and_unloads_module(monkeypatch):
@@ -139,3 +135,56 @@ def test_shared_download_destinations_keep_independent_correctness_snapshots():
     np.testing.assert_array_equal(snapshots["first"], [1, 1])
     np.testing.assert_array_equal(snapshots["second"], [2, 2])
     assert not np.shares_memory(snapshots["first"], snapshots["second"])
+
+
+@pytest.mark.parametrize("compare_mode", [False, True])
+def test_native_receipts_do_not_drop_fragment_policy(compare_mode):
+    from benchmarks.rocm.record_gfx1201_folded_native_package import matching_reference_receipts
+    reference = {"selected_schedule": {"workgroup_mode": "wgp", "block_m": 256}}
+    selected = {"selected_schedule": {"workgroup_mode": "wgp", "block_m": 256,
+                                     "fragment_read_schedule": "k32_groups"}}
+    assert not matching_reference_receipts(reference, selected,
+                                          compare_workgroup_mode=compare_mode)
+    assert matching_reference_receipts(reference, selected,
+                                       compare_fragment_read_policy=True)
+    # A fragment-policy opt-in cannot also hide geometry or CU/WGP changes.
+    selected["selected_schedule"]["block_m"] = 128
+    assert not matching_reference_receipts(reference, selected,
+                                          compare_fragment_read_policy=True)
+
+
+def test_native_receipts_match_explicit_and_absent_llvm_default():
+    from benchmarks.rocm.record_gfx1201_folded_native_package import matching_reference_receipts
+    reference = {"selected_schedule": {"workgroup_mode": "wgp"}}
+    selected = {"selected_schedule": {"workgroup_mode": "wgp",
+                                     "fragment_read_schedule": "llvm_default"}}
+    assert matching_reference_receipts(reference, selected)
+    assert "fragment_read_schedule" not in reference["selected_schedule"]
+
+
+@pytest.mark.parametrize("compare_mode", [False, True])
+def test_recorder_rejects_fragment_mismatch_before_allocating_engines(monkeypatch, compare_mode):
+    from benchmarks.rocm import record_gfx1201_folded_native_package as recorder
+    schedule = {"raster_group_m": 4, "workgroup_mode": "wgp",
+                "staging_prefetch": "register_next_slab",
+                "epilogue_schedule": "complete_tile_vector_scales", "row_guard": "cta"}
+    image = SimpleNamespace(compiler_fingerprint="test", compile_state="test")
+    package = SimpleNamespace(descriptor=SimpleNamespace(provenance={}), image=image)
+    candidate = SimpleNamespace(package=package, route_receipt={
+        "selected_schedule": {**schedule, "fragment_read_schedule": "k32_groups"}})
+    reference = SimpleNamespace(package=package, route_receipt={"selected_schedule": schedule})
+    monkeypatch.setattr(recorder.base, "_logical_inputs", lambda case: {
+        "a": np.zeros((1, 1)), "a_scale": np.ones(1),
+        "packed_row_major": np.zeros((1, 1)), "b_scale": np.ones((1, 1))})
+    monkeypatch.setattr(recorder, "prepare_folded_weights",
+                        lambda *args, **kwargs: SimpleNamespace(lossless=True))
+    monkeypatch.setattr(recorder, "compile_for_tool",
+                        lambda tool, *args, **kwargs: candidate if tool == "candidate" else reference)
+    monkeypatch.setattr(recorder, "package_mxfp4_folded_prefill", lambda *args, **kwargs: package)
+    def allocated(*args, **kwargs):
+        raise AssertionError("allocated engine before checking the complete native schedule")
+    monkeypatch.setattr(recorder, "package_engine", allocated)
+    with pytest.raises(RuntimeError, match="different physical schedule"):
+        recorder.run_case(None, None, base.Case("prefill", 256, 8192, 1536),
+                          "candidate", 3, reference_compiler="reference",
+                          compare_native_workgroup_mode=compare_mode)

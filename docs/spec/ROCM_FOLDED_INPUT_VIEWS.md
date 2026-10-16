@@ -1,3 +1,7 @@
+---
+last_updated: 2026-10-16
+---
+
 # Folded gfx1201 input storage views
 
 Owner: ROCM-MXFP4-W4A8-1 / LAYOUT-ALG-1.
@@ -8,6 +12,10 @@ the existing full-K FP32 reduction, E4M3 folded values, E8M0 row reference,
 explicit approximate policy, wide-scale epilogue fallback and BF16 output.
 
 ## Semantic and storage boundary
+
+This named contract belongs to four-operand tessera.scaled_matmul. A physical
+scaled-contract tag on ordinary matmul is diagnosed before scale operands are
+read, consistently with the shared ROCm/NVIDIA contract preflight.
 
 The Graph operands are unencoded logical tensor<MxKxui8> and tensor<NxKxui8>.
 Each is a standard MLIR tensor.extract_slice of a function-entry dense

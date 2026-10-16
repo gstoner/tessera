@@ -10,6 +10,8 @@ scope: ROCm backend implementation and exact-device proof
 Owner ROCM-MXFP4-W4A8-1 / LAYOUT-ALG-1.
 Synchronization key: GFX1201-FOLDED-INPUT-VIEWS-20261016.
 
+Shared Schedule preflight now diagnoses scaled physical-profile tags on ordinary matmul before accessing absent scale operands. Host-free ROCm/NVIDIA negative regressions cover the corrected boundary; this establishes no new rocm physical schedule or sibling exact-device result.
+
 Implemented bounded whole-row input views and canonicalized identity entry roots through Graph/Schedule/Tile, native ROCm Target, LLVM/ROCDL, HSACO and checked LDA/LDB ABI. 48 owning-gfx1201 regression cases pass, including canonicalization and both NaN padding patterns. 764 focused host gates and 16 packet consumers passed before the final canonicalization hardening; the hardened view/packet set passes 39 cases. Full-unit and CI gates remain pending.
 
 Seven-trial forward/reverse packets at ten M256 shapes use one pitched image. B-only padding reduces captured device windows 44% at N8192/K4096 and 28–32% at N16384/K4096; neighboring K regresses slightly and N16384/K5120 improves less than 1%. Public launch wall time does not improve. No default selector or padding promotion. The broader per-column attribution, prepared/resident public route and general views remain open. See benchmarks/baselines/gfx1201_folded_input_pitches_20261016/README.md.

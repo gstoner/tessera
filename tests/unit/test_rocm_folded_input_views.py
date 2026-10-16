@@ -1,10 +1,13 @@
 """Typed semantic input views must retain their physical roots and row pitches."""
 from pathlib import Path
+import os
 import subprocess
 
 import pytest
 
 from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+pytestmark = pytest.mark.compiler_route
 
 PITCHED = "rocm_mxfp4_w4a8_folded_row_pitched_v1"
 
@@ -31,9 +34,11 @@ def pitched_graph(a_pitch=80, b_pitch=96, m=256, n=64, k=64):
 
 
 @pytest.fixture(scope="module")
-def compiler():
+def compiler(request):
     tool = find_tessera_opt()
     if tool is None:
+        if os.environ.get("TESSERA_OPT") or "compiler_route" in request.config.getoption("markexpr"):
+            pytest.fail("required production compiler is unavailable")
         pytest.skip("requires matching native compiler")
     return Path(tool)
 
@@ -150,3 +155,35 @@ def test_dense_row_pitch_abi_does_not_discard_tensor_encodings(compiler, encoded
         input=graph.replace(encoded_type, encoded), text=True, capture_output=True)
     assert result.returncode != 0, result.stdout
     assert "unencoded" in result.stderr
+
+
+@pytest.mark.parametrize("target,arch,profile", [
+    ("rocm", "gfx1201", "rocm_mxfp4_w4a8_folded_prefill_v1"),
+    ("rocm", "gfx1201", PITCHED),
+    ("nvidia_sm120", "sm_120", "nvidia_sm120_nvfp4_blockscale_v1"),
+])
+def test_scaled_profile_on_unscaled_matmul_is_diagnosed_without_asserting(compiler, target, arch, profile):
+    graph = f'''module attributes {{tessera.target="{target}", tessera.arch="{arch}"}} {{
+  func.func @wrong(%a: tensor<256x64xui8>, %b: tensor<64x64xui8>) -> tensor<256x64xi32> {{
+    %0 = "tessera.matmul"(%a, %b) {{physical_contract="{profile}"}}
+      : (tensor<256x64xui8>, tensor<64x64xui8>) -> tensor<256x64xi32>
+    return %0 : tensor<256x64xi32>
+  }}
+}}'''
+    result = subprocess.run([str(compiler), "--tessera-graph-to-schedule"],
+        input=graph, text=True, capture_output=True)
+    assert result.returncode == 1, result.stderr
+    assert "four-operand tessera.scaled_matmul" in result.stderr
+
+
+def test_empty_physical_tag_retains_ordinary_matmul_semantics(compiler):
+    graph = '''module attributes {tessera.target="rocm", tessera.arch="gfx1201"} {
+  func.func @plain(%a: tensor<16x16xf16>, %b: tensor<16x16xf16>) -> tensor<16x16xf32> {
+    %0 = "tessera.matmul"(%a, %b) {physical_contract=""}
+      : (tensor<16x16xf16>, tensor<16x16xf16>) -> tensor<16x16xf32>
+    return %0 : tensor<16x16xf32>
+  }
+}'''
+    result = subprocess.run([str(compiler), "--tessera-graph-to-schedule"],
+        input=graph, text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr

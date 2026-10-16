@@ -103,3 +103,24 @@ packet records unchanged source/compiler witnesses, all 22 legacy CU and
 combinations, canonicalized and uncanonicalized). Every pitched variant
 retains the exact measured f80b9107 HSACO. This is an image-equivalence proof;
 the timing packets and their source fingerprints remain unchanged.
+
+## Final dense-layout boundary review
+
+Source f0d6fb7e5f1d3547575d5219650415e4d1c45fbd rejects encoded physical roots,
+logical views, scale planes and results before dense bufferization. Seven
+red-to-green regressions cover that boundary. The corrected source retains
+all 22 CU, 12 format and 80 pitched/canonicalized image identities; the compact
+equivalence certificate references the retained earlier rows, while the
+compressed raw observation keeps the final source/compiler hashes.
+48 owning-gfx1201 regression tests pass with this compiler; 343 focused
+view/evidence/diagnostic/pass checks pass. Their raw logs are retained.
+
+Validation history is explicit: the 528b902a5 serial sweep was intentionally
+interrupted for the encoding correction, with its original receipt, partial
+log and reason preserved. The f0d6fb7e5 four-worker sweep completed with
+28,594 passes, 5,873 skips and three failures, all caused by the new
+specification's missing date. The document now carries last_updated, without
+an allow-list exception. The repaired date/audit/view gate passes 58 tests.
+These are historical, source-bound results, not a claim that the final full
+gate has passed. The new native-view tests also join the required production
+compiler-route lane and reject a missing explicitly configured compiler.

@@ -7,15 +7,14 @@ Reference date for staleness: **2026-10-16**.
 ## Headline
 
 - **168** docs catalogued across the canonical doc tree.
-- **166** carry a `last_updated:` marker; **2** are undated (invisible to the freshness audit until tagged).
-- **36** updated within the last 30 days.
+- **167** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **37** updated within the last 30 days.
 - **67** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
 
 These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-form `Last updated:` line to participate in the audit.  Until tagged, the freshness signal is unavailable.
 
-- `docs/spec/ROCM_FOLDED_INPUT_VIEWS.md`
 - `docs/reference/tessera_frontend_lanes.md`
 
 ## Per-root inventory
@@ -41,7 +40,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `NATIVE_ARTIFACT_SPEC.md` | Normative | 2026-07-19 | 89 | ✓ |
 | `PRODUCTION_COMPILER_PLAN.md` | Ratified | 2026-06-05 | 133 | ✓ |
 | `PYTHON_API_SPEC.md` | Normative | 2026-10-15 | 1 | ✓ |
-| `ROCM_FOLDED_INPUT_VIEWS.md` | - | _undated_ | - | _body_ |
+| `ROCM_FOLDED_INPUT_VIEWS.md` | - | 2026-10-16 | 0 | ✓ |
 | `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 90 | ✓ |
 | `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 147 | ✓ |
 | `TARGET_IR_SPEC.md` | Normative | 2026-08-24 | 53 | ✓ |
@@ -184,7 +183,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | - | 2026-09-07 | 39 | ✓ |
 | `compiler/EGGROLL_SUPPORT_PLAN.md` | - | 2026-09-07 | 39 | ✓ |
 | `compiler/EVALUATOR_PLAN.md` | - | 2026-10-06 | 10 | ✓ |
-| `compiler/FIVE_SLICE_STATUS_20261007.md` | - | 2026-10-15 | 1 | ✓ |
+| `compiler/FIVE_SLICE_STATUS_20261007.md` | - | 2026-10-16 | 0 | ✓ |
 | `compiler/FORGE_ASSESSMENT.md` | - | 2026-09-07 | 39 | ✓ |
 | `compiler/FRONTEND_GRAPH_SCHEDULE_REVIEW.md` | - | 2026-08-02 | 75 | ✓ |
 | `compiler/FRONT_END_LOWERING_ASSESSMENT.md` | - | 2026-09-03 | 43 | ✓ |

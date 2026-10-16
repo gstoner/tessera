@@ -11,6 +11,8 @@ last_updated: 2026-10-16
 Owner ROCM-MXFP4-W4A8-1 / LAYOUT-ALG-1.
 Synchronization key: GFX1201-FOLDED-INPUT-VIEWS-20261016.
 
+Shared Schedule preflight now diagnoses scaled physical-profile tags on ordinary matmul before accessing absent scale operands. Host-free ROCm/NVIDIA negative regressions cover the corrected boundary; this establishes no new nvidia physical schedule or sibling exact-device result.
+
 Follow-up required for nvidia: the shared semantic view is standard MLIR, but this named physical ABI and kernel are gfx1201-specific. No sibling schedule, execution or AD parity is claimed; existing routes are unchanged. NVIDIA uses its own NVVM/PTX fragment and resident-buffer contracts; this RDNA4 row-reference package cannot bind a CUDA image.
 
 

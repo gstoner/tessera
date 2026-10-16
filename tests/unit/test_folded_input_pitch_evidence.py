@@ -93,3 +93,37 @@ def test_canonicalization_hardening_preserves_all_measured_image_variants():
                 for canonical in (False, True)}
     assert actual == expected
     assert {row["payload_sha256"] for row in packet["pitched_rows"]} == {IMAGE}
+
+
+def test_encoding_guard_retains_the_original_image_rows_with_final_source():
+    observed = load("encoding-guard-image-parity")
+    earlier = json.loads((PACKET / "post-canonicalization-image-parity.json").read_text())
+    certificate = json.loads((PACKET / "encoding-guard-equivalence.json").read_text())
+    assert observed["source_before"] == observed["source_after"]
+    assert observed["source_before"]["commit"] == "f0d6fb7e5f1d3547575d5219650415e4d1c45fbd"
+    keys = ("cu_rows", "format_rows", "pitched_rows")
+    assert all(observed[key] == earlier[key] for key in keys)
+    rows = {key: observed[key] for key in keys}
+    digest = hashlib.sha256(json.dumps(rows, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    assert certificate["reference_rows_sha256"] == certificate["observed_rows_sha256"] == digest
+    assert certificate["counts"] == {"cu_rows": 22, "format_rows": 12, "pitched_rows": 80}
+    assert certificate["source_before"] == observed["source_before"]
+    assert certificate["source_after"] == observed["source_after"]
+    manifest = json.loads((PACKET / "compression-manifest.json").read_text())
+    assert certificate["observed_raw_sha256"] == manifest[
+        "encoding-guard-image-parity.json.gz"]["raw_sha256"]
+    assert certificate["reference_sha256"] == hashlib.sha256(
+        (PACKET / certificate["reference"]).read_bytes()).hexdigest()
+
+
+def test_incomplete_and_red_unit_history_is_retained_without_relabeling():
+    root = PACKET / "validation-history"
+    for phase, exit_code in (("before-encoding-guard", -15), ("before-doc-date-fix", 1)):
+        directory = root / phase
+        receipt = json.loads((directory / "full-unit-validation.json").read_text())
+        raw = gzip.decompress((directory / "full-unit.log.gz").read_bytes())
+        assert receipt["state"] == "failed" and receipt["exit_code"] == exit_code
+        assert receipt["source_before"] == receipt["source_after"]
+        assert hashlib.sha256(raw).hexdigest() == receipt["raw_log_sha256"]
+    reason = json.loads((root / "before-encoding-guard/full-unit-interruption.json").read_text())
+    assert "Intentionally interrupted" in reason["reason"]

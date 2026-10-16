@@ -865,8 +865,14 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.independentBatchRows = batchRows;
     schedule.independentBatchCount = batchCount;
   }
-  if (auto physical = op->getAttrOfType<StringAttr>("physical_contract"))
+  if (auto physical = op->getAttrOfType<StringAttr>("physical_contract")) {
+    if (!physical.getValue().empty() &&
+        (!scaledMatmul || op->getNumOperands() != 4)) {
+      op->emitError("named scaled physical contracts require four-operand tessera.scaled_matmul");
+      return failure();
+    }
     schedule.physicalContract = physical.getValue();
+  }
   schedule.target = moduleString(module, "tessera.target", "target");
   schedule.arch = moduleString(module, "tessera.arch", "arch");
   // The module retains its exact frontend target. Matmul schedules use the

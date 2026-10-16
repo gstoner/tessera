@@ -22,5 +22,23 @@
     "compressed_sha256": "31ea155fdc16e37a535449a303497b8af8fd40a79dd27e8e4459d631519dc938",
     "raw_bytes": 271333,
     "compressed_bytes": 19756
+  },
+  "encoding-guard-image-parity.json.gz": {
+    "raw_sha256": "0284258d80ad88c149106a5c422f90583a5f9e4714726dc6c9a04b8c22695104",
+    "compressed_sha256": "fe4917c0561707369a39db16544d053347ac42c411217e0aee4b5cfc469c4586",
+    "raw_bytes": 78785,
+    "compressed_bytes": 5276
+  },
+  "encoding-guard-device.log.gz": {
+    "raw_sha256": "0903fc3ec3b58426fcb17fbb02ced03936ebc181328a133d42c998f37c6cbff2",
+    "compressed_sha256": "71943a503f5a5901e06739adb4804a954b15b6862598f358d74777e0affd95df",
+    "raw_bytes": 100,
+    "compressed_bytes": 53
+  },
+  "encoding-guard-focused.log.gz": {
+    "raw_sha256": "1d8d8e345152e21164838ca1b2364015817e759e2624ec7a04cd660e5b7303a5",
+    "compressed_sha256": "c61acd8de7ae6763913f75ecf6f02a39641c083b836dc7fc8be4d6d504eea461",
+    "raw_bytes": 420,
+    "compressed_bytes": 77
   }
 }

@@ -12,6 +12,8 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 Owner ROCM-MXFP4-W4A8-1 / LAYOUT-ALG-1.
 Synchronization key: GFX1201-FOLDED-INPUT-VIEWS-20261016.
 
+Shared Schedule preflight now diagnoses scaled physical-profile tags on ordinary matmul before accessing absent scale operands. Host-free ROCm/NVIDIA negative regressions cover the corrected boundary; this establishes no new x86 physical schedule or sibling exact-device result.
+
 Follow-up required for x86: the shared semantic view is standard MLIR, but this named physical ABI and kernel are gfx1201-specific. No sibling schedule, execution or AD parity is claimed; existing routes are unchanged. x86 uses CPU memrefs and its own native package ABI; RDNA4 FP8 WMMA/LDS scheduling does not apply to AVX-512 code generation.
 
 

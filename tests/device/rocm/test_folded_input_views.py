@@ -16,7 +16,7 @@ pytestmark = [pytest.mark.hardware_rocm, pytest.mark.skipif(
     os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="explicit gfx1201 gate")]
 
 
-@pytest.mark.parametrize("shape", [(65, 48, 64), (256, 128, 128), (257, 129, 192)])
+@pytest.mark.parametrize("shape", [(65, 48, 64), (256, 128, 128), (257, 129, 192), (256, 8192, 1536)])
 def test_padded_input_views_preserve_math_and_one_image(shape):
     assert rt._rocm_live_arch() == "gfx1201"
     m, n, k = shape
@@ -37,6 +37,9 @@ def test_padded_input_views_preserve_math_and_one_image(shape):
             tessera_opt=Path(os.environ["TESSERA_OPT"]), allow_approximate=True,
             input_row_strides=(lda, ldb)).package
         images.add(package.image.payload_digest)
+        if shape == (256, 8192, 1536):
+            assert package.descriptor.provenance["workgroup_mode"] == "cu"
+            assert package.descriptor.provenance["fragment_read_schedule"] == "k32_groups"
         artifact = rt.RuntimeArtifact(metadata={"target": package.image.target},
             native_image=package.image, launch_descriptor=package.descriptor,
             tile_ir=package.tile_ir, target_ir=package.target_ir)

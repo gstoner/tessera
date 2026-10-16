@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-15
+last_updated: 2026-10-16
 audit_role: reference
 ---
 
@@ -11,6 +11,34 @@ PR950 extend the source and proof below. PR949 and PR950 deliver native/public
 NVFP4 expansion and source-preserving multi-output ownership. Older entries retain their original
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
+
+## Current reconciliation — 2026-10-16
+
+PR952 is merged as b361ecf42aca146aa9b47cbd156e601ffe3ce972; its publication
+wait is closed. The new opt-in folded input-view slice preserves logical
+Graph tensors over dense parent storage through native Schedule/Tile,
+ROCm Target, LLVM/ROCDL and a checked runtime LDA/LDB ABI. Identity views
+survive canonicalization; encoded storage, logical tensors, scales and
+results are rejected before the dense physical ABI can discard their layouts.
+
+The timing source is 920bdadc4; canonicalization proof is b50c2cc13 and the
+final encoding legality guard is f0d6fb7e5. The last source passes 48 owning
+gfx1201 regressions and preserves 22 legacy CU images, 12 FP8/MXFP8 controls
+and 80 pitched/canonicalized image variants. Seven-trial bidirectional
+measurements at ten shapes isolate a B-row-spacing contribution to the
+K4096 cliff. The N16384/K5120 effect is below 1%, neighboring K can regress,
+and public launch wall time does not improve. No default promotion or
+broader M256/per-column, prepared/resident, view/AD or five-slice closure.
+
+The final guard's four-worker unit sweep completed with 28,594 passes,
+5,873 skips and three failures caused by the new specification's missing
+date. The date is repaired without an allow-list exception; the affected
+date/audit/view gate passes 58 cases. The full green publication gate is
+still pending at this checkpoint. Historical red and intentionally
+interrupted receipts remain source-bound in the packet.
+
+Evidence: benchmarks/baselines/gfx1201_folded_input_pitches_20261016/README.md.
+All five remaining-requirement rows below stay open.
 
 ## Current reconciliation — 2026-10-15
 

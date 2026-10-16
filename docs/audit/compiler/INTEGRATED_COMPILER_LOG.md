@@ -12648,7 +12648,7 @@ PRs: [#952](https://github.com/gstoner/tessera/pull/952); sync GFX1201-FOLDED-FR
 
 Outcome: native single-row CU selection follows the measured regular-N,
 K1472/1536/1600 band plus N8192/K2048. The full 22-shape calibration improves
-captured device time 6.2-17.5 percent in both compiler and shape orders,
+captured device time 6.3-18.5 percent in both compiler and shape orders,
 with identical native device buffers and independent host snapshots.
 One image per mode serves all selected shapes; nine excluded classes and
 twelve FP8/MXFP8 controls preserve byte-identical native packages.
@@ -12657,9 +12657,16 @@ GPU numerical cases and the source/registry/lifecycle gates. Source/compiler
 hashes stay unchanged. Shared-frame leases close after graphs/modules.
 All four architecture queues distinguish owning gfx1201 proof from siblings.
 
+Review follow-up: complete native receipt matching now includes fragment policy.
+Five new guard cases fail before the fix; all 13 focused cases pass after it.
+The strict 68fb44443 benchmark freeze reruns all 22 calibration cases and six
+independent reference cases in both orders, with fragment changes disallowed.
+Production compiler/runtime source and binary are unchanged from the full-unit
+8e53d3355 certificate. Measurement and regression scopes remain explicit.
+
 Remaining: publication CI and broader route/performance obligations.
 The independent six-case Radiance comparison is near parity at N8192/K1536
-and K2048, but N16384 and K5120 retain roughly 15-27 percent gaps.
+and K2048, but N16384 and K5120 retain roughly 14-27 percent gaps.
 Rejected LDS output-store policies remain historical evidence; no unused
 production switch or hardware-counter attribution is introduced.
 

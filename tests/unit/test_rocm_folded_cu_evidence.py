@@ -8,7 +8,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PACKET = ROOT / "benchmarks/baselines/gfx1201_folded_cu_policy_20261016"
-REVISION = "8e53d33556d04066c4a6cd0335b7be1b164b1f80"
+REVISION = "68fb444434bbb20f396399e8a1df186c67e00f94"
+FULL_UNIT_REVISION = "8e53d33556d04066c4a6cd0335b7be1b164b1f80"
 
 
 def load(name):
@@ -31,6 +32,7 @@ def test_cu_grid_binds_current_lowering_and_benchmark_sources(order):
     assert packet["profiler_counters"] is False
     assert packet["native_reference_schedule_match"] == "all fields except explicit workgroup mode"
     assert packet["shared_native_resident_frames"] is True
+    assert packet["native_reference_fragment_read_policy_comparison"] is False
     for relative, digest in packet["source_sha256"].items():
         assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == digest, relative
 
@@ -81,12 +83,12 @@ def test_cu_grid_reverses_compilers_and_preserves_both_source_witnesses():
 def test_cu_exclusions_and_fp8_controls_preserve_original_images():
     excluded = json.loads((PACKET / "excluded-image-equality.json").read_text())
     assert excluded["source_before"] == excluded["source_after"]
-    assert excluded["source_before"]["head"] == REVISION
+    assert excluded["source_before"]["head"] == FULL_UNIT_REVISION
     assert len(excluded["rows"]) == 9
     for row in excluded["rows"]:
         assert row["identical"] and row["arms"]["current"] == row["arms"]["control"]
     formats = json.loads((PACKET / "format-image-equality.json").read_text())
-    assert formats["source_commit"] == REVISION and formats["source_clean"]
+    assert formats["source_commit"] == FULL_UNIT_REVISION and formats["source_clean"]
     assert len(formats["rows"]) == 12
     for row in formats["rows"]:
         assert row["identical_native_package"]
@@ -95,7 +97,7 @@ def test_cu_exclusions_and_fp8_controls_preserve_original_images():
 
 def test_frozen_full_unit_receipt_binds_the_same_compiler_and_raw_log():
     receipt = json.loads((PACKET / "post-grid-validation.json").read_text())
-    assert receipt["revision"] == REVISION and receipt["state"] == "passed"
+    assert receipt["revision"] == FULL_UNIT_REVISION and receipt["state"] == "passed"
     assert receipt["source_before"] == receipt["source_after"]
     assert not receipt["source_before"]["status"]
     assert receipt["source_before"]["compiler_sha256"] == load(
@@ -116,6 +118,7 @@ def test_radiance_packets_bind_independent_binary_layout_and_timing_scope(order)
     packet = load(f"radiance-{order}.json.gz")
     assert packet["source_commit"] == REVISION and packet["dirty_worktree"] is False
     assert packet["architecture"] == "gfx1201" and packet["radiance_comparison"]
+    assert packet["native_reference_fragment_read_policy_comparison"] is False
     reference = packet["radiance"]
     assert reference["binary_sha256"] == (
         "c9f91bc882ad39f331769043b4d51f9bd3813af48a37b4f3ee5f640598eac3a6")

@@ -119,12 +119,23 @@ multi-row CU behavior remains. Other single-row classes retain WGP,
 including the measured-regressing N16384/K2048 class. Workgroup mode remains
 an image-keyed physical performance choice and does not change arithmetic.
 
-Frozen 8e53d3355 passes the complete 22-shape calibration in both compiler and
-shape orders, with identical native resident frames and about 6.2-17.5 percent
+Reviewed recorder 68fb44443 passes the complete 22-shape calibration in both compiler and
+shape orders, with identical native resident frames and about 6.3-18.5 percent
 lower captured-device time. Each native mode reuses one image across the
 selected shapes. Nine excluded classes and twelve FP8/MXFP8 controls retain
-byte-identical packages. The matching source passes 28,930 non-slow unit cases
+byte-identical packages. The unchanged production source at 8e53d3355 passes 28,930 non-slow unit cases
 and 44 owning GPU numerical cases. Independent Radiance ratios remain
 shape-specific; N16384 and long-K gaps are open. No hardware-counter cause
 or measured occupancy is inferred from static resource equality.
 Evidence: benchmarks/baselines/gfx1201_folded_cu_policy_20261016/README.md.
+
+## Complete native reference matching
+
+The reviewed recorder compares the complete selected_schedule dictionaries,
+including fragment_read_schedule; absent means llvm_default. CU/WGP comparison
+cannot hide a fragment-policy change. An explicit
+--compare-native-fragment-read-policy flag enables that separate experiment.
+Both experiment flags require a native reference compiler. Fresh calibration
+and independent reference packets at 68fb44443 keep fragment comparison disabled.
+Production compiler/runtime source is unchanged from the original 8e53d3355
+full-unit certificate; those revision scopes remain separate.

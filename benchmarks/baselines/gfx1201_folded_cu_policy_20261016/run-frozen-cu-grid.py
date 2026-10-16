@@ -7,7 +7,7 @@ import subprocess
 import sys
 
 root = Path.cwd()
-out = Path(__file__).resolve().parent / "frozen-cu-policy"
+out = Path(__file__).resolve().parent / "review-cu-policy"
 out.mkdir(exist_ok=True)
 current = Path(os.environ["TESSERA_OPT"]).resolve()
 control = out.parent / "native-control/tessera-opt"

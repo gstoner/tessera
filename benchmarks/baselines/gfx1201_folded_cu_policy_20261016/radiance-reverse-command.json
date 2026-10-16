@@ -17,7 +17,7 @@
   "--radiance-revision",
   "dfdfa3832922c9a4253133f09c1f5c0d39748fc7",
   "--output",
-  "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/output-slab-design/frozen-cu-radiance/reverse.json",
+  "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/output-slab-design/review-cu-radiance/reverse.json",
   "--case",
   "prefill:256x16384x5120",
   "--case",

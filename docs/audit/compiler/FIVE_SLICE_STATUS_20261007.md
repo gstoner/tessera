@@ -14,6 +14,12 @@ and a passing test lane does not close a wider capability envelope.
 
 ## Current reconciliation — 2026-10-15
 
+PR952 review revalidation at 68fb44443 uses complete native schedule receipts,
+including fragment_read_schedule. Its 22-shape calibration and six-case Radiance
+comparison pass in both orders with fragment changes disallowed. The original
+8e53d3355 full-unit/owning-device certificate retains its source scope; production
+compiler/runtime source and binary are unchanged. Broader five-slice work remains open.
+
 
 Frozen 8e53d3355 integrates the native folded fragment groups and the measured
 single-row CU profile against merged PR951. Its fresh non-slow unit gate passes

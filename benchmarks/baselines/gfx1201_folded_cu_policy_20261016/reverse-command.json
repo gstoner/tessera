@@ -13,7 +13,7 @@
   "--trials",
   "7",
   "--output",
-  "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/output-slab-design/frozen-cu-policy/reverse.json",
+  "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/output-slab-design/review-cu-policy/reverse.json",
   "--case",
   "prefill:256x8192x2048",
   "--case",

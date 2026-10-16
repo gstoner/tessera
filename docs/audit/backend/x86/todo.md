@@ -12,6 +12,12 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
 Synchronization key: GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
 
+PR952 review: native reference matching now includes the complete fragment
+policy; CU/WGP opt-in cannot hide a fragment change. Thirteen affected guard/
+ownership cases pass. The strict 68fb44443 recorder reruns the 22-case calibration
+and six reference cases with fragment differences disallowed. Compiler/runtime
+source remains unchanged from the original full-unit certificate.
+
 Final scoped regression: frozen 8e53d3355 passes 28,930 non-slow unit tests
 (5,482 skipped, 876 deselected) with matching LLVM/MLIR23.1.1 on Tajasaurus.
 All 22 calibrated CU rows improve in both compiler/shape orders; 44 owning

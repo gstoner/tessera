@@ -32,7 +32,7 @@ def dense(a):
 
 
 def run_case(kind, storage, accum, affine, dynamic, mode, mismatch=False, permuted=False,
-             profile="overflow"):
+             profile="overflow", epsilon=1e-5):
     dtype = {"f16": np.float16, "bf16": ml_dtypes.bfloat16, "f32": np.float32}[storage]
     m, n = 2, 32
     value = 1e20 if storage == "f32" else 64.0
@@ -50,7 +50,7 @@ def run_case(kind, storage, accum, affine, dynamic, mode, mismatch=False, permut
         seeds.append(np.full(n, 0.0625, dtype=dtype))
     dy = np.tile(np.array([1, -1, -1, 1], dtype=dtype), (m, n // 4))
     if profile != "overflow":
-        assert profile in {"mixed", "offset"}
+        assert profile in {"mixed", "offset", "radial", "tiny_zero", "tiny_radial"}
         rng = np.random.default_rng(619)
         x[:] = (rng.normal(0, 2, x.shape) + (64 if profile == "offset" else 0)).astype(dtype)
         gamma[:] = rng.uniform(-1.5, 1.5, n).astype(dtype)
@@ -58,6 +58,22 @@ def run_case(kind, storage, accum, affine, dynamic, mode, mismatch=False, permut
         for seed in seeds:
             seed[:] = rng.normal(0, 0.5, seed.shape).astype(dtype)
         dy[:] = rng.normal(0, 0.5, dy.shape).astype(dtype)
+        if profile == "radial":
+            # A genuinely smooth epsilon derivative survives even when the
+            # large projection terms cancel. Do not relax the one-encoding gate.
+            gamma[:] = 2
+            seeds[0][:] = x
+            for seed in seeds[1:]:
+                seed.fill(0)
+            dy[:] = (x.astype(np.float64) / (2 if affine else 1)).astype(dtype)
+        if profile in {"tiny_zero", "tiny_radial"}:
+            x.fill(0 if profile == "tiny_zero" else 1e-30)
+            gamma.fill(2)
+            for seed in seeds:
+                seed.fill(0)
+            if profile == "tiny_radial":
+                seeds[0][:] = x
+            dy[:] = x.astype(np.float64) / (2 if affine else 1)
     types = [f"tensor<{'?' if dynamic else m}x{n}x{storage}>"] + [f"tensor<{n}x{storage}>"] * affine
     order = [1, 0, *range(2, len(types))] if permuted else list(range(len(types)))
     args = ", ".join(f"%a{i}: {types[i]}" for i in order)
@@ -74,7 +90,7 @@ def run_case(kind, storage, accum, affine, dynamic, mode, mismatch=False, permut
     attr = ", ".join(str(i) + " : i64" for i in range(len(types)))
     source = f'''module {{
  func.func @norm({args}) -> {types[0]} attributes {{tessera.autodiff = "{"forward" if mode == "jvp" else "reverse"}", tessera.autodiff.wrt_indices = [{attr}]}} {{
-  %y = "tessera.{kind}"({names}) {{eps = 1.0e-5 : f64{policy}}} : ({", ".join(types)}) -> {types[0]}
+  %y = "tessera.{kind}"({names}) {{eps = {epsilon:.17e} : f64{policy}}} : ({", ".join(types)}) -> {types[0]}
   return %y : {types[0]}
  }}
 }}
@@ -93,7 +109,7 @@ def run_case(kind, storage, accum, affine, dynamic, mode, mismatch=False, permut
         return {"case": label, "status": "default_storage_types_preserved"}
     wide = x.astype(np.float64)
     center = np.mean(wide, axis=-1, keepdims=True) if kind == "layer_norm" else 0.0
-    inv = 1 / np.sqrt(np.mean((wide - center) ** 2, axis=-1, keepdims=True) + 1e-5)
+    inv = 1 / np.sqrt(np.mean((wide - center) ** 2, axis=-1, keepdims=True) + epsilon)
     z = (wide - center) * inv
     g = gamma.astype(np.float64) if affine else 1.0
     primal = z * g + (beta.astype(np.float64) if affine == 2 else 0)
@@ -358,3 +374,35 @@ def test_symbolic_normalization_keeps_permuted_affine_argument_lineage(kind, sto
 def test_native_normalization_affine_nontrivial_and_cancellation(kind, storage, mode, profile):
     run_case(kind, storage, "fp32", 1 if kind == "rmsnorm" else 2, True, mode,
              permuted=True, profile=profile)
+
+
+@pytest.mark.compiler_route
+@pytest.mark.parametrize("storage,accum", [("f16", "fp32"), ("bf16", "fp32"), ("f32", "fp64")])
+@pytest.mark.parametrize("mode", ["jvp", "vjp"])
+@pytest.mark.parametrize("affine", [0, 1])
+@pytest.mark.parametrize("dynamic", [False, True])
+def test_native_rms_radial_derivative_retains_epsilon(storage, accum, mode, affine, dynamic):
+    run_case("rmsnorm", storage, accum, affine, dynamic, mode,
+             permuted=bool(affine), profile="radial")
+
+
+@pytest.mark.compiler_route
+@pytest.mark.parametrize("storage,accum,epsilon", [
+    ("f16", "fp32", 1e-40), ("bf16", "fp32", 1e-40), ("f32", "fp64", 1e-310)])
+@pytest.mark.parametrize("mode", ["jvp", "vjp"])
+@pytest.mark.parametrize("affine", [0, 1])
+@pytest.mark.parametrize("dynamic", [False, True])
+def test_native_rms_tiny_epsilon_zero_seed_avoids_inverse_square_overflow(
+    storage, accum, epsilon, mode, affine, dynamic,
+):
+    run_case("rmsnorm", storage, accum, affine, dynamic, mode,
+             permuted=bool(affine), profile="tiny_zero", epsilon=epsilon)
+
+
+@pytest.mark.compiler_route
+@pytest.mark.parametrize("mode", ["jvp", "vjp"])
+@pytest.mark.parametrize("affine", [0, 1])
+@pytest.mark.parametrize("dynamic", [False, True])
+def test_native_rms_tiny_radial_seed_avoids_inverse_square_overflow(mode, affine, dynamic):
+    run_case("rmsnorm", "bf16", "fp32", affine, dynamic, mode,
+             permuted=bool(affine), profile="tiny_radial", epsilon=1e-40)

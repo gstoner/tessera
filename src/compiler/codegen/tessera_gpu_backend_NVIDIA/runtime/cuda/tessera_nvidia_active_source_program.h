@@ -37,3 +37,17 @@ extern "C" int tessera_nvidia_active_source_program_profile(uint64_t handle,
 extern "C" int tessera_nvidia_active_source_program_scratch_stats(uint64_t handle,
     size_t *capacity, size_t *allocations);
 extern "C" int tessera_nvidia_active_source_program_close(uint64_t handle);
+
+// Completed-call variant: the first three views are borrowed compact CUDA
+// roots and the final two are independent host F32 results. Producer streams
+// (including CUDA legacy/per-thread handles 1/2) are ordered by native events.
+// Callers retain roots/streams until return. Private edges remain owner-owned.
+extern "C" int tessera_nvidia_active_source_program_invoke_resident_inputs(
+    uint64_t handle,const TesseraNvidiaMatmulHostView *views,size_t view_count,
+    const uint64_t *producer_streams,size_t producer_count);
+// Refresh/warm up resident roots before separate stage/composed event windows.
+// Root waits, warmup and host result readback are excluded from those windows.
+extern "C" int tessera_nvidia_active_source_program_profile_resident_inputs(
+    uint64_t handle,const TesseraNvidiaMatmulHostView *views,size_t view_count,
+    const uint64_t *producer_streams,size_t producer_count,
+    int repeats,int captured,float *stage_ms,size_t stage_count,float *program_ms);

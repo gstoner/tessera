@@ -86,7 +86,7 @@ def _project_views(values,interfaces,writable_from):
         if len(shape) not in {1,2}:raise ValueError("native resident tensor requires rank-one/two buffers")
         if interface["data"][1] and ordinal>=writable_from:
             raise ValueError("native resident tensor requires writable output buffers")
-        strides=interface["strides"]
+        strides=interface.get("strides")
         if strides is None:
             strides=(dtype.itemsize,) if len(shape)==1 else (shape[1]*dtype.itemsize,dtype.itemsize)
         view.data=int(interface["data"][0]);view.bytes=int(np.prod(shape))*dtype.itemsize

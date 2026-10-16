@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-15
+last_updated: 2026-10-16
 ---
 
 # Normalization AD accumulator contract
@@ -27,6 +27,28 @@ the corresponding centered or RMS projection; affine gradients reduce
 the physical incoming cotangent times z, or the cotangent alone, across
 all leading axes. This defines the smooth derivative before the final
 storage conversion; no derivative of the quantization step is introduced.
+
+For an explicitly wider RMSNorm accumulator, the native derivative now uses
+an algebraically equivalent weighted-residual form to retain epsilon in radial
+directions. With r = inverse_rms, w = (x*r)*r, a = mean(x*w) and
+b = mean(direction*w), it computes
+r * ((direction*a - x*b) + direction*((epsilon*r)*r)).
+Multiplication order avoids forming r*r, which can overflow even while r
+is finite for small positive epsilon. The tiny-epsilon tests require finite
+zero-seed derivatives and compare nonzero radial derivatives to an independent
+FP64 oracle without changing the encoding bound.
+The same helper serves JVP and the gamma-projected VJP direction. For a seed
+identical to x, the two residual products cancel and the epsilon term survives,
+rather than being lost by subtracting nearly equal large projection terms.
+All operations remain in the requested working type; this is no implicit
+FP64 promotion. Statistics, primal output, affine derivative terms and final
+storage conversion retain their contracts.
+
+The new finite scalar epsilon and addition travel through actual typed Graph
+SSA into the checked SM120 row outline, Schedule, scalar Tile body and native
+lowering. Body seals still bind the concrete operation graph. The numerical
+and architecture validation below must pass before publication; a prototype
+or a changed expression is not a precision certificate.
 
 An unspecified accumulator retains existing storage-typed Graph arithmetic.
 A BF16 storage / FP16 accumulator request is unrealizable, despite equal
@@ -88,3 +110,25 @@ positive/negative dynamic seed checks. The Python IR interpreter must execute
 scalar dimension comparisons and cf.assert, not discard them. Exact native
 output bits are transported through an integer-printing C driver; the CPU
 compiler proof does not establish GPU correctness or performance.
+
+## 2026-10-16 tiny-epsilon numerical gate
+
+The shared RMS JVP/VJP repair multiplies x by each inverse factor before
+the reductions, and scales epsilon by each inverse factor before applying the
+direction. It avoids materializing an overflowing inverse square when inverse
+is finite. Thirty-two native tiny-epsilon regressions reproduce NaNs before the
+repair; all 153 native LLVM precision cases now pass, including zero seeds in
+FP16/BF16->FP32 and FP32->FP64, affine/permuted/static/dynamic cases and nonzero
+BF16 radial inputs. Twenty RTX5070 cases cover nonzero tiny-epsilon BF16
+through public host/resident, portable and event/captured profile routes.
+
+Frozen 46a5dd8da721055a51b672adde1eb6e534789c3b passes 26,889 non-slow unit passes (7,678 skips),
+912 required compiler-route passes and 416 owning RTX5070 passes, with no skips
+in either required proof lane. All phase source/tool/helper witnesses match.
+Eight timed packages also pass independent FP64 checks and standalone replay
+with compiler subprocesses disabled. The latest same-owner resident comparison
+shows about 19–28% lower public latency at the larger synthetic M256 cases,
+and 40–57% higher latency at smaller cases. No default, quantized-route or
+sibling physical promotion follows. The earlier d1ba6e98d and e164fd4d8
+records retain their original source scope; they do not validate this changed
+arithmetic. The five-slice aggregate and wider integration gates remain open.

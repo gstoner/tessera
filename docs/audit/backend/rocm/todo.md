@@ -5,6 +5,80 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## W11-RESIDENT-SOURCE-20261016 — resident roots for source-active JVP
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-RESIDENT-SOURCE-20261016.
+
+PR953 merged as d6ea97e5dfb2a61db81ea6e5b43be18f1e9943fe after all required
+checks and automated review passed. Its prior source-bound local evidence retains
+its own scope; the five-slice aggregate remains open.
+
+Not applicable to rocm physical execution: gfx1151/gfx1201 HIP pointers and streams require independent physical ownership.
+The frontend dispatch change applies only to native SM120 CUDA roots and retains
+the existing attention storage gate. Native event/capacity helper reuse is confined
+to NVIDIA; the additional shared AD arithmetic assessment follows below. No sibling schedule, ABI execution or device parity is claimed;
+existing sibling producer/AD package obligations remain open.
+
+
+The shared native RMS derivative now preserves an explicit epsilon term
+using weighted residuals in the requested wider accumulator; storage-typed
+behavior is retained. The verified producer outline and Schedule/Tile scalarizer
+consume finite scalar constants and add from the actual Graph body.
+
+Frozen d1ba6e98d validation is complete: 26,836 non-slow unit passes
+(7,678 skips), 880 required compiler-route passes with no skips and 348 owning
+RTX5070 device passes with no skips. All phase source/tool/helper witnesses
+match. Twelve device cases compare actual CUDA driver entries/grids/blocks
+with sealed geometry; eight timed packages replay with compiler subprocesses
+disabled and independent FP64 numerical comparisons. The shared native LLVM
+precision gate passes all 121 cases.
+
+Seven-window measurements retain separate device stages/program and public
+completed-call wall times. Resident roots reduce public latency 18–32% for
+the larger synthetic M256 cases, while smaller cases regress 45–61%.
+No default promotion, quantized-route change, sibling physical parity or
+aggregate closure follows. Generic/dynamic/pitched/mixed producers, resident
+results and reverse composition remain open.
+Evidence: benchmarks/baselines/sm120_resident_source_jvp_20261016/README.md.
+Publication CI remains pending; earlier red and pre-geometry records retain
+their original source scope.
+
+PR954 review follow-through at e164fd4d8 treats omitted CUDA strides as
+compact, matching the optional-field contract already admitted by frontend
+tracing. Twelve host regressions first reproduce KeyError; all 97 focused host
+controls then pass. The expanded owning RTX5070 lane passes 396 cases without
+skips, including 48 omitted-strides public/replay/profile combinations across
+both storage types, argument orders and minimal/ragged shapes. Its clean
+source-before/after witness and raw logs/JUnit are archived separately.
+The d1ba6e98d full-unit/benchmark certificate retains its original scope; no
+new timing or sibling physical parity is inferred from this metadata repair.
+
+### RMS numerical review follow-through — 2026-10-16
+
+The shared RMS JVP/VJP repair multiplies x by each inverse factor before
+the reductions, and scales epsilon by each inverse factor before applying the
+direction. It avoids materializing an overflowing inverse square when inverse
+is finite. Thirty-two native tiny-epsilon regressions reproduce NaNs before the
+repair; all 153 native LLVM precision cases now pass, including zero seeds in
+FP16/BF16->FP32 and FP32->FP64, affine/permuted/static/dynamic cases and nonzero
+BF16 radial inputs. Twenty RTX5070 cases cover nonzero tiny-epsilon BF16
+through public host/resident, portable and event/captured profile routes.
+
+Frozen 46a5dd8da721055a51b672adde1eb6e534789c3b passes 26,889 non-slow unit passes (7,678 skips),
+912 required compiler-route passes and 416 owning RTX5070 passes, with no skips
+in either required proof lane. All phase source/tool/helper witnesses match.
+Eight timed packages also pass independent FP64 checks and standalone replay
+with compiler subprocesses disabled. The latest same-owner resident comparison
+shows about 19–28% lower public latency at the larger synthetic M256 cases,
+and 40–57% higher latency at smaller cases. No default, quantized-route or
+sibling physical promotion follows. The earlier d1ba6e98d and e164fd4d8
+records retain their original source scope; they do not validate this changed
+arithmetic. The five-slice aggregate and wider integration gates remain open.
+Evidence: benchmarks/baselines/sm120_resident_source_jvp_20261016/rms-review/README.md.
+
+Contract: docs/spec/ir/source_active_row_jvp.md.
+
 ## GFX1201-FOLDED-INPUT-VIEWS-20261016 — preserve physical input row pitches
 
 Owner ROCM-MXFP4-W4A8-1 / LAYOUT-ALG-1.

@@ -121,6 +121,22 @@ class PreparedActiveSourceJVP:
             fn = getattr(lib, 'tessera_nvidia_active_source_program_' + key)
             fn.argtypes, fn.restype = args, ct.c_int
         lib.tessera_nvidia_matmul_last_error.restype = ct.c_char_p
+        resident_signatures = {
+            'invoke_resident_inputs': [
+                ct.c_uint64, ct.POINTER(HostView), ct.c_size_t,
+                ct.POINTER(ct.c_uint64), ct.c_size_t],
+            'profile_resident_inputs': [
+                ct.c_uint64, ct.POINTER(HostView), ct.c_size_t,
+                ct.POINTER(ct.c_uint64), ct.c_size_t, ct.c_int, ct.c_int,
+                ct.POINTER(ct.c_float), ct.c_size_t, ct.POINTER(ct.c_float)],
+        }
+        self._resident_available = all(
+            hasattr(lib, 'tessera_nvidia_active_source_program_' + key)
+            for key in resident_signatures)
+        if self._resident_available:
+            for key, args in resident_signatures.items():
+                fn = getattr(lib, 'tessera_nvidia_active_source_program_' + key)
+                fn.argtypes, fn.restype = args, ct.c_int
         metadata = (HostView * 7)()
         for i, buffer in enumerate(plan['buffers']):
             rows, cols = buffer['shape']
@@ -147,7 +163,7 @@ class PreparedActiveSourceJVP:
         self.handle = handle.value
         self._pid = os.getpid()
         self._finalizer = weakref.finalize(self, lib.tessera_nvidia_active_source_program_close, self.handle)
-        self.receipt = {
+        self.receipt: dict[str, object] = {
             'family': 'tensor_active_source_jvp_program', 'execution_mode': 'cuda_runtime',
             'execution_kind': 'native_gpu', 'evidence_target': 'nvidia_sm120',
             'compiler_path': 'nvidia_sm120_active_source_jvp_compiled',
@@ -166,31 +182,69 @@ class PreparedActiveSourceJVP:
 
     def _frame(self, values):
         self._guard()
-        if len(values) != 3 or any(not isinstance(a, np.ndarray) for a in values):
-            raise ValueError("source-active program requires three ndarray roots")
-        roots = tuple(np.ascontiguousarray(a) for a in values)
+        if len(values) != 3:
+            raise ValueError("source-active program requires three explicit roots")
+        resident = any(hasattr(value, "__cuda_array_interface__") for value in values)
         plan = self._plan
-        for i, root in enumerate(roots):
-            b = plan['buffers'][i]
-            if list(root.shape) != b['shape'] or root.dtype.name != {'f16': 'float16', 'bf16': 'bfloat16'}[b['storage']]:
-                raise ValueError("source-active root shape/storage differs")
+        streams = None
+        if resident:
+            if not all(hasattr(value, "__cuda_array_interface__") for value in values):
+                raise ValueError("source-active resident program requires all CUDA roots")
+            from .resident_nvidia_tensor import cuda_frontend_specs, ordered_resident_views
+            specs = cuda_frontend_specs(values, ranks=(2,))
+            for i, (shape, dtype) in enumerate(specs):
+                buffer = plan['buffers'][i]
+                if (list(shape) != buffer['shape'] or dtype.name !=
+                        {'f16': 'float16', 'bf16': 'bfloat16'}[buffer['storage']]):
+                    raise ValueError("source-active root shape/storage differs")
+            if not self._resident_available:
+                raise RuntimeError("source-active resident inputs require updated native provider")
+            # No resident outputs are passed here. The private native stream
+            # orders the returned root producer streams before all native reads.
+            projected, declared = ordered_resident_views(values, None, writable_from=3)
+            roots = tuple(values)  # Keep every external owner live through native completion.
+            root_views = tuple(projected)
+            streams = (ct.c_uint64 * 3)(*declared)
+        else:
+            if any(not isinstance(value, np.ndarray) for value in values):
+                raise ValueError("source-active program requires three ndarray roots")
+            roots = tuple(np.ascontiguousarray(a) for a in values)
+            for i, root in enumerate(roots):
+                buffer = plan['buffers'][i]
+                if (list(root.shape) != buffer['shape'] or root.dtype.name !=
+                        {'f16': 'float16', 'bf16': 'bfloat16'}[buffer['storage']]):
+                    raise ValueError("source-active root shape/storage differs")
+            root_views = tuple(_view(root) for root in roots)
         outputs = tuple(np.empty(plan['buffers'][i]['shape'], np.float32) for i in (5, 6))
-        views = (HostView * 5)(*[_view(a) for a in (*roots, *outputs)])
-        return roots, outputs, views
+        views = (HostView * 5)(*root_views, *(_view(output) for output in outputs))
+        return roots, outputs, views, streams
 
     def __call__(self, values):
-        roots, outputs, views = self._frame(values)
-        self._check(self.lib.tessera_nvidia_active_source_program_invoke(self.handle, views, 5))
+        roots, outputs, views, streams = self._frame(values)
+        if streams is None:
+            self._check(self.lib.tessera_nvidia_active_source_program_invoke(self.handle, views, 5))
+        else:
+            self._check(self.lib.tessera_nvidia_active_source_program_invoke_resident_inputs(
+                self.handle, views, 5, streams, 3))
+        self.receipt.update(input_binding="host_roots" if streams is None else "cuda_resident_roots",
+                            root_uploads=3 if streams is None else 0)
         return outputs
 
     def profile(self, values, *, repeats=20, captured=True):
-        """Refresh same-address roots outside device timing, then profile the program."""
+        """Refresh roots before independent native stage and composed events."""
         if type(repeats) is not int or not 0 < repeats < 2**31 or type(captured) is not bool:
             raise ValueError("source-active profile options differ")
-        roots, outputs, views = self._frame(values)
+        roots, outputs, views, streams = self._frame(values)
         stage, program = (ct.c_float * 3)(), ct.c_float()
-        self._check(self.lib.tessera_nvidia_active_source_program_profile(self.handle, repeats, int(captured),
-            stage, 3, ct.byref(program), views, 5))
+        if streams is None:
+            self._check(self.lib.tessera_nvidia_active_source_program_profile(
+                self.handle, repeats, int(captured), stage, 3, ct.byref(program), views, 5))
+        else:
+            self._check(self.lib.tessera_nvidia_active_source_program_profile_resident_inputs(
+                self.handle, views, 5, streams, 3, repeats, int(captured),
+                stage, 3, ct.byref(program)))
+        self.receipt.update(input_binding="host_roots" if streams is None else "cuda_resident_roots",
+                            root_uploads=3 if streams is None else 0)
         return outputs, {'stage_ms': tuple(stage), 'program_ms': program.value}
 
     def scratch_stats(self):

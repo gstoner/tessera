@@ -459,18 +459,25 @@ llvm::SmallVector<mlir::Value> RmsNormOp::buildTangent(
       builder, loc, x, type, getEpsAttr(), /*centered=*/false);
   (void)unused;
   mlir::Value inverseB = broadcastLastAxis(builder, loc, type, inverse, x);
-  mlir::Value normalized =
-      builder.create<MulOp>(loc, type, x, inverseB).getResult();
-  mlir::Value meanProjected = reduceMeanLastAxis(
-      builder, loc, type,
-      builder.create<MulOp>(loc, type, dx, normalized).getResult());
-  mlir::Value correction = builder.create<MulOp>(
-      loc, type, normalized,
-      broadcastLastAxis(builder, loc, type, meanProjected, x)).getResult();
-  mlir::Value result = builder.create<MulOp>(
-      loc, type,
-      builder.create<SubOp>(loc, type, dx, correction).getResult(),
-      inverseB).getResult();
+  mlir::Value normalized;
+  if (type == storage || (tangents.size() > 1 && tangents[1]))
+    normalized = builder.create<MulOp>(loc, type, x, inverseB).getResult();
+  mlir::Value result;
+  if (type != storage) {
+    result = normalization_ad::stableRmsProjection(
+        builder, loc, type, x, dx, inverseB, getEpsAttr());
+  } else {
+    mlir::Value meanProjected = reduceMeanLastAxis(
+        builder, loc, type,
+        builder.create<MulOp>(loc, type, dx, normalized).getResult());
+    mlir::Value correction = builder.create<MulOp>(
+        loc, type, normalized,
+        broadcastLastAxis(builder, loc, type, meanProjected, x)).getResult();
+    result = builder.create<MulOp>(
+        loc, type,
+        builder.create<SubOp>(loc, type, dx, correction).getResult(),
+        inverseB).getResult();
+  }
   if (!getAffine().empty())
     result = builder.create<MulOp>(
         loc, type, result,

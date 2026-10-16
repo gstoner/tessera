@@ -1,0 +1,20 @@
+{
+  "scope": "one canonical fixture; all native members/IR/images/resources retained, geometry metadata corrected",
+  "old_artifact_hash": "8353860879601cad6558a6d91fb72a58696c9ece2eeb362c6e6d93f910c806f0",
+  "new_artifact_hash": "6dfa191a1cfc01b28aee82fc8bc3d6d4e4e0425b52c3f5437a0c48d6efcc766f",
+  "old_blocks": [
+    128,
+    128,
+    128
+  ],
+  "new_blocks": [
+    128,
+    32,
+    32
+  ],
+  "image_digests": [
+    "49a7f9f79ccc885c83a045cfda644e1003a989e03c24d7dc68dca3c1ff5945b3",
+    "8ec83d2c5afc14fbf54afac06765688b2fddc86931a283abd5bb5ee1abade26b",
+    "8ec83d2c5afc14fbf54afac06765688b2fddc86931a283abd5bb5ee1abade26b"
+  ]
+}

@@ -119,6 +119,8 @@ def execute(artifact, args):
                     "ok": True, "execution_kind": "native_gpu", "compiler_path": path,
                     "evidence_target": "nvidia_sm120",
                     "native_call_binding": "prepared_cpp_active_source_program",
+                    "input_binding": owner.receipt["input_binding"],
+                    "root_uploads": owner.receipt["root_uploads"],
                     "member": step["member"], "image_digest": record["image_digest"],
                     "descriptor_digest": record["member_digest"], "abi": copy.deepcopy(record["abi"]),
                 } for step, record in zip(plan["steps"], data["members"], strict=True))

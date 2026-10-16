@@ -849,29 +849,36 @@ llvm::SmallVector<mlir::Value> RmsNormOp::buildAdjoint(
                                                  normalizationCast(builder, loc, getAffine().front(), element), x))
                       .getResult();
   }
-  mlir::Value leading = builder
-                            .create<MulOp>(loc, inputType, projectedDy,
-                                           inverseBroadcast)
-                            .getResult();
-  mlir::Value dyX =
-      builder.create<MulOp>(loc, inputType, projectedDy, x).getResult();
-  mlir::Value meanDyX = reduceMeanLastAxis(builder, loc, inputType, dyX);
-  mlir::Value meanDyXBroadcast =
-      broadcastLastAxisStat(builder, loc, inputType, meanDyX, x);
-  mlir::Value inverseSquared =
-      builder.create<MulOp>(loc, inputType, inverseBroadcast, inverseBroadcast)
-          .getResult();
-  mlir::Value inverseCubed =
-      builder.create<MulOp>(loc, inputType, inverseSquared, inverseBroadcast)
-          .getResult();
-  mlir::Value scaledX =
-      builder.create<MulOp>(loc, inputType, x, inverseCubed).getResult();
-  mlir::Value correction =
-      builder.create<MulOp>(loc, inputType, scaledX, meanDyXBroadcast)
-          .getResult();
+  mlir::Value inputGradient;
+  if (inputType != storageType) {
+    inputGradient = normalization_ad::stableRmsProjection(
+        builder, loc, inputType, x, projectedDy, inverseBroadcast, getEpsAttr());
+  } else {
+    mlir::Value leading = builder
+                              .create<MulOp>(loc, inputType, projectedDy,
+                                             inverseBroadcast)
+                              .getResult();
+    mlir::Value dyX =
+        builder.create<MulOp>(loc, inputType, projectedDy, x).getResult();
+    mlir::Value meanDyX = reduceMeanLastAxis(builder, loc, inputType, dyX);
+    mlir::Value meanDyXBroadcast =
+        broadcastLastAxisStat(builder, loc, inputType, meanDyX, x);
+    mlir::Value inverseSquared =
+        builder.create<MulOp>(loc, inputType, inverseBroadcast, inverseBroadcast)
+            .getResult();
+    mlir::Value inverseCubed =
+        builder.create<MulOp>(loc, inputType, inverseSquared, inverseBroadcast)
+            .getResult();
+    mlir::Value scaledX =
+        builder.create<MulOp>(loc, inputType, x, inverseCubed).getResult();
+    mlir::Value correction =
+        builder.create<MulOp>(loc, inputType, scaledX, meanDyXBroadcast)
+            .getResult();
+    inputGradient = builder.create<SubOp>(
+        loc, inputType, leading, correction).getResult();
+  }
   llvm::SmallVector<mlir::Value> gradients;
-  gradients.push_back(
-      builder.create<SubOp>(loc, inputType, leading, correction).getResult());
+  gradients.push_back(inputGradient);
   if (!getAffine().empty()) {
     mlir::Value normalized =
         builder.create<MulOp>(loc, inputType, x, inverseBroadcast).getResult();

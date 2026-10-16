@@ -1,0 +1,44 @@
+[
+  {
+    "phase": "frontend-before",
+    "outcome": "8 failed; resident roots were misclassified as attention",
+    "record": "frontend-before.log.gz",
+    "scope": "development counterexample; not a validation certificate for the frozen source"
+  },
+  {
+    "phase": "host-only-owner-before",
+    "outcome": "4 failed; the owner required ndarray roots",
+    "record": "host-only-owner-before.log.gz",
+    "scope": "development counterexample; not a validation certificate for the frozen source"
+  },
+  {
+    "phase": "invalid-stream-before",
+    "outcome": "SIGSEGV in cuStreamGetCtx for token 3; exit 139",
+    "record": "invalid-stream-before.log.gz",
+    "scope": "development counterexample; not a validation certificate for the frozen source"
+  },
+  {
+    "phase": "radial-before",
+    "outcome": "110 passed, 2 failed; BF16 radial cancellation under the unchanged oracle",
+    "record": "radial-before.log.gz",
+    "scope": "development counterexample; not a validation certificate for the frozen source"
+  },
+  {
+    "phase": "minimal-fixture-before",
+    "outcome": "328 passed, 8 failed; the 1x1 negative fixtures described valid storage",
+    "record": "minimal-fixture-before.log.gz",
+    "scope": "development counterexample; not a validation certificate for the frozen source"
+  },
+  {
+    "phase": "llvm-path-before",
+    "outcome": "121 skipped; incomplete PATH, not numerical proof",
+    "record": "llvm-path-before.log.gz",
+    "scope": "development counterexample; not a validation certificate for the frozen source"
+  },
+  {
+    "phase": "mypy-before",
+    "outcome": "2 errors; receipt values needed an explicit mixed-value mapping type",
+    "record": "mypy-before.log.gz",
+    "scope": "development counterexample; not a validation certificate for the frozen source"
+  }
+]

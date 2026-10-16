@@ -12,6 +12,73 @@ NVFP4 expansion and source-preserving multi-output ownership. Older entries reta
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
 
+## Delivery and next source-active integration — 2026-10-16
+
+PR953 merged as d6ea97e5dfb2a61db81ea6e5b43be18f1e9943fe. Its exact
+cad673b2c head passed unit, audit, lint, production compiler-route proof and
+validate-required; automated review completed without findings. This closes
+that publication wait, without extending its physical/performance envelope.
+
+W11-RESIDENT-SOURCE-20261016 extends the named source-active JVP program to
+compact resident roots, native event ordering and completed host outputs.
+The first 104 device cases pass. The widened lane originally records 110 passes
+and two BF16 radial failures under the unchanged oracle. A shared native
+weighted-residual RMS JVP/VJP repair, integrated through the verified producer
+outline and Schedule/Tile scalarizer, now passes all 336 resident cases across minimal/ragged shapes.
+The 504-pass/four-skip adjacent result retains its pre-arithmetic scope.
+Frozen d1ba6e98d validation is complete: 26,836 non-slow unit passes
+(7,678 skips), 880 required compiler-route passes with no skips and 348 owning
+RTX5070 device passes with no skips. All phase source/tool/helper witnesses
+match. Twelve device cases compare actual CUDA driver entries/grids/blocks
+with sealed geometry; eight timed packages replay with compiler subprocesses
+disabled and independent FP64 numerical comparisons. The shared native LLVM
+precision gate passes all 121 cases.
+
+Seven-window measurements retain separate device stages/program and public
+completed-call wall times. Resident roots reduce public latency 18–32% for
+the larger synthetic M256 cases, while smaller cases regress 45–61%.
+No default promotion, quantized-route change, sibling physical parity or
+aggregate closure follows. Generic/dynamic/pitched/mixed producers, resident
+results and reverse composition remain open.
+Evidence: benchmarks/baselines/sm120_resident_source_jvp_20261016/README.md.
+Publication CI remains pending; earlier red and pre-geometry records retain
+their original source scope.
+
+## Optional CUDA metadata review repair — 2026-10-16
+
+PR954 review follow-through at e164fd4d8 treats omitted CUDA strides as
+compact, matching the optional-field contract already admitted by frontend
+tracing. Twelve host regressions first reproduce KeyError; all 97 focused host
+controls then pass. The expanded owning RTX5070 lane passes 396 cases without
+skips, including 48 omitted-strides public/replay/profile combinations across
+both storage types, argument orders and minimal/ragged shapes. Its clean
+source-before/after witness and raw logs/JUnit are archived separately.
+The d1ba6e98d full-unit/benchmark certificate retains its original scope; no
+new timing or sibling physical parity is inferred from this metadata repair.
+
+## RMS numerical review follow-through — 2026-10-16
+
+The shared RMS JVP/VJP repair multiplies x by each inverse factor before
+the reductions, and scales epsilon by each inverse factor before applying the
+direction. It avoids materializing an overflowing inverse square when inverse
+is finite. Thirty-two native tiny-epsilon regressions reproduce NaNs before the
+repair; all 153 native LLVM precision cases now pass, including zero seeds in
+FP16/BF16->FP32 and FP32->FP64, affine/permuted/static/dynamic cases and nonzero
+BF16 radial inputs. Twenty RTX5070 cases cover nonzero tiny-epsilon BF16
+through public host/resident, portable and event/captured profile routes.
+
+Frozen 46a5dd8da721055a51b672adde1eb6e534789c3b passes 26,889 non-slow unit passes (7,678 skips),
+912 required compiler-route passes and 416 owning RTX5070 passes, with no skips
+in either required proof lane. All phase source/tool/helper witnesses match.
+Eight timed packages also pass independent FP64 checks and standalone replay
+with compiler subprocesses disabled. The latest same-owner resident comparison
+shows about 19–28% lower public latency at the larger synthetic M256 cases,
+and 40–57% higher latency at smaller cases. No default, quantized-route or
+sibling physical promotion follows. The earlier d1ba6e98d and e164fd4d8
+records retain their original source scope; they do not validate this changed
+arithmetic. The five-slice aggregate and wider integration gates remain open.
+Evidence: benchmarks/baselines/sm120_resident_source_jvp_20261016/rms-review/README.md.
+
 ## Current reconciliation — 2026-10-16
 
 PR952 is merged as b361ecf42aca146aa9b47cbd156e601ffe3ce972; its publication

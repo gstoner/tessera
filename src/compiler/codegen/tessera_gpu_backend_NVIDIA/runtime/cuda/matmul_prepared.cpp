@@ -687,6 +687,57 @@ extern "C" int tessera_nvidia_matmul_profile_captured(uint64_t handle, int repea
 // The final view is the caller's private edge allocation; the earlier views
 // follow the consumer ABI with source replacing its LHS. Native completion
 // retires all reads/writes before allocations may be released or reused.
+// Shared by primal and paired-JVP resident frames. Metadata never proves
+// allocation capacity or context; query the live CUDA allocation before reads.
+static bool residentAllocation(CUdeviceptr pointer, size_t span, CUcontext context) {
+  CUcontext allocationContext = nullptr;
+  unsigned int memoryType = 0;
+  CUdeviceptr base = 0;
+  size_t capacity = 0;
+  return span && pointer <= UINTPTR_MAX - span &&
+      ok(cuPointerGetAttribute(&allocationContext, CU_POINTER_ATTRIBUTE_CONTEXT,
+          pointer), "resident allocation context") &&
+      ok(cuPointerGetAttribute(&memoryType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
+          pointer), "resident allocation type") &&
+      allocationContext == context && memoryType == CU_MEMORYTYPE_DEVICE &&
+      ok(cuMemGetAddressRange(&base, &capacity, pointer), "resident allocation capacity") &&
+      pointer >= base && pointer - base <= capacity &&
+      span <= capacity - size_t(pointer - base);
+}
+struct ProducerEvents {
+  std::vector<CUevent> events;
+  ~ProducerEvents() { for (CUevent event : events) cuEventDestroy(event); }
+  bool wait(CUcontext context, CUstream stream, const uint64_t *streams, size_t count) {
+    std::vector<CUstream> producers;
+    for (size_t i = 0; i < count; ++i) {
+      if (!streams[i]) return bad("ordered resident producer stream must be explicit"), false;
+      // CUDA's two default-stream sentinels are 1 and 2. Other low addresses
+      // are not live opaque handles; some drivers dereference them rather
+      // than returning INVALID_HANDLE from cuStreamGetCtx.
+      if (streams[i] > 2 && streams[i] < 4096)
+        return bad("ordered resident producer stream token is invalid"), false;
+      CUstream producer = reinterpret_cast<CUstream>(uintptr_t(streams[i]));
+      CUcontext producerContext = nullptr;
+      if (!ok(cuStreamGetCtx(producer, &producerContext), "producer stream context") ||
+          producerContext != context)
+        return bad("ordered resident producer context mismatch"), false;
+      if (producer == stream) continue;
+      bool duplicate = false;
+      for (CUstream prior : producers) duplicate |= prior == producer;
+      if (!duplicate) producers.push_back(producer);
+    }
+    for (CUstream producer : producers) {
+      CUevent event = nullptr;
+      if (!ok(cuEventCreate(&event, CU_EVENT_DISABLE_TIMING), "create producer ordering event"))
+        return false;
+      events.push_back(event);
+      if (!ok(cuEventRecord(event, producer), "record producer ordering event") ||
+          !ok(cuStreamWaitEvent(stream, event, 0), "wait for resident producer"))
+        return false;
+    }
+    return true;
+  }
+};
 static int invokeResident(
     uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count,
     void *launchStream, bool ownedEdge,
@@ -798,17 +849,7 @@ static int invokeResident(
       rhsLeading = pitch / int64_t(width);
     }
     pointers[i] = reinterpret_cast<CUdeviceptr>(actual.data);
-    CUcontext allocationContext = nullptr;
-    unsigned int memoryType = 0;
-    CUdeviceptr base = 0; size_t capacity = 0;
-    if (!ok(cuPointerGetAttribute(&allocationContext, CU_POINTER_ATTRIBUTE_CONTEXT,
-          pointers[i]), "resident allocation context") ||
-        !ok(cuPointerGetAttribute(&memoryType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
-          pointers[i]), "resident allocation type") ||
-        allocationContext != context || memoryType != CU_MEMORYTYPE_DEVICE ||
-        !ok(cuMemGetAddressRange(&base, &capacity, pointers[i]), "resident allocation capacity") ||
-        pointers[i] < base || pointers[i] - base > capacity ||
-        spans[i] > capacity - size_t(pointers[i] - base))
+    if (!residentAllocation(pointers[i], spans[i], context))
       return bad("prepared resident allocation context or capacity mismatch");
     // Read-only inputs may alias. The edge and output must be disjoint from
     // every other live buffer and from each other.
@@ -823,36 +864,11 @@ static int invokeResident(
   // Validate and order every external read after its declared producer.
   // Keep events live through synchronous completion, including launch failure.
   // All allocation/context/shape/alias checks precede event submission.
-  struct ProducerEvents {
-    std::vector<CUevent> events;
-    ~ProducerEvents() { for (CUevent event : events) cuEventDestroy(event); }
-  } ordering;
+  ProducerEvents ordering;
   if (producerStreams) {
     if (!ownedEdge || producerCount != owner.count - 1)
       return bad("ordered resident producer stream arity mismatch");
-    std::vector<CUstream> producers;
-    for (size_t i = 0; i < producerCount; ++i) {
-      if (!producerStreams[i])
-        return bad("ordered resident producer stream must be explicit");
-      CUstream producer = reinterpret_cast<CUstream>(uintptr_t(producerStreams[i]));
-      CUcontext producerContext = nullptr;
-      if (!ok(cuStreamGetCtx(producer, &producerContext), "producer stream context") ||
-          producerContext != context)
-        return bad("ordered resident producer context mismatch");
-      if (producer == stream) continue;
-      bool duplicate = false;
-      for (CUstream prior : producers) duplicate |= prior == producer;
-      if (!duplicate) producers.push_back(producer);
-    }
-    for (CUstream producer : producers) {
-      CUevent event = nullptr;
-      if (!ok(cuEventCreate(&event, CU_EVENT_DISABLE_TIMING), "create producer ordering event"))
-        return 1;
-      ordering.events.push_back(event);
-      if (!ok(cuEventRecord(event, producer), "record producer ordering event") ||
-          !ok(cuStreamWaitEvent(stream, event, 0), "wait for resident producer"))
-        return 1;
-    }
+    if (!ordering.wait(context, stream, producerStreams, producerCount)) return 1;
   }
   std::array<CUdeviceptr, 5> buffers{};
   for (size_t i = 0; i < owner.count; ++i) buffers[i] = pointers[i];
@@ -1045,13 +1061,16 @@ bool tensorProgramOutputs(TensorProgramOwner &owner,
   return true;
 }
 bool submitTensorProgram(TensorProgramOwner &owner, int repeats=1,
-    float *times=nullptr, bool captured=false) {
+    float *times=nullptr, bool captured=false, const CUdeviceptr *bindings=nullptr) {
+  auto address=[&](int64_t buffer) {
+    return bindings ? bindings[buffer] : owner.arena->base+owner.offsets[buffer];
+  };
   for (size_t i=0;i<owner.stages.size();++i) {
     auto &stage=owner.stages[i];
-    CUdeviceptr input=owner.arena->base+owner.offsets[stage.inputs[0]];
-    CUdeviceptr other=(stage.matmul || stage.secondOutput>=0) ? owner.arena->base+owner.offsets[stage.inputs[1]] : 0;
-    CUdeviceptr output=owner.arena->base+owner.offsets[stage.output];
-    CUdeviceptr second=stage.secondOutput>=0 ? owner.arena->base+owner.offsets[stage.secondOutput] : 0;
+    CUdeviceptr input=address(stage.inputs[0]);
+    CUdeviceptr other=(stage.matmul || stage.secondOutput>=0) ? address(stage.inputs[1]) : 0;
+    CUdeviceptr output=address(stage.output);
+    CUdeviceptr second=stage.secondOutput>=0 ? address(stage.secondOutput) : 0;
     void *args[6]={};
     if (stage.secondOutput>=0) {
       args[0]=&input;args[1]=&other;args[2]=&output;args[3]=&second;

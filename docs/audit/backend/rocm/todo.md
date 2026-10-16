@@ -5,6 +5,47 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NVFP4-SOURCE-BOUNDED-20261016 — native source capacity contract
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Synchronization key: NVFP4-SOURCE-BOUNDED-20261016.
+
+Implementation in progress. Native MLIR exports source-preserving bounded
+expansion/product frames as NVFP4 schema v4, preserving v1/v2/v3 meanings.
+Native image projection has an explicit arbitrary-M policy so aligned
+capacities cannot retain unguarded whole-row LDS assumptions. The additive
+multi-output HIP row ABI validates row-dependent bytes/elements, changes
+consumer M/grid/memref extents and preserves fixed capacity allocations.
+
+Focused compiler/registry gates pass 375 cases. Owning RX9070XT/gfx1201 passes
+59 bounded/static source, public/compiler-free replay and partition tests,
+including 15 bounded cases: FP32/BF16, reordered roots, shrink/grow, full versus
+activation-only updates, retained outputs, malformed row contracts and a
+capacity-256/N4096/K16 LDS image replayed at M19/1/256/127. Allocation bytes/count
+remain stable. These are scoped candidate results, pending published receipts.
+
+Fresh-process replay also passes with compiler paths disabled. Nine timing
+rows have seven correctness-gated windows >=10ms in each separate member,
+program-event and completed prepared-host scope; no speedup is claimed.
+The owning compatibility gate passes 226 prior bounded NVFP4, FP8/MXFP8/MXFP4
+and generic-owner cases; adjacent host gates pass 544 with 22 hardware skips.
+Receipts: benchmarks/baselines/nvfp4_source_bounded_20261016/README.md.
+Final generated-document/ABI/registry drift gates pass 401 cases.
+Representative original gate/up checkpoint proof also passes at N24576/K4096:
+prepared M19/1/256/200/127/19 and public/portable M1/19/200/256/1, with unchanged
+images/allocations and compiler/eager helpers forbidden for replay. All arithmetic
+bounds pass; M256 relative RMS versus decoded FP8 is 2.568e-7. Projection quality
+does not establish full MLP/model acceptance.
+PR960's initial unit lane has one recorder-discovery failure and 18 readback
+fixture compile errors. A named companion plus the actual production span
+helper repairs both; 23 focused tests pass. No native runtime/math changes.
+Next: repaired exact-head PR CI and review. Performance and
+original checkpoint/model-quality acceptance remain open. No gfx1151 FP8 route
+or full-model quality acceptance is inferred.
+
+Contract: docs/spec/NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md.
+
+
 ## GFX1201-W8A8-SHORT-RAGGED-20261016 — measured small-grid Schedule follow-through
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.

@@ -415,7 +415,7 @@ def package_blockscale(
     scale_group_panels: int = -1, blockscale_stage_k: int = -1,
     blockscale_lds_pad_bytes: int = -1, blockscale_prefetch: int = -1,
     project_image_identity: bool = True, lds_runtime_k: bool = True,
-    scale_format: str = "fp32",
+    scale_format: str = "fp32", arbitrary_m: bool = False,
 ) -> ROCMNativePackage:
     """Compile the Tile program to a gfx1201 HSACO and bind its launch ABI.
 
@@ -425,6 +425,8 @@ def package_blockscale(
     LDS-staged multi-wave body the Schedule selects at large M. None changes
     what a group computes. -1 keeps the generator's measured default (and,
     for ``blockscale_prefetch``, the carrier's pipeline depth)."""
+    if type(arbitrary_m) is not bool or (arbitrary_m and not project_image_identity):
+        raise ValueError("arbitrary_m requires a bool and projected image identity")
     if not isinstance(lds_runtime_k, bool):
         raise ValueError("lds_runtime_k must be a bool")
     if not isinstance(project_image_identity, bool):
@@ -446,7 +448,7 @@ def package_blockscale(
         blockscale_lds_pad_bytes=int(blockscale_lds_pad_bytes),
         blockscale_prefetch=int(blockscale_prefetch))
     target_key = hashlib.sha256("\x1f".join(
-        ("rocm.w8a8.native_target.v3", str(project_image_identity), str(lds_runtime_k),
+        ("rocm.w8a8.native_target.v3", str(project_image_identity), str(lds_runtime_k), str(arbitrary_m),
          program.tile_ir, _tool_digest(tool))
         + config.cache_key()).encode()).hexdigest()
     cached_target = _blockscale_target_cache.get(target_key)
@@ -458,7 +460,8 @@ def package_blockscale(
         runtime_mn = project_image_identity and checked["staging"] == "lds"
         image_target = (_shape_free_target_ir(
             checked_target, family="scaled_matmul" if runtime_shape else "scaled_matmul_lds",
-            directive=_DIRECTIVE, runtime_k=bool(runtime_mn and lds_runtime_k))
+            directive=_DIRECTIVE, runtime_k=bool(runtime_mn and lds_runtime_k),
+            arbitrary_m=arbitrary_m)
             if project_image_identity else checked_target)
         if len(_blockscale_target_cache) >= 128:
             _blockscale_target_cache.pop(next(iter(_blockscale_target_cache)))
@@ -530,7 +533,8 @@ def package_blockscale(
             "runtime_shape_image": runtime_shape,
             "runtime_mn_image": runtime_mn,
             "lds_runtime_k": runtime_mn and lds_runtime_k,
-            "lds_whole_m": runtime_mn and shape.m % checked["block_m"] == 0,
+            "arbitrary_m": arbitrary_m,
+            "lds_whole_m": runtime_mn and not arbitrary_m and shape.m % checked["block_m"] == 0,
             "lds_whole_n": runtime_mn and shape.n % checked["block_n"] == 0,
             "physical_contract": contract,
             "materializer": "generate-wmma-gemm-kernel",

@@ -16,7 +16,7 @@ def _plan_json(ir: str) -> str:
     if len(matches) != 1:
         raise ValueError("native NVFP4 export requires one compiler program record")
     text = base64.b64decode(matches[0], validate=True).decode()
-    if json.loads(text).get("schema") not in {"tessera.native.nvfp4_program.v1", "tessera.native.nvfp4_program.v2", "tessera.native.nvfp4_program.v3"}:
+    if json.loads(text).get("schema") not in {"tessera.native.nvfp4_program.v1", "tessera.native.nvfp4_program.v2", "tessera.native.nvfp4_program.v3", "tessera.native.nvfp4_program.v4"}:
         raise ValueError("unsupported native NVFP4 program schema")
     return text
 

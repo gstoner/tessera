@@ -6,6 +6,23 @@ target: nvidia_sm120
 last_updated: 2026-10-16
 ---
 
+## NVFP4-SOURCE-BOUNDED-20261016 — native source capacity contract
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Synchronization key: NVFP4-SOURCE-BOUNDED-20261016.
+
+Shared native program export adds an explicitly versioned gfx1201 bounded
+source schema and retains prior schema meanings. Not applicable to nvidia
+physical execution: NVIDIA uses separate NVFP4 and CUDA program contracts. No sibling target, dtype,
+public operation, schedule or ABI is admitted by the host export proof.
+Follow-up required for any sibling source-preserving consumer: supply its own
+lowering, frame ownership and exact-device evidence. The additive HIP row ABI has scoped gfx1201 candidate execution proof;
+this backend has no new physical consumer or transferred execution evidence.
+Its independent backend runtime/ABI remains unchanged.
+
+Contract: docs/spec/NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md.
+
+
 ## GFX1201-W8A8-SHORT-RAGGED-20261016 — measured small-grid Schedule follow-through
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.

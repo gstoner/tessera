@@ -60,8 +60,9 @@ def test_native_source_preserving_edges(roles):
 def test_source_preserving_bound_needs_its_own_contract():
     source = source_graph().replace('tessera.arch = "gfx1201"',
                                     'tessera.arch = "gfx1201", tessera.native.nvfp4_m_bound = 32 : i64')
-    with pytest.raises(RuntimeError, match="static activation frame"):
-        export_native_nvfp4_program(source)
+    plan = export_native_nvfp4_program(source).manifest
+    assert plan["schema"] == "tessera.native.nvfp4_program.v4"
+    assert plan["active_m"] == 19 and plan["m_bound"] == 32
 
 
 @pytest.mark.compiler_route

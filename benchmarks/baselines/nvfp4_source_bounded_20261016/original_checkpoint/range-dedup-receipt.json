@@ -1,0 +1,60 @@
+{
+  "retained": "validated gate_proj.npz and up_proj.npz plus all range metadata and small headers/indexes",
+  "removed": [
+    {
+      "request": [
+        "https://huggingface.co/Qwen/Qwen3-8B/resolve/b968826d9c46dd6066d109eabc6255188de91218/model-00001-of-00005.safetensors",
+        1446003832,
+        1546667127
+      ],
+      "bytes": 100663296,
+      "sha256": "ac3f743828a20694255953a4290079eda84f38e48e608a24731fb0510780db35"
+    },
+    {
+      "request": [
+        "https://huggingface.co/nvidia/Qwen3-8B-NVFP4/resolve/ccd10a893cbca613259517c3efe08e151ddf2b8e/model-00001-of-00002.safetensors",
+        1711458000,
+        1736623823
+      ],
+      "bytes": 25165824,
+      "sha256": "a0fca785098afc1eb226da153c9064ec99a31ab0621de503410185a409819e2d"
+    },
+    {
+      "request": [
+        "https://huggingface.co/nvidia/Qwen3-8B-NVFP4/resolve/ccd10a893cbca613259517c3efe08e151ddf2b8e/model-00001-of-00002.safetensors",
+        1248511696,
+        1251657423
+      ],
+      "bytes": 3145728,
+      "sha256": "e97fc0a1c076a1edfa409026b08ab731c69f811e68f1a2dfaa325fdd344d8353"
+    },
+    {
+      "request": [
+        "https://huggingface.co/nvidia/Qwen3-8B-NVFP4/resolve/ccd10a893cbca613259517c3efe08e151ddf2b8e/model-00001-of-00002.safetensors",
+        1686292176,
+        1711457999
+      ],
+      "bytes": 25165824,
+      "sha256": "aff199166d0bd99966c2d89811736da829fca680ae3ec89df4f575992d2a6d05"
+    },
+    {
+      "request": [
+        "https://huggingface.co/nvidia/Qwen3-8B-NVFP4/resolve/ccd10a893cbca613259517c3efe08e151ddf2b8e/model-00001-of-00002.safetensors",
+        1251657424,
+        1254803151
+      ],
+      "bytes": 3145728,
+      "sha256": "e6a1a5eb6c7dd13ad0a59250777ff052e15fb6c184deafd123eb0e174b296d61"
+    },
+    {
+      "request": [
+        "https://huggingface.co/Qwen/Qwen3-8B/resolve/b968826d9c46dd6066d109eabc6255188de91218/model-00001-of-00005.safetensors",
+        1345340536,
+        1446003831
+      ],
+      "bytes": 100663296,
+      "sha256": "1f9e6bddfbbfff53f82b684776dd1b36643277b72d40f70abcd287e02ab7ea9e"
+    }
+  ],
+  "freed_bytes": 257949696
+}

@@ -16,6 +16,8 @@ def library(tmp_path_factory):
     source=(root/"src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp").read_text()
     begin=source.index('extern "C" int tessera_rocm_program_read(')
     end=source.index('extern "C" int tessera_rocm_program_close(',begin)
+    helper_begin=source.index('uint64_t activeBytes(')
+    helper_end=source.index('void applyRows(',helper_begin)
     prefix=r'''
 #include <cstdint>
 #include <cstring>
@@ -29,6 +31,8 @@ struct Contract { uint64_t bytes; uint32_t ownership; };
 struct Program {
   std::vector<Contract> contract;
   std::vector<void *> buffers;
+  std::vector<uint64_t> rowBytes;
+  int64_t activeRows=0;
   bool poisoned=false,output=true,pinned=false;
   uint64_t generation=3,pinnedReadbackBytes=48;
   std::vector<unsigned char> readback;
@@ -67,13 +71,19 @@ extern "C" void setup(int pinned){
   }
   pool.programs.emplace(7,std::move(p));
 }
+extern "C" void setup_rows(int pinned,int64_t active){
+  setup(pinned);
+  auto &p=*pool.programs.at(7);
+  p.activeRows=active;
+  p.rowBytes={0,4,4,4};
+}
 extern "C" void fail(int copy,int sync){failCopy=copy;failSync=sync;}
 extern "C" void identity_failure(){sameIdentity=false;}
 extern "C" int stats(int kind){return kind==0?copies:kind==1?syncs:pool.programs.at(7)->poisoned;}
 '''
     folder=tmp_path_factory.mktemp("native-readback")
     cpp=folder/"read.cpp";so=folder/"read.so"
-    cpp.write_text(prefix+source[begin:end])
+    cpp.write_text(prefix+source[helper_begin:helper_end]+source[begin:end])
     subprocess.run([compiler,"-std=c++17","-shared","-fPIC",str(cpp),"-o",str(so)],check=True)
     lib=c.CDLL(str(so))
     lib.tessera_rocm_program_read_many.argtypes=[c.c_uint64,c.c_uint64,c.c_uint32,c.POINTER(c.c_uint32),c.POINTER(c.c_void_p),c.POINTER(c.c_uint64)]
@@ -81,12 +91,12 @@ extern "C" int stats(int kind){return kind==0?copies:kind==1?syncs:pool.programs
     lib.stats.restype=c.c_int
     return lib
 
-def owner_for(lib):
+def owner_for(lib,rows=4):
     owner=PreparedScaledProgram.__new__(PreparedScaledProgram)
     owner.handle=c.c_uint64(7);owner.lib=lib
     owner._read_many=lib.tessera_rocm_program_read_many
     owner._binding=SimpleNamespace(outputs=(1,2,3),storage=[
-        SimpleNamespace(shape=(4,),storage="f32") for _ in range(4)])
+        SimpleNamespace(shape=(rows,),storage="f32") for _ in range(4)])
     return owner
 
 @pytest.mark.parametrize("pinned",[0,1])
@@ -142,3 +152,19 @@ def test_reordered_subset_uses_checked_returned_slots(library):
     np.testing.assert_array_equal(outputs[0],np.arange(4)+30)
     np.testing.assert_array_equal(outputs[1],np.arange(4)+10)
     assert library.stats(1)==1
+
+
+@pytest.mark.parametrize("pinned",[0,1])
+@pytest.mark.parametrize("batched",[False,True])
+def test_bounded_read_publishes_only_active_rows_and_refuses_capacity_span(library,pinned,batched):
+    library.setup_rows.argtypes=[c.c_int,c.c_int64]
+    library.setup_rows(pinned,2)
+    outputs=owner_for(library,rows=2).read(3,batched=batched)
+    for slot,output in enumerate(outputs,1):
+        np.testing.assert_array_equal(output,np.arange(2,dtype=np.float32)+slot*10)
+    copied=library.stats(0)
+    capacity=[np.full(4,-99,np.float32) for _ in range(3)]
+    code=library.tessera_rocm_program_read_many(7,3,3,(c.c_uint32*3)(1,2,3),
+        (c.c_void_p*3)(*[a.ctypes.data for a in capacity]),(c.c_uint64*3)(16,16,16))
+    assert code==1 and library.stats(0)==copied and library.stats(2)==0
+    for output in capacity:np.testing.assert_array_equal(output,-99)

@@ -616,6 +616,9 @@ class PreparedScaledProgram:
     def _bind_abi(self, package):
         return _scaled_abi_binding(package)
 
+    def _prepare_tail(self):
+        return (), ()
+
     def __init__(self, package: _PreparedProgramPackage, inputs, *, runtime_library: str):
         self._binding = self._bind_abi(package)
         self.package = package
@@ -625,9 +628,11 @@ class PreparedScaledProgram:
         self.lib = c.CDLL(runtime_library)
         self.handle = c.c_uint64()
         prepare = getattr(self.lib, self._prepare_symbol)
+        tail_types, tail_values = self._prepare_tail()
         prepare.argtypes = [
             c.c_char_p, c.c_uint32, c.c_uint32, c.POINTER(_Buffer), c.c_uint32,
-            c.POINTER(self._step_type), c.POINTER(c.c_void_p), c.POINTER(c.c_uint64), c.POINTER(c.c_uint64)]
+            c.POINTER(self._step_type), c.POINTER(c.c_void_p), c.POINTER(c.c_uint64),
+            *tail_types, c.POINTER(c.c_uint64)]
         prepare.restype = c.c_int
         self.lib.tessera_rocm_program_update.argtypes = [
             c.c_uint64, c.POINTER(c.c_void_p), c.POINTER(c.c_uint64)]
@@ -645,9 +650,10 @@ class PreparedScaledProgram:
         rows = self._binding.storage
         buffers, steps = self._binding.buffers, self._binding.steps
         arrays, addresses, sizes = self._inputs(inputs)
+        _, tail_values = self._prepare_tail()
         code = prepare(
             b"gfx1201",self._binding.argument_count,len(rows),buffers,len(steps),
-            steps,addresses,sizes,c.byref(self.handle))
+            steps,addresses,sizes,*tail_values,c.byref(self.handle))
         if code:
             if self.handle.value:
                 cleanup = self.lib.tessera_rocm_program_close(self.handle)
@@ -665,11 +671,14 @@ class PreparedScaledProgram:
         return self._program
 
     def _inputs(self, inputs):
+        return self._inputs_for_storage(inputs, self._binding.storage)
+
+    def _inputs_for_storage(self, inputs, storage_specs):
         count = self._binding.argument_count
         if len(inputs) != count:
             raise ValueError("native scaled program argument count differs")
         arrays = []
-        for slot, (value, contract) in enumerate(zip(inputs,self._binding.storage[:count])):
+        for slot, (value, contract) in enumerate(zip(inputs,storage_specs[:count])):
             array = np.asarray(value)
             storage = contract.storage
             if storage == "f8E4M3FN" and str(array.dtype) == "float8_e4m3fn":

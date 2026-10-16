@@ -136,3 +136,17 @@ def test_canonicalization_preserves_dense_and_pitched_input_views(compiler, pitc
         input=pitched_graph(*pitches), text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
     assert "runtime_row_strides" in result.stdout
+
+
+@pytest.mark.parametrize("encoded_type", [
+    "tensor<256x80xui8>", "tensor<64x96xui8>", "tensor<256x64xui8>",
+    "tensor<64x64xui8>", "tensor<256xf32>", "tensor<64xui8>", "tensor<256x64xbf16>",
+])
+def test_dense_row_pitch_abi_does_not_discard_tensor_encodings(compiler, encoded_type):
+    graph = pitched_graph()
+    encoded = encoded_type[:-1] + ', "col_major">'
+    result = subprocess.run([str(compiler), "--tessera-graph-to-schedule",
+        "--tessera-schedule-to-tile", "--lower-tile-to-rocm=arch=gfx1201"],
+        input=graph.replace(encoded_type, encoded), text=True, capture_output=True)
+    assert result.returncode != 0, result.stdout
+    assert "unencoded" in result.stderr

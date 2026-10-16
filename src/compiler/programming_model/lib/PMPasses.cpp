@@ -271,6 +271,11 @@ static FailureOr<std::pair<Value, int64_t>> foldedInputStorage(Value value) {
   auto root = dyn_cast<BlockArgument>(storage);
   auto type = dyn_cast<RankedTensorType>(storage.getType());
   auto logical = dyn_cast<RankedTensorType>(value.getType());
+  if ((type && type.getEncoding()) || (logical && logical.getEncoding())) {
+    emitError(value.getLoc(),
+              "row-pitched folded storage requires unencoded dense roots and logical views");
+    return failure();
+  }
   if (!root || !isa<func::FuncOp>(root.getOwner()->getParentOp()) ||
       !root.getOwner()->isEntryBlock() || !type || !logical ||
       type.getRank() != 2 || logical.getRank() != 2 ||

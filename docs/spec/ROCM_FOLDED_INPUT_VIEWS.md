@@ -9,12 +9,12 @@ explicit approximate policy, wide-scale epilogue fallback and BF16 output.
 
 ## Semantic and storage boundary
 
-The Graph operands are logical tensor<MxKxui8> and tensor<NxKxui8>.
+The Graph operands are unencoded logical tensor<MxKxui8> and tensor<NxKxui8>.
 Each is a standard MLIR tensor.extract_slice of a function-entry dense
-storage argument, or its canonicalized identity entry argument: zero origin, unit steps, all storage rows. The parent row
+unencoded storage argument, or its canonicalized identity entry argument: zero origin, unit steps, all storage rows. The parent row
 width is LDA or LDB, at least K and divisible by 16. First delivery requires
 static positive extents, M > 64, K divisible by 64. Other origins, steps,
-partial rows and non-entry roots require a later view composition contract.
+partial rows, encoded tensor layouts and non-entry roots require a later view composition contract.
 
 Native scheduling derives row pitches from the storage types and includes
 them in schedule lineage. Tile bufferization extracts pointers from the
@@ -33,7 +33,10 @@ global row addressing uses LDA/LDB. The distinct package ABI is:
 Package guards bind exact storage shapes and scalar pitches, prevent signed
 64-bit span overflow, and retain the load-time hash of the logical weight
 region. Padding is neither arithmetic input nor part of that logical hash.
-Input roots remain alive through completion. Reserved row-reference code
+Input roots remain alive through completion. The logical A/B, scale vectors,
+result and physical A/B roots must be unencoded tensors. This dense ABI cannot
+discard a conflicting or unknown tensor encoding; another physical layout
+requires its own verified view/ABI contract. Reserved row-reference code
 255 remains invalid.
 
 Native image projection removes authored pitch values and carries

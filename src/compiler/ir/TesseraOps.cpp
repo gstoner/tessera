@@ -763,6 +763,9 @@ LogicalResult ScaledMatmulOp::verify() {
                     ? dyn_cast_or_null<StringAttr>(policy.get("execution_mode"))
                     : StringAttr();
     if (physical.getValue() == "rocm_mxfp4_w4a8_folded_row_pitched_v1") {
+      if (aType.getEncoding() || bType.getEncoding() || rType.getEncoding() ||
+          lhsScaleType.getEncoding() || rhsScaleType.getEncoding())
+        return emitOpError("row-pitched folded physical contract requires unencoded tensors");
       auto granularity = sl ? sl.getAs<StringAttr>("granularity") : StringAttr();
       auto accum = policy ? policy.getAs<StringAttr>("accum") : StringAttr();
       if (!sl || sl.size() != 3 || !block || block.size() != 2 ||

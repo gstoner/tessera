@@ -30,6 +30,20 @@ from .rocm_native import (
 )
 
 
+GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k_lda_ldb.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
+
+
+def checked_folded_input_pitches(pitches: tuple[int, int], m: int, n: int, k: int) -> tuple[int, int]:
+    """Validate the physical dense roots of logical [M,K] / [N,K] views."""
+    if (not isinstance(pitches, tuple) or len(pitches) != 2
+            or any(type(p) is not int or p < k or p % 16 for p in pitches)
+            or min(m, n, k) <= 0
+            or m * pitches[0] > (1 << 63) - 1
+            or n * pitches[1] > (1 << 63) - 1):
+        raise ValueError("folded input row pitches require aligned bounded dense storage spans")
+    return pitches
+
+
 GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI = (
     "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k."
     "e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
@@ -644,6 +658,7 @@ def _bind_folded_prefill_image(
     allow_approximate: bool,
     schedule: FoldedPrefillSchedule,
     safe_epilogue_scales: np.ndarray | None = None,
+    input_row_strides: tuple[int, int] | None = None,
 ) -> ROCMNativePackage:
     """Bind a checked physical payload/ABI to an already materialized image."""
     if not isinstance(schedule, FoldedPrefillSchedule):
@@ -673,7 +688,13 @@ def _bind_folded_prefill_image(
     )
     if safe_epilogue_scales is not None and safe_epilogue_scales.shape != (m,):
         raise ValueError("safe epilogue activation scales disagree with M")
-    abi_id = (GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI
+    if input_row_strides is not None:
+        checked_folded_input_pitches(input_row_strides, m, n, k)
+        if safe_certificate is not None:
+            raise ValueError("row-pitched inputs require the native full-K epilogue")
+    lda, ldb = input_row_strides or (k, k)
+    abi_id = (GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI if input_row_strides is not None else
+              GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI
               if safe_certificate is not None else GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI)
     if image.target != "rocm_gfx1201" or image.architecture != "gfx1201":
         raise ValueError("folded image must target gfx1201")
@@ -717,11 +738,12 @@ def _bind_folded_prefill_image(
         scalars=(
             ScalarArgument(5, "M", "int64"), ScalarArgument(6, "N", "int64"),
             ScalarArgument(7, "K", "int64"),
-        ),
+        ) + ((ScalarArgument(8, "LDA", "int64"), ScalarArgument(9, "LDB", "int64"))
+             if input_row_strides is not None else ()),
         shape_guards=(
-            ShapeGuard("a", 0, "eq", m), ShapeGuard("a", 1, "eq", k),
+            ShapeGuard("a", 0, "eq", m), ShapeGuard("a", 1, "eq", lda),
             ShapeGuard("b_folded", 0, "eq", n),
-            ShapeGuard("b_folded", 1, "eq", k),
+            ShapeGuard("b_folded", 1, "eq", ldb),
             ShapeGuard("a_scale", 0, "eq", m),
             ShapeGuard("row_reference", 0, "eq", n),
             ShapeGuard("output", 0, "eq", m), ShapeGuard("output", 1, "eq", n),
@@ -745,6 +767,7 @@ __all__ = [
     "FOLDED_EPILOGUE_SCHEDULES", "FOLDED_PREFILL_SCHEDULE_V1", "FOLDED_ROW_GUARDS",
     "FOLDED_STAGING_PREFETCH", "FOLDED_WEIGHT_LAYOUT", "FOLDED_WORKGROUP_MODES",
     "FoldedPrefillSchedule", "GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI",
+    "GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI", "checked_folded_input_pitches",
     "GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI", "MAX_RASTER_GROUP_M",
     "certify_folded_safe_scales", "emit_mxfp4_folded_prefill_hip",
     "folded_prefill_grid", "package_mxfp4_folded_prefill",

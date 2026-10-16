@@ -1,9 +1,17 @@
 ---
-last_updated: 2026-10-15
+last_updated: 2026-10-16
 audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+
+## GFX1201-FOLDED-INPUT-VIEWS-20261016 — preserve physical input row pitches
+
+Owner ROCM-MXFP4-W4A8-1 / LAYOUT-ALG-1.
+Synchronization key: GFX1201-FOLDED-INPUT-VIEWS-20261016.
+
+Implementation in progress: whole-row zero-origin unit-step tensor.extract_slice roots carry LDA/LDB through Schedule/Tile and a distinct gfx1201 Target ABI. Runtime span checks, numerical padding-poison cases, same-image attribution benchmarks and drift gates remain required. The existing contiguous route and physical schedules remain the control; no new performance selector is promoted.
+
 
 ## GFX1201-FOLDED-FRAGMENT-GROUPS-20261015 — native fragment read groups
 

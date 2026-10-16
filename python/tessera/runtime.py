@@ -4614,6 +4614,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
     )
     from tessera.compiler.rocm_mxfp4_folded import (
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI,
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
     )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
@@ -4638,6 +4639,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI,
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI,
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
         PACKED_FOLDED_TARGET_ABI_V1,
         # ROCM-FP8-BLOCKSCALE-1: compiler-generated W8A8 block scaling,
@@ -4674,6 +4676,7 @@ def _submit_rocm_mxfp4_w4a8(
     import hashlib
     from tessera.compiler.rocm_mxfp4_folded import (
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI,
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
         certify_folded_safe_scales,
     )
@@ -4691,7 +4694,17 @@ def _submit_rocm_mxfp4_w4a8(
     )
     m, n, k = (int(cast(int, scalars[name])) for name in ("M", "N", "K"))
     safe_folded = descriptor.abi_id == GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI
-    folded = descriptor.abi_id == GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI or safe_folded
+    pitched_folded = descriptor.abi_id == GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI
+    folded = descriptor.abi_id == GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI or safe_folded or pitched_folded
+    lda, ldb = k, k
+    if pitched_folded:
+        from tessera.compiler.rocm_mxfp4_folded import checked_folded_input_pitches
+        lda, ldb = checked_folded_input_pitches((cast(int, scalars.get("LDA")), cast(int, scalars.get("LDB"))), m, n, k)
+        if (descriptor.provenance.get("a_row_stride") != lda or
+                descriptor.provenance.get("b_row_stride") != ldb or
+                descriptor.provenance.get("input_view_policy") != "entry_root_zero_origin_unit_steps" or
+                descriptor.provenance.get("native_compiler_owned") is not True):
+            raise RuntimeError("folded row pitches disagree with the checked storage roots")
     packed_folded = descriptor.abi_id == PACKED_FOLDED_TARGET_ABI_V1
     native_folded = (folded or packed_folded) and descriptor.provenance.get("native_compiler_owned") is True
     if packed_folded and native_folded:
@@ -4785,10 +4798,10 @@ def _submit_rocm_mxfp4_w4a8(
             != "folded_row_reference_explicit_approximate"
         ):
             raise RuntimeError("folded MXFP4 launch requires its explicit policy and layout")
-        packed_shape = (n, k)
+        packed_shape = (n, ldb)
         scale_shape: tuple[int, ...] = (n,)
         for key, array in (
-            ("weight_sha256", packed_b),
+            ("weight_sha256", packed_b[:, :k] if pitched_folded else packed_b),
             ("row_reference_sha256", b_scale),
         ):
             expected = descriptor.provenance.get(key)
@@ -4839,7 +4852,7 @@ def _submit_rocm_mxfp4_w4a8(
     if bf16 is None:
         raise RuntimeError("MXFP4 W4A8 output requires ml_dtypes.bfloat16")
     if (
-        tuple(a.shape) != (m, k)
+        tuple(a.shape) != (m, lda)
         or tuple(packed_b.shape) != packed_shape
         or tuple(a_scale.shape) != (m,)
         or tuple(b_scale.shape) != scale_shape
@@ -4902,6 +4915,8 @@ def _submit_rocm_mxfp4_w4a8(
         else:
             values.extend(ctypes.c_void_p(pointer.value) for pointer in device)
         values.extend([ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k)])
+        if pitched_folded:
+            values.extend([ctypes.c_int64(lda), ctypes.c_int64(ldb)])
         arguments = (ctypes.c_void_p * len(values))(
             *[ctypes.cast(ctypes.byref(value), ctypes.c_void_p) for value in values]
         )
@@ -5013,6 +5028,7 @@ def _submit_rocm_gfx1151_native(
     )
     from tessera.compiler.rocm_mxfp4_folded import (
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI,
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
     )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
@@ -5044,6 +5060,7 @@ def _submit_rocm_gfx1151_native(
         GFX_MXFP4_W4A8_WMMA_ABI,
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI,
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
         PACKED_FOLDED_TARGET_ABI_V1,
     }:
@@ -6634,6 +6651,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
     )
     from tessera.compiler.rocm_mxfp4_folded import (
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI,
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
     )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
@@ -6682,6 +6700,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_MXFP4_W4A8_WMMA_ABI,
             GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
             GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI,
             GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
             PACKED_FOLDED_TARGET_ABI_V1,
             GFX1201_QUARK_W4A4_PROBE_ABI,

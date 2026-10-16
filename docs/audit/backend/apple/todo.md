@@ -3,8 +3,16 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-10-15
+last_updated: 2026-10-16
 ---
+
+## GFX1201-FOLDED-INPUT-VIEWS-20261016 — preserve physical input row pitches
+
+Owner ROCM-MXFP4-W4A8-1 / LAYOUT-ALG-1.
+Synchronization key: GFX1201-FOLDED-INPUT-VIEWS-20261016.
+
+Follow-up required for apple: the shared semantic view is standard MLIR, but this named physical ABI and kernel are gfx1201-specific. No sibling schedule, execution or AD parity is claimed; existing routes are unchanged. Apple consumes Metal/AIR storage and has no RDNA4 WMMA ABI; no Metal schedule or execution parity follows from these row pitches.
+
 
 ## GFX1201-FOLDED-FRAGMENT-GROUPS-20261015 — native fragment read groups
 

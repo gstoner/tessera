@@ -261,6 +261,31 @@ private:
 // ---------------------------------------------------------------------------
 
 namespace {
+// Whole-row, zero-origin, unit-step views retain entry storage roots.
+// The caller owns the roots throughout the launch; the output is fresh.
+static FailureOr<std::pair<Value, int64_t>> foldedInputStorage(Value value) {
+  auto slice = value.getDefiningOp<tensor::ExtractSliceOp>();
+  if (!slice)
+    return failure();
+  auto root = dyn_cast<BlockArgument>(slice.getSource());
+  auto type = dyn_cast<RankedTensorType>(slice.getSource().getType());
+  auto logical = dyn_cast<RankedTensorType>(value.getType());
+  if (!root || !isa<func::FuncOp>(root.getOwner()->getParentOp()) ||
+      !root.getOwner()->isEntryBlock() || !type || !logical ||
+      type.getRank() != 2 || logical.getRank() != 2 ||
+      !type.hasStaticShape() || !logical.hasStaticShape() ||
+      type.getElementType() != logical.getElementType() ||
+      type.getDimSize(0) != logical.getDimSize(0) ||
+      type.getDimSize(1) < logical.getDimSize(1) ||
+      type.getDimSize(1) <= 0 || type.getDimSize(1) % 16 != 0 ||
+      type.getDimSize(0) > INT64_MAX / type.getDimSize(1) ||
+      slice.getStaticOffsets() != ArrayRef<int64_t>({0, 0}) ||
+      slice.getStaticStrides() != ArrayRef<int64_t>({1, 1}) ||
+      slice.getStaticSizes() != logical.getShape())
+    return failure();
+  return std::pair<Value, int64_t>{slice.getSource(), type.getDimSize(1)};
+}
+
 struct MatmulSchedule {
   StringRef bLayout = "col_major";
   bool nvfp4TransposeA = false;
@@ -281,6 +306,7 @@ struct MatmulSchedule {
   int64_t scaleBlockK = 0;
   StringRef scaleFormat;
   StringRef physicalContract;
+  int64_t aRowStride = 0, bRowStride = 0;
   int64_t independentBatchRows = 0;
   int64_t independentBatchCount = 0;
   bool sharedBatchRhs = false;
@@ -886,10 +912,19 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   const bool packedMxfp4 =
       schedule.physicalContract == "rocm_mxfp4_w4a8_exact_v1";
   const bool foldedMxfp4 =
-      schedule.physicalContract == "rocm_mxfp4_w4a8_folded_prefill_v1";
+      schedule.physicalContract == "rocm_mxfp4_w4a8_folded_prefill_v1" ||
+      schedule.physicalContract == "rocm_mxfp4_w4a8_folded_row_pitched_v1";
   const bool packedFoldedMxfp4 =
       schedule.physicalContract == "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
   const bool foldedFamily = foldedMxfp4 || packedFoldedMxfp4;
+  if (schedule.physicalContract == "rocm_mxfp4_w4a8_folded_row_pitched_v1") {
+    auto a = foldedInputStorage(op->getOperand(0));
+    auto b = foldedInputStorage(op->getOperand(1));
+    if (failed(a) || failed(b))
+      return failure();
+    schedule.aRowStride = a->second;
+    schedule.bRowStride = b->second;
+  }
   if (foldedFamily || transposedB) {
     n = bounded(rhs.getDimSize(0), 1, schedule.dynamicN);
     if (failed(n))
@@ -1522,6 +1557,10 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
        Twine(schedule.blockK) + ";scale_k=" + Twine(schedule.scaleBlockK) +
        ";scale_format=" + schedule.scaleFormat +
        scaleN +
+       (schedule.aRowStride > 0
+            ? ";lda=" + std::to_string(schedule.aRowStride) +
+                  ";ldb=" + std::to_string(schedule.bRowStride)
+            : std::string()) +
        ";physical_contract=" + schedule.physicalContract +
        ";accum=" + schedule.accum + ";tile=" + Twine(schedule.tileM) + "x" +
        Twine(schedule.tileN) + "x" + Twine(schedule.tileK) +
@@ -3439,6 +3478,10 @@ struct GraphToSchedulePass
                          builder.getStringAttr(selected->scaleFormat));
       state.addAttribute("physical_contract",
                          builder.getStringAttr(selected->physicalContract));
+      if (selected->aRowStride > 0) {
+        state.addAttribute("a_row_stride", builder.getI64IntegerAttr(selected->aRowStride));
+        state.addAttribute("b_row_stride", builder.getI64IntegerAttr(selected->bRowStride));
+      }
       // ROCM-FP8-BLOCKSCALE-1: stated only when the W8A8 contract set it.
       if (selected->scaleBlockN > 0)
         state.addAttribute("scale_n",
@@ -4500,7 +4543,13 @@ struct ScheduleToTilePass
         auto value = dyn_cast<BoolAttr>(attr);
         return value && value.getValue() == expected;
       };
-      if (scheduled.getTileMAttr().getInt() != selected->tileM ||
+      auto strideMatches = [&](StringRef key, int64_t expected) {
+        auto attr = scheduled->getAttrOfType<IntegerAttr>(key);
+        return expected == 0 ? !scheduled->hasAttr(key) : attr && attr.getInt() == expected;
+      };
+      if (!strideMatches("a_row_stride", selected->aRowStride) ||
+          !strideMatches("b_row_stride", selected->bRowStride) ||
+          scheduled.getTileMAttr().getInt() != selected->tileM ||
           scheduled.getTileNAttr().getInt() != selected->tileN ||
           scheduled.getTileKAttr().getInt() != selected->tileK ||
           scheduled.getMacroTileMAttr().getInt() != selected->macroTileM ||
@@ -5052,8 +5101,13 @@ struct ScheduleToTilePass
         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer)
             .getResult();
       };
-      Value a = toPointer(graph->getOperand(0), lhsType);
-      Value b = toPointer(graph->getOperand(1), rhsType);
+      Value lhsStorage = graph->getOperand(0), rhsStorage = graph->getOperand(1);
+      if (selected->aRowStride > 0) {
+        lhsStorage = foldedInputStorage(lhsStorage)->first;
+        rhsStorage = foldedInputStorage(rhsStorage)->first;
+      }
+      Value a = toPointer(lhsStorage, cast<RankedTensorType>(lhsStorage.getType()));
+      Value b = toPointer(rhsStorage, cast<RankedTensorType>(rhsStorage.getType()));
       Value lhsScalePointer, rhsScalePointer;
       if (selected->scaleBlockK > 0) {
         auto lhsScaleType = cast<RankedTensorType>(graph->getOperand(2).getType());
@@ -5135,6 +5189,13 @@ struct ScheduleToTilePass
         kernelState.addOperands({a, b, biasPointer, d, m, n, k});
       else
         kernelState.addOperands({a, b, d, m, n, k});
+      if (selected->aRowStride > 0) {
+        kernelState.addOperands({
+            builder.create<arith::ConstantIntOp>(loc, selected->aRowStride, 64),
+            builder.create<arith::ConstantIntOp>(loc, selected->bRowStride, 64)});
+        kernelState.addAttribute("a_row_stride", builder.getI64IntegerAttr(selected->aRowStride));
+        kernelState.addAttribute("b_row_stride", builder.getI64IntegerAttr(selected->bRowStride));
+      }
       if (selected->target == "rocm" && selected->independentBatchCount > 0) {
         kernelState.addAttribute("batching", builder.getStringAttr(
             !selected->broadcastTypes.empty() ? "broadcast" :
@@ -5172,6 +5233,7 @@ struct ScheduleToTilePass
       }
       if (selected->scaleBlockK > 0 && !nvfp4) {
         const bool foldedMxfp4 =
+            selected->physicalContract == "rocm_mxfp4_w4a8_folded_row_pitched_v1" ||
             selected->physicalContract == "rocm_mxfp4_w4a8_folded_prefill_v1" ||
             selected->physicalContract ==
                 "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
@@ -5231,6 +5293,8 @@ struct ScheduleToTilePass
             "execution_mode",
             builder.getStringAttr(
                 (selected->physicalContract ==
+                     "rocm_mxfp4_w4a8_folded_row_pitched_v1" ||
+                 selected->physicalContract ==
                      "rocm_mxfp4_w4a8_folded_prefill_v1" ||
                  selected->physicalContract ==
                      "rocm_mxfp4_w4a8_packed_folded_prefill_v1")
@@ -5277,8 +5341,20 @@ struct ScheduleToTilePass
           loc, outType, output);
       scheduled.getScheduled().replaceAllUsesWith(result);
       scheduled.erase();
+      SmallVector<Operation *> consumedViews;
+      if (selected->aRowStride > 0)
+        for (Value value : graph->getOperands().take_front(2)) {
+          Operation *view = value.getDefiningOp();
+          if (!llvm::is_contained(consumedViews, view))
+            consumedViews.push_back(view);
+        }
       if (graph->use_empty())
         graph->erase();
+      // The kernel now reads the parent storage. Retire only consumed, dead
+      // view producers; retain any view still used by another Graph consumer.
+      for (Operation *view : consumedViews)
+        if (view->use_empty())
+          view->erase();
 
       for (schedule::ArtifactOp artifact : matchingArtifacts)
         artifact.erase();

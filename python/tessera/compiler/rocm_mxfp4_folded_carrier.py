@@ -7,7 +7,8 @@ import re
 
 from .rocm_mxfp4 import FoldedRowReference
 from .rocm_mxfp4_folded import (
-    GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+    GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI, GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI,
+    checked_folded_input_pitches,
     FoldedPrefillSchedule,
     _bind_folded_prefill_image,
 )
@@ -32,7 +33,6 @@ def package_folded_scaled_wmma_target_ir(
         raise TypeError("folded runtime_k must be a bool")
     if runtime_k and not runtime_mn:
         raise ValueError("folded runtime_k requires runtime_mn")
-    physical = "rocm_mxfp4_w4a8_folded_prefill_v1"
     directives = [
         line.strip() for line in target_ir.splitlines()
         if "tessera_rocm.scaled_wmma_gemm" in line
@@ -44,10 +44,15 @@ def package_folded_scaled_wmma_target_ir(
     if len(directives) != 1 or len(carriers) != 1:
         raise ValueError("folded packaging requires exactly one Tile and Target carrier")
     operation, tile_operation = directives[0], carriers[0]
+    physical = _target_string_attr(operation, "physical_contract")
+    pitched = physical == "rocm_mxfp4_w4a8_folded_row_pitched_v1"
+    if not pitched and physical != "rocm_mxfp4_w4a8_folded_prefill_v1":
+        raise ValueError("folded Target IR requires a supported physical_contract")
+    abi = GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI if pitched else GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
     for name, expected in {
-        "abi": "a_bfold_sa_rowref_d_m_n_k",
+        "abi": "a_bfold_sa_rowref_d_m_n_k_lda_ldb" if pitched else "a_bfold_sa_rowref_d_m_n_k",
         "physical_contract": physical,
-        "package_abi": GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+        "package_abi": abi,
         "scale_format": "e8m0_row_reference",
         "partial_combine": "row_reference_after_full_k",
         "k_step_schedule": "isolated_k_stage",
@@ -77,6 +82,14 @@ def package_folded_scaled_wmma_target_ir(
         )
     }
     m, n, k = integers["m"], integers["n"], integers["k"]
+    pitches = None
+    if pitched:
+        pitches = checked_folded_input_pitches(
+            (_target_integer_attr(operation, "a_row_stride"),
+             _target_integer_attr(operation, "b_row_stride")), m, n, k)
+        if any(_target_integer_attr(tile_operation, key) != value
+               for key, value in zip(("a_row_stride", "b_row_stride"), pitches)):
+            raise ValueError("folded Tile/Target row pitches disagree")
     if min(m, n, k) <= 0 or m <= 64 or k % 64:
         raise ValueError("folded Target IR requires M>64, positive N, K divisible by 64")
     for name, expected_int in {
@@ -140,11 +153,12 @@ def package_folded_scaled_wmma_target_ir(
         pipeline_name="tessera-lower-to-rocm",
         compiler_fingerprint=compiler, toolchain_fingerprint=toolchain,
         target_ir_digest=digest, binary_format="hsaco", payload=payload,
-        entry_points=(NativeEntryPoint(entry, GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI),),
+        entry_points=(NativeEntryPoint(entry, abi),),
         compile_state=state, device_libraries=libraries)
     package = _bind_folded_prefill_image(
         m, n, k, folded, image=image, entry=entry, source=native_target,
-        backend_ir=backend, allow_approximate=allow_approximate, schedule=schedule)
+        backend_ir=backend, allow_approximate=allow_approximate, schedule=schedule,
+        input_row_strides=pitches)
     descriptor = replace(
         package.descriptor,
         image_digest=image.image_digest,
@@ -152,6 +166,9 @@ def package_folded_scaled_wmma_target_ir(
             **package.descriptor.provenance,
             "materializer": "tessera_rocm.scaled_wmma_gemm",
             "physical_contract": physical,
+            **({"a_row_stride": pitches[0], "b_row_stride": pitches[1],
+                "input_view_policy": "entry_root_zero_origin_unit_steps",
+                "image_row_stride_policy": "runtime"} if pitches is not None else {}),
             "tile_ir_sha256": hashlib.sha256(tile_ir.encode()).hexdigest(),
             "target_ir_sha256": digest,
             "schedule_hash": target_hash,

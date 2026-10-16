@@ -36,7 +36,18 @@ inline bool isValidFoldedW4A8Target(Operation *op, bool allowRuntimeMN) {
     return a ? a.getValue() : llvm::StringRef();
   };
   bool packed = text("physical_contract") == "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
+  bool pitched = text("physical_contract") == "rocm_mxfp4_w4a8_folded_row_pitched_v1";
   int64_t m = integer("m"), n = integer("n"), k = integer("k");
+  bool rowStridesValid = pitched
+      ? (op->hasAttrOfType<UnitAttr>("runtime_row_strides")
+             ? allowRuntimeMN && integer("a_row_stride") == 0 &&
+                   integer("b_row_stride") == 0
+             : integer("a_row_stride") >= k && integer("b_row_stride") >= k &&
+                   integer("a_row_stride") > 0 && integer("b_row_stride") > 0 &&
+                   integer("a_row_stride") % 16 == 0 &&
+                   integer("b_row_stride") % 16 == 0)
+      : !op->hasAttr("a_row_stride") && !op->hasAttr("b_row_stride") &&
+            !op->hasAttr("runtime_row_strides");
   // The existing packed Schedule profile has one fixed physical schedule.
   // Defaults are native-owned; undeclared tuning attributes cannot override it.
   bool scheduleValid = packed
@@ -80,12 +91,15 @@ inline bool isValidFoldedW4A8Target(Operation *op, bool allowRuntimeMN) {
     if (!runtimeK)
       fragmentScheduleValid &= k >= 1024;
   }
-  return fragmentScheduleValid && arch && arch.getValue() == "gfx1201" && shapeValid &&
+  return rowStridesValid && fragmentScheduleValid && arch && arch.getValue() == "gfx1201" && shapeValid &&
       !op->hasAttr("runtime_shape") && kValid &&
       !text("name").empty() &&
-      (packed || text("physical_contract") == "rocm_mxfp4_w4a8_folded_prefill_v1") &&
-      text("abi") == (packed ? "a_bpacked_sa_scaleplane_d_m_n_k" : "a_bfold_sa_rowref_d_m_n_k") &&
-      text("package_abi") == (packed
+      (packed || pitched || text("physical_contract") == "rocm_mxfp4_w4a8_folded_prefill_v1") &&
+      text("abi") == (pitched ? "a_bfold_sa_rowref_d_m_n_k_lda_ldb"
+          : packed ? "a_bpacked_sa_scaleplane_d_m_n_k" : "a_bfold_sa_rowref_d_m_n_k") &&
+      text("package_abi") == (pitched
+          ? "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k_lda_ldb.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
+          : packed
           ? "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1"
           : "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1") &&
       text("scale_format") == (packed ? "e8m0_k32_plus_row_reference" : "e8m0_row_reference") &&

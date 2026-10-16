@@ -3,6 +3,7 @@
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Dialect/Tile/TileEpilogue.h"
 
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "llvm/ADT/StringMap.h"
@@ -614,9 +615,32 @@ LogicalResult TileEpilogueAttr::verify(
 }
 
 LogicalResult ScaledMatmulKernelOp::verify() {
-  if (getInputs().size() != 8)
+  auto contract = (*this)->getAttrOfType<StringAttr>("physical_contract");
+  const bool pitched = contract &&
+      contract.getValue() == "rocm_mxfp4_w4a8_folded_row_pitched_v1";
+  if (getInputs().size() != (pitched ? 10u : 8u))
     return emitOpError(
-        "requires A, B, lhs_scale, rhs_scale, D, M, N, and K operands");
+        "requires A, B, lhs_scale, rhs_scale, D, M, N, K and declared row pitches");
+  if (pitched) {
+    for (Value pointer : getInputs().take_front(5))
+      if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+        return emitOpError("row-pitched input and output storage must be !llvm.ptr");
+    for (Value dimension : getInputs().drop_front(5))
+      if (!dimension.getType().isInteger(64))
+        return emitOpError("row-pitched dimensions and leading dimensions must be i64");
+    auto k = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_k");
+    for (auto [name, index] : {std::pair<StringRef, unsigned>{"a_row_stride", 8},
+                              {"b_row_stride", 9}}) {
+      auto stride = (*this)->getAttrOfType<IntegerAttr>(name);
+      auto value = getInputs()[index].getDefiningOp<arith::ConstantIntOp>();
+      if (!k || !stride || stride.getInt() < k.getInt() ||
+          stride.getInt() % 16 || !value ||
+          value.value() != stride.getInt())
+        return emitOpError("row-pitched storage requires matching aligned i64 leading dimensions");
+    }
+  } else if ((*this)->hasAttr("a_row_stride") || (*this)->hasAttr("b_row_stride")) {
+    return emitOpError("row pitches require the named row-pitched physical contract");
+  }
   auto mma = (*this)->getAttrOfType<TileMmaDescAttr>("mma");
   if (!mma || mma.getScaleBlockK() <= 0 || mma.getScaleFormat().empty())
     return emitOpError(
@@ -631,9 +655,8 @@ LogicalResult ScaledMatmulKernelOp::verify() {
   auto scheduleScope = partial.getAs<StringAttr>("schedule_scope");
   auto crossStepMotion = partial.getAs<StringAttr>("cross_step_motion");
   auto physical = (*this)->getAttrOfType<StringAttr>("physical_contract");
-  const bool folded = physical &&
-                      physical.getValue() ==
-                          "rocm_mxfp4_w4a8_folded_prefill_v1";
+  const bool folded = pitched || (physical &&
+      physical.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1");
   const bool packedFolded = physical &&
                             physical.getValue() ==
                                 "rocm_mxfp4_w4a8_packed_folded_prefill_v1";

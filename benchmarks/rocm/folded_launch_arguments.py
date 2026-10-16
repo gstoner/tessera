@@ -20,4 +20,20 @@ def folded_launch_values(package, pointers, arrays, shape):
         if layout is not None or package.image.pipeline_name != HAND_EMITTED_HIP_PRODUCER:
             raise ValueError("legacy folded benchmark requires its HIP pointer contract")
         values = [ct.c_void_p(pointer.value) for pointer in pointers]
-    return values + [ct.c_int64(value) for value in shape]
+    dimensions = [ct.c_int64(value) for value in shape]
+    from tessera.compiler.rocm_mxfp4_folded import (
+        GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI, checked_folded_input_pitches,
+    )
+    if getattr(package.descriptor, "abi_id", None) == GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI:
+        if not native:
+            raise ValueError("row-pitched storage requires native codegen")
+        m, n, k = shape
+        lda, ldb = checked_folded_input_pitches(
+            (provenance.get("a_row_stride"), provenance.get("b_row_stride")), m, n, k)
+        if (arrays[0].shape != (m, lda) or arrays[1].shape != (n, ldb)
+                or arrays[2].shape != (m,) or arrays[3].shape != (n,)
+                or arrays[4].shape != (m, n)
+                or not all(array.flags.c_contiguous for array in arrays)):
+            raise ValueError("row-pitched resident buffers disagree with dense storage roots")
+        dimensions.extend([ct.c_int64(lda), ct.c_int64(ldb)])
+    return values + dimensions

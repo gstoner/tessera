@@ -38,3 +38,24 @@ def test_reject_crossed_contract(native,layout,pipeline):
     with pytest.raises(ValueError):
         folded_launch_values(package(native,layout,pipeline),
             [ct.c_void_p(4096)]*5,[np.zeros(1,np.uint8)]*5,(65,48,64))
+
+
+@pytest.mark.parametrize("bad_span", [False, True])
+def test_row_pitched_resident_values_bind_parent_spans(bad_span):
+    from tessera.compiler.rocm_mxfp4_folded import GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI
+    p = package(True, "expanded_memref", "tessera-lower-to-rocm")
+    p.descriptor.abi_id = GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI
+    p.descriptor.provenance.update(a_row_stride=80, b_row_stride=96)
+    arrays = [np.zeros((65, 80), np.uint8), np.zeros((48, 96), np.uint8),
+              np.zeros(65, np.float32), np.zeros(48, np.uint8), np.zeros((65, 48), np.uint16)]
+    pointers = [ct.c_void_p(0x1000 + i * 256) for i in range(5)]
+    if bad_span:
+        arrays[0] = np.zeros((65, 64), np.uint8)
+        with pytest.raises(ValueError, match="storage roots"):
+            folded_launch_values(p, pointers, arrays, (65, 48, 64))
+    else:
+        values = folded_launch_values(p, pointers, arrays, (65, 48, 64))
+        assert len(values) == 30
+        assert [v.value for v in values[-5:]] == [65, 48, 64, 80, 96]
+        assert values[3].value == 65 * 80
+        assert values[8].value == 48 * 96

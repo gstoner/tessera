@@ -145,7 +145,7 @@ struct WmmaGemmRequest {
   int64_t staticM = 0, staticN = 0, staticK = 0;
   bool runtimeMN = false, runtimeK = false, wholeM = false, wholeN = false;
   bool foldedFullK = false, foldedWaveGuard = false, foldedVectorScales = false;
-  bool foldedCuMode = false, foldedPacked = false;
+  bool foldedCuMode = false, foldedPacked = false, foldedRowPitched = false;
   bool foldedFragmentGroups = false;
   bool exactMXFP4 = false;
   int64_t foldedPrefetch = 0;
@@ -2013,7 +2013,8 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
                                 bool foldedWaveGuard = false,
                                 bool foldedVectorScales = false,
                                 StringRef scaleFormat = "fp32", bool foldedPacked = false,
-                                bool foldedFragmentGroups = false) {
+                                bool foldedFragmentGroups = false,
+                                bool foldedRowPitched = false) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
@@ -2052,6 +2053,8 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
   Value M = gpuFunc.getArgument(5);
   Value N = gpuFunc.getArgument(6);
   Value K = gpuFunc.getArgument(7);
+  Value aRowStride = foldedRowPitched ? gpuFunc.getArgument(8) : K;
+  Value bRowStride = foldedRowPitched ? gpuFunc.getArgument(9) : K;
   applyScaledBatchViews(b, loc, gpuFunc, scaleK, scaleN, M, N, K,
                         A, B, lhsScale, rhsScale, D);
   auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
@@ -2190,7 +2193,7 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
     bool packed = false;
   };
   auto planCopy = [&](Value src, Value dst, int64_t rows, Value origin,
-                      Value bound, bool whole) {
+                      Value bound, bool whole, Value rowStride) {
     CopyPlan plan{src, dst, rows * ldsStride, {}, {}, {}, {}, {}, false};
     const int64_t vectors = rows * vecsPerRow;
     const int64_t trips = (vectors + nthreads - 1) / nthreads;
@@ -2220,14 +2223,14 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
       plan.globalRows.push_back(gr);
       plan.kVectors.push_back(kVec);
       plan.rowBase.push_back(b.create<arith::AddIOp>(
-          loc, b.create<arith::MulIOp>(loc, gr, K), kVec));
+          loc, b.create<arith::MulIOp>(loc, gr, rowStride), kVec));
       plan.ldsDst.push_back(b.create<arith::AddIOp>(
           loc, b.create<arith::MulIOp>(loc, row, cStride), kVec));
     }
     return plan;
   };
-  CopyPlan planA = planCopy(A, ldsA, wgM, baseRow, M, wholeM);
-  CopyPlan planB = planCopy(B, ldsB, wgN, baseCol, N, wholeN);
+  CopyPlan planA = planCopy(A, ldsA, wgM, baseRow, M, wholeM, aRowStride);
+  CopyPlan planB = planCopy(B, ldsB, wgN, baseCol, N, wholeN, bRowStride);
   planB.packed = foldedPacked;
   const llvm::MaybeAlign align16(16);
 
@@ -3513,7 +3516,8 @@ struct GenerateWMMAGemmKernelPass
     module.walk([&](Operation *op) {
       auto contract = op->getAttrOfType<StringAttr>("physical_contract");
       if (op->getName().getStringRef() == "tessera_rocm.scaled_wmma_gemm" &&
-          contract && (contract.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1" ||
+          contract && (contract.getValue() == "rocm_mxfp4_w4a8_folded_row_pitched_v1" ||
+                       contract.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1" ||
                        contract.getValue() == "rocm_mxfp4_w4a8_packed_folded_prefill_v1"))
         foldedDirectives.push_back(op);
     });
@@ -3559,6 +3563,7 @@ struct GenerateWMMAGemmKernelPass
       request.bTransposed = true; request.staging = "lds";
       request.warps = 8; request.pipelineDepth = 1;
       request.foldedFullK = true;
+      request.foldedRowPitched = text("physical_contract") == "rocm_mxfp4_w4a8_folded_row_pitched_v1";
       request.foldedPacked = packed;
       request.foldedWaveGuard = rowGuard == "wave";
       // GFX1201-PACKED-VECTOR-SCALES-2026-10-06: paired forward/reverse
@@ -4174,6 +4179,8 @@ struct GenerateWMMAGemmKernelPass
         argTys.append({scaleTy, referenceTy});
       }
       argTys.append({dTy, idxTy, idxTy, idxTy});
+      if (request.foldedRowPitched)
+        argTys.append({idxTy, idxTy});
       if (hasBias && !portableContract)
         argTys.push_back(biasTy); // legacy directive ABI: trailing bias
       auto fnTy = b.getFunctionType(argTys, {});
@@ -4332,7 +4339,8 @@ struct GenerateWMMAGemmKernelPass
       } else if (scaledLds) {
         gpuFunc->setAttr("tessera.rocm.block_scale_contract",
                          b.getStringAttr(request.foldedFullK
-                             ? (request.foldedPacked ? "rocm_mxfp4_w4a8_packed_folded_prefill_v1"
+                             ? (request.foldedRowPitched ? "rocm_mxfp4_w4a8_folded_row_pitched_v1"
+                                : request.foldedPacked ? "rocm_mxfp4_w4a8_packed_folded_prefill_v1"
                                                      : "rocm_mxfp4_w4a8_folded_prefill_v1")
                              : request.scaleFormat == "e8m0"
                                  ? "rocm_mxfp8_e4m3_e8m0_k32_nk_v1"
@@ -4350,7 +4358,7 @@ struct GenerateWMMAGemmKernelPass
             outputTy, request.runtimeMN, request.wholeM, request.wholeN,
             request.runtimeK, request.foldedFullK, request.foldedWaveGuard,
             request.foldedVectorScales, request.scaleFormat, request.foldedPacked,
-            request.foldedFragmentGroups);
+            request.foldedFragmentGroups, request.foldedRowPitched);
       } else if (scaled) {
         gpuFunc->setAttr("tessera.rocm.block_scale_contract",
                          b.getStringAttr(

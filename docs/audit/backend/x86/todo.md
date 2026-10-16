@@ -1,11 +1,19 @@
 ---
-last_updated: 2026-10-15
+last_updated: 2026-10-16
 audit_role: plan
 plan_state: open
 owner: x86 backend
 target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
+
+## GFX1201-FOLDED-INPUT-VIEWS-20261016 — preserve physical input row pitches
+
+Owner ROCM-MXFP4-W4A8-1 / LAYOUT-ALG-1.
+Synchronization key: GFX1201-FOLDED-INPUT-VIEWS-20261016.
+
+Follow-up required for x86: the shared semantic view is standard MLIR, but this named physical ABI and kernel are gfx1201-specific. No sibling schedule, execution or AD parity is claimed; existing routes are unchanged. x86 uses CPU memrefs and its own native package ABI; RDNA4 FP8 WMMA/LDS scheduling does not apply to AVX-512 code generation.
+
 
 ## GFX1201-FOLDED-FRAGMENT-GROUPS-20261015 — native fragment read groups
 

@@ -3846,7 +3846,10 @@ struct LowerTileToROCMPass
             physical.getValue() == "rocm_mxfp4_w4a8_exact_v1";
         const bool foldedMxfp4 =
             physical &&
-            physical.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1";
+            (physical.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1" ||
+             physical.getValue() == "rocm_mxfp4_w4a8_folded_row_pitched_v1");
+        const bool pitchedFolded = physical &&
+            physical.getValue() == "rocm_mxfp4_w4a8_folded_row_pitched_v1";
         const bool packedFoldedMxfp4 =
             physical && physical.getValue() ==
                             "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
@@ -3894,7 +3897,7 @@ struct LowerTileToROCMPass
         }
         if (!desc || !partial || !combine || !scheduleScope ||
             !crossStepMotion || !epilogue || !parent ||
-            op->getNumOperands() != 8 || arch != "gfx1201" ||
+            op->getNumOperands() != (pitchedFolded ? 10u : 8u) || arch != "gfx1201" ||
             desc.getFamily() != "wmma" || desc.getM() != 16 ||
             desc.getN() != 16 || desc.getK() != 16 ||
             desc.getAccType() != "f32" || desc.getScaleBlockK() <= 0 ||
@@ -3947,11 +3950,16 @@ struct LowerTileToROCMPass
         state.addAttribute(
             "abi", builder.getStringAttr(
                        fp8W8A8NK ? "a_bnk_lhs_scale_rhs_scale_d_m_n_k"
+                       : pitchedFolded ? "a_bfold_sa_rowref_d_m_n_k_lda_ldb"
                        : packedFoldedMxfp4 ? "a_bpacked_sa_scaleplane_d_m_n_k"
                                     : foldedMxfp4 ? "a_bfold_sa_rowref_d_m_n_k"
                                     : "a_b_lhs_scale_rhs_scale_d_m_n_k"));
         for (StringRef key : {"batching", "batch_count", "batch_operands", "batch_result", "transposeA"})
           if (Attribute value = op->getAttr(key)) state.addAttribute(key, value);
+        if (pitchedFolded) {
+          state.addAttribute("a_row_stride", op->getAttr("a_row_stride"));
+          state.addAttribute("b_row_stride", op->getAttr("b_row_stride"));
+        }
         state.addAttribute("m", problemM);
         state.addAttribute("n", problemN);
         state.addAttribute("k", problemK);
@@ -4052,7 +4060,9 @@ struct LowerTileToROCMPass
         state.addAttribute(
             "package_abi",
             builder.getStringAttr(
-                packedFoldedMxfp4
+                pitchedFolded
+                    ? "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k_lda_ldb.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
+                    : packedFoldedMxfp4
                     ? "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1"
                     : foldedMxfp4
                     ? "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"

@@ -1,3 +1,8 @@
+---
+last_updated: 2026-10-16
+audit_role: reference
+---
+
 # SM120 prepared attention row-residual owner
 
 Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.

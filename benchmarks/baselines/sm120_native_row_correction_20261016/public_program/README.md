@@ -67,3 +67,23 @@ python -m pytest -q tests/device/nvidia/test_public_attention_rows_program.py
 # Decompress the frozen recorder into the owning scratch directory, then:
 python record_public_row_benchmark.py --output public-row-ab.json
 ```
+
+
+## Final publication gates
+
+Production compiler-route: 1,225 passed, zero skips. Existing typed public
+reverse: 172 passed; its two unset-flag stream skips are retained in the first
+receipt, and the separate flagged stream-isolation receipt proves both executed.
+Final row program: 71 passed; focused compatibility/registry: 448 passed.
+Ruff and the zero-error mypy ratchet pass. All nine audit commands pass.
+
+The first broad non-slow unit run has 26,039 passes, 5,902 skips and five failures.
+These identify a missing spec date, missing root packet index and the exact six-op
+ODS inventory delta. The authored omissions are fixed, all six new operations
+are pinned by name, and all six have compiler consumers. All five affected test
+modules then pass 806 cases with zero skips. The initial full receipt and repair
+receipt are both retained; the initial run is not labelled fully green. Exact-head
+GitHub CI remains a required publication gate.
+
+Unchanged frozen validation sources reuse the measured source snapshot; changed
+files have separate validation snapshots. record.json maps every source explicitly.

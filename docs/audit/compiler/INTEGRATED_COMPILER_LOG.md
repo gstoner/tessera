@@ -12811,7 +12811,11 @@ Eight matched public A/B rows separate stage/device/public scopes: Sq7/17 Sk129
 improve completed public calls 1.67-4.97x and device windows 3.53-10.25x.
 Tiny regressions remain, so prepass is explicit and default inline is unchanged.
 All four backend queues assess the shared serialization/runtime contract.
-Remaining: broad required gates/CI, automatic policy, dynamic/layout/composition,
+Required production proof passes 1225 cases. The first broad unit run has 26039
+passes,5902 skips and five authored drift failures; all five affected modules
+pass806 cases after repairing date/index and exact-six-op inventory. Nine audits,
+Ruff and zero-error mypy pass. Original broad and repair receipts are retained.
+Remaining: exact-head CI, automatic policy, dynamic/layout/composition,
 and the full original five-slice completion audit. No sibling proof transfers.
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/public_program/README.md.
 <!-- entry-fields:end -->

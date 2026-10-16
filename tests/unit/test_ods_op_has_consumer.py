@@ -250,6 +250,12 @@ def test_scan_parses_every_ods_form() -> None:
         "tile.load_element",
         "tile.store_element",
         "tile.row_region_kernel",
+        "tessera_attn.checkpoint_row_correction",
+        "tessera_attn.checkpoint_backward_rows",
+        "schedule.attention_row_correction",
+        "schedule.attention_backward_rows",
+        "tile.attention_row_correction_kernel",
+        "tile.attention_backward_rows_kernel",
         "tessera_nvidia.row_region_kernel",
         "tile.tri_solve",                  # Tile_LinalgOp -> Tile_Op -> Op
         "tessera_solver.trsm",             # def TrsmOp : Op<Tessera_Solver_Dialect, "trsm">
@@ -289,7 +295,8 @@ def test_scan_parses_every_ods_form() -> None:
 #: 673 -> 674: native tile.transpose_kernel carrier with Schedule/ROCm consumers.
 #: 676 -> 679: native NVFP4 expansion Graph, Tile and ROCm Target records.
 # Four typed scalar Tile operations and the NVIDIA row-region consumer.
-_DECLARED_OP_RECORDS = 684
+# Six native attention row products: Graph, Schedule and Tile producer/consumer.
+_DECLARED_OP_RECORDS = 690
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:

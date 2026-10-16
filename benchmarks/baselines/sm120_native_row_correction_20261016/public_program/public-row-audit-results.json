@@ -1,0 +1,93 @@
+[
+  {
+    "name": "plan",
+    "command": [
+      "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+      "scripts/check_compiler_plan.py"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "generated",
+    "command": [
+      "bash",
+      "scripts/check_generated_docs.sh"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "claim_lint",
+    "command": [
+      "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+      "-m",
+      "tessera.compiler.audit",
+      "claim_lint"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "surface_examples",
+    "command": [
+      "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+      "-m",
+      "tessera.cli.surface_audit",
+      "--surface=examples",
+      "--check"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "surface_benchmarks",
+    "command": [
+      "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+      "-m",
+      "tessera.cli.surface_audit",
+      "--surface=benchmarks",
+      "--check"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "surface_research",
+    "command": [
+      "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+      "-m",
+      "tessera.cli.surface_audit",
+      "--surface=research",
+      "--check"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "surface_tools",
+    "command": [
+      "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+      "-m",
+      "tessera.cli.surface_audit",
+      "--surface=tools",
+      "--check"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "surface_tests",
+    "command": [
+      "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+      "-m",
+      "tessera.cli.surface_audit",
+      "--surface=tests",
+      "--check"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "surface_claims",
+    "command": [
+      "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+      "-m",
+      "tessera.cli.claim_lint",
+      "--check"
+    ],
+    "exit_code": 0
+  }
+]

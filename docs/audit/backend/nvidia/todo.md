@@ -6,6 +6,24 @@ target: nvidia_sm120
 last_updated: 2026-10-16
 ---
 
+## SM120-NATIVE-ROW-CORRECTION-20261016 — native residual producer
+
+Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: SM120-NATIVE-ROW-CORRECTION-20261016.
+
+Implementation in progress. A compiler-internal pure tensor operation defines
+FP32 probability-weighted row correction independently of rounded saved O.
+This is not a public Graph API, new dtype or executable target admission.
+
+Initial internal tensor contract: 61 host-free compiler/registry cases pass.
+Native AD product projection, Schedule/Tile producer and consumer, checked
+workspace lifetime/ABI, replay and owning-device numerical/timing gates remain
+in progress. No execution support or schedule default is promoted.
+
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/contract/README.md.
+
+
+
 ## SM120-REVERSE-ARTIFACT-REUSE-20261016 — private compiled identity
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
@@ -23,6 +41,8 @@ pass; all twelve audit lanes pass. Native row-correction reuse and the wider
 five-slice program remain open.
 
 Evidence: benchmarks/baselines/sm120_reverse_artifact_reuse_20261016/README.md.
+Delivered in PR #957, merged as 24f8f61b199 after required CI/review passed on
+558fc6c328. Its frozen evidence retains the original source and skip scope.
 
 
 

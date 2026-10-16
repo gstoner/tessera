@@ -685,6 +685,66 @@ static mlir::LogicalResult verifyCheckpointTensorOp(mlir::Operation *op, bool ba
 mlir::LogicalResult CheckpointForwardOp::verify() { return verifyCheckpointTensorOp(*this,false); }
 mlir::LogicalResult CheckpointBackwardOp::verify() { return verifyCheckpointTensorOp(*this,true); }
 
+mlir::LogicalResult CheckpointRowCorrectionOp::verify() {
+  using namespace mlir;
+  Operation *op = getOperation();
+  auto biasAttr = op->getAttrOfType<BoolAttr>("bias");
+  auto seedAttr = op->getAttrOfType<BoolAttr>("lse_cotangent");
+  if (!biasAttr || !seedAttr)
+    return emitOpError("row correction requires explicit boolean bias and LSE seed policies");
+  bool bias = biasAttr.getValue(), seeded = seedAttr.getValue();
+  if (op->getNumOperands() != 5 + unsigned(bias) + unsigned(seeded))
+    return emitOpError("row correction input count disagrees with bias/LSE seed roles");
+  SmallVector<RankedTensorType> types;
+  for (Type type : op->getOperandTypes()) {
+    auto tensor = dyn_cast<RankedTensorType>(type);
+    if (!tensor || tensor.getEncoding() ||
+        llvm::any_of(tensor.getShape(), [](int64_t dim) { return dim <= 0; }))
+      return emitOpError("row correction requires positive static unencoded tensor shapes");
+    types.push_back(tensor);
+  }
+  auto dout = types[0], q = types[1], k = types[2], v = types[3];
+  if (dout.getRank() != 4 || q.getRank() != 4 || k.getRank() != 4 || v.getRank() != 4)
+    return emitOpError("row correction dO/Q/K/V must have rank four");
+  Type storage = q.getElementType();
+  if ((!storage.isF16() && !storage.isBF16()) || k.getElementType() != storage ||
+      v.getElementType() != storage ||
+      (dout.getElementType() != storage && !dout.getElementType().isF32()))
+    return emitOpError("row correction requires homogeneous half Q/K/V and matching half or f32 dO");
+  int64_t b = q.getDimSize(0), hq = q.getDimSize(1), sq = q.getDimSize(2), d = q.getDimSize(3);
+  int64_t hkv = k.getDimSize(1), sk = k.getDimSize(2), dv = v.getDimSize(3);
+  auto tensor = [&](ArrayRef<int64_t> shape, Type element) {
+    return RankedTensorType::get(shape, element);
+  };
+  auto row = tensor({b, hq, sq}, Float32Type::get(op->getContext()));
+  if (hq % hkv || k != tensor({b, hkv, sk, d}, storage) ||
+      v != tensor({b, hkv, sk, dv}, storage) ||
+      dout != tensor({b, hq, sq, dv}, dout.getElementType()) ||
+      types[4 + unsigned(bias)] != row || op->getResult(0).getType() != row ||
+      (seeded && types.back() != row))
+    return emitOpError("row correction data, LSE, seed or result shapes disagree");
+  if (bias) {
+    auto physical = types[4];
+    SmallVector<int64_t, 4> scores{b, hq, sq, sk};
+    if (physical.getRank() != 4 || !physical.getElementType().isF32())
+      return emitOpError("row correction bias requires rank-four f32 storage");
+    for (unsigned axis = 0; axis < 4; ++axis)
+      if (physical.getDimSize(axis) != 1 && physical.getDimSize(axis) != scores[axis])
+        return emitOpError("row correction bias axes must broadcast to [B,Hq,Sq,Sk]");
+  }
+  auto scale = op->getAttrOfType<FloatAttr>("scale");
+  if (!scale || !scale.getType().isF32() || !scale.getValue().isFinite() ||
+      scale.getValue().isNegative() || scale.getValue().isZero())
+    return emitOpError("row correction scale must be finite positive f32");
+  for (NamedAttribute attr : op->getAttrs()) {
+    auto name = attr.getName().strref();
+    if (name != "scale" && name != "causal" && name != "bias" &&
+        name != "lse_cotangent" && name != "schedule.artifact_hash")
+      return emitOpError("row correction has an unsupported policy attribute: ") << name;
+  }
+  return success();
+}
+
 mlir::LogicalResult CheckpointJVPOp::verify() {
   using namespace mlir;
   const bool bias = getNumOperands() == 10;

@@ -12687,7 +12687,7 @@ Evidence: [Typed backward contract](../../spec/SM120_TYPED_ATTENTION_BACKWARD_CO
 ### 2026-10-16 — private SM120 reverse artifact identity reuse
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
-PRs: pending; sync SM120-REVERSE-ARTIFACT-REUSE-20261016.
+PRs: [#957](https://github.com/gstoner/tessera/pull/957); sync SM120-REVERSE-ARTIFACT-REUSE-20261016.
 Outcome: existing compiled reverse adapter retains a private hashed artifact and
 makes detached per-call snapshots. Ordinary dispatcher, checked ABI and native
 MLIR/LLVM-generated programs remain in control. Ten ownership/cache regressions
@@ -12699,7 +12699,8 @@ Validation: 184 unique RTX5070 cases pass across primary and explicit-switch
 rerun; 26,037 required unit cases pass (5,903 host-lane skips), 1,061
 compiler-route cases pass with zero skips and all twelve audit lanes pass.
 The measured production source is unchanged; validation.json retains scope.
-Remaining: publication CI/review and native row-correction producer reuse;
+Delivery: PR957 required CI/review passed on 558fc6c328; merged as 24f8f61b199.
+Remaining: native row-correction producer reuse;
 typed capture/dynamic/composed reverse, half JVP, wider masks/layouts and the full
 five-slice program remain open. All four backend plans assess the private scope.
 Evidence: benchmarks/baselines/sm120_reverse_artifact_reuse_20261016/README.md.

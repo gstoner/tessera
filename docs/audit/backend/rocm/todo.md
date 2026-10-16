@@ -5,6 +5,24 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## SM120-NATIVE-ROW-CORRECTION-20261016 — native residual producer
+
+Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: SM120-NATIVE-ROW-CORRECTION-20261016.
+
+Implementation in progress. A compiler-internal pure tensor operation defines
+FP32 probability-weighted row correction independently of rounded saved O.
+This is not a public Graph API, new dtype or executable target admission.
+
+Follow-up required for rocm: the shared internal tensor semantic contract
+is declared, but physical lowering/owner integration is initially SM120 work.
+No NVIDIA schedule or execution evidence transfers. Compiler parser proof is
+not rocm numerical or runtime parity.
+
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/contract/README.md.
+
+
+
 ## SM120-REVERSE-ARTIFACT-REUSE-20261016 — private compiled identity
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
@@ -18,10 +36,15 @@ guards and compiler/source/wrt/LRU/fork boundaries remain active.
 Not applicable to rocm physical execution: the private cache belongs only to
 the SM120 attention family adapter; shared runtime and ABI definitions are unchanged.
 No NVIDIA numerical or timing result transfers to this backend.
-The Super-Bear unit run skipped ROCm lit at its stale-tool guard; fresh ROCm
-lit evidence is missing for that host and is not inferred from NVIDIA gates.
+The frozen Super-Bear unit run skipped ROCm lit at its stale-tool guard.
+A subsequent real LLVM/MLIR 23.1.1 assertions build on unchanged source 558fc6c328
+produces identical tool bytes and passes the lit wrapper with zero skips and
+ci_require_executed. This repairs tool freshness, not ROCm GPU execution; the
+frozen original receipt is unchanged.
 
 Evidence: benchmarks/baselines/sm120_reverse_artifact_reuse_20261016/README.md.
+Delivered in PR #957, merged as 24f8f61b199 after required CI/review passed on
+558fc6c328. Its frozen evidence retains the original source and skip scope.
 
 
 

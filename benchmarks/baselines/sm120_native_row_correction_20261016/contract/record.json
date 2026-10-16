@@ -1,0 +1,26 @@
+{
+  "scope": "host-free parser/verifier and registry compatibility only; no Schedule/Tile lowering, runtime execution, numerical or performance claim",
+  "parent_main": "24f8f61b199d67f4a76311b2fbc5c4e7b824a79f",
+  "source_sha256": {
+    "src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td": "569371e09f55d9e0388d46b74fa64a901dbebbb41cec91eff7451e5e6f78e885",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "17e9073da064cc4c8891426047fb2a440e298106600f41ab7aa3f192986c5eb5",
+    "tests/unit/test_native_attention_row_correction.py": "2730fa97a388678e6d9a77f34fd130f60116b4dd2b05d1f5a4f2fcac0001a71e"
+  },
+  "compiler_sha256": "c6867b57647c0b8fd09e988730f5f15829127f5673cc568dd1582c61c6ffd692",
+  "llvm_version": "23.1.1",
+  "llvm_assertions": "ON",
+  "passed": 61,
+  "skipped": 0,
+  "failed": 0,
+  "new_contract_cases": 31,
+  "control": "parent compiler refuses the new internal operation as unregistered",
+  "command": "python -m pytest -q tests/unit/test_native_attention_row_correction.py tests/unit/test_operator_registry_foundation.py tests/unit/test_tensor_attributes_dtype_audit.py",
+  "sha256": {
+    "Attn.td.gz": "c9d6bd6d9619bea5ae20fc566e6099a236a83980d8ed40c9f150d8d010220e74",
+    "AttnOps.cpp.gz": "a386634eba1fffa28d3f542064d27cc8a4779a9a6ed3f02d0a5051ab6b59439b",
+    "contract.log.gz": "f2108856582edc35939246941835c057ff2f4998297ac27986e276ac7e28d6cc",
+    "contract.xml.gz": "956f3bae764a1eb01446454b7ff5ff535b77ff74cdca499437b8bb0f6ec3b20e",
+    "parent-contract-probe.log.gz": "f3dd550cb6756b0839ba9ab659573ca0a81265cdf1374b366305412ecf16b727",
+    "test_native_attention_row_correction.py.gz": "1e2481f16890780efcc838df8717e3b3c9859df08e97709b5eb3bc48ca229ebd"
+  }
+}

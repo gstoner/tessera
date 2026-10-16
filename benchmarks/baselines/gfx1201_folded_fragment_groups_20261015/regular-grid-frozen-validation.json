@@ -1,0 +1,189 @@
+{
+  "state": "passed",
+  "revision": "3b2fa3b70146fb04c597116230ded25bf6863321",
+  "source_clean_before": true,
+  "pid": 577333,
+  "started_utc": "2026-10-16T00:02:03.112935+00:00",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "phases": [
+    {
+      "name": "focused",
+      "command": [
+        "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/unit/test_rocm_folded_native_target.py",
+        "tests/unit/test_rocm_mxfp4_folded.py",
+        "tests/unit/test_rocm_mxfp4_folded_evidence.py",
+        "tests/unit/test_rocm_mxfp4_folded_frontend.py",
+        "tests/unit/test_rocm_mxfp4_folded_k64_evidence.py",
+        "tests/unit/test_rocm_mxfp4_folded_phase_evidence.py",
+        "tests/unit/test_rocm_mxfp4_folded_phases.py",
+        "tests/unit/test_rocm_mxfp4_folded_schedule.py",
+        "tests/unit/test_rocm_mxfp4_packed_folded.py",
+        "tests/unit/test_rocm_mxfp4_packed_folded_evidence.py",
+        "tests/unit/test_tile_folded_scale_native.py",
+        "tests/unit/test_folded_launch_arguments.py",
+        "tests/unit/test_diagnostic_code_registry.py",
+        "tests/unit/test_pass_metadata.py",
+        "tests/unit/test_audit_docs.py",
+        "tests/unit/test_compiler_plan_routing.py"
+      ],
+      "state": "passed",
+      "log": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/production-grid-proof/focused.log",
+      "returncode": 0,
+      "duration_seconds": 3.7310116890002973,
+      "tail": "........................................................................ [ 15%]\n........................................................................ [ 31%]\n........................................................................ [ 47%]\n........................................................................ [ 62%]\n........................................................................ [ 78%]\n........................................................................ [ 94%]\n..........................                                               [100%]\n458 passed in 3.11s\n"
+    },
+    {
+      "name": "device",
+      "command": [
+        "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/device/rocm/test_mxfp4_folded_native_package.py"
+      ],
+      "state": "passed",
+      "log": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/production-grid-proof/device.log",
+      "returncode": 0,
+      "duration_seconds": 26.17840444900503,
+      "tail": "............................................                             [100%]\n44 passed in 25.82s\n"
+    },
+    {
+      "name": "policy",
+      "command": [
+        "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/production-grid-proof/verify_policy.py"
+      ],
+      "state": "passed",
+      "log": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/production-grid-proof/policy.log",
+      "returncode": 0,
+      "duration_seconds": 14.936513748994912,
+      "tail": "261015/fresh-reference/tessera-opt is older than 4 generator source(s) -- newest src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).\n  warn_if_generator_is_stale(tool)\n(256, 8192, 1024) strategy True preserved old image False\n(256, 16384, 5120) strategy True preserved old image False\n(512, 8192, 5120) strategy True preserved old image False\n(1024, 16384, 5120) strategy True preserved old image False\n(128, 4096, 256) strategy False preserved old image True\n(200, 1040, 1536) strategy False preserved old image True\n(256, 1024, 8192) strategy False preserved old image True\n(256, 8192, 512) strategy False preserved old image True\n(256, 4096, 960) strategy False preserved old image True\n(256, 4096, 1024) strategy False preserved old image True\n(256, 4096, 2048) strategy False preserved old image True\n(256, 4096, 3072) strategy False preserved old image True\n(256, 4096, 5120) strategy False preserved old image True\n(256, 8208, 5120) strategy False preserved old image True\n(256, 12288, 1088) strategy True preserved old image False\n(256, 8256, 1024) strategy False preserved old image True\n(256, 8256, 1088) strategy False preserved old image True\n(256, 8704, 4096) strategy False preserved old image True\n(256, 10240, 1024) strategy False preserved old image True\nPASS 19 selection/image checks, 4 negative admissions, 2 native image-reuse pairs\n"
+    },
+    {
+      "name": "format_images",
+      "command": [
+        "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/production-grid-proof/compare_images.py"
+      ],
+      "state": "passed",
+      "log": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/production-grid-proof/format_images.log",
+      "returncode": 0,
+      "duration_seconds": 4.066063200007193,
+      "tail": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_native.py:1615: RuntimeWarning: /home/angstorms/scratch/gfx1201-m256-attribution-20261015/fresh-reference/tessera-opt is older than 4 generator source(s) -- newest src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).\n  warn_if_generator_is_stale(tool)\nIdentical compiled Tile/Target/image/ABI controls: 12\n"
+    },
+    {
+      "name": "forward",
+      "command": [
+        "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+        "benchmarks/rocm/record_gfx1201_folded_native_package.py",
+        "--tessera-opt",
+        "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/tools/tessera-opt/tessera-opt",
+        "--native-reference-opt",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/fresh-reference/tessera-opt",
+        "--llvm-bin",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/llvm-tools/bin",
+        "--hip-graph-windows",
+        "--trials",
+        "7",
+        "--output",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/production-grid-proof/forward.json",
+        "--case",
+        "prefill:256x8192x1024",
+        "--case",
+        "prefill:256x12288x1088",
+        "--case",
+        "prefill:768x8192x1536",
+        "--case",
+        "prefill:1024x16384x5120",
+        "--case",
+        "prefill:256x4096x2048",
+        "--case",
+        "prefill:256x8256x1088",
+        "--case",
+        "prefill:256x8704x4096",
+        "--case",
+        "prefill:256x10240x1024"
+      ],
+      "state": "passed",
+      "log": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/production-grid-proof/forward.log",
+      "returncode": 0,
+      "duration_seconds": 29.74390754601336,
+      "tail": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_native.py:1615: RuntimeWarning: /home/angstorms/scratch/gfx1201-m256-attribution-20261015/fresh-reference/tessera-opt is older than 4 generator source(s) -- newest src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).\n  warn_if_generator_is_stale(tool)\n[256, 8192, 1024] native/control device ratio 1.069279880363511\n[256, 12288, 1088] native/control device ratio 1.0503040834057342\n[768, 8192, 1536] native/control device ratio 0.9902779549838262\n[1024, 16384, 5120] native/control device ratio 0.9891863966389194\n[256, 4096, 2048] native/control device ratio 1.0777651975837068\n[256, 8256, 1088] native/control device ratio 1.0760805776620932\n[256, 8704, 4096] native/control device ratio 1.049247394259262\n[256, 10240, 1024] native/control device ratio 1.0597292620029686\n"
+    },
+    {
+      "name": "reverse",
+      "command": [
+        "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+        "benchmarks/rocm/record_gfx1201_folded_native_package.py",
+        "--tessera-opt",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/fresh-reference/tessera-opt",
+        "--native-reference-opt",
+        "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/tools/tessera-opt/tessera-opt",
+        "--llvm-bin",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/llvm-tools/bin",
+        "--hip-graph-windows",
+        "--trials",
+        "7",
+        "--output",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/production-grid-proof/reverse.json",
+        "--case",
+        "prefill:256x10240x1024",
+        "--case",
+        "prefill:256x8704x4096",
+        "--case",
+        "prefill:256x8256x1088",
+        "--case",
+        "prefill:256x4096x2048",
+        "--case",
+        "prefill:1024x16384x5120",
+        "--case",
+        "prefill:768x8192x1536",
+        "--case",
+        "prefill:256x12288x1088",
+        "--case",
+        "prefill:256x8192x1024"
+      ],
+      "state": "passed",
+      "log": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/production-grid-proof/reverse.log",
+      "returncode": 0,
+      "duration_seconds": 29.53116372799559,
+      "tail": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_native.py:1615: RuntimeWarning: /home/angstorms/scratch/gfx1201-m256-attribution-20261015/fresh-reference/tessera-opt is older than 4 generator source(s) -- newest src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).\n  warn_if_generator_is_stale(tool)\n[256, 10240, 1024] native/control device ratio 1.0571333541139531\n[256, 8704, 4096] native/control device ratio 1.055716164767699\n[256, 8256, 1088] native/control device ratio 1.0853274955045564\n[256, 4096, 2048] native/control device ratio 1.0776126203616312\n[1024, 16384, 5120] native/control device ratio 1.0246320466537073\n[768, 8192, 1536] native/control device ratio 1.036884363455044\n[256, 12288, 1088] native/control device ratio 1.0644427135174253\n[256, 8192, 1024] native/control device ratio 1.0980655627314744\n"
+    }
+  ],
+  "tools": {
+    "core": {
+      "path": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/tools/tessera-opt/tessera-opt",
+      "sha256": "4e5eeed3ea09f496d6f67a144338ae647281618a2d0503e572ba9fbf7139fb6a",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions."
+    },
+    "rocm": {
+      "path": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt",
+      "sha256": "a7faec48fccd454d2a745df7c8d17dd6076c88940c091b8e03146f91f652e318",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions."
+    },
+    "baseline": {
+      "path": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/fresh-reference/tessera-opt",
+      "sha256": "3958d87d982485537ffb13ec8e8357c2c94e6270ff2b62c102bdf055b1db929a",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions."
+    }
+  },
+  "source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "f91b755be30a664d4bd38670e8ca1db630b1147979c064a5cf8e0bf8f8b9874b",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "ec49445164c8c3bc8bab9b7b312c2381610d2ba5019dd837b9e9d0593805f914",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMFoldedW4A8Contract.h": "a84ed82197bd3e1105e346cfd5aab466b237a695e14c737cb0cd09c95e0bf05c",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "b784f500d23854e4c6cc6c8ebfec2a8b0b8b6f7212d5c8999eda4727aba48896",
+    "python/tessera/compiler/rocm_mxfp4_folded_carrier.py": "777bd2592ce595aeecd1018dc679914b604bdfbb697bf0be05ea88de47020b3e",
+    "python/tessera/compiler/rocm_mxfp4_folded_frontend.py": "15a7a275072006aa137ad400797e688277c6c092446b7b36d68cefe294d7ac8c",
+    "benchmarks/rocm/record_gfx1201_folded_native_package.py": "7e68e07932719202ca1a7a737dd4193f864d66dd21d29d383bd9f8ef7d458670"
+  },
+  "python_version": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+  "numpy_version": "2.5.4",
+  "ml_dtypes_version": "0.6.0",
+  "source_clean_after": true,
+  "finished_utc": "2026-10-16T00:03:52.299483+00:00"
+}

@@ -1,0 +1,67 @@
+{
+  "source_commit": "8e53d33556d04066c4a6cd0335b7be1b164b1f80",
+  "shape_mnk": [
+    256,
+    8192,
+    1472
+  ],
+  "scope": "static ISA/resources only; no hardware-counter or measured-occupancy claim",
+  "arms": {
+    "native_mlir": {
+      "resources": {
+        "lds_bytes": 25600,
+        "scratch_bytes": 0,
+        "sgpr_count": 29,
+        "sgpr_spill_count": 0,
+        "spills": false,
+        "vgpr_count": 177,
+        "vgpr_spill_count": 0
+      },
+      "selected_isa": {
+        "entry_symbol": "tessera_rocm_folded_matmul_9e1ec5f733151245",
+        "instruction_count": 3908,
+        "instruction_stream_sha256": "5ebc6c683f64d5443914de9794cf1ef229d2462a41985f5390889fb24678205d",
+        "mnemonics": {
+          "ds_load_2addr_b64": 12,
+          "ds_store_b128": 10,
+          "global_load_b128": 26,
+          "global_load_b32": 64,
+          "global_load_u8": 8,
+          "s_barrier_signal": 3,
+          "s_barrier_wait": 3,
+          "s_wait_loadcnt": 42,
+          "v_wmma_f32_16x16x16_fp8_fp8": 32
+        },
+        "payload_sha256": "f9a76cae9af0db96f6d2f7f2880183eee183ea8b2a7bde3b2b08260219ec4c1f"
+      }
+    },
+    "native_reference_control": {
+      "resources": {
+        "lds_bytes": 25600,
+        "scratch_bytes": 0,
+        "sgpr_count": 29,
+        "sgpr_spill_count": 0,
+        "spills": false,
+        "vgpr_count": 177,
+        "vgpr_spill_count": 0
+      },
+      "selected_isa": {
+        "entry_symbol": "tessera_rocm_folded_matmul_a870cecb1991940b",
+        "instruction_count": 3908,
+        "instruction_stream_sha256": "5ebc6c683f64d5443914de9794cf1ef229d2462a41985f5390889fb24678205d",
+        "mnemonics": {
+          "ds_load_2addr_b64": 12,
+          "ds_store_b128": 10,
+          "global_load_b128": 26,
+          "global_load_b32": 64,
+          "global_load_u8": 8,
+          "s_barrier_signal": 3,
+          "s_barrier_wait": 3,
+          "s_wait_loadcnt": 42,
+          "v_wmma_f32_16x16x16_fp8_fp8": 32
+        },
+        "payload_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557"
+      }
+    }
+  }
+}

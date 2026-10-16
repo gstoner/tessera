@@ -42,6 +42,7 @@ class FoldedScaledMatmulProgram:
                 "raster_group_m": provenance["raster_group_m"],
                 "workgroup_mode": provenance["workgroup_mode"],
                 "staging_prefetch": provenance["staging_prefetch"],
+                "fragment_read_schedule": provenance.get("fragment_read_schedule", "llvm_default"),
                 "epilogue_schedule": provenance["epilogue_schedule"],
                 "row_guard": provenance["row_guard"],
             },

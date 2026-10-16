@@ -1,3 +1,4 @@
+#include "ROCMFoldedW4A8Contract.h"
 #include "Tessera/IR/StructuredReductionContract.h"
 #include "TesseraROCM/Passes.h"
 #include "ROCMDirectAttention.h"
@@ -4004,18 +4005,28 @@ struct LowerTileToROCMPass
             // GFX1201-LANES-2026-09-27, measured on the RX 9070 XT with
             // bitwise-identical BF16 output): grouped M-major rasterization,
             // a register-staged next K64 slab and the complete-tile vector
-            // epilogue for every shape. CU workgroup mode only once the
-            // problem spans two or more BM256 row blocks: at one row block
-            // it measured 6-10% slower on N=17408, and 11-24% faster at
-            // M >= 512. The packed-folded kernel has its own schedule and
-            // does not consume these keys, so it does not receive them.
+            // epilogue for every shape. Preserve the original multi-row CU
+            // profile and select the measured single-row calibration band.
+            // CU is not a universal improvement: K2048/N16384 regresses and
+            // remains WGP; shape-free images still key the selected mode.
             const int64_t rowBlocks = (problemM.getInt() + 255) / 256;
             state.addAttribute("raster_group_m", builder.getI64IntegerAttr(4));
             state.addAttribute(
                 "workgroup_mode",
-                builder.getStringAttr(rowBlocks >= 2 ? "cu" : "wgp"));
+                builder.getStringAttr(
+                    rowBlocks >= 2 ||
+                            tessera_rocm::isFoldedSingleRowCuBand(
+                                problemM.getInt(), problemN.getInt(),
+                                problemK.getInt())
+                        ? "cu" : "wgp"));
             state.addAttribute("staging_prefetch",
                                builder.getStringAttr("register_next_slab"));
+            // Experimental native policy: preserve old images outside the
+            // full-tile, bulk-N, longer-K band characterized on gfx1201.
+            if (tessera_rocm::isFoldedFragmentGroupBand(
+                    problemM.getInt(), problemN.getInt(), problemK.getInt()))
+              state.addAttribute("fragment_read_schedule",
+                                 builder.getStringAttr("k32_groups"));
             state.addAttribute(
                 "epilogue_schedule",
                 builder.getStringAttr("complete_tile_vector_scales"));

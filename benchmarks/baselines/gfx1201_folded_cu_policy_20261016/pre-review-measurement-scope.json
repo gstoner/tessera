@@ -1,0 +1,31 @@
+{
+  "artifact_commit": "e9ae27cef7e87f5e079d2dc4bbdad4457fc57cf1",
+  "benchmark_revision": "8e53d33556d04066c4a6cd0335b7be1b164b1f80",
+  "superseded_by": "68fb444434bbb20f396399e8a1df186c67e00f94",
+  "packets": {
+    "cu-grid-forward.json.gz": {
+      "raw_sha256": "3cfab946b9cb6229736641b359be6922a784f1fae43b04b6246d11bac6624026",
+      "compressed_sha256": "7275b7e5d9d2e39991ad308216c5344e7ced0d5d94ad1c438514dc28aeece06e",
+      "raw_bytes": 1122185,
+      "compressed_bytes": 121019
+    },
+    "cu-grid-reverse.json.gz": {
+      "raw_sha256": "2330d45691065b6cf44cf512b4a212f46c296f60e977325780028a8a15d0517c",
+      "compressed_sha256": "154058134c25dbf8c0781286750e129bed88b57f3285ecbf4fdee5234b97e31b",
+      "raw_bytes": 1121546,
+      "compressed_bytes": 120674
+    },
+    "radiance-forward.json.gz": {
+      "raw_sha256": "0f74539d79460a0fbe4ad125a150e608ced2a766a6d4e4e5c10457e722fb853e",
+      "compressed_sha256": "6b08bd59398ac2891dd308abf94825fbd3dcdc51bfb555ed3dced6f470238b0e",
+      "raw_bytes": 383044,
+      "compressed_bytes": 43015
+    },
+    "radiance-reverse.json.gz": {
+      "raw_sha256": "4a587c878435c3b4e4d57facfe23e65019d00f47a95df977d7cb94c07c667e41",
+      "compressed_sha256": "adab18436ea82ac2097f1d0b882a367f5c9b73353fc16c70da940af7199b26c2",
+      "raw_bytes": 383012,
+      "compressed_bytes": 42837
+    }
+  }
+}

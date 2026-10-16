@@ -124,7 +124,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="generate-wmma-gemm-kernel",
         cpp_class="GenerateWMMAGemmKernelPass",
-        summary="Materializes checked ROCm WMMA Target contracts as native GPU kernels with typed Tile views/fragments, predicated partial LDS copies, isolated FP8/fp32 or MXFP8/E8M0 K32 scale groups and full-K folded scale epilogues; compiler-exported static scaled members carry native entry/scalar/grid ABI metadata.",
+        summary="Materializes checked ROCm WMMA Target contracts as native GPU kernels with typed Tile views/fragments, predicated partial LDS copies, isolated FP8/fp32 or MXFP8/E8M0 K32 scale groups and full-K folded scale epilogues, including explicit gfx1201 K32 LDS/WMMA scheduling groups without added workgroup barriers; compiler-exported static scaled members carry native entry/scalar/grid ABI metadata.",
         input_dialects=("tessera_rocm", "tile", "arith", "func"),
         output_dialects=("tile", "gpu", "memref", "arith", "scf", "vector", "rocdl"),
         preserved_attrs=("tessera.autodiff.scaled_program_json", "tessera.rocm.program_member_json"),
@@ -145,6 +145,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "epilogue consumes f32 token scales and E8M0 column references, "
             "recovers zero/nonfinite scale products through ordered f64 multiplies "
             "and leaves final output rounding to the accumulator store. "
+            "Full-panel bulk-N folded prefill carries a native-owned, image-keyed "
+            "fragment read scheduling policy; short/ragged cases retain prior images. "
             "Standard E8M0 group scaling composes signed byte exponents into "
             "LLVM ldexp with explicit code-255 NaN propagation; its one f32 "
             "rounding matches the wide reference without intermediate "

@@ -149,6 +149,19 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
     GFX1201-PERF-2026-09-27), takes the M bound per wave on a partial row
     block, so waves with no stored row issue no WMMAs; it is required too.
 
+    Optional `fragment_read_schedule = "k32_groups"` is a gfx1201 native
+    instruction scheduling key for unpacked folded prefill. Tile-to-ROCm chooses
+    it only for full M256 panels, N >= 8192 divisible by 4096 and K >= 1024, with register
+    next-slab prefetch. Native generation groups six LDS reads followed by
+    sixteen WMMA operations in each K32 half-slab. The key constrains LLVM
+    scheduling; it adds no workgroup barrier and changes no arithmetic.
+    Absence retains the prior compiler schedule. It is incompatible with
+    packed folded storage and partial panels. Verified runtime-M/N/K identity
+    retains the key and whole-panel proofs while removing launch extents;
+    the checked package still binds the authored shape. This hint is not an
+    AMD ISA instruction and does not enable FP8 WMMA on gfx1151.
+
+
     `physical_contract = "rocm_fp8_w8a8_blockscale_v1"` (ROCM-FP8-BLOCKSCALE-1)
     is the logical W8A8 form bound to an executable ABI: e4m3 A and B stay in
     storage into `V_WMMA_F32_16X16X16_FP8_FP8`, lhs scales are fp32
@@ -188,6 +201,7 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
                        OptionalAttr<I64Attr>:$raster_group_m,
                        OptionalAttr<StrAttr>:$workgroup_mode,
                        OptionalAttr<StrAttr>:$staging_prefetch,
+                       OptionalAttr<StrAttr>:$fragment_read_schedule,
                        OptionalAttr<StrAttr>:$epilogue_schedule,
                        OptionalAttr<StrAttr>:$row_guard,
                        // ROCM-FP8-BLOCKSCALE-1: the weight scale's N block

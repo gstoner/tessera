@@ -331,10 +331,18 @@ class _Engine:
 def _copies(
     hip: ctypes.CDLL, arrays: tuple[np.ndarray, ...], count: int
 ) -> list[_DeviceArrays]:
-    return [
-        _DeviceArrays(hip, tuple(np.zeros_like(a) if i == len(arrays) - 1 else a for i, a in enumerate(arrays)))
-        for _ in range(count)
-    ]
+    copies = []
+    try:
+        for _ in range(count):
+            copies.append(_DeviceArrays(
+                hip, tuple(np.zeros_like(a) if i == len(arrays) - 1 else a
+                           for i, a in enumerate(arrays)),
+            ))
+    except Exception:
+        for copy in reversed(copies):
+            copy.close()
+        raise
+    return copies
 
 
 def _tessera_engine(
@@ -513,7 +521,7 @@ def _radiance_engine(
             scratch.device[1].value,
         )
 
-    def launch(bundle: _DeviceArrays) -> None:
+    def launch(bundle: _DeviceArrays, stream: ctypes.c_void_p | None = None) -> None:
         p = bundle.device
         module.launch(
             p[0].value,
@@ -525,7 +533,7 @@ def _radiance_engine(
             case.m,
             case.n,
             case.k,
-            0,
+            int(stream.value or 0) if stream is not None else 0,
         )
 
     engine = _Engine(
@@ -536,6 +544,12 @@ def _radiance_engine(
         5,
         {"weight_layout": "fragment_order", "row_reference_fold": "exact_delta_le_2"},
     )
+    def launch_on_stream(stream: ctypes.c_void_p) -> None:
+        current = engine.copies[engine._next]
+        engine._next = (engine._next + 1) % len(engine.copies)
+        launch(current, stream)
+
+    engine.launch_on_stream = launch_on_stream  # type: ignore[attr-defined]
     original_close = engine.close
 
     def close() -> None:

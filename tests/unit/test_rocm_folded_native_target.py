@@ -226,3 +226,115 @@ def test_packed_vector_scale_band_preserves_seed_and_runtime_identity(
               if "tile.fragment_folded_scale " in line]
     assert scales
     assert all(("vector_scales = true" in line) == vectorized for line in scales)
+
+
+@pytest.mark.parametrize("m,n,k,selected",[
+    (256,8192,1024,True),(256,16384,1536,True),
+    (512,8192,5120,True),(1024,16384,5120,True),
+    (256,4096,1024,False),(256,4096,5120,False),
+    (200,8192,5120,False),(256,8208,5120,False),
+    (256,8192,512,False),
+    (256,8256,1024,False),(256,8256,1088,False),
+    (256,8256,5120,False),(256,8704,4096,False),
+    (256,12288,1088,True),
+])
+def test_native_folded_fragment_groups_follow_measured_band(target,m,n,k,selected):
+    tool,_=target
+    result=subprocess.run([str(tool),"--tessera-graph-to-schedule",
+        "--tessera-schedule-to-tile","--lower-tile-to-rocm=arch=gfx1201"],
+        input=author_folded_scaled_matmul_graph(m,n,k),text=True,capture_output=True)
+    assert result.returncode==0,result.stderr
+    assert ('fragment_read_schedule = "k32_groups"' in result.stdout)==selected
+
+
+@pytest.fixture(scope="module")
+def grouped_target(target):
+    tool,_=target
+    result=subprocess.run([str(tool),"--tessera-graph-to-schedule",
+        "--tessera-schedule-to-tile","--lower-tile-to-rocm=arch=gfx1201"],
+        input=author_folded_scaled_matmul_graph(256,8192,1024),
+        text=True,capture_output=True)
+    assert result.returncode==0,result.stderr
+    assert 'fragment_read_schedule = "k32_groups"' in result.stdout
+    return tool,result.stdout
+
+
+@pytest.mark.parametrize("old,new",[
+    ('"k32_groups"','"unknown"'),
+    ('fragment_read_schedule = "k32_groups"','fragment_read_schedule = 2 : i64'),
+    ('n = 8192 : i64','n = 4096 : i64'),
+    ('n = 8192 : i64','n = 8256 : i64'),
+    ('k = 1024 : i64','k = 512 : i64'),
+    ('row_guard = "cta"','row_guard = "wave"'),
+    ('staging_prefetch = "register_next_slab"','staging_prefetch = "none"'),
+])
+def test_native_folded_fragment_groups_reject_conflicting_contract(grouped_target,old,new):
+    tool,text=grouped_target
+    assert old in text
+    result=subprocess.run([str(tool),"--generate-wmma-gemm-kernel=via-tile=true"],
+        input=text.replace(old,new),text=True,capture_output=True)
+    assert result.returncode!=0
+    assert ("ROCM_FOLDED_NATIVE_CONTRACT" in result.stderr
+            or "string attribute" in result.stderr),result.stderr
+
+
+def test_native_folded_fragment_groups_survive_identity_and_add_no_workgroup_barriers(grouped_target):
+    tool,text=grouped_target
+    projected=subprocess.run([str(tool),
+        "--tessera-rocm-project-kernel-identity=family=folded_matmul runtime-k=true"],
+        input=text,text=True,capture_output=True)
+    assert projected.returncode==0,projected.stderr
+    assert 'fragment_read_schedule = "k32_groups"' in projected.stdout
+    outputs=[]
+    for source in [projected.stdout,projected.stdout.replace(
+            'fragment_read_schedule = "k32_groups", ',"")]:
+        generated=subprocess.run([str(tool),"--generate-wmma-gemm-kernel=via-tile=true"],
+            input=source,text=True,capture_output=True)
+        assert generated.returncode==0,generated.stderr
+        outputs.append(generated.stdout)
+    grouped,plain=outputs
+    assert grouped.count("rocdl.sched.group.barrier")==4
+    assert "rocdl.sched.group.barrier" not in plain
+    assert grouped.count("gpu.barrier")==plain.count("gpu.barrier")>0
+    assert grouped.count("tile.mma ")==plain.count("tile.mma ")==32
+
+
+def test_native_folded_fragment_policy_is_an_image_key(grouped_target):
+    tool,text=grouped_target
+    results=[]
+    for source in [text,text.replace('fragment_read_schedule = "k32_groups", ',"")]:
+        result=subprocess.run([str(tool),
+            "--tessera-rocm-project-kernel-identity=family=folded_matmul runtime-k=true"],
+            input=source,text=True,capture_output=True)
+        assert result.returncode==0,result.stderr
+        results.append(result.stdout)
+    assert results[0]!=results[1]
+
+
+@pytest.mark.parametrize("n", range(8192, 32769, 4096))
+@pytest.mark.parametrize("k", [1472, 1536, 1600])
+def test_native_folded_single_row_cu_calibration_band(target, n, k):
+    tool, _ = target
+    result = subprocess.run([str(tool), "--tessera-graph-to-schedule",
+        "--tessera-schedule-to-tile", "--lower-tile-to-rocm=arch=gfx1201"],
+        input=author_folded_scaled_matmul_graph(256, n, k),
+        text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert 'workgroup_mode = "cu"' in result.stdout
+
+
+@pytest.mark.parametrize("m,n,k,mode", [
+    (256, 8192, 2048, "cu"), (256, 16384, 2048, "wgp"),
+    (256, 4096, 1536, "wgp"), (256, 17408, 1536, "wgp"),
+    (256, 8192, 1024, "wgp"), (256, 8192, 5120, "wgp"),
+    (200, 8192, 1536, "wgp"), (512, 8192, 1536, "cu"),
+    (256, 36864, 1536, "wgp"),
+])
+def test_native_folded_cu_profile_preserves_excluded_modes(target, m, n, k, mode):
+    tool, _ = target
+    result = subprocess.run([str(tool), "--tessera-graph-to-schedule",
+        "--tessera-schedule-to-tile", "--lower-tile-to-rocm=arch=gfx1201"],
+        input=author_folded_scaled_matmul_graph(m, n, k),
+        text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert f'workgroup_mode = "{mode}"' in result.stdout

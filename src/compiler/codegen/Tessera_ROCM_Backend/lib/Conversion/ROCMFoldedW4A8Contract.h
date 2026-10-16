@@ -4,6 +4,21 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/StringRef.h"
 namespace mlir::tessera_rocm {
+// Empirical RX9070XT band: irregular N grids regress even at long K.
+// Other shapes retain the same native kernel path without grouping hints.
+inline bool isFoldedFragmentGroupBand(int64_t m, int64_t n, int64_t k) {
+  return m > 0 && m % 256 == 0 && n >= 8192 && n % 4096 == 0 &&
+         k >= 1024 && k % 64 == 0;
+}
+// RX9070XT measured single-row-block CU profile. Performance classes remain
+// native-owned and image-keyed; excluded shapes keep the compiled baseline.
+// Neighboring K1472/1536/1600 controls motivate this bounded calibration band.
+// Full rectangular validation is required before publishing the selection.
+inline bool isFoldedSingleRowCuBand(int64_t m, int64_t n, int64_t k) {
+  return m == 256 && n >= 8192 && n <= 32768 && n % 4096 == 0 &&
+         ((k >= 1472 && k <= 1600 && k % 64 == 0) ||
+          (n == 8192 && k == 2048));
+}
 inline bool isValidFoldedW4A8Target(Operation *op, bool allowRuntimeMN) {
   auto text = [&](llvm::StringRef key) -> llvm::StringRef {
     auto a = op->getAttrOfType<StringAttr>(key);
@@ -48,7 +63,24 @@ inline bool isValidFoldedW4A8Target(Operation *op, bool allowRuntimeMN) {
             op->getAttrOfType<BoolAttr>("whole_m") &&
             op->getAttrOfType<BoolAttr>("whole_n")
       : m > (packed ? 0 : 64) && n > 0 && !op->hasAttr("whole_m") && !op->hasAttr("whole_n");
-  return arch && arch.getValue() == "gfx1201" && shapeValid &&
+  bool fragmentScheduleValid = true;
+  if (Attribute hint = op->getAttr("fragment_read_schedule")) {
+    auto value = dyn_cast<StringAttr>(hint);
+    fragmentScheduleValid = !packed && value &&
+        value.getValue() == "k32_groups" &&
+        text("staging_prefetch") == "register_next_slab" &&
+        text("row_guard") == "cta";
+    if (runtimeMN) {
+      auto wm = op->getAttrOfType<BoolAttr>("whole_m");
+      auto wn = op->getAttrOfType<BoolAttr>("whole_n");
+      fragmentScheduleValid &= wm && wn && wm.getValue() && wn.getValue();
+    } else {
+      fragmentScheduleValid &= isFoldedFragmentGroupBand(m, n, k);
+    }
+    if (!runtimeK)
+      fragmentScheduleValid &= k >= 1024;
+  }
+  return fragmentScheduleValid && arch && arch.getValue() == "gfx1201" && shapeValid &&
       !op->hasAttr("runtime_shape") && kValid &&
       !text("name").empty() &&
       (packed || text("physical_contract") == "rocm_mxfp4_w4a8_folded_prefill_v1") &&

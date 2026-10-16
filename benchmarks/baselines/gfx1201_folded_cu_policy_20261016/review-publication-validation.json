@@ -1,0 +1,16 @@
+{
+  "state": "passed",
+  "scope": "affected review/ownership/evidence/registry/lifecycle tests; not a repeated full-unit sweep",
+  "benchmark_revision": "68fb444434bbb20f396399e8a1df186c67e00f94",
+  "full_unit_revision": "8e53d33556d04066c4a6cd0335b7be1b164b1f80",
+  "production_source_unchanged": true,
+  "dirty_worktree": true,
+  "source_sha256": {
+    "benchmarks/rocm/record_gfx1201_folded_native_package.py": "cf503c7a0eb2cd2430cf4eb69163a7de168b0a2e9eef33864958e43116b12439",
+    "tests/unit/test_folded_native_resident_frames.py": "8d0b3b4d3bad67ddafca3982938d30c121f874f7532a9a9e3aba916f39ee67ae",
+    "tests/unit/test_rocm_folded_cu_evidence.py": "3bd3ab5f0d3aa5241c7752b34a136b8e08baa7697dc9281f2ed56b26cf45f90d"
+  },
+  "result": "347 passed in 1.58s",
+  "returncode": 0,
+  "log_sha256": "d3dd7ae2b18f17cfb46ddecea3b016a05cdb2a7501f76803db9d4ab1115e4b6f"
+}

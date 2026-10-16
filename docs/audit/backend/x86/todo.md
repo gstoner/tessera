@@ -7,6 +7,60 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## GFX1201-FOLDED-FRAGMENT-GROUPS-20261015 — native fragment read groups
+
+Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
+Synchronization key: GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
+
+PR952 review: native reference matching now includes the complete fragment
+policy; CU/WGP opt-in cannot hide a fragment change. Thirteen affected guard/
+ownership cases pass. The strict 68fb44443 recorder reruns the 22-case calibration
+and six reference cases with fragment differences disallowed. Compiler/runtime
+source remains unchanged from the original full-unit certificate.
+
+Final scoped regression: frozen 8e53d3355 passes 28,930 non-slow unit tests
+(5,482 skipped, 876 deselected) with matching LLVM/MLIR23.1.1 on Tajasaurus.
+All 22 calibrated CU rows improve in both compiler/shape orders; 44 owning
+gfx1201 numerical tests pass. Twelve FP8/MXFP8 image controls and nine
+excluded native classes are byte-identical. The independent Radiance packet
+retains short-K near-parity rows and open N16384/long-K gaps.
+Evidence: benchmarks/baselines/gfx1201_folded_cu_policy_20261016/README.md.
+This is host/compiler evidence for x86 shared surfaces; gfx1201 timings
+are not sibling exact-device parity.
+
+Benchmark follow-through: optional shared native resident frames now use
+explicit leases, independent host correctness snapshots and exception-safe
+cleanup. CU/WGP comparison may differ only in workgroup mode; other schedule
+fields remain equal. Historical packets retain their original hashes.
+Not applicable to x86 physical execution: this gfx1201 benchmark control
+adds no sibling ABI, schedule or exact-device parity.
+
+Shared test discovery now honors explicit MLIR_OPT, then TESSERA_LLVM_BIN,
+then LLVM_BIN before legacy host fallbacks. A broken configured tool
+cannot silently switch dialect versions. This changes test tool selection,
+not x86 lowering or physical execution; sibling device proof is unchanged.
+
+Regression follow-up: the frozen all-unit sweep records 26,635 passes and
+23 failures. Matching host MLIR/lit and runtime provider configuration plus
+the spec-date/historical-packet repairs pass all affected modules and
+registry/lifecycle gates (456 passed, 13 skipped). The failed original
+receipt is retained; a fresh all-unit green result is not claimed.
+No new x86 physical schedule or device parity is inferred from this repair.
+
+The shared benchmark change is scoped to gfx1201: its optional independent
+Radiance arm uses explicit-stream capture and separate host/device timing.
+Not applicable to x86 physical execution or runtime ABI; no comparator
+result is transferred to this architecture.
+
+Not applicable to x86 physical scheduling: the new optional field and
+instruction grouping belong to the gfx1201 ROCm Target folded-prefill contract.
+Shared Graph/Schedule/Tile arithmetic, storage policy and runtime ABI are
+unchanged. No native schedule is transferred and no new x86 device evidence
+or capability is claimed. Its existing owning queue remains in force.
+
+Contract: docs/spec/ir/gfx1201_folded_fragment_schedule.md.
+Evidence: benchmarks/baselines/gfx1201_folded_fragment_groups_20261015/README.md.
+
 ## W11-ACTIVE-SOURCE-20261015 — source-active row JVP packages
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.

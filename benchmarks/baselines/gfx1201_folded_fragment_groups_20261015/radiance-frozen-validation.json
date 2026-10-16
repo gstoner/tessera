@@ -1,0 +1,140 @@
+{
+  "state": "passed",
+  "revision": "7ac37d9e2e65d0d0130f4dad2bd11029f663372e",
+  "source_clean_before": true,
+  "pid": 585487,
+  "started_utc": "2026-10-16T00:36:14.134828+00:00",
+  "architecture": "gfx1201",
+  "phases": [
+    {
+      "name": "focused",
+      "command": [
+        "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/unit/test_folded_native_radiance_benchmark.py",
+        "tests/unit/test_gfx1201_folded_staging_census.py",
+        "tests/unit/test_audit_docs.py",
+        "tests/unit/test_compiler_plan_routing.py"
+      ],
+      "state": "passed",
+      "log": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/radiance-production-proof/focused.log",
+      "returncode": 0,
+      "duration_seconds": 1.189429404999828,
+      "tail": "..............................                                           [100%]\n30 passed in 0.59s\n"
+    },
+    {
+      "name": "forward",
+      "command": [
+        "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+        "benchmarks/rocm/record_gfx1201_folded_native_package.py",
+        "--tessera-opt",
+        "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/tools/tessera-opt/tessera-opt",
+        "--native-reference-opt",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/fresh-reference/tessera-opt",
+        "--llvm-bin",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/llvm-tools/bin",
+        "--radiance-module",
+        "/home/angstorms/scratch/tessera-legacy-20260929/mxfp4-independent-build/radiance_mxfp4_fp8.so",
+        "--radiance-revision",
+        "dfdfa3832922c9a4253133f09c1f5c0d39748fc7",
+        "--hip-graph-windows",
+        "--trials",
+        "7",
+        "--output",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/radiance-production-proof/forward.json",
+        "--case",
+        "prefill:256x4096x5120",
+        "--case",
+        "prefill:256x8192x5120",
+        "--case",
+        "prefill:256x16384x5120"
+      ],
+      "state": "passed",
+      "log": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/radiance-production-proof/forward.log",
+      "returncode": 0,
+      "duration_seconds": 17.87933095099288,
+      "tail": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_native.py:1615: RuntimeWarning: /home/angstorms/scratch/gfx1201-m256-attribution-20261015/fresh-reference/tessera-opt is older than 4 generator source(s) -- newest src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).\n  warn_if_generator_is_stale(tool)\n[256, 4096, 5120] native/control device ratio 1.0590486438103761\n[256, 8192, 5120] native/control device ratio 1.0052336334771266\n[256, 16384, 5120] native/control device ratio 1.0015201249454027\n"
+    },
+    {
+      "name": "reverse",
+      "command": [
+        "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+        "benchmarks/rocm/record_gfx1201_folded_native_package.py",
+        "--tessera-opt",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/fresh-reference/tessera-opt",
+        "--native-reference-opt",
+        "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/tools/tessera-opt/tessera-opt",
+        "--llvm-bin",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/llvm-tools/bin",
+        "--radiance-module",
+        "/home/angstorms/scratch/tessera-legacy-20260929/mxfp4-independent-build/radiance_mxfp4_fp8.so",
+        "--radiance-revision",
+        "dfdfa3832922c9a4253133f09c1f5c0d39748fc7",
+        "--hip-graph-windows",
+        "--trials",
+        "7",
+        "--output",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/radiance-production-proof/reverse.json",
+        "--case",
+        "prefill:256x16384x5120",
+        "--case",
+        "prefill:256x8192x5120",
+        "--case",
+        "prefill:256x4096x5120"
+      ],
+      "state": "passed",
+      "log": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/guarded-bulk-n-strategy/radiance-production-proof/reverse.log",
+      "returncode": 0,
+      "duration_seconds": 18.06312211799377,
+      "tail": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_native.py:1615: RuntimeWarning: /home/angstorms/scratch/gfx1201-m256-attribution-20261015/fresh-reference/tessera-opt is older than 4 generator source(s) -- newest src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).\n  warn_if_generator_is_stale(tool)\n[256, 16384, 5120] native/control device ratio 1.0297920462731471\n[256, 8192, 5120] native/control device ratio 1.0082866090400382\n[256, 4096, 5120] native/control device ratio 1.0963126481123244\n"
+    }
+  ],
+  "source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "f91b755be30a664d4bd38670e8ca1db630b1147979c064a5cf8e0bf8f8b9874b",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "ec49445164c8c3bc8bab9b7b312c2381610d2ba5019dd837b9e9d0593805f914",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMFoldedW4A8Contract.h": "a84ed82197bd3e1105e346cfd5aab466b237a695e14c737cb0cd09c95e0bf05c",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "027f9d132c0a25de1a3d82926d8c6e77ddfd419421dde46a9e972208c5b14b32",
+    "python/tessera/compiler/rocm_native.py": "32e93f2b4b9ff3e199ba8c6470b7020e2589503a5adb0b5cddc01a6638713119",
+    "python/tessera/compiler/rocm_mxfp4_folded_frontend.py": "15a7a275072006aa137ad400797e688277c6c092446b7b36d68cefe294d7ac8c",
+    "python/tessera/compiler/rocm_mxfp4_folded_carrier.py": "777bd2592ce595aeecd1018dc679914b604bdfbb697bf0be05ea88de47020b3e",
+    "python/tessera/compiler/rocm_mxfp4_folded.py": "0a5b78225344a9630d774b4c8b350c6369ed2150148e1f1aa14d9075030a065f",
+    "python/tessera/runtime.py": "9080072dd29dec32e45397ee931e2990ced75530907962daefb3911d39a899cb",
+    "benchmarks/rocm/folded_launch_arguments.py": "f1eb90369174f12737da3e9ca1257a0705607981cc1c82ceabfdb5c2fcf91061",
+    "benchmarks/rocm/record_gfx1201_folded_native_package.py": "3a5b92765b9fbc05a962a85cdb294572c41d1056207a396aaae4bf055c2d27ce",
+    "benchmarks/rocm/benchmark_gfx1201_mxfp4_production.py": "64ab36223abd90b067052b3e7e4c3a6a2db889359d2f1bdf03fea722e2cb1ab0",
+    "benchmarks/rocm/folded_graph_windows.py": "d4969e7bcc1cfb839f39457e89d8df92212e4b1de7d2d5a10121eca6f0d4afd5",
+    "benchmarks/rocm/ablate_gfx1201_folded_load_schedule.py": "d889a4a3a0b309a02f509163f362dc3ecd398be3b6352c6c49a0adf935ae0623",
+    "benchmarks/rocm/record_gfx1201_mxfp4_folded_load_schedule.py": "8cb5beb38c97960b13333c96a66309abe1080b9eef42eea49dfa7782a5b97de6"
+  },
+  "tools": {
+    "core": {
+      "path": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/tools/tessera-opt/tessera-opt",
+      "sha256": "4e5eeed3ea09f496d6f67a144338ae647281618a2d0503e572ba9fbf7139fb6a"
+    },
+    "baseline": {
+      "path": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/fresh-reference/tessera-opt",
+      "sha256": "3958d87d982485537ffb13ec8e8357c2c94e6270ff2b62c102bdf055b1db929a"
+    },
+    "radiance": {
+      "path": "/home/angstorms/scratch/tessera-legacy-20260929/mxfp4-independent-build/radiance_mxfp4_fp8.so",
+      "sha256": "c9f91bc882ad39f331769043b4d51f9bd3813af48a37b4f3ee5f640598eac3a6"
+    }
+  },
+  "radiance": {
+    "module_path": "/home/angstorms/scratch/tessera-legacy-20260929/mxfp4-independent-build/radiance_mxfp4_fp8.so",
+    "binary_sha256": "c9f91bc882ad39f331769043b4d51f9bd3813af48a37b4f3ee5f640598eac3a6",
+    "declared_revision": "dfdfa3832922c9a4253133f09c1f5c0d39748fc7",
+    "revision_binding": "caller_declared; binary hash is authoritative",
+    "tuning_environment": {
+      "RADIANCE_MXFP4_WPERM": "1",
+      "RADIANCE_MXFP4_TN4_MIN_M": "2048",
+      "RADIANCE_MXFP4_DECODE_MAX_M": "0",
+      "RADIANCE_MXFP4_EPIFAST": "1",
+      "RADIANCE_MXFP4_DECODE_NT": "0"
+    }
+  },
+  "source_clean_after": true,
+  "finished_utc": "2026-10-16T00:36:53.457457+00:00"
+}

@@ -5,6 +5,75 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## GFX1201-FOLDED-FRAGMENT-GROUPS-20261015 — native fragment read groups
+
+Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
+Synchronization key: GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
+
+PR952 review: native reference matching now includes the complete fragment
+policy; CU/WGP opt-in cannot hide a fragment change. Thirteen affected guard/
+ownership cases pass. The strict 68fb44443 recorder reruns the 22-case calibration
+and six reference cases with fragment differences disallowed. Compiler/runtime
+source remains unchanged from the original full-unit certificate.
+
+Final scoped regression: frozen 8e53d3355 passes 28,930 non-slow unit tests
+(5,482 skipped, 876 deselected) with matching LLVM/MLIR23.1.1 on Tajasaurus.
+All 22 calibrated CU rows improve in both compiler/shape orders; 44 owning
+gfx1201 numerical tests pass. Twelve FP8/MXFP8 image controls and nine
+excluded native classes are byte-identical. The independent Radiance packet
+retains short-K near-parity rows and open N16384/long-K gaps.
+Evidence: benchmarks/baselines/gfx1201_folded_cu_policy_20261016/README.md.
+Calibration is validated; broader ROCm route/performance closure remains open.
+
+Benchmark follow-through: optional shared native resident frames now use
+explicit leases, independent host correctness snapshots and exception-safe
+cleanup. CU/WGP comparison may differ only in workgroup mode; other schedule
+fields remain equal. Historical packets retain their original hashes.
+The bounded single-row CU calibration passes its full rectangular owning-device
+sweep; broader route/performance closure remains open.
+
+Shared test discovery now honors explicit MLIR_OPT, then TESSERA_LLVM_BIN,
+then LLVM_BIN before legacy host fallbacks. A broken configured tool
+cannot silently switch dialect versions. This changes test tool selection,
+not rocm lowering or physical execution; sibling device proof is unchanged.
+
+Regression follow-up: the frozen all-unit sweep records 26,635 passes and
+23 failures. Matching host MLIR/lit and runtime provider configuration plus
+the spec-date/historical-packet repairs pass all affected modules and
+registry/lifecycle gates (456 passed, 13 skipped). The failed original
+receipt is retained; a fresh all-unit green result is not claimed.
+The exact gfx1201 spectral provider and existing x86 image were selected explicitly.
+
+The optional independent Radiance comparison now shares the explicit-stream,
+all-three-copy poisoned-output graph protocol with native packages. Module
+bytes and declared source revision are distinguished; tuning inputs are
+recorded. Ordinary launch, captured device and Tessera public API costs remain
+separate. The reference has no Tessera public-API timing. Invalid reference
+arguments are checked before device probing. This benchmark addition changes
+no production runtime ABI or logical dtype admission.
+
+Native Tile-to-ROCm selects an explicit, image-keyed K32 fragment-read
+schedule for unpacked folded prefill only with full M256, N>=8192 divisible
+by 4096, K>=1024
+problems. The first N>=4096 candidate was rejected after reproducible short-K
+regressions; excluded shapes retain baseline images. The Target field is ODS
+declared, verified and reported through readonly package provenance. LLVM
+scheduling groups add no workgroup barriers. Frozen 3b2fa3b70 passes 458 focused checks, 44 device tests, 19 selection/image
+checks and 12 FP8/MXFP8 unchanged-image controls. Eight-shape forward/reverse
+runs characterize the regular grid; three selected rows improve 2.1-5.1 percent,
+while one is within control variation. Actual timed ISA has 7 versus 11 DS waits
+with unchanged MMAs, LDS reads, barriers and resources. Broad regression and
+publication remain open. A clean matched captured Radiance comparison now
+retains a 20-22 percent device gap at M256/K5120, N8192/16384; Python launch
+gaps do not explain it. An output-identical reference epilogue switch costs
+5.3-8.6 percent. Native arithmetic/recovery semantics are unchanged; alias and
+address-generation proof is the next investigation.
+gfx1151 has no schedule change; broader MXFP4/Radiance, W8A8 and route closure
+obligations remain open.
+
+Contract: docs/spec/ir/gfx1201_folded_fragment_schedule.md.
+Evidence: benchmarks/baselines/gfx1201_folded_fragment_groups_20261015/README.md.
+
 ## W11-ACTIVE-SOURCE-20261015 — source-active row JVP packages
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.

@@ -13,6 +13,10 @@ audit_role: reference
 
 
 
+
+
+
+
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -12580,6 +12584,28 @@ Evidence: benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md;
 tests/device/rocm/test_public_nvfp4_source_program.py.
 <!-- entry-fields:end -->
 
+
+### 2026-10-15 — gfx1201 native folded fragment read groups
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+PRs: [#952](https://github.com/gstoner/tessera/pull/952); sync GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
+
+Outcome: Native Tile-to-ROCm carries the measured bulk-N fragment read policy
+as a declared, verified and image-keyed Target attribute. LLVM scheduling
+groups preserve typed fragments, arithmetic and workgroup barrier counts.
+The broader N4096 candidate was rejected by repeated regressions. The matching
+production compiler passes 384 focused checks and 44 RX9070XT numerical tests;
+19 selection/image checks preserve all fourteen excluded baseline images and two
+image-reuse classes. A second counterexample loop rejected irregular short/long N grids; one native\npredicate selects only measured regular N4096 multiples. Twelve FP8/MXFP8\nKN/NK image/ABI controls are unchanged. All four backend queues are assessed separately.
+
+Remaining: Coordinating-main synchronization, broad regression and publication
+CI; broader MXFP4 M256/Radiance attribution, W8A8 short/ragged cases
+and general route/performance closure. No sibling physical parity is inferred.
+
+Evidence: benchmarks/baselines/gfx1201_folded_fragment_groups_20261015/README.md;
+docs/spec/ir/gfx1201_folded_fragment_schedule.md.
+Frozen 3b2fa3b70: 458 focused, 44 device, 19 selection/image and 12 format-image\nchecks pass with clean source unchanged. Eight-shape forward/reverse timing\nretains separate host/device domains. Three grouped rows improve 2.1-5.1 percent;\none remains within control variation. The timed WMMA loop has 7 versus 11 DS\nwaits, with unchanged MMA/LDS/barrier counts, registers/LDS and no spills.\n\n<!-- entry-fields:end -->
+
 ### 2026-10-15 — native source-active row JVP packages
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -12613,4 +12639,37 @@ root bugs on the prior code/provider. The corrected eager admission and native
 root refresh pass 436 affected checks; a rebuilt-provider benchmark passes all
 four cases. Original frozen full-suite proof retains its source scope.
 
+<!-- entry-fields:end -->
+
+### 2026-10-16 — gfx1201 folded CU calibration and frozen regression
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+PRs: [#952](https://github.com/gstoner/tessera/pull/952); sync GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
+
+Outcome: native single-row CU selection follows the measured regular-N,
+K1472/1536/1600 band plus N8192/K2048. The full 22-shape calibration improves
+captured device time 6.3-18.5 percent in both compiler and shape orders,
+with identical native device buffers and independent host snapshots.
+One image per mode serves all selected shapes; nine excluded classes and
+twelve FP8/MXFP8 controls preserve byte-identical native packages.
+The matching frozen 8e53d3355 passes 28,930 non-slow unit tests, 44 owning
+GPU numerical cases and the source/registry/lifecycle gates. Source/compiler
+hashes stay unchanged. Shared-frame leases close after graphs/modules.
+All four architecture queues distinguish owning gfx1201 proof from siblings.
+
+Review follow-up: complete native receipt matching now includes fragment policy.
+Five new guard cases fail before the fix; all 13 focused cases pass after it.
+The strict 68fb44443 benchmark freeze reruns all 22 calibration cases and six
+independent reference cases in both orders, with fragment changes disallowed.
+Production compiler/runtime source and binary are unchanged from the full-unit
+8e53d3355 certificate. Measurement and regression scopes remain explicit.
+
+Remaining: publication CI and broader route/performance obligations.
+The independent six-case Radiance comparison is near parity at N8192/K1536
+and K2048, but N16384 and K5120 retain roughly 14-27 percent gaps.
+Rejected LDS output-store policies remain historical evidence; no unused
+production switch or hardware-counter attribution is introduced.
+
+Evidence: benchmarks/baselines/gfx1201_folded_cu_policy_20261016/README.md;
+docs/spec/ir/gfx1201_folded_fragment_schedule.md.
 <!-- entry-fields:end -->

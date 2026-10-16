@@ -1,0 +1,180 @@
+{
+  "scope": "frozen 3b2fa3b70146fb04c597116230ded25bf6863321 production regular-grid policy; RX9070XT/gfx1201 only",
+  "runs": [
+    {
+      "file": "regular-grid-forward.json.gz",
+      "compiler_roles_reversed": false,
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            1024
+          ],
+          "selected": true,
+          "candidate_over_baseline_graph_ratio": 0.9493473814830985,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            12288,
+            1088
+          ],
+          "selected": true,
+          "candidate_over_baseline_graph_ratio": 0.9876941590711563,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            768,
+            8192,
+            1536
+          ],
+          "selected": true,
+          "candidate_over_baseline_graph_ratio": 0.9629497372812803,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            1024,
+            16384,
+            5120
+          ],
+          "selected": true,
+          "candidate_over_baseline_graph_ratio": 0.9621935496618735,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            2048
+          ],
+          "selected": false,
+          "candidate_over_baseline_graph_ratio": 0.9865417903066271,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            1088
+          ],
+          "selected": false,
+          "candidate_over_baseline_graph_ratio": 0.9973923041363588,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8704,
+            4096
+          ],
+          "selected": false,
+          "candidate_over_baseline_graph_ratio": 0.9908700935841376,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            10240,
+            1024
+          ],
+          "selected": false,
+          "candidate_over_baseline_graph_ratio": 1.0111634294683147,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        }
+      ]
+    },
+    {
+      "file": "regular-grid-reverse.json.gz",
+      "compiler_roles_reversed": true,
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            10240,
+            1024
+          ],
+          "selected": false,
+          "candidate_over_baseline_graph_ratio": 0.9944220434528077,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8704,
+            4096
+          ],
+          "selected": false,
+          "candidate_over_baseline_graph_ratio": 1.0198967701727457,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            1088
+          ],
+          "selected": false,
+          "candidate_over_baseline_graph_ratio": 1.0056097882304942,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            2048
+          ],
+          "selected": false,
+          "candidate_over_baseline_graph_ratio": 1.0063479972068812,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            1024,
+            16384,
+            5120
+          ],
+          "selected": true,
+          "candidate_over_baseline_graph_ratio": 0.9588098258221499,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            768,
+            8192,
+            1536
+          ],
+          "selected": true,
+          "candidate_over_baseline_graph_ratio": 0.9607345319226878,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            12288,
+            1088
+          ],
+          "selected": true,
+          "candidate_over_baseline_graph_ratio": 1.0047474226144522,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            1024
+          ],
+          "selected": true,
+          "candidate_over_baseline_graph_ratio": 0.9786039367391058,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        }
+      ]
+    }
+  ],
+  "interpretation": "Three selected rows improve 2.1-5.1 percent in both run orders; N12288/K1088 remains within identical-image control variation. Excluded images are unchanged. No per-shape guarantee, no host-speedup claim and no fresh Radiance comparison.",
+  "raw_compiler_hashes_authoritative": true,
+  "hardware_counters": false
+}

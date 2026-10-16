@@ -1,0 +1,60 @@
+{
+  "revision": "8e53d33556d04066c4a6cd0335b7be1b164b1f80",
+  "source_before": {
+    "head": "8e53d33556d04066c4a6cd0335b7be1b164b1f80",
+    "status": "",
+    "compiler_sha256": "1d709b7513b2be8787c629a5b2f048be77db4968b9077f65081fdb289d9ddae7"
+  },
+  "state": "passed",
+  "phases": [
+    {
+      "name": "owning-device",
+      "command": [
+        "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/device/rocm/test_mxfp4_folded_native_package.py"
+      ],
+      "state": "passed",
+      "started": 1792120907.6963546,
+      "returncode": 0,
+      "elapsed_seconds": 25.571624033997068,
+      "tail": "............................................                             [100%]\n44 passed in 25.21s"
+    },
+    {
+      "name": "format-images",
+      "command": [
+        "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+        "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/output-slab-design/frozen-cu-policy/compare-format-controls.py"
+      ],
+      "state": "passed",
+      "started": 1792120933.545593,
+      "returncode": 0,
+      "elapsed_seconds": 4.061704158986686,
+      "tail": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_native.py:1615: RuntimeWarning: /home/angstorms/scratch/gfx1201-m256-attribution-20261015/fresh-reference/tessera-opt is older than 12 generator source(s) -- newest src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).\n  warn_if_generator_is_stale(tool)\nIdentical compiled Tile/Target/image/ABI controls: 12"
+    },
+    {
+      "name": "full-unit",
+      "command": [
+        "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/unit",
+        "-m",
+        "not slow"
+      ],
+      "state": "passed",
+      "started": 1792120937.89974,
+      "returncode": 0,
+      "elapsed_seconds": 1164.3392361639999,
+      "tail": "    ts.optim.adafactor(p, gradient, state, **kwargs)[0],\n\ntests/unit/test_s10_optim.py::test_adafactor_vjp_differentiates_the_corrected_forward\n  /home/angstorms/scratch/jvp-schema-reconcile-20261011/tests/unit/test_s10_optim.py:248: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 5. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.\n    ts.optim.adafactor(p, gradient, state, **kwargs)[0],\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n28930 passed, 5482 skipped, 876 deselected, 12 warnings in 1160.81s (0:19:20)"
+    }
+  ],
+  "source_after": {
+    "head": "8e53d33556d04066c4a6cd0335b7be1b164b1f80",
+    "status": "",
+    "compiler_sha256": "1d709b7513b2be8787c629a5b2f048be77db4968b9077f65081fdb289d9ddae7"
+  }
+}

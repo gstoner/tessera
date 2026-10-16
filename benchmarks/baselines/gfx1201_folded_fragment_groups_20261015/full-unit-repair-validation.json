@@ -1,0 +1,93 @@
+{
+  "state": "affected_gates_passed",
+  "initial_full_suite": "full-unit-initial-validation.json",
+  "initial_result": {
+    "failed": 23,
+    "passed": 26635,
+    "skipped": 7353,
+    "deselected": 876
+  },
+  "repaired_result": {
+    "passed": 456,
+    "skipped": 13,
+    "seconds": 9.53
+  },
+  "production_sources_unchanged_from_frozen_reference": {
+    "benchmarks/rocm/ablate_gfx1201_folded_load_schedule.py": true,
+    "benchmarks/rocm/benchmark_gfx1201_mxfp4_production.py": true,
+    "benchmarks/rocm/folded_graph_windows.py": true,
+    "benchmarks/rocm/folded_launch_arguments.py": true,
+    "benchmarks/rocm/record_gfx1201_folded_native_package.py": true,
+    "benchmarks/rocm/record_gfx1201_mxfp4_folded_load_schedule.py": true,
+    "python/tessera/compiler/rocm_mxfp4_folded.py": true,
+    "python/tessera/compiler/rocm_mxfp4_folded_carrier.py": true,
+    "python/tessera/compiler/rocm_mxfp4_folded_frontend.py": true,
+    "python/tessera/compiler/rocm_native.py": true,
+    "python/tessera/runtime.py": true,
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": true,
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMFoldedW4A8Contract.h": true,
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": true,
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": true
+  },
+  "changes": [
+    "Added missing specification date.",
+    "Preserved immutable September timing source hashes; current recorder source hashes are checked against fresh October captured packets.",
+    "Selected matching MLIR_OPT, LLVM23.1.1 lit source and existing exact gfx1201 spectral/x86 providers.",
+    "Shared MLIR discovery honors configured toolchain directories after an explicit executable; five deterministic failures reproduce before repair."
+  ],
+  "tools_and_providers": {
+    "matching_mlir_opt": {
+      "path": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/mlir-opt",
+      "sha256": "62a18523fcec89907cd9b0eade4d5976c549d11f85697089766242406ed1c271"
+    },
+    "initial_vendor_mlir_opt": {
+      "path": "/opt/rocm/core/lib/llvm/bin/mlir-opt",
+      "sha256": "166d354b1ac659d8710a1122a644713844634d56fc83f8ee84e6d143355ccf1b"
+    },
+    "spectral_provider": {
+      "path": "/home/angstorms/scratch/rocm-fp8-spectral-runtime-20261014/libtessera_spectral_rocm.so",
+      "sha256": "88afea4534615069a4c92bc87aa8f29b17573c7685ee4dffebbb4a764f7bbb04"
+    },
+    "x86_provider": {
+      "path": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/src/compiler/codegen/tessera_x86_backend/libtessera_x86_elementwise.so",
+      "sha256": "20c708743eee20c69827e2605bba15aee627c86005db697ab8452a6f101afc21"
+    }
+  },
+  "matching_mlir_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.",
+  "initial_vendor_mlir_version": "AMD LLVM version 23.0.0git\n  Optimized build.",
+  "log_sha256": "58cee3056bac2253cc1e5139d35f6059cb991933a99dce79306bdf0d6754fac0",
+  "log_summary": "........................................................................ [ 15%]\n........................s........ssss................................... [ 30%]\n.sssss........sss....................................................... [ 46%]\n........................................................................ [ 61%]\n........................................................................ [ 76%]\n........................................................................ [ 92%]\n.....................................                                    [100%]\n456 passed, 13 skipped in 9.53s\n",
+  "validation_environment": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/full-validation-env.sh",
+  "timestamp_utc": "2026-10-16T01:31:23.511951+00:00",
+  "limits": "The initial full sweep remains a failed historical receipt. The 456-case follow-up covers every failed module plus registry/lifecycle gates. No fresh all-unit green result is claimed.",
+  "configured_root_reproducer": {
+    "before": {
+      "failed": 5,
+      "passed": 3
+    },
+    "after": {
+      "passed": 464,
+      "skipped": 13,
+      "seconds": 9.67
+    },
+    "explicit_MLIR_OPT_unset": true,
+    "infrastructure_gate": {
+      "passed": 54,
+      "seconds": 25.14
+    },
+    "source_sha256": {
+      "tests/_support/environment.py": "3a9dccee31e0e040b6ffae459d472b39c13446bf096276c5ccdcfcc14548ad06",
+      "tests/unit/test_compiler_mlir_tool_selection.py": "68650a5f1e9679889e1d9e54c857cf5efaf38b7f176babe5b252f27221bfeda5"
+    },
+    "log_sha256": "4f50df14a2867b254e819377501e34139a4cf31072ff38fb974f7668fe1e38bf",
+    "summary": "........................................................................ [ 15%]\n................................s........ssss........................... [ 30%]\n.........sssss........sss............................................... [ 45%]\n........................................................................ [ 60%]\n........................................................................ [ 75%]\n........................................................................ [ 90%]\n.............................................                            [100%]\n464 passed, 13 skipped in 9.67s\n"
+  },
+  "environment_selectors": {
+    "MLIR_OPT": "unset for configured-root gate",
+    "TESSERA_LLVM_BIN": "/home/angstorms/scratch/gfx1201-m256-attribution-20261015/llvm-tools/bin",
+    "TESSERA_BUILD_DIR": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make",
+    "TESSERA_ROCM_SPECTRAL_LIB": "/home/angstorms/scratch/rocm-fp8-spectral-runtime-20261014/libtessera_spectral_rocm.so",
+    "lit_source": "/home/angstorms/toolchains/llvm-project-src/llvm/utils/lit",
+    "lit_version": "23.1.1dev"
+  }
+}

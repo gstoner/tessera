@@ -218,7 +218,7 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   **Open:** the remaining short-K / N = 1024 whole-M shapes and K = 1536 ragged rows; the `[K, N]` weight on the register panel; AITER's split-K buckets unmeasured; gfx1151 edge-row store before/after device-clock timing remains unavailable.
 - Depends on: —
 - Start: device
-- Latest: [2026-10-15 — gfx1201 native K16 scale-group default](INTEGRATED_COMPILER_LOG.md#2026-10-15--gfx1201-native-k16-scale-group-default)
+- Latest: [2026-10-16 — gfx1201 folded CU calibration and frozen regression](INTEGRATED_COMPILER_LOG.md#2026-10-16--gfx1201-folded-cu-calibration-and-frozen-regression)
 
 ### ROCM-MXFP4-W4A8-1
 
@@ -240,7 +240,7 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   **2026-09-28 diagnostic, sync `GFX1201-MXFP4-M256-SLOPE-2026-09-28`.** A fixed-K one-copy N scan at 8192/12288/17408 ablated selected schedule keys in two independent processes, with bitwise exact K32 agreement and device-clock/HIP-event windows. The selected marginal cost was 17.99-18.09 ns per added column against Radiance 13.43-13.60; removing the vector epilogue left 17.69-18.10, removing prefetch 18.62-18.82, and removing raster 17.83-17.93. These keys help absolute latency but do not explain the slope. The remaining mechanism is in the core loop or launch geometry; A restaging, LDS fragment traffic and issue remain unseparated without counters or a validated phase ablation. The source tree was dirty, so the packet is diagnostic and makes no promotion claim. [Packet](../../../benchmarks/baselines/gfx1201_mxfp4_m256_decomposition_20260928/README.md).
 - Depends on: [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1)
 - Start: device
-- Latest: [2026-10-06 — gfx1201 packed vector-scale epilogue](INTEGRATED_COMPILER_LOG.md#2026-10-06--gfx1201-packed-vector-scale-epilogue)
+- Latest: [2026-10-16 — gfx1201 folded CU calibration and frozen regression](INTEGRATED_COMPILER_LOG.md#2026-10-16--gfx1201-folded-cu-calibration-and-frozen-regression)
 
 ### EVIDENCE-PACKET-1
 

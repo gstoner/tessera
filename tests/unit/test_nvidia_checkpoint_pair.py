@@ -161,12 +161,21 @@ def test_recompute_backward_graph_still_verifies(bias):
 def test_generated_pair_does_not_admit_half_forward_into_f32_derivative_abi(monkeypatch, storage):
     from types import SimpleNamespace
     import tessera.compiler.scheduled_checkpoint as scheduled
-    monkeypatch.setattr(scheduled, "lower_generated_checkpoint",
-        lambda *args, **kwargs: SimpleNamespace(storage=storage, output_storage=storage))
+    def lower(source, *, backward=False, **kwargs):
+        physical_storage = "f32" if backward else storage
+        return SimpleNamespace(
+            dims=(1, 2, 1, 3, 5, 4, 3), scale=.5, causal=True,
+            bias=False, bias_shape=(), shape_bounds=(),
+            storage=physical_storage, output_storage=physical_storage,
+            frontend_argument_indices=(0, 1, 2),
+            names=(("dO", "q", "k", "v", "output", "lse", "dq", "dk", "dv")
+                   if backward else ("q", "k", "v", "output", "lse")))
+    monkeypatch.setattr(scheduled, "lower_generated_checkpoint", lower)
     monkeypatch.setattr(native, "package_scheduled_checkpoint",
-        lambda *args, **kwargs: pytest.fail("packaged a half forward into the f32 paired AD ABI"))
-    with pytest.raises(ValueError, match="paired checkpoint AD requires its f32 storage"):
+        lambda *args, **kwargs: pytest.fail("packaged mismatched half/f32 derivative storage"))
+    with pytest.raises(ValueError, match="producer and consumer policies disagree"):
         native.package_generated_attention_checkpoint_pair("source", pipeline_name="test")
+
 
 def test_production_checkpoint_identities_declare_storage_at_every_call_site():
     import ast

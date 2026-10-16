@@ -4,6 +4,12 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/StringRef.h"
 namespace mlir::tessera_rocm {
+// Empirical RX9070XT band: irregular N grids regress even at long K.
+// Other shapes retain the same native kernel path without grouping hints.
+inline bool isFoldedFragmentGroupBand(int64_t m, int64_t n, int64_t k) {
+  return m > 0 && m % 256 == 0 && n >= 8192 && n % 4096 == 0 &&
+         k >= 1024 && k % 64 == 0;
+}
 inline bool isValidFoldedW4A8Target(Operation *op, bool allowRuntimeMN) {
   auto text = [&](llvm::StringRef key) -> llvm::StringRef {
     auto a = op->getAttrOfType<StringAttr>(key);
@@ -60,7 +66,7 @@ inline bool isValidFoldedW4A8Target(Operation *op, bool allowRuntimeMN) {
       auto wn = op->getAttrOfType<BoolAttr>("whole_n");
       fragmentScheduleValid &= wm && wn && wm.getValue() && wn.getValue();
     } else {
-      fragmentScheduleValid &= m % 256 == 0 && n >= 8192 && n % 64 == 0;
+      fragmentScheduleValid &= isFoldedFragmentGroupBand(m, n, k);
     }
     if (!runtimeK)
       fragmentScheduleValid &= k >= 1024;

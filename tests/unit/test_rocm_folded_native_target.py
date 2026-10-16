@@ -234,6 +234,9 @@ def test_packed_vector_scale_band_preserves_seed_and_runtime_identity(
     (256,4096,1024,False),(256,4096,5120,False),
     (200,8192,5120,False),(256,8208,5120,False),
     (256,8192,512,False),
+    (256,8256,1024,False),(256,8256,1088,False),
+    (256,8256,5120,False),(256,8704,4096,False),
+    (256,12288,1088,True),
 ])
 def test_native_folded_fragment_groups_follow_measured_band(target,m,n,k,selected):
     tool,_=target
@@ -260,6 +263,7 @@ def grouped_target(target):
     ('"k32_groups"','"unknown"'),
     ('fragment_read_schedule = "k32_groups"','fragment_read_schedule = 2 : i64'),
     ('n = 8192 : i64','n = 4096 : i64'),
+    ('n = 8192 : i64','n = 8256 : i64'),
     ('k = 1024 : i64','k = 512 : i64'),
     ('row_guard = "cta"','row_guard = "wave"'),
     ('staging_prefetch = "register_next_slab"','staging_prefetch = "none"'),
@@ -291,8 +295,8 @@ def test_native_folded_fragment_groups_survive_identity_and_add_no_workgroup_bar
     grouped,plain=outputs
     assert grouped.count("rocdl.sched.group.barrier")==4
     assert "rocdl.sched.group.barrier" not in plain
-    assert grouped.count("gpu.barrier")==plain.count("gpu.barrier")
-    assert grouped.count("tile.mma ")==plain.count("tile.mma ")
+    assert grouped.count("gpu.barrier")==plain.count("gpu.barrier")>0
+    assert grouped.count("tile.mma ")==plain.count("tile.mma ")==32
 
 
 def test_native_folded_fragment_policy_is_an_image_key(grouped_target):

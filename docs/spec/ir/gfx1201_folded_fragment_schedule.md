@@ -15,7 +15,7 @@ The optional Target attribute fragment_read_schedule = "k32_groups" is selected
 only for the unpacked rocm_mxfp4_w4a8_folded_prefill_v1 contract when:
 
 - M is divisible by 256;
-- N is at least 8192 and divisible by 64;
+- N is at least 8192 and divisible by 4096;
 - K is at least 1024 and divisible by 64;
 - row_guard is cta and staging_prefetch is register_next_slab.
 
@@ -45,7 +45,7 @@ it does not claim that folding equals the original per-K-block source tensor.
 
 ## Evidence and limits
 
-The original broad N>=4096 policy was rejected: M256/N4096/K1024 regressed
+Two broader policies were rejected. A minimum-N8192/full-N64 policy regresses\nN8256/K1088 by 2.4-4.0 percent. Factorial N/K experiments show that odd K64\nslab counts can improve at regular N8192/12288, while irregular N widths can\nregress even with aligned K and at long K. This is measured N-grid sensitivity;\nwithout counters it does not establish a specific cache or occupancy cause.\nThe original broad N>=4096 policy was also rejected: M256/N4096/K1024 regressed
 4.35 percent in both run orders, with regressions also measured at K2048/3072.
 The narrowed bulk-N candidate improves the five selected cases in both orders:
 roughly 1.5-4.1 percent in the first run and 1.9-3.7 percent in reverse order.

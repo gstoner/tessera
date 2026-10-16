@@ -1,0 +1,458 @@
+{
+  "scope": "rejected broader policy measurements; not final selector timing",
+  "measurements": [
+    {
+      "file": "candidate-n64-forward.json.gz",
+      "compiler_roles_reversed": false,
+      "candidate_compiler_sha256": "4785f4e4db6ff6c6ddfa1f161fe9ab052baa34b4902598081a6a68aeeba04ee7",
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            1024
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9675778766687856,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            1536
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9723400950068272,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            2048
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9638097721516986,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            512,
+            8192,
+            5120
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9823411005897551,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            1024,
+            16384,
+            5120
+          ],
+          "candidate_over_baseline_graph_ratio": 0.96092146503753,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            1088
+          ],
+          "candidate_over_baseline_graph_ratio": 1.0239134321565566,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            768,
+            8192,
+            1536
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9665040661249612,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            2048
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9853016661348724,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        }
+      ]
+    },
+    {
+      "file": "candidate-n64-reverse.json.gz",
+      "compiler_roles_reversed": true,
+      "candidate_compiler_sha256": "4785f4e4db6ff6c6ddfa1f161fe9ab052baa34b4902598081a6a68aeeba04ee7",
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            2048
+          ],
+          "candidate_over_baseline_graph_ratio": 1.0127635046113308,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            768,
+            8192,
+            1536
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9656155881325194,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            1088
+          ],
+          "candidate_over_baseline_graph_ratio": 1.0400873362445415,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            1024,
+            16384,
+            5120
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9652968262002051,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            512,
+            8192,
+            5120
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9776309775791148,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            2048
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9665535344078113,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            1536
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9849989259897333,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            1024
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9673467244628283,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        }
+      ]
+    },
+    {
+      "file": "candidate-n64-alignment-forward.json.gz",
+      "compiler_roles_reversed": false,
+      "candidate_compiler_sha256": "4785f4e4db6ff6c6ddfa1f161fe9ab052baa34b4902598081a6a68aeeba04ee7",
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            1088
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9779451383786432,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            1024
+          ],
+          "candidate_over_baseline_graph_ratio": 1.043384508371839,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            1536
+          ],
+          "candidate_over_baseline_graph_ratio": 1.0064462832930345,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            12288,
+            1088
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9887102279046045,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            12288,
+            1536
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9799125859254428,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            1152
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9708727255067019,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        }
+      ]
+    },
+    {
+      "file": "candidate-n64-alignment-reverse.json.gz",
+      "compiler_roles_reversed": true,
+      "candidate_compiler_sha256": "4785f4e4db6ff6c6ddfa1f161fe9ab052baa34b4902598081a6a68aeeba04ee7",
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            1152
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9760244793629467,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            12288,
+            1536
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9801680781865162,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            12288,
+            1088
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9942337783947396,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            1536
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9977997119622932,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            1024
+          ],
+          "candidate_over_baseline_graph_ratio": 1.0154137343810912,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            1088
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9775723237767461,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        }
+      ]
+    },
+    {
+      "file": "candidate-n64-grid-forward.json.gz",
+      "compiler_roles_reversed": false,
+      "candidate_compiler_sha256": "4785f4e4db6ff6c6ddfa1f161fe9ab052baa34b4902598081a6a68aeeba04ee7",
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            8704,
+            1024
+          ],
+          "candidate_over_baseline_graph_ratio": 1.018099610461881,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            9216,
+            1024
+          ],
+          "candidate_over_baseline_graph_ratio": 1.026541494128992,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            10240,
+            1024
+          ],
+          "candidate_over_baseline_graph_ratio": 1.0340137348526643,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            5120
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9855584210807634,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        }
+      ]
+    },
+    {
+      "file": "candidate-n64-grid-reverse.json.gz",
+      "compiler_roles_reversed": true,
+      "candidate_compiler_sha256": "4785f4e4db6ff6c6ddfa1f161fe9ab052baa34b4902598081a6a68aeeba04ee7",
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            5120
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9846493386001659,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            10240,
+            1024
+          ],
+          "candidate_over_baseline_graph_ratio": 1.0283608916834137,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            9216,
+            1024
+          ],
+          "candidate_over_baseline_graph_ratio": 1.0293256396655155,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8704,
+            1024
+          ],
+          "candidate_over_baseline_graph_ratio": 1.0313270512695967,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        }
+      ]
+    },
+    {
+      "file": "candidate-n64-transition-forward.json.gz",
+      "compiler_roles_reversed": false,
+      "candidate_compiler_sha256": "54efedff6f035ce624790616373a3367eae132d95277eb49f91d5085e7d384f4",
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            4096
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9860642151144944,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8704,
+            4096
+          ],
+          "candidate_over_baseline_graph_ratio": 1.1635486670299287,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            2048
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9950149098596808,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            3072
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9896069009603021,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        }
+      ]
+    },
+    {
+      "file": "candidate-n64-transition-reverse.json.gz",
+      "compiler_roles_reversed": true,
+      "candidate_compiler_sha256": "54efedff6f035ce624790616373a3367eae132d95277eb49f91d5085e7d384f4",
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            3072
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9891953335798176,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8256,
+            2048
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9936896083906219,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8704,
+            4096
+          ],
+          "candidate_over_baseline_graph_ratio": 1.0716566944324952,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            4096
+          ],
+          "candidate_over_baseline_graph_ratio": 0.9913615968465632,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        }
+      ]
+    }
+  ],
+  "decision": "Retain existing native schedule outside full-M256, N>=8192 divisible4096, K>=1024/K64. N-grid sensitivity is measured; no counter-based cache/occupancy cause is claimed."
+}

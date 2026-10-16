@@ -151,7 +151,7 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
 
     Optional `fragment_read_schedule = "k32_groups"` is a gfx1201 native
     instruction scheduling key for unpacked folded prefill. Tile-to-ROCm chooses
-    it only for full M256/N64 panels, N >= 8192 and K >= 1024, with register
+    it only for full M256 panels, N >= 8192 divisible by 4096 and K >= 1024, with register
     next-slab prefetch. Native generation groups six LDS reads followed by
     sixteen WMMA operations in each K32 half-slab. The key constrains LLVM
     scheduling; it adds no workgroup barrier and changes no arithmetic.

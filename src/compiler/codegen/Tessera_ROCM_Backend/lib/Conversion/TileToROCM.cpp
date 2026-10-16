@@ -1,3 +1,4 @@
+#include "ROCMFoldedW4A8Contract.h"
 #include "Tessera/IR/StructuredReductionContract.h"
 #include "TesseraROCM/Passes.h"
 #include "ROCMDirectAttention.h"
@@ -4018,9 +4019,8 @@ struct LowerTileToROCMPass
                                builder.getStringAttr("register_next_slab"));
             // Experimental native policy: preserve old images outside the
             // full-tile, bulk-N, longer-K band characterized on gfx1201.
-            if (problemM.getInt() % 256 == 0 &&
-                problemN.getInt() >= 8192 && problemN.getInt() % 64 == 0 &&
-                problemK.getInt() >= 1024)
+            if (tessera_rocm::isFoldedFragmentGroupBand(
+                    problemM.getInt(), problemN.getInt(), problemK.getInt()))
               state.addAttribute("fragment_read_schedule",
                                  builder.getStringAttr("k32_groups"));
             state.addAttribute(

@@ -12509,9 +12509,9 @@ Outcome: Native Tile-to-ROCm carries the measured bulk-N fragment read policy
 as a declared, verified and image-keyed Target attribute. LLVM scheduling
 groups preserve typed fragments, arithmetic and workgroup barrier counts.
 The broader N4096 candidate was rejected by repeated regressions. The matching
-production compiler passes 378 focused checks and 40 RX9070XT numerical tests;
-14 selection/image checks preserve all ten excluded baseline images and two
-image-reuse classes. All four backend queues are assessed separately.
+production compiler passes 384 focused checks and 44 RX9070XT numerical tests;
+19 selection/image checks preserve all fourteen excluded baseline images and two
+image-reuse classes. A second counterexample loop rejected irregular short/long N grids; one native\npredicate selects only measured regular N4096 multiples. Twelve FP8/MXFP8\nKN/NK image/ABI controls are unchanged. All four backend queues are assessed separately.
 
 Remaining: Frozen production timing/format and documentation gates before
 publication; broader MXFP4 M256/Radiance attribution, W8A8 short/ragged cases

@@ -566,7 +566,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "and consumed as an explicit backward residual. Optional checkpoint-product exports "
             "one generated forward/backward checkpoint with canonical physical argument order and a native-verified frontend argument permutation hashed into its Schedule contract, "
             "retaining requested Q/K/V and exact-shaped f32 score-bias cotangent selection/order in paired lineage while "
-            "the native package exports the complete physical gradient product."
+            "the native package exports the complete physical gradient product. "
+            "Optional row_correction checkpoint export retains a static half tensor residual without rounded O, original argument properties, frontend/activity mappings and paired lineage; export alone is not native execution proof."
         ),
         input_dialects=("tessera", "func", "arith", "scf", "tensor"),
         output_dialects=("cf", "tessera", "tessera_attn", "func", "arith", "scf", "tensor", "gpu", "llvm", "memref", "tile", "math"),
@@ -575,7 +576,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "tessera.autodiff.cotangent_capture", "tessera.autodiff.scale_adjoint",
             "tessera.autodiff.scaled_member", "tessera.autodiff.scaled_program_witness",
             "tessera.autodiff.product_abi", "tessera.autodiff.product_pair",
-            "tessera.attention_ad_pair", "tessera.native_vjp_pair", "tessera.native_vjp_inputs",
+            "tessera.row_correction_gradient_activity", "tessera.layout", "tessera.attention_ad_pair", "tessera.native_vjp_pair", "tessera.native_vjp_inputs",
             "tessera.native_vjp_input_widths", "tessera.native_vjp_output_widths",
             "tessera.native_vjp_width", "tessera.native_vjp_output_width", "tessera.native_vjp_wrt",
             "tessera.autodiff.activity",

@@ -12705,3 +12705,25 @@ typed capture/dynamic/composed reverse, half JVP, wider masks/layouts and the fu
 five-slice program remain open. All four backend plans assess the private scope.
 Evidence: benchmarks/baselines/sm120_reverse_artifact_reuse_20261016/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-16 — native attention row correction Graph projection
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-NATIVE-ROW-CORRECTION-20261016.
+Outcome: a pure internal typed row residual has 61 initial compiler/registry
+checks. Original Graph -> native paired AD now exports the correction product
+without rounded saved O, retaining full pair lineage, frontend permutation,
+requested activity and source/residual argument properties. Read-only input
+ownership is explicit. Twenty-one new projection cases plus original contract,
+legacy AD and diagnostic/pass gates pass 410 cases with zero skips/failures.
+The first projection dropped layout attributes; a red regression is repaired,
+including reordered frontend arguments. No Python backend arithmetic or GPU IR
+reconstruction is introduced.
+Remaining: Schedule/Tile producer and workspace consumer, checked native ABI/
+lifetime ownership, serialization/replay, original frontend exact-device oracle
+checks and separate stage/completed-call timing. Preserved layout metadata does
+not establish physical layout support. All four queues are assessed; the full
+five-slice goal remains open.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/contract/README.md;
+benchmarks/baselines/sm120_native_row_correction_20261016/projection/README.md.
+<!-- entry-fields:end -->

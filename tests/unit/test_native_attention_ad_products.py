@@ -110,7 +110,7 @@ def test_checkpoint_export_refuses_unsupported_role():
         pytest.skip('native compiler unavailable')
     result = subprocess.run([str(tool),'--tessera-autodiff-paired=checkpoint-product=jvp'],input=source('reverse'),text=True,capture_output=True)
     assert result.returncode != 0
-    assert 'forward/backward role' in result.stderr
+    assert 'forward/backward/row_correction role' in result.stderr
 
 
 @pytest.mark.parametrize('indices',['0','1','0, 1','0, 1, 2'])

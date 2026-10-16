@@ -14,13 +14,17 @@ Synchronization key: SM120-NATIVE-ROW-CORRECTION-20261016.
 Implementation in progress. A compiler-internal pure tensor operation defines
 FP32 probability-weighted row correction independently of rounded saved O.
 This is not a public Graph API, new dtype or executable target admission.
+Native AD projection now preserves original pair lineage, frontend/activity
+mappings and source argument properties without rounded O. Physical layouts
+are not admitted by metadata preservation alone.
 
 Follow-up required for apple: the shared internal tensor semantic contract
 is declared, but physical lowering/owner integration is initially SM120 work.
 No NVIDIA schedule or execution evidence transfers. Compiler parser proof is
 not apple numerical or runtime parity.
 
-Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/contract/README.md.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/contract/README.md;
+benchmarks/baselines/sm120_native_row_correction_20261016/projection/README.md.
 
 
 

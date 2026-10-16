@@ -1,0 +1,37 @@
+{
+  "scope": "host-free original Graph -> native AD tensor product and metadata/legacy compatibility; no physical Schedule/Tile or GPU execution claim",
+  "parent_contract_commit": "49b6159a190608529cff1dea3a1cc6e6ea320bb5",
+  "source_sha256": {
+    "src/transforms/lib/AutodiffPairedPass.cpp": "7badcdd3778d5b11d3012af41ed10511bdb39cb73dc8a1250074595b1de6a188",
+    "python/tessera/compiler/pass_metadata.py": "f87c1c51d12356595924443d38d902eb5fa8bf6c1a7c23888c31c23b624878af",
+    "tests/unit/test_native_attention_row_correction_projection.py": "5209ad56f832b94953a9a64200da292298ac0ecc5b3da0982ea80e7f1071c77a",
+    "tests/unit/test_native_attention_ad_products.py": "4b60c60b454fcceef3bbc10389ac6d0e43045350f101455a159b034c5977fe3b"
+  },
+  "compiler_sha256": "ba1ada52fa76d8d36db79d9aed7a97924447c8a1d5f2501920e5c04efb52e371",
+  "passed": 410,
+  "skipped": 0,
+  "failed": 0,
+  "new_projection_cases": 21,
+  "controls": [
+    "prior compiler rejects new checkpoint-product mode",
+    "first implementation dropped source argument layout; regression reproduced before attribute preservation"
+  ],
+  "sha256": {
+    "AutodiffPairedPass.cpp.gz": "d7c7c83b2b187764748a26bb06566d0542f68b204738010cade8a56edba94b4e",
+    "README.md": "9c505dde149efcd669332a32655337ff43682032fc6e69e8277143df747c1431",
+    "parent-projection-probe.log.gz": "3ca0c2100b7db6bf0a983ab944b8e0ea42860882d3322d6c013f37a5b84fd442",
+    "pass_metadata.py.gz": "d3ca7483accef0740cb29015ea4edf8e98330c103e1c26ac2ac7a4ce5aaab574",
+    "projection-audit-docs.log.gz": "80cb9cd4444345db4a8bc025d032e3f3ce51a7d3bf7e0b3bef05a9f72a9eda39",
+    "projection-final.log.gz": "074b8fc84c301120883be9c7de5337bc5f0e9d5162026b5a91cda9880b831314",
+    "projection-final.xml.gz": "b81fe492a84f14e6ac541fd0d89981594d6d4e30a2decedf56aa9fa47f4f9062",
+    "projection-fixed.log.gz": "0fafced71e74409c3bfb2b871dac08f909a2fb4217f96ac297c6339b66bbd7a4",
+    "projection-fixed.xml.gz": "a9e633793f3551b3754e19de0664bcbff487bbd09b53731691122f1d1d921576",
+    "projection-layout-control.log.gz": "fb7ba7bdd6aa3120e61de11e626737e17741c3dee8e23f8a867fd53b340dbace",
+    "test_native_attention_ad_products.py.gz": "b93c288c6b806147b54de690922183b17ae98bb4e1ccc2484a2348e1818a5c27",
+    "test_native_attention_row_correction_projection.py.gz": "39a9e10df7d758b2a9c4dabf7d25f73bca8cafb19f16c182b28e8589318d4d78"
+  },
+  "primary_receipts": [
+    "projection-final.log.gz",
+    "projection-final.xml.gz"
+  ]
+}

@@ -29,6 +29,13 @@ The public dtype/ABI and this backend's physical selectors are unchanged.
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/consumer/README.md;
 prior producer proof: benchmarks/baselines/sm120_native_row_correction_20261016/schedule_target/README.md.
 
+Not applicable to this backend: the new three-image owner and sized timing
+exports are CUDA/SM120-specific. Shared Graph contracts are unchanged in this
+phase; no NVIDIA owner or timing result transfers to sibling execution.
+
+Native owner specification: docs/spec/SM120_ATTENTION_ROW_OWNER_CONTRACT.md.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/prepared_owner/README.md.
+
 ## SM120-REVERSE-ARTIFACT-REUSE-20261016 — private compiled identity
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

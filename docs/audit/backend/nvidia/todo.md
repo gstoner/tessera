@@ -28,13 +28,30 @@ compact64/128-thread cases include dV-only execution with no producer launch and
 poisoned row storage. Producer/consumer use the same stream without an
 intermediate host synchronization.
 
-Follow-up required: additive prepared C++ ownership and row lifetime, complete
-executable-member serialization/provenance, public frontend stream/snapshot/
-generation/compiler-absent replay, and separate producer/consumer/device/full-call
-benchmarks. No public default, speedup or full five-slice closure is promoted.
+The additive native C++ owner now binds all three images, owns private row
+storage, orders producer streams and elides the row member for dV-only activity.
+Its new invoke checks an explicit four-float timing capacity; the old two-float
+ABI remains unchanged. Direct owner proof passes 45 cases; existing public
+typed reverse passes 172 cases with the new provider. The focused host-free
+owner/artifact/registry lane passes 466 cases, all zero-skip.
+
+Eight matched native-owner timing rows retain identical inputs and forward PTX.
+On Sq7/Sk129 and Sq17/Sk129, complete device windows improve about 3.6x and
+10x, while diagnostic completed-call time improves about 2.5x and 7.6x. Tiny
+rows are near parity and tiny FP16 completed-call time regresses about 4%.
+These are diagnostic owner scopes, not public frontend latency or default
+selection evidence.
+
+Follow-up required: complete executable-member serialization/provenance, strict
+portable validation, original public frontend stream/snapshot/generation and
+compiler-absent replay, then public-call benchmarks before native selection.
+No global default or full five-slice closure is promoted.
 
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/consumer/README.md;
 prior producer proof: benchmarks/baselines/sm120_native_row_correction_20261016/schedule_target/README.md.
+
+Native owner specification: docs/spec/SM120_ATTENTION_ROW_OWNER_CONTRACT.md.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/prepared_owner/README.md.
 
 ## SM120-REVERSE-ARTIFACT-REUSE-20261016 — private compiled identity
 

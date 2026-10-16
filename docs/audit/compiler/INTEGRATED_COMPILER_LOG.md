@@ -12769,3 +12769,29 @@ compiler-absent replay, and separate stage/completed-call benchmarks. This is
 native diagnostic producer/consumer execution, not public route or goal closure.
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/consumer/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-16 — prepared native row owner and matched timing
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-NATIVE-ROW-CORRECTION-20261016.
+Outcome: an additive checked C++ owner sequences actual forward/row/backward
+images on one stream with private aligned row storage, producer-event ordering,
+context/lifetime guards and value-only row-module/workspace/launch elision.
+Native entry names encode physical policy and CUDA checks actual parameter
+width/order/count. A new explicit timing capacity protects four stage/complete-
+window floats; legacy invoke still writes two. A last-completed device-window
+query uses the same interval for old and new owners. Direct RTX5070 proof passes
+45 cases; 172 existing public typed reverse cases pass with the new provider.
+The focused owner/artifact/registry lane passes 466 cases, zero skips. Two
+existing JVP/VJP stream-isolation cases also pass with the same new provider.
+Eight matched input/forward-image A/B rows alternate arm order. Sq7/Sk129 and
+Sq17/Sk129 improve complete device windows about 3.6x/10x and diagnostic completed
+calls about 2.5x/7.6x. Tiny cases are near parity; tiny FP16 completed-call time
+regresses about 4%. Device and host scopes remain distinct, and no public @jit
+latency or automatic selection claim follows. All four backend queues assessed.
+Remaining: all-member portable provenance/schema validation, original public
+frontend replay/stream/snapshot/generation/lifetime gates, public-call timing and
+native route selection. The complete original five-slice goal remains active.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/prepared_owner/README.md.
+Spec: docs/spec/SM120_ATTENTION_ROW_OWNER_CONTRACT.md.
+<!-- entry-fields:end -->

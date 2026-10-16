@@ -1,0 +1,143 @@
+{
+  "scope": "direct native C++ three-image prepared owner, existing public reverse/JVP compatibility and matched native-owner timing; new public portable program/frontend integration remains open",
+  "parent_consumer_commit": "8556a485b6d50adaa41987db807ef92256a0fa6b",
+  "source_sha256": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "6230fabaef59fa2b1e2c0b6e248a76fed837ce44068f8d540fcdcbd3e258f75a",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "d2a422a2bd06b7964fa87458c707bbfcd74c1c7b7ff0b6cde6444e26e448c4aa",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "abcb8b5158187a1278513d53d9db16bcf1db77ca716aaa82f713b9af53ea4fc0",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "ae76b66a7266e74f4440e7c098ba93ac28aca3941fb50990391d19b817cd6363",
+    "src/compiler/programming_model/lib/NativeAttentionRowCorrection.h": "54cb632b405bebb3afc298f2f1584ba42f97443c3e28d02ead4fabc8d2dd38f8",
+    "python/tessera/compiler/pass_metadata.py": "50af8699222b81d6c47a1bb31b33756cbc8627b820f550e69e1b7da625fd0572",
+    "tests/device/nvidia/test_prepared_attention_row_owner.py": "6a56f41280f2e45023cc3c0fbf3b787f18a65fd89982fec12d0d843016fbf3b0",
+    "tests/device/nvidia/test_public_typed_attention_vjp.py": "cc7fb32286d6d3c1ee7a6979cfdc39ae84c4ed6801b5707468b7c99489171988",
+    "tests/device/nvidia/test_prepared_attention_stream_isolation.py": "752de7987be572684bfed68e753d74dfd898d9c9c4fda34506d994c8183d9ec1",
+    "docs/spec/SM120_ATTENTION_ROW_OWNER_CONTRACT.md": "6ff879c9edef6eb9e3405c446d7da175ce66b96bf49bfa7b84d3278809c1b80b"
+  },
+  "tools": {
+    "tessera-opt": {
+      "path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt",
+      "sha256": "b935236195248ce27158a576cd194c7da60609ef829331d8af5b0f58d003d003"
+    },
+    "tessera-nvidia-opt": {
+      "path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+      "sha256": "4184ec8b025d088a9def3164c6cebac61bd0b84b8940c38bfc7b4a31c22bd9e4"
+    },
+    "mlir-opt": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/llvm-tools/bin/mlir-opt",
+      "sha256": "62a18523fcec89907cd9b0eade4d5976c549d11f85697089766242406ed1c271"
+    },
+    "mlir-translate": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/llvm-tools/bin/mlir-translate",
+      "sha256": "1ab0beb342311021e062480166403962d6981ac1e63162947cd80eb5ecb3a80d"
+    },
+    "llc": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/llvm-tools/bin/llc",
+      "sha256": "81554da92c973d14b3505f8b6ce30eb66d307cbf76c662bf76478e6b5d3bfad6"
+    },
+    "llvm-link": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/llvm-tools/bin/llvm-link",
+      "sha256": "16ced40d94d8e4af05f55d01608d1cb8f89cdc8c7ebf501dd3651588175fd3b5"
+    },
+    "ptxas": {
+      "path": "/usr/local/cuda/bin/ptxas",
+      "sha256": "9c2c084df7eb9be48f0502b6938ce2571679b2a78cad1c564b583bd7d9ea3c50"
+    }
+  },
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "provider": {
+    "path": "/home/angstorms/scratch/sm120-native-row-correction-20261016/libtessera_nvidia_ptx_launch.so",
+    "sha256": "37e9b2574217434840448b1d400e9b8509f0103c908098d7d8238024df3ba07f",
+    "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+    "build": "g++ -std=c++17 -O3 -shared -fPIC -I/usr/local/cuda-13.3/include -Isrc/runtime/include <tessera_nvidia_ptx_launch.cpp attention_jvp_prepared.cpp matmul_prepared.cpp> -L/usr/lib/wsl/lib -lcuda -ldl -o <scratch-provider.so>"
+  },
+  "receipts": {
+    "prepared-owner-final.xml": 45,
+    "owner-legacy-device.xml": 172,
+    "owner-jvp-vjp-stream.xml": 2,
+    "prepared-owner-unit.xml": 466,
+    "owner-doc-registry.xml": 307
+  },
+  "all_final_receipts_zero_skips": true,
+  "coverage": [
+    "actual Graph/AD/Schedule/Tile forward,row,backward images in one C++ owner",
+    "private frame reuse over two changed input sets",
+    "requested result order and64/128-thread compact kernels",
+    "dV-only no row image/workspace/launch",
+    "pending producer stream waits before private snapshots",
+    "explicit timing capacity and sentinel protection; old two-float invoke preserved",
+    "actual compiled row parameter-count tampering refuses and valid owner remains usable",
+    "last-completed matching device interval for old/new owners"
+  ],
+  "benchmark": {
+    "packet": "benchmark.json",
+    "rows": 8,
+    "samples_per_arm_per_row": 40,
+    "separate_domains": [
+      "native_device_window_ms",
+      "diagnostic_owner_completed_call_ms",
+      "forward_ms,row_ms,backward_ms"
+    ],
+    "large_shape_device_ratios": [
+      3.619966758145453,
+      10.081250451452611,
+      3.567986892970296,
+      10.042442255523758
+    ],
+    "large_shape_completed_call_ratios": [
+      2.501827258128727,
+      7.6543553047073605,
+      2.4526641622712186,
+      7.581053783471
+    ],
+    "tiny_f16_completed_call_ratio": 0.9609480522070513,
+    "not_claimed": [
+      "public @jit latency",
+      "shape-general speedup",
+      "automatic route admission"
+    ]
+  },
+  "remaining": [
+    "strict portable program schema with all executable-member hashes/pair/policy/lifetime provenance",
+    "public prepared adapter and original frontend stream/snapshot/output-generation/compiler-absent replay",
+    "public completed-call A/B and native route selection"
+  ],
+  "artifact_sha256": {
+    "README.md": "6b7e48567987bd51372ba6d84c57bdaaf2947fd945e95c1c12cb10a705d7e396",
+    "benchmark.json": "b7dc2efd1eeafa6c31ac93536338aa920bb8219cc318c53658d6837f93926918",
+    "build-row-owner-provider-final.log.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
+    "build-row-owner-symbols.log.gz": "0aae23ad268360e5acfef29a15beea8e5a1a6d992375eeb9420bc583521fdb4b",
+    "owner-doc-registry.log.gz": "8e051dd26cb085cab538aedede85403475f3ac800766fd96e714bd69737faeb2",
+    "owner-doc-registry.xml.gz": "078ccf81fd5558164085a51fa73cac7af5905f751987f7ab2e76761de0e10e78",
+    "owner-jvp-vjp-stream.log.gz": "2ab39b2e8c68c8abdea635904cc4f08e0d2b7584615c20118ad1ea26e5d7e6d0",
+    "owner-jvp-vjp-stream.xml.gz": "5b030932e05c10b16b605bf27eb53160486f639c2d1f9ec200b78e6b4d488f37",
+    "owner-legacy-device.log.gz": "12b036753f809811cdc9145b3b2667a0314c7b350093b6b7cc3edf2bfc3fe307",
+    "owner-legacy-device.xml.gz": "1d959d3a8d1db87000fef9c3be247d5cc0ff231ac6cb6d6c631367f8a87cca15",
+    "prepared-owner-benchmark.log.gz": "5d2c31210d5642c4752f8cab121f60b7511109cdfef5bb99abc2950c6cf09d3a",
+    "prepared-owner-final.log.gz": "9bf0e07e9f2a0ce3296f6ed3bbe3359b6dd032392eea8ce1f2d4e411c0b49805",
+    "prepared-owner-final.xml.gz": "c25d4116a0b599f962c032a182feeeeb4dab237975bcc14fa359f24ca60928fe",
+    "prepared-owner-unit.log.gz": "f6e2df167f3ae9e8a4ffdfd34ae1226ae5451d81922c7994581e83116f0b6373",
+    "prepared-owner-unit.xml.gz": "9083471a6a768b3f1a8a7ae09ec0894afbcaaeea0b8272dc48e76ae3c6f07caf",
+    "record_benchmark.py.gz": "029a2fb12c720d79fad16593f7f7d38ed32ef626ef6244200d5718e1269eb7e6",
+    "source/docs/spec/SM120_ATTENTION_ROW_OWNER_CONTRACT.md.gz": "0f8c6baf1154ded380bb606a6c7c3c9c047dc1ed2e8678928d309161e9cc1727",
+    "source/python/tessera/compiler/pass_metadata.py.gz": "4e0eb7d251ca5cf6553d2dbaa74676993febc3a43f85d49e65a422107f2bba5d",
+    "source/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp.gz": "2c182e1f6718ff261d42579c227b0bca9977e88cb5e62f9ffc7d1142a8006e41",
+    "source/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp.gz": "159f5188e6e302bf83f3749222dd2b39a88fa7b78fe9328fd0af880da96c0c6a",
+    "source/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp.gz": "dc6fefea73177fe36003bece5669fda2d3651146b9cb9fdf8e2526192af3cdc5",
+    "source/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h.gz": "ea34943706d3b183439b615f3a1675257c1201dc0a37b7c484d86c8a6a002c66",
+    "source/src/compiler/programming_model/lib/NativeAttentionRowCorrection.h.gz": "95429bad91abe8a3027ac7f1f36c2464fce1f9270da542be7ca17a8f14cd5d5b",
+    "source/tests/device/nvidia/test_prepared_attention_row_owner.py.gz": "9c3a22127f7bbd9a0a59a0480385faf56bbe293f1d9ac870f06e853cb045a099",
+    "source/tests/device/nvidia/test_prepared_attention_stream_isolation.py.gz": "4bfd1adb0911d0febf77117d2bd8080ef79c8b8dd21563b393e5a9382f297be7",
+    "source/tests/device/nvidia/test_public_typed_attention_vjp.py.gz": "ab3406205f0e65d3d50580789a2422fb0d6599f18d080aeb462af9267219137d",
+    "generated-owner.log.gz": "093a61b7eada152914b21e3316e74e669dc5aca86362004baa53874216e10d5e",
+    "owner-generated-check.log.gz": "2141caf45a37d068b822b906fece7eeb58ff5e53aa9d4502db51a0533db6b98d",
+    "graph-prepared-owner.log.gz": "6082b591494615bbf65a3a5d3a7a9e0bcaacba1e5774d1e19ff7830036dcf6bd"
+  },
+  "documentation_gates": {
+    "audit_and_registry_passed": 307,
+    "compiler_plan": "passed",
+    "all_registered_generated_docs": "regenerated",
+    "changed_generated_doc_drift": "3 passed",
+    "graphify": "AST-only update complete:97134 nodes,235713 edges"
+  },
+  "proof_guards": "ci_require_executed passed separately on all five successful JUnit receipts"
+}

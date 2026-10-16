@@ -229,6 +229,25 @@ static LogicalResult lowerNativeRowCorrections(ModuleOp mod, bool &selected) {
     SmallVector<Type> types(graph->getNumOperands() + outputs, ptr);
     types.append(7, b.getI64Type());
     std::string entry = std::string(c->backward ? "tessera_tile_attention_backward_rows_" : "tessera_tile_attention_row_correction_") + c->hash.substr(0, 10);
+    if (!c->backward) {
+      entry = (Twine("tessera_tile_attention_row_correction_b") +
+          Twine(unsigned(cast<BoolAttr>(c->contract.get("bias")).getValue())) + "_s" +
+          Twine(unsigned(cast<BoolAttr>(c->contract.get("lse_cotangent")).getValue())) + "_" +
+          cast<StringAttr>(c->contract.get("storage")).getValue() + "_out_" +
+          cast<StringAttr>(c->contract.get("output_storage")).getValue() + "_" + c->hash.substr(0,10)).str();
+    } else if (c->contract.get("gradient_output")) {
+      unsigned mask = 0;
+      auto activity = cast<DenseI64ArrayAttr>(c->contract.get("gradient_activity"));
+      for (unsigned i = 0; i < activity.size(); ++i) if (activity[i]) mask |= 1u << i;
+      unsigned bias = cast<BoolAttr>(c->contract.get("bias")).getValue();
+      entry = (Twine("tessera_tile_attention_backward_rows_compact_m") + Twine(mask) +
+          "_b" + Twine(bias) + "_g" + Twine(bias) + "_l" +
+          Twine(unsigned(cast<StringAttr>(c->contract.get("gradient_launch")).getValue() == "logical_v1")) +
+          "_t" + Twine(cast<IntegerAttr>(c->contract.get("block_threads")).getInt()) + "_" +
+          cast<StringAttr>(c->contract.get("storage")).getValue() + "_out_" +
+          cast<StringAttr>(c->contract.get("output_storage")).getValue() + "_" + c->hash.substr(0,10)).str();
+      if (cast<BoolAttr>(c->contract.get("lse_cotangent")).getValue()) entry += "_cotangent_";
+    }
     if (SymbolTable::lookupSymbolIn(mod, entry))
       return scheduled->emitError("row correction entry symbol collision");
     auto fn = LLVM::LLVMFuncOp::create(b, graph->getLoc(), entry,

@@ -12678,8 +12678,25 @@ docs/spec/ir/gfx1201_folded_fragment_schedule.md.
 ### 2026-10-16 — typed SM120 saved-LSE public reverse ownership
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
-PRs: pending; sync SM120-SAVED-LSE-HALF-BACKWARD-20261016.
+PRs: [#956](https://github.com/gstoner/tessera/pull/956); sync SM120-SAVED-LSE-HALF-BACKWARD-20261016.
 Outcome: Original FP16/BF16 reverse Graph lowers through native AD, checkpoint Schedule/Tile and NVIDIA/LLVM PTX. A typed checked descriptor and additive native prepare ABI preserve per-role widths, producer-stream ordering and private snapshots. Portable half VJP uses schema v2; FP32 VJP v1 and JVP schemas 5/6 retain their meanings. Native FP32 probability-weighted row correction avoids differentiating through rounded saved O. The separately frozen 9b2159e655 native stage passed 639 focused and 167 owning-device cases. Frozen 68c7e59300 passes 26,022 non-slow unit cases (5,902 skipped), 1,061 required production compiler-route cases and 339 owning RTX5070 cases. Both compiler-route and device proof lanes have zero skips/failures; source/tool/provider witnesses remain unchanged. All twelve audit lanes pass. Thirty-two matched stored-value characterization rows and thirty-two fresh compiler-absent portable replays pass numerical checks.
-Remaining: Static synchronous public owner proof does not close half capture generations, dynamic public reverse ownership, half JVP, composition, wider masks/layouts or the five-slice program. Required CI/review and publication remain pending; native row-correction reuse remains an independent optimization obligation. All four backend plans assess this shared contract; CUDA evidence does not establish sibling execution.
+Remaining: Static synchronous public owner proof does not close half capture generations, dynamic public reverse ownership, half JVP, composition, wider masks/layouts or the five-slice program. Required CI/review passed on 14bd3c7e2d; merged as 27ccc3b547. Native row-correction reuse remains an independent optimization obligation. All four backend plans assess this shared contract; CUDA evidence does not establish sibling execution.
 Evidence: [Typed backward contract](../../spec/SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md); benchmarks/baselines/sm120_saved_lse_half_backward_20261016/native-stage/README.md; tests/device/nvidia/test_public_typed_attention_vjp.py; benchmarks/nvidia/record_typed_attention_backward.py.
+<!-- entry-fields:end -->
+
+### 2026-10-16 — private SM120 reverse artifact identity reuse
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-REVERSE-ARTIFACT-REUSE-20261016.
+Outcome: existing compiled reverse adapter retains a private hashed artifact and
+makes detached per-call snapshots. Ordinary dispatcher, checked ABI and native
+MLIR/LLVM-generated programs remain in control. Ten ownership/cache regressions
+and adjacent contracts pass (24 cases); the historical adapter fails the warm
+serialization guard. Frozen c0e991af9e has twelve independent-oracle same-image
+host/resident A/B rows: completed-call ratios 1.215-1.817, with device events
+reported separately. No kernel speedup or sibling physical proof is claimed.
+Remaining: broader integration/CI gates and native row-correction producer reuse;
+typed capture/dynamic/composed reverse, half JVP, wider masks/layouts and the full
+five-slice program remain open. All four backend plans assess the private scope.
+Evidence: benchmarks/baselines/sm120_reverse_artifact_reuse_20261016/README.md.
 <!-- entry-fields:end -->

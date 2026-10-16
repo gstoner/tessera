@@ -6,6 +6,24 @@ target: apple_gpu
 last_updated: 2026-10-16
 ---
 
+## SM120-REVERSE-ARTIFACT-REUSE-20261016 — private compiled identity
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Synchronization key: SM120-REVERSE-ARTIFACT-REUSE-20261016.
+
+A private compiler-keyed prototype retains RuntimeArtifact's existing memoized hash;
+each invocation receives detached metadata and still traverses checked native dispatch.
+No numerical execution, roots or results are cached. Shape/storage/stream/lifetime
+guards and compiler/source/wrt/LRU/fork boundaries remain active.
+
+Not applicable to apple physical execution: the private cache belongs only to
+the SM120 attention family adapter; shared runtime and ABI definitions are unchanged.
+No NVIDIA numerical or timing result transfers to this backend.
+
+Evidence: benchmarks/baselines/sm120_reverse_artifact_reuse_20261016/README.md.
+
+
+
 ## SM120-SAVED-LSE-HALF-BACKWARD-20261016 — typed public reverse owner
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
@@ -27,8 +45,8 @@ restored.
 
 Evidence:
 benchmarks/baselines/sm120_saved_lse_half_backward_20261016/public-stage/README.md.
-Earlier 9b2159e655 native-stage receipts keep their original scope. CI/review and
-publication remain pending.
+Earlier 9b2159e655 native-stage receipts keep their original scope. Delivered in
+PR #956, merged as 27ccc3b547; required CI and review passed on 14bd3c7e2d.
 
 Follow-up required for apple physical integration: half reverse admission remains
 SM120-specific, and the typed CUDA owner does not implement this backend. Its existing

@@ -1,0 +1,14 @@
+{
+  "measured_source": "c0e991af9e62b899158d9da081a079dd6b89d8e3",
+  "sha256": {
+    "README.md": "01053409a2e0f2af780a26c5fa99476aa515f840a75eaaac9601839d9487dcdd",
+    "adapter-ab.json.gz": "b59421f28a7a8bb1fc3044f892d67576c4e8480323d99511f88b75f71a61052a",
+    "candidate_adapter.py.gz": "31a49807fcca6edeb12457326a7e9e2cb867ae3e8d3d0bc690c060449b617ac0",
+    "focused.log.gz": "763e1411d72e4e3a4c581a440582408aaa890e48f4e6c0eeaf7f24edd6adfa20",
+    "focused.xml.gz": "b2f94da3874c18bca1c1b922e25f07e9692755e9a849aa4f3490c9adfe107714",
+    "ownership_tests.py.gz": "d8f163fa6633c4e6815e2a7763fa3466c43a9598f80f732504f6e432608ff21f",
+    "parent-counterexample.log.gz": "ac62f5fd455f1d80d148cda83e8876cee02f40399223207f5564d34b7c14a80d",
+    "parent_adapter.py.gz": "9699a6206728ec32277af08448c2d62c56e8ae9b781268fc0e151f44f0483ce4",
+    "recorder.py.gz": "c9a7fa9758d8523e756d763df83df740de5c2486f459732ebe51a33f2b56bbb1"
+  }
+}

@@ -127,7 +127,7 @@ _BWD_IR_ORACLE_CPU: frozenset[str] = frozenset(
 )
 _FWD_IR_ORACLE_CPU: frozenset[str] = frozenset(
     {"fft", "ifft", "irfft", "layer_norm", "matmul", "mul", "reduce",
-     "rfft", "rmsnorm", "sigmoid", "softmax", "tanh"}
+     "rfft", "relu", "rmsnorm", "sigmoid", "softmax", "tanh"}
 )
 
 # Stable build identifiers used in the ledger. They describe the configuration

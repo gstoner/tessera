@@ -1,0 +1,24 @@
+bringing up nodes...
+bringing up nodes...
+
+........................................................................ [  8%]
+........................................................................ [ 17%]
+........................................................................ [ 26%]
+........................................................................ [ 35%]
+........................................................................ [ 43%]
+........................................................................ [ 52%]
+........................................................................ [ 61%]
+........................................................................ [ 70%]
+........................................................................ [ 78%]
+........................................................................ [ 87%]
+........................................................................ [ 96%]
+..............................                                           [100%]
+=============================== warnings summary ===============================
+tests/unit/test_native_relu_tangent.py::test_native_relu_forward_emitted_ir_matches_independent_oracle[10-shape0-bf16-bfloat16]
+tests/unit/test_native_relu_tangent.py::test_native_relu_forward_emitted_ir_matches_independent_oracle[2x5-shape1-bf16-bfloat16]
+tests/unit/test_native_relu_tangent.py::test_native_relu_forward_emitted_ir_matches_independent_oracle[?x5-shape2-bf16-bfloat16]
+  /home/angstorms/scratch/sm120-relu-producer-20261014/tests/unit/test_native_relu_tangent.py:50: RuntimeWarning: invalid value encountered in greater
+    np.copyto(expected_tangent, seed, where=x > 0)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+822 passed, 3 warnings in 176.69s (0:02:56)

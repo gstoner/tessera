@@ -7,8 +7,8 @@ audit_role: reference
 
 This is an evidence ledger, not a closure declaration. The original
 PR895–903 stack is historical delivery context; later changes through merged
-PR948 extend the source and proof below. PR949 contains the additional
-native/public NVFP4 expansion slice; its publication checks are tracked on GitHub. Older entries retain their original
+PR950 extend the source and proof below. PR949 and PR950 deliver native/public
+NVFP4 expansion and source-preserving multi-output ownership. Older entries retain their original
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
 
@@ -23,7 +23,7 @@ bytes through ordinary JIT, compiler-free replay and prepared import-once
 execution. Full checkpoint frames exceed the 128 MiB idle-allocation budget;
 the packet separates that host boundary from native graph-dispatch timings.
 PR949 merged as 51749071b on 2026-10-15; its delivery wait is closed.
-PR950 merged as 2e8e2cfab the same day. PR951 remains open as last verified;
+PR950 merged as 2e8e2cfab the same day. PR951 merged as 54a5d6c8d on 2026-10-16;
 the independent native folded scheduling slice still requires publication CI. None of these gates closes the aggregate five-slice objective.
 Evidence: benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md.
 
@@ -32,8 +32,8 @@ proved envelopes and remaining work are:
 
 | Slice | Latest additional proof | Remaining requirement |
 | --- | --- | --- |
-| GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; nvfp4_model_activations_20261015 adds actual BF16 model layer inputs, 18 native format arms and separately labeled decoded-weight projection error. Source-preserving K16 consumers now pass on identical captured inputs (6.23% native RMS at M256; one shared native image), with separate device/host costs; see nvfp4_checkpoint_k16_20261015. PR949 adds native expansion plus ordinary public JIT, serialized/fresh-process replay without compiler tools, and bitwise pinned-checkpoint output proof under gfx1201_nvfp4_public_expand_20261015. | The queued native multi-output branch proves resident source-preserving composition, import-once ownership, ordinary static FP32 JIT and compiler-free replay with original checkpoint inputs; see rocm_nvfp4_public_source_20261015. Bounded/wider composition and representative-corpus/full-model quality acceptance remain open. |
-| NVIDIA W1.1 | Compact resident two-sided and bounded producer routes, plus single-sided normalization/softmax chains, have owning RTX 5070 receipts under sm120_single_sided_resident_tensor_20261009. | Generic producer/accumulator reconstruction, mixed or pitched resident entry, wider composition and resident AD; Merged PR947 adds the named RMSNorm -> ReLU -> matmul storage boundary and its separately recorded RTX 5070 proof. |
+| GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; nvfp4_model_activations_20261015 adds actual BF16 model layer inputs, 18 native format arms and separately labeled decoded-weight projection error. Source-preserving K16 consumers now pass on identical captured inputs (6.23% native RMS at M256; one shared native image), with separate device/host costs; see nvfp4_checkpoint_k16_20261015. PR949 adds native expansion plus ordinary public JIT, serialized/fresh-process replay without compiler tools, and bitwise pinned-checkpoint output proof under gfx1201_nvfp4_public_expand_20261015. | Merged PR950 proves resident source-preserving composition, import-once ownership, ordinary static FP32 JIT and compiler-free replay with original checkpoint inputs; see rocm_nvfp4_public_source_20261015. Bounded/wider composition and representative-corpus/full-model quality acceptance remain open. |
+| NVIDIA W1.1 | The pending NVIDIA branch adds native static FP16/BF16 active-source RMSNorm -> ReLU -> matmul JVP through Graph/Schedule/Tile/NVIDIA/LLVM-PTX, a checked three-stage owner and compiler-free paired replay. The synchronized frozen 3659a2b45 full-unit gate passes 26,630 cases; later PR951 review corrections pass 436 affected checks and retain separate source scope. See sm120_active_source_jvp_runtime_20261015. Prior RHS-only proof retains its own source scope. Earlier resident/primal receipts retain their recorded scope. | Generic producer/accumulator reconstruction, mixed or pitched resident entry, wider composition and resident AD; Merged PR947 adds the named RMSNorm -> ReLU -> matmul storage boundary and its separately recorded RTX 5070 proof. |
 | NVIDIA saved-LSE forward | The bounded saved-LSE package preserves O/LSE through native sequence projection, schema 5/6 and compiler-free replay; see bounded_saved_lse_jvp_20261011. | Wider storage/masks, nested/composed output and general attention integration. |
 | NVIDIA attention backward | Bounded paired JVP/reverse, broadcast physical bias extents, trace-at-one replay and retained generations are covered by bounded_saved_lse_jvp_20261011; static resident reverse has its own sm120_resident_attention_vjp_20261009 receipt. | Dynamic/composed resident reverse, broader AD and independent performance promotion. |
 | ROCm routes/performance | The current FP8 candidate records independent RHS formats, shape-independent unsplit images, ordinary textual JIT, 60 gfx1201 cases and separate gfx1151 LDS proof in rocm_fp8_shape_cache_20261014. | PR948 candidate delivery is merged. Wider image families/layouts, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution remain open. A queued native folded fragment-read policy adds regular-grid gfx1201 evidence: 458 focused, 44 device and bidirectional timing/ISA proof under gfx1201_folded_fragment_groups_20261015. It does not close the Radiance gap or transfer sibling schedules. |
@@ -73,6 +73,14 @@ stale partial-dashboard summary in unit CI. Its marker-aware renderer now
 joins the standard 33-document drift gate; numerical/runtime scope is unchanged.
 
 ## Delivery gates
+
+NORM-AD-ACCUM-20261015: frozen 861f4ad6b passes the full non-slow unit gate
+(26,392 passed, 7,676 skipped, 876 deselected) on Super-Bear WSL after building
+the missing matching ROCm optimizer and rerunning the complete suite.
+Evidence: benchmarks/baselines/native_normalization_ad_accum_20261015/README.md.
+This validates the committed normalization derivative arithmetic slice; the
+native multi-result producer and wider five-slice obligations remain open.
+
 
 The aggregate is not ready to claim full completion. Deliver reviewable
 slices against merged main, synchronize affected owning builds, and run
@@ -1744,3 +1752,56 @@ half results only for NVIDIA SM120; sibling FP32 result gates are preserved.
 Dynamic/composed/nested tuple and half saved-LSE/AD integration remain open.
 110 final claim/generated-registry/audit/runtime ABI cases and all 32 generated-document drift checks pass.
 Evidence: benchmarks/baselines/sm120_resident_attention_forward_20261009/README.md.
+
+
+## Optional native ReLU schedule — 2026-10-15
+
+The W1.1 named route now has an explicit flat_128 Schedule/Tile policy beside
+the serial default, checked symbols/geometry, native direct/resident/prepared
+grids and provider negotiation before allocation. Owning RTX5070 validation
+passes 668 affected tests (one Apple-only skip), including exhaustive FP16/
+BF16 storage, native producer and bounded/two-sided resident ownership,
+portable replay, and public/prepared attention forward/reverse controls.
+Registry/document gates pass 243 tests; 33 generated documents are in sync.
+Final matched timing is recorded separately in
+benchmarks/baselines/sm120_relu_flat_20261015/README.md.
+Single-column regression and noisy program enqueue windows prevent default
+promotion. Wider storage/layout/AD and all original five-slice obligations
+remain open. This pending slice does not relabel PR947/948 receipts.
+
+
+Captured profiling follow-through retains the same optional schedule and
+native images. The last validated host frame now has native per-call graphs,
+with lease/context checks and bounded node counts. 681 owning RTX5070 tests
+pass (one Apple-only skip). At M,K,N=129,256,33, captured program medians are
+about 45.7 us serial and 6.1 us flat for both FP16/BF16. This is a device-graph
+domain, not a completed public-call speedup. Profile setup/priming/cleanup wall
+time and inference wall remain separate in the captured.json packet.
+Persistent graphs, captured borrowed-root profiling, wider storage/AD and
+the full original objective remain open.
+
+## Public paired RHS JVP delivery — 2026-10-15
+
+W11-TENSOR-RHS-JVP-20261015 connects the previously declared paired executor
+to RuntimeArtifact launch, preserving the original two-output native owner and
+compiler-free public JSON replay. The frozen RTX 5070 lane passes 392 tests
+(eight environment-specific skips). Six same-image alternating windows reduce
+completed host replay from 3.358–3.582 ms to 0.898–1.066 ms by retaining only
+fully validated JSON certificates. Captured device program time remains a
+separate 6.33–52.03 us metric; no native kernel or sibling speedup is inferred.
+
+Public replay borrows a matching live JIT lease; standalone replay owns its
+temporary preparation. Active-source/A+B derivatives, generic dynamic/resident
+AD, wider encoded/fused producers and aggregate five-slice closure remain open.
+This closes a named delivery gap, not the generic producer reconstruction task.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.
+
+## Frozen public paired replay full-unit gate — 2026-10-15
+
+Clean revision fc712bfd6 passes the complete non-slow tests/unit command on
+Super-Bear WSL: 26,269 passed, 7,700 skipped, 876 deselected. The packet retains
+source/compiler/provider/device identities and the raw log. This is separate
+from earlier fleet/ROCm receipts and is not summed with focused gates.
+The isolated normalization precision-policy candidate is not part of this
+frozen source. No overall five-slice or sibling hardware closure is declared.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.

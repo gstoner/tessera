@@ -175,12 +175,12 @@ def validate(program):
         abi=(native.SM120_RELU_F16_ABI if storage=="f16" else native.SM120_RELU_BF16_ABI) if activation else (native.SM120_NORM_F16_ABI if storage=="f16" else native.SM120_NORM_BF16_ABI) if norm else (
             native.SM120_SOFTMAX_F16_ABI if storage=="f16" else native.SM120_SOFTMAX_BF16_ABI)
         schedule=pp.get("schedule")
-        geometry=("sm120_activation_serial_rows" if activation else "sm120_norm_"+str(schedule)+"_rows" if norm else
+        geometry=(("sm120_activation_flat_elements" if pp["schedule"] == "flat_128" else "sm120_activation_serial_rows") if activation else "sm120_norm_"+str(schedule)+"_rows" if norm else
                   "sm120_softmax_cooperative_128_rows" if schedule=="cooperative_128" else
                   "sm120_softmax_thread_per_row_128")
         scalar_names=("Rows","Columns") if norm or activation else ("Rows","K")
         if (p.descriptor.abi_id!=abi or pp.get("route")!="canonical_scheduled_tile_consumer" or
-                schedule not in {"serial","cooperative_128"} or
+                schedule not in ({"serial","flat_128"} if activation else {"serial","cooperative_128"}) or
                 p.descriptor.geometry!=LaunchGeometry(policy=geometry) or
                 p.descriptor.workspace!=WorkspaceRequirement() or p.descriptor.dynamic_local_memory_bytes or
                 p.descriptor.dynamic_local_memory_expression or p.descriptor.ordering!=program.edge.consumer.descriptor.ordering or

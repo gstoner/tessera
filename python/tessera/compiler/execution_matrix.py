@@ -1151,6 +1151,8 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "loads + launches it. Interleaved-pair RoPE over "
                             "[M, D] (one workgroup per row); f32/f16/bf16",
     "rocm_nvfp4_program": "Checked native checkpoint conversion/storage/packed matmul on one owned HIP stream",
+    "nvidia_active_source_jvp_program": "Compiler-owned static source-active RMSNorm/ReLU JVP and transactional two-result native CUDA owner",
+    "nvidia_tensor_rhs_jvp_program": "Compiler-owned static paired producer/RHS-JVP SSA, native Schedule/Tile members and transactional two-output CUDA owner",
     "nvidia_lhs_program": "Checked native LHS normalization/softmax/ReLU producer members and complete matmul epilogue on one owned CUDA stream",
     "nvidia_rhs_program": "Checked native RMSNorm/LayerNorm RHS and typed matmul packages on one owned CUDA stream",
     "nvidia_mma":           "NVIDIA GPU (consumer Blackwell sm_120) warp-level "
@@ -3796,6 +3798,30 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         numerical_fixture="tests/device/rocm/test_nvfp4_resident_jit.py",
         evidence_target="rocm_gfx1201",proof_build=".build-gfx1201-current",
         device_proof="device_verified_jit"),
+    ("nvidia_sm120", "nvidia_sm120_active_source_jvp_compiled"): ExecutionRow(
+        target="nvidia_sm120",compiler_path="nvidia_sm120_active_source_jvp_compiled",
+        execution_kind="native_gpu",executable=True,executor_id="nvidia_active_source_jvp_program",
+        runtime_status="success",execution_mode="cuda_runtime",owns_stream=True,
+        reason="Named static fp16/BF16 RMSNorm with explicit fp32 accumulation -> ReLU -> "
+               "plain fp32-output matmul source JVP: actual native AD SSA, multi-result Schedule/Tile "
+               "producer, typed-fragment consumers and checked CUDA owner. Public JVP and portable "
+               "compiler-free replay retain exact original argument roles. Dynamic, resident-root, "
+               "general reverse and encoded operand AD remain outside this envelope.",
+        numerical_fixture="tests/unit/test_native_sm120_active_source_jvp_runtime.py",
+        evidence_target="nvidia_sm120",proof_build="LLVM/MLIR23.1.1+CUDA13.3+RTX5070",
+        device_proof="device_verified_jit"),
+    ("nvidia_sm120", "nvidia_sm120_tensor_jvp_compiled"): ExecutionRow(
+        target="nvidia_sm120",compiler_path="nvidia_sm120_tensor_jvp_compiled",
+        execution_kind="native_gpu",executable=True,executor_id="nvidia_tensor_rhs_jvp_program",
+        runtime_status="success",execution_mode="cuda_runtime",owns_stream=True,
+        reason="Named static fp16/BF16 RMSNorm -> ReLU -> matmul RHS-only JVP: native paired SSA "
+               "outlines one shared producer prefix and two typed-fragment consumers, then one sealed "
+               "C++ owner returns independently owned f32 primal/tangent arrays. Public JVP export and compiler-free "
+               "RuntimeArtifact replay bind the same two-result ABI and preserve a live JIT lease. Active-source, dynamic, "
+               "resident-root, general reverse and encoded-operand AD remain outside this proof.",
+        numerical_fixture="tests/unit/test_native_sm120_rhs_jvp_program.py",
+        evidence_target="nvidia_sm120",proof_build="LLVM/MLIR23.1.1+CUDA13.3+RTX5070",
+        device_proof="device_verified_jit"),
     ("nvidia_sm120", "canonical_nvidia_lhs_program"): ExecutionRow(
         target="nvidia_sm120", compiler_path="canonical_nvidia_lhs_program",
         execution_kind="native_gpu", executable=True, executor_id="nvidia_lhs_program",
@@ -3803,7 +3829,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="Static primal fp16/BF16 normalization/softmax and standalone ReLU LHS members -> fp16/fp32 matmul "
                "with native epilogues through checked Graph/Schedule/Tile/PTX packages. "
                "The named RMSNorm -> ReLU -> matmul route retains two private half-storage stores; "
-               "ReLU uses a serial 128-thread row launch, propagated NaNs, f16 positive zero and bf16 signed zero. "
+               "ReLU uses a serial row or explicit flat_128 element launch with 128 threads, propagated NaNs, f16 positive zero and bf16 signed zero. "
                "Portable argument/shape/numerical lineage is validated before allocation; host inputs, "
                "one owned CUDA stream, host output. Existing normalization proof remains in "
                "tests/device/nvidia/test_lhs_tensor_jit.py. No dynamic/composed AD or FP8/MXFP8/MXFP4 support is inferred.",

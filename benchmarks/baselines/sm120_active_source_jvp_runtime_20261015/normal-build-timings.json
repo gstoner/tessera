@@ -1,0 +1,262 @@
+{
+  "device": "NVIDIA GeForce RTX 5070",
+  "compute_capability": "12.0",
+  "driver": "610.88",
+  "device_uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "compiler_sha256": "81a98c3b282d27138b7417b03097cac03fceb10813ce2156ddd2d5f305eb266f",
+  "compiler_identity": "f3d08fa9490a79892af4c12650aeddc8432c8797ae89ca4505735666cb4085b8",
+  "compiler_path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt",
+  "runtime_sha256": "2f51cf156777a470b803fc9ed8c5f3eb3a9396d0802651d49c7ecc8ec99ee689",
+  "nvidia_codegen_fingerprints": [
+    "lower-tile-to-nvidia:27debe15b03c32b95807f62e4c26a1f49c4036d953edc963ef01e266c02a1609"
+  ],
+  "benchmark_source_sha256": "e20776eaa123d994508c79d59b52fe74ec0c9a5725c3baa23cd3e479fa243669",
+  "reference_source_sha256": "620f748b1e5ab2f1eef00e2ef01e13b0e6aa76c7307665d6c2d1ee6933294628",
+  "source_sha256": {
+    "compiler/portable_nvidia_active_source.py": "8c8a4ec8f23b5162fa93bdcc41dcb8f794adb098b2d345e09d2d4677c2d6143d",
+    "compiler/prepared_nvidia_active_source.py": "384ee7a49b0bac771e97a4a21596530681c366990737f5c7ac9cb87ce68c992f",
+    "compiler/nvidia_tensor_jvp_runtime.py": "6baf918a9446d09aefb1b90ba552977d42dc7e828aff7fe6902ed3994a0f752d",
+    "compiler/execution_matrix.py": "5713b5cae3f0965e7f750b96e7ff8dca72d538b859443c0f5ad7512582248f5e",
+    "runtime.py": "18d3ca0090f5c83f02f495972e3e03756506049fa73b02f646a02e9745d16090",
+    "compiler/jit.py": "7338b55fd5474fdefb55084137b98a28e4c74cab8fbec4953af38dffb7a3df90"
+  },
+  "scope": "same-owner/image public JVP and portable replay; full certificate control clears only pure validation cache",
+  "rows": [
+    {
+      "storage": "f16",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "permuted": false,
+      "host_completed_samples_us": {
+        "public_jvp": [
+          831.4144011819735,
+          781.6131983418018,
+          770.7086013397202,
+          766.2025978788733,
+          769.7868015384302,
+          794.3980017444119,
+          757.0540008600801
+        ],
+        "portable_cached_certificate": [
+          765.5446010176092,
+          779.5151992468163,
+          783.2936011254787,
+          787.3277994804084,
+          762.0741991559044,
+          768.544600578025,
+          757.9600001918152
+        ],
+        "portable_full_certificate": [
+          2835.469599813223,
+          2779.742600978352,
+          2789.6613988559693,
+          2805.710001848638,
+          2777.4223999585956,
+          2772.2481987439096,
+          2809.750399319455
+        ]
+      },
+      "host_completed_medians_us": {
+        "public_jvp": 770.7086013397202,
+        "portable_cached_certificate": 768.544600578025,
+        "portable_full_certificate": 2789.6613988559693
+      },
+      "device_captured_program_ms": 0.0066284798085689545,
+      "device_captured_stage_ms": [
+        0.00416448013857007,
+        0.001858560019172728,
+        0.001208320027217269
+      ],
+      "artifact_hash": "24cd0eae15f82b563b2f350a699c417cb8462abdfdc52f9623b3cc2023672243",
+      "image_digests": [
+        "450f68e812ee7eff2c198808b8c1491b15779ca32b76ba0c4f75e0b66ece0520",
+        "8ec83d2c5afc14fbf54afac06765688b2fddc86931a283abd5bb5ee1abade26b",
+        "8ec83d2c5afc14fbf54afac06765688b2fddc86931a283abd5bb5ee1abade26b"
+      ],
+      "scratch_capacity_bytes": 9728,
+      "scratch_allocation_count": 1,
+      "same_native_owner_and_images": true,
+      "correctness": "independent_fp64_before_after"
+    },
+    {
+      "storage": "bf16",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "permuted": true,
+      "host_completed_samples_us": {
+        "public_jvp": [
+          785.7616001274437,
+          763.9340008608997,
+          703.8308016490191,
+          746.7513991286978,
+          701.4706003246829,
+          710.5789991328493,
+          705.1905995467678
+        ],
+        "portable_cached_certificate": [
+          791.0100015578791,
+          775.1450000796467,
+          764.8344006156549,
+          779.4672012096271,
+          779.0251984260976,
+          769.2468003369868,
+          758.5860003018752
+        ],
+        "portable_full_certificate": [
+          2814.9746009148657,
+          2799.3119991151616,
+          2771.31840121001,
+          2788.3609989658,
+          2778.7823986727744,
+          2777.7165989391506,
+          2776.6546001657844
+        ]
+      },
+      "host_completed_medians_us": {
+        "public_jvp": 710.5789991328493,
+        "portable_cached_certificate": 775.1450000796467,
+        "portable_full_certificate": 2778.7823986727744
+      },
+      "device_captured_program_ms": 0.006910079624503851,
+      "device_captured_stage_ms": [
+        0.004344959743320942,
+        0.0012118399608880281,
+        0.0012620800407603383
+      ],
+      "artifact_hash": "a3ac47a41bf9e1803acf0e70957fa13558ec57d68ead5626d6b61a279739aa75",
+      "image_digests": [
+        "ab3f419c2dd371e0eb359edba385e2c6e54904ea8e3bdec0a0062fd1f441a090",
+        "8024a7deec129a6e77ed0dd338085589f6ae8507d96a69a90ebdbfbbd96c1460",
+        "8024a7deec129a6e77ed0dd338085589f6ae8507d96a69a90ebdbfbbd96c1460"
+      ],
+      "scratch_capacity_bytes": 9728,
+      "scratch_allocation_count": 1,
+      "same_native_owner_and_images": true,
+      "correctness": "independent_fp64_before_after"
+    },
+    {
+      "storage": "f16",
+      "shape_mnk": [
+        129,
+        33,
+        257
+      ],
+      "permuted": false,
+      "host_completed_samples_us": {
+        "public_jvp": [
+          895.8004007581621,
+          881.7936002742499,
+          882.4456017464399,
+          925.596198067069,
+          875.0968001550063,
+          875.6811992498115,
+          883.7697998387739
+        ],
+        "portable_cached_certificate": [
+          877.6352013228461,
+          895.5020020948723,
+          900.2965991385281,
+          902.8108004713431,
+          863.4363999590278,
+          860.7222000136971,
+          889.2320009181276
+        ],
+        "portable_full_certificate": [
+          2892.1553981490433,
+          2893.1815992109478,
+          2943.6404001899064,
+          2903.10219861567,
+          2974.82059977483,
+          2871.555997990072,
+          2894.6334001375362
+        ]
+      },
+      "host_completed_medians_us": {
+        "public_jvp": 882.4456017464399,
+        "portable_cached_certificate": 889.2320009181276,
+        "portable_full_certificate": 2894.6334001375362
+      },
+      "device_captured_program_ms": 0.10880127549171448,
+      "device_captured_stage_ms": [
+        0.10048767924308777,
+        0.004485120065510273,
+        0.004489600192755461
+      ],
+      "artifact_hash": "0d4a1d66a1263e220121e5e4cb6460f0996c96bd2e2d51ce50cb332728912d27",
+      "image_digests": [
+        "9f1fe5f9c499a9b3ea2fbb5d7a449284a6ce76a77ea8b4c9a6cec659e5c37ebe",
+        "9d10bc47f08ca176558ed298326deb225d98ec641e16b69fab585c4d9ebbf820",
+        "9d10bc47f08ca176558ed298326deb225d98ec641e16b69fab585c4d9ebbf820"
+      ],
+      "scratch_capacity_bytes": 317696,
+      "scratch_allocation_count": 1,
+      "same_native_owner_and_images": true,
+      "correctness": "independent_fp64_before_after"
+    },
+    {
+      "storage": "bf16",
+      "shape_mnk": [
+        129,
+        33,
+        257
+      ],
+      "permuted": true,
+      "host_completed_samples_us": {
+        "public_jvp": [
+          947.7056009927765,
+          891.5760001400486,
+          840.946999960579,
+          881.7196008749306,
+          815.9354008967057,
+          855.4960018955171,
+          861.1262019257993
+        ],
+        "portable_cached_certificate": [
+          885.6475993525237,
+          855.4257976356894,
+          861.5183993242681,
+          869.4827993167564,
+          872.9630004381761,
+          885.9577996190637,
+          892.4338006181642
+        ],
+        "portable_full_certificate": [
+          2933.9658009121194,
+          2925.0756022520363,
+          2950.539000448771,
+          2919.377002399415,
+          2910.0248008035123,
+          2937.247999943793,
+          2903.9304004982114
+        ]
+      },
+      "host_completed_medians_us": {
+        "public_jvp": 861.1262019257993,
+        "portable_cached_certificate": 872.9630004381761,
+        "portable_full_certificate": 2925.0756022520363
+      },
+      "device_captured_program_ms": 0.10969856381416321,
+      "device_captured_stage_ms": [
+        0.10129407793283463,
+        0.004479039926081896,
+        0.004516480024904013
+      ],
+      "artifact_hash": "26ee4e03cd24d48b5e5eaf0f9bc4a20ef28e52f77cc39c5b74e17777ed4e978b",
+      "image_digests": [
+        "299127d92b22d89a67d808db20dc2096fb4a688dbb4bd6f976a68d514418e009",
+        "4f7a4a40e48a3fe040b67d8f863249d49c2e940ce6520111a438368c7b8a205f",
+        "4f7a4a40e48a3fe040b67d8f863249d49c2e940ce6520111a438368c7b8a205f"
+      ],
+      "scratch_capacity_bytes": 317696,
+      "scratch_allocation_count": 1,
+      "same_native_owner_and_images": true,
+      "correctness": "independent_fp64_before_after"
+    }
+  ]
+}

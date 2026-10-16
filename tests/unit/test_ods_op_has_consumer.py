@@ -246,6 +246,11 @@ def test_scan_parses_every_ods_form() -> None:
     names = {op.full_name for op in _OPS}
     for expected in (
         "tile.view",                       # def Tile_ViewOp : Tile_Op<"view", [Pure]>
+        "tile.buffer_view",
+        "tile.load_element",
+        "tile.store_element",
+        "tile.row_region_kernel",
+        "tessera_nvidia.row_region_kernel",
         "tile.tri_solve",                  # Tile_LinalgOp -> Tile_Op -> Op
         "tessera_solver.trsm",             # def TrsmOp : Op<Tessera_Solver_Dialect, "trsm">
         "tessera.matmul",
@@ -283,7 +288,8 @@ def test_scan_parses_every_ods_form() -> None:
 # 673 -> 674: native compact tile.transpose_kernel result materialization.
 #: 673 -> 674: native tile.transpose_kernel carrier with Schedule/ROCm consumers.
 #: 676 -> 679: native NVFP4 expansion Graph, Tile and ROCm Target records.
-_DECLARED_OP_RECORDS = 679
+# Four typed scalar Tile operations and the NVIDIA row-region consumer.
+_DECLARED_OP_RECORDS = 684
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:

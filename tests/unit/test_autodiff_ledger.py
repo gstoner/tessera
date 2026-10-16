@@ -80,7 +80,7 @@ def test_native_tangents_are_compiler_grounded() -> None:
     assert native == {
         "add", "sub", "mul", "matmul", "scaled_matmul", "transpose", "reshape", "squeeze",
         "unsqueeze", "expand", "broadcast", "permute", "flatten", "view",
-        "stop_gradient", "sigmoid", "tanh", "softmax", "reduce",
+        "stop_gradient", "sigmoid", "tanh", "relu", "softmax", "reduce",
         "fft", "ifft", "rfft", "irfft", "dct", "dropout", "layer_norm",
         "rmsnorm", "stft", "istft", "spectral_filter", "spectral_conv",
         "es_low_rank_correction", "all_reduce", "reduce_scatter",

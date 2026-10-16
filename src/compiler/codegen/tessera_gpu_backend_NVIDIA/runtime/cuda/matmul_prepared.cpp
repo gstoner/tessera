@@ -1,3 +1,4 @@
+#include "tessera_nvidia_active_source_program.h"
 // Native ownership of checked static/bounded Schedule/Tile/LLVM SM120 matmul images.
 // No source/kernel reconstruction; synchronous host storage is copied into a
 // context-owned scratch. Each handle pins one module and physical ABI;
@@ -85,6 +86,7 @@ struct RowProducer {
   CUmodule module = nullptr;
   CUfunction function = nullptr;
   bool cooperative = false;
+  bool flat = false;
 };
 struct Owner {
   CUcontext context = nullptr;
@@ -95,7 +97,7 @@ struct Owner {
   CUfunction producer = nullptr;
   std::vector<RowProducer> followingProducers, rhsProducers;
   CUdeviceptr producerScratch = 0, rhsEdge = 0, rhsScratch = 0, ownedLhsEdge = 0, ownedResult = 0;
-  bool cooperativeProducer = false, invoked = false, rowSymbol = false;
+  bool cooperativeProducer = false, flatProducer = false, invoked = false, rowSymbol = false;
   int dynamicAxes = 0, storage = 0;
   bool macro = false;
   bool bias = false, residual = false, rowB = false, halfOutput = false;
@@ -162,29 +164,66 @@ bool view(Owner &owner, int dtype, int rank, int64_t x, int64_t y, bool column) 
   owner.bytes[index] = expected.bytes;
   return true;
 }
+// Captures borrow the validated owner frame only while its mutex is held.
+// No graph survives this call or follows an arena resize/generation change.
+template <typename Launch>
+bool measureLaunches(CUstream stream, int repeats, bool captured,
+                     Launch launchOnce, float *milliseconds) {
+  CUevent start = nullptr, end = nullptr;
+  CUgraph graph = nullptr;
+  CUgraphExec executable = nullptr;
+  bool status = ok(cuEventCreate(&start,0),"create profile start event") &&
+                ok(cuEventCreate(&end,0),"create profile end event");
+  if (status && captured) {
+    status = ok(cuStreamBeginCapture(stream,CU_STREAM_CAPTURE_MODE_THREAD_LOCAL),
+                "begin prepared profile capture");
+    if (status) {
+      for (int i=0; status && i<repeats; ++i) status = launchOnce();
+      // End even an invalidated capture before draining or retiring resources.
+      const std::string saved = error;
+      CUresult ended = cuStreamEndCapture(stream,&graph);
+      if (status) status = ok(ended,"end prepared profile capture");
+      else error = saved;
+    }
+    if (status)
+      status = ok(cuGraphInstantiate(&executable,graph,0),"instantiate prepared profile");
+    if (status)
+      status = ok(cuGraphLaunch(executable,stream),"prime prepared profile graph") &&
+               ok(cuStreamSynchronize(stream),"complete profile graph prime");
+  }
+  if (status) status = ok(cuEventRecord(start,stream),"record profile start");
+  if (status && captured)
+    status = ok(cuGraphLaunch(executable,stream),"launch prepared profile graph");
+  else if (status)
+    for (int i=0; status && i<repeats; ++i) status = launchOnce();
+  float elapsed = 0;
+  status = status && ok(cuEventRecord(end,stream),"record profile end") &&
+           ok(cuEventSynchronize(end),"complete profile") &&
+           ok(cuEventElapsedTime(&elapsed,start,end),"profile elapsed time");
+  const std::string saved = error;
+  if (!status) cuStreamSynchronize(stream);
+  bool retired = true;
+  if (executable) retired = ok(cuGraphExecDestroy(executable),"retire profile executable") && retired;
+  if (graph) retired = ok(cuGraphDestroy(graph),"retire profile graph") && retired;
+  if (start) retired = ok(cuEventDestroy(start),"retire profile start event") && retired;
+  if (end) retired = ok(cuEventDestroy(end),"retire profile end event") && retired;
+  if (!status) error = saved;
+  if (status && retired) *milliseconds = elapsed / repeats;
+  return status && retired;
+}
+
 // Host-staged and resident execution share the same sealed member kernel ABIs.
 bool submit(Owner &owner, const std::array<CUdeviceptr, 5> &buffers,
             CUdeviceptr edge, std::array<int64_t, 3> dims, CUstream stream, int64_t rhsLeading = 0,
-            int repeats = 1, float *stageTimes = nullptr) {
+            int repeats = 1, float *stageTimes = nullptr, bool captureStages = false) {
   size_t timingIndex = 0;
   auto launch = [&](CUfunction function, unsigned x, unsigned y, unsigned threads,
                     void **args, const char *message) {
     if (!stageTimes)
       return ok(cuLaunchKernel(function,x,y,1,threads,1,1,0,stream,args,nullptr),message);
-    CUevent start = nullptr, end = nullptr;
-    bool status = ok(cuEventCreate(&start,0),"create stage start event") &&
-                  ok(cuEventCreate(&end,0),"create stage end event") &&
-                  ok(cuEventRecord(start,stream),"record stage start");
-    for (int i = 0; status && i < repeats; ++i)
-      status = ok(cuLaunchKernel(function,x,y,1,threads,1,1,0,stream,args,nullptr),message);
-    float elapsed = 0;
-    status = status && ok(cuEventRecord(end,stream),"record stage end") &&
-             ok(cuEventSynchronize(end),"synchronize stage end") &&
-             ok(cuEventElapsedTime(&elapsed,start,end),"stage elapsed time");
-    if (start) cuEventDestroy(start);
-    if (end) cuEventDestroy(end);
-    if (status) stageTimes[timingIndex++] = elapsed / repeats;
-    return status;
+    return measureLaunches(stream,repeats,captureStages,[&]() {
+      return ok(cuLaunchKernel(function,x,y,1,threads,1,1,0,stream,args,nullptr),message);
+    },&stageTimes[timingIndex++]);
   };
   if (owner.producer) {
     int64_t rows = dims[0], columns = dims[2];
@@ -196,8 +235,9 @@ bool submit(Owner &owner, const std::array<CUdeviceptr, 5> &buffers,
         return bad("prepared producer chain lost disjoint scratch"), false;
       CUfunction function = index == 0 ? owner.producer : owner.followingProducers[index - 1].function;
       bool cooperative = index == 0 ? owner.cooperativeProducer : owner.followingProducers[index - 1].cooperative;
+      bool flat = index == 0 ? owner.flatProducer : owner.followingProducers[index - 1].flat;
       void *producerArgs[] = {&source, &destination, &rows, &columns};
-      if (!launch(function,unsigned(cooperative ? rows : (rows + 127) / 128),
+      if (!launch(function,unsigned(cooperative ? rows : ((flat ? rows * columns : rows) + 127) / 128),
           1,128,producerArgs,"launch prepared tensor producer")) return false;
       source = destination;
     }
@@ -214,7 +254,7 @@ bool submit(Owner &owner, const std::array<CUdeviceptr, 5> &buffers,
         return bad("prepared RHS chain lost disjoint scratch"), false;
       auto &stage = owner.rhsProducers[index];
       void *producerArgs[] = {&source, &destination, &rows, &columns};
-      if (!launch(stage.function,unsigned(stage.cooperative ? rows : (rows + 127) / 128),
+      if (!launch(stage.function,unsigned(stage.cooperative ? rows : ((stage.flat ? rows * columns : rows) + 127) / 128),
           1,128,producerArgs,"launch prepared RHS tensor producer")) return false;
       source = destination;
     }
@@ -312,6 +352,9 @@ extern "C" int tessera_nvidia_matmul_set_dynamic_axes(uint64_t handle, int axes)
 }
 // Attach exactly one compiler-owned shape-preserving row producer before use.
 // Both pointer ABIs are retained by one synchronous owner; no edge escapes.
+// A new flat symbol must never reach an older prefix-only prepared launcher.
+extern "C" int tessera_nvidia_matmul_supports_flat_activation() { return 1; }
+
 static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
     const char *entry, int cooperative, bool append, bool rhs = false) {
   error.clear();
@@ -345,6 +388,7 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
                     std::strncmp(entry, layer.c_str(), layer.size()) == 0;
   const std::string relu = "tessera_tile_activation_relu_" + type + "_";
   const bool activation = std::strncmp(entry, relu.c_str(), relu.size()) == 0;
+  const bool flat = activation && std::strstr(entry, "_flat_128_") != nullptr;
   const bool softmaxSerial = softmax == entry;
   const bool softmaxCooperative = softmax + "_cooperative_128" == entry;
   const bool expectedCooperative = norm
@@ -397,7 +441,7 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
         cuModuleUnload(module); return 1;
       }
       try {
-        owner.rhsProducers.push_back(RowProducer{module,function,bool(cooperative)});
+        owner.rhsProducers.push_back(RowProducer{module,function,bool(cooperative),flat});
       } catch (...) {
         if (replacement) cuMemFree(replacement);
         throw;
@@ -431,7 +475,7 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
         cuModuleUnload(module); return 1;
       }
       try {
-        owner.followingProducers.push_back(RowProducer{module, function, bool(cooperative)});
+        owner.followingProducers.push_back(RowProducer{module, function, bool(cooperative),flat});
       } catch (...) {
         if (scratch) cuMemFree(scratch);
         throw;
@@ -440,6 +484,7 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
     } else {
       owner.producerModule = module; owner.producer = function;
       owner.cooperativeProducer = cooperative;
+      owner.flatProducer = flat;
     }
     return 0;
   } catch (...) {
@@ -573,9 +618,9 @@ extern "C" int tessera_nvidia_matmul_invoke(
   return 0;
 }
 
-extern "C" int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
+static int profileFrame(uint64_t handle, int repeats,
     float *stageMs, size_t stageCount, float *programMs,
-    TesseraNvidiaMatmulHostView *output) {
+    TesseraNvidiaMatmulHostView *output, bool captured) {
   error.clear();
   if (getpid() != process) return bad("prepared profiling cannot cross fork");
   std::lock_guard<std::mutex> lock(mutex);
@@ -584,7 +629,9 @@ extern "C" int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
   Owner &owner = *found->second;
   const size_t stages = size_t(bool(owner.producer)) + owner.followingProducers.size() +
                         owner.rhsProducers.size() + 1;
-  if (!stageMs || !programMs || !output || repeats <= 0 || repeats > 1000000 || stageCount != stages)
+  if (!stageMs || !programMs || !output || repeats <= 0 ||
+      repeats > (captured ? 4096 : 1000000) || stageCount != stages ||
+      (captured && stages > 65536 / size_t(repeats)))
     return bad("prepared profiling stage/count ABI mismatch");
   if (!owner.hostGeneration || owner.hostGeneration != owner.arena->generation ||
       owner.hostBase != owner.arena->base)
@@ -604,23 +651,12 @@ extern "C" int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
   if ((context && context != owner.context) ||
       !ok(cuCtxGetId(owner.context,&identity),"profiling context identity") || identity != owner.identity)
     return bad("prepared profiling context changed");
-  CUevent start = nullptr, end = nullptr;
-  bool status = ok(cuEventCreate(&start,0),"create program start event") &&
-                ok(cuEventCreate(&end,0),"create program end event") &&
-                ok(cuEventRecord(start,owner.stream),"record program start");
-  for (int i = 0; status && i < repeats; ++i)
-    status = submit(owner,owner.buffers,owner.hostEdge,owner.activeDims,owner.stream);
-  float elapsed = 0;
-  status = status && ok(cuEventRecord(end,owner.stream),"record program end") &&
-           ok(cuEventSynchronize(end),"synchronize program end") &&
-           ok(cuEventElapsedTime(&elapsed,start,end),"program elapsed time");
-  if (start) cuEventDestroy(start);
-  if (end) cuEventDestroy(end);
-  if (status) {
-    *programMs = elapsed / repeats;
+  bool status = measureLaunches(owner.stream,repeats,captured,[&]() {
+    return submit(owner,owner.buffers,owner.hostEdge,owner.activeDims,owner.stream);
+  },programMs);
+  if (status)
     status = submit(owner,owner.buffers,owner.hostEdge,owner.activeDims,owner.stream,
-                    0,repeats,stageMs);
-  }
+                    0,repeats,stageMs,captured);
   if (status)
     status = ok(cuMemcpyDtoH(output->data,owner.buffers[owner.count-1],bytes),
                 "copy profiled output");
@@ -632,6 +668,20 @@ extern "C" int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
     return 1;
   }
   return 0;
+}
+
+// Legacy enqueue-event ABI remains unchanged.
+extern "C" int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
+    float *stageMs, size_t stageCount, float *programMs,
+    TesseraNvidiaMatmulHostView *output) {
+  return profileFrame(handle,repeats,stageMs,stageCount,programMs,output,false);
+}
+
+// Distinct symbol prevents old enqueue loops from being mislabeled as capture.
+extern "C" int tessera_nvidia_matmul_profile_captured(uint64_t handle, int repeats,
+    float *stageMs, size_t stageCount, float *programMs,
+    TesseraNvidiaMatmulHostView *output) {
+  return profileFrame(handle,repeats,stageMs,stageCount,programMs,output,true);
 }
 
 // The final view is the caller's private edge allocation; the earlier views
@@ -927,3 +977,259 @@ extern "C" int tessera_nvidia_matmul_scratch_stats(
   *allocations = owner.arena->allocations + size_t(bool(owner.ownedResult));
   return 0;
 }
+
+
+// Paired SSA programs use a distinct sealed owner. Existing matmul/resident
+// handles cannot accidentally reinterpret a tangent root as a fused operand.
+namespace {
+struct TensorProgramStage {
+  CUmodule module = nullptr;
+  CUfunction function = nullptr;
+  int64_t inputs[2]{}, output = 0, secondOutput = -1;
+  bool matmul = false;
+  unsigned gridX = 0, gridY = 1;
+  std::array<int64_t,3> dims{};
+};
+struct TensorProgramOwner {
+  bool sourceActive = false;
+  std::array<TesseraNvidiaMatmulHostView,3> lastInputs{};
+  CUcontext context = nullptr;
+  unsigned long long identity = 0;
+  CUstream stream = nullptr;
+  std::shared_ptr<Scratch> arena;
+  std::vector<TesseraNvidiaMatmulHostView> buffers;
+  std::vector<size_t> offsets;
+  std::vector<TensorProgramStage> stages;
+  size_t bytes = 0;
+  uint64_t generation = 0;
+  CUdeviceptr base = 0;
+  ~TensorProgramOwner() {
+    if (getpid()!=process || !context || cuCtxPushCurrent(context)!=CUDA_SUCCESS) return;
+    unsigned long long live = 0;
+    if (cuCtxGetId(context,&live)==CUDA_SUCCESS && live==identity) {
+      if (stream) cuStreamSynchronize(stream);
+      if (stream) cuStreamDestroy(stream);
+      for (auto &stage: stages) if (stage.module) cuModuleUnload(stage.module);
+    }
+    CUcontext prior = nullptr; cuCtxPopCurrent(&prior);
+  }
+};
+std::map<uint64_t,std::unique_ptr<TensorProgramOwner>> tensorPrograms;
+bool tensorProgramContext(TensorProgramOwner &owner) {
+  CUcontext context = nullptr; unsigned long long identity = 0;
+  if (!ok(cuCtxGetCurrent(&context),"get tensor program context")) return false;
+  if (!context && !ok(cuCtxSetCurrent(owner.context),"restore tensor program context")) return false;
+  if ((context && context!=owner.context) ||
+      !ok(cuCtxGetId(owner.context,&identity),"tensor program context identity") || identity!=owner.identity)
+    return bad("tensor program context changed"),false;
+  return true;
+}
+bool tensorProgramView(const TesseraNvidiaMatmulHostView &v,
+    const TesseraNvidiaMatmulHostView &expected) {
+  const size_t width = expected.dtype==1 ? 4 : 2;
+  return v.data && reinterpret_cast<uintptr_t>(v.data)%width==0 &&
+      v.bytes==expected.bytes && v.dtype==expected.dtype && v.rank==2 &&
+      v.shape[0]==expected.shape[0] && v.shape[1]==expected.shape[1] &&
+      (v.shape[0]==1 || v.strides[0]==expected.strides[0]) &&
+      (v.shape[1]==1 || v.strides[1]==expected.strides[1]) &&
+      reinterpret_cast<uintptr_t>(v.data)<=UINTPTR_MAX-v.bytes;
+}
+bool tensorProgramOutputs(TensorProgramOwner &owner,
+    const TesseraNvidiaMatmulHostView *views) {
+  for (size_t i=0;i<2;++i)
+    if (!tensorProgramView(views[i],owner.buffers[owner.buffers.size()-2+i]))
+      return bad("tensor program output shape/stride/storage mismatch"),false;
+  uintptr_t a=reinterpret_cast<uintptr_t>(views[0].data),b=reinterpret_cast<uintptr_t>(views[1].data);
+  if (a<b+views[1].bytes && b<a+views[0].bytes)
+    return bad("tensor program returned outputs overlap"),false;
+  return true;
+}
+bool submitTensorProgram(TensorProgramOwner &owner, int repeats=1,
+    float *times=nullptr, bool captured=false) {
+  for (size_t i=0;i<owner.stages.size();++i) {
+    auto &stage=owner.stages[i];
+    CUdeviceptr input=owner.arena->base+owner.offsets[stage.inputs[0]];
+    CUdeviceptr other=(stage.matmul || stage.secondOutput>=0) ? owner.arena->base+owner.offsets[stage.inputs[1]] : 0;
+    CUdeviceptr output=owner.arena->base+owner.offsets[stage.output];
+    CUdeviceptr second=stage.secondOutput>=0 ? owner.arena->base+owner.offsets[stage.secondOutput] : 0;
+    void *args[6]={};
+    if (stage.secondOutput>=0) {
+      args[0]=&input;args[1]=&other;args[2]=&output;args[3]=&second;
+      args[4]=&stage.dims[0];args[5]=&stage.dims[1];
+    } else if (stage.matmul) {
+      args[0]=&input; args[1]=&other; args[2]=&output;
+      for (int j=0;j<3;++j) args[3+j]=&stage.dims[j];
+    } else {
+      args[0]=&input; args[1]=&output; args[2]=&stage.dims[0]; args[3]=&stage.dims[1];
+    }
+    auto launch=[&]() {
+      return ok(cuLaunchKernel(stage.function,stage.gridX,stage.gridY,1,
+          stage.matmul ? 32 : 128,1,1,0,owner.stream,args,nullptr),"launch tensor program member");
+    };
+    if (times ? !measureLaunches(owner.stream,repeats,captured,launch,&times[i]) : !launch()) return false;
+  }
+  return true;
+}
+bool readTensorProgram(TensorProgramOwner &owner, const TesseraNvidiaMatmulHostView *outputs) {
+  auto *host=static_cast<unsigned char *>(owner.arena->host);
+  bool status=true;
+  for (size_t i=owner.buffers.size()-2;i<owner.buffers.size() && status;++i)
+    status=ok(cuMemcpyDtoHAsync(host+owner.offsets[i],owner.arena->base+owner.offsets[i],
+        owner.buffers[i].bytes,owner.stream),"read paired tensor output");
+  const std::string saved=error;
+  bool completed=ok(cuStreamSynchronize(owner.stream),"complete paired tensor program");
+  if (!status) { error=saved; return false; }
+  if (!completed) return false;
+  // Commit neither caller output until every native read has completed.
+  for (size_t i=0;i<2;++i) {
+    size_t id=owner.buffers.size()-2+i;
+    std::memcpy(outputs[i].data,host+owner.offsets[id],owner.buffers[id].bytes);
+  }
+  return true;
+}
+bool tensorProgramFrameAliases(const TesseraNvidiaMatmulHostView *views) {
+  for (size_t i=3;i<5;++i) for (size_t j=0;j<3;++j) {
+    uintptr_t a=reinterpret_cast<uintptr_t>(views[i].data),b=reinterpret_cast<uintptr_t>(views[j].data);
+    if (a<b+views[j].bytes && b<a+views[i].bytes) return bad("paired tensor output aliases an input"),false;
+  }
+  return true;
+}
+int invokeTensorProgram(TensorProgramOwner &owner,const TesseraNvidiaMatmulHostView *views) {
+  for (size_t i=0;i<3;++i)
+    if (!tensorProgramView(views[i],owner.buffers[i])) return bad("paired tensor input shape/stride/storage mismatch");
+  if (!tensorProgramOutputs(owner,views+3)) return 1;
+  if (!tensorProgramFrameAliases(views)) return 1;
+  if (!tensorProgramContext(owner)) return 1;
+  owner.generation=0;
+  if (!owner.arena->grow(owner.bytes) || !owner.arena->growHost(owner.bytes)) return 1;
+  ++owner.arena->generation;
+  auto *host=static_cast<unsigned char *>(owner.arena->host);
+  for (size_t i=0;i<3;++i) std::memcpy(host+owner.offsets[i],views[i].data,views[i].bytes);
+  bool status=true;
+  for (size_t i=0;i<3 && status;++i)
+    status=ok(cuMemcpyHtoDAsync(owner.arena->base+owner.offsets[i],host+owner.offsets[i],views[i].bytes,owner.stream),"upload paired tensor root");
+  if (status) status=submitTensorProgram(owner);
+  if (status) status=readTensorProgram(owner,views+3);
+  if (!status) { const std::string saved=error;cuStreamSynchronize(owner.stream);error=saved;return 1; }
+  owner.generation=owner.arena->generation;owner.base=owner.arena->base;
+  for (size_t i=0;i<3;++i) owner.lastInputs[i]=views[i];
+  return 0;
+}
+}
+extern "C" int tessera_nvidia_tensor_program_prepare(
+    const TesseraNvidiaMatmulHostView *buffers,size_t count,const int64_t *roles,
+    const TesseraNvidiaTensorProgramStep *steps,size_t stageCount,uint64_t *handle) {
+  error.clear(); if (handle) *handle=0;
+  if (getpid()!=process) return bad("tensor program cannot cross fork");
+  std::lock_guard<std::mutex> lock(mutex);
+  if (!buffers || !roles || !steps || !handle || stageCount<3 || stageCount>64 || count!=stageCount+3 ||
+      roles[0]<0 || roles[0]>1 || roles[1]!=1-roles[0] || roles[2]!=2)
+    return bad("invalid paired tensor program frame");
+  try {
+    auto owner=std::make_unique<TensorProgramOwner>();
+    if (!current(owner->context) || !ok(cuCtxGetId(owner->context,&owner->identity),"tensor program identity"))
+      return bad("tensor program requires live SM120 context");
+    const auto &source=buffers[roles[0]],&rhs=buffers[roles[1]];
+    const int64_t m=source.shape[0],k=source.shape[1],n=rhs.shape[1];
+    if ((source.dtype!=2 && source.dtype!=3) || rhs.dtype!=source.dtype || rhs.shape[0]!=k ||
+        m<=0 || n<=0 || k<=0 || m>=(1LL<<31) || n>=(1LL<<31) || k>=(1LL<<31))
+      return bad("paired tensor program storage/shape mismatch");
+    for (size_t i=0;i<count;++i) {
+      const bool output=i>=count-2;
+      const bool right=i==size_t(roles[1]) || i==2;
+      const int64_t rows=right?k:m,cols=right?n:output?n:k;
+      const int dtype=output?1:source.dtype; const size_t width=dtype==1?4:2;
+      const __int128 bytes=(__int128)rows*cols*width;
+      if (bytes>INT64_MAX || buffers[i].rank!=2 || buffers[i].dtype!=dtype ||
+          buffers[i].shape[0]!=rows || buffers[i].shape[1]!=cols || buffers[i].bytes!=size_t(bytes) ||
+          buffers[i].strides[0]!=int64_t(cols*width) || buffers[i].strides[1]!=int64_t(width) ||
+          owner->bytes>SIZE_MAX-255 || size_t(bytes)>SIZE_MAX-owner->bytes-255)
+        return bad("paired tensor program capacity/layout mismatch");
+      owner->buffers.push_back(buffers[i]); owner->buffers.back().data=nullptr;
+      owner->offsets.push_back(owner->bytes);
+      owner->bytes=(owner->bytes+size_t(bytes)+255)&~size_t(255);
+    }
+    for (size_t i=0;i<stageCount;++i) {
+      const auto &s=steps[i]; const bool matmul=i>=stageCount-2;
+      const int64_t input=matmul?int64_t(count-3):i?int64_t(3+i-1):roles[0];
+      if (!s.image || !s.image_bytes || !s.entry || s.kind!=int(matmul) ||
+          s.input_count!=(matmul?2:1) || s.output!=int64_t(3+i) || s.inputs[0]!=input ||
+          s.inputs[1]!=(matmul?(i==stageCount-2?roles[1]:roles[2]):-1) || s.mapping<0 || s.mapping>2)
+        return bad("paired tensor program SSA member mismatch");
+      const std::string entry=s.entry,type=source.dtype==2?"f16":"bf16";
+      const bool relu=entry.rfind("tessera_tile_activation_relu_"+type+"_",0)==0;
+      const bool norm=entry.rfind("tessera_tile_norm_rmsnorm_"+type+"_",0)==0 ||
+                      entry.rfind("tessera_tile_norm_layernorm_"+type+"_",0)==0;
+      const bool softmax=entry=="tessera_tile_softmax_"+type || entry=="tessera_tile_softmax_"+type+"_cooperative_128";
+      const bool cooperative=entry.find("cooperative_128")!=std::string::npos;
+      const bool flat=relu && entry.find("_flat_128_")!=std::string::npos;
+      if (matmul ? (s.mapping!=0 || entry.rfind("nvidia_sm120_scheduled_matmul_",0)!=0 ||
+                      entry.find("_macro_kernel")!=std::string::npos) :
+          ((!relu && !norm && !softmax) || s.mapping!=(flat?2:cooperative?1:0) ||
+           (flat && (__int128)m*k>(1LL<<31))))
+        return bad("paired tensor member entry/mapping mismatch");
+      owner->stages.emplace_back(); auto &stage=owner->stages.back();
+      std::string image(static_cast<const char *>(s.image),s.image_bytes);
+      if (!ok(cuModuleLoadData(&stage.module,image.c_str()),"load paired tensor PTX") ||
+          !ok(cuModuleGetFunction(&stage.function,stage.module,s.entry),"resolve paired tensor entry")) return 1;
+      for (size_t param=0;param<(matmul?6u:4u);++param) {
+        size_t offset=0,bytes=0;
+        if (!ok(cuFuncGetParamInfo(stage.function,param,&offset,&bytes),"inspect paired tensor parameter") ||
+            offset!=param*8 || bytes!=8) return bad("paired tensor member parameter ABI mismatch");
+      }
+      size_t offset=0,bytes=0;
+      if (cuFuncGetParamInfo(stage.function,matmul?6:4,&offset,&bytes)!=CUDA_ERROR_INVALID_VALUE)
+        return bad("paired tensor member parameter count mismatch");
+      stage.matmul=matmul;stage.inputs[0]=s.inputs[0];stage.inputs[1]=s.inputs[1];stage.output=s.output;
+      stage.dims=matmul?std::array<int64_t,3>{m,n,k}:std::array<int64_t,3>{m,k,0};
+      stage.gridX=unsigned(matmul?(n+7)/8:cooperative?m:((flat?m*k:m)+127)/128);
+      stage.gridY=unsigned(matmul?(m+15)/16:1);
+    }
+    if (!ok(cuStreamCreate(&owner->stream,CU_STREAM_NON_BLOCKING),"create paired tensor stream")) return 1;
+    owner->arena=scratch[owner->identity].lock();
+    if (!owner->arena) {
+      owner->arena=std::make_shared<Scratch>();owner->arena->context=owner->context;
+      owner->arena->identity=owner->identity;scratch[owner->identity]=owner->arena;
+    }
+    uint64_t id=nextHandle++;tensorPrograms.emplace(id,std::move(owner));*handle=id;return 0;
+  } catch (...) { return bad("paired tensor program preparation failed"); }
+}
+extern "C" int tessera_nvidia_tensor_program_invoke(uint64_t handle,
+    const TesseraNvidiaMatmulHostView *views,size_t count) {
+  error.clear();if (getpid()!=process) return bad("tensor program cannot cross fork");
+  std::lock_guard<std::mutex> lock(mutex);auto found=tensorPrograms.find(handle);
+  if (found==tensorPrograms.end() || found->second->sourceActive || !views || count!=5) return bad("paired tensor host frame mismatch");
+  return invokeTensorProgram(*found->second,views);
+}
+extern "C" int tessera_nvidia_tensor_program_profile(uint64_t handle,int repeats,int captured,
+    float *stageMs,size_t count,float *programMs,const TesseraNvidiaMatmulHostView *outputs,size_t outputCount) {
+  error.clear();if (getpid()!=process) return bad("tensor program cannot cross fork");
+  std::lock_guard<std::mutex> lock(mutex);auto found=tensorPrograms.find(handle);
+  if (found==tensorPrograms.end() || found->second->sourceActive) return bad("paired tensor profiling owner is closed");
+  auto &owner=*found->second;
+  if (!outputs || outputCount!=2 || !stageMs || !programMs || count!=owner.stages.size() ||
+      (captured!=0 && captured!=1) || repeats<=0 || repeats>(captured?4096:1000000) ||
+      (captured && count>65536/size_t(repeats))) return bad("paired tensor profiling count mismatch");
+  if (!owner.generation || owner.generation!=owner.arena->generation || owner.base!=owner.arena->base)
+    return bad("paired tensor profiling lease is stale");
+  if (!tensorProgramOutputs(owner,outputs) || !tensorProgramContext(owner)) return 1;
+  bool status=measureLaunches(owner.stream,repeats,bool(captured),[&]() {return submitTensorProgram(owner);},programMs);
+  if (status) status=submitTensorProgram(owner,repeats,stageMs,bool(captured));
+  if (status) status=readTensorProgram(owner,outputs);
+  if (!status) {const std::string saved=error;cuStreamSynchronize(owner.stream);owner.generation=0;error=saved;return 1;}
+  return 0;
+}
+extern "C" int tessera_nvidia_tensor_program_scratch_stats(uint64_t handle,size_t *capacity,size_t *allocations) {
+  error.clear();if (getpid()!=process) return bad("tensor program cannot cross fork");
+  std::lock_guard<std::mutex> lock(mutex);auto found=tensorPrograms.find(handle);
+  if (found==tensorPrograms.end() || found->second->sourceActive || !capacity || !allocations) return bad("invalid paired tensor scratch query");
+  *capacity=found->second->arena->capacity;*allocations=found->second->arena->allocations;return 0;
+}
+extern "C" int tessera_nvidia_tensor_program_close(uint64_t handle) {
+  error.clear();if (getpid()!=process) return bad("tensor program cannot cross fork");
+  std::lock_guard<std::mutex> lock(mutex);auto found=tensorPrograms.find(handle);
+  if (found==tensorPrograms.end() || found->second->sourceActive) return bad("paired tensor owner is closed or unknown");
+  tensorPrograms.erase(found);return 0;
+}
+
+#include "active_source_owner.inc"

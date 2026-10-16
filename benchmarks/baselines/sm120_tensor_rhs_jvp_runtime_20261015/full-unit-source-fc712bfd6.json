@@ -1,0 +1,26 @@
+{
+  "frozen_revision": "fc712bfd6e401cb9efbc54556a5c1b89299b8f96",
+  "worktree_clean_before_receipt": true,
+  "command": "python -m pytest -q tests/unit -m 'not slow' --durations=25",
+  "passed": 26269,
+  "skipped": 7700,
+  "deselected": 876,
+  "elapsed_seconds": 2017.89,
+  "host": "Super-Bear WSL",
+  "physical_evidence": "NVIDIA RTX5070 sm120; no sibling hardware certificate",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "tool_sha256": {
+    "TESSERA_OPT": "d994705917e4d43b6c1d34ca02ad9c91b292c6f649c10e35a93d9a1266da43c3",
+    "TESSERA_NVIDIA_OPT": "bad7652472d6364322cb629e9fb28751c9df804e84a07d1e6f0db801c9e6e578",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "efbb6b9a17309ee36eb50be3791e252fb7c96f0e9cffe3d2d01f7449e557894b"
+  },
+  "llvm_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.",
+  "rocm_opt_env": null,
+  "source_sha256": {
+    "src/compiler/ir/TangentInterface.cpp": "ec6c89881423cf1264b9216e1ba563d018842820446fe455a70c692458350334",
+    "src/compiler/ir/AdjointInterface.cpp": "a4effbf11497ba1235023788704d6c41fe938ef44eacf92d4a9a40f437e59d6a",
+    "src/transforms/lib/AutodiffForwardPass.cpp": "b42bf0328c1ce6c782925e64e9907915c6d83298bc2fa234634ee434bb3005f7",
+    "src/transforms/lib/TesseraToLinalgPass.cpp": "d1883eaff79df07ab7801c96ebbd4c954e147f64c874ca2730ba9e635f0f96a4"
+  },
+  "scope": "Frozen public RHS-JVP/runtime certificate reuse source. Separate isolated precision-policy prototype is not part of this suite."
+}

@@ -1,0 +1,31 @@
+{
+  "revision": "264e1a0f74d853c948ed28a466f71c6e35929d01",
+  "start_unix": 1792055575.0304854,
+  "cwd": "/home/angstorms/scratch/sm120-relu-producer-20261014",
+  "command": [
+    "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "-m",
+    "not slow",
+    "tests/unit"
+  ],
+  "binary_sha256": {
+    "TESSERA_OPT": "d994705917e4d43b6c1d34ca02ad9c91b292c6f649c10e35a93d9a1266da43c3",
+    "TESSERA_NVIDIA_OPT": "bad7652472d6364322cb629e9fb28751c9df804e84a07d1e6f0db801c9e6e578",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "efbb6b9a17309ee36eb50be3791e252fb7c96f0e9cffe3d2d01f7449e557894b"
+  },
+  "environment": {
+    "TESSERA_NVIDIA_GEMM_LIB": "/home/angstorms/scratch/bounded-lse-runtime-20261014/libtessera_nvidia_gemm.so",
+    "LLVM_BIN": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin",
+    "TESSERA_PYTHON": "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "/home/angstorms/scratch/sm120-paired-program-20261015/libtessera_nvidia_ptx_launch_paired.so",
+    "TESSERA_LLVM_BIN": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin",
+    "TESSERA_OPT": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt",
+    "CUDA_HOME": "/usr/local/cuda-13.3",
+    "TESSERA_NVIDIA_OPT": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+    "TESSERA_ROCM_ROOT": "/home/angstorms/scratch/rocm-host-tools-20261008"
+  },
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88"
+}

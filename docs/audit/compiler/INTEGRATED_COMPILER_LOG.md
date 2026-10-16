@@ -12316,6 +12316,87 @@ gfx1201.json; source/binary/Target/Tile/HSACO identities and separate event,
 package and completed-host timing regions.
 <!-- entry-fields:end -->
 
+### 2026-10-15 — optional native SM120 flat activation mapping
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync W11-RELU-FLAT-20261015.
+
+Outcome: Explicit serial/flat_128 Graph/Schedule/Tile identity and symbols,
+native LLVM/NVVM arithmetic and matching native direct/resident/prepared
+grids. Provider feature negotiation prevents older prefix-only launchers
+from using a serial grid, before owner allocation. The initial 46-case
+RTX5070 gate passes exhaustive payloads, composed numerics, unchanged norm/
+consumer images, retained outputs and two-sided bounded replay.
+Serial remains the default.
+
+Captured-profile follow-through: native per-call CUDA graphs now measure the
+sealed last host frame while holding its lease/context ownership. 681
+RTX5070 regressions pass (one Apple-only skip), including 13 capture cases
+across storage, bounded/two-sided replay, retained outputs, stale leases and
+old providers. The packet separates device graph/event, profile setup wall
+and completed inference wall. This changes profiling transport, not native
+arithmetic or inference selection.
+
+Remaining: Publication CI after parent synchronization, captured borrowed-root
+profiling, persistent inference graphs and broader producer/AD/five-slice obligations. Single-column
+regression and program enqueue noise prevent default promotion.
+All four queues assessed; no FP8/MXFP8/MXFP4 or sibling proof transferred.
+
+Evidence: benchmarks/baselines/sm120_relu_flat_20261015/README.md;
+docs/spec/ir/sm120_activation_schedule_tile_contract.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-15 — native ReLU tangent and producer AD integration
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync W11-RELU-AD-20261015.
+
+Outcome: native ReLU TangentInterface reuses the strict-positive adjoint rule;
+real half/BF16/f32/f64 and direct symbolic Graph envelopes are numerically
+checked. Native active-A/B/A+B paired Graph now emits for the named half/BF16
+RMSNorm -> ReLU -> matmul. 469 shared checks and 150 owning RTX 5070 producer
+and saved-LSE forward/reverse controls pass. Independent FP32 directional
+oracles validate all three activity choices. All four backend plans distinguish
+shared Graph proof from missing physical composed AD consumers.
+
+Remaining: native multi-output paired-program outlining, complete derivative
+member Schedule/Tile lowering, checked shared-buffer and output ownership,
+public composed JVP/VJP execution, benchmarking and general producer closure.
+No new performance/default selection or five-slice completion claim.
+
+Evidence: benchmarks/baselines/native_relu_ad_20261015/README.md,
+before/route-census.json, after/route-census.json, shared-tests.txt,
+sm120-controls.txt and validation.json.
+<!-- entry-fields:end -->
+
+
+### 2026-10-15 — native SM120 paired tensor RHS execution
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync W11-TENSOR-RHS-JVP-20261015.
+
+Outcome: actual native RHS-linear JVP SSA now outlines to v7 tensor members
+with shared-edge lifetime through both matmul consumers and two returned IDs.
+Native Schedule/Tile/LLVM/PTX packages execute through a sealed C++ program
+owner with checked roles, capacity, context, leases and transactional output
+readback. The named f16/BF16 public RMSNorm -> ReLU -> matmul RHS JVP executes
+without Python member submission. 666 affected regressions, 26 subsequent
+program cases and four public role-permutation controls pass. Six exact
+RTX5070 timing cases have separate captured program/member and public wall
+regions; no comparison/default promotion is claimed. All four queues assessed.
+
+Integration gate: ReLU proof-matrix registration and the paired specification date are repaired after three minimal red cases. 53 proof/native directional-duality/spec/freshness checks pass. Matching core/ROCm tools rebuilt from the 264e1a0f compiler source pass 463 shared and owning gfx1201 NVFP4 route/ownership/lifetime cases. Apple/x86 have no physical ABI/admission changes; the frozen NVIDIA sweep records 26,021 passes and 74 failures, all 74 passing after repair/complete tools on f2162522c; another 100 owning program/proof/audit checks pass. This is partitioned evidence, not one green full sweep. Evidence: benchmarks/baselines/sm120_shared_rocm_parity_20261015/README.md.
+
+Remaining: active-source/A+B derivative consumers, composed reverse, dynamic
+and borrowed resident roots, portable paired replay, encoded/fused envelopes,
+and the other original five-slice obligations. No sibling physical proof transfer.
+
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_20261015/README.md,
+timing.json, affected-tests.txt, program-tests.txt and public-permutation-tests.txt;
+docs/spec/ir/sm120_paired_tensor_program_contract.md.
+<!-- entry-fields:end -->
+
 ### 2026-10-15 — NVFP4 ingest quality on captured model inputs
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
@@ -12520,3 +12601,38 @@ and general route/performance closure. No sibling physical parity is inferred.
 Evidence: benchmarks/baselines/gfx1201_folded_fragment_groups_20261015/README.md;
 docs/spec/ir/gfx1201_folded_fragment_schedule.md.
 Frozen 3b2fa3b70: 458 focused, 44 device, 19 selection/image and 12 format-image\nchecks pass with clean source unchanged. Eight-shape forward/reverse timing\nretains separate host/device domains. Three grouped rows improve 2.1-5.1 percent;\none remains within control variation. The timed WMMA loop has 7 versus 11 DS\nwaits, with unchanged MMA/LDS/barrier counts, registers/LDS and no spills.\n\n<!-- entry-fields:end -->
+
+### 2026-10-15 — native source-active row JVP packages
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync W11-ACTIVE-SOURCE-20261015.
+
+Outcome: actual frontend RMSNorm/ReLU/source-tangent SSA now crosses native
+Graph/AD/Schedule/typed scalar Tile views/NVIDIA/LLVM-PTX into one checked
+three-stage, two-output C++ owner. FP16/BF16 public JVP and compiler-free
+portable replay retain private edge ownership, permuted roots and storage
+semantics, including BF16 negative zero and NaN selection. All three normal
+compiler tools build after PR950 integration. 754 focused checks pass; the
+frozen full sweep has 26,628 passes and two audit-drift failures. Recorder
+naming and five explicit ODS pins repair those failures; 770 audit checks pass.
+All four backend queues distinguish this exact RTX 5070 route from siblings.
+
+Remaining: publication CI; general
+producer/accumulator, dynamic/resident and reverse AD envelopes; independent
+sibling physical consumers. No aggregate five-slice or performance promotion.
+
+Evidence: benchmarks/baselines/sm120_active_source_jvp_runtime_20261015/README.md,
+full-unit-951658503.json, full-unit-951658503.log.gz and audit-repair-tests.txt;
+docs/spec/ir/source_active_row_jvp.md.
+Validation update: frozen synchronized 3659a2b45 passes 26,630 non-slow
+unit tests (7,678 skipped, 876 deselected) in 2017.98 seconds on Super-Bear.
+The final owning attention controls pass 35 tests. Matching compiler/runtime
+publication timing and the green raw full-suite log are retained in the packet.
+Publication CI remains required; broader envelope obligations remain open.
+
+PR951 review: 28 added cases reproduce narrower-policy and stale-profile
+root bugs on the prior code/provider. The corrected eager admission and native
+root refresh pass 436 affected checks; a rebuilt-provider benchmark passes all
+four cases. Original frozen full-suite proof retains its source scope.
+
+<!-- entry-fields:end -->

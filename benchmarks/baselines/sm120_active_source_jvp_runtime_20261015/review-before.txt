@@ -1,0 +1,1328 @@
+FFFFFFFFFFFFFFFFFFFFFFFFFFFF                                             [100%]
+=================================== FAILURES ===================================
+_________ test_narrower_explicit_accumulator_is_rejected[float16-bf16] _________
+
+storage = <class 'numpy.float16'>, accum = 'bf16'
+
+    @pytest.mark.parametrize('storage,accum',[
+        (np.float16,'bf16'), (np.float32,'fp16'),
+        (np.float32,'bf16'), (np.float64,'fp32'),
+    ])
+    def test_narrower_explicit_accumulator_is_rejected(storage,accum):
+        x=np.ones((2,8),dtype=storage)
+>       with pytest.raises(ValueError,match='narrower than storage'):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/unit/test_normalization_frontend_policy.py:63: Failed
+_________ test_narrower_explicit_accumulator_is_rejected[float32-fp16] _________
+
+storage = <class 'numpy.float32'>, accum = 'fp16'
+
+    @pytest.mark.parametrize('storage,accum',[
+        (np.float16,'bf16'), (np.float32,'fp16'),
+        (np.float32,'bf16'), (np.float64,'fp32'),
+    ])
+    def test_narrower_explicit_accumulator_is_rejected(storage,accum):
+        x=np.ones((2,8),dtype=storage)
+>       with pytest.raises(ValueError,match='narrower than storage'):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/unit/test_normalization_frontend_policy.py:63: Failed
+_________ test_narrower_explicit_accumulator_is_rejected[float32-bf16] _________
+
+storage = <class 'numpy.float32'>, accum = 'bf16'
+
+    @pytest.mark.parametrize('storage,accum',[
+        (np.float16,'bf16'), (np.float32,'fp16'),
+        (np.float32,'bf16'), (np.float64,'fp32'),
+    ])
+    def test_narrower_explicit_accumulator_is_rejected(storage,accum):
+        x=np.ones((2,8),dtype=storage)
+>       with pytest.raises(ValueError,match='narrower than storage'):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/unit/test_normalization_frontend_policy.py:63: Failed
+_________ test_narrower_explicit_accumulator_is_rejected[float64-fp32] _________
+
+storage = <class 'numpy.float64'>, accum = 'fp32'
+
+    @pytest.mark.parametrize('storage,accum',[
+        (np.float16,'bf16'), (np.float32,'fp16'),
+        (np.float32,'bf16'), (np.float64,'fp32'),
+    ])
+    def test_narrower_explicit_accumulator_is_rejected(storage,accum):
+        x=np.ones((2,8),dtype=storage)
+>       with pytest.raises(ValueError,match='narrower than storage'):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE ValueError
+
+tests/unit/test_normalization_frontend_policy.py:63: Failed
+_______ test_profile_refreshes_in_place_mutated_roots[package0-False-0] ________
+
+package = (<TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>, (array([[-1.1211e+00,  1.8789e+00, -1...0.00044631, 0.00038786, 0.00026305, 0.00054957,
+        0.00027303, 0.0001955 , 0.00061967, 0.00024168]])], 'f16', ...)
+root_index = 0, captured = False
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,
+        -0.25832942,  0.78807425, -0.2246910... -3.79415214e-01,
+        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,
+         5.34928590e-03]], dtype=float32))
+expected = [array([[-0.24901459,  1.13503835,  2.11448927, -0.81366339,  1.35724128,
+         1.43982009, -0.049781  , -0.3852515...1.74993126e-01,  5.43072280e-02,
+         7.10299906e-01, -5.35455867e-01, -6.08183358e-01,
+         5.99675809e-01]])]
+budgets = [array([[0.00170664, 0.00150067, 0.00258244, 0.00247857, 0.00238125,
+        0.0017789 , 0.00204329, 0.00286497, 0.001... 0.00105345, 0.00096714, 0.00088538, 0.00091593, 0.00056655,
+        0.00083625, 0.00119394, 0.00096019, 0.00126014]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[1.83055779, 1.36311442, 3.05111868, 0.0703977 , 0.08510138,\n        1.69814951, 0.83785525, 0.16056045, 0.2819...  2.08360384, 2.94740774, 1.3911406 , 0.88057102, 2.24513474,\n        0.36693778, 0.1283026 , 1.77573617, 0.44615883]]) <= array([[0.00170664, 0.00150067, 0.00258244, 0.00247857, 0.00238125,\n        0.0017789 , 0.00204329, 0.00286497, 0.0018...  0.00280993, 0.00314398, 0.00276292, 0.00256467, 0.00207012,\n        0.00251736, 0.00352588, 0.00240338, 0.00307668]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[1.83055779, 1.36311442, 3.05111868, 0.0703977 , 0.08510138,\n        1.69814951, 0.83785525, 0.16056045, 0.2819...  2.08360384, 2.94740774, 1.3911406 , 0.88057102, 2.24513474,\n        0.36693778, 0.1283026 , 1.77573617, 0.44615883]]) = <ufunc 'absolute'>((array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) - array([[-0.24901459,  1.13503835,  2.11448927, -0.81366339,  1.35724128,\n         1.43982009, -0.049781  , -0.38525151...0629,  0.86594893, -0.41973863, -0.64772637, -0.78992299,\n         0.71094611,  0.50448957,  0.89998521,  1.25622774]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) = <built-in method astype of numpy.ndarray object at 0x7bf014049d70>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf014049d70> = array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,\n        -0.25832942,  0.78807425, -0.22469106....8108792 ,  0.23284465,  1.4552118 ,\n         0.34400833,  0.37618697, -0.87575096,  0.8100689 ]],\n      dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+_______ test_profile_refreshes_in_place_mutated_roots[package0-False-1] ________
+
+package = (<TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>, (array([[-1.1211e+00,  1.8789e+00, -1...0.00044631, 0.00038786, 0.00026305, 0.00054957,
+        0.00027303, 0.0001955 , 0.00061967, 0.00024168]])], 'f16', ...)
+root_index = 1, captured = False
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,
+        -0.25832942,  0.78807425, -0.2246910... -3.79415214e-01,
+        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,
+         5.34928590e-03]], dtype=float32))
+expected = [array([[3.98600362, 4.89087815, 5.24563337, 5.14825768, 4.14071627,
+        4.9058013 , 4.38289152, 4.889087  , 4.639...045, -0.08010216,  0.0118384 , -0.1470513 ,  0.21114489,
+         0.14008464, -0.0639635 ,  0.1601884 ,  0.01871667]])]
+budgets = [array([[0.00271121, 0.00334417, 0.00363583, 0.0036044 , 0.00292453,
+        0.00350443, 0.00305819, 0.00323502, 0.003... 0.00049512, 0.00040994, 0.00047883, 0.00039464, 0.00033335,
+        0.00038322, 0.00036192, 0.00058123, 0.00032611]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[2.40446041e+00, 5.11895422e+00, 6.18226278e+00, 5.89152337e+00,\n        2.86857637e+00, 5.16413072e+00, 3.5948...66685585e+00, 2.60113045e+00, 7.67529711e-01, 2.43447286e+00,\n        2.38637675e+00, 4.26428803e+00, 1.73506038e+00]]) <= array([[0.00271121, 0.00334417, 0.00363583, 0.0036044 , 0.00292453,\n        0.00350443, 0.00305819, 0.00323502, 0.0030...  0.0029186 , 0.0031691 , 0.00306587, 0.00224078, 0.00195113,\n        0.00226598, 0.00207515, 0.00260883, 0.00196844]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[2.40446041e+00, 5.11895422e+00, 6.18226278e+00, 5.89152337e+00,\n        2.86857637e+00, 5.16413072e+00, 3.5948...66685585e+00, 2.60113045e+00, 7.67529711e-01, 2.43447286e+00,\n        2.38637675e+00, 4.26428803e+00, 1.73506038e+00]]) = <ufunc 'absolute'>((array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) - array([[3.98600362, 4.89087815, 5.24563337, 5.14825768, 4.14071627,\n        4.9058013 , 4.38289152, 4.889087  , 4.6391...  3.60802197, 3.99124721, 3.85597662, 2.8339751 , 2.22274147,\n        2.77848119, 2.76256371, 3.38853707, 2.54512928]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) = <built-in method astype of numpy.ndarray object at 0x7bf0140a6130>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf0140a6130> = array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,\n        -0.25832942,  0.78807425, -0.22469106....8108792 ,  0.23284465,  1.4552118 ,\n         0.34400833,  0.37618697, -0.87575096,  0.8100689 ]],\n      dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+_______ test_profile_refreshes_in_place_mutated_roots[package0-False-2] ________
+
+package = (<TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>, (array([[-1.1211e+00,  1.8789e+00, -1...0.00044631, 0.00038786, 0.00026305, 0.00054957,
+        0.00027303, 0.0001955 , 0.00061967, 0.00024168]])], 'f16', ...)
+root_index = 2, captured = False
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,
+        -0.25832942,  0.78807425, -0.2246910... -3.79415214e-01,
+        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,
+         5.34928590e-03]], dtype=float32))
+expected = [array([[ 1.58154336, -0.22807607, -0.93662945, -0.74326573,  1.27214001,
+        -0.25832947,  0.78807432, -0.2246910...832, -0.13959955, -0.17224648, -0.15662296,  0.38325125,
+         0.21105419, -0.03311153, -0.07497349,  0.31994897]])]
+budgets = [array([[0.00217385, 0.00253479, 0.00323316, 0.00364624, 0.00189246,
+        0.00229783, 0.0036048 , 0.00257019, 0.003... 0.00042437, 0.00036265, 0.00037376, 0.00017414, 0.00051333,
+        0.0003152 , 0.00013074, 0.00036913, 0.00029928]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[0.50048261, 0.05624761, 0.16471332, 0.22696204, 0.04918753,\n        0.38765118, 0.33305201, 0.18983581, 0.1170...  0.72022122, 0.34266094, 0.19113247, 0.49344681, 0.76266647,\n        0.44846288, 0.20369751, 0.20283521, 0.31459969]]) <= array([[0.00035994, 0.00033422, 0.00039678, 0.00050193, 0.00026647,\n        0.00039683, 0.00052035, 0.00032058, 0.0004...  0.00042437, 0.00036265, 0.00037376, 0.00017414, 0.00051333,\n        0.0003152 , 0.00013074, 0.00036913, 0.00029928]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[0.50048261, 0.05624761, 0.16471332, 0.22696204, 0.04918753,\n        0.38765118, 0.33305201, 0.18983581, 0.1170...  0.72022122, 0.34266094, 0.19113247, 0.49344681, 0.76266647,\n        0.44846288, 0.20369751, 0.20283521, 0.31459969]]) = <ufunc 'absolute'>((array([[-2.64211625e-01, -1.41157120e-01,  4.43228073e-02,\n        -2.04809651e-01, -1.38055366e-02,  3.06901366e-01,\n... 3.36823851e-01, -3.79415214e-01,\n        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,\n         5.34928590e-03]]) - array([[ 0.23627098, -0.19740473, -0.12039051,  0.02215239,  0.035382  ,\n        -0.08074982,  0.11820806, -0.17365675...6832, -0.13959955, -0.17224648, -0.15662296,  0.38325125,\n         0.21105419, -0.03311153, -0.07497349,  0.31994897]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[-2.64211625e-01, -1.41157120e-01,  4.43228073e-02,\n        -2.04809651e-01, -1.38055366e-02,  3.06901366e-01,\n... 3.36823851e-01, -3.79415214e-01,\n        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,\n         5.34928590e-03]]) = <built-in method astype of numpy.ndarray object at 0x7bf0140a70f0>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf0140a70f0> = array([[-2.64211625e-01, -1.41157120e-01,  4.43228073e-02,\n        -2.04809651e-01, -1.38055366e-02,  3.06901366e-01,\n..., -3.79415214e-01,\n        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,\n         5.34928590e-03]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+________ test_profile_refreshes_in_place_mutated_roots[package0-True-0] ________
+
+package = (<TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>, (array([[-1.1211e+00,  1.8789e+00, -1...0.00044631, 0.00038786, 0.00026305, 0.00054957,
+        0.00027303, 0.0001955 , 0.00061967, 0.00024168]])], 'f16', ...)
+root_index = 0, captured = True
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,
+        -0.25832942,  0.78807425, -0.2246910... -3.79415214e-01,
+        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,
+         5.34928590e-03]], dtype=float32))
+expected = [array([[-0.24901459,  1.13503835,  2.11448927, -0.81366339,  1.35724128,
+         1.43982009, -0.049781  , -0.3852515...1.74993126e-01,  5.43072280e-02,
+         7.10299906e-01, -5.35455867e-01, -6.08183358e-01,
+         5.99675809e-01]])]
+budgets = [array([[0.00170664, 0.00150067, 0.00258244, 0.00247857, 0.00238125,
+        0.0017789 , 0.00204329, 0.00286497, 0.001... 0.00105345, 0.00096714, 0.00088538, 0.00091593, 0.00056655,
+        0.00083625, 0.00119394, 0.00096019, 0.00126014]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[1.83055779, 1.36311442, 3.05111868, 0.0703977 , 0.08510138,\n        1.69814951, 0.83785525, 0.16056045, 0.2819...  2.08360384, 2.94740774, 1.3911406 , 0.88057102, 2.24513474,\n        0.36693778, 0.1283026 , 1.77573617, 0.44615883]]) <= array([[0.00170664, 0.00150067, 0.00258244, 0.00247857, 0.00238125,\n        0.0017789 , 0.00204329, 0.00286497, 0.0018...  0.00280993, 0.00314398, 0.00276292, 0.00256467, 0.00207012,\n        0.00251736, 0.00352588, 0.00240338, 0.00307668]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[1.83055779, 1.36311442, 3.05111868, 0.0703977 , 0.08510138,\n        1.69814951, 0.83785525, 0.16056045, 0.2819...  2.08360384, 2.94740774, 1.3911406 , 0.88057102, 2.24513474,\n        0.36693778, 0.1283026 , 1.77573617, 0.44615883]]) = <ufunc 'absolute'>((array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) - array([[-0.24901459,  1.13503835,  2.11448927, -0.81366339,  1.35724128,\n         1.43982009, -0.049781  , -0.38525151...0629,  0.86594893, -0.41973863, -0.64772637, -0.78992299,\n         0.71094611,  0.50448957,  0.89998521,  1.25622774]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) = <built-in method astype of numpy.ndarray object at 0x7bf0140a7db0>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf0140a7db0> = array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,\n        -0.25832942,  0.78807425, -0.22469106....8108792 ,  0.23284465,  1.4552118 ,\n         0.34400833,  0.37618697, -0.87575096,  0.8100689 ]],\n      dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+________ test_profile_refreshes_in_place_mutated_roots[package0-True-1] ________
+
+package = (<TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>, (array([[-1.1211e+00,  1.8789e+00, -1...0.00044631, 0.00038786, 0.00026305, 0.00054957,
+        0.00027303, 0.0001955 , 0.00061967, 0.00024168]])], 'f16', ...)
+root_index = 1, captured = True
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,
+        -0.25832942,  0.78807425, -0.2246910... -3.79415214e-01,
+        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,
+         5.34928590e-03]], dtype=float32))
+expected = [array([[3.98600362, 4.89087815, 5.24563337, 5.14825768, 4.14071627,
+        4.9058013 , 4.38289152, 4.889087  , 4.639...045, -0.08010216,  0.0118384 , -0.1470513 ,  0.21114489,
+         0.14008464, -0.0639635 ,  0.1601884 ,  0.01871667]])]
+budgets = [array([[0.00271121, 0.00334417, 0.00363583, 0.0036044 , 0.00292453,
+        0.00350443, 0.00305819, 0.00323502, 0.003... 0.00049512, 0.00040994, 0.00047883, 0.00039464, 0.00033335,
+        0.00038322, 0.00036192, 0.00058123, 0.00032611]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[2.40446041e+00, 5.11895422e+00, 6.18226278e+00, 5.89152337e+00,\n        2.86857637e+00, 5.16413072e+00, 3.5948...66685585e+00, 2.60113045e+00, 7.67529711e-01, 2.43447286e+00,\n        2.38637675e+00, 4.26428803e+00, 1.73506038e+00]]) <= array([[0.00271121, 0.00334417, 0.00363583, 0.0036044 , 0.00292453,\n        0.00350443, 0.00305819, 0.00323502, 0.0030...  0.0029186 , 0.0031691 , 0.00306587, 0.00224078, 0.00195113,\n        0.00226598, 0.00207515, 0.00260883, 0.00196844]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[2.40446041e+00, 5.11895422e+00, 6.18226278e+00, 5.89152337e+00,\n        2.86857637e+00, 5.16413072e+00, 3.5948...66685585e+00, 2.60113045e+00, 7.67529711e-01, 2.43447286e+00,\n        2.38637675e+00, 4.26428803e+00, 1.73506038e+00]]) = <ufunc 'absolute'>((array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) - array([[3.98600362, 4.89087815, 5.24563337, 5.14825768, 4.14071627,\n        4.9058013 , 4.38289152, 4.889087  , 4.6391...  3.60802197, 3.99124721, 3.85597662, 2.8339751 , 2.22274147,\n        2.77848119, 2.76256371, 3.38853707, 2.54512928]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) = <built-in method astype of numpy.ndarray object at 0x7bf0140a71b0>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf0140a71b0> = array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,\n        -0.25832942,  0.78807425, -0.22469106....8108792 ,  0.23284465,  1.4552118 ,\n         0.34400833,  0.37618697, -0.87575096,  0.8100689 ]],\n      dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+________ test_profile_refreshes_in_place_mutated_roots[package0-True-2] ________
+
+package = (<TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>, (array([[-1.1211e+00,  1.8789e+00, -1...0.00044631, 0.00038786, 0.00026305, 0.00054957,
+        0.00027303, 0.0001955 , 0.00061967, 0.00024168]])], 'f16', ...)
+root_index = 2, captured = True
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,
+        -0.25832942,  0.78807425, -0.2246910... -3.79415214e-01,
+        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,
+         5.34928590e-03]], dtype=float32))
+expected = [array([[ 1.58154336, -0.22807607, -0.93662945, -0.74326573,  1.27214001,
+        -0.25832947,  0.78807432, -0.2246910...832, -0.13959955, -0.17224648, -0.15662296,  0.38325125,
+         0.21105419, -0.03311153, -0.07497349,  0.31994897]])]
+budgets = [array([[0.00217385, 0.00253479, 0.00323316, 0.00364624, 0.00189246,
+        0.00229783, 0.0036048 , 0.00257019, 0.003... 0.00042437, 0.00036265, 0.00037376, 0.00017414, 0.00051333,
+        0.0003152 , 0.00013074, 0.00036913, 0.00029928]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[0.50048261, 0.05624761, 0.16471332, 0.22696204, 0.04918753,\n        0.38765118, 0.33305201, 0.18983581, 0.1170...  0.72022122, 0.34266094, 0.19113247, 0.49344681, 0.76266647,\n        0.44846288, 0.20369751, 0.20283521, 0.31459969]]) <= array([[0.00035994, 0.00033422, 0.00039678, 0.00050193, 0.00026647,\n        0.00039683, 0.00052035, 0.00032058, 0.0004...  0.00042437, 0.00036265, 0.00037376, 0.00017414, 0.00051333,\n        0.0003152 , 0.00013074, 0.00036913, 0.00029928]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[0.50048261, 0.05624761, 0.16471332, 0.22696204, 0.04918753,\n        0.38765118, 0.33305201, 0.18983581, 0.1170...  0.72022122, 0.34266094, 0.19113247, 0.49344681, 0.76266647,\n        0.44846288, 0.20369751, 0.20283521, 0.31459969]]) = <ufunc 'absolute'>((array([[-2.64211625e-01, -1.41157120e-01,  4.43228073e-02,\n        -2.04809651e-01, -1.38055366e-02,  3.06901366e-01,\n... 3.36823851e-01, -3.79415214e-01,\n        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,\n         5.34928590e-03]]) - array([[ 0.23627098, -0.19740473, -0.12039051,  0.02215239,  0.035382  ,\n        -0.08074982,  0.11820806, -0.17365675...6832, -0.13959955, -0.17224648, -0.15662296,  0.38325125,\n         0.21105419, -0.03311153, -0.07497349,  0.31994897]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[-2.64211625e-01, -1.41157120e-01,  4.43228073e-02,\n        -2.04809651e-01, -1.38055366e-02,  3.06901366e-01,\n... 3.36823851e-01, -3.79415214e-01,\n        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,\n         5.34928590e-03]]) = <built-in method astype of numpy.ndarray object at 0x7bf0140a4930>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf0140a4930> = array([[-2.64211625e-01, -1.41157120e-01,  4.43228073e-02,\n        -2.04809651e-01, -1.38055366e-02,  3.06901366e-01,\n..., -3.79415214e-01,\n        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,\n         5.34928590e-03]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+_______ test_profile_refreshes_in_place_mutated_roots[package1-False-0] ________
+
+package = (<TesseraJitFn 'product_reversed' effect=pure deterministic=False target='nvidia_sm120'>, (array([[ 4.2383e-01, -2.304...0.00044631, 0.00038786, 0.00026305, 0.00054957,
+        0.00027303, 0.0001955 , 0.00061967, 0.00024168]])], 'f16', ...)
+root_index = 0, captured = False
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,
+        -0.25832942,  0.78807425, -0.2246910... -3.79415214e-01,
+        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,
+         5.34928590e-03]], dtype=float32))
+expected = [array([[3.98600362, 4.89087815, 5.24563337, 5.14825768, 4.14071627,
+        4.9058013 , 4.38289152, 4.889087  , 4.639...045, -0.08010216,  0.0118384 , -0.1470513 ,  0.21114489,
+         0.14008464, -0.0639635 ,  0.1601884 ,  0.01871667]])]
+budgets = [array([[0.00271121, 0.00334417, 0.00363583, 0.0036044 , 0.00292453,
+        0.00350443, 0.00305819, 0.00323502, 0.003... 0.00049512, 0.00040994, 0.00047883, 0.00039464, 0.00033335,
+        0.00038322, 0.00036192, 0.00058123, 0.00032611]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[2.40446041e+00, 5.11895422e+00, 6.18226278e+00, 5.89152337e+00,\n        2.86857637e+00, 5.16413072e+00, 3.5948...66685585e+00, 2.60113045e+00, 7.67529711e-01, 2.43447286e+00,\n        2.38637675e+00, 4.26428803e+00, 1.73506038e+00]]) <= array([[0.00271121, 0.00334417, 0.00363583, 0.0036044 , 0.00292453,\n        0.00350443, 0.00305819, 0.00323502, 0.0030...  0.0029186 , 0.0031691 , 0.00306587, 0.00224078, 0.00195113,\n        0.00226598, 0.00207515, 0.00260883, 0.00196844]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[2.40446041e+00, 5.11895422e+00, 6.18226278e+00, 5.89152337e+00,\n        2.86857637e+00, 5.16413072e+00, 3.5948...66685585e+00, 2.60113045e+00, 7.67529711e-01, 2.43447286e+00,\n        2.38637675e+00, 4.26428803e+00, 1.73506038e+00]]) = <ufunc 'absolute'>((array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) - array([[3.98600362, 4.89087815, 5.24563337, 5.14825768, 4.14071627,\n        4.9058013 , 4.38289152, 4.889087  , 4.6391...  3.60802197, 3.99124721, 3.85597662, 2.8339751 , 2.22274147,\n        2.77848119, 2.76256371, 3.38853707, 2.54512928]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) = <built-in method astype of numpy.ndarray object at 0x7bf01403cf30>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf01403cf30> = array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,\n        -0.25832942,  0.78807425, -0.22469106....8108792 ,  0.23284465,  1.4552118 ,\n         0.34400833,  0.37618697, -0.87575096,  0.8100689 ]],\n      dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+_______ test_profile_refreshes_in_place_mutated_roots[package1-False-1] ________
+
+package = (<TesseraJitFn 'product_reversed' effect=pure deterministic=False target='nvidia_sm120'>, (array([[ 4.2383e-01, -2.304...0.00044631, 0.00038786, 0.00026305, 0.00054957,
+        0.00027303, 0.0001955 , 0.00061967, 0.00024168]])], 'f16', ...)
+root_index = 1, captured = False
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,
+        -0.25832942,  0.78807425, -0.2246910... -3.79415214e-01,
+        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,
+         5.34928590e-03]], dtype=float32))
+expected = [array([[-0.24901459,  1.13503835,  2.11448927, -0.81366339,  1.35724128,
+         1.43982009, -0.049781  , -0.3852515...1.74993126e-01,  5.43072280e-02,
+         7.10299906e-01, -5.35455867e-01, -6.08183358e-01,
+         5.99675809e-01]])]
+budgets = [array([[0.00170664, 0.00150067, 0.00258244, 0.00247857, 0.00238125,
+        0.0017789 , 0.00204329, 0.00286497, 0.001... 0.00105345, 0.00096714, 0.00088538, 0.00091593, 0.00056655,
+        0.00083625, 0.00119394, 0.00096019, 0.00126014]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[1.83055779, 1.36311442, 3.05111868, 0.0703977 , 0.08510138,\n        1.69814951, 0.83785525, 0.16056045, 0.2819...  2.08360384, 2.94740774, 1.3911406 , 0.88057102, 2.24513474,\n        0.36693778, 0.1283026 , 1.77573617, 0.44615883]]) <= array([[0.00170664, 0.00150067, 0.00258244, 0.00247857, 0.00238125,\n        0.0017789 , 0.00204329, 0.00286497, 0.0018...  0.00280993, 0.00314398, 0.00276292, 0.00256467, 0.00207012,\n        0.00251736, 0.00352588, 0.00240338, 0.00307668]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[1.83055779, 1.36311442, 3.05111868, 0.0703977 , 0.08510138,\n        1.69814951, 0.83785525, 0.16056045, 0.2819...  2.08360384, 2.94740774, 1.3911406 , 0.88057102, 2.24513474,\n        0.36693778, 0.1283026 , 1.77573617, 0.44615883]]) = <ufunc 'absolute'>((array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) - array([[-0.24901459,  1.13503835,  2.11448927, -0.81366339,  1.35724128,\n         1.43982009, -0.049781  , -0.38525151...0629,  0.86594893, -0.41973863, -0.64772637, -0.78992299,\n         0.71094611,  0.50448957,  0.89998521,  1.25622774]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) = <built-in method astype of numpy.ndarray object at 0x7bf01403e730>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf01403e730> = array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,\n        -0.25832942,  0.78807425, -0.22469106....8108792 ,  0.23284465,  1.4552118 ,\n         0.34400833,  0.37618697, -0.87575096,  0.8100689 ]],\n      dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+_______ test_profile_refreshes_in_place_mutated_roots[package1-False-2] ________
+
+package = (<TesseraJitFn 'product_reversed' effect=pure deterministic=False target='nvidia_sm120'>, (array([[ 4.2383e-01, -2.304...0.00044631, 0.00038786, 0.00026305, 0.00054957,
+        0.00027303, 0.0001955 , 0.00061967, 0.00024168]])], 'f16', ...)
+root_index = 2, captured = False
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,
+        -0.25832942,  0.78807425, -0.2246910... -3.79415214e-01,
+        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,
+         5.34928590e-03]], dtype=float32))
+expected = [array([[ 1.58154336, -0.22807607, -0.93662945, -0.74326573,  1.27214001,
+        -0.25832947,  0.78807432, -0.2246910...832, -0.13959955, -0.17224648, -0.15662296,  0.38325125,
+         0.21105419, -0.03311153, -0.07497349,  0.31994897]])]
+budgets = [array([[0.00217385, 0.00253479, 0.00323316, 0.00364624, 0.00189246,
+        0.00229783, 0.0036048 , 0.00257019, 0.003... 0.00042437, 0.00036265, 0.00037376, 0.00017414, 0.00051333,
+        0.0003152 , 0.00013074, 0.00036913, 0.00029928]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[0.50048261, 0.05624761, 0.16471332, 0.22696204, 0.04918753,\n        0.38765118, 0.33305201, 0.18983581, 0.1170...  0.72022122, 0.34266094, 0.19113247, 0.49344681, 0.76266647,\n        0.44846288, 0.20369751, 0.20283521, 0.31459969]]) <= array([[0.00035994, 0.00033422, 0.00039678, 0.00050193, 0.00026647,\n        0.00039683, 0.00052035, 0.00032058, 0.0004...  0.00042437, 0.00036265, 0.00037376, 0.00017414, 0.00051333,\n        0.0003152 , 0.00013074, 0.00036913, 0.00029928]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[0.50048261, 0.05624761, 0.16471332, 0.22696204, 0.04918753,\n        0.38765118, 0.33305201, 0.18983581, 0.1170...  0.72022122, 0.34266094, 0.19113247, 0.49344681, 0.76266647,\n        0.44846288, 0.20369751, 0.20283521, 0.31459969]]) = <ufunc 'absolute'>((array([[-2.64211625e-01, -1.41157120e-01,  4.43228073e-02,\n        -2.04809651e-01, -1.38055366e-02,  3.06901366e-01,\n... 3.36823851e-01, -3.79415214e-01,\n        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,\n         5.34928590e-03]]) - array([[ 0.23627098, -0.19740473, -0.12039051,  0.02215239,  0.035382  ,\n        -0.08074982,  0.11820806, -0.17365675...6832, -0.13959955, -0.17224648, -0.15662296,  0.38325125,\n         0.21105419, -0.03311153, -0.07497349,  0.31994897]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[-2.64211625e-01, -1.41157120e-01,  4.43228073e-02,\n        -2.04809651e-01, -1.38055366e-02,  3.06901366e-01,\n... 3.36823851e-01, -3.79415214e-01,\n        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,\n         5.34928590e-03]]) = <built-in method astype of numpy.ndarray object at 0x7bf01403fdb0>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf01403fdb0> = array([[-2.64211625e-01, -1.41157120e-01,  4.43228073e-02,\n        -2.04809651e-01, -1.38055366e-02,  3.06901366e-01,\n..., -3.79415214e-01,\n        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,\n         5.34928590e-03]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+________ test_profile_refreshes_in_place_mutated_roots[package1-True-0] ________
+
+package = (<TesseraJitFn 'product_reversed' effect=pure deterministic=False target='nvidia_sm120'>, (array([[ 4.2383e-01, -2.304...0.00044631, 0.00038786, 0.00026305, 0.00054957,
+        0.00027303, 0.0001955 , 0.00061967, 0.00024168]])], 'f16', ...)
+root_index = 0, captured = True
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,
+        -0.25832942,  0.78807425, -0.2246910... -3.79415214e-01,
+        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,
+         5.34928590e-03]], dtype=float32))
+expected = [array([[3.98600362, 4.89087815, 5.24563337, 5.14825768, 4.14071627,
+        4.9058013 , 4.38289152, 4.889087  , 4.639...045, -0.08010216,  0.0118384 , -0.1470513 ,  0.21114489,
+         0.14008464, -0.0639635 ,  0.1601884 ,  0.01871667]])]
+budgets = [array([[0.00271121, 0.00334417, 0.00363583, 0.0036044 , 0.00292453,
+        0.00350443, 0.00305819, 0.00323502, 0.003... 0.00049512, 0.00040994, 0.00047883, 0.00039464, 0.00033335,
+        0.00038322, 0.00036192, 0.00058123, 0.00032611]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[2.40446041e+00, 5.11895422e+00, 6.18226278e+00, 5.89152337e+00,\n        2.86857637e+00, 5.16413072e+00, 3.5948...66685585e+00, 2.60113045e+00, 7.67529711e-01, 2.43447286e+00,\n        2.38637675e+00, 4.26428803e+00, 1.73506038e+00]]) <= array([[0.00271121, 0.00334417, 0.00363583, 0.0036044 , 0.00292453,\n        0.00350443, 0.00305819, 0.00323502, 0.0030...  0.0029186 , 0.0031691 , 0.00306587, 0.00224078, 0.00195113,\n        0.00226598, 0.00207515, 0.00260883, 0.00196844]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[2.40446041e+00, 5.11895422e+00, 6.18226278e+00, 5.89152337e+00,\n        2.86857637e+00, 5.16413072e+00, 3.5948...66685585e+00, 2.60113045e+00, 7.67529711e-01, 2.43447286e+00,\n        2.38637675e+00, 4.26428803e+00, 1.73506038e+00]]) = <ufunc 'absolute'>((array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) - array([[3.98600362, 4.89087815, 5.24563337, 5.14825768, 4.14071627,\n        4.9058013 , 4.38289152, 4.889087  , 4.6391...  3.60802197, 3.99124721, 3.85597662, 2.8339751 , 2.22274147,\n        2.77848119, 2.76256371, 3.38853707, 2.54512928]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) = <built-in method astype of numpy.ndarray object at 0x7bf01403f570>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf01403f570> = array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,\n        -0.25832942,  0.78807425, -0.22469106....8108792 ,  0.23284465,  1.4552118 ,\n         0.34400833,  0.37618697, -0.87575096,  0.8100689 ]],\n      dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+________ test_profile_refreshes_in_place_mutated_roots[package1-True-1] ________
+
+package = (<TesseraJitFn 'product_reversed' effect=pure deterministic=False target='nvidia_sm120'>, (array([[ 4.2383e-01, -2.304...0.00044631, 0.00038786, 0.00026305, 0.00054957,
+        0.00027303, 0.0001955 , 0.00061967, 0.00024168]])], 'f16', ...)
+root_index = 1, captured = True
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,
+        -0.25832942,  0.78807425, -0.2246910... -3.79415214e-01,
+        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,
+         5.34928590e-03]], dtype=float32))
+expected = [array([[-0.24901459,  1.13503835,  2.11448927, -0.81366339,  1.35724128,
+         1.43982009, -0.049781  , -0.3852515...1.74993126e-01,  5.43072280e-02,
+         7.10299906e-01, -5.35455867e-01, -6.08183358e-01,
+         5.99675809e-01]])]
+budgets = [array([[0.00170664, 0.00150067, 0.00258244, 0.00247857, 0.00238125,
+        0.0017789 , 0.00204329, 0.00286497, 0.001... 0.00105345, 0.00096714, 0.00088538, 0.00091593, 0.00056655,
+        0.00083625, 0.00119394, 0.00096019, 0.00126014]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[1.83055779, 1.36311442, 3.05111868, 0.0703977 , 0.08510138,\n        1.69814951, 0.83785525, 0.16056045, 0.2819...  2.08360384, 2.94740774, 1.3911406 , 0.88057102, 2.24513474,\n        0.36693778, 0.1283026 , 1.77573617, 0.44615883]]) <= array([[0.00170664, 0.00150067, 0.00258244, 0.00247857, 0.00238125,\n        0.0017789 , 0.00204329, 0.00286497, 0.0018...  0.00280993, 0.00314398, 0.00276292, 0.00256467, 0.00207012,\n        0.00251736, 0.00352588, 0.00240338, 0.00307668]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[1.83055779, 1.36311442, 3.05111868, 0.0703977 , 0.08510138,\n        1.69814951, 0.83785525, 0.16056045, 0.2819...  2.08360384, 2.94740774, 1.3911406 , 0.88057102, 2.24513474,\n        0.36693778, 0.1283026 , 1.77573617, 0.44615883]]) = <ufunc 'absolute'>((array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) - array([[-0.24901459,  1.13503835,  2.11448927, -0.81366339,  1.35724128,\n         1.43982009, -0.049781  , -0.38525151...0629,  0.86594893, -0.41973863, -0.64772637, -0.78992299,\n         0.71094611,  0.50448957,  0.89998521,  1.25622774]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.58154321, -0.22807607, -0.93662941, -0.74326569,  1.27213991,\n        -0.25832942,  0.78807425, -0.22469106...9755, -2.08145881, -1.81087923,  0.23284465,  1.45521176,\n         0.34400833,  0.37618697, -0.87575096,  0.81006891]]) = <built-in method astype of numpy.ndarray object at 0x7bf01403f810>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf01403f810> = array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,\n        -0.25832942,  0.78807425, -0.22469106....8108792 ,  0.23284465,  1.4552118 ,\n         0.34400833,  0.37618697, -0.87575096,  0.8100689 ]],\n      dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+________ test_profile_refreshes_in_place_mutated_roots[package1-True-2] ________
+
+package = (<TesseraJitFn 'product_reversed' effect=pure deterministic=False target='nvidia_sm120'>, (array([[ 4.2383e-01, -2.304...0.00044631, 0.00038786, 0.00026305, 0.00054957,
+        0.00027303, 0.0001955 , 0.00061967, 0.00024168]])], 'f16', ...)
+root_index = 2, captured = True
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.5815432 , -0.22807607, -0.9366294 , -0.7432657 ,  1.2721399 ,
+        -0.25832942,  0.78807425, -0.2246910... -3.79415214e-01,
+        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,
+         5.34928590e-03]], dtype=float32))
+expected = [array([[ 1.58154336, -0.22807607, -0.93662945, -0.74326573,  1.27214001,
+        -0.25832947,  0.78807432, -0.2246910...832, -0.13959955, -0.17224648, -0.15662296,  0.38325125,
+         0.21105419, -0.03311153, -0.07497349,  0.31994897]])]
+budgets = [array([[0.00217385, 0.00253479, 0.00323316, 0.00364624, 0.00189246,
+        0.00229783, 0.0036048 , 0.00257019, 0.003... 0.00042437, 0.00036265, 0.00037376, 0.00017414, 0.00051333,
+        0.0003152 , 0.00013074, 0.00036913, 0.00029928]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[0.50048261, 0.05624761, 0.16471332, 0.22696204, 0.04918753,\n        0.38765118, 0.33305201, 0.18983581, 0.1170...  0.72022122, 0.34266094, 0.19113247, 0.49344681, 0.76266647,\n        0.44846288, 0.20369751, 0.20283521, 0.31459969]]) <= array([[0.00035994, 0.00033422, 0.00039678, 0.00050193, 0.00026647,\n        0.00039683, 0.00052035, 0.00032058, 0.0004...  0.00042437, 0.00036265, 0.00037376, 0.00017414, 0.00051333,\n        0.0003152 , 0.00013074, 0.00036913, 0.00029928]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[0.50048261, 0.05624761, 0.16471332, 0.22696204, 0.04918753,\n        0.38765118, 0.33305201, 0.18983581, 0.1170...  0.72022122, 0.34266094, 0.19113247, 0.49344681, 0.76266647,\n        0.44846288, 0.20369751, 0.20283521, 0.31459969]]) = <ufunc 'absolute'>((array([[-2.64211625e-01, -1.41157120e-01,  4.43228073e-02,\n        -2.04809651e-01, -1.38055366e-02,  3.06901366e-01,\n... 3.36823851e-01, -3.79415214e-01,\n        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,\n         5.34928590e-03]]) - array([[ 0.23627098, -0.19740473, -0.12039051,  0.02215239,  0.035382  ,\n        -0.08074982,  0.11820806, -0.17365675...6832, -0.13959955, -0.17224648, -0.15662296,  0.38325125,\n         0.21105419, -0.03311153, -0.07497349,  0.31994897]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[-2.64211625e-01, -1.41157120e-01,  4.43228073e-02,\n        -2.04809651e-01, -1.38055366e-02,  3.06901366e-01,\n... 3.36823851e-01, -3.79415214e-01,\n        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,\n         5.34928590e-03]]) = <built-in method astype of numpy.ndarray object at 0x7bee0bfcd290>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bee0bfcd290> = array([[-2.64211625e-01, -1.41157120e-01,  4.43228073e-02,\n        -2.04809651e-01, -1.38055366e-02,  3.06901366e-01,\n..., -3.79415214e-01,\n        -2.37408698e-01,  1.70585975e-01, -2.77808696e-01,\n         5.34928590e-03]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+_______ test_profile_refreshes_in_place_mutated_roots[package2-False-0] ________
+
+package = (<TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>, (array([[-1.125, 1.875, -1.11719, 0.7....00354953, 0.00308236, 0.00209058, 0.00437403,
+        0.00216788, 0.00155368, 0.00493223, 0.00192056]])], 'bf16', ...)
+root_index = 0, captured = False
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,
+        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,... -3.79252911e-01,
+        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,
+         4.73332405e-03]], dtype=float32))
+expected = [array([[-0.25259227,  1.14026797,  2.11321358, -0.81171393,  1.35837889,
+         1.44366264, -0.04909198, -0.3807362...1.76046744e-01,  5.41797951e-02,
+         7.11141527e-01, -5.35313010e-01, -6.04971211e-01,
+         6.00667238e-01]])]
+budgets = [array([[0.01359757, 0.0119556 , 0.0205463 , 0.01975823, 0.01897592,
+        0.01416517, 0.01628794, 0.02283614, 0.014... 0.00838767, 0.00769342, 0.00704713, 0.0072789 , 0.0045052 ,
+        0.00664862, 0.00949788, 0.00764188, 0.0100279 ]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[1.831801  , 1.36970395, 3.05133007, 0.06108522, 0.08592129,\n        1.70182443, 0.8450778 , 0.15641986, 0.2840...  2.08255315, 2.94657564, 1.38716543, 0.88490671, 2.24149629,\n        0.3737427 , 0.12514067, 1.78367173, 0.44886804]]) <= array([[0.01359757, 0.0119556 , 0.0205463 , 0.01975823, 0.01897592,\n        0.01416517, 0.01628794, 0.02283614, 0.0145...  0.02325113, 0.02692072, 0.02248908, 0.02107899, 0.01696758,\n        0.02133334, 0.0297813 , 0.02035431, 0.02464617]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[1.831801  , 1.36970395, 3.05133007, 0.06108522, 0.08592129,\n        1.70182443, 0.8450778 , 0.15641986, 0.2840...  2.08255315, 2.94657564, 1.38716543, 0.88490671, 2.24149629,\n        0.3737427 , 0.12514067, 1.78367173, 0.44886804]]) = <ufunc 'absolute'>((array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) - array([[-0.25259227,  1.14026797,  2.11321358, -0.81171393,  1.35837889,\n         1.44366264, -0.04909198, -0.38073623...5254,  0.87145281, -0.42328167, -0.65200508, -0.78691121,\n         0.71557462,  0.50267375,  0.90872752,  1.25908613]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) = <built-in method astype of numpy.ndarray object at 0x7bf017e86c70>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf017e86c70> = array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n...,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+_______ test_profile_refreshes_in_place_mutated_roots[package2-False-1] ________
+
+package = (<TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>, (array([[-1.125, 1.875, -1.11719, 0.7....00354953, 0.00308236, 0.00209058, 0.00437403,
+        0.00216788, 0.00155368, 0.00493223, 0.00192056]])], 'bf16', ...)
+root_index = 1, captured = False
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,
+        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,... -3.79252911e-01,
+        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,
+         4.73332405e-03]], dtype=float32))
+expected = [array([[3.98751664, 4.88945425, 5.24391377, 5.15195763, 4.13721013,
+        4.90840685, 4.38173103, 4.88883018, 4.640...406, -0.08046293,  0.01160789, -0.14766693,  0.21017551,
+         0.13973761, -0.06412125,  0.16103578,  0.01895022]])]
+budgets = [array([[0.02157955, 0.02660739, 0.02892153, 0.02869417, 0.02325364,
+        0.02790685, 0.02435437, 0.0257306 , 0.024... 0.00393354, 0.00326147, 0.00380718, 0.00313808, 0.00265177,
+        0.0030469 , 0.00287444, 0.00462391, 0.00259235]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[2.40830791, 5.11889023, 6.18203026, 5.90258634, 2.86475253,\n        5.16656864, 3.58574522, 5.11314656, 4.3651...  4.9135561 , 6.06022   , 5.66172111, 2.59738332, 0.76467276,\n        2.4348824 , 2.37911928, 4.25972414, 1.73027909]]) <= array([[0.02157955, 0.02660739, 0.02892153, 0.02869417, 0.02325364,\n        0.02790685, 0.02435437, 0.0257306 , 0.0243...  0.02321849, 0.02521209, 0.02439161, 0.01783644, 0.01553578,\n        0.01804376, 0.01650301, 0.0207738 , 0.01565608]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[2.40830791, 5.11889023, 6.18203026, 5.90258634, 2.86475253,\n        5.16656864, 3.58574522, 5.11314656, 4.3651...  4.9135561 , 6.06022   , 5.66172111, 2.59738332, 0.76467276,\n        2.4348824 , 2.37911928, 4.25972414, 1.73027909]]) = <ufunc 'absolute'>((array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) - array([[3.98751664, 4.88945425, 5.24391377, 5.15195763, 4.13721013,\n        4.90840685, 4.38173103, 4.88883018, 4.6408...  3.60025549, 3.98509717, 3.85127401, 2.83028495, 2.21925783,\n        2.77671432, 2.75665236, 3.38477993, 2.54049718]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) = <built-in method astype of numpy.ndarray object at 0x7bf017e85950>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf017e85950> = array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n...,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+_______ test_profile_refreshes_in_place_mutated_roots[package2-False-2] ________
+
+package = (<TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>, (array([[-1.125, 1.875, -1.11719, 0.7....00354953, 0.00308236, 0.00209058, 0.00437403,
+        0.00216788, 0.00155368, 0.00493223, 0.00192056]])], 'bf16', ...)
+root_index = 2, captured = False
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,
+        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,... -3.79252911e-01,
+        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,
+         4.73332405e-03]], dtype=float32))
+expected = [array([[ 1.57920879e+00, -2.29435980e-01, -9.38116446e-01,
+        -7.50628710e-01,  1.27245766e+00, -2.58161783e-01,...1.56296413e-01,  3.83436320e-01,
+         2.10318020e-01, -3.30803543e-02, -7.47246444e-02,
+         3.20446800e-01]])]
+budgets = [array([[0.01729334, 0.0201682 , 0.02573942, 0.02901547, 0.01506889,
+        0.01827276, 0.02872155, 0.0204562 , 0.024... 0.00337392, 0.0028806 , 0.00296768, 0.00138213, 0.0040831 ,
+        0.00250366, 0.00103615, 0.00293455, 0.00238044]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[0.50083292, 0.05730854, 0.16567719, 0.22619575, 0.04920748,\n        0.38787512, 0.33306976, 0.18926938, 0.1167...  0.72022483, 0.3425972 , 0.19092724, 0.49287425, 0.76268923,\n        0.44727175, 0.20342506, 0.20210519, 0.31571348]]) <= array([[0.00286303, 0.00265841, 0.00315636, 0.00399232, 0.00211798,\n        0.00315662, 0.00414046, 0.00254844, 0.0035...  0.00337392, 0.0028806 , 0.00296768, 0.00138213, 0.0040831 ,\n        0.00250366, 0.00103615, 0.00293455, 0.00238044]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[0.50083292, 0.05730854, 0.16567719, 0.22619575, 0.04920748,\n        0.38787512, 0.33306976, 0.18926938, 0.1167...  0.72022483, 0.3425972 , 0.19092724, 0.49287425, 0.76268923,\n        0.44727175, 0.20342506, 0.20210519, 0.31571348]]) = <ufunc 'absolute'>((array([[-2.63888687e-01, -1.40683725e-01,  4.51998711e-02,\n        -2.04689622e-01, -1.34190619e-02,  3.06905568e-01,\n... 3.36577833e-01, -3.79252911e-01,\n        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,\n         4.73332405e-03]]) - array([[ 2.36944228e-01, -1.97992265e-01, -1.20477319e-01,\n         2.15061307e-02,  3.57884169e-02, -8.09695572e-02,\n...-1.56296413e-01,  3.83436320e-01,\n         2.10318020e-01, -3.30803543e-02, -7.47246444e-02,\n         3.20446800e-01]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[-2.63888687e-01, -1.40683725e-01,  4.51998711e-02,\n        -2.04689622e-01, -1.34190619e-02,  3.06905568e-01,\n... 3.36577833e-01, -3.79252911e-01,\n        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,\n         4.73332405e-03]]) = <built-in method astype of numpy.ndarray object at 0x7bf017e87ab0>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf017e87ab0> = array([[-2.63888687e-01, -1.40683725e-01,  4.51998711e-02,\n        -2.04689622e-01, -1.34190619e-02,  3.06905568e-01,\n..., -3.79252911e-01,\n        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,\n         4.73332405e-03]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+________ test_profile_refreshes_in_place_mutated_roots[package2-True-0] ________
+
+package = (<TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>, (array([[-1.125, 1.875, -1.11719, 0.7....00354953, 0.00308236, 0.00209058, 0.00437403,
+        0.00216788, 0.00155368, 0.00493223, 0.00192056]])], 'bf16', ...)
+root_index = 0, captured = True
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,
+        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,... -3.79252911e-01,
+        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,
+         4.73332405e-03]], dtype=float32))
+expected = [array([[-0.25259227,  1.14026797,  2.11321358, -0.81171393,  1.35837889,
+         1.44366264, -0.04909198, -0.3807362...1.76046744e-01,  5.41797951e-02,
+         7.11141527e-01, -5.35313010e-01, -6.04971211e-01,
+         6.00667238e-01]])]
+budgets = [array([[0.01359757, 0.0119556 , 0.0205463 , 0.01975823, 0.01897592,
+        0.01416517, 0.01628794, 0.02283614, 0.014... 0.00838767, 0.00769342, 0.00704713, 0.0072789 , 0.0045052 ,
+        0.00664862, 0.00949788, 0.00764188, 0.0100279 ]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[1.831801  , 1.36970395, 3.05133007, 0.06108522, 0.08592129,\n        1.70182443, 0.8450778 , 0.15641986, 0.2840...  2.08255315, 2.94657564, 1.38716543, 0.88490671, 2.24149629,\n        0.3737427 , 0.12514067, 1.78367173, 0.44886804]]) <= array([[0.01359757, 0.0119556 , 0.0205463 , 0.01975823, 0.01897592,\n        0.01416517, 0.01628794, 0.02283614, 0.0145...  0.02325113, 0.02692072, 0.02248908, 0.02107899, 0.01696758,\n        0.02133334, 0.0297813 , 0.02035431, 0.02464617]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[1.831801  , 1.36970395, 3.05133007, 0.06108522, 0.08592129,\n        1.70182443, 0.8450778 , 0.15641986, 0.2840...  2.08255315, 2.94657564, 1.38716543, 0.88490671, 2.24149629,\n        0.3737427 , 0.12514067, 1.78367173, 0.44886804]]) = <ufunc 'absolute'>((array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) - array([[-0.25259227,  1.14026797,  2.11321358, -0.81171393,  1.35837889,\n         1.44366264, -0.04909198, -0.38073623...5254,  0.87145281, -0.42328167, -0.65200508, -0.78691121,\n         0.71557462,  0.50267375,  0.90872752,  1.25908613]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) = <built-in method astype of numpy.ndarray object at 0x7bf01404b1b0>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf01404b1b0> = array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n...,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+________ test_profile_refreshes_in_place_mutated_roots[package2-True-1] ________
+
+package = (<TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>, (array([[-1.125, 1.875, -1.11719, 0.7....00354953, 0.00308236, 0.00209058, 0.00437403,
+        0.00216788, 0.00155368, 0.00493223, 0.00192056]])], 'bf16', ...)
+root_index = 1, captured = True
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,
+        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,... -3.79252911e-01,
+        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,
+         4.73332405e-03]], dtype=float32))
+expected = [array([[3.98751664, 4.88945425, 5.24391377, 5.15195763, 4.13721013,
+        4.90840685, 4.38173103, 4.88883018, 4.640...406, -0.08046293,  0.01160789, -0.14766693,  0.21017551,
+         0.13973761, -0.06412125,  0.16103578,  0.01895022]])]
+budgets = [array([[0.02157955, 0.02660739, 0.02892153, 0.02869417, 0.02325364,
+        0.02790685, 0.02435437, 0.0257306 , 0.024... 0.00393354, 0.00326147, 0.00380718, 0.00313808, 0.00265177,
+        0.0030469 , 0.00287444, 0.00462391, 0.00259235]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[2.40830791, 5.11889023, 6.18203026, 5.90258634, 2.86475253,\n        5.16656864, 3.58574522, 5.11314656, 4.3651...  4.9135561 , 6.06022   , 5.66172111, 2.59738332, 0.76467276,\n        2.4348824 , 2.37911928, 4.25972414, 1.73027909]]) <= array([[0.02157955, 0.02660739, 0.02892153, 0.02869417, 0.02325364,\n        0.02790685, 0.02435437, 0.0257306 , 0.0243...  0.02321849, 0.02521209, 0.02439161, 0.01783644, 0.01553578,\n        0.01804376, 0.01650301, 0.0207738 , 0.01565608]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[2.40830791, 5.11889023, 6.18203026, 5.90258634, 2.86475253,\n        5.16656864, 3.58574522, 5.11314656, 4.3651...  4.9135561 , 6.06022   , 5.66172111, 2.59738332, 0.76467276,\n        2.4348824 , 2.37911928, 4.25972414, 1.73027909]]) = <ufunc 'absolute'>((array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) - array([[3.98751664, 4.88945425, 5.24391377, 5.15195763, 4.13721013,\n        4.90840685, 4.38173103, 4.88883018, 4.6408...  3.60025549, 3.98509717, 3.85127401, 2.83028495, 2.21925783,\n        2.77671432, 2.75665236, 3.38477993, 2.54049718]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) = <built-in method astype of numpy.ndarray object at 0x7bf017dcdc50>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf017dcdc50> = array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n...,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+________ test_profile_refreshes_in_place_mutated_roots[package2-True-2] ________
+
+package = (<TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>, (array([[-1.125, 1.875, -1.11719, 0.7....00354953, 0.00308236, 0.00209058, 0.00437403,
+        0.00216788, 0.00155368, 0.00493223, 0.00192056]])], 'bf16', ...)
+root_index = 2, captured = True
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,
+        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,... -3.79252911e-01,
+        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,
+         4.73332405e-03]], dtype=float32))
+expected = [array([[ 1.57920879e+00, -2.29435980e-01, -9.38116446e-01,
+        -7.50628710e-01,  1.27245766e+00, -2.58161783e-01,...1.56296413e-01,  3.83436320e-01,
+         2.10318020e-01, -3.30803543e-02, -7.47246444e-02,
+         3.20446800e-01]])]
+budgets = [array([[0.01729334, 0.0201682 , 0.02573942, 0.02901547, 0.01506889,
+        0.01827276, 0.02872155, 0.0204562 , 0.024... 0.00337392, 0.0028806 , 0.00296768, 0.00138213, 0.0040831 ,
+        0.00250366, 0.00103615, 0.00293455, 0.00238044]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[0.50083292, 0.05730854, 0.16567719, 0.22619575, 0.04920748,\n        0.38787512, 0.33306976, 0.18926938, 0.1167...  0.72022483, 0.3425972 , 0.19092724, 0.49287425, 0.76268923,\n        0.44727175, 0.20342506, 0.20210519, 0.31571348]]) <= array([[0.00286303, 0.00265841, 0.00315636, 0.00399232, 0.00211798,\n        0.00315662, 0.00414046, 0.00254844, 0.0035...  0.00337392, 0.0028806 , 0.00296768, 0.00138213, 0.0040831 ,\n        0.00250366, 0.00103615, 0.00293455, 0.00238044]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[0.50083292, 0.05730854, 0.16567719, 0.22619575, 0.04920748,\n        0.38787512, 0.33306976, 0.18926938, 0.1167...  0.72022483, 0.3425972 , 0.19092724, 0.49287425, 0.76268923,\n        0.44727175, 0.20342506, 0.20210519, 0.31571348]]) = <ufunc 'absolute'>((array([[-2.63888687e-01, -1.40683725e-01,  4.51998711e-02,\n        -2.04689622e-01, -1.34190619e-02,  3.06905568e-01,\n... 3.36577833e-01, -3.79252911e-01,\n        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,\n         4.73332405e-03]]) - array([[ 2.36944228e-01, -1.97992265e-01, -1.20477319e-01,\n         2.15061307e-02,  3.57884169e-02, -8.09695572e-02,\n...-1.56296413e-01,  3.83436320e-01,\n         2.10318020e-01, -3.30803543e-02, -7.47246444e-02,\n         3.20446800e-01]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[-2.63888687e-01, -1.40683725e-01,  4.51998711e-02,\n        -2.04689622e-01, -1.34190619e-02,  3.06905568e-01,\n... 3.36577833e-01, -3.79252911e-01,\n        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,\n         4.73332405e-03]]) = <built-in method astype of numpy.ndarray object at 0x7bf018443b10>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf018443b10> = array([[-2.63888687e-01, -1.40683725e-01,  4.51998711e-02,\n        -2.04689622e-01, -1.34190619e-02,  3.06905568e-01,\n..., -3.79252911e-01,\n        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,\n         4.73332405e-03]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+_______ test_profile_refreshes_in_place_mutated_roots[package3-False-0] ________
+
+package = (<TesseraJitFn 'product_reversed' effect=pure deterministic=False target='nvidia_sm120'>, (array([[0.423828, -0.002304....00354953, 0.00308236, 0.00209058, 0.00437403,
+        0.00216788, 0.00155368, 0.00493223, 0.00192056]])], 'bf16', ...)
+root_index = 0, captured = False
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,
+        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,... -3.79252911e-01,
+        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,
+         4.73332405e-03]], dtype=float32))
+expected = [array([[3.98751664, 4.88945425, 5.24391377, 5.15195763, 4.13721013,
+        4.90840685, 4.38173103, 4.88883018, 4.640...406, -0.08046293,  0.01160789, -0.14766693,  0.21017551,
+         0.13973761, -0.06412125,  0.16103578,  0.01895022]])]
+budgets = [array([[0.02157955, 0.02660739, 0.02892153, 0.02869417, 0.02325364,
+        0.02790685, 0.02435437, 0.0257306 , 0.024... 0.00393354, 0.00326147, 0.00380718, 0.00313808, 0.00265177,
+        0.0030469 , 0.00287444, 0.00462391, 0.00259235]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[2.40830791, 5.11889023, 6.18203026, 5.90258634, 2.86475253,\n        5.16656864, 3.58574522, 5.11314656, 4.3651...  4.9135561 , 6.06022   , 5.66172111, 2.59738332, 0.76467276,\n        2.4348824 , 2.37911928, 4.25972414, 1.73027909]]) <= array([[0.02157955, 0.02660739, 0.02892153, 0.02869417, 0.02325364,\n        0.02790685, 0.02435437, 0.0257306 , 0.0243...  0.02321849, 0.02521209, 0.02439161, 0.01783644, 0.01553578,\n        0.01804376, 0.01650301, 0.0207738 , 0.01565608]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[2.40830791, 5.11889023, 6.18203026, 5.90258634, 2.86475253,\n        5.16656864, 3.58574522, 5.11314656, 4.3651...  4.9135561 , 6.06022   , 5.66172111, 2.59738332, 0.76467276,\n        2.4348824 , 2.37911928, 4.25972414, 1.73027909]]) = <ufunc 'absolute'>((array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) - array([[3.98751664, 4.88945425, 5.24391377, 5.15195763, 4.13721013,\n        4.90840685, 4.38173103, 4.88883018, 4.6408...  3.60025549, 3.98509717, 3.85127401, 2.83028495, 2.21925783,\n        2.77671432, 2.75665236, 3.38477993, 2.54049718]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) = <built-in method astype of numpy.ndarray object at 0x7bf01797b570>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf01797b570> = array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n...,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+_______ test_profile_refreshes_in_place_mutated_roots[package3-False-1] ________
+
+package = (<TesseraJitFn 'product_reversed' effect=pure deterministic=False target='nvidia_sm120'>, (array([[0.423828, -0.002304....00354953, 0.00308236, 0.00209058, 0.00437403,
+        0.00216788, 0.00155368, 0.00493223, 0.00192056]])], 'bf16', ...)
+root_index = 1, captured = False
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,
+        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,... -3.79252911e-01,
+        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,
+         4.73332405e-03]], dtype=float32))
+expected = [array([[-0.25259227,  1.14026797,  2.11321358, -0.81171393,  1.35837889,
+         1.44366264, -0.04909198, -0.3807362...1.76046744e-01,  5.41797951e-02,
+         7.11141527e-01, -5.35313010e-01, -6.04971211e-01,
+         6.00667238e-01]])]
+budgets = [array([[0.01359757, 0.0119556 , 0.0205463 , 0.01975823, 0.01897592,
+        0.01416517, 0.01628794, 0.02283614, 0.014... 0.00838767, 0.00769342, 0.00704713, 0.0072789 , 0.0045052 ,
+        0.00664862, 0.00949788, 0.00764188, 0.0100279 ]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[1.831801  , 1.36970395, 3.05133007, 0.06108522, 0.08592129,\n        1.70182443, 0.8450778 , 0.15641986, 0.2840...  2.08255315, 2.94657564, 1.38716543, 0.88490671, 2.24149629,\n        0.3737427 , 0.12514067, 1.78367173, 0.44886804]]) <= array([[0.01359757, 0.0119556 , 0.0205463 , 0.01975823, 0.01897592,\n        0.01416517, 0.01628794, 0.02283614, 0.0145...  0.02325113, 0.02692072, 0.02248908, 0.02107899, 0.01696758,\n        0.02133334, 0.0297813 , 0.02035431, 0.02464617]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[1.831801  , 1.36970395, 3.05133007, 0.06108522, 0.08592129,\n        1.70182443, 0.8450778 , 0.15641986, 0.2840...  2.08255315, 2.94657564, 1.38716543, 0.88490671, 2.24149629,\n        0.3737427 , 0.12514067, 1.78367173, 0.44886804]]) = <ufunc 'absolute'>((array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) - array([[-0.25259227,  1.14026797,  2.11321358, -0.81171393,  1.35837889,\n         1.44366264, -0.04909198, -0.38073623...5254,  0.87145281, -0.42328167, -0.65200508, -0.78691121,\n         0.71557462,  0.50267375,  0.90872752,  1.25908613]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) = <built-in method astype of numpy.ndarray object at 0x7bf017979170>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf017979170> = array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n...,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+_______ test_profile_refreshes_in_place_mutated_roots[package3-False-2] ________
+
+package = (<TesseraJitFn 'product_reversed' effect=pure deterministic=False target='nvidia_sm120'>, (array([[0.423828, -0.002304....00354953, 0.00308236, 0.00209058, 0.00437403,
+        0.00216788, 0.00155368, 0.00493223, 0.00192056]])], 'bf16', ...)
+root_index = 2, captured = False
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,
+        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,... -3.79252911e-01,
+        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,
+         4.73332405e-03]], dtype=float32))
+expected = [array([[ 1.57920879e+00, -2.29435980e-01, -9.38116446e-01,
+        -7.50628710e-01,  1.27245766e+00, -2.58161783e-01,...1.56296413e-01,  3.83436320e-01,
+         2.10318020e-01, -3.30803543e-02, -7.47246444e-02,
+         3.20446800e-01]])]
+budgets = [array([[0.01729334, 0.0201682 , 0.02573942, 0.02901547, 0.01506889,
+        0.01827276, 0.02872155, 0.0204562 , 0.024... 0.00337392, 0.0028806 , 0.00296768, 0.00138213, 0.0040831 ,
+        0.00250366, 0.00103615, 0.00293455, 0.00238044]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[0.50083292, 0.05730854, 0.16567719, 0.22619575, 0.04920748,\n        0.38787512, 0.33306976, 0.18926938, 0.1167...  0.72022483, 0.3425972 , 0.19092724, 0.49287425, 0.76268923,\n        0.44727175, 0.20342506, 0.20210519, 0.31571348]]) <= array([[0.00286303, 0.00265841, 0.00315636, 0.00399232, 0.00211798,\n        0.00315662, 0.00414046, 0.00254844, 0.0035...  0.00337392, 0.0028806 , 0.00296768, 0.00138213, 0.0040831 ,\n        0.00250366, 0.00103615, 0.00293455, 0.00238044]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[0.50083292, 0.05730854, 0.16567719, 0.22619575, 0.04920748,\n        0.38787512, 0.33306976, 0.18926938, 0.1167...  0.72022483, 0.3425972 , 0.19092724, 0.49287425, 0.76268923,\n        0.44727175, 0.20342506, 0.20210519, 0.31571348]]) = <ufunc 'absolute'>((array([[-2.63888687e-01, -1.40683725e-01,  4.51998711e-02,\n        -2.04689622e-01, -1.34190619e-02,  3.06905568e-01,\n... 3.36577833e-01, -3.79252911e-01,\n        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,\n         4.73332405e-03]]) - array([[ 2.36944228e-01, -1.97992265e-01, -1.20477319e-01,\n         2.15061307e-02,  3.57884169e-02, -8.09695572e-02,\n...-1.56296413e-01,  3.83436320e-01,\n         2.10318020e-01, -3.30803543e-02, -7.47246444e-02,\n         3.20446800e-01]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[-2.63888687e-01, -1.40683725e-01,  4.51998711e-02,\n        -2.04689622e-01, -1.34190619e-02,  3.06905568e-01,\n... 3.36577833e-01, -3.79252911e-01,\n        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,\n         4.73332405e-03]]) = <built-in method astype of numpy.ndarray object at 0x7bf017c63b10>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf017c63b10> = array([[-2.63888687e-01, -1.40683725e-01,  4.51998711e-02,\n        -2.04689622e-01, -1.34190619e-02,  3.06905568e-01,\n..., -3.79252911e-01,\n        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,\n         4.73332405e-03]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+________ test_profile_refreshes_in_place_mutated_roots[package3-True-0] ________
+
+package = (<TesseraJitFn 'product_reversed' effect=pure deterministic=False target='nvidia_sm120'>, (array([[0.423828, -0.002304....00354953, 0.00308236, 0.00209058, 0.00437403,
+        0.00216788, 0.00155368, 0.00493223, 0.00192056]])], 'bf16', ...)
+root_index = 0, captured = True
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,
+        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,... -3.79252911e-01,
+        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,
+         4.73332405e-03]], dtype=float32))
+expected = [array([[3.98751664, 4.88945425, 5.24391377, 5.15195763, 4.13721013,
+        4.90840685, 4.38173103, 4.88883018, 4.640...406, -0.08046293,  0.01160789, -0.14766693,  0.21017551,
+         0.13973761, -0.06412125,  0.16103578,  0.01895022]])]
+budgets = [array([[0.02157955, 0.02660739, 0.02892153, 0.02869417, 0.02325364,
+        0.02790685, 0.02435437, 0.0257306 , 0.024... 0.00393354, 0.00326147, 0.00380718, 0.00313808, 0.00265177,
+        0.0030469 , 0.00287444, 0.00462391, 0.00259235]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[2.40830791, 5.11889023, 6.18203026, 5.90258634, 2.86475253,\n        5.16656864, 3.58574522, 5.11314656, 4.3651...  4.9135561 , 6.06022   , 5.66172111, 2.59738332, 0.76467276,\n        2.4348824 , 2.37911928, 4.25972414, 1.73027909]]) <= array([[0.02157955, 0.02660739, 0.02892153, 0.02869417, 0.02325364,\n        0.02790685, 0.02435437, 0.0257306 , 0.0243...  0.02321849, 0.02521209, 0.02439161, 0.01783644, 0.01553578,\n        0.01804376, 0.01650301, 0.0207738 , 0.01565608]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[2.40830791, 5.11889023, 6.18203026, 5.90258634, 2.86475253,\n        5.16656864, 3.58574522, 5.11314656, 4.3651...  4.9135561 , 6.06022   , 5.66172111, 2.59738332, 0.76467276,\n        2.4348824 , 2.37911928, 4.25972414, 1.73027909]]) = <ufunc 'absolute'>((array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) - array([[3.98751664, 4.88945425, 5.24391377, 5.15195763, 4.13721013,\n        4.90840685, 4.38173103, 4.88883018, 4.6408...  3.60025549, 3.98509717, 3.85127401, 2.83028495, 2.21925783,\n        2.77671432, 2.75665236, 3.38477993, 2.54049718]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) = <built-in method astype of numpy.ndarray object at 0x7bf017979b30>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf017979b30> = array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n...,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+________ test_profile_refreshes_in_place_mutated_roots[package3-True-1] ________
+
+package = (<TesseraJitFn 'product_reversed' effect=pure deterministic=False target='nvidia_sm120'>, (array([[0.423828, -0.002304....00354953, 0.00308236, 0.00209058, 0.00437403,
+        0.00216788, 0.00155368, 0.00493223, 0.00192056]])], 'bf16', ...)
+root_index = 1, captured = True
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,
+        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,... -3.79252911e-01,
+        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,
+         4.73332405e-03]], dtype=float32))
+expected = [array([[-0.25259227,  1.14026797,  2.11321358, -0.81171393,  1.35837889,
+         1.44366264, -0.04909198, -0.3807362...1.76046744e-01,  5.41797951e-02,
+         7.11141527e-01, -5.35313010e-01, -6.04971211e-01,
+         6.00667238e-01]])]
+budgets = [array([[0.01359757, 0.0119556 , 0.0205463 , 0.01975823, 0.01897592,
+        0.01416517, 0.01628794, 0.02283614, 0.014... 0.00838767, 0.00769342, 0.00704713, 0.0072789 , 0.0045052 ,
+        0.00664862, 0.00949788, 0.00764188, 0.0100279 ]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[1.831801  , 1.36970395, 3.05133007, 0.06108522, 0.08592129,\n        1.70182443, 0.8450778 , 0.15641986, 0.2840...  2.08255315, 2.94657564, 1.38716543, 0.88490671, 2.24149629,\n        0.3737427 , 0.12514067, 1.78367173, 0.44886804]]) <= array([[0.01359757, 0.0119556 , 0.0205463 , 0.01975823, 0.01897592,\n        0.01416517, 0.01628794, 0.02283614, 0.0145...  0.02325113, 0.02692072, 0.02248908, 0.02107899, 0.01696758,\n        0.02133334, 0.0297813 , 0.02035431, 0.02464617]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[1.831801  , 1.36970395, 3.05133007, 0.06108522, 0.08592129,\n        1.70182443, 0.8450778 , 0.15641986, 0.2840...  2.08255315, 2.94657564, 1.38716543, 0.88490671, 2.24149629,\n        0.3737427 , 0.12514067, 1.78367173, 0.44886804]]) = <ufunc 'absolute'>((array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) - array([[-0.25259227,  1.14026797,  2.11321358, -0.81171393,  1.35837889,\n         1.44366264, -0.04909198, -0.38073623...5254,  0.87145281, -0.42328167, -0.65200508, -0.78691121,\n         0.71557462,  0.50267375,  0.90872752,  1.25908613]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n... 2.32901633e-01,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]]) = <built-in method astype of numpy.ndarray object at 0x7bf017c62a90>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf017c62a90> = array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,\n        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,\n...,  1.45458508e+00,\n         3.41831923e-01,  3.77533078e-01, -8.74944210e-01,\n         8.10218096e-01]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+________ test_profile_refreshes_in_place_mutated_roots[package3-True-2] ________
+
+package = (<TesseraJitFn 'product_reversed' effect=pure deterministic=False target='nvidia_sm120'>, (array([[0.423828, -0.002304....00354953, 0.00308236, 0.00209058, 0.00437403,
+        0.00216788, 0.00155368, 0.00493223, 0.00192056]])], 'bf16', ...)
+root_index = 2, captured = True
+
+    @pytest.mark.parametrize('root_index',[0,1,2])
+    @pytest.mark.parametrize('captured',[False,True])
+    def test_profile_refreshes_in_place_mutated_roots(package,root_index,captured):
+        fn,original,_,_,_,_,permuted=package
+        roots=tuple(x.copy() for x in original)
+        fn.native_jvp(*roots[:2],tangents=(roots[2],))
+        owner=next(iter(fn._native_prepared_jvp_calls.values()))
+        stats=owner.scratch_stats()
+        pointer=roots[root_index].ctypes.data
+        roots[root_index][...] = roots[root_index]*-0.5+0.25
+        assert roots[root_index].ctypes.data==pointer
+        a,b=(roots[1],roots[0]) if permuted else roots[:2]
+        expected,budgets=oracle(a,b,roots[2])
+        outputs,timing=owner.profile(roots,repeats=3,captured=captured)
+>       check(outputs,expected,budgets)
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:368: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+outputs = (array([[ 1.57920873e+00, -2.29435980e-01, -9.38116491e-01,
+        -7.50628710e-01,  1.27245760e+00, -2.58161783e-01,... -3.79252911e-01,
+        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,
+         4.73332405e-03]], dtype=float32))
+expected = [array([[ 1.57920879e+00, -2.29435980e-01, -9.38116446e-01,
+        -7.50628710e-01,  1.27245766e+00, -2.58161783e-01,...1.56296413e-01,  3.83436320e-01,
+         2.10318020e-01, -3.30803543e-02, -7.47246444e-02,
+         3.20446800e-01]])]
+budgets = [array([[0.01729334, 0.0201682 , 0.02573942, 0.02901547, 0.01506889,
+        0.01827276, 0.02872155, 0.0204562 , 0.024... 0.00337392, 0.0028806 , 0.00296768, 0.00138213, 0.0040831 ,
+        0.00250366, 0.00103615, 0.00293455, 0.00238044]])]
+
+    def check(outputs,expected,budgets):
+        assert len(outputs)==2 and not np.shares_memory(*outputs)
+        for actual,reference,budget in zip(outputs,expected,budgets,strict=True):
+            assert actual.dtype==np.float32 and np.isfinite(actual).all()
+>           assert np.all(np.abs(actual.astype(np.float64)-reference)<=budget)
+E           AssertionError: assert np.False_
+E            +  where np.False_ = <function all at 0x7bf060b498b0>(array([[0.50083292, 0.05730854, 0.16567719, 0.22619575, 0.04920748,\n        0.38787512, 0.33306976, 0.18926938, 0.1167...  0.72022483, 0.3425972 , 0.19092724, 0.49287425, 0.76268923,\n        0.44727175, 0.20342506, 0.20210519, 0.31571348]]) <= array([[0.00286303, 0.00265841, 0.00315636, 0.00399232, 0.00211798,\n        0.00315662, 0.00414046, 0.00254844, 0.0035...  0.00337392, 0.0028806 , 0.00296768, 0.00138213, 0.0040831 ,\n        0.00250366, 0.00103615, 0.00293455, 0.00238044]]))
+E            +    where <function all at 0x7bf060b498b0> = np.all
+E            +    and   array([[0.50083292, 0.05730854, 0.16567719, 0.22619575, 0.04920748,\n        0.38787512, 0.33306976, 0.18926938, 0.1167...  0.72022483, 0.3425972 , 0.19092724, 0.49287425, 0.76268923,\n        0.44727175, 0.20342506, 0.20210519, 0.31571348]]) = <ufunc 'absolute'>((array([[-2.63888687e-01, -1.40683725e-01,  4.51998711e-02,\n        -2.04689622e-01, -1.34190619e-02,  3.06905568e-01,\n... 3.36577833e-01, -3.79252911e-01,\n        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,\n         4.73332405e-03]]) - array([[ 2.36944228e-01, -1.97992265e-01, -1.20477319e-01,\n         2.15061307e-02,  3.57884169e-02, -8.09695572e-02,\n...-1.56296413e-01,  3.83436320e-01,\n         2.10318020e-01, -3.30803543e-02, -7.47246444e-02,\n         3.20446800e-01]])))
+E            +      where <ufunc 'absolute'> = np.abs
+E            +      and   array([[-2.63888687e-01, -1.40683725e-01,  4.51998711e-02,\n        -2.04689622e-01, -1.34190619e-02,  3.06905568e-01,\n... 3.36577833e-01, -3.79252911e-01,\n        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,\n         4.73332405e-03]]) = <built-in method astype of numpy.ndarray object at 0x7bf017bcf8d0>(<class 'numpy.float64'>)
+E            +        where <built-in method astype of numpy.ndarray object at 0x7bf017bcf8d0> = array([[-2.63888687e-01, -1.40683725e-01,  4.51998711e-02,\n        -2.04689622e-01, -1.34190619e-02,  3.06905568e-01,\n..., -3.79252911e-01,\n        -2.36953735e-01,  1.70344710e-01, -2.76829839e-01,\n         4.73332405e-03]], dtype=float32).astype
+E            +        and   <class 'numpy.float64'> = np.float64
+
+tests/unit/test_native_sm120_active_source_jvp_runtime.py:58: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_normalization_frontend_policy.py::test_narrower_explicit_accumulator_is_rejected[float16-bf16]
+FAILED tests/unit/test_normalization_frontend_policy.py::test_narrower_explicit_accumulator_is_rejected[float32-fp16]
+FAILED tests/unit/test_normalization_frontend_policy.py::test_narrower_explicit_accumulator_is_rejected[float32-bf16]
+FAILED tests/unit/test_normalization_frontend_policy.py::test_narrower_explicit_accumulator_is_rejected[float64-fp32]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package0-False-0]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package0-False-1]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package0-False-2]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package0-True-0]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package0-True-1]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package0-True-2]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package1-False-0]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package1-False-1]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package1-False-2]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package1-True-0]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package1-True-1]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package1-True-2]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package2-False-0]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package2-False-1]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package2-False-2]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package2-True-0]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package2-True-1]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package2-True-2]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package3-False-0]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package3-False-1]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package3-False-2]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package3-True-0]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package3-True-1]
+FAILED tests/unit/test_native_sm120_active_source_jvp_runtime.py::test_profile_refreshes_in_place_mutated_roots[package3-True-2]
+28 failed, 78 deselected in 6.15s

@@ -1,0 +1,79 @@
+{
+  "base_revision": "b9d7565c7aaaba043f16801c138c16533995fae1",
+  "scope": "native Graph ReLU tangent, named paired Graph derivative proof; no new executable composed AD",
+  "source_sha256": {
+    "src/compiler/ir/TesseraOps.td": "5da80523cc2a36d1aa4b033afe4c6629712f28e9741d63f270a97417ed39aafb",
+    "src/compiler/ir/TangentInterface.cpp": "ec6c89881423cf1264b9216e1ba563d018842820446fe455a70c692458350334",
+    "src/compiler/ir/AdjointInterface.cpp": "a4effbf11497ba1235023788704d6c41fe938ef44eacf92d4a9a40f437e59d6a",
+    "src/transforms/lib/AutodiffForwardPass.cpp": "ea2859fda8a7c87e8df2ff5fb288df8fc59a9f480a147b41c6937f83673d93c8",
+    "python/tessera/compiler/autodiff_ledger.py": "ff478d0ff993a0943044d8b405a392bdecc065cbcb9f9a7436bbae356f178180",
+    "python/tessera/compiler/autodiff_request.py": "cf0e99345a009845e3db0d730d77e3d09ec8f2d466056c9eb537a506b3d91ee7",
+    "python/tessera/compiler/pass_metadata.py": "df699ce74a4d018e62da9fe6048e9ab07f4c013a7294ac6e8e7d7431f3cd6bf5",
+    "tests/unit/test_native_relu_tangent.py": "9e36d20253b06e271b27cdd3e57442022f9ea075c51de34d4f8047f073db2d6d",
+    "tests/unit/test_autodiff_paired_cpu_oracle.py": "7ab94dcb577507518202240f9fc2af3d12c4d39c8e52e674ea5252121633099d",
+    "tests/unit/test_autodiff_ledger.py": "7e147dac03b290d36056156f9df0b2c7ff61b87e2e9b4f3046a9a09a81ad2797"
+  },
+  "compiler_sha256": {
+    "TESSERA_OPT": "b1c64d1611f0c266cfa2275ffaba045f6a1709118605dbbc7687e722a2b80f62",
+    "TESSERA_NVIDIA_OPT": "bad7652472d6364322cb629e9fb28751c9df804e84a07d1e6f0db801c9e6e578"
+  },
+  "shared_gates": {
+    "passed": 469
+  },
+  "sm120_controls": {
+    "passed": 150,
+    "device": "NVIDIA GeForce RTX 5070",
+    "uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+    "driver": "610.88",
+    "cuda": "13.3.73",
+    "llvm_mlir": "23.1.1"
+  },
+  "focused_cases": 23,
+  "census_cases": 6,
+  "public_composed_jvp_vjp": "not implemented; all six current census cases explicitly refuse",
+  "timing": "no new performance claim; historical primal packets retain original source identity",
+  "delivery": {
+    "initial": {
+      "passed": 127,
+      "failed": 3,
+      "reason": "new audit log Owner field must be one linked ID"
+    },
+    "after_owner_format_fix": {
+      "passed": 19,
+      "scope": "all audit-doc and compiler-plan transition tests, including the three initial failures"
+    },
+    "generated_docs_in_sync": 33,
+    "graphify": "AST refresh complete",
+    "ruff": "passed",
+    "mypy": "2 source files passed",
+    "public_and_surface_claims": "passed",
+    "compiler_plan": "passed",
+    "generated_views_after_owner_fix": "compiler_progress, docs_freshness, autodiff_connection_ledger passed"
+  },
+  "evidence_sha256": {
+    "README.md": "5deae4db247c61be9af79d99e30f3c3084997b118c4c731a7e267968ea266fab",
+    "after/bf16_a_paired.mlir": "768d30433da3651c84b5d07243fc5db9f1fb84fad62bdc39328d1d760f568298",
+    "after/bf16_ab_paired.mlir": "0a46d53e8e8120bc8c92f7661c4376dcae06c6cfd284ea2e6ec96af9db85ed0e",
+    "after/bf16_b_paired.mlir": "5f8da81584da814522e0b91123404fb66048badcdffe3168e1ad5317186da3b7",
+    "after/f16_a_paired.mlir": "c8c21c8dcd064c8384c0d3eac9242dc6741d23d1af766d12bcd9d3b14d5e5ed3",
+    "after/f16_ab_paired.mlir": "e93c8dcdc6eb70fe98715378f838afff424bbfbab3635d724435719460abf974",
+    "after/f16_b_paired.mlir": "9b648ddeb912f433b9505094c065bfc498d70cd052c6137adb31402650a7f44a",
+    "after/route-census.json": "bdaf38e33c9227b0f09828749fd36df7eee9be2f613a878d3837992322a81ccf",
+    "before/bf16_b_paired.mlir": "5f8da81584da814522e0b91123404fb66048badcdffe3168e1ad5317186da3b7",
+    "before/f16_b_paired.mlir": "9b648ddeb912f433b9505094c065bfc498d70cd052c6137adb31402650a7f44a",
+    "before/probe.py": "b6298dced6ae6d5983e79cf96523e976d9a8a602fcb41b6d1bc2964d418aa103",
+    "before/route-census.json": "d7d3e59fb67d9cd6870db433b6ca539c8529de021232c624650182b8582353b1",
+    "compiler-plan.txt": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+    "delivery-owner-fixed.txt": "b90c6b927a42b09d27eec896db3c385e90dca7ce4e1ed1419c9e704149bd4e7e",
+    "delivery-pre-owner-fix.txt": "aa61d19687c14cb857d4448e64af536de679a6571fdf918fbd9feba6ccb1891c",
+    "generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "generated-final-check.txt": "b04ad203143b3676867e8e21c2b496ff7bc14f03e61d5a4adc23f29f54d5866d",
+    "graphify.txt": "e8c33262447975140b248dfe2a6dd71c6824c53986537c2da000559a61f0a104",
+    "mypy.txt": "f9b031e5c45aa702cd4fef028d465551cb20a2c4698e0913c7b00766b20ac4d8",
+    "public-claims.txt": "b7cabb6c341cf801ecd49c4d47463f73b43c581493a32da0645833c891959021",
+    "ruff.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "shared-tests.txt": "6181a3c1df7b86efcaa6f76286fbaf10a13c9131ada403759594b8c3d6ecd3e4",
+    "sm120-controls.txt": "35f55239703c95997644d3c3165396a2354232efb93ba094e89b920209ac63fd",
+    "surface-claims.txt": "bf5d4cc729d2f06fb82724680faf43ff5f4cc73c5b1e461c791adc0ca27049b1"
+  }
+}

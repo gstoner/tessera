@@ -1,3 +1,4 @@
+#include "Tessera/IR/NormalizationAD.h"
 //===- AdjointInterface.cpp - buildAdjoint impls per op --------*- C++ -*-===//
 //
 // Phase F4 of docs/audit/roadmap/ROADMAP_AUDIT.md. The generated header
@@ -29,6 +30,9 @@
 
 // The interface impl mixin — generated from AdjointInterface.td.
 namespace tessera {
+using normalization_ad::normalizationWorkType;
+using normalization_ad::normalizationCast;
+using normalization_ad::normalizationGuard;
 #include "Tessera/AdjointInterface.cpp.inc"
 }  // namespace tessera (re-opened below for the buildAdjoint defs)
 
@@ -649,38 +653,44 @@ llvm::SmallVector<mlir::Value> LayerNormOp::buildAdjoint(
     return placeholderAdjoint(builder, getLoc(), getX().getType(),
                               "layer_norm", outputCotangents[0], getX());
   auto loc = getLoc();
-  mlir::Value dy = outputCotangents[0];
+  auto storageType = inputType;
+  inputType = normalizationWorkType(getOperation(), storageType);
+  if (!inputType) return {};
+  auto element = inputType.getElementType();
+  normalizationGuard(builder, loc, getX(), outputCotangents[0]);
+  auto x = normalizationCast(builder, loc, getX(), element);
+  mlir::Value dy = normalizationCast(builder, loc, outputCotangents[0], element);
   auto [center, inverseScale] = buildNormalizationStats(
-      builder, loc, getX(), inputType,
+      builder, loc, x, inputType,
       (*this)->getAttrOfType<mlir::FloatAttr>("eps"), /*centered=*/true);
   mlir::Value centerBroadcast =
-      broadcastLastAxisStat(builder, loc, inputType, center, getX());
+      broadcastLastAxisStat(builder, loc, inputType, center, x);
   mlir::Value inverseBroadcast =
-      broadcastLastAxisStat(builder, loc, inputType, inverseScale, getX());
+      broadcastLastAxisStat(builder, loc, inputType, inverseScale, x);
   mlir::Value centered =
-      builder.create<SubOp>(loc, inputType, getX(), centerBroadcast).getResult();
+      builder.create<SubOp>(loc, inputType, x, centerBroadcast).getResult();
   mlir::Value normalized =
       builder.create<MulOp>(loc, inputType, centered, inverseBroadcast).getResult();
   mlir::Value projectedDy = dy;
   if (!getAffine().empty()) {
-    mlir::Value gamma = getAffine().front();
+    mlir::Value gamma = normalizationCast(builder, loc, getAffine().front(), element);
     projectedDy = builder
                       .create<MulOp>(loc, inputType, dy,
                                      broadcastChannelVector(builder, loc,
                                                             inputType, gamma,
-                                                            getX()))
+                                                            x))
                       .getResult();
   }
   mlir::Value meanDy =
       reduceMeanLastAxis(builder, loc, inputType, projectedDy);
   mlir::Value meanDyBroadcast =
-      broadcastLastAxisStat(builder, loc, inputType, meanDy, getX());
+      broadcastLastAxisStat(builder, loc, inputType, meanDy, x);
   mlir::Value dyNormalized =
       builder.create<MulOp>(loc, inputType, projectedDy, normalized).getResult();
   mlir::Value meanDyNormalized =
       reduceMeanLastAxis(builder, loc, inputType, dyNormalized);
   mlir::Value meanDyNormalizedBroadcast =
-      broadcastLastAxisStat(builder, loc, inputType, meanDyNormalized, getX());
+      broadcastLastAxisStat(builder, loc, inputType, meanDyNormalized, x);
   mlir::Value centeredDy =
       builder.create<SubOp>(loc, inputType, projectedDy, meanDyBroadcast).getResult();
   mlir::Value correction = builder
@@ -701,6 +711,10 @@ llvm::SmallVector<mlir::Value> LayerNormOp::buildAdjoint(
   }
   if (getAffine().size() > 1)
     gradients.push_back(reduceLeadingSum(builder, loc, inputType, dy));
+  for (auto [index, value] : llvm::enumerate(gradients)) {
+    auto storage = mlir::cast<mlir::RankedTensorType>(getOperand(index).getType());
+    gradients[index] = normalizationCast(builder, loc, value, storage.getElementType());
+  }
   return gradients;
 }
 
@@ -813,20 +827,26 @@ llvm::SmallVector<mlir::Value> RmsNormOp::buildAdjoint(
     return placeholderAdjoint(builder, getLoc(), getX().getType(), "rmsnorm",
                               outputCotangents[0], getX());
   auto loc = getLoc();
-  mlir::Value dy = outputCotangents[0];
+  auto storageType = inputType;
+  inputType = normalizationWorkType(getOperation(), storageType);
+  if (!inputType) return {};
+  auto element = inputType.getElementType();
+  normalizationGuard(builder, loc, getX(), outputCotangents[0]);
+  auto x = normalizationCast(builder, loc, getX(), element);
+  mlir::Value dy = normalizationCast(builder, loc, outputCotangents[0], element);
   auto [unusedCenter, inverseScale] = buildNormalizationStats(
-      builder, loc, getX(), inputType,
+      builder, loc, x, inputType,
       (*this)->getAttrOfType<mlir::FloatAttr>("eps"), /*centered=*/false);
   (void)unusedCenter;
   mlir::Value inverseBroadcast =
-      broadcastLastAxisStat(builder, loc, inputType, inverseScale, getX());
+      broadcastLastAxisStat(builder, loc, inputType, inverseScale, x);
   mlir::Value projectedDy = dy;
   if (!getAffine().empty()) {
     projectedDy = builder
                       .create<MulOp>(
                           loc, inputType, dy,
                           broadcastChannelVector(builder, loc, inputType,
-                                                 getAffine().front(), getX()))
+                                                 normalizationCast(builder, loc, getAffine().front(), element), x))
                       .getResult();
   }
   mlir::Value leading = builder
@@ -834,10 +854,10 @@ llvm::SmallVector<mlir::Value> RmsNormOp::buildAdjoint(
                                            inverseBroadcast)
                             .getResult();
   mlir::Value dyX =
-      builder.create<MulOp>(loc, inputType, projectedDy, getX()).getResult();
+      builder.create<MulOp>(loc, inputType, projectedDy, x).getResult();
   mlir::Value meanDyX = reduceMeanLastAxis(builder, loc, inputType, dyX);
   mlir::Value meanDyXBroadcast =
-      broadcastLastAxisStat(builder, loc, inputType, meanDyX, getX());
+      broadcastLastAxisStat(builder, loc, inputType, meanDyX, x);
   mlir::Value inverseSquared =
       builder.create<MulOp>(loc, inputType, inverseBroadcast, inverseBroadcast)
           .getResult();
@@ -845,7 +865,7 @@ llvm::SmallVector<mlir::Value> RmsNormOp::buildAdjoint(
       builder.create<MulOp>(loc, inputType, inverseSquared, inverseBroadcast)
           .getResult();
   mlir::Value scaledX =
-      builder.create<MulOp>(loc, inputType, getX(), inverseCubed).getResult();
+      builder.create<MulOp>(loc, inputType, x, inverseCubed).getResult();
   mlir::Value correction =
       builder.create<MulOp>(loc, inputType, scaledX, meanDyXBroadcast)
           .getResult();
@@ -854,10 +874,14 @@ llvm::SmallVector<mlir::Value> RmsNormOp::buildAdjoint(
       builder.create<SubOp>(loc, inputType, leading, correction).getResult());
   if (!getAffine().empty()) {
     mlir::Value normalized =
-        builder.create<MulOp>(loc, inputType, getX(), inverseBroadcast).getResult();
+        builder.create<MulOp>(loc, inputType, x, inverseBroadcast).getResult();
     gradients.push_back(reduceLeadingSum(
         builder, loc, inputType,
         builder.create<MulOp>(loc, inputType, dy, normalized).getResult()));
+  }
+  for (auto [index, value] : llvm::enumerate(gradients)) {
+    auto storage = mlir::cast<mlir::RankedTensorType>(getOperand(index).getType());
+    gradients[index] = normalizationCast(builder, loc, value, storage.getElementType());
   }
   return gradients;
 }

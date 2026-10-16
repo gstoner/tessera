@@ -1,0 +1,95 @@
+{
+  "base_revision": "2bd496bf77311c39b046bef2ac6f5336895d0ce6",
+  "synchronization_key": "W11-TENSOR-RHS-JVP-20261015",
+  "scope": "actual native paired Graph RHS-only coefficient program; full original goal remains open",
+  "source_sha256": {
+    "src/transforms/lib/NativeSM120TensorProgram.h": "0366f2e5060cda2d44f2db121fd6ce66d075bef10f932f67a12a7d1d99826f57",
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "8f3722f087f6e5913df41c7b4c5c9979a78db690a6016205960392235a468c90",
+    "src/transforms/lib/AutodiffForwardPass.cpp": "b42bf0328c1ce6c782925e64e9907915c6d83298bc2fa234634ee434bb3005f7",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "180ae290399f39ef965bd3d6fa70fbe484fd6a31c1944fd34dcf0deed2a90623",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "d60df4559b3d8ee9e3bc75ecadfb942884ffcd1c46fffd48e556aacb42836a90",
+    "python/tessera/compiler/native_sm120_tensor_program.py": "7d8b4360316e1dd4c7fdde67e7863f0976a7b8e22aded73564d3e5f4bbd8e075",
+    "python/tessera/compiler/prepared_nvidia_tensor_jvp.py": "67a48866205a288a4039169ded27dc2219719749eee2d466b83bbacd90066a29",
+    "python/tessera/compiler/jit.py": "765509434e2fda0b4ed88c69618733f634e4f017591e531eaa6c1340139eede1",
+    "python/tessera/compiler/execution_matrix.py": "cfa3e3013d030034d1b8b7ef42d9412c73a3194341e108c430acb1fd66794f69",
+    "python/tessera/compiler/pass_metadata.py": "aaa39a861bebf3582d117b3392dded693e15cca285c3ea3f6977c53c783795e7",
+    "tests/unit/test_native_sm120_rhs_jvp_program.py": "1087bdfa2b4da6b72df71d8745962172810ac582b6a46c658a83bd41396e4aa2",
+    "benchmarks/nvidia/benchmark_tensor_rhs_jvp.py": "111a9250f883d0c96c158356dce6739d03d8f7cfdcdf135412ad882a4b2f9788"
+  },
+  "binary_sha256": {
+    "TESSERA_OPT": "d994705917e4d43b6c1d34ca02ad9c91b292c6f649c10e35a93d9a1266da43c3",
+    "TESSERA_NVIDIA_OPT": "bad7652472d6364322cb629e9fb28751c9df804e84a07d1e6f0db801c9e6e578",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "efbb6b9a17309ee36eb50be3791e252fb7c96f0e9cffe3d2d01f7449e557894b"
+  },
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "toolchain": {
+    "llvm_mlir": "23.1.1",
+    "cuda": "13.3.73"
+  },
+  "gates": {
+    "affected_regressions": {
+      "passed": 666
+    },
+    "expanded_program_cases": {
+      "passed": 26
+    },
+    "public_argument_permutation": {
+      "passed": 4,
+      "deselected": 24
+    },
+    "shared_programs_before_regeneration": {
+      "passed": 109,
+      "skipped": 4,
+      "failed": 2,
+      "failure_scope": "expected ABI/execution derived-view drift before owning regeneration"
+    },
+    "final_delivery": {
+      "passed": 55,
+      "scope": "ABI/execution registry, audit docs and compiler-plan transitions including the two earlier derived-view failures"
+    },
+    "generated_docs_in_sync": 33,
+    "mypy": "5 source files passed",
+    "ruff": "passed",
+    "compiler_plan": "passed",
+    "public_and_surface_claims": "passed",
+    "graphify": "AST refresh complete",
+    "post_packet_owning_views_in_sync": 4
+  },
+  "timing_source_and_binary_pins_match_final_production": true,
+  "new_native_exports": [
+    "tessera_nvidia_tensor_program_prepare",
+    "tessera_nvidia_tensor_program_invoke",
+    "tessera_nvidia_tensor_program_profile",
+    "tessera_nvidia_tensor_program_scratch_stats",
+    "tessera_nvidia_tensor_program_close"
+  ],
+  "existing_native_abi_symbols_removed": [],
+  "open": [
+    "active-source and A+B derivative members",
+    "composed reverse",
+    "symbolic and resident-root envelopes",
+    "portable paired replay",
+    "encoded/fused envelope",
+    "remaining original five-slice requirements"
+  ],
+  "evidence_sha256": {
+    "README.md": "a661f47fb625c18cd3d5790f0ccf03f1af0302456bce8fc78bd6e6d7bf22ca82",
+    "affected-tests.txt": "c4de2c8d7af178246aef4277e5e7c082c10cb2af5ca80c0440927b2f1c177e1e",
+    "benchmark.txt": "617c767f7675a9c73d692ec304708ec617146c4a2b66562bea001af10e5f0342",
+    "compiler-plan.txt": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+    "compiler-red.txt": "63adb8fda71a37396930d6cc6ea39950a3a677c45d6e3a3e8666b147be10d5eb",
+    "delivery-tests.txt": "1847100a4b79b170d4fb4235a30ae054ea2289179fca4ea96a53c02720d57819",
+    "generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "graphify.txt": "a8a66cdb1422198fd6ae499c8e314f9b9d343b984a4be8d054714552d68c1063",
+    "mypy.txt": "e317872697c2cbfdefa321527a6efe73290dff3a390b0fa8723b87092eccba6a",
+    "post-packet-doc-check.txt": "87d8a1ee041c96f169de2710b9b36fa4cd0baf6e440cb7cb7c121d0503653a0b",
+    "program-tests.txt": "8f8de542f8ca90c00e3926841e6f81465746b1efd78391921ea1f3d27efe2026",
+    "public-claims.txt": "b7cabb6c341cf801ecd49c4d47463f73b43c581493a32da0645833c891959021",
+    "public-permutation-tests.txt": "29acf51c0233fd01adb680900e91ca39981e6d7c063893ee960e5f8dfdf4be17",
+    "ruff.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "shared-program-pre-regeneration.txt": "a99627617e9fd9d361d6ef44e9cf825a9fd99a250a39f695b3e701e4e19d81a8",
+    "surface-claims.txt": "bf5d4cc729d2f06fb82724680faf43ff5f4cc73c5b1e461c791adc0ca27049b1",
+    "timing.json": "2964233d1a7e8cbbe3daf2e021c02802c5392425250fb1125b87fa75a01b7102"
+  },
+  "test_source_phases": "14 initial program cases in the 666 gate; 12 producer/mapping cases added for the 26-case gate; two reversed-role cases added and all four public combinations rerun. Production sources stayed unchanged through these test augmentations."
+}

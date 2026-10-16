@@ -1,3 +1,5 @@
+include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/SymbolInterfaces.td"
 //===- TesseraNVIDIADialect.td - Tessera NVIDIA Target IR ----*- tablegen -*-===//
 //
 // Hardware-free NVIDIA Target IR contract dialect (Decision #19).
@@ -387,4 +389,16 @@ def NVIDIA_ProfilerProbeOp : TesseraNVIDIA_Op<"profiler_probe"> {
   let summary = "Profiler probe marker (device-timer instrumentation point)";
 }
 
+
+def NVIDIA_RowRegionKernelOp : Op<TesseraNVIDIADialect, "row_region_kernel",
+    [SingleBlock, NoTerminator, SymbolTable, RecursiveMemoryEffects]> {
+  let summary = "Sealed SM120 row body retaining typed scalar memory accesses";
+  let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$rows,
+      I64Attr:$columns, TypeAttr:$storage, I64Attr:$workgroup_size,
+      I64Attr:$schema, StrAttr:$source_hash, StrAttr:$artifact_hash,
+      StrAttr:$tile_body_hash, StrAttr:$body_hash);
+  let regions = (region AnyRegion:$body);
+  let assemblyFormat = "attr-dict-with-keyword $body";
+  let hasVerifier = 1;
+}
 #endif // TESSERA_NVIDIA_DIALECT

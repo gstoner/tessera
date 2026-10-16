@@ -63,7 +63,13 @@ def _wrap_rmsnorm(original_fn: Optional[Callable]) -> Callable:
     @functools.wraps(original_fn or (lambda *a, **k: None))
     def rmsnorm(x, gamma=None, *, eps: float = 1e-5,
                 rows: Optional[int] = None, cols: Optional[int] = None,
-                dtype: str = "f32"):
+                dtype: str = "f32", numeric_policy=None):
+        if numeric_policy is not None:
+            if _active_trace() is not None:
+                raise ValueError("Apple encode RMSNorm does not support explicit numeric_policy")
+            if original_fn is None:
+                raise ValueError("RMSNorm numeric_policy requires the canonical eager operation")
+            return original_fn(x, gamma=gamma, eps=eps, numeric_policy=numeric_policy)
         # Trace-mode interception: route to apple_gpu_ops when active.
         if gamma is not None and _active_trace() is not None:
             if rows is None or cols is None:

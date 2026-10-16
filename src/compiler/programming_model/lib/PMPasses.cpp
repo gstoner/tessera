@@ -1,3 +1,4 @@
+#include "NativeRowSchedule.h"
 //===- PMPasses.cpp — Programming Model v1.1 passes and pipelines ---------===//
 //
 // Library-owned pass bodies. Previously these lived in
@@ -1630,10 +1631,21 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
       return failure();
     for (NamedAttribute attr : op->getAttrs()) {
       if (attr.getName().getValue() == "schedule.artifact_hash") continue;
+      if (attr.getName().getValue() == "schedule") {
+        auto mode = dyn_cast<StringAttr>(attr.getValue());
+        if (!mode || (mode.getValue() != "serial" && mode.getValue() != "flat_128"))
+          return failure();
+        schedule.reductionSchedule = mode.getValue();
+        continue;
+      }
       auto effect = dyn_cast<StringAttr>(attr.getValue());
       if (attr.getName().getValue() != "tessera.effect_kind" ||
           !effect || effect.getValue() != "pure") return failure();
     }
+    // Match the checked runtime envelope before forming a flat grid or bytes.
+    if (input.getDimSize(0) >= (1LL << 31) || input.getDimSize(1) >= (1LL << 31) ||
+        input.getDimSize(0) > (1LL << 31) / input.getDimSize(1))
+      return failure();
     schedule.family = "activation";
     schedule.kind = "relu";
     schedule.rows = input.getDimSize(0);
@@ -3198,6 +3210,9 @@ struct GraphToSchedulePass
       if (failed(scheduleNativeSparse(mod))) signalPassFailure();
       return;
     }
+    bool nativeRowSelected = false;
+    if (failed(row_region::schedule(mod,nativeRowSelected))) return signalPassFailure();
+    if (nativeRowSelected) return;
     bool scaleTransposeSelected = false;
     if (scaleTransposeWave && scaleTransposeAuto) {
       mod.emitError("scale transpose cannot request both explicit wave and automatic schedules");
@@ -3534,7 +3549,7 @@ struct GraphToSchedulePass
                          builder.getI64IntegerAttr(selected->workgroupSize));
       if (selected->family == "activation") {
         state.addAttribute("kind", builder.getStringAttr(selected->kind));
-        state.addAttribute("schedule", builder.getStringAttr("serial"));
+        state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
         state.addAttribute("nan_mode", builder.getStringAttr("propagate"));
         state.addAttribute("zero_mode", builder.getStringAttr(selected->storage == "f16" ? "positive" : "preserve"));
       } else if (selected->family == "norm") {
@@ -4225,6 +4240,9 @@ struct ScheduleToTilePass
       if (failed(lowerCooperativeSSD(mod, ssdGPU))) signalPassFailure();
       return;
     }
+    bool nativeRowSelected = false;
+    if (failed(row_region::lower(mod,nativeRowSelected))) return signalPassFailure();
+    if (nativeRowSelected) return;
     bool scaleTransposeSelected = false;
     if (failed(lowerNativeScaleTranspose(mod, scaleTransposeSelected))) return signalPassFailure();
     if (scaleTransposeSelected) return;
@@ -5339,7 +5357,7 @@ struct ScheduleToTilePass
                      attrInt("workgroup_size") != selected->workgroupSize;
       if (isActivation) {
         altered = altered || attrString("kind") != "relu" ||
-                  attrString("schedule") != "serial" || attrString("nan_mode") != "propagate" ||
+                  attrString("schedule") != selected->reductionSchedule || attrString("nan_mode") != "propagate" ||
                   attrString("zero_mode") != (selected->storage == "f16" ? "positive" : "preserve");
       } else if (isNorm) {
         auto eps = scheduled->getAttrOfType<FloatAttr>("epsilon");
@@ -5390,7 +5408,7 @@ struct ScheduleToTilePass
           return signalPassFailure();
         }
         // Preserve the established runtime launch symbols and serial schedule.
-        std::string name = isActivation ? (Twine("tessera_tile_activation_relu_") + selected->storage + "_" + hash.getValue().take_front(10)).str() : isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + (selected->reductionSchedule == "serial" ? "_" : "_cooperative_128_") + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage +
+        std::string name = isActivation ? (Twine("tessera_tile_activation_relu_") + selected->storage + (selected->reductionSchedule == "flat_128" ? "_flat_128_" : "_") + hash.getValue().take_front(10)).str() : isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + (selected->reductionSchedule == "serial" ? "_" : "_cooperative_128_") + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage +
             (selected->reductionSchedule == "serial" ? "" : "_cooperative_128")).str() :
             (Twine("tessera_tile_reduce_") + selected->kind + "_" + selected->storage + "_" + selected->reductionSchedule).str();
         if (SymbolTable::lookupSymbolIn(mod, name)) {

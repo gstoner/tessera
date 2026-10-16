@@ -1,0 +1,1 @@
+[claim_lint:all surfaces + api_reference] clean — 8 scaffold/broken/archived directories scanned + API reference op-name references resolved.

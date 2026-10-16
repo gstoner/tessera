@@ -42,11 +42,11 @@ class PreparedLhsCall(PreparedMatmulCall):
         pp = pd.provenance
         norm = pp["kind"] in {"rmsnorm", "layernorm"}
         activation = pp["kind"] == "relu"
-        policy = ("sm120_activation_serial_rows" if activation else "sm120_norm_" + pp["schedule"] + "_rows" if norm
+        policy = (("sm120_activation_flat_elements" if pp["schedule"] == "flat_128" else "sm120_activation_serial_rows") if activation else "sm120_norm_" + pp["schedule"] + "_rows" if norm
                   else ("sm120_softmax_cooperative_128_rows" if pp["schedule"] == "cooperative_128"
                         else "sm120_softmax_thread_per_row_128"))
         scalar_names = ("Rows", "Columns") if norm or activation else ("Rows", "K")
-        if (pp["schedule"] not in {"serial", "cooperative_128"}
+        if (pp["schedule"] not in ({"serial", "flat_128"} if activation else {"serial", "cooperative_128"})
                 or pd.geometry != LaunchGeometry(policy=policy)
                 or pd.workspace != WorkspaceRequirement()
                 or pd.dynamic_local_memory_bytes or pd.dynamic_local_memory_expression
@@ -54,6 +54,20 @@ class PreparedLhsCall(PreparedMatmulCall):
                 or tuple(s.name for s in sorted(pd.scalars, key=lambda s:s.ordinal)) != scalar_names
                 or any(s.dtype != "int64" for s in pd.scalars)):
             raise ValueError("prepared tensor producer geometry/scalar ABI differs")
+        # The old prepared provider accepted any ReLU prefix and used a row
+        # grid. Negotiate the new mapping before it can create/allocate an owner.
+        stages=(*(program.producer_chain or (producer,)), *program.rhs_chain)
+        if any(stage.descriptor.provenance.get("kind") == "relu" and
+               stage.descriptor.provenance.get("schedule") == "flat_128" for stage in stages):
+            from tessera.runtime import _load_nvidia_ptx_launch
+            provider=_load_nvidia_ptx_launch()
+            probe=getattr(provider,"tessera_nvidia_matmul_supports_flat_activation",None)
+            if probe is None:
+                raise ValueError("flat ReLU requires an updated native prepared provider")
+            probe.argtypes=[]
+            probe.restype=ct.c_int
+            if probe()!=1:
+                raise ValueError("flat ReLU requires an updated native prepared provider")
         artifact = NvidiaNormRhsProgram.runtime_artifact(consumer)
         if program.native_plan_json is not None:
             names=tuple(item.name for item in sorted(descriptor.buffers,key=lambda b:b.ordinal)
@@ -218,12 +232,16 @@ class PreparedLhsCall(PreparedMatmulCall):
             raise ValueError("resident profile requires a positive bounded repeat count")
         return self._resident_call(ordered,output,stream=stream,repeats=repeats)
 
-    def profile(self, repeats=128):
+    def profile(self, repeats=128, *, captured=False):
         """Profile the last host frame; native lease checks reject other owners."""
         if self.pid != os.getpid() or not self._finalizer.alive:
             raise ValueError("prepared tensor owner is closed or belongs to another process")
         if type(repeats) is not int or not 1<=repeats<=1000000 or not hasattr(self,"_profile_shape"):
             raise ValueError("profile requires a successful host frame and positive repeat count")
+        if type(captured) is not bool:
+            raise ValueError("captured profiling selection must be boolean")
+        if captured and (repeats>4096 or repeats*len(self.component_receipts)>65536):
+            raise ValueError("captured profiling exceeds repeat/member-node limits")
         self.program.validate()
         from .prepared_nvidia_matmul import HostView
         output=np.empty(self._profile_shape,self.output_dtype)
@@ -233,12 +251,16 @@ class PreparedLhsCall(PreparedMatmulCall):
         view.shape[:]=output.shape;view.strides[:]=output.strides
         count=len(self.component_receipts)
         stages=(ct.c_float*count)();program=ct.c_float()
-        fn=self.lib.tessera_nvidia_matmul_profile
+        name="tessera_nvidia_matmul_profile_captured" if captured else "tessera_nvidia_matmul_profile"
+        if not hasattr(self.lib,name):
+            raise RuntimeError("native captured profiling is unavailable")
+        fn=getattr(self.lib,name)
         fn.argtypes=[ct.c_uint64,ct.c_int,ct.POINTER(ct.c_float),ct.c_size_t,
                      ct.POINTER(ct.c_float),ct.POINTER(HostView)]
         fn.restype=ct.c_int
         self._check(fn(self.handle,repeats,stages,count,ct.byref(program),ct.byref(view)))
-        return {"program_ms":program.value,"grouped_stage_ms":list(stages),"output":output}
+        return {"program_ms":program.value,"grouped_stage_ms":list(stages),"output":output,
+                "timing_domain":"cuda_graph_batch" if captured else "native_enqueue_event"}
 
     def scratch_stats(self):
         if self.pid != os.getpid() or not self._finalizer.alive:

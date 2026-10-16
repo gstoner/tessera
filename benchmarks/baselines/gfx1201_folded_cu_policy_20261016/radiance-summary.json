@@ -1,0 +1,68 @@
+[
+  {
+    "shape_mnk": [
+      256,
+      8192,
+      1536
+    ],
+    "current_native_over_radiance_captured_ratio": [
+      0.9812597359684041,
+      0.9540646032780705
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      16384,
+      1536
+    ],
+    "current_native_over_radiance_captured_ratio": [
+      1.1715718778593152,
+      1.145914258980975
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      8192,
+      2048
+    ],
+    "current_native_over_radiance_captured_ratio": [
+      1.0288403993952375,
+      0.9925750449445524
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      16384,
+      2048
+    ],
+    "current_native_over_radiance_captured_ratio": [
+      1.2680153228490303,
+      1.2710754343674027
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      8192,
+      5120
+    ],
+    "current_native_over_radiance_captured_ratio": [
+      1.2129860112891349,
+      1.202773428919116
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      16384,
+      5120
+    ],
+    "current_native_over_radiance_captured_ratio": [
+      1.213450311074773,
+      1.2131054027869583
+    ]
+  }
+]

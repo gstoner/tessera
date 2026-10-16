@@ -1,0 +1,233 @@
+{
+  "source_before": {
+    "head": "8e53d33556d04066c4a6cd0335b7be1b164b1f80",
+    "status": "",
+    "compiler_sha256": "1d709b7513b2be8787c629a5b2f048be77db4968b9077f65081fdb289d9ddae7"
+  },
+  "source_after": {
+    "head": "8e53d33556d04066c4a6cd0335b7be1b164b1f80",
+    "status": "",
+    "compiler_sha256": "1d709b7513b2be8787c629a5b2f048be77db4968b9077f65081fdb289d9ddae7"
+  },
+  "architecture": "gfx1201",
+  "control_sha256": "4e5eeed3ea09f496d6f67a144338ae647281618a2d0503e572ba9fbf7139fb6a",
+  "scope": "compiled excluded classes; no device timing or sibling claim",
+  "rows": [
+    {
+      "shape_mnk": [
+        256,
+        4096,
+        1536
+      ],
+      "identical": true,
+      "arms": {
+        "current": {
+          "image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+          "entry": "tessera_rocm_folded_matmul_708d500594ff51c6",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "2bc28f7144fc11083ad2c63a566b5dddd8a06ba5596621eff892c115bb83a125",
+          "tile_sha256": "0099cb4a4a73114b882b728f478a53ff5529eff51b691fc8a49b560df8f63cb4"
+        },
+        "control": {
+          "image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+          "entry": "tessera_rocm_folded_matmul_708d500594ff51c6",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "2bc28f7144fc11083ad2c63a566b5dddd8a06ba5596621eff892c115bb83a125",
+          "tile_sha256": "0099cb4a4a73114b882b728f478a53ff5529eff51b691fc8a49b560df8f63cb4"
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        17408,
+        1536
+      ],
+      "identical": true,
+      "arms": {
+        "current": {
+          "image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+          "entry": "tessera_rocm_folded_matmul_708d500594ff51c6",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "2bc28f7144fc11083ad2c63a566b5dddd8a06ba5596621eff892c115bb83a125",
+          "tile_sha256": "82b94e974a3769367579bb14dac3c78a03b73d47e8709f8e81a345c07824bb5f"
+        },
+        "control": {
+          "image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+          "entry": "tessera_rocm_folded_matmul_708d500594ff51c6",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "2bc28f7144fc11083ad2c63a566b5dddd8a06ba5596621eff892c115bb83a125",
+          "tile_sha256": "82b94e974a3769367579bb14dac3c78a03b73d47e8709f8e81a345c07824bb5f"
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        8192,
+        1024
+      ],
+      "identical": true,
+      "arms": {
+        "current": {
+          "image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+          "entry": "tessera_rocm_folded_matmul_a870cecb1991940b",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "775e39e4604efe6257ed0de069440573a50a024c3615c2d791a14795ae963dd0",
+          "tile_sha256": "797c0e5b42ae5309a04e192f3edc4f39ee2dd42d45249efa72255ea5dd1e5b39"
+        },
+        "control": {
+          "image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+          "entry": "tessera_rocm_folded_matmul_a870cecb1991940b",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "775e39e4604efe6257ed0de069440573a50a024c3615c2d791a14795ae963dd0",
+          "tile_sha256": "797c0e5b42ae5309a04e192f3edc4f39ee2dd42d45249efa72255ea5dd1e5b39"
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        16384,
+        2048
+      ],
+      "identical": true,
+      "arms": {
+        "current": {
+          "image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+          "entry": "tessera_rocm_folded_matmul_a870cecb1991940b",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "775e39e4604efe6257ed0de069440573a50a024c3615c2d791a14795ae963dd0",
+          "tile_sha256": "e48e4d528df2e54b2525d4ac115ed4da0b1c263b4ecf51f233c17af03864aef2"
+        },
+        "control": {
+          "image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+          "entry": "tessera_rocm_folded_matmul_a870cecb1991940b",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "775e39e4604efe6257ed0de069440573a50a024c3615c2d791a14795ae963dd0",
+          "tile_sha256": "e48e4d528df2e54b2525d4ac115ed4da0b1c263b4ecf51f233c17af03864aef2"
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        8192,
+        5120
+      ],
+      "identical": true,
+      "arms": {
+        "current": {
+          "image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+          "entry": "tessera_rocm_folded_matmul_a870cecb1991940b",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "775e39e4604efe6257ed0de069440573a50a024c3615c2d791a14795ae963dd0",
+          "tile_sha256": "a93cefc3a77f2d03ce190cc6ab00fdd6baf89e556610c1785a54e6fd379fb296"
+        },
+        "control": {
+          "image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+          "entry": "tessera_rocm_folded_matmul_a870cecb1991940b",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "775e39e4604efe6257ed0de069440573a50a024c3615c2d791a14795ae963dd0",
+          "tile_sha256": "a93cefc3a77f2d03ce190cc6ab00fdd6baf89e556610c1785a54e6fd379fb296"
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        16384,
+        5120
+      ],
+      "identical": true,
+      "arms": {
+        "current": {
+          "image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+          "entry": "tessera_rocm_folded_matmul_a870cecb1991940b",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "775e39e4604efe6257ed0de069440573a50a024c3615c2d791a14795ae963dd0",
+          "tile_sha256": "afa65dcc213156f2deedd9cbb9169a8a34384df6c9a5e95ab8cb0b8fc1d34c75"
+        },
+        "control": {
+          "image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+          "entry": "tessera_rocm_folded_matmul_a870cecb1991940b",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "775e39e4604efe6257ed0de069440573a50a024c3615c2d791a14795ae963dd0",
+          "tile_sha256": "afa65dcc213156f2deedd9cbb9169a8a34384df6c9a5e95ab8cb0b8fc1d34c75"
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        200,
+        8192,
+        1536
+      ],
+      "identical": true,
+      "arms": {
+        "current": {
+          "image_sha256": "999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4",
+          "entry": "tessera_rocm_folded_matmul_130d3100d2bc4ad0",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "b495d3bd1344e66cbb16fe43e51e652d92ee3ccaeeda767ace4e085b7849869d",
+          "tile_sha256": "c83fc0674dda2791c651f9aae82392e5f8df47d2e17aadef16081b0e1f89a2fb"
+        },
+        "control": {
+          "image_sha256": "999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4",
+          "entry": "tessera_rocm_folded_matmul_130d3100d2bc4ad0",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "b495d3bd1344e66cbb16fe43e51e652d92ee3ccaeeda767ace4e085b7849869d",
+          "tile_sha256": "c83fc0674dda2791c651f9aae82392e5f8df47d2e17aadef16081b0e1f89a2fb"
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        512,
+        8192,
+        1536
+      ],
+      "identical": true,
+      "arms": {
+        "current": {
+          "image_sha256": "f9a76cae9af0db96f6d2f7f2880183eee183ea8b2a7bde3b2b08260219ec4c1f",
+          "entry": "tessera_rocm_folded_matmul_9e1ec5f733151245",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "9275f15a731640dc0af97d99fca118299bb4920d6aba07f268b75ce740395fe3",
+          "tile_sha256": "4c01a76ef0952307c1be8980c07398d4ad5e772ff26f9c17687872ea8cf3e962"
+        },
+        "control": {
+          "image_sha256": "f9a76cae9af0db96f6d2f7f2880183eee183ea8b2a7bde3b2b08260219ec4c1f",
+          "entry": "tessera_rocm_folded_matmul_9e1ec5f733151245",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "9275f15a731640dc0af97d99fca118299bb4920d6aba07f268b75ce740395fe3",
+          "tile_sha256": "4c01a76ef0952307c1be8980c07398d4ad5e772ff26f9c17687872ea8cf3e962"
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        36864,
+        1536
+      ],
+      "identical": true,
+      "arms": {
+        "current": {
+          "image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+          "entry": "tessera_rocm_folded_matmul_a870cecb1991940b",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "775e39e4604efe6257ed0de069440573a50a024c3615c2d791a14795ae963dd0",
+          "tile_sha256": "4eb8de1b225007a9a74fef085637b79a576149be13d7ae15c8187569ec2232c0"
+        },
+        "control": {
+          "image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+          "entry": "tessera_rocm_folded_matmul_a870cecb1991940b",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "target_sha256": "775e39e4604efe6257ed0de069440573a50a024c3615c2d791a14795ae963dd0",
+          "tile_sha256": "4eb8de1b225007a9a74fef085637b79a576149be13d7ae15c8187569ec2232c0"
+        }
+      }
+    }
+  ]
+}

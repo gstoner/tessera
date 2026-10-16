@@ -1,0 +1,244 @@
+[
+  {
+    "shape_mnk": [
+      256,
+      8192,
+      1472
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.8365271255869717,
+      0.8566392776371592
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      12288,
+      1472
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.8891857955907777,
+      0.8983305766361809
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      16384,
+      1472
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.8873836300706608,
+      0.8932654458016319
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      20480,
+      1472
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.9119608199484869,
+      0.9048650318329242
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      24576,
+      1472
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.9155538442690376,
+      0.9149304088359
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      28672,
+      1472
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.9052495928543348,
+      0.907001842270066
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      32768,
+      1472
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.9342482451714876,
+      0.9268722552752273
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      8192,
+      1536
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.8253730922221909,
+      0.8280505610201504
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      12288,
+      1536
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.9178200764038584,
+      0.9135380429776896
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      16384,
+      1536
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.8980690923420466,
+      0.8963370645713028
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      20480,
+      1536
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.8978517860291753,
+      0.8982828623187197
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      24576,
+      1536
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.9212950945234409,
+      0.9167885749522754
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      28672,
+      1536
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.9004016217992272,
+      0.8966860858619403
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      32768,
+      1536
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.9383824257470467,
+      0.9381726364172425
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      8192,
+      1600
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.848384922561802,
+      0.8445218479679516
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      12288,
+      1600
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.8905476150267897,
+      0.8974058361235582
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      16384,
+      1600
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.888651526403775,
+      0.8880949822714087
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      20480,
+      1600
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.8965333349679262,
+      0.8917994375338675
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      24576,
+      1600
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.9027651930284802,
+      0.8940426068974893
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      28672,
+      1600
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.8860737555152134,
+      0.8876860489492164
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      32768,
+      1600
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.9225458831453106,
+      0.917060091907489
+    ]
+  },
+  {
+    "shape_mnk": [
+      256,
+      8192,
+      2048
+    ],
+    "cu_over_wgp_captured_device_ratio": [
+      0.8285893480940191,
+      0.8546225160913841
+    ]
+  }
+]

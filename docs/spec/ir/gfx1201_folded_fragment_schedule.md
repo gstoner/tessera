@@ -110,3 +110,21 @@ contracts. It requires an independent native reference compiler.
 Older frozen timing packets retain their original benchmark-source hashes.
 New measurements must fingerprint the changed harness and exact compiler
 binaries; a historical packet is not current-source performance evidence.
+
+## Single-row CU calibration
+
+Native Tile-to-ROCm selects CU for unpacked folded M256, N8192..32768 in
+steps of 4096, and K1472/1536/1600; N8192/K2048 is also selected. Existing
+multi-row CU behavior remains. Other single-row classes retain WGP,
+including the measured-regressing N16384/K2048 class. Workgroup mode remains
+an image-keyed physical performance choice and does not change arithmetic.
+
+Frozen 8e53d3355 passes the complete 22-shape calibration in both compiler and
+shape orders, with identical native resident frames and about 6.2-17.5 percent
+lower captured-device time. Each native mode reuses one image across the
+selected shapes. Nine excluded classes and twelve FP8/MXFP8 controls retain
+byte-identical packages. The matching source passes 28,930 non-slow unit cases
+and 44 owning GPU numerical cases. Independent Radiance ratios remain
+shape-specific; N16384 and long-K gaps are open. No hardware-counter cause
+or measured occupancy is inferred from static resource equality.
+Evidence: benchmarks/baselines/gfx1201_folded_cu_policy_20261016/README.md.

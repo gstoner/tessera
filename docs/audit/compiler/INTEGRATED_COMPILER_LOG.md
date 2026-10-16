@@ -13,6 +13,10 @@ audit_role: reference
 
 
 
+
+
+
+
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -12635,4 +12639,30 @@ root bugs on the prior code/provider. The corrected eager admission and native
 root refresh pass 436 affected checks; a rebuilt-provider benchmark passes all
 four cases. Original frozen full-suite proof retains its source scope.
 
+<!-- entry-fields:end -->
+
+### 2026-10-16 — gfx1201 folded CU calibration and frozen regression
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+PRs: pending; sync GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
+
+Outcome: native single-row CU selection follows the measured regular-N,
+K1472/1536/1600 band plus N8192/K2048. The full 22-shape calibration improves
+captured device time 6.2-17.5 percent in both compiler and shape orders,
+with identical native device buffers and independent host snapshots.
+One image per mode serves all selected shapes; nine excluded classes and
+twelve FP8/MXFP8 controls preserve byte-identical native packages.
+The matching frozen 8e53d3355 passes 28,930 non-slow unit tests, 44 owning
+GPU numerical cases and the source/registry/lifecycle gates. Source/compiler
+hashes stay unchanged. Shared-frame leases close after graphs/modules.
+All four architecture queues distinguish owning gfx1201 proof from siblings.
+
+Remaining: publication CI and broader route/performance obligations.
+The independent six-case Radiance comparison is near parity at N8192/K1536
+and K2048, but N16384 and K5120 retain roughly 15-27 percent gaps.
+Rejected LDS output-store policies remain historical evidence; no unused
+production switch or hardware-counter attribution is introduced.
+
+Evidence: benchmarks/baselines/gfx1201_folded_cu_policy_20261016/README.md;
+docs/spec/ir/gfx1201_folded_fragment_schedule.md.
 <!-- entry-fields:end -->

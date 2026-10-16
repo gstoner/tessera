@@ -10,12 +10,21 @@ scope: ROCm backend implementation and exact-device proof
 Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
 Synchronization key: GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
 
+Final scoped regression: frozen 8e53d3355 passes 28,930 non-slow unit tests
+(5,482 skipped, 876 deselected) with matching LLVM/MLIR23.1.1 on Tajasaurus.
+All 22 calibrated CU rows improve in both compiler/shape orders; 44 owning
+gfx1201 numerical tests pass. Twelve FP8/MXFP8 image controls and nine
+excluded native classes are byte-identical. The independent Radiance packet
+retains short-K near-parity rows and open N16384/long-K gaps.
+Evidence: benchmarks/baselines/gfx1201_folded_cu_policy_20261016/README.md.
+Calibration is validated; broader ROCm route/performance closure remains open.
+
 Benchmark follow-through: optional shared native resident frames now use
 explicit leases, independent host correctness snapshots and exception-safe
 cleanup. CU/WGP comparison may differ only in workgroup mode; other schedule
 fields remain equal. Historical packets retain their original hashes.
-The bounded single-row CU candidate requires its full rectangular owning-device
-sweep before promotion; broader route/performance closure remains open.
+The bounded single-row CU calibration passes its full rectangular owning-device
+sweep; broader route/performance closure remains open.
 
 Shared test discovery now honors explicit MLIR_OPT, then TESSERA_LLVM_BIN,
 then LLVM_BIN before legacy host fallbacks. A broken configured tool

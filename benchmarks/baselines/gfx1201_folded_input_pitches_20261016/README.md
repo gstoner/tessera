@@ -90,6 +90,16 @@ Recorder ownership:
 | Recorder | Outputs |
 | --- | --- |
 | benchmarks/rocm/benchmark_folded_input_pitches.py | forward/reverse and long-forward/long-reverse JSON |
-| verify_legacy_images.py | legacy-image-parity.json and log |
+| verify_legacy_images.py | post-canonicalization-image-parity.json and log |
 
 The diagnostic smoke run is not included in the published timing set.
+
+## Post-measurement canonicalization proof
+
+Canonicalization hardening is source b50c2cc1349bc7406b7d7ef0e6c1fa40ec2183fa,
+separate from the 920bdadc4 timing source. The post-canonicalization image
+packet records unchanged source/compiler witnesses, all 22 legacy CU and
+12 format identities, and 80 pitched variants (ten shapes, four pitch
+combinations, canonicalized and uncanonicalized). Every pitched variant
+retains the exact measured f80b9107 HSACO. This is an image-equivalence proof;
+the timing packets and their source fingerprints remain unchanged.

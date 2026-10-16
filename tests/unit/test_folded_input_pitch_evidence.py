@@ -74,3 +74,22 @@ def test_legacy_cu_and_fp8_mxfp8_controls_retain_all_native_artifacts():
     assert len(packet["cu_rows"]) == 22 and len(packet["format_rows"]) == 12
     for row in packet["cu_rows"] + packet["format_rows"]:
         assert row["identical"] and row["current"] == row["frozen"]
+
+
+def test_canonicalization_hardening_preserves_all_measured_image_variants():
+    packet = json.loads((PACKET / "post-canonicalization-image-parity.json").read_text())
+    assert packet["measured_source_revision"] == SOURCE
+    assert packet["source_before"] == packet["source_after"]
+    assert packet["source_before"]["commit"] == "b50c2cc1349bc7406b7d7ef0e6c1fa40ec2183fa"
+    assert len(packet["cu_rows"]) == 22 and len(packet["format_rows"]) == 12
+    for row in packet["cu_rows"] + packet["format_rows"]:
+        assert row["identical"] and row["current"] == row["frozen"]
+    assert len(packet["pitched_rows"]) == 80
+    actual = {(tuple(row["shape_mnk"]), tuple(row["pitches"]), row["canonicalized"])
+              for row in packet["pitched_rows"]}
+    expected = {((256, n, k), pitches, canonical)
+                for n in (8192, 16384) for k in (4032, 4096, 4160, 5120, 8192)
+                for pitches in ((k, k), (k + 16, k), (k, k + 16), (k + 16, k + 16))
+                for canonical in (False, True)}
+    assert actual == expected
+    assert {row["payload_sha256"] for row in packet["pitched_rows"]} == {IMAGE}

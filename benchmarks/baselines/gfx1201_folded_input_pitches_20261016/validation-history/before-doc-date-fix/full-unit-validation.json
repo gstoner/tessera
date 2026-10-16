@@ -1,0 +1,35 @@
+{
+  "revision": "f0d6fb7e5f1d3547575d5219650415e4d1c45fbd",
+  "state": "failed",
+  "source_before": {
+    "head": "f0d6fb7e5f1d3547575d5219650415e4d1c45fbd",
+    "status": "",
+    "src_tree": "b1017a2b3363d01200d2cabd3f8ac349dbf054b2",
+    "python_tree": "4f914a3bb82db7c137c93f1b40778f447f6676dc",
+    "compiler_sha256": "21beeb2c5607339c89c8235cdf2bd707d55b5414c5734e1d75ee4357cba363ae"
+  },
+  "command": [
+    "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "-n",
+    "4",
+    "tests/unit",
+    "-m",
+    "not slow"
+  ],
+  "python": "3.14.4",
+  "environment": "host WSL on Tajasaurus; exact-device proof recorded separately",
+  "log": "full-unit.log",
+  "exit_code": 1,
+  "source_after": {
+    "head": "f0d6fb7e5f1d3547575d5219650415e4d1c45fbd",
+    "status": "",
+    "src_tree": "b1017a2b3363d01200d2cabd3f8ac349dbf054b2",
+    "python_tree": "4f914a3bb82db7c137c93f1b40778f447f6676dc",
+    "compiler_sha256": "21beeb2c5607339c89c8235cdf2bd707d55b5414c5734e1d75ee4357cba363ae"
+  },
+  "elapsed_s": 411.4118319620029,
+  "raw_log_sha256": "f888dccba73e2bdfbdfe1109998cb2ed02b17b9e219cf5455cf853ef7fe05bdd"
+}

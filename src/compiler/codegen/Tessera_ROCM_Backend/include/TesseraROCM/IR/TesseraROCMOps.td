@@ -170,6 +170,12 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
     the Tessera contract upstream ROCDL cannot carry -- which scale multiplies
     which partial -- and so earns its place here (Decision #19).
 
+    The opt-in rocm_mxfp4_w4a8_folded_row_pitched_v1 profile has identical
+    full-K math but preserves zero-origin unit-step input views. Its distinct
+    ABI adds LDA/LDB; a_row_stride/b_row_stride bind authored storage roots.
+    Native identity projects them to zero with runtime_row_strides; only
+    global row addresses consume those arguments, while K controls reduction.
+
     Native image identity may project a verified one-wave global W8A8
     directive to runtime_shape with m/n/k = 0. M/N/K then come exclusively
     from the checked launch ABI; scale-group divisibility and buffer extents
@@ -202,6 +208,9 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
                        OptionalAttr<StrAttr>:$workgroup_mode,
                        OptionalAttr<StrAttr>:$staging_prefetch,
                        OptionalAttr<StrAttr>:$fragment_read_schedule,
+                       OptionalAttr<I64Attr>:$a_row_stride,
+                       OptionalAttr<I64Attr>:$b_row_stride,
+                       OptionalAttr<UnitAttr>:$runtime_row_strides,
                        OptionalAttr<StrAttr>:$epilogue_schedule,
                        OptionalAttr<StrAttr>:$row_guard,
                        // ROCM-FP8-BLOCKSCALE-1: the weight scale's N block

@@ -133,10 +133,19 @@ LogicalResult MatmulOp::verify() {
     return emitOpError(
         "macro tile dimensions must be positive multiples of tile_m/tile_n");
   const bool foldedMxfp4 =
-      getPhysicalContract() == "rocm_mxfp4_w4a8_folded_prefill_v1";
+      getPhysicalContract() == "rocm_mxfp4_w4a8_folded_prefill_v1" ||
+      getPhysicalContract() == "rocm_mxfp4_w4a8_folded_row_pitched_v1";
   const bool packedFoldedMxfp4 =
       getPhysicalContract() == "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
   const bool foldedFamily = foldedMxfp4 || packedFoldedMxfp4;
+  const bool pitched = getPhysicalContract() == "rocm_mxfp4_w4a8_folded_row_pitched_v1";
+  for (StringRef key : {"a_row_stride", "b_row_stride"}) {
+    auto stride = (*this)->getAttrOfType<IntegerAttr>(key);
+    if (pitched ? (!stride || stride.getInt() < getScaleK() ||
+                   stride.getInt() <= 0 || stride.getInt() % 16)
+                : (*this)->hasAttr(key))
+      return emitOpError("row pitches must match the named aligned folded storage contract");
+  }
   // ROCM-FP8-BLOCKSCALE-1: the W8A8 contract's LDS-staged body runs 8 waves.
   const bool fp8W8A8Lds =
       (getPhysicalContract() == "rocm_fp8_w8a8_blockscale_nk_v1" ||

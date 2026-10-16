@@ -1,9 +1,23 @@
 ---
-last_updated: 2026-10-15
+last_updated: 2026-10-16
 audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+
+## GFX1201-FOLDED-INPUT-VIEWS-20261016 — preserve physical input row pitches
+
+Owner ROCM-MXFP4-W4A8-1 / LAYOUT-ALG-1.
+Synchronization key: GFX1201-FOLDED-INPUT-VIEWS-20261016.
+
+Shared Schedule preflight now diagnoses scaled physical-profile tags on ordinary matmul before accessing absent scale operands. Host-free ROCm/NVIDIA negative regressions cover the corrected boundary; this establishes no new rocm physical schedule or sibling exact-device result.
+
+Implemented bounded whole-row input views and canonicalized identity entry roots through Graph/Schedule/Tile, native ROCm Target, LLVM/ROCDL, HSACO and checked LDA/LDB ABI. 48 owning-gfx1201 regression cases pass, including canonicalization and both NaN padding patterns. 764 focused host gates and 16 packet consumers passed before the final canonicalization hardening; the hardened view/packet set passes 39 cases. The final clean 6a9610363 full non-slow unit gate passes 28,603 cases (5,873 skipped), with unchanged source/compiler witnesses. The required compiler-route lane passes 856 selected cases with no skips; owning gfx1201 regressions pass 49, including pitched CU mode. All 33 generated documents are in sync. GitHub publication CI remains pending at this source checkpoint.
+
+Seven-trial forward/reverse packets at ten M256 shapes use one pitched image. B-only padding reduces captured device windows 44% at N8192/K4096 and 28–32% at N16384/K4096; neighboring K regresses slightly and N16384/K5120 improves less than 1%. Public launch wall time does not improve. No default selector or padding promotion. The broader per-column attribution, prepared/resident public route and general views remain open. See benchmarks/baselines/gfx1201_folded_input_pitches_20261016/README.md.
+
+All 22 legacy CU shapes and 12 FP8/MXFP8 KN/NK controls retain exact Tile, Target, entry, ABI and HSACO identities at the measured source. The prior CU source is now a strict historical byte witness rather than a claim that new compiler files are its old source.
+
 
 ## GFX1201-FOLDED-FRAGMENT-GROUPS-20261015 — native fragment read groups
 

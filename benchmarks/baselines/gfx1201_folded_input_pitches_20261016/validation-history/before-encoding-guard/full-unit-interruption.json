@@ -1,0 +1,14 @@
+{
+  "wrapper_pid": 838810,
+  "pytest_pid": 838853,
+  "command": [
+    "/home/angstorms/scratch/jvp-schema-tools-20261011/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/unit",
+    "-m",
+    "not slow"
+  ],
+  "reason": "Intentionally interrupted incomplete 528b902a5 unit sweep to fix reproduced encoded tensor storage-root layout loss in the new physical profile."
+}

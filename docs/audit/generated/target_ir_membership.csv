@@ -33,7 +33,7 @@ rocm,async_copy,optional-only,,dst_space src_space
 rocm,wait,optional-only,,dst_space src_space
 rocm,mfma,optional-only,,dst_space src_space
 rocm,wmma_gemm,requires,dtype portable_abi,dst_space rhs_storage src_space
-rocm,scaled_wmma_gemm,requires,abi k_step_schedule package_abi,dst_space epilogue_schedule fragment_read_schedule schedule_raster_group schedule_raster_order src_space staging staging_prefetch tile_m_per_wave tile_n_per_wave warps
+rocm,scaled_wmma_gemm,requires,abi k_step_schedule package_abi,a_row_stride b_row_stride dst_space epilogue_schedule fragment_read_schedule runtime_row_strides schedule_raster_group schedule_raster_order src_space staging staging_prefetch tile_m_per_wave tile_n_per_wave warps
 rocm,flash_attn,requires,dtype,dst_space src_space
 rocm,flash_attn_bwd,requires,dtype,dst_space src_space
 rocm,linear_attn,requires,dtype feature_map,dst_space src_space

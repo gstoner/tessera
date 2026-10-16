@@ -14,7 +14,10 @@ import subprocess
 import numpy as np
 
 from .rocm_mxfp4 import FoldedRowReference
-from .rocm_mxfp4_folded import GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI
+from .rocm_mxfp4_folded import (
+    GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI, GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI,
+    checked_folded_input_pitches,
+)
 from .rocm_mxfp4_folded_carrier import package_folded_scaled_wmma_target_ir
 from .rocm_native import ROCMNativePackage
 
@@ -33,6 +36,9 @@ class FoldedScaledMatmulProgram:
         return {
             "route": provenance["route"],
             "physical_contract": provenance["physical_contract"],
+            **({"input_row_strides": [provenance["a_row_stride"], provenance["b_row_stride"]],
+                "input_view_policy": provenance["input_view_policy"]}
+               if "a_row_stride" in provenance else {}),
             "selected_schedule": {
                 "block_m": provenance["block_m"],
                 "block_n": provenance["block_n"],
@@ -65,10 +71,24 @@ class FoldedScaledMatmulProgram:
         }
 
 
-def author_folded_scaled_matmul_graph(m: int, n: int, k: int) -> str:
+def author_folded_scaled_matmul_graph(
+    m: int, n: int, k: int, *, input_row_strides: tuple[int, int] | None = None,
+) -> str:
     """Author the distinct approximate physical Graph operation."""
     if min(m, n, k) <= 0 or m <= 64 or k % 64:
         raise ValueError("folded scaled_matmul requires M>64, N>0, K divisible by 64")
+    if input_row_strides is not None:
+        lda, ldb = checked_folded_input_pitches(input_row_strides, m, n, k)
+        dense = author_folded_scaled_matmul_graph(m, n, k)
+        return (dense.replace(
+            f"%a: tensor<{m}x{k}xui8>", f"%a_storage: tensor<{m}x{lda}xui8>", 1)
+            .replace(f"%b: tensor<{n}x{k}xui8>", f"%b_storage: tensor<{n}x{ldb}xui8>", 1)
+            .replace("    %0 = tessera.scaled_matmul",
+                f"    %a = tensor.extract_slice %a_storage[0, 0] [{m}, {k}] [1, 1] : tensor<{m}x{lda}xui8> to tensor<{m}x{k}xui8>\n"
+                f"    %b = tensor.extract_slice %b_storage[0, 0] [{n}, {k}] [1, 1] : tensor<{n}x{ldb}xui8> to tensor<{n}x{k}xui8>\n"
+                "    %0 = tessera.scaled_matmul", 1)
+            .replace("rocm_mxfp4_w4a8_folded_prefill_v1",
+                     "rocm_mxfp4_w4a8_folded_row_pitched_v1", 1))
     return f'''module attributes {{tessera.target = "rocm", tessera.arch = "gfx1201"}} {{
   func.func @folded_w4a8(%a: tensor<{m}x{k}xui8>,
                          %b: tensor<{n}x{k}xui8>,
@@ -107,6 +127,7 @@ def _lower(tessera_opt: Path, graph_ir: str, *, target: bool) -> str:
 def compile_folded_scaled_matmul(
     a: np.ndarray, a_scale: np.ndarray, folded: FoldedRowReference, *,
     tessera_opt: Path, allow_approximate: bool = False, runtime_mn: bool = True, runtime_k: bool = True,
+    input_row_strides: tuple[int, int] | None = None,
 ) -> FoldedScaledMatmulProgram:
     """Compile a typed frontend call into the exact gfx1201 folded ABI.
 
@@ -134,15 +155,19 @@ def compile_folded_scaled_matmul(
     n = folded.weight_bytes.shape[0]
     if folded.row_reference.shape != (n,):
         raise ValueError("folded scaled_matmul row reference must be [N]")
+    if input_row_strides is not None:
+        checked_folded_input_pitches(input_row_strides, m, n, k)
     if not tessera_opt.is_file():
         raise FileNotFoundError(f"folded scaled_matmul compiler not found: {tessera_opt}")
-    graph_ir = author_folded_scaled_matmul_graph(m, n, k)
+    graph_ir = author_folded_scaled_matmul_graph(m, n, k, input_row_strides=input_row_strides)
     tile_ir = _lower(tessera_opt, graph_ir, target=False)
     target_ir = _lower(tessera_opt, graph_ir, target=True)
     package = package_folded_scaled_wmma_target_ir(
         tile_ir, target_ir, folded, allow_approximate=True, runtime_mn=runtime_mn, runtime_k=runtime_k,
     )
-    if package.descriptor.abi_id != GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI:
+    expected_abi = (GFX_MXFP4_W4A8_FOLDED_ROW_PITCHED_ABI if input_row_strides is not None
+                    else GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI)
+    if package.descriptor.abi_id != expected_abi:
         raise ValueError("folded scaled_matmul selected a mismatched package ABI")
     return FoldedScaledMatmulProgram(package=package, graph_ir=graph_ir)
 

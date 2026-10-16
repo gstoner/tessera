@@ -347,6 +347,12 @@ struct ProjectROCMKernelIdentityPass
         }
       }
     }
+    if (family == "folded_matmul" && copy->hasAttr("a_row_stride")) {
+      OpBuilder builder(&getContext());
+      copy->setAttr("runtime_row_strides", builder.getUnitAttr());
+      copy->setAttr("a_row_stride", builder.getI64IntegerAttr(0));
+      copy->setAttr("b_row_stride", builder.getI64IntegerAttr(0));
+    }
     projected->getBody()->push_back(copy);
     std::string canonical;
     llvm::raw_string_ostream os(canonical);

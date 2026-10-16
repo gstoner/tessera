@@ -697,7 +697,8 @@ LogicalResult ScaledMatmulOp::verify() {
       return success();
     }
     const bool folded =
-        physical.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1";
+        physical.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1" ||
+        physical.getValue() == "rocm_mxfp4_w4a8_folded_row_pitched_v1";
     const bool packedFolded =
         physical.getValue() == "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
     const bool foldedFamily = folded || packedFolded;
@@ -761,6 +762,18 @@ LogicalResult ScaledMatmulOp::verify() {
     auto mode = policy
                     ? dyn_cast_or_null<StringAttr>(policy.get("execution_mode"))
                     : StringAttr();
+    if (physical.getValue() == "rocm_mxfp4_w4a8_folded_row_pitched_v1") {
+      if (aType.getEncoding() || bType.getEncoding() || rType.getEncoding() ||
+          lhsScaleType.getEncoding() || rhsScaleType.getEncoding())
+        return emitOpError("row-pitched folded physical contract requires unencoded tensors");
+      auto granularity = sl ? sl.getAs<StringAttr>("granularity") : StringAttr();
+      auto accum = policy ? policy.getAs<StringAttr>("accum") : StringAttr();
+      if (!sl || sl.size() != 3 || !block || block.size() != 2 ||
+          !isa<IntegerAttr>(block[0]) || cast<IntegerAttr>(block[0]).getInt() != 1 ||
+          !granularity || granularity.getValue() != "output_column" ||
+          !policy || policy.size() != 2 || !accum || accum.getValue() != "fp32")
+        return emitOpError("row-pitched folded storage requires output-column row references and fp32 full-K accumulation");
+    }
     if (!mode || mode.getValue() !=
                      (foldedFamily ? "folded_row_reference_explicit_approximate"
                              : "exact_per_block"))

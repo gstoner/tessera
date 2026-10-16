@@ -84,6 +84,19 @@ independent host snapshot contract; the frozen grid is the decisive CU witness.
 
 ## Reproduction and limits
 
+
+The archived drivers use repository identifier-style names. Recorded commands
+retain their original scratch paths; the table maps each shipped copy to its
+purpose and output.
+
+| Recorder | Purpose | Output |
+| --- | --- | --- |
+| [run_frozen_cu_grid.py](run_frozen_cu_grid.py) | Strict 22-shape forward/reversed CU/WGP calibration | cu-grid-forward.json.gz, cu-grid-reverse.json.gz, paired-summary.json |
+| [run_frozen_cu_radiance.py](run_frozen_cu_radiance.py) | Strict six-shape independent reference comparison | radiance-forward.json.gz, radiance-reverse.json.gz, radiance-summary.json |
+| [compare_format_controls.py](compare_format_controls.py) | FP8/MXFP8 KN/NK image and ABI controls | format-image-equality.json |
+| [verify_excluded_images.py](verify_excluded_images.py) | Excluded shape-class image and ABI controls | excluded-image-equality.json |
+
+
 Forward/reverse command JSON files identify the actual compiler roles and
 all shapes. Compressed packets retain source hashes and actual device identity.
 The compression manifest checks both raw and compressed bytes. The reproduction

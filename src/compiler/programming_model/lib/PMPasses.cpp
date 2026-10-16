@@ -695,6 +695,23 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
          "\", so the LDS-staged W8A8 body's occupancy rule cannot be "
          "evaluated")
             .str();
+  // GFX1201-W8A8-SHORT-RAGGED-20261016: four-wave 64x64 LDS tiles
+  // reduce the coarse-grid and masked register-panel cost for sub-128 ragged
+  // rows. Owning-device paired controls exclude aligned M and wider N,
+  // where this geometry can regress. Keep K128/N128 scale semantics and the
+  // measured short-K envelope explicit; no physical policy transfers to MX.
+  if (nk && schedule.arch == "gfx1201" && computeUnits &&
+      schedule.scaleBlockK == 128 && schedule.scaleBlockN == 128 &&
+      schedule.m > 64 && schedule.m < 128 && schedule.m % 32 != 0 &&
+      schedule.n >= 1024 && schedule.n <= 3072 && schedule.n % 128 == 0 &&
+      schedule.k >= 1024 && schedule.k <= 2048) {
+    schedule.staging = "lds";
+    schedule.warps = 4;
+    schedule.pipelineDepth = 1;
+    schedule.macroTileM = 64;
+    schedule.macroTileN = 64;
+    return;
+  }
   // ROCM-FP8-BLOCKSCALE-1, gfx1201 ragged 97..127-row follow-up: the
   // register fallback uses a 16-row panel because M is not 32-aligned. On
   // Tajasarus it took 2.4-3.4x the time of the 128x64 LDS body across the

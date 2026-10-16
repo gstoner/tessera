@@ -190,6 +190,14 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201") ->
     def tiles(tm: int, tn: int) -> int:
         return -(-shape.m // tm) * -(-shape.n // tn)
 
+    # Differential mirror of the measured four-wave small-grid rule. Native
+    # Schedule owns selection; aligned rows and wider N retain their controls.
+    if (shape.weight_layout == "nk" and arch == "gfx1201" and units is not None
+            and shape.scale_k == 128 and shape.scale_n == 128
+            and 64 < shape.m < 128 and shape.m % 32 != 0
+            and 1024 <= shape.n <= 3072 and shape.n % 128 == 0
+            and 1024 <= shape.k <= 2048):
+        return BlockScalePanel("lds", 64, 64, 4)
     # Differential mirror of the bounded gfx1201 ragged-row rule in PMPasses.
     # The Schedule pass remains the sole selector authority.
     if (shape.weight_layout == "nk" and arch == "gfx1201" and units is not None

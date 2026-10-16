@@ -244,7 +244,8 @@ def _assert_lds_isa(package, *, spill_free: bool = True) -> None:
 LDS_SHAPES = [
     # (shape, expected macro tile) -- Schedule-selected: 128x128 at >= 64
     # workgroups (ragged M included since FOUNDATION-BATCH-2-2026-09-27),
-    # else 128x64; ragged M, ragged N and both; both output storages.
+    # else 128x64, with four-wave 64x64 in the measured small-grid envelope;
+    # ragged M, ragged N and both; both output storages.
     (BlockScaleShape(256, 4096, 256, 128, 128, "nk"), (128, 128)),
     (BlockScaleShape(128, 4096, 384, 128, 128, "nk"), (128, 64)),
     (BlockScaleShape(200, 4096, 256, 128, 128, "nk"), (128, 128)),
@@ -254,8 +255,8 @@ LDS_SHAPES = [
     (BlockScaleShape(200, 2048, 384, 128, 128, "nk"), (128, 64)),
     (BlockScaleShape(1000, 4096, 256, 128, 128, "nk"), (128, 128)),
     (BlockScaleShape(300, 4000, 256, 128, 128, "nk", "bf16"), (128, 128)),
-    (BlockScaleShape(100, 1024, 1024, 128, 128, "nk"), (128, 64)),
-    (BlockScaleShape(127, 1024, 1024, 128, 128, "nk"), (128, 64)),
+    (BlockScaleShape(100, 1024, 1024, 128, 128, "nk"), (64, 64)),
+    (BlockScaleShape(127, 1024, 1024, 128, 128, "nk"), (64, 64)),
 ]
 
 
@@ -273,8 +274,10 @@ def test_blockscale_w8a8_lds_body_on_gfx1201(shape, macro, exact):
     assert rt._rocm_live_arch() == "gfx1201"
     package = package_blockscale(lower_blockscale(shape))
     prov = package.descriptor.provenance
-    assert (prov["staging"], prov["warps"], tuple(prov["macro_tile"])) == ("lds", 8, macro)
-    assert prov["workgroup"] == [256, 1, 1]
+    expected_warps = 4 if macro == (64, 64) else 8
+    assert (prov["staging"], prov["warps"], tuple(prov["macro_tile"])) == (
+        "lds", expected_warps, macro)
+    assert prov["workgroup"] == [expected_warps * 32, 1, 1]
     assert package.descriptor.abi_id == PACKAGE_ABIS[(shape.weight_layout, shape.output)]
     _assert_lds_isa(package)
     a, b, a_scale, b_scale = _inputs(shape, exact=exact, seed=shape.m * 11 + shape.n)

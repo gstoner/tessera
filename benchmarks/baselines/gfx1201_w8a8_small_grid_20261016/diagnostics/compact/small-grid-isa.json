@@ -1,0 +1,137 @@
+{
+  "scope": "Static ISA/resource metadata of numerically proved measured images; HIP occupancy model, no hardware counters or executed barrier-count claim",
+  "readobj_version": "AMD LLVM version 23.0.0git\n  Optimized build.\n",
+  "objdump_version": "Ubuntu LLVM version 23.1.1\n  Optimized build.\n\n\n  Registered Targets:\n    aarch64     - AArch64 (little endian)\n    aarch64_32  - AArch64 (little endian ILP32)\n    aarch64_be  - AArch64 (big endian)\n    amdgcn      - legacy name for amdgpu\n    amdgpu      - AMDGPU gfx6+\n    arm         - ARM\n    arm64       - ARM64 (little endian)\n    arm64_32    - ARM64 (little endian ILP32)\n    armeb       - ARM (big endian)\n    avr         - Atmel AVR Microcontroller\n    bpf         - BPF (host endian)\n    bpfeb       - BPF (big endian)\n    bpfel       - BPF (little endian)\n    hexagon     - Hexagon\n    lanai       - Lanai\n    loongarch32 - 32-bit LoongArch\n    loongarch64 - 64-bit LoongArch\n    m68k        - Motorola 68000 family\n    mips        - MIPS (32-bit big endian)\n    mips64      - MIPS (64-bit big endian)\n    mips64el    - MIPS (64-bit little endian)\n    mipsel      - MIPS (32-bit little endian)\n    msp430      - MSP430 [experimental]\n    nvptx       - NVIDIA PTX 32-bit\n    nvptx64     - NVIDIA PTX 64-bit\n    ppc32       - PowerPC 32\n    ppc32le     - PowerPC 32 LE\n    ppc64       - PowerPC 64\n    ppc64le     - PowerPC 64 LE\n    r600        - AMD GPUs HD2XXX-HD6XXX\n    riscv32     - 32-bit RISC-V\n    riscv32be   - 32-bit big endian RISC-V\n    riscv64     - 64-bit RISC-V\n    riscv64be   - 64-bit big endian RISC-V\n    sparc       - Sparc\n    sparcel     - Sparc LE\n    sparcv9     - Sparc V9\n    spirv       - SPIR-V Logical\n    spirv32     - SPIR-V 32-bit\n    spirv64     - SPIR-V 64-bit\n    systemz     - SystemZ\n    thumb       - Thumb\n    thumbeb     - Thumb (big endian)\n    ve          - VE\n    wasm32      - WebAssembly 32-bit\n    wasm64      - WebAssembly 64-bit\n    x86         - 32-bit X86: Pentium-Pro and above\n    x86-64      - 64-bit X86: EM64T and AMD64\n    xcore       - XCore\n    xtensa      - Xtensa 32\n",
+  "source_commit": "77769bc69cd2b0d7f634d0f7c91691816f47258f",
+  "rows": [
+    {
+      "shape": [
+        65,
+        3072,
+        1536
+      ],
+      "label": "tessera_nk+bf16@base",
+      "image_sha256": "bb5682616a506eb7a9cb17b76cef68e6258ae53754cf7005af0ec4c5f7caa789",
+      "metadata": {
+        "group_segment_fixed_size": 0,
+        "private_segment_fixed_size": 0,
+        "sgpr_count": 93,
+        "vgpr_count": 256,
+        "wavefront_size": 32
+      },
+      "static_instruction_counts": {
+        "s_wait_kmcnt": 9,
+        "s_wait_alu": 977,
+        "global_load_d16_u8": 102,
+        "global_load_d16_hi_u8": 90,
+        "s_wait_loadcnt": 206,
+        "v_wmma_f32_16x16x16_fp8_fp8": 80,
+        "global_load_b32": 69,
+        "global_load_b64": 96
+      },
+      "block_threads": 32,
+      "dynamic_shared_bytes": 0,
+      "occupancy_api_status": 0,
+      "active_blocks_model": 24
+    },
+    {
+      "shape": [
+        65,
+        3072,
+        1536
+      ],
+      "label": "tessera_nk+bf16_lds64x64_w4_d1_s128_p16_f0@base",
+      "image_sha256": "528b6e9c6cb3ac68167c2f2cf6741de187fc444dcc72a3b90aeb4f2f3ad61231",
+      "metadata": {
+        "group_segment_fixed_size": 18432,
+        "private_segment_fixed_size": 0,
+        "sgpr_count": 42,
+        "vgpr_count": 206,
+        "wavefront_size": 32
+      },
+      "static_instruction_counts": {
+        "s_wait_kmcnt": 34,
+        "s_wait_alu": 263,
+        "global_load_b128": 8,
+        "s_barrier_signal": 2,
+        "s_barrier_wait": 2,
+        "s_wait_loadcnt": 17,
+        "ds_store_b128": 8,
+        "s_wait_dscnt": 11,
+        "global_load_b32": 16,
+        "ds_load_2addr_b64": 16,
+        "v_wmma_f32_16x16x16_fp8_fp8": 32
+      },
+      "block_threads": 128,
+      "dynamic_shared_bytes": 0,
+      "occupancy_api_status": 0,
+      "active_blocks_model": 3
+    },
+    {
+      "shape": [
+        127,
+        3072,
+        1536
+      ],
+      "label": "tessera_nk+bf16@base",
+      "image_sha256": "c865c3fff2a7086c1d6349829f0db5f05edfa9d0e546845c1a01432bc0f61dc3",
+      "metadata": {
+        "group_segment_fixed_size": 27648,
+        "private_segment_fixed_size": 0,
+        "sgpr_count": 42,
+        "vgpr_count": 192,
+        "wavefront_size": 32
+      },
+      "static_instruction_counts": {
+        "s_wait_kmcnt": 34,
+        "s_wait_alu": 267,
+        "global_load_b128": 6,
+        "s_barrier_signal": 2,
+        "s_barrier_wait": 2,
+        "s_wait_loadcnt": 19,
+        "ds_store_b128": 6,
+        "s_wait_dscnt": 10,
+        "ds_load_2addr_b64": 16,
+        "global_load_b32": 16,
+        "v_wmma_f32_16x16x16_fp8_fp8": 32
+      },
+      "block_threads": 256,
+      "dynamic_shared_bytes": 0,
+      "occupancy_api_status": 0,
+      "active_blocks_model": 2
+    },
+    {
+      "shape": [
+        127,
+        3072,
+        1536
+      ],
+      "label": "tessera_nk+bf16_lds64x64_w4_d1_s128_p16_f0@base",
+      "image_sha256": "528b6e9c6cb3ac68167c2f2cf6741de187fc444dcc72a3b90aeb4f2f3ad61231",
+      "metadata": {
+        "group_segment_fixed_size": 18432,
+        "private_segment_fixed_size": 0,
+        "sgpr_count": 42,
+        "vgpr_count": 206,
+        "wavefront_size": 32
+      },
+      "static_instruction_counts": {
+        "s_wait_kmcnt": 34,
+        "s_wait_alu": 263,
+        "global_load_b128": 8,
+        "s_barrier_signal": 2,
+        "s_barrier_wait": 2,
+        "s_wait_loadcnt": 17,
+        "ds_store_b128": 8,
+        "s_wait_dscnt": 11,
+        "global_load_b32": 16,
+        "ds_load_2addr_b64": 16,
+        "v_wmma_f32_16x16x16_fp8_fp8": 32
+      },
+      "block_threads": 128,
+      "dynamic_shared_bytes": 0,
+      "occupancy_api_status": 0,
+      "active_blocks_model": 3
+    }
+  ]
+}

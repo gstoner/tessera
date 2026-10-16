@@ -1,0 +1,395 @@
+{
+  "scope": "AITER exact-device reference validation only; no Tessera or timing claim",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "aiter_kernel_source_sha256": "f48245242d51165a5545554fdf1b0f84418f24b4a67d839125c3e2c170fac685",
+  "reference_environment": {
+    "scope": "reference compiler/source import probe only; no GPU correctness or timing claimed",
+    "python": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+    "triton_version": "3.8.0",
+    "triton_module": "/home/angstorms/scratch/rocm-reference-tools-20261016/python/triton/__init__.py",
+    "wheel": "triton-3.8.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+    "wheel_sha256": "387dae4cb0089a7b6ba1a428ae0782b65c4c58f57d94617cb22ca8593d8ccbca",
+    "aiter_kernel_source_sha256": "f48245242d51165a5545554fdf1b0f84418f24b4a67d839125c3e2c170fac685",
+    "retained_source_sha256": "f48245242d51165a5545554fdf1b0f84418f24b4a67d839125c3e2c170fac685",
+    "source_matches_retained": true,
+    "ragged_reference_config": {
+      "BLOCK_SIZE_M": 64,
+      "BLOCK_SIZE_N": 128,
+      "BLOCK_SIZE_K": 128,
+      "GROUP_SIZE_M": 8,
+      "num_warps": 4,
+      "num_stages": 2,
+      "waves_per_eu": 4,
+      "matrix_instr_nonkdim": 16,
+      "cache_modifier": null,
+      "NUM_KSPLIT": 1,
+      "kpack": 2
+    },
+    "config_source": "GEMM-A8W8_BLOCKSCALE-N=3072-K=1536.json:any"
+  },
+  "rows": [
+    {
+      "shape_mnk": [
+        200,
+        8192,
+        1024
+      ],
+      "input_sha256": {
+        "a": "ad7fd87caba12666f7d5fe8fea3a700d211ce31a7082b20f82c28b702422c905",
+        "wt": "ccfe1fcb0fda54f0e72f715f5dc23eb732e99cbfb157b7ec25c7bb66d1886f0d",
+        "sa": "af8cdb3f6a0fcc428bc40824a46af9098e200d3ab9ea3253b9a2771c904a08c0",
+        "sbt": "0cffeb2e9e97038fe86a7ddf14b291bd64a508cfc6f21a6c4807360a3f64bbaf"
+      },
+      "config": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 32,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 4,
+        "num_warps": 4,
+        "num_stages": 2,
+        "waves_per_eu": 6,
+        "matrix_instr_nonkdim": 16,
+        "cache_modifier": ".cg",
+        "NUM_KSPLIT": 1,
+        "kpack": 2
+      },
+      "config_source": "GEMM-A8W8_BLOCKSCALE-N=8192-K=1024.json:M_LEQ_256",
+      "status": "passed",
+      "oracle_max_rel_error": 0.001347787337234314,
+      "compiled": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_64_BLOCK_SIZE_N_32_BLOCK_SIZE_K_128_GROUP_SIZE_M_4_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_1024_EVEN_K_1_cache_modifier_CG",
+        "hsaco_sha256": "9e10626597353fe8e13147704fe18365a1b80c4140bc367301ea8286b8e486eb",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 12288,
+        "num_warps": 4,
+        "output": "bf16"
+      },
+      "matches_retained_aiter_image": false
+    },
+    {
+      "shape_mnk": [
+        200,
+        2048,
+        2048
+      ],
+      "input_sha256": {
+        "a": "34b306a0e485f54ed6f8bb903c16ef11098ef494069f014280510f5485d39038",
+        "wt": "22a95e420a51ef88fcc6d1a1c325dbe872516d5454b547d747e5bc63745daf24",
+        "sa": "cf157728b453f836f4f923371f781ba8b72a4c79683ac360615d429afcc7f9f6",
+        "sbt": "8890a1695a07c68bebb16d6fadfaed347b2444cc02fa887bf5f6e0cdbcd21e7a"
+      },
+      "config": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 64,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 4,
+        "num_warps": 8,
+        "num_stages": 2,
+        "waves_per_eu": 6,
+        "matrix_instr_nonkdim": 16,
+        "cache_modifier": ".cg",
+        "NUM_KSPLIT": 1,
+        "kpack": 2
+      },
+      "config_source": "GEMM-A8W8_BLOCKSCALE-N=2048-K=2048.json:M_LEQ_256",
+      "status": "passed",
+      "oracle_max_rel_error": 0.0010902950303769412,
+      "compiled": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_64_BLOCK_SIZE_N_64_BLOCK_SIZE_K_128_GROUP_SIZE_M_4_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_2048_EVEN_K_1_cache_modifier_CG",
+        "hsaco_sha256": "3988a8ca8fe46c15071c27fea30fa6dcc8fa29c25f4bd005e9820caaeefc0511",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 16384,
+        "num_warps": 8,
+        "output": "bf16"
+      },
+      "matches_retained_aiter_image": false
+    },
+    {
+      "shape_mnk": [
+        1024,
+        3072,
+        1536
+      ],
+      "input_sha256": {
+        "a": "055c26e381a0b58c5e306e2518fdd199dd651c0c444f5ccf24537e3e8326726d",
+        "wt": "02164fb67c3662915be27e35ad60f31790c48baeaa04f354313bd78abe7aa69e",
+        "sa": "0115b7f1ee8fa47983e46527afd84004357dbfa37cec50f28a1fc462c08233f1",
+        "sbt": "252e3cfbc1b0b312360fa8c30a025733221880c4f061e6200714543f282b186d"
+      },
+      "config": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 128,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 8,
+        "num_warps": 4,
+        "num_stages": 2,
+        "waves_per_eu": 4,
+        "matrix_instr_nonkdim": 16,
+        "cache_modifier": null,
+        "NUM_KSPLIT": 1,
+        "kpack": 2
+      },
+      "config_source": "GEMM-A8W8_BLOCKSCALE-N=3072-K=1536.json:any",
+      "status": "passed",
+      "oracle_max_rel_error": 0.0012848591450303254,
+      "compiled": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_64_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_1536_EVEN_K_1_cache_modifier_NONE",
+        "hsaco_sha256": "3f10f18a161adbe0ad9cd8ea181fb12bf06b5035ffc859bbe39e10e6c8316460",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 25088,
+        "num_warps": 4,
+        "output": "bf16"
+      },
+      "matches_retained_aiter_image": false
+    },
+    {
+      "shape_mnk": [
+        127,
+        8192,
+        1024
+      ],
+      "input_sha256": {
+        "a": "025d7e588f621428f63b0d9b704b796258581f286df46c6e4e6c432d5f3cc853",
+        "wt": "65ccfd2f75d32784ff7081cfac1f4f39c00cfc3389f579331d4785410cea9a7a",
+        "sa": "9e42bec21edb47574a01bb15d42e5b2b2b56df468b021b19aa8e69247a2b93c2",
+        "sbt": "b6780b5b9edae3319009ac92b8ade335c6d03b8875baa615c4e2b6b3de4babc0"
+      },
+      "config": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 32,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 8,
+        "num_warps": 4,
+        "num_stages": 2,
+        "waves_per_eu": 8,
+        "matrix_instr_nonkdim": 16,
+        "cache_modifier": ".cg",
+        "NUM_KSPLIT": 1,
+        "kpack": 2
+      },
+      "config_source": "GEMM-A8W8_BLOCKSCALE-N=8192-K=1024.json:M_LEQ_128",
+      "status": "passed",
+      "oracle_max_rel_error": 0.0017030973825155197,
+      "compiled": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_64_BLOCK_SIZE_N_32_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_1024_EVEN_K_1_cache_modifier_CG",
+        "hsaco_sha256": "c5ed96f491abc6d30ecd99ff757e9505e6fc8ca9840b8ecb89ea8b6c76dd0124",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 12288,
+        "num_warps": 4,
+        "output": "bf16"
+      }
+    },
+    {
+      "shape_mnk": [
+        200,
+        4096,
+        1024
+      ],
+      "input_sha256": {
+        "a": "e99338c722115fc2d45ae49038c373ebde28b9e99250ff8499eab36584d0d083",
+        "wt": "2104c34ba1e3bf8dfccc5a0562d730fa10c01b9f44d19654f30d9a0066c68e62",
+        "sa": "45f4ab518cac2fcc4f76f26d22eb5160e0ae9589687d5c359074abdd0057056c",
+        "sbt": "f0f51a846964ae203d1ad87fefadc1ca6523170259df244010c7f2eb6b511404"
+      },
+      "config": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 128,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 8,
+        "num_warps": 4,
+        "num_stages": 1,
+        "waves_per_eu": 0,
+        "matrix_instr_nonkdim": 16,
+        "cache_modifier": null,
+        "NUM_KSPLIT": 1,
+        "kpack": 2
+      },
+      "config_source": "GEMM-A8W8_BLOCKSCALE-N=4096-K=1024.json:M_LEQ_1024",
+      "status": "passed",
+      "oracle_max_rel_error": 0.0013724975716099908,
+      "compiled": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_64_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_1024_EVEN_K_1_cache_modifier_NONE",
+        "hsaco_sha256": "6db6622e7d4cce9c1234c25e3b54b517e8b67f15db21a931e53dd0495779c324",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 16384,
+        "num_warps": 4,
+        "output": "bf16"
+      }
+    },
+    {
+      "shape_mnk": [
+        1024,
+        4096,
+        1024
+      ],
+      "input_sha256": {
+        "a": "8deb8a0289c903635375b853a64e2dd48cb2e34a0078bffd6585307336af79b4",
+        "wt": "066d7654b939341c25a22173fa35fbf714d66d8482fd1518c3b6ce31a90b6792",
+        "sa": "ff0f357798c5f0126f4bcfce5514a826568b6b3e73fabbac43c0403885696ad0",
+        "sbt": "bfc34348dc8edb7cf0d670d0ab93a90621e602c9be68060583dafe9e7c40a9ea"
+      },
+      "config": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 128,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 8,
+        "num_warps": 4,
+        "num_stages": 1,
+        "waves_per_eu": 0,
+        "matrix_instr_nonkdim": 16,
+        "cache_modifier": null,
+        "NUM_KSPLIT": 1,
+        "kpack": 2
+      },
+      "config_source": "GEMM-A8W8_BLOCKSCALE-N=4096-K=1024.json:M_LEQ_1024",
+      "status": "passed",
+      "oracle_max_rel_error": 0.0015143547085559833,
+      "compiled": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_64_BLOCK_SIZE_N_128_BLOCK_SIZE_K_128_GROUP_SIZE_M_8_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_1024_EVEN_K_1_cache_modifier_NONE",
+        "hsaco_sha256": "6db6622e7d4cce9c1234c25e3b54b517e8b67f15db21a931e53dd0495779c324",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 16384,
+        "num_warps": 4,
+        "output": "bf16"
+      }
+    },
+    {
+      "shape_mnk": [
+        255,
+        2048,
+        2048
+      ],
+      "input_sha256": {
+        "a": "b7b841c4e7a8e380a63d906fb0e8acf2d5e5ff6f8e009e357b1a0efd216b199f",
+        "wt": "ae9de9c4e3c322eab0b4e5075d26f98a7bffc30606ed63d03be7cc821ecbddb0",
+        "sa": "4d166e0e0701375b8bac925ede3218118377e74a22b136621f99e3882036206e",
+        "sbt": "9345e5f7a63b0f313316851b727c3ca06aefe007ff85f04802fdbf4a3d84ee39"
+      },
+      "config": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 64,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 4,
+        "num_warps": 8,
+        "num_stages": 2,
+        "waves_per_eu": 6,
+        "matrix_instr_nonkdim": 16,
+        "cache_modifier": ".cg",
+        "NUM_KSPLIT": 1,
+        "kpack": 2
+      },
+      "config_source": "GEMM-A8W8_BLOCKSCALE-N=2048-K=2048.json:M_LEQ_256",
+      "status": "passed",
+      "oracle_max_rel_error": 0.0009638442878531183,
+      "compiled": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_64_BLOCK_SIZE_N_64_BLOCK_SIZE_K_128_GROUP_SIZE_M_4_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_2048_EVEN_K_1_cache_modifier_CG",
+        "hsaco_sha256": "3988a8ca8fe46c15071c27fea30fa6dcc8fa29c25f4bd005e9820caaeefc0511",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 16384,
+        "num_warps": 8,
+        "output": "bf16"
+      }
+    },
+    {
+      "shape_mnk": [
+        127,
+        3072,
+        1536
+      ],
+      "input_sha256": {
+        "a": "44f0a6b500c6c625555a8e2d941db928153778b69db4fc8d8fd5affd35278101",
+        "wt": "00ce1dc8dc2d34d94b186151882ebc55d8ac22feee11f189c5264361a79fa54f",
+        "sa": "ea15152dace089d9343254e848bd5ef318bb0801728c2d4e201c87e52df8b9ab",
+        "sbt": "2e0dbc9a053ccd8e089de90aac4ff9f0dd9c205b5356da13f43105a163c6d641"
+      },
+      "config": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 64,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 4,
+        "num_warps": 8,
+        "num_stages": 2,
+        "waves_per_eu": 4,
+        "matrix_instr_nonkdim": 16,
+        "cache_modifier": ".cg",
+        "NUM_KSPLIT": 1,
+        "kpack": 2
+      },
+      "config_source": "GEMM-A8W8_BLOCKSCALE-N=3072-K=1536.json:M_LEQ_128",
+      "status": "passed",
+      "oracle_max_rel_error": 0.0012166910741432673,
+      "compiled": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_64_BLOCK_SIZE_N_64_BLOCK_SIZE_K_128_GROUP_SIZE_M_4_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_1536_EVEN_K_1_cache_modifier_CG",
+        "hsaco_sha256": "9eff02c4a1dc8337282ff06d9f6087da450be77b6af5ae0d17bd0c608fe67413",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 16384,
+        "num_warps": 8,
+        "output": "bf16"
+      }
+    },
+    {
+      "shape_mnk": [
+        255,
+        3072,
+        1536
+      ],
+      "input_sha256": {
+        "a": "4faa8f2842418d3d309ef7c5100d93fa9b304d723a86ee32603a6af14fe76a1d",
+        "wt": "2e61190a2d00def65f90086565c99cb39332c7b2d43a23791d343abc9a92d839",
+        "sa": "57576bd37676f0538a5ccef1c133c1277d17a9fb908592fd6d1336f88cef007e",
+        "sbt": "2386f6a82e0bcd5d10e45efc1b190f0c9ef18d320ba6d179949e0f09e9a38049"
+      },
+      "config": {
+        "BLOCK_SIZE_M": 64,
+        "BLOCK_SIZE_N": 64,
+        "BLOCK_SIZE_K": 128,
+        "GROUP_SIZE_M": 4,
+        "num_warps": 4,
+        "num_stages": 2,
+        "waves_per_eu": 4,
+        "matrix_instr_nonkdim": 16,
+        "cache_modifier": ".cg",
+        "NUM_KSPLIT": 1
+      },
+      "config_source": "GEMM-A8W8_BLOCKSCALE-N=3072-K=1536.json:M_LEQ_256",
+      "status": "passed",
+      "oracle_max_rel_error": 0.001305665135917141,
+      "compiled": {
+        "triton_version": "3.8.0",
+        "kernel": "_gemm_a8w8_blockscale_kernel_GROUP_K_128_GROUP_N_128_BLOCK_SIZE_M_64_BLOCK_SIZE_N_64_BLOCK_SIZE_K_128_GROUP_SIZE_M_4_NUM_KSPLIT_1_SPLITK_BLOCK_SIZE_1536_EVEN_K_1_cache_modifier_CG",
+        "hsaco_sha256": "0ec9be561f86fbd93b220919d8a04b0a0a0af5bc5e89dbc9d607352755238b50",
+        "wmma": [
+          "v_wmma_f32_16x16x16_fp8_fp8"
+        ],
+        "shared_bytes": 16384,
+        "num_warps": 4,
+        "output": "bf16"
+      }
+    }
+  ]
+}

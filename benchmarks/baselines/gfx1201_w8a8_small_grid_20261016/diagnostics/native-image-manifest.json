@@ -1,0 +1,15 @@
+{
+  "source_commit": "0c25a75eb2b716c97ff577815481d507f7b5d8a8",
+  "source_cpp": "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_image_cache.cpp",
+  "provider_path": "/home/angstorms/scratch/rocm-reference-tools-20261016/libtessera_rocm_native_image.so",
+  "provider_sha256": "e0744891fb5a5a0891b15788292cd39cdc1ac00b34e7be60a9a8118a7ef5c571",
+  "provider_source_sha256": "80be398eddb21197cded4a88093d86b3c3fc67034e8368c09be51d9a419f0860",
+  "cache_initial": {
+    "loads": 0,
+    "hits": 0,
+    "function_lookups": 0,
+    "unloads": 0
+  },
+  "triton_version": "3.8.0",
+  "architecture": "gfx1201"
+}

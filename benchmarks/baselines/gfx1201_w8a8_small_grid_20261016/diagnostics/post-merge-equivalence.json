@@ -1,0 +1,8 @@
+{
+  "measured_commit": "0c25a75eb2b716c97ff577815481d507f7b5d8a8",
+  "merged_main": "e8a782d2e454c049f772467af09bd0fdf2db423d",
+  "measured_tree": "edc91781a5a628587af9ff1b359271c7c93eddb7",
+  "merged_tree": "edc91781a5a628587af9ff1b359271c7c93eddb7",
+  "identical": true,
+  "scope": "Full source tree equality; raw timing packet commit labels remain unchanged"
+}

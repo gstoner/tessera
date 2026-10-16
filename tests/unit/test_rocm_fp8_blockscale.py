@@ -339,7 +339,7 @@ def test_panel_oracle_states_the_rule(m, n, layout, expected):
 
 @pytest.mark.parametrize(("m", "n", "k", "expected"), [
     (96, 8192, 1024, ("global", 32, 32, 1)),
-    (97, 1024, 1024, ("lds", 128, 64, 8)),
+    (97, 1024, 1024, ("lds", 64, 64, 4)),
     (100, 2048, 4096, ("lds", 128, 64, 8)),
     (127, 24576, 1536, ("lds", 128, 64, 8)),
     (128, 8192, 1024, ("lds", 128, 128, 8)),
@@ -415,3 +415,35 @@ def test_projection_refuses_when_the_oracle_and_the_schedule_diverge(monkeypatch
                         lambda *a, **k: w8a8.BlockScalePanel("global", 32, 32, 1))
     with pytest.raises(ValueError, match="oracle disagrees with the native Schedule"):
         w8a8.lower_blockscale(shape)
+
+
+@pytest.mark.compiler_route
+@pytest.mark.parametrize("m,n,k,selected", [
+    (64, 1024, 1024, False), (65, 1024, 1024, True),
+    (95, 2048, 2048, True), (96, 2048, 2048, False),
+    (97, 3072, 1024, True), (127, 3072, 2048, True),
+    (128, 3072, 1536, False), (127, 3200, 1536, False),
+    (127, 1023, 1536, False), (127, 1153, 1536, False),
+    (127, 2048, 896, False), (127, 2048, 2176, False),
+])
+def test_small_grid_schedule_envelope(m, n, k, selected):
+    from tessera.compiler.rocm_fp8_blockscale import (
+        BlockScalePanel, blockscale_panel_oracle, verify_blockscale_schedule,
+    )
+    shape = BlockScaleShape(m, n, k, 128, 128, "nk")
+    expected = BlockScalePanel("lds", 64, 64, 4)
+    assert (blockscale_panel_oracle(shape) == expected) == selected
+    if find_tessera_opt() is None:
+        pytest.skip("production tessera-opt unavailable")
+    program = lower_blockscale(shape)
+    assert (verify_blockscale_schedule(shape, program.schedule_ir) == expected) == selected
+
+
+@pytest.mark.parametrize("layout,scale_n,scale_k,arch", [
+    ("kn", 128, 128, "gfx1201"), ("nk", 64, 128, "gfx1201"),
+    ("nk", 128, 256, "gfx1201"), ("nk", 128, 128, "gfx1151"),
+])
+def test_small_grid_does_not_admit_sibling_contracts(layout, scale_n, scale_k, arch):
+    from tessera.compiler.rocm_fp8_blockscale import BlockScalePanel, blockscale_panel_oracle
+    shape = BlockScaleShape(127, 2048, 2048, scale_k, scale_n, layout)
+    assert blockscale_panel_oracle(shape, arch=arch) != BlockScalePanel("lds", 64, 64, 4)

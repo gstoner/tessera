@@ -7,6 +7,21 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## GFX1201-W8A8-SHORT-RAGGED-20261016 — measured small-grid Schedule follow-through
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Synchronization key: GFX1201-W8A8-SHORT-RAGGED-20261016.
+
+Not applicable to x86 physical execution: The x86 LLVM/vector route has no RDNA WMMA or workgroup LDS consumer.
+The shared PM pass changes only the named gfx1201 NK W8A8 selector. No new
+Graph/Tile operation, dtype, diagnostic, pass, numerical semantics or runtime ABI
+is introduced. Python remains the differential panel oracle. Existing sibling
+selectors are unchanged; ROCm device results establish no x86 performance or
+execution claim. The original five-slice goal remains active.
+
+Evidence: benchmarks/baselines/gfx1201_w8a8_small_grid_20261016/README.md.
+
+
 ## SM120-NATIVE-ROW-CORRECTION-20261016 — native residual producer and consumer
 
 Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.

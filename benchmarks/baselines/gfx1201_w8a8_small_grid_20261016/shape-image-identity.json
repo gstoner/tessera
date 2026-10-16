@@ -1,0 +1,43 @@
+{
+  "scope": "Six selected static shapes: numerical replays use one physical image per output storage; not a host/module cache speedup claim",
+  "shapes": [
+    [
+      65,
+      1024,
+      1024
+    ],
+    [
+      95,
+      2048,
+      2048
+    ],
+    [
+      97,
+      1024,
+      2048
+    ],
+    [
+      127,
+      3072,
+      1536
+    ],
+    [
+      127,
+      3072,
+      1280
+    ],
+    [
+      127,
+      2048,
+      1536
+    ]
+  ],
+  "images": {
+    "tessera_nk": [
+      "2d179cefc4ecd7d9e676303fcf952da415cd3eeeb5de75460eb157c80a329709"
+    ],
+    "tessera_nk+bf16": [
+      "528b6e9c6cb3ac68167c2f2cf6741de187fc444dcc72a3b90aeb4f2f3ad61231"
+    ]
+  }
+}

@@ -48,6 +48,9 @@ struct Program {
   std::vector<hipEvent_t> events;
   std::vector<hipGraph_t> graphs;
   std::vector<hipGraphExec_t> graphExecutables;
+  TesseraRocmProgramRows rows{};
+  int64_t activeRows = 0;
+  std::vector<uint64_t> rowBytes;
   uint64_t generation = 0;
   bool poisoned = true, ready = false, output = false;
 };
@@ -143,11 +146,97 @@ int clean(Program &p) {
   p.stream = nullptr;
   return 0;
 }
+uint64_t activeBytes(const Program &p, uint32_t slot, int64_t rows) {
+  return !p.rowBytes.empty() && p.rowBytes[slot]
+      ? uint64_t(rows) * p.rowBytes[slot] : p.contract[slot].bytes;
+}
+void applyRows(Program &p, int64_t rows) {
+  if (!p.rows.capacity_m) return;
+  p.activeRows = rows;
+  auto &stage = p.stages[p.rows.consumer_step];
+  stage.scalars[p.rows.m_scalar] = rows;
+  stage.geometry[p.rows.grid_axis] =
+      unsigned(rows / p.rows.tile_m + (rows % p.rows.tile_m != 0));
+  for (uint32_t i = 0; i < stage.inputs.size() + stage.outputs.size(); ++i) {
+    uint32_t slot = i < stage.inputs.size() ? stage.inputs[i]
+        : stage.outputs[i - stage.inputs.size()];
+    stage.refs[i].elements = int64_t(activeBytes(p, slot, rows) /
+        (p.contract[slot].bytes / p.contract[slot].elements));
+  }
+}
+template<class Step>
+bool validRows(const TesseraRocmProgramRows *rows, int64_t active,
+               uint32_t arguments, uint32_t buffers,
+               const TesseraRocmProgramBuffer *contract,
+               uint32_t steps, const Step *plan, std::vector<uint64_t> &strides) {
+  strides.assign(buffers, 0);
+  if (!rows) return active == 0;
+  if (rows->capacity_m < 1 || active < 1 || active > rows->capacity_m ||
+      rows->slot_count != 3 ||
+      rows->consumer_step != steps - 1 || rows->m_scalar != 0 ||
+      rows->grid_axis != 1 || !rows->tile_m) return false;
+  const auto &consumer = plan[rows->consumer_step];
+  // This additive admission is the named A/B/SA/SB/output plus M/N/K
+  // consumer ABI. Labels cannot redirect the active M write into N or K.
+  if (consumer.input_count != 4 || consumer.scalar_count != 3 ||
+      outputCount(consumer) != 1 || rows->slots[0] != consumer.inputs[0] ||
+      rows->slots[1] != consumer.inputs[2] ||
+      rows->slots[2] != outputSlot(consumer, 0) ||
+      consumer.scalars[1] < 1 || consumer.scalars[2] < 1 ||
+      consumer.scalars[2] % 16 || rows->row_bytes[0] != uint64_t(consumer.scalars[2]) ||
+      rows->row_bytes[1] % 4 ||
+      rows->row_bytes[1] / 4 != uint64_t(consumer.scalars[2] / 16)) return false;
+  uint64_t grid = uint64_t(rows->capacity_m) / rows->tile_m +
+                  (uint64_t(rows->capacity_m) % rows->tile_m != 0);
+  if (rows->m_scalar >= consumer.scalar_count ||
+      consumer.scalars[rows->m_scalar] != rows->capacity_m ||
+      outputCount(consumer) != 1 || grid > 2147483647U ||
+      consumer.geometry[rows->grid_axis] != grid) return false;
+  uint32_t inputs = 0, outputs = 0;
+  for (uint32_t i = 0; i < 7; ++i) {
+    if (i >= rows->slot_count) {
+      if (rows->slots[i] || rows->row_bytes[i]) return false;
+      continue;
+    }
+    uint32_t slot = rows->slots[i];
+    if (slot >= buffers || strides[slot] || !rows->row_bytes[i]) return false;
+    const auto &b = contract[slot];
+    uint64_t capacity = uint64_t(rows->capacity_m);
+    if (b.bytes % capacity || b.elements % capacity ||
+        rows->row_bytes[i] != b.bytes / capacity) return false;
+    bool consumed = false;
+    for (uint32_t j = 0; j < consumer.input_count; ++j)
+      consumed |= consumer.inputs[j] == slot;
+    if (slot < arguments) {
+      if (!consumed) return false;
+      ++inputs;
+    } else {
+      if (b.ownership != 2 || outputSlot(consumer, 0) != slot) return false;
+      ++outputs;
+    }
+    // The invariant producer prefix must not access row-dependent storage.
+    for (uint32_t j = 0; j < rows->consumer_step; ++j) {
+      for (uint32_t q = 0; q < plan[j].input_count; ++q)
+        if (plan[j].inputs[q] == slot) return false;
+      for (uint32_t q = 0; q < outputCount(plan[j]); ++q)
+        if (outputSlot(plan[j], q) == slot) return false;
+    }
+    strides[slot] = rows->row_bytes[i];
+  }
+  const auto &a = contract[rows->slots[0]];
+  const auto &sa = contract[rows->slots[1]];
+  if (a.bytes / a.elements != 1 || sa.bytes / sa.elements != 4) return false;
+  const auto &out = contract[rows->slots[2]];
+  uint64_t itemBytes = out.bytes / out.elements;
+  if ((itemBytes != 2 && itemBytes != 4) || rows->row_bytes[2] % itemBytes ||
+      rows->row_bytes[2] / itemBytes != uint64_t(consumer.scalars[1])) return false;
+  return inputs == 2 && outputs == 1;
+}
 bool inputContract(const Program &p, const void *const *inputs,
                    const uint64_t *bytes) {
   if (!inputs || !bytes) return false;
   for (uint32_t i = 0; i < p.arguments; ++i)
-    if (!inputs[i] || bytes[i] != p.contract[i].bytes) return false;
+    if (!inputs[i] || bytes[i] != activeBytes(p, i, p.activeRows)) return false;
   return true;
 }
 int upload(Program &p, const void *const *inputs, const uint64_t *bytes) {
@@ -175,7 +264,7 @@ int upload(Program &p, const void *const *inputs, const uint64_t *bytes) {
     const void *source = p.pinned
         ? static_cast<unsigned char *>(p.pinnedInputs) + p.inputOffsets[i]
         : p.snapshots[i].data();
-    if (hipMemcpyAsync(p.buffers[i], source, p.contract[i].bytes,
+    if (hipMemcpyAsync(p.buffers[i], source, bytes[i],
                        hipMemcpyHostToDevice, p.stream) != hipSuccess) {
       p.poisoned = true; return 5;
     }
@@ -193,7 +282,8 @@ static int prepareProgram(
     const char *architecture, uint32_t arguments, uint32_t buffers,
     const TesseraRocmProgramBuffer *contract, uint32_t steps,
     const Step *plan, const void *const *inputs,
-    const uint64_t *inputBytes, uint64_t *handle) try {
+    const uint64_t *inputBytes, uint64_t *handle,
+    const TesseraRocmProgramRows *rowPolicy = nullptr, int64_t activeRows = 0) try {
   if (handle) *handle = 0;
   if (!handle || !architecture || !contract || !plan || !inputs || !inputBytes ||
       !arguments || arguments > 128 || !steps || steps > 128 ||
@@ -214,7 +304,7 @@ static int prepareProgram(
          b.ownership == 0 || b.first_write < 0 || b.first_write >= int64_t(steps)) ||
         b.bytes > (uint64_t(1) << 31) - total) return 1;
     total += b.bytes;
-    if (i < arguments && (!inputs[i] || inputBytes[i] != b.bytes)) return 1;
+    if (i < arguments && !inputs[i]) return 1;
     if (b.ownership == 2) ++returned;
   }
   if (!returned) return 1;
@@ -249,7 +339,16 @@ static int prepareProgram(
     if (contract[i].ownership == 2) reads[i] = steps;
     if (contract[i].last_read != reads[i]) return 1;
   }
+  std::vector<uint64_t> rowStrides;
+  if (!validRows(rowPolicy, activeRows, arguments, buffers, contract,
+                 steps, plan, rowStrides)) return 1;
+  for (uint32_t i = 0; i < arguments; ++i)
+    if (inputBytes[i] != (rowStrides[i] ? uint64_t(activeRows) * rowStrides[i]
+                                      : contract[i].bytes)) return 1;
   auto p = std::make_unique<Program>();
+  if (rowPolicy) p->rows = *rowPolicy;
+  p->activeRows = activeRows;
+  p->rowBytes = std::move(rowStrides);
   p->arguments = arguments;
   p->contract.assign(contract, contract + buffers);
   p->buffers.resize(buffers, nullptr);
@@ -281,6 +380,17 @@ static int prepareProgram(
       std::getenv("TESSERA_ROCM_PROGRAM_PINNED"));
   p->cacheKey = programKey(arch, arguments, buffers, contract, steps, plan);
   keyValue(p->cacheKey, p->pinned);
+  const bool bounded = rowPolicy != nullptr;
+  keyValue(p->cacheKey, bounded);
+  if (bounded) {
+    keyValue(p->cacheKey, p->rows.capacity_m);
+    keyValue(p->cacheKey, p->rows.slot_count);
+    for (uint32_t i = 0; i < p->rows.slot_count; ++i) {
+      keyValue(p->cacheKey, p->rows.slots[i]); keyValue(p->cacheKey, p->rows.row_bytes[i]);
+    }
+    keyValue(p->cacheKey, p->rows.consumer_step); keyValue(p->cacheKey, p->rows.m_scalar);
+    keyValue(p->cacheKey, p->rows.grid_axis); keyValue(p->cacheKey, p->rows.tile_m);
+  }
   p->pinnedReadbackBytes = outputTotal;
   // Budget both pinned slabs and pageable snapshots/readback capacity.
   // Reserved capacity counts even before the first pageable read.
@@ -297,6 +407,7 @@ static int prepareProgram(
       ++pool.hits;
       auto &owned = *pool.programs.at(id);
       // An upload failure quarantines this active owner until explicit close.
+      applyRows(owned, activeRows);
       return upload(owned, inputs, inputBytes);
     }
   }
@@ -339,6 +450,7 @@ static int prepareProgram(
     }
     for (uint32_t j = 0; j < plan[i].scalar_count; ++j) s.argv[arg++] = &s.scalars[j];
   }
+  applyRows(owned, activeRows);
   int rc = upload(owned, inputs, inputBytes);
   if (rc) return rc;
   owned.poisoned = false;
@@ -431,6 +543,17 @@ extern "C" int tessera_rocm_program_prepare_multi_output(
                         plan, inputs, inputBytes, handle);
 }
 
+extern "C" int tessera_rocm_program_prepare_multi_output_rows(
+    const char *architecture, uint32_t arguments, uint32_t buffers,
+    const TesseraRocmProgramBuffer *contract, uint32_t steps,
+    const TesseraRocmProgramMultiOutputStep *plan, const void *const *inputs,
+    const uint64_t *inputBytes, const TesseraRocmProgramRows *rows,
+    int64_t activeRows, uint64_t *handle) {
+  if (!rows) { if (handle) *handle = 0; return 1; }
+  return prepareProgram(architecture, arguments, buffers, contract, steps,
+                        plan, inputs, inputBytes, handle, rows, activeRows);
+}
+
 extern "C" int tessera_rocm_program_update(
     uint64_t handle, const void *const *inputs, const uint64_t *bytes) try {
   if (getpid() != process) return 2;
@@ -444,9 +567,9 @@ extern "C" int tessera_rocm_program_update(
 
 // Partial root uploads preserve unaffected SSA values, but invalidate every
 // transitive dependent result. Complete admission precedes any state change.
-extern "C" int tessera_rocm_program_update_slots(
+static int updateSlots(
     uint64_t handle, uint32_t count, const uint32_t *slots,
-    const void *const *inputs, const uint64_t *bytes) try {
+    const void *const *inputs, const uint64_t *bytes, int64_t requestedRows) try {
   if (!count || !slots || !inputs || !bytes) return 1;
   if (getpid() != process) return 2;
   auto &pool = state(); std::lock_guard<std::mutex> guard(pool.mutex);
@@ -455,12 +578,18 @@ extern "C" int tessera_rocm_program_update_slots(
   if (!identity(p)) return 2;
   if (p.poisoned || !p.ready) return 10;
   if (count > p.arguments) return 1;
+  if (requestedRows && (!p.rows.capacity_m || requestedRows < 1 ||
+                        requestedRows > p.rows.capacity_m)) return 1;
+  int64_t nextRows = requestedRows ? requestedRows : p.activeRows;
   std::vector<unsigned char> changed(p.contract.size(), 0);
   for (uint32_t i = 0; i < count; ++i) {
     if (slots[i] >= p.arguments || changed[slots[i]] ||
-        !inputs[i] || bytes[i] != p.contract[slots[i]].bytes) return 1;
+        !inputs[i] || bytes[i] != activeBytes(p, slots[i], nextRows)) return 1;
     changed[slots[i]] = 1;
   }
+  if (nextRows != p.activeRows)
+    for (uint32_t slot = 0; slot < p.arguments; ++slot)
+      if (p.rowBytes[slot] && !changed[slot]) return 1;
   auto initialized = p.initialized;
   for (auto &stage : p.stages) {
     bool invalid = false;
@@ -479,6 +608,17 @@ extern "C" int tessera_rocm_program_update_slots(
     }
   if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
   p.poisoned = true; p.ready = false; p.output = false;
+  if (nextRows != p.activeRows) {
+    while (!p.graphExecutables.empty()) {
+      if (hipGraphExecDestroy(p.graphExecutables.back()) != hipSuccess) return 9;
+      p.graphExecutables.pop_back();
+    }
+    while (!p.graphs.empty()) {
+      if (hipGraphDestroy(p.graphs.back()) != hipSuccess) return 9;
+      p.graphs.pop_back();
+    }
+    applyRows(p, nextRows);
+  }
   for (uint32_t i = 0; i < count; ++i) {
     auto slot = slots[i];
     const void *source;
@@ -494,6 +634,33 @@ extern "C" int tessera_rocm_program_update_slots(
   if (hipStreamSynchronize(p.stream) != hipSuccess) return 7;
   p.initialized = std::move(initialized);
   p.ready = true; p.poisoned = false;
+  return 0;
+} catch (...) { return 12; }
+
+extern "C" int tessera_rocm_program_update_slots(
+    uint64_t handle, uint32_t count, const uint32_t *slots,
+    const void *const *inputs, const uint64_t *bytes) {
+  return updateSlots(handle, count, slots, inputs, bytes, 0);
+}
+extern "C" int tessera_rocm_program_update_rows(
+    uint64_t handle, int64_t rows, uint32_t count, const uint32_t *slots,
+    const void *const *inputs, const uint64_t *bytes) {
+  if (rows < 1) return 1;
+  return updateSlots(handle, count, slots, inputs, bytes, rows);
+}
+extern "C" int tessera_rocm_program_rows_info(
+    uint64_t handle, int64_t *capacity, int64_t *active,
+    uint64_t *bytes, uint64_t *count) try {
+  if (!capacity || !active || !bytes || !count) return 1;
+  if (getpid() != process) return 2;
+  auto &pool = state(); std::lock_guard<std::mutex> guard(pool.mutex);
+  auto it = pool.programs.find(handle); if (it == pool.programs.end()) return 1;
+  auto &p = *it->second;
+  if (!identity(p)) return 2;
+  if (!p.rows.capacity_m) return 1;
+  if (p.poisoned) return 10;
+  *capacity = p.rows.capacity_m; *active = p.activeRows;
+  *bytes = p.allocationBytes; *count = p.buffers.size();
   return 0;
 } catch (...) { return 12; }
 
@@ -638,7 +805,7 @@ extern "C" int tessera_rocm_program_read(
   auto &p = *it->second;
   if (!identity(p)) return 2;
   if (slot >= p.contract.size() || p.contract[slot].ownership != 2 ||
-      bytes != p.contract[slot].bytes) return 1;
+      bytes != activeBytes(p, slot, p.activeRows)) return 1;
   if (p.poisoned || !p.output || !generation || generation != p.generation) return 10;
   if (!p.pinned) p.readback.resize(bytes);
   if (p.pinned && bytes > p.pinnedReadbackBytes) return 1;
@@ -670,7 +837,7 @@ extern "C" int tessera_rocm_program_read_many(
   for (uint32_t i = 0; i < count; ++i) {
     if (!outputs[i] || slots[i] >= p.contract.size() ||
         p.contract[slots[i]].ownership != 2 ||
-        bytes[i] != p.contract[slots[i]].bytes ||
+        bytes[i] != activeBytes(p, slots[i], p.activeRows) ||
         total > p.pinnedReadbackBytes ||
         bytes[i] > p.pinnedReadbackBytes - total) return 1;
     uintptr_t begin = reinterpret_cast<uintptr_t>(outputs[i]);

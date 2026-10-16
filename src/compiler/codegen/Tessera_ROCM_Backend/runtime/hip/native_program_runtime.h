@@ -59,6 +59,32 @@ int tessera_rocm_program_prepare_multi_output(
     const TesseraRocmProgramBuffer *buffers, uint32_t step_count,
     const TesseraRocmProgramMultiOutputStep *steps, const void *const *inputs,
     const uint64_t *input_bytes, uint64_t *handle);
+// Additive bounded-row ABI. All allocations retain capacity_m rows. Only the
+// named original activation/K16-scale inputs and one returned consumer output
+// vary their active byte spans. Slots are A,SA,output; scalar M is index0 and
+// the grid row axis is1 in the A/B/SA/SB/output + M/N/K ABI. The last consumer's M scalar and grid axis follow active_m.
+typedef struct {
+  int64_t capacity_m;
+  uint32_t slot_count;
+  uint32_t slots[7];
+  uint64_t row_bytes[7];
+  uint32_t consumer_step;
+  uint32_t m_scalar;
+  uint32_t grid_axis;
+  uint32_t tile_m;
+} TesseraRocmProgramRows;
+int tessera_rocm_program_prepare_multi_output_rows(
+    const char *, uint32_t, uint32_t, const TesseraRocmProgramBuffer *, uint32_t,
+    const TesseraRocmProgramMultiOutputStep *, const void *const *,
+    const uint64_t *, const TesseraRocmProgramRows *, int64_t active_m,
+    uint64_t *handle);
+// Row changes require all row-dependent input slots in this atomic update.
+int tessera_rocm_program_update_rows(
+    uint64_t handle, int64_t active_m, uint32_t count, const uint32_t *slots,
+    const void *const *inputs, const uint64_t *bytes);
+int tessera_rocm_program_rows_info(
+    uint64_t handle, int64_t *capacity_m, int64_t *active_m,
+    uint64_t *allocation_bytes, uint64_t *allocation_count);
 // Pack a checked positive-stride read-only host view into compact borrowed
 // destination storage. This performs byte movement only, before HIP upload.
 // Source/destination spans must be disjoint. Rank and strides are byte facts.

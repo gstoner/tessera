@@ -8,8 +8,10 @@ audit_role: reference
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Sync: NVFP4-SOURCE-BOUNDED-20261016.
 
-Status: native export and member projection implemented; runtime owner and
-public execution remain pending. This document does not certify v4 execution.
+Status: native export, arbitrary-active-M image projection and prepared/public
+execution are implemented in the current candidate. Owning gfx1201 validation
+passes the named bounded envelopes below; broader integration and performance
+gates remain open.
 
 ## Version meanings
 
@@ -49,7 +51,7 @@ read lifetimes retain the ordinary native SSA plan. `active_m` is the trace
 extent; `m_bound` is the capacity. Their integer values do not replace the
 actual runtime row count in the consumer's M scalar and grid.
 
-## Remaining runtime acceptance gates
+## Runtime ownership contract
 
 - Native image projection must support arbitrary positive active M, including
   when CAP is aligned to a physical LDS tile. A capacity-derived `whole_m`
@@ -70,9 +72,36 @@ actual runtime row count in the consumer's M scalar and grid.
 
 ## Current proof boundary
 
-Thirteen native export/projection tests cover two capacities, both result
-storages, argument permutations and invalid bound types/values/overflow. The
-pre-change compiler rejects all thirteen at its static-frame boundary. Rebuilt
-core/ROCm tools pass 351 host cases; three legacy runtime cases require the
-owning ROCm host. The fresh main-based provider independently passes 50 static
-source/ownership/schema tests on gfx1201. V4 has no device execution proof yet.
+The focused native export/projection and diagnostic/pass gates pass 375 cases.
+On RX 9070 XT/gfx1201, 59 bounded/static source, public replay and native
+partition tests pass with matching rebuilt compiler tools and the candidate
+HIP owner. Fifteen bounded cases cover FP32/BF16 output, root permutations,
+M1/19/33/64 shrink/grow, full-root re-import, activation-only weight reuse,
+stale output rejection, retained output independence and eight malformed
+native row frames. The capacity-256, N4096, K16 LDS package executes active
+M19/1/256/127 with whole_m=false. Device buffer allocation count and byte
+capacity remain unchanged during row rebinding.
+
+The native owner checks the named A/B/SA/SB/output plus M/N/K ABI, including
+one-byte activation elements, four-byte activation scales and two/four-byte
+outputs. The additive row ABI does not alter the previous static struct
+layouts or v1/v2/v3 schema meanings. Image cache identity includes the
+arbitrary-M projection policy; static routes retain their existing instruction
+semantics.
+
+The device test module is
+tests/device/rocm/test_nvfp4_source_bounded_rows.py.
+Receipts and the exact timing recorder are preserved under
+benchmarks/baselines/nvfp4_source_bounded_20261016; matching binaries remain
+under ~/scratch/nvfp4-source-bounded-20261016 on the owning WSL host. A separate fresh-process bounded replay passes with compiler paths disabled
+and numerical helpers forbidden. Nine correctness-gated timing rows cover
+FP32/BF16 global capacities and FP32 capacity-256 LDS. Each has seven member,
+program-event and completed prepared-host windows of at least 10 ms. Member
+graph-dispatch medians are approximately 3-4 us for expansion and 6-12 us for
+the consumer; completed prepared invoke/read medians are 0.219-0.416 ms.
+These scopes differ and establish no speedup or pure-kernel latency.
+A further owning-device compatibility gate passes 226 legacy bounded NVFP4,
+FP8 W8A8, MXFP8, exact MXFP4 and generic scaled-owner cases. Adjacent host gates
+pass 544 cases with 22 hardware-dependent skips. Generated documentation and
+final PR validation remain open. No full-model quality
+acceptance, broad performance closure or gfx1151 FP8 execution is inferred.

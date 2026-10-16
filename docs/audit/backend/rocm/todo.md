@@ -10,21 +10,29 @@ scope: ROCm backend implementation and exact-device proof
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Synchronization key: NVFP4-SOURCE-BOUNDED-20261016.
 
-Implementation in progress. Native MLIR now exports bounded source-preserving
-expansion/product frames as native NVFP4 schema v4. Schema v1 remains static
-lossy ingest, v2 bounded lossy ingest and v3 static source expansion. Original
-Graph/role/SSA witnesses, capacity activation and K16-scale rows, byte strides,
-private weight outputs and product lifetimes are explicit in the native plan.
-Thirteen new contract cases first fail on the old compiler; 351 host compiler/
-registry cases pass after rebuilding, with three owning-ROCm cases deferred.
+Implementation in progress. Native MLIR exports source-preserving bounded
+expansion/product frames as NVFP4 schema v4, preserving v1/v2/v3 meanings.
+Native image projection has an explicit arbitrary-M policy so aligned
+capacities cannot retain unguarded whole-row LDS assumptions. The additive
+multi-output HIP row ABI validates row-dependent bytes/elements, changes
+consumer M/grid/memref extents and preserves fixed capacity allocations.
 
-Execution remains artifact_only for v4. Next: arbitrary-active-M image projection
-for aligned LDS capacities, then checked generic multi-output owner updates,
-original public/prepared/compiler-free replay and separate timings on gfx1201.
-The restored main-based HIP provider passes 50 existing static/source tests;
-three static baseline shapes have seven correctness-gated member/program/host
-windows >=10ms. Those are baseline v3 results, not v4 execution proof.
-No gfx1151 FP8 route or full-model quality acceptance is inferred.
+Focused compiler/registry gates pass 375 cases. Owning RX9070XT/gfx1201 passes
+59 bounded/static source, public/compiler-free replay and partition tests,
+including 15 bounded cases: FP32/BF16, reordered roots, shrink/grow, full versus
+activation-only updates, retained outputs, malformed row contracts and a
+capacity-256/N4096/K16 LDS image replayed at M19/1/256/127. Allocation bytes/count
+remain stable. These are scoped candidate results, pending published receipts.
+
+Fresh-process replay also passes with compiler paths disabled. Nine timing
+rows have seven correctness-gated windows >=10ms in each separate member,
+program-event and completed prepared-host scope; no speedup is claimed.
+The owning compatibility gate passes 226 prior bounded NVFP4, FP8/MXFP8/MXFP4
+and generic-owner cases; adjacent host gates pass 544 with 22 hardware skips.
+Receipts: benchmarks/baselines/nvfp4_source_bounded_20261016/README.md.
+Next: generated docs and final PR gates. Performance and
+original checkpoint/model-quality acceptance remain open. No gfx1151 FP8 route
+or full-model quality acceptance is inferred.
 
 Contract: docs/spec/NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md.
 

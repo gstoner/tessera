@@ -264,3 +264,35 @@ def test_mxfp8_lds_k64_native_identity_refuses_partial_slab():
     source = _mxfp8_lds_target(k=1056).replace("macro_k = 32", "macro_k = 64")
     with pytest.raises(RuntimeError, match="ROCM_FP8_BLOCKSCALE_CONTRACT"):
         _project(source, "scaled_matmul_lds")
+
+
+@pytest.mark.compiler_route
+@pytest.mark.parametrize("capacity", [256, 257])
+def test_native_arbitrary_m_projection_guards_aligned_capacity(capacity):
+    from tessera.compiler.rocm_fp8_blockscale import BlockScaleShape, lower_blockscale
+    from tessera.compiler.rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel, ROCMOutputLevel
+    from tessera.compiler.rocm_native import _run_opt
+    shape = BlockScaleShape(capacity, 4096, 256, 128, 128, "nk")
+    program = lower_blockscale(shape)
+    config = ROCMExecutablePipeline(family="matmul", arch="gfx1201", input_level=ROCMInputLevel.TILE)
+    target = _run_opt(rocm_native._tessera_opt(), program.tile_ir,
+                      config.pass_pipeline(output=ROCMOutputLevel.TARGET))
+    projected = rocm_native._shape_free_target_ir(
+        target, family="scaled_matmul_lds", directive="tessera_rocm.scaled_wmma_gemm",
+        runtime_k=True, arbitrary_m=True)
+    assert "whole_m = false" in projected
+    assert "whole_n = true" in projected
+    assert "runtime_mn" in projected
+    assert "m = 0 : i64" in projected
+    if capacity == 256:
+        assert "whole_m = true" in rocm_native._shape_free_target_ir(
+            target, family="scaled_matmul_lds", directive="tessera_rocm.scaled_wmma_gemm",
+            runtime_k=True)
+
+
+@pytest.mark.compiler_route
+def test_native_arbitrary_m_projection_refuses_unrelated_family():
+    with pytest.raises(ValueError, match="arbitrary_m"):
+        rocm_native._shape_free_target_ir(
+            _target(16, "a" * 64), family="matmul", directive="tessera_rocm.wmma_gemm",
+            arbitrary_m=True)

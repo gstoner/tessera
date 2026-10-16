@@ -16,8 +16,9 @@ source schema and retains prior schema meanings. Not applicable to apple
 physical execution: Apple has no consumer for this HIP source-expansion program. No sibling target, dtype,
 public operation, schedule or ABI is admitted by the host export proof.
 Follow-up required for any sibling source-preserving consumer: supply its own
-lowering, frame ownership and exact-device evidence. V4 runtime execution is
-still pending in the owning ROCm work; static gfx1201 proof does not transfer.
+lowering, frame ownership and exact-device evidence. The additive HIP row ABI has scoped gfx1201 candidate execution proof;
+this backend has no new physical consumer or transferred execution evidence.
+Its independent backend runtime/ABI remains unchanged.
 
 Contract: docs/spec/NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md.
 

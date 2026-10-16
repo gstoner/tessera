@@ -1,0 +1,57 @@
+{
+  "base_revision": "b985b4138cbbbef9d041c9edec57056e51351d29",
+  "source_sha256": {
+    "src/transforms/lib/NativeNVFP4Program.h": "fbd430bce5a134b66d1122db2805085b5509d824c28d8882fa2783d4426a4269",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "a6e44fdf80f8603e8955c6b2d6653bf0953366420d63b0a55c56b466b1b5b9e3",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "780c2db5de9b1af827c61d8be2406e3593f8c91550dd2725f54318774ac9503f",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "928f52e8c5441db62f61b392490c31fb02e8ca0783204fb9481748915eaf8803",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/ProgramHostTransportPolicy.h": "990cfba9ea7bec25e3683c0235487c22b5e1dd955e90452db51ab8647863086b",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "e9a76f3ac03dd6758e699891e501a84488e9fca2b9e44e4fd3dfdc4c83e19ad3",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp": "bd3a1e4f85312c62d975ff06466e42fe540c28a24407ea423642129534d09843",
+    "python/tessera/compiler/native_scaled_program.py": "3b70c627d6a5ac83144caced38cb24eb2418f89fecedc7add33873a1e53d7467",
+    "python/tessera/compiler/rocm_nvfp4_expansion_program.py": "82aeb3f43c0986a3d6d1a4b0528f6fd72a400c9cbebd905912e855e404fde5f1",
+    "python/tessera/compiler/rocm_fp8_blockscale.py": "5c5307b6d5f1155221a0ff84b626d6d5c3b050e45fdd8a3472946b14d2845c5a",
+    "python/tessera/compiler/rocm_native.py": "eee05e1af5bd170492fe02f3be4c18702af0a5287fa778139620813eafdcdeb7",
+    "tests/device/rocm/test_nvfp4_source_bounded_rows.py": "350699d5f5e767132aa9601d68b3800cbf1b2faf6304073455fec7b283dfec23",
+    "tests/device/rocm/test_prepared_nvfp4_expansion_program.py": "3b8f9d8197cfac2bc45490fba6b87d69861806dabb4c27fa44f9c75dbb731635",
+    "tests/unit/test_native_nvfp4_expansion_program.py": "9c300bb61df46fb0ece7c35334b891e2296424c2e7b1a9986df212be2d0c490f"
+  },
+  "runtime": {
+    "path": "/home/angstorms/scratch/nvfp4-source-bounded-20261016/runtime-candidate/libtessera_rocm_native_movement.so",
+    "sha256": "80007eda0c824713656b61757b52c610a37f65d3fe7e11f7f4703c08f15d6d84"
+  },
+  "donor_source_and_compiler": {
+    "docs/audit/backend/apple/todo.md": "d2a90393e883833ee4effb674eeeb345f86140c87a0b70ddc3ab18095e85a5c3",
+    "docs/audit/backend/nvidia/todo.md": "06c193ffa8aa1b52dc39b082294b10542fcbbf290cdff84a60b7c03ffaf1bd25",
+    "docs/audit/backend/rocm/todo.md": "39e453634e5a67a53a6369c60843af78de6e301fd8a5f35ecdc0df4c7cfa7415",
+    "docs/audit/backend/x86/todo.md": "6afc6c08104b419dfb218a140be3f1c202e485f461ddd667884cc2293a8ceeae",
+    "docs/spec/NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md": "a7ff1f3636387dbf807ab443a4f3b77a45b91e7ddd61fe470437b8ca33835ed9",
+    "python/tessera/compiler/native_nvfp4_program.py": "267335ba580714a9eb0d556ac57169d11fccea0eab4000097ca8af7748bb263e",
+    "python/tessera/compiler/native_scaled_program.py": "3b70c627d6a5ac83144caced38cb24eb2418f89fecedc7add33873a1e53d7467",
+    "python/tessera/compiler/pass_metadata.py": "d1ed8a2557f88bdcfc2be880e1b9c5198e90e5afe482731aa6c1b874428fda81",
+    "python/tessera/compiler/rocm_fp8_blockscale.py": "5c5307b6d5f1155221a0ff84b626d6d5c3b050e45fdd8a3472946b14d2845c5a",
+    "python/tessera/compiler/rocm_native.py": "eee05e1af5bd170492fe02f3be4c18702af0a5287fa778139620813eafdcdeb7",
+    "python/tessera/compiler/rocm_nvfp4_expansion_program.py": "82aeb3f43c0986a3d6d1a4b0528f6fd72a400c9cbebd905912e855e404fde5f1",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "a6e44fdf80f8603e8955c6b2d6653bf0953366420d63b0a55c56b466b1b5b9e3",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "780c2db5de9b1af827c61d8be2406e3593f8c91550dd2725f54318774ac9503f",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "928f52e8c5441db62f61b392490c31fb02e8ca0783204fb9481748915eaf8803",
+    "src/transforms/lib/NativeNVFP4Program.h": "fbd430bce5a134b66d1122db2805085b5509d824c28d8882fa2783d4426a4269",
+    "tests/unit/test_native_nvfp4_expansion_program.py": "9c300bb61df46fb0ece7c35334b891e2296424c2e7b1a9986df212be2d0c490f",
+    "tests/unit/test_native_nvfp4_source_bounded.py": "3a5dfbea2aed7c86a9750f9df46fdba3c9454ef8a6eb69d7b8f66cc7ade81544",
+    "tests/unit/test_rocm_kernel_identity_native.py": "27000cdf1b627708333144d191c249a50ec42cba04f7fc4fb6e38fe329ab3dac",
+    "tests/device/rocm/test_nvfp4_source_bounded_rows.py": "27ec7eb93157f5c55b031d616df77a38bcd816de0ef9e7a5e20baca2f2b957cf",
+    ".build-relu/tools/tessera-opt/tessera-opt": "39ebe2905bace30b694bcd31da51c9c4fdaa074387061073061a3e70591bf5d8",
+    ".build-relu/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "182275def6a576d750d152dd2f5cd9af24ffddbc71f39f8f66eb10453ff382e4",
+    ".build-relu/src/compiler/layout_algebra/libtessera_layout_algebra.so": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8"
+  },
+  "artifacts_sha256": {
+    "device-regressions.txt": "bcc145d49c423122bbe0210efea6de3195b7965f6c0fbe1911dd181fada3378d",
+    "fresh-process-replay.txt": "d712501db6a5dd648dfe7d9ad8c2bf2d7c16acd6d77e574e1749d0cd9084e473",
+    "device-ownership.txt": "c0334931104f8078d3351ea0ffdadac3c0fc55a9a194c63ae3e30373c5cfab93",
+    "record-bounded-source.py": "7736ed08df0915ab7d12118c4bf296067e08ce4dded131d9fcd0b4a78e013d48",
+    "gfx1201-timing.json": "e72bce14377f5c8e23ead982f04aa3720780e06ca6aa9625220365c634d258a8"
+  },
+  "measured_recorder_utf8": "\"\"\"Reproduce bounded NVFP4 source owner event/member/completed-host scopes.\"\"\"\nimport ctypes as C\nimport hashlib\nimport json\nimport os\nfrom pathlib import Path\nimport statistics\nimport time\n\nimport numpy as np\nfrom tessera import runtime as rt\nfrom tessera.compiler.rocm_nvfp4_expansion_program import package_native_nvfp4_expansion_program\nfrom tests.device.rocm.test_prepared_nvfp4_expansion_program import inputs_and_oracle\nfrom tests.unit.test_native_nvfp4_expansion_program import source_graph\n\nw = Path(\"/home/angstorms/scratch/nvfp4-source-bounded-20261016\")\nassert rt._rocm_live_arch() == \"gfx1201\"\nhip = rt._load_hip_for_launch()\ndevice, name = C.c_int(), C.create_string_buffer(256)\nassert hip.hipGetDevice(C.byref(device)) == 0\nassert hip.hipDeviceGetName(name, len(name), device.value) == 0 and name.value\nsha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()\nrecord = {\"schema\": \"tessera.nvfp4_source_bounded_characterization.v1\",\n          \"architecture\": rt._rocm_live_arch(), \"device\": name.value.decode(),\n          \"compiler_sha256\": sha(os.environ[\"TESSERA_OPT\"]),\n          \"rocm_tool_sha256\": sha(os.environ[\"TESSERA_ROCM_OPT\"]),\n          \"provider_sha256\": sha(os.environ[\"TESSERA_ROCM_MULTI_OUTPUT_LIB\"]),\n          \"recorder_sha256\": sha(__file__), \"model_quality_acceptance\": False,\n          \"timing_scope\": \"grouped member graphs include device graph dispatch; program HIP event windows may include host enqueue idle; completed prepared invoke/read excludes prepare and upload. No pure-kernel or public-JIT timing claim.\",\n          \"rows\": []}\nfor cap,n,k,output in ((64,7,48,\"f32\"), (64,7,48,\"bf16\"), (256,4096,16,\"f32\")):\n    source = source_graph(19,n,k,output=output).replace(\n        'tessera.arch = \"gfx1201\"', f'tessera.arch = \"gfx1201\", tessera.native.nvfp4_m_bound = {cap} : i64')\n    package = package_native_nvfp4_expansion_program(source)\n    roots, expected = inputs_and_oracle(19,n,k,tuple(range(5)),output)\n    with package.prepare(roots, runtime_library=os.environ[\"TESSERA_ROCM_MULTI_OUTPUT_LIB\"]) as owner:\n        initial=owner.rows_info()\n        owner.import_weights()\n        for m in (19,1,cap):\n            index=np.arange(m)%19\n            owner.update_activations(roots[3][index].copy(),roots[4][index].copy())\n            wanted=expected[index]\n            generation,_=owner.invoke_consumer()\n            np.testing.assert_array_equal(owner.read(generation)[0],wanted)\n            members,events,hosts,member_windows,event_windows,host_windows=[],[],[],[],[],[]\n            repeats,host_repeats=8192,256\n            for _ in range(7):\n                generation,stage_times=owner.profile_members(repeats=repeats)\n                np.testing.assert_array_equal(owner.read(generation)[0],wanted)\n                durations=[t*repeats for t in stage_times]\n                assert min(durations)>=10., durations\n                members.append(stage_times);member_windows.append(durations)\n                generation,event=owner.invoke(repeats=repeats,timed=True)\n                np.testing.assert_array_equal(owner.read(generation)[0],wanted)\n                assert event*repeats>=10.\n                events.append(event);event_windows.append(event*repeats)\n                start=time.perf_counter_ns()\n                last=None\n                for _ in range(host_repeats):\n                    generation,_=owner.invoke()\n                    last=owner.read(generation)[0]\n                duration=(time.perf_counter_ns()-start)/1e6\n                assert duration>=10.\n                np.testing.assert_array_equal(last,wanted)\n                hosts.append(duration/host_repeats);host_windows.append(duration)\n                assert owner.rows_info()==(cap,m,*initial[2:])\n            row={\"capacity_m\":cap,\"shape_mnk\":[m,n,k],\"output_storage\":output,\n                 \"staging\":package.consumer.descriptor.provenance[\"staging\"],\n                 \"binding_digest\":package.binding_digest,\n                 \"images\":[package.producer.native.image.image_digest,package.consumer.image.image_digest],\n                 \"allocation_bytes\":initial[2],\"allocation_count\":initial[3],\n                 \"device_repeats\":repeats,\"host_repeats\":host_repeats,\n                 \"member_grouped_dispatch_mean_samples_ms\":members,\n                 \"program_event_mean_samples_ms\":events,\"prepared_invoke_read_mean_samples_ms\":hosts,\n                 \"member_window_duration_ms\":member_windows,\"program_window_duration_ms\":event_windows,\n                 \"host_window_duration_ms\":host_windows,\n                 \"correctness\":\"independent nibble decode FP64 oracle; bitwise before and after every timing window\",\n                 \"member_median_ms\":[statistics.median(x[i] for x in members) for i in (0,1)],\n                 \"program_median_ms\":statistics.median(events),\"prepared_host_median_ms\":statistics.median(hosts)}\n            record[\"rows\"].append(row)\n            (w/\"bounded-source-timing.json\").write_text(json.dumps(record,indent=2)+\"\\n\")\n            print(json.dumps({key:row[key] for key in (\"shape_mnk\",\"output_storage\",\"member_median_ms\",\"program_median_ms\",\"prepared_host_median_ms\")}),flush=True)\n\n",
+  "companion_recorder_sha256": "963eee5e1a2247681a5e3cfd73bd1a0b757bcc69cc9c2404a26eab4caa599fd4",
+  "companion_note": "Only the extra blank line at EOF was removed from the measured recorder; exact measured source is retained in measured_recorder_utf8."
+}

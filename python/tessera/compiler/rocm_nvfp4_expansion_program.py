@@ -28,6 +28,13 @@ from .rocm_native import ROCMNativePackage
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
 
+class _Rows(C.Structure):
+    _fields_ = [("capacity_m", C.c_int64), ("slot_count", C.c_uint32),
+                ("slots", C.c_uint32 * 7), ("row_bytes", C.c_uint64 * 7),
+                ("consumer_step", C.c_uint32), ("m_scalar", C.c_uint32),
+                ("grid_axis", C.c_uint32), ("tile_m", C.c_uint32)]
+
+
 class _MultiOutputStep(C.Structure):
     _fields_ = [
         ("image", C.c_void_p), ("image_bytes", C.c_uint64), ("entry", C.c_char_p),
@@ -70,7 +77,7 @@ class NativeNVFP4ExpansionProgram:
         self.producer.validate()
         p = json.loads(self.program_json)
         roles = p["role_indices"]
-        if (p.get("schema") != "tessera.native.nvfp4_program.v3"
+        if (p.get("schema") not in {"tessera.native.nvfp4_program.v3", "tessera.native.nvfp4_program.v4"}
                 or p["source_graph_ir"] != self.graph_ir
                 or p["member_graphs"] != [self.producer.graph_ir, self.consumer_graph_ir]
                 or len(roles) != 5 or any(type(i) is not int for i in roles)
@@ -85,6 +92,19 @@ class NativeNVFP4ExpansionProgram:
         n, k = cast(Sequence[int], provenance["shape_nk"])
         activation = p["buffers"][roles[3]]
         m = activation["shape"][0]
+        bounded = p["schema"] == "tessera.native.nvfp4_program.v4"
+        if bounded:
+            if (type(p.get("m_bound")) is not int or p["m_bound"] != m
+                    or type(p.get("active_m")) is not int or not 0 < p["active_m"] <= m
+                    or not isinstance(p.get("original_graph_ir"), str) or not p["original_graph_ir"]
+                    or p.get("row_frame") != {
+                        "input_slots": roles[3:], "output_slot": 7,
+                        "row_strides_bytes": [k, 4*(k//16), n*(2 if p["buffers"][7]["storage"] == "bf16" else 4)],
+                        "consumer_step": 1}):
+                raise ValueError("native expansion bounded row frame differs")
+            if (self.consumer.descriptor.provenance.get("arbitrary_m") is not True
+                    or self.consumer.descriptor.provenance.get("lds_whole_m") is not False):
+                raise ValueError("native expansion bounded image requires arbitrary M guards")
         out = p["buffers"][7]["storage"]
         shape = BlockScaleShape(m, n, k, 16, 1, "nk", out)
         code_storage = p["buffers"][roles[0]]["storage"]
@@ -156,8 +176,9 @@ def package_native_nvfp4_expansion_program(graph):
         source = graph.to_mlir(target="rocm_gfx1201", canonical=True)
     program = export_native_nvfp4_program(source)
     plan = program.manifest
-    if plan["schema"] != "tessera.native.nvfp4_program.v3":
+    if plan["schema"] not in {"tessera.native.nvfp4_program.v3", "tessera.native.nvfp4_program.v4"}:
         raise ValueError("prepared expansion requires the native source-preserving program")
+    bounded = plan["schema"] == "tessera.native.nvfp4_program.v4"
     producer = package_nvfp4_expansion(program.project_member(0))
     consumer_graph = program.project_member(1)
     roles = plan["role_indices"]
@@ -171,7 +192,7 @@ def package_native_nvfp4_expansion_program(graph):
     schedule = run_tessera_opt(tool, consumer_graph, "--tessera-graph-to-schedule")
     tile = run_tessera_opt(tool, schedule, "--tessera-schedule-to-tile")
     consumer = package_blockscale(BlockScaleProgram(
-        shape, "w8a8_blockscale", consumer_graph, schedule, tile))
+        shape, "w8a8_blockscale", consumer_graph, schedule, tile), arbitrary_m=bounded)
     # Retain the static checked Target witness separately from the native
     # shape-independent image projection. Neither is reconstructed in Python.
     from .rocm_native import _run_opt, _shape_free_target_ir
@@ -186,7 +207,7 @@ def package_native_nvfp4_expansion_program(graph):
         raise ValueError("native expansion image projection policy differs")
     projection = _shape_free_target_ir(
         checked_target, family=family, directive="tessera_rocm.scaled_wmma_gemm",
-        runtime_k=runtime_k)
+        runtime_k=runtime_k, arbitrary_m=bounded)
     if projection != consumer.target_ir:
         raise ValueError("native expansion consumer image projection differs")
     fields = (program.plan_json, plan["source_graph_ir"], producer, consumer, consumer_graph, schedule, checked_target)
@@ -204,6 +225,17 @@ class PreparedNVFP4ExpansionProgram(PreparedScaledProgram):
         package.validate()
         plan = json.loads(package.program_json)
         rows = plan["buffers"]
+        self._bounded = plan["schema"] == "tessera.native.nvfp4_program.v4"
+        self._active_m = plan.get("active_m", rows[plan["role_indices"][3]]["shape"][0])
+        self._capacity_m = rows[plan["role_indices"][3]]["shape"][0]
+        if self._bounded:
+            self._prepare_symbol = "tessera_rocm_program_prepare_multi_output_rows"
+            frame = plan["row_frame"]
+            bm = package.consumer.descriptor.provenance["macro_tile"][0]
+            self._rows = _Rows(self._capacity_m, 3,
+                (C.c_uint32 * 7)(*frame["input_slots"], frame["output_slot"]),
+                (C.c_uint64 * 7)(*frame["row_strides_bytes"]),
+                frame["consumer_step"], 0, 1, bm)
         self._roles = tuple(plan["role_indices"])
         self._offsets = tuple(package.producer.native.descriptor.provenance["row_offsets"])
         native = (package.producer.native, package.consumer)
@@ -236,16 +268,80 @@ class PreparedNVFP4ExpansionProgram(PreparedScaledProgram):
             tuple(_StorageSpec(tuple(b["shape"]), b["storage"], b["bytes"], dtypes[b["storage"]]) for b in rows),
             (7,), ())
 
-    def _inputs(self, inputs):
+    def _prepare_tail(self):
+        if not self._bounded:
+            return (), ()
+        return (C.POINTER(_Rows), C.c_int64), (C.byref(self._rows), self._active_m)
+
+    def _storage(self, active_m):
+        if not self._bounded:
+            return self._binding.storage
+        result = list(self._binding.storage)
+        for slot in (*self._roles[3:], 7):
+            spec = result[slot]
+            result[slot] = _StorageSpec((active_m, *spec.shape[1:]), spec.storage,
+                spec.bytes // self._capacity_m * active_m, spec.numpy_dtype)
+        return tuple(result)
+
+    def _input_m(self, inputs):
+        if len(inputs) != 5:
+            raise ValueError("native expansion program requires five roots")
+        shape = np.shape(inputs[self._roles[3]])
+        if len(shape) != 2 or not 0 < shape[0] <= self._capacity_m:
+            raise ValueError("native expansion active M exceeds capacity")
+        return shape[0]
+
+    def _inputs_at(self, inputs, active_m):
         if len(inputs) != 5:
             raise ValueError("native expansion program requires five roots")
         codes, scales, globals_ = (inputs[i] for i in self._roles[:3])
         checked_expansion_inputs(codes, scales, globals_, row_offsets=self._offsets,
                                  numeric_policy=nvfp4_expansion_policy())
-        return super()._inputs(inputs)
+        return self._inputs_for_storage(inputs, self._storage(active_m))
+
+    def _inputs(self, inputs):
+        active_m = self._input_m(inputs) if self._bounded else self._active_m
+        arrays = self._inputs_at(inputs, active_m)
+        self._active_m = active_m
+        return arrays
+
+    @property
+    def active_m(self):
+        return self._active_m
+
+    def _update_rows(self, active_m, slots, arrays):
+        from .native_scaled_program import _status
+        update = self.lib.tessera_rocm_program_update_rows
+        update.argtypes = [C.c_uint64, C.c_int64, C.c_uint32, C.POINTER(C.c_uint32),
+                           C.POINTER(C.c_void_p), C.POINTER(C.c_uint64)]
+        update.restype = C.c_int
+        count = len(slots)
+        _status(update(self.handle, active_m, count, (C.c_uint32 * count)(*slots),
+                       (C.c_void_p * count)(*[a.ctypes.data for a in arrays]),
+                       (C.c_uint64 * count)(*[a.nbytes for a in arrays])))
+        self._active_m = active_m
+
+    def update(self, inputs):
+        if not self._bounded:
+            return super().update(inputs)
+        active_m = self._input_m(inputs)
+        arrays, _, _ = self._inputs_at(inputs, active_m)
+        self._update_rows(active_m, tuple(range(5)), arrays)
+
+    def rows_info(self):
+        if not self._bounded:
+            raise ValueError("static expansion has no bounded row frame")
+        from .native_scaled_program import _status
+        info = self.lib.tessera_rocm_program_rows_info
+        info.argtypes = [C.c_uint64, C.POINTER(C.c_int64), C.POINTER(C.c_int64),
+                         C.POINTER(C.c_uint64), C.POINTER(C.c_uint64)]
+        info.restype = C.c_int
+        capacity, active, size, count = C.c_int64(), C.c_int64(), C.c_uint64(), C.c_uint64()
+        _status(info(self.handle, C.byref(capacity), C.byref(active), C.byref(size), C.byref(count)))
+        return capacity.value, active.value, size.value, count.value
 
     def read(self, generation, *, batched=True):
-        contract = self._binding.storage[7]
+        contract = self._storage(self._active_m)[7]
         output = np.empty(contract.shape, dtype=contract.numpy_dtype)
         from .native_scaled_program import _status
         _status(self.lib.tessera_rocm_program_read(
@@ -277,9 +373,14 @@ class PreparedNVFP4ExpansionProgram(PreparedScaledProgram):
     def update_activations(self, activation, scales):
         from .native_scaled_program import _status, pack_host_view
         slots = self._roles[3:]
+        shape = np.shape(activation)
+        active_m = shape[0] if len(shape) == 2 else 0
+        if self._bounded and not 0 < active_m <= self._capacity_m:
+            raise ValueError("native expansion active M exceeds capacity")
+        specs = self._storage(active_m) if self._bounded else self._binding.storage
         arrays = []
         for slot, value in zip(slots, (activation, scales), strict=True):
-            contract = self._binding.storage[slot]
+            contract = specs[slot]
             array = np.asarray(value)
             if contract.storage == "f8E4M3FN" and array.dtype == np.dtype(ml_dtypes.float8_e4m3fn):
                 array = array.view(np.uint8)
@@ -287,6 +388,8 @@ class PreparedNVFP4ExpansionProgram(PreparedScaledProgram):
                     or array.nbytes != contract.bytes):
                 raise ValueError("native expansion activation storage/shape differs")
             arrays.append(pack_host_view(self.lib, array))
+        if self._bounded:
+            return self._update_rows(active_m, slots, arrays)
         update = self.lib.tessera_rocm_program_update_slots
         update.argtypes = [C.c_uint64, C.c_uint32, C.POINTER(C.c_uint32),
                            C.POINTER(C.c_void_p), C.POINTER(C.c_uint64)]

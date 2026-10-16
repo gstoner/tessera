@@ -29,6 +29,9 @@ struct ProjectROCMKernelIdentityPass
   Option<bool> runtimeK{*this, "runtime-k",
                         llvm::cl::desc("Project LDS W8A8 or folded K to its checked runtime group loop"),
                         llvm::cl::init(false)};
+  Option<bool> arbitraryM{*this, "arbitrary-m",
+      llvm::cl::desc("Guard arbitrary positive runtime M in scaled matrix images"),
+      llvm::cl::init(false)};
   Option<bool> primalProfile{*this, "primal-profile",
       llvm::cl::desc("Use the measured gfx1201 scaled-primal image policy"),
       llvm::cl::init(false)};
@@ -56,6 +59,11 @@ struct ProjectROCMKernelIdentityPass
       .Case("folded_matmul", "tessera_rocm.scaled_wmma_gemm").Default("");
     if (runtimeK && family != "scaled_matmul_lds" && family != "folded_matmul") {
       module.emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: runtime-K image projection requires the LDS W8A8 or folded family");
+      return signalPassFailure();
+    }
+    if (arbitraryM && family != "scaled_matmul" &&
+        family != "scaled_matmul_lds" && family != "folded_matmul") {
+      module.emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: arbitrary-M projection requires a scaled matrix family");
       return signalPassFailure();
     }
     if (directive.empty()) {
@@ -308,6 +316,11 @@ struct ProjectROCMKernelIdentityPass
       // Frontend selection intent must not duplicate that image cache key.
       projected->getOperation()->removeAttr("tessera.rocm.mxfp8_schedule");
     if (mathRecipe) projected->getOperation()->removeAttr("tessera.launch_bindings");
+    auto sourceBatching = kernel->getAttrOfType<StringAttr>("batching");
+    if (arbitraryM && sourceBatching && sourceBatching.getValue() == "broadcast") {
+      kernel->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: arbitrary-M projection requires an unbatched matrix");
+      return signalPassFailure();
+    }
     Operation *copy = kernel->clone();
     if (mathRecipe) {
       copy->removeAttr("native_math_contract");
@@ -333,7 +346,8 @@ struct ProjectROCMKernelIdentityPass
         auto block = copy->getAttrOfType<IntegerAttr>(
             axis == "m" ? "block_m" : "block_n");
         copy->setAttr(axis == "m" ? "whole_m" : "whole_n",
-                      builder.getBoolAttr(extent.getInt() % block.getInt() == 0));
+                      builder.getBoolAttr(extent.getInt() % block.getInt() == 0 &&
+                                          !(axis == "m" && arbitraryM)));
         copy->setAttr(axis, builder.getI64IntegerAttr(0));
       }
       if (runtimeK) {

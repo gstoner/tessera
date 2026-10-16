@@ -1494,19 +1494,23 @@ _shape_free_targets: dict[str, str] = {}
 
 
 def _shape_free_target_ir(target_ir: str, *, family: str, directive: str,
-                          runtime_k: bool = False) -> str:
+                          runtime_k: bool = False, arbitrary_m: bool = False) -> str:
     """Invoke the verified native MLIR physical image identity projection."""
     if _SHAPE_FREE_DIRECTIVES.get(family) != directive:
         raise ValueError("ROCm kernel identity family/directive mismatch")
     if not isinstance(runtime_k, bool) or (runtime_k and family not in {"scaled_matmul_lds", "folded_matmul"}):
         raise ValueError("runtime_k projection requires the LDS W8A8 or folded family and a bool")
+    if not isinstance(arbitrary_m, bool) or (arbitrary_m and family not in {
+            "scaled_matmul", "scaled_matmul_lds", "folded_matmul"}):
+        raise ValueError("arbitrary_m projection requires a scaled matrix family and a bool")
     tool = _tessera_opt()
     if tool is None:
         raise RuntimeError("tessera-opt is required for ROCm kernel identity")
     return _run_opt(
         tool, target_ir,
         f"builtin.module(tessera-rocm-project-kernel-identity{{family={family}"
-        + (" runtime-k=true" if runtime_k else "") + "})",
+        + (" runtime-k=true" if runtime_k else "")
+        + (" arbitrary-m=true" if arbitrary_m else "") + "})",
     )
 
 

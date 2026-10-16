@@ -40,6 +40,8 @@ def checkpoint_shapes(pair, *, runtime_dims=None):
         desc = LaunchDescriptor.from_dict(package.descriptor.to_dict())
         desc.validate_image(image)
         p: dict[str, Any] = dict(desc.provenance)
+        if p.get("storage") != "f32" or p.get("gradient_storage" if backward else "output") != "f32":
+            raise ValueError("legacy saved-LSE AD tape requires f32 storage")
         dims = p.get('shape')
         symbolic_dims = cast(tuple[int, ...], dims)
         shape_bounds = p.get("shape_bounds",())
@@ -114,7 +116,7 @@ def checkpoint_shapes(pair, *, runtime_dims=None):
         from .attention_shape_contract import physical_attention_bias_shape
         physical_attention_bias_shape(symbolic_dims,bias_dims)
         physical_bias: tuple[int, ...] = tuple(bias_dims)
-        identity = _checkpoint_identity(tuple(symbolic_dims), scale, causal, bias=bias, bias_shape=physical_bias, shape_bounds=tuple(shape_bounds))
+        identity = _checkpoint_identity(tuple(symbolic_dims), scale, causal, bias=bias, bias_shape=physical_bias, shape_bounds=tuple(shape_bounds), storage="f32", output_storage="f32")
         if physical_bias and p.get("bias_gradient_reduction") != "physical_owner_lexicographic_bhqk_v1":
             raise ValueError("resident attention bias reduction policy disagrees")
         bias_storage = physical_attention_bias_shape(dims,physical_bias)

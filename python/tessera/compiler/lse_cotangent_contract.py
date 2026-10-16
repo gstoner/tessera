@@ -32,7 +32,7 @@ def lse_cotangent_contract(descriptor, *, runtime_dims=None):
         raise ValueError("seeded attention numerical checkpoint policy disagrees")
     from .nvidia_native import _checkpoint_identity
     physical = tuple(p.get("bias_shape", ()))
-    identity = _checkpoint_identity(symbolic_dims,scale,causal,bias=bias,bias_shape=physical,shape_bounds=tuple(bounds))
+    identity = _checkpoint_identity(symbolic_dims,scale,causal,bias=bias,bias_shape=physical,shape_bounds=tuple(bounds), storage="f32", output_storage="f32")
     if p.get("checkpoint_contract")!=identity:
         raise ValueError("seeded attention numerical identity differs from saved checkpoint")
     if p.get("bias_gradient_reduction")!=("physical_owner_lexicographic_bhqk_v1" if physical else "none"):

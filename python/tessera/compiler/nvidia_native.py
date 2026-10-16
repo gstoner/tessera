@@ -4449,7 +4449,7 @@ def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NV
             "graph_ir_digest": hashlib.sha256(scheduled.graph_ir.encode()).hexdigest(),
             "target_ir_digest": image.target_ir_digest,
             "schedule_ir_digest": hashlib.sha256(scheduled.schedule_ir.encode()).hexdigest(),
-            "checkpoint_contract": _checkpoint_identity(dims, scale, causal, bias=scheduled.bias, bias_shape=scheduled.bias_shape, shape_bounds=scheduled.shape_bounds),
+            "checkpoint_contract": _checkpoint_identity(dims, scale, causal, bias=scheduled.bias, bias_shape=scheduled.bias_shape, shape_bounds=scheduled.shape_bounds, storage=scheduled.storage, output_storage=scheduled.output_storage),
             "mask_alignment": "end_aligned_v1", "bias": scheduled.bias,
             "bias_shape": list(scheduled.bias_shape),
             "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1" if scheduled.bias_shape else "none",
@@ -4509,10 +4509,13 @@ def package_scheduled_checkpoint_pair(forward,backward, *, pipeline_name: str):
     forward.validate();backward.validate()
     if forward.backward or not backward.backward:
         raise ValueError("checkpoint pair requires forward then backward native products")
+    if any(product.storage != "f32" or product.output_storage != "f32"
+           for product in (forward, backward)):
+        raise ValueError("paired checkpoint AD requires its f32 storage contract")
     f_identity=_checkpoint_identity(forward.dims,forward.scale,forward.causal,
-        bias=forward.bias,bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds)
+        bias=forward.bias,bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage)
     b_identity=_checkpoint_identity(backward.dims,backward.scale,backward.causal,
-        bias=backward.bias,bias_shape=backward.bias_shape,shape_bounds=backward.shape_bounds)
+        bias=backward.bias,bias_shape=backward.bias_shape,shape_bounds=backward.shape_bounds, storage=backward.storage, output_storage=backward.output_storage)
     if f_identity!=b_identity:
         raise ValueError("checkpoint producer and consumer policies disagree")
     f,b=forward.names,backward.names
@@ -4531,7 +4534,7 @@ def package_generated_attention_forward_checkpoint(source: str, *, pipeline_name
     forward = lower_generated_checkpoint(source)
     identity = _checkpoint_identity(
         forward.dims, forward.scale, forward.causal,
-        bias=forward.bias, bias_shape=forward.bias_shape, shape_bounds=forward.shape_bounds)
+        bias=forward.bias, bias_shape=forward.bias_shape, shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage)
     return AttentionForwardCheckpoint(
         package_scheduled_checkpoint(forward, pipeline_name=pipeline_name), identity)
 
@@ -4553,8 +4556,8 @@ def package_attention_checkpoint_pair(
     b_physical = _shape(backward, b_names[5]) if b_bias else ()
     if f_physical is None or b_physical is None:
         raise ValueError("saved-LSE physical bias shapes must be concrete")
-    identity = _checkpoint_identity(f_dims, f_scale, f_causal, bias=f_bias, bias_shape=f_physical)
-    if identity != _checkpoint_identity(b_dims, b_scale, b_causal, bias=b_bias, bias_shape=b_physical):
+    identity = _checkpoint_identity(f_dims, f_scale, f_causal, bias=f_bias, bias_shape=f_physical, storage="f32", output_storage="f32")
+    if identity != _checkpoint_identity(b_dims, b_scale, b_causal, bias=b_bias, bias_shape=b_physical, storage="f32", output_storage="f32"):
         raise ValueError("saved-LSE producer and consumer policies disagree")
     if (f_names[:3] != b_names[1:4] or f_names[3 + int(f_bias)] != b_names[4]
             or f_names[4 + int(f_bias)] != b_names[5 + int(b_bias)]
@@ -5062,12 +5065,12 @@ def package_generated_attention_checkpoint_pair(
     forward = lower_generated_checkpoint(source)
     if not compact_gradients and (compact_launch != "packed_v1" or compact_threads != 128):
         raise ValueError("compact launch requires compact gradient outputs")
-    backward = lower_generated_checkpoint(source, backward=True, prune_inactive=prune_inactive,
-        compact_gradients=compact_gradients, compact_launch=compact_launch, compact_threads=compact_threads)
     if forward.storage != "f32" or forward.output_storage != "f32":
         raise ValueError("paired checkpoint AD requires its f32 storage contract")
-    identity = _checkpoint_identity(forward.dims, forward.scale, forward.causal, bias=forward.bias, bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds)
-    if identity != _checkpoint_identity(backward.dims, backward.scale, backward.causal, bias=backward.bias, bias_shape=backward.bias_shape,shape_bounds=backward.shape_bounds):
+    backward = lower_generated_checkpoint(source, backward=True, prune_inactive=prune_inactive,
+        compact_gradients=compact_gradients, compact_launch=compact_launch, compact_threads=compact_threads)
+    identity = _checkpoint_identity(forward.dims, forward.scale, forward.causal, bias=forward.bias, bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage)
+    if identity != _checkpoint_identity(backward.dims, backward.scale, backward.causal, bias=backward.bias, bias_shape=backward.bias_shape,shape_bounds=backward.shape_bounds, storage=backward.storage, output_storage=backward.output_storage):
         raise ValueError('generated checkpoint producer and consumer policies disagree')
     if forward.frontend_argument_indices != backward.frontend_argument_indices:
         raise ValueError("generated checkpoint frontend mappings disagree")

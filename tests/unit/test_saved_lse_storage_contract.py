@@ -134,3 +134,46 @@ def test_typed_descriptor_buffer_roles_are_checked(typed_package, index, changes
     buffers[index] = replace(buffers[index], **changes)
     with pytest.raises(ValueError):
         validate_typed_saved_lse_descriptor(replace(descriptor, buffers=tuple(buffers)))
+
+@pytest.mark.parametrize("storage", ["f16", "bf16", "f32"])
+@pytest.mark.parametrize("bias", [None, "1x2x1x1", "1x2x3x5"])
+def test_forward_only_wrapper_preserves_native_storage_identity(compiler, monkeypatch, storage, bias):
+    from tessera.compiler import nvidia_native as native, scheduled_checkpoint as checkpoint
+    graph = module(storage=storage, bias=bias, public=False)
+    schedule = run_tessera_opt(compiler, graph, "--tessera-graph-to-schedule")
+    tile = run_tessera_opt(compiler, schedule, "--tessera-schedule-to-tile")
+    forward = checkpoint._decode_checkpoint(graph, schedule, tile, backward=False)
+    monkeypatch.setattr(checkpoint, "lower_generated_checkpoint", lambda source: forward)
+    monkeypatch.setattr(native, "_compile_tile_ir",
+        lambda text, entry: (text, "// PTX", {}, "compiler", "toolchain", (), "cold"))
+    wrapper = native.package_generated_attention_forward_checkpoint(
+        "native producer", pipeline_name="tessera-nvidia-pipeline-sm120")
+    assert wrapper.contract_digest == wrapper.forward.descriptor.provenance["checkpoint_contract"]
+    expected = native._checkpoint_identity(forward.dims, forward.scale, forward.causal,
+        bias=forward.bias, bias_shape=forward.bias_shape, shape_bounds=forward.shape_bounds,
+        storage=forward.storage, output_storage=forward.output_storage)
+    assert wrapper.contract_digest == expected
+    if storage != "f32":
+        from tessera.compiler.resident_attention import checkpoint_shapes
+        with pytest.raises(ValueError, match="legacy saved-LSE AD tape requires f32 storage"):
+            checkpoint_shapes(wrapper)
+
+
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.parametrize("bias", [None, "1x2x1x1", "1x2x3x5"])
+def test_scheduled_ad_pair_rejects_half_forward_before_target_compilation(
+    compiler, monkeypatch, storage, bias,
+):
+    from tessera.compiler import nvidia_native as native, scheduled_checkpoint as checkpoint
+    graph = module(storage=storage, bias=bias, public=False)
+    schedule = run_tessera_opt(compiler, graph, "--tessera-graph-to-schedule")
+    tile = run_tessera_opt(compiler, schedule, "--tessera-schedule-to-tile")
+    forward = checkpoint._decode_checkpoint(graph, schedule, tile, backward=False)
+    names = ("do", "q", "k", "v", "o", "bias", "lse", "dq", "dk", "dv") if bias else (
+        "do", "q", "k", "v", "o", "lse", "dq", "dk", "dv")
+    backward = checkpoint.lower_scheduled_checkpoint(names, forward.dims, forward.scale, True,
+        backward=True, bias=bool(bias), bias_shape=tuple(map(int, bias.split("x"))) if bias else None)
+    monkeypatch.setattr(native, "_compile_tile_ir",
+        lambda *args: pytest.fail("compiled a mismatched half/f32 AD pair"))
+    with pytest.raises(ValueError, match="paired checkpoint AD requires its f32 storage"):
+        native.package_scheduled_checkpoint_pair(forward, backward, pipeline_name="test")

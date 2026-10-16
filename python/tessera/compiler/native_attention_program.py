@@ -69,7 +69,7 @@ class NativeAttentionJVPProgram:
             policy=self.pair.forward.descriptor.provenance
             expected=_checkpoint_identity(_policy_indices(policy, "shape"),frame._scale,frame._causal,
                 bias=biased,bias_shape=_policy_indices(policy, "bias_shape") if biased else (),
-                shape_bounds=_policy_indices(policy, "shape_bounds"))
+                shape_bounds=_policy_indices(policy, "shape_bounds"), storage="f32", output_storage="f32")
             if f'tessera.attention_checkpoint_identity = "{expected}"' not in self.tangent.arena_ir:
                 raise ValueError('automatic attention program forward/tangent generations disagree')
             tensor_names=('q','k','v','primal','lse','dq','dk','dv') + (

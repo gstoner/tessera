@@ -51,8 +51,19 @@ def test_saved_storage_source_device_and_compiler_free_replay():
         row["artifact"] for row in BENCHMARK["rows"]}
     assert all(row["execution_kind"] == "native_gpu" for row in replay["rows"])
     source = json.loads((PACKET / "validation/source-manifest.json").read_text())
+    review = json.loads((PACKET / "review/source-manifest.json").read_text())
+    assert review["native_source_tree"] == source["native_tree"]
     for name, digest in source["files"].items():
+        current = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+        if current != digest:
+            # Older receipts remain bound to their exact retained source bytes.
+            assert review["parent_files"][name] == digest
+            prior = gzip.decompress((PACKET / review["snapshots"][name]).read_bytes())
+            assert hashlib.sha256(prior).hexdigest() == digest
+    for name, digest in review["files"].items():
         assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == digest, name
+        prior = gzip.decompress((PACKET / review["snapshots"][name]).read_bytes())
+        assert hashlib.sha256(prior).hexdigest() == review["parent_files"][name]
 
 
 @pytest.mark.parametrize("index", range(12))

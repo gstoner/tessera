@@ -105,3 +105,19 @@ FP8 W8A8, MXFP8, exact MXFP4 and generic scaled-owner cases. Adjacent host gates
 pass 544 cases with 22 hardware-dependent skips. Generated-document, ABI and registry final gates pass 401 cases.
 Final PR validation remains open. No full-model quality
 acceptance, broad performance closure or gfx1151 FP8 execution is inferred.
+
+## Representative original checkpoint follow-through
+
+The packet's original_checkpoint/ directory retains native prepared,
+ordinary JIT and portable replay for the original 24576x4096 combined gate/up
+weights and validated captured activations. One capacity-256 owner handles
+M19/1/256/200/127/19 with fixed allocations. Public/portable M1/19/200/256/1
+replay forbids compiler and eager helpers. All arithmetic bounds pass.
+M256 relative RMS versus the decoded FP8 projection is 2.568e-7, while the
+original BF16 projection difference remains 6.2286%. Full MLP/model-quality
+acceptance is still open.
+
+PR960's first unit lane exposed an unnamed recorder stem and an incomplete
+host-only readback fixture. The repaired fixture consumes the production span
+helper and adds pinned/pageable active-prefix read coverage; 23 focused tests
+pass. Native runtime and arithmetic source hashes remain unchanged.

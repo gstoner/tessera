@@ -1,0 +1,41 @@
+{
+  "head": "06dca840d42ba598788589b01b33bcccfdbf599b",
+  "source_sha256": {
+    "src/transforms/lib/NativeNVFP4Program.h": "fbd430bce5a134b66d1122db2805085b5509d824c28d8882fa2783d4426a4269",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "a6e44fdf80f8603e8955c6b2d6653bf0953366420d63b0a55c56b466b1b5b9e3",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "780c2db5de9b1af827c61d8be2406e3593f8c91550dd2725f54318774ac9503f",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "928f52e8c5441db62f61b392490c31fb02e8ca0783204fb9481748915eaf8803",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/ProgramHostTransportPolicy.h": "990cfba9ea7bec25e3683c0235487c22b5e1dd955e90452db51ab8647863086b",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "e9a76f3ac03dd6758e699891e501a84488e9fca2b9e44e4fd3dfdc4c83e19ad3",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp": "bd3a1e4f85312c62d975ff06466e42fe540c28a24407ea423642129534d09843",
+    "python/tessera/compiler/native_scaled_program.py": "3b70c627d6a5ac83144caced38cb24eb2418f89fecedc7add33873a1e53d7467",
+    "python/tessera/compiler/rocm_nvfp4_expansion_program.py": "82aeb3f43c0986a3d6d1a4b0528f6fd72a400c9cbebd905912e855e404fde5f1",
+    "python/tessera/compiler/rocm_fp8_blockscale.py": "5c5307b6d5f1155221a0ff84b626d6d5c3b050e45fdd8a3472946b14d2845c5a",
+    "python/tessera/compiler/rocm_native.py": "eee05e1af5bd170492fe02f3be4c18702af0a5287fa778139620813eafdcdeb7"
+  },
+  "recorder_sha256": "edf28d24dd1a278d49c19f2639c82c9cf6a6dea0194e1f52bfc44d1318b25604",
+  "result_sha256": "a9616eb9e0a57463eba5394cfc454563d623bc96f74a68c4d9e3cb1b80b0f6ed",
+  "compiler_and_provider_match_pr960_packet": true,
+  "stale_mtime_warning": "Git checkout refreshed source mtimes after matched tools were transferred. Critical source SHA-256, donor binary SHA-256 and provider SHA-256 match; no timestamp manipulation.",
+  "full_model_quality_acceptance": false,
+  "public_and_portable_original_frames": [
+    1,
+    19,
+    200,
+    256,
+    1
+  ],
+  "compiler_and_eager_helpers_forbidden_for_public_portable": true,
+  "prepared_active_rows": [
+    19,
+    1,
+    256,
+    200,
+    127,
+    19
+  ],
+  "benchmark_log": "original-bounded-public-source.log",
+  "scope": "Original gate/up projection; full MLP/model quality remains open.",
+  "archived_result": "gfx1201.json",
+  "archived_log": "benchmark.txt"
+}

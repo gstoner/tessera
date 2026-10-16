@@ -31,7 +31,15 @@ The owning compatibility gate passes 226 prior bounded NVFP4, FP8/MXFP8/MXFP4
 and generic-owner cases; adjacent host gates pass 544 with 22 hardware skips.
 Receipts: benchmarks/baselines/nvfp4_source_bounded_20261016/README.md.
 Final generated-document/ABI/registry drift gates pass 401 cases.
-Next: PR CI and review. Performance and
+Representative original gate/up checkpoint proof also passes at N24576/K4096:
+prepared M19/1/256/200/127/19 and public/portable M1/19/200/256/1, with unchanged
+images/allocations and compiler/eager helpers forbidden for replay. All arithmetic
+bounds pass; M256 relative RMS versus decoded FP8 is 2.568e-7. Projection quality
+does not establish full MLP/model acceptance.
+PR960's initial unit lane has one recorder-discovery failure and 18 readback
+fixture compile errors. A named companion plus the actual production span
+helper repairs both; 23 focused tests pass. No native runtime/math changes.
+Next: repaired exact-head PR CI and review. Performance and
 original checkpoint/model-quality acceptance remain open. No gfx1151 FP8 route
 or full-model quality acceptance is inferred.
 

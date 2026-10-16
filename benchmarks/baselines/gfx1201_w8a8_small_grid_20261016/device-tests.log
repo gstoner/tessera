@@ -1,0 +1,98 @@
+........................................................................ [ 20%]
+........................................................................ [ 41%]
+...................................................FFFF................. [ 62%]
+........................................................................ [ 83%]
+.........................................................                [100%]
+=================================== FAILURES ===================================
+___ test_blockscale_w8a8_lds_body_on_gfx1201[100x1024x1024_f32-128x64-exact] ___
+
+shape = BlockScaleShape(m=100, n=1024, k=1024, scale_k=128, scale_n=128, weight_layout='nk', output='f32')
+macro = (128, 64), exact = True
+
+    @pytest.mark.parametrize("exact", [True, False], ids=["exact", "random"])
+    @pytest.mark.parametrize(("shape", "macro"), LDS_SHAPES, ids=_lds_id)
+    def test_blockscale_w8a8_lds_body_on_gfx1201(shape, macro, exact):
+        """The Schedule-selected LDS body: the expected workgroup, the fp64 oracle
+        (bit-equal on exact inputs), and bitwise the register panel's result."""
+        assert rt._rocm_live_arch() == "gfx1201"
+        package = package_blockscale(lower_blockscale(shape))
+        prov = package.descriptor.provenance
+>       assert (prov["staging"], prov["warps"], tuple(prov["macro_tile"])) == ("lds", 8, macro)
+E       AssertionError: assert ('lds', 4, (64, 64)) == ('lds', 8, (128, 64))
+E         
+E         At index 1 diff: 4 != 8
+E         Use -v to get more diff
+
+tests/device/rocm/test_fp8_blockscale_w8a8.py:276: AssertionError
+__ test_blockscale_w8a8_lds_body_on_gfx1201[100x1024x1024_f32-128x64-random] ___
+
+shape = BlockScaleShape(m=100, n=1024, k=1024, scale_k=128, scale_n=128, weight_layout='nk', output='f32')
+macro = (128, 64), exact = False
+
+    @pytest.mark.parametrize("exact", [True, False], ids=["exact", "random"])
+    @pytest.mark.parametrize(("shape", "macro"), LDS_SHAPES, ids=_lds_id)
+    def test_blockscale_w8a8_lds_body_on_gfx1201(shape, macro, exact):
+        """The Schedule-selected LDS body: the expected workgroup, the fp64 oracle
+        (bit-equal on exact inputs), and bitwise the register panel's result."""
+        assert rt._rocm_live_arch() == "gfx1201"
+        package = package_blockscale(lower_blockscale(shape))
+        prov = package.descriptor.provenance
+>       assert (prov["staging"], prov["warps"], tuple(prov["macro_tile"])) == ("lds", 8, macro)
+E       AssertionError: assert ('lds', 4, (64, 64)) == ('lds', 8, (128, 64))
+E         
+E         At index 1 diff: 4 != 8
+E         Use -v to get more diff
+
+tests/device/rocm/test_fp8_blockscale_w8a8.py:276: AssertionError
+___ test_blockscale_w8a8_lds_body_on_gfx1201[127x1024x1024_f32-128x64-exact] ___
+
+shape = BlockScaleShape(m=127, n=1024, k=1024, scale_k=128, scale_n=128, weight_layout='nk', output='f32')
+macro = (128, 64), exact = True
+
+    @pytest.mark.parametrize("exact", [True, False], ids=["exact", "random"])
+    @pytest.mark.parametrize(("shape", "macro"), LDS_SHAPES, ids=_lds_id)
+    def test_blockscale_w8a8_lds_body_on_gfx1201(shape, macro, exact):
+        """The Schedule-selected LDS body: the expected workgroup, the fp64 oracle
+        (bit-equal on exact inputs), and bitwise the register panel's result."""
+        assert rt._rocm_live_arch() == "gfx1201"
+        package = package_blockscale(lower_blockscale(shape))
+        prov = package.descriptor.provenance
+>       assert (prov["staging"], prov["warps"], tuple(prov["macro_tile"])) == ("lds", 8, macro)
+E       AssertionError: assert ('lds', 4, (64, 64)) == ('lds', 8, (128, 64))
+E         
+E         At index 1 diff: 4 != 8
+E         Use -v to get more diff
+
+tests/device/rocm/test_fp8_blockscale_w8a8.py:276: AssertionError
+__ test_blockscale_w8a8_lds_body_on_gfx1201[127x1024x1024_f32-128x64-random] ___
+
+shape = BlockScaleShape(m=127, n=1024, k=1024, scale_k=128, scale_n=128, weight_layout='nk', output='f32')
+macro = (128, 64), exact = False
+
+    @pytest.mark.parametrize("exact", [True, False], ids=["exact", "random"])
+    @pytest.mark.parametrize(("shape", "macro"), LDS_SHAPES, ids=_lds_id)
+    def test_blockscale_w8a8_lds_body_on_gfx1201(shape, macro, exact):
+        """The Schedule-selected LDS body: the expected workgroup, the fp64 oracle
+        (bit-equal on exact inputs), and bitwise the register panel's result."""
+        assert rt._rocm_live_arch() == "gfx1201"
+        package = package_blockscale(lower_blockscale(shape))
+        prov = package.descriptor.provenance
+>       assert (prov["staging"], prov["warps"], tuple(prov["macro_tile"])) == ("lds", 8, macro)
+E       AssertionError: assert ('lds', 4, (64, 64)) == ('lds', 8, (128, 64))
+E         
+E         At index 1 diff: 4 != 8
+E         Use -v to get more diff
+
+tests/device/rocm/test_fp8_blockscale_w8a8.py:276: AssertionError
+=============================== warnings summary ===============================
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_7x19x32_g16_n1-1--1-exact]
+  /home/angstorms/scratch/jvp-schema-reconcile-20261011/tests/unit/../../python/tessera/compiler/rocm_native.py:1615: RuntimeWarning: /home/angstorms/scratch/rocm-reference-tools-20261016/small-grid/compiler/tools/tessera-opt/tessera-opt is older than 2 generator source(s) -- newest src/compiler/programming_model/lib/PMPasses.cpp. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).
+    warn_if_generator_is_stale(tool)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_lds_body_on_gfx1201[100x1024x1024_f32-128x64-exact]
+FAILED tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_lds_body_on_gfx1201[100x1024x1024_f32-128x64-random]
+FAILED tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_lds_body_on_gfx1201[127x1024x1024_f32-128x64-exact]
+FAILED tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_lds_body_on_gfx1201[127x1024x1024_f32-128x64-random]
+4 failed, 341 passed, 1 warning in 85.27s (0:01:25)

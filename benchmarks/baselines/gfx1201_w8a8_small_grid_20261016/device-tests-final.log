@@ -1,0 +1,12 @@
+........................................................................ [ 20%]
+........................................................................ [ 41%]
+........................................................................ [ 62%]
+........................................................................ [ 83%]
+.........................................................                [100%]
+=============================== warnings summary ===============================
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_blockscale_w8a8_matches_fp64_oracle_on_gfx1201[kn_7x19x32_g16_n1-1--1-exact]
+  /home/angstorms/scratch/jvp-schema-reconcile-20261011/tests/unit/../../python/tessera/compiler/rocm_native.py:1615: RuntimeWarning: /home/angstorms/scratch/rocm-reference-tools-20261016/small-grid/compiler/tools/tessera-opt/tessera-opt is older than 2 generator source(s) -- newest src/compiler/programming_model/lib/PMPasses.cpp. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).
+    warn_if_generator_is_stale(tool)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+345 passed, 1 warning in 85.24s (0:01:25)

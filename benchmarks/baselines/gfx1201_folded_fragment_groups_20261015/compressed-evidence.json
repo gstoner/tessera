@@ -108,5 +108,25 @@
     "raw_sha256": "ef00baf88a1b4418af3505a53acc843d1de0f7ef5e3a4a5947b27719ff0add53",
     "gzip_sha256": "611a6400cc6b8031fe7c15abb0ee883065054dc9baf91740b4e6a94fbdc034ee",
     "raw_bytes": 152940
+  },
+  "radiance-fast-forward.json.gz": {
+    "raw_sha256": "7fdc8a8b83a56aef3fef657a6ee69de0e4940c55506859dbec8dbf32af90e3dd",
+    "gzip_sha256": "9d6ba8542e759eaaf433a27e93925db0d0068671cf7cd8c329ec64d9e8b1aa9c",
+    "raw_bytes": 190785
+  },
+  "radiance-legacy-epilogue-forward.json.gz": {
+    "raw_sha256": "dc57dcc76c4276da4df343276f35ea5d19dc5792da5e36307445d89410a3e764",
+    "gzip_sha256": "521fc087396e29010a109d30420fc7ac5b7585a06eb0e85ecc61f96c6107d8e2",
+    "raw_bytes": 190826
+  },
+  "radiance-fast-reverse.json.gz": {
+    "raw_sha256": "0b53349ac37d16b3586645e018d3fa112af40dc2957d4a9bc8c48c264b723983",
+    "gzip_sha256": "fa0a135d1f60b32ffb00566ecbb711eb9ae40ccefa795fb193e79f8df8ba3618",
+    "raw_bytes": 190751
+  },
+  "radiance-legacy-epilogue-reverse.json.gz": {
+    "raw_sha256": "4eddb20bb3c4f6dec1a5cbb67890fade7edc758cd744789f5339cb569defad2b",
+    "gzip_sha256": "b363b597481f6beb7293e6e28c2780d23c26b4a07cfe6636284faae14e813efe",
+    "raw_bytes": 190801
   }
 }

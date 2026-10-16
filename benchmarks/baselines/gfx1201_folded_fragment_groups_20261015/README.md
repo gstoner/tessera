@@ -172,3 +172,45 @@ The actual module digest and explicit tuning inputs are recorded separately
 from that declaration. A reference row has an empty public-API sample list
 and null public-API median. The recorder writes each timing domain separately;
 use native_over_radiance_graph_ratio for the captured comparison.
+
+
+## Fresh independent captured reference
+
+Frozen 7ac37d9e2 passes the complete four-engine protocol in forward and reversed
+compiler/shape orders, seven trials each at M256/K5120 and N4096/8192/16384.
+The live device is RX9070XT/gfx1201. The independent module remains SHA256
+c9f91bc882ad39f331769043b4d51f9bd3813af48a37b4f3ee5f640598eac3a6,
+with declared upstream dfdfa3832922c9a4253133f09c1f5c0d39748fc7.
+Its explicit tuning environment and actual binary digest are recorded.
+
+All engines agree bitwise, meet the sampled independent FP64 oracle, and pass
+bracketed/plain all-three-copy poison checks before and after timing. Source,
+tools and module remain unchanged during each frozen run. Reference rows carry
+no public Tessera API time. Captured graph dispatch excludes repeated Python
+submission; ordinary windows and completed Tessera launch costs remain separate.
+
+At N8192 the native/reference captured ratio is 1.2038 / 1.2045 (forward/reverse);
+at N16384 it is 1.2180 / 1.2145. The marginal N8192->16384 cost is:
+16.217 / 16.293 ns per column native, 16.774 / 16.739 frozen native baseline,
+and 13.141 / 13.291 reference. Removing Python submission gaps does not
+remove the remaining device cost. These measurements do not close the gap.
+
+A second pair of clean frozen runs changes only RADIANCE_MXFP4_EPIFAST from
+1 to 0. All outputs and native MLIR image hashes remain identical. Legacy HIP
+control payloads differ between recompiles; their selected instruction streams
+and outputs match. The packet preserves this distinction rather than asserting
+all ELF bytes are unchanged. The reference legacy epilogue is 5.3-8.6 percent
+slower in both orders; its marginal slope rises to 13.763 / 13.965 ns per column.
+That prices part of the reference's address/branch optimization, not the whole
+native gap.
+
+The native epilogue already guards FP64 recovery. Its Tile contract specifies
+partial*(reference*token) in FP32 for regular products and wide recovery for
+zero/nonfinite products, with its stated zero-partial rule. The reference's
+source multiplication order cannot replace that contract. Next investigate
+native alias/address proofs and address generation, preserving all edge
+semantics; do not assume FP64 executes on the hot path.
+
+radiance-curve-decision.json normalizes roles and epilogue controls. Both frozen
+validation files and four compressed raw packets retain commands, fingerprints
+and scope. Wider route/performance closure remains open.

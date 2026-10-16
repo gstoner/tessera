@@ -1,0 +1,203 @@
+{
+  "scope": "frozen 7ac37d9e2 matched RX9070XT/gfx1201 captured graph measurements; no cross-architecture proof",
+  "measurements": [
+    {
+      "run": "forward",
+      "compiler_roles_reversed": false,
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            5120
+          ],
+          "native_graph_ms": 0.07878524822695035,
+          "baseline_graph_ms": 0.07913531914893616,
+          "radiance_graph_ms": 0.0705977304964539,
+          "native_over_radiance_graph_ratio": 1.1159742341987566,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            5120
+          ],
+          "native_graph_ms": 0.14722749999999998,
+          "baseline_graph_ms": 0.15226875,
+          "radiance_graph_ms": 0.12230041666666668,
+          "native_over_radiance_graph_ratio": 1.2038184661404123,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            16384,
+            5120
+          ],
+          "native_graph_ms": 0.28007333333333334,
+          "baseline_graph_ms": 0.28968444444444447,
+          "radiance_graph_ms": 0.22995407407407406,
+          "native_over_radiance_graph_ratio": 1.2179533433406993,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        }
+      ],
+      "N8192_to_N16384_ns_per_column": {
+        "native": 16.216532389322918,
+        "baseline": 16.77437676323785,
+        "radiance": 13.14131560149016
+      }
+    },
+    {
+      "run": "reverse",
+      "compiler_roles_reversed": true,
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            16384,
+            5120
+          ],
+          "native_graph_ms": 0.2815503703703704,
+          "baseline_graph_ms": 0.2884948148148148,
+          "radiance_graph_ms": 0.2318251851851852,
+          "native_over_radiance_graph_ratio": 1.2144943188353934,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            5120
+          ],
+          "native_graph_ms": 0.14807916666666668,
+          "baseline_graph_ms": 0.15136708333333335,
+          "radiance_graph_ms": 0.12294125,
+          "native_over_radiance_graph_ratio": 1.2044709702127372,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        },
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            5120
+          ],
+          "native_graph_ms": 0.07831611111111111,
+          "baseline_graph_ms": 0.08112305555555556,
+          "radiance_graph_ms": 0.07070583333333333,
+          "native_over_radiance_graph_ratio": 1.1076329550052841,
+          "correctness": "bitwise_matched_and_sampled_independent_oracle"
+        }
+      ],
+      "N8192_to_N16384_ns_per_column": {
+        "native": 16.29287154586227,
+        "baseline": 16.73922503436053,
+        "radiance": 13.2914959942853
+      }
+    }
+  ],
+  "epilogue_control": [
+    {
+      "run": "forward",
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            5120
+          ],
+          "fast_ms": 0.0705977304964539,
+          "legacy_epilogue_ms": 0.07657599999999999,
+          "legacy_over_fast_ratio": 1.0846807604367166,
+          "unchanged_native_image_ratio": 0.9979495587450421,
+          "normalized_to_unchanged_native_ratio": 1.0869094043197354,
+          "all_outputs_and_native_mlir_images_identical": true,
+          "hip_control_instruction_stream_identical": true,
+          "hip_control_payload_byte_identical": false
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            5120
+          ],
+          "fast_ms": 0.12230041666666668,
+          "legacy_epilogue_ms": 0.12936311111111112,
+          "legacy_over_fast_ratio": 1.0577487357520132,
+          "unchanged_native_image_ratio": 1.005992615359072,
+          "normalized_to_unchanged_native_ratio": 1.0514478134359542,
+          "all_outputs_and_native_mlir_images_identical": true,
+          "hip_control_instruction_stream_identical": true,
+          "hip_control_payload_byte_identical": false
+        },
+        {
+          "shape_mnk": [
+            256,
+            16384,
+            5120
+          ],
+          "fast_ms": 0.22995407407407406,
+          "legacy_epilogue_ms": 0.2421066666666667,
+          "legacy_over_fast_ratio": 1.0528479116602996,
+          "unchanged_native_image_ratio": 1.0056021742204773,
+          "normalized_to_unchanged_native_ratio": 1.046982533104054,
+          "all_outputs_and_native_mlir_images_identical": true,
+          "hip_control_instruction_stream_identical": true,
+          "hip_control_payload_byte_identical": false
+        }
+      ]
+    },
+    {
+      "run": "reverse",
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            16384,
+            5120
+          ],
+          "fast_ms": 0.2318251851851852,
+          "legacy_epilogue_ms": 0.24429176470588237,
+          "legacy_over_fast_ratio": 1.053775777255343,
+          "unchanged_native_image_ratio": 1.002376972446836,
+          "normalized_to_unchanged_native_ratio": 1.0512769209801784,
+          "all_outputs_and_native_mlir_images_identical": true,
+          "hip_control_instruction_stream_identical": true,
+          "hip_control_payload_byte_identical": false
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            5120
+          ],
+          "fast_ms": 0.12294125,
+          "legacy_epilogue_ms": 0.129892,
+          "legacy_over_fast_ratio": 1.0565371671428427,
+          "unchanged_native_image_ratio": 1.001077126537044,
+          "normalized_to_unchanged_native_ratio": 1.0554003673999104,
+          "all_outputs_and_native_mlir_images_identical": true,
+          "hip_control_instruction_stream_identical": true,
+          "hip_control_payload_byte_identical": false
+        },
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            5120
+          ],
+          "fast_ms": 0.07070583333333333,
+          "legacy_epilogue_ms": 0.07680562962962963,
+          "legacy_over_fast_ratio": 1.0862700573450512,
+          "unchanged_native_image_ratio": 0.9954983010449107,
+          "normalized_to_unchanged_native_ratio": 1.0911822312553052,
+          "all_outputs_and_native_mlir_images_identical": true,
+          "hip_control_instruction_stream_identical": true,
+          "hip_control_payload_byte_identical": false
+        }
+      ]
+    }
+  ],
+  "interpretation": "Native remains 20-22 percent slower than the independent pinned reference at N8192/16384 after excluding Python submission gaps. Reference address-fast epilogue saves 5.3-8.6 percent versus its output-identical legacy form; that does not attribute all native cost or authorize changing the native arithmetic order/recovery gate.",
+  "remaining": "Native alias/address-generation proof and optimization, numerical edge validation, broader regression and coordinating-main publication"
+}

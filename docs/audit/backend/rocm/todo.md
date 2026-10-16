@@ -29,7 +29,11 @@ checks and 12 FP8/MXFP8 unchanged-image controls. Eight-shape forward/reverse
 runs characterize the regular grid; three selected rows improve 2.1-5.1 percent,
 while one is within control variation. Actual timed ISA has 7 versus 11 DS waits
 with unchanged MMAs, LDS reads, barriers and resources. Broad regression and
-publication remain open.
+publication remain open. A clean matched captured Radiance comparison now
+retains a 20-22 percent device gap at M256/K5120, N8192/16384; Python launch
+gaps do not explain it. An output-identical reference epilogue switch costs
+5.3-8.6 percent. Native arithmetic/recovery semantics are unchanged; alias and
+address-generation proof is the next investigation.
 gfx1151 has no schedule change; broader MXFP4/Radiance, W8A8 and route closure
 obligations remain open.
 

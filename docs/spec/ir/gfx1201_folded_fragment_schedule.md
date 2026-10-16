@@ -56,7 +56,8 @@ The narrowed bulk-N candidate improves the five selected cases in both orders:
 roughly 1.5-4.1 percent in the first run and 1.9-3.7 percent in reverse order.
 Captured graph dispatch plus kernel latency is separate from ordinary launch
 windows and public host time. There are no WSL hardware counter measurements
-and no fresh Radiance comparison.
+in the earlier native-only runs. The later matched captured-reference packet
+retains a measured 20-22 percent gap at N8192/16384; it does not establish closure.
 
 The production packet and validation receipts are maintained under
 benchmarks/baselines/gfx1201_folded_fragment_groups_20261015/.

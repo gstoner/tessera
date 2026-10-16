@@ -6,33 +6,28 @@ target: apple_gpu
 last_updated: 2026-10-16
 ---
 
-## SM120-NATIVE-ROW-CORRECTION-20261016 — native residual producer
+## SM120-NATIVE-ROW-CORRECTION-20261016 — native residual producer and consumer
 
 Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
 Synchronization key: SM120-NATIVE-ROW-CORRECTION-20261016.
 
-Implementation in progress. A compiler-internal pure tensor operation defines
-FP32 probability-weighted row correction independently of rounded saved O.
-This is not a public Graph API, new dtype or executable target admission.
-Native AD projection now preserves original pair lineage, frontend/activity
-mappings and source argument properties without rounded O. Physical layouts
-are not admitted by metadata preservation alone.
+Implementation in progress. Private Graph/AD products compute an ordered FP32
+probability-weighted row correction and consume it in backward without rounded
+saved O or a duplicate dLSE subtraction. Source-pair lineage, frontend/activity
+mapping and readonly source properties survive sealed Schedule/Tile replay.
+The new consumer has a distinct pointer ABI, compact requested gradients and
+combined-gradient launch capacity checks. Physical admission is currently static
+compact half QKV with matching half or FP32 dO; bias and row storage are FP32.
+This is an internal operation contract, not a new public Graph API or dtype.
 
-Follow-up required for apple: the shared internal tensor semantic contract
-is declared, but physical lowering/owner integration is initially SM120 work.
-No NVIDIA schedule or execution evidence transfers. Compiler parser proof is
-not apple numerical or runtime parity.
+Follow-up required for apple: shared internal Graph/Tile registration and
+host-free contract checks do not supply an architecture-owned physical consumer,
+runtime owner or numerical proof. Native lowering and the 120 device cases are
+SM120-only; no NVIDIA schedule or physical result transfers to this backend.
+The public dtype/ABI and this backend's physical selectors are unchanged.
 
-Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/contract/README.md;
-benchmarks/baselines/sm120_native_row_correction_20261016/projection/README.md.
-
-
-
-The new Schedule/Tile/target producer has NVIDIA-only numerical proof.
-Sibling physical execution remains follow-up required; no target schedule or
-GPU result transfers. Shared compiler metadata and contract tests pass.
-
-Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/schedule_target/README.md.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/consumer/README.md;
+prior producer proof: benchmarks/baselines/sm120_native_row_correction_20261016/schedule_target/README.md.
 
 ## SM120-REVERSE-ARTIFACT-REUSE-20261016 — private compiled identity
 

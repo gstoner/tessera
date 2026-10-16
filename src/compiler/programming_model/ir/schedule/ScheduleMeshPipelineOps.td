@@ -710,3 +710,12 @@ def Schedule_SparseMMAOp : Op<ScheduleDialect, "sparse_mma"> {
   let hasVerifier = 1;
   let assemblyFormat = "$a `,` $b `,` $acc `,` $indices attr-dict `:` type($a) `,` type($b) `,` type($acc) `->` type($res)";
 }
+
+// Separate multi-result consumer contract; no legacy checkpoint ABI change.
+def Schedule_AttentionBackwardRowsOp : Op<ScheduleDialect, "attention_backward_rows"> {
+  let summary = "Sealed attention backward consuming a precomputed FP32 row residual";
+  let arguments = (ins Variadic<AnyRankedTensor>:$subjects,
+                       StrAttr:$artifact_hash, DictionaryAttr:$contract);
+  let results = (outs Variadic<AnyRankedTensor>:$scheduled);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}

@@ -6,32 +6,35 @@ target: nvidia_sm120
 last_updated: 2026-10-16
 ---
 
-## SM120-NATIVE-ROW-CORRECTION-20261016 — native residual producer
+## SM120-NATIVE-ROW-CORRECTION-20261016 — native residual producer and consumer
 
 Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
 Synchronization key: SM120-NATIVE-ROW-CORRECTION-20261016.
 
-Implementation in progress. A compiler-internal pure tensor operation defines
-FP32 probability-weighted row correction independently of rounded saved O.
-This is not a public Graph API, new dtype or executable target admission.
-Native AD projection now preserves original pair lineage, frontend/activity
-mappings and source argument properties without rounded O. Physical layouts
-are not admitted by metadata preservation alone.
+Implementation in progress. Private Graph/AD products compute an ordered FP32
+probability-weighted row correction and consume it in backward without rounded
+saved O or a duplicate dLSE subtraction. Source-pair lineage, frontend/activity
+mapping and readonly source properties survive sealed Schedule/Tile replay.
+The new consumer has a distinct pointer ABI, compact requested gradients and
+combined-gradient launch capacity checks. Physical admission is currently static
+compact half QKV with matching half or FP32 dO; bias and row storage are FP32.
+This is an internal operation contract, not a new public Graph API or dtype.
 
-Initial internal tensor contract: 61 host-free compiler/registry cases pass.
-Native AD projection adds 21 cases; the combined projection/legacy/registry
-lane passes 410 cases with zero skips. The sealed Schedule/Tile producer and native target now pass 434 portable
-target/registry cases and 192 RTX5070 device cases (96 new producer, 96 existing
-backward), all zero-skip. Changed-input reuse, independent FP64 row numerics and
-guarded stores pass. Workspace-consuming backward, checked public owner/ABI,
-replay and separate stage/completed-call timing remain in progress. No execution support or schedule default is promoted.
+Parity validated for diagnostic native execution on RTX5070 / SM120: 574
+portable compiler/registry cases and 120 owning-device cases pass, zero skips.
+The 96 full-gradient cases prove changed-input reuse, independent FP64 numerics,
+bitwise inline parity, explicit residual dependence and guarded stores. The 24
+compact64/128-thread cases include dV-only execution with no producer launch and
+poisoned row storage. Producer/consumer use the same stream without an
+intermediate host synchronization.
 
-Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/contract/README.md;
-benchmarks/baselines/sm120_native_row_correction_20261016/projection/README.md.
+Follow-up required: additive prepared C++ ownership and row lifetime, complete
+executable-member serialization/provenance, public frontend stream/snapshot/
+generation/compiler-absent replay, and separate producer/consumer/device/full-call
+benchmarks. No public default, speedup or full five-slice closure is promoted.
 
-
-
-Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/schedule_target/README.md.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/consumer/README.md;
+prior producer proof: benchmarks/baselines/sm120_native_row_correction_20261016/schedule_target/README.md.
 
 ## SM120-REVERSE-ARTIFACT-REUSE-20261016 — private compiled identity
 

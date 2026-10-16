@@ -1,0 +1,139 @@
+{
+  "scope": "native Graph/AD -> sealed multi-result Schedule/Tile -> NVIDIA/LLVM/PTX explicit row-residual consumer with diagnostic resident same-stream execution; public prepared owner/serialization/performance remain open",
+  "parent_producer_commit": "a8bf30dafa97f4468169cb5e52496076659b4478",
+  "source_sha256": {
+    "src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td": "df816cf8eff8d01131fc25918defb116aa73e1b10ed10d7179a0950ee0f651bb",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "88c550dbdbd5933e4bc41758ce24dc104e0482bec7e0c4706a1abb59ba8a2c7a",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "5a2684b1bc022e726c180d6a73bef8993928d4c76c45deef471a65e970e76e6e",
+    "src/compiler/programming_model/lib/NativeAttentionRowCorrection.h": "98926c0b173c7db8262447842b97f017524c50d4d888648f9d5ad1e2c33d528a",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "a2ed93c3de516a54d3c4d6428b4948d80fd4ee33a9d98dc0787b0e430f68e0f7",
+    "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "1a2846a5e7fa8754c7b56db41a6d027d9089471c1fba5eccb2afe5ff4532687a",
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "ce03ad2db5e78f8b8b97c167fd8c9e2ee48c50ff92c99286c01d294169ea370a",
+    "src/compiler/ir/TileOps.cpp": "1363d6127b6c1ff4aaa6005066be2ec79cae6cf5824519ed028525845d3f9cb0",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "83aaa8d81d603afac2d4714f7e6360771167eed539b3146b01d4cdfcd7d888db",
+    "python/tessera/compiler/pass_metadata.py": "cf2f41ac79ae63f33a2620a611a06b702164f11cd066683d0ba78392e5125975",
+    "tests/unit/test_native_attention_backward_rows.py": "4ebbcf515630a804e9ff2336d023048b858c0fe8e582f59ab4d4ef0094b329fc",
+    "tests/unit/test_native_attention_ad_products.py": "f2260895bffd408495819bc9066e2176ef3b83b378556c453ce566b39f53da8a",
+    "tests/device/nvidia/test_native_attention_backward_rows_kernel.py": "3122fa777752591042ce613605afe4a5f645c2cdea9a1d307960fba10b30eb4b",
+    "tests/device/nvidia/test_native_attention_row_correction_kernel.py": "505dc055b42e66dd19f96e757ef13831ff87856e47b60a5e8d8912eec3be5d3e",
+    "tests/device/nvidia/test_saved_lse_half_backward_kernel.py": "6c2dab687ad5317c3d0f5fa7b26bb76f3c8cfd99e82aebe9651345dd771507e9"
+  },
+  "tools": {
+    "tessera-opt": {
+      "path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt",
+      "sha256": "77fa60a6a9653b7d64ff1cabad7408b39db9fd9da9ab3a103489c5d8b456c310"
+    },
+    "tessera-nvidia-opt": {
+      "path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+      "sha256": "4184ec8b025d088a9def3164c6cebac61bd0b84b8940c38bfc7b4a31c22bd9e4"
+    },
+    "mlir-opt": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/llvm-tools/bin/mlir-opt",
+      "sha256": "62a18523fcec89907cd9b0eade4d5976c549d11f85697089766242406ed1c271"
+    },
+    "mlir-translate": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/llvm-tools/bin/mlir-translate",
+      "sha256": "1ab0beb342311021e062480166403962d6981ac1e63162947cd80eb5ecb3a80d"
+    },
+    "llc": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/llvm-tools/bin/llc",
+      "sha256": "81554da92c973d14b3505f8b6ce30eb66d307cbf76c662bf76478e6b5d3bfad6"
+    },
+    "llvm-link": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/llvm-tools/bin/llvm-link",
+      "sha256": "16ced40d94d8e4af05f55d01608d1cb8f89cdc8c7ebf501dd3651588175fd3b5"
+    },
+    "ptxas": {
+      "path": "/usr/local/cuda/bin/ptxas",
+      "sha256": "9c2c084df7eb9be48f0502b6938ce2571679b2a78cad1c564b583bd7d9ea3c50"
+    }
+  },
+  "provider": {
+    "path": "/home/angstorms/scratch/sm120-attention-half-ad-20261016/libtessera_nvidia_ptx_launch.so",
+    "sha256": "1b1804b0805bc8f8a5eeb24a4f8258daa1c62121bc7ce7deea19763ce695849f",
+    "scope": "unchanged resident allocation helper, not a new prepared whole-program owner"
+  },
+  "target": "nvidia_sm120",
+  "architecture": "sm_120",
+  "device": "NVIDIA GeForce RTX 5070, 12.0, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "tests": {
+    "portable": {
+      "passed": 574,
+      "skipped": 0,
+      "failed": 0
+    },
+    "owning_device": {
+      "passed": 120,
+      "skipped": 0,
+      "failed": 0,
+      "full_gradient_cases": 96,
+      "compact_cases": 24
+    }
+  },
+  "receipts": {
+    "consumer-final.xml": 574,
+    "consumer-device.xml": 96,
+    "consumer-compact-device.xml": 24
+  },
+  "coverage": [
+    "FP16/BF16 QKV and matching half/FP32 dO",
+    "GQA/MHA, Sq1, Sq>Sk, Sk129, causal/noncausal, bias and dLSE seed variants",
+    "two changed-root and seed sets per full-gradient compiled image",
+    "full gradients are bitwise equal to original inline backward and agree with independent FP64 oracle",
+    "perturbed row residual shifts Q/K/bias as predicted and leaves dV bitwise unchanged",
+    "same-stream producer -> consumer without intervening host synchronization",
+    "guarded row and gradient stores",
+    "compact Q-only, dV-only and Q/bias outputs at64/128 threads",
+    "dV-only omits producer and leaves poisoned row input untouched",
+    "native source-pair digest agrees between independently projected producer and consumer",
+    "same-typed Schedule result swap, Tile pointer-role swap and policy/hash tampering refused"
+  ],
+  "discovery": [
+    "Initial Schedule mutation used nonexistent SSA names and its generic text comparison only observed a trailing newline. Corrected to swap actual same-typed named results and require real content mutation; full lane then passes."
+  ],
+  "remaining": [
+    "additive prepared C++ owner and private row lifetime",
+    "portable schema and complete all-member image/policy/buffer-lifetime provenance",
+    "public frontend stream/snapshot/generation/compiler-absent replay tests",
+    "separate producer/consumer/device/completed-call timings and interleaved short/long baseline before selection"
+  ],
+  "artifact_sha256": {
+    "build-row-consumer-final.log.gz": "307c46369e52c9a1528d23b8dad204bee86b1de25fbc8762cab1282cd47c7947",
+    "consumer-compact-device.log.gz": "86094304341f9a273e58733b6292e333b6d8810a72f791083c8c8c90334697f9",
+    "consumer-compact-device.xml.gz": "3d2794afba0c2af9206c6075fbde81fe199fa681692d7c86e691a4063e9ca4e7",
+    "consumer-contract-fixed.log.gz": "ca347e05ea20ed4c0bdfecd48f8ab70993204dda52e20b3b9f37ecbe7b36e088",
+    "consumer-contract-fixed.xml.gz": "9b6f4646efa585cf50a027ba6d7be1299a733edb86148160fe19656c20c2d6bd",
+    "consumer-contract.log.gz": "fb81a794b413650a2a44a7106cc479363ed1279d284fa7379a18ff2072af0b56",
+    "consumer-device.log.gz": "cf8282265e81650d678690388f1aedeeee4849ef83dbfe7c9ca21992a4dcb0b8",
+    "consumer-device.xml.gz": "2acc9fe9620becffc3b56f263d4c02c5ebfcc728c64959f17ae72a2f09e07a4c",
+    "consumer-final.log.gz": "d70f4804e2df557713f8912f83b502590f467ee875efccf284ef7f0be4cd769b",
+    "consumer-final.xml.gz": "6af783d7c77d002750c34d1a20218cce3a19efc1085cc493eb965cbad641aecb",
+    "source/python/tessera/compiler/pass_metadata.py.gz": "c1d3ccaaa1179845e8ae1004136d1bf13337f41f27c6e22bc9998bfdcab14eba",
+    "source/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp.gz": "5549900e17ece2713ce636ebc703d946678df95a8d13ff18199a1c4eff277fd4",
+    "source/src/compiler/ir/TileOps.cpp.gz": "60252d713097decfce300e0a517ca6925f66a7e4e964379764f903016090b93f",
+    "source/src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td.gz": "b801cacba9c84272e06a8d5569c083f51a8a6e88f5179df4d93eb24b5cec8dd8",
+    "source/src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td.gz": "9ac2b08736e71e4bb81dd75ce2d39e8036b7dd1e7e042725331dfa926f19fa0f",
+    "source/src/compiler/programming_model/lib/NativeAttentionRowCorrection.h.gz": "0088593fe4a2a9b707b1910e9815eefcf617cece93d64a10ea892dc0930b6be3",
+    "source/src/compiler/programming_model/lib/PMPasses.cpp.gz": "0f93ca186f16bb9e0be476257c85a1246461d1298b568e3ddf88865f913a203d",
+    "source/src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td.gz": "fcaf805ba60341259c5fa0ebaf404f7b63a9f01c43ff32e26bfbb100e9e3708e",
+    "source/src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp.gz": "42d8f730d507e1fd11f8f78fbf07dc0f7d1e483ec2af7342f413f270489a0332",
+    "source/src/transforms/lib/AutodiffPairedPass.cpp.gz": "7fa0629a8acf4ba7638fe1388a13681d163d2fd9777e264c1edaa5fd2626fbd4",
+    "source/tests/device/nvidia/test_native_attention_backward_rows_kernel.py.gz": "1b2dfb2bdd28dc9a1dea3aff055cc24fb4d7387d639f78be21b57829735c34fc",
+    "source/tests/device/nvidia/test_native_attention_row_correction_kernel.py.gz": "12d8503f109d00a5656a5e9c8a5f054c40ad4a5c0e539a48fa1d9e040019966d",
+    "source/tests/device/nvidia/test_saved_lse_half_backward_kernel.py.gz": "0efa4d4bb30e9059065caf03b66dce6a210266ed9f19e641d42ad3e5fd4ac13c",
+    "source/tests/unit/test_native_attention_ad_products.py.gz": "3c967d5caadf37f7c144211218a803df372b1d6fc653e41fb49c761c1a0da149",
+    "source/tests/unit/test_native_attention_backward_rows.py.gz": "f105588e9fa712a81c215d3324189c07c2fb00dd546a9f6b2c761ec17e08d240",
+    "consumer-audit-final.log.gz": "5520f878d183cb6c4aa45fd41902735982bd4ff7fd1459ec3c583bc449aef76c",
+    "consumer-audit-final.xml.gz": "add5f101ff3a8f7426f95f9bb6b8363efc83fd4b12df2f3915f8472c9aab9176",
+    "generated-consumer.log.gz": "093a61b7eada152914b21e3316e74e669dc5aca86362004baa53874216e10d5e",
+    "consumer-generated-check.log.gz": "2141caf45a37d068b822b906fece7eeb58ff5e53aa9d4502db51a0533db6b98d",
+    "graph-consumer.log.gz": "a5f6136a59487ca9cee8cde97a991d773f2688e017c7403f7c64b1ae27133e71"
+  },
+  "documentation_gates": {
+    "audit_docs": 11,
+    "compiler_plan": "passed",
+    "generated_docs": "all registered views regenerated;3 changed-view drift checks passed",
+    "graphify": "AST-only refresh completed"
+  },
+  "proof_guards": "ci_require_executed passed separately on portable574,full-device96 andcompact-device24 receipts"
+}

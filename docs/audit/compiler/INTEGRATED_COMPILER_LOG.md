@@ -12748,3 +12748,24 @@ and separate stage/device/completed-call timings. Diagnostic producer execution
 is not public reverse integration, performance admission or five-slice closure.
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/schedule_target/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-16 — native backward consumes explicit row residual
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-NATIVE-ROW-CORRECTION-20261016.
+Outcome: original Graph/native paired AD now projects a distinct typed
+backward_rows product with FP32 residual input instead of rounded O and a
+second seed subtraction. Source-pair/frontend/activity/readonly facts survive
+sealed multi-result Schedule replay and distinct native Tile/target lowering.
+Complete result order, physical bindings and combined launch capacity are checked.
+Portable compiler/legacy AD/mandatory registries pass574 cases, zero skips.
+RTX5070 passes120 cases, zero skips:96 full-gradient changed-input/bitwise inline
+controls and24 compact64/128-thread cases. Residual perturbation produces the
+predicted Q/K/bias change; dV remains unchanged. Value-only activity omits the
+producer and ignores poisoned residual storage. All guarded stores pass.
+Remaining: additive checked prepared ownership and row lifetime, full executable-
+member serialization/provenance, public frontend stream/snapshot/generation and
+compiler-absent replay, and separate stage/completed-call benchmarks. This is
+native diagnostic producer/consumer execution, not public route or goal closure.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/consumer/README.md.
+<!-- entry-fields:end -->

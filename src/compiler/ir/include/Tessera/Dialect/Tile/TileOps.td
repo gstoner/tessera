@@ -1124,6 +1124,14 @@ def Tile_CoalitionButterflyKernelOp : Tile_Op<"coalition_butterfly_kernel"> {
 
 // One thread computes one f32[B,Hq,Sq] correction row from saved LSE.
 // Inputs: dO,Q,K,V,[bias],row_lse,[row_seed],row_result, then seven i64 dims.
+def Tile_AttentionBackwardRowsKernelOp : Tile_Op<"attention_backward_rows_kernel"> {
+  let summary = "Native half attention reverse using an explicit FP32 row residual";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` type(operands)";
+}
+
 def Tile_AttentionRowCorrectionKernelOp : Tile_Op<"attention_row_correction_kernel"> {
   let summary = "Launch-level typed probability-weighted f32 row correction";
   let arguments = (ins Variadic<AnyType>:$inputs);

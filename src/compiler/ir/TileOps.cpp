@@ -2358,8 +2358,7 @@ LogicalResult DepthAttentionKernelOp::verify() {
   return success();
 }
 
-LogicalResult AttentionRowCorrectionKernelOp::verify() {
-  Operation *op = getOperation();
+static LogicalResult verifyAttentionRowKernel(Operation *op, bool backward) {
   auto bias = op->getAttrOfType<BoolAttr>("bias");
   auto seeded = op->getAttrOfType<BoolAttr>("lse_cotangent");
   auto storage = op->getAttrOfType<StringAttr>("storage");
@@ -2377,45 +2376,69 @@ LogicalResult AttentionRowCorrectionKernelOp::verify() {
       !output || (output.getValue() != storage.getValue() && output.getValue() != "f32") ||
       !row || row.getValue() != "f32" || !accum || accum.getValue() != "f32" ||
       !correction || correction.getValue() != "probability_dot_v_f32_v1")
-    return emitOpError("row correction requires its explicit typed f32 probability policy");
+    return op->emitOpError("row correction requires its explicit typed f32 probability policy");
   if (!scale || !scale.getType().isF32() || !scale.getValue().isFinite() ||
       scale.getValue().isNegative() || scale.getValue().isZero())
-    return emitOpError("row correction requires finite positive f32 scale");
+    return op->emitOpError("row correction requires finite positive f32 scale");
   if (!shape || shape.size() != 7 ||
       llvm::any_of(shape.asArrayRef(), [](int64_t x) { return x <= 0; }) || shape[1] % shape[2])
-    return emitOpError("row correction requires positive B/Hq/Hkv/Sq/Sk/D/Dv and divisible query heads");
+    return op->emitOpError("row correction requires positive B/Hq/Hkv/Sq/Sk/D/Dv and divisible query heads");
   if (!threads || !threads.getType().isInteger(64) ||
-      (threads.getInt() != 32 && threads.getInt() != 64 && threads.getInt() != 128))
-    return emitOpError("row correction block threads must be 32, 64 or 128");
+      ((backward || threads.getInt() != 32) && threads.getInt() != 64 && threads.getInt() != 128))
+    return op->emitOpError("row correction block threads must be 32, 64 or 128");
   int64_t expectedBytes = 4;
   for (unsigned axis : {0u, 1u, 3u}) {
     if (expectedBytes > std::numeric_limits<int64_t>::max() / shape[axis])
-      return emitOpError("row correction row byte span overflows i64");
+      return op->emitOpError("row correction row byte span overflows i64");
     expectedBytes *= shape[axis];
   }
   if (!bytes || !bytes.getType().isInteger(64) || bytes.getInt() != expectedBytes ||
       expectedBytes / 4 > int64_t(INT32_MAX) * threads.getInt())
-    return emitOpError("row correction byte span or launch-grid capacity disagrees");
+    return op->emitOpError("row correction byte span or launch-grid capacity disagrees");
   unsigned pointers = 6 + unsigned(bias.getValue()) + unsigned(seeded.getValue());
-  if (getInputs().size() != pointers + 7)
-    return emitOpError("row correction expects exact input/result pointers and seven i64 dimensions");
-  for (Value value : getInputs().take_front(pointers))
+  auto activity = op->getAttrOfType<DenseI64ArrayAttr>("gradient_activity");
+  if (op->hasAttr("gradient_activity") && (!activity || activity.size() != 3 + unsigned(bias.getValue()) ||
+      llvm::any_of(activity.asArrayRef(), [](int64_t x) { return x != 0 && x != 1; }) ||
+      llvm::none_of(activity.asArrayRef(), [](int64_t x) { return x == 1; })))
+    return op->emitOpError("row correction gradient activity must be nonempty binary primal roles");
+  if (backward) {
+    auto usage = op->getAttrOfType<StringAttr>("row_correction_usage");
+    auto biasGradient = op->getAttrOfType<BoolAttr>("bias_gradient");
+    if (!usage || usage.getValue() != "external_input_v1" || !biasGradient || biasGradient.getValue() != bias.getValue())
+      return op->emitOpError("row-corrected backward requires explicit external residual and matching physical bias gradient");
+    unsigned outputs = 3 + unsigned(bias.getValue());
+    if (auto compactAttr = op->getAttr("gradient_output")) {
+      auto compact = dyn_cast<StringAttr>(compactAttr);
+      auto launch = op->getAttrOfType<StringAttr>("gradient_launch");
+      if (!compact || compact.getValue() != "compact_v1" || !activity ||
+          !launch || (launch.getValue() != "packed_v1" && launch.getValue() != "logical_v1"))
+        return op->emitOpError("row-corrected backward compact outputs require binary activity and packed/logical launch");
+      outputs = 0;
+      for (int64_t bit : activity.asArrayRef()) outputs += bit;
+    } else if (op->hasAttr("gradient_launch")) {
+      return op->emitOpError("row-corrected backward launch override requires compact output");
+    }
+    pointers = 6 + unsigned(bias.getValue()) + outputs;
+  }
+  if (op->getOperands().size() != pointers + 7)
+    return op->emitOpError("row correction expects exact input/result pointers and seven i64 dimensions");
+  for (Value value : op->getOperands().take_front(pointers))
     if (auto pointer = dyn_cast<LLVM::LLVMPointerType>(value.getType());
         !pointer || pointer.getAddressSpace() != 0)
-      return emitOpError("row correction data/result operands require the generic opaque LLVM pointer ABI");
-  for (Value value : getInputs().drop_front(pointers))
+      return op->emitOpError("row correction data/result operands require the generic opaque LLVM pointer ABI");
+  for (Value value : op->getOperands().drop_front(pointers))
     if (!value.getType().isInteger(64))
-      return emitOpError("row correction dimensions must be i64");
+      return op->emitOpError("row correction dimensions must be i64");
   auto physicalBias = op->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
   if (bias.getValue()) {
     if (!physicalBias || physicalBias.size() != 4)
-      return emitOpError("row correction requires its physical bias shape");
+      return op->emitOpError("row correction requires its physical bias shape");
     SmallVector<int64_t, 4> scores{shape[0], shape[1], shape[3], shape[4]};
     for (unsigned i = 0; i < 4; ++i)
       if (physicalBias[i] != 1 && physicalBias[i] != scores[i])
-        return emitOpError("row correction bias shape must broadcast to logical scores");
+        return op->emitOpError("row correction bias shape must broadcast to logical scores");
   } else if (op->hasAttr("bias_shape")) {
-    return emitOpError("row correction bias shape requires a bias input");
+    return op->emitOpError("row correction bias shape requires a bias input");
   }
   auto spanFits = [&](int64_t width, ArrayRef<int64_t> dims) {
     for (int64_t dim : dims) {
@@ -2429,35 +2452,63 @@ LogicalResult AttentionRowCorrectionKernelOp::verify() {
       !spanFits(2, {shape[0], shape[2], shape[4], shape[6]}) ||
       !spanFits(output.getValue() == "f32" ? 4 : 2, {shape[0], shape[1], shape[3], shape[6]}) ||
       (physicalBias && !spanFits(4, physicalBias.asArrayRef())))
-    return emitOpError("row correction physical input byte span overflows i64");
+    return op->emitOpError("row correction physical input byte span overflows i64");
+  if (backward) {
+    int64_t total = 0;
+    int64_t capacity = int64_t(INT32_MAX) * threads.getInt();
+    auto addElements = [&](ArrayRef<int64_t> dims) {
+      int64_t count = 1;
+      for (int64_t dim : dims) {
+        if (count > capacity / dim) return false;
+        count *= dim;
+      }
+      if (count > capacity - total) return false;
+      total += count;
+      return true;
+    };
+    if (!addElements({shape[0], shape[1], shape[3], shape[5]}) ||
+        !addElements({shape[0], shape[2], shape[4], shape[5]}) ||
+        !addElements({shape[0], shape[2], shape[4], shape[6]}) ||
+        (physicalBias && !addElements(physicalBias.asArrayRef())))
+      return op->emitOpError("row-corrected backward output launch exceeds grid capacity");
+  }
   for (NamedAttribute attr : op->getAttrs()) {
     StringRef name = attr.getName().strref();
     if (name != "shape" && name != "storage" && name != "output_storage" &&
         name != "row_storage" && name != "accum" && name != "row_correction" &&
         name != "scale" && name != "causal" && name != "bias" &&
         name != "lse_cotangent" && name != "row_bytes" && name != "block_threads" &&
-        name != "bias_shape")
-      return emitOpError("row correction has an unsupported physical policy attribute: ") << name;
+        name != "bias_shape" && name != "gradient_activity" &&
+        (!backward || (name != "row_correction_usage" && name != "bias_gradient" &&
+                       name != "gradient_output" && name != "gradient_launch")))
+      return op->emitOpError("row correction has an unsupported physical policy attribute: ") << name;
   }
   if (auto fn = op->getParentOfType<LLVM::LLVMFuncOp>()) {
     if (auto contract = fn->getAttrOfType<DictionaryAttr>("tessera.native_contract")) {
       auto family = contract.getAs<StringAttr>("family");
       auto hash = fn->getAttrOfType<StringAttr>("tessera.schedule_hash");
-      if (!family || family.getValue() != "attention_row_correction" || !hash)
-        return emitOpError("row correction Tile parent has a different native contract");
+      if (!family || family.getValue() != (backward ? "attention_backward_rows" : "attention_row_correction") || !hash)
+        return op->emitOpError("row correction Tile parent has a different native contract");
       std::string text; llvm::raw_string_ostream os(text); contract.print(os); os.flush();
       auto actual = llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(text)), true);
       if (hash.getValue() != actual)
-        return emitOpError("row correction Tile parent Schedule hash disagrees");
+        return op->emitOpError("row correction Tile parent Schedule hash disagrees");
       for (NamedAttribute attr : op->getAttrs())
         if (contract.get(attr.getName()) != attr.getValue())
-          return emitOpError("row correction Tile policy differs from the sealed native contract");
+          return op->emitOpError("row correction Tile policy differs from the sealed native contract");
       if (!llvm::hasSingleElement(fn.getBody()) ||
-          !llvm::equal(getInputs(), fn.getBody().front().getArguments()))
-        return emitOpError("row correction Tile input/result order differs from the sealed entry ABI");
+          !llvm::equal(op->getOperands(), fn.getBody().front().getArguments()))
+        return op->emitOpError("row correction Tile input/result order differs from the sealed entry ABI");
     }
   }
   return success();
+}
+
+LogicalResult AttentionRowCorrectionKernelOp::verify() {
+  return verifyAttentionRowKernel(getOperation(), false);
+}
+LogicalResult AttentionBackwardRowsKernelOp::verify() {
+  return verifyAttentionRowKernel(getOperation(), true);
 }
 
 LogicalResult AttentionBackwardKernelOp::verify() {

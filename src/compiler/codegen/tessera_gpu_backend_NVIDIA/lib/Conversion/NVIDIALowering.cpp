@@ -2906,30 +2906,31 @@ static LogicalResult materializeSm120AttentionRowCorrectionKernel(
 }
 
 static LogicalResult materializeSm120AttentionBackwardKernel(
-    tessera::tile::AttentionBackwardKernelOp kernel, OpBuilder &builder) {
-  Operation *op = kernel.getOperation();
-  ValueRange in = kernel.getInputs();
+    Operation *op, OpBuilder &builder, bool externalRows = false) {
+  if (externalRows && failed(cast<tessera::tile::AttentionBackwardRowsKernelOp>(op).verify()))
+    return failure();
+  ValueRange in = op->getOperands();
   auto biasAttr = op->getAttrOfType<BoolAttr>("bias");
   auto storage = op->getAttrOfType<StringAttr>("storage");
   auto accum = op->getAttrOfType<StringAttr>("accum");
   auto scaleAttr = op->getAttrOfType<FloatAttr>("scale");
   auto causalAttr = op->getAttrOfType<BoolAttr>("causal");
-  auto windowLeftAttr = op->getAttrOfType<IntegerAttr>("window_left");
-  auto windowRightAttr = op->getAttrOfType<IntegerAttr>("window_right");
-  auto softcapAttr = op->getAttrOfType<FloatAttr>("softcap");
-  auto dropoutAttr = op->getAttrOfType<FloatAttr>("dropout_p");
-  auto dropoutSeedAttr = op->getAttrOfType<IntegerAttr>("dropout_seed");
-  auto route = op->getAttrOfType<StringAttr>("route");
-  auto deterministic = op->getAttrOfType<BoolAttr>("deterministic");
-  auto workspace = op->getAttrOfType<IntegerAttr>("workspace_bytes");
-  auto workspaceOwner = op->getAttrOfType<StringAttr>("workspace_owner");
-  auto lseCheckpoint = op->getAttrOfType<StringAttr>("lse_checkpoint");
+  auto windowLeftAttr = (externalRows ? builder.getI64IntegerAttr(-1) : op->getAttrOfType<IntegerAttr>("window_left"));
+  auto windowRightAttr = (externalRows ? builder.getI64IntegerAttr(-1) : op->getAttrOfType<IntegerAttr>("window_right"));
+  auto softcapAttr = (externalRows ? builder.getF32FloatAttr(0) : op->getAttrOfType<FloatAttr>("softcap"));
+  auto dropoutAttr = (externalRows ? builder.getF32FloatAttr(0) : op->getAttrOfType<FloatAttr>("dropout_p"));
+  auto dropoutSeedAttr = (externalRows ? builder.getI64IntegerAttr(0) : op->getAttrOfType<IntegerAttr>("dropout_seed"));
+  auto route = (externalRows ? builder.getStringAttr("deterministic_direct") : op->getAttrOfType<StringAttr>("route"));
+  auto deterministic = (externalRows ? builder.getBoolAttr(true) : op->getAttrOfType<BoolAttr>("deterministic"));
+  auto workspace = (externalRows ? builder.getI64IntegerAttr(0) : op->getAttrOfType<IntegerAttr>("workspace_bytes"));
+  auto workspaceOwner = (externalRows ? builder.getStringAttr("output_element") : op->getAttrOfType<StringAttr>("workspace_owner"));
+  auto lseCheckpoint = (externalRows ? builder.getStringAttr("saved") : op->getAttrOfType<StringAttr>("lse_checkpoint"));
   const bool hasBias = biasAttr && biasAttr.getValue();
   const bool hasSavedLse = lseCheckpoint && lseCheckpoint.getValue() == "saved";
   auto savedOutputAttr = op->getAttrOfType<BoolAttr>("saved_output");
-  const bool hasSavedOutput = savedOutputAttr && savedOutputAttr.getValue();
+  const bool hasSavedOutput = externalRows || (savedOutputAttr && savedOutputAttr.getValue());
   auto lseCotangentAttr = op->getAttrOfType<BoolAttr>("lse_cotangent");
-  const bool hasLseCotangent = lseCotangentAttr && lseCotangentAttr.getValue();
+  const bool hasLseCotangent = !externalRows && lseCotangentAttr && lseCotangentAttr.getValue();
   if (op->hasAttr("lse_cotangent") && !lseCotangentAttr)
     return op->emitError("lse_cotangent must be boolean");
   auto biasGradientAttr = op->getAttrOfType<BoolAttr>("bias_gradient");
@@ -3009,10 +3010,11 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
                          : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
   unsigned storageAlignment = (f16Storage || bf16Storage) ? 2 : 4;
   const unsigned savedOutputIndex = 4;
-  const unsigned biasIndex = 4 + unsigned(hasSavedOutput);
+  const unsigned biasIndex = 4 + unsigned(hasSavedOutput && !externalRows);
   const unsigned lseIndex = biasIndex + unsigned(hasBias);
   const unsigned lseCotangentIndex = lseIndex + unsigned(hasSavedLse);
-  const unsigned outputBase = lseCotangentIndex + unsigned(hasLseCotangent);
+  const unsigned rowCorrectionIndex = lseIndex + 1;
+  const unsigned outputBase = lseCotangentIndex + unsigned(hasLseCotangent) + unsigned(externalRows);
   auto gradientIndex = [&](unsigned role) {
     unsigned index = outputBase;
     for (unsigned i = 0; i < role; ++i) index += !compact || gradientActive(i);
@@ -3040,7 +3042,8 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
     bool lseSeedPointer = hasLseCotangent && pointer == lseCotangentIndex;
     bool wideOutputPointer = halfSaved && outputStorage.getValue() == "f32" &&
         (pointer == 0 || pointer == savedOutputIndex);
-    bool wide = biasPointer || lsePointer || lseSeedPointer || wideOutputPointer;
+    bool wide = biasPointer || lsePointer || lseSeedPointer || wideOutputPointer ||
+        (externalRows && pointer == rowCorrectionIndex);
     Type type = wide ? Type(f32) : storageType;
     unsigned alignment = wide ? 4 : storageAlignment;
     Value ptr = LLVM::GEPOp::create(builder, loc, in[pointer].getType(), type,
@@ -3230,6 +3233,11 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
           mulI64(builder, loc,
               addI64(builder, loc, mulI64(builder, loc, b, Hq), hq), Sq), q);
       Value savedLse = load(lseIndex, rowIndex);
+      if (externalRows) {
+        Value onef = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.0f));
+        // The producer already subtracted dLSE. Never subtract a seed twice.
+        return {savedLse, onef, load(rowCorrectionIndex, rowIndex)};
+      }
       // Half O has already rounded at its public store. Recompute sum(P*dP)
       // in f32 below instead of feeding that rounding into the row correction.
       if (hasSavedOutput && !halfSaved) {
@@ -3306,7 +3314,7 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
       builder, loc, i64, NVVM::ThreadIdXOp::create(builder, loc, i32));
   Value linear = addI64(builder, loc,
       mulI64(builder, loc, block, i64Constant(builder, loc,
-          compact ? op->getAttrOfType<IntegerAttr>("block_threads").getInt() : 128)), thread);
+          (compact || externalRows) ? op->getAttrOfType<IntegerAttr>("block_threads").getInt() : 128)), thread);
   Value dqCount = mulI64(builder, loc, mulI64(builder, loc,
       mulI64(builder, loc, B, Hq), Sq), D);
   Value dkCount = mulI64(builder, loc, mulI64(builder, loc,
@@ -5732,6 +5740,7 @@ struct LowerTileToNVIDIAPass
                tessera::tile::PackedLoadOp>()) ||
           name == "tile.attention_kernel" ||
           name == "tile.attention_row_correction_kernel" ||
+          name == "tile.attention_backward_rows_kernel" ||
           name == "tile.attention_backward_kernel" ||
           name == "tile.training_kernel" ||
           name == "tile.paged_kv_read_kernel" ||
@@ -6058,10 +6067,21 @@ struct LowerTileToNVIDIAPass
         continue;
       }
 
+      if (isTileOp(op, "tile.attention_backward_rows_kernel")) {
+        if (smVersion != kConsumerBlackwellSM ||
+            failed(materializeSm120AttentionBackwardKernel(op, builder, true))) {
+          if (smVersion != kConsumerBlackwellSM)
+            op->emitError("tile.attention_backward_rows_kernel requires sm_120");
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
+
       if (isTileOp(op, "tile.attention_backward_kernel")) {
         if (smVersion < kConsumerBlackwellSM ||
             failed(materializeSm120AttentionBackwardKernel(
-                cast<tessera::tile::AttentionBackwardKernelOp>(op), builder))) {
+                op, builder))) {
           if (smVersion < kConsumerBlackwellSM)
             op->emitError(
                 "tile.attention_backward_kernel currently requires sm_120");

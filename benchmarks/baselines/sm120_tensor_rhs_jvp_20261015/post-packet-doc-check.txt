@@ -1,0 +1,1 @@
+ok: 4 generated doc(s) in sync

@@ -5,6 +5,141 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## W11-ACTIVE-SOURCE-20261015 — source-active row JVP packages
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-ACTIVE-SOURCE-20261015.
+
+PR951 review: shared eager normalization rejects explicitly narrower
+accumulators, matching native admission. This is shared semantic validation;
+the NVIDIA profiling correction does not change this backend's physical ABI
+or establish new exact-device parity.
+
+Follow-up required independently on gfx1201 and gfx1151. Shared canonical
+matmul output_dtype inference and explicit eager RMSNorm precision apply. The
+new scalar Tile views and two-result row Schedule contract have only an SM120
+physical consumer here; no HIP producer route or sibling device result is
+implied. Retain the owning ROCm ingest, route and performance obligations.
+
+Contract: docs/spec/ir/source_active_row_jvp.md.
+Evidence: benchmarks/baselines/sm120_active_source_jvp_runtime_20261015/README.md.
+
+## NORM-AD-ACCUM-20261015 — native normalization derivative precision
+
+Owner AD-FWD-CORE-1 / AD-HIGHER-1 / NUMPOL-CARRIER-1.
+Synchronization key: NORM-AD-ACCUM-20261015.
+
+Native RMSNorm/LayerNorm JVP/VJP preserve explicitly wider accumulator
+working types and round returned storage values after derivative arithmetic.
+Dynamic leading seed extents are guarded before reads; distinct permuted
+affine root arguments retain their original derivative roles.
+Unspecified accumulator behavior is preserved. Conservative reverse-mode
+numeric-policy provenance debt remains open.
+
+Follow-up required on gfx1201/gfx1151: shared AD arithmetic changes do not provide HIP producer packages or architecture-specific evidence; retain existing ROCm route/performance obligations.
+
+Contract: docs/spec/ir/normalization_ad_accumulator_policy.md.
+Evidence: benchmarks/baselines/native_normalization_ad_accum_20261015/README.md.
+
+Frozen 861f4ad6b passes the full non-slow unit gate on Super-Bear WSL:
+26,392 passed, 7,676 skipped and 876 deselected. Matching LLVM/MLIR 23.1.1
+core/ROCm tools and the repaired missing-optimizer lit gate are recorded in
+the packet. This is host/compiler proof for the committed arithmetic fix;
+later isolated candidates retain separate certificates.
+
+
+
+## W11-TENSOR-RHS-JVP-20261015 — frozen full regression
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+
+The clean fc712bfd6 public paired artifact/replay source passes the full
+non-slow tests/unit gate on Super-Bear WSL: 26,269 passed, 7,700 skipped and
+876 deselected. LLVM/MLIR23.1.1 and the owning RTX5070 provider/device are
+recorded; this is not a sibling hardware certificate. Earlier red partitioned
+results remain historical. The separate precision-policy prototype is not
+part of this frozen source or certificate.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.
+
+
+## W11-TENSOR-RHS-JVP-20261015 — public artifact dispatch
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+
+Not applicable to rocm physical execution: the shared executor table
+only resolves the already-declared exact SM120 paired row. This adds no
+sibling admission, native ABI or schedule. Parent target validation
+prevents evidence relabeling. The bounded pure certificate cache retains no device allocation; it does
+not change sibling execution. Sibling composed AD remains follow-up required
+with its own native lowering and exact-device proof.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.
+
+
+## W11-TENSOR-RHS-JVP-20261015 — portable paired replay
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+
+Not applicable to rocm execution: this schema serializes only the static
+SM120 two-output native owner. No sibling provider, physical schedule or
+target admission changes. Future parity requires its own native ABI and
+exact-device proof; NVIDIA timings do not establish sibling support.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_portable_20261015/README.md.
+
+## W11-TENSOR-RHS-JVP-20261015 — native paired execution
+
+Integration follow-through: ReLU now has an authored derivative proof contract and a native JVP/adjoint directional-duality witness. The paired specification has its required date. All 53 proof/spec/freshness guards pass without weakening admission. Parity validated on owning RX9070XT/gfx1201: rebuilt LLVM/MLIR 23.1.1 core/ROCm tools pass 463 combined shared and existing NVFP4 route/ownership/lifetime/replay guards. This does not admit the new SM120 paired program on HIP or transfer CUDA timings; gfx1151 physical proof is separate.
+Evidence: benchmarks/baselines/sm120_shared_rocm_parity_20261015/README.md. Broad NVIDIA reconciliation: the frozen sweep has 26,021 passes and 74 failures; all 74 pass on f2162522c with the proof/date repair and complete LLVM tools. A further 100 owning RTX5070 program/proof/audit checks pass. This is partitioned regression evidence, not a single green full-sweep certificate; no sibling physical result is inferred.
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+Native v7 tensor export outlines the actual RHS-linear paired Graph SSA,
+retains original/paired Graph witnesses and shared-edge last-use through both
+matmul reads, and exports two returned f32 output IDs. Independently compiled
+Schedule/Tile/LLVM/PTX members bind to a distinct sealed C++ program owner.
+The public named RMSNorm -> ReLU -> matmul RHS JVP now executes for f16/BF16;
+Python authors no derivative program and submits no member kernels.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_20261015/README.md;
+docs/spec/ir/sm120_paired_tensor_program_contract.md.
+
+Shared scaled/NVFP4 export controls are assessed independently on the WSL compiler; no new ROCm device proof is claimed. Follow-up required for the sibling composed normalization/activation AD consumers. Existing gfx1201 scale-program semantics and gfx1151/gfx1201 physical schedules remain separate; no HIP ABI is changed.
+
+## W11-RELU-AD-20261015 — native Graph tangent integration
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-RELU-AD-20261015.
+Native MLIR ReLU now implements TangentInterface by reusing its strict-positive
+adjoint predicate; real f16/bf16/f32/f64 storage and a direct symbolic ReLU
+contract are covered. The named RMSNorm -> ReLU -> matmul now emits active
+A/B/A+B paired Graph IR in f16 and bf16. Shared gates pass 469 tests, including
+three independent FP32 composed directional oracles and four target provenance
+guards. Graph IR proof does not imply an executable native AD package.
+Evidence: benchmarks/baselines/native_relu_ad_20261015/README.md.
+
+Follow-up required for composed gfx1151/gfx1201 AD consumers; no HIP/WMMA arithmetic, image-key or runtime ABI change. Shared Graph transformation and provenance guards are assessed; encoded scale-product admissions retain their independent contracts.
+
+## W11-RELU-FLAT-20261015 — optional native activation schedule
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Synchronization key: W11-RELU-FLAT-20261015.
+Captured-profile assessment: not applicable to rocm physical execution.
+The new API is CUDA-only measurement of a sealed NVIDIA host frame; it adds no
+rocm runtime entry, arithmetic or timing claim. Shared runtime-ABI and
+generated-view gates assess the added native symbol without transferring
+physical results.
+Native Graph/Schedule/Tile carries explicit serial or flat_128 ReLU;
+NVIDIA LLVM/NVVM maps adjacent stored elements to adjacent warp lanes.
+The FP16/BF16 NaN-payload and signed-zero policy is unchanged. Hashed
+symbols and descriptor geometry distinguish mappings. Native launchers
+use checked element capacity; prepared providers negotiate flat support
+before owner allocation. Serial remains the default and A/B control.
+Not applicable to gfx1151/gfx1201 physical execution: no HIP emitter or WMMA policy changes. Shared IR drift gates remain required; FP8/MXFP8/MXFP4 and W8A8 obligations retain their owning evidence.
+Evidence: benchmarks/baselines/sm120_relu_flat_20261015/README.md;
+docs/spec/ir/sm120_activation_schedule_tile_contract.md.
+No default performance promotion or five-slice closure claim.
+
 ## NVFP4-NATIVE-MULTI-OUTPUT-20261015 — native producer/product ownership
 
 Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.

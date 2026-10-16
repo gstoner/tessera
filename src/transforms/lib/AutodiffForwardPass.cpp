@@ -8,6 +8,7 @@
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/Builders.h"
@@ -538,13 +539,32 @@ class AutodiffForwardPass
   void getDependentDialects(mlir::DialectRegistry &registry) const override {
     registry.insert<tessera::attn::TesseraAttnDialect,
                     tessera::tile::TesseraTileDialect>();
-    registry.insert<mlir::arith::ArithDialect, mlir::func::FuncDialect,
+    registry.insert<mlir::cf::ControlFlowDialect, mlir::arith::ArithDialect, mlir::func::FuncDialect,
                     mlir::scf::SCFDialect, mlir::tensor::TensorDialect,
                     mlir::math::MathDialect, mlir::gpu::GPUDialect, mlir::LLVM::LLVMDialect, mlir::memref::MemRefDialect>();
   }
 
   void runOnOperation() override {
     mlir::ModuleOp module = getOperation();
+    // Select an existing native export without differentiating its parent a
+    // second time. The projection verifies typed member lineage/body seals.
+    if (exportScaledProgram && selectScaledMember >= 0 &&
+        module->hasAttr("tessera.native.sm120_tensor_program")) {
+      if (exportScaledPrimal || emitStorageChild || exportHVP || exportAttentionJVP) {
+        module.emitError("existing SM120 member projection conflicts with another export");
+        return signalPassFailure();
+      }
+      if (mlir::failed(mlir::verify(module)) ||
+          mlir::failed(projectNativeScaledMatmulMember(module, selectScaledMember)))
+        signalPassFailure();
+      return;
+    }
+    std::string originalProgramSource;
+    if (exportScaledProgram) {
+      llvm::raw_string_ostream stream(originalProgramSource);
+      module.print(stream); stream.flush();
+      originalProgramSource += "\n";
+    }
     llvm::SmallVector<mlir::func::FuncOp> forwards;
     llvm::SmallVector<mlir::func::FuncOp> emittedHVPs;
     module.walk([&](mlir::func::FuncOp func) {
@@ -626,6 +646,53 @@ class AutodiffForwardPass
         forward.emitError("tessera-autodiff-forward: requires one defined block");
         return signalPassFailure();
       }
+      // This direct pointwise product needs no extent-dependent constants,
+      // broadcasting or zero materialization. Keep symbolic admission tied to
+      // that verified dataflow; other dynamic families retain their contracts.
+      bool symbolicRelu = false;
+      if (forward.getNumArguments() == 1 && forward.getNumResults() == 1 &&
+          forward.getBody().front().getOperations().size() == 2) {
+        auto relu = mlir::dyn_cast<ReluOp>(forward.getBody().front().front());
+        auto ret = mlir::dyn_cast<mlir::func::ReturnOp>(forward.getBody().front().back());
+        symbolicRelu = relu && ret && ret.getNumOperands() == 1 &&
+            relu.getX() == forward.getArgument(0) &&
+            relu.getX().getType() == relu.getY().getType() &&
+            ret.getOperand(0) == relu.getY();
+      }
+
+      // Direct row normalization derives all symbolic leading extents from x.
+      // Keep the reduction/channel extent static and affine operands explicit.
+      bool symbolicNormalization = false;
+      if (forward.getNumResults() == 1 &&
+          forward.getBody().front().getOperations().size() == 2) {
+        auto &op = forward.getBody().front().front();
+        auto ret = mlir::dyn_cast<mlir::func::ReturnOp>(
+            forward.getBody().front().back());
+        if (mlir::isa<RmsNormOp, LayerNormOp>(op) &&
+            op.getNumOperands() == forward.getNumArguments() &&
+            op.getNumResults() == 1 && ret && ret.getNumOperands() == 1 &&
+            ret.getOperand(0) == op.getResult(0)) {
+          auto x = mlir::dyn_cast<mlir::RankedTensorType>(
+              op.getOperand(0).getType());
+          bool valid = x && x.getRank() == 2 && !x.getEncoding() &&
+              !x.isDynamicDim(1) && x.getDimSize(1) > 0 &&
+              op.getResult(0).getType() == x;
+          llvm::SmallDenseSet<unsigned> directArguments;
+          for (auto [index, value] : llvm::enumerate(op.getOperands())) {
+            auto argument = mlir::dyn_cast<mlir::BlockArgument>(value);
+            valid &= argument &&
+                argument.getOwner() == &forward.getBody().front() &&
+                directArguments.insert(argument.getArgNumber()).second;
+            if (index == 0 || !valid) continue;
+            auto channel = mlir::dyn_cast<mlir::RankedTensorType>(value.getType());
+            valid &= channel && channel.getRank() == 1 &&
+                channel.hasStaticShape() && !channel.getEncoding() &&
+                channel.getDimSize(0) == x.getDimSize(1) &&
+                channel.getElementType() == x.getElementType();
+          }
+          symbolicNormalization = valid;
+        }
+      }
       bool boundedAttentionExport = false;
       if (exportAttentionJVP) {
         auto &attention = forward.getBody().front().front();
@@ -645,7 +712,10 @@ class AutodiffForwardPass
         auto tensor = mlir::dyn_cast<mlir::RankedTensorType>(type);
         bool admissibleTensor =
             tensor && (tensor.hasStaticShape() ||
-                       (boundedAttentionExport && !tensor.getEncoding() && tensor.getElementType().isF32())) &&
+                       (boundedAttentionExport && !tensor.getEncoding() && tensor.getElementType().isF32()) ||
+                       ((symbolicRelu || symbolicNormalization) && !tensor.getEncoding() &&
+                        (tensor.getElementType().isF16() || tensor.getElementType().isBF16() ||
+                         tensor.getElementType().isF32() || tensor.getElementType().isF64()))) &&
             mlir::isa<mlir::FloatType, mlir::IntegerType, mlir::ComplexType>(
                 tensor.getElementType());
         bool controlScalar =
@@ -653,7 +723,8 @@ class AutodiffForwardPass
         if (!admissibleTensor && !controlScalar) {
           forward.emitError(
               "tessera-autodiff-forward: requires static ranked numeric "
-              "tensors plus nondifferentiable integer/index control scalars");
+              "tensors, an admitted symbolic derivative envelope, or "
+              "nondifferentiable integer/index control scalars");
           return signalPassFailure();
         }
       }
@@ -1002,7 +1073,7 @@ class AutodiffForwardPass
       std::string text; llvm::raw_string_ostream os(text); os<<llvm::json::Value(std::move(contract)); os.flush();
       module->setAttr("tessera.autodiff.attention_jvp_contract",mlir::StringAttr::get(&getContext(),text));
     }
-    if (exportScaledProgram && mlir::failed(emitNativeScaledMatmulProgram(module))) {
+    if (exportScaledProgram && mlir::failed(emitNativeScaledMatmulProgram(module,false,false,originalProgramSource))) {
       signalPassFailure();
       return;
     }

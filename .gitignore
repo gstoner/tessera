@@ -114,3 +114,6 @@ build-nvidia/
 # Decision #26: CI-generated coverage evidence, reproducible locally.
 /docs/audit/generated/test_coverage.csv
 /docs/audit/generated/test_coverage.md
+
+# Authored native program implementation, not generated TableGen output.
+!src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/active_source_owner.inc

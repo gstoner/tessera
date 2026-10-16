@@ -1,0 +1,81 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+______ test_every_admitted_metadata_operation_has_atomic_replay[allocate] ______
+
+mode = 'allocate'
+
+    @pytest.mark.parametrize('mode', ATOMIC_MODES)
+    def test_every_admitted_metadata_operation_has_atomic_replay(mode):
+        tool = find_tessera_opt()
+        target = native_storage_target()
+        if tool is None or target is None or llvm_bin_dir() is None:
+            pytest.skip('native compiler and a CUDA or ROCm toolchain required')
+>       program = materialize_pool(4, 8, 'atomic_' + mode, compiler=tool,
+            llvm_bin=llvm_bin_dir(), backend=target[0], chip=target[1], payload_dtype='int8', references=1)
+
+tests/unit/test_gated_heap.py:21: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/gpu_heap_collection.py:563: in materialize_pool
+    package = build_native_gpu_storage(
+python/tessera/compiler/native_gpu_storage.py:182: in build_native_gpu_storage
+    _run(llvm_bin / 'clang', '-shared', '-fPIC', '-O2', str(directory / 'sizer.ll'),
+python/tessera/compiler/native_gpu_storage.py:51: in _run
+    return subprocess.check_output([str(_resolve_tool(tool)), *args], input=source, text=True,
+/usr/lib/python3.14/subprocess.py:473: in check_output
+    return run(*popenargs, stdout=PIPE, timeout=timeout, check=True,
+/usr/lib/python3.14/subprocess.py:555: in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/subprocess.py:1039: in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+/usr/lib/python3.14/subprocess.py:1875: in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: None args: ['/home/angstorms/toolchains/llvm-23.1.1-asse...>
+args = ['/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/clang', '-shared', '-fPIC', '-O2', '/tmp/tessera-native-sizer-1q2zvykm/sizer.ll', '-o', ...]
+executable = '/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/clang'
+env = None, restore_signals = True, close_fds = True, p2cread = 12
+p2cwrite = 13, c2pread = 14, c2pwrite = 15, errread = 16, errwrite = 17
+
+    def _posix_spawn(self, args, executable, env, restore_signals, close_fds,
+                     p2cread, p2cwrite,
+                     c2pread, c2pwrite,
+                     errread, errwrite):
+        """Execute program using os.posix_spawn()."""
+        kwargs = {}
+        if restore_signals:
+            # See _Py_RestoreSignals() in Python/pylifecycle.c
+            sigset = []
+            for signame in ('SIGPIPE', 'SIGXFZ', 'SIGXFSZ'):
+                signum = getattr(signal, signame, None)
+                if signum is not None:
+                    sigset.append(signum)
+            kwargs['setsigdef'] = sigset
+    
+        file_actions = []
+        for fd in (p2cwrite, c2pread, errread):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_CLOSE, fd))
+        for fd, fd2 in (
+            (p2cread, 0),
+            (c2pwrite, 1),
+            (errwrite, 2),
+        ):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_DUP2, fd, fd2))
+    
+        if close_fds:
+            file_actions.append((os.POSIX_SPAWN_CLOSEFROM, 3))
+    
+        if file_actions:
+            kwargs['file_actions'] = file_actions
+    
+>       self.pid = os.posix_spawn(executable, args, env, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/clang'
+
+/usr/lib/python3.14/subprocess.py:1819: FileNotFoundError
+=========================== short test summary info ============================
+FAILED tests/unit/test_gated_heap.py::test_every_admitted_metadata_operation_has_atomic_replay[allocate]
+1 failed in 0.94s

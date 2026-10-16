@@ -1,0 +1,82 @@
+FF.                                                                      [100%]
+=================================== FAILURES ===================================
+________________ test_flat_relu_policy_reaches_native_tile[f16] ________________
+
+storage = 'f16'
+
+    @pytest.mark.compiler_route
+    @pytest.mark.parametrize("storage", ["f16", "bf16"])
+    def test_flat_relu_policy_reaches_native_tile(storage):
+        tool=find_tessera_opt()
+        if tool is None: pytest.skip("requires production compiler")
+>       schedule=run_tessera_opt(tool,graph(storage),"--tessera-graph-to-schedule")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_sm120_coalesced_activation.py:18: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {\n  func.func @relu(%x: tensor<257x257x... {schedule = "flat_128"} : (tensor<257x257xf16>) -> tensor<257x257xf16>\n    return %out : tensor<257x257xf16>\n  }\n}'
+option = '--tessera-graph-to-schedule'
+
+    def run_tessera_opt(tool: Path, source: str, option: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", option],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                f"scheduled compiler boundary {option} failed: "
+                + (result.stderr.strip() or str(result.returncode))
+            )
+E           RuntimeError: scheduled compiler boundary --tessera-graph-to-schedule failed: <stdin>:3:12: error: E2E-REAL-6 Graph->Schedule requires a supported static semantic-kernel contract for the selected target
+E               %out = "tessera.relu"(%x) {schedule = "flat_128"} : (tensor<257x257xf16>) -> tensor<257x257xf16>
+E                      ^
+E           <stdin>:3:12: note: see current operation: %0 = "tessera.relu"(%arg0) {schedule = "flat_128"} : (tensor<257x257xf16>) -> tensor<257x257xf16>
+
+python/tessera/compiler/scheduled_matmul.py:1044: RuntimeError
+_______________ test_flat_relu_policy_reaches_native_tile[bf16] ________________
+
+storage = 'bf16'
+
+    @pytest.mark.compiler_route
+    @pytest.mark.parametrize("storage", ["f16", "bf16"])
+    def test_flat_relu_policy_reaches_native_tile(storage):
+        tool=find_tessera_opt()
+        if tool is None: pytest.skip("requires production compiler")
+>       schedule=run_tessera_opt(tool,graph(storage),"--tessera-graph-to-schedule")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_sm120_coalesced_activation.py:18: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {\n  func.func @relu(%x: tensor<257x257x...chedule = "flat_128"} : (tensor<257x257xbf16>) -> tensor<257x257xbf16>\n    return %out : tensor<257x257xbf16>\n  }\n}'
+option = '--tessera-graph-to-schedule'
+
+    def run_tessera_opt(tool: Path, source: str, option: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", option],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                f"scheduled compiler boundary {option} failed: "
+                + (result.stderr.strip() or str(result.returncode))
+            )
+E           RuntimeError: scheduled compiler boundary --tessera-graph-to-schedule failed: <stdin>:3:12: error: E2E-REAL-6 Graph->Schedule requires a supported static semantic-kernel contract for the selected target
+E               %out = "tessera.relu"(%x) {schedule = "flat_128"} : (tensor<257x257xbf16>) -> tensor<257x257xbf16>
+E                      ^
+E           <stdin>:3:12: note: see current operation: %0 = "tessera.relu"(%arg0) {schedule = "flat_128"} : (tensor<257x257xbf16>) -> tensor<257x257xbf16>
+
+python/tessera/compiler/scheduled_matmul.py:1044: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_sm120_coalesced_activation.py::test_flat_relu_policy_reaches_native_tile[f16]
+FAILED tests/unit/test_sm120_coalesced_activation.py::test_flat_relu_policy_reaches_native_tile[bf16]
+2 failed, 1 passed in 0.53s

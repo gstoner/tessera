@@ -1,0 +1,114 @@
+........................................................................ [ 55%]
+...............F..F.F.....................................               [100%]
+=================================== FAILURES ===================================
+______________ test_compiler_plan_routing_and_log_are_consistent _______________
+
+    def test_compiler_plan_routing_and_log_are_consistent():
+>       checker.check(ROOT)
+
+tests/unit/test_compiler_plan_routing.py:14: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/check_compiler_plan.py:135: in check
+    tasks, routing, history = records(plan), routes(plan), entries(log)
+                                                           ^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+text = '---\nlast_updated: 2026-10-15\naudit_role: reference\n---\n\n# Integrated compiler engineering log\n\n\n\n\n\n\n### 2...json, after/route-census.json, shared-tests.txt,\nsm120-controls.txt and validation.json.\n<!-- entry-fields:end -->\n'
+
+    def entries(text: str) -> dict[str, str]:
+        result = {}
+        matches = list(re.finditer(r'^### (.+)$', text, re.M))
+        for i, match in enumerate(matches):
+            title = match[1]
+            if not re.match(r'^\d{4}-\d{2}-\d{2} — .+', title):
+                raise ValueError(f'log heading must be date-first: {title}')
+            anchor = slug(title)
+            if anchor in result:
+                raise ValueError(f'duplicate log anchor {anchor}')
+            body = text[match.end():matches[i+1].start() if i+1<len(matches) else len(text)]
+            if '<!-- entry-fields:end -->' not in body:
+                raise ValueError(f'log {anchor} needs an entry-fields delimiter')
+            body = body.split('<!-- entry-fields:end -->',1)[0]
+            fields = {}
+            for field in ('Owner', 'PRs', 'Outcome', 'Remaining', 'Evidence'):
+                values = re.findall(r'^'+field+r': (.+)$', body, re.M)
+                if len(values) != 1:
+                    raise ValueError(f'log {anchor} needs one {field}')
+                fields[field] = values[0]
+            owner = LINK.fullmatch(fields['Owner'])
+            if owner is None or not re.fullmatch(ID, owner[1]):
+>               raise ValueError(f'log {anchor} needs a linked owner ID')
+E               ValueError: log 2026-10-15--native-relu-tangent-and-producer-ad-integration needs a linked owner ID
+
+scripts/check_compiler_plan.py:106: ValueError
+___________________ test_new_log_entry_requires_owner_change ___________________
+
+    def test_new_log_entry_requires_owner_change():
+        plan=(ROOT/checker.PLAN).read_text(); log=(ROOT/checker.LOG).read_text()
+        extra='''\n### 2026-09-08 — Test increment
+    
+    Owner: [W2.4a](INTEGRATED_COMPILER_PLAN.md#w24a)
+    
+    PRs: Uncommitted.
+    
+    Outcome: A test.
+    
+    Remaining: At owner.
+    
+    Evidence: Test fixture.
+    
+    <!-- entry-fields:end -->
+    '''
+>       with pytest.raises(ValueError,match='requires an update'):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'requires an update'
+E         Actual message: 'log 2026-10-15--native-relu-tangent-and-producer-ad-integration needs a linked owner ID'
+
+tests/unit/test_compiler_plan_routing.py:42: AssertionError
+________ test_historical_correction_does_not_require_fake_task_progress ________
+
+    def test_historical_correction_does_not_require_fake_task_progress():
+        plan=(ROOT/checker.PLAN).read_text(); log=(ROOT/checker.LOG).read_text()
+>       checker.check_transition(plan,log,plan,log.replace('Original recorded scope','Corrected recorded scope',1))
+
+tests/unit/test_compiler_plan_routing.py:57: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+scripts/check_compiler_plan.py:114: in check_transition
+    old_entries, new_entries = entries(old_log), entries(new_log)
+                               ^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+text = '---\nlast_updated: 2026-10-15\naudit_role: reference\n---\n\n# Integrated compiler engineering log\n\n\n\n\n\n\n### 2...json, after/route-census.json, shared-tests.txt,\nsm120-controls.txt and validation.json.\n<!-- entry-fields:end -->\n'
+
+    def entries(text: str) -> dict[str, str]:
+        result = {}
+        matches = list(re.finditer(r'^### (.+)$', text, re.M))
+        for i, match in enumerate(matches):
+            title = match[1]
+            if not re.match(r'^\d{4}-\d{2}-\d{2} — .+', title):
+                raise ValueError(f'log heading must be date-first: {title}')
+            anchor = slug(title)
+            if anchor in result:
+                raise ValueError(f'duplicate log anchor {anchor}')
+            body = text[match.end():matches[i+1].start() if i+1<len(matches) else len(text)]
+            if '<!-- entry-fields:end -->' not in body:
+                raise ValueError(f'log {anchor} needs an entry-fields delimiter')
+            body = body.split('<!-- entry-fields:end -->',1)[0]
+            fields = {}
+            for field in ('Owner', 'PRs', 'Outcome', 'Remaining', 'Evidence'):
+                values = re.findall(r'^'+field+r': (.+)$', body, re.M)
+                if len(values) != 1:
+                    raise ValueError(f'log {anchor} needs one {field}')
+                fields[field] = values[0]
+            owner = LINK.fullmatch(fields['Owner'])
+            if owner is None or not re.fullmatch(ID, owner[1]):
+>               raise ValueError(f'log {anchor} needs a linked owner ID')
+E               ValueError: log 2026-10-15--native-relu-tangent-and-producer-ad-integration needs a linked owner ID
+
+scripts/check_compiler_plan.py:106: ValueError
+=========================== short test summary info ============================
+FAILED tests/unit/test_compiler_plan_routing.py::test_compiler_plan_routing_and_log_are_consistent
+FAILED tests/unit/test_compiler_plan_routing.py::test_new_log_entry_requires_owner_change
+FAILED tests/unit/test_compiler_plan_routing.py::test_historical_correction_does_not_require_fake_task_progress
+3 failed, 127 passed in 323.46s (0:05:23)

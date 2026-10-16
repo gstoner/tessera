@@ -1,6 +1,10 @@
 // Compiler-owned outlining of actual SM120 tensor producer/matmul Graph edges.
 #pragma once
 #include "mlir/IR/Verifier.h"
+#include "mlir/Parser/Parser.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "llvm/Support/SHA256.h"
+#include <cmath>
 
 namespace tessera {
 static bool hasNativeSM120TensorGraph(mlir::ModuleOp module) {
@@ -40,7 +44,10 @@ static mlir::func::FuncOp cloneNativeSM120TensorMember(
   return child;
 }
 
-static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
+#include "NativeSM120ActiveSourceProgram.h"
+
+static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module, bool paired = false,
+    llvm::StringRef originalSource = {}) {
   using namespace mlir;
   if (failed(verify(module))) return failure();
   if (module->hasAttr("tessera.native.sm120_tensor_program"))
@@ -48,30 +55,68 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
   auto arch = module->getAttrOfType<StringAttr>("tessera.arch");
   SmallVector<func::FuncOp> roots;
   for (auto fn : module.getOps<func::FuncOp>())
-    if (!fn.isDeclaration()) roots.push_back(fn);
+    if (!fn.isDeclaration() && (!paired ||
+        (fn->getAttrOfType<StringAttr>("tessera.autodiff.role") &&
+         fn->getAttrOfType<StringAttr>("tessera.autodiff.role").getValue() == "jvp")))
+      roots.push_back(fn);
   if (!arch || arch.getValue() != "sm_120" || roots.size() != 1 ||
       !roots[0].getBody().hasOneBlock())
     return module.emitError("SM120 tensor program requires one explicit sm_120 Graph root");
   auto root = roots[0];
   if (root.getNumArguments() < 2 || root.getNumArguments() > 4 ||
-      root.getNumResults() != 1 || (root.getBody().front().getOperations().size() < 3 ||
+      root.getNumResults() != (paired ? 2u : 1u) ||
+      (paired && (root.getNumArguments() != 3 || originalSource.empty())) ||
+      (root.getBody().front().getOperations().size() < (paired ? 4u : 3u) ||
        root.getBody().front().getOperations().size() > 65))
     return root.emitError("SM120 tensor program requires its producer/matmul Graph");
   SmallVector<Operation *> ops;
   for (auto &op : root.getBody().front().without_terminator()) ops.push_back(&op);
-  auto consumer = ops.back();
-  const size_t producerCount = ops.size() - 1;
+  const size_t producerCount = ops.size() - (paired ? 2 : 1);
+  auto consumer = ops[producerCount];
   auto ret = dyn_cast<func::ReturnOp>(root.getBody().front().back());
   if (consumer->getName().getStringRef() != "tessera.matmul" ||
       consumer->getNumResults() != 1 ||
-      consumer->getNumOperands() != root.getNumArguments() ||
-      !ret || ret.getNumOperands() != 1 || ret.getOperand(0) != consumer->getResult(0))
+      consumer->getNumOperands() != (paired ? 2u : root.getNumArguments()) ||
+      !ret || ret.getNumOperands() != (paired ? 2u : 1u) || ret.getOperand(0) != consumer->getResult(0))
     return root.emitError("SM120 tensor program lost its original producer/consumer SSA edge");
+  if (paired) {
+    auto tangent = ops.back();
+    auto rhs = dyn_cast<BlockArgument>(consumer->getOperand(1));
+    auto parentRef = root->getAttrOfType<FlatSymbolRefAttr>("tessera.autodiff.forward");
+    auto parent = parentRef ? dyn_cast_or_null<func::FuncOp>(
+        SymbolTable::lookupSymbolIn(module,parentRef)) : func::FuncOp{};
+    auto wrt = parent ? parent->getAttrOfType<ArrayAttr>("tessera.autodiff.wrt_indices") : ArrayAttr{};
+    auto role = wrt && wrt.size() == 1 ? dyn_cast<IntegerAttr>(wrt[0]) : IntegerAttr{};
+    if (parent && rhs && role && role.getInt() != rhs.getArgNumber())
+      return emitNativeSM120ActiveSourceOutline(module,root,parent,originalSource);
+    if (!parent || parent.getNumArguments() != 2 || parent.getNumResults() != 1 ||
+        !rhs || rhs.getOwner() != &root.getBody().front() || rhs.getArgNumber() >= 2 ||
+        !role || role.getInt() != rhs.getArgNumber() ||
+        tangent->getName().getStringRef() != "tessera.matmul" ||
+        tangent->getNumOperands() != 2 || tangent->getNumResults() != 1 ||
+        tangent->getOperand(0) != consumer->getOperand(0) ||
+        tangent->getOperand(1) != root.getArgument(2) ||
+        tangent->getOperand(1).getType() != consumer->getOperand(1).getType() ||
+        tangent->getResult(0).getType() != consumer->getResult(0).getType() ||
+        ret.getOperand(1) != tangent->getResult(0))
+      return root.emitError("SM120 paired tensor program requires the native RHS-linear shared producer product");
+    for (Operation *product : {consumer,tangent}) {
+      auto activation = product->getAttrOfType<StringAttr>("activation");
+      auto order = product->getAttrOfType<StringAttr>("rhs_storage_order");
+      auto transA = product->getAttrOfType<BoolAttr>("transposeA");
+      auto transB = product->getAttrOfType<BoolAttr>("transposeB");
+      if ((activation && activation.getValue() != "none") ||
+          (order && order.getValue() != "row_major") ||
+          (transA && transA.getValue()) || (transB && transB.getValue()) ||
+          product->hasAttr("bias") || product->hasAttr("residual"))
+        return product->emitError("SM120 paired tensor consumers require plain row-major products");
+    }
+  }
   // Track each producer's actual root and retain topological SSA order.
   // The two operand chains may have different shapes and may be interleaved.
   llvm::DenseMap<Value,Value> origins;
   for (Value arg : root.getArguments()) origins[arg] = arg;
-  for (Operation *producer : ArrayRef<Operation *>(ops).drop_back()) {
+  for (Operation *producer : ArrayRef<Operation *>(ops).take_front(producerCount)) {
     auto name = producer->getName().getStringRef();
     Value input = producer->getNumOperands() == 1 ? producer->getOperand(0) : Value{};
     if ((name != "tessera.rmsnorm" && name != "tessera.layer_norm" && name != "tessera.softmax" && name != "tessera.relu") ||
@@ -96,6 +141,7 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
       (!source.getElementType().isF16() && !source.getElementType().isBF16()))
     return root.emitError("SM120 tensor producer requires static rank-two matching f16/bf16 storage");
   const bool dag = rhsValue.getDefiningOp() != nullptr;
+  if (paired && dag) return root.emitError("SM120 paired RHS must retain its original argument role");
   if (dag) {
     auto order = consumer->getAttrOfType<StringAttr>("rhs_storage_order");
     if (order && order.getValue() != "row_major")
@@ -103,6 +149,7 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
   }
   SmallVector<Value> roles{origins.lookup(lhsValue),origins.lookup(rhsValue)};
   for (Value value : consumer->getOperands().drop_front(2)) roles.push_back(value);
+  if (paired) roles.push_back(root.getArgument(2));
   llvm::SmallDenseSet<unsigned> seen;
   llvm::json::Array roleJSON;
   for (Value value : roles) {
@@ -119,6 +166,7 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
     auto key = attr.getName().getValue();
     if (key != "function_type" && key != "sym_name" && key != "sym_visibility" &&
         key != "arg_attrs" && key != "res_attrs" &&
+        !(paired && (key == "tessera.autodiff.forward" || key == "tessera.autodiff.role")) &&
         key != "tessera.frontend.authority" &&
         key != "tessera.structured_cfg.schema" &&
         key != "tessera.structured_cfg.digest" && key != "tessera.structured_cfg.blocks")
@@ -135,12 +183,15 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
       !rhs.hasStaticShape() || !out.hasStaticShape() ||
       rhs.getDimSize(0) != k || out.getDimSize(0) != m ||
       out.getDimSize(1) != rhs.getDimSize(1) ||
-      rhs.getElementType() != source.getElementType())
+      rhs.getElementType() != source.getElementType() ||
+      (paired && !out.getElementType().isF32()))
     return root.emitError("SM120 tensor original matmul shape/storage differs");
   int64_t n = rhs.getDimSize(1);
   int64_t capacities[3] = {m,n,k};
   bool varying[3] = {false,false,false};
   auto request = module->getAttr("tessera.native.sm120_tensor_bounds");
+  if (paired && request)
+    return root.emitError("SM120 paired tensor bounds need their own native capacity contract");
   if (request) {
     auto bounds = dyn_cast<DictionaryAttr>(request);
     if (!bounds || bounds.empty())
@@ -158,15 +209,19 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
   }
   bool dynamic = varying[0] || varying[1] || varying[2];
   bool bias = consumer->hasAttr("bias"), residual = consumer->hasAttr("residual");
-  if (roles.size() != unsigned(2 + bias + residual))
+  if (roles.size() != unsigned(2 + bias + residual + paired))
     return root.emitError("SM120 tensor epilogue roles differ");
   llvm::DenseMap<Value,RankedTensorType> capacityTypes;
   capacityTypes[roles[0]] = RankedTensorType::get({capacities[0],capacities[2]},source.getElementType());
   capacityTypes[roles[1]] = RankedTensorType::get({capacities[2],capacities[1]},rhs.getElementType());
-  for (Operation *producer : ArrayRef<Operation *>(ops).drop_back())
+  for (Operation *producer : ArrayRef<Operation *>(ops).take_front(producerCount))
     capacityTypes[producer->getResult(0)] = capacityTypes[origins.lookup(producer->getResult(0))];
   capacityTypes[consumer->getResult(0)] = RankedTensorType::get({capacities[0],capacities[1]},out.getElementType());
-  for (unsigned index = 2; index < roles.size(); ++index) {
+  if (paired) {
+    capacityTypes[roles[2]] = capacityTypes[roles[1]];
+    capacityTypes[ops.back()->getResult(0)] = capacityTypes[consumer->getResult(0)];
+  }
+  for (unsigned index = 2; !paired && index < roles.size(); ++index) {
     auto type = dyn_cast<RankedTensorType>(roles[index].getType());
     bool isBias = bias && index == 2;
     if (!type || !type.getElementType().isF32() || type.getEncoding() ||
@@ -211,7 +266,11 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
     writes.push_back(index); reads.push_back(index);
   }
   int64_t outputID = ids.lookup(ret.getOperand(0));
-  reads[outputID] = ops.size();
+  llvm::SmallDenseSet<int64_t> outputIDs;
+  for (Value output : ret.getOperands()) {
+    outputIDs.insert(ids.lookup(output));
+    reads[ids.lookup(output)] = ops.size();
+  }
   llvm::json::Array buffers,steps,memberGraphs;
   for (auto [index,value] : llvm::enumerate(values)) {
     auto original = dyn_cast<RankedTensorType>(value.getType());
@@ -234,7 +293,7 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
     buffers.push_back(llvm::json::Object{
       {"id",int64_t(index)},{"bytes",int64_t(bytes)},{"shape",std::move(shape)},
       {"storage",storage},{"ownership",index < root.getNumArguments() ? "readonly_input" :
-                                   int64_t(index) == outputID ? "returned_output" : "private_scratch"},
+                                   outputIDs.contains(int64_t(index)) ? "returned_output" : "private_scratch"},
       {"first_write",writes[index]},{"last_read",reads[index]}});
   }
   for (unsigned index = 0; index < ops.size(); ++index)
@@ -274,8 +333,8 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
     b.setInsertionPointToEnd(module.getBody());
     auto symbol = (root.getSymName()+"__tensor_member_"+llvm::Twine(index)).str();
     SmallVector<Type> inputTypes;
-    for (Value value : op->getOperands()) inputTypes.push_back(memberType(value,index == producerCount));
-    auto outputType = memberType(op->getResult(0),index == producerCount);
+    for (Value value : op->getOperands()) inputTypes.push_back(memberType(value,index >= producerCount));
+    auto outputType = memberType(op->getResult(0),index >= producerCount);
     auto member = b.create<func::FuncOp>(op->getLoc(),symbol,
         b.getFunctionType(inputTypes,TypeRange{outputType}));
     member.setPrivate();
@@ -290,9 +349,9 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
     }
     auto cloned = body.clone(*op,mapping);
     cloned->getResult(0).setType(outputType);
-    if (dag && index == producerCount)
+    if ((dag || paired) && index >= producerCount)
       cloned->setAttr("rhs_storage_order",b.getStringAttr("row_major"));
-    if (dynamic && index == producerCount)
+    if (dynamic && index >= producerCount)
       cloned->setAttr("shape_bounds",b.getI64ArrayAttr({capacities[0],capacities[1],capacities[2]}));
     body.create<func::ReturnOp>(op->getLoc(),cloned->getResults());
     auto projected = ModuleOp::create(module.getLoc());
@@ -308,14 +367,19 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
       {"member",symbol},{"inputs",std::move(inputs)},
       {"outputs",llvm::json::Array{ids.lookup(op->getResult(0))}}});
   }
-  llvm::json::Object plan{{"schema",dag ? (dynamic ?
+  llvm::json::Object plan{{"schema",paired ? "tessera.native.sm120_tensor_program.v7" : dag ? (dynamic ?
           "tessera.native.sm120_tensor_program.v6" : "tessera.native.sm120_tensor_program.v5") :
           dynamic ? (producerCount > 1 ?
           "tessera.native.sm120_tensor_program.v4" : "tessera.native.sm120_tensor_program.v2") :
           producerCount > 1 ? "tessera.native.sm120_tensor_program.v3" : "tessera.native.sm120_tensor_program.v1"},
-      {"source_graph_ir",sourceIR+"\n"},{"root",root.getSymName().str()},
+      {"source_graph_ir",paired ? originalSource.str() : sourceIR+"\n"},{"root",root.getSymName().str()},
       {"role_indices",std::move(roleJSON)},{"buffers",std::move(buffers)},
       {"steps",std::move(steps)},{"output",outputID},{"member_graphs",std::move(memberGraphs)}};
+  if (paired) {
+    plan["kind"] = "paired_jvp";
+    plan["paired_graph_ir"] = sourceIR+"\n";
+    plan["outputs"] = llvm::json::Array{outputID,ids.lookup(ret.getOperand(1))};
+  }
   if (dynamic) {
     plan["original_graph_ir"] = originalIR+"\n";
     plan["active_shape"] = llvm::json::Array{m,n,k};
@@ -344,6 +408,8 @@ static mlir::LogicalResult projectNativeSM120TensorMember(mlir::ModuleOp module,
   auto lineage = member ? member->getAttrOfType<IntegerAttr>("tessera.native.sm120_tensor_member") : IntegerAttr{};
   if (!member || !lineage || lineage.getInt() != index)
     return module.emitError("SM120 tensor member lineage differs");
+  if (member->hasAttr("tessera.native.sm120_row_producer") &&
+      failed(verifyNativeSM120RowOutline(member))) return failure();
   auto child = cloneNativeSM120TensorMember(member,index);
   module.getBody()->clear(); module.getBody()->push_back(child);
   module->removeAttr("tessera.native.sm120_tensor_program");

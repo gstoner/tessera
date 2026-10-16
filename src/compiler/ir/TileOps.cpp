@@ -1,3 +1,5 @@
+#include "Tessera/IR/TileBufferViewContract.h"
+#include "Tessera/IR/RowRegionContract.h"
 #include "Tessera/IR/StaticPermutationContract.h"
 #include "Tessera/IR/NVFP4IngestContract.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -2128,10 +2130,10 @@ LogicalResult ActivationKernelOp::verify() {
   if (!arch || arch.getValue() != "sm_120" ||
       (str("storage") != "f16" && str("storage") != "bf16") ||
       str("accum") != "f32" || str("kind") != "relu" ||
-      str("schedule") != "serial" || str("nan_mode") != "propagate" ||
+      (str("schedule") != "serial" && str("schedule") != "flat_128") || str("nan_mode") != "propagate" ||
       str("zero_mode") != (str("storage") == "f16" ? "positive" : "preserve") ||
       !axis || axis.getInt() != -1 || !threads || threads.getInt() != 128)
-    return emitOpError("requires SM120 f16/bf16 serial ReLU, 128 threads and propagated NaNs");
+    return emitOpError("requires SM120 f16/bf16 serial|flat_128 ReLU, 128 threads and propagated NaNs");
   return success();
 }
 
@@ -3322,4 +3324,11 @@ mlir::LogicalResult tessera::tile::TransposeKernelOp::verify() {
       !getOperand(2).getType().isSignlessInteger(64))
     return emitOpError("requires compact positive rank-1..8 f32 shapes, a unique axis permutation and pointer/pointer/i64 ABI");
   return mlir::success();
+}
+
+namespace tessera::tile {
+mlir::LogicalResult BufferViewOp::verify() { return verifyScalarBufferView(getOperation()); }
+mlir::LogicalResult LoadElementOp::verify() { return verifyScalarBufferView(getOperation()); }
+mlir::LogicalResult StoreElementOp::verify() { return verifyScalarBufferView(getOperation()); }
+mlir::LogicalResult RowRegionKernelOp::verify() { return row_region::verifyKernel(getOperation()); }
 }

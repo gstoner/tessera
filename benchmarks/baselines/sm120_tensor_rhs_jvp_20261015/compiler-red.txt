@@ -1,0 +1,88 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_native_paired_tensor_ssa_retains_shared_edge_and_two_owned_outputs[f16] _
+
+storage = 'f16'
+
+    @pytest.mark.compiler_route
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    def test_native_paired_tensor_ssa_retains_shared_edge_and_two_owned_outputs(storage):
+        source=graph(storage)
+>       ir=export(source)
+           ^^^^^^^^^^^^^^
+
+tests/unit/test_native_sm120_rhs_jvp_program.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_native_sm120_rhs_jvp_program.py:26: in export
+    return run_tessera_opt(tool,source,"--tessera-autodiff-forward="+options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {\n  func.func @product(%a: tensor<7x32x...put_dtype = "fp32"} : (tensor<7x32xf16>, tensor<32x9xf16>) -> tensor<7x9xf32>\n    return %p : tensor<7x9xf32>\n  }\n}'
+option = '--tessera-autodiff-forward=export-scaled-program=true'
+
+    def run_tessera_opt(tool: Path, source: str, option: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", option],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                f"scheduled compiler boundary {option} failed: "
+                + (result.stderr.strip() or str(result.returncode))
+            )
+E           RuntimeError: scheduled compiler boundary --tessera-autodiff-forward=export-scaled-program=true failed: <stdin>:4:10: error: scaled JVP program needs scaled products and admitted native carriers
+E               %n = "tessera.rmsnorm"(%a) {eps = 1.0E-5 : f64} : (tensor<7x32xf16>) -> tensor<7x32xf16>
+E                    ^
+E           <stdin>:4:10: note: see current operation: %0 = "tessera.rmsnorm"(%arg0) <{eps = 1.000000e-05 : f64}> : (tensor<7x32xf16>) -> tensor<7x32xf16>
+
+python/tessera/compiler/scheduled_matmul.py:1044: RuntimeError
+_ test_native_paired_tensor_ssa_retains_shared_edge_and_two_owned_outputs[bf16] _
+
+storage = 'bf16'
+
+    @pytest.mark.compiler_route
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    def test_native_paired_tensor_ssa_retains_shared_edge_and_two_owned_outputs(storage):
+        source=graph(storage)
+>       ir=export(source)
+           ^^^^^^^^^^^^^^
+
+tests/unit/test_native_sm120_rhs_jvp_program.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_native_sm120_rhs_jvp_program.py:26: in export
+    return run_tessera_opt(tool,source,"--tessera-autodiff-forward="+options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {\n  func.func @product(%a: tensor<7x32x...t_dtype = "fp32"} : (tensor<7x32xbf16>, tensor<32x9xbf16>) -> tensor<7x9xf32>\n    return %p : tensor<7x9xf32>\n  }\n}'
+option = '--tessera-autodiff-forward=export-scaled-program=true'
+
+    def run_tessera_opt(tool: Path, source: str, option: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", option],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                f"scheduled compiler boundary {option} failed: "
+                + (result.stderr.strip() or str(result.returncode))
+            )
+E           RuntimeError: scheduled compiler boundary --tessera-autodiff-forward=export-scaled-program=true failed: <stdin>:4:10: error: scaled JVP program needs scaled products and admitted native carriers
+E               %n = "tessera.rmsnorm"(%a) {eps = 1.0E-5 : f64} : (tensor<7x32xbf16>) -> tensor<7x32xbf16>
+E                    ^
+E           <stdin>:4:10: note: see current operation: %0 = "tessera.rmsnorm"(%arg0) <{eps = 1.000000e-05 : f64}> : (tensor<7x32xbf16>) -> tensor<7x32xbf16>
+
+python/tessera/compiler/scheduled_matmul.py:1044: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_sm120_rhs_jvp_program.py::test_native_paired_tensor_ssa_retains_shared_edge_and_two_owned_outputs[f16]
+FAILED tests/unit/test_native_sm120_rhs_jvp_program.py::test_native_paired_tensor_ssa_retains_shared_edge_and_two_owned_outputs[bf16]
+2 failed in 0.33s

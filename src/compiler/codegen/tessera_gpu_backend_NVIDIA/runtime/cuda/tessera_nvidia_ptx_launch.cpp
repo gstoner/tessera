@@ -100,7 +100,9 @@ constexpr const char* kTileNormPrefix = "tessera_tile_norm_";
 bool isTileActivation(const char* name) {
     if (!name) return false;
     for (const char* prefix : {"tessera_tile_activation_relu_f16_",
-                               "tessera_tile_activation_relu_bf16_"}) {
+                               "tessera_tile_activation_relu_bf16_",
+                               "tessera_tile_activation_relu_f16_flat_128_",
+                               "tessera_tile_activation_relu_bf16_flat_128_"}) {
         const size_t n = std::strlen(prefix);
         if (std::strncmp(name, prefix, n) != 0 || std::strlen(name + n) != 10) continue;
         bool valid = true;
@@ -835,7 +837,7 @@ int invokeFusedMatmul16(CUfunction fn, const char* name, void** buffers,
 // {rows, K}. The kernel maps 128 independent rows per CTA; each thread owns a
 // complete row, matching the typed Tile schedule recorded in the descriptor.
 int invokeSoftmax(CUfunction fn, void** buffers, size_t nbuf,
-                  const int64_t* dims, size_t ndim, size_t elementBytes, bool cooperative = false) {
+                  const int64_t* dims, size_t ndim, size_t elementBytes, bool cooperative = false, bool flat = false) {
     if (nbuf != 2 || ndim != 2) return 5;
     const long long rows = dims[0], K = dims[1];
     if (rows <= 0 || K <= 0 || rows >= (1LL << 31) || K >= (1LL << 31) ||
@@ -858,7 +860,7 @@ int invokeSoftmax(CUfunction fn, void** buffers, size_t nbuf,
         }
         long long rowsArg = rows, kArg = K;
         void* args[] = {&dx, &dout, &rowsArg, &kArg};
-        unsigned grid = (unsigned)(cooperative ? rows : (rows + 127) / 128);
+        unsigned grid = (unsigned)(cooperative ? rows : ((flat ? rows * K : rows) + 127) / 128);
         if (!cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0), "cuLaunchKernel") || !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
             !cuOk(cuMemcpyDtoH(buffers[1], dout, bytes), "cuMemcpyDtoH"))
             rc = 3;
@@ -1738,7 +1740,8 @@ int benchmarkUnary(CUfunction fn, const char* name, void** buffers,
         void* reduceArgs[]={&dx,&dout,&outerArg,&axisArg,&innerArg};
         void** args=rowwise?softmaxArgs:reduceArgs;
         const bool cooperative=std::strstr(name,"_cooperative_128")!=nullptr;
-        const unsigned grid=cooperative?(unsigned)outputs:(unsigned)((outputs+127)/128);
+        const size_t launchElements = isTileActivation(name) && std::strstr(name,"_flat_128_") ? outputs * size_t(axis) : outputs;
+        const unsigned grid=cooperative?(unsigned)outputs:(unsigned)((launchElements+127)/128);
         auto launch = [&]() {
             return cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0);
         };
@@ -2670,7 +2673,8 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         const bool narrow = std::strstr(kernel_name, "_f16_") != nullptr ||
                             std::strstr(kernel_name, "_bf16_") != nullptr;
         return invokeSoftmax(fn, buffers, nbuf, dims, ndim, narrow ? 2 : 4,
-            std::strstr(kernel_name, "_cooperative_128_") != nullptr);
+            std::strstr(kernel_name, "_cooperative_128_") != nullptr,
+            isTileActivation(kernel_name) && std::strstr(kernel_name, "_flat_128_"));
     }
     if (std::strncmp(kernel_name, kTileAttentionBackwardPrefix,
                      std::strlen(kTileAttentionBackwardPrefix)) == 0)
@@ -2722,7 +2726,8 @@ int invokeResident(const char* name, void** buffers, size_t nbuf,
         CUdeviceptr y = reinterpret_cast<CUdeviceptr>(buffers[1]);
         long long rows = dims[0], columns = dims[1];
         void* args[] = {&x, &y, &rows, &columns};
-        const unsigned grid = static_cast<unsigned>(std::strstr(name, "_cooperative_128_") != nullptr ? rows : (rows + 127) / 128);
+        const bool flat = isTileActivation(name) && std::strstr(name, "_flat_128_");
+        const unsigned grid = static_cast<unsigned>(std::strstr(name, "_cooperative_128_") != nullptr ? rows : ((flat ? rows * columns : rows) + 127) / 128);
         return cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0,
                                    static_cast<CUstream>(stream), args, 0),
                     "cuLaunchKernel(resident rmsnorm)") ? 0 : 3;

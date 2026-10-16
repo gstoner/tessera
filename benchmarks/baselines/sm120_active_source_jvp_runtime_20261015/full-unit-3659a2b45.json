@@ -1,0 +1,68 @@
+{
+  "revision": "3659a2b457f27835f033bc1c2f6fa735f2194f53",
+  "dirty_before": "",
+  "pid": 1165531,
+  "gpu": "NVIDIA GeForce RTX 5070, 12.0, 610.88, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "started_utc": "2026-10-15T22:35:46.519452+00:00",
+  "python": "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+  "tools": {
+    "TESSERA_OPT": {
+      "path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt",
+      "sha256": "4933ce714af733dfdf8f4bb7eb1461c65ac979852822e5b41741a9f98a246f4a",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions."
+    },
+    "TESSERA_NVIDIA_OPT": {
+      "path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+      "sha256": "59e1970a0323f1ba4b8f52556842d2786b4d522cc3c449464b67bf513f381399",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions."
+    },
+    "TESSERA_ROCM_OPT": {
+      "path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt",
+      "sha256": "3f5b2c00e309d9a660ff5268dadd18da0fc35aab6cfa2986f88528403b567329",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions."
+    },
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/active-source-design/active-row-owner/libtessera_nvidia_integrated_source_owner.so",
+      "sha256": "2f51cf156777a470b803fc9ed8c5f3eb3a9396d0802651d49c7ecc8ec99ee689"
+    }
+  },
+  "phases": [
+    {
+      "name": "focused",
+      "command": [
+        "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "tests/unit/test_benchmark_recorders_are_named.py",
+        "tests/unit/test_ods_op_has_consumer.py",
+        "tests/unit/test_compiler_plan_routing.py"
+      ],
+      "log": "/home/angstorms/scratch/sm120-paired-program-20261015/active-source-design/active-row-owner/post950-audit-repaired-focused.log",
+      "state": "passed",
+      "returncode": 0,
+      "duration_seconds": 18.671225202997448,
+      "tail": "........................................................................ [  9%]\n........................................................................ [ 18%]\n........................................................................ [ 27%]\n........................................................................ [ 37%]\n........................................................................ [ 46%]\n........................................................................ [ 55%]\n........................................................................ [ 64%]\n........................................................................ [ 74%]\n........................................................................ [ 83%]\n........................................................................ [ 92%]\n..........................................................               [100%]\n778 passed in 17.38s\n"
+    },
+    {
+      "name": "full_unit",
+      "command": [
+        "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+        "-m",
+        "pytest",
+        "tests/unit",
+        "-q",
+        "-m",
+        "not slow"
+      ],
+      "log": "/home/angstorms/scratch/sm120-paired-program-20261015/active-source-design/active-row-owner/post950-audit-repaired-full_unit.log",
+      "state": "passed",
+      "returncode": 0,
+      "duration_seconds": 2026.0789819939964,
+      "tail": "rom an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.\n    expected_p, expected_state = ts.optim.adafactor(\n\ntests/unit/test_native_artifact_contract.py::test_cached_dtype_spelling_does_not_cache_invocation_shape_or_layout\n  /home/angstorms/scratch/sm120-relu-producer-20261014/tests/unit/test_native_artifact_contract.py:376: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    value.shape = (3, 2)\n\ntests/unit/test_nvfp4_tensor.py::test_revalidation_catches_mutated_caller_buffer\n  /home/angstorms/scratch/sm120-relu-producer-20261014/tests/unit/test_nvfp4_tensor.py:37: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.\n  As an alternative, you can create a new view using np.reshape (with copy=False if needed).\n    storage.shape=(2,6)\n\ntests/unit/test_optimizer_mixed_precision_support.py::test_adafactor_vjp_and_jvp_match_finite_difference_for_vector_state\n  /home/angstorms/scratch/sm120-relu-producer-20261014/tests/unit/test_optimizer_mixed_precision_support.py:168: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 2. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.\n    lambda gg: float(ts.optim.adafactor(params, gg, state, lr=0.01, beta2=0.9, eps=1e-6)[0].sum()),\n\ntests/unit/test_optimizer_mixed_precision_support.py::test_adafactor_vjp_and_jvp_match_finite_difference_for_vector_state\n  /home/angstorms/scratch/sm120-relu-producer-20261014/tests/unit/../../python/tessera/autodiff/jvp.py:2427: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 2. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.\n    return ts_optim.adafactor(p, g, s, lr=lr, beta2=beta2, eps=eps, **kwargs)[0]\n\ntests/unit/test_optimizer_mixed_precision_support.py::test_adafactor_vjp_and_jvp_match_finite_difference_for_vector_state\n  /home/angstorms/scratch/sm120-relu-producer-20261014/tests/unit/test_optimizer_mixed_precision_support.py:183: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 2. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.\n    lambda pp: ts.optim.adafactor(pp, grads, state, lr=0.01, beta2=0.9, eps=1e-6)[0],\n\ntests/unit/test_s10_optim.py::test_adafactor_vjp_differentiates_the_corrected_forward\n  /home/angstorms/scratch/sm120-relu-producer-20261014/tests/unit/test_s10_optim.py:248: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 1. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.\n    ts.optim.adafactor(p, gradient, state, **kwargs)[0],\n\ntests/unit/test_s10_optim.py::test_adafactor_vjp_differentiates_the_corrected_forward\n  /home/angstorms/scratch/sm120-relu-producer-20261014/tests/unit/test_s10_optim.py:248: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 5. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.\n    ts.optim.adafactor(p, gradient, state, **kwargs)[0],\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n26630 passed, 7678 skipped, 876 deselected, 11 warnings in 2017.98s (0:33:37)\n"
+    }
+  ],
+  "state": "passed",
+  "prior_numerical_gate": "post950-final-frozen-validation.json; two audit-drift failures repaired; compiler/runtime/Python numerical source unchanged",
+  "finished_utc": "2026-10-15T23:09:52.478947+00:00"
+}

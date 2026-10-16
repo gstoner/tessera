@@ -82,6 +82,7 @@ add_mlir_dialect_library(TesseraIR
     MLIRSCFDialect
     MLIRTensorDialect
     MLIRArithDialect
+    MLIRControlFlowDialect
     MLIRInferTypeOpInterface
     MLIRSideEffectInterfaces
     MLIRTilingInterface

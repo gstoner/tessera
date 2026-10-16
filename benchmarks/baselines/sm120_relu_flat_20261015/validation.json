@@ -1,0 +1,94 @@
+{
+  "recorded_utc": "2026-10-15T05:53:57.594059+00:00",
+  "work_items": [
+    "W1.1",
+    "FRONTEND-IR-MEDIUM-1",
+    "E2E-REAL-6"
+  ],
+  "base_revision": "a21c24725dd6ccebacef5eb38b5cdb0f3a466c10",
+  "scope": "explicit optional native serial/flat ReLU scheduling; default unchanged",
+  "parent_pr948": {
+    "head": "a21c24725dd6ccebacef5eb38b5cdb0f3a466c10",
+    "validate_run": 38686476646,
+    "required_ci": "all passed; merge authorization pending at recording",
+    "unit": {
+      "passed": 21666,
+      "skipped": 9782
+    }
+  },
+  "gates": {
+    "affected": {
+      "passed": 668,
+      "skipped": 1,
+      "skip": "Darwin-only Apple control",
+      "epoch": "before descriptive backend/execution text updates; checked arithmetic/provider sources match final"
+    },
+    "delivery": {
+      "passed": 243,
+      "skipped": 1,
+      "deselected": 65,
+      "epoch": "after description and generated-dashboard updates, before benchmark provenance-only cleanup"
+    },
+    "generated_documents": 33,
+    "focused_mypy": "four files clean",
+    "ruff": "passed before final packet",
+    "red_policy_gate": "two policy cases fail before compiler change; overflow refusal passes",
+    "final_generated_views": "four execution/coverage/surface views and three plan views in sync",
+    "final_plan_ownership": "passed after Latest update",
+    "audit_frontmatter_after_plan_timestamp": {
+      "passed": 11
+    },
+    "claims": "both gates clean",
+    "diff_hygiene": "passed",
+    "graphify": "final AST-only update complete",
+    "direct_resident_probes": {
+      "passed": 2,
+      "scope": "all 65,536 payloads per storage, input preservation and foreign-stream refusal"
+    }
+  },
+  "final_source_sha256": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "50dd1fc40362ad1b268c74035532274e81008e0b425ba865ad131f1d3449b2db",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "19100f9641c9fef750cd2bc04fc9b3a12b36cd4c4a25fc5d3f4556f8177babe8",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "dfaa7f29c584991e13aa6d481f55bd792b8bd1583f60b84f6257e62ee1ee6ac2",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "cb8fd489e916d62dcfb74e5fc19f1743b822986c616275ff0be4c53ce7e90a70",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "482d50231c3a00d2864c40408051f0484db21146b5aa6443da0e570d6c6ffc6f",
+    "src/compiler/ir/TileOps.cpp": "41adce40fe5e248316fa545f5a476b5ade79175cbe2076719ec06bf377b80c32",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "05f13abc39e38cd217dd164689b40fb67edfd4a171dd1a73492f9dd13d3fd4c4",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "8fbcc638c0691aadaa469de3174138f99e964b6ed9056b02888db8bf1cf0a626",
+    "src/transforms/lib/NativeSM120TensorProgram.h": "6a0ff7e51cf45d73b14daa71e21684ea4f2c7a1b56aaf69932f4430415264e01",
+    "python/tessera/compiler/native_sm120_tensor_program.py": "17d33a1ee8ce11402814eb1c5c54116d8560abb553d74ae52e86ef24c3156242",
+    "python/tessera/compiler/nvidia_native.py": "3e2999a1e13487bb4cbd5b0f21a0a558214b40b79c58d8ade83ea8017ad29852",
+    "python/tessera/compiler/nvidia_tensor_lhs.py": "9e8641da7afaead9a53209ae22470c6668821f9971c52cb5c9a9c0b4c5958316",
+    "python/tessera/compiler/nvidia_tensor_dag.py": "a9d16470cb19feed6bcf5bbbb949a56b5171cddb120cf27099d072cf73fa6d2f",
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "52961fb8234c2cdce4adf650dd2381c58bf7bf363241aa93cb213ee919691be2",
+    "python/tessera/compiler/backend_manifest.py": "4eac8c2f927e178dcf104c21e4c00637c53d7d6b57306205a901e766b0fb6efc",
+    "python/tessera/compiler/execution_matrix.py": "d1fb68e02513056621433e1a80afa14db3be50b883025d3bcc0985ce0846c978",
+    "python/tessera/runtime.py": "48a616361135b71fde0669a17dc1ca5bf187cbaf3643c9e6b4f195f25883e4fd",
+    "tests/unit/test_sm120_coalesced_activation.py": "7429af7424151a17875d1ce594efe8a341c6771cce39bf73182ecfbcfe0e99c6",
+    "tests/unit/test_sm120_scheduled_activation.py": "2595eeeaffcd250cc388f4d69cebe288d2788c1d2a2cc5a421dc1ffc0d7bb652",
+    "benchmarks/nvidia/benchmark_relu_schedule.py": "85348251922f90b1d5c1b2ceda5b0c46a2c27a0b47c733e0376fcc293e336e36",
+    "benchmarks/nvidia/relu_capture_probe.cpp": "8f8b99ca9cece0c77726fa9805d3fe89ec80de6d161812cb0ed9d57230d628ea"
+  },
+  "affected_gate_description_source_sha256": {
+    "python/tessera/compiler/backend_manifest.py": "ff0c0552d30c99f653efc155c5e59f7ec25d4d38e5a60a91c51bda00a9c9e6d6",
+    "python/tessera/compiler/execution_matrix.py": "89de6f61923aeb397e9a2c7212413e3eaa01364ab0a1179c5bbb04cf92fb2c5f"
+  },
+  "evidence_sha256": {
+    "generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "resident-tests.txt": "3dfcaeaf525c0c9fec3fa5930d4bacc690401a723bdeda9806882f0172658ed0",
+    "red-policy-tests.txt": "177a9e435e4b8d61004f21c3bf2a52293508d1fcd15776aec68d10916947d522",
+    "mypy.txt": "71144743c83babea384888a735db0c4daba3d4d7b7942b6839984bd5c21b52bb",
+    "affected-tests.txt": "270c4d135b1c030a07b694d7cf3597448889bc595ca9c18d24e654a89f6a51a6",
+    "delivery-tests.txt": "f74841fdbd63c6d417c4d5bdb54a55bdd3227b32d0391ab46c4d2c6b39e52b2a",
+    "resident.json": "ffa658065c23b06d143b92866f19e71a282b9a6478df715432e3a8fde3b74f06",
+    "graphify.txt": "6e6fb6a3717c3b195ac606edc6df7c2ceca9b599a0cf46e259db47fa8d8fb506",
+    "matched.json": "106d62312cc4e05d80b7937b680886fe86bc9752a336b695db5b84d94eef6925"
+  },
+  "remaining": [
+    "publication CI after parent synchronization",
+    "wider producer/layout/AD integration",
+    "independent FP8/MXFP8/MXFP4 and sibling proof",
+    "original five-slice requirements"
+  ],
+  "timing_claim": "only recorded explicit schedules and metric domains; no default promotion or general compiler speedup"
+}

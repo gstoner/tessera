@@ -1,3 +1,4 @@
+#include "Tessera/IR/RowRegionContract.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/IR/Builders.h"
@@ -234,3 +235,5 @@ LogicalResult CudaMathKernelOp::verify() {
   }
   return success();
 }
+
+mlir::LogicalResult tessera::nvidia::RowRegionKernelOp::verify() { return tessera::row_region::verifyKernel(getOperation()); }

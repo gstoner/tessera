@@ -97,7 +97,7 @@ def _checked_semantics(semantics):
         raise ValueError("LHS attributes must be dictionaries")
     pa,ca=dict(sorted(pa.items())),dict(sorted(ca.items()))
     if s["producer"]=="tessera.relu":
-        if pa:
+        if set(pa)-{"schedule"} or pa.get("schedule", "serial") not in {"serial", "flat_128"}:
             raise ValueError("LHS ReLU requires its storage-preserving native contract")
     elif s["producer"]=="tessera.softmax":
         if set(pa)-{"axis"} or pa.get("axis",-1)!=-1:
@@ -188,8 +188,16 @@ def _epilogue_argument_names(consumer):
     return consumer
 
 
-def package_traced_lhs(module, *, producer_schedule=None, softmax_schedule=None, dynamic_axes=(), shape_bounds=None):
+def package_traced_lhs(module, *, producer_schedule=None, softmax_schedule=None, activation_schedule=None, dynamic_axes=(), shape_bounds=None):
     module=deepcopy(module)
+    if activation_schedule is not None:
+        if activation_schedule not in {"serial", "flat_128"}:
+            raise ValueError("ReLU Schedule policy requires serial|flat_128")
+        activations=[op for fn in module.functions for op in fn.body if op.op_name == "tessera.relu"]
+        if not activations:
+            raise ValueError("ReLU Schedule override requires a producer activation")
+        for op in activations:
+            op.kwargs={**op.kwargs, "schedule":activation_schedule}
     if shape_bounds is not None:
         from .bounded_nvidia_lhs import validate_bounds
         shape_bounds=dict(validate_bounds(shape_bounds))

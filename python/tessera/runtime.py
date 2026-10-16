@@ -160,6 +160,11 @@ def _execute_rocm_nvfp4_program_artifact(artifact: Any, args: Any) -> NativeProg
     return NativeProgramExecution(output,receipts)
 
 
+def _execute_nvidia_tensor_jvp_program_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
+    from .compiler.nvidia_tensor_jvp_runtime import execute
+    return execute(artifact, args)
+
+
 def _execute_nvidia_lhs_program_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
     from .compiler.prepared_nvidia_lhs import launch_portable_lhs
     prepared = launch_portable_lhs(artifact,args)
@@ -35542,6 +35547,8 @@ def _executor_table():
         "x86_deltanet_compiled": _execute_x86_compiled_deltanet,
         "x86_deltanet_bwd_compiled": _execute_x86_compiled_deltanet_backward,
         "rocm_rope_compiled": _execute_rocm_compiled_rope,
+        "nvidia_tensor_rhs_jvp_program": _execute_nvidia_tensor_jvp_program_artifact,
+        "nvidia_active_source_jvp_program": _execute_nvidia_tensor_jvp_program_artifact,
         "nvidia_lhs_program": _execute_nvidia_lhs_program_artifact,
     "nvidia_rhs_program": _execute_nvidia_rhs_program_artifact,
         "rocm_nvfp4_program": _execute_rocm_nvfp4_program_artifact,

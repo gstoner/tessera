@@ -1,0 +1,21 @@
+{
+  "frozen_source_sha256": {
+    "src/transforms/lib/NativeSM120TensorProgram.h": "0366f2e5060cda2d44f2db121fd6ce66d075bef10f932f67a12a7d1d99826f57",
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "8f3722f087f6e5913df41c7b4c5c9979a78db690a6016205960392235a468c90",
+    "src/transforms/lib/AutodiffForwardPass.cpp": "b42bf0328c1ce6c782925e64e9907915c6d83298bc2fa234634ee434bb3005f7",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "180ae290399f39ef965bd3d6fa70fbe484fd6a31c1944fd34dcf0deed2a90623",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "d60df4559b3d8ee9e3bc75ecadfb942884ffcd1c46fffd48e556aacb42836a90",
+    "python/tessera/compiler/native_sm120_tensor_program.py": "7d8b4360316e1dd4c7fdde67e7863f0976a7b8e22aded73564d3e5f4bbd8e075",
+    "python/tessera/compiler/prepared_nvidia_tensor_jvp.py": "67c3040a551d735f57f6f0b663b075504d7e964bc5effbc498f9e9c4c82da842",
+    "python/tessera/compiler/portable_nvidia_tensor_jvp.py": "f8ba4345a54f67eb7cd40932acc8a93e6e017d8e4088410a4deaf7bfbd9678fa",
+    "python/tessera/compiler/nvidia_tensor_jvp_runtime.py": "e436e58d15d5c56b695fa0b8f792bc15b0af8820719fe1833439591ed3a6eb93",
+    "python/tessera/runtime.py": "e01304d1cf7f483844dcf7ceef2e26178cef77e4a4d988bdd70743ca2c28ac04",
+    "python/tessera/compiler/jit.py": "c8fb1694f646f8eaa8cc6a48b271575ab9f9ab464c51a8e471d6b8c02f7e601a",
+    "benchmarks/nvidia/benchmark_tensor_rhs_jvp.py": "aaf2a83935b4d4d336a61efc674aa3e36be030ce87758a76276e07d4c010d14d",
+    "tests/unit/test_native_sm120_rhs_jvp_program.py": "f3641343418c2e540dc81921a06853385e6027de98d3e4c5c606b56f5ddd6fbd",
+    "python/tessera/compiler/execution_matrix.py": "433efa2ebbcb294653d659de2e10e4a936f0668ba6fd53b676fb4adfdf8f1be7"
+  },
+  "benchmark_source_matches": true,
+  "final_gate": "392 passed, 8 skipped; four imported mypy modules pass",
+  "timing_scope": "same-image alternating certificate-cache/full-validation host control; native device clocks separate"
+}

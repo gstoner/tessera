@@ -6,6 +6,164 @@ target: nvidia_sm120
 last_updated: 2026-10-15
 ---
 
+## W11-ACTIVE-SOURCE-20261015 — source-active row JVP packages
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-ACTIVE-SOURCE-20261015.
+
+PR951 review: shared eager normalization rejects explicitly narrower
+accumulators, matching native admission. Source-active profiling refreshes
+same-address host roots and warms up before device timing; 24 owning-device
+mutation regressions pass within the 436-check review gate.
+
+Native static FP16/BF16 source-active RMSNorm (explicit FP32 accumulator) ->
+ReLU -> plain FP32-output matmul JVP executes through the actual traced Graph,
+native AD SSA, sealed two-result Schedule/Tile producer, typed fragments,
+NVIDIA Target/LLVM/NVVM images and one checked C++ owner. Public native_jvp
+exports a distinct portable source-active schema. Compiler-free fresh-process
+replay, original argument permutations, minimal/ragged rows, live-owner reuse,
+changed root values and pre-provider artifact rejection have RTX5070 proof.
+
+The native outline remains artifact_only. Existing RHS v7 numbering/ABI is
+unchanged. General producer, dynamic/resident and reverse AD remain open.
+Normal CMake compiler builds and 78 owning source/policy checks pass, including
+direct signed-zero/NaN producer storage checks. The pre-synchronization focused
+gate passes 754 cases. PR950 is integrated and all three matching compiler tools
+build. Frozen synchronized 3659a2b45 passes the full non-slow unit suite:
+26,630 passed, 7,678 skipped, 876 deselected in 2017.98 seconds. The original
+two audit-drift failures and repair history remain recorded. A fresh owning
+attention control run passes 35 tests; publication-timings.json records the
+matching compiler/runtime host and device measurements. Publication CI remains
+open; earlier full-suite results retain their original source scopes.
+
+Contract: docs/spec/ir/source_active_row_jvp.md.
+Evidence: benchmarks/baselines/sm120_active_source_jvp_runtime_20261015/README.md.
+
+## NORM-AD-ACCUM-20261015 — native normalization derivative precision
+
+Owner AD-FWD-CORE-1 / AD-HIGHER-1 / NUMPOL-CARRIER-1.
+Synchronization key: NORM-AD-ACCUM-20261015.
+
+Native RMSNorm/LayerNorm JVP/VJP preserve explicitly wider accumulator
+working types and round returned storage values after derivative arithmetic.
+Dynamic leading seed extents are guarded before reads; distinct permuted
+affine root arguments retain their original derivative roles.
+Unspecified accumulator behavior is preserved. Conservative reverse-mode
+numeric-policy provenance debt remains open.
+
+Historical follow-up at the normalization checkpoint: active-source derivative SSA needed a multi-result Schedule/Tile producer and additive CUDA owner. W11-ACTIVE-SOURCE-20261015 above now provides the named static source-active route; general composed/reverse/resident AD remains open. Existing paired v7 RHS-only contracts are unchanged.
+
+Contract: docs/spec/ir/normalization_ad_accumulator_policy.md.
+Evidence: benchmarks/baselines/native_normalization_ad_accum_20261015/README.md.
+
+Frozen 861f4ad6b passes the full non-slow unit gate on Super-Bear WSL:
+26,392 passed, 7,676 skipped and 876 deselected. Matching LLVM/MLIR 23.1.1
+core/ROCm tools and the repaired missing-optimizer lit gate are recorded in
+the packet. This is host/compiler proof for the committed arithmetic fix;
+later isolated candidates retain separate certificates.
+
+
+
+## W11-TENSOR-RHS-JVP-20261015 — frozen full regression
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+
+The clean fc712bfd6 public paired artifact/replay source passes the full
+non-slow tests/unit gate on Super-Bear WSL: 26,269 passed, 7,700 skipped and
+876 deselected. LLVM/MLIR23.1.1 and the owning RTX5070 provider/device are
+recorded; this is not a sibling hardware certificate. Earlier red partitioned
+results remain historical. The separate precision-policy prototype is not
+part of this frozen source or certificate.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.
+
+
+## W11-TENSOR-RHS-JVP-20261015 — public artifact dispatch
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+
+The previously declared paired executor now resolves in the runtime table.
+native_jvp_runtime_artifact exports the last static paired product;
+RuntimeArtifact JSON replay returns two independent arrays through the
+same native C++ owner, with named/positional three-root ABI and complete
+member receipts. Matching public replay borrows the live JIT lease.
+Parent Graph/target/argument changes reject before provider access.
+Fresh-process FP16/BF16 replay forbids compiler/package/member launches.
+The frozen owning-device gate passes 392 cases (eight environment-specific
+skips). Matched same-image RuntimeArtifact replay reduces completed host time
+from 3.358–3.582 ms to 0.898–1.066 ms through bounded validated-certificate
+reuse; this is host overhead reduction, not a native kernel speedup.
+Active-source/A+B derivatives and generic resident AD remain open.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.
+
+
+## W11-TENSOR-RHS-JVP-20261015 — portable paired replay
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+
+Parity validated on RTX 5070: explicit prepared manifest/replay now uses a
+separate paired schema, preserving primal v1–v6. Fresh-process FP16/BF16
+replay disables compiler/package/member launch paths; 31 paired cases pass.
+Six numerical/timing cases retain separate stage/program/host clocks.
+The subsequent public dispatch entry above closes this named artifact gap; active-source AD remains open.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_portable_20261015/README.md.
+
+## W11-TENSOR-RHS-JVP-20261015 — native paired execution
+
+Integration follow-through: ReLU now has an authored derivative proof contract and a native JVP/adjoint directional-duality witness. The paired specification has its required date. All 53 proof/spec/freshness guards pass without weakening admission. Follow-up required: the frozen 264e1a0f broad NVIDIA sweep is reconciled by the explicit repaired failure set recorded below. The proof/date repair changes no CUDA arithmetic or native owner ABI; prior source-pinned RTX5070 numerical/timing evidence remains separate.
+Evidence: benchmarks/baselines/sm120_shared_rocm_parity_20261015/README.md. Broad NVIDIA reconciliation: the frozen sweep has 26,021 passes and 74 failures; all 74 pass on f2162522c with the proof/date repair and complete LLVM tools. A further 100 owning RTX5070 program/proof/audit checks pass. This is partitioned regression evidence, not a single green full-sweep certificate; no sibling physical result is inferred.
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-TENSOR-RHS-JVP-20261015.
+Native v7 tensor export outlines the actual RHS-linear paired Graph SSA,
+retains original/paired Graph witnesses and shared-edge last-use through both
+matmul reads, and exports two returned f32 output IDs. Independently compiled
+Schedule/Tile/LLVM/PTX members bind to a distinct sealed C++ program owner.
+The public named RMSNorm -> ReLU -> matmul RHS JVP now executes for f16/BF16;
+Python authors no derivative program and submits no member kernels.
+Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_20261015/README.md;
+docs/spec/ir/sm120_paired_tensor_program_contract.md.
+
+Parity validated on RTX5070: 666 affected regressions pass; 26 final program cases cover the registered row producers/mappings and lifetimes; four public dtype/role-permutation controls pass. Six source-pinned timing cases separate captured member/program, compile/prepare and completed frontend time (6.46-51.85 us program, 0.725-0.884 ms warm public call). Maximum error is below 4.8e-6. Active-source/A+B, composed reverse, dynamic/resident roots and encoded/fused envelopes remain open. Default serial ReLU is unchanged; no speedup or five-slice closure claim.
+
+## W11-RELU-AD-20261015 — native Graph tangent integration
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.
+Synchronization key: W11-RELU-AD-20261015.
+Native MLIR ReLU now implements TangentInterface by reusing its strict-positive
+adjoint predicate; real f16/bf16/f32/f64 storage and a direct symbolic ReLU
+contract are covered. The named RMSNorm -> ReLU -> matmul now emits active
+A/B/A+B paired Graph IR in f16 and bf16. Shared gates pass 469 tests, including
+three independent FP32 composed directional oracles and four target provenance
+guards. Graph IR proof does not imply an executable native AD package.
+Evidence: benchmarks/baselines/native_relu_ad_20261015/README.md.
+
+Parity validated for existing primal producer and saved-LSE attention controls on RTX 5070: 150 tests pass against the rebuilt LLVM/MLIR 23.1.1 compiler. This checkpoint had no public composed execution. W11-TENSOR-RHS-JVP-20261015 above now proves the named static RHS JVP; active-source and composed VJP execution remain open.
+
+## W11-RELU-FLAT-20261015 — optional native activation schedule
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Synchronization key: W11-RELU-FLAT-20261015.
+Captured-profile follow-through: the native last-host-frame profiler now
+measures complete program and member CUDA graphs with per-call graph lifetime,
+context/lease guards and bounded node counts. 681 owning RTX5070 regressions
+pass (one Apple-only skip), including 13 captured frame/lease cases.
+Captured, enqueue-event, profiling-overhead and inference-wall metrics are
+separate in sm120_relu_flat_20261015/captured.json. Captured borrowed-root
+profiling, persistent inference graphs and default selection remain open.
+Native Graph/Schedule/Tile carries explicit serial or flat_128 ReLU;
+NVIDIA LLVM/NVVM maps adjacent stored elements to adjacent warp lanes.
+The FP16/BF16 NaN-payload and signed-zero policy is unchanged. Hashed
+symbols and descriptor geometry distinguish mappings. Native launchers
+use checked element capacity; prepared providers negotiate flat support
+before owner allocation. Serial remains the default and A/B control.
+Parity validated on RTX5070: 668 affected tests pass (one Darwin-only skip), including 46 activation cases, bounded/resident/DAG/portable ownership and public/prepared attention forward/reverse controls. The final 12-case standalone and six-case composed ABBA packet is source-pinned in sm120_relu_flat_20261015/matched.json. Follow-up required: publication CI; serial remains the default because singleton/short and program/host results do not establish broad non-regression.
+Evidence: benchmarks/baselines/sm120_relu_flat_20261015/README.md;
+docs/spec/ir/sm120_activation_schedule_tile_contract.md.
+No default performance promotion or five-slice closure claim.
+
 ## NVFP4-NATIVE-MULTI-OUTPUT-20261015 — native producer/product ownership
 
 Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
@@ -83,7 +241,7 @@ post-matmul epilogue, whose original fixture remains registered. Generated
 execution/conformance/coverage views are refreshed; sibling physical claims
 and all operation/dtype/ABI definitions are unchanged.
 
-Parity validated on RTX 5070/sm_120 for the named static f16/bf16 producer chain at M,K,N=(7,32,9), (17,64,19), (129,256,33). Follow-up required: captured measurement, coalesced ReLU row mapping, symbolic frontend metadata and broader producer/AD coverage.
+Parity validated on RTX 5070/sm_120 for the named static f16/bf16 producer chain at M,K,N=(7,32,9), (17,64,19), (129,256,33). Captured measurement and explicit coalesced mapping are recorded in W11-RELU-FLAT-20261015 above. Follow-up required: symbolic frontend metadata and broader producer/AD execution coverage.
 
 ## MXFP4-RESERVED-SCALE-20261014 — PR946 review correction
 

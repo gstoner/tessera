@@ -794,3 +794,15 @@ bool isTileControlType(::mlir::Type type) {
 
 } // namespace tile
 } // namespace tessera
+
+namespace tessera::tile {
+mlir::LogicalResult BufferViewType::verify(
+    llvm::function_ref<mlir::InFlightDiagnostic()> error, mlir::Type element,
+    llvm::StringRef access, llvm::StringRef order) {
+  if ((!element.isF16() && !element.isBF16() && !element.isF32()) ||
+      (access != "read" && access != "write" && access != "read_write") ||
+      (order != "row_major" && order != "col_major"))
+    return error() << "requires f16/bf16/f32 storage, a read/write permission and row/column-major order";
+  return mlir::success();
+}
+}

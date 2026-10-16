@@ -1,0 +1,16 @@
+{
+  "scope": "working-tree test-oracle correction; no compiler/runtime source changes; source hashes bind the tested repair",
+  "base_revision": "0d88cf94c29e8011b98e9313fed9720838dd0fc3",
+  "python": "3.11.17",
+  "numpy": "1.26.4",
+  "ml_dtypes": "0.5.4",
+  "compiler_sha256": "4933ce714af733dfdf8f4bb7eb1461c65ac979852822e5b41741a9f98a246f4a",
+  "source_sha256": {
+    "tests/unit/test_autodiff_paired_cpu_oracle.py": "81f936c6d6bed6872fe3340c89fa356d7d968ac39bcb6f4ea19894d978062c0e",
+    "tests/unit/test_native_relu_tangent.py": "e4b7fbd10e77899443970847207c0c21310ba69b295787afe2291a56ca58ec2d"
+  },
+  "before": "3 failed, 9 passed, 12 deselected in 1.47s",
+  "after": "822 passed, 3 warnings in 176.69s; ci_require_executed: every selected proof test executed",
+  "current_stack_control": "Python 3.14.4 / NumPy 2.5.3 / ml_dtypes 0.6.0: 103 passed in 2.21s",
+  "upstream_failed_run": "https://github.com/gstoner/tessera/actions/runs/38824250913/job/116728113451"
+}

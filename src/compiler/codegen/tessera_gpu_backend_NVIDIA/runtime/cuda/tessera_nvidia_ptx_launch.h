@@ -26,6 +26,28 @@ struct TesseraNvidiaMatmulHostView {
   int32_t dtype, rank;
   int64_t shape[2], strides[2];
 };
+// Sealed static RHS-linear paired Graph program. Buffer IDs and ordered members
+// are compiler-authored. Three readonly roots precede private SSA intermediates
+// and two f32 returned outputs. No matmul/bias argument is repurposed as a seed.
+struct TesseraNvidiaTensorProgramStep {
+  const void *image;
+  size_t image_bytes;
+  const char *entry;
+  int64_t inputs[2], input_count, output;
+  int32_t kind, mapping; // kind: row=0/matmul=1; row mapping: serial/cooperative/flat.
+};
+int tessera_nvidia_tensor_program_prepare(const TesseraNvidiaMatmulHostView *buffers,
+    size_t buffer_count, const int64_t *roles, const TesseraNvidiaTensorProgramStep *steps,
+    size_t step_count, uint64_t *handle);
+int tessera_nvidia_tensor_program_invoke(uint64_t handle,
+    const TesseraNvidiaMatmulHostView *views, size_t view_count);
+int tessera_nvidia_tensor_program_profile(uint64_t handle, int repeats, int captured,
+    float *stage_ms, size_t stage_count, float *program_ms,
+    const TesseraNvidiaMatmulHostView *outputs, size_t output_count);
+int tessera_nvidia_tensor_program_scratch_stats(uint64_t handle,
+    size_t *capacity, size_t *allocations);
+int tessera_nvidia_tensor_program_close(uint64_t handle);
+
 int tessera_nvidia_matmul_prepare(const void *image, size_t image_bytes,
     const char *entry, const int64_t *mnk, int storage, int bias, int residual,
     int row_b, int half_output, uint64_t *handle);
@@ -94,7 +116,13 @@ int tessera_nvidia_matmul_profile_lhs_resident_ordered(uint64_t handle,
     int repeats, float *stage_ms, size_t stage_count, float *program_ms);
 // CUDA-event profiles of the last successful host frame. Rejects stale shared
 // arena leases. Stage windows group repeated kernels and are not additive.
+int tessera_nvidia_matmul_supports_flat_activation(void);
 int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
+    float *stage_ms, size_t stage_count, float *program_ms,
+    TesseraNvidiaMatmulHostView *output);
+// Per-call CUDA graphs of the same checked frame, at most 4096 repeats and
+// 65536 member nodes. Graph setup/prime/retirement is outside event timing.
+int tessera_nvidia_matmul_profile_captured(uint64_t handle, int repeats,
     float *stage_ms, size_t stage_count, float *program_ms,
     TesseraNvidiaMatmulHostView *output);
 int tessera_nvidia_matmul_close(uint64_t handle);

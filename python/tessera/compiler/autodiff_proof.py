@@ -106,6 +106,12 @@ def _contracts() -> tuple[DerivativeProofContract, ...]:
             "active window products are rejected because overlap-add normalization "
             "depends quadratically on the window"),
         DerivativeProofContract(
+            "relu", ProofKind.DIRECTIONAL_AND_DUALITY,
+            "d relu(x)=where(x>0,dx,0); VJP uses the same diagonal mask",
+            "real f16/bf16/f32/f64 Graph tensors; finite differences away from zero",
+            "strict-positive predicate selects zero for both signed zeros and "
+            "NaN; this boundary selection is not a classical derivative claim"),
+        DerivativeProofContract(
             "tanh", ProofKind.DIRECTIONAL_AND_DUALITY,
             "dy=dx*(1-tanh(x)^2)", "finite floating inputs"),
         DerivativeProofContract(

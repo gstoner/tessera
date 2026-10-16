@@ -31,6 +31,20 @@ validation remain in progress. General producer reconstruction,
 dynamic/pitched/mixed roots, resident results and reverse composition remain
 open. The five remaining requirements below are not relabeled complete.
 
+## Source-active ABI geometry correction — 2026-10-16
+
+The clean c8a1f89a2 gate passes 26,834 non-slow unit cases (7,678 skipped),
+880 required compiler-route cases with no skips, and 336 owning-device cases.
+Its eight-profile timing and standalone replay records retain that source scope.
+
+Follow-through inspection found consumer geometry metadata declared 128 threads
+while the native owner actually launches 32. The corrected records now match
+the native row128/consumer32 geometry; twelve real-driver trace cases and
+85 portable/admission checks pass. Malformed consumer128 records are rejected
+before provider access. The native step ABI and portable schema numbering stay
+unchanged. Corrected-source measurements, full validation and publication remain
+in progress; the five-slice aggregate is not closed.
+
 ## Current reconciliation — 2026-10-16
 
 PR952 is merged as b361ecf42aca146aa9b47cbd156e601ffe3ce972; its publication

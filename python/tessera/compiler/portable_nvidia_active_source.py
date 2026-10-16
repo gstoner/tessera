@@ -31,7 +31,7 @@ def _abi(plan, index, entry):
         'step_bytes': 112, 'kind': 'row_pair' if index == 0 else 'matmul',
         'entry': entry, 'inputs': step['inputs'], 'outputs': step['outputs'],
         'dimensions': [m, k, 0] if index == 0 else [m, n, k],
-        'storage': source['storage'], 'block_size': 128,
+        'storage': source['storage'], 'block_size': 128 if index == 0 else 32,
         'parameters': ['ptr'] * (4 if index == 0 else 3) + ['i64'] * (2 if index == 0 else 3),
     }
 

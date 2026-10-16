@@ -56,7 +56,7 @@ lowering consumes all Tile memory operations and types, verifies original
 pointer roots, and preserves the Tile body hash separately when resealing the
 native body. ReLU uses an ordered comparison and selects the original storage value
 for NaNs and BF16 signed zero; F16 zeros become positive, matching its canonical
-activation contract. Row workgroups contain 128 threads.
+activation contract. Row workgroups contain 128 threads; each matmul consumer uses one 32-thread warp.
 
 ## Native program and persistence
 
@@ -83,6 +83,14 @@ schema is `tessera.nvidia.tensor_active_source_jvp.v1`. It carries the native
 plan, actual members at every compiler boundary, PTX images, resource records,
 compiler/toolchain identity, typed step ABI and cross-bound digests. Existing
 RHS-only native v7 and portable schemas are not renumbered.
+
+Portable member geometry is derived from the native stage kind: row_pair
+declares 128 threads, and matmul declares 32. The prior producer-wide value of
+128 on consumer metadata was incorrect; regenerated manifests use the actual
+launch geometry. Inconsistent consumer records are rejected before provider
+access, rather than silently normalized. The native step size, public API and
+portable schema numbering are unchanged. Untimed driver-interposition tests
+compare all three actual entry/grid/block launches with these sealed records.
 
 Restoration validates the complete package and parent Graph/argument ABI before
 provider access. Replay requires no compiler or image file reads. Digests detect

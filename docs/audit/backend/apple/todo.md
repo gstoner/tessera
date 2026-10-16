@@ -33,6 +33,20 @@ The exact-bit native LLVM gate passes all 121 JVP/VJP precision cases with no
 skips. Post-repair adjacent controls, publication and benchmark gates remain
 in progress. This is no sibling physical producer or performance proof.
 
+
+Portable geometry follow-through: member metadata now declares the actual
+128-thread row producer and 32-thread matmul consumers. Twelve owning RTX5070
+driver-interposition cases compare the real entry/grid/block sequence with
+the sealed metadata; 85 portable/admission checks pass. Resealed legacy-style
+128-thread consumer records are rejected before provider access. The native
+112-byte step ABI and portable schema numbering are unchanged. Native kernel
+code is unchanged; this is not sibling geometry or execution parity.
+
+The earlier c8a1f89a2 source passes 26,834 non-slow unit cases (7,678 skipped),
+880 required compiler-route cases without skips and 336 device cases. Those
+receipts retain their pre-geometry-correction scope; final corrected-source
+benchmark and publication gates remain in progress.
+
 Contract: docs/spec/ir/source_active_row_jvp.md.
 
 ## GFX1201-FOLDED-INPUT-VIEWS-20261016 — preserve physical input row pitches

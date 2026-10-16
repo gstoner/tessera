@@ -224,3 +224,109 @@ np.savez(sys.argv[3], *outputs)
     assert completed.returncode == 0, completed.stdout + completed.stderr
     with np.load(destination) as saved:
         check((saved["arr_0"], saved["arr_1"]), expected, budgets)
+
+
+_GEOMETRY_TRACE = r"""
+#include <cuda.h>
+#include <cstdio>
+#include <cstdlib>
+#include <dlfcn.h>
+extern "C" CUresult CUDAAPI cuLaunchKernel(
+    CUfunction function, unsigned gx, unsigned gy, unsigned gz,
+    unsigned bx, unsigned by, unsigned bz, unsigned shared,
+    CUstream stream, void **parameters, void **extra) {
+  static auto real = reinterpret_cast<decltype(&cuLaunchKernel)>(
+      dlsym(RTLD_NEXT, "cuLaunchKernel"));
+  if (!real) return CUDA_ERROR_NOT_INITIALIZED;
+  const char *name = nullptr;
+  auto getName = reinterpret_cast<decltype(&cuFuncGetName)>(
+      dlsym(RTLD_NEXT, "cuFuncGetName"));
+  if (getName) getName(&name, function);
+  if (const char *path = std::getenv("TESSERA_TEST_CUDA_LAUNCH_TRACE")) {
+    if (FILE *file = std::fopen(path, "a")) {
+      std::fprintf(file, "%s %u %u %u %u %u %u\n",
+          name ? name : "unknown", gx, gy, gz, bx, by, bz);
+      std::fclose(file);
+    }
+  }
+  return real(function, gx, gy, gz, bx, by, bz, shared, stream, parameters, extra);
+}
+"""
+
+
+@pytest.fixture(scope="module")
+def launch_geometry_library(tmp_path_factory):
+    import os
+    from pathlib import Path
+    import shutil
+    import subprocess
+    compiler = shutil.which("clang++") or shutil.which("g++")
+    assert compiler, "owning geometry proof requires a host C++ compiler"
+    directory = tmp_path_factory.mktemp("cuda-launch-geometry")
+    source = directory / "trace.cpp"
+    source.write_text(_GEOMETRY_TRACE)
+    library = directory / "trace.so"
+    subprocess.run([
+        compiler, "-std=c++17", "-O2", "-fPIC", "-shared", str(source),
+        "-I"+str(Path(os.environ["CUDA_HOME"])/"include"),
+        "-ldl", "-o", str(library),
+    ], check=True, capture_output=True, text=True)
+    return library
+
+
+def test_portable_geometry_matches_actual_driver_launches(
+    compiled, launch_geometry_library, tmp_path,
+):
+    import os
+    import subprocess
+    import sys
+    fn, roots, expected, budgets = compiled
+    artifact = fn.native_jvp_runtime_artifact()
+    members = artifact.metadata["native_program"]["members"]
+    artifact_path = tmp_path / "program.json"
+    artifact_path.write_text(artifact.to_json())
+    np.savez(tmp_path / "inputs.npz", *(root.view(np.uint16) for root in roots))
+    storage = "bf16" if roots[0].dtype.name == "bfloat16" else "f16"
+    worker = """
+from contextlib import ExitStack
+from pathlib import Path
+import sys
+import ml_dtypes
+import numpy as np
+from tessera import runtime as rt
+from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
+artifact = rt.RuntimeArtifact.from_json(Path(sys.argv[1]).read_text())
+dtype = ml_dtypes.bfloat16 if sys.argv[4] == "bf16" else np.float16
+with np.load(sys.argv[2]) as saved:
+    arrays = tuple(saved["arr_"+str(i)].view(dtype) for i in range(3))
+with ExitStack() as stack:
+    sessions = [stack.enter_context(NvidiaDeviceSession()) for _ in arrays]
+    roots = tuple(session.upload(value) for session, value in zip(sessions, arrays, strict=True))
+    result = rt.launch(artifact, roots)
+    assert result["ok"], result
+    np.savez(sys.argv[3], *result["output"])
+"""
+    env = dict(os.environ)
+    env["LD_PRELOAD"] = str(launch_geometry_library)
+    env["TESSERA_TEST_CUDA_LAUNCH_TRACE"] = str(tmp_path / "launches.txt")
+    for name in ("TESSERA_OPT", "TESSERA_NVIDIA_OPT", "TESSERA_LLVM_BIN", "LLVM_BIN"):
+        env[name] = "/compiler-intentionally-unavailable"
+    process = subprocess.run([
+        sys.executable, "-c", worker, str(artifact_path), str(tmp_path / "inputs.npz"),
+        str(tmp_path / "outputs.npz"), storage,
+    ], env=env, capture_output=True, text=True, check=False)
+    assert process.returncode == 0, process.stdout + process.stderr
+    with np.load(tmp_path / "outputs.npz") as saved:
+        check((saved["arr_0"], saved["arr_1"]), expected, budgets)
+    launches = [line.split() for line in (tmp_path / "launches.txt").read_text().splitlines()]
+    assert len(launches) == len(members) == 3
+    m, n, k = members[1]["abi"]["dimensions"]
+    grids = [((m+127)//128, 1, 1), ((n+7)//8, (m+15)//16, 1)]
+    for index, (launch, member) in enumerate(zip(launches, members, strict=True)):
+        assert launch[0] == member["entry"]
+        actual_grid = tuple(map(int, launch[1:4]))
+        actual_block = tuple(map(int, launch[4:7]))
+        assert actual_grid == grids[0 if index == 0 else 1]
+        assert actual_block == (member["abi"]["block_size"], 1, 1)
+        assert actual_block == ((128 if index == 0 else 32), 1, 1)
+    assert k == roots[-1].shape[1]

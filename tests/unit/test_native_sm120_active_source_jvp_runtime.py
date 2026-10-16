@@ -73,6 +73,7 @@ def test_json_public_replay_borrows_live_jit_lease(package,monkeypatch):
     restored=rt.RuntimeArtifact.from_json(artifact.to_json())
     names=['primal_0','primal_1',f'tangent_{int(permuted)}']
     assert restored.metadata['arg_names']==names
+    assert [member['abi']['block_size'] for member in restored.metadata['native_program']['members']]==[128,32,32]
     with monkeypatch.context() as warm:
         warm.setattr(prepared.PreparedActiveSourceJVP,'from_manifest',classmethod(lambda *a,**k:pytest.fail('live lease prepared twice')))
         warm.setattr(nvidia_native,'_compile_tile_ir',lambda *a,**k:pytest.fail('replay compiled'))
@@ -100,6 +101,8 @@ def corruptions():
     yield 'dimensions',lambda d:d['members'][1]['abi'].update(dimensions=[17,19,36])
     yield 'storage',lambda d:d['members'][0]['abi'].update(storage='f32')
     yield 'block',lambda d:d['members'][0]['abi'].update(block_size=32)
+    yield 'consumer-block-1',lambda d:d['members'][1]['abi'].update(block_size=128)
+    yield 'consumer-block-2',lambda d:d['members'][2]['abi'].update(block_size=128)
     yield 'parameters',lambda d:d['members'][0]['abi'].update(parameters=['ptr']*6)
     yield 'resource',lambda d:d['members'][0]['resources'].update(registers_per_thread=-1)
     yield 'extra-field',lambda d:d['members'][0].update(already_verified=True)

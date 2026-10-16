@@ -38,6 +38,7 @@ def source_snapshot():
     paths=[
         'python/tessera/compiler/jit.py',
         'python/tessera/compiler/prepared_nvidia_active_source.py',
+        'python/tessera/compiler/portable_nvidia_active_source.py',
         'python/tessera/compiler/nvidia_tensor_jvp_runtime.py',
         'src/compiler/ir/TangentInterface.cpp',
         'src/compiler/ir/AdjointInterface.cpp',

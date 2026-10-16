@@ -1,0 +1,127 @@
+{
+  "purpose": "Historical receipt bytes, not validation of later source",
+  "revisions": {
+    "validation": {
+      "revision": "de14978d8a94916c8438ddcd737c2289ee20b5e7",
+      "files": {
+        "benchmarks/nvidia/record_saved_lse_storage.py": {
+          "sha256": "a72b8b353340a03ca610fc196298140d337f4443157366f2457fbb66d0bcde6e",
+          "snapshot": "history/source-archive/a72b8b353340a03ca610fc196298140d337f4443157366f2457fbb66d0bcde6e.gz"
+        },
+        "python/tessera/compiler/jit.py": {
+          "sha256": "b6871278f6594e29e0c85f73ac97e320892c8b1d4a43b8e961c582cf6abbf3ca",
+          "snapshot": "history/source-archive/b6871278f6594e29e0c85f73ac97e320892c8b1d4a43b8e961c582cf6abbf3ca.gz"
+        },
+        "python/tessera/compiler/nvidia_native.py": {
+          "sha256": "21cbc37fd5b44d359313167fc6779c642d9d3eb66aa65e0028a912ce88180cd1",
+          "snapshot": "history/source-archive/21cbc37fd5b44d359313167fc6779c642d9d3eb66aa65e0028a912ce88180cd1.gz"
+        },
+        "python/tessera/compiler/prepared_attention_forward.py": {
+          "sha256": "e924f8774a11e68fa459828fecb3692724145866429f4ee81f7c132c85cf811b",
+          "snapshot": "history/source-archive/e924f8774a11e68fa459828fecb3692724145866429f4ee81f7c132c85cf811b.gz"
+        },
+        "python/tessera/compiler/scheduled_checkpoint.py": {
+          "sha256": "7b68c39ce4fc2d38db95bf0a3e4397a10705b3aa29a32e25b35f5843396bae3c",
+          "snapshot": "history/source-archive/7b68c39ce4fc2d38db95bf0a3e4397a10705b3aa29a32e25b35f5843396bae3c.gz"
+        },
+        "python/tessera/compiler/trace.py": {
+          "sha256": "33030559f7a5ace66efd3c46645a8e21da6ae234888010c42490c04b9a2ae637",
+          "snapshot": "history/source-archive/33030559f7a5ace66efd3c46645a8e21da6ae234888010c42490c04b9a2ae637.gz"
+        },
+        "python/tessera/compiler/typed_attention_checkpoint.py": {
+          "sha256": "292a113ce7413a7a2d26aa7fa446148a78fecb876bd48ecaac98b7b7f79bd54c",
+          "snapshot": "history/source-archive/292a113ce7413a7a2d26aa7fa446148a78fecb876bd48ecaac98b7b7f79bd54c.gz"
+        },
+        "python/tessera/runtime.py": {
+          "sha256": "d4ef672538c0271804e2f064528c937be357f2dc0497f9cf9adce200239a6a16",
+          "snapshot": "history/source-archive/d4ef672538c0271804e2f064528c937be357f2dc0497f9cf9adce200239a6a16.gz"
+        },
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": {
+          "sha256": "d81f7f6d261dabebc24773f84b0e519a111e132a111100b484b34e7cd6f8ddca",
+          "snapshot": "history/source-archive/d81f7f6d261dabebc24773f84b0e519a111e132a111100b484b34e7cd6f8ddca.gz"
+        },
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": {
+          "sha256": "8bc67afd5b7cadc89f44563e32714255eb2b60995d5ac8c8b3d26d451536c1bf",
+          "snapshot": "history/source-archive/8bc67afd5b7cadc89f44563e32714255eb2b60995d5ac8c8b3d26d451536c1bf.gz"
+        },
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": {
+          "sha256": "abcb8b5158187a1278513d53d9db16bcf1db77ca716aaa82f713b9af53ea4fc0",
+          "snapshot": "history/source-archive/abcb8b5158187a1278513d53d9db16bcf1db77ca716aaa82f713b9af53ea4fc0.gz"
+        },
+        "src/compiler/ir/TileOps.cpp": {
+          "sha256": "cb40fa1a0d5f008f267aa7347cee480bb580c2654d4a1a4a030995b244522719",
+          "snapshot": "history/source-archive/cb40fa1a0d5f008f267aa7347cee480bb580c2654d4a1a4a030995b244522719.gz"
+        },
+        "src/compiler/ir/include/Tessera/IR/AttentionCheckpointStorage.h": {
+          "sha256": "0f35b70362e9f46ab2ec200db353c061a2d6248c0b97037e985ee19acab77603",
+          "snapshot": "history/source-archive/0f35b70362e9f46ab2ec200db353c061a2d6248c0b97037e985ee19acab77603.gz"
+        },
+        "src/compiler/programming_model/lib/NativeCheckpoint.h": {
+          "sha256": "fd1d15954d22db2a4d75b67678c7d1f6a5ecacfdebc4d6781eb31da266876798",
+          "snapshot": "history/source-archive/fd1d15954d22db2a4d75b67678c7d1f6a5ecacfdebc4d6781eb31da266876798.gz"
+        },
+        "src/compiler/programming_model/lib/PMPasses.cpp": {
+          "sha256": "6af703452d7c51b8e1a1da165cc4696ed19663890c00a2621c057de2302e3aa3",
+          "snapshot": "history/source-archive/6af703452d7c51b8e1a1da165cc4696ed19663890c00a2621c057de2302e3aa3.gz"
+        },
+        "src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td": {
+          "sha256": "5044200915b10c970ca08cbd2cf142ad671c7b6bc249a7e47729dea8c41310e4",
+          "snapshot": "history/source-archive/5044200915b10c970ca08cbd2cf142ad671c7b6bc249a7e47729dea8c41310e4.gz"
+        },
+        "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": {
+          "sha256": "dd9d9fc551c5d1d905aea1cec41fd8dd5d529dc0b4b31c1f02ee67bf7775e696",
+          "snapshot": "history/source-archive/dd9d9fc551c5d1d905aea1cec41fd8dd5d529dc0b4b31c1f02ee67bf7775e696.gz"
+        },
+        "tests/device/nvidia/test_saved_lse_storage.py": {
+          "sha256": "2065cbedd3479fb121d14c703884bf07cbb6df6bcad25cc8cbb9bf405e3f8689",
+          "snapshot": "history/source-archive/2065cbedd3479fb121d14c703884bf07cbb6df6bcad25cc8cbb9bf405e3f8689.gz"
+        },
+        "tests/unit/test_public_attention_saved_lse.py": {
+          "sha256": "b25e6e94e3c162cae36a97a2ffadf004a7c13e4593c1b2fdc66ee85a56cd25b3",
+          "snapshot": "history/source-archive/b25e6e94e3c162cae36a97a2ffadf004a7c13e4593c1b2fdc66ee85a56cd25b3.gz"
+        },
+        "tests/unit/test_saved_lse_storage_contract.py": {
+          "sha256": "83f40e49b2bb395e8a93822c02a07394d0962181f296a79d79476547b2f763bb",
+          "snapshot": "history/source-archive/83f40e49b2bb395e8a93822c02a07394d0962181f296a79d79476547b2f763bb.gz"
+        }
+      }
+    },
+    "review": {
+      "revision": "9c06172016b67a7b7535727540decf96808bfb58",
+      "files": {
+        "python/tessera/compiler/lse_cotangent_contract.py": {
+          "sha256": "6e2232a6446b3f40e6b3dec0bec2b3f6a8207f5fc1361bef0e0375e947a45a31",
+          "snapshot": "history/source-archive/6e2232a6446b3f40e6b3dec0bec2b3f6a8207f5fc1361bef0e0375e947a45a31.gz"
+        },
+        "python/tessera/compiler/native_attention_program.py": {
+          "sha256": "3b954bae0ac06a95c22a985df7b19e9c27cd2832c81c48f0eeecac11d769df96",
+          "snapshot": "history/source-archive/3b954bae0ac06a95c22a985df7b19e9c27cd2832c81c48f0eeecac11d769df96.gz"
+        },
+        "python/tessera/compiler/nvidia_native.py": {
+          "sha256": "87704038d351be798262cca61a65ca61f0c7b016d4c6e75880e0b3af9719734d",
+          "snapshot": "history/source-archive/87704038d351be798262cca61a65ca61f0c7b016d4c6e75880e0b3af9719734d.gz"
+        },
+        "python/tessera/compiler/resident_attention.py": {
+          "sha256": "e09dc9a1aad9939bba84b0654d4db9fe5feb302bcb2a4f0f8777b67c0f986993",
+          "snapshot": "history/source-archive/e09dc9a1aad9939bba84b0654d4db9fe5feb302bcb2a4f0f8777b67c0f986993.gz"
+        },
+        "tests/unit/test_bounded_attention_jvp_lowering.py": {
+          "sha256": "c25c4a084d1b14f1540f1425592689bd9777529b76936dcc8e8413a112052003",
+          "snapshot": "history/source-archive/c25c4a084d1b14f1540f1425592689bd9777529b76936dcc8e8413a112052003.gz"
+        },
+        "tests/unit/test_nvidia_checkpoint_pair.py": {
+          "sha256": "69ca05fb1e9ebf2b23d4b88e05fc2b4518dd05b354c774d54ca1a9eddc91963c",
+          "snapshot": "history/source-archive/69ca05fb1e9ebf2b23d4b88e05fc2b4518dd05b354c774d54ca1a9eddc91963c.gz"
+        },
+        "tests/unit/test_saved_lse_storage_contract.py": {
+          "sha256": "29bd942ef7c5a4e4f3f46b1ccffb736d8e730b92da18a377fb67a80a5a7cfe5d",
+          "snapshot": "history/source-archive/29bd942ef7c5a4e4f3f46b1ccffb736d8e730b92da18a377fb67a80a5a7cfe5d.gz"
+        },
+        "tests/unit/test_saved_lse_storage_packet.py": {
+          "sha256": "dae55211b15466c942ba63bdae2b2048556edb4e66d8736cf7cd7b099eb5eaf1",
+          "snapshot": "history/source-archive/dae55211b15466c942ba63bdae2b2048556edb4e66d8736cf7cd7b099eb5eaf1.gz"
+        }
+      }
+    }
+  }
+}

@@ -40,13 +40,13 @@ namespace tessera {
 
 llvm::SmallVector<mlir::Value> FlashAttnOp::buildAdjoint(
     mlir::OpBuilder &builder, mlir::ValueRange cotangents) {
-  if (!denseAttentionAD(*this, true, true) || cotangents.size() != getNumResults() ||
+  if (!denseAttentionAD(*this, true, true, false, true) || cotangents.size() != getNumResults() ||
       llvm::none_of(cotangents, [](mlir::Value value) { return bool(value); })) return {};
   auto zeroIfInactive = [&](mlir::Value primal, mlir::Value seed) {
     if (seed) return seed;
     auto type = mlir::cast<mlir::RankedTensorType>(primal.getType());
     return mlir::arith::ConstantOp::create(builder, getLoc(),
-        mlir::DenseElementsAttr::get(type, builder.getF32FloatAttr(0.0))).getResult();
+        mlir::DenseElementsAttr::get(type, builder.getFloatAttr(type.getElementType(), 0.0))).getResult();
   };
   auto outputSeed = zeroIfInactive(getOperation()->getResult(0), cotangents[0]);
   auto saved = attentionCheckpoint(builder, *this, false, getOperands());

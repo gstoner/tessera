@@ -2446,10 +2446,19 @@ LogicalResult AttentionBackwardKernelOp::verify() {
     return emitOpError(
         "deterministic reference route requires storage=\"f16\", "
         "storage=\"bf16\", or storage=\"f32\"");
-  if (hasLseCotangent && storage.getValue() != "f32")
-    return emitOpError("saved LSE cotangent requires f32 storage");
-  if (hasBiasGradient && storage.getValue() != "f32")
-    return emitOpError("saved bias gradient requires f32 storage");
+  auto correction = getOperation()->getAttrOfType<StringAttr>("row_correction");
+  auto outputStorage = getOperation()->getAttrOfType<StringAttr>("output_storage");
+  bool halfSaved = hasSavedOutput && storage.getValue() != "f32";
+  if (halfSaved && (!hasSavedLse || !correction ||
+      correction.getValue() != "probability_dot_v_f32_v1" || !outputStorage ||
+      (outputStorage.getValue() != storage.getValue() && outputStorage.getValue() != "f32")))
+    return emitOpError("half saved-output backward requires the typed f32 probability row correction contract");
+  if (getOperation()->hasAttr("row_correction") && !halfSaved)
+    return emitOpError("explicit row correction requires a half saved-output backward contract");
+  if (getOperation()->hasAttr("output_storage") && !halfSaved)
+    return emitOpError("backward output storage requires a half saved-output contract");
+  if ((hasLseCotangent || hasBiasGradient) && storage.getValue() != "f32" && !halfSaved)
+    return emitOpError("typed auxiliary gradients require the half saved-output contract");
   if (!accum || accum.getValue() != "f32")
     return emitOpError("requires accum=\"f32\"");
   if (!scale || !scale.getValue().isFinite() || scale.getValueAsDouble() <= 0.0)

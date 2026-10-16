@@ -7,6 +7,30 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## SM120-SAVED-LSE-HALF-BACKWARD-20261016 — native reverse storage integration
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Synchronization key: SM120-SAVED-LSE-HALF-BACKWARD-20261016.
+
+PR955 merged as 88cc58edf765f6c9799767ccef40cd5135997cbd after all required
+checks and a clear automated review passed on 2b7578ff1. Its forward-storage
+receipts retain their frozen source; complete source snapshots are archived.
+
+Shared candidate changes: native Graph reverse accepts homogeneous half
+Q/K/V with independently typed primary O/dO; FP32 LSE, bias and their seeds
+remain distinct. The sealed Schedule/Tile policy recomputes the FP32 row
+correction from P and dO.V, avoiding rounded saved-O feedback. Existing FP32
+ABI/schema identities are unchanged; half JVP admission remains separate.
+See docs/spec/SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md.
+
+Follow-up required for x86 physical integration: common half reverse admission
+requires the explicit NVIDIA SM120 target/architecture. Existing x86 storage
+and native derivative consumers are unchanged. CUDA kernel evidence does not
+prove sibling execution; an independent native consumer and owning-host
+numerical/timing proof are required before widening this backend.
+
+
+
 ## SM120-SAVED-LSE-STORAGE-20261016 — independent O and LSE storage
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

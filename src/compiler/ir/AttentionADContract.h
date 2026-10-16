@@ -1,4 +1,5 @@
-// Bounded dense f32 attention products use the registered checkpoint dialect.
+// Bounded dense attention products use the registered checkpoint dialect.
+// Half-storage reverse products require the explicit SM120 storage contract.
 // Forward and reverse products admit rank-four f32 score biases broadcast on any axis.
 // JVP products carry bias and its tangent explicitly; cache, dropout and
 // numeric-policy variants require separate contracts.
@@ -8,7 +9,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "Tessera/IR/AttentionShapeContract.h"
 namespace tessera {
-inline bool denseAttentionAD(mlir::Operation *op, bool allowBias = false, bool allowLse = false, bool allowBoundedSequences = false) {
+inline bool denseAttentionAD(mlir::Operation *op, bool allowBias = false, bool allowLse = false, bool allowBoundedSequences = false, bool allowHalfStorage = false) {
   if ((op->getNumOperands() != 3 && !(allowBias && op->getNumOperands() == 4)) || (op->getNumResults() != 1 && !(allowLse && op->getNumResults() == 2)) ||
       op->hasAttr("numeric_policy")) return false;
   for (auto attr : op->getAttrs())
@@ -24,8 +25,19 @@ inline bool denseAttentionAD(mlir::Operation *op, bool allowBias = false, bool a
   auto v = mlir::dyn_cast<mlir::RankedTensorType>(op->getOperand(2).getType());
   auto o = mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(0).getType());
   for (auto t : {q,k,v,o})
-    if (!t || t.getRank() != 4 || !t.getElementType().isF32() ||
+    if (!t || t.getRank() != 4 || t.getEncoding() ||
         llvm::any_of(t.getShape(), [](int64_t d) { return !mlir::ShapedType::isDynamic(d) && d <= 0; })) return false;
+  auto storage = q.getElementType();
+  if ((!storage.isF16() && !storage.isBF16() && !storage.isF32()) ||
+      k.getElementType() != storage || v.getElementType() != storage ||
+      (o.getElementType() != storage && !o.getElementType().isF32())) return false;
+  if (!storage.isF32()) {
+    if (!allowHalfStorage) return false;
+    auto module = op->getParentOfType<mlir::ModuleOp>();
+    auto target = module ? module->getAttrOfType<mlir::StringAttr>("tessera.target") : mlir::StringAttr();
+    auto arch = module ? module->getAttrOfType<mlir::StringAttr>("tessera.arch") : mlir::StringAttr();
+    if (!target || target.getValue() != "nvidia_sm120" || !arch || arch.getValue() != "sm_120") return false;
+  }
   bool dynamic = !q.hasStaticShape() || !k.hasStaticShape() || !v.hasStaticShape() || !o.hasStaticShape();
   if (dynamic) {
     auto module = op->getParentOfType<mlir::ModuleOp>();
@@ -45,7 +57,7 @@ inline bool denseAttentionAD(mlir::Operation *op, bool allowBias = false, bool a
     auto policy = op->getAttrOfType<mlir::StringAttr>("lse_checkpoint");
     auto lse = mlir::dyn_cast<mlir::RankedTensorType>(op->getResult(1).getType());
     if (!policy || policy.getValue() != "saved" || !lse ||
-        lse != mlir::RankedTensorType::get(q.getShape().take_front(3), q.getElementType())) return false;
+        lse != mlir::RankedTensorType::get(q.getShape().take_front(3), mlir::Float32Type::get(op->getContext()))) return false;
   }
   if (op->getNumOperands() == 4) {
     auto bias = mlir::dyn_cast<mlir::RankedTensorType>(op->getOperand(3).getType());

@@ -12,6 +12,20 @@ NVFP4 expansion and source-preserving multi-output ownership. Older entries reta
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
 
+## Native half-storage reverse candidate — 2026-10-16
+
+PR955 merged as 88cc58edf765f6c9799767ccef40cd5135997cbd after its exact
+2b7578ff1 head passed every required CI check and clear automated review.
+The next native compiler candidate extends original half reverse Graphs
+through typed checkpoint/Schedule/Tile/NVIDIA/LLVM-PTX and preserves FP32
+row correction rather than reusing rounded O. Widened numerical kernel proof
+passes 96 RTX5070 cases; 118 compiler cases and 583 focused drift/AD cases
+pass. Public typed backward packaging, retained ownership, portable replay,
+wider proof, benchmarks and final gates remain open. This candidate does not
+close any of the five remaining-requirement rows. See
+docs/spec/SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md.
+
+
 ## Native saved-LSE storage integration — 2026-10-16
 
 PR955's identity review repairs 13 reproduced regressions and makes storage

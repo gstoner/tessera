@@ -1,6 +1,11 @@
 """Canonical family adapter for compiler-owned SM120 saved-LSE reverse."""
 from __future__ import annotations
 from collections import OrderedDict
+import copy
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from tessera.runtime import RuntimeArtifact
 import hashlib
 from pathlib import Path
 import re
@@ -8,7 +13,7 @@ import os
 import threading
 
 _cache: OrderedDict[tuple[str, tuple[int, ...], str, int, int, int, int],
-                    tuple[str, str, str, dict[str, str]]] = OrderedDict()
+                    tuple[str, str, str, dict[str, str], RuntimeArtifact]] = OrderedDict()
 _lock=threading.RLock()
 _LIMIT=96
 _pid=os.getpid()
@@ -102,16 +107,27 @@ def execute_family(*,source,target,ordered_inputs,arg_names,source_arg_names,
                     (program.pair.forward.tile_ir+program.pair.backward.tile_ir).encode()).hexdigest(),
                 state_lineage_digest=program.pair.contract_digest,
             )
-            cached=(text,pin,program.pair.backward.target_ir,proof)
+            # The compiler owns the root/result roles; retain only immutable
+            # compiled facts, never root values or invocation results.
+            names=[f"primal_{i}" for i in range(len(program.input_indices))]+["cotangent"]
+            if program.pair.backward.descriptor.provenance.get("lse_cotangent",False):
+                names.append("lse_cotangent")
+            prototype=rt.RuntimeArtifact(graph_ir=source_graph_ir,target_ir=program.pair.backward.target_ir,
+                metadata=dict(target=target,compiler_path="nvidia_sm120_attention_vjp_compiled",
+                              execution_kind="native_gpu",execution_mode="cuda_runtime",executable=True,
+                              arg_names=names,program_json=text,program_digest=pin))
+            # RuntimeArtifact already memoizes its canonical identity. Keep the
+            # prototype private and detach all mutable metadata before dispatch.
+            _ = prototype.artifact_hash
+            cached=(text,pin,program.pair.backward.target_ir,proof,prototype)
             _cache[key]=cached
             while len(_cache)>_LIMIT:_cache.popitem(last=False)
         _cache.move_to_end(key)
-    text,pin,target_ir,proof=cached
+    text,pin,target_ir,proof,prototype=cached
     names=[f"primal_{i}" for i in range(len(ordered_inputs))]+["cotangent"]+(["lse_cotangent"] if seeded else [])
-    artifact=rt.RuntimeArtifact(graph_ir=source_graph_ir,target_ir=target_ir,
-        metadata=dict(target=target,compiler_path="nvidia_sm120_attention_vjp_compiled",
-                      execution_kind="native_gpu",execution_mode="cuda_runtime",executable=True,
-                      arg_names=names,program_json=text,program_digest=pin))
+    if names!=(prototype.metadata or {}).get("arg_names"):
+        raise ValueError("attention VJP frontend roles disagree with native checkpoint")
+    artifact=copy.deepcopy(prototype)
     receipt=rt.launch(artifact,values)
     if not receipt.get("ok") or receipt.get("execution_kind")!="native_gpu":
         raise RuntimeError(f"native attention VJP launch failed: {receipt}")

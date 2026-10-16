@@ -14,9 +14,11 @@ Synchronization key: SM120-SAVED-LSE-STORAGE-20261016.
 Identity review follow-through makes storage explicit at every production
 checkpoint identity call and preserves typed forward-only wrappers. Scheduled
 AD pairs and the legacy resident AD tape retain their FP32 contract. The
-13-case red regression is repaired; 168 focused cases pass. Native compiler
-arithmetic and sibling physical envelopes are unchanged; the review epoch
-requires fresh software gates before publication.
+13-case red regression is repaired; 168 focused cases pass. Frozen 9c0617201
+passes 26,017 CPU unit cases (5,902 skipped), 975 production-route cases and
+94 owning RTX5070 cases; both required proof lanes have zero skips. Native
+compiler arithmetic and sibling physical envelopes are unchanged. GitHub
+publication/review remains the synchronization gate.
 
 PR954 merged as 7a95133351f6b58dbd24ac62160fd6651082bc6a after its final
 4cd5e2735 head passed CI and review. Its W1.1 source-active resident proof

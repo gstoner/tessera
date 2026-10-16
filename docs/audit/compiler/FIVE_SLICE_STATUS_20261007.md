@@ -14,6 +14,16 @@ and a passing test lane does not close a wider capability envelope.
 
 ## Native saved-LSE storage integration — 2026-10-16
 
+PR955's identity review repairs 13 reproduced regressions and makes storage
+explicit at every production identity call. Forward-only wrapper identities
+retain native storage; scheduled AD pairs retain their FP32 contract.
+Frozen 9c0617201 passes 26,017 CPU unit cases (5,902 skipped), 975 required
+production-route cases and 94 RTX5070 cases, with zero skips in both proof
+lanes and unchanged unit source/tool witnesses. The prior timing source
+retains its original scope; all 24 sealed packages also replay numerically.
+Evidence: sm120_saved_lse_storage_20261016/review/README.md.
+
+
 PR954 is merged as 7a95133351f6b58dbd24ac62160fd6651082bc6a. Its final
 4cd5e2735 head passed every required check and clear automated review.
 Earlier pending-publication statements below describe their historical

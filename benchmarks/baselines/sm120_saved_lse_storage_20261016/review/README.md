@@ -11,9 +11,13 @@ source/output storage; a source-wide compiler call-site audit holds that rule.
 The legacy resident AD tape validates its FP32 data/gradient roles separately
 from the delivered typed public forward owner.
 
-All 168 focused wrapper, identity and bounded-contract tests pass, and mypy
-reports zero errors. Full unit, production-route and owning-device validation
-for this changed Python contract are being completed before the new PR head.
+Frozen 9c06172016b67a7b7535727540decf96808bfb58 passes 26,017 required
+CPU unit cases (5,902 skipped), 975 production compiler-route cases and 94
+owning RTX5070 device cases. Route/device proof has zero skips. The clean
+unit source/tool witnesses match before and after. All 24 sealed packages
+also replay numerically with compiler subprocesses disabled. The 168 focused
+wrapper/identity/bounded cases pass, and mypy reports zero errors.
+Raw logs/JUnit and the source witness are retained alongside this README.
 
 The native compiler source tree and native provider are unchanged. Earlier
 timings and receipts retain their original source scope. source-manifest.json

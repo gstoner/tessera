@@ -4,6 +4,15 @@ Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
 Synchronization key: SM120-SAVED-LSE-STORAGE-20261016.
 Recorded by: `benchmarks/nvidia/record_saved_lse_storage.py`.
 
+## Latest software review epoch
+
+The identity repair at 9c0617201 passes 26,017 CPU unit cases (5,902 skipped),
+975 production compiler-route cases and 94 owning-device cases, with zero
+skips in both required proof lanes and unchanged source/tool witnesses.
+All 24 packages replay numerically. See review/README.md for the repaired
+13-case regression, explicit-storage call-site audit and exact source chain.
+The earlier timing and gate records below retain their original source scope.
+
 ## Delivered proof
 
 Static compact FP16/BF16 Q/K/V execute through the real public frontend,

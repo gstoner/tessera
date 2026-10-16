@@ -2581,6 +2581,9 @@ class JitFn:
         Capture arguments follow the traced frontend argument order and own
         one native forward O/LSE generation. Backward returns requested Q/K/V
         and supported bias gradients in wrt order from that saved generation.
+        Explicit GPU-generation capture remains the FP32 tape API. Half-storage
+        programs use the checked synchronous public native_backward/portable
+        owner; resident gradient-result generations remain a separate extension.
         """
         import re
         from .native_attention_program import compile_attention_vjp_program
@@ -3231,9 +3234,9 @@ class JitFn:
                     from .resident_nvidia_tensor import cuda_frontend_specs
                     from .frontend_authority import certify_resident_frontends
                     specs=cuda_frontend_specs(certificate_roots,ranks=(4,))
-                    seed_specs=cuda_frontend_specs(cotangent_roots,ranks=(4,))
-                    if any(dtype.name!="float32" for _,dtype in (*specs,*seed_specs)):
-                        raise TesseraJitError("resident reverse requires fp32 roots and cotangent")
+                    seed_specs=cuda_frontend_specs(cotangent_roots,ranks=(3,4))
+                    if any(dtype.name not in ("float32", "float16", "bfloat16") for _,dtype in (*specs,*seed_specs)):
+                        raise TesseraJitError("resident reverse requires f16/bf16/f32 roots and typed cotangents")
                     from dataclasses import replace
                     source_module=replace(source_module,module_attrs={
                         **source_module.module_attrs,"tessera.target":'"nvidia_sm120"',

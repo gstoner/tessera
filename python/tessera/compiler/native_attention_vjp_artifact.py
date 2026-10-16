@@ -7,7 +7,7 @@ def canonical(value):
     return json.dumps(value,sort_keys=True,separators=(",",":"),allow_nan=False)
 
 def payload(program):
-    from .resident_attention import checkpoint_shapes
+    from .typed_attention_backward import vjp_checkpoint_shapes as checkpoint_shapes
     dims,_=checkpoint_shapes(program.pair)
     p=program.pair.backward.descriptor.provenance
     count=3+int(program.pair.forward.descriptor.provenance.get("bias",False))
@@ -33,7 +33,8 @@ def payload(program):
             raise ValueError("portable VJP Tile IR differs from native descriptor")
         return dict(tile_ir=x.tile_ir,target_ir=x.target_ir,backend_ir=x.backend_ir,
                     image=x.image.to_dict(),descriptor=x.descriptor.to_dict())
-    return dict(schema="tessera.native_attention_vjp_program.v1",
+    typed = program.pair.forward.descriptor.provenance.get("storage") != "f32"
+    return dict(schema="tessera.native_attention_vjp_program.v2" if typed else "tessera.native_attention_vjp_program.v1",
                 forward=package(program.pair.forward),backward=package(program.pair.backward),
                 checkpoint_digest=program.pair.contract_digest,
                 active=list(active),frontend_argument_indices=list(mapping))
@@ -55,7 +56,7 @@ def from_json(text,*,expected_digest):
     if actual!=expected_digest or actual!=envelope["program_digest"]:
         raise ValueError("portable VJP differs from pinned identity")
     fields={"schema","forward","backward","checkpoint_digest","active","frontend_argument_indices"}
-    if not isinstance(data,dict) or set(data)!=fields or data.get("schema")!="tessera.native_attention_vjp_program.v1":
+    if not isinstance(data,dict) or set(data)!=fields or data.get("schema") not in {"tessera.native_attention_vjp_program.v1", "tessera.native_attention_vjp_program.v2"}:
         raise ValueError("unsupported portable attention VJP schema")
     def package(raw):
         if set(raw)!={"tile_ir","target_ir","backend_ir","image","descriptor"}:
@@ -65,5 +66,6 @@ def from_json(text,*,expected_digest):
     result=NativeAttentionVJPProgram(
         AttentionCheckpointPair(package(data["forward"]),package(data["backward"]),data["checkpoint_digest"]),
         tuple(data["active"]),tuple(data["frontend_argument_indices"]))
-    payload(result)
+    if canonical(payload(result)) != canonical(data):
+        raise ValueError("portable attention VJP schema disagrees with its native storage/seed contract")
     return result

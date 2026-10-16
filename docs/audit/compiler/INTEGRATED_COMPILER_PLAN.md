@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-15
+last_updated: 2026-10-16
 audit_role: plan
 plan_state: open
 ---
@@ -398,7 +398,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 
 - Current slice (2026-09-30, sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30): The Graph-to-package contract composes bounded dynamic M/N/K on gfx1201 and sm_120. Exact-device fp16/bf16 parity, padded host ingress, allocation residency, and image reuse pass. Separate fp16 and bf16 event packets support stage attribution only; gfx1201 variation is high. Apple and x86 need independent resident consumers; wider physical layouts and remaining W1.1 producers stay open. [Evidence](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 
-- Latest: [2026-10-14 — native mixed FP8 Target image identity](INTEGRATED_COMPILER_LOG.md#2026-10-14--native-mixed-fp8-target-image-identity)
+- Latest: [Typed SM120 saved-LSE public reverse ownership](INTEGRATED_COMPILER_LOG.md#2026-10-16--typed-sm120-saved-lse-public-reverse-ownership)
 
 Current increment: checked rank-four broadcast saved-LSE packages and private tape execute on SM120; physical bias extents, deterministic reduction and saved-state pairing are bound through native Graph/Schedule/Tile and checked CUDA descriptors. [Evidence](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md). Broader W1.1, frontend/AD and sibling routes remain open.
 
@@ -465,7 +465,7 @@ Current increment: checked rank-four broadcast saved-LSE packages and private ta
 - Current increment (2026-10-05, sync NVIDIA-JVP-NATIVE-SCHEDULE-2026-10-05): bounded static f32 SM120 saved-LSE JVP now lowers the actual native AD Graph through replay-sealed C++ Schedule/Tile, native arena and NVVM/LLVM. Python GPU arithmetic construction and inactive-load string rewriting are retired. Ten ordinary JIT oracle cases, direct/automatic saved-state products and separate dispatch/wall measurements are retained; general dynamic/composed/bias/dropout/value-only AD and sibling routes remain open. [Evidence](../../../benchmarks/baselines/nvidia_jvp_native_schedule_20261005/README.md).
 - Current compiler overhead increment (2026-10-05, sync NATIVE-COMPILE-ORCHESTRATION-2026-10-05): native JVP passes retain SSA in one MLIR pass manager; GPU packaging reuses exact tool SHA-256 for stable file identities and rejects read-time rebuilds. Image/arena bytes remain identical in balanced A/B packages; cold and warm identities are measured separately. Native persistent compiler sessions and image-validator overhead remain open. [Evidence](../../../benchmarks/baselines/native_compile_orchestration_20261005/README.md).
 - Current increment (2026-10-08, sync SCALED-MAP-AXIS-INTEGRATION-20261008): non-leading static typed FP8/MXFP8 input maps preserve alias views, scalar bounds, native scale JVP seeds and original VJP axis order. Checked C++ host packing retains compact compiler ABI admission. Owning gfx1201 execution and separate completed-public/native-event timings are recorded. Generic closure, dynamic/nonzero-output maps, wider storage AD and sibling packed/native routes remain open. [Evidence](../../../benchmarks/baselines/scaled_map_axes_20261008/README.md).
-- Latest: [2026-10-14 — exact MXFP4 reserved-scale ingress correction](INTEGRATED_COMPILER_LOG.md#2026-10-14--exact-mxfp4-reserved-scale-ingress-correction)
+- Latest: [Typed SM120 saved-LSE public reverse ownership](INTEGRATED_COMPILER_LOG.md#2026-10-16--typed-sm120-saved-lse-public-reverse-ownership)
 
 ### MSW-9
 
@@ -532,7 +532,7 @@ Current increment: checked rank-four broadcast saved-LSE packages and private ta
 - Current increment (2026-10-06, sync NVIDIA-COMPACT-GRADIENTS-2026-10-06): native paired AD/Schedule/Tile now preserves complete logical results while exporting only requested physical gradient buffers. Checked static SM120 host/resident packages, private capture and repeated gradients are proved on RTX 5070. Preserved logical ranges with explicit 64/128-thread geometry address the measured packed-range loss; no universal policy/default promotion follows. Matching gfx1201 shared compiler/norm regressions pass, without HIP compact-gradient execution claims. General composed/dynamic/higher AD and sibling physical consumers remain open. [Evidence](../../../benchmarks/baselines/nvidia_compact_gradients_20261005/README.md).
 - Current increment (2026-10-06, sync NVIDIA-JVP-ARGUMENT-ORDER-2026-10-06): native forward export now verifies distinct frontend Q/K/V permutations; automatic private capture and tangent requests follow verified physical roles and activity. All six orders have owning RTX 5070 finite-difference/mutation/repeated-direction proof, with unchanged native images within each semantic envelope. Shared gfx1201 compiler/norm regressions pass without HIP tangent claims. General composed/dynamic/bias/higher AD remains open. [Evidence](../../../benchmarks/baselines/nvidia_jvp_argument_order_20261006/README.md).
 - Current increment (2026-10-06, sync NVIDIA-JVP-PORTABLE-2026-10-06): pinned canonical program JSON retains native images, sizing library, roles and manifests; capture validates them before CUDA allocation. Seventy-two restored-program RTX 5070 cases and three compiler-forbidden fresh-process replays pass. Public native-JVP family/runtime integration, unused reverse-image retirement, general AD and sibling physical consumers remain open. [Evidence](../../../benchmarks/baselines/nvidia_jvp_portable_20261006/README.md).
-- Latest: [native broadcasted scaled-result SSA](INTEGRATED_COMPILER_LOG.md#2026-10-09--native-broadcasted-scaled-result-ssa)
+- Latest: [Typed SM120 saved-LSE public reverse ownership](INTEGRATED_COMPILER_LOG.md#2026-10-16--typed-sm120-saved-lse-public-reverse-ownership)
 
 ### W2.4a
 

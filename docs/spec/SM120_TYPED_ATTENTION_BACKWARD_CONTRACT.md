@@ -7,7 +7,7 @@ audit_role: reference
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
 Synchronization key: SM120-SAVED-LSE-HALF-BACKWARD-20261016.
-Status: compiler/kernel candidate; public runtime integration remains open.
+Status: static typed public owner candidate; final validation and publication remain open.
 
 ## Compiler foundation
 
@@ -37,20 +37,63 @@ row correction. An LSE seed subtracts from the correction before the standard
 P*(dP-delta) score derivative; only Q/K/bias receive that contribution.
 Bias and LSE seeds use four-byte loads; bias gradient uses four-byte stores.
 
+## Typed public owner and serialization
+
+The additive backward descriptor ABI is
+`tessera.nvidia.sm120.attention_backward_lse.typed_f32acc.v1`. Buffer roles
+seal primary dO, Q/K/V, saved O, optional bias, FP32 LSE/seed and requested
+physical gradient outputs independently. Native contract hashes, shape guards,
+entry symbols, byte widths, geometry, numeric policy and saved bindings are
+checked without invoking compiler tools when restoring the portable program.
+
+Half-storage programs use `tessera.native_attention_vjp_program.v2`.
+Existing FP32 programs retain v1, including saved-LSE cotangents. JVP schema5
+still means saved-LSE plus bounded sequences; schema6 remains static. No JVP
+schema is reinterpreted by this reverse-only extension.
+
+`tessera_nvidia_attention_vjp_prepare_typed` is an additive C registration
+entry. Storage codes f32=1/f16=2/bf16=3 and the LSE seed flag must agree with
+both exact native entry spellings before module loading or allocation. The
+original FP32 prepare signature remains unchanged. Native ownership retains
+private roots, O/LSE and gradient scratch, uses per-role byte widths and
+logical element counts for grids, orders producer streams before snapshots,
+and returns independent completed host gradient arrays.
+
+Ordinary `native_backward` supports static compact host roots or all-CUDA
+roots, including requested gradient subsets and tuple primary/LSE seeds.
+Data matrices are never promoted to FP32 in Python. Bias/LSE roles stay FP32.
+Textually authored half inputs with FP32 primary output also execute through
+the same checked owner at 64/128 reverse block sizes. Library/device discovery
+precedes the strict subprocess guard; first package preparation and launch
+remain inside the guard during cold portable replay.
+
+Explicit GPU-generation `program.capture()` remains the existing FP32 tape
+API. Half JVP, dynamic resident frames, pitched/mixed Q/K/V storage, resident
+returned gradients and wider composed/mask contracts remain required follow-ups.
+Unowned raw half backward submission is not the public composed owner route.
+
 ## Proof and delivery boundary
 
-The initial native compiler lane passes 118 cases. The expanded focused
-AD/op/dtype/diagnostic/pass lane passes 583. Ninety-six owning RTX5070
-kernel cases compare original-Graph compiled forward/backward with an
-independent FP64 oracle from identical stored inputs. Guarded two-/four-byte
-outputs and poisoned saved output check physical stores and residual use.
-These are native kernel tests, not public package/runtime ABI certification.
-The matrix covers causal/noncausal, three static shapes, batching/GQA,
-trace-at-one, Sk=129, Sq>Sk, bias and optional LSE seeds. Final source/tool
-witnesses and delivery receipts remain active.
+The frozen native stage on 9b2159e655 records 639 focused cases and 167 owning
+RTX5070 cases with zero skips/failures and unchanged source/tool witnesses:
+benchmarks/baselines/sm120_saved_lse_half_backward_20261016/native-stage/README.md.
+Its 96 new direct-kernel cases retain their original source scope.
 
-Public typed backward packaging, retained native ownership, producer-stream
-ordering, standalone compiler-free replay, independent returned generations,
-benchmarks and full publication gates remain open. Existing JVP schemas5/6
-and legacy FP32 AD tape are unchanged. All four backend queues record their
-independent physical obligations. The original five-slice goal stays open.
+The public candidate separately passes 96 half host/resident/portable cases,
+48 FP32 compatibility cases, twelve native binding rejection/recovery cases,
+and sixteen textually authored FP32-primary cases. These are separate test
+scopes, not a replacement frozen full-source certificate. Cases cover causal
+and noncausal, batching/MHA/GQA, requested subsets, trace-at-one, long keys,
+Sq>Sk, bias and LSE seeds. Independent FP64 comparisons use identical stored
+inputs; delayed producer writes, held result generations and compiler-free
+warm calls/replay are checked. Final source-bound receipts remain active.
+
+`benchmarks/nvidia/record_typed_attention_backward.py` records alternating
+host/resident completed public calls and separate forward/backward CUDA event
+windows. FP32 controls expand identical half-quantized operand values. Raw
+u16 inputs, artifact identities, input hashes, per-role numerical errors,
+source/tool/provider pins and fresh-process compiler-free replay support
+reproduction. Event windows exclude snapshots/downloads and may include native
+dispatch gaps. No default or general speedup promotion follows from a timing
+sample. Final isolated measurements, full unit/compiler-route gates and CI/
+review are still required before publication. The five-slice goal remains open.

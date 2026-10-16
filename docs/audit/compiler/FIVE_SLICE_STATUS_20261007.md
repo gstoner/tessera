@@ -12,18 +12,23 @@ NVFP4 expansion and source-preserving multi-output ownership. Older entries reta
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
 
-## Native half-storage reverse candidate — 2026-10-16
+## Typed native/public reverse candidate — 2026-10-16
 
-PR955 merged as 88cc58edf765f6c9799767ccef40cd5135997cbd after its exact
-2b7578ff1 head passed every required CI check and clear automated review.
-The next native compiler candidate extends original half reverse Graphs
-through typed checkpoint/Schedule/Tile/NVIDIA/LLVM-PTX and preserves FP32
-row correction rather than reusing rounded O. Widened numerical kernel proof
-passes 96 RTX5070 cases; 118 compiler cases and 583 focused drift/AD cases
-pass. Public typed backward packaging, retained ownership, portable replay,
-wider proof, benchmarks and final gates remain open. This candidate does not
-close any of the five remaining-requirement rows. See
-docs/spec/SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md.
+PR955 merged as 88cc58edf765f6c9799767ccef40cd5135997cbd after every required
+CI check and clear review. The next native stage is frozen at 9b2159e655:
+639 focused cases and 167 RTX5070 cases pass with unchanged source/tool
+witnesses. The new static public owner separately passes 96 half cases,
+48 FP32 compatibility cases, twelve binding rejection/recovery cases and
+sixteen textual FP32-primary cases. It retains typed Graph/AD/Schedule/Tile/
+NVIDIA/LLVM-PTX ancestry, FP32 probability row correction, ordered private
+resident snapshots and independent host gradient results.
+
+Half reverse serialization uses additive VJP v2; FP32 v1 and JVP schemas5/6
+retain their meanings. Final frozen gates and isolated event/public timing
+packets remain active. Half explicit GPU-generation capture, dynamic/composed
+resident frames, resident results and broader storage/mask/performance closure
+remain open. This does not close any of the original five requirement rows.
+See docs/spec/SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md.
 
 
 ## Native saved-LSE storage integration — 2026-10-16

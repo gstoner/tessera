@@ -6,29 +6,37 @@ target: nvidia_sm120
 last_updated: 2026-10-16
 ---
 
-## SM120-SAVED-LSE-HALF-BACKWARD-20261016 — native reverse storage integration
+## SM120-SAVED-LSE-HALF-BACKWARD-20261016 — typed public reverse owner
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
 Synchronization key: SM120-SAVED-LSE-HALF-BACKWARD-20261016.
 
-PR955 merged as 88cc58edf765f6c9799767ccef40cd5135997cbd after all required
-checks and a clear automated review passed on 2b7578ff1. Its forward-storage
-receipts retain their frozen source; complete source snapshots are archived.
+PR955 merged as 88cc58edf765f6c9799767ccef40cd5135997cbd after required checks
+and clear review on 2b7578ff1. The following native stage is frozen separately
+at 9b2159e655: 639 focused and 167 RTX5070 cases, zero skips/failures, unchanged
+source/tools. Evidence: sm120_saved_lse_half_backward_20261016/native-stage.
 
-Shared candidate changes: native Graph reverse accepts homogeneous half
-Q/K/V with independently typed primary O/dO; FP32 LSE, bias and their seeds
-remain distinct. The sealed Schedule/Tile policy recomputes the FP32 row
-correction from P and dO.V, avoiding rounded saved-O feedback. Existing FP32
-ABI/schema identities are unchanged; half JVP admission remains separate.
-See docs/spec/SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md.
+Shared candidate contracts: original half reverse Graph -> native AD ->
+checkpoint/Schedule/Tile -> NVIDIA/LLVM-PTX; per-role typed backward descriptor,
+additive prepare_typed C ABI, and portable VJP v2 for half storage. FP32 v1 and
+existing JVP schemas5/6 retain their meanings. Native ownership uses correct
+byte widths/logical grids, producer-stream dependencies, private snapshots and
+independent completed host gradients. Half row correction remains FP32 P*dP;
+rounded saved O does not enter the reduction. Library/device discovery is
+separate from compiler-free package preparation and replay.
 
-Parity validated at the native compiler/kernel layer only: original FP16/BF16
-reverse Graphs retain typed checkpoint roles through Schedule/Tile, NVIDIA
-Target and LLVM/PTX. Ninety-six RTX5070 native kernel numerical cases pass, including
-FP32 bias/LSE cotangents, guarded output stores and poisoned saved O. The
-118-case compiler lane and 583-case expanded registry/AD lane pass. The cases cover causal/noncausal, batching/GQA, trace-at-one, long keys and Sq greater than Sk. Public typed packaging, retained reverse ownership,
-portable replay, benchmarks and final publication gates remain required.
+Parity validated in the named candidate: 96 public half cases, 48 FP32
+compatibility cases, twelve binding rejection/recovery cases and sixteen
+textual FP32-primary cases pass on RTX5070. Delayed streams, result generations,
+subset ordering and compiler-free warm/portable calls are checked. These
+observed scopes do not replace the pending frozen final source/tool receipts.
+Explicit half GPU-generation capture, dynamic/composed resident reverse,
+resident results and wider storage/mask/performance closure remain open.
 
+Final isolated benchmarks, complete source-bound unit/compiler-route/device
+receipts, generated documentation, publication CI and review remain active.
+See docs/spec/SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md. All original five
+remaining-requirement rows stay open.
 
 
 ## SM120-SAVED-LSE-STORAGE-20261016 — independent O and LSE storage

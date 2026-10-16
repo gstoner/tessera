@@ -3,6 +3,8 @@ import subprocess
 
 import pytest
 
+pytestmark = pytest.mark.compiler_route
+
 from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
 
 

@@ -15,7 +15,7 @@ _lock = threading.RLock()
 class PreparedAttentionVJP:
     def __init__(self, metadata):
         from .native_attention_program import NativeAttentionVJPProgram
-        from .resident_attention import checkpoint_shapes
+        from .typed_attention_backward import vjp_checkpoint_shapes as checkpoint_shapes
         self.identity = (metadata["program_digest"], metadata["program_json"])
         self.program = NativeAttentionVJPProgram.from_json(
             metadata["program_json"], expected_digest=metadata["program_digest"]
@@ -29,9 +29,21 @@ class PreparedAttentionVJP:
         frontend = [None] * len(physical_inputs)
         for role, index in enumerate(self.program.input_indices):
             frontend[index] = physical_inputs[role]
-        self.names = tuple(f"primal_{i}" for i in range(len(frontend))) + ("cotangent",)
-        self.shapes = (*frontend, physical[3])
+        import numpy as np
+        from ml_dtypes import bfloat16
+        self.storage = provenance["storage"]
+        self.output_storage = provenance["output"]
+        self.seeded = self.program.pair.backward.descriptor.provenance.get("lse_cotangent", False)
+        types = {"f32": np.dtype("float32"), "f16": np.dtype("float16"), "bf16": np.dtype(bfloat16)}
+        role_dtypes = (types[self.storage],)*3 + ((types["f32"],) if self.bias_shape else ())
+        frontend_dtypes = [None]*len(frontend)
+        for role, index in enumerate(self.program.input_indices):
+            frontend_dtypes[index] = role_dtypes[role]
+        self.dtypes = (*frontend_dtypes, types[self.output_storage], *((types["f32"],) if self.seeded else ()))
+        self.names = tuple(f"primal_{i}" for i in range(len(frontend))) + ("cotangent",) + (("lse_cotangent",) if self.seeded else ())
+        self.shapes = (*frontend, physical[3], *((physical[4],) if self.seeded else ()))
         self.output_shapes = tuple(physical_inputs[i] for i in self.program.active)
+        self.output_dtypes = tuple(role_dtypes[i] for i in self.program.active)
         self.handle = 0
         self.closed = False
         self.pid = os.getpid()
@@ -81,11 +93,20 @@ class PreparedAttentionVJP:
         mapping = (I * len(program.input_indices))(*program.input_indices)
         roles = (I * len(program.active))(*program.active)
         handle = U()
-        self._check(lib.tessera_nvidia_attention_vjp_prepare(
-            fimage, len(forward.image.payload), forward.descriptor.entry_symbol.encode(),
-            bimage, len(backward.image.payload), backward.descriptor.entry_symbol.encode(),
-            dims, bias, mapping, roles, len(program.active), ct.byref(handle),
-        ))
+        arguments = (fimage, len(forward.image.payload), forward.descriptor.entry_symbol.encode(),
+                     bimage, len(backward.image.payload), backward.descriptor.entry_symbol.encode(),
+                     dims, bias, mapping, roles, len(program.active))
+        if self.storage != "f32" or self.seeded:
+            prepare = getattr(lib, "tessera_nvidia_attention_vjp_prepare_typed", None)
+            if prepare is None:
+                raise RuntimeError("typed native reverse requires the versioned typed preparation symbol")
+            prepare.argtypes = lib.tessera_nvidia_attention_vjp_prepare.argtypes[:-1] + [I, I, I, ct.POINTER(U)]
+            prepare.restype = I
+            codes = {"f32": 1, "f16": 2, "bf16": 3}
+            status = prepare(*arguments, codes[self.storage], codes[self.output_storage], int(self.seeded), ct.byref(handle))
+        else:
+            status = lib.tessera_nvidia_attention_vjp_prepare(*arguments, ct.byref(handle))
+        self._check(status)
         self.handle = handle.value
 
     def invoke(self, metadata, args):
@@ -105,20 +126,20 @@ class PreparedAttentionVJP:
                 from .resident_nvidia_tensor import cuda_frontend_specs
                 if not all(hasattr(value,"__cuda_array_interface__") for value in args):
                     raise ValueError("attention VJP requires all resident roots or all host roots")
-                specs=cuda_frontend_specs(args,ranks=(4,))
-                if any(dtype!=np.dtype("float32") or shape!=expected
-                       for (shape,dtype),expected in zip(specs,self.shapes,strict=True)):
+                specs=cuda_frontend_specs(args,ranks=(3,4))
+                if any(dtype!=wanted or shape!=expected
+                       for (shape,dtype),expected,wanted in zip(specs,self.shapes,self.dtypes,strict=True)):
                     raise ValueError("attention VJP resident storage differs from native contract")
                 values=tuple(args)
             else:
                 values = tuple(np.asarray(x) for x in args)
-                if any(x.dtype != np.float32 or x.shape != shape
-                       for x, shape in zip(values, self.shapes, strict=True)):
+                if any(x.dtype != dtype or x.shape != shape
+                       for x, shape, dtype in zip(values, self.shapes, self.dtypes, strict=True)):
                     raise ValueError("attention VJP host storage differs from native contract")
                 values = tuple(np.ascontiguousarray(x) for x in values)
             if not self.handle:
                 self._prepare()
-            outputs = tuple(np.empty(shape, np.float32) for shape in self.output_shapes)
+            outputs = tuple(np.empty(shape, dtype) for shape, dtype in zip(self.output_shapes, self.output_dtypes, strict=True))
             if resident:
                 import math
                 interfaces=tuple(value.__cuda_array_interface__ for value in values)

@@ -167,6 +167,7 @@ SM120_ATTN_LSE_ABIS = frozenset({SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32
 SM120_ATTN_LSE_BIASED_ABIS = frozenset({SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI, SM120_ATTN_LSE_BIAS_TYPED_ABI, SM120_ATTN_LSE_BCAST_TYPED_ABI})
 SM120_ATTN_LSE_BROADCAST_ABIS = frozenset({SM120_ATTN_LSE_BCAST_F32_ABI, SM120_ATTN_LSE_BCAST_TYPED_ABI})
 SM120_ATTN_BWD_LSE_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2"
+SM120_ATTN_BWD_LSE_TYPED_ABI = "tessera.nvidia.sm120.attention_backward_lse.typed_f32acc.v1"
 SM120_ATTN_BWD_LSE_COMPACT_F32_ABI = "tessera.nvidia.sm120.attention_backward_lse.compact.f32.v1"
 SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI = "tessera.nvidia.sm120.attention_backward_lse.cotangent.f32.v1"
 SM120_PAGED_KV_F32_ABI = "tessera.nvidia.paged_kv.pages_table_o_dims.f32_i32.v1"
@@ -4348,6 +4349,11 @@ def package_attention_backward_lse(
 
 def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativePackage:
     names, dims, scale, causal = scheduled.names, scheduled.dims, scheduled.scale, scheduled.causal
+    storage, output_storage = scheduled.storage, scheduled.output_storage
+    data_dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}[storage]
+    output_dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}[output_storage]
+    data_alignment = 4 if storage == "f32" else 2
+    output_alignment = 4 if output_storage == "f32" else 2
     bias_name = names[5] if scheduled.bias else None
     unbiassed_names = names[:5] + names[6:] if scheduled.bias else names
     seeded = scheduled.lse_cotangent
@@ -4371,6 +4377,8 @@ def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NV
         abi_id = SM120_ATTN_BWD_LSE_COMPACT_F32_ABI
     if seeded:
         abi_id = SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI
+    if storage != "f32":
+        abi_id = SM120_ATTN_BWD_LSE_TYPED_ABI
     entry, tile_ir = scheduled.entry, scheduled.tile_ir
     lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state = _compile_tile_ir(tile_ir, entry)
     image = NativeImageArtifact(
@@ -4382,15 +4390,15 @@ def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NV
         resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
     )
     buffers: tuple[BufferBinding, ...] = (
-        BufferBinding(0, do_name, "input", "fp32", 4, "row_major", 4),
-        BufferBinding(1, q_name, "input", "fp32", 4, "row_major", 4),
-        BufferBinding(2, k_name, "input", "fp32", 4, "row_major", 4),
-        BufferBinding(3, v_name, "input", "fp32", 4, "row_major", 4),
-        BufferBinding(4, output_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(0, do_name, "input", output_dtype, 4, "row_major", output_alignment),
+        BufferBinding(1, q_name, "input", data_dtype, 4, "row_major", data_alignment),
+        BufferBinding(2, k_name, "input", data_dtype, 4, "row_major", data_alignment),
+        BufferBinding(3, v_name, "input", data_dtype, 4, "row_major", data_alignment),
+        BufferBinding(4, output_name, "input", output_dtype, 4, "row_major", output_alignment),
         BufferBinding(5, lse_name, "input", "fp32", 3, "row_major", 4),
-        BufferBinding(6, dq_name, "output", "fp32", 4, "row_major", 4),
-        BufferBinding(7, dk_name, "output", "fp32", 4, "row_major", 4),
-        BufferBinding(8, dv_name, "output", "fp32", 4, "row_major", 4),
+        BufferBinding(6, dq_name, "output", data_dtype, 4, "row_major", data_alignment),
+        BufferBinding(7, dk_name, "output", data_dtype, 4, "row_major", data_alignment),
+        BufferBinding(8, dv_name, "output", data_dtype, 4, "row_major", data_alignment),
     )
     guards = tuple(
         ShapeGuard(name, axis, "eq", extent)
@@ -4462,13 +4470,18 @@ def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NV
             "physical_gradient_roles": [i for i, active in enumerate(scheduled.gradient_activity) if active] if scheduled.compact_gradients else list(range(3 + int(bias_gradient))),
             "work_item": "NVIDIA-LSE-1", "checkpoint_role": "backward_load",
             "route": "deterministic_direct", "deterministic": True,
-            "lse_checkpoint": "saved", "shape": list(dims), "storage": "f32",
-            "gradient_storage": "f32", "row_lse": "f32[B,Hq,Sq]",
+            "lse_checkpoint": "saved", "shape": list(dims), "storage": storage,
+            "gradient_storage": storage, "row_lse": "f32[B,Hq,Sq]",
+            **({"output": output_storage, "accum": "f32",
+                "row_correction": "probability_dot_v_f32_v1"} if storage != "f32" else {}),
             "scale": scale, "causal": causal, "workspace_bytes": 0,
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )
-    if seeded:
+    if storage != "f32":
+        from .typed_attention_backward import validate_typed_backward_descriptor
+        validate_typed_backward_descriptor(descriptor)
+    elif seeded:
         from .lse_cotangent_contract import lse_cotangent_contract
         lse_cotangent_contract(descriptor)
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
@@ -4509,9 +4522,8 @@ def package_scheduled_checkpoint_pair(forward,backward, *, pipeline_name: str):
     forward.validate();backward.validate()
     if forward.backward or not backward.backward:
         raise ValueError("checkpoint pair requires forward then backward native products")
-    if any(product.storage != "f32" or product.output_storage != "f32"
-           for product in (forward, backward)):
-        raise ValueError("paired checkpoint AD requires its f32 storage contract")
+    if (forward.storage, forward.output_storage) != (backward.storage, backward.output_storage):
+        raise ValueError("paired checkpoint AD requires its f32 storage contract or matching typed storage")
     f_identity=_checkpoint_identity(forward.dims,forward.scale,forward.causal,
         bias=forward.bias,bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage)
     b_identity=_checkpoint_identity(backward.dims,backward.scale,backward.causal,
@@ -4936,6 +4948,7 @@ __all__ = [
     "SM120_ATTN_LSE_BROADCAST_ABIS",
     "SM120_ATTN_LSE_F32_ABI",
     "SM120_ATTN_BWD_LSE_F32_ABI",
+    "SM120_ATTN_BWD_LSE_TYPED_ABI",
     "SM120_BF16_ABI",
     "SM120_EPILOGUE_ABIS",
     "SM120_REDUCED_OUTPUT_ABIS",
@@ -5065,8 +5078,6 @@ def package_generated_attention_checkpoint_pair(
     forward = lower_generated_checkpoint(source)
     if not compact_gradients and (compact_launch != "packed_v1" or compact_threads != 128):
         raise ValueError("compact launch requires compact gradient outputs")
-    if forward.storage != "f32" or forward.output_storage != "f32":
-        raise ValueError("paired checkpoint AD requires its f32 storage contract")
     backward = lower_generated_checkpoint(source, backward=True, prune_inactive=prune_inactive,
         compact_gradients=compact_gradients, compact_launch=compact_launch, compact_threads=compact_threads)
     identity = _checkpoint_identity(forward.dims, forward.scale, forward.causal, bias=forward.bias, bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage)

@@ -41,6 +41,7 @@ struct Owner {
   std::array<int,4> mapping{},roles{};
   size_t activeCount=0;
   bool reverse=false,bias=false,forwardOnly=false,savedLse=false,forwardBiasScalars=false;
+  bool reverseLseSeed=false;
   int storage=1,outputStorage=1;
   CUstream stream=nullptr;
   std::array<int64_t,4> biasShape{};
@@ -105,7 +106,13 @@ int prepareResidentDependencies(Owner &s,const void *const *inputs,
       CUdeviceptr pointer=reinterpret_cast<uintptr_t>(inputs[i]),base=0;
       size_t capacity=0;CUcontext allocationContext=nullptr,streamContext=nullptr;
       unsigned memoryType=0;
-      if(pointer%(s.forwardOnly && i<3 && s.storage!=1?2:4) || pointer>UINTPTR_MAX-inputBytes[i])
+      unsigned alignment=s.forwardOnly && i<3 && s.storage!=1?2:4;
+      if(s.reverse){
+        for(size_t role=0;role<3;++role)
+          if(i==size_t(s.mapping[role]) && s.storage!=1)alignment=2;
+        if(i==3+unsigned(s.bias) && s.outputStorage!=1)alignment=2;
+      }
+      if(pointer%alignment || pointer>UINTPTR_MAX-inputBytes[i])
         return bad("resident attention pointer alignment or extent disagrees");
       if(!ok(cuPointerGetAttribute(&allocationContext,CU_POINTER_ATTRIBUTE_CONTEXT,pointer),"resident context") ||
          !ok(cuPointerGetAttribute(&memoryType,CU_POINTER_ATTRIBUTE_MEMORY_TYPE,pointer),"resident memory type") ||
@@ -415,16 +422,18 @@ extern "C" int tessera_nvidia_attention_jvp_close(uint64_t handle){
 // Reverse products share the module/context/arena retirement machinery above.
 // Their private output/LSE generation never escapes a synchronous invocation.
 extern "C" const char *tessera_nvidia_attention_vjp_last_error(){return ownerError.c_str();}
-extern "C" int tessera_nvidia_attention_vjp_prepare(
+static int prepareAttentionVjp(
   const void *fimage,size_t fbytes,const char *fentry,
   const void *bimage,size_t bbytes,const char *bentry,
   const int64_t *dims,const int64_t *biasShape,const int *mapping,
-  const int *roles,size_t activeCount,uint64_t *handle){
+  const int *roles,size_t activeCount,int storage,int outputStorage,int lseCotangent,uint64_t *handle){
   ownerError.clear();if(handle)*handle=0;
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
   if(!handle || !fimage || !fbytes || !fentry || !bimage || !bbytes || !bentry ||
-     !dims || !mapping || !roles || activeCount<1 || activeCount>4)
+     !dims || !mapping || !roles || activeCount<1 || activeCount>4 ||
+     storage<1 || storage>3 || outputStorage<1 || outputStorage>3 ||
+     (outputStorage!=1 && outputStorage!=storage) || (lseCotangent!=0 && lseCotangent!=1))
     return bad("invalid reverse images or ABI");
   unsigned mask=0,bias=0,biasGradient=0,logical=0,threads=0;
   const char *prefix="tessera_tile_attention_backward_lse_output_compact_m";
@@ -447,15 +456,37 @@ extern "C" int tessera_nvidia_attention_vjp_prepare(
   };
   if(!number(mask,15) || !field("_b",bias,1) || !field("_g",biasGradient,1) ||
      !field("_l",logical,1) || !field("_t",threads,128) || *cursor++!='_' ||
-     std::strlen(cursor)!=10 || !mask || mask>(biasGradient?15u:7u) ||
+     !mask || mask>(biasGradient?15u:7u) ||
      (biasGradient && !bias) || (threads!=64 && threads!=128) ||
      std::strncmp(fentry,"tessera_tile_attention_lse_",std::strlen("tessera_tile_attention_lse_")))
     return bad("unsupported reverse entry contract");
-  for(const char *p=cursor;*p;++p)
-    if(!(*p>='0' && *p<='9') && !(*p>='a' && *p<='f'))return bad("invalid reverse digest suffix");
+  const char *dataName=storage==2?"f16":storage==3?"bf16":"f32";
+  const char *outputName=outputStorage==2?"f16":outputStorage==3?"bf16":"f32";
+  if(storage!=1){
+    std::string suffix=std::string(dataName)+"_out_"+outputName+"_";
+    if(std::strncmp(cursor,suffix.c_str(),suffix.size()))return bad("typed reverse entry storage disagrees");
+    cursor+=suffix.size();
+  }
+  auto hashSuffix=[](const char *text){
+    for(unsigned i=0;i<10;++i)
+      if(!text[i] || (!(text[i]>='0' && text[i]<='9') && !(text[i]>='a' && text[i]<='f')))return false;
+    return true;
+  };
+  const char *seedSuffix=lseCotangent?"_cotangent_":"";
+  if(std::strlen(cursor)!=10+std::strlen(seedSuffix) || !hashSuffix(cursor) ||
+     std::strcmp(cursor+10,seedSuffix))return bad("invalid reverse digest/seed suffix");
+  std::string forwardPrefix="tessera_tile_attention_lse_";
+  if(storage!=1){
+    forwardPrefix+=dataName;forwardPrefix+="_";
+    if(outputStorage!=1)forwardPrefix+=std::string("out_")+outputName+"_";
+  }
+  if(std::strncmp(fentry,forwardPrefix.c_str(),forwardPrefix.size()) ||
+     std::strlen(fentry+forwardPrefix.size())!=10 || !hashSuffix(fentry+forwardPrefix.size()))
+    return bad("reverse forward entry storage/digest disagrees");
   try{
     auto state=std::make_unique<Owner>();
     state->reverse=true;state->bias=bias;state->activeCount=activeCount;
+    state->storage=storage;state->outputStorage=outputStorage;state->reverseLseSeed=lseCotangent;
     state->reverseThreads=threads;
     const size_t primals=3+bias;
     bool mapped[4]{},active[4]{};unsigned requestedMask=0;
@@ -479,7 +510,10 @@ extern "C" int tessera_nvidia_attention_vjp_prepare(
        !extent({b,hkv,sk,d},state->bytes[1]) || !extent({b,hkv,sk,dv},state->bytes[2]) ||
        !extent({b,hq,sq,dv},state->bytes[3]) || !extent({b,hq,sq},state->bytes[4]))
       return bad("invalid reverse extent");
+    if(storage!=1)for(unsigned role=0;role<3;++role)state->bytes[role]/=2;
+    if(outputStorage!=1)state->bytes[3]/=2;
     state->bytes[5]=state->bytes[3];
+    if(lseCotangent)state->bytes[11]=state->bytes[4];
     if(bias){
       if(!biasShape)return bad("missing reverse bias shape");
       const int64_t scores[4]={b,hq,sq,sk};
@@ -491,10 +525,10 @@ extern "C" int tessera_nvidia_attention_vjp_prepare(
         return bad("invalid reverse bias size");
     }else if(biasShape)return bad("unexpected reverse bias shape");
     for(size_t i=0;i<4;++i)if(active[i])state->bytes[7+i]=state->bytes[i==3?6:i];
-    uint64_t forwardElements=state->bytes[3]/4;
+    uint64_t forwardElements=state->bytes[3]/(outputStorage==1?4:2);
     __uint128_t reverseElements=0;
     for(size_t i=0;i<4;++i)
-      if(active[i] || (logical && i<3+biasGradient))reverseElements+=state->bytes[i==3?6:i]/4;
+      if(active[i] || (logical && i<3+biasGradient))reverseElements+=state->bytes[i==3?6:i]/(i==3 || storage==1?4:2);
     if(!reverseElements || reverseElements>uint64_t(INT_MAX)*threads ||
        forwardElements>=(1ULL<<31))return bad("reverse grid exceeds bounds");
     state->forwardGrid=unsigned((forwardElements+127)/128);
@@ -524,6 +558,22 @@ extern "C" int tessera_nvidia_attention_vjp_prepare(
     uint64_t id=nextOwner++;owners.emplace(id,std::move(state));*handle=id;return 0;
   }catch(...){ownerError="native reverse owner allocation failed";return 3;}
 }
+extern "C" int tessera_nvidia_attention_vjp_prepare(
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *bimage,size_t bbytes,const char *bentry,
+  const int64_t *dims,const int64_t *biasShape,const int *mapping,
+  const int *roles,size_t activeCount,uint64_t *handle){
+  return prepareAttentionVjp(fimage,fbytes,fentry,bimage,bbytes,bentry,dims,biasShape,
+                            mapping,roles,activeCount,1,1,0,handle);
+}
+extern "C" int tessera_nvidia_attention_vjp_prepare_typed(
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *bimage,size_t bbytes,const char *bentry,
+  const int64_t *dims,const int64_t *biasShape,const int *mapping,
+  const int *roles,size_t activeCount,int storage,int outputStorage,int lseCotangent,uint64_t *handle){
+  return prepareAttentionVjp(fimage,fbytes,fentry,bimage,bbytes,bentry,dims,biasShape,
+                            mapping,roles,activeCount,storage,outputStorage,lseCotangent,handle);
+}
 static int invokeAttentionVjp(
   uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
   void *const *outputs,const size_t *outputBytes,size_t outputCount,float *deviceMilliseconds,
@@ -538,7 +588,7 @@ static int invokeAttentionVjp(
      !ok(cuCtxGetId(s.context,&identity),"reverse context generation"))return 3;
   if(context!=s.context || identity!=s.contextIdentity)return bad("prepared reverse context generation disagrees");
   const size_t primals=3+unsigned(s.bias);
-  if(!inputs || !inputBytes || inputCount!=primals+1 || !outputs || !outputBytes ||
+  if(!inputs || !inputBytes || inputCount!=primals+1+unsigned(s.reverseLseSeed) || !outputs || !outputBytes ||
      outputCount!=s.activeCount)return bad("reverse host ABI disagrees");
   auto validSpan=[](const void *p,size_t n){return p && n && reinterpret_cast<uintptr_t>(p)<=UINTPTR_MAX-n;};
   auto overlap=[](const void *a,size_t an,const void *b,size_t bn){
@@ -550,6 +600,8 @@ static int invokeAttentionVjp(
        inputBytes[s.mapping[i]]!=s.bytes[i==3?6:i])return bad("reverse primal extent disagrees");
   if(!validSpan(inputs[primals],inputBytes[primals]) || inputBytes[primals]!=s.bytes[5])
     return bad("reverse cotangent extent disagrees");
+  if(s.reverseLseSeed && (!validSpan(inputs[primals+1],inputBytes[primals+1]) || inputBytes[primals+1]!=s.bytes[11]))
+    return bad("reverse LSE cotangent extent disagrees");
   for(size_t i=0;i<outputCount;++i){
     if(!validSpan(outputs[i],outputBytes[i]) || outputBytes[i]!=s.bytes[7+s.roles[i]])
       return bad("reverse gradient extent disagrees");
@@ -576,6 +628,7 @@ static int invokeAttentionVjp(
   for(size_t i=0;i<primals;++i)
     if(!snapshot(i==3?6:i,s.mapping[i]))return 3;
   if(!snapshot(5,primals))return 3;
+  if(s.reverseLseSeed && !snapshot(11,primals+1))return 3;
   std::array<int64_t,11> scalars{};
   for(size_t i=0;i<7;++i)scalars[i]=s.dims[i];
   bool broadcast=s.bias;
@@ -592,11 +645,12 @@ static int invokeAttentionVjp(
   if(s.bias)fa[arg++]=&s.buffers[6];
   fa[arg++]=&s.buffers[3];fa[arg++]=&s.buffers[4];
   for(size_t i=0;i<scalarCount;++i)fa[arg++]=&scalars[i];
-  void *ba[22]{};arg=0;
+  void *ba[24]{};arg=0;
   const unsigned baseSlots[5]={5,0,1,2,3};
   for(auto i:baseSlots)ba[arg++]=&s.buffers[i];
   if(s.bias)ba[arg++]=&s.buffers[6];
   ba[arg++]=&s.buffers[4];
+  if(s.reverseLseSeed)ba[arg++]=&s.buffers[11];
   for(size_t role=0;role<4;++role)if(s.bytes[7+role])ba[arg++]=&s.buffers[7+role];
   for(size_t i=0;i<scalarCount;++i)ba[arg++]=&scalars[i];
   // Pinned uploads and both consumers share the owner stream.

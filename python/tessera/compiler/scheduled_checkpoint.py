@@ -39,8 +39,7 @@ class ScheduledCheckpointArtifact:
 
     def validate(self) -> None:
         if (not isinstance(self.storage, str) or self.storage not in {"f16", "bf16", "f32"} or
-                not isinstance(self.output_storage, str) or self.output_storage not in {self.storage, "f32"} or
-                (self.backward and (self.storage != "f32" or self.output_storage != "f32"))):
+                not isinstance(self.output_storage, str) or self.output_storage not in {self.storage, "f32"}):
             raise ValueError("checkpoint storage requires homogeneous forward data and f32 auxiliaries")
         if type(self.lse_cotangent) is not bool or (self.lse_cotangent and not self.backward):
             raise ValueError("LSE cotangent requires a boolean backward role")
@@ -106,6 +105,9 @@ class ScheduledCheckpointArtifact:
         if self.storage != "f32" or self.output_storage != "f32":
             fields.update(storage=json.dumps(self.storage), output_storage=json.dumps(self.output_storage),
                           row_lse_storage=json.dumps("f32"), accum=json.dumps("f32"))
+            if self.backward:
+                fields.update(gradient_storage=json.dumps(self.storage),
+                              row_correction=json.dumps("probability_dot_v_f32_v1"))
         elif re.search(r'\bstorage =', contract_text):
             raise ValueError("checkpoint native storage facts are missing from metadata")
         if self.shape_bounds:

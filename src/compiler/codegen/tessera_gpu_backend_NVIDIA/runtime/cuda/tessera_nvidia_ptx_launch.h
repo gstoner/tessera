@@ -283,6 +283,15 @@ int tessera_nvidia_attention_vjp_prepare(
     const void* backward_image, size_t backward_bytes, const char* backward_entry,
     const int64_t* dims, const int64_t* bias_shape, const int* frontend_mapping,
     const int* active_roles, size_t active_count, uint64_t* handle);
+// Additive typed registration: storage/output_storage use f32=1,f16=2,bf16=3.
+// LSE/bias/auxiliary seeds stay f32; lse_cotangent adds a rank-three seed input.
+// All flags are checked against the exact native entry spelling before loading.
+int tessera_nvidia_attention_vjp_prepare_typed(
+    const void* forward_image, size_t forward_bytes, const char* forward_entry,
+    const void* backward_image, size_t backward_bytes, const char* backward_entry,
+    const int64_t* dims, const int64_t* bias_shape, const int* frontend_mapping,
+    const int* active_roles, size_t active_count, int storage, int output_storage,
+    int lse_cotangent, uint64_t* handle);
 int tessera_nvidia_attention_vjp_invoke(
     uint64_t handle, const void* const* inputs, const size_t* input_bytes,
     size_t input_count, void* const* outputs, const size_t* output_bytes,

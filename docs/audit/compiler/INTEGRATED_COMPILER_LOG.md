@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-15
+last_updated: 2026-10-16
 audit_role: reference
 ---
 
@@ -12672,4 +12672,14 @@ production switch or hardware-counter attribution is introduced.
 
 Evidence: benchmarks/baselines/gfx1201_folded_cu_policy_20261016/README.md;
 docs/spec/ir/gfx1201_folded_fragment_schedule.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-16 — typed SM120 saved-LSE public reverse ownership
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-SAVED-LSE-HALF-BACKWARD-20261016.
+Outcome: Original FP16/BF16 reverse Graph lowers through native AD, checkpoint Schedule/Tile and NVIDIA/LLVM PTX. A typed checked descriptor and additive native prepare ABI preserve per-role widths, producer-stream ordering and private snapshots. Portable half VJP uses schema v2; FP32 VJP v1 and JVP schemas 5/6 retain their meanings. Native FP32 probability-weighted row correction avoids differentiating through rounded saved O. The separately frozen 9b2159e655 native stage passed 639 focused and 167 owning-device cases. Public candidate checks passed 96 half, 48 FP32 compatibility, twelve rejection/recovery and sixteen textual FP32-primary cases; final clean-source timing and broad gates remain pending.
+Remaining: Static synchronous public owner proof does not close half capture generations, dynamic public reverse ownership, half JVP, composition, wider masks/layouts or the five-slice program. Finish isolated matched-input timing, fresh compiler-absent replay and final validation before publishing. All four backend plans assess this shared contract; CUDA evidence does not establish sibling execution.
+Evidence: [Typed backward contract](../../spec/SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md); benchmarks/baselines/sm120_saved_lse_half_backward_20261016/native-stage/README.md; tests/device/nvidia/test_public_typed_attention_vjp.py; benchmarks/nvidia/record_typed_attention_backward.py.
 <!-- entry-fields:end -->

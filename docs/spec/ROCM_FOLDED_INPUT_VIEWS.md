@@ -11,7 +11,7 @@ explicit approximate policy, wide-scale epilogue fallback and BF16 output.
 
 The Graph operands are logical tensor<MxKxui8> and tensor<NxKxui8>.
 Each is a standard MLIR tensor.extract_slice of a function-entry dense
-storage argument: zero origin, unit steps, all storage rows. The parent row
+storage argument, or its canonicalized identity entry argument: zero origin, unit steps, all storage rows. The parent row
 width is LDA or LDB, at least K and divisible by 16. First delivery requires
 static positive extents, M > 64, K divisible by 64. Other origins, steps,
 partial rows and non-entry roots require a later view composition contract.
@@ -43,12 +43,19 @@ class. Runtime dimensions, capacities and panel classes remain checked.
 
 ## Validation and performance policy
 
-Implementation is in progress. Numerical proof must compare against an
-independent decoded FP64 oracle, poison padding with distinct E4M3 NaNs,
-exercise full and ragged panels and confirm identical image bytes across
-pitch combinations. Attribution must record device-event timing separately
-from package launch timing. Compare dense/dense, padded-A/dense-B,
-dense-A/padded-B and padded/padded under one image.
+The bounded profile executes on RX 9070 XT / gfx1201. Numerical tests use an
+independent decoded FP64 oracle, distinct E4M3 NaN padding, full/ragged panels
+and identical image bytes across pitch combinations. Ordinary MLIR
+canonicalization may remove identity slices; scheduling preserves those
+entry roots and the same checked physical ABI. The canonicalized route has
+separate owning-device numerical proof.
+
+Seven-trial forward/reverse attribution compares dense/dense, padded-A/dense-B,
+dense-A/padded-B and padded/padded under one image at ten M256 shapes. Raw
+device-clock and HIP-event windows are separate from public launch wall time.
+See the [frozen packet](../../benchmarks/baselines/gfx1201_folded_input_pitches_20261016/README.md).
+No end-to-end performance improvement or default promotion is established.
+The broad per-column cost and prepared/resident public route remain open.
 
 This profile does not promote padding as a default optimization, establish a
 cache mechanism, claim general view/AD support or transfer physical schedules

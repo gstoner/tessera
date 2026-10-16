@@ -10,7 +10,11 @@ scope: ROCm backend implementation and exact-device proof
 Owner ROCM-MXFP4-W4A8-1 / LAYOUT-ALG-1.
 Synchronization key: GFX1201-FOLDED-INPUT-VIEWS-20261016.
 
-Implementation in progress: whole-row zero-origin unit-step tensor.extract_slice roots carry LDA/LDB through Schedule/Tile and a distinct gfx1201 Target ABI. Runtime span checks, numerical padding-poison cases, same-image attribution benchmarks and drift gates remain required. The existing contiguous route and physical schedules remain the control; no new performance selector is promoted.
+Implemented bounded whole-row input views and canonicalized identity entry roots through Graph/Schedule/Tile, native ROCm Target, LLVM/ROCDL, HSACO and checked LDA/LDB ABI. 48 owning-gfx1201 regression cases pass, including canonicalization and both NaN padding patterns. 764 focused host gates and 16 packet consumers passed before the final canonicalization hardening; the hardened view/packet set passes 39 cases. Full-unit and CI gates remain pending.
+
+Seven-trial forward/reverse packets at ten M256 shapes use one pitched image. B-only padding reduces captured device windows 44% at N8192/K4096 and 28–32% at N16384/K4096; neighboring K regresses slightly and N16384/K5120 improves less than 1%. Public launch wall time does not improve. No default selector or padding promotion. The broader per-column attribution, prepared/resident public route and general views remain open. See benchmarks/baselines/gfx1201_folded_input_pitches_20261016/README.md.
+
+All 22 legacy CU shapes and 12 FP8/MXFP8 KN/NK controls retain exact Tile, Target, entry, ABI and HSACO identities at the measured source. The prior CU source is now a strict historical byte witness rather than a claim that new compiler files are its old source.
 
 
 ## GFX1201-FOLDED-FRAGMENT-GROUPS-20261015 — native fragment read groups

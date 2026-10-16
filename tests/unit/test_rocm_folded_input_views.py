@@ -126,3 +126,13 @@ def test_schedule_cannot_substitute_a_different_storage_pitch(compiler):
         input=schedule.replace("a_row_stride = 80 : i64", "a_row_stride = 96 : i64"))
     assert result.returncode != 0
     assert "altered after hashing" in result.stderr
+
+
+@pytest.mark.parametrize("pitches", [(64, 64), (80, 64), (64, 96), (80, 96)])
+def test_canonicalization_preserves_dense_and_pitched_input_views(compiler, pitches):
+    result = subprocess.run([str(compiler), "--canonicalize", "--tessera-graph-to-schedule",
+        "--tessera-schedule-to-tile", "--lower-tile-to-rocm=arch=gfx1201",
+        "--tessera-rocm-project-kernel-identity=family=folded_matmul runtime-k=true"],
+        input=pitched_graph(*pitches), text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert "runtime_row_strides" in result.stdout

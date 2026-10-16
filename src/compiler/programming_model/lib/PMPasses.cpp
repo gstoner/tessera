@@ -265,10 +265,11 @@ namespace {
 // The caller owns the roots throughout the launch; the output is fresh.
 static FailureOr<std::pair<Value, int64_t>> foldedInputStorage(Value value) {
   auto slice = value.getDefiningOp<tensor::ExtractSliceOp>();
-  if (!slice)
-    return failure();
-  auto root = dyn_cast<BlockArgument>(slice.getSource());
-  auto type = dyn_cast<RankedTensorType>(slice.getSource().getType());
+  // MLIR canonicalization removes identity slices. An entry argument is the
+  // same whole-row view with row pitch K; retain the named physical ABI.
+  Value storage = slice ? Value(slice.getSource()) : value;
+  auto root = dyn_cast<BlockArgument>(storage);
+  auto type = dyn_cast<RankedTensorType>(storage.getType());
   auto logical = dyn_cast<RankedTensorType>(value.getType());
   if (!root || !isa<func::FuncOp>(root.getOwner()->getParentOp()) ||
       !root.getOwner()->isEntryBlock() || !type || !logical ||
@@ -279,11 +280,11 @@ static FailureOr<std::pair<Value, int64_t>> foldedInputStorage(Value value) {
       type.getDimSize(1) < logical.getDimSize(1) ||
       type.getDimSize(1) <= 0 || type.getDimSize(1) % 16 != 0 ||
       type.getDimSize(0) > INT64_MAX / type.getDimSize(1) ||
-      slice.getStaticOffsets() != ArrayRef<int64_t>({0, 0}) ||
-      slice.getStaticStrides() != ArrayRef<int64_t>({1, 1}) ||
-      slice.getStaticSizes() != logical.getShape())
+      (slice && (slice.getStaticOffsets() != ArrayRef<int64_t>({0, 0}) ||
+                 slice.getStaticStrides() != ArrayRef<int64_t>({1, 1}) ||
+                 slice.getStaticSizes() != logical.getShape())))
     return failure();
-  return std::pair<Value, int64_t>{slice.getSource(), type.getDimSize(1)};
+  return std::pair<Value, int64_t>{storage, type.getDimSize(1)};
 }
 
 struct MatmulSchedule {
@@ -5345,7 +5346,7 @@ struct ScheduleToTilePass
       if (selected->aRowStride > 0)
         for (Value value : graph->getOperands().take_front(2)) {
           Operation *view = value.getDefiningOp();
-          if (!llvm::is_contained(consumedViews, view))
+          if (view && !llvm::is_contained(consumedViews, view))
             consumedViews.push_back(view);
         }
       if (graph->use_empty())

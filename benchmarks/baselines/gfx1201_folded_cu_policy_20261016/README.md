@@ -123,3 +123,13 @@ python/ is unchanged from the full-unit/owning-device certificate at 8e53d33556d
 That original full-suite receipt retains its revision; the reviewed benchmark
 freeze is 68fb444434bbb20f396399e8a1df186c67e00f94. Earlier measurement hashes are preserved in
 pre-review-measurement-scope.json and their Git artifact revision.
+
+## Historical source scope after input-view development
+
+The calibration remains bound to 68fb444434bbb20f396399e8a1df186c67e00f94.
+The source-snapshot-68fb44443.json.gz witness contains the actual files read
+from that Git revision, with every byte digest checked against the original
+packet before archival. Its compression-manifest entry and unit consumer
+validate both compressed and expanded data. New compiler source does not
+retroactively replace the calibration source. Follow-on current-image parity
+and pitched-input timings belong to the input-pitches packet.

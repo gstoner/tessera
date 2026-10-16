@@ -23,7 +23,7 @@ def load(name):
 
 
 @pytest.mark.parametrize("order", ["forward", "reverse"])
-def test_cu_grid_binds_current_lowering_and_benchmark_sources(order):
+def test_cu_grid_binds_frozen_lowering_and_benchmark_sources(order):
     packet = load(f"cu-grid-{order}.json.gz")
     assert packet["source_commit"] == REVISION
     assert packet["dirty_worktree"] is False
@@ -33,8 +33,17 @@ def test_cu_grid_binds_current_lowering_and_benchmark_sources(order):
     assert packet["native_reference_schedule_match"] == "all fields except explicit workgroup mode"
     assert packet["shared_native_resident_frames"] is True
     assert packet["native_reference_fragment_read_policy_comparison"] is False
+    # This packet is a historical measurement, not a prohibition on future
+    # compiler development. Retain its actual Git-revision source bytes and
+    # verify every original fingerprint; current-image parity is recorded in
+    # the owning follow-on packet.
+    snapshot = load("source-snapshot-68fb44443.json.gz")
+    assert snapshot["revision"] == REVISION
+    assert set(snapshot["files"]) == set(packet["source_sha256"])
     for relative, digest in packet["source_sha256"].items():
-        assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == digest, relative
+        source = snapshot["files"][relative]
+        assert source["sha256"] == digest
+        assert hashlib.sha256(source["text"].encode()).hexdigest() == digest, relative
 
 
 @pytest.mark.parametrize("order", ["forward", "reverse"])

@@ -1,5 +1,6 @@
 """Owning gfx1201 proof: physical padding never changes logical math."""
 import os
+import subprocess
 from pathlib import Path
 
 import ml_dtypes
@@ -52,3 +53,34 @@ def test_padded_input_views_preserve_math_and_one_image(shape):
             assert result.get("ok") and result.get("execution_kind") == "native_gpu", result
             np.testing.assert_array_equal(output.view(np.uint16), expected.view(np.uint16))
     assert len(images) == 1
+
+
+def test_canonicalized_identity_views_execute_on_the_owning_device():
+    from tessera.compiler.rocm_mxfp4_folded_frontend import (
+        author_folded_scaled_matmul_graph, _lower,
+    )
+    from tessera.compiler.rocm_mxfp4_folded_carrier import package_folded_scaled_wmma_target_ir
+    assert rt._rocm_live_arch() == "gfx1201"
+    tool = Path(os.environ["TESSERA_OPT"])
+    m, n, k = 65, 48, 64
+    graph = author_folded_scaled_matmul_graph(m, n, k, input_row_strides=(k, k))
+    canonical = subprocess.run([str(tool), "--canonicalize"], input=graph,
+        text=True, capture_output=True, check=True).stdout
+    assert "tensor.extract_slice" not in canonical
+    # Exact decoded operands are 2 and 1, so every result is K*2.
+    a = np.full((m, k), 2, ml_dtypes.float8_e4m3fn).view(np.uint8)
+    scales = np.ones(m, np.float32)
+    folded = prepare_folded_weights(mx.pack_e2m1_codes(np.full((n, k), 2, np.uint8)),
+        np.full((k // 32, n), 127, np.uint8), allow_approximate=True)
+    package = package_folded_scaled_wmma_target_ir(
+        _lower(tool, canonical, target=False), _lower(tool, canonical, target=True),
+        folded, allow_approximate=True)
+    output = np.full((m, n), -101, ml_dtypes.bfloat16)
+    artifact = rt.RuntimeArtifact(metadata={"target": package.image.target},
+        native_image=package.image, launch_descriptor=package.descriptor,
+        tile_ir=package.tile_ir, target_ir=package.target_ir)
+    result = rt.launch(artifact, {"buffers": {"a": a, "b_folded": folded.weight_bytes,
+        "a_scale": scales, "row_reference": folded.row_reference, "output": output},
+        "scalars": {"M": m, "N": n, "K": k, "LDA": k, "LDB": k}})
+    assert result.get("ok") and result.get("execution_kind") == "native_gpu", result
+    np.testing.assert_array_equal(output, np.full((m, n), k * 2, ml_dtypes.bfloat16))

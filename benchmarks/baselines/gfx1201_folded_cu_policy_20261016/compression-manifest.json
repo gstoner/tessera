@@ -105,5 +105,11 @@
     "compressed_sha256": "18e59686429dae930670d38604b2d02b8100030d6513dc0f24bb8ba026ffb5c5",
     "raw_bytes": 9340,
     "compressed_bytes": 1536
+  },
+  "source-snapshot-68fb44443.json.gz": {
+    "raw_sha256": "95e44009761321fca727531d8c3713c787f1e3a05fc3abf97e5df8649832a921",
+    "compressed_sha256": "7c4024929de7815fb72a85b7c3a32d6012b0fc2e1c299d2e7c71d394dafcdd1e",
+    "raw_bytes": 3252754,
+    "compressed_bytes": 663329
   }
 }

@@ -15,8 +15,12 @@ schedule for unpacked folded prefill only with full M256, N>=8192 divisible\nby 
 problems. The first N>=4096 candidate was rejected after reproducible short-K
 regressions; excluded shapes retain baseline images. The Target field is ODS
 declared, verified and reported through readonly package provenance. LLVM
-scheduling groups add no workgroup barriers. Production compiler/device,
-image identity and format controls are being recorded before publication.
+scheduling groups add no workgroup barriers. Frozen 3b2fa3b70 passes 458 focused checks, 44 device tests, 19 selection/image
+checks and 12 FP8/MXFP8 unchanged-image controls. Eight-shape forward/reverse
+runs characterize the regular grid; three selected rows improve 2.1-5.1 percent,
+while one is within control variation. Actual timed ISA has 7 versus 11 DS waits
+with unchanged MMAs, LDS reads, barriers and resources. Broad regression and
+publication remain open.
 gfx1151 has no schedule change; broader MXFP4/Radiance, W8A8 and route closure
 obligations remain open.
 

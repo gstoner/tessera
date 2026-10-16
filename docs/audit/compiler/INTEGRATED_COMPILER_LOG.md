@@ -12513,10 +12513,10 @@ production compiler passes 384 focused checks and 44 RX9070XT numerical tests;
 19 selection/image checks preserve all fourteen excluded baseline images and two
 image-reuse classes. A second counterexample loop rejected irregular short/long N grids; one native\npredicate selects only measured regular N4096 multiples. Twelve FP8/MXFP8\nKN/NK image/ABI controls are unchanged. All four backend queues are assessed separately.
 
-Remaining: Frozen production timing/format and documentation gates before
-publication; broader MXFP4 M256/Radiance attribution, W8A8 short/ragged cases
+Remaining: Coordinating-main synchronization, broad regression and publication
+CI; broader MXFP4 M256/Radiance attribution, W8A8 short/ragged cases
 and general route/performance closure. No sibling physical parity is inferred.
 
 Evidence: benchmarks/baselines/gfx1201_folded_fragment_groups_20261015/README.md;
 docs/spec/ir/gfx1201_folded_fragment_schedule.md.
-<!-- entry-fields:end -->
+Frozen 3b2fa3b70: 458 focused, 44 device, 19 selection/image and 12 format-image\nchecks pass with clean source unchanged. Eight-shape forward/reverse timing\nretains separate host/device domains. Three grouped rows improve 2.1-5.1 percent;\none remains within control variation. The timed WMMA loop has 7 versus 11 DS\nwaits, with unchanged MMA/LDS/barrier counts, registers/LDS and no spills.\n\n<!-- entry-fields:end -->

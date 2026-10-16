@@ -82,3 +82,56 @@ Raw historical/probe JSON is stored as deterministic gzip to avoid repeating
 large package/resource records in review diffs. compressed-evidence.json binds
 both uncompressed and stored hashes. Python gzip.open(path, "rt") reads it.
 The final frozen regular-grid timing and publication gates remain open.
+
+
+## Final frozen production gate
+
+Frozen 3b2fa3b70146fb04c597116230ded25bf6863321 remains clean and unchanged
+through 458 focused regression checks, 44 owning-device numerical checks,
+19 selection/image checks with four negative admissions and two reuse classes,
+12 FP8/MXFP8 image comparisons, and eight-shape forward/reverse timings.
+regular-grid-frozen-validation.json records source/tool hashes, versions,
+actual GPU, exact commands and terminal results. Historical receipts above
+retain their original scope.
+
+Ratios below are candidate / immutable native baseline for captured device
+graph dispatch, normalized when compiler roles reverse. They are not the
+recorder's separate native/HIP ratio, pure hardware instruction time, ordinary
+host-dispatch windows or completed public launch time. All those raw timing
+domains remain separate in the compressed recorder packets.
+
+| M,N,K | Grouping selected | Forward ratio | Reverse ratio |
+| --- | --- | ---: | ---: |
+| 256,8192,1024 | yes | 0.9493 | 0.9786 |
+| 256,12288,1088 | yes | 0.9877 | 1.0047 |
+| 768,8192,1536 | yes | 0.9629 | 0.9607 |
+| 1024,16384,5120 | yes | 0.9622 | 0.9588 |
+| 256,4096,2048 | no; identical image | 0.9865 | 1.0063 |
+| 256,8256,1088 | no; identical image | 0.9974 | 1.0056 |
+| 256,8704,4096 | no; identical image | 0.9909 | 1.0199 |
+| 256,10240,1024 | no; identical image | 1.0112 | 0.9944 |
+
+Three selected rows improve 2.1-5.1 percent in both orders; N12288/K1088 is
+within identical-image control variation and has no stable gain claim.
+Identical-image controls vary by up to about two percent. The policy is an
+empirical choice inside the explicit approximate folded route, not a
+per-shape speed guarantee or automatic logical-MXFP4 promotion.
+
+## Timed-image ISA attribution
+
+The exported candidate and baseline images are hash-matched to the actual
+timing packet before disassembly. The single WMMA-containing backward branch
+region has 95 versus 100 static instructions and 7 versus 11 DS waits.
+Both retain 32 WMMAs, 12 LDS loads and two barrier signal/wait pairs in that
+region. Both use 177 VGPRs, 29 SGPRs, 25,600 LDS bytes and no spills.
+The full symbol retains three barrier pairs (prologue plus loop body).
+This is static selected-image attribution, not dynamic weighting, a hardware
+counter measurement or a priced barrier/stall explanation.
+
+regular-grid-isa-census.json binds symbol/image/resource evidence; compressed
+assembly retains the instruction stream. The raw compiler executable hashes
+are recorded separately from common toolchain/dependency fingerprints.
+
+The remaining delivery gates are synchronization with the current coordinating
+NVIDIA PR/main, broad regression and publication CI. Wider MXFP4/Radiance
+attribution, other ROCm families and sibling exact-device parity remain open.

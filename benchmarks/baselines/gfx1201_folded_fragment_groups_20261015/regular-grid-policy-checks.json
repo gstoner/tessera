@@ -1,0 +1,258 @@
+{
+  "scope": "production native Target strategy with declared ODS; selected and excluded static Graph cases",
+  "source_commit": "3b2fa3b70146fb04c597116230ded25bf6863321",
+  "rows": [
+    {
+      "shape_mnk": [
+        256,
+        8192,
+        1024
+      ],
+      "selected": true,
+      "old_image_byte_identical": false,
+      "candidate_image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_a870cecb1991940b"
+    },
+    {
+      "shape_mnk": [
+        256,
+        16384,
+        5120
+      ],
+      "selected": true,
+      "old_image_byte_identical": false,
+      "candidate_image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_a870cecb1991940b"
+    },
+    {
+      "shape_mnk": [
+        512,
+        8192,
+        5120
+      ],
+      "selected": true,
+      "old_image_byte_identical": false,
+      "candidate_image_sha256": "f9a76cae9af0db96f6d2f7f2880183eee183ea8b2a7bde3b2b08260219ec4c1f",
+      "baseline_image_sha256": "efdf53b2e41f7b7af9685e0b68a0d21833874a1ab2ad56ea33fa84d926ff2533",
+      "entry": "tessera_rocm_folded_matmul_9e1ec5f733151245"
+    },
+    {
+      "shape_mnk": [
+        1024,
+        16384,
+        5120
+      ],
+      "selected": true,
+      "old_image_byte_identical": false,
+      "candidate_image_sha256": "f9a76cae9af0db96f6d2f7f2880183eee183ea8b2a7bde3b2b08260219ec4c1f",
+      "baseline_image_sha256": "efdf53b2e41f7b7af9685e0b68a0d21833874a1ab2ad56ea33fa84d926ff2533",
+      "entry": "tessera_rocm_folded_matmul_9e1ec5f733151245"
+    },
+    {
+      "shape_mnk": [
+        128,
+        4096,
+        256
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4",
+      "baseline_image_sha256": "999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4",
+      "entry": "tessera_rocm_folded_matmul_130d3100d2bc4ad0"
+    },
+    {
+      "shape_mnk": [
+        200,
+        1040,
+        1536
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "b082cfdaaafa3c760c6fe49fa9472349182c1474fd80f31340b14849bd0154c7",
+      "baseline_image_sha256": "b082cfdaaafa3c760c6fe49fa9472349182c1474fd80f31340b14849bd0154c7",
+      "entry": "tessera_rocm_folded_matmul_a629485a5b78541c"
+    },
+    {
+      "shape_mnk": [
+        256,
+        1024,
+        8192
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_708d500594ff51c6"
+    },
+    {
+      "shape_mnk": [
+        256,
+        8192,
+        512
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_708d500594ff51c6"
+    },
+    {
+      "shape_mnk": [
+        256,
+        4096,
+        960
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_708d500594ff51c6"
+    },
+    {
+      "shape_mnk": [
+        256,
+        4096,
+        1024
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_708d500594ff51c6"
+    },
+    {
+      "shape_mnk": [
+        256,
+        4096,
+        2048
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_708d500594ff51c6"
+    },
+    {
+      "shape_mnk": [
+        256,
+        4096,
+        3072
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_708d500594ff51c6"
+    },
+    {
+      "shape_mnk": [
+        256,
+        4096,
+        5120
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_708d500594ff51c6"
+    },
+    {
+      "shape_mnk": [
+        256,
+        8208,
+        5120
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "4eb8446ca40e022b7247d6ad639d60694f3e335b06a0a6cc7c1b4d246102fde6",
+      "baseline_image_sha256": "4eb8446ca40e022b7247d6ad639d60694f3e335b06a0a6cc7c1b4d246102fde6",
+      "entry": "tessera_rocm_folded_matmul_d82e0167a16f4d0d"
+    },
+    {
+      "shape_mnk": [
+        256,
+        12288,
+        1088
+      ],
+      "selected": true,
+      "old_image_byte_identical": false,
+      "candidate_image_sha256": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_a870cecb1991940b"
+    },
+    {
+      "shape_mnk": [
+        256,
+        8256,
+        1024
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_708d500594ff51c6"
+    },
+    {
+      "shape_mnk": [
+        256,
+        8256,
+        1088
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_708d500594ff51c6"
+    },
+    {
+      "shape_mnk": [
+        256,
+        8704,
+        4096
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_708d500594ff51c6"
+    },
+    {
+      "shape_mnk": [
+        256,
+        10240,
+        1024
+      ],
+      "selected": false,
+      "old_image_byte_identical": true,
+      "candidate_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "baseline_image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "entry": "tessera_rocm_folded_matmul_708d500594ff51c6"
+    }
+  ],
+  "negative_admission": [
+    {
+      "case": "unknown_value",
+      "returncode": 1,
+      "diagnostic": "ROCM_FOLDED_NATIVE_CONTRACT:"
+    },
+    {
+      "case": "wrong_type",
+      "returncode": 1,
+      "diagnostic": "string attribute"
+    },
+    {
+      "case": "partial_m",
+      "returncode": 1,
+      "diagnostic": "ROCM_FOLDED_NATIVE_CONTRACT:"
+    },
+    {
+      "case": "partial_n",
+      "returncode": 1,
+      "diagnostic": "ROCM_FOLDED_NATIVE_CONTRACT:"
+    }
+  ],
+  "shape_reuse": "two WGP shapes and two CU shapes share their respective policy-qualified images",
+  "compiler_sha256": "4e5eeed3ea09f496d6f67a144338ae647281618a2d0503e572ba9fbf7139fb6a"
+}

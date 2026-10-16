@@ -78,5 +78,25 @@
     "raw_sha256": "1a4c1ca14847c62280c0eeae44cea3fe291310d8270815cd29e437bd17c876ab",
     "gzip_sha256": "0caa258e581dd33c8933b9240983d3354bd6cd092f421e7cee5ff43cdb372244",
     "raw_bytes": 53077
+  },
+  "regular-grid-forward.json.gz": {
+    "raw_sha256": "9cefc6d259376c8d105d118e11d0c22d7d70b4179f2293773feb398223dd6ed5",
+    "gzip_sha256": "c694483deb27fe354b2ecea4b6af7f2d5a31522f4741bcd948b993e97a36b8f4",
+    "raw_bytes": 402599
+  },
+  "regular-grid-reverse.json.gz": {
+    "raw_sha256": "82c705f7506d0b7dc1f652ae05baa39aa47c6908b08e5d27add6130515380605",
+    "gzip_sha256": "fd8ca899bc05920faf5c981b6019e05f1edebdbfbeb135cd25dc7acc83715fb8",
+    "raw_bytes": 402453
+  },
+  "regular-grid-candidate.s.gz": {
+    "raw_sha256": "2bf63758cdb362804de69f58e9a59ee647bac9d99dbbbf88a58720618d64d254",
+    "gzip_sha256": "ac494a618a899ab01d0623c15c0cd40b2277c3ecb7c4820b04fdb06e77ca03d5",
+    "raw_bytes": 361182
+  },
+  "regular-grid-baseline.s.gz": {
+    "raw_sha256": "6eb30e64b4a6e1ec1adb380f3664c99284d34654e28382e3bdd75381da2df335",
+    "gzip_sha256": "e661fb8ef50905c748e3471c29031a2cde75ab3c827ec46daa35d2cd16557d1f",
+    "raw_bytes": 361360
   }
 }

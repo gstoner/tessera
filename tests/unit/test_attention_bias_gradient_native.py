@@ -38,6 +38,7 @@ def test_bias_gradient_survives_schedule_replay_and_native_lowering():
     assert re.search(r"st\.global\.(?:f32|b32)", ptx)
 
 
+@pytest.mark.compiler_route
 @pytest.mark.parametrize("with_bias,result_type", [
     (False, "tensor<1x2x3x4xf32>"),
     (True, "tensor<1x2x3x5xf32>"),

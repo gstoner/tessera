@@ -68,6 +68,8 @@ resolveNativeCheckpointStorage(mlir::Operation *op, bool backward) {
     if (tensor.getElementType() != expected) {
       if (!backward && index == 1)
         return op->emitError("checkpoint row LSE storage must be f32"), failure();
+      if (backward && index == 3)
+        return op->emitError("checkpoint bias gradient result storage must be f32"), failure();
       return op->emitError("checkpoint result storage disagrees with its gradient/output/f32 auxiliary role"), failure();
     }
   }

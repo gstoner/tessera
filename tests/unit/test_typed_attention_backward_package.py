@@ -153,3 +153,25 @@ def test_typed_public_binding_checks_each_root_and_seed_dtype_before_native_prep
     with pytest.raises(ValueError, match="storage"):
         owner.invoke(metadata, values)
     assert not owner.handle
+
+
+@pytest.mark.parametrize("storage", ["f32", "f16"])
+def test_non_bf16_owner_does_not_require_optional_ml_dtypes(compiler_package, storage, monkeypatch):
+    import builtins
+    import numpy as np
+    from tessera.compiler.native_attention_program import NativeAttentionVJPProgram
+    from tessera.compiler.prepared_attention_vjp import PreparedAttentionVJP
+    pair = compiler_package(storage=storage)
+    program = NativeAttentionVJPProgram(pair, (0, 1, 2, 3), (0, 1, 2, 3))
+    metadata = dict(program_json=program.to_json(), program_digest=program.program_digest)
+    original_import = builtins.__import__
+    def missing(name, *args, **kwargs):
+        if name == "ml_dtypes" or name.startswith("ml_dtypes."):
+            raise ModuleNotFoundError("optional ml_dtypes unavailable")
+        return original_import(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, "__import__", missing)
+    owner = PreparedAttentionVJP(metadata)
+    expected = np.dtype("float32" if storage == "f32" else "float16")
+    assert owner.dtypes[:3] == (expected,)*3
+    assert owner.output_dtypes[:3] == (expected,)*3
+    assert not owner.handle

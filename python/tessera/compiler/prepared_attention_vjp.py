@@ -30,11 +30,13 @@ class PreparedAttentionVJP:
         for role, index in enumerate(self.program.input_indices):
             frontend[index] = physical_inputs[role]
         import numpy as np
-        from ml_dtypes import bfloat16
         self.storage = provenance["storage"]
         self.output_storage = provenance["output"]
         self.seeded = self.program.pair.backward.descriptor.provenance.get("lse_cotangent", False)
-        types = {"f32": np.dtype("float32"), "f16": np.dtype("float16"), "bf16": np.dtype(bfloat16)}
+        types = {"f32": np.dtype("float32"), "f16": np.dtype("float16")}
+        if "bf16" in (self.storage, self.output_storage):
+            from ml_dtypes import bfloat16
+            types["bf16"] = np.dtype(bfloat16)
         role_dtypes = (types[self.storage],)*3 + ((types["f32"],) if self.bias_shape else ())
         frontend_dtypes = [None]*len(frontend)
         for role, index in enumerate(self.program.input_indices):

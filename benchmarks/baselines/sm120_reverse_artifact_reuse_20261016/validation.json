@@ -1,0 +1,183 @@
+{
+  "measured_source": "c0e991af9e62b899158d9da081a079dd6b89d8e3",
+  "gate_source_before_docs": "2f4d8b4b4b385205b8b2de8b5e8264bceeeec635",
+  "source_after_gates": {
+    "commit": "2f4d8b4b4b385205b8b2de8b5e8264bceeeec635",
+    "status": [],
+    "source_tree": "57fcd851565e880259ba74ea4e1d46e005e2618f",
+    "tools": {
+      "TESSERA_OPT": "6b32e23b9e5d1f3b5f95a674076afcc5784311bf58fe33d9df722210a4a806a2",
+      "TESSERA_NVIDIA_OPT": "ecc4c4781c4c4b3342f07b8b4d587ebf2c45699868fe1171af67c73e6de029b9",
+      "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "1b1804b0805bc8f8a5eeb24a4f8258daa1c62121bc7ce7deea19763ce695849f"
+    },
+    "recorder_sha256": "b64397874c547c53f49a6ff995d2c708ac2b77c16d7007ade0e1803c77c44e4c"
+  },
+  "unit": {
+    "cases": 31940,
+    "passed": 26037,
+    "skipped": 5903,
+    "failures": 0,
+    "limitations": [
+      "ROCm lit suite skipped because tessera-rocm-opt predates source mtimes after checkout refresh. No fresh ROCm lit execution proof is claimed."
+    ]
+  },
+  "compiler_route": {
+    "cases": 1061,
+    "passed": 1061,
+    "skipped": 0,
+    "failures": 0
+  },
+  "device_primary": {
+    "cases": 184,
+    "passed": 174,
+    "skipped": 10,
+    "failures": 0
+  },
+  "device_explicit_proof_switch_rerun": {
+    "cases": 10,
+    "passed": 10,
+    "skipped": 0,
+    "failures": 0
+  },
+  "device_unique_passes": 184,
+  "audits": {
+    "head": "2f4d8b4b4b385205b8b2de8b5e8264bceeeec635",
+    "lanes": [
+      {
+        "lane": "lint",
+        "command": [
+          "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+          "-m",
+          "ruff",
+          "check",
+          "python/tessera/"
+        ],
+        "returncode": 0,
+        "elapsed_seconds": 0.035889625549316406
+      },
+      {
+        "lane": "typing",
+        "command": [
+          "bash",
+          "scripts/mypy_ratchet.sh"
+        ],
+        "returncode": 0,
+        "elapsed_seconds": 0.21026611328125
+      },
+      {
+        "lane": "plan",
+        "command": [
+          "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+          "scripts/check_compiler_plan.py",
+          "--base",
+          "27ccc3b547ffdac51537f56930204ec41d8fcc28"
+        ],
+        "returncode": 0,
+        "elapsed_seconds": 0.3620121479034424
+      },
+      {
+        "lane": "generated-drift",
+        "command": [
+          "bash",
+          "scripts/check_generated_docs.sh"
+        ],
+        "returncode": 0,
+        "elapsed_seconds": 125.03934454917908
+      },
+      {
+        "lane": "coverage-evidence",
+        "command": [
+          "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+          "scripts/coverage_evidence.py",
+          "--output",
+          "/home/angstorms/scratch/sm120-reverse-artifact-reuse-20261016/coverage-evidence"
+        ],
+        "returncode": 0,
+        "elapsed_seconds": 33.224692583084106
+      },
+      {
+        "lane": "public-claims",
+        "command": [
+          "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+          "-m",
+          "tessera.compiler.audit",
+          "claim_lint"
+        ],
+        "returncode": 0,
+        "elapsed_seconds": 0.6138241291046143
+      },
+      {
+        "lane": "surface-examples",
+        "command": [
+          "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+          "-m",
+          "tessera.cli.surface_audit",
+          "--surface=examples",
+          "--check"
+        ],
+        "returncode": 0,
+        "elapsed_seconds": 30.16197156906128
+      },
+      {
+        "lane": "surface-benchmarks",
+        "command": [
+          "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+          "-m",
+          "tessera.cli.surface_audit",
+          "--surface=benchmarks",
+          "--check"
+        ],
+        "returncode": 0,
+        "elapsed_seconds": 11.513120651245117
+      },
+      {
+        "lane": "surface-research",
+        "command": [
+          "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+          "-m",
+          "tessera.cli.surface_audit",
+          "--surface=research",
+          "--check"
+        ],
+        "returncode": 0,
+        "elapsed_seconds": 0.7156872749328613
+      },
+      {
+        "lane": "surface-tools",
+        "command": [
+          "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+          "-m",
+          "tessera.cli.surface_audit",
+          "--surface=tools",
+          "--check"
+        ],
+        "returncode": 0,
+        "elapsed_seconds": 2.5134382247924805
+      },
+      {
+        "lane": "surface-tests",
+        "command": [
+          "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+          "-m",
+          "tessera.cli.surface_audit",
+          "--surface=tests",
+          "--check"
+        ],
+        "returncode": 0,
+        "elapsed_seconds": 123.7126088142395
+      },
+      {
+        "lane": "surface-claims",
+        "command": [
+          "/home/angstorms/scratch/compiler-tools-venv-20261014/bin/python",
+          "-m",
+          "tessera.cli.claim_lint",
+          "--check"
+        ],
+        "returncode": 0,
+        "elapsed_seconds": 0.640873908996582
+      }
+    ]
+  },
+  "scope": "Production adapter, recorder, ownership regressions and native src unchanged from measured c0e991af9e. Required unit invocation began at 61c9aa9ee5; only the E2E Latest documentation pointer changed to 2f4d8b4b4b while it ran. Final focused documentation gates cover that change. Interrupted broader unit run is not completion evidence."
+}

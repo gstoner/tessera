@@ -18,6 +18,8 @@ guards and compiler/source/wrt/LRU/fork boundaries remain active.
 Not applicable to rocm physical execution: the private cache belongs only to
 the SM120 attention family adapter; shared runtime and ABI definitions are unchanged.
 No NVIDIA numerical or timing result transfers to this backend.
+The Super-Bear unit run skipped ROCm lit at its stale-tool guard; fresh ROCm
+lit evidence is missing for that host and is not inferred from NVIDIA gates.
 
 Evidence: benchmarks/baselines/sm120_reverse_artifact_reuse_20261016/README.md.
 

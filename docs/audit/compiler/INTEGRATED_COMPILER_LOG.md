@@ -12695,7 +12695,11 @@ and adjacent contracts pass (24 cases); the historical adapter fails the warm
 serialization guard. Frozen c0e991af9e has twelve independent-oracle same-image
 host/resident A/B rows: completed-call ratios 1.215-1.817, with device events
 reported separately. No kernel speedup or sibling physical proof is claimed.
-Remaining: broader integration/CI gates and native row-correction producer reuse;
+Validation: 184 unique RTX5070 cases pass across primary and explicit-switch
+rerun; 26,037 required unit cases pass (5,903 host-lane skips), 1,061
+compiler-route cases pass with zero skips and all twelve audit lanes pass.
+The measured production source is unchanged; validation.json retains scope.
+Remaining: publication CI/review and native row-correction producer reuse;
 typed capture/dynamic/composed reverse, half JVP, wider masks/layouts and the full
 five-slice program remain open. All four backend plans assess the private scope.
 Evidence: benchmarks/baselines/sm120_reverse_artifact_reuse_20261016/README.md.

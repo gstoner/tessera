@@ -41,8 +41,24 @@ Ten cache/ownership regressions plus adjacent contracts passed (24 total).
 The warm serialization guard fails against the parent adapter, demonstrating the
 removed work. Separate packet checks validate bound sources, all twelve rows,
 input hashes, positive separate samples and recomputed medians/ratios.
-Owning-device public reverse and broader validation are recorded separately as
-they complete; the benchmark alone does not close integration coverage.
+Owning-device validation executes 184 unique cases: 174 passed in the first
+run; its ten explicit-proof-switch skips all pass in the targeted rerun with
+TESSERA_NVIDIA_DEVICE_PROOF=1. No skipped case is counted as execution evidence.
+This covers typed/F32 host/resident reverse, changed inputs, producer ordering,
+retained outputs, native guards and serialized replay.
+
+The required CI unit selector passes 26,037 cases (5,903 skips). The production compiler-route lane passes 1,061 cases with zero skips,
+and ci_require_executed passes. All twelve audit lanes, focused Ruff and zero-error
+mypy gates pass. AST graph update completes without semantic API calls.
+One additional skip versus the prior unit receipt is the ROCm lit suite: its
+source-age guard rejects the Super-Bear tessera-rocm-opt after checkout refresh.
+Fresh ROCm lit execution is missing here; this private NVIDIA adapter change
+does not claim ROCm validation or tool freshness. Other skip reasons include
+unavailable sibling GPUs, runtimes and optional shared images.
+The initial broad unit invocation was deliberately interrupted and is excluded
+from completion evidence. The initial audit pointer failure was corrected;
+validation.json records source scope and the documentation-only continuation.
+The benchmark and these bounded checks do not close the five-slice program.
 
 Native row-correction producer/consumer reuse, typed capture/dynamic/composed
 reverse, half JVP and broader masks/layouts remain open. Apple, ROCm and x86

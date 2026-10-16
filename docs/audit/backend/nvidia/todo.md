@@ -16,9 +16,11 @@ each invocation receives detached metadata and still traverses checked native di
 No numerical execution, roots or results are cached. Shape/storage/stream/lifetime
 guards and compiler/source/wrt/LRU/fork boundaries remain active.
 
-RTX5070 warm public reverse has twelve same-image numerical/timing rows; broader
-owning-device integration validation is in progress. Native row-correction reuse
-and the wider five-slice program remain open.
+RTX5070 warm public reverse has twelve same-image numerical/timing rows and
+184 unique owning-device cases passed across the primary run and explicit-switch
+rerun. 26,037 required unit cases and 1,061 zero-skip compiler-route cases
+pass; all twelve audit lanes pass. Native row-correction reuse and the wider
+five-slice program remain open.
 
 Evidence: benchmarks/baselines/sm120_reverse_artifact_reuse_20261016/README.md.
 

@@ -217,3 +217,28 @@ def test_pre_geometry_measurements_remain_historical_and_images_are_conserved():
     equivalence = json.loads((PACKET / "history/fixture-geometry-equivalence.json").read_text())
     assert equivalence["old_blocks"] == [128, 128, 128]
     assert equivalence["new_blocks"] == [128, 32, 32]
+
+
+def test_optional_strides_review_repair_has_separate_executed_device_evidence(tmp_path):
+    receipt = data("validation/optional-strides-device-validation.json.gz")
+    source = receipt["source_before"]
+    assert source == receipt["source_after"] and not source["status"]
+    assert receipt["exit_code"] == 0
+    assert source["commit"] == "e164fd4d80373f326168d050497ef0663fee7440"
+    assert source["src_tree"] == "b1dac085ee213deed38ad5eaf82707bdca0006b4"
+    assert hashlib.sha256(receipt["source"].encode()).hexdigest() == source["source_sha256"]
+    log = raw("validation/optional-strides-device.log.gz")
+    assert hashlib.sha256(log).hexdigest() == receipt["log_sha256"]
+    assert b"396 passed" in log
+    assert b"12 failed" in raw("validation/optional-strides-before.log.gz")
+    assert b"97 passed" in raw("validation/optional-strides-after.log.gz")
+    junit = raw("validation/optional-strides-device.xml.gz")
+    path = tmp_path / "review.xml"
+    path.write_bytes(junit)
+    result = subprocess.run([sys.executable, str(ROOT / "scripts/ci_require_executed.py"), str(path)],
+                            capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    cases = ET.fromstring(junit).findall(".//testcase")  # noqa: S314
+    assert len(cases) == 396
+    omitted = [case for case in cases if "test_optional_strides_resident_jvp" in case.get("name", "")]
+    assert len(omitted) == 48

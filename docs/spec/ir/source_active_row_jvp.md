@@ -108,6 +108,11 @@ two independent completed host F32 outputs. They retain the existing compiled
 members, step ABI and portable schema. Older providers continue to serve host
 calls; resident calls require both new native symbols.
 
+For compact CUDA Array Interface buffers, omitted optional strides and strides=None
+both denote compact row-major storage. Explicit noncompact strides remain outside
+this source-active envelope. The shared resident-view projection preserves the
+same optional-field interpretation as typed frontend admission.
+
 Public JVP selects the owned Graph family after typed resident tracing, rather
 than assuming every CUDA root belongs to attention. Metadata-only structural
 certification retains the original AST/tracer topology; numerical authority

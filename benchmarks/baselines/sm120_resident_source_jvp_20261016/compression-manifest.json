@@ -287,6 +287,36 @@
     "compressed_bytes": 1972,
     "raw_bytes": 29460
   },
+  "validation/optional-strides-after.log.gz": {
+    "compressed_sha256": "3238299ce4ab0c4a5f74aeecd58d5e524ee7958608f3284914f8ee64ced38586",
+    "raw_sha256": "70a6a33537eef1f33d8e3c4f705c51240b2a0e74bdc9970d335cfd21646c0631",
+    "compressed_bytes": 61,
+    "raw_bytes": 179
+  },
+  "validation/optional-strides-before.log.gz": {
+    "compressed_sha256": "6b4918622e9edfa01f63c1a08fa419249e36b37c2f443852d6198fd1cfcc316f",
+    "raw_sha256": "e58fadb3ab72c685eea33f843494eb56ec2485f7b098a36f70261f4e70e80997",
+    "compressed_bytes": 1397,
+    "raw_bytes": 30216
+  },
+  "validation/optional-strides-device-validation.json.gz": {
+    "compressed_sha256": "1587acf0b7f31bf2a0050fc8d6c1126fcc064b8234520b85edac9f3182f52017",
+    "raw_sha256": "105d111af2ffd32e40683f47c4f64f270ad0ebc4667e8240ac8b0fb3c6b2da75",
+    "compressed_bytes": 3494,
+    "raw_bytes": 12128
+  },
+  "validation/optional-strides-device.log.gz": {
+    "compressed_sha256": "664735445140891b71e97a88cb55b7737e637e5c5605f0a6c30276ba447c66e0",
+    "raw_sha256": "7dfa008ce23782efe58ab1d121b6c9e473fdddb342b1f5ff1b9bcc6090a3d45c",
+    "compressed_bytes": 94,
+    "raw_bytes": 512
+  },
+  "validation/optional-strides-device.xml.gz": {
+    "compressed_sha256": "53eca7ac0cc2add8128bac91fc5b3556e3d6bf05f8490ec86240eacf794c86f8",
+    "raw_sha256": "31864dbd63be216e257a1e6cf7ee56ab25a140ee0b914cadba50cd61fdde570b",
+    "compressed_bytes": 2440,
+    "raw_bytes": 72968
+  },
   "validation/validate_corrected.py.txt.gz": {
     "compressed_sha256": "6bb2b2f880d2d9ca6d48cc8aeaf2fc4e16d1ab8bc52aa0c863deb0672eb6e366",
     "raw_sha256": "7b241c308c4d95a35e30c01437974c868a42e5db558e658af62feca0fcafbc48",

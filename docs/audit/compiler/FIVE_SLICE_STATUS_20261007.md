@@ -44,6 +44,18 @@ Evidence: benchmarks/baselines/sm120_resident_source_jvp_20261016/README.md.
 Publication CI remains pending; earlier red and pre-geometry records retain
 their original source scope.
 
+## Optional CUDA metadata review repair — 2026-10-16
+
+PR954 review follow-through at e164fd4d8 treats omitted CUDA strides as
+compact, matching the optional-field contract already admitted by frontend
+tracing. Twelve host regressions first reproduce KeyError; all 97 focused host
+controls then pass. The expanded owning RTX5070 lane passes 396 cases without
+skips, including 48 omitted-strides public/replay/profile combinations across
+both storage types, argument orders and minimal/ragged shapes. Its clean
+source-before/after witness and raw logs/JUnit are archived separately.
+The d1ba6e98d full-unit/benchmark certificate retains its original scope; no
+new timing or sibling physical parity is inferred from this metadata repair.
+
 ## Current reconciliation — 2026-10-16
 
 PR952 is merged as b361ecf42aca146aa9b47cbd156e601ffe3ce972; its publication

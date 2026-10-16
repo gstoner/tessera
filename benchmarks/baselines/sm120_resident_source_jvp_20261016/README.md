@@ -110,3 +110,20 @@ LLVM numerical tests, but does not establish Apple/ROCm/x86 physical parity.
 No FP8/MXFP8/MXFP4 schedule, selector or promotion changes occur here. The larger
 five-slice program remains open. Subsequent evidence/documentation commits do
 not change this frozen implementation certificate.
+
+## PR954 optional-strides review follow-through
+
+PR954 review follow-through at e164fd4d8 treats omitted CUDA strides as
+compact, matching the optional-field contract already admitted by frontend
+tracing. Twelve host regressions first reproduce KeyError; all 97 focused host
+controls then pass. The expanded owning RTX5070 lane passes 396 cases without
+skips, including 48 omitted-strides public/replay/profile combinations across
+both storage types, argument orders and minimal/ragged shapes. Its clean
+source-before/after witness and raw logs/JUnit are archived separately.
+The d1ba6e98d full-unit/benchmark certificate retains its original scope; no
+new timing or sibling physical parity is inferred from this metadata repair.
+The five validation/optional-strides records preserve the red host regression,
+97-pass host gate and 396-case device JUnit/log/source witness. The source snapshot
+in the review receipt is the metadata helper at e164fd4d8; native src tree identity
+remains b1dac085ee213deed38ad5eaf82707bdca0006b4. It does not replace the earlier
+benchmark epoch or assert that the later repair was timed.

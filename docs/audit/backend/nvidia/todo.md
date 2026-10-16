@@ -20,14 +20,18 @@ are not admitted by metadata preservation alone.
 
 Initial internal tensor contract: 61 host-free compiler/registry cases pass.
 Native AD projection adds 21 cases; the combined projection/legacy/registry
-lane passes 410 cases with zero skips. Schedule/Tile producer and consumer,
-checked workspace lifetime/ABI, replay and owning-device numerical/timing gates
-remain in progress. No execution support or schedule default is promoted.
+lane passes 410 cases with zero skips. The sealed Schedule/Tile producer and native target now pass 434 portable
+target/registry cases and 192 RTX5070 device cases (96 new producer, 96 existing
+backward), all zero-skip. Changed-input reuse, independent FP64 row numerics and
+guarded stores pass. Workspace-consuming backward, checked public owner/ABI,
+replay and separate stage/completed-call timing remain in progress. No execution support or schedule default is promoted.
 
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/contract/README.md;
 benchmarks/baselines/sm120_native_row_correction_20261016/projection/README.md.
 
 
+
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/schedule_target/README.md.
 
 ## SM120-REVERSE-ARTIFACT-REUSE-20261016 — private compiled identity
 

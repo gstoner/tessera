@@ -40,6 +40,7 @@
 #include "Tessera/IR/StaticPermutationContract.h"
 #include "Tessera/IR/TransposeUtils.h"
 #include "mlir/IR/IRMapping.h"
+#include "mlir/IR/Verifier.h"
 #include "llvm/ADT/SetVector.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -74,6 +75,7 @@ using namespace mlir;
 namespace tessera {
 
 #include "NativeCheckpoint.h"
+#include "NativeAttentionRowCorrection.h"
 #include "NativeAttentionRecompute.h"
 #include "NativeAttentionJvp.h"
 #include "NativePagedKV.h"
@@ -3282,6 +3284,9 @@ struct GraphToSchedulePass
     bool jvpSelected=false;
     if (failed(scheduleNativeAttentionJvp(mod,jvpSelected))) return signalPassFailure();
     if (jvpSelected) return;
+    bool rowCorrectionSelected = false;
+    if (failed(scheduleNativeRowCorrections(mod, rowCorrectionSelected))) return signalPassFailure();
+    if (rowCorrectionSelected) return;
     if (failed(importSavedAttentionGraphs(mod)) ||
         failed(scheduleNativeCheckpoints(mod)) ||
         failed(scheduleNativeAttentionRecompute(mod))) return signalPassFailure();
@@ -4322,6 +4327,9 @@ struct ScheduleToTilePass
     bool jvpSelected=false;
     if (failed(lowerNativeAttentionJvp(mod,jvpSelected))) return signalPassFailure();
     if (jvpSelected) return;
+    bool rowCorrectionSelected = false;
+    if (failed(lowerNativeRowCorrections(mod, rowCorrectionSelected))) return signalPassFailure();
+    if (rowCorrectionSelected) return;
     if (failed(lowerNativeAttentionRecompute(mod)) ||
         failed(lowerNativeCheckpoints(mod))) return signalPassFailure();
     if (failed(lowerNativeNVFP4Ingest(mod)) || failed(lowerNativeMXFP4StorageIngest(mod))) return signalPassFailure();

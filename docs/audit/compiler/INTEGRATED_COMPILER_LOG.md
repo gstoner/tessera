@@ -12727,3 +12727,24 @@ five-slice goal remains open.
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/contract/README.md;
 benchmarks/baselines/sm120_native_row_correction_20261016/projection/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-16 — native row correction Schedule and target execution
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-NATIVE-ROW-CORRECTION-20261016.
+Outcome: original Graph/native AD row residual now passes a sealed Schedule and
+opaque-pointer typed Tile ABI into native NVIDIA/LLVM/PTX codegen. Source pair,
+argument roles, dtype/shape facts, FP32 row byte capacity and launch geometry
+are replay-checked; unsupported physical layouts are gated before outlining.
+The outlined producer and existing inline backward share ordered FP32 reduction
+math. Portable target/AD/registry proof passes 434 cases, zero skips. Owning
+RTX5070 proof passes 192 cases, zero skips: 96 changed-input/guarded-store new
+producer cases and 96 existing forward/backward cases after the refactor.
+An omitted target worklist entry was caught by executable compilation and fixed;
+full successful receipts follow a real rebuild. All four queues are assessed.
+Remaining: workspace-consuming backward and additive prepared owner/serialization,
+complete executable-member provenance, public frontend replay/stream/lifetime,
+and separate stage/device/completed-call timings. Diagnostic producer execution
+is not public reverse integration, performance admission or five-slice closure.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/schedule_target/README.md.
+<!-- entry-fields:end -->

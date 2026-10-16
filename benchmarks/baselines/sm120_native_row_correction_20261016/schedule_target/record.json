@@ -1,0 +1,127 @@
+{
+  "scope": "native original Graph/AD -> sealed Schedule/Tile -> NVIDIA target -> LLVM/PTX -> diagnostic resident producer execution; no public prepared workspace consumer or performance claim",
+  "parent_projection_commit": "44a9e70291f193114e9228ea93d28d4293aeb7a6",
+  "source_sha256": {
+    "src/compiler/programming_model/lib/NativeAttentionRowCorrection.h": "0c52bf0a5e5429f3e547013ded9722f405f108b8c44ce573360ceb5040a56d35",
+    "src/compiler/programming_model/lib/NativeCheckpoint.h": "dd325023351abb8939cfb79563288315b8c2b4c29494cb49509cdd8b12e35d52",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "a2ed93c3de516a54d3c4d6428b4948d80fd4ee33a9d98dc0787b0e430f68e0f7",
+    "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "0f9317aae63b8a238865c4a54323d64ad47ccb3c8397bc777e6e32c11d5e5579",
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "1ed78ddd66a6fa391dcf3a695fb70a307d410f5917d3efb7a55cac3ff54068af",
+    "src/compiler/ir/TileOps.cpp": "5235b3e96e40a2303e3e3a469799c0343d653905d09503d65c708e6b62753dc1",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "8f3b1381fd5cb3cdfda2d5d5318d7701377858f3a803cfe1d5034d0530b2774f",
+    "src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td": "569371e09f55d9e0388d46b74fa64a901dbebbb41cec91eff7451e5e6f78e885",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "17e9073da064cc4c8891426047fb2a440e298106600f41ab7aa3f192986c5eb5",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "7badcdd3778d5b11d3012af41ed10511bdb39cb73dc8a1250074595b1de6a188",
+    "python/tessera/compiler/pass_metadata.py": "0dfc401a5d14e5060ea84afcc27a5589d3c3b8233ec8c793cae452976dbe2816",
+    "tests/unit/test_native_attention_row_correction_schedule.py": "57eaab874841e1f1b4e967a7ffb936b96c94522c4fbf32e2e20d6643ae27b047",
+    "tests/unit/test_native_attention_row_correction_target.py": "ce69867bbd25a454df4a347b711e20b542b43dc888d3cc47abcd3aca1bba803b",
+    "tests/device/nvidia/test_native_attention_row_correction_kernel.py": "505dc055b42e66dd19f96e757ef13831ff87856e47b60a5e8d8912eec3be5d3e",
+    "tests/device/nvidia/test_saved_lse_half_backward_kernel.py": "6c2dab687ad5317c3d0f5fa7b26bb76f3c8cfd99e82aebe9651345dd771507e9"
+  },
+  "tools": {
+    "tessera-opt": {
+      "path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt",
+      "sha256": "8b854c6b926c7b5f792a4fa8e6baf39604e07d6acf0f557135d403257b142f01"
+    },
+    "tessera-nvidia-opt": {
+      "path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+      "sha256": "2b0fba2ca120d04267477f6dd2885111eda4faccbeed7bda878e276bcdc260c8"
+    },
+    "mlir-opt": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/llvm-tools/bin/mlir-opt",
+      "sha256": "62a18523fcec89907cd9b0eade4d5976c549d11f85697089766242406ed1c271"
+    },
+    "mlir-translate": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/llvm-tools/bin/mlir-translate",
+      "sha256": "1ab0beb342311021e062480166403962d6981ac1e63162947cd80eb5ecb3a80d"
+    },
+    "llc": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/llvm-tools/bin/llc",
+      "sha256": "81554da92c973d14b3505f8b6ce30eb66d307cbf76c662bf76478e6b5d3bfad6"
+    },
+    "llvm-link": {
+      "path": "/home/angstorms/scratch/sm120-paired-program-20261015/llvm-tools/bin/llvm-link",
+      "sha256": "16ced40d94d8e4af05f55d01608d1cb8f89cdc8c7ebf501dd3651588175fd3b5"
+    },
+    "ptxas": {
+      "path": "/usr/local/cuda/bin/ptxas",
+      "sha256": "9c2c084df7eb9be48f0502b6938ce2571679b2a78cad1c564b583bd7d9ea3c50"
+    }
+  },
+  "provider": {
+    "path": "/home/angstorms/scratch/sm120-attention-half-ad-20261016/libtessera_nvidia_ptx_launch.so",
+    "sha256": "1b1804b0805bc8f8a5eeb24a4f8258daa1c62121bc7ce7deea19763ce695849f",
+    "scope": "unchanged resident allocation/driver helper, not a new prepared reverse ABI"
+  },
+  "device": "NVIDIA GeForce RTX 5070, 12.0, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "target": "nvidia_sm120",
+  "architecture": "sm_120",
+  "tests": {
+    "portable_target_and_registry": {
+      "passed": 434,
+      "skipped": 0,
+      "failed": 0
+    },
+    "owning_device": {
+      "passed": 192,
+      "new_producer_cases": 96,
+      "existing_backward_cases": 96,
+      "skipped": 0,
+      "failed": 0
+    }
+  },
+  "coverage": [
+    "FP16/BF16 QKV; matching half or FP32 dO",
+    "GQA/MHA; Sq=1; Sq>Sk; ragged Sk129",
+    "causal/noncausal; physical broadcast bias; optional dLSE seed",
+    "two changed-input executions per new compiled producer",
+    "guarded FP32 row output stores",
+    "complete source/Schedule hash replay; opaque input-role swap refusal; layout admission"
+  ],
+  "controls": [
+    "Initial target worklist omitted new Tile op: PTX and early device cases failed; registration repaired, production tools rebuilt, full successful runs retained.",
+    "First target assertion expected nvvm.ex2.approx; actual verified MLIR spelling is nvvm.ex2 and emitted PTX ex2.approx.f32.",
+    "Failed initial device run was explicitly interrupted after 72 failing cases against the omitted-worklist binary; it is not a successful receipt."
+  ],
+  "remaining": [
+    "workspace-consuming backward Graph/Schedule/Tile product",
+    "additive checked prepared owner and all-member serialized provenance",
+    "original frontend public replay/stream/lifetime proof",
+    "separate producer/consumer/device/completed-call timing and short/long interleaved baseline"
+  ],
+  "artifact_sha256": {
+    "build-row-target-worklist.log.gz": "fd8531a7206e56b53e391731bfb61452f073d684f6cf64113ebbbdc7b1d6f0e6",
+    "row-device-fixed.log.gz": "0d9fa3ba16d28d5791396825afa8c19cf8d00b13baf6f01e4bd765f215d468bb",
+    "row-device-fixed.xml.gz": "28655cd1d7efaa601c77df5fb4c3675acabfaef5e55d99f3c17083382204c69e",
+    "row-device.log.gz": "5169d3c0b82fc17006e8e65f7033b208553f7037d63c27e51c2ef926ed4e6e2e",
+    "schedule-tile.log.gz": "57eeed9aeae1f45d96717e54b6f84efaf4fa10a466a60164efcde25775cbff85",
+    "schedule-tile.xml.gz": "a85a51043dda31010437f47ba8f63269cb0d71c2ea37d70a7dd6a88115e84b12",
+    "source/python/tessera/compiler/pass_metadata.py.gz": "fc17b58e8d4531e9bff5e659c90d038244d1320946ca9f116658b326f23e3997",
+    "source/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp.gz": "ad30887457fdd1e67e6849211a714ecae67d3cfd6c42df7708b87a4bc8f1f759",
+    "source/src/compiler/ir/TileOps.cpp.gz": "9381c904b68c46c01d8ba9042580ca740b458b87e6f54baffd18c5e1a22dbe30",
+    "source/src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td.gz": "03412553f63cca690e6673eafd4e44f7768744860fe392c40f177684bcf9934c",
+    "source/src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td.gz": "dfb91d557e7d41e1d439bc2d87e229938e2746c60c874c5469112c43c2998ebe",
+    "source/src/compiler/programming_model/lib/NativeAttentionRowCorrection.h.gz": "7960ad48fe08e2b447d6de373a2e793aa105dbd82fccbebd91a0c806eaa1093c",
+    "source/src/compiler/programming_model/lib/NativeCheckpoint.h.gz": "17ab07f74822f3c46a1210f16deb783eb6a294de899c31268c77418125c89fba",
+    "source/src/compiler/programming_model/lib/PMPasses.cpp.gz": "0f93ca186f16bb9e0be476257c85a1246461d1298b568e3ddf88865f913a203d",
+    "source/src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td.gz": "c9d6bd6d9619bea5ae20fc566e6099a236a83980d8ed40c9f150d8d010220e74",
+    "source/src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp.gz": "a386634eba1fffa28d3f542064d27cc8a4779a9a6ed3f02d0a5051ab6b59439b",
+    "source/src/transforms/lib/AutodiffPairedPass.cpp.gz": "d7c7c83b2b187764748a26bb06566d0542f68b204738010cade8a56edba94b4e",
+    "source/tests/device/nvidia/test_native_attention_row_correction_kernel.py.gz": "12d8503f109d00a5656a5e9c8a5f054c40ad4a5c0e539a48fa1d9e040019966d",
+    "source/tests/device/nvidia/test_saved_lse_half_backward_kernel.py.gz": "0efa4d4bb30e9059065caf03b66dce6a210266ed9f19e641d42ad3e5fd4ac13c",
+    "source/tests/unit/test_native_attention_row_correction_schedule.py.gz": "ff173690eddc4f93cb0f46600c07c7b14d697ca65612b4ff915ead5b17a7fd80",
+    "source/tests/unit/test_native_attention_row_correction_target.py.gz": "d0d1b4c1051a92b65584ee6aa3b5893079f4b19be64114c8e79293d3fb98caf0",
+    "target-final.log.gz": "2b132aa9ef7dd47ade060ab775c86e2612c51710afdab66f1635776f8538d38a",
+    "target-final.xml.gz": "0b3748a0d50041c7065cbb8ec4e3107e71330b64997792835f76c81553058f9e",
+    "target-fixed.log.gz": "e73764f42db37a39a9361d4163530e80f374cbb3273b419f50ee212a945ae7ee",
+    "target.log.gz": "5ade4f514b4fe080879a98130909f634825fef3e0c247c126a902f296ddca2c3",
+    "schedule-target-audit.log.gz": "f8be6f7a970db5ee117c3ae4a3f6eaf9bacea0d053ff0e9231a49346438a74c6",
+    "schedule-target-audit.xml.gz": "a4809d74c821177fa50c328dbd19daff3e0ede4b149078d730e9a8dcdde9d2c5",
+    "generated-schedule-target.log.gz": "093a61b7eada152914b21e3316e74e669dc5aca86362004baa53874216e10d5e"
+  },
+  "documentation_gates": {
+    "audit_docs_passed": 11,
+    "compiler_plan": "passed",
+    "generated_docs": "regenerated all registered views with owning generator"
+  }
+}

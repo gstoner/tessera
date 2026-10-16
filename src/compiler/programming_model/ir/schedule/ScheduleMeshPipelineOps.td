@@ -658,6 +658,14 @@ def Schedule_AttentionCheckpointOp : Op<ScheduleDialect, "attention_checkpoint">
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
+// Retains the exact tensor residual and its sealed physical contract.
+def Schedule_AttentionRowCorrectionOp : Op<ScheduleDialect, "attention_row_correction"> {
+  let summary = "Content-addressed probability-weighted row correction schedule";
+  let arguments = (ins AnyRankedTensor:$subject, StrAttr:$artifact_hash, DictionaryAttr:$contract);
+  let results = (outs AnyRankedTensor:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+}
+
 def Schedule_PagedKVReadOp : Op<ScheduleDialect, "paged_kv_read"> {
   let arguments = (ins AnyRankedTensor:$subject, StrAttr:$artifact_hash, DictionaryAttr:$contract);
   let results = (outs AnyRankedTensor:$scheduled);

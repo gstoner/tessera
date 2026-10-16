@@ -2769,6 +2769,142 @@ static LogicalResult materializeSm120AttentionKernel(
   return success();
 }
 
+// Shared ordered FP32 reduction for inline reverse and the outlined residual.
+// Keep the probability, product, accumulation and final seed subtraction order.
+template <typename Score, typename Dot, typename Dropout>
+static Value emitProbabilityRowCorrection(OpBuilder &builder, Location loc,
+    Value Sk, Value savedLse, Value log2e, Score score, Dot dot,
+    Dropout dropout, Value seed = {}) {
+  Value zero = i64Constant(builder, loc, 0);
+  Value one = i64Constant(builder, loc, 1);
+  auto f32 = builder.getF32Type();
+  Value zf = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f));
+  auto loop = scf::ForOp::create(builder, loc, zero, Sk, one, ValueRange{zf});
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(loop.getBody());
+    Value key = loop.getInductionVar();
+    Value weight = NVVM::Ex2Op::create(builder, loc,
+        arith::MulFOp::create(builder, loc,
+            arith::SubFOp::create(builder, loc, score(key), savedLse), log2e), false);
+    Value term = arith::MulFOp::create(builder, loc, weight,
+        arith::MulFOp::create(builder, loc, dropout(key), dot(key)));
+    scf::YieldOp::create(builder, loc, ValueRange{
+        arith::AddFOp::create(builder, loc, loop.getRegionIterArgs()[0], term)});
+  }
+  builder.setInsertionPointAfter(loop);
+  Value result = loop.getResult(0);
+  if (seed) result = arith::SubFOp::create(builder, loc, result, seed);
+  return result;
+}
+
+static LogicalResult materializeSm120AttentionRowCorrectionKernel(
+    tessera::tile::AttentionRowCorrectionKernelOp kernel, OpBuilder &builder) {
+  // Recheck the complete typed/parent seal at the target boundary.
+  if (failed(kernel.verify())) return failure();
+  Operation *op = kernel.getOperation();
+  ValueRange in = kernel.getInputs();
+  Location loc = op->getLoc();
+  auto i32 = builder.getI32Type();
+  auto i64 = builder.getI64Type();
+  auto f32 = builder.getF32Type();
+  bool bias = op->getAttrOfType<BoolAttr>("bias").getValue();
+  bool seeded = op->getAttrOfType<BoolAttr>("lse_cotangent").getValue();
+  bool causal = op->getAttrOfType<BoolAttr>("causal").getValue();
+  bool wide = op->getAttrOfType<StringAttr>("output_storage").getValue() == "f32";
+  Type half = op->getAttrOfType<StringAttr>("storage").getValue() == "f16"
+      ? Type(builder.getF16Type()) : Type(builder.getBF16Type());
+  unsigned lse = 4 + unsigned(bias);
+  unsigned output = lse + 1 + unsigned(seeded);
+  unsigned dims = output + 1;
+  Value B = in[dims], Hq = in[dims+1], Hkv = in[dims+2];
+  Value Sq = in[dims+3], Sk = in[dims+4], D = in[dims+5], Dv = in[dims+6];
+  Value zero = i64Constant(builder, loc, 0), one = i64Constant(builder, loc, 1);
+  Value scale = arith::ConstantFloatOp::create(builder, loc, f32,
+      op->getAttrOfType<FloatAttr>("scale").getValue());
+  Value log2e = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.4426950408889634f));
+  auto load = [&](unsigned role, Value index) -> Value {
+    bool fp32 = role >= 4 || (role == 0 && wide);
+    Type type = fp32 ? Type(f32) : half;
+    Value ptr = LLVM::GEPOp::create(builder, loc, in[role].getType(), type,
+        in[role], ValueRange{index});
+    Value value = LLVM::LoadOp::create(builder, loc, type, ptr, fp32 ? 4 : 2);
+    return fp32 ? value : Value(LLVM::FPExtOp::create(builder, loc, f32, value));
+  };
+  auto index4 = [&](Value b, Value h, Value row, Value d,
+                     Value heads, Value rows, Value width) -> Value {
+    return addI64(builder, loc, mulI64(builder, loc,
+        addI64(builder, loc, mulI64(builder, loc,
+            addI64(builder, loc, mulI64(builder, loc, b, heads), h), rows), row), width), d);
+  };
+  Value block = arith::ExtUIOp::create(builder, loc, i64,
+      NVVM::BlockIdXOp::create(builder, loc, i32));
+  Value thread = arith::ExtUIOp::create(builder, loc, i64,
+      NVVM::ThreadIdXOp::create(builder, loc, i32));
+  Value linear = addI64(builder, loc, mulI64(builder, loc, block,
+      i64Constant(builder, loc, op->getAttrOfType<IntegerAttr>("block_threads").getInt())), thread);
+  auto active = scf::IfOp::create(builder, loc,
+      lessI64(builder, loc, linear, mulI64(builder, loc, mulI64(builder, loc, B, Hq), Sq)), false);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(active.thenBlock());
+    Value q = arith::RemUIOp::create(builder, loc, linear, Sq);
+    Value bh = arith::DivUIOp::create(builder, loc, linear, Sq);
+    Value h = arith::RemUIOp::create(builder, loc, bh, Hq);
+    Value b = arith::DivUIOp::create(builder, loc, bh, Hq);
+    Value hk = arith::DivUIOp::create(builder, loc, h,
+        arith::DivUIOp::create(builder, loc, Hq, Hkv));
+    auto dot = [&](Value key, bool qk) -> Value {
+      Value zf = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f));
+      Value width = qk ? D : Dv;
+      auto loop = scf::ForOp::create(builder, loc, zero, width, one, ValueRange{zf});
+      {
+        OpBuilder::InsertionGuard dotGuard(builder);
+        builder.setInsertionPointToStart(loop.getBody());
+        Value d = loop.getInductionVar();
+        Value a = load(qk ? 1 : 0, index4(b, h, q, d, Hq, Sq, width));
+        Value v = load(qk ? 2 : 3, index4(b, hk, key, d, Hkv, Sk, width));
+        scf::YieldOp::create(builder, loc, ValueRange{
+            arith::AddFOp::create(builder, loc, loop.getRegionIterArgs()[0],
+                arith::MulFOp::create(builder, loc, a, v))});
+      }
+      builder.setInsertionPointAfter(loop);
+      return loop.getResult(0);
+    };
+    auto score = [&](Value key) -> Value {
+      Value value = arith::MulFOp::create(builder, loc, dot(key, true), scale);
+      if (bias) {
+        auto shape = op->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
+        Value bb = shape[0] == 1 ? zero : b, hh = shape[1] == 1 ? zero : h;
+        Value qq = shape[2] == 1 ? zero : q, kk = shape[3] == 1 ? zero : key;
+        Value index = index4(bb, hh, qq, kk, i64Constant(builder, loc, shape[1]),
+            i64Constant(builder, loc, shape[2]), i64Constant(builder, loc, shape[3]));
+        value = arith::AddFOp::create(builder, loc, value, load(4, index));
+      }
+      if (causal) {
+        Value aligned = addI64(builder, loc, q, arith::MaxSIOp::create(builder, loc,
+            arith::SubIOp::create(builder, loc, Sk, Sq), zero));
+        Value legal = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ule, key, aligned);
+        Value negInf = arith::ConstantFloatOp::create(builder, loc, f32,
+            APFloat::getInf(APFloat::IEEEsingle(), true));
+        value = arith::SelectOp::create(builder, loc, legal, value, negInf);
+      }
+      return value;
+    };
+    Value savedLse = load(lse, linear);
+    Value seed = seeded ? load(lse + 1, linear) : Value();
+    Value delta = emitProbabilityRowCorrection(builder, loc, Sk, savedLse, log2e,
+        score, [&](Value key) { return dot(key, false); },
+        [&](Value) -> Value { return arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.0f)); }, seed);
+    Value ptr = LLVM::GEPOp::create(builder, loc, in[output].getType(), f32,
+        in[output], ValueRange{linear});
+    LLVM::StoreOp::create(builder, loc, delta, ptr, 4);
+  }
+  builder.setInsertionPointAfter(active);
+  op->erase();
+  return success();
+}
+
 static LogicalResult materializeSm120AttentionBackwardKernel(
     tessera::tile::AttentionBackwardKernelOp kernel, OpBuilder &builder) {
   Operation *op = kernel.getOperation();
@@ -3106,30 +3242,12 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
                                       load(lseCotangentIndex, rowIndex));
         return {savedLse, onef, delta};
       }
-      Value zf = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f));
-      auto deltaLoop = scf::ForOp::create(builder, loc, zero, Sk, one, ValueRange{zf});
-      {
-        OpBuilder::InsertionGuard guard(builder);
-        builder.setInsertionPointToStart(deltaLoop.getBody());
-        Value key = deltaLoop.getInductionVar();
-        Value weight = NVVM::Ex2Op::create(
-            builder, loc,
-            arith::MulFOp::create(builder, loc,
-                arith::SubFOp::create(builder, loc,
-                    maskedScore(b, hq, hkv, q, key), savedLse), log2e), false);
-        Value term = arith::MulFOp::create(
-            builder, loc, weight,
-            arith::MulFOp::create(builder, loc,
-                dropoutScale(b, hq, q, key), doDotV(b, hq, hkv, q, key)));
-        scf::YieldOp::create(builder, loc, ValueRange{
-            arith::AddFOp::create(builder, loc, deltaLoop.getRegionIterArgs()[0], term)});
-      }
-      builder.setInsertionPointAfter(deltaLoop);
+      Value seed = hasLseCotangent ? load(lseCotangentIndex, rowIndex) : Value();
+      Value delta = emitProbabilityRowCorrection(builder, loc, Sk, savedLse, log2e,
+          [&](Value key) { return maskedScore(b, hq, hkv, q, key); },
+          [&](Value key) { return doDotV(b, hq, hkv, q, key); },
+          [&](Value key) { return dropoutScale(b, hq, q, key); }, seed);
       Value onef = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.0f));
-      Value delta = deltaLoop.getResult(0);
-      if (hasLseCotangent)
-        delta = arith::SubFOp::create(builder, loc, delta,
-                                    load(lseCotangentIndex, rowIndex));
       return {savedLse, onef, delta};
     }
     Value negInf = arith::ConstantFloatOp::create(
@@ -5613,6 +5731,7 @@ struct LowerTileToNVIDIAPass
            op->getOperand(0).getDefiningOp<
                tessera::tile::PackedLoadOp>()) ||
           name == "tile.attention_kernel" ||
+          name == "tile.attention_row_correction_kernel" ||
           name == "tile.attention_backward_kernel" ||
           name == "tile.training_kernel" ||
           name == "tile.paged_kv_read_kernel" ||
@@ -5921,6 +6040,18 @@ struct LowerTileToNVIDIAPass
                 cast<tessera::tile::AttentionKernelOp>(op), builder))) {
           if (smVersion < kConsumerBlackwellSM)
             op->emitError("tile.attention_kernel currently requires sm_120");
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
+
+      if (isTileOp(op, "tile.attention_row_correction_kernel")) {
+        if (smVersion != kConsumerBlackwellSM ||
+            failed(materializeSm120AttentionRowCorrectionKernel(
+                cast<tessera::tile::AttentionRowCorrectionKernelOp>(op), builder))) {
+          if (smVersion != kConsumerBlackwellSM)
+            op->emitError("tile.attention_row_correction_kernel requires sm_120");
           signalPassFailure();
           return;
         }

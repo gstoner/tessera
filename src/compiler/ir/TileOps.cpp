@@ -25,6 +25,10 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/Support/SHA256.h"
+#include "llvm/Support/raw_ostream.h"
+#include <limits>
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/SmallVector.h"
 
@@ -2351,6 +2355,108 @@ LogicalResult DepthAttentionKernelOp::verify() {
       requiredString("merge_recurrence") !=
           "max_shifted_pairwise_merge_v1")
     return emitOpError("requires canonical depth-attention recurrences");
+  return success();
+}
+
+LogicalResult AttentionRowCorrectionKernelOp::verify() {
+  Operation *op = getOperation();
+  auto bias = op->getAttrOfType<BoolAttr>("bias");
+  auto seeded = op->getAttrOfType<BoolAttr>("lse_cotangent");
+  auto storage = op->getAttrOfType<StringAttr>("storage");
+  auto output = op->getAttrOfType<StringAttr>("output_storage");
+  auto row = op->getAttrOfType<StringAttr>("row_storage");
+  auto accum = op->getAttrOfType<StringAttr>("accum");
+  auto correction = op->getAttrOfType<StringAttr>("row_correction");
+  auto scale = op->getAttrOfType<FloatAttr>("scale");
+  auto causal = op->getAttrOfType<BoolAttr>("causal");
+  auto shape = op->getAttrOfType<DenseI64ArrayAttr>("shape");
+  auto bytes = op->getAttrOfType<IntegerAttr>("row_bytes");
+  auto threads = op->getAttrOfType<IntegerAttr>("block_threads");
+  if (!bias || !seeded || !causal || !storage ||
+      (storage.getValue() != "f16" && storage.getValue() != "bf16") ||
+      !output || (output.getValue() != storage.getValue() && output.getValue() != "f32") ||
+      !row || row.getValue() != "f32" || !accum || accum.getValue() != "f32" ||
+      !correction || correction.getValue() != "probability_dot_v_f32_v1")
+    return emitOpError("row correction requires its explicit typed f32 probability policy");
+  if (!scale || !scale.getType().isF32() || !scale.getValue().isFinite() ||
+      scale.getValue().isNegative() || scale.getValue().isZero())
+    return emitOpError("row correction requires finite positive f32 scale");
+  if (!shape || shape.size() != 7 ||
+      llvm::any_of(shape.asArrayRef(), [](int64_t x) { return x <= 0; }) || shape[1] % shape[2])
+    return emitOpError("row correction requires positive B/Hq/Hkv/Sq/Sk/D/Dv and divisible query heads");
+  if (!threads || !threads.getType().isInteger(64) ||
+      (threads.getInt() != 32 && threads.getInt() != 64 && threads.getInt() != 128))
+    return emitOpError("row correction block threads must be 32, 64 or 128");
+  int64_t expectedBytes = 4;
+  for (unsigned axis : {0u, 1u, 3u}) {
+    if (expectedBytes > std::numeric_limits<int64_t>::max() / shape[axis])
+      return emitOpError("row correction row byte span overflows i64");
+    expectedBytes *= shape[axis];
+  }
+  if (!bytes || !bytes.getType().isInteger(64) || bytes.getInt() != expectedBytes ||
+      expectedBytes / 4 > int64_t(INT32_MAX) * threads.getInt())
+    return emitOpError("row correction byte span or launch-grid capacity disagrees");
+  unsigned pointers = 6 + unsigned(bias.getValue()) + unsigned(seeded.getValue());
+  if (getInputs().size() != pointers + 7)
+    return emitOpError("row correction expects exact input/result pointers and seven i64 dimensions");
+  for (Value value : getInputs().take_front(pointers))
+    if (auto pointer = dyn_cast<LLVM::LLVMPointerType>(value.getType());
+        !pointer || pointer.getAddressSpace() != 0)
+      return emitOpError("row correction data/result operands require the generic opaque LLVM pointer ABI");
+  for (Value value : getInputs().drop_front(pointers))
+    if (!value.getType().isInteger(64))
+      return emitOpError("row correction dimensions must be i64");
+  auto physicalBias = op->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
+  if (bias.getValue()) {
+    if (!physicalBias || physicalBias.size() != 4)
+      return emitOpError("row correction requires its physical bias shape");
+    SmallVector<int64_t, 4> scores{shape[0], shape[1], shape[3], shape[4]};
+    for (unsigned i = 0; i < 4; ++i)
+      if (physicalBias[i] != 1 && physicalBias[i] != scores[i])
+        return emitOpError("row correction bias shape must broadcast to logical scores");
+  } else if (op->hasAttr("bias_shape")) {
+    return emitOpError("row correction bias shape requires a bias input");
+  }
+  auto spanFits = [&](int64_t width, ArrayRef<int64_t> dims) {
+    for (int64_t dim : dims) {
+      if (dim <= 0 || width > std::numeric_limits<int64_t>::max() / dim) return false;
+      width *= dim;
+    }
+    return true;
+  };
+  if (!spanFits(2, {shape[0], shape[1], shape[3], shape[5]}) ||
+      !spanFits(2, {shape[0], shape[2], shape[4], shape[5]}) ||
+      !spanFits(2, {shape[0], shape[2], shape[4], shape[6]}) ||
+      !spanFits(output.getValue() == "f32" ? 4 : 2, {shape[0], shape[1], shape[3], shape[6]}) ||
+      (physicalBias && !spanFits(4, physicalBias.asArrayRef())))
+    return emitOpError("row correction physical input byte span overflows i64");
+  for (NamedAttribute attr : op->getAttrs()) {
+    StringRef name = attr.getName().strref();
+    if (name != "shape" && name != "storage" && name != "output_storage" &&
+        name != "row_storage" && name != "accum" && name != "row_correction" &&
+        name != "scale" && name != "causal" && name != "bias" &&
+        name != "lse_cotangent" && name != "row_bytes" && name != "block_threads" &&
+        name != "bias_shape")
+      return emitOpError("row correction has an unsupported physical policy attribute: ") << name;
+  }
+  if (auto fn = op->getParentOfType<LLVM::LLVMFuncOp>()) {
+    if (auto contract = fn->getAttrOfType<DictionaryAttr>("tessera.native_contract")) {
+      auto family = contract.getAs<StringAttr>("family");
+      auto hash = fn->getAttrOfType<StringAttr>("tessera.schedule_hash");
+      if (!family || family.getValue() != "attention_row_correction" || !hash)
+        return emitOpError("row correction Tile parent has a different native contract");
+      std::string text; llvm::raw_string_ostream os(text); contract.print(os); os.flush();
+      auto actual = llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(text)), true);
+      if (hash.getValue() != actual)
+        return emitOpError("row correction Tile parent Schedule hash disagrees");
+      for (NamedAttribute attr : op->getAttrs())
+        if (contract.get(attr.getName()) != attr.getValue())
+          return emitOpError("row correction Tile policy differs from the sealed native contract");
+      if (!llvm::hasSingleElement(fn.getBody()) ||
+          !llvm::equal(getInputs(), fn.getBody().front().getArguments()))
+        return emitOpError("row correction Tile input/result order differs from the sealed entry ABI");
+    }
+  }
   return success();
 }
 

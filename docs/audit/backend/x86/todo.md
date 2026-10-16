@@ -29,6 +29,12 @@ benchmarks/baselines/sm120_native_row_correction_20261016/projection/README.md.
 
 
 
+The new Schedule/Tile/target producer has NVIDIA-only numerical proof.
+Sibling physical execution remains follow-up required; no target schedule or
+GPU result transfers. Shared compiler metadata and contract tests pass.
+
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/schedule_target/README.md.
+
 ## SM120-REVERSE-ARTIFACT-REUSE-20261016 — private compiled identity
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

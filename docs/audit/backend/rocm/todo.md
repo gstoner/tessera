@@ -30,7 +30,8 @@ program-event and completed prepared-host scope; no speedup is claimed.
 The owning compatibility gate passes 226 prior bounded NVFP4, FP8/MXFP8/MXFP4
 and generic-owner cases; adjacent host gates pass 544 with 22 hardware skips.
 Receipts: benchmarks/baselines/nvfp4_source_bounded_20261016/README.md.
-Next: generated docs and final PR gates. Performance and
+Final generated-document/ABI/registry drift gates pass 401 cases.
+Next: PR CI and review. Performance and
 original checkpoint/model-quality acceptance remain open. No gfx1151 FP8 route
 or full-model quality acceptance is inferred.
 

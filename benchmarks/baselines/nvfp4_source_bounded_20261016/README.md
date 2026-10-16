@@ -24,6 +24,8 @@ Python marshals that ABI.
 - host-regressions.txt: 544 passed, 22 skipped; the skips require hardware
   unavailable on the NVIDIA compiler host. They are not device proof.
 - audit.txt: 11 passed.
+- final-drift-gates.txt: 401 passed across generated documentation, runtime ABI,
+  audit lifecycle, diagnostics and pass metadata.
 - gfx1201-timing.json: nine synthetic rows, seven windows per timing scope,
   every window at least 10 ms. Independent nibble decoding and FP64 reference
   comparison precede timing and repeat after each window. Each bounded package
@@ -60,6 +62,7 @@ code, provider and compiler configuration when comparing reruns.
 
 ## Open gates
 
-Generated-document and broader PR validation remain pending. Legacy schema
+Final local generated-document and ABI drift gates pass; broader PR CI and
+review remain pending. Legacy schema
 meanings are unchanged. No general shape/layout/AD or model-quality closure,
 performance promotion, gfx1151 FP8 execution or sibling-device proof is claimed.

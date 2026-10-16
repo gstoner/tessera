@@ -102,6 +102,6 @@ the consumer; completed prepared invoke/read medians are 0.219-0.416 ms.
 These scopes differ and establish no speedup or pure-kernel latency.
 A further owning-device compatibility gate passes 226 legacy bounded NVFP4,
 FP8 W8A8, MXFP8, exact MXFP4 and generic scaled-owner cases. Adjacent host gates
-pass 544 cases with 22 hardware-dependent skips. Generated documentation and
-final PR validation remain open. No full-model quality
+pass 544 cases with 22 hardware-dependent skips. Generated-document, ABI and registry final gates pass 401 cases.
+Final PR validation remains open. No full-model quality
 acceptance, broad performance closure or gfx1151 FP8 execution is inferred.

@@ -278,7 +278,8 @@ def BackwardReduceSplitOp : Op<Tessera_Attn_Dialect, "backward_reduce_split", [P
   let hasVerifier = 1;
 }
 
-// Isolated f32 attention checkpoint entries. These tensor contracts produce or
+// Forward checkpoint Q/K/V use f16/bf16/f32 storage; row LSE stays f32.
+// Backward retains its f32 contract. These tensor contracts produce or
 // consume the LSE value; lse.save/load separately own explicit memory movement.
 def CheckpointForwardOp : Op<Tessera_Attn_Dialect, "checkpoint_forward", [Pure]> {
   let summary = "Compute plain scaled attention and natural-log row LSE";

@@ -32,7 +32,7 @@ static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
       fn.getNumResults() != (backward ? 3 + unsigned(biasGradient) : 2) ||
       graph->getNumOperands() != fn.getNumArguments() ||
       graph->getResultTypes() != fn.getResultTypes())
-    return graph->emitError("checkpoint requires an isolated SM120 f32 tensor entry"), failure();
+    return graph->emitError("checkpoint requires an isolated SM120 tensor entry"), failure();
   SmallVector<unsigned> argumentRoles;
   llvm::SmallDenseSet<unsigned> distinctRoles;
   for (Value operand : graph->getOperands()) {
@@ -45,12 +45,14 @@ static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
   for (unsigned i = 0; i < fn.getNumArguments(); ++i)
     if (fn.getArgAttr(i, "tessera.layout"))
       return graph->emitError("checkpoint layout overrides are unsupported"), failure();
+  auto storage = resolveNativeCheckpointStorage(graph, backward);
+  if (failed(storage)) return failure();
   SmallVector<RankedTensorType> types;
   for (Type type : graph->getOperandTypes()) {
     auto tensor = dyn_cast<RankedTensorType>(type);
-    if (!tensor || tensor.getEncoding() || !tensor.getElementType().isF32() ||
+    if (!tensor || tensor.getEncoding() ||
         llvm::any_of(tensor.getShape(), [](int64_t d) { return !ShapedType::isDynamic(d) && d <= 0; }))
-      return graph->emitError("checkpoint requires positive or bounded f32 shapes"), failure();
+      return graph->emitError("checkpoint requires positive or bounded tensor shapes"), failure();
     types.push_back(tensor);
   }
   unsigned base = backward ? 1 : 0;
@@ -66,7 +68,8 @@ static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
   auto bounds = shape->bounds;
 
   auto tensor = [&](ArrayRef<int64_t> shape) { return RankedTensorType::get(shape, q.getElementType()); };
-  auto output = tensor({b,hq,sq,dv}), lse = tensor({b,hq,sq});
+  auto output = RankedTensorType::get({b,hq,sq,dv}, storage->outputElement);
+  auto lse = RankedTensorType::get({b,hq,sq}, Float32Type::get(graph->getContext()));
   unsigned lseIndex = 5 + unsigned(bias);
   SmallVector<int64_t> biasShape;
   if (bias) {
@@ -127,6 +130,14 @@ static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
       builder.getNamedAttr("arguments", args), builder.getNamedAttr("results", results),
       builder.getNamedAttr("mask_alignment", builder.getStringAttr("end_aligned_v1")),
       builder.getNamedAttr("target", target), builder.getNamedAttr("arch", arch)});
+  if (!storage->inputElement.isF32() || !storage->outputElement.isF32()) {
+    NamedAttrList fields(contract);
+    fields.set("storage", builder.getStringAttr(checkpointStorageSpelling(storage->inputElement)));
+    fields.set("output_storage", builder.getStringAttr(checkpointStorageSpelling(storage->outputElement)));
+    fields.set("row_lse_storage", builder.getStringAttr("f32"));
+    fields.set("accum", builder.getStringAttr("f32"));
+    contract = builder.getDictionaryAttr(fields);
+  }
   if (bounds) {
     NamedAttrList fields(contract);
     fields.set("shape_bounds", bounds);
@@ -353,6 +364,15 @@ static LogicalResult lowerNativeCheckpoints(ModuleOp mod) {
     std::string entry = (Twine("tessera_tile_attention_") +
         (c->backward ? (c->biasGradient ? "backward_lse_output_bias_gradient_" : "backward_lse_output_") : "lse_") +
         c->hash.substr(0,10)).str();
+    auto storage = resolveNativeCheckpointStorage(graph, c->backward);
+    if (failed(storage)) return failure();
+    if (!c->backward && !storage->inputElement.isF32()) {
+      entry = "tessera_tile_attention_lse_" +
+          checkpointStorageSpelling(storage->inputElement).str() +
+          (storage->outputElement.isF32() ? "_" :
+           "_out_" + checkpointStorageSpelling(storage->outputElement).str() + "_") +
+          c->hash.substr(0,10);
+    }
     if (c->lseCotangent)
       entry = std::string(c->biasGradient ? "tessera_tile_attention_backward_lse_output_bias_gradient_cotangent_" : "tessera_tile_attention_backward_lse_output_cotangent_") + c->hash.substr(0,10);
     if (compact) {
@@ -377,7 +397,9 @@ static LogicalResult lowerNativeCheckpoints(ModuleOp mod) {
     // logical dimensions. Static carriers retain their original operand ABI.
     kernel.addOperands(block->getArguments().take_front(
         types.size() - scalarCount + (dynamicBias ? 11 : 7)));
-    kernel.addAttribute("storage",builder.getStringAttr("f32"));
+    kernel.addAttribute("storage",builder.getStringAttr(checkpointStorageSpelling(storage->inputElement)));
+    if (!c->backward && !storage->outputElement.isF32())
+      kernel.addAttribute("output_storage", builder.getStringAttr(checkpointStorageSpelling(storage->outputElement)));
     kernel.addAttribute("accum",builder.getStringAttr("f32"));
     kernel.addAttribute("scale",graph->getAttr("scale")); kernel.addAttribute("causal",graph->getAttr("causal"));
     kernel.addAttribute("bias",builder.getBoolAttr(c->bias));

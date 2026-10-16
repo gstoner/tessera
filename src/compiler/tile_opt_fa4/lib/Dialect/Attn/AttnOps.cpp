@@ -1,4 +1,5 @@
 #include "Tessera/IR/AttentionShapeContract.h"
+#include "Tessera/IR/AttentionCheckpointStorage.h"
 #include <limits>
 //===- AttnOps.cpp — FA-4 attention op verifiers + helpers ───────────────===//
 //
@@ -621,12 +622,14 @@ void registerAttnDialect(::mlir::DialectRegistry &registry) {
 // Checkpoint entry semantics are deliberately narrower than general attention.
 static mlir::LogicalResult verifyCheckpointTensorOp(mlir::Operation *op, bool backward) {
   using namespace mlir;
+  auto storage = tessera::resolveNativeCheckpointStorage(op, backward);
+  if (failed(storage)) return failure();
   SmallVector<RankedTensorType> inputs;
   for (Type type : op->getOperandTypes()) {
     auto tensor = dyn_cast<RankedTensorType>(type);
-    if (!tensor || tensor.getEncoding() || !tensor.getElementType().isF32() ||
+    if (!tensor || tensor.getEncoding() ||
         llvm::any_of(tensor.getShape(), [](int64_t d) { return !ShapedType::isDynamic(d) && d <= 0; }))
-      return op->emitOpError("checkpoint operands require positive or bounded f32 shapes");
+      return op->emitOpError("checkpoint operands require positive or bounded tensor shapes");
     inputs.push_back(tensor);
   }
   auto seedAttr = op->getAttrOfType<BoolAttr>("lse_cotangent");
@@ -652,7 +655,8 @@ static mlir::LogicalResult verifyCheckpointTensorOp(mlir::Operation *op, bool ba
   if (failed(shape)) return failure();
 
   auto tensor = [&](ArrayRef<int64_t> shape) { return RankedTensorType::get(shape,q.getElementType()); };
-  auto output=tensor({b,hq,sq,dv}), lse=tensor({b,hq,sq});
+  auto output=RankedTensorType::get({b,hq,sq,dv},storage->outputElement);
+  auto lse=RankedTensorType::get({b,hq,sq},Float32Type::get(op->getContext()));
   if (bias) {
     auto biasType = inputs[backward ? 5 : 3];
     if (biasType.getRank() != 4)

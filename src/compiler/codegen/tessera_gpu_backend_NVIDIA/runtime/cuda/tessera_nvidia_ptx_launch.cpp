@@ -968,13 +968,20 @@ bool attentionBiasExtents(const int64_t* dims, size_t ndim, bool hasBias,
     return true;
 }
 
+bool attentionStoragePrefix(const char* name, bool saved, bool bf16) {
+    const char* prefix = saved
+        ? (bf16 ? "tessera_tile_attention_lse_bf16_" : "tessera_tile_attention_lse_f16_")
+        : (bf16 ? "tessera_tile_attention_bf16_" : "tessera_tile_attention_f16_");
+    return name && std::strncmp(name, prefix, std::strlen(prefix)) == 0;
+}
+
 bool attentionResultWidth(const char* name,bool saved,size_t &width) {
     width=sizeof(float);
     bool f16=std::strstr(name,"_out_f16_")!=nullptr;
     bool bf16=std::strstr(name,"_out_bf16_")!=nullptr;
-    if ((f16 && bf16) || ((f16 || bf16) && saved)) return false;
-    if (f16 && std::strncmp(name,"tessera_tile_attention_f16_",27)!=0) return false;
-    if (bf16 && std::strncmp(name,"tessera_tile_attention_bf16_",28)!=0) return false;
+    if (f16 && bf16) return false;
+    if (f16 && !attentionStoragePrefix(name, saved, false)) return false;
+    if (bf16 && !attentionStoragePrefix(name, saved, true)) return false;
     if (f16 || bf16) width=2;
     else if (std::strstr(name,"_out_")) return false;
     return true;
@@ -1021,9 +1028,8 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
         !product({B, Hq, Sq, Dv}, oElements) ||
         (hasSavedLse && !product({B, Hq, Sq}, rowElements)) ||
         (hasBias && !product({BiasB, BiasH, BiasQ, BiasK}, biasElements))) return 5;
-    const bool narrow =
-        std::strncmp(name, "tessera_tile_attention_f16_", 27) == 0 ||
-        std::strncmp(name, "tessera_tile_attention_bf16_", 28) == 0;
+    const bool narrow = attentionStoragePrefix(name, hasSavedLse, false) ||
+                        attentionStoragePrefix(name, hasSavedLse, true);
     const size_t elementBytes = narrow ? 2 : 4;
     size_t outputBytes=0;
     if (!attentionResultWidth(name,hasSavedLse,outputBytes)) return 5;
@@ -1804,9 +1810,8 @@ int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
         !product({B, Hq, Sq, Dv}, counts[outputIndex]) ||
         (hasSavedLse && !product({B, Hq, Sq}, counts[lseIndex])) ||
         (hasBias && !product({BiasB, BiasH, BiasQ, BiasK}, counts[3]))) return 5;
-    const bool narrow =
-        std::strncmp(name, "tessera_tile_attention_f16_", 27) == 0 ||
-        std::strncmp(name, "tessera_tile_attention_bf16_", 28) == 0;
+    const bool narrow = attentionStoragePrefix(name, hasSavedLse, false) ||
+                        attentionStoragePrefix(name, hasSavedLse, true);
     const size_t elementBytes = narrow ? 2 : 4;
     size_t outputBytes=0;
     if (!attentionResultWidth(name,hasSavedLse,outputBytes)) return 5;

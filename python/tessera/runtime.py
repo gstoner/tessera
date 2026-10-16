@@ -3181,6 +3181,8 @@ def _submit_nvidia_sm120_native(
         SM120_SOFTMAX_F16_ABI,
         SM120_SOFTMAX_BF16_ABI,
         SM120_SOFTMAX_F32_ABI,
+        SM120_ATTN_LSE_TYPED_ABIS,
+        SM120_ATTN_LSE_BIASED_ABIS, SM120_ATTN_LSE_BROADCAST_ABIS,
     )
     from tessera.compiler.nvidia_training import (
         SM120_ADAM_ABIS,
@@ -3204,7 +3206,7 @@ def _submit_nvidia_sm120_native(
         evaluate_launch_expression,
     )
 
-    if descriptor.abi_id not in {
+    if descriptor.abi_id not in {*SM120_ATTN_LSE_TYPED_ABIS,
         SM120_ATTN_F16_ABI,
         SM120_ATTN_F16_RESULT_ABI,
         SM120_ATTN_BF16_RESULT_ABI,
@@ -3273,7 +3275,7 @@ def _submit_nvidia_sm120_native(
         SM120_DYNAMIC_EXPR_SMEM_ABI,
     }:
         raise RuntimeError(f"unsupported SM120 descriptor ABI {descriptor.abi_id!r}")
-    if descriptor.abi_id in {
+    if descriptor.abi_id in {*SM120_ATTN_LSE_TYPED_ABIS,
             SM120_ATTN_LSE_F32_ABI,SM120_ATTN_LSE_BIAS_F32_ABI,SM120_ATTN_LSE_BCAST_F32_ABI,
             SM120_ATTN_BWD_LSE_F32_ABI,SM120_ATTN_BWD_LSE_BIAS_F32_ABI,
             SM120_ATTN_BWD_LSE_BCAST_F32_ABI,SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI,
@@ -3297,6 +3299,9 @@ def _submit_nvidia_sm120_native(
                 raise RuntimeError("bounded attention buffers disagree with runtime dimension roles")
     if descriptor.abi_id in {SM120_NVFP4_ABI,SM120_NVFP4_BATCH_ABI} and descriptor.provenance.get("batch_rows") is not None:
         _nvfp4_logical_batch_prefix(descriptor)
+    if descriptor.abi_id in SM120_ATTN_LSE_TYPED_ABIS:
+        from tessera.compiler.typed_attention_checkpoint import validate_typed_saved_lse_descriptor
+        validate_typed_saved_lse_descriptor(descriptor)
     seeded_contract = None
     if descriptor.abi_id == SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI:
         from tessera.compiler.lse_cotangent_contract import lse_cotangent_contract, validate_lse_cotangent_invocation
@@ -3405,7 +3410,7 @@ def _submit_nvidia_sm120_native(
                 if len(actual)!=2 or any(shape[axis]>1 and actual[axis]!=pitch[axis]*width
                                           for axis in range(2)):
                     raise RuntimeError("SM120 strided resident storage disagrees with LDA/LDB/LDD scalars")
-        if descriptor.abi_id in {SM120_ATTN_LSE_BCAST_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI}:
+        if descriptor.abi_id in {*SM120_ATTN_LSE_BROADCAST_ABIS, SM120_ATTN_BWD_LSE_BCAST_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI}:
             from tessera.compiler.attention_shape_contract import physical_attention_bias_shape
             if len(dimensions) != 11 or tuple(dimensions[7:]) != physical_attention_bias_shape(
                     dimensions[:7],descriptor.provenance.get("bias_shape",())):
@@ -3444,7 +3449,7 @@ def _submit_nvidia_sm120_native(
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
     }
-    attention_abis = {
+    attention_abis = {*SM120_ATTN_LSE_TYPED_ABIS,
         SM120_ATTN_F16_ABI,
         SM120_ATTN_F16_RESULT_ABI,
         SM120_ATTN_BF16_RESULT_ABI,
@@ -3761,19 +3766,19 @@ def _submit_nvidia_sm120_native(
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
         bias_b, bias_h, bias_q, bias_k = b, hq, sq, sk
-        if descriptor.abi_id in {SM120_ATTN_BCAST_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI}:
+        if descriptor.abi_id in {*SM120_ATTN_LSE_BROADCAST_ABIS, SM120_ATTN_BCAST_F32_ABI}:
             bias_b, bias_h, bias_q, bias_k = (
                 int(cast(int, scalars[name])) for name in ("BiasB", "BiasH", "BiasQ", "BiasK"))
             if bias_b not in (1, b) or bias_h not in (1, hq) or bias_q not in (1, sq) or bias_k not in (1, sk):
                 raise RuntimeError("SM120 broadcast bias dimensions disagree")
             from tessera.compiler.attention_shape_contract import physical_attention_bias_shape
-            if descriptor.abi_id == SM120_ATTN_LSE_BCAST_F32_ABI and (
+            if descriptor.abi_id in SM120_ATTN_LSE_BROADCAST_ABIS and (
                     (bias_b,bias_h,bias_q,bias_k) != physical_attention_bias_shape(
                         dimensions,descriptor.provenance.get("bias_shape",()))):
                 raise RuntimeError("SM120 saved-LSE physical bias scalars disagree with compiled shape")
             dimensions += (bias_b, bias_h, bias_q, bias_k)
-        if descriptor.abi_id in {SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI}:
-            bias = raw[3] if descriptor.abi_id in {SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI} else None
+        if descriptor.abi_id in {*SM120_ATTN_LSE_TYPED_ABIS, SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI}:
+            bias = raw[3] if descriptor.abi_id in {*SM120_ATTN_LSE_BIASED_ABIS} else None
             values = raw[:3] + raw[4:] if bias is not None else raw
             q, key, value, output, row_lse = values
             if (
@@ -6852,6 +6857,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_SOFTMAX_F16_ABI,
         SM120_SOFTMAX_BF16_ABI,
         SM120_SOFTMAX_F32_ABI,
+        SM120_ATTN_LSE_TYPED_ABIS,
     )
     from tessera.compiler.nvidia_training import SM120_TRAINING_ABIS
     from tessera.compiler.nvidia_dynamic_smem import (
@@ -6863,7 +6869,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         target == "nvidia_sm120"
         and abi_id
         in (
-            {
+            {*SM120_ATTN_LSE_TYPED_ABIS,
                 SM120_ATTN_F16_ABI,
                 SM120_ATTN_F16_RESULT_ABI,
                 SM120_ATTN_BF16_RESULT_ABI,

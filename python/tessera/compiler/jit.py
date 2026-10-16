@@ -2135,8 +2135,7 @@ class JitFn:
             scalars = dict(zip(scalar_names, scalar_values, strict=True))
         elif attention:
             from .nvidia_native import (
-                _attention_contract, _attention_lse_contract,
-                SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI,
+                _attention_contract, _attention_lse_contract, SM120_ATTN_LSE_ABIS,
                 SM120_ATTN_F16_ABI, SM120_ATTN_BF16_ABI,
                 SM120_ATTN_F16_RESULT_ABI, SM120_ATTN_BF16_RESULT_ABI,
                 SM120_ATTN_BIAS_F16_RESULT_ABI, SM120_ATTN_BIAS_BF16_RESULT_ABI,
@@ -2152,7 +2151,7 @@ class JitFn:
                         or any(type(value) is not int or value <= 0 for value in bias_shape)):
                     raise ValueError("saved attention physical bias dimensions are malformed")
                 scalar_names += ("BiasB","BiasH","BiasQ","BiasK")
-            attention_abis = ({SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI}
+            attention_abis = (SM120_ATTN_LSE_ABIS
                 if attention_saved_lse else {SM120_ATTN_F16_ABI,SM120_ATTN_BF16_ABI,SM120_ATTN_F32_ABI,
                     SM120_ATTN_F16_RESULT_ABI, SM120_ATTN_BF16_RESULT_ABI,
                     SM120_ATTN_BIAS_F16_RESULT_ABI, SM120_ATTN_BIAS_BF16_RESULT_ABI,

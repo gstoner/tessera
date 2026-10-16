@@ -28,7 +28,8 @@ All 94 adjacent forward/JVP/reverse device cases pass without skips; 12
 authored half-input/FP32-output cases also pass. All 24 standalone timed
 packages replay numerically with compiler subprocesses disabled. Twelve
 legacy FP32 Tile/Target/PTX images, entries and ABI IDs are unchanged.
-The full unit and documentation/publication gates are still being finished.
+The final required CPU unit gate passes 25,975 cases (5,902 skipped), with
+unchanged source/tool witnesses. Documentation/publication gates are active.
 Half-storage AD, dynamic/composed resident execution, wider masks and
 performance closure remain follow-up required. No default promotion follows.
 

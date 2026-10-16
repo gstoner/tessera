@@ -59,7 +59,8 @@ half replay is not part of this delivered public owner envelope.
 
 ## Compatibility and proof boundaries
 
-Existing FP32 ABI identifiers and raw native images retain their identities.
+Existing FP32 ABI identifiers and raw Tile/Target/PTX bytes remain unchanged.
+Wrapper image/artifact digests include compiler fingerprints and may change.
 Saved-LSE paired AD schema 5 still means bounded sequences specifically;
 schema 6 remains static. Paired AD remains its existing FP32 storage contract.
 Adding half forward storage does not admit half roots into that derivative ABI.

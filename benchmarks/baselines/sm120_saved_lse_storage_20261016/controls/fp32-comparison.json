@@ -1,0 +1,159 @@
+{
+  "before": {
+    "commit": "a72626bc22319b49c2c9f5f4957a45107d11d463",
+    "status": [],
+    "src_tree": "52755f7ec6d29950a1aa053cc89d1635877293dc",
+    "tools": {
+      "TESSERA_OPT": "bb3f78bde782ddf792a28ca028b7588c4ee0d7b9e2077e6d13f8970dd00cc58c",
+      "TESSERA_NVIDIA_OPT": "67fc8a88e0ac1662db4c115ca09ea193dfd053eb4a954ff96c1a5a19c7ca24a3",
+      "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "2800b55abad107a7af51df763d9b7b53767ac5f37a515f9841dfe6e4ae55e2e5"
+    },
+    "helper_sha256": "f0b3c9cb000ca7565663fe1642a104e9d76e87261fb3e36ce08e4f5b0401605f"
+  },
+  "after": {
+    "commit": "de14978d8a94916c8438ddcd737c2289ee20b5e7",
+    "status": [],
+    "src_tree": "7b24ff3a8bd634afc43603def3888e80d7df409a",
+    "tools": {
+      "TESSERA_OPT": "8b141b1355b2b36d3fd6c6942193b5bca90a2ecd2095227dd28396213563bfdd",
+      "TESSERA_NVIDIA_OPT": "6a9d80729dddf9d87eda49fabf0087dad4307d247da10a415b693992e23f2598",
+      "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "12e651ba27c0d5a613475bf790212deb63238c531cc99207dbc5d1fa47b30eef"
+    },
+    "helper_sha256": "f0b3c9cb000ca7565663fe1642a104e9d76e87261fb3e36ce08e4f5b0401605f"
+  },
+  "comparison": "raw Tile IR, Target IR, PTX, entry and ABI; wrapper compiler fingerprint intentionally excluded",
+  "rows": [
+    {
+      "case": "c0-none-sk5",
+      "equal": {
+        "case": true,
+        "entry": true,
+        "abi": true,
+        "tile_sha256": true,
+        "target_sha256": true,
+        "ptx_sha256": true
+      }
+    },
+    {
+      "case": "c0-none-sk129",
+      "equal": {
+        "case": true,
+        "entry": true,
+        "abi": true,
+        "tile_sha256": true,
+        "target_sha256": true,
+        "ptx_sha256": true
+      }
+    },
+    {
+      "case": "c0-broadcast-sk5",
+      "equal": {
+        "case": true,
+        "entry": true,
+        "abi": true,
+        "tile_sha256": true,
+        "target_sha256": true,
+        "ptx_sha256": true
+      }
+    },
+    {
+      "case": "c0-broadcast-sk129",
+      "equal": {
+        "case": true,
+        "entry": true,
+        "abi": true,
+        "tile_sha256": true,
+        "target_sha256": true,
+        "ptx_sha256": true
+      }
+    },
+    {
+      "case": "c0-dense-sk5",
+      "equal": {
+        "case": true,
+        "entry": true,
+        "abi": true,
+        "tile_sha256": true,
+        "target_sha256": true,
+        "ptx_sha256": true
+      }
+    },
+    {
+      "case": "c0-dense-sk129",
+      "equal": {
+        "case": true,
+        "entry": true,
+        "abi": true,
+        "tile_sha256": true,
+        "target_sha256": true,
+        "ptx_sha256": true
+      }
+    },
+    {
+      "case": "c1-none-sk5",
+      "equal": {
+        "case": true,
+        "entry": true,
+        "abi": true,
+        "tile_sha256": true,
+        "target_sha256": true,
+        "ptx_sha256": true
+      }
+    },
+    {
+      "case": "c1-none-sk129",
+      "equal": {
+        "case": true,
+        "entry": true,
+        "abi": true,
+        "tile_sha256": true,
+        "target_sha256": true,
+        "ptx_sha256": true
+      }
+    },
+    {
+      "case": "c1-broadcast-sk5",
+      "equal": {
+        "case": true,
+        "entry": true,
+        "abi": true,
+        "tile_sha256": true,
+        "target_sha256": true,
+        "ptx_sha256": true
+      }
+    },
+    {
+      "case": "c1-broadcast-sk129",
+      "equal": {
+        "case": true,
+        "entry": true,
+        "abi": true,
+        "tile_sha256": true,
+        "target_sha256": true,
+        "ptx_sha256": true
+      }
+    },
+    {
+      "case": "c1-dense-sk5",
+      "equal": {
+        "case": true,
+        "entry": true,
+        "abi": true,
+        "tile_sha256": true,
+        "target_sha256": true,
+        "ptx_sha256": true
+      }
+    },
+    {
+      "case": "c1-dense-sk129",
+      "equal": {
+        "case": true,
+        "entry": true,
+        "abi": true,
+        "tile_sha256": true,
+        "target_sha256": true,
+        "ptx_sha256": true
+      }
+    }
+  ]
+}

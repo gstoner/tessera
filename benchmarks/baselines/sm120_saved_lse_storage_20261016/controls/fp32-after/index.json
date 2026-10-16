@@ -1,0 +1,195 @@
+{
+  "source_before": {
+    "commit": "de14978d8a94916c8438ddcd737c2289ee20b5e7",
+    "status": [],
+    "src_tree": "7b24ff3a8bd634afc43603def3888e80d7df409a",
+    "tools": {
+      "TESSERA_OPT": "8b141b1355b2b36d3fd6c6942193b5bca90a2ecd2095227dd28396213563bfdd",
+      "TESSERA_NVIDIA_OPT": "6a9d80729dddf9d87eda49fabf0087dad4307d247da10a415b693992e23f2598",
+      "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "12e651ba27c0d5a613475bf790212deb63238c531cc99207dbc5d1fa47b30eef"
+    },
+    "helper_sha256": "f0b3c9cb000ca7565663fe1642a104e9d76e87261fb3e36ce08e4f5b0401605f"
+  },
+  "source_after": {
+    "commit": "de14978d8a94916c8438ddcd737c2289ee20b5e7",
+    "status": [],
+    "src_tree": "7b24ff3a8bd634afc43603def3888e80d7df409a",
+    "tools": {
+      "TESSERA_OPT": "8b141b1355b2b36d3fd6c6942193b5bca90a2ecd2095227dd28396213563bfdd",
+      "TESSERA_NVIDIA_OPT": "6a9d80729dddf9d87eda49fabf0087dad4307d247da10a415b693992e23f2598",
+      "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "12e651ba27c0d5a613475bf790212deb63238c531cc99207dbc5d1fa47b30eef"
+    },
+    "helper_sha256": "f0b3c9cb000ca7565663fe1642a104e9d76e87261fb3e36ce08e4f5b0401605f"
+  },
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0",
+  "rows": [
+    {
+      "case": "c0-none-sk5",
+      "artifact": "c0-none-sk5.json.gz",
+      "artifact_hash": "99d6f4fe91b4a17de9718d167a24a507fe27e979899f24e351c6bbfaa84e5860",
+      "entry": "tessera_tile_attention_lse_6194076ffd",
+      "abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "tile_sha256": "7564072d4255f643b1067fa1428cf029e8af7736c0dd4f461be5728ca625b135",
+      "target_sha256": "f2c7919a740c10005c53bd279e6575ea5f6ab1f52fd0b35cb32ec637744b3182",
+      "ptx_sha256": "d7b810aede3e7b91d2e36674e3fbbbd5bd156e97938a0f630b7fb372d6e5fad6",
+      "max_abs_error": [
+        6.113328093748649e-09,
+        1.5897337890535823e-07
+      ]
+    },
+    {
+      "case": "c0-none-sk129",
+      "artifact": "c0-none-sk129.json.gz",
+      "artifact_hash": "bb299f9e076e0ddb0ab76ff3c686ba8d6fa68631db84c6e9c032c0751359531b",
+      "entry": "tessera_tile_attention_lse_64eaef1a5e",
+      "abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "tile_sha256": "0d995483e5faa107f56daf69b8f69ea934eb271698ead093da371e436f7c1541",
+      "target_sha256": "745078d539df5a6abb02c7c2e7083109ca13bbe004b3538107c46c44d83b38a4",
+      "ptx_sha256": "095cdb6fd1714cc0f67eb5aa9fa61d628d27f1cc05c837ab3020c06801d75aca",
+      "max_abs_error": [
+        1.2903937883501637e-08,
+        2.825115785753951e-07
+      ]
+    },
+    {
+      "case": "c0-broadcast-sk5",
+      "artifact": "c0-broadcast-sk5.json.gz",
+      "artifact_hash": "2eba9390a32a8217b2d8b3f7e849971b2adc598aa971db8d19bf25a50f5949b7",
+      "entry": "tessera_tile_attention_lse_f7654a9926",
+      "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims_bias_shape.f32.v1",
+      "tile_sha256": "58732bc8bad3c3967bc71ee0ea83f094cd054cbe7b6fea3326aeec00cd478047",
+      "target_sha256": "eb3ff4dc7346b004a071ba128c4dcc5bc4de43ae36aa4642aeabe2a6158ed502",
+      "ptx_sha256": "990e48ea771ab737595eaed80c9e99b97b7516d2a0642f93810ebf2764014cd3",
+      "max_abs_error": [
+        6.113328093748649e-09,
+        1.7396825957582962e-07
+      ]
+    },
+    {
+      "case": "c0-broadcast-sk129",
+      "artifact": "c0-broadcast-sk129.json.gz",
+      "artifact_hash": "68d8c6c0262c0b472a587938407a1912013c282c1110db471c18efd8fb5d8972",
+      "entry": "tessera_tile_attention_lse_9c6fd52ae4",
+      "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims_bias_shape.f32.v1",
+      "tile_sha256": "b8de6afde14efea1d968a199ece6aa7687f3b10465ab3a6f3938fcad1e5443eb",
+      "target_sha256": "9e2611688b9af1004a77e8bfc98b9577a5e818eddd1470a06774713ccf18b246",
+      "ptx_sha256": "51feb4af453d48773cf1571974b4eab96805b567f957b07bb29977465508e393",
+      "max_abs_error": [
+        1.6541818227688854e-08,
+        3.9383921013325107e-07
+      ]
+    },
+    {
+      "case": "c0-dense-sk5",
+      "artifact": "c0-dense-sk5.json.gz",
+      "artifact_hash": "8e337887edec820c8fa7a04bcd89c107ba656d965d774083d35a4dc94c1c4e2c",
+      "entry": "tessera_tile_attention_lse_31ba8a9693",
+      "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "tile_sha256": "7c1c714408edfefbc36bd583ed61a902a9d0f5eebb2e4ae5d1e25f5404c1d962",
+      "target_sha256": "310718940140b1429ff5b373891da6f66c5fcaa4d0c762687f65163de96e56c6",
+      "ptx_sha256": "00436919200618083dd7fdda4372deef9572a0c92177cd8c568bc39e13e0a772",
+      "max_abs_error": [
+        1.2435125262832969e-08,
+        1.0269628658576835e-07
+      ]
+    },
+    {
+      "case": "c0-dense-sk129",
+      "artifact": "c0-dense-sk129.json.gz",
+      "artifact_hash": "c4b793b0bf6c1c4ea946751efc4e524e82dc224a1c1dc72d3d9ffea41e6e5cc5",
+      "entry": "tessera_tile_attention_lse_d830c2a49d",
+      "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "tile_sha256": "a467e8467da0ff4a4c8169e255720777a80c4098712b0a344c0c255f39e3810e",
+      "target_sha256": "0395009664f47e7ebad251aa3f7fa00fdc5220fc31fbb2d9071b7520dc36ba73",
+      "ptx_sha256": "6ab396d76c0adaa1e12c7a05dfabd4de81903aedd4c77fea151c9861070a722b",
+      "max_abs_error": [
+        1.3213741288653491e-08,
+        4.2455445914413303e-07
+      ]
+    },
+    {
+      "case": "c1-none-sk5",
+      "artifact": "c1-none-sk5.json.gz",
+      "artifact_hash": "c941611d5fe8ec5577d528537b961e2d92f01f8ddb9b765c9982e7c3c493099e",
+      "entry": "tessera_tile_attention_lse_72712d2d07",
+      "abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "tile_sha256": "454620d6529c82b6465e4982a3564a9ff398499530c7291d68f21662c260534a",
+      "target_sha256": "6c1b714968a2d238dd42c34e406eabac738d22a694b4b01cabaab6516daa9189",
+      "ptx_sha256": "0496d66381b063428cfb366402216c58ce44be48cc14b3703fafe2acbcec61cd",
+      "max_abs_error": [
+        1.1809523761674434e-08,
+        1.5897337890535823e-07
+      ]
+    },
+    {
+      "case": "c1-none-sk129",
+      "artifact": "c1-none-sk129.json.gz",
+      "artifact_hash": "406996f06ee6314e276ea49a1195d24f99df660d5d5dea8a823387fc97b135eb",
+      "entry": "tessera_tile_attention_lse_2eccbd4a4f",
+      "abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "tile_sha256": "97a598e6350b150dc16e063e9e77e3582c1131b45650dc2a29940402f4146037",
+      "target_sha256": "a4f57a6d2c42eb88210a8a3ee71c70da1602338e72c51876cdf4297ca9b4f3c1",
+      "ptx_sha256": "977d8876b6476ea1d698e0e59f62d9663428a0088a8edc2b87752d2a223d0370",
+      "max_abs_error": [
+        1.2998882914505572e-08,
+        3.786385525117453e-07
+      ]
+    },
+    {
+      "case": "c1-broadcast-sk5",
+      "artifact": "c1-broadcast-sk5.json.gz",
+      "artifact_hash": "7abecc9070c723111f8e14afd7017499baaac31c3fcc7b09bfa5f62d155e7bd1",
+      "entry": "tessera_tile_attention_lse_f7e82b3974",
+      "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims_bias_shape.f32.v1",
+      "tile_sha256": "d7ef14b6335745c8e163cb40fef22a121cd934e86f05e29aec355806d1ee9ace",
+      "target_sha256": "5afb1457c1ad69ef90de7dd541f2fb5434e32b47f62f3fdb4381ca6e2ffb8fce",
+      "ptx_sha256": "119ae32c50c652bf69e237dc62e8c525458914bc303b2ea275539681a9bda6ea",
+      "max_abs_error": [
+        1.1809523761674434e-08,
+        1.6269866920382015e-07
+      ]
+    },
+    {
+      "case": "c1-broadcast-sk129",
+      "artifact": "c1-broadcast-sk129.json.gz",
+      "artifact_hash": "9b86d0ed95dd773f567ed91d85c5b1980589f3ffbbec492d8684f326e5482da5",
+      "entry": "tessera_tile_attention_lse_2567242b0b",
+      "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims_bias_shape.f32.v1",
+      "tile_sha256": "78f814ce7585e7722bb4d943b1d0c389f6dbe1307adb95136a2c72f9c6959688",
+      "target_sha256": "953a4ec9f1694b6236ca96b28c194c2cb210c49938f20564b43931626d0da660",
+      "ptx_sha256": "7503b49cee7c071d515ec29a55b3a35a6103844f5cef97236748f0a49b9d9874",
+      "max_abs_error": [
+        1.6724173212967486e-08,
+        3.9383921013325107e-07
+      ]
+    },
+    {
+      "case": "c1-dense-sk5",
+      "artifact": "c1-dense-sk5.json.gz",
+      "artifact_hash": "3f582069b4fcf773651ad0c9fbdf4ae27c50ab44b5423a3f4c81c25b567869ce",
+      "entry": "tessera_tile_attention_lse_0d085c2718",
+      "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "tile_sha256": "625d813fa5771594d84f9fe1ad269b9b3a3f82b3b534002c691e9b3457894849",
+      "target_sha256": "09ea427161deba8477ffc2d746317510bfa3976294ac8a775baa99ae66157a5a",
+      "ptx_sha256": "16c282df30b40e6c963bb411840d24092ade3a9077e16e88baaf3347a58312d7",
+      "max_abs_error": [
+        1.594447598951554e-08,
+        1.0269628658576835e-07
+      ]
+    },
+    {
+      "case": "c1-dense-sk129",
+      "artifact": "c1-dense-sk129.json.gz",
+      "artifact_hash": "72f1a6da5d014039f3a3805d9c35e636195ef94aebb9d8c5486900cd20af8931",
+      "entry": "tessera_tile_attention_lse_376186b74b",
+      "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "tile_sha256": "0c557438a836f2b5986329e60b80b3bced207939dce5ce8e02ae66d164489228",
+      "target_sha256": "5222bcc0373da95c68199fa833c2daf2bfe612b26948570a873ee1247a2f5133",
+      "ptx_sha256": "8c7d7b8d548ae934fdcc10a95c5295f70ed10f2204b52d1192af834fa43d036e",
+      "max_abs_error": [
+        9.037811728174194e-09,
+        5.239512876897834e-07
+      ]
+    }
+  ]
+}

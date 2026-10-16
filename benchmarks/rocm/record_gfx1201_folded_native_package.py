@@ -9,6 +9,8 @@ protocol; their public Tessera API timing fields are empty.
 from __future__ import annotations
 import argparse
 import ctypes
+from contextlib import ExitStack
+from dataclasses import replace
 import hashlib
 import json
 import math
@@ -30,6 +32,7 @@ from benchmarks.rocm import benchmark_gfx1201_mxfp4_production as base
 from benchmarks.rocm.ablate_gfx1201_folded_load_schedule import package_engine
 from benchmarks.rocm.record_gfx1201_mxfp4_folded_load_schedule import DeviceClock, _schedule_from
 from benchmarks.rocm.folded_graph_windows import FoldedGraphWindows
+from benchmarks.rocm.folded_native_resident_frame import FoldedNativeFramePool
 
 SOURCES=(
  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp",
@@ -45,6 +48,7 @@ SOURCES=(
  "benchmarks/rocm/record_gfx1201_folded_native_package.py",
  "benchmarks/rocm/benchmark_gfx1201_mxfp4_production.py",
  "benchmarks/rocm/folded_graph_windows.py",
+ "benchmarks/rocm/folded_native_resident_frame.py",
  "benchmarks/rocm/ablate_gfx1201_folded_load_schedule.py",
  "benchmarks/rocm/record_gfx1201_mxfp4_folded_load_schedule.py",
 )
@@ -76,8 +80,21 @@ def compile_for_tool(compiler,a,a_scale,folded,**options):
         if previous is None:os.environ.pop("TESSERA_OPT",None)
         else:os.environ["TESSERA_OPT"]=previous
 
+def matching_reference_schedule(reference, selected, *, compare_workgroup_mode=False):
+    """Permit only the explicitly requested workgroup-mode experiment."""
+    if compare_workgroup_mode:
+        reference = replace(reference, workgroup_mode=selected.workgroup_mode)
+    return reference == selected
+
+
+def independent_output_snapshots(engines):
+    # Shared resident frames also share download destinations. Freeze each
+    # result before the next engine overwrites that host destination.
+    return {engine.name:engine.output().copy() for engine in engines}
+
 def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
-             reference_compiler=None,hip_graph_windows=False,radiance=None):
+             reference_compiler=None,hip_graph_windows=False,radiance=None,
+             share_native_resident_frames=False,compare_native_workgroup_mode=False):
     inputs=base._logical_inputs(case)
     folded=prepare_folded_weights(inputs["packed_row_major"],inputs["b_scale"],allow_approximate=True)
     if not folded.lossless:
@@ -105,11 +122,16 @@ def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
         reference=compile_for_tool(reference_compiler,inputs["a"],inputs["a_scale"],folded,
             runtime_k=runtime_k)
         reference_compile_ms=(time.perf_counter_ns()-start)/1e6
-        if _schedule_from(reference.route_receipt)!=schedule:
+        if not matching_reference_schedule(_schedule_from(reference.route_receipt),schedule,
+                compare_workgroup_mode=compare_native_workgroup_mode):
             raise RuntimeError("native reference uses a different physical schedule")
         packages["native_reference_control"]=reference.package
     engines=[]
     graph_clock=None
+    cleanup=ExitStack()
+    resident_pool=(FoldedNativeFramePool(lambda arrays,count: base._copies(hip,arrays,count))
+                   if share_native_resident_frames else None)
+    if resident_pool is not None:cleanup.callback(resident_pool.close)
     try:
         for name,package in packages.items():
             engines.append(package_engine(hip,case,inputs,folded,package,name=name,
@@ -117,12 +139,14 @@ def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
                           "route":package.descriptor.provenance,
                           "compiler_fingerprint":package.image.compiler_fingerprint,
                           "compile_state":package.image.compile_state},
-                copies=3))
+                copies=3,resident_pool=(resident_pool if name.startswith("native_") else None)))
+            cleanup.callback(engines[-1].close)
         if radiance is not None:
             engine=base._radiance_engine(hip,radiance,case,inputs,3)
             engine.metadata["reference_binary_sha256"]=base._sha256(Path(radiance.__file__))
             engines.append(engine)
-        outputs={engine.name:engine.output() for engine in engines}
+            cleanup.callback(engine.close)
+        outputs=independent_output_snapshots(engines)
         np.testing.assert_array_equal(outputs["native_mlir"].view(np.uint16),
                                       outputs["hip_matched_control"].view(np.uint16))
         for output in outputs.values():
@@ -207,7 +231,9 @@ def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
                     "correctness":"bracketed_and_plain_graphs_all_three_poisoned_outputs_bitwise_matched_before_timing",
                     "graph_over_ordinary_ratio":statistics.median(device)/
                         next(r["device_window_per_launch_median_ms"] for r in result if r["engine"]==engine.name)})
-        return {"shape_mnk":[case.m,case.n,case.k],"correctness":"bitwise_matched_and_sampled_independent_oracle",
+        return {"native_reference_workgroup_mode_comparison":compare_native_workgroup_mode,
+            "shared_native_resident_frames":resident_pool.report if resident_pool is not None else None,
+            "shape_mnk":[case.m,case.n,case.k],"correctness":"bitwise_matched_and_sampled_independent_oracle",
             "frontend_receipt":program.route_receipt,"fold_lossless":folded.lossless,
             "native_frontend_package_wall_ms":native_compile_ms,"hip_control_package_wall_ms":hip_compile_ms,
             "native_static_frontend_package_wall_ms":static_compile_ms,
@@ -232,8 +258,10 @@ def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
                 result[0]["device_window_per_launch_median_ms"]/result[2]["device_window_per_launch_median_ms"]
                 if static_control else None)}
     finally:
-        if graph_clock is not None:graph_clock.close()
-        for engine in reversed(engines):engine.close()
+        try:
+            if graph_clock is not None:graph_clock.close()
+        finally:
+            cleanup.close()
 
 def radiance_metadata(module,revision):
     # Validate the optional reference contract before any device/provider probe.
@@ -261,6 +289,8 @@ def main():
     parser.add_argument("--case",action="append",type=base._parse_case)
     parser.add_argument("--native-static-control",action="store_true")
     parser.add_argument("--hip-graph-windows",action="store_true",help="Also capture/replay checked resident packages without repeated host dispatch")
+    parser.add_argument("--share-native-resident-frames",action="store_true")
+    parser.add_argument("--compare-native-workgroup-mode",action="store_true")
     parser.add_argument("--native-reference-opt",type=Path,
         help="Matching native reference compiler for interleaved schedule comparison")
     parser.add_argument("--native-runtime-k",action=argparse.BooleanOptionalAction,default=True,
@@ -273,6 +303,8 @@ def main():
     if args.trials<3: raise ValueError("at least three alternating trials required")
     if args.native_reference_opt is not None and not args.native_reference_opt.is_file():
         raise FileNotFoundError("native reference compiler does not exist")
+    if args.compare_native_workgroup_mode and args.native_reference_opt is None:
+        raise ValueError("workgroup-mode comparison requires a native reference compiler")
     reference_metadata=radiance_metadata(args.radiance_module,args.radiance_revision)
     if rt._rocm_live_arch()!="gfx1201":raise RuntimeError("owning gfx1201 required")
     hip=rt._load_hip_for_launch()
@@ -281,7 +313,7 @@ def main():
               if reference_metadata is not None else None)
     clock=DeviceClock(hip,args.tessera_opt,args.llvm_bin)
     try:
-        rows=[run_case(hip,clock,case,args.tessera_opt,args.trials,args.native_static_control,args.native_runtime_k,args.native_reference_opt,args.hip_graph_windows,radiance) for case in
+        rows=[run_case(hip,clock,case,args.tessera_opt,args.trials,args.native_static_control,args.native_runtime_k,args.native_reference_opt,args.hip_graph_windows,radiance,args.share_native_resident_frames,args.compare_native_workgroup_mode) for case in
             (args.case or [base.Case("prefill",256,n,5120) for n in (4096,8192,16384)])]
     finally:clock.close()
     if reference_metadata is not None and base._sha256(
@@ -297,6 +329,9 @@ def main():
             base._sha256(args.native_reference_opt) if args.native_reference_opt else None),
         "timing_scope":"rotating_three_resident_copies; device windows include dispatch gaps; public launch includes transfers",
         "schedule_match":"matched native/HIP geometry, staging and epilogue; native instruction policy may differ; Radiance is independent",
+        "native_reference_schedule_match":("all fields except explicit workgroup mode"
+            if args.compare_native_workgroup_mode else "all schedule fields"),
+        "shared_native_resident_frames":args.share_native_resident_frames,
         "hip_graph_windows":args.hip_graph_windows,
         "graph_timing_scope":"GPU graph dispatch plus captured kernels and optional markers; capture/instantiate excluded",
         "profiler_counters":False,"radiance_comparison":radiance is not None,

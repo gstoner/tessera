@@ -11,6 +11,13 @@ last_updated: 2026-10-15
 Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
 Synchronization key: GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
 
+Benchmark follow-through: optional shared native resident frames now use
+explicit leases, independent host correctness snapshots and exception-safe
+cleanup. CU/WGP comparison may differ only in workgroup mode; other schedule
+fields remain equal. Historical packets retain their original hashes.
+Not applicable to apple physical execution: this gfx1201 benchmark control
+adds no sibling ABI, schedule or exact-device parity.
+
 Shared test discovery now honors explicit MLIR_OPT, then TESSERA_LLVM_BIN,
 then LLVM_BIN before legacy host fallbacks. A broken configured tool
 cannot silently switch dialect versions. This changes test tool selection,

@@ -10,6 +10,15 @@ inline bool isFoldedFragmentGroupBand(int64_t m, int64_t n, int64_t k) {
   return m > 0 && m % 256 == 0 && n >= 8192 && n % 4096 == 0 &&
          k >= 1024 && k % 64 == 0;
 }
+// RX9070XT measured single-row-block CU profile. Performance classes remain
+// native-owned and image-keyed; excluded shapes keep the compiled baseline.
+// Neighboring K1472/1536/1600 controls motivate this bounded calibration band.
+// Full rectangular validation is required before publishing the selection.
+inline bool isFoldedSingleRowCuBand(int64_t m, int64_t n, int64_t k) {
+  return m == 256 && n >= 8192 && n <= 32768 && n % 4096 == 0 &&
+         ((k >= 1472 && k <= 1600 && k % 64 == 0) ||
+          (n == 8192 && k == 2048));
+}
 inline bool isValidFoldedW4A8Target(Operation *op, bool allowRuntimeMN) {
   auto text = [&](llvm::StringRef key) -> llvm::StringRef {
     auto a = op->getAttrOfType<StringAttr>(key);

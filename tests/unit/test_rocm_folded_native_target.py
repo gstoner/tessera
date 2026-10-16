@@ -309,3 +309,32 @@ def test_native_folded_fragment_policy_is_an_image_key(grouped_target):
         assert result.returncode==0,result.stderr
         results.append(result.stdout)
     assert results[0]!=results[1]
+
+
+@pytest.mark.parametrize("n", range(8192, 32769, 4096))
+@pytest.mark.parametrize("k", [1472, 1536, 1600])
+def test_native_folded_single_row_cu_calibration_band(target, n, k):
+    tool, _ = target
+    result = subprocess.run([str(tool), "--tessera-graph-to-schedule",
+        "--tessera-schedule-to-tile", "--lower-tile-to-rocm=arch=gfx1201"],
+        input=author_folded_scaled_matmul_graph(256, n, k),
+        text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert 'workgroup_mode = "cu"' in result.stdout
+
+
+@pytest.mark.parametrize("m,n,k,mode", [
+    (256, 8192, 2048, "cu"), (256, 16384, 2048, "wgp"),
+    (256, 4096, 1536, "wgp"), (256, 17408, 1536, "wgp"),
+    (256, 8192, 1024, "wgp"), (256, 8192, 5120, "wgp"),
+    (200, 8192, 1536, "wgp"), (512, 8192, 1536, "cu"),
+    (256, 36864, 1536, "wgp"),
+])
+def test_native_folded_cu_profile_preserves_excluded_modes(target, m, n, k, mode):
+    tool, _ = target
+    result = subprocess.run([str(tool), "--tessera-graph-to-schedule",
+        "--tessera-schedule-to-tile", "--lower-tile-to-rocm=arch=gfx1201"],
+        input=author_folded_scaled_matmul_graph(m, n, k),
+        text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert f'workgroup_mode = "{mode}"' in result.stdout

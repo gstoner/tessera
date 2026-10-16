@@ -79,6 +79,8 @@ register-staged selected schedule, all output-changing (``diagnostic_bound``):
 """
 from __future__ import annotations
 
+from contextlib import ExitStack
+
 import ctypes
 from dataclasses import replace
 import hashlib
@@ -411,75 +413,79 @@ def compile_source(source: str, flags: tuple[str, ...]) -> bytes:
 def package_engine(
     hip: ctypes.CDLL, case: base.Case, inputs: dict[str, np.ndarray],
     folded: Any, package: Any, *, name: str, metadata: dict[str, object],
-    copies: int = 3,
+    copies: int = 3, resident_pool=None,
 ) -> base._Engine:
     """Launch ``package`` with its own descriptor geometry on rotating copies."""
-    payload = package.image.payload
-    descriptor = package.descriptor
-    module = ctypes.c_void_p()
-    function = ctypes.c_void_p()
-    if hip.hipModuleLoadData(ctypes.byref(module), payload) != 0:
-        raise RuntimeError(f"folded engine {name} module load failed")
-    if hip.hipModuleGetFunction(
-        ctypes.byref(function), module, descriptor.entry_symbol.encode(),
-    ) != 0:
-        hip.hipModuleUnload(module)
-        raise RuntimeError(f"folded engine {name} entry missing")
-    grid = descriptor.geometry.grid
-    workgroup = descriptor.geometry.workgroup
-    if grid is None or workgroup is None:
-        hip.hipModuleUnload(module)
-        raise RuntimeError("folded engine requires fixed launch geometry")
-    arrays = (
-        inputs["a"], folded.weight_bytes, inputs["a_scale"],
-        folded.row_reference, inputs["output"],
-    )
-    try:
-        device_copies = base._copies(hip, arrays, copies)
-    except Exception:
-        hip.hipModuleUnload(module)
-        raise
-
-    def launch(bundle: base._DeviceArrays, stream=None) -> None:
-        values = folded_launch_values(
-            package, bundle.device, arrays, (case.m, case.n, case.k),
+    with ExitStack() as cleanup:
+        payload = package.image.payload
+        descriptor = package.descriptor
+        module = ctypes.c_void_p()
+        function = ctypes.c_void_p()
+        if hip.hipModuleLoadData(ctypes.byref(module), payload) != 0:
+            raise RuntimeError(f"folded engine {name} module load failed")
+        cleanup.callback(hip.hipModuleUnload, module)
+        if hip.hipModuleGetFunction(
+            ctypes.byref(function), module, descriptor.entry_symbol.encode(),
+        ) != 0:
+            raise RuntimeError(f"folded engine {name} entry missing")
+        grid = descriptor.geometry.grid
+        workgroup = descriptor.geometry.workgroup
+        if grid is None or workgroup is None:
+            raise RuntimeError("folded engine requires fixed launch geometry")
+        arrays = (
+            inputs["a"], folded.weight_bytes, inputs["a_scale"],
+            folded.row_reference, inputs["output"],
         )
-        arguments = (ctypes.c_void_p * len(values))(
-            *[ctypes.cast(ctypes.byref(value), ctypes.c_void_p) for value in values]
+        if resident_pool is None:
+            device_copies = base._copies(hip, arrays, copies)
+            for bundle in device_copies:
+                cleanup.callback(bundle.close)
+        else:
+            layout = descriptor.provenance.get("kernel_argument_layout")
+            if layout != "expanded_memref":
+                raise ValueError("shared frames require the native expanded_memref ABI")
+            lease = resident_pool.acquire(arrays, copies)
+            cleanup.callback(lease.close)
+            device_copies = lease.copies
+
+        def launch(bundle: base._DeviceArrays, stream=None) -> None:
+            values = folded_launch_values(
+                package, bundle.device, arrays, (case.m, case.n, case.k),
+            )
+            arguments = (ctypes.c_void_p * len(values))(
+                *[ctypes.cast(ctypes.byref(value), ctypes.c_void_p) for value in values]
+            )
+            rc = hip.hipModuleLaunchKernel(
+                function, *grid, *workgroup, 0, stream, arguments, None,
+            )
+            if rc != 0:
+                raise RuntimeError(f"folded engine {name} launch failed rc={rc}")
+
+        engine = base._Engine(
+            name, hip, device_copies, launch, 4,
+            {
+                **metadata,
+                "grid": list(grid),
+                "image_sha256": hashlib.sha256(payload).hexdigest(),
+                "abi": descriptor.abi_id,
+                "shared_resident_frames": resident_pool is not None,
+                "resident_frame_identity": (resident_pool.report["pointer_identity_sha256"]
+                                            if resident_pool is not None else None),
+                "selected_isa": selected_symbol_isa_evidence(
+                    payload, descriptor.entry_symbol,
+                ),
+                **base._code_object_evidence(payload),
+            },
         )
-        rc = hip.hipModuleLaunchKernel(
-            function, *grid, *workgroup, 0, stream, arguments, None,
-        )
-        if rc != 0:
-            raise RuntimeError(f"folded engine {name} launch failed rc={rc}")
+        def launch_on_stream(stream):
+            bundle = engine.copies[engine._next]
+            engine._next = (engine._next + 1) % len(engine.copies)
+            launch(bundle, stream)
 
-    engine = base._Engine(
-        name, hip, device_copies, launch, 4,
-        {
-            **metadata,
-            "grid": list(grid),
-            "image_sha256": hashlib.sha256(payload).hexdigest(),
-            "abi": descriptor.abi_id,
-            "selected_isa": selected_symbol_isa_evidence(
-                payload, descriptor.entry_symbol,
-            ),
-            **base._code_object_evidence(payload),
-        },
-    )
-    def launch_on_stream(stream):
-        bundle = engine.copies[engine._next]
-        engine._next = (engine._next + 1) % len(engine.copies)
-        launch(bundle, stream)
-
-    engine.launch_on_stream = launch_on_stream
-    original_close = engine.close
-
-    def close() -> None:
-        original_close()
-        hip.hipModuleUnload(module)
-
-    engine.close = close  # type: ignore[method-assign]
-    return engine
+        engine.launch_on_stream = launch_on_stream
+        owned = cleanup.pop_all()
+        engine.close = owned.close
+        return engine
 
 
 def schedule_engine(

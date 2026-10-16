@@ -87,3 +87,26 @@ Reference rows carry no Tessera public-API time. Ordinary device-clock windows
 include host submission gaps; captured graph windows and completed public
 Tessera calls remain distinct fields. Reference arguments are validated before
 any hardware/provider probe. No reference code is a production lowering.
+
+
+## Shared resident benchmark frames
+
+The optional --share-native-resident-frames recorder switch gives native
+expanded-memref arms identical device root pointers and three rotating output
+buffers. HIP and Radiance arms retain their distinct physical allocations.
+A pool owns the allocations; engines hold explicit leases. Captured graphs
+close before engine modules, and all leases close before freeing the pool.
+Failure before capture follows the same cleanup path. Host downloads are
+copied immediately, so one engine cannot overwrite another correctness witness.
+The packet records a pointer-identity hash, live lease count and final closed
+state; each native engine records the same frame identity.
+
+Schedule equality remains mandatory by default. The explicit
+--compare-native-workgroup-mode option permits a CU/WGP difference only;
+rasterization, staging, epilogue and row guards must still match. This is an
+experimental comparison control, not permission to substitute numerical
+contracts. It requires an independent native reference compiler.
+
+Older frozen timing packets retain their original benchmark-source hashes.
+New measurements must fingerprint the changed harness and exact compiler
+binaries; a historical packet is not current-source performance evidence.

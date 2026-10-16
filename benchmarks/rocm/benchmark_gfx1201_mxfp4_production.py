@@ -331,10 +331,18 @@ class _Engine:
 def _copies(
     hip: ctypes.CDLL, arrays: tuple[np.ndarray, ...], count: int
 ) -> list[_DeviceArrays]:
-    return [
-        _DeviceArrays(hip, tuple(np.zeros_like(a) if i == len(arrays) - 1 else a for i, a in enumerate(arrays)))
-        for _ in range(count)
-    ]
+    copies = []
+    try:
+        for _ in range(count):
+            copies.append(_DeviceArrays(
+                hip, tuple(np.zeros_like(a) if i == len(arrays) - 1 else a
+                           for i, a in enumerate(arrays)),
+            ))
+    except Exception:
+        for copy in reversed(copies):
+            copy.close()
+        raise
+    return copies
 
 
 def _tessera_engine(

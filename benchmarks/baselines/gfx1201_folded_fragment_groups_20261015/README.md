@@ -135,3 +135,20 @@ are recorded separately from common toolchain/dependency fingerprints.
 The remaining delivery gates are synchronization with the current coordinating
 NVIDIA PR/main, broad regression and publication CI. Wider MXFP4/Radiance
 attribution, other ROCm families and sibling exact-device parity remain open.
+
+
+## Fresh M256 long-K column curve
+
+A further clean-source run on proof commit 64c54aa0e verifies that compiler,
+implementation sources and tools match frozen 3b2fa3b70, then measures the
+original M256/K5120, N4096/8192/16384 curve in both compiler/shape orders.
+The grouped N8192/16384 medians improve 2.58-3.31 percent forward and
+2.66-3.27 percent in reverse. The N8192->16384 marginal cost is 16.129 versus
+16.817 ns/column forward and 16.040 versus 16.699 ns/column reverse.
+
+The unchanged N4096 control varies by 0.7-3.6 percent in this extra run.
+That larger control variation limits confidence in small individual gains;
+it is retained rather than represented as code improvement. This is the
+current native-only curve, not a fresh Radiance comparison. A captured
+independent-reference comparison remains a follow-up. m256-slope-decision.json
+normalizes compiler roles and binds the two compressed raw packets.

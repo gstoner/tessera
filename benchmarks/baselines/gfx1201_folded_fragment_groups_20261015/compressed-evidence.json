@@ -98,5 +98,15 @@
     "raw_sha256": "6eb30e64b4a6e1ec1adb380f3664c99284d34654e28382e3bdd75381da2df335",
     "gzip_sha256": "e661fb8ef50905c748e3471c29031a2cde75ab3c827ec46daa35d2cd16557d1f",
     "raw_bytes": 361360
+  },
+  "m256-forward.json.gz": {
+    "raw_sha256": "65af2f6c5713b3c2ebcfdc326efcaa20cd83919b7e3d429871c720384f935296",
+    "gzip_sha256": "06fb047745569a2a71206dd41164e8c2117f8897bde19162effe5a317407f9ce",
+    "raw_bytes": 152863
+  },
+  "m256-reverse.json.gz": {
+    "raw_sha256": "ef00baf88a1b4418af3505a53acc843d1de0f7ef5e3a4a5947b27719ff0add53",
+    "gzip_sha256": "611a6400cc6b8031fe7c15abb0ee883065054dc9baf91740b4e6a94fbdc034ee",
+    "raw_bytes": 152940
   }
 }

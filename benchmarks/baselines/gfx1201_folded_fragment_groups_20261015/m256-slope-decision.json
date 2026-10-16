@@ -1,0 +1,92 @@
+{
+  "scope": "fresh M256/K5120 native-only captured graph curve; no Radiance comparison",
+  "implementation_revision": "3b2fa3b70146fb04c597116230ded25bf6863321",
+  "measurement_revision": "64c54aa0e; source and tools verified unchanged from implementation freeze",
+  "runs": [
+    {
+      "raw_file": "m256-forward.json.gz",
+      "measurement_head": "64c54aa0eec4bb73e664444620b974c35b4cf563",
+      "worktree_dirty": false,
+      "compiler_roles_reversed": false,
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            5120
+          ],
+          "candidate_graph_ms": 0.0785184496124031,
+          "baseline_graph_ms": 0.07905333333333334,
+          "candidate_over_baseline": 0.9932338878276662
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            5120
+          ],
+          "candidate_graph_ms": 0.14619333333333331,
+          "baseline_graph_ms": 0.15007055555555557,
+          "candidate_over_baseline": 0.9741640043386998
+        },
+        {
+          "shape_mnk": [
+            256,
+            16384,
+            5120
+          ],
+          "candidate_graph_ms": 0.27832285714285715,
+          "baseline_graph_ms": 0.28783619047619047,
+          "candidate_over_baseline": 0.9669487936260043
+        }
+      ],
+      "N8192_to_N16384_ns_per_column": {
+        "candidate": 16.129092261904766,
+        "baseline": 16.817094106522816
+      }
+    },
+    {
+      "raw_file": "m256-reverse.json.gz",
+      "measurement_head": "64c54aa0eec4bb73e664444620b974c35b4cf563",
+      "worktree_dirty": false,
+      "compiler_roles_reversed": true,
+      "rows": [
+        {
+          "shape_mnk": [
+            256,
+            16384,
+            5120
+          ],
+          "candidate_graph_ms": 0.2785980952380952,
+          "baseline_graph_ms": 0.28802666666666665,
+          "candidate_over_baseline": 0.9672649357863689
+        },
+        {
+          "shape_mnk": [
+            256,
+            8192,
+            5120
+          ],
+          "candidate_graph_ms": 0.1472,
+          "baseline_graph_ms": 0.15122871794871795,
+          "candidate_over_baseline": 0.973360099831805
+        },
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            5120
+          ],
+          "candidate_graph_ms": 0.07788608695652173,
+          "baseline_graph_ms": 0.08082202898550725,
+          "candidate_over_baseline": 0.9636739875769268
+        }
+      ],
+      "N8192_to_N16384_ns_per_column": {
+        "candidate": 16.039806547619044,
+        "baseline": 16.69896834935897
+      }
+    }
+  ],
+  "interpretation": "N8192/16384 grouped medians improve 2.58-3.31 percent in forward and 2.66-3.27 percent in reverse. The unchanged N4096 control varies by 0.7-3.6 percent, so modest gains are characterization and not a per-shape guarantee."
+}

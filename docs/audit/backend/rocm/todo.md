@@ -10,8 +10,17 @@ scope: ROCm backend implementation and exact-device proof
 Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
 Synchronization key: GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
 
+The optional independent Radiance comparison now shares the explicit-stream,
+all-three-copy poisoned-output graph protocol with native packages. Module
+bytes and declared source revision are distinguished; tuning inputs are
+recorded. Ordinary launch, captured device and Tessera public API costs remain
+separate. The reference has no Tessera public-API timing. Invalid reference
+arguments are checked before device probing. This benchmark addition changes
+no production runtime ABI or logical dtype admission.
+
 Native Tile-to-ROCm selects an explicit, image-keyed K32 fragment-read
-schedule for unpacked folded prefill only with full M256, N>=8192 divisible\nby 4096, K>=1024
+schedule for unpacked folded prefill only with full M256, N>=8192 divisible
+by 4096, K>=1024
 problems. The first N>=4096 candidate was rejected after reproducible short-K
 regressions; excluded shapes retain baseline images. The Target field is ODS
 declared, verified and reported through readonly package provenance. LLVM

@@ -11,6 +11,11 @@ last_updated: 2026-10-15
 Owner ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
 Synchronization key: GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
 
+The shared benchmark change is scoped to gfx1201: its optional independent
+Radiance arm uses explicit-stream capture and separate host/device timing.
+Not applicable to apple physical execution or runtime ABI; no comparator
+result is transferred to this architecture.
+
 Not applicable to apple physical scheduling: the new optional field and
 instruction grouping belong to the gfx1201 ROCm Target folded-prefill contract.
 Shared Graph/Schedule/Tile arithmetic, storage policy and runtime ABI are

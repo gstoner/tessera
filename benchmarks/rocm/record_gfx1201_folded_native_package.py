@@ -3,7 +3,8 @@
 
 Device-clock windows include any host dispatch gaps. Public launch wall time
 includes host transfers, allocation and module loading. Neither is a profiler
-phase attribution or a comparison against Radiance.
+phase attribution. Optional Radiance rows use the same checked resident graph
+protocol; their public Tessera API timing fields are empty.
 """
 from __future__ import annotations
 import argparse
@@ -42,6 +43,7 @@ SOURCES=(
  "python/tessera/runtime.py",
  "benchmarks/rocm/folded_launch_arguments.py",
  "benchmarks/rocm/record_gfx1201_folded_native_package.py",
+ "benchmarks/rocm/benchmark_gfx1201_mxfp4_production.py",
  "benchmarks/rocm/folded_graph_windows.py",
  "benchmarks/rocm/ablate_gfx1201_folded_load_schedule.py",
  "benchmarks/rocm/record_gfx1201_mxfp4_folded_load_schedule.py",
@@ -75,7 +77,7 @@ def compile_for_tool(compiler,a,a_scale,folded,**options):
         else:os.environ["TESSERA_OPT"]=previous
 
 def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
-             reference_compiler=None,hip_graph_windows=False):
+             reference_compiler=None,hip_graph_windows=False,radiance=None):
     inputs=base._logical_inputs(case)
     folded=prepare_folded_weights(inputs["packed_row_major"],inputs["b_scale"],allow_approximate=True)
     if not folded.lossless:
@@ -116,6 +118,10 @@ def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
                           "compiler_fingerprint":package.image.compiler_fingerprint,
                           "compile_state":package.image.compile_state},
                 copies=3))
+        if radiance is not None:
+            engine=base._radiance_engine(hip,radiance,case,inputs,3)
+            engine.metadata["reference_binary_sha256"]=base._sha256(Path(radiance.__file__))
+            engines.append(engine)
         outputs={engine.name:engine.output() for engine in engines}
         np.testing.assert_array_equal(outputs["native_mlir"].view(np.uint16),
                                       outputs["hip_matched_control"].view(np.uint16))
@@ -185,8 +191,9 @@ def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
             result.append({"engine":engine.name,"device_window_per_launch_samples_ms":device,
                 "device_window_per_launch_median_ms":statistics.median(device),
                 "plain_event_per_launch_samples_ms":plain,
-                "public_launch_wall_samples_ms":public[engine.name],
-                "public_launch_wall_median_ms":statistics.median(public[engine.name]),
+                "public_launch_wall_samples_ms":public.get(engine.name,[]),
+                "public_launch_wall_median_ms":(statistics.median(public[engine.name])
+                    if engine.name in public else None),
                 "windows":windows,"image_evidence":engine.metadata,
                 "output_sha256":hashlib.sha256(outputs[engine.name].tobytes()).hexdigest()})
         graph_rows=[]
@@ -211,6 +218,14 @@ def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
                      if row["engine"]=="native_reference_control")
                 if reference_compiler is not None else None),
             "launches_per_window":launches,"rows":result,"graph_rows":graph_rows,
+            "native_over_radiance_device_ratio":(
+                result[0]["device_window_per_launch_median_ms"]/
+                next(r["device_window_per_launch_median_ms"] for r in result if r["engine"]=="radiance")
+                if radiance is not None else None),
+            "native_over_radiance_graph_ratio":(
+                graph_rows[0]["device_window_per_launch_median_ms"]/
+                next(r["device_window_per_launch_median_ms"] for r in graph_rows if r["engine"]=="radiance")
+                if radiance is not None and graph_rows else None),
             "native_over_hip_graph_ratio":(graph_rows[0]["device_window_per_launch_median_ms"]/graph_rows[1]["device_window_per_launch_median_ms"] if graph_rows else None),
             "native_over_hip_device_ratio":result[0]["device_window_per_launch_median_ms"]/result[1]["device_window_per_launch_median_ms"],
             "native_over_static_device_ratio":(
@@ -219,6 +234,25 @@ def run_case(hip,clock,case,compiler,trials,static_control=False,runtime_k=True,
     finally:
         if graph_clock is not None:graph_clock.close()
         for engine in reversed(engines):engine.close()
+
+def radiance_metadata(module,revision):
+    # Validate the optional reference contract before any device/provider probe.
+    if module is None and revision is None:
+        return None
+    if module is None or not isinstance(revision,str) or not revision.strip():
+        raise ValueError("Radiance comparison requires both module and revision")
+    module=Path(module).resolve()
+    if not module.is_file():
+        raise FileNotFoundError("Radiance module does not exist")
+    if os.environ.get("RADIANCE_MXFP4_WPERM")!="1":
+        raise ValueError("Radiance comparison requires RADIANCE_MXFP4_WPERM=1")
+    tuning=("RADIANCE_MXFP4_WPERM","RADIANCE_MXFP4_TN4_MIN_M",
+            "RADIANCE_MXFP4_DECODE_MAX_M","RADIANCE_MXFP4_EPIFAST",
+            "RADIANCE_MXFP4_DECODE_NT")
+    return {"module_path":str(module),"binary_sha256":base._sha256(module),
+            "declared_revision":revision,"revision_binding":"caller_declared; binary hash is authoritative",
+            "tuning_environment":{key:os.environ.get(key) for key in tuning}}
+
 
 def main():
     parser=argparse.ArgumentParser()
@@ -231,20 +265,28 @@ def main():
         help="Matching native reference compiler for interleaved schedule comparison")
     parser.add_argument("--native-runtime-k",action=argparse.BooleanOptionalAction,default=True,
         help="Use the native checked full-K64 runtime loop and shape-independent image")
+    parser.add_argument("--radiance-module",type=Path,help="Optional independent reference with explicit stream ABI")
+    parser.add_argument("--radiance-revision",help="Declared source revision; actual module bytes are fingerprinted")
     parser.add_argument("--trials",type=int,default=7)
     parser.add_argument("--output",required=True,type=Path)
     args=parser.parse_args()
     if args.trials<3: raise ValueError("at least three alternating trials required")
     if args.native_reference_opt is not None and not args.native_reference_opt.is_file():
         raise FileNotFoundError("native reference compiler does not exist")
+    reference_metadata=radiance_metadata(args.radiance_module,args.radiance_revision)
     if rt._rocm_live_arch()!="gfx1201":raise RuntimeError("owning gfx1201 required")
     hip=rt._load_hip_for_launch()
     if hip is None or hip.hipInit(0)!=0:raise RuntimeError("HIP unavailable")
+    radiance=(base._load_radiance(Path(reference_metadata["module_path"]))
+              if reference_metadata is not None else None)
     clock=DeviceClock(hip,args.tessera_opt,args.llvm_bin)
     try:
-        rows=[run_case(hip,clock,case,args.tessera_opt,args.trials,args.native_static_control,args.native_runtime_k,args.native_reference_opt,args.hip_graph_windows) for case in
+        rows=[run_case(hip,clock,case,args.tessera_opt,args.trials,args.native_static_control,args.native_runtime_k,args.native_reference_opt,args.hip_graph_windows,radiance) for case in
             (args.case or [base.Case("prefill",256,n,5120) for n in (4096,8192,16384)])]
     finally:clock.close()
+    if reference_metadata is not None and base._sha256(
+            Path(reference_metadata["module_path"]))!=reference_metadata["binary_sha256"]:
+        raise RuntimeError("Radiance module changed during measurement")
     packet={"schema":"tessera.rocm.folded_native_package.v1","architecture":rt._rocm_live_arch(),
         "device":base._selected_device_name(hip),"kernel_release":platform.release(),
         "source_commit":subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip(),
@@ -254,10 +296,11 @@ def main():
         "native_reference_compiler_sha256":(
             base._sha256(args.native_reference_opt) if args.native_reference_opt else None),
         "timing_scope":"rotating_three_resident_copies; device windows include dispatch gaps; public launch includes transfers",
-        "schedule_match":"same Target-selected keys; native instruction schedule may differ",
+        "schedule_match":"matched native/HIP geometry, staging and epilogue; native instruction policy may differ; Radiance is independent",
         "hip_graph_windows":args.hip_graph_windows,
         "graph_timing_scope":"GPU graph dispatch plus captured kernels and optional markers; capture/instantiate excluded",
-        "profiler_counters":False,"radiance_comparison":False,"rows":rows}
+        "profiler_counters":False,"radiance_comparison":radiance is not None,
+        "radiance":reference_metadata,"rows":rows}
     args.output.parent.mkdir(parents=True,exist_ok=True)
     args.output.write_text(json.dumps(packet,indent=2,sort_keys=True)+"\n")
     for row in rows:

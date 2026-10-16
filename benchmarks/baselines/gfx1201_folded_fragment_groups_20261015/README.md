@@ -152,3 +152,23 @@ it is retained rather than represented as code improvement. This is the
 current native-only curve, not a fresh Radiance comparison. A captured
 independent-reference comparison remains a follow-up. m256-slope-decision.json
 normalizes compiler roles and binds the two compressed raw packets.
+
+
+## Optional independent reference recorder
+
+The existing native-package recorder now accepts --radiance-module and
+--radiance-revision. The pinned reference preflight passed independent-oracle
+and full native/reference output parity, explicit-stream capture node counts
+and all-three-copy poison checks for bracketed/plain graphs. A diagnostic
+four-engine CLI smoke passed under the uncommitted recorder; its timings are
+not promoted as evidence. Thirty host-free argument/census/documentation
+checks and Ruff pass.
+
+For a frozen owning-device run, set the native optimizer/LLVM paths and
+RADIANCE_MXFP4_WPERM=1, then invoke the same recorder with:
+--hip-graph-windows --radiance-module PATH_TO_INDEPENDENT_MODULE
+--radiance-revision DECLARED_SOURCE_REVISION.
+The actual module digest and explicit tuning inputs are recorded separately
+from that declaration. A reference row has an empty public-API sample list
+and null public-API median. The recorder writes each timing domain separately;
+use native_over_radiance_graph_ratio for the captured comparison.

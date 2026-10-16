@@ -45,7 +45,12 @@ it does not claim that folding equals the original per-K-block source tensor.
 
 ## Evidence and limits
 
-Two broader policies were rejected. A minimum-N8192/full-N64 policy regresses\nN8256/K1088 by 2.4-4.0 percent. Factorial N/K experiments show that odd K64\nslab counts can improve at regular N8192/12288, while irregular N widths can\nregress even with aligned K and at long K. This is measured N-grid sensitivity;\nwithout counters it does not establish a specific cache or occupancy cause.\nThe original broad N>=4096 policy was also rejected: M256/N4096/K1024 regressed
+Two broader policies were rejected. A minimum-N8192/full-N64 policy regresses
+N8256/K1088 by 2.4-4.0 percent. Factorial N/K experiments show that odd K64
+slab counts can improve at regular N8192/12288, while irregular N widths can
+regress even with aligned K and at long K. This is measured N-grid sensitivity;
+without counters it does not establish a specific cache or occupancy cause.
+The original broad N>=4096 policy was also rejected: M256/N4096/K1024 regressed
 4.35 percent in both run orders, with regressions also measured at K2048/3072.
 The narrowed bulk-N candidate improves the five selected cases in both orders:
 roughly 1.5-4.1 percent in the first run and 1.9-3.7 percent in reverse order.
@@ -57,3 +62,23 @@ The production packet and validation receipts are maintained under
 benchmarks/baselines/gfx1201_folded_fragment_groups_20261015/.
 Broader MXFP4 M256/Radiance attribution, W8A8 short/ragged coverage, other cache
 families and general ROCm route closure remain open. No sibling parity is inferred.
+
+
+## Independent captured-device reference
+
+The optional recorder arguments --radiance-module and --radiance-revision
+identify an independent reference. Its actual module bytes are hashed before
+and after measurement. The revision is a caller declaration, not an attestation
+that those bytes were built from that revision. Fragment-order input requires
+RADIANCE_MXFP4_WPERM=1; relevant dispatch tuning inputs are recorded.
+
+The verified reference ABI accepts an explicit HIP stream. Native and reference
+engines use the same three-copy rotation, independent numerical oracle,
+bracketed/plain graph node census and poisoned-output checks. Captures borrow
+modules/buffers; graph owners close before those dependencies. Capture and
+instantiation are excluded from device timing.
+
+Reference rows carry no Tessera public-API time. Ordinary device-clock windows
+include host submission gaps; captured graph windows and completed public
+Tessera calls remain distinct fields. Reference arguments are validated before
+any hardware/provider probe. No reference code is a production lowering.

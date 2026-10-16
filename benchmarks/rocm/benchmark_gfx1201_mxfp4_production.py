@@ -513,7 +513,7 @@ def _radiance_engine(
             scratch.device[1].value,
         )
 
-    def launch(bundle: _DeviceArrays) -> None:
+    def launch(bundle: _DeviceArrays, stream: ctypes.c_void_p | None = None) -> None:
         p = bundle.device
         module.launch(
             p[0].value,
@@ -525,7 +525,7 @@ def _radiance_engine(
             case.m,
             case.n,
             case.k,
-            0,
+            int(stream.value or 0) if stream is not None else 0,
         )
 
     engine = _Engine(
@@ -536,6 +536,12 @@ def _radiance_engine(
         5,
         {"weight_layout": "fragment_order", "row_reference_fold": "exact_delta_le_2"},
     )
+    def launch_on_stream(stream: ctypes.c_void_p) -> None:
+        current = engine.copies[engine._next]
+        engine._next = (engine._next + 1) % len(engine.copies)
+        launch(current, stream)
+
+    engine.launch_on_stream = launch_on_stream  # type: ignore[attr-defined]
     original_close = engine.close
 
     def close() -> None:

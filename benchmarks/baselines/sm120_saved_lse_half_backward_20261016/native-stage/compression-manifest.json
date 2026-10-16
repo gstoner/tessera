@@ -1,0 +1,42 @@
+{
+  "native-stage-witness.json.gz": {
+    "sha256": "78761265c72321cba1e3646938363b2592a72e871b4ce1934ee5349911fcbd46",
+    "bytes": 2815
+  },
+  "native-stage-before.json.gz": {
+    "sha256": "7ef81eb7456c3c043bc6d9349c6875093be8b2292d09a6c513ddd5bbcd655cd3",
+    "bytes": 647
+  },
+  "native-focused.xml.gz": {
+    "sha256": "ade821edd37e0cb0fba85bd8b7d0a0ded55f86fe86fb094f426d0623e404bcbc",
+    "bytes": 91150
+  },
+  "native-focused.log.gz": {
+    "sha256": "c18de5659176b3a9855c59a86ed78c98a2fcb0fe7c2547b01f870f73332059ee",
+    "bytes": 741
+  },
+  "native-device.xml.gz": {
+    "sha256": "90046ebb1e61b9928760232c485add7888544512314c84d118788eff5b09664a",
+    "bytes": 32019
+  },
+  "native-device.log.gz": {
+    "sha256": "020c624427cf1225f83c77ac4c8f7aa670626ec6077206b06af180c83d0eef10",
+    "bytes": 272
+  },
+  "build-freeze.log.gz": {
+    "sha256": "d7f7504bb1c86664994889fac71922f4eaed055a3a2eb3e6ad016ac7604ffc9e",
+    "bytes": 1186408
+  },
+  "generated-docs.log.gz": {
+    "sha256": "9d8b85d764f7e4ee9cddcad4256bc591602b3561b272a9d99fe967c4d938cd18",
+    "bytes": 3490
+  },
+  "graphify.log.gz": {
+    "sha256": "bb863a6fbe029402d2def981f5c6192e0489a364c92c0a2819ab89743c15f061",
+    "bytes": 2320
+  },
+  "validate_native_stage.py.gz": {
+    "sha256": "64dfad768039ba9a7968768d1af7ee046217120423b68fac9a1bd668c6354268",
+    "bytes": 2732
+  }
+}

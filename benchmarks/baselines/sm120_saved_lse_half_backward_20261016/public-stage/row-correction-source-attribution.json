@@ -1,0 +1,63 @@
+{
+  "scope": "source algorithm attribution, not hardware counters or a measured prepass speedup",
+  "source_sha256": "a1c6e25e268007d82b1fcba60f7c31a7d694837254ca3f1f49e81370c734766b",
+  "source_file": "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp",
+  "observations": {
+    "row_stats_definition": [
+      3091
+    ],
+    "row_stats_call": [
+      3220,
+      3280,
+      3348,
+      3407,
+      3462
+    ],
+    "half_probability_delta": [
+      3110
+    ],
+    "dV_avoids_delta": [
+      3352
+    ]
+  },
+  "profiles": [
+    {
+      "dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "unique_rows": 6,
+      "dQ_source_rowStats_evaluations": 24,
+      "dK_source_rowStats_evaluations": 120,
+      "broadcast_bias_source_rowStats_evaluations": 30,
+      "all_gradient_reuse_factor_with_bias": 29,
+      "all_gradient_reuse_factor_without_bias": 24,
+      "candidate_f32_workspace_bytes": 24,
+      "caveat": "static source-level loop multiplicities; optimizer and masking can change actual instruction counts"
+    },
+    {
+      "dims": [
+        1,
+        4,
+        2,
+        7,
+        129,
+        8,
+        6
+      ],
+      "unique_rows": 28,
+      "dQ_source_rowStats_evaluations": 224,
+      "dK_source_rowStats_evaluations": 28896,
+      "broadcast_bias_source_rowStats_evaluations": 3612,
+      "all_gradient_reuse_factor_with_bias": 1169,
+      "all_gradient_reuse_factor_without_bias": 1040,
+      "candidate_f32_workspace_bytes": 112,
+      "caveat": "static source-level loop multiplicities; optimizer and masking can change actual instruction counts"
+    }
+  ]
+}

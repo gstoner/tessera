@@ -2823,19 +2823,28 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   }
   const bool f16Storage = storage && storage.getValue() == "f16";
   const bool bf16Storage = storage && storage.getValue() == "bf16";
+  auto outputStorage = op->getAttrOfType<StringAttr>("output_storage");
+  auto correction = op->getAttrOfType<StringAttr>("row_correction");
+  bool halfSaved = hasSavedOutput && (f16Storage || bf16Storage);
+  if (halfSaved && (!outputStorage || !correction ||
+      correction.getValue() != "probability_dot_v_f32_v1" ||
+      (outputStorage.getValue() != storage.getValue() && outputStorage.getValue() != "f32")))
+    return op->emitError("half saved-output backward requires typed output and f32 row correction");
+  if ((op->hasAttr("row_correction") || op->hasAttr("output_storage")) && !halfSaved)
+    return op->emitError("typed backward policy requires half saved-output storage");
   auto biasShape = op->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
   bool dynamicBias = biasShape && llvm::any_of(biasShape.asArrayRef(),
       [](int64_t dim) { return ShapedType::isDynamic(dim); });
   if (in.size() != 14 + unsigned(hasBias) + unsigned(hasSavedLse) + unsigned(hasSavedOutput) + unsigned(hasBiasGradient) + unsigned(hasLseCotangent) - removed + 4 * unsigned(dynamicBias) || !storage ||
       (!f16Storage && !bf16Storage && storage.getValue() != "f32") ||
-      (hasLseCotangent && (!hasSavedLse || !hasSavedOutput || storage.getValue() != "f32")) ||
-      (hasBiasGradient && (!hasBias || !hasSavedOutput || !hasSavedLse || storage.getValue() != "f32")) ||
+      (hasLseCotangent && (!hasSavedLse || !hasSavedOutput || (storage.getValue() != "f32" && !halfSaved))) ||
+      (hasBiasGradient && (!hasBias || !hasSavedOutput || !hasSavedLse || (storage.getValue() != "f32" && !halfSaved))) ||
       !accum || accum.getValue() != "f32" ||
       !scaleAttr || !causalAttr || !windowLeftAttr || !windowRightAttr ||
       !softcapAttr || !dropoutAttr || !dropoutSeedAttr || !route ||
       route.getValue() != "deterministic_direct" ||
       !deterministic || !deterministic.getValue() ||
-      (hasSavedOutput && (!hasSavedLse || storage.getValue() != "f32")) || !workspace ||
+      (hasSavedOutput && (!hasSavedLse || (storage.getValue() != "f32" && !halfSaved))) || !workspace ||
       workspace.getInt() != 0 || !workspaceOwner ||
       workspaceOwner.getValue() != "output_element" ||
       (lseCheckpoint && lseCheckpoint.getValue() != "recompute" &&
@@ -2892,22 +2901,29 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   auto load = [&](unsigned pointer, Value index) -> Value {
     bool biasPointer = hasBias && pointer == biasIndex;
     bool lsePointer = hasSavedLse && pointer == lseIndex;
-    Type type = (biasPointer || lsePointer) ? Type(f32) : storageType;
-    unsigned alignment = (biasPointer || lsePointer) ? 4 : storageAlignment;
+    bool lseSeedPointer = hasLseCotangent && pointer == lseCotangentIndex;
+    bool wideOutputPointer = halfSaved && outputStorage.getValue() == "f32" &&
+        (pointer == 0 || pointer == savedOutputIndex);
+    bool wide = biasPointer || lsePointer || lseSeedPointer || wideOutputPointer;
+    Type type = wide ? Type(f32) : storageType;
+    unsigned alignment = wide ? 4 : storageAlignment;
     Value ptr = LLVM::GEPOp::create(builder, loc, in[pointer].getType(), type,
                                     in[pointer], ValueRange{index});
     Value loaded = LLVM::LoadOp::create(builder, loc, type, ptr, alignment);
-    return !biasPointer && !lsePointer && (f16Storage || bf16Storage)
+    return !wide && (f16Storage || bf16Storage)
         ? Value(LLVM::FPExtOp::create(builder, loc, f32, loaded))
         : loaded;
   };
   auto store = [&](unsigned pointer, Value index, Value value) {
-    Value stored = (f16Storage || bf16Storage)
+    bool biasGradientPointer = hasBiasGradient && pointer == dbIndex;
+    Type type = biasGradientPointer ? Type(f32) : storageType;
+    unsigned alignment = biasGradientPointer ? 4 : storageAlignment;
+    Value stored = !biasGradientPointer && (f16Storage || bf16Storage)
         ? Value(LLVM::FPTruncOp::create(builder, loc, storageType, value))
         : value;
     Value ptr = LLVM::GEPOp::create(builder, loc, in[pointer].getType(),
-                                    storageType, in[pointer], ValueRange{index});
-    LLVM::StoreOp::create(builder, loc, stored, ptr, storageAlignment);
+                                    type, in[pointer], ValueRange{index});
+    LLVM::StoreOp::create(builder, loc, stored, ptr, alignment);
   };
   auto qIndex = [&](Value b, Value h, Value q, Value d) -> Value {
     return addI64(builder, loc,
@@ -3078,7 +3094,9 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
           mulI64(builder, loc,
               addI64(builder, loc, mulI64(builder, loc, b, Hq), hq), Sq), q);
       Value savedLse = load(lseIndex, rowIndex);
-      if (hasSavedOutput) {
+      // Half O has already rounded at its public store. Recompute sum(P*dP)
+      // in f32 below instead of feeding that rounding into the row correction.
+      if (hasSavedOutput && !halfSaved) {
         Value onef = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.0f));
         Value delta = doDotOutput(b, hq, q);
         // dScores = P * (dO.V - dot(dO,O) + dLSE). The LSE term
@@ -3108,7 +3126,11 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
       }
       builder.setInsertionPointAfter(deltaLoop);
       Value onef = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.0f));
-      return {savedLse, onef, deltaLoop.getResult(0)};
+      Value delta = deltaLoop.getResult(0);
+      if (hasLseCotangent)
+        delta = arith::SubFOp::create(builder, loc, delta,
+                                    load(lseCotangentIndex, rowIndex));
+      return {savedLse, onef, delta};
     }
     Value negInf = arith::ConstantFloatOp::create(
         builder, loc, f32, APFloat::getInf(APFloat::IEEEsingle(), true));

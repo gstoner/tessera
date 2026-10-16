@@ -1132,9 +1132,14 @@ def Tile_CoalitionButterflyKernelOp : Tile_Op<"coalition_butterfly_kernel"> {
 def Tile_AttentionBackwardKernelOp : Tile_Op<"attention_backward_kernel"> {
   let summary = "Launch-level deterministic scaled dot-product attention VJP";
   let description = [{
-    With lse_cotangent=true, saved f32 output/LSE are required and a f32
+    With lse_cotangent=true, saved output/LSE are required and a f32
     [B,Hq,Sq] cotangent pointer follows row_lse before gradient outputs.
     Q/K/bias gradients include P*dLSE; the V gradient is unchanged.
+    Half saved-output storage requires output_storage to name the primary
+    result/seed type and row_correction="probability_dot_v_f32_v1".
+    Its row correction is recomputed in f32 from probabilities and dO.V;
+    saved rounded O never enters that sum. Q/K/V gradients use input storage,
+    while row LSE, its cotangent, bias and bias gradients retain f32.
   }];
   let arguments = (ins Variadic<AnyType>:$inputs,
                        OptionalAttr<BoolAttr>:$lse_cotangent);

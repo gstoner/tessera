@@ -16,7 +16,7 @@ inline mlir::LogicalResult projectBoundedAttentionEntry(mlir::ModuleOp module,ml
       fn.getBody().front().getOperations().size()!=2)
     return fn.emitError("bounded attention projection requires one isolated SM120 entry and positive Sq/Sk capacities");
   auto *op=&fn.getBody().front().front();
-  if (op->getName().getStringRef()!="tessera.flash_attn" || !denseAttentionAD(op,true,true))
+  if (op->getName().getStringRef()!="tessera.flash_attn" || !denseAttentionAD(op,true,true,false,true))
     return fn.emitError("bounded attention projection requires a supported static attention Graph");
   auto ret=mlir::dyn_cast<mlir::func::ReturnOp>(fn.getBody().front().back());
   if (!ret || ret.getOperands()!=op->getResults() || fn.getNumArguments()!=op->getNumOperands())

@@ -1,0 +1,140 @@
+{
+  "commit": "68c7e59300f195bf67507f9de57101840440bb7e",
+  "files": {
+    "benchmarks/nvidia/record_typed_attention_backward.py": {
+      "sha256": "b64397874c547c53f49a6ff995d2c708ac2b77c16d7007ade0e1803c77c44e4c",
+      "bytes": 14507,
+      "archive": "source/b64397874c547c53f49a6ff995d2c708ac2b77c16d7007ade0e1803c77c44e4c.gz"
+    },
+    "python/tessera/compiler/jit.py": {
+      "sha256": "52c6e41a232e31cd4384578ca8e8671e9811ea98fb70d6e239d696a1b58b2fe6",
+      "bytes": 270999,
+      "archive": "source/52c6e41a232e31cd4384578ca8e8671e9811ea98fb70d6e239d696a1b58b2fe6.gz"
+    },
+    "python/tessera/compiler/native_attention_vjp_artifact.py": {
+      "sha256": "13ef6d98f850e799a45a7d303975e4a0c3dd00aa23f954632751cfaabb564bf2",
+      "bytes": 4469,
+      "archive": "source/13ef6d98f850e799a45a7d303975e4a0c3dd00aa23f954632751cfaabb564bf2.gz"
+    },
+    "python/tessera/compiler/native_attention_vjp_runtime.py": {
+      "sha256": "c6c0c9d4da822fb81ac80c7272a5f7fcf750617dead409ba6a975bdc0002a8ab",
+      "bytes": 7688,
+      "archive": "source/c6c0c9d4da822fb81ac80c7272a5f7fcf750617dead409ba6a975bdc0002a8ab.gz"
+    },
+    "python/tessera/compiler/nvidia_native.py": {
+      "sha256": "69e3b38b5bc655221d581523835e2bd9b2cfc6c4860a145fc2b8a5051d494fcc",
+      "bytes": 240226,
+      "archive": "source/69e3b38b5bc655221d581523835e2bd9b2cfc6c4860a145fc2b8a5051d494fcc.gz"
+    },
+    "python/tessera/compiler/prepared_attention_vjp.py": {
+      "sha256": "707078ca9e5f7ef06af1ed5155cd106300436883ae96e90eb4272c1b0d7b6ab3",
+      "bytes": 11385,
+      "archive": "source/707078ca9e5f7ef06af1ed5155cd106300436883ae96e90eb4272c1b0d7b6ab3.gz"
+    },
+    "python/tessera/compiler/scheduled_checkpoint.py": {
+      "sha256": "fdaaece0ac7eb0d9780db65407f4ca9fe86785dc870173a61de798ae5c02dd17",
+      "bytes": 20011,
+      "archive": "source/fdaaece0ac7eb0d9780db65407f4ca9fe86785dc870173a61de798ae5c02dd17.gz"
+    },
+    "python/tessera/compiler/typed_attention_backward.py": {
+      "sha256": "3af87862f5c94c5b2f12b20c9d705ced591969b631c77d7f7bf9f723e80dca95",
+      "bytes": 15739,
+      "archive": "source/3af87862f5c94c5b2f12b20c9d705ced591969b631c77d7f7bf9f723e80dca95.gz"
+    },
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": {
+      "sha256": "a1c6e25e268007d82b1fcba60f7c31a7d694837254ca3f1f49e81370c734766b",
+      "bytes": 339690,
+      "archive": "source/a1c6e25e268007d82b1fcba60f7c31a7d694837254ca3f1f49e81370c734766b.gz"
+    },
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": {
+      "sha256": "774d292ebce7263aad7a52e8d79e1c5f118080b885692eefb523bfb049951826",
+      "bytes": 47931,
+      "archive": "source/774d292ebce7263aad7a52e8d79e1c5f118080b885692eefb523bfb049951826.gz"
+    },
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": {
+      "sha256": "9add1ca5631a833231f51e843bd7c3207ee1e8b7b08ac8207289133688f31fdf",
+      "bytes": 18610,
+      "archive": "source/9add1ca5631a833231f51e843bd7c3207ee1e8b7b08ac8207289133688f31fdf.gz"
+    },
+    "src/compiler/ir/AdjointInterface.cpp": {
+      "sha256": "639d7717c172395a16f37c77029a4eb4c0734edd683819049238e00967ebd5b8",
+      "bytes": 52069,
+      "archive": "source/639d7717c172395a16f37c77029a4eb4c0734edd683819049238e00967ebd5b8.gz"
+    },
+    "src/compiler/ir/AttentionADContract.h": {
+      "sha256": "bc621d712b61f0a2de39bfb584f8b98864ea52da42c7ffcbbd7379b0ff4be918",
+      "bytes": 6381,
+      "archive": "source/bc621d712b61f0a2de39bfb584f8b98864ea52da42c7ffcbbd7379b0ff4be918.gz"
+    },
+    "src/compiler/ir/TileOps.cpp": {
+      "sha256": "72b9a6776b96d8c7a266533fcdaa7a768f41aafcbd272750c40517c4645710d2",
+      "bytes": 166413,
+      "archive": "source/72b9a6776b96d8c7a266533fcdaa7a768f41aafcbd272750c40517c4645710d2.gz"
+    },
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": {
+      "sha256": "59faba34b9b2a107aa63ec851414ea407ae389e082a3c6991830f0a1f5139342",
+      "bytes": 86060,
+      "archive": "source/59faba34b9b2a107aa63ec851414ea407ae389e082a3c6991830f0a1f5139342.gz"
+    },
+    "src/compiler/ir/include/Tessera/IR/AttentionCheckpointStorage.h": {
+      "sha256": "7173f12101476ea08d79f6eb9a054615e3da154692bed7e8ca62b63259e63c5f",
+      "bytes": 4110,
+      "archive": "source/7173f12101476ea08d79f6eb9a054615e3da154692bed7e8ca62b63259e63c5f.gz"
+    },
+    "src/compiler/programming_model/lib/NativeCheckpoint.h": {
+      "sha256": "dd325023351abb8939cfb79563288315b8c2b4c29494cb49509cdd8b12e35d52",
+      "bytes": 26368,
+      "archive": "source/dd325023351abb8939cfb79563288315b8c2b4c29494cb49509cdd8b12e35d52.gz"
+    },
+    "src/transforms/lib/AutodiffPairedPass.cpp": {
+      "sha256": "f9febba616c00f2a89c82d3ac45a7b24f64ec6d8a685eb67facc853cbeee9865",
+      "bytes": 157775,
+      "archive": "source/f9febba616c00f2a89c82d3ac45a7b24f64ec6d8a685eb67facc853cbeee9865.gz"
+    },
+    "src/transforms/lib/NativeAttentionProjection.h": {
+      "sha256": "07f843a8134012c1ae1d7cf5852de6891421c31c8d2b5b304209da3457c8113c",
+      "bytes": 4003,
+      "archive": "source/07f843a8134012c1ae1d7cf5852de6891421c31c8d2b5b304209da3457c8113c.gz"
+    },
+    "tests/device/nvidia/test_public_typed_attention_vjp.py": {
+      "sha256": "cc7fb32286d6d3c1ee7a6979cfdc39ae84c4ed6801b5707468b7c99489171988",
+      "bytes": 13914,
+      "archive": "source/cc7fb32286d6d3c1ee7a6979cfdc39ae84c4ed6801b5707468b7c99489171988.gz"
+    },
+    "tests/device/nvidia/test_saved_lse_half_backward_kernel.py": {
+      "sha256": "6c2dab687ad5317c3d0f5fa7b26bb76f3c8cfd99e82aebe9651345dd771507e9",
+      "bytes": 8701,
+      "archive": "source/6c2dab687ad5317c3d0f5fa7b26bb76f3c8cfd99e82aebe9651345dd771507e9.gz"
+    },
+    "tests/unit/test_attention_bias_gradient_native.py": {
+      "sha256": "2c44c800aed79d53bb1fe00a372f38ecddc3d5b6d46d7ac4830140691b5c4fb6",
+      "bytes": 4585,
+      "archive": "source/2c44c800aed79d53bb1fe00a372f38ecddc3d5b6d46d7ac4830140691b5c4fb6.gz"
+    },
+    "tests/unit/test_nvidia_checkpoint_pair.py": {
+      "sha256": "ae349b2c920dc54aaa8f95e4df5403c9930494aec047a1835a2b0645d5efde03",
+      "bytes": 10987,
+      "archive": "source/ae349b2c920dc54aaa8f95e4df5403c9930494aec047a1835a2b0645d5efde03.gz"
+    },
+    "tests/unit/test_saved_lse_half_backward.py": {
+      "sha256": "b72681fadc4c2cf278ac2a281ace11ae2bc98e4e259c5d85f1178452e47bea08",
+      "bytes": 6059,
+      "archive": "source/b72681fadc4c2cf278ac2a281ace11ae2bc98e4e259c5d85f1178452e47bea08.gz"
+    },
+    "tests/unit/test_saved_lse_storage_packet.py": {
+      "sha256": "9e20569b12e6b587f9a0ce58cb3304fe2fc5e14b8092caa44a97ecef64283355",
+      "bytes": 6006,
+      "archive": "source/9e20569b12e6b587f9a0ce58cb3304fe2fc5e14b8092caa44a97ecef64283355.gz"
+    },
+    "tests/unit/test_typed_attention_backward_package.py": {
+      "sha256": "711d362f2bdef01299386886a2351b0e766b7aaf68a0116ef1c7dd401285e757",
+      "bytes": 9178,
+      "archive": "source/711d362f2bdef01299386886a2351b0e766b7aaf68a0116ef1c7dd401285e757.gz"
+    },
+    "tests/unit/test_typed_attention_backward_recorder.py": {
+      "sha256": "4444e10e83208f8d621bec43cf6b3fe019d507b378a0d9a86707d65c395f42f7",
+      "bytes": 2517,
+      "archive": "source/4444e10e83208f8d621bec43cf6b3fe019d507b378a0d9a86707d65c395f42f7.gz"
+    }
+  }
+}

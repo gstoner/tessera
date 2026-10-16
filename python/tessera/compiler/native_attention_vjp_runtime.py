@@ -65,21 +65,23 @@ def execute_family(*,source,target,ordered_inputs,arg_names,source_arg_names,
             or len(set(arg_names))!=len(arg_names) or len(set(source_arg_names))!=len(source_arg_names)):
         raise ValueError("attention VJP frontend argument arity/identity disagrees")
     cots=tuple(out_cotangents) if isinstance(out_cotangents,(tuple,list)) else (out_cotangents,)
-    if len(cots)!=1:raise ValueError("attention VJP requires one output cotangent")
-    roots=(*ordered_inputs,cots[0])
+    seeded = source.kwargs.get("lse_checkpoint") == "saved"
+    if len(cots) != 1+int(seeded):
+        raise ValueError("attention VJP cotangents must match the native primary/LSE result roles")
+    roots=(*ordered_inputs,*cots)
     resident=any(hasattr(value,"__cuda_array_interface__") for value in roots)
     if resident:
         from .resident_nvidia_tensor import cuda_frontend_specs
         if not all(hasattr(value,"__cuda_array_interface__") for value in roots):
             raise ValueError("SM120 native attention reverse requires all resident roots")
-        specs=cuda_frontend_specs(roots,ranks=(4,))
-        if any(dtype!=np.dtype("float32") for _,dtype in specs):
-            raise ValueError("SM120 native attention reverse requires fp32 resident roots")
+        specs=cuda_frontend_specs(roots,ranks=(3,4))
+        if any(dtype.name not in ("float32", "float16", "bfloat16") for _,dtype in specs):
+            raise ValueError("SM120 native attention reverse requires f16/bf16/f32 resident roots")
         values=tuple(roots)
     else:
         values=tuple(np.asarray(x) for x in roots)
-        if any(x.dtype!=np.float32 for x in values):
-            raise ValueError("SM120 native attention reverse requires fp32 host tensors")
+        if any(x.dtype.name not in ("float32", "float16", "bfloat16") for x in values):
+            raise ValueError("SM120 native attention reverse requires f16/bf16/f32 host tensors")
     active=tuple(arg_names.index(name) for name in wrt_names)
     compiler=find_tessera_opt()
     if compiler is None:raise ValueError("attention VJP requires the selected native compiler")
@@ -105,7 +107,7 @@ def execute_family(*,source,target,ordered_inputs,arg_names,source_arg_names,
             while len(_cache)>_LIMIT:_cache.popitem(last=False)
         _cache.move_to_end(key)
     text,pin,target_ir,proof=cached
-    names=[f"primal_{i}" for i in range(len(ordered_inputs))]+["cotangent"]
+    names=[f"primal_{i}" for i in range(len(ordered_inputs))]+["cotangent"]+(["lse_cotangent"] if seeded else [])
     artifact=rt.RuntimeArtifact(graph_ir=source_graph_ir,target_ir=target_ir,
         metadata=dict(target=target,compiler_path="nvidia_sm120_attention_vjp_compiled",
                       execution_kind="native_gpu",execution_mode="cuda_runtime",executable=True,

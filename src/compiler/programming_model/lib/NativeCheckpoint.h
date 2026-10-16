@@ -136,6 +136,10 @@ static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
     fields.set("output_storage", builder.getStringAttr(checkpointStorageSpelling(storage->outputElement)));
     fields.set("row_lse_storage", builder.getStringAttr("f32"));
     fields.set("accum", builder.getStringAttr("f32"));
+    if (backward) {
+      fields.set("gradient_storage", builder.getStringAttr(checkpointStorageSpelling(storage->inputElement)));
+      fields.set("row_correction", builder.getStringAttr("probability_dot_v_f32_v1"));
+    }
     contract = builder.getDictionaryAttr(fields);
   }
   if (bounds) {
@@ -383,6 +387,9 @@ static LogicalResult lowerNativeCheckpoints(ModuleOp mod) {
           "_t" + Twine(cast<IntegerAttr>(c->contract.get("gradient_block_threads")).getInt()) +
           "_" + c->hash.substr(0,10)).str();
     }
+    if (c->backward && !storage->inputElement.isF32())
+      entry.insert(entry.size() - 10, checkpointStorageSpelling(storage->inputElement).str() +
+          "_out_" + checkpointStorageSpelling(storage->outputElement).str() + "_");
     if (c->lseCotangent && compact) entry += "_cotangent_";
     if (SymbolTable::lookupSymbolIn(mod, entry)) return scheduled->emitError("checkpoint entry symbol collision");
     builder.setInsertionPointToEnd(mod.getBody());
@@ -398,8 +405,11 @@ static LogicalResult lowerNativeCheckpoints(ModuleOp mod) {
     kernel.addOperands(block->getArguments().take_front(
         types.size() - scalarCount + (dynamicBias ? 11 : 7)));
     kernel.addAttribute("storage",builder.getStringAttr(checkpointStorageSpelling(storage->inputElement)));
-    if (!c->backward && !storage->outputElement.isF32())
+    if ((!c->backward && !storage->outputElement.isF32()) ||
+        (c->backward && !storage->inputElement.isF32()))
       kernel.addAttribute("output_storage", builder.getStringAttr(checkpointStorageSpelling(storage->outputElement)));
+    if (auto correction = c->contract.get("row_correction"))
+      kernel.addAttribute("row_correction", correction);
     kernel.addAttribute("accum",builder.getStringAttr("f32"));
     kernel.addAttribute("scale",graph->getAttr("scale")); kernel.addAttribute("causal",graph->getAttr("causal"));
     kernel.addAttribute("bias",builder.getBoolAttr(c->bias));

@@ -53,17 +53,19 @@ def test_saved_storage_source_device_and_compiler_free_replay():
     source = json.loads((PACKET / "validation/source-manifest.json").read_text())
     review = json.loads((PACKET / "review/source-manifest.json").read_text())
     assert review["native_source_tree"] == source["native_tree"]
-    for name, digest in source["files"].items():
-        current = hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
-        if current != digest:
-            # Older receipts remain bound to their exact retained source bytes.
-            assert review["parent_files"][name] == digest
-            prior = gzip.decompress((PACKET / review["snapshots"][name]).read_bytes())
-            assert hashlib.sha256(prior).hexdigest() == digest
-    for name, digest in review["files"].items():
-        assert hashlib.sha256((ROOT / name).read_bytes()).hexdigest() == digest, name
+    archive = json.loads((PACKET / "history/source-archive.json").read_text())
+    for label, manifest in (("validation", source), ("review", review)):
+        records = archive["revisions"][label]["files"]
+        assert set(records) == set(manifest["files"])
+        for name, digest in manifest["files"].items():
+            record = records[name]
+            assert record["sha256"] == digest
+            frozen = gzip.decompress((PACKET / record["snapshot"]).read_bytes())
+            assert hashlib.sha256(frozen).hexdigest() == digest, name
+    for name, digest in review["parent_files"].items():
         prior = gzip.decompress((PACKET / review["snapshots"][name]).read_bytes())
-        assert hashlib.sha256(prior).hexdigest() == review["parent_files"][name]
+        assert hashlib.sha256(prior).hexdigest() == digest
+
 
 
 @pytest.mark.parametrize("index", range(12))

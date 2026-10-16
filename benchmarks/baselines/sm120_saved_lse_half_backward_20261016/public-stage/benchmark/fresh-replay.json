@@ -1,0 +1,168 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0",
+  "compiler_subprocesses_forbidden": true,
+  "preflight": "device and host/library capability discovery only; no package prepared or launched",
+  "first_package_preparation_inside_subprocess_guard": true,
+  "rows": [
+    {
+      "case": "f16-sq3-sk5-bias0-lse0-native",
+      "artifact_hash": "0e5d59ab5804c03c0cbd239820ef022302eb2b719cfd41ff70a28070ee3b56fc",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq3-sk5-bias0-lse0-fp32-control",
+      "artifact_hash": "bcb505dbbc9de4869d84e2ee8c25d8668f8d8cc6a940f03064d8b7bcdb107bcf",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq3-sk5-bias0-lse1-fp32-control",
+      "artifact_hash": "633d5c3106c60985bbc206fc5a14e73767ae2abdec77a89940ad42162d525b5b",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq3-sk5-bias0-lse1-native",
+      "artifact_hash": "f99eb528aabc0b42f54be8d763a9b888f124697f89a33e42631d2327da2e1c96",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq3-sk5-bias1-lse0-native",
+      "artifact_hash": "0f505e2302a6b024eafedc121bebc982dce0c59933ea387dcb2d4c6c6bc7c947",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq3-sk5-bias1-lse0-fp32-control",
+      "artifact_hash": "4951388c171fe47ee4ab0510c0838d4687efa8fe0d743c14ad9e25c0dd219228",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq3-sk5-bias1-lse1-fp32-control",
+      "artifact_hash": "bb856e427fa5d446b527fa5a23e3e76f12926ffdd39d6f29128f0df8febbda1f",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq3-sk5-bias1-lse1-native",
+      "artifact_hash": "77d458d955afd971ca256d193aa2ade300aad7a3bb884ce40e908ee9dd7f2475",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq7-sk129-bias0-lse0-native",
+      "artifact_hash": "5bb2e174756ef1e1659d19fb6937f226ac036080704df7ec775afddacd1dec48",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq7-sk129-bias0-lse0-fp32-control",
+      "artifact_hash": "1d71ff9c5d68621e1ff6ed9a0b5d410bec4f024b9921d360996d3db5e45b66e7",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq7-sk129-bias0-lse1-fp32-control",
+      "artifact_hash": "913c0229f875eb9248f8abd06d6df2459c3669641cf09a5115007e061928c7e6",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq7-sk129-bias0-lse1-native",
+      "artifact_hash": "1299637d6348e705cb46a7a5cac0e5018f223ecf5e5f88768f2e873129df7fe7",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq7-sk129-bias1-lse0-native",
+      "artifact_hash": "0b960da18aeb1a7d1f8ffe1007e1cfc201e3d642487f1a804a0e7ab99739ad40",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq7-sk129-bias1-lse0-fp32-control",
+      "artifact_hash": "80fef9940bf0cb7e26c5d8c9d40c1de56c62c8c4f680b236adad15f77df3e6c8",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq7-sk129-bias1-lse1-fp32-control",
+      "artifact_hash": "3ef2e6342c56d92199caf5c20d87e8ad85eb6b78c6b0ac2a7e157f30e12dab48",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "f16-sq7-sk129-bias1-lse1-native",
+      "artifact_hash": "14fb23f3b5f6976c5a6126f468cb9a2ae9b54fdc4d99084372ffd9d111df2566",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq3-sk5-bias0-lse0-native",
+      "artifact_hash": "8f1ff93c978e55b5750f28852f4eda7fe852d69866b6f1aabd1df3088009fd41",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq3-sk5-bias0-lse0-fp32-control",
+      "artifact_hash": "bcb505dbbc9de4869d84e2ee8c25d8668f8d8cc6a940f03064d8b7bcdb107bcf",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq3-sk5-bias0-lse1-fp32-control",
+      "artifact_hash": "633d5c3106c60985bbc206fc5a14e73767ae2abdec77a89940ad42162d525b5b",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq3-sk5-bias0-lse1-native",
+      "artifact_hash": "68155b82cabc99f877a8b1f784b7771cd30893f643102cf3ff5c5a33d388a8cc",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq3-sk5-bias1-lse0-native",
+      "artifact_hash": "d10779708df62e9e7dd9bc040c7e5fb94fccfbac7ffa15522c720fbc67c5fa77",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq3-sk5-bias1-lse0-fp32-control",
+      "artifact_hash": "4951388c171fe47ee4ab0510c0838d4687efa8fe0d743c14ad9e25c0dd219228",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq3-sk5-bias1-lse1-fp32-control",
+      "artifact_hash": "bb856e427fa5d446b527fa5a23e3e76f12926ffdd39d6f29128f0df8febbda1f",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq3-sk5-bias1-lse1-native",
+      "artifact_hash": "55f368cef449a7526c4785f5084b6cc904664ee23054615df3c5699b457ccc6e",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq7-sk129-bias0-lse0-native",
+      "artifact_hash": "ff31b2c1f7b72dcec54916d1469117dd31cdf9467a2b335e355832f44122e20a",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq7-sk129-bias0-lse0-fp32-control",
+      "artifact_hash": "1d71ff9c5d68621e1ff6ed9a0b5d410bec4f024b9921d360996d3db5e45b66e7",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq7-sk129-bias0-lse1-fp32-control",
+      "artifact_hash": "913c0229f875eb9248f8abd06d6df2459c3669641cf09a5115007e061928c7e6",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq7-sk129-bias0-lse1-native",
+      "artifact_hash": "5d13031a243fc3ee28fecbc1c49fd5daf5b26ce0fb446f230f395099ce22052a",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq7-sk129-bias1-lse0-native",
+      "artifact_hash": "35aaed9966a0248ea46968b7bee1176b1ff06a192be83d1f4c95f382bb8e7c6a",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq7-sk129-bias1-lse0-fp32-control",
+      "artifact_hash": "80fef9940bf0cb7e26c5d8c9d40c1de56c62c8c4f680b236adad15f77df3e6c8",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq7-sk129-bias1-lse1-fp32-control",
+      "artifact_hash": "3ef2e6342c56d92199caf5c20d87e8ad85eb6b78c6b0ac2a7e157f30e12dab48",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "case": "bf16-sq7-sk129-bias1-lse1-native",
+      "artifact_hash": "0cc36641ccc968982e5218b30e5bdc6fb0937005ce9c963f2eaafc3a22f4a8ba",
+      "execution_kind": "native_gpu"
+    }
+  ]
+}

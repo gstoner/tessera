@@ -25,3 +25,13 @@ binds the changed source and exact pre-review snapshots, so earlier hashes
 are checked against their retained bytes rather than rewritten as current proof.
 The five-slice aggregate, half-storage AD and sibling physical integration
 remain open.
+
+## Historical source retention after the typed-backward extension
+
+The complete 20-file original source and eight-file review source are retained
+as content-addressed compressed bytes under history/source-archive/, with
+exact Git revisions in history/source-archive.json. Packet tests validate each
+manifest hash against those frozen bytes. Later compiler changes are validated
+by their own receipts; this packet does not certify a moving source checkout.
+The earlier review parent snapshots remain checked independently. Numerical,
+timing, compiler-route and full-unit records retain their original source scope.

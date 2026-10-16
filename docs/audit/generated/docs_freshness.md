@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-16**.
 
 ## Headline
 
-- **171** docs catalogued across the canonical doc tree.
-- **170** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **40** updated within the last 30 days.
+- **172** docs catalogued across the canonical doc tree.
+- **171** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **41** updated within the last 30 days.
 - **67** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -38,6 +38,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `LOWERING_PIPELINE_SPEC.md` | Normative | 2026-07-13 | 95 | ✓ |
 | `MEMORY_MODEL_SPEC.md` | Normative | 2026-05-22 | 147 | ✓ |
 | `NATIVE_ARTIFACT_SPEC.md` | Normative | 2026-07-19 | 89 | ✓ |
+| `NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md` | - | 2026-10-16 | 0 | ✓ |
 | `PRODUCTION_COMPILER_PLAN.md` | Ratified | 2026-06-05 | 133 | ✓ |
 | `PYTHON_API_SPEC.md` | Normative | 2026-10-15 | 1 | ✓ |
 | `ROCM_FOLDED_INPUT_VIEWS.md` | - | 2026-10-16 | 0 | ✓ |

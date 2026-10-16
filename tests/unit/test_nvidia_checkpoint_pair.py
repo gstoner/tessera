@@ -92,7 +92,7 @@ def test_generated_pair_matches_both_saved_output_and_lse_slots(monkeypatch, bro
         assert compact_gradients is False
         assert compact_launch == "packed_v1" and compact_threads == 128
         return SimpleNamespace(dims=(1,2,1,3,5,4,3), scale=.5, causal=True, shape_bounds=(),
-            bias_shape=(), names=tuple(names) if backward else (("q","k","v","bias","output","lse") if bias else ("q","k","v","output","lse")), bias=bias, frontend_argument_indices=tuple(range(3+int(bias))))
+            storage="f32", output_storage="f32", bias_shape=(), names=tuple(names) if backward else (("q","k","v","bias","output","lse") if bias else ("q","k","v","output","lse")), bias=bias, frontend_argument_indices=tuple(range(3+int(bias))))
     monkeypatch.setattr(scheduled, "lower_generated_checkpoint", lower)
     monkeypatch.setattr(native, "package_scheduled_checkpoint", lambda artifact, **kwargs: artifact)
     if broken is not None:
@@ -156,3 +156,30 @@ def test_recompute_backward_graph_still_verifies(bias):
     module = _backward_module(saved=False, bias=bias)
     source = module.to_mlir(canonical=True)
     assert "tessera.flash_attn_bwd" in run_tessera_opt(find_tessera_opt(), source, "--verify-each")
+
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+def test_generated_pair_does_not_admit_half_forward_into_f32_derivative_abi(monkeypatch, storage):
+    from types import SimpleNamespace
+    import tessera.compiler.scheduled_checkpoint as scheduled
+    monkeypatch.setattr(scheduled, "lower_generated_checkpoint",
+        lambda *args, **kwargs: SimpleNamespace(storage=storage, output_storage=storage))
+    monkeypatch.setattr(native, "package_scheduled_checkpoint",
+        lambda *args, **kwargs: pytest.fail("packaged a half forward into the f32 paired AD ABI"))
+    with pytest.raises(ValueError, match="paired checkpoint AD requires its f32 storage"):
+        native.package_generated_attention_checkpoint_pair("source", pipeline_name="test")
+
+def test_production_checkpoint_identities_declare_storage_at_every_call_site():
+    import ast
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[2] / "python/tessera/compiler"
+    calls = []
+    for path in root.glob("*.py"):
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Call) and (
+                isinstance(node.func, ast.Name) and node.func.id == "_checkpoint_identity"
+                or isinstance(node.func, ast.Attribute) and node.func.attr == "_checkpoint_identity"
+            ):
+                keywords = {keyword.arg for keyword in node.keywords}
+                calls.append((path.name, node.lineno, keywords))
+    assert calls
+    assert all({"storage", "output_storage"} <= keywords for _, _, keywords in calls), calls

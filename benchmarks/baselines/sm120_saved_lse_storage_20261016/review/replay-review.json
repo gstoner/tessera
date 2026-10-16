@@ -1,0 +1,102 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "compiler_subprocesses_forbidden": true,
+  "rows": [
+    {
+      "artifact": "packages/00.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/01.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/02.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/03.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/04.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/05.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/06.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/07.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/08.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/09.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/10.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/11.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/12.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/13.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/14.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/15.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/16.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/17.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/18.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/19.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/20.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/21.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/22.json.gz",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "artifact": "packages/23.json.gz",
+      "execution_kind": "native_gpu"
+    }
+  ]
+}

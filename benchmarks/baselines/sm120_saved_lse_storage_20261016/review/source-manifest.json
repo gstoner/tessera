@@ -1,0 +1,34 @@
+{
+  "parent_head": "3d6df4a5330ab8c988af46821037c5271bf60de9",
+  "native_source_tree": "7b24ff3a8bd634afc43603def3888e80d7df409a",
+  "files": {
+    "python/tessera/compiler/lse_cotangent_contract.py": "6e2232a6446b3f40e6b3dec0bec2b3f6a8207f5fc1361bef0e0375e947a45a31",
+    "python/tessera/compiler/native_attention_program.py": "3b954bae0ac06a95c22a985df7b19e9c27cd2832c81c48f0eeecac11d769df96",
+    "python/tessera/compiler/nvidia_native.py": "87704038d351be798262cca61a65ca61f0c7b016d4c6e75880e0b3af9719734d",
+    "python/tessera/compiler/resident_attention.py": "e09dc9a1aad9939bba84b0654d4db9fe5feb302bcb2a4f0f8777b67c0f986993",
+    "tests/unit/test_bounded_attention_jvp_lowering.py": "c25c4a084d1b14f1540f1425592689bd9777529b76936dcc8e8413a112052003",
+    "tests/unit/test_nvidia_checkpoint_pair.py": "69ca05fb1e9ebf2b23d4b88e05fc2b4518dd05b354c774d54ca1a9eddc91963c",
+    "tests/unit/test_saved_lse_storage_contract.py": "29bd942ef7c5a4e4f3f46b1ccffb736d8e730b92da18a377fb67a80a5a7cfe5d",
+    "tests/unit/test_saved_lse_storage_packet.py": "dae55211b15466c942ba63bdae2b2048556edb4e66d8736cf7cd7b099eb5eaf1"
+  },
+  "parent_files": {
+    "python/tessera/compiler/lse_cotangent_contract.py": "ab3d60d31ba8ea0ff2e6af7340024d306ca5ff6e9d215f3bdb10dec9e3bec284",
+    "python/tessera/compiler/native_attention_program.py": "c2ec15496a38afcc4428ff19388f85476d1d2a8a4b9fe700ebeeef28338a640f",
+    "python/tessera/compiler/nvidia_native.py": "21cbc37fd5b44d359313167fc6779c642d9d3eb66aa65e0028a912ce88180cd1",
+    "python/tessera/compiler/resident_attention.py": "27cbc9ccad56cb9ef2080a4c2588b63f24f90306a0e7721a1e3a8f4482d20372",
+    "tests/unit/test_bounded_attention_jvp_lowering.py": "fe2d7e9111acae478cae50734e02ddb877f412e227efbbbdaeca701d68849337",
+    "tests/unit/test_nvidia_checkpoint_pair.py": "2f9487a6f60033d0c030138d7dd1d9727900760df81a35279c063f637a0b7656",
+    "tests/unit/test_saved_lse_storage_contract.py": "83f40e49b2bb395e8a93822c02a07394d0962181f296a79d79476547b2f763bb",
+    "tests/unit/test_saved_lse_storage_packet.py": "2c16f79b709dcb15a4c3e0ecbf2321241468be96b1f291a10018e8aea6e5fa44"
+  },
+  "snapshots": {
+    "python/tessera/compiler/lse_cotangent_contract.py": "review/parent-source/python/tessera/compiler/lse_cotangent_contract.py.gz",
+    "python/tessera/compiler/native_attention_program.py": "review/parent-source/python/tessera/compiler/native_attention_program.py.gz",
+    "python/tessera/compiler/nvidia_native.py": "review/parent-source/python/tessera/compiler/nvidia_native.py.gz",
+    "python/tessera/compiler/resident_attention.py": "review/parent-source/python/tessera/compiler/resident_attention.py.gz",
+    "tests/unit/test_bounded_attention_jvp_lowering.py": "review/parent-source/tests/unit/test_bounded_attention_jvp_lowering.py.gz",
+    "tests/unit/test_nvidia_checkpoint_pair.py": "review/parent-source/tests/unit/test_nvidia_checkpoint_pair.py.gz",
+    "tests/unit/test_saved_lse_storage_contract.py": "review/parent-source/tests/unit/test_saved_lse_storage_contract.py.gz",
+    "tests/unit/test_saved_lse_storage_packet.py": "review/parent-source/tests/unit/test_saved_lse_storage_packet.py.gz"
+  }
+}

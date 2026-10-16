@@ -450,7 +450,12 @@ class TraceBuilder:
             # (notably bfloat16 RMSNorm) through scalar arithmetic. Graph IR's
             # canonical same_as_first contract owns storage dtype; eager values
             # remain the numerical oracle but cannot redefine that ABI.
-            dtypes = tuple(tracer_args[0].dtype for _ in dtypes)
+            if shape_rule_for(graph_name) == "attention_value_width":
+                # Only the primary result shares Q storage. Saved row-LSE
+                # retains its independently inferred FP32 accumulation type.
+                dtypes = (tracer_args[0].dtype, *dtypes[1:])
+            else:
+                dtypes = tuple(tracer_args[0].dtype for _ in dtypes)
         _canonicalize_spectral_attrs(graph_name, operand_ir_types, ir_kwargs)
         ssas = tuple(self._fresh() for _ in out_shapes)
         result_ir_types = tuple(

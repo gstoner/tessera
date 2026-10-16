@@ -1,0 +1,26 @@
+{
+  "commit": "de14978d8a94916c8438ddcd737c2289ee20b5e7",
+  "files": {
+    "benchmarks/nvidia/record_saved_lse_storage.py": "a72b8b353340a03ca610fc196298140d337f4443157366f2457fbb66d0bcde6e",
+    "python/tessera/compiler/jit.py": "b6871278f6594e29e0c85f73ac97e320892c8b1d4a43b8e961c582cf6abbf3ca",
+    "python/tessera/compiler/nvidia_native.py": "21cbc37fd5b44d359313167fc6779c642d9d3eb66aa65e0028a912ce88180cd1",
+    "python/tessera/compiler/prepared_attention_forward.py": "e924f8774a11e68fa459828fecb3692724145866429f4ee81f7c132c85cf811b",
+    "python/tessera/compiler/scheduled_checkpoint.py": "7b68c39ce4fc2d38db95bf0a3e4397a10705b3aa29a32e25b35f5843396bae3c",
+    "python/tessera/compiler/trace.py": "33030559f7a5ace66efd3c46645a8e21da6ae234888010c42490c04b9a2ae637",
+    "python/tessera/compiler/typed_attention_checkpoint.py": "292a113ce7413a7a2d26aa7fa446148a78fecb876bd48ecaac98b7b7f79bd54c",
+    "python/tessera/runtime.py": "d4ef672538c0271804e2f064528c937be357f2dc0497f9cf9adce200239a6a16",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "d81f7f6d261dabebc24773f84b0e519a111e132a111100b484b34e7cd6f8ddca",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "8bc67afd5b7cadc89f44563e32714255eb2b60995d5ac8c8b3d26d451536c1bf",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "abcb8b5158187a1278513d53d9db16bcf1db77ca716aaa82f713b9af53ea4fc0",
+    "src/compiler/ir/TileOps.cpp": "cb40fa1a0d5f008f267aa7347cee480bb580c2654d4a1a4a030995b244522719",
+    "src/compiler/ir/include/Tessera/IR/AttentionCheckpointStorage.h": "0f35b70362e9f46ab2ec200db353c061a2d6248c0b97037e985ee19acab77603",
+    "src/compiler/programming_model/lib/NativeCheckpoint.h": "fd1d15954d22db2a4d75b67678c7d1f6a5ecacfdebc4d6781eb31da266876798",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "6af703452d7c51b8e1a1da165cc4696ed19663890c00a2621c057de2302e3aa3",
+    "src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td": "5044200915b10c970ca08cbd2cf142ad671c7b6bc249a7e47729dea8c41310e4",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "dd9d9fc551c5d1d905aea1cec41fd8dd5d529dc0b4b31c1f02ee67bf7775e696",
+    "tests/device/nvidia/test_saved_lse_storage.py": "2065cbedd3479fb121d14c703884bf07cbb6df6bcad25cc8cbb9bf405e3f8689",
+    "tests/unit/test_public_attention_saved_lse.py": "b25e6e94e3c162cae36a97a2ffadf004a7c13e4593c1b2fdc66ee85a56cd25b3",
+    "tests/unit/test_saved_lse_storage_contract.py": "83f40e49b2bb395e8a93822c02a07394d0962181f296a79d79476547b2f763bb"
+  },
+  "native_tree": "7b24ff3a8bd634afc43603def3888e80d7df409a"
+}

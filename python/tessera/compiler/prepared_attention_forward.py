@@ -31,8 +31,8 @@ class PreparedAttentionForward:
         from .native_artifact import LaunchDescriptor, NativeImageArtifact, OrderingSemantics, WorkspaceRequirement
         from .nvidia_native import (
             _attention_contract, _attention_lse_contract,
-            SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI,
-            SM120_ATTN_LSE_BCAST_F32_ABI, SM120_ATTN_F16_ABI,
+            SM120_ATTN_LSE_ABIS, SM120_ATTN_LSE_TYPED_ABIS,
+            SM120_ATTN_F16_ABI,
             SM120_ATTN_BF16_ABI, SM120_ATTN_F32_ABI,
             SM120_ATTN_BIAS_F16_ABI, SM120_ATTN_BIAS_BF16_ABI,
             SM120_ATTN_BIAS_F32_ABI,
@@ -64,7 +64,7 @@ class PreparedAttentionForward:
         ):
             raise ValueError("prepared attention launch geometry differs")
         contract = _attention_lse_contract(module) if self.saved else _attention_contract(module)
-        allowed = ({SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI}
+        allowed = (SM120_ATTN_LSE_ABIS
                    if self.saved else {SM120_ATTN_F16_ABI, SM120_ATTN_BF16_ABI,
                                       SM120_ATTN_F32_ABI, SM120_ATTN_BIAS_F16_ABI,
                                       SM120_ATTN_BIAS_BF16_ABI, SM120_ATTN_BIAS_F32_ABI,
@@ -86,14 +86,18 @@ class PreparedAttentionForward:
         if inputs not in (3, 4):
             raise ValueError("prepared attention input arity differs")
         self.storage = {"fp32": 1, "fp16": 2, "bf16": 3}.get(bindings[0].dtype)
-        if self.storage is None or (self.saved and self.storage != 1):
+        if self.storage is None:
             raise ValueError("prepared attention storage differs")
         self.output_dtype = bindings[inputs].dtype
         self.output_storage = {"fp32": 1, "fp16": 2, "bf16": 3}.get(self.output_dtype)
         if (self.output_storage is None or self.output_dtype != module.functions[0].result_types[0].dtype
-                or (self.saved and self.output_storage != 1)
                 or (self.output_storage != 1 and self.output_storage != self.storage)):
             raise ValueError("prepared attention result storage differs")
+        if self.saved and self.storage != 1:
+            from .typed_attention_checkpoint import validate_typed_saved_lse_descriptor
+            validate_typed_saved_lse_descriptor(descriptor)
+        elif self.saved and descriptor.abi_id in SM120_ATTN_LSE_TYPED_ABIS:
+            raise ValueError("typed saved-LSE ABI requires half source storage")
         if not self.saved:
             expected_abi = ({
                 "fp16": SM120_ATTN_BIAS_F16_RESULT_ABI, "bf16": SM120_ATTN_BIAS_BF16_RESULT_ABI,
@@ -139,6 +143,9 @@ class PreparedAttentionForward:
         frontend = tuple(arg.name for arg in module.functions[0].args)
         if len(frontend) != inputs or set(frontend) != {item.name for item in bindings[:inputs]}:
             raise ValueError("prepared attention frontend bindings differ")
+        graph_types = {arg.name: arg.ir_type.dtype for arg in module.functions[0].args}
+        if any(binding.dtype != graph_types[binding.name] for binding in bindings[:inputs]):
+            raise ValueError("prepared attention input storage differs from Graph types")
         self.positions = tuple(frontend.index(item.name) for item in bindings[:inputs])
         self.shapes = shapes
         self.input_dtypes = types[:inputs]

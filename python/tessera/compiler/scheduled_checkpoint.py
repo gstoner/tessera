@@ -34,8 +34,14 @@ class ScheduledCheckpointArtifact:
     compact_threads: int = 128
     lse_cotangent: bool = False
     shape_bounds: tuple[int, ...] = ()
+    storage: str = "f32"
+    output_storage: str = "f32"
 
     def validate(self) -> None:
+        if (not isinstance(self.storage, str) or self.storage not in {"f16", "bf16", "f32"} or
+                not isinstance(self.output_storage, str) or self.output_storage not in {self.storage, "f32"} or
+                (self.backward and (self.storage != "f32" or self.output_storage != "f32"))):
+            raise ValueError("checkpoint storage requires homogeneous forward data and f32 auxiliaries")
         if type(self.lse_cotangent) is not bool or (self.lse_cotangent and not self.backward):
             raise ValueError("LSE cotangent requires a boolean backward role")
         if type(self.compact_threads) is not int or self.compact_threads not in (64,128) or (not self.compact_gradients and self.compact_threads != 128):
@@ -97,6 +103,11 @@ class ScheduledCheckpointArtifact:
             "causal": str(self.causal).lower(),
             "bias": str(self.bias).lower(),
         }
+        if self.storage != "f32" or self.output_storage != "f32":
+            fields.update(storage=json.dumps(self.storage), output_storage=json.dumps(self.output_storage),
+                          row_lse_storage=json.dumps("f32"), accum=json.dumps("f32"))
+        elif re.search(r'\bstorage =', contract_text):
+            raise ValueError("checkpoint native storage facts are missing from metadata")
         if self.shape_bounds:
             fields["shape_bounds"] = "array<i64: " + ", ".join(map(str,self.shape_bounds)) + ">"
             fields["shape_policy"] = json.dumps("bounded_sequences_v1")
@@ -303,12 +314,16 @@ def _decode_checkpoint(graph, schedule, tile, *, backward,
     physical_bias = re.search(r'bias_shape = array<i64: ([-0-9, ]+)>', text)
     activity = re.search(r'gradient_activity = array<i64: ([01, ]+)>', text)
     bounds = re.search(r'\bshape_bounds = array<i64: ([0-9, ]+)>',text)
+    storage = re.search(r'\bstorage = "([a-z0-9]+)"', text)
+    output_storage = re.search(r'\boutput_storage = "([a-z0-9]+)"', text)
     artifact = ScheduledCheckpointArtifact(graph,schedule,tile,entries[0],hashes[0],backward,names,
         tuple(map(int,shape[1].split(','))),scale_value,causal[1]=='true',bias,bias_gradient,indices,
         tuple(map(int,physical_bias[1].split(','))) if physical_bias else (),
         tuple(map(int,activity[1].split(','))) if activity else (),
         compact_gradients=compact_gradients, compact_launch=compact_launch, compact_threads=compact_threads,
         lse_cotangent="lse_cotangent = true" in text,
-        shape_bounds=tuple(map(int,bounds[1].split(","))) if bounds else ())
+        shape_bounds=tuple(map(int,bounds[1].split(","))) if bounds else (),
+        storage=storage[1] if storage else "f32",
+        output_storage=output_storage[1] if output_storage else "f32")
     artifact.validate()
     return artifact

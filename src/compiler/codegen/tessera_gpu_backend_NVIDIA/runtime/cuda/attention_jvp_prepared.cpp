@@ -647,10 +647,18 @@ extern "C" int tessera_nvidia_attention_forward_prepare(
   if(getpid()!=ownerProcess)return bad("prepared forward cannot cross fork");
   if(!image || !imageBytes || !entry || !dims || !handle || storage<1 || storage>3 ||
      (savedLse!=0 && savedLse!=1) || (biasScalars!=0 && biasScalars!=1) ||
-     (savedLse && (storage!=1 || outputStorage!=1)) || (biasScalars && !biasShape) ||
+     (biasScalars && !biasShape) ||
      outputStorage<1 || outputStorage>3 || (outputStorage!=1 && outputStorage!=storage))
 
     return bad("prepared forward registration disagrees");
+  constexpr char f16Prefix[]="tessera_tile_attention_lse_f16_";
+  constexpr char bf16Prefix[]="tessera_tile_attention_lse_bf16_";
+  bool typedF16=std::strncmp(entry,f16Prefix,sizeof(f16Prefix)-1)==0;
+  bool typedBF16=std::strncmp(entry,bf16Prefix,sizeof(bf16Prefix)-1)==0;
+  if ((typedF16 && (!savedLse || storage!=2)) ||
+      (typedBF16 && (!savedLse || storage!=3)) ||
+      (savedLse && storage!=1 && !(typedF16 || typedBF16)))
+    return bad("prepared typed saved-LSE entry storage disagrees");
   bool namedF16=std::strstr(entry,"_out_f16_"),namedBF16=std::strstr(entry,"_out_bf16_");
   if ((outputStorage==2)!=namedF16 || (outputStorage==3)!=namedBF16)
     return bad("prepared forward result storage differs from entry");

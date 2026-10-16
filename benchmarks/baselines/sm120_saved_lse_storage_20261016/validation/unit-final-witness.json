@@ -1,0 +1,37 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "pytest",
+    "tests/unit",
+    "-q",
+    "-m",
+    "not slow and not performance and not compiler_route and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm and not hardware_amx and not hardware_avx512",
+    "-n",
+    "8",
+    "--timeout=180",
+    "--junitxml=/home/angstorms/scratch/sm120-saved-lse-storage-20261016/unit-final.xml"
+  ],
+  "source_before": {
+    "commit": "9566c7e61c39865e94d7253d4478a20e8cd783aa",
+    "status": "",
+    "native_source_tree": "7b24ff3a8bd634afc43603def3888e80d7df409a",
+    "tools": {
+      "TESSERA_OPT": "8b141b1355b2b36d3fd6c6942193b5bca90a2ecd2095227dd28396213563bfdd",
+      "TESSERA_NVIDIA_OPT": "6a9d80729dddf9d87eda49fabf0087dad4307d247da10a415b693992e23f2598",
+      "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "12e651ba27c0d5a613475bf790212deb63238c531cc99207dbc5d1fa47b30eef"
+    }
+  },
+  "source_after": {
+    "commit": "9566c7e61c39865e94d7253d4478a20e8cd783aa",
+    "status": "",
+    "native_source_tree": "7b24ff3a8bd634afc43603def3888e80d7df409a",
+    "tools": {
+      "TESSERA_OPT": "8b141b1355b2b36d3fd6c6942193b5bca90a2ecd2095227dd28396213563bfdd",
+      "TESSERA_NVIDIA_OPT": "6a9d80729dddf9d87eda49fabf0087dad4307d247da10a415b693992e23f2598",
+      "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "12e651ba27c0d5a613475bf790212deb63238c531cc99207dbc5d1fa47b30eef"
+    }
+  },
+  "exit_code": 0,
+  "unchanged": true
+}

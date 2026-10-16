@@ -1,0 +1,146 @@
+[
+  {
+    "storage": "f16",
+    "output": "f32",
+    "bias": null,
+    "causal": false,
+    "entry": "tessera_tile_attention_lse_f16_9fb26f72f3",
+    "abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.typed_f32acc.v1",
+    "max_abs_error": [
+      5.279173410921434e-09,
+      1.2778667080048933e-07
+    ]
+  },
+  {
+    "storage": "f16",
+    "output": "f32",
+    "bias": null,
+    "causal": true,
+    "entry": "tessera_tile_attention_lse_f16_4d7d55092c",
+    "abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.typed_f32acc.v1",
+    "max_abs_error": [
+      1.4308451104505515e-08,
+      1.2778667080048933e-07
+    ]
+  },
+  {
+    "storage": "f16",
+    "output": "f32",
+    "bias": "1x2x1x1",
+    "causal": false,
+    "entry": "tessera_tile_attention_lse_f16_5f3d23d99c",
+    "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims_bias_shape.typed_f32acc.v1",
+    "max_abs_error": [
+      5.279173410921434e-09,
+      1.5789270491062268e-07
+    ]
+  },
+  {
+    "storage": "f16",
+    "output": "f32",
+    "bias": "1x2x1x1",
+    "causal": true,
+    "entry": "tessera_tile_attention_lse_f16_faae883100",
+    "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims_bias_shape.typed_f32acc.v1",
+    "max_abs_error": [
+      1.4308451104505515e-08,
+      1.3151196109895125e-07
+    ]
+  },
+  {
+    "storage": "f16",
+    "output": "f32",
+    "bias": "1x2x3x5",
+    "causal": false,
+    "entry": "tessera_tile_attention_lse_f16_6ae73d840c",
+    "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.typed_f32acc.v1",
+    "max_abs_error": [
+      1.449486931870414e-08,
+      1.4325167407847061e-07
+    ]
+  },
+  {
+    "storage": "f16",
+    "output": "f32",
+    "bias": "1x2x3x5",
+    "causal": true,
+    "entry": "tessera_tile_attention_lse_f16_d21ca71eb6",
+    "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.typed_f32acc.v1",
+    "max_abs_error": [
+      8.866067158219693e-09,
+      9.439305714842305e-08
+    ]
+  },
+  {
+    "storage": "bf16",
+    "output": "f32",
+    "bias": null,
+    "causal": false,
+    "entry": "tessera_tile_attention_lse_bf16_11a670fda7",
+    "abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.typed_f32acc.v1",
+    "max_abs_error": [
+      1.1198413044088973e-08,
+      1.5814719867002225e-07
+    ]
+  },
+  {
+    "storage": "bf16",
+    "output": "f32",
+    "bias": null,
+    "causal": true,
+    "entry": "tessera_tile_attention_lse_bf16_3ff3b6042d",
+    "abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.typed_f32acc.v1",
+    "max_abs_error": [
+      1.8376720534174495e-08,
+      1.5814719867002225e-07
+    ]
+  },
+  {
+    "storage": "bf16",
+    "output": "f32",
+    "bias": "1x2x1x1",
+    "causal": false,
+    "entry": "tessera_tile_attention_lse_bf16_f4e044b3db",
+    "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims_bias_shape.typed_f32acc.v1",
+    "max_abs_error": [
+      1.1006318592632347e-08,
+      1.8411461000233942e-07
+    ]
+  },
+  {
+    "storage": "bf16",
+    "output": "f32",
+    "bias": "1x2x1x1",
+    "causal": true,
+    "entry": "tessera_tile_attention_lse_bf16_88f498e586",
+    "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims_bias_shape.typed_f32acc.v1",
+    "max_abs_error": [
+      1.8376720534174495e-08,
+      1.8411461000233942e-07
+    ]
+  },
+  {
+    "storage": "bf16",
+    "output": "f32",
+    "bias": "1x2x3x5",
+    "causal": false,
+    "entry": "tessera_tile_attention_lse_bf16_f470937006",
+    "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.typed_f32acc.v1",
+    "max_abs_error": [
+      1.1023514927266387e-08,
+      7.232498067111237e-08
+    ]
+  },
+  {
+    "storage": "bf16",
+    "output": "f32",
+    "bias": "1x2x3x5",
+    "causal": true,
+    "entry": "tessera_tile_attention_lse_bf16_3a421a88fe",
+    "abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.typed_f32acc.v1",
+    "max_abs_error": [
+      1.3058440218038925e-08,
+      1.0002828521038509e-07
+    ]
+  }
+]

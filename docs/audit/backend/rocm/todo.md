@@ -5,6 +5,37 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## SM120-SAVED-LSE-STORAGE-20261016 — independent O and LSE storage
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Synchronization key: SM120-SAVED-LSE-STORAGE-20261016.
+
+Identity review follow-through makes storage explicit at every production
+checkpoint identity call and preserves typed forward-only wrappers. Scheduled
+AD pairs and the legacy resident AD tape retain their FP32 contract. The
+13-case red regression is repaired; 168 focused cases pass. Frozen 9c0617201
+passes 26,017 CPU unit cases (5,902 skipped), 975 production-route cases and
+94 owning RTX5070 cases; both required proof lanes have zero skips. Native
+compiler arithmetic and sibling physical envelopes are unchanged. GitHub
+publication/review remains the synchronization gate.
+
+PR954 merged as 7a95133351f6b58dbd24ac62160fd6651082bc6a after its final
+4cd5e2735 head passed CI and review. Its W1.1 source-active resident proof
+retains its own scope; all five broader completion rows remain open.
+
+Shared contracts: production tracing preserves the independent FP32 row-LSE
+result; native checkpoint verification and Schedule/Tile retain homogeneous
+Q/K/V storage and independently declared O storage. Three additive typed
+forward ABIs preserve the existing FP32 ABI and saved-LSE AD schemas 5
+(bounded) and 6 (static). No new dtype, operation, pass or diagnostic code is
+introduced. See docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+
+Follow-up required for independent gfx1151/gfx1201 saved-LSE storage
+integration. The shared frontend result typing is corrected, while the
+new checkpoint ABI and retained owner are NVIDIA-specific. Neither ROCm
+architecture receives CUDA physical schedules or numerical/timing evidence.
+ROCm cache, paged-KV, W8A8 and MXFP4 performance obligations remain open.
+
 ## W11-RESIDENT-SOURCE-20261016 — resident roots for source-active JVP
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-FWD-CORE-1.

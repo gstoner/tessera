@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-16**.
 
 ## Headline
 
-- **168** docs catalogued across the canonical doc tree.
-- **167** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **37** updated within the last 30 days.
+- **169** docs catalogued across the canonical doc tree.
+- **168** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **38** updated within the last 30 days.
 - **67** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -43,6 +43,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `ROCM_FOLDED_INPUT_VIEWS.md` | - | 2026-10-16 | 0 | ✓ |
 | `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 90 | ✓ |
 | `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 147 | ✓ |
+| `SM120_SAVED_LSE_STORAGE_CONTRACT.md` | - | 2026-10-16 | 0 | ✓ |
 | `TARGET_IR_SPEC.md` | Normative | 2026-08-24 | 53 | ✓ |
 | `TILE_IR.md` | Normative | 2026-10-02 | 14 | ✓ |
 | `VALIDATION_SPINE.md` | Normative | 2026-08-02 | 75 | ✓ |

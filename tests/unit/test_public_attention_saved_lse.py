@@ -153,3 +153,16 @@ def test_tuple_rebinding_does_not_retain_stale_auxiliary_results():
     graph=ts.jit(saved_rebound,target="nvidia_sm120").graph_ir.functions[0]
     assert graph.return_values==["%q"]
     assert len(graph.result_types)==1
+
+
+@pytest.mark.parametrize("dtype", ["fp16", "bf16", "fp32"])
+@pytest.mark.parametrize("evaluate", [False, True])
+def test_saved_trace_keeps_independent_result_storage(dtype, evaluate):
+    import ml_dtypes
+    storage = {"fp16": np.float16, "bf16": ml_dtypes.bfloat16, "fp32": np.float32}[dtype]
+    arrays = tuple(np.zeros(shape, dtype=storage) for shape in
+        ((1, 2, 3, 4), (1, 1, 5, 4), (1, 1, 5, 3)))
+    traced = trace(saved, *arrays, evaluate_catalog_outputs=evaluate)
+    module = to_graph_ir_module(traced, name="saved", target="nvidia_sm120")
+    assert [result.dtype for result in module.functions[0].result_types] == [dtype, "fp32"]
+    assert [result.dtype for result in module.functions[0].body[0].inferred_types] == [dtype, "fp32"]

@@ -351,3 +351,20 @@ benchmarks/nvidia/benchmark_bounded_attention_packages.py --output PATH
 records completed capture, backward submission, completed host and private
 CUDA event windows. See baselines/nvidia_bounded_attention_packages_20261008.
 The public JIT/automatic AD integration boundary remains explicit.
+
+### SM120 saved-LSE storage — 2026-10-16
+
+Recorder: `nvidia/record_saved_lse_storage.py`.
+Run from the repository root on Super-Bear with the matching compiler/provider:
+
+```sh
+python benchmarks/nvidia/record_saved_lse_storage.py --output "$HOME/scratch/sm120-saved-lse-packet"
+python benchmarks/nvidia/record_saved_lse_storage.py --output "$HOME/scratch/sm120-saved-lse-packet" --replay-only
+```
+
+The recorder requires a clean source checkout and an actual RTX5070/SM120.
+It compares exact stored FP16/BF16/FP32 inputs with an independent FP64 oracle,
+keeps CUDA kernel events separate from completed public host/resident calls,
+and saves standalone packages for numerical replay without compiler subprocesses.
+The named contract and scope are in
+`docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md`.

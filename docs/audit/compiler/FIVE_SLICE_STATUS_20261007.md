@@ -7,10 +7,44 @@ audit_role: reference
 
 This is an evidence ledger, not a closure declaration. The original
 PR895–903 stack is historical delivery context; later changes through merged
-PR950 extend the source and proof below. PR949 and PR950 deliver native/public
+PR954 extend the source and proof below; the current storage slice is recorded separately. PR949 and PR950 deliver native/public
 NVFP4 expansion and source-preserving multi-output ownership. Older entries retain their original
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
+
+## Native saved-LSE storage integration — 2026-10-16
+
+PR955's identity review repairs 13 reproduced regressions and makes storage
+explicit at every production identity call. Forward-only wrapper identities
+retain native storage; scheduled AD pairs retain their FP32 contract.
+Frozen 9c0617201 passes 26,017 CPU unit cases (5,902 skipped), 975 required
+production-route cases and 94 RTX5070 cases, with zero skips in both proof
+lanes and unchanged unit source/tool witnesses. The prior timing source
+retains its original scope; all 24 sealed packages also replay numerically.
+Evidence: sm120_saved_lse_storage_20261016/review/README.md.
+
+
+PR954 is merged as 7a95133351f6b58dbd24ac62160fd6651082bc6a. Its final
+4cd5e2735 head passed every required check and clear automated review.
+Earlier pending-publication statements below describe their historical
+checkpoints and no longer block that delivered source-active resident slice.
+
+SM120-SAVED-LSE-STORAGE-20261016 now carries FP16/BF16 saved-LSE forward
+through the real public trace, native Graph/Schedule/Tile, NVIDIA Target,
+LLVM/NVVM/PTX and checked host/resident owners. LSE stays FP32 independently
+of primary storage. All 960 production compiler-route cases and 94 adjacent
+RTX5070 device cases pass without skips; 12 authored half-input/FP32-output
+cases also pass. Twenty-four packages replay numerically without compiler
+subprocesses. Twelve legacy FP32 raw Tile/Target/PTX images, entries and ABI
+IDs are unchanged. The final required CPU unit gate passes 25,975 cases
+(5,902 skipped) on clean 9566c7e61 with unchanged source/tool witnesses.
+Documentation and publication gates are active.
+
+This extends the forward-storage envelope only. Half-storage AD, generic
+producer integration, wider masks, dynamic/composed resident closure and
+representative performance/model-quality requirements remain open. Each
+sibling backend queue records its independent physical follow-up. All five
+remaining-requirement rows remain open.
 
 ## Delivery and next source-active integration — 2026-10-16
 
@@ -67,7 +101,7 @@ FP16/BF16->FP32 and FP32->FP64, affine/permuted/static/dynamic cases and nonzero
 BF16 radial inputs. Twenty RTX5070 cases cover nonzero tiny-epsilon BF16
 through public host/resident, portable and event/captured profile routes.
 
-Frozen 46a5dd8da721055a51b672adde1eb6e534789c3b passes 26,889 non-slow unit passes (7,678 skips),
+Frozen 46a5dd8da721055a51b672adde1eb6e534789c3b records 26,889 non-slow unit passes (7,678 skips),
 912 required compiler-route passes and 416 owning RTX5070 passes, with no skips
 in either required proof lane. All phase source/tool/helper witnesses match.
 Eight timed packages also pass independent FP64 checks and standalone replay
@@ -147,8 +181,8 @@ proved envelopes and remaining work are:
 | Slice | Latest additional proof | Remaining requirement |
 | --- | --- | --- |
 | GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; nvfp4_model_activations_20261015 adds actual BF16 model layer inputs, 18 native format arms and separately labeled decoded-weight projection error. Source-preserving K16 consumers now pass on identical captured inputs (6.23% native RMS at M256; one shared native image), with separate device/host costs; see nvfp4_checkpoint_k16_20261015. PR949 adds native expansion plus ordinary public JIT, serialized/fresh-process replay without compiler tools, and bitwise pinned-checkpoint output proof under gfx1201_nvfp4_public_expand_20261015. | Merged PR950 proves resident source-preserving composition, import-once ownership, ordinary static FP32 JIT and compiler-free replay with original checkpoint inputs; see rocm_nvfp4_public_source_20261015. Bounded/wider composition and representative-corpus/full-model quality acceptance remain open. |
-| NVIDIA W1.1 | Merged PR951 adds native static FP16/BF16 active-source RMSNorm -> ReLU -> matmul JVP through Graph/Schedule/Tile/NVIDIA/LLVM-PTX, a checked three-stage owner and compiler-free paired replay. The synchronized frozen 3659a2b45 full-unit gate passes 26,630 cases; later PR951 review corrections pass 436 affected checks and retain separate source scope. See sm120_active_source_jvp_runtime_20261015. Prior RHS-only proof retains its own source scope. Earlier resident/primal receipts retain their recorded scope. | Generic producer/accumulator reconstruction, mixed or pitched resident entry, wider composition and resident AD; Merged PR947 adds the named RMSNorm -> ReLU -> matmul storage boundary and its separately recorded RTX 5070 proof. |
-| NVIDIA saved-LSE forward | The bounded saved-LSE package preserves O/LSE through native sequence projection, schema 5/6 and compiler-free replay; see bounded_saved_lse_jvp_20261011. | Wider storage/masks, nested/composed output and general attention integration. |
+| NVIDIA W1.1 | Merged PR954 extends PR951's named static FP16/BF16 active-source RMSNorm -> ReLU -> matmul JVP to compact resident roots, native stream ordering and completed host outputs through Graph/Schedule/Tile/NVIDIA/LLVM-PTX. Frozen 46a5dd8da passes 26,889 non-slow unit cases, 912 required compiler-route cases and 416 RTX5070 cases; eight timed packages replay numerically. See sm120_resident_source_jvp_20261016/rms-review. Older RHS-only, primal and PR951 receipts retain their own source scope. | Generic producer/accumulator reconstruction, mixed/pitched/dynamic roots, wider composition, resident results and reverse composition. |
+| NVIDIA saved-LSE forward | Bounded FP32 saved-LSE preserves O/LSE through native projection, schemas 5/6 and replay. The current static FP16/BF16 storage slice adds public host/resident forward, independent FP32 LSE, authored FP32 O, 24 timed standalone numerical replays and unchanged legacy FP32 native bytes. See sm120_saved_lse_storage_20261016. | Mixed/quantized storage, wider masks, nested/composed outputs, dynamic resident storage and half-storage AD. |
 | NVIDIA attention backward | Bounded paired JVP/reverse, broadcast physical bias extents, trace-at-one replay and retained generations are covered by bounded_saved_lse_jvp_20261011; static resident reverse has its own sm120_resident_attention_vjp_20261009 receipt. | Dynamic/composed resident reverse, broader AD and independent performance promotion. |
 | ROCm routes/performance | The current FP8 candidate records independent RHS formats, shape-independent unsplit images, ordinary textual JIT, 60 gfx1201 cases and separate gfx1151 LDS proof in rocm_fp8_shape_cache_20261014. | PR948 candidate delivery is merged. Wider image families/layouts, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution remain open. A queued native folded fragment-read policy adds regular-grid gfx1201 evidence: 458 focused, 44 device and bidirectional timing/ISA proof under gfx1201_folded_fragment_groups_20261015. It does not close the Radiance gap or transfer sibling schedules. |
 

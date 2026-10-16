@@ -136,7 +136,8 @@ def test_generated_forward_identity_binds_capacity(monkeypatch):
     symbolic = (1, 2, 1, DYNAMIC_DIM, DYNAMIC_DIM, 8, 8)
     bounds = (1, 2, 1, 9, 11, 8, 8)
     scheduled = SimpleNamespace(dims=symbolic, shape_bounds=bounds,
-        scale=8**-.5, causal=True, bias=False, bias_shape=())
+        scale=8**-.5, causal=True, bias=False, bias_shape=(),
+        storage="f32", output_storage="f32")
     monkeypatch.setattr("tessera.compiler.scheduled_checkpoint.lower_generated_checkpoint",
                         lambda source: scheduled)
     package = object()

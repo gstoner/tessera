@@ -2532,9 +2532,9 @@ static LogicalResult materializeSm120AttentionKernel(
   bool halfOutput = outputStorage && outputStorage.getValue() != "f32";
   if (op->hasAttr("output_storage") &&
       (!outputStorage || (halfOutput &&
-       (hasSavedLse || outputStorage.getValue() != storage.getValue() ||
+       (outputStorage.getValue() != storage.getValue() ||
         (!f16Storage && !bf16Storage)))))
-    return op->emitError("half attention result requires matching f16/bf16 storage and no saved LSE");
+    return op->emitError("half attention result requires matching f16/bf16 storage");
   Location loc = op->getLoc();
   Type i32 = builder.getI32Type();
   Type i64 = builder.getI64Type();

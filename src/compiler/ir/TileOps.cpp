@@ -2287,10 +2287,10 @@ LogicalResult AttentionKernelOp::verify() {
     auto target = module ? module->getAttrOfType<StringAttr>("tessera.target") : StringAttr();
     if (!outputStorage ||
         (outputStorage.getValue() != "f32" &&
-         (!target || target.getValue() != "nvidia_sm120" || hasSavedLse ||
+         (!target || target.getValue() != "nvidia_sm120" ||
           outputStorage.getValue() != storage.getValue() ||
           (outputStorage.getValue() != "f16" && outputStorage.getValue() != "bf16"))))
-      return emitOpError("half result storage requires NVIDIA ordinary attention and matching input storage");
+      return emitOpError("half result storage requires NVIDIA attention and matching input storage");
   }
   if (!accum || accum.getValue() != "f32")
     return emitOpError("requires accum=\"f32\"");

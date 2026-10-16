@@ -110,3 +110,27 @@ def test_ordered_output_must_be_writable():
     output=Buffer((17,11),np.float32,stream=73)
     with pytest.raises(ValueError,match="writable output"):
         ordered_resident_views([a,b,output],73,writable_from=2)
+
+
+@pytest.mark.parametrize("shape", [(7,), (3, 7)])
+@pytest.mark.parametrize("storage", ["float16", "bfloat16", "float32"])
+@pytest.mark.parametrize("ordered", [False, True])
+def test_optional_strides_omission_matches_compact_cuda_contract(shape, storage, ordered):
+    import ml_dtypes
+    from tessera.compiler.resident_nvidia_tensor import cuda_frontend_specs, resident_views
+    dtype = ml_dtypes.bfloat16 if storage == "bfloat16" else np.dtype(storage)
+    source = Buffer(shape, dtype, stream=31)
+    del source.interface["strides"]
+    assert cuda_frontend_specs([source]) == ((shape, np.dtype(dtype)),)
+    if ordered:
+        views, streams = ordered_resident_views([source], 31, writable_from=1)
+        assert streams == (31,)
+    else:
+        views = resident_views([source], 31, writable_from=1)
+    assert views[0].data == 4096
+    assert views[0].rank == len(shape)
+    assert list(views[0].shape)[:len(shape)] == list(shape)
+    width = np.dtype(dtype).itemsize
+    assert list(views[0].strides)[:len(shape)] == (
+        [width] if len(shape) == 1 else [shape[1]*width, width])
+    assert views[0].bytes == int(np.prod(shape))*width

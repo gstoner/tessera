@@ -330,3 +330,32 @@ with ExitStack() as stack:
         assert actual_block == (member["abi"]["block_size"], 1, 1)
         assert actual_block == ((128 if index == 0 else 32), 1, 1)
     assert k == roots[-1].shape[1]
+
+
+@pytest.mark.parametrize("route", ["public", "portable", "events", "captured"])
+def test_optional_strides_resident_jvp_matches_independent_oracle(compiled, route):
+    class CompactBorrowed(Borrowed):
+        @property
+        def __cuda_array_interface__(self):
+            interface = super().__cuda_array_interface__
+            interface.pop("strides", None)
+            return interface
+
+    fn, roots, expected, budgets = compiled
+    owner = next(iter(fn._native_prepared_jvp_calls.values()))
+    artifact = rt.RuntimeArtifact.from_json(fn.native_jvp_runtime_artifact().to_json())
+    with ExitStack() as stack:
+        sessions = [stack.enter_context(NvidiaDeviceSession()) for _ in roots]
+        values = tuple(CompactBorrowed(session.upload(value))
+                       for session, value in zip(sessions, roots, strict=True))
+        if route == "public":
+            pair = fn.native_jvp(*values[:2], tangents=(values[2],))
+        elif route == "portable":
+            result = rt.launch(artifact, values)
+            assert result["ok"], result
+            pair = result["output"]
+        else:
+            pair, timing = owner.profile(values, repeats=3, captured=route == "captured")
+            assert timing["program_ms"] > 0 and all(value > 0 for value in timing["stage_ms"])
+        check(pair, expected, budgets)
+        assert owner.receipt["input_binding"] == "cuda_resident_roots"

@@ -1,0 +1,196 @@
+{
+  "scope": "Automatic native Schedule route; matched output formats; no claim for remaining wider envelopes",
+  "source_commit": "508c8dad658b88f2d8a7557fc97c2f1ad2a624e3",
+  "rows": [
+    {
+      "shape": [
+        65,
+        1024,
+        1024
+      ],
+      "bf16_current_us": 9.54329487179487,
+      "bf16_baseline_us": 30.38304,
+      "speedup": 3.1837054610768476,
+      "current_over_aiter": 1.101269507782438,
+      "same_bf16_image": false,
+      "same_f32_image": false,
+      "current_macro_tile": [
+        64,
+        64
+      ],
+      "current_warps": 4,
+      "all_arms_admissible": true
+    },
+    {
+      "shape": [
+        95,
+        2048,
+        2048
+      ],
+      "bf16_current_us": 15.553148514851486,
+      "bf16_baseline_us": 57.45470588235295,
+      "speedup": 3.6940884237998657,
+      "current_over_aiter": 0.9400298000240372,
+      "same_bf16_image": false,
+      "same_f32_image": false,
+      "current_macro_tile": [
+        64,
+        64
+      ],
+      "current_warps": 4,
+      "all_arms_admissible": true
+    },
+    {
+      "shape": [
+        97,
+        1024,
+        2048
+      ],
+      "bf16_current_us": 14.405652173913044,
+      "bf16_baseline_us": 17.085762331838566,
+      "speedup": 1.1860457357688317,
+      "current_over_aiter": 1.1920363946287345,
+      "same_bf16_image": false,
+      "same_f32_image": false,
+      "current_macro_tile": [
+        64,
+        64
+      ],
+      "current_warps": 4,
+      "all_arms_admissible": true
+    },
+    {
+      "shape": [
+        127,
+        3072,
+        1536
+      ],
+      "bf16_current_us": 16.084530612244897,
+      "bf16_baseline_us": 17.138165938864628,
+      "speedup": 1.06550612834282,
+      "current_over_aiter": 0.9780535087123099,
+      "same_bf16_image": false,
+      "same_f32_image": false,
+      "current_macro_tile": [
+        64,
+        64
+      ],
+      "current_warps": 4,
+      "all_arms_admissible": true
+    },
+    {
+      "shape": [
+        127,
+        3072,
+        1280
+      ],
+      "bf16_current_us": 14.565614366729678,
+      "bf16_baseline_us": 15.387596899224805,
+      "speedup": 1.0564330835486537,
+      "current_over_aiter": 1.0032490250558868,
+      "same_bf16_image": false,
+      "same_f32_image": false,
+      "current_macro_tile": [
+        64,
+        64
+      ],
+      "current_warps": 4,
+      "all_arms_admissible": true
+    },
+    {
+      "shape": [
+        127,
+        2048,
+        1536
+      ],
+      "bf16_current_us": 13.740974729241877,
+      "bf16_baseline_us": 15.498254620123204,
+      "speedup": 1.127886116196815,
+      "current_over_aiter": 1.0991745266191977,
+      "same_bf16_image": false,
+      "same_f32_image": false,
+      "current_macro_tile": [
+        64,
+        64
+      ],
+      "current_warps": 4,
+      "all_arms_admissible": true
+    },
+    {
+      "shape": [
+        96,
+        2048,
+        2048
+      ],
+      "bf16_current_us": 12.840875202593194,
+      "bf16_baseline_us": 12.771410048622368,
+      "speedup": 0.9945903100158782,
+      "current_over_aiter": 0.7745757885545385,
+      "same_bf16_image": true,
+      "same_f32_image": true,
+      "current_macro_tile": [
+        16,
+        32
+      ],
+      "current_warps": 1,
+      "all_arms_admissible": true
+    },
+    {
+      "shape": [
+        127,
+        4096,
+        1536
+      ],
+      "bf16_current_us": 18.91916870415648,
+      "bf16_baseline_us": 18.946396181384248,
+      "speedup": 1.0014391476524962,
+      "current_over_aiter": 0.9025826237888737,
+      "same_bf16_image": true,
+      "same_f32_image": true,
+      "current_macro_tile": [
+        128,
+        64
+      ],
+      "current_warps": 8,
+      "all_arms_admissible": true
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "bf16_current_us": 42.13142857142857,
+      "bf16_baseline_us": 41.73873684210526,
+      "speedup": 0.9906793635383725,
+      "current_over_aiter": 0.9279502249621899,
+      "same_bf16_image": true,
+      "same_f32_image": true,
+      "current_macro_tile": [
+        128,
+        64
+      ],
+      "current_warps": 8,
+      "all_arms_admissible": true
+    },
+    {
+      "shape": [
+        1024,
+        3072,
+        1536
+      ],
+      "bf16_current_us": 74.28304761904762,
+      "bf16_baseline_us": 74.05790476190477,
+      "speedup": 0.996969121968481,
+      "current_over_aiter": 1.0349654769926637,
+      "same_bf16_image": true,
+      "same_f32_image": true,
+      "current_macro_tile": [
+        128,
+        128
+      ],
+      "current_warps": 8,
+      "all_arms_admissible": true
+    }
+  ]
+}

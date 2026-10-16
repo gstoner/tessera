@@ -1,0 +1,25 @@
+{
+  "scope": "reference compiler/source import probe only; no GPU correctness or timing claimed",
+  "python": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+  "triton_version": "3.8.0",
+  "triton_module": "/home/angstorms/scratch/rocm-reference-tools-20261016/python/triton/__init__.py",
+  "wheel": "triton-3.8.0-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl",
+  "wheel_sha256": "387dae4cb0089a7b6ba1a428ae0782b65c4c58f57d94617cb22ca8593d8ccbca",
+  "aiter_kernel_source_sha256": "f48245242d51165a5545554fdf1b0f84418f24b4a67d839125c3e2c170fac685",
+  "retained_source_sha256": "f48245242d51165a5545554fdf1b0f84418f24b4a67d839125c3e2c170fac685",
+  "source_matches_retained": true,
+  "ragged_reference_config": {
+    "BLOCK_SIZE_M": 64,
+    "BLOCK_SIZE_N": 128,
+    "BLOCK_SIZE_K": 128,
+    "GROUP_SIZE_M": 8,
+    "num_warps": 4,
+    "num_stages": 2,
+    "waves_per_eu": 4,
+    "matrix_instr_nonkdim": 16,
+    "cache_modifier": null,
+    "NUM_KSPLIT": 1,
+    "kpack": 2
+  },
+  "config_source": "GEMM-A8W8_BLOCKSCALE-N=3072-K=1536.json:any"
+}

@@ -1,0 +1,12 @@
+{
+  "role": "verifier-fixed portable compiler reuse; binaries match executed Super-Bear review-fix proof",
+  "source_candidate": "0c25a75eb2b716c97ff577815481d507f7b5d8a8",
+  "source_tree": "86768b098b2ff79ba6c3f4e200749caa34f3f843",
+  "files": {
+    "tools/tessera-opt/tessera-opt": "c6af577f22d554b42104e5956761ad0e6c94b295a88aaa56aa2f13073e94a726",
+    "src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "7b53661d37dac640e4d07974ed64f7e1c9032da389a8587893abf46acd31b0fa",
+    "src/compiler/layout_algebra/libtessera_layout_algebra.so": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+    "tessera_llvm_pin.txt": "7d2a77418df5f79c119b56679c4d9f5375f4d9338af017c3f42db28bb044aff7"
+  },
+  "scope": "Tool identity/load proof only; no new ROCm kernel correctness or timing; synchronize source checkout after PR958 merge before baseline"
+}

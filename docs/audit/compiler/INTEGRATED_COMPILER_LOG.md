@@ -12836,3 +12836,23 @@ Remaining: exact-head CI/review; original five-slice
 obligations remain active.
 Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/thread_review/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-16 — gfx1201 W8A8 small-grid Schedule follow-through
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync GFX1201-W8A8-SHORT-RAGGED-20261016.
+Outcome: native PM Schedule selects four-wave 64x64 LDS only for the measured
+NK K128/N128 scale, ragged 65..127 M, whole-128 N1024..3072 and K1024..2048
+window, preserving faster aligned/wider controls. Python is a differential
+oracle; typed Tile/Target/ROCDL/LLVM/HSACO and checked ABI own execution.
+439 focused gates and 345 owning gfx1201 FP8/MXFP8/MXFP4 cases pass. Ten paired
+automatic-route profiles pass all 50 timing arms; six selected BF16 rows improve
+1.056-3.694x and four excluded F32/BF16 image pairs remain byte-identical.
+Partial-row, real-barrier, compact-LDS and larger-geometry nonwinners are
+retained with reproducible patches and exact resources. No new public contract
+or sibling physical schedule is introduced; all four backend plans assessed.
+Remaining: wider W8A8, narrow-N/large-M AITER gaps, broader ROCm closure and the
+full original five-slice completion audit. Device and public timings are separate.
+Evidence: benchmarks/baselines/gfx1201_w8a8_small_grid_20261016/README.md.
+<!-- entry-fields:end -->

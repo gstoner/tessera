@@ -5,6 +5,30 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## GFX1201-W8A8-SHORT-RAGGED-20261016 — measured small-grid Schedule follow-through
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Synchronization key: GFX1201-W8A8-SHORT-RAGGED-20261016.
+
+Native PM Schedule now selects four-wave 64x64 LDS tiles for NK W8A8,
+K128/N128 FP32 scales, ragged 65..127 rows excluding 32-aligned M,
+whole-128-column N1024..3072 and K1024..2048. The Python panel oracle is
+only a differential witness; MLIR owns selection and typed Tile/native lowering.
+Focused compiler/registry gates pass 439 cases; owning gfx1201 FP8/MXFP8/MXFP4
+regressions pass 345 with zero skips. Automatic-route paired timing passes all 50
+arms across ten profiles: six selected BF16 rows improve 1.056-3.694x; four
+excluded profiles retain byte-identical F32/BF16 images. The M127,N3072,K1536
+row moves 17.14->16.08 us (0.978x AITER). Narrow-N and large-M gaps remain. Diagnostic controls reject partial-row
+batching, an extra LDS phase boundary, compact XOR LDS and broader geometry
+promotion. Faster aligned-M/wider-N controls are retained.
+
+Follow-up required for gfx1151 physical work: this selector is gfx1201-only;
+gfx1151 has no FP8 WMMA. MXFP8/MXFP4 selection and existing cache/ABI contracts
+are unchanged. Broader W8A8/ROCm and original five-slice obligations remain open.
+
+Evidence: benchmarks/baselines/gfx1201_w8a8_small_grid_20261016/README.md.
+
+
 ## SM120-NATIVE-ROW-CORRECTION-20261016 — native residual producer and consumer
 
 Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.

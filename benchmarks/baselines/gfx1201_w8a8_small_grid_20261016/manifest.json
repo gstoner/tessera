@@ -1,0 +1,11 @@
+{
+  "source_commit": "2e9ad4dd6603b309529ef577886cb542f4628a8f",
+  "source_tree": "fef23ba2b2289eabb11a049a87594c7ea74b9e02",
+  "build_host": "Super-Bear",
+  "execution_host": "Tajasaurus",
+  "files": {
+    "src/compiler/layout_algebra/libtessera_layout_algebra.so": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+    "src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "bd60be60a274155c5d358eea9ea4cd887773023a266c74d8244638c5edaccf36",
+    "tools/tessera-opt/tessera-opt": "a07df19b876a30f92e57d4071ba89647fe7b62cc90a70721867929a6c3f5777f"
+  }
+}

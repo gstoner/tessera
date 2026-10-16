@@ -1,0 +1,63 @@
+diff --git a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+index 52f9202415..785ab5280d 100644
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2022,6 +2022,17 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
+   // 16-element copy vector is exactly one 128-bit access.
+   const int64_t vecW = 16;
+   const int64_t ldsStride = stageK + padBytes;
++  // Compact K128 LDS trial: distribute 16-byte chunks across banks without
++  // padding. This is selected only by the explicit zero-padding experiment;
++  // the production padded body and encoded MX consumers stay unchanged.
++  auto owner = gpuFunc->getParentOfType<ModuleOp>();
++  auto architecture = owner
++      ? owner->getAttrOfType<StringAttr>("tessera.arch") : StringAttr();
++  const bool compactXorLds = architecture && architecture.getValue() == "gfx1201" &&
++      padBytes == 0 && stageK == 128 && scaleFormat == "fp32" &&
++      scaleK == 128 && scaleN == 128 && !foldedFullK;
++  if (compactXorLds)
++    gpuFunc->setAttr("tessera.rocm.compact_lds", b.getStringAttr("xor_row_16b_v1"));
+   const int64_t nbuf = prefetch == 2 ? 2 : 1;
+   auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
+   Value ldsA = gpuFunc.addWorkgroupAttribution(
+@@ -2156,7 +2167,24 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
+   auto ldsView = [&](OpBuilder &bb, Location l, Value base, Value row,
+                      Value col, Attribute memory) -> Value {
+     OperationState state(l, "tile.view");
+-    state.addOperands({base, row, col, cStride});
++    if (compactXorLds) {
++      // The existing linear-base view is per lane, excluding only the
++      // architecture-owned K half-wave offset (0 or 8 bytes). XOR changes
++      // 16-byte chunks, so the fragment remains contiguous within its chunk.
++      Value lane = bb.create<arith::RemUIOp>(l, tx, ci(16));
++      Value slow = bb.create<arith::AddIOp>(
++          l, memory == ldsRowMajor ? row : col, lane);
++      Value chunkXor = bb.create<arith::MulIOp>(
++          l, bb.create<arith::RemUIOp>(l, slow, ci(8)), ci(16));
++      Value fast = bb.create<arith::XOrIOp>(
++          l, memory == ldsRowMajor ? col : row, chunkXor);
++      Value linear = bb.create<arith::AddIOp>(
++          l, bb.create<arith::MulIOp>(l, slow, cStride), fast);
++      state.addOperands({base, linear, row, col, cStride});
++      state.addAttribute("tile.linear_base", bb.getUnitAttr());
++    } else {
++      state.addOperands({base, row, col, cStride});
++    }
+     state.addTypes(tileValueTy);
+     state.addAttribute("tile.layout", tileLayout);
+     state.addAttribute("tile.memory", memory);
+@@ -2224,8 +2252,13 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
+       plan.kVectors.push_back(kVec);
+       plan.rowBase.push_back(b.create<arith::AddIOp>(
+           loc, b.create<arith::MulIOp>(loc, gr, rowStride), kVec));
++      Value physicalK = kVec;
++      if (compactXorLds)
++        physicalK = b.create<arith::XOrIOp>(
++            loc, kVec, b.create<arith::MulIOp>(
++                loc, b.create<arith::RemUIOp>(loc, row, ci(8)), ci(16)));
+       plan.ldsDst.push_back(b.create<arith::AddIOp>(
+-          loc, b.create<arith::MulIOp>(loc, row, cStride), kVec));
++          loc, b.create<arith::MulIOp>(loc, row, cStride), physicalK));
+     }
+     return plan;
+   };

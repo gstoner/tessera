@@ -1,0 +1,117 @@
+{
+  "decision": "No production promotion: no register reduction or repeatable speedup established",
+  "rows": [
+    {
+      "shape": [
+        1024,
+        3072,
+        1536
+      ],
+      "experimental_us": 73.12814814814814,
+      "baseline_us": 72.81333333333333,
+      "experimental_over_baseline": 1.0043235874585443,
+      "paired_ratio_min_max": [
+        0.9896987945720378,
+        1.0098649681528662
+      ],
+      "same_image": false,
+      "all_timing_arms_admissible": true
+    },
+    {
+      "shape": [
+        1024,
+        4096,
+        1024
+      ],
+      "experimental_us": 67.37773913043479,
+      "baseline_us": 67.35930434782608,
+      "experimental_over_baseline": 1.000273678340167,
+      "paired_ratio_min_max": [
+        0.9899578895725587,
+        1.0396926329571736
+      ],
+      "same_image": false,
+      "all_timing_arms_admissible": true
+    },
+    {
+      "shape": [
+        1024,
+        1024,
+        2048
+      ],
+      "experimental_us": 34.83004444444445,
+      "baseline_us": 35.06331838565022,
+      "experimental_over_baseline": 0.9933470660523323,
+      "paired_ratio_min_max": [
+        0.9795071757929468,
+        1.0020113003212991
+      ],
+      "same_image": false,
+      "all_timing_arms_admissible": true
+    },
+    {
+      "shape": [
+        1024,
+        1024,
+        4096
+      ],
+      "experimental_us": 64.97752066115703,
+      "baseline_us": 65.21933333333334,
+      "experimental_over_baseline": 0.9962923160998839,
+      "paired_ratio_min_max": [
+        0.9850396559469348,
+        1.0172565403167222
+      ],
+      "same_image": false,
+      "all_timing_arms_admissible": true
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "experimental_us": 41.8531914893617,
+      "baseline_us": 41.716458333333335,
+      "experimental_over_baseline": 1.0032776789183733,
+      "paired_ratio_min_max": [
+        0.9706968215944639,
+        1.0134557881477184
+      ],
+      "same_image": true,
+      "all_timing_arms_admissible": true
+    },
+    {
+      "shape": [
+        200,
+        2048,
+        2048
+      ],
+      "experimental_us": 22.08191011235955,
+      "baseline_us": 22.086611570247932,
+      "experimental_over_baseline": 0.9997871353931577,
+      "paired_ratio_min_max": [
+        0.9785973302820609,
+        1.013815503742698
+      ],
+      "same_image": true,
+      "all_timing_arms_admissible": true
+    },
+    {
+      "shape": [
+        127,
+        3072,
+        1536
+      ],
+      "experimental_us": 17.085689655172413,
+      "baseline_us": 17.067127659574467,
+      "experimental_over_baseline": 1.00108758755241,
+      "paired_ratio_min_max": [
+        0.97771371293818,
+        1.00108758755241
+      ],
+      "same_image": true,
+      "all_timing_arms_admissible": true
+    }
+  ]
+}

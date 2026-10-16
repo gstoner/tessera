@@ -1,0 +1,113 @@
+diff --git a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+index 52f9202415..2baa70a012 100644
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2405,15 +2405,17 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
+ 
+   // ---- One slab's MMA chain on the partial, from LDS buffer `buf`.
+   auto computeActive = [&](OpBuilder &kb, Location l, Value buf,
+-                     SmallVector<Value> partial, int64_t firstPanel = 0) {
++                     SmallVector<Value> partial, int64_t firstPanel = 0,
++                     int64_t firstRow = 0, int64_t rowCount = -1) {
++    const int64_t rows = rowCount < 0 ? mt : rowCount;
+     Value aRow = buf ? Value(kb.create<arith::MulIOp>(l, buf, ci(wgM))) : c0;
+     Value bCol = buf ? Value(kb.create<arith::MulIOp>(l, buf, ci(wgN))) : c0;
+     for (int64_t p = 0; p < stagePanels; ++p) {
+       Value kOff = ci((firstPanel + p) * 16);
+-      SmallVector<Value> af(mt), bf(nt);
+-      for (int64_t mi = 0; mi < mt; ++mi) {
+-        Value r = buf ? Value(kb.create<arith::AddIOp>(l, lrow[mi], aRow))
+-                      : lrow[mi];
++      SmallVector<Value> af(rows), bf(nt);
++      for (int64_t mi = 0; mi < rows; ++mi) {
++        Value r = buf ? Value(kb.create<arith::AddIOp>(l, lrow[firstRow + mi], aRow))
++                      : lrow[firstRow + mi];
+         af[mi] = packFragment(kb, l, ldsView(kb, l, ldsA, r, kOff, ldsRowMajor),
+                               aFragmentTy);
+       }
+@@ -2424,7 +2426,7 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
+         bf[ni] = packFragment(kb, l, ldsView(kb, l, ldsB, kOff, c, ldsColMajor),
+                               bFragmentTy);
+       }
+-      for (int64_t mi = 0; mi < mt; ++mi)
++      for (int64_t mi = 0; mi < rows; ++mi)
+         for (int64_t ni = 0; ni < nt; ++ni) {
+           OperationState mma(l, "tile.mma");
+           mma.addOperands({af[mi], bf[ni], partial[mi * nt + ni]});
+@@ -2444,7 +2446,7 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
+             IntegerAttr::get(i32, 2 * mt * nt), IntegerAttr::get(i32, 0));
+       }
+     }
+-    if (groupStageReads) {
++    if (groupStageReads && rows == mt) {
+       // All of the stage's LDS fragment reads, then its WMMA chain (see
+       // `groupStageReads` above for why and when).
+       auto i32 = kb.getI32Type();
+@@ -2480,6 +2482,20 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
+     return SmallVector<Value>(branch.getResults().begin(), branch.getResults().end());
+   };
+ 
++  // Experimental native lifetime schedule: complete and scale one fragment
++  // row before creating the next row partial. Each output retains its exact
++  // ascending-K chain and one scale-group join. The current compiler control
++  // remains frozen for an owning-device A/B before choosing a production rule.
++  auto owner = gpuFunc->getParentOfType<ModuleOp>();
++  auto architecture = owner
++      ? owner->getAttrOfType<StringAttr>("tessera.arch") : StringAttr();
++  const bool batchPartialRows = architecture && architecture.getValue() == "gfx1201" &&
++      scaleFormat == "fp32" && scaleK == 128 && scaleN == 128 &&
++      stageK == 128 && prefetch == 0 && mt == 2 && nt == 4 &&
++      wgM == 128 && wgN == 128 && nthreads == 256 && !foldedFullK;
++  if (batchPartialRows)
++    gpuFunc->setAttr("tessera.rocm.partial_m_batch", b.getI64IntegerAttr(1));
++
+   const int64_t stagesPerGroup = scaleK / stageK;
+   Value cStageK = ci(stageK);
+   // The checked ABI admits positive whole scale groups. Expose the nonempty
+@@ -2600,6 +2616,46 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
+       [&](OpBuilder &gb, Location l, Value g, ValueRange iter) {
+         SmallVector<Value> accs(iter.begin(), iter.end());
+         Value kGroup = gb.create<arith::MulIOp>(l, g, ci(scaleK));
++        if (batchPartialRows) {
++          // Stage once. Both fragment rows finish their LDS reads before the
++          // next group barrier permits slab overwrite.
++          auto slabA = issue(gb, l, planA, kGroup);
++          auto slabB = issue(gb, l, planB, kGroup);
++          barrier(gb, l);
++          drain(gb, l, planA, slabA, Value());
++          drain(gb, l, planB, slabB, Value());
++          barrier(gb, l);
++          SmallVector<Value> joined(accs);
++          for (int64_t mi = 0; mi < mt; ++mi) {
++            SmallVector<Value> partial;
++            for (int64_t ni = 0; ni < nt; ++ni) {
++              OperationState zero(l, "tile.fragment_zero");
++              zero.addTypes(accFragmentTy);
++              partial.push_back(gb.create(zero)->getResult(0));
++            }
++            partial = computeActive(gb, l, Value(), std::move(partial),
++                                    /*firstPanel=*/0, /*firstRow=*/mi,
++                                    /*rowCount=*/1);
++            for (int64_t ni = 0; ni < nt; ++ni) {
++              OperationState join(l, "tile.fragment_scaled_accumulate");
++              join.addOperands({accs[mi * nt + ni], partial[ni], lhsScale,
++                                rhsScale, rowOrigin[mi], colOrigin[ni],
++                                g, cGroups, M, N});
++              join.addTypes(accFragmentTy);
++              join.addAttribute("scale_n", gb.getI64IntegerAttr(scaleN));
++              join.addAttribute("scale_format", gb.getStringAttr(scaleFormat));
++              joined[mi * nt + ni] = gb.create(join)->getResult(0);
++            }
++            // Attribution arm: an explicit shared-memory phase boundary
++            // prevents CSE/hoisting of the next row's B fragment loads across
++            // this row. This is a real workgroup barrier, not a free hint;
++            // compare registers and its synchronization cost before promotion.
++            if (mi + 1 < mt)
++              barrier(gb, l);
++          }
++          gb.create<scf::YieldOp>(l, joined);
++          return;
++        }
+         SmallVector<Value> partial = foldedFullK ? accs : zeroFragments(gb, l);
+         if (stagesPerGroup == 1) {
+           partial = stage(gb, l, kGroup, std::move(partial));

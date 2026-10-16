@@ -8,7 +8,12 @@ def canonical(value):
 
 def payload(program):
     from .typed_attention_backward import vjp_checkpoint_shapes as checkpoint_shapes
-    dims,_=checkpoint_shapes(program.pair)
+    row_program = getattr(program,"row_program",False)
+    if row_program:
+        from .native_attention_rows import validate_program
+        dims,_=validate_program(program)
+    else:
+        dims,_=checkpoint_shapes(program.pair)
     p=program.pair.backward.descriptor.provenance
     count=3+int(program.pair.forward.descriptor.provenance.get("bias",False))
     mapping=program.input_indices
@@ -33,6 +38,12 @@ def payload(program):
             raise ValueError("portable VJP Tile IR differs from native descriptor")
         return dict(tile_ir=x.tile_ir,target_ir=x.target_ir,backend_ir=x.backend_ir,
                     image=x.image.to_dict(),descriptor=x.descriptor.to_dict())
+    if row_program:
+        return dict(schema="tessera.native_attention_vjp_program.v3",
+                    forward=package(program.pair.forward),backward=package(program.pair.backward),
+                    correction=package(program.correction) if program.correction is not None else None,
+                    checkpoint_digest=program.pair.contract_digest,active=list(active),
+                    frontend_argument_indices=list(mapping))
     typed = program.pair.forward.descriptor.provenance.get("storage") != "f32"
     return dict(schema="tessera.native_attention_vjp_program.v2" if typed else "tessera.native_attention_vjp_program.v1",
                 forward=package(program.pair.forward),backward=package(program.pair.backward),
@@ -49,23 +60,31 @@ def from_json(text,*,expected_digest):
     from .nvidia_native import NVIDIANativePackage,AttentionCheckpointPair
     from .native_artifact import NativeImageArtifact,LaunchDescriptor
     envelope=json.loads(text)
-    if set(envelope)!={"program","program_digest"}:
+    if not isinstance(envelope,dict) or set(envelope)!={"program","program_digest"}:
         raise ValueError("portable VJP envelope fields disagree")
     data=envelope["program"]
     actual=hashlib.sha256(canonical(data).encode()).hexdigest()
     if actual!=expected_digest or actual!=envelope["program_digest"]:
         raise ValueError("portable VJP differs from pinned identity")
     fields={"schema","forward","backward","checkpoint_digest","active","frontend_argument_indices"}
-    if not isinstance(data,dict) or set(data)!=fields or data.get("schema") not in {"tessera.native_attention_vjp_program.v1", "tessera.native_attention_vjp_program.v2"}:
+    row_program = isinstance(data,dict) and data.get("schema")=="tessera.native_attention_vjp_program.v3"
+    if row_program: fields.add("correction")
+    if not isinstance(data,dict) or set(data)!=fields or data.get("schema") not in {"tessera.native_attention_vjp_program.v1", "tessera.native_attention_vjp_program.v2", "tessera.native_attention_vjp_program.v3"}:
         raise ValueError("unsupported portable attention VJP schema")
     def package(raw):
-        if set(raw)!={"tile_ir","target_ir","backend_ir","image","descriptor"}:
+        if not isinstance(raw,dict) or set(raw)!={"tile_ir","target_ir","backend_ir","image","descriptor"}:
             raise ValueError("portable VJP package fields disagree")
         return NVIDIANativePackage(raw["tile_ir"],raw["target_ir"],raw["backend_ir"],
             NativeImageArtifact.from_dict(raw["image"]),LaunchDescriptor.from_dict(raw["descriptor"]))
-    result=NativeAttentionVJPProgram(
-        AttentionCheckpointPair(package(data["forward"]),package(data["backward"]),data["checkpoint_digest"]),
-        tuple(data["active"]),tuple(data["frontend_argument_indices"]))
+    pair=AttentionCheckpointPair(package(data["forward"]),package(data["backward"]),data["checkpoint_digest"])
+    from .native_attention_rows import NativeAttentionRowsProgram
+    result: NativeAttentionVJPProgram | NativeAttentionRowsProgram
+    if row_program:
+        from .native_attention_rows import NativeAttentionRowsProgram
+        result=NativeAttentionRowsProgram(pair,package(data["correction"]) if data["correction"] is not None else None,
+            tuple(data["active"]),tuple(data["frontend_argument_indices"]))
+    else:
+        result=NativeAttentionVJPProgram(pair,tuple(data["active"]),tuple(data["frontend_argument_indices"]))
     if canonical(payload(result)) != canonical(data):
         raise ValueError("portable attention VJP schema disagrees with its native storage/seed contract")
     return result

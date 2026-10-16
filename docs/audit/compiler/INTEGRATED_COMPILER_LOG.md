@@ -12687,7 +12687,7 @@ Evidence: [Typed backward contract](../../spec/SM120_TYPED_ATTENTION_BACKWARD_CO
 ### 2026-10-16 — private SM120 reverse artifact identity reuse
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
-PRs: pending; sync SM120-REVERSE-ARTIFACT-REUSE-20261016.
+PRs: [#957](https://github.com/gstoner/tessera/pull/957); sync SM120-REVERSE-ARTIFACT-REUSE-20261016.
 Outcome: existing compiled reverse adapter retains a private hashed artifact and
 makes detached per-call snapshots. Ordinary dispatcher, checked ABI and native
 MLIR/LLVM-generated programs remain in control. Ten ownership/cache regressions
@@ -12699,8 +12699,140 @@ Validation: 184 unique RTX5070 cases pass across primary and explicit-switch
 rerun; 26,037 required unit cases pass (5,903 host-lane skips), 1,061
 compiler-route cases pass with zero skips and all twelve audit lanes pass.
 The measured production source is unchanged; validation.json retains scope.
-Remaining: publication CI/review and native row-correction producer reuse;
+Delivery: PR957 required CI/review passed on 558fc6c328; merged as 24f8f61b199.
+Remaining: native row-correction producer reuse;
 typed capture/dynamic/composed reverse, half JVP, wider masks/layouts and the full
 five-slice program remain open. All four backend plans assess the private scope.
 Evidence: benchmarks/baselines/sm120_reverse_artifact_reuse_20261016/README.md.
+<!-- entry-fields:end -->
+
+### 2026-10-16 — native attention row correction Graph projection
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-NATIVE-ROW-CORRECTION-20261016.
+Outcome: a pure internal typed row residual has 61 initial compiler/registry
+checks. Original Graph -> native paired AD now exports the correction product
+without rounded saved O, retaining full pair lineage, frontend permutation,
+requested activity and source/residual argument properties. Read-only input
+ownership is explicit. Twenty-one new projection cases plus original contract,
+legacy AD and diagnostic/pass gates pass 410 cases with zero skips/failures.
+The first projection dropped layout attributes; a red regression is repaired,
+including reordered frontend arguments. No Python backend arithmetic or GPU IR
+reconstruction is introduced.
+Remaining: Schedule/Tile producer and workspace consumer, checked native ABI/
+lifetime ownership, serialization/replay, original frontend exact-device oracle
+checks and separate stage/completed-call timing. Preserved layout metadata does
+not establish physical layout support. All four queues are assessed; the full
+five-slice goal remains open.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/contract/README.md;
+benchmarks/baselines/sm120_native_row_correction_20261016/projection/README.md.
+<!-- entry-fields:end -->
+
+### 2026-10-16 — native row correction Schedule and target execution
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-NATIVE-ROW-CORRECTION-20261016.
+Outcome: original Graph/native AD row residual now passes a sealed Schedule and
+opaque-pointer typed Tile ABI into native NVIDIA/LLVM/PTX codegen. Source pair,
+argument roles, dtype/shape facts, FP32 row byte capacity and launch geometry
+are replay-checked; unsupported physical layouts are gated before outlining.
+The outlined producer and existing inline backward share ordered FP32 reduction
+math. Portable target/AD/registry proof passes 434 cases, zero skips. Owning
+RTX5070 proof passes 192 cases, zero skips: 96 changed-input/guarded-store new
+producer cases and 96 existing forward/backward cases after the refactor.
+An omitted target worklist entry was caught by executable compilation and fixed;
+full successful receipts follow a real rebuild. All four queues are assessed.
+Remaining: workspace-consuming backward and additive prepared owner/serialization,
+complete executable-member provenance, public frontend replay/stream/lifetime,
+and separate stage/device/completed-call timings. Diagnostic producer execution
+is not public reverse integration, performance admission or five-slice closure.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/schedule_target/README.md.
+<!-- entry-fields:end -->
+
+### 2026-10-16 — native backward consumes explicit row residual
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-NATIVE-ROW-CORRECTION-20261016.
+Outcome: original Graph/native paired AD now projects a distinct typed
+backward_rows product with FP32 residual input instead of rounded O and a
+second seed subtraction. Source-pair/frontend/activity/readonly facts survive
+sealed multi-result Schedule replay and distinct native Tile/target lowering.
+Complete result order, physical bindings and combined launch capacity are checked.
+Portable compiler/legacy AD/mandatory registries pass574 cases, zero skips.
+RTX5070 passes120 cases, zero skips:96 full-gradient changed-input/bitwise inline
+controls and24 compact64/128-thread cases. Residual perturbation produces the
+predicted Q/K/bias change; dV remains unchanged. Value-only activity omits the
+producer and ignores poisoned residual storage. All guarded stores pass.
+Remaining: additive checked prepared ownership and row lifetime, full executable-
+member serialization/provenance, public frontend stream/snapshot/generation and
+compiler-absent replay, and separate stage/completed-call benchmarks. This is
+native diagnostic producer/consumer execution, not public route or goal closure.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/consumer/README.md.
+<!-- entry-fields:end -->
+
+### 2026-10-16 — prepared native row owner and matched timing
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-NATIVE-ROW-CORRECTION-20261016.
+Outcome: an additive checked C++ owner sequences actual forward/row/backward
+images on one stream with private aligned row storage, producer-event ordering,
+context/lifetime guards and value-only row-module/workspace/launch elision.
+Native entry names encode physical policy and CUDA checks actual parameter
+width/order/count. A new explicit timing capacity protects four stage/complete-
+window floats; legacy invoke still writes two. A last-completed device-window
+query uses the same interval for old and new owners. Direct RTX5070 proof passes
+45 cases; 172 existing public typed reverse cases pass with the new provider.
+The focused owner/artifact/registry lane passes 466 cases, zero skips. Two
+existing JVP/VJP stream-isolation cases also pass with the same new provider.
+Eight matched input/forward-image A/B rows alternate arm order. Sq7/Sk129 and
+Sq17/Sk129 improve complete device windows about 3.6x/10x and diagnostic completed
+calls about 2.5x/7.6x. Tiny cases are near parity; tiny FP16 completed-call time
+regresses about 4%. Device and host scopes remain distinct, and no public @jit
+latency or automatic selection claim follows. All four backend queues assessed.
+Remaining: all-member portable provenance/schema validation, original public
+frontend replay/stream/snapshot/generation/lifetime gates, public-call timing and
+native route selection. The complete original five-slice goal remains active.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/prepared_owner/README.md.
+Spec: docs/spec/SM120_ATTENTION_ROW_OWNER_CONTRACT.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-16 — public native row program and original frontend timing
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-NATIVE-ROW-CORRECTION-20261016.
+Outcome: strict VJP v3 pins all forward/row/backward executable members,
+geometry, storage and native paired lineage, with compiler-free restoration.
+Original JIT/native reverse and resident ordered replay use the additive owner;
+exactly dV-only omits the producer. Policy participates in cache identity.
+71 RTX5070 device cases and 448 focused compatibility/registry/audit cases pass.
+Trace-at-one tests preserve equivalent static physical bias representations.
+Eight matched public A/B rows separate stage/device/public scopes: Sq7/17 Sk129
+improve completed public calls 1.67-4.97x and device windows 3.53-10.25x.
+Tiny regressions remain, so prepass is explicit and default inline is unchanged.
+All four backend queues assess the shared serialization/runtime contract.
+Required production proof passes 1225 cases. The first broad unit run has 26039
+passes,5902 skips and five authored drift failures; all five affected modules
+pass806 cases after repairing date/index and exact-six-op inventory. Nine audits,
+Ruff and zero-error mypy pass. Original broad and repair receipts are retained.
+Remaining: exact-head CI, automatic policy, dynamic/layout/composition,
+and the full original five-slice completion audit. No sibling proof transfers.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/public_program/README.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-16 — row producer thread ABI verification
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: #958; sync SM120-NATIVE-ROW-CORRECTION-20261016.
+Outcome: shared Tile verification now matches the native owner: producer 32 only,
+consumer 64/128. Twelve direct Tile cases bypass optional parent sealing and
+reproduce four invalid-producer acceptances before the fix. Rebuilt drivers pass
+420 focused checks, 116 owning RTX5070 public/prepared cases and 11 audit cases,
+all zero-skip. All four backend plans assessed. Generated legal geometry,
+arithmetic and runtime ABIs remain unchanged; frozen performance scope retained.
+The full required production lane passes 1237 cases with zero skips.
+Remaining: exact-head CI/review; original five-slice
+obligations remain active.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/thread_review/README.md.
 <!-- entry-fields:end -->

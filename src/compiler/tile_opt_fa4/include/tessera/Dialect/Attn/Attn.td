@@ -307,6 +307,48 @@ def CheckpointBackwardOp : Op<Tessera_Attn_Dialect, "checkpoint_backward", [Pure
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
+// Compiler-internal residual product; not a public frontend operation.
+def CheckpointRowCorrectionOp : Op<Tessera_Attn_Dialect, "checkpoint_row_correction", [Pure]> {
+  let summary = "Compute saved-LSE probability-weighted f32 row correction";
+  let description = [{
+    Inputs are dO,Q,K,V,[bias],row_lse,[dLSE], with explicit bias and
+    lse_cotangent policies. The result is f32[B,Hq,Sq]. For each query row,
+    accumulate sum_k P_k * dot(dO,V_k) in ascending key order in f32, then
+    subtract dLSE when present. P uses saved natural-log LSE, f32 scaled
+    scores, optional physical broadcast bias and end-aligned causal masking.
+    Q/K/V use homogeneous f16 or bf16 storage; dO may use that storage or f32.
+    Saved rounded O is deliberately not an input. This initial contract has
+    static positive shapes with no dropout, windowing or softcap.
+  }];
+  let arguments = (ins Variadic<AnyRankedTensor>:$inputs,
+                      F32Attr:$scale, BoolAttr:$causal,
+                      BoolAttr:$bias, BoolAttr:$lse_cotangent);
+  let results = (outs AnyRankedTensor:$row_correction);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
+// Explicit external residual consumer; legacy checkpoint_backward is unchanged.
+def CheckpointBackwardRowsOp : Op<Tessera_Attn_Dialect, "checkpoint_backward_rows", [Pure]> {
+  let summary = "Compute attention gradients using an explicit FP32 row correction";
+  let description = [{
+    Inputs are dO,Q,K,V,[bias],row_lse,row_correction. The correction already
+    includes the optional dLSE seed subtraction; this consumer must not apply it
+    again. dQ/dK/dV match Q/K/V storage and dBias matches physical FP32 bias.
+    Both residual rows use FP32[B,Hq,Sq]. Rounded saved O is not an input.
+    lse_cotangent records the source derivative policy for producer linkage.
+    This private initial contract is static compact half QKV, half/F32 dO,
+    end-aligned causal or noncausal attention without dropout/window/softcap.
+  }];
+  let arguments = (ins Variadic<AnyRankedTensor>:$inputs,
+                      F32Attr:$scale, BoolAttr:$causal,
+                      BoolAttr:$bias, BoolAttr:$lse_cotangent);
+  let results = (outs AnyRankedTensor:$d_query, AnyRankedTensor:$d_key,
+                     AnyRankedTensor:$d_value, Optional<AnyRankedTensor>:$d_bias);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 // Internal AD product, not a new public Graph operation.
 def CheckpointJVPOp : Op<Tessera_Attn_Dialect, "checkpoint_jvp", [Pure]> {
   let summary = "Compute attention tangents from paired O/LSE and optional score bias";

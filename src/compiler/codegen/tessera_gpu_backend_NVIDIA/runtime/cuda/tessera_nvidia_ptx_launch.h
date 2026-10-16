@@ -286,6 +286,27 @@ int tessera_nvidia_attention_vjp_prepare(
 // Additive typed registration: storage/output_storage use f32=1,f16=2,bf16=3.
 // LSE/bias/auxiliary seeds stay f32; lse_cotangent adds a rank-three seed input.
 // All flags are checked against the exact native entry spelling before loading.
+// Additive static half reverse owner with an explicit row residual member.
+// Value-only activity omits rimage/rbytes/rentry and allocates no row workspace.
+// Invocation timings require exactly four floats: forward,row,backward,total
+// native device launch window. nullptr with timing_count=0 disables output.
+int tessera_nvidia_attention_vjp_rows_prepare(
+    const void *forward_image,size_t forward_bytes,const char *forward_entry,
+    const void *backward_image,size_t backward_bytes,const char *backward_entry,
+    const void *row_image,size_t row_bytes,const char *row_entry,
+    const int64_t *dims,const int64_t *bias_shape,const int *mapping,
+    const int *roles,size_t active_count,int storage,int output_storage,int lse_cotangent,uint64_t *handle);
+int tessera_nvidia_attention_vjp_rows_invoke(
+    uint64_t handle,const void *const *inputs,const size_t *input_bytes,size_t input_count,
+    void *const *outputs,const size_t *output_bytes,size_t output_count,float *timings,size_t timing_count);
+int tessera_nvidia_attention_vjp_rows_invoke_resident_ordered(
+    uint64_t handle,const void *const *inputs,const size_t *input_bytes,size_t input_count,
+    const uint64_t *producer_streams,size_t producer_count,
+    void *const *outputs,const size_t *output_bytes,size_t output_count,float *timings,size_t timing_count);
+int tessera_nvidia_attention_vjp_rows_info(uint64_t handle,size_t *row_bytes,size_t *stages);
+// Last successful complete native device window, for either reverse ABI.
+int tessera_nvidia_attention_vjp_last_device_window(uint64_t handle,float *milliseconds);
+
 int tessera_nvidia_attention_vjp_prepare_typed(
     const void* forward_image, size_t forward_bytes, const char* forward_entry,
     const void* backward_image, size_t backward_bytes, const char* backward_entry,

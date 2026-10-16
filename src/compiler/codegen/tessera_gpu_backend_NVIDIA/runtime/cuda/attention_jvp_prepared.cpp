@@ -29,25 +29,27 @@ int bad(const char *reason){ownerError=reason;return 1;}
 struct Owner {
   CUcontext context=nullptr;
   unsigned long long contextIdentity=0;
-  CUmodule forwardModule=nullptr,tangentModule=nullptr;
-  CUfunction forward=nullptr,tangent=nullptr;
+  CUmodule forwardModule=nullptr,tangentModule=nullptr,rowModule=nullptr;
+  CUfunction forward=nullptr,tangent=nullptr,rowFunction=nullptr;
   CUdeviceptr arena=0;
   size_t arenaBytes=0;
   void *hostArena=nullptr;
-  std::array<size_t,12> hostOffsets{};
-  std::array<CUdeviceptr,12> buffers{};
-  std::array<size_t,12> bytes{};
+  std::array<size_t,13> hostOffsets{};
+  std::array<CUdeviceptr,13> buffers{};
+  std::array<size_t,13> bytes{};
   std::array<int64_t,7> dims{};
   std::array<int,4> mapping{},roles{};
   size_t activeCount=0;
   bool reverse=false,bias=false,forwardOnly=false,savedLse=false,forwardBiasScalars=false;
-  bool reverseLseSeed=false;
+  bool reverseLseSeed=false,reverseRows=false,reverseRowStage=false,reverseCompleted=false;
+  unsigned rowGrid=0;
   int storage=1,outputStorage=1;
   CUstream stream=nullptr;
   std::array<int64_t,4> biasShape{};
   unsigned reverseGrid=0,reverseThreads=128;
   unsigned forwardGrid=0,tangentGrid=0,shared=0;
   std::array<CUevent,4> events{};
+  std::array<CUevent,2> rowEvents{};
   void *sizerLibrary=nullptr;
   ~Owner(){
     if(getpid()!=ownerProcess)return; // Never touch inherited CUDA handles.
@@ -59,9 +61,11 @@ struct Owner {
     }
     if(stream)cuStreamSynchronize(stream);
     for(auto event:events)if(event)cuEventDestroy(event);
+    for(auto event:rowEvents)if(event)cuEventDestroy(event);
     if(arena)cuMemFree(arena);
     if(hostArena)cuMemFreeHost(hostArena);
     if(stream)cuStreamDestroy(stream);
+    if(rowModule)cuModuleUnload(rowModule);
     if(tangentModule)cuModuleUnload(tangentModule);
     if(forwardModule)cuModuleUnload(forwardModule);
     if(sizerLibrary)dlclose(sizerLibrary);
@@ -421,12 +425,24 @@ extern "C" int tessera_nvidia_attention_jvp_close(uint64_t handle){
 
 // Reverse products share the module/context/arena retirement machinery above.
 // Their private output/LSE generation never escapes a synchronous invocation.
+static bool attentionKernelParameters(CUfunction function,size_t count){
+  for(size_t i=0;i<count;++i){
+    size_t offset=0,width=0;
+    if(!ok(cuFuncGetParamInfo(function,i,&offset,&width),"query attention kernel parameter"))return false;
+    if(offset!=i*8 || width!=8){ownerError="attention kernel parameter width/order differs";return false;}
+  }
+  size_t offset=0,width=0;
+  CUresult end=cuFuncGetParamInfo(function,count,&offset,&width);
+  if(end!=CUDA_ERROR_INVALID_VALUE){ownerError="attention kernel parameter count differs";return false;}
+  return true;
+}
 extern "C" const char *tessera_nvidia_attention_vjp_last_error(){return ownerError.c_str();}
 static int prepareAttentionVjp(
   const void *fimage,size_t fbytes,const char *fentry,
   const void *bimage,size_t bbytes,const char *bentry,
   const int64_t *dims,const int64_t *biasShape,const int *mapping,
-  const int *roles,size_t activeCount,int storage,int outputStorage,int lseCotangent,uint64_t *handle){
+  const int *roles,size_t activeCount,int storage,int outputStorage,int lseCotangent,uint64_t *handle,
+  bool externalRows=false,const void *rimage=nullptr,size_t rbytes=0,const char *rentry=nullptr){
   ownerError.clear();if(handle)*handle=0;
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
@@ -436,7 +452,7 @@ static int prepareAttentionVjp(
      (outputStorage!=1 && outputStorage!=storage) || (lseCotangent!=0 && lseCotangent!=1))
     return bad("invalid reverse images or ABI");
   unsigned mask=0,bias=0,biasGradient=0,logical=0,threads=0;
-  const char *prefix="tessera_tile_attention_backward_lse_output_compact_m";
+  const char *prefix=externalRows?"tessera_tile_attention_backward_rows_compact_m":"tessera_tile_attention_backward_lse_output_compact_m";
   if(std::strncmp(bentry,prefix,std::strlen(prefix)))return bad("unsupported reverse entry contract");
   const char *cursor=bentry+std::strlen(prefix);
   auto number=[&](unsigned &value,unsigned bound){
@@ -483,9 +499,23 @@ static int prepareAttentionVjp(
   if(std::strncmp(fentry,forwardPrefix.c_str(),forwardPrefix.size()) ||
      std::strlen(fentry+forwardPrefix.size())!=10 || !hashSuffix(fentry+forwardPrefix.size()))
     return bad("reverse forward entry storage/digest disagrees");
+  const bool rowStage=externalRows && mask!=4;
+  if(externalRows){
+    if(storage==1)return bad("row reverse requires half QKV storage");
+    if(rowStage){
+      std::string rowPrefix=std::string("tessera_tile_attention_row_correction_b")+
+        std::to_string(bias)+"_s"+std::to_string(lseCotangent)+"_"+dataName+"_out_"+outputName+"_";
+      if(!rimage || !rbytes || !rentry || std::strncmp(rentry,rowPrefix.c_str(),rowPrefix.size()) ||
+         std::strlen(rentry+rowPrefix.size())!=10 || !hashSuffix(rentry+rowPrefix.size()))
+        return bad("row producer image/storage/bias/seed contract differs");
+    }else if(rimage || rbytes || rentry){
+      return bad("value-only reverse must omit row producer image and workspace");
+    }
+  }
   try{
     auto state=std::make_unique<Owner>();
     state->reverse=true;state->bias=bias;state->activeCount=activeCount;
+    state->reverseRows=externalRows;state->reverseRowStage=rowStage;
     state->storage=storage;state->outputStorage=outputStorage;state->reverseLseSeed=lseCotangent;
     state->reverseThreads=threads;
     const size_t primals=3+bias;
@@ -514,6 +544,7 @@ static int prepareAttentionVjp(
     if(outputStorage!=1)state->bytes[3]/=2;
     state->bytes[5]=state->bytes[3];
     if(lseCotangent)state->bytes[11]=state->bytes[4];
+    if(rowStage){state->bytes[12]=state->bytes[4];state->rowGrid=unsigned((state->bytes[4]/4+31)/32);}
     if(bias){
       if(!biasShape)return bad("missing reverse bias shape");
       const int64_t scores[4]={b,hq,sq,sk};
@@ -533,8 +564,8 @@ static int prepareAttentionVjp(
        forwardElements>=(1ULL<<31))return bad("reverse grid exceeds bounds");
     state->forwardGrid=unsigned((forwardElements+127)/128);
     state->reverseGrid=unsigned((reverseElements+threads-1)/threads);
-    size_t total=0;std::array<size_t,12> offsets{};
-    for(size_t i=0;i<12;++i){
+    size_t total=0;std::array<size_t,13> offsets{};
+    for(size_t i=0;i<(externalRows?13u:12u);++i){
       if(total>SIZE_MAX-255)return bad("reverse alignment overflow");
       total=(total+255)&~size_t(255);offsets[i]=total;
       if(state->bytes[i]>SIZE_MAX-total)return bad("reverse arena overflow");
@@ -550,8 +581,19 @@ static int prepareAttentionVjp(
        !ok(cuStreamCreate(&state->stream,CU_STREAM_NON_BLOCKING),"create reverse stream") ||
        !ok(cuMemAlloc(&state->arena,total),"allocate reverse arena") ||
        !ok(cuMemHostAlloc(&state->hostArena,total,0),"allocate reverse staging"))return 3;
-    for(size_t i=0;i<12;++i){
-      state->buffers[i]=state->arena+offsets[i];state->hostOffsets[i]=offsets[i];
+    if(externalRows){
+      if(!attentionKernelParameters(state->forward,5+bias+7) ||
+         !attentionKernelParameters(state->tangent,6+bias+activeCount+7))return 3;
+      if(rowStage){
+        if(!ok(cuModuleLoadData(&state->rowModule,rimage),"load row producer") ||
+           !ok(cuModuleGetFunction(&state->rowFunction,state->rowModule,rentry),"resolve row producer") ||
+           !attentionKernelParameters(state->rowFunction,6+bias+unsigned(lseCotangent)+7))return 3;
+        for(auto &event:state->rowEvents)if(!ok(cuEventCreate(&event,CU_EVENT_DEFAULT),"create row event"))return 3;
+      }
+    }
+    for(size_t i=0;i<(externalRows?13u:12u);++i){
+      state->buffers[i]=state->bytes[i]?state->arena+offsets[i]:0;
+      state->hostOffsets[i]=offsets[i];
     }
     for(auto &event:state->events)if(!ok(cuEventCreate(&event,CU_EVENT_DEFAULT),"create reverse event"))return 3;
     if(nextOwner==0)return bad("owner identity exhausted");
@@ -574,16 +616,29 @@ extern "C" int tessera_nvidia_attention_vjp_prepare_typed(
   return prepareAttentionVjp(fimage,fbytes,fentry,bimage,bbytes,bentry,dims,biasShape,
                             mapping,roles,activeCount,storage,outputStorage,lseCotangent,handle);
 }
+extern "C" int tessera_nvidia_attention_vjp_rows_prepare(
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *bimage,size_t bbytes,const char *bentry,
+  const void *rimage,size_t rbytes,const char *rentry,
+  const int64_t *dims,const int64_t *biasShape,const int *mapping,
+  const int *roles,size_t activeCount,int storage,int outputStorage,int lseCotangent,uint64_t *handle){
+  return prepareAttentionVjp(fimage,fbytes,fentry,bimage,bbytes,bentry,dims,biasShape,
+      mapping,roles,activeCount,storage,outputStorage,lseCotangent,handle,true,rimage,rbytes,rentry);
+}
 static int invokeAttentionVjp(
   uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
   void *const *outputs,const size_t *outputBytes,size_t outputCount,float *deviceMilliseconds,
-  const uint64_t *producerStreams=nullptr,size_t producerCount=0){
+  const uint64_t *producerStreams=nullptr,size_t producerCount=0,
+  bool rowsABI=false,size_t timingCount=2){
   ownerError.clear();
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
   auto found=owners.find(handle);
   if(found==owners.end() || !found->second->reverse || found->second->forwardOnly)return bad("prepared reverse is closed or wrong product");
   auto &s=*found->second;CUcontext context=nullptr;unsigned long long identity=0;
+  if(rowsABI!=s.reverseRows)return bad("prepared reverse ABI version disagrees");
+  if(rowsABI && ((deviceMilliseconds && timingCount!=4) || (!deviceMilliseconds && timingCount!=0)))
+    return bad("row reverse timing output requires exactly four floats or no output");
   if(!ok(cuCtxGetCurrent(&context),"reverse current context") ||
      !ok(cuCtxGetId(s.context,&identity),"reverse context generation"))return 3;
   if(context!=s.context || identity!=s.contextIdentity)return bad("prepared reverse context generation disagrees");
@@ -615,6 +670,7 @@ static int invokeAttentionVjp(
   int dependencies=prepareResidentDependencies(s,inputs,inputBytes,inputCount,
                                                producerStreams,producerCount,ordering,producers);
   if(dependencies)return dependencies;
+  s.reverseCompleted=false;
   StreamDrain drain{s.stream};
   for(size_t i=0;i<producers.size();++i)
     if(!ok(cuEventRecord(ordering.values[i],producers[i]),"record reverse producer event") ||
@@ -646,18 +702,32 @@ static int invokeAttentionVjp(
   fa[arg++]=&s.buffers[3];fa[arg++]=&s.buffers[4];
   for(size_t i=0;i<scalarCount;++i)fa[arg++]=&scalars[i];
   void *ba[24]{};arg=0;
-  const unsigned baseSlots[5]={5,0,1,2,3};
+  const unsigned baseSlots[4]={5,0,1,2};
   for(auto i:baseSlots)ba[arg++]=&s.buffers[i];
+  if(!s.reverseRows)ba[arg++]=&s.buffers[3];
   if(s.bias)ba[arg++]=&s.buffers[6];
   ba[arg++]=&s.buffers[4];
-  if(s.reverseLseSeed)ba[arg++]=&s.buffers[11];
+  if(s.reverseRows)ba[arg++]=&s.buffers[12];
+  else if(s.reverseLseSeed)ba[arg++]=&s.buffers[11];
   for(size_t role=0;role<4;++role)if(s.bytes[7+role])ba[arg++]=&s.buffers[7+role];
   for(size_t i=0;i<scalarCount;++i)ba[arg++]=&scalars[i];
   // Pinned uploads and both consumers share the owner stream.
   if(!ok(cuEventRecord(s.events[0],s.stream),"start saved forward") ||
      !ok(cuLaunchKernel(s.forward,s.forwardGrid,1,1,128,1,1,0,s.stream,fa,nullptr),"launch saved forward") ||
-     !ok(cuEventRecord(s.events[1],s.stream),"end saved forward") ||
-     !ok(cuEventRecord(s.events[2],s.stream),"start backward") ||
+     !ok(cuEventRecord(s.events[1],s.stream),"end saved forward"))return 3;
+  if(s.reverseRowStage){
+    void *ra[16]{};size_t ri=0;
+    for(auto slot:baseSlots)ra[ri++]=&s.buffers[slot];
+    if(s.bias)ra[ri++]=&s.buffers[6];
+    ra[ri++]=&s.buffers[4];
+    if(s.reverseLseSeed)ra[ri++]=&s.buffers[11];
+    ra[ri++]=&s.buffers[12];
+    for(size_t i=0;i<7;++i)ra[ri++]=&scalars[i];
+    if(!ok(cuEventRecord(s.rowEvents[0],s.stream),"start row producer") ||
+       !ok(cuLaunchKernel(s.rowFunction,s.rowGrid,1,1,32,1,1,0,s.stream,ra,nullptr),"launch row producer") ||
+       !ok(cuEventRecord(s.rowEvents[1],s.stream),"end row producer"))return 3;
+  }
+  if(!ok(cuEventRecord(s.events[2],s.stream),"start backward") ||
      !ok(cuLaunchKernel(s.tangent,s.reverseGrid,1,1,s.reverseThreads,1,1,0,s.stream,ba,nullptr),"launch backward") ||
      !ok(cuEventRecord(s.events[3],s.stream),"end backward"))return 3;
   for(size_t i=0;i<outputCount;++i)
@@ -665,9 +735,16 @@ static int invokeAttentionVjp(
   if(!ok(cuStreamSynchronize(s.stream),"complete reverse product"))return 3;
   drain.armed=false;
   for(size_t i=0;i<outputCount;++i)copyOutput(s,7+s.roles[i],outputs[i]);
-  if(deviceMilliseconds &&
-     (!ok(cuEventElapsedTime(&deviceMilliseconds[0],s.events[0],s.events[1]),"saved forward elapsed") ||
-      !ok(cuEventElapsedTime(&deviceMilliseconds[1],s.events[2],s.events[3]),"backward elapsed")))return 3;
+  if(deviceMilliseconds){
+    if(!ok(cuEventElapsedTime(&deviceMilliseconds[0],s.events[0],s.events[1]),"saved forward elapsed"))return 3;
+    if(s.reverseRows){
+      deviceMilliseconds[1]=0;
+      if((s.reverseRowStage && !ok(cuEventElapsedTime(&deviceMilliseconds[1],s.rowEvents[0],s.rowEvents[1]),"row producer elapsed")) ||
+         !ok(cuEventElapsedTime(&deviceMilliseconds[2],s.events[2],s.events[3]),"row backward elapsed") ||
+         !ok(cuEventElapsedTime(&deviceMilliseconds[3],s.events[0],s.events[3]),"complete reverse device window"))return 3;
+    }else if(!ok(cuEventElapsedTime(&deviceMilliseconds[1],s.events[2],s.events[3]),"backward elapsed"))return 3;
+  }
+  s.reverseCompleted=true;
   return 0;
 }
 extern "C" int tessera_nvidia_attention_vjp_invoke(
@@ -683,6 +760,43 @@ extern "C" int tessera_nvidia_attention_vjp_invoke_resident_ordered(
   if(!producerStreams || !producerCount)return bad("resident reverse producer streams are missing");
   return invokeAttentionVjp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
                             outputCount,deviceMilliseconds,producerStreams,producerCount);
+}
+extern "C" int tessera_nvidia_attention_vjp_rows_invoke(
+  uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
+  void *const *outputs,const size_t *outputBytes,size_t outputCount,float *times,size_t timingCount){
+  return invokeAttentionVjp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
+      outputCount,times,nullptr,0,true,timingCount);
+}
+extern "C" int tessera_nvidia_attention_vjp_rows_invoke_resident_ordered(
+  uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
+  const uint64_t *producerStreams,size_t producerCount,
+  void *const *outputs,const size_t *outputBytes,size_t outputCount,float *times,size_t timingCount){
+  if(!producerStreams || !producerCount)return bad("resident reverse producer streams are missing");
+  return invokeAttentionVjp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
+      outputCount,times,producerStreams,producerCount,true,timingCount);
+}
+extern "C" int tessera_nvidia_attention_vjp_last_device_window(uint64_t handle,float *milliseconds){
+  ownerError.clear();
+  if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
+  std::lock_guard<std::mutex> lock(ownerMutex);
+  auto found=owners.find(handle);
+  if(found==owners.end() || !found->second->reverse || !found->second->reverseCompleted || !milliseconds)
+    return bad("prepared reverse has no completed device window");
+  auto &s=*found->second;CUcontext context=nullptr;unsigned long long identity=0;
+  if(!ok(cuCtxGetCurrent(&context),"device window current context") ||
+     !ok(cuCtxGetId(s.context,&identity),"device window context generation"))return 3;
+  if(context!=s.context || identity!=s.contextIdentity)return bad("device window context generation disagrees");
+  return ok(cuEventElapsedTime(milliseconds,s.events[0],s.events[3]),"last reverse device window")?0:3;
+}
+extern "C" int tessera_nvidia_attention_vjp_rows_info(uint64_t handle,size_t *rowBytes,size_t *stages){
+  ownerError.clear();
+  if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
+  std::lock_guard<std::mutex> lock(ownerMutex);
+  auto found=owners.find(handle);
+  if(found==owners.end() || !found->second->reverseRows || !rowBytes || !stages)
+    return bad("prepared row reverse info handle or outputs disagree");
+  *rowBytes=found->second->bytes[12];*stages=found->second->reverseRowStage?3:2;
+  return 0;
 }
 extern "C" int tessera_nvidia_attention_vjp_close(uint64_t handle){
   ownerError.clear();

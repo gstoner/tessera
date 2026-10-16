@@ -1,0 +1,31 @@
+{
+  "scope": "PR958 shared Tile producer/consumer thread ABI review correction",
+  "parent_commit": "433cc16c93449317892d1b80c20fc8d971062e67",
+  "source_sha256": {
+    "src/compiler/ir/TileOps.cpp": "11e88f3046d0ce1edbfdbe65c823528981d19c32c4fc2a937126e17766335460",
+    "tests/unit/test_native_attention_row_correction_schedule.py": "cf3acf09136117c6b183aa060a13475614c7f5877d45024209085800b7222ae5"
+  },
+  "tools": {
+    "TESSERA_OPT": {
+      "path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt",
+      "sha256": "c6af577f22d554b42104e5956761ad0e6c94b295a88aaa56aa2f13073e94a726"
+    },
+    "TESSERA_NVIDIA_OPT": {
+      "path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+      "sha256": "1c91d1bdeb4d78e18f7739a271adbe72ffa4dcf4253c3c78f69b6faebd5046cd"
+    },
+    "tessera-rocm-opt": {
+      "path": "/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt",
+      "sha256": "7b53661d37dac640e4d07974ed64f7e1c9032da389a8587893abf46acd31b0fa"
+    }
+  },
+  "provider_sha256": "37e9b2574217434840448b1d400e9b8509f0103c908098d7d8238024df3ba07f",
+  "device": "RTX5070 SM120 UUID GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "red": "4 invalid producer cases accepted;8 controls passed",
+  "focused": "420passed zero skips",
+  "device_proof": "116passed zero skips",
+  "audit": "11passed",
+  "production": "1237passed zero skips; ci_require_executed passed",
+  "performance": "No arithmetic/runtime/generated legal geometry changed; existing frozen timings not relabelled",
+  "drift": "791passed zero skips; audit/spec/ODS consumers"
+}

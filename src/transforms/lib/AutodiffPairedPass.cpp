@@ -1763,7 +1763,7 @@ public:
       llvm::cl::desc("Generate a bounded native primal/VJP child"), llvm::cl::init(false)};
 
   mlir::Pass::Option<std::string> checkpointProduct{*this, "checkpoint-product",
-      llvm::cl::desc("Export one isolated generated attention forward/backward checkpoint"), llvm::cl::init("")};
+      llvm::cl::desc("Export one isolated generated attention forward/backward/row-correction checkpoint"), llvm::cl::init("")};
 
   mlir::Pass::Option<bool> pruneCheckpointGradients{*this, "prune-checkpoint-gradients",
       llvm::cl::desc("Skip unrequested checkpoint gradient computations, retaining zero-filled ABI outputs"),
@@ -1884,7 +1884,7 @@ public:
       module.emitError("compact checkpoint launch requires compact gradient export");
       return signalPassFailure();
     }
-    if (compactCheckpointGradients && (!pruneCheckpointGradients || checkpointProduct != "backward")) {
+    if (compactCheckpointGradients && (!pruneCheckpointGradients || (checkpointProduct != "backward" && checkpointProduct != "backward_rows"))) {
       module.emitError("compact checkpoint outputs require pruned backward checkpoint export");
       return signalPassFailure();
     }
@@ -1893,8 +1893,9 @@ public:
       return signalPassFailure();
     }
     if (!checkpointProduct.empty() && (emitStorageChild || targets.size() != 1 ||
-        (checkpointProduct != "forward" && checkpointProduct != "backward"))) {
-      module.emitError("checkpoint product requires one fresh reverse request and forward/backward role");
+        (checkpointProduct != "forward" && checkpointProduct != "backward" &&
+         checkpointProduct != "row_correction" && checkpointProduct != "backward_rows"))) {
+      module.emitError("checkpoint product requires one fresh reverse request and forward/backward/row_correction/backward_rows role");
       return signalPassFailure();
     }
     if (emitStorageChild && targets.size() != 1) {
@@ -2047,6 +2048,102 @@ private:
     return mlir::success();
   }
 
+  mlir::LogicalResult exportRowCorrectionCheckpoint(
+      mlir::ModuleOp module, mlir::Operation *backward,
+      llvm::ArrayRef<mlir::func::FuncOp> functions,
+      llvm::ArrayRef<int64_t> frontendArgumentIndices,
+      llvm::ArrayRef<int64_t> gradientActivity, bool consumer = false) {
+    // Project the actual generated AD residual product. The source pair remains
+    // the lineage witness; the rounded saved O is not a correction input.
+    auto seedAttr = backward->getAttrOfType<mlir::BoolAttr>("lse_cotangent");
+    bool seeded = seedAttr && seedAttr.getValue();
+    bool bias = backward->getNumOperands() == 7 + unsigned(seeded);
+    auto query = mlir::dyn_cast<mlir::RankedTensorType>(backward->getOperand(1).getType());
+    if (!query || (!query.getElementType().isF16() && !query.getElementType().isBF16()) ||
+        llvm::any_of(backward->getOperandTypes(), [](mlir::Type type) {
+          auto tensor = mlir::dyn_cast<mlir::RankedTensorType>(type);
+          return !tensor || !tensor.hasStaticShape();
+        }))
+      return backward->emitError("row correction export requires static half checkpoint inputs");
+    llvm::SmallVector<mlir::Type> argumentTypes;
+    for (auto [index, operand] : llvm::enumerate(backward->getOperands())) {
+      if (index == 4 || (consumer && seeded && index + 1 == backward->getNumOperands())) continue;
+      argumentTypes.push_back(operand.getType());
+    }
+    mlir::Type rowType = backward->getOperand(5 + unsigned(bias)).getType();
+    if (consumer) argumentTypes.push_back(rowType);
+    llvm::SmallVector<mlir::Type> resultTypes;
+    if (consumer) resultTypes.append(backward->getResultTypes().begin(), backward->getResultTypes().end());
+    else resultTypes.push_back(rowType);
+    std::string lineage; llvm::raw_string_ostream stream(lineage);
+    module.print(stream); stream.flush();
+    mlir::OpBuilder builder(module.getContext());
+    builder.setInsertionPointToEnd(module.getBody());
+    auto fn = mlir::func::FuncOp::create(builder, backward->getLoc(),
+        consumer ? "attention_backward_rows_checkpoint" : "attention_row_correction_checkpoint",
+        builder.getFunctionType(argumentTypes, resultTypes));
+    auto *block = fn.addEntryBlock();
+    builder.setInsertionPointToStart(block);
+    mlir::OperationState state(backward->getLoc(), consumer ? "tessera_attn.checkpoint_backward_rows" : "tessera_attn.checkpoint_row_correction");
+    state.addOperands(block->getArguments());
+    state.addTypes(resultTypes);
+    state.addAttribute("scale", backward->getAttr("scale"));
+    state.addAttribute("causal", backward->getAttr("causal"));
+    state.addAttribute("bias", builder.getBoolAttr(bias));
+    state.addAttribute("lse_cotangent", builder.getBoolAttr(seeded));
+    auto *product = builder.create(state);
+    mlir::func::ReturnOp::create(builder, backward->getLoc(), product->getResults());
+    llvm::SmallVector<mlir::Attribute> args;
+    llvm::SmallVector<llvm::StringRef> names{"dO", "q", "k", "v"};
+    if (bias) names.push_back("bias");
+    names.push_back("lse");
+    if (consumer) names.push_back("row_correction");
+    else if (seeded) names.push_back("row_seed");
+    for (auto name : names) args.push_back(builder.getStringAttr(name));
+    fn->setAttr("tessera.argument_bindings", builder.getArrayAttr(args));
+    llvm::SmallVector<mlir::Attribute> results;
+    if (consumer) {
+      for (auto name : {"dq", "dk", "dv"}) results.push_back(builder.getStringAttr(name));
+      if (bias) results.push_back(builder.getStringAttr("dbias"));
+    } else results.push_back(builder.getStringAttr("row_correction"));
+    fn->setAttr("tessera.result_bindings", builder.getArrayAttr(results));
+    if (!gradientActivity.empty())
+      fn->setAttr(consumer ? "tessera.checkpoint_gradient_activity" : "tessera.row_correction_gradient_activity",
+                  builder.getDenseI64ArrayAttr(gradientActivity));
+    if (consumer && compactCheckpointGradients) {
+      fn->setAttr("tessera.checkpoint_gradient_output", builder.getStringAttr("compact_v1"));
+      fn->setAttr("tessera.checkpoint_gradient_launch", builder.getStringAttr(compactCheckpointLaunch));
+      fn->setAttr("tessera.checkpoint_gradient_threads", builder.getI64IntegerAttr(compactCheckpointThreads));
+    }
+    // Keep attributes attached to the actual residual arguments. Primal
+    // argument properties remain authoritative in the original forward map,
+    // even when the generated backward has not copied those properties.
+    auto originalBackward = backward->getParentOfType<mlir::func::FuncOp>();
+    unsigned argumentIndex = 0;
+    for (auto [index, operand] : llvm::enumerate(backward->getOperands())) {
+      if (index == 4 || (consumer && seeded && index + 1 == backward->getNumOperands())) continue;
+      auto argument = mlir::cast<mlir::BlockArgument>(operand);
+      if (auto attrs = originalBackward.getArgAttrDict(argument.getArgNumber()))
+        for (auto attr : attrs)
+          fn.setArgAttr(argumentIndex, attr.getName().strref(), attr.getValue());
+      ++argumentIndex;
+    }
+    for (auto original : functions) {
+      if (original.getBody().front().front().getName().getStringRef() !=
+          "tessera_attn.checkpoint_forward") continue;
+      for (unsigned role = 0; role < frontendArgumentIndices.size(); ++role)
+        if (auto attrs = original.getArgAttrDict(frontendArgumentIndices[role]))
+          for (auto attr : attrs)
+            fn.setArgAttr(1 + role, attr.getName().strref(), attr.getValue());
+    }
+    for (unsigned i = 0; i < fn.getNumArguments(); ++i)
+      fn.setArgAttr(i, "bufferization.writable", builder.getBoolAttr(false));
+    for (auto old : functions) old.erase();
+    module->setAttr("tessera.attention_argument_indices", builder.getDenseI64ArrayAttr(frontendArgumentIndices));
+    module->setAttr("tessera.attention_ad_pair", builder.getStringAttr(lineage));
+    return mlir::success();
+  }
+
   mlir::LogicalResult exportCheckpoint(mlir::ModuleOp module, llvm::StringRef role) {
     llvm::SmallVector<mlir::func::FuncOp> functions;
     mlir::Operation *selected = nullptr;
@@ -2063,7 +2160,8 @@ private:
       bool backward = name == "tessera_attn.checkpoint_backward";
       if (!forward && !backward) return fn.emitError("checkpoint export found another product family");
       forwards += forward; backwards += backward;
-      if ((role == "forward" && forward) || (role == "backward" && backward)) selected = op;
+      if ((role == "forward" && forward) ||
+          ((role == "backward" || role == "row_correction" || role == "backward_rows") && backward)) selected = op;
       auto ret = mlir::dyn_cast<mlir::func::ReturnOp>(fn.getBody().front().back());
       if (!ret) return fn.emitError("checkpoint return roles disagree");
       if (forward) {
@@ -2123,13 +2221,16 @@ private:
     }
     if (functions.size() != 2 || forwards != 1 || backwards != 1 || !selected)
       return module.emitError("checkpoint export requires exactly one generated forward/backward pair");
-    if (pruneCheckpointGradients && role == "backward") {
+    if (pruneCheckpointGradients && (role == "backward" || role == "row_correction" || role == "backward_rows")) {
       if (frontendArgumentIndices.size() != selected->getNumResults())
         return selected->emitError("checkpoint gradient roles disagree with forward input roles");
       for (int64_t index : frontendArgumentIndices)
         gradientActivity.push_back(!hasActivityRequest ||
                                    llvm::is_contained(requestedArguments, index));
     }
+    if (role == "row_correction" || role == "backward_rows")
+      return exportRowCorrectionCheckpoint(module, selected, functions,
+                                           frontendArgumentIndices, gradientActivity, role == "backward_rows");
     std::string lineage; llvm::raw_string_ostream stream(lineage); module.print(stream); stream.flush();
     mlir::OpBuilder builder(module.getContext());
     builder.setInsertionPointToEnd(module.getBody());

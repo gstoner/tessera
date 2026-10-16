@@ -20,7 +20,12 @@ class PreparedAttentionVJP:
         self.program = NativeAttentionVJPProgram.from_json(
             metadata["program_json"], expected_digest=metadata["program_digest"]
         )
-        dims, physical = checkpoint_shapes(self.program.pair)
+        self.row_program=getattr(self.program,"row_program",False)
+        if self.row_program:
+            from .native_attention_rows import validate_program
+            dims,physical=validate_program(self.program)
+        else:
+            dims, physical = checkpoint_shapes(self.program.pair)
         self.dims = dims
         b, hq, _, sq, sk, _, _ = dims
         provenance = self.program.pair.forward.descriptor.provenance
@@ -98,7 +103,18 @@ class PreparedAttentionVJP:
         arguments = (fimage, len(forward.image.payload), forward.descriptor.entry_symbol.encode(),
                      bimage, len(backward.image.payload), backward.descriptor.entry_symbol.encode(),
                      dims, bias, mapping, roles, len(program.active))
-        if self.storage != "f32" or self.seeded:
+        if self.row_program:
+            prepare=getattr(lib,"tessera_nvidia_attention_vjp_rows_prepare",None)
+            if prepare is None:
+                raise RuntimeError("row reverse requires the versioned native rows owner")
+            correction=program.correction
+            row_image=ct.create_string_buffer(correction.image.payload) if correction is not None else None
+            row_arguments=(row_image,len(correction.image.payload),correction.descriptor.entry_symbol.encode()) if correction is not None else (None,0,None)
+            prepare.argtypes=[P,S,ct.c_char_p]*3+[ct.POINTER(L),ct.POINTER(L),ct.POINTER(I),ct.POINTER(I),S,I,I,I,ct.POINTER(U)]
+            prepare.restype=I
+            codes={"f16":2,"bf16":3,"f32":1}
+            status=prepare(*arguments[:6],*row_arguments,*arguments[6:],codes[self.storage],codes[self.output_storage],int(self.seeded),ct.byref(handle))
+        elif self.storage != "f32" or self.seeded:
             prepare = getattr(lib, "tessera_nvidia_attention_vjp_prepare_typed", None)
             if prepare is None:
                 raise RuntimeError("typed native reverse requires the versioned typed preparation symbol")
@@ -153,22 +169,27 @@ class PreparedAttentionVJP:
                 sizes = (ct.c_size_t * len(values))(*(x.nbytes for x in values))
             destinations = (ct.c_void_p * len(outputs))(*(x.ctypes.data for x in outputs))
             lengths = (ct.c_size_t * len(outputs))(*(x.nbytes for x in outputs))
-            times = (ct.c_float * 2)()
+            times = (ct.c_float * (4 if self.row_program else 2))()
             if resident:
                 try:
-                    invoke=self._library().tessera_nvidia_attention_vjp_invoke_resident_ordered
+                    invoke=getattr(self._library(),"tessera_nvidia_attention_vjp_rows_invoke_resident_ordered" if self.row_program else "tessera_nvidia_attention_vjp_invoke_resident_ordered")
                 except AttributeError as exc:
                     raise RuntimeError("native attention runtime lacks ordered resident VJP ABI") from exc
                 invoke.argtypes=[ct.c_uint64,ct.POINTER(ct.c_void_p),ct.POINTER(ct.c_size_t),ct.c_size_t,
                                  ct.POINTER(ct.c_uint64),ct.c_size_t,ct.POINTER(ct.c_void_p),
                                  ct.POINTER(ct.c_size_t),ct.c_size_t,ct.POINTER(ct.c_float)]
+                if self.row_program:invoke.argtypes=[*invoke.argtypes,ct.c_size_t]
                 invoke.restype=ct.c_int
+                tail=(len(times),) if self.row_program else ()
                 self._check(invoke(self.handle,pointers,sizes,len(values),streams,len(values),
-                                   destinations,lengths,len(outputs),times))
+                                   destinations,lengths,len(outputs),times,*tail))
             else:
-                self._check(self._library().tessera_nvidia_attention_vjp_invoke(
-                    self.handle, pointers, sizes, len(values), destinations, lengths, len(outputs), times,
-                ))
+                invoke=getattr(self._library(),"tessera_nvidia_attention_vjp_rows_invoke" if self.row_program else "tessera_nvidia_attention_vjp_invoke")
+                if self.row_program:
+                    invoke.argtypes=list(self._library().tessera_nvidia_attention_vjp_invoke.argtypes or [])+[ct.c_size_t]
+                    invoke.restype=ct.c_int
+                tail=(len(times),) if self.row_program else ()
+                self._check(invoke(self.handle,pointers,sizes,len(values),destinations,lengths,len(outputs),times,*tail))
             self.last_device_ms = tuple(times)
             return outputs
 

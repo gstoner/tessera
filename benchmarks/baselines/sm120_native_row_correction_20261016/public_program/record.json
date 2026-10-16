@@ -1,0 +1,48 @@
+{
+  "scope": "public synchronous original JIT and portable VJP v3 row program on owning SM120; default inline unchanged",
+  "parent_commit": "11afe20a72459131b56992bf3ba2f09f9329a307",
+  "source_sha256": {
+    "python/tessera/compiler/native_attention_rows.py": "696ff0ce8401a462931f9e669e7bc928141a398745d261ff5a704e0d8d4df728",
+    "python/tessera/compiler/native_attention_program.py": "4cebaef5ef9cbec8b3a4479e7bc8cd251ad96ffb05f39b946331671d7c4ab137",
+    "python/tessera/compiler/native_attention_vjp_artifact.py": "d5029cbab3ce6aa349c4862625c477cec9f964dd8d72b49dbff940bb91e2bec0",
+    "python/tessera/compiler/native_attention_vjp_runtime.py": "46859e2ffd44d730ffc2379f045d908682a2c554079050795d8fcf7f2708d533",
+    "python/tessera/compiler/prepared_attention_vjp.py": "3ce8c495c45ce9591daf963303fc6c8d408de73a3042ebccf97fb16e68635322",
+    "tests/unit/test_native_attention_rows_program.py": "38cfafb2000875b6a735899f87c43ac3fe8603893dc8b1a6ea7cd3cb537931b0",
+    "tests/device/nvidia/test_public_attention_rows_program.py": "1314df62073c6cf39a6f0535b5d9de8bf8e26967b010f33e07d95f9174387a0d"
+  },
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "provider_sha256": "37e9b2574217434840448b1d400e9b8509f0103c908098d7d8238024df3ba07f",
+  "benchmark": "public-row-ab.json",
+  "device_proof": "public-row-final-typed-device.xml",
+  "focused_proof": "public-row-final-focused.xml",
+  "broader_gates": {
+    "production": "1225passed,zero skips;public-row-production.xml",
+    "unit_initial": "26039passed,5902skipped,5failed;public-row-unit-initial.xml.gz",
+    "drift_repair": "806passed,zero skips across all5 affected modules; missing specdate/rootmanifest and exact6-op inventory fixed",
+    "audits": "9 commands allzero; public-row-audit-results.json",
+    "lint": "Ruff passed; mypy zero errors; generated-doc/coverage evidence passed",
+    "graphify": "AST-only update97184nodes235959edges3590communities; final ODS testpin refresh queued",
+    "exact_head_ci": "pending"
+  },
+  "validation_source_sha256": {
+    "python/tessera/compiler/native_attention_rows.py": "c58f7e07611ad5e9be9f6789c525d661438b6803daa16a059abc1accaa86f575",
+    "python/tessera/compiler/native_attention_program.py": "4cebaef5ef9cbec8b3a4479e7bc8cd251ad96ffb05f39b946331671d7c4ab137",
+    "python/tessera/compiler/native_attention_vjp_artifact.py": "b2cb6e4a16b045c011c7ab6fee24409fd070e9376f4acff5f0a6b974705b4494",
+    "python/tessera/compiler/native_attention_vjp_runtime.py": "2dc1b14eb579698ed4da4aea9a2b032bdcaeb337ef9358c0bec5e373b84f6e85",
+    "python/tessera/compiler/prepared_attention_vjp.py": "a77f89295b3f85186e889af4d221b153b601c3700e8a31f2ed2bfe0644486703",
+    "tests/unit/test_native_attention_rows_program.py": "38cfafb2000875b6a735899f87c43ac3fe8603893dc8b1a6ea7cd3cb537931b0",
+    "tests/device/nvidia/test_public_attention_rows_program.py": "1314df62073c6cf39a6f0535b5d9de8bf8e26967b010f33e07d95f9174387a0d"
+  },
+  "source_difference_scope": "Post-benchmark type annotations and equivalent ctypes argument-list construction; frozen benchmark sources remain unchanged. Final 71-device and448-focused receipts bind validation_sources.",
+  "production_proof": "public-row-production.xml",
+  "legacy_proof": "public-row-legacy-device.xml:172 passed;2 unsetflag skips retained;public-row-stream-isolation.xml:both2 executed and passed",
+  "validation_source_files": {
+    "python/tessera/compiler/native_attention_rows.py": "validation_sources/python/tessera/compiler/native_attention_rows.py.gz",
+    "python/tessera/compiler/native_attention_program.py": "sources/python/tessera/compiler/native_attention_program.py.gz",
+    "python/tessera/compiler/native_attention_vjp_artifact.py": "validation_sources/python/tessera/compiler/native_attention_vjp_artifact.py.gz",
+    "python/tessera/compiler/native_attention_vjp_runtime.py": "validation_sources/python/tessera/compiler/native_attention_vjp_runtime.py.gz",
+    "python/tessera/compiler/prepared_attention_vjp.py": "validation_sources/python/tessera/compiler/prepared_attention_vjp.py.gz",
+    "tests/unit/test_native_attention_rows_program.py": "sources/tests/unit/test_native_attention_rows_program.py.gz",
+    "tests/device/nvidia/test_public_attention_rows_program.py": "sources/tests/device/nvidia/test_public_attention_rows_program.py.gz"
+  }
+}

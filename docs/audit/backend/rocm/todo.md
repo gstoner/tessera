@@ -5,6 +5,46 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## SM120-NATIVE-ROW-CORRECTION-20261016 — native residual producer and consumer
+
+Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: SM120-NATIVE-ROW-CORRECTION-20261016.
+
+PR958 review correction: the shared Tile verifier now requires exactly 32
+threads for the row producer and 64/128 for its backward consumer. Direct
+Tile fixtures cover both storage types and all three thread sizes, without a
+sealed parent hash masking the operation check. This preserves the native
+owner ABI and the existing generated schedule. Not applicable to rocm physical execution: no sibling consumer or schedule is added, and NVIDIA proof does not transfer.
+
+Implementation in progress. Private Graph/AD products compute an ordered FP32
+probability-weighted row correction and consume it in backward without rounded
+saved O or a duplicate dLSE subtraction. Source-pair lineage, frontend/activity
+mapping and readonly source properties survive sealed Schedule/Tile replay.
+The new consumer has a distinct pointer ABI, compact requested gradients and
+combined-gradient launch capacity checks. Physical admission is currently static
+compact half QKV with matching half or FP32 dO; bias and row storage are FP32.
+This is an internal operation contract, not a new public Graph API or dtype.
+
+Follow-up required for rocm: shared internal Graph/Tile registration and
+host-free contract checks do not supply an architecture-owned physical consumer,
+runtime owner or numerical proof. Native lowering and the 120 device cases are
+SM120-only; no NVIDIA schedule or physical result transfers to this backend.
+The public dtype/ABI and this backend's physical selectors are unchanged.
+
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/consumer/README.md;
+prior producer proof: benchmarks/baselines/sm120_native_row_correction_20261016/schedule_target/README.md.
+
+Not applicable to this backend: the new three-image owner and sized timing
+exports are CUDA/SM120-specific. Shared Graph contracts are unchanged in this
+phase; no NVIDIA owner or timing result transfers to sibling execution.
+
+Native owner specification: docs/spec/SM120_ATTENTION_ROW_OWNER_CONTRACT.md.
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/prepared_owner/README.md.
+
+Follow-up required for rocm: public v3 serialization and policy/cache identity are shared contract changes; the new physical owner remains SM120-specific. Its 71 device cases and public timings establish no rocm execution or performance result. Existing sibling selectors and physical ABIs are unchanged.
+
+Evidence: benchmarks/baselines/sm120_native_row_correction_20261016/public_program/README.md.
+
 ## SM120-REVERSE-ARTIFACT-REUSE-20261016 — private compiled identity
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
@@ -18,10 +58,15 @@ guards and compiler/source/wrt/LRU/fork boundaries remain active.
 Not applicable to rocm physical execution: the private cache belongs only to
 the SM120 attention family adapter; shared runtime and ABI definitions are unchanged.
 No NVIDIA numerical or timing result transfers to this backend.
-The Super-Bear unit run skipped ROCm lit at its stale-tool guard; fresh ROCm
-lit evidence is missing for that host and is not inferred from NVIDIA gates.
+The frozen Super-Bear unit run skipped ROCm lit at its stale-tool guard.
+A subsequent real LLVM/MLIR 23.1.1 assertions build on unchanged source 558fc6c328
+produces identical tool bytes and passes the lit wrapper with zero skips and
+ci_require_executed. This repairs tool freshness, not ROCm GPU execution; the
+frozen original receipt is unchanged.
 
 Evidence: benchmarks/baselines/sm120_reverse_artifact_reuse_20261016/README.md.
+Delivered in PR #957, merged as 24f8f61b199 after required CI/review passed on
+558fc6c328. Its frozen evidence retains the original source and skip scope.
 
 
 

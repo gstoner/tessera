@@ -249,8 +249,11 @@ class _Interp:
                 env[dst] = comparisons[predicate](x, rhs_value)
             elif op == "tessera.masked_fill":
                 value = float(re.search(r"value = ([-0-9.eE+]+)", rhs).group(1))
-                env[dst] = np.where(env[operands[1]], env[operands[0]], value).astype(
-                    env[operands[0]].dtype)
+                data = env[operands[0]]
+                # A Graph scalar fill has the operand storage type. NumPy 1.x
+                # otherwise infers fp16 for 0.0, which cannot promote with BF16.
+                fill = np.asarray(value, dtype=data.dtype)
+                env[dst] = np.where(env[operands[1]], data, fill)
             elif op == "tessera.normalization_stats":
                 assert len(destinations) == 2
                 x = env[operands[0]]

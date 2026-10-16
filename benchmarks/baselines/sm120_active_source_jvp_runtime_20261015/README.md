@@ -158,3 +158,25 @@ stage/program events. Its runtime SHA256 is:
 The 26,630-pass frozen full-unit certificate above remains scoped to 3659a2b45.
 It does not certify these later review corrections; publication CI must pass
 on the updated PR head.
+
+
+## PR951 compiler-route CI correction
+
+The compiler builds in the failed updated-head CI run. The route proof then
+fails three BF16 ReLU cases because the test interpreter lets NumPy 1.26 infer
+an FP16 dtype for scalar 0.0 inside where; that dtype cannot promote with BF16.
+A scratch WSL Python 3.11.17 / NumPy 1.26.4 / ml_dtypes 0.5.4 environment
+reproduces precisely the three failures.
+
+The oracle now gives a scalar fill the Graph operand's declared storage dtype.
+The independent tangent expectation uses zeros_like plus copyto, preserving a
+separate formulation and all existing numerical assertions. No compiler/runtime
+code, marker, skip state, dependency pin or CI fan-in is changed.
+
+The complete compiler-route lane passes 822 tests in 176.69 seconds under the
+matched CI numerical stack; the JUnit execution gate confirms every selected
+proof test executed. Three warnings are expected NaN comparisons. The current
+Python 3.14/NumPy 2.5 stack passes 103 affected tests. Ruff passes.
+ci-numpy126-validation.json binds the tested files and compiler digest; compressed
+failed logs/JUnit and plain passing logs retain the original evidence.
+Updated-head publication CI remains required.

@@ -46,7 +46,9 @@ def test_native_relu_forward_emitted_ir_matches_independent_oracle(tool, storage
     # Conversion is exact for all tested real storage values.
     np.testing.assert_array_equal(primal.astype(np.float64), expected_primal.astype(np.float64))
     assert primal.dtype == np.dtype(dtype)
-    np.testing.assert_array_equal(tangent, np.where(x > 0, seed, 0).astype(dtype))
+    expected_tangent = np.zeros_like(seed)
+    np.copyto(expected_tangent, seed, where=x > 0)
+    np.testing.assert_array_equal(tangent, expected_tangent)
     assert tangent.dtype == np.dtype(dtype)
 
 

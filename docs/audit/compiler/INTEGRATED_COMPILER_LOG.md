@@ -12588,7 +12588,7 @@ tests/device/rocm/test_public_nvfp4_source_program.py.
 ### 2026-10-15 — gfx1201 native folded fragment read groups
 
 Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
-PRs: pending; sync GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
+PRs: [#952](https://github.com/gstoner/tessera/pull/952); sync GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
 
 Outcome: Native Tile-to-ROCm carries the measured bulk-N fragment read policy
 as a declared, verified and image-keyed Target attribute. LLVM scheduling
@@ -12644,7 +12644,7 @@ four cases. Original frozen full-suite proof retains its source scope.
 ### 2026-10-16 — gfx1201 folded CU calibration and frozen regression
 
 Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
-PRs: pending; sync GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
+PRs: [#952](https://github.com/gstoner/tessera/pull/952); sync GFX1201-FOLDED-FRAGMENT-GROUPS-20261015.
 
 Outcome: native single-row CU selection follows the measured regular-N,
 K1472/1536/1600 band plus N8192/K2048. The full 22-shape calibration improves

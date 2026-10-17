@@ -1,0 +1,8 @@
+float16 (1, 2, 1, 3, 5, 4, 3) {'public': {'completed_call_ms': 1.0161901062319028, 'device_window_ms': 1.0484002016545404}, 'prepared': {'completed_call_ms': 1.0214955727771549, 'device_window_ms': 1.1029215511865316}}
+float16 (1, 4, 2, 1, 129, 32, 24) {'public': {'completed_call_ms': 1.0703377348480756, 'device_window_ms': 0.9993897754552558}, 'prepared': {'completed_call_ms': 0.9857490129990163, 'device_window_ms': 1.0029307180517009}}
+float16 (1, 4, 2, 7, 129, 32, 24) {'public': {'completed_call_ms': 0.9738171099004037, 'device_window_ms': 1.0027728157010032}, 'prepared': {'completed_call_ms': 1.0096244526624274, 'device_window_ms': 1.0046558447546943}}
+float16 (1, 4, 2, 32, 257, 32, 24) {'public': {'completed_call_ms': 1.0226329341139753, 'device_window_ms': 1.0003586986754474}, 'prepared': {'completed_call_ms': 0.8282948124029643, 'device_window_ms': 1.00046520949875}}
+bfloat16 (1, 2, 1, 3, 5, 4, 3) {'public': {'completed_call_ms': 1.0000677181030806, 'device_window_ms': 1.176395905339681}, 'prepared': {'completed_call_ms': 1.0945004920335635, 'device_window_ms': 1.0511037102001226}}
+bfloat16 (1, 4, 2, 1, 129, 32, 24) {'public': {'completed_call_ms': 1.006955254957309, 'device_window_ms': 1.01104548807631}, 'prepared': {'completed_call_ms': 1.0061024982235984, 'device_window_ms': 1.001002698715335}}
+bfloat16 (1, 4, 2, 7, 129, 32, 24) {'public': {'completed_call_ms': 0.9693161854439631, 'device_window_ms': 1.002373264251307}, 'prepared': {'completed_call_ms': 0.9964071883175526, 'device_window_ms': 1.004308467895691}}
+bfloat16 (1, 4, 2, 32, 257, 32, 24) {'public': {'completed_call_ms': 0.8845695292012234, 'device_window_ms': 1.0012614943315994}, 'prepared': {'completed_call_ms': 0.8116427955896918, 'device_window_ms': 1.000941304699715}}

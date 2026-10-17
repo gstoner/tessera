@@ -22,13 +22,14 @@ envelopes and NVFP4/full-MLP/quality closure remain open.
 
 Evidence: benchmarks/baselines/rocm_resident_quantized_product_20261017/README.md.
 
-Native SSA partition work is in progress for a BF16 source quantized to
+Native SSA partition packages a BF16 source quantized to
 private E4M3 codes and FP32 K16 scales, followed by an exact scaled product.
 The compiler derives two member graphs and all first-write/last-read lifetimes.
 Three exact gfx1201 composed numerical/changed-input/lifetime cases pass.
 Captured producer/consumer windows and ordinary composed/prepared windows are
-recorded separately. Public JIT and portable composed-package integration
-remain required; no full-MLP or model-quality closure is claimed.
+recorded separately. The public JIT and portable composed-package integration
+are proved in the production checkpoint above; full-MLP and model-quality
+closure remain open.
 
 ## ROCM-K16-QUANT-PUBLIC-20261017 — authored two-result package
 

@@ -1,0 +1,39 @@
+{
+  "source_revision": "4ca0268a0353fd9732f915fb496c3e8be6ee11ea",
+  "source_files_sha256": {
+    "src/transforms/lib/NativeQuantizedGateUpProgram.h": "420949cb927c90c947c91522bb972782bb516ccd20b9ba2ec518a65a6b87e2be",
+    "src/transforms/lib/NativeQuantizedProductProgram.h": "5ade5e6be63ecc6bdb6a75845128ed4be7126d75830bd3af7e615fb31dbe880a",
+    "python/tessera/compiler/rocm_quantized_product_program.py": "aebd3c10b813a9cdd7ea1bde14c421e255b9a73352e6a7acf4b446b48d815214",
+    "python/tessera/compiler/rocm_quantized_product_frontend.py": "32166ab41b65db26e8c42c376a165d99fb6d8a9ea97ec49779a0fc3a0636ed43",
+    "python/tessera/compiler/execution_matrix.py": "2ff6c0464da1036b908f642b78dc178003373945641a0f5f292ef31f336799c3",
+    "benchmarks/rocm/benchmark_public_quantized_gate_up.py": "6e6030fc1607131393e61dab457b50a195ea332a5c574cdd71e44e78a723e805",
+    "tests/unit/test_native_quantized_gate_up_program.py": "4d3e36f621b97cd842972f10cc040d0521b63b47bff16890949f28bcd4dbadd6",
+    "tests/unit/test_rocm_quantized_gate_up_program.py": "eca2600b06704c3980c18a15a0db269fab5104c376b4216b0e56ff1b04996a21",
+    "tests/device/rocm/test_native_quantized_gate_up_jit.py": "b1d76463c87a8e3630ca0d24c8d9e8b9b9efaf6b29e8c1dca6bec61e13cf5270"
+  },
+  "compiler_sha256": "a055a8a31fb652250c030dabd4d64a0f1bfaa304a9252691b43072855bbeffeb",
+  "gates": {
+    "native_registry": {
+      "result": "335 passed",
+      "log_sha256": "9a1116a52707d9823126feaec5b78562919bc2b84302fb39437c4dd97c4b740c"
+    },
+    "package": {
+      "result": "47 passed",
+      "log_sha256": "222cdc84c978cdfaec0fde8398d3ba62d24d4163a42f91018bcc60fefc7507f8"
+    },
+    "gfx1201": {
+      "result": "22 passed",
+      "log_sha256": "fb09167f2ed8870498c86b08cf1cb54bc8ca7f6eb96497a40f24b5fa97ef6cc6"
+    },
+    "audit_registry": {
+      "result": "311 passed",
+      "log_sha256": "eb52a6c52827217298f346593e2b3adbde293894b5b358c79b6bf731e662109b"
+    }
+  },
+  "remaining": [
+    "broad CPU suite",
+    "generated documentation drift check",
+    "full resident down projection",
+    "model quality and original five-slice scope"
+  ]
+}

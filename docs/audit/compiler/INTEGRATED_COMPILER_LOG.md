@@ -13161,3 +13161,27 @@ acceptance, wider/dynamic layouts, encoded AD and the original five-slice
 NVIDIA/ROCm obligations.
 Evidence: benchmarks/baselines/rocm_quantize_nvfp4_product_20261017/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-17 — native quantized gate/up four-member composition
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; follows merged #970. Sync: ROCM-QUANTIZED-GATEUP-20261017.
+
+Outcome: native MLIR partitions the original four-root Graph through K16
+quantization, NVFP4 expansion, BF16-store product and SiLU gate/up. Distinct
+native/package/frontend v3 contracts retain v1/v2. Actual SSA uses derive ten
+buffers with one BF16 parent and no escaping FP32 parent allocation. All four
+members lower through Schedule/Tile/Target/LLVM/HSACO into one checked HIP
+owner. Portable replay checks interfaces and private lifetimes without tools.
+
+Proof: 335 native/registry controls, 47 package controls and 22 owning gfx1201
+device tests pass. Three numerical/timing packets separate captured members,
+ordinary program events, prepared invoke/read and full public calls. All four
+backend queues are assessed; no sibling physical parity or speedup is claimed.
+Broader CPU and documentation validation remain pending.
+
+Remaining: full resident down projection, checkpoint/model quality, wider and
+dynamic layouts, encoded AD and the original five-slice NVIDIA/ROCm goal.
+Evidence: benchmarks/baselines/rocm_quantized_gate_up_20261017/README.md.
+<!-- entry-fields:end -->

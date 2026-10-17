@@ -223,3 +223,39 @@ update invalidation. Source-pinned captured-member, ordinary HIP-event,
 prepared invoke/read and public timings remain distinct. Full gate/up/
 activation/down MLP, model quality, dynamic/general layouts, wider composed
 storage envelopes and encoded AD remain open.
+
+
+## Four-member quantized gate/up program (v3)
+
+`tessera.native.quantized_product.v3` composes the original BF16 K16
+quantizer, NVFP4 expansion, exact FP32 scaled product with an explicit BF16
+store, and two parent views feeding FP32 SiLU-multiply with a BF16 result.
+Native MLIR validates the original SSA and derives member boundaries; Python
+marshals the checked native plan. Native/package/frontend v1 and v2 retain
+their existing contracts.
+
+The default frame has four read-only roots: X, packed weights, E4M3 weight
+scales and two FP64 projection globals. Private Q/SA (slots 4/5) are written
+by member 0 and read by member 2; expanded B/SB (6/7) are written by member 1
+and read by member 2. BF16 parent (8) is written by member 2 and read by member
+3. BF16 output (9) is returned. Root order is derived from original argument
+roles. Logical views allocate no buffers, and the FP32 accumulator does not
+escape its product/store member. Readiness and root updates invalidate
+private results through the checked native owner.
+
+Certified internal projection attributes
+`tessera.native.quantized_product_projection` and
+`tessera.native.quantized_product_projection_name` bind each actual SSA
+partition to its existing semantic validator; both are stripped before
+component lowering. Every member descends through Schedule/Tile/Target into
+HSACO. Portable restoration checks all four images, interfaces and shared
+frame lifetimes without requiring the compiler.
+
+The public path is `canonical_rocm_quantized_gate_up_program`. Exact-device
+proof is scoped to gfx1201 static compact BF16 inputs and the named K16
+quantization policy. FP32 product accumulation precedes the explicit BF16
+parent store; activation widens that stored parent, preserving its rounding.
+Random numerical comparisons use BF16 tolerances; separate analytic cases
+prove bitwise parent rounding and both SiLU operand orientations. Full down
+projection, wider layouts/dynamic shapes, encoded derivatives and model
+quality remain open.

@@ -222,6 +222,8 @@ class ResidentAttentionTape:
         else:
             self.dims, self.shapes = self._checkpoint_shapes(pair)
         forward_policy=pair.forward.descriptor.provenance
+        self._jvp_storage=forward_policy["storage"]
+        self._jvp_output_storage=forward_policy["output"]
         dtype_names={"f16":"fp16","bf16":"bf16","f32":"fp32"}
         self._input_dtype=dtype_names[forward_policy["storage"]]
         self._output_dtype=dtype_names[forward_policy["output"]]
@@ -557,7 +559,8 @@ class ResidentAttentionTape:
                        if source is None else
                        materialize_generated(source,self._symbolic_dims,self._scale,self._causal,compiler=compiler,llvm_bin=llvm_bin,
                            bias_shape=self._symbolic_bias_shape if self._has_bias else (),
-                           shape_bounds=self._shape_bounds))
+                           shape_bounds=self._shape_bounds,
+                           storage=self._jvp_storage,output_storage=self._jvp_output_storage))
             if f'tessera.attention_checkpoint_identity = "{self.contract_digest}"' not in package.arena_ir:
                 raise ValueError("resident JVP product differs from its captured forward generation")
             from .native_storage_contract import read_tensor_contract

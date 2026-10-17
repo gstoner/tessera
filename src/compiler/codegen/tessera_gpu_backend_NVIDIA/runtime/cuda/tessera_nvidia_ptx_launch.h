@@ -274,6 +274,21 @@ int tessera_nvidia_attention_jvp_prepare_typed(
     const int64_t* bias_shape, const int* frontend_mapping,
     const int* active_roles, size_t active_count, int storage,
     int output_storage, int saved_lse, uint64_t* handle);
+// Bounded owner keeps capacity arenas; each invocation validates concrete dimensions.
+// Shape symbols use MLIR kDynamic only for Sq/Sk. Bias symbols preserve broadcast ones.
+int tessera_nvidia_attention_jvp_prepare_bounded(
+    const void* forward_image, size_t forward_bytes, const char* forward_entry,
+    const void* tangent_image, size_t tangent_bytes, const char* tangent_entry,
+    const char* sizer_path, const char* sizer_entry, const int64_t* symbolic_dims,
+    const int64_t* shape_bounds, const int64_t* bias_shape, const int* frontend_mapping,
+    const int* active_roles, size_t active_count, int storage,
+    int output_storage, int saved_lse, uint64_t* handle);
+int tessera_nvidia_attention_jvp_invoke_bounded(
+    uint64_t handle, const void* const* inputs, const size_t* input_bytes,
+    size_t input_count, const int64_t* runtime_dims, const int64_t* runtime_bias_shape,
+    const uint64_t* producer_streams, size_t producer_count,
+    void* const* outputs, const size_t* output_bytes, size_t output_count,
+    float* device_milliseconds);
 int tessera_nvidia_attention_jvp_invoke_lse(
     uint64_t handle, const void* const* inputs, const size_t* input_bytes,
     size_t input_count, void* const* outputs, const size_t* output_bytes,

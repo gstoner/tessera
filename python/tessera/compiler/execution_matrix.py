@@ -3789,6 +3789,16 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
     # rocm_compiled analog) is a later follow-up. The row targets the proven arch
     # nvidia_sm120 — the NVRTC symbol auto-detects compute_XX, but only sm_120 is
     # hardware-proven, so the other arches stay unimplemented.
+    ("rocm_gfx1201", "canonical_rocm_quantized_gate_up_program"): ExecutionRow(
+        target="rocm_gfx1201",compiler_path="canonical_rocm_quantized_gate_up_program",
+        execution_kind="native_gpu",executable=True,executor_id="rocm_quantized_product_program",
+        runtime_status="success",execution_mode="hip_runtime",owns_stream=True,
+        reason="Named static BF16 K16 quantizer, two-projection NVFP4 expansion, FP32 product with "
+               "explicit BF16 store, and aliased gate/up views with FP32 SiLU and BF16 output through "
+               "four native Graph/Schedule/Tile/ROCDL/LLVM/HSACO members and one checked C++ HIP owner. "
+               "No FP32 parent allocation; full down-projection MLP and encoded AD remain open.",
+        numerical_fixture="tests/device/rocm/test_native_quantized_gate_up_jit.py",
+        evidence_target="rocm_gfx1201",proof_build=".build-bf16",device_proof="device_verified_jit"),
     ("rocm_gfx1201", "canonical_rocm_quantized_nvfp4_product_program"): ExecutionRow(
         target="rocm_gfx1201",compiler_path="canonical_rocm_quantized_nvfp4_product_program",
         execution_kind="native_gpu",executable=True,executor_id="rocm_quantized_product_program",

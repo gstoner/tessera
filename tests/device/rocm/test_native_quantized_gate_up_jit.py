@@ -1,5 +1,9 @@
 """Owning gfx1201 proof for quantizer/expansion/BF16-store/SiLU composition."""
 from __future__ import annotations
+import os
+from pathlib import Path
+import subprocess
+import sys
 import ml_dtypes
 import numpy as np
 import pytest
@@ -78,3 +82,56 @@ def test_parent_readiness_and_update_invalidation_cover_all_five_private_planes(
         with pytest.raises(RuntimeError,match="status 10"):owner.invoke_range(3,1)
         generation,_=owner.invoke();close(owner.read(generation)[0],oracle(changed))
         close(held,oracle(values))
+
+
+def test_four_member_portable_roundtrip_and_new_named_roots(monkeypatch):
+    assert rt._rocm_live_arch()=="gfx1201","owning gfx1201 required"
+    values=inputs(3,17,48);changed=inputs(3,17,48,seed=812);changed[3]*=np.array([1.5,.5])
+    wanted,wanted2=oracle(values),oracle(changed)
+    fn=ts.jit(target="rocm_gfx1201",native_required=True)(make_gate_up())
+    first=fn(*values)
+    artifact=fn.runtime_artifact()
+    assert artifact.metadata["compiler_path"]=="canonical_rocm_quantized_gate_up_program"
+    restored=rt.RuntimeArtifact.from_json(artifact.to_json())
+    monkeypatch.setenv("TESSERA_OPT","/missing/compiler");monkeypatch.setenv("PATH","/missing/tools")
+    result=rt.launch(restored,dict(zip(("x","packed","weight_scales","globals_"),changed,strict=True)))
+    assert result.get("ok") and result.get("execution_kind")=="native_gpu",result
+    assert len(result["component_receipts"])==4
+    close(result["output"],wanted2);close(first,wanted)
+
+
+def test_fresh_process_four_member_replay_without_compiler(tmp_path):
+    assert rt._rocm_live_arch()=="gfx1201","owning gfx1201 required"
+    values=inputs(3,17,48)
+    fn=ts.jit(target="rocm_gfx1201",native_required=True)(make_gate_up())
+    expected=fn(*values)
+    (tmp_path/"artifact.json").write_text(fn.runtime_artifact().to_json())
+    np.savez(tmp_path/"roots.npz",x=values[0].astype(np.float32),packed=values[1],scales=values[2].view(np.uint8),globals=values[3])
+    script="\n".join([
+        "import sys,numpy as np,ml_dtypes",
+        "from pathlib import Path",
+        "from tessera import runtime as rt",
+        "root=Path(sys.argv[1]);p=np.load(root/'roots.npz')",
+        "artifact=rt.RuntimeArtifact.from_json((root/'artifact.json').read_text())",
+        "values=[p['x'].astype(ml_dtypes.bfloat16),p['packed'],p['scales'].view(ml_dtypes.float8_e4m3fn),p['globals']]",
+        "result=rt.launch(artifact,values)",
+        "assert result.get('ok') and result.get('execution_kind')=='native_gpu',result",
+        "assert len(result['component_receipts'])==4",
+        "np.save(root/'result.npy',result['output'])",
+    ])
+    result=subprocess.run([sys.executable,"-c",script,str(tmp_path)],capture_output=True,text=True,
+        env={**os.environ,"PATH":"/missing/tools","TESSERA_OPT":"/missing/compiler"})
+    assert result.returncode==0,result.stdout+result.stderr
+    np.testing.assert_array_equal(np.load(tmp_path/"result.npy").view(np.uint16),expected.view(np.uint16))
+
+
+def test_nested_inspection_metadata_cannot_poison_cached_gate_up(monkeypatch):
+    assert rt._rocm_live_arch()=="gfx1201","owning gfx1201 required"
+    values=inputs(3,17,48);changed=inputs(3,17,48,seed=619);wanted=oracle(changed)
+    fn=ts.jit(target="rocm_gfx1201",native_required=True)(make_gate_up())
+    fn(*values);artifact=fn.runtime_artifact()
+    artifact.metadata["native_program"]["native_program"]["stages"][3]["descriptor"]["provenance"]["native_parent_view"]["member_json"]="{}"
+    result=rt.launch(artifact,values)
+    assert not result.get("ok"),result
+    monkeypatch.setenv("TESSERA_OPT","/missing/compiler")
+    close(fn(*changed),wanted)

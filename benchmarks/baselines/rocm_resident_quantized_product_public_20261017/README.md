@@ -7,7 +7,8 @@ The authored Python function emits the original BF16 max/scale/normalize/RNE
 Graph and exact E4M3 scaled product. Native MLIR owns semantic admission,
 two-member partition, Schedule/Tile lowering, private buffer lifetimes and
 ROCDL/LLVM/HSACO generation. The existing checked C++ owner executes both
-members on its private HIP stream; Python performs no quantization or matmul.
+members on its private HIP stream; Python performs no quantization or matmul. The new consumer uses unprojected
+checked native Target IR; it does not use Python shape-free Target rewriting.
 
 ## Exact-device checks
 

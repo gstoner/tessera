@@ -36,11 +36,11 @@ Target lowering now materializes BF16/byte/FP32 accesses from that body and
 exports a checked three-buffer/two-output frame. The GPU adapter checks flat
 memref spans and launches the cloned SSA. Matching LLVM serialization emits
 HSACO; three exact gfx1201 envelopes pass the independent oracle through
-the diagnostic C++ multi-output owner. Public packaging/JIT and resident
-composition remain required; diagnostic execution is not public closure.
-The ordinary Python trace still needs constructor/shape-metadata integration;
-the current verified input is textual Graph IR. Schedule profile schema 4
-belongs to the row-region namespace; attention schema numbering is unchanged.
+the diagnostic C++ multi-output owner. That packet establishes textual Graph
+input only. The later canonical quantizer and resident-product sections below
+record their separate public execution proofs; the diagnostic packet itself
+does not establish those boundaries. Schedule profile schema 4 belongs to the
+row-region namespace; attention schema numbering is unchanged.
 
 For compact BF16 input X[M,I], with positive static extents and I divisible
 by 16, define groups along the last axis. Each group widens exactly to FP32,
@@ -109,3 +109,63 @@ standalone view/cast/constant kernels or alter fake-quant reference semantics.
 Exact public and canonical-image numerical/timing evidence:
 benchmarks/baselines/rocm_native_k16_quant_public_20261017/README.md.
 Resident activation/down projection and full MLP/model-quality gates remain open.
+
+
+## Native resident quantizer/product program
+
+Sync: ROCM-RESIDENT-QUANT-PRODUCT-20261017.
+
+A module marked `tessera.native.quantized_product` with target
+`rocm_gfx1201` and architecture `gfx1201` may contain the original thirteen
+quantizer operations followed by one exact scaled product. The native exporter
+validates the quantizer through the same `BlockQuantContract.h` matcher as the
+standalone Schedule path. It clones the original operations into two members;
+Python consumes those projected members and never reconstructs their Graph,
+Tile arithmetic or numerical policy.
+
+The three input roles are BF16 X[M,K], E4M3FN B[N,K] and FP32 SB[K/16,N].
+The product consumes Q[M,K], B, S[M,K/16] and SB, with `transposeB=true`,
+`scale_layout={granularity="block", block=[1,16], format="fp32"}` and
+`numeric_policy={accum="fp32", execution_mode="exact_per_block"}`. Unsupported
+attributes or changed policies are rejected before source partition. Public
+proof covers static FP32 output; BF16 output has separate prepared-route proof.
+
+The permanent SSA manifest schema is `tessera.native.quantized_product.v1`.
+Root buffer IDs follow the original function argument order, while role
+indices are derived from actual SSA uses. IDs 3 and 4 are the private Q/S
+outputs, and ID 5 is the returned product:
+
+| Role | Ownership | First write | Last read |
+|---|---|---:|---:|
+| X | read-only root | -1 | 0 |
+| B, SB | read-only roots | -1 | 1 |
+| Q, S | private scratch | 0 | 1 |
+| Product | returned output | 1 | 2 (program return) |
+
+The portable package and frontend schemas are respectively
+`tessera.rocm.quantized_product_package.v1` and
+`tessera.rocm.quantized_product_frontend.v1`. They retain the original Graph,
+projected Graph/Schedule/Tile/Target witnesses, member images and checked
+member descriptors. The quantizer uses its existing mixed-width two-output
+ABI; the product uses its existing four-input/one-output scaled-matmul ABI.
+A single checked C++ multi-output owner marshals their flattened rank-one
+memrefs, scalar arguments, launch geometry and private stream ordering.
+Producer frame shapes, storage and byte extents must match the shared buffers;
+individually valid members with incompatible interfaces are refused before
+provider access. No private Q/S host readback occurs between members.
+
+Ordinary JIT calls reuse the verified private program with current host roots.
+Artifact construction is an inspection/export boundary. Portable launches
+validate serialized Graph/argument/stage witnesses and retain normal checked
+execution; mutating an inspection artifact cannot change the private JIT
+program. The new consumer uses unprojected checked native Target IR rather
+than Python shape-free Target rewriting.
+
+Evidence and distinct public, portable-control, captured-member, ordinary
+HIP-event and prepared-invoke/read timing domains:
+benchmarks/baselines/rocm_resident_quantized_product_public_20261017/README.md.
+
+This names one compiled source envelope. Combining the quantizer with NVFP4
+weight expansion and the complete gate/up/activation/down MLP, general layouts,
+bounded shapes, encoded AD and model-quality acceptance remain open. No
+sibling architecture or attention schema is promoted or renumbered.

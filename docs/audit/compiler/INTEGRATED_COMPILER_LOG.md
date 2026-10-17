@@ -12880,3 +12880,28 @@ full original five-slice obligations, broad CI and review remain open.
 Evidence: benchmarks/baselines/sm120_native_row_graph_20261016/README.md,
 benchmarks/baselines/nvfp4_source_bounded_20261016/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-16 — native ROCm SiLU activation and explicit store-width ownership
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync ROCM-NATIVE-SWIGLU-ACTIVATION-20261016.
+Outcome: isolated original SiLU Graph reaches native Schedule, typed Tile,
+ROCm Target, GPU/ROCDL/LLVM and HSACO with FP32 arithmetic and a single final
+FP32 or matching FP16/BF16 store. Additive descriptor identities and an explicit
+output-width C staging entry preserve existing FP32 ABI meanings. Shape-only
+tracing avoids eager arithmetic, and checked JIT allocation preserves output
+storage. 45 owning RX9070XT/gfx1201 cases pass, including all admitted ranks,
+changed inputs, IEEE classes, operand roles and fresh compiler-free replay.
+Adjacent math/widening/owner tests pass 91 cases; focused registry/ABI/lifecycle
+and compiler tests pass 551 cases. Ruff and zero-error mypy pass.
+Two 15-row timing trials reverse device-arm order. At M256/N12288 activation
+shape native device windows are about25–27 us, within1.5% of same-store legacy
+kernels. Smaller rows vary by order; no speedup or schedule promotion is claimed.
+Completed public calls remain4.43–5.94 ms. Device and host scopes are separate.
+All four backend queues assessed. No gfx1151 or sibling physical proof transfers.
+Remaining: broad validation/CI and publication, full resident gate/up views and
+lifetimes, activation quantization/downprojection, original-model quality and
+the full five-slice obligations.
+Evidence: benchmarks/baselines/rocm_native_silu_20261016/README.md.
+<!-- entry-fields:end -->

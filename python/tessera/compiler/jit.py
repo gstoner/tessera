@@ -2216,11 +2216,11 @@ class JitFn:
             if set(dimensions) != set(range(output.rank)):
                 raise ValueError("host tensor call requires fully static output guards")
             dtype = {"uint8": np.uint8, "fp64": np.float64, "fp32": np.float32,
-                     **({"fp16": np.float16} if matmul or nvidia_softmax else {})}.get(output.dtype)
+                     **({"fp16": np.float16} if matmul or nvidia_softmax or native_math else {})}.get(output.dtype)
             if dtype is None and descriptor.abi_id == NVFP4_EXPAND_ABI and output.dtype == "fp8_e4m3":
                 import ml_dtypes
                 dtype = ml_dtypes.float8_e4m3fn
-            if dtype is None and nvidia_softmax and output.dtype == "bf16":
+            if dtype is None and (nvidia_softmax or native_math) and output.dtype == "bf16":
                 import ml_dtypes
                 dtype = ml_dtypes.bfloat16
             if dtype is None or output.layout != "row_major":

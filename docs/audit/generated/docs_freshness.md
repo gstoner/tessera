@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-16**.
 
 ## Headline
 
-- **172** docs catalogued across the canonical doc tree.
-- **171** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **41** updated within the last 30 days.
+- **173** docs catalogued across the canonical doc tree.
+- **172** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **42** updated within the last 30 days.
 - **67** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -39,6 +39,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `MEMORY_MODEL_SPEC.md` | Normative | 2026-05-22 | 147 | ✓ |
 | `NATIVE_ARTIFACT_SPEC.md` | Normative | 2026-07-19 | 89 | ✓ |
 | `NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md` | - | 2026-10-16 | 0 | ✓ |
+| `NATIVE_ROCM_SILU_MATH_CONTRACT.md` | - | 2026-10-16 | 0 | ✓ |
 | `PRODUCTION_COMPILER_PLAN.md` | Ratified | 2026-06-05 | 133 | ✓ |
 | `PYTHON_API_SPEC.md` | Normative | 2026-10-15 | 1 | ✓ |
 | `ROCM_FOLDED_INPUT_VIEWS.md` | - | 2026-10-16 | 0 | ✓ |
@@ -53,7 +54,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `VALUE_TARGET_IR_CONTRACT.md` | Normative | 2026-06-04 | 134 | ✓ |
 | `ir/gfx1201_folded_fragment_schedule.md` | - | 2026-10-15 | 1 | ✓ |
 | `ir/normalization_ad_accumulator_policy.md` | - | 2026-10-16 | 0 | ✓ |
-| `ir/rocm_nvfp4_source_preserving_program.md` | - | 2026-10-15 | 1 | ✓ |
+| `ir/rocm_nvfp4_source_preserving_program.md` | - | 2026-10-16 | 0 | ✓ |
 | `ir/sm120_activation_schedule_tile_contract.md` | - | 2026-10-15 | 1 | ✓ |
 | `ir/sm120_paired_tensor_program_contract.md` | - | 2026-10-15 | 1 | ✓ |
 | `ir/source_active_row_jvp.md` | - | 2026-10-16 | 0 | ✓ |

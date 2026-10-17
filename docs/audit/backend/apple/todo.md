@@ -14954,3 +14954,5 @@ Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
 Not applicable to Metal lowering: the shared Tile binary_math verifier admits narrow SiLU storage only with a sealed owning ROCm contract. Existing Apple kernels and numerical policy are unchanged; sibling narrow-storage refusal and registry gates require validation. No Mac execution is claimed.
 
 Shared frontend follow-through: same-shape/same-storage SiLU shape-only capture uses its existing catalog result contract instead of evaluating eager input arithmetic. Explicit numerical tracing remains available. This is frontend metadata parity only; owning physical proof is unchanged.
+
+Native-owner follow-through: the existing FP32 C staging ABI is preserved; an additive explicit-output-width export supports the two checked matching-half SiLU descriptors. Shape-only frontend capture and JIT output allocation follow the descriptor. Not applicable to this backend's physical execution: output-width C staging is HIP-only and native math admission remains ROCm-owned. Shared registry/compiler gates pass; no sibling device proof or performance claim is added.

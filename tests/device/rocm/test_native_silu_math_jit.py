@@ -48,7 +48,7 @@ def target():
 
 @pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
 @pytest.mark.parametrize("reverse", [False, True])
-@pytest.mark.parametrize("shape", [(3, 17), (2, 3, 257)])
+@pytest.mark.parametrize("shape", [(257,), (3, 17), (2, 3, 257)])
 def test_native_silu_jit_changed_inputs_replay_and_retained_output(target, storage, reverse, shape, monkeypatch):
     dtype = {"f32": np.float32, "f16": np.float16, "bf16": ml_dtypes.bfloat16}[storage]
     rng = np.random.default_rng(1610)
@@ -142,22 +142,29 @@ def test_native_silu_reuses_shape_free_images(target, storage):
     assert images[0] == images[1]
 
 
-@pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
-def test_native_silu_fresh_process_replay_without_compiler_or_eager(target, storage, tmp_path):
+@pytest.mark.parametrize("storage,matching_store", [("f32", False), ("f16", False), ("bf16", False), ("f16", True), ("bf16", True)])
+def test_native_silu_fresh_process_replay_without_compiler_or_eager(target, storage, matching_store, tmp_path):
     dtype = {"f32": np.float32, "f16": np.float16, "bf16": ml_dtypes.bfloat16}[storage]
     rng = np.random.default_rng(1710)
     values = [rng.normal(0, 0.7, (3, 17)).astype(dtype) for _ in range(2)]
-    fn = ts.jit(target=target)(function(storage))
+    fn = ts.jit(target=target)(silu if matching_store else function(storage))
     actual = fn(*values)
     expected = oracle(values)
-    np.testing.assert_allclose(actual, expected, rtol=3e-6, atol=2e-7)
+    if matching_store:
+        limit = np.finfo(np.float16) if storage == "f16" else ml_dtypes.finfo(ml_dtypes.bfloat16)
+        budget = float(limit.eps) * np.maximum(np.abs(expected.astype(np.float64)), float(limit.tiny))
+        budget += 8 * np.finfo(np.float32).eps * np.abs(expected.astype(np.float64))
+        assert np.all(np.abs(actual.astype(np.float64) - expected.astype(np.float64)) <= budget)
+    else:
+        budget = 3e-6 * np.abs(expected.astype(np.float64)) + 2e-7
+        np.testing.assert_allclose(actual, expected, rtol=3e-6, atol=2e-7)
     artifact = fn.runtime_artifact()
     (tmp_path / "artifact.json").write_text(artifact.to_json())
     np.savez(
         tmp_path / "inputs.npz",
         a=values[0].view(np.uint16) if storage == "bf16" else values[0],
         b=values[1].view(np.uint16) if storage == "bf16" else values[1],
-        expected=expected,
+        expected=expected, budget=budget,
     )
     script = r"""
 import json,sys,subprocess
@@ -176,10 +183,10 @@ data=np.load(p/"inputs.npz")
 a,b=data["a"],data["b"]
 if storage=="bf16":a,b=a.view(ml_dtypes.bfloat16),b.view(ml_dtypes.bfloat16)
 info=artifact.launch_descriptor.provenance["native_math"]
-buffers=dict(zip(info["bindings"][:-1],(a,b),strict=True));buffers[info["bindings"][-1]]=np.empty_like(data["expected"])
+buffers=dict(zip(info["bindings"][:-1],(a,b),strict=True));buffers[info["bindings"][-1]]=np.empty(data["expected"].shape, {"f32":np.float32,"f16":np.float16,"bf16":ml_dtypes.bfloat16}[info["output_storage"]])
 receipt=rt.launch(artifact,{"buffers":buffers,"scalars":{"N":info["elements"]}})
 assert receipt["ok"] and receipt["execution_kind"]=="native_gpu",receipt
-np.testing.assert_allclose(buffers[info["bindings"][-1]],data["expected"],rtol=3e-6,atol=2e-7)
+assert np.all(np.abs(buffers[info["bindings"][-1]].astype(np.float64)-data["expected"].astype(np.float64)) <= data["budget"])
 print("native SiLU fresh replay passed")
 """
     env = dict(os.environ, TESSERA_OPT="/no/compiler", TESSERA_ROCM_OPT="/no/compiler")
@@ -196,7 +203,7 @@ print("native SiLU fresh replay passed")
 
 @pytest.mark.parametrize("storage", ["f16", "bf16"])
 @pytest.mark.parametrize("reverse", [False, True])
-@pytest.mark.parametrize("shape", [(3, 17), (2, 3, 257)])
+@pytest.mark.parametrize("shape", [(257,), (3, 17), (2, 3, 257)])
 def test_default_half_silu_uses_native_matching_store(target, storage, reverse, shape, monkeypatch):
     dtype = np.float16 if storage == "f16" else ml_dtypes.bfloat16
     finfo = np.finfo(np.float16) if storage == "f16" else ml_dtypes.finfo(ml_dtypes.bfloat16)

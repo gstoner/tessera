@@ -302,19 +302,21 @@ extern "C" int tessera_rocm_movement_launch(
 
 // Native math host staging. Compiler descriptors validate semantic roles and
 // storage; this service checks physical spans, dimensions and owner identity.
-// family 0 unary, 1 binary, 2 last-axis scan; computation/output are f32.
-extern "C" int tessera_rocm_math_launch(
+// family 0 unary, 1 binary, 2 last-axis scan; computation is f32.
+// v2 explicitly carries store width; matching-half output is binary-only.
+extern "C" int tessera_rocm_math_launch_v2(
     const void *image, size_t imageBytes, const char *entry, const char *architecture,
-    int family, int inputElementBytes, const void *lhs, size_t lhsBytes,
+    int family, int inputElementBytes, int outputElementBytes, const void *lhs, size_t lhsBytes,
     const void *rhs, size_t rhsBytes, void *output, size_t outputBytes,
     const int64_t *dimensions, size_t dimensionCount, int reuse) try {
   if (!image || imageBytes < 4 || std::memcmp(image,"\177ELF",4) ||
       !entry || !*entry || !architecture || family < 0 || family > 2 ||
       (inputElementBytes != 2 && inputElementBytes != 4) ||
+      (outputElementBytes != 4 && !(outputElementBytes == 2 && family == 1 && inputElementBytes == 2)) ||
       !lhs || !output || !dimensions || (reuse != 0 && reuse != 1) ||
       dimensionCount != (family == 2 ? 2u : 1u) ||
       uintptr_t(dimensions)%alignof(int64_t) || uintptr_t(lhs)%inputElementBytes ||
-      uintptr_t(output)%alignof(float) ||
+      uintptr_t(output)%size_t(outputElementBytes) ||
       (family == 1 ? (!rhs || uintptr_t(rhs)%inputElementBytes) : (rhs || rhsBytes))) return 1;
   if (getpid() != process) return 2;
   size_t elements = 0, inputBytes = 0, expectedOutput = 0;
@@ -322,7 +324,7 @@ extern "C" int tessera_rocm_math_launch(
     if (!product({dimensions[0],dimensions[1]},1,elements)) return 1;
   } else if (!product({dimensions[0]},1,elements)) return 1;
   if (elements > size_t(INT64_MAX)/4) return 1;
-  inputBytes = elements*size_t(inputElementBytes); expectedOutput = elements*4;
+  inputBytes = elements*size_t(inputElementBytes); expectedOutput = elements*size_t(outputElementBytes);
   if (lhsBytes != inputBytes || outputBytes != expectedOutput ||
       (family == 1 && rhsBytes != inputBytes) ||
       uintptr_t(lhs) > UINTPTR_MAX-lhsBytes ||
@@ -382,7 +384,7 @@ extern "C" int tessera_rocm_math_launch(
   std::array<Memref,3> refs;
   for(size_t i=0;i<3;++i) if(bytes[i]) {
     refs[i]={arena.buffers[i],arena.buffers[i],0,
-             int64_t(bytes[i]/(i==2?4:inputElementBytes)),1};
+             int64_t(bytes[i]/(i==2?outputElementBytes:inputElementBytes)),1};
     auto &ref=refs[i];
     arguments.insert(arguments.end(),{&ref.allocated,&ref.aligned,&ref.offset,&ref.elements,&ref.stride});
   }
@@ -395,6 +397,17 @@ extern "C" int tessera_rocm_math_launch(
     return finish(5,true);
   return finish(0,true);
 } catch (...) { return 12; }
+
+// Preserve the original f32-output C ABI for existing providers/callers.
+extern "C" int tessera_rocm_math_launch(
+    const void *image, size_t imageBytes, const char *entry, const char *architecture,
+    int family, int inputElementBytes, const void *lhs, size_t lhsBytes,
+    const void *rhs, size_t rhsBytes, void *output, size_t outputBytes,
+    const int64_t *dimensions, size_t dimensionCount, int reuse) {
+  return tessera_rocm_math_launch_v2(image,imageBytes,entry,architecture,family,
+      inputElementBytes,4,lhs,lhsBytes,rhs,rhsBytes,output,outputBytes,
+      dimensions,dimensionCount,reuse);
+}
 
 extern "C" int tessera_rocm_movement_clear_current() try {
   if (int status=clearResidentCurrent()) return status;

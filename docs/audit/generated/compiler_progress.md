@@ -25,7 +25,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Tile IR` | mixed | 337 | 362 | 25 | complete=4, fused=300, no_kernel_required=7, not_applicable=26, partial=25 | Close partial Tile IR rows or explicitly classify them as fused/not-applicable. |
 | `Target IR native/fused codegen` | mixed | 333 | 362 | 29 | device_verified_abi=26, device_verified_jit=200, fused=73, no_kernel_required=8, not_applicable=26, reference=29 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. |
 | `Runtime dispatch readiness` | closed | 362 | 362 | 0 | fused=6, ready=356 | Keep this layer drift-gated through support_table.csv. |
-| `Benchmark evidence` | mixed | 107 | 362 | 255 | benchmarked=107, none=255 | Attach benchmarks to native/hardware-promoted rows first. |
+| `Benchmark evidence` | mixed | 108 | 362 | 254 | benchmarked=108, none=254 | Attach benchmarks to native/hardware-promoted rows first. |
 
 ## Primitive Contract State
 
@@ -44,7 +44,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Verifier coverage` | closed | 297 | 297 | 0 | real=297 | No action unless this row reopens. |
 | `Direct test evidence` | mixed | 414 | 529 | 115 | covered_by_family=29, directly_tested=421, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
 | `Runtime execution matrix` | closed | 284 | 284 | 0 | apple_cpu=2, apple_gpu=24, cpu=7, nvidia_sm120=60, rocm=96, rocm_gfx1151=2, rocm_gfx1201=6, x86=87 | Add rows only when a launch path actually executes. |
-| `Runtime ABI symbols` | mixed | 695 | 1026 | 331 | apple=723, nvidia=65, rocm=73, x86=165 | Reduce stub-only ABI rows where a backend claims native execution. |
+| `Runtime ABI symbols` | mixed | 696 | 1027 | 331 | apple=723, nvidia=65, rocm=74, x86=165 | Reduce stub-only ABI rows where a backend claims native execution. |
 | `Audited repo surfaces` | mixed | 39 | 69 | 30 | archived=4, compile_only=20, runnable=39, runnable_optional=2, scaffold=4 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
 
 ## Code Generation Pathways
@@ -67,7 +67,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 |---|---|---:|---|---|---|
 | `backend_kernel` | mixed | 429 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. | `docs/audit/generated/s_series_status.md` |
 | `Direct test evidence` | mixed | 115 | covered_by_family=29, directly_tested=421, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. | `tessera.compiler.generated_docs:test_coverage (live renderer)` |
-| `ROCm target-map native promotion` | mixed | 52 | artifact_only=15, device_verified_abi=2, device_verified_jit=37, planned=3, ready=22, unsupported=12 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |
+| `ROCm target-map native promotion` | mixed | 53 | artifact_only=15, device_verified_abi=2, device_verified_jit=37, planned=3, ready=23, unsupported=12 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |
 | `CUDA target-map native promotion` | open | 45 | artifact_only=42, planned=3 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/nvidia_sm90_target_map.csv` |
 | `Audited repo surfaces` | mixed | 30 | archived=4, compile_only=20, runnable=39, runnable_optional=2, scaffold=4 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. | `docs/audit/generated/surface_status.csv` |
 | `Target IR native/fused codegen` | mixed | 29 | device_verified_abi=26, device_verified_jit=200, fused=73, no_kernel_required=8, not_applicable=26, reference=29 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. | `docs/audit/generated/support_table.csv` |

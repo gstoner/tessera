@@ -892,6 +892,12 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         runtime_backend="hip",
         default_runtime_status="artifact_only",
         supported_ops={
+            "tessera.silu_mul": OpCapability(
+                "tessera.silu_mul", "ready", dtypes=("fp32", "fp16", "bf16"), ranks=(1,2,3),
+                reason="Isolated static compact same-shape inputs use native Graph/Schedule/Tile "
+                       "SiLU with f32 computation and a final f32 or matching-half store. "
+                       "Exact widening casts are fused into loads. Broadcast, mixed-storage, "
+                       "dynamic shapes and full MLP composition require separate proof."),
             "tessera.cast": OpCapability(
                 "tessera.cast","ready",dtypes=("fp16","bf16"),ranks=(1,2,3),
                 reason="Exact widening to fp32 feeding one native math consumer; "

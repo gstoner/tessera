@@ -1,0 +1,22 @@
+{
+  "source_commit": "05481f153fe5df407759997bc15fec29497a3831",
+  "src_tree": "4f011f1e854f19c936422c50bb8af9c6c7bdb969",
+  "python_tree": "9e2a8c5a890e6f42e5eca5a1bf171177ae391411",
+  "files": {
+    "tools/tessera-opt/tessera-opt": {
+      "sha256": "d02a71578ec176b07cb1ca97fe9a33a6f640483462970bde15a0f084878b1126",
+      "donor_build_mtime_ns": 1792199273693414784
+    },
+    "src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": {
+      "sha256": "caa88a408596dff49393a4fd425a61257c8726f60b6c7678ca28fb264e5ba66b",
+      "donor_build_mtime_ns": 1792199273185378260
+    },
+    "src/compiler/layout_algebra/libtessera_layout_algebra.so": {
+      "sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+      "donor_build_mtime_ns": 1792018597214073585
+    }
+  },
+  "install_policy": "Verify exact source trees and compiler/library bytes before test; install timestamps remain distinct from donor build timestamps; never touch source mtimes.",
+  "archive_sha256": "6e34fcd57a0d294e40ad5bf26c9cf4fdad4af3d70a355ef98d8c20c479015017",
+  "installed_at_unix": 1792199846.7143424
+}

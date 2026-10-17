@@ -213,7 +213,7 @@ The compiler-facing table contains **362** callable/IR rows; the remaining **167
 | `tile_ir` | `not_applicable` 26, `complete` 4, `partial` 25, `fused` 300, `no_kernel_required` 7 |
 | `target_ir` | `not_applicable` 26, `fused` 73, `device_verified_abi` 26, `device_verified_jit` 200, `reference` 29, `no_kernel_required` 8 |
 | `runtime` | `fused` 6, `ready` 356 |
-| `bench` | `benchmarked` 107, `none` 255 |
+| `bench` | `benchmarked` 108, `none` 254 |
 
 Exact-target backend-manifest rows:
 
@@ -228,7 +228,7 @@ Exact-target backend-manifest rows:
 | `nvidia_sm90` | 103 | `artifact_only` 42, `planned` 61 |
 | `rocm` | 332 | `device_verified_abi` 3, `device_verified_jit` 316, `artifact_only` 1, `planned` 12 |
 | `rocm_gfx1151` | 10 | `device_verified_jit` 10 |
-| `rocm_gfx1201` | 13 | `device_verified_jit` 13 |
+| `rocm_gfx1201` | 14 | `device_verified_jit` 14 |
 | `x86` | 325 | `device_verified_jit` 274, `fused` 42, `reference` 9 |
 
 Current open queues derived from the same sources:
@@ -237,7 +237,7 @@ Current open queues derived from the same sources:
 |---|---:|---|
 | Tile IR partial | 25 | `adadelta`, `adagrad`, `binary_brier_loss`, `brier_loss`, `depth_attn`, `det`, `eigh`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue`, `inv`, `kron`, `logdet`, `matrix_power`, `norm`, `ntk_rope`, `ordinal_logistic_loss`, `rmsprop`, `shampoo`, `soft_binned_ece`, `solve`, `trace`, `vec` |
 | Backend contract planned | 9 | `broadcast_to_axis`, `collective_permute`, `named_sharding`, `partition_spec`, `pmax`, `pmean`, `pmin`, `psum`, `shard_map` |
-| Native/fused aggregate rows without benchmark inventory | 197 | See generated support table; this is an evidence queue, not proof of a missing kernel. |
+| Native/fused aggregate rows without benchmark inventory | 196 | See generated support table; this is an evidence queue, not proof of a missing kernel. |
 | VJP / JVP planned | 44 / 44 | Autodiff rules, not forward compiler execution. |
 | Sharding partial | 60 | Multi-device/domain proof. |
 

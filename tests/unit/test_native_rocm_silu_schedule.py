@@ -10,6 +10,7 @@ from tests.unit.test_rocm_math_widening import module
 
 @pytest.mark.parametrize("arch", ["gfx1151", "gfx1201"])
 @pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
+@pytest.mark.compiler_route
 def test_original_silu_mul_reaches_native_schedule_and_typed_tile(arch, storage):
     tool = find_tessera_opt()
     assert tool is not None, "matching production compiler required"
@@ -39,6 +40,7 @@ def test_original_silu_mul_reaches_native_schedule_and_typed_tile(arch, storage)
 
 @pytest.mark.parametrize("arch", ["gfx1151", "gfx1201"])
 @pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
+@pytest.mark.compiler_route
 def test_same_native_setup_reaches_existing_division_route(arch, storage):
     tool = find_tessera_opt()
     assert tool is not None
@@ -63,6 +65,7 @@ def test_same_native_setup_reaches_existing_division_route(arch, storage):
 
 @pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
 @pytest.mark.parametrize("shape", [(1,), (2, 3, 257)])
+@pytest.mark.compiler_route
 def test_silu_recipe_preserves_source_and_native_binary_abi(storage, shape):
     from copy import deepcopy
     from tessera.compiler import rocm_math_native as native
@@ -91,6 +94,7 @@ def test_silu_recipe_preserves_source_and_native_binary_abi(storage, shape):
         lambda s: s.replace("tessera.silu_mul ", "tessera.div "),
     ],
 )
+@pytest.mark.compiler_route
 def test_silu_native_replay_rejects_semantic_mutation(edit):
     from tessera.compiler import rocm_math_native as native
 
@@ -105,6 +109,7 @@ def test_silu_native_replay_rejects_semantic_mutation(edit):
 
 @pytest.mark.parametrize("target", ["x86", "apple_gpu", "nvidia"])
 @pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.compiler_route
 def test_silu_narrow_tile_storage_requires_owning_rocm_contract(target, storage):
     from tessera.compiler import rocm_math_native as native
 
@@ -118,6 +123,7 @@ def test_silu_narrow_tile_storage_requires_owning_rocm_contract(target, storage)
 
 
 @pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.compiler_route
 def test_silu_widening_does_not_admit_unproved_pow_storage(storage):
     from tessera.compiler import rocm_math_native as native
 
@@ -136,6 +142,7 @@ def test_silu_widening_does_not_admit_unproved_pow_storage(storage):
 
 @pytest.mark.parametrize("arch", ["gfx1151", "gfx1201"])
 @pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
+@pytest.mark.compiler_route
 def test_silu_target_and_gpu_lower_the_actual_gate_expression(arch, storage):
     from tessera.compiler import rocm_math_native as native
 
@@ -176,6 +183,7 @@ def matching_half_module(storage, shape=(3, 17)):
 
 @pytest.mark.parametrize("storage", ["f16", "bf16"])
 @pytest.mark.parametrize("target", ["rocm_gfx1151", "rocm_gfx1201"])
+@pytest.mark.compiler_route
 def test_matching_half_silu_keeps_f32_math_until_final_store(storage, target):
     from copy import deepcopy
     from tessera.compiler import rocm_math_native as native
@@ -200,6 +208,7 @@ def test_matching_half_silu_keeps_f32_math_until_final_store(storage, target):
 
 
 @pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.compiler_route
 def test_matching_half_silu_does_not_reinterpret_existing_widening_abi(storage):
     from tessera.compiler import rocm_math_native as native
 
@@ -252,6 +261,7 @@ def test_silu_catalog_trace_does_not_require_eager_arithmetic(storage, evaluate,
         ("bf16", True),
     ],
 )
+@pytest.mark.compiler_route
 def test_silu_native_image_projection_preserves_store_and_reuses_shapes(storage, matching):
     from tessera.compiler import rocm_math_native as native
     from tessera.compiler.rocm_native import _shape_free_target_ir
@@ -273,3 +283,12 @@ def test_silu_native_image_projection_preserves_store_and_reuses_shapes(storage,
         assert 'output_dtype = "' + (storage if matching else "f32") + '"' in physical
         projected.append(physical)
     assert projected[0] == projected[1]
+
+
+@pytest.mark.parametrize("dtype", ["fp32", "fp16", "bf16"])
+def test_gfx1201_silu_capability_tracks_native_storage_and_rank(dtype):
+    from tessera.compiler.capabilities import TARGET_CAPABILITIES
+
+    row = TARGET_CAPABILITIES["rocm_gfx1201"].supported_ops["tessera.silu_mul"]
+    assert dtype in row.dtypes
+    assert row.ranks == (1, 2, 3)

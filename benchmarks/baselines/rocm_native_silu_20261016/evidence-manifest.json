@@ -1,0 +1,90 @@
+{
+  "schema": "tessera.native-silu-evidence.v1",
+  "scope": "isolated gfx1201 SiLU; full MLP and broad unit validation remain open",
+  "artifacts": {
+    "README.md": {
+      "sha256": "654d44d9068f7cda35d6a0673fe9cfc6ec0655522d2c59c28acef3b7ce835646",
+      "bytes": 2799
+    },
+    "adjacent-device-and-owner.log": {
+      "sha256": "cb20151540ce4802a940662d1833dee7729f61d04c923d73987cf7b4cdc93694",
+      "bytes": 180
+    },
+    "build-half-owner.log": {
+      "sha256": "ee98ab825b0f195469ab091d1fc7d8d6567b5dc918508c0206ef7833c56113e0",
+      "bytes": 3403
+    },
+    "capability-allocation-gates.log": {
+      "sha256": "6fa414aa5ba10a8aece1e051758bce40445f04b50fbc69dff93b78f885b35dba",
+      "bytes": 741
+    },
+    "claim-lint.log": {
+      "sha256": "b7cabb6c341cf801ecd49c4d47463f73b43c581493a32da0645833c891959021",
+      "bytes": 263
+    },
+    "compiler-plan-gate.log": {
+      "sha256": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+      "bytes": 54
+    },
+    "compiler-route.log": {
+      "sha256": "4de5b73bf2ecdac38337806e25a6a4ce16369a1f86e010336271cc218bda82ac",
+      "bytes": 1631
+    },
+    "compiler-source-manifest-fixed.json": {
+      "sha256": "ea8fdf6613a5b96113575b401b0430c6686e82eb57d1bfc2d081827a89794481",
+      "bytes": 1072
+    },
+    "fifth-device-and-contract.log": {
+      "sha256": "66328eb13c346e347cab4eb8bba2a9b62142a152fcf9eaf653b986603dc4e45e",
+      "bytes": 180
+    },
+    "final-device-rank123.log": {
+      "sha256": "994080ca7193e4ebfd4b7af2b84cc01eae63387d45b1f72880b8dabb5a4433ed",
+      "bytes": 100
+    },
+    "final-focused-gates.log": {
+      "sha256": "e7d1ef57e7a7619ac8653892944cb694085c738a6493955727fbcc83c786f99a",
+      "bytes": 661
+    },
+    "generated-docs-check.log": {
+      "sha256": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+      "bytes": 32
+    },
+    "half-owner-lifetime.log": {
+      "sha256": "8964ec0c2d96a99a0012763cb299d0385e0125f9a98c492b18fdae2e013f728a",
+      "bytes": 98
+    },
+    "installed-compiler.json": {
+      "sha256": "2efb11fcafb2c4226b0cd61f3a85a2b97d6cc479132c9c0a102754b28c67adcc",
+      "bytes": 1115
+    },
+    "mypy-ratchet.log": {
+      "sha256": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+      "bytes": 49
+    },
+    "owner-abi-doc-gates.log": {
+      "sha256": "9ae7e965d8040405a5c95ecf0b81dab033bb1d3f37ac461d1d457d65f87b628c",
+      "bytes": 99
+    },
+    "ruff-full.log": {
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "bytes": 19
+    },
+    "silu-cpu-classification.log": {
+      "sha256": "3cc6232e30f667612c93bc84f0fe57e466e6184b1c2685da1c60b2626adee4b3",
+      "bytes": 113
+    },
+    "silu-route-classification.log": {
+      "sha256": "a81f91f78285011fce798a25fab982f7d77524a65b50dce30809ed0c30f8378a",
+      "bytes": 224
+    },
+    "silu-timings-legacy-first.json": {
+      "sha256": "9a73cf30cf4b9054764582be5a3dcd596f08d2903e7c5ad14d0105572fe6ddfd",
+      "bytes": 29196
+    },
+    "silu-timings-native-first.json": {
+      "sha256": "67c50808904bec9bb48fc124d6b767f6820a6e214699dd77a7d81190a44f75a1",
+      "bytes": 29184
+    }
+  }
+}

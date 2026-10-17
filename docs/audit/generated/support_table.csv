@@ -72,7 +72,7 @@ rsqrt,elementwise,public,public,registered,complete,fused,device_verified_jit,re
 score_combine,elementwise,public,public,registered,complete,fused,fused,ready,benchmarked
 sigmoid,elementwise,public,public,registered,complete,fused,device_verified_jit,ready,benchmarked
 silu,elementwise,public,public,registered,complete,fused,device_verified_abi,ready,none
-silu_mul,elementwise,public,public,registered,complete,fused,device_verified_jit,ready,none
+silu_mul,elementwise,public,public,registered,complete,fused,device_verified_jit,ready,benchmarked
 sin,elementwise,public,public,registered,complete,fused,device_verified_jit,ready,none
 sinh,elementwise,public,public,registered,complete,fused,device_verified_jit,ready,none
 softcap,elementwise,public,public,registered,complete,fused,device_verified_jit,ready,none

@@ -8,7 +8,7 @@ audit_role: reference
 Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
 Synchronization: ROCM-NATIVE-SWIGLU-ACTIVATION-20261016.
 
-Status: implementation under validation; owning-device and timing gates remain.
+Status: owning gfx1201 numerical/replay validation passed; benchmark and publication gates are in progress.
 This is an activation dependency for full source-preserving NVFP4 MLP
 composition, not full MLP or model-quality acceptance.
 
@@ -58,18 +58,29 @@ Apple, NVIDIA or x86 binary-math storage. Existing sibling FP32 rules remain.
 
 ## Validation boundaries
 
-The focused compiler/registry lane passes671 cases after the matching-half
-extension, including native GPU expression order, unchanged old ABI meanings,
-source immutability, argument reversal, mutation refusal and sibling guards.
-These are host/compiler tests, not GPU numerical evidence.
+The final focused compiler/registry lane passes 603 cases after capability and
+JIT allocation follow-through. The owning gfx1201 lane passes 45 device cases
+plus 56 compiler-contract cases, including matching-half fresh-process replay
+with compiler access and eager/legacy arithmetic forbidden. Adjacent native
+math/widening and native owner lifetime validation passes 91 cases. These counts
+have different scopes and are not independent cumulative coverage totals.
+
+The additive native staging export `tessera_rocm_math_launch_v2` accepts an
+explicit output element width. Matching two-byte output requires binary math
+with two-byte inputs. Dimensions, exact byte counts, alignment, overlap and
+owner identity are checked before resources are acquired. The original
+`tessera_rocm_math_launch` remains an FP32-output wrapper; older providers are
+still usable for FP32 output. A half-store descriptor requires the v2 export.
+The runtime owns storage/launch only; arithmetic remains in the compiled image.
+Malformed width/span/alias tests check rejection before GPU synchronization,
+and existing allocation/copy/completion/lease fault injection remains green.
 
 Rank-one half widening admission is new only on gfx1201. Its exact-device
-fixture must pass before publication; gfx1151 retains its previous rank-two/
+fixture passes rank-one widening; gfx1151 retains its previous rank-two/
 rank-three widening envelope. Core compiler tests on a named target do not
 substitute for numerical execution on that target's owning hardware.
 
-Remaining gates include owning gfx1201 numerics, IEEE/signed-zero checks,
-ordinary JIT/changed-input/compiler-free replay, shape-independent images,
-separate kernel and completed-host benchmarks, generated registries and exact
-PR checks. Full resident gate/up views/lifetimes, activation quantization and
+Remaining gates include benchmark interpretation, generated registries and exact
+PR checks. Owning tests cover IEEE/signed-zero, ordinary JIT/changed-input/
+compiler-free replay and shape-independent images. Full resident gate/up views/lifetimes, activation quantization and
 down projection remain part of the full five-slice objective.

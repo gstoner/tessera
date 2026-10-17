@@ -99,7 +99,7 @@ each row into a single E2E tier.
 | ``score_combine`` | elementwise | public | public | registered | fused | fused | ready | benchmarked |
 | ``sigmoid`` | elementwise | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``silu`` | elementwise | public | public | registered | fused | device_verified_abi | ready | none |
-| ``silu_mul`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
+| ``silu_mul`` | elementwise | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``sin`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
 | ``sinh`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
 | ``softcap`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |

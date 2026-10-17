@@ -387,6 +387,20 @@ int main(){
  assert(math(1)==0&&allocations.size()==3);
  for(int i=0;i<17;++i)assert(mathOut[i]==mathA[i]+mathB[i]);
  assert(math(1,0)==0&&allocations.empty());
+ // v2 rejects malformed output width/span/alias before acquiring GPU state.
+ uint16_t halfA[17]={},halfB[17]={},halfOut[17]={};
+ int widthSync=synchronizations;
+ auto halfMath=[&](int family,int inputWidth,int outputWidth,size_t outputBytes,void* destination) {
+  return tessera_rocm_math_launch_v2(image,5,"math_half","gfx1151",family,inputWidth,outputWidth,
+   halfA,sizeof(halfA),halfB,sizeof(halfB),destination,outputBytes,mathDims,1,1);
+ };
+ assert(halfMath(1,2,1,sizeof(halfOut),halfOut)==1);
+ assert(halfMath(1,4,2,sizeof(halfOut),halfOut)==1);
+ assert(halfMath(0,2,2,sizeof(halfOut),halfOut)==1);
+ assert(halfMath(2,2,2,sizeof(halfOut),halfOut)==1);
+ assert(halfMath(1,2,2,sizeof(halfOut)-2,halfOut)==1);
+ assert(halfMath(1,2,2,sizeof(halfOut),halfA)==1);
+ assert(synchronizations==widthSync&&allocations.empty());
  int priorSync=synchronizations;
  assert(tessera_rocm_math_launch(image,5,"math_sqrt","gfx1151",0,4,
   mathA,sizeof(mathA)-4,nullptr,0,mathOut,sizeof(mathOut),mathDims,1,1)==1);

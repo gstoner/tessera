@@ -637,7 +637,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         ),
         required_dialects=(
             "tessera", "tile", "tessera_rocm", "gpu", "llvm", "rocdl",
-            "func", "scf", "arith", "memref",
+            "func", "scf", "arith", "memref", "math",
         ),
         targets=("rocm_gfx1151",),
         family_plugins=(

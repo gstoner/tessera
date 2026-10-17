@@ -15,8 +15,8 @@ add_mlir_library(TesseraROCMIR
   ABI.cpp
   MFMTables.cpp
   LINK_LIBS PUBLIC
-    MLIRIR MLIRFuncDialect MLIRLLVMDialect
-  DEPENDS TesseraROCMTableGen)
+    TesseraIR MLIRIR MLIRFuncDialect MLIRLLVMDialect
+  DEPENDS TesseraROCMTableGen TesseraTileIRTableGen)
 target_include_directories(TesseraROCMIR PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/../../include
   ${CMAKE_CURRENT_BINARY_DIR})

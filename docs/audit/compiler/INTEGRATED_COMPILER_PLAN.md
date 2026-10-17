@@ -160,7 +160,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
   FP32/BF16 outputs. Ordinary static FP32 JIT, compiler-free replay and the original Qwen3
   projection now have exact-device proof through both native stages.
   Remaining: bounded frames, wider composition and model-quality acceptance.
-- Latest: [Native Graph slice semantics for gate/up composition](INTEGRATED_COMPILER_LOG.md#2026-10-16--native-graph-slice-semantics-for-gateup-composition)
+- Latest: [2026-10-16 — native gfx1201 parent-view candidate](INTEGRATED_COMPILER_LOG.md#2026-10-16--native-gfx1201-parent-view-candidate)
 
 ### ROCM-SPLIT-K-1
 

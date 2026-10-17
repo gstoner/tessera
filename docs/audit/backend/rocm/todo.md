@@ -5,6 +5,16 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-NATIVE-GATE-UP-CONSUMER-20261016 — parent-view native integration
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: ROCM-NATIVE-GATE-UP-CONSUMER-20261016.
+Evidence: benchmarks/baselines/native_gate_up_view_20261016/README.md.
+Contract: docs/spec/NATIVE_PARENT_VIEW_CONTRACT.md.
+
+Implementation in progress: the explicit one-parent gate/up profile reaches native Schedule, typed-view Tile, ROCm Target, GPU/ROCDL/LLVM and HSACO. Five RX9070XT/gfx1201 candidate rows execute through the checked C++ owner, including M256/I12288, changed inputs and ownership guards. Seventeen compiler cases pass; current shared gate counts are recorded in the candidate packet. Canonical plugin/public JIT, resident producer chaining, low storage, full MLP/model quality and matched performance closure remain required; this is no default-route promotion.
+
+
 ## NVFP4-SOURCE-BOUNDED-20261016 — native source capacity contract
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

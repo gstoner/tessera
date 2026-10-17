@@ -6,6 +6,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/InitAllExtensions.h"
@@ -35,7 +36,7 @@ int main(int argc, char **argv){
   // over `!llvm.ptr<1>`, which the fragment materializer does not have -- it
   // works in memrefs, so the amdgpu level is the one it can actually emit.
   registry.insert<mlir::amdgpu::AMDGPUDialect, mlir::arith::ArithDialect,
-                  mlir::func::FuncDialect,
+                  mlir::func::FuncDialect, mlir::math::MathDialect,
                   mlir::gpu::GPUDialect, mlir::memref::MemRefDialect,
                   mlir::LLVM::LLVMDialect, mlir::ROCDL::ROCDLDialect,
                   mlir::scf::SCFDialect, mlir::vector::VectorDialect,

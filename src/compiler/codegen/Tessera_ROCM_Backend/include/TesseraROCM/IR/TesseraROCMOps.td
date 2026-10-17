@@ -1711,3 +1711,16 @@ def ROCM_StructuredReductionOp : TesseraROCM_Op<"structured_reduction",
   let assemblyFormat = "attr-dict-with-keyword $body";
   let hasVerifier = 1;
 }
+
+// The gfx1201 profile is distinct from NVIDIA schema-1 row regions.
+def ROCM_RowRegionKernelOp : TesseraROCM_Op<"row_region_kernel",
+    [SingleBlock, NoTerminator, SymbolTable, RecursiveMemoryEffects]> {
+  let summary = "Sealed gfx1201 parent-view scalar SSA body";
+  let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$rows,
+      I64Attr:$columns, TypeAttr:$storage, I64Attr:$workgroup_size,
+      I64Attr:$schema, StrAttr:$source_hash, StrAttr:$artifact_hash,
+      StrAttr:$body_hash, StrAttr:$tile_body_hash);
+  let regions = (region AnyRegion:$body);
+  let assemblyFormat = "attr-dict-with-keyword $body";
+  let hasVerifier = 1;
+}

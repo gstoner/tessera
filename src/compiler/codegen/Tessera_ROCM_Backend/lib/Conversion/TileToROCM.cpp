@@ -1,3 +1,5 @@
+#include "Tessera/IR/RowRegionContract.h"
+#include "Tessera/IR/TileBufferViewContract.h"
 #include "ROCMFoldedW4A8Contract.h"
 #include "Tessera/IR/StructuredReductionContract.h"
 #include "TesseraROCM/Passes.h"
@@ -2750,6 +2752,27 @@ struct LowerTileToROCMPass
 
   void runOnOperation() override {
     StringRef arch = archOpt;
+    SmallVector<tessera::tile::RowRegionKernelOp> viewKernels;
+    for (auto kernel : getOperation().getOps<tessera::tile::RowRegionKernelOp>()) viewKernels.push_back(kernel);
+    if (!viewKernels.empty()) {
+      if (arch != "gfx1201" || viewKernels.size() != 1 || getOperation().getBody()->getOperations().size() != 1 ||
+          viewKernels.front().getArch() != "gfx1201" || viewKernels.front().getSchema() != 2) {
+        getOperation().emitError("ROCm parent-view lowering requires its isolated gfx1201 schema-2 profile");
+        return signalPassFailure();
+      }
+      auto kernel = viewKernels.front();
+      if (failed(tessera::row_region::verifyGateUpKernel(kernel))) return signalPassFailure();
+      OpBuilder b(kernel); OperationState state(kernel.getLoc(), "tessera_rocm.row_region_kernel");
+      state.addAttributes(kernel->getAttrs()); state.addRegion();
+      Operation *target = b.create(state); target->getRegion(0).takeBody(kernel->getRegion(0));
+      auto fn = cast<LLVM::LLVMFuncOp>(target->getRegion(0).front().front());
+      target->setAttr("tile_body_hash",kernel->getAttr("body_hash"));
+      if (failed(tessera::tile::lowerScalarBufferAccesses(fn))) return signalPassFailure();
+      target->setAttr("body_hash",b.getStringAttr(tessera::row_region::digest(fn)));
+      kernel.erase();
+      if (failed(tessera::row_region::verifyGateUpKernel(target))) return signalPassFailure();
+      return;
+    }
     if (failed(lowerROCMResultPermutations(getOperation(), arch)))
       return signalPassFailure();
 

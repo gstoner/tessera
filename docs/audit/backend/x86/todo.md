@@ -7,6 +7,14 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## ROCM-NATIVE-GATE-UP-CONSUMER-20261016 — parent-view native integration
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: ROCM-NATIVE-GATE-UP-CONSUMER-20261016.
+
+Follow-up required for an owning parent-view consumer. The shared row-region verifier now pairs architecture and schema: SM120 schema 1 retains its original meaning, while gfx1201 schema 2 is separate. No x86 physical schedule, ABI or execution proof transfers from ROCm.
+
+
 ## NVFP4-SOURCE-BOUNDED-20261016 — native source capacity contract
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

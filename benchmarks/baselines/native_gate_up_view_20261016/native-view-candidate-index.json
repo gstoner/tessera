@@ -1,0 +1,55 @@
+{
+  "rows": [
+    {
+      "packet": "native-view-candidate-3-17-False.json",
+      "shape": [
+        3,
+        17
+      ],
+      "reverse": false,
+      "image_sha256": "1c4f85f9e6752aa8d1d9f7e7a5f17e5d8563441f15476c37ed9ee2860ae7b462",
+      "entry": "tessera_gate_up_view_1f57b8fac8275b05"
+    },
+    {
+      "packet": "native-view-candidate-3-17-True.json",
+      "shape": [
+        3,
+        17
+      ],
+      "reverse": true,
+      "image_sha256": "c6ef02b0b300ae083c04b4c1f4cfe59281e778a98b08bb3a319765c70e7007a4",
+      "entry": "tessera_gate_up_view_3f79439aa1eec395"
+    },
+    {
+      "packet": "native-view-candidate-16-17-False.json",
+      "shape": [
+        16,
+        17
+      ],
+      "reverse": false,
+      "image_sha256": "1c4f85f9e6752aa8d1d9f7e7a5f17e5d8563441f15476c37ed9ee2860ae7b462",
+      "entry": "tessera_gate_up_view_1f57b8fac8275b05"
+    },
+    {
+      "packet": "native-view-candidate-16-64-False.json",
+      "shape": [
+        16,
+        64
+      ],
+      "reverse": false,
+      "image_sha256": "d3c76f1a16dc22a45e1f8cfd6bd6ed03ade9a5f41857c09628bb56b41355da5c",
+      "entry": "tessera_gate_up_view_7f49af59e8a1be31"
+    },
+    {
+      "packet": "native-view-candidate-256-12288-False.json",
+      "shape": [
+        256,
+        12288
+      ],
+      "reverse": false,
+      "image_sha256": "99de8b255903810a4df2ce6ae771b127b59fde44cc32c2a5cceb498dff7611b3",
+      "entry": "tessera_gate_up_view_728dcc05793be97a"
+    }
+  ],
+  "scope": "native image construction only; no GPU execution claim"
+}

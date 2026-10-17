@@ -6,6 +6,15 @@ target: nvidia_sm120
 last_updated: 2026-10-16
 ---
 
+## ROCM-NATIVE-GATE-UP-CONSUMER-20261016 — parent-view native integration
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: ROCM-NATIVE-GATE-UP-CONSUMER-20261016.
+Parity validated for the existing SM120 schema-1 source-active JVP: 12 exact RTX5070 numerical cases pass after the shared verifier change. This is regression evidence, not NVIDIA parent-view admission.
+
+Follow-up required for an owning parent-view consumer. The shared row-region verifier now pairs architecture and schema: SM120 schema 1 retains its original meaning, while gfx1201 schema 2 is separate. No nvidia physical schedule, ABI or execution proof transfers from ROCm.
+
+
 ## NVFP4-SOURCE-BOUNDED-20261016 — native source capacity contract
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

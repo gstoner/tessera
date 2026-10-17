@@ -1,3 +1,4 @@
+#include "Tessera/IR/RowRegionContract.h"
 #include "Tessera/IR/NVFP4IngestContract.h"
 #include <limits>
 #include "mlir/Bytecode/BytecodeOpInterface.h"
@@ -141,4 +142,8 @@ mlir::LogicalResult NVFP4ExpandOp::verify() {
   if (getScheduleHash().size() != 64 || getName().empty())
     return emitOpError("NVFP4 expansion requires a hashed Schedule and entry symbol");
   return mlir::success();
+}
+
+mlir::LogicalResult RowRegionKernelOp::verify() {
+  return tessera::row_region::verifyGateUpKernel(getOperation());
 }

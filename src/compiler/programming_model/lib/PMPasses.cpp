@@ -1,3 +1,4 @@
+#include "NativeGateUpSchedule.h"
 #include "NativeRowSchedule.h"
 //===- PMPasses.cpp — Programming Model v1.1 passes and pipelines ---------===//
 //
@@ -3281,6 +3282,9 @@ struct GraphToSchedulePass
       if (failed(scheduleNativeSparse(mod))) signalPassFailure();
       return;
     }
+    bool gateUpSelected = false;
+    if (failed(gate_up_view::schedule(mod,gateUpSelected))) return signalPassFailure();
+    if (gateUpSelected) return;
     bool nativeRowSelected = false;
     if (failed(row_region::schedule(mod,nativeRowSelected))) return signalPassFailure();
     if (nativeRowSelected) return;
@@ -4306,6 +4310,8 @@ struct ScheduleToTilePass
                     NVVM::NVVMDialect, scf::SCFDialect, math::MathDialect,
                     schedule::ScheduleDialect, tensor::TensorDialect>();
     registerTesseraDialects(registry);
+    registry.insert<LLVM::LLVMDialect, math::MathDialect, arith::ArithDialect,
+                    scf::SCFDialect, gpu::GPUDialect>();
     tile::registerTileDialect(registry);
 #ifdef TESSERA_HAVE_NVIDIA_TARGET_IR
     registry.insert<tessera::nvidia::TesseraNVIDIADialect>();
@@ -4318,6 +4324,9 @@ struct ScheduleToTilePass
       if (failed(lowerCooperativeSSD(mod, ssdGPU))) signalPassFailure();
       return;
     }
+    bool gateUpSelected = false;
+    if (failed(gate_up_view::lower(mod,gateUpSelected))) return signalPassFailure();
+    if (gateUpSelected) return;
     bool nativeRowSelected = false;
     if (failed(row_region::lower(mod,nativeRowSelected))) return signalPassFailure();
     if (nativeRowSelected) return;

@@ -6,6 +6,14 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## ROCM-QUANTIZED-MLP-20261017 — native gate/up-to-down partition
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-QUANTIZED-MLP-20261017.
+
+Not applicable to apple physical execution: this new native partition admits only gfx1201. Shared assessment: a distinct native v4 schema reuses the SSA-derived outliner, existing quantizer and expansion/product validators; earlier v1/v2/v3 partition regressions pass. No runtime ABI or apple physical schedule changes. Follow-up required before sibling adoption; no physical parity is inferred.
+
+
 ## ROCM-QUANTIZED-GATEUP-20261017 — native quantizer through gate/up
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

@@ -259,3 +259,23 @@ Random numerical comparisons use BF16 tolerances; separate analytic cases
 prove bitwise parent rounding and both SiLU operand orientations. Full down
 projection, wider layouts/dynamic shapes, encoded derivatives and model
 quality remain open.
+
+
+## Seven-member full MLP native partition (v4, compiler proof)
+
+`tessera.native.quantized_product.v4` reuses the validated v3 gate/up prefix
+and v2 quantizer/expansion/product suffix over the original Graph SSA. Seven
+read-only roots contain the input plus independent gate/up and down packed
+weights, scales and projection globals. Seven members derive eighteen
+buffers: roots 0..6, first Q/SA 7/8, first B/SB 9/10, BF16 parent 11, BF16
+activation 12, second Q/SA 13/14, second B/SB 15/16 and returned output 17.
+The activation is written by member 3 and read by member 4; second quantized
+planes are read by member 6. The actual product result type controls the
+final FP32 or BF16 store under the existing exact product contract.
+
+A common native SSA outliner derives root order, private allocations and
+first-write/last-read bounds from certified original operation groups. Both
+quantizers and expansions retain their original math and numerical policies.
+This native schema currently has compiler proof only; Python package/frontend
+admission, native-owner execution, portable replay, hardware numerical proof
+and timings remain required before any execution claim.

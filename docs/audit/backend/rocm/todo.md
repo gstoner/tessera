@@ -5,6 +5,14 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-QUANTIZED-MLP-20261017 — native gate/up-to-down partition
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-QUANTIZED-MLP-20261017.
+
+Native compiler proof: the original gate/up -> BF16 activation -> second K16 quantizer -> NVFP4 down-projection Graph now partitions into seven members and eighteen SSA-derived buffers. The combined native/legacy/pass-metadata/diagnostic gate passes 334 tests. Package/frontend integration, exact gfx1201 execution, separate timing and model-quality acceptance remain required. No execution row is promoted by this compiler-only result.
+
+
 ## ROCM-QUANTIZED-GATEUP-20261017 — native quantizer through gate/up
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

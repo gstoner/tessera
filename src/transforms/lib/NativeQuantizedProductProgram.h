@@ -4,6 +4,7 @@
 
 namespace tessera {
 static mlir::LogicalResult emitNativeQuantizedGateUpProgram(mlir::ModuleOp module);
+static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module);
 static mlir::func::FuncOp cloneQuantizedProductMember(mlir::func::FuncOp member,
                                                     int64_t index) {
   auto child = mlir::cast<mlir::func::FuncOp>(member->clone());
@@ -44,11 +45,12 @@ static mlir::LogicalResult emitNativeQuantizedProductProgram(mlir::ModuleOp modu
   if (llvm::range_size(roots) != 1) return refuse();
   auto root = *roots.begin();
   if (root.isDeclaration() || !root.getBody().hasOneBlock() ||
-      (root.getNumArguments() != 3 && root.getNumArguments() != 4) || root.getNumResults() != 1) return refuse();
+      (root.getNumArguments() != 3 && root.getNumArguments() != 4 && root.getNumArguments() != 7) || root.getNumResults() != 1) return refuse();
   for (unsigned i=0; i<root.getNumArguments(); ++i)
     if (auto attrs = root.getArgAttrDict(i); attrs && !attrs.empty()) return refuse();
   SmallVector<Operation *> ops;
   for (Operation &op : root.getBody().front().without_terminator()) ops.push_back(&op);
+  if (ops.size()==37) return emitNativeQuantizedMLPProgram(module);
   if (ops.size()==22) return emitNativeQuantizedGateUpProgram(module);
   bool expansion = ops.size() == 15 &&
       ops[13]->getName().getStringRef() == "tessera.nvfp4_expand";

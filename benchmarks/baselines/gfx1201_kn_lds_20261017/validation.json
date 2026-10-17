@@ -1,0 +1,43 @@
+{
+  "implementation_revision": "da0ac7720b5c701950651604580850589110d652",
+  "selections_overlap_do_not_sum": true,
+  "native_schedule_public_and_sampler": {
+    "passed": 210,
+    "seconds": 20.15
+  },
+  "post_selection_registry_identity_w8a8_mx": {
+    "passed": 612,
+    "seconds": 101.15
+  },
+  "public_scale_jvp": {
+    "passed": 15,
+    "deselected": 11,
+    "seconds": 6.21
+  },
+  "sampler": {
+    "passed": 5,
+    "seconds": 0.15
+  },
+  "mypy": "zero errors baseline zero",
+  "production_image_controls": 20,
+  "adjacent_image_controls": 3,
+  "publication_gates": "broad CPU lane and public CI pending",
+  "commands": {
+    "integration": "python -m pytest tests/unit/test_rocm_fp8_blockscale.py tests/unit/test_rocm_fp8_host_timing.py tests/device/rocm/test_public_typed_scaled_primal.py -q",
+    "production_regressions": "python -m pytest tests/unit/test_rocm_kernel_identity_native.py tests/unit/test_diagnostic_code_registry.py tests/unit/test_pass_metadata.py tests/device/rocm/test_fp8_blockscale_w8a8.py tests/device/rocm/test_mxfp8_checked_package.py tests/device/rocm/test_mxfp8_lds_package.py tests/device/rocm/test_mxfp4_folded_native_package.py -q",
+    "public_jvp": "python -m pytest tests/device/rocm/test_public_scaled_jvp.py -q -k test_public_scale_jvp"
+  },
+  "production_compiler_route": {
+    "passed": 1600,
+    "skipped": 0,
+    "seconds": 84.33,
+    "execution_certificate": "every selected proof test executed"
+  },
+  "generated_docs": 33,
+  "publication_document_tests": {
+    "passed": 37,
+    "seconds": 8.09
+  },
+  "public_audits": "all five surfaces and both claim linters pass",
+  "initial_compiler_route": "153 unexpected skips from a missing PATH llc; certificate correctly rejected; exact existing LLVM23.1.1 assertions tool exposed and full lane rerun"
+}

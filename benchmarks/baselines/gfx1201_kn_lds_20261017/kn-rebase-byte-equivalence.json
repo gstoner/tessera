@@ -1,0 +1,20 @@
+{
+  "head": "6d22d41b2b01587a76b96d622ad7f3993d74dbfe",
+  "original_commit": "32735be89",
+  "base_main": "1c4ea1e9e5dce31442451ddebd68a7792c927c1a",
+  "source_fields_checked": {
+    "benchmarks/rocm/benchmark_gfx1201_fp8_blockscale.py": "a4f3bba267928cad83d3fe83ff95106ae9c53f7a47f6d559a5aa48c5a6658858",
+    "python/tessera/compiler/rocm_fp8_blockscale.py": "7c87a448b6c90f5fe43d30bc7b1c3231609bc9f4d45e3aa0d74a69aaa73beefa",
+    "python/tessera/compiler/rocm_native.py": "eee05e1af5bd170492fe02f3be4c18702af0a5287fa778139620813eafdcdeb7",
+    "python/tessera/compiler/rocm_pipeline.py": "db3f8c651adf871e11d24dc978590a3fc775ae77446adae4ca5a09934b2a8eaa",
+    "python/tessera/runtime.py": "c4aa7f6db382422fe5cf8ec42d0535fec9f891912d6a62fec2607d5e4aabce48",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "b4c1172db03012c95a6e061cec20162d5fc1bddc84ff898ef56d095f5f147407",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "fb3bc5d338b5fe5bf2a41960f867d876cf49448bee1e61139d5b66c43a8f61c2",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "f8210ccb080edc0f5b6ac2259646e48bf3893bd13cbe1c6665cb3edcca49da48",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "a7700e7edddf9c7d5d7390ea58a4da352562739ba1a86d9bf019e5c6365206fe"
+  },
+  "compiler_sha256": "a9847f49ceeff7a394e39916ffa19e18bb582b70cbb78c3c9279825e36d395ba",
+  "source_diff_empty": true,
+  "mtime_warning": "Git main synchronization and rebase refreshed source mtimes after the matching build. All recorder source hashes and compiler bytes match the measured aligned candidate; no timestamp touching or validation substitution.",
+  "scope": "source/binary equivalence; no new device test result"
+}

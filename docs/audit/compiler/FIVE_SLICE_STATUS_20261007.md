@@ -2075,3 +2075,15 @@ from earlier fleet/ROCm receipts and is not summed with focused gates.
 The isolated normalization precision-policy candidate is not part of this
 frozen source. No overall five-slice or sibling hardware closure is declared.
 Evidence: benchmarks/baselines/sm120_tensor_rhs_jvp_runtime_20261015/README.md.
+
+
+## Native gfx1201 KN W8A8 performance integration
+
+GFX1201-KN-LDS-20261017 selects the measured compact KN envelope through
+native Graph/Schedule/Tile/Target/LLVM and the checked ABI. RX9070XT proof
+includes 210 integration cases, 612 post-selection regressions and 15 public
+JVP cases (overlapping selections), exact production-image parity and
+separate dispatch/completed-host measurements. The row-major experiment is
+retained as a measured negative. ROCm performance, MXFP4 attribution, generic
+frontend/AD and every original aggregate row remain open.
+Evidence: benchmarks/baselines/gfx1201_kn_lds_20261017/README.md.

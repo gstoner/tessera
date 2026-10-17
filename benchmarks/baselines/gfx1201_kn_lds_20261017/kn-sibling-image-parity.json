@@ -1,0 +1,57 @@
+{
+  "scope": "same gfx1201 owning host; old6d22 core compiler vs current native selector; no sibling-architecture evidence",
+  "rows": [
+    {
+      "profile": "w8a8_nk",
+      "arms": [
+        {
+          "compiler": "/home/angstorms/scratch/rocm-main-refresh-20261017/tessera-opt-kn-aligned-v2",
+          "image": "c865c3fff2a7086c1d6349829f0db5f05edfa9d0e546845c1a01432bc0f61dc3",
+          "entry": "tessera_rocm_scaled_matmul_lds_0ac40669ce7dd492",
+          "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+        },
+        {
+          "compiler": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/tools/tessera-opt/tessera-opt",
+          "image": "c865c3fff2a7086c1d6349829f0db5f05edfa9d0e546845c1a01432bc0f61dc3",
+          "entry": "tessera_rocm_scaled_matmul_lds_0ac40669ce7dd492",
+          "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+        }
+      ]
+    },
+    {
+      "profile": "mxfp8_nk",
+      "arms": [
+        {
+          "compiler": "/home/angstorms/scratch/rocm-main-refresh-20261017/tessera-opt-kn-aligned-v2",
+          "image": "61dff4d0700a3fbbc9ed8cf92b136a62b02b82762887bfa04e52568577bf6a6d",
+          "entry": "tessera_rocm_scaled_matmul_lds_ca3ee2619c809164",
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1"
+        },
+        {
+          "compiler": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/tools/tessera-opt/tessera-opt",
+          "image": "61dff4d0700a3fbbc9ed8cf92b136a62b02b82762887bfa04e52568577bf6a6d",
+          "entry": "tessera_rocm_scaled_matmul_lds_ca3ee2619c809164",
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1"
+        }
+      ]
+    },
+    {
+      "profile": "mxfp4_folded_m256",
+      "arms": [
+        {
+          "compiler": "/home/angstorms/scratch/rocm-main-refresh-20261017/tessera-opt-kn-aligned-v2",
+          "image": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+          "entry": "tessera_rocm_folded_matmul_a870cecb1991940b",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
+        },
+        {
+          "compiler": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/tools/tessera-opt/tessera-opt",
+          "image": "eb39530dd16944dab899e31e3f78be4fa807adf7377d3abe1c0a80fec4026557",
+          "entry": "tessera_rocm_folded_matmul_a870cecb1991940b",
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
+        }
+      ]
+    }
+  ],
+  "all_identical": true
+}

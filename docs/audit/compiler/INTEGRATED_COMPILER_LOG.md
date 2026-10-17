@@ -13386,3 +13386,37 @@ separate execution envelopes.
 
 Evidence: benchmarks/baselines/sm120_typed_attention_jvp_20261017/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-17 — gfx1201 KN LDS native selection
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync GFX1201-KN-LDS-20261017.
+
+Outcome: native Graph/Schedule admits compact KN W8A8 into typed Tile,
+ROCm Target, LLVM and HSACO. Bounds retain unmeasured cases on their prior
+route; scales, tails, lifetime and image identity remain checked. 210
+integration cases, 612 post-selection regressions and 15 public JVP cases
+pass (overlapping selections). All 20 measured images/entries/ABIs match
+production selection; NK/MXFP8/M256 MXFP4 images are unchanged.
+
+Matched dispatch improves 1.33-7.28x; counterbalanced completed host calls
+are roughly flat with mixed results preserved. The numerically correct
+row-major LDS alternative loses 27-33% and is rejected. Static ISA/register/
+barrier records are separate from unavailable dynamic conflict profiling.
+All four backend queues assess the ROCm-only contract and optional paired
+host fields without transferring hardware proof.
+
+PR978 merged at 1c4ea1e9e after exact-head required CI and a complete resolved
+review audit; its earlier pending-publication record is historical.
+The full production compiler-route lane passes 1,600 cases without skips;
+all 33 generated documents, 37 focused publication tests, both claim linters
+and all five public surface audits pass. The initial missing-llc run was
+correctly rejected by the execution certificate and rerun after restoring
+the exact existing LLVM 23.1.1 assertions tool to PATH.
+
+Remaining: broad CPU/public CI gates, wider KN/AITER gaps, MXFP4 attribution
+and the original five-slice objective.
+
+Evidence: benchmarks/baselines/gfx1201_kn_lds_20261017/README.md.
+<!-- entry-fields:end -->

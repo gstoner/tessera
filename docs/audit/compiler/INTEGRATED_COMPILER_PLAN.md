@@ -251,7 +251,7 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   **Open:** the remaining short-K / N = 1024 whole-M shapes and K = 1536 ragged rows; the `[K, N]` weight on the register panel; AITER's split-K buckets unmeasured; gfx1151 edge-row store before/after device-clock timing remains unavailable.
 - Depends on: —
 - Start: device
-- Latest: [2026-10-16 — gfx1201 folded CU calibration and frozen regression](INTEGRATED_COMPILER_LOG.md#2026-10-16--gfx1201-folded-cu-calibration-and-frozen-regression)
+- Latest: [2026-10-17 — gfx1201 KN LDS native selection](INTEGRATED_COMPILER_LOG.md#2026-10-17--gfx1201-kn-lds-native-selection)
 
 ### ROCM-MXFP4-W4A8-1
 
@@ -431,7 +431,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 
 - Current slice (2026-09-30, sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30): The Graph-to-package contract composes bounded dynamic M/N/K on gfx1201 and sm_120. Exact-device fp16/bf16 parity, padded host ingress, allocation residency, and image reuse pass. Separate fp16 and bf16 event packets support stage attribution only; gfx1201 variation is high. Apple and x86 need independent resident consumers; wider physical layouts and remaining W1.1 producers stay open. [Evidence](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 
-- Latest: [2026-10-17 — typed attention JVP public and portable integration](INTEGRATED_COMPILER_LOG.md#2026-10-17--typed-attention-jvp-public-and-portable-integration)
+- Latest: [2026-10-17 — gfx1201 KN LDS native selection](INTEGRATED_COMPILER_LOG.md#2026-10-17--gfx1201-kn-lds-native-selection)
 
 Current increment: checked rank-four broadcast saved-LSE packages and private tape execute on SM120; physical bias extents, deterministic reduction and saved-state pairing are bound through native Graph/Schedule/Tile and checked CUDA descriptors. [Evidence](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md). Broader W1.1, frontend/AD and sibling routes remain open.
 

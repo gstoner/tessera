@@ -1,0 +1,226 @@
+{
+  "scope": "native default Graph/Schedule/Tile package vs pre-selection measured diagnostic geometry",
+  "all20_images_entries_abis_identical": true,
+  "rows": [
+    {
+      "shape": [
+        128,
+        1024,
+        1024
+      ],
+      "output": "f32",
+      "image_sha256": "07b2d1ac5f779e21ff2fafb74f73b4fe576403c830073916adc6aa3b917b0535",
+      "entry": "tessera_rocm_scaled_matmul_lds_e81e7a7c66365ac2",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        128,
+        1024,
+        1024
+      ],
+      "output": "bf16",
+      "image_sha256": "ac05f5a4f3014818f2f335a9fd008b5e9a76ab482b728ce788836fd00357ae77",
+      "entry": "tessera_rocm_scaled_matmul_lds_38aa909c526e2878",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        129,
+        2048,
+        1536
+      ],
+      "output": "f32",
+      "image_sha256": "82509ad24fb59acbcc79a4189d4c6e72bd34483860458b430cc7f62913211f96",
+      "entry": "tessera_rocm_scaled_matmul_lds_c34fa4783faee602",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        129,
+        2048,
+        1536
+      ],
+      "output": "bf16",
+      "image_sha256": "4dd89f45ad76371872d40de4982eab636f34dcaf535c9f8d6a41845f39e11b06",
+      "entry": "tessera_rocm_scaled_matmul_lds_c6e92e38cfae595d",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "output": "f32",
+      "image_sha256": "82509ad24fb59acbcc79a4189d4c6e72bd34483860458b430cc7f62913211f96",
+      "entry": "tessera_rocm_scaled_matmul_lds_c34fa4783faee602",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "output": "bf16",
+      "image_sha256": "4dd89f45ad76371872d40de4982eab636f34dcaf535c9f8d6a41845f39e11b06",
+      "entry": "tessera_rocm_scaled_matmul_lds_c6e92e38cfae595d",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        200,
+        2048,
+        2048
+      ],
+      "output": "f32",
+      "image_sha256": "82509ad24fb59acbcc79a4189d4c6e72bd34483860458b430cc7f62913211f96",
+      "entry": "tessera_rocm_scaled_matmul_lds_c34fa4783faee602",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        200,
+        2048,
+        2048
+      ],
+      "output": "bf16",
+      "image_sha256": "4dd89f45ad76371872d40de4982eab636f34dcaf535c9f8d6a41845f39e11b06",
+      "entry": "tessera_rocm_scaled_matmul_lds_c6e92e38cfae595d",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1536
+      ],
+      "output": "f32",
+      "image_sha256": "82509ad24fb59acbcc79a4189d4c6e72bd34483860458b430cc7f62913211f96",
+      "entry": "tessera_rocm_scaled_matmul_lds_c34fa4783faee602",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1536
+      ],
+      "output": "bf16",
+      "image_sha256": "4dd89f45ad76371872d40de4982eab636f34dcaf535c9f8d6a41845f39e11b06",
+      "entry": "tessera_rocm_scaled_matmul_lds_c6e92e38cfae595d",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        256,
+        4096,
+        2048
+      ],
+      "output": "f32",
+      "image_sha256": "07b2d1ac5f779e21ff2fafb74f73b4fe576403c830073916adc6aa3b917b0535",
+      "entry": "tessera_rocm_scaled_matmul_lds_e81e7a7c66365ac2",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        256,
+        4096,
+        2048
+      ],
+      "output": "bf16",
+      "image_sha256": "ac05f5a4f3014818f2f335a9fd008b5e9a76ab482b728ce788836fd00357ae77",
+      "entry": "tessera_rocm_scaled_matmul_lds_38aa909c526e2878",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        4096
+      ],
+      "output": "f32",
+      "image_sha256": "82509ad24fb59acbcc79a4189d4c6e72bd34483860458b430cc7f62913211f96",
+      "entry": "tessera_rocm_scaled_matmul_lds_c34fa4783faee602",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        4096
+      ],
+      "output": "bf16",
+      "image_sha256": "4dd89f45ad76371872d40de4982eab636f34dcaf535c9f8d6a41845f39e11b06",
+      "entry": "tessera_rocm_scaled_matmul_lds_c6e92e38cfae595d",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        256,
+        1024,
+        4096
+      ],
+      "output": "f32",
+      "image_sha256": "07b2d1ac5f779e21ff2fafb74f73b4fe576403c830073916adc6aa3b917b0535",
+      "entry": "tessera_rocm_scaled_matmul_lds_e81e7a7c66365ac2",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        256,
+        1024,
+        4096
+      ],
+      "output": "bf16",
+      "image_sha256": "ac05f5a4f3014818f2f335a9fd008b5e9a76ab482b728ce788836fd00357ae77",
+      "entry": "tessera_rocm_scaled_matmul_lds_38aa909c526e2878",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        185,
+        3072,
+        1792
+      ],
+      "output": "f32",
+      "image_sha256": "82509ad24fb59acbcc79a4189d4c6e72bd34483860458b430cc7f62913211f96",
+      "entry": "tessera_rocm_scaled_matmul_lds_c34fa4783faee602",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        185,
+        3072,
+        1792
+      ],
+      "output": "bf16",
+      "image_sha256": "4dd89f45ad76371872d40de4982eab636f34dcaf535c9f8d6a41845f39e11b06",
+      "entry": "tessera_rocm_scaled_matmul_lds_c6e92e38cfae595d",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        217,
+        6144,
+        3072
+      ],
+      "output": "f32",
+      "image_sha256": "82509ad24fb59acbcc79a4189d4c6e72bd34483860458b430cc7f62913211f96",
+      "entry": "tessera_rocm_scaled_matmul_lds_c34fa4783faee602",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1"
+    },
+    {
+      "shape": [
+        217,
+        6144,
+        3072
+      ],
+      "output": "bf16",
+      "image_sha256": "4dd89f45ad76371872d40de4982eab636f34dcaf535c9f8d6a41845f39e11b06",
+      "entry": "tessera_rocm_scaled_matmul_lds_c6e92e38cfae595d",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+    }
+  ]
+}

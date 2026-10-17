@@ -6,6 +6,15 @@ target: nvidia_sm120
 last_updated: 2026-10-17
 ---
 
+## GFX1201-KN-LDS-20261017 — native KN W8A8 staging
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync: GFX1201-KN-LDS-20261017.
+
+Not applicable to nvidia physical execution: only ROCm W8A8 Schedule verification/selection, LDS materialization and image projection change. CUDA fragments, SM120 images and runtime ownership are unchanged. No shared operation, dtype or runtime ABI is added. Optional paired completed-host fields extend only the ROCm recorder; no sibling schema consumer changes. Follow-up required before adapting the layout or recorder to this backend; gfx1201 numerical/performance proof does not transfer.
+
+Evidence: benchmarks/baselines/gfx1201_kn_lds_20261017/README.md.
+
 ## SM120-TYPED-JVP-20261017 — typed forward-mode integration
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

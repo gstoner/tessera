@@ -1,0 +1,275 @@
+{
+  "scope": "20 matched output comparisons on10profiles; dispatch windows, not isolated kernels",
+  "all_admissible": true,
+  "inadmissible": [],
+  "rows": [
+    {
+      "shape": [
+        128,
+        1024,
+        1024
+      ],
+      "output": "f32",
+      "admissible": true,
+      "dispatch_speedup": 1.4290550135280002,
+      "event_speedup": 1.428741902934529,
+      "completed_host_speedup": 1.0118031445692925,
+      "minimum_window_ms": 12.58964
+    },
+    {
+      "shape": [
+        128,
+        1024,
+        1024
+      ],
+      "output": "bf16",
+      "admissible": true,
+      "dispatch_speedup": 1.3740598168304616,
+      "event_speedup": 1.3713748767493457,
+      "completed_host_speedup": 0.9985894081509574,
+      "minimum_window_ms": 12.86981
+    },
+    {
+      "shape": [
+        129,
+        2048,
+        1536
+      ],
+      "output": "f32",
+      "admissible": true,
+      "dispatch_speedup": 3.5963935468904684,
+      "event_speedup": 3.6002541818543046,
+      "completed_host_speedup": 1.0098707828985787,
+      "minimum_window_ms": 11.71316
+    },
+    {
+      "shape": [
+        129,
+        2048,
+        1536
+      ],
+      "output": "bf16",
+      "admissible": true,
+      "dispatch_speedup": 3.501095328552647,
+      "event_speedup": 3.5035944630961215,
+      "completed_host_speedup": 1.0449150103231524,
+      "minimum_window_ms": 11.67088
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "output": "f32",
+      "admissible": true,
+      "dispatch_speedup": 2.587765328931741,
+      "event_speedup": 2.5881747615046833,
+      "completed_host_speedup": 1.0334582637980627,
+      "minimum_window_ms": 13.05828
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "output": "bf16",
+      "admissible": true,
+      "dispatch_speedup": 2.5737018635812214,
+      "event_speedup": 2.5712613511650133,
+      "completed_host_speedup": 1.1276840910073662,
+      "minimum_window_ms": 13.10732
+    },
+    {
+      "shape": [
+        200,
+        2048,
+        2048
+      ],
+      "output": "f32",
+      "admissible": true,
+      "dispatch_speedup": 3.2502810989875752,
+      "event_speedup": 3.2504076376800173,
+      "completed_host_speedup": 0.8799474996164284,
+      "minimum_window_ms": 11.95316
+    },
+    {
+      "shape": [
+        200,
+        2048,
+        2048
+      ],
+      "output": "bf16",
+      "admissible": true,
+      "dispatch_speedup": 3.1484980797032667,
+      "event_speedup": 3.1503322593546756,
+      "completed_host_speedup": 0.9229969373703278,
+      "minimum_window_ms": 12.88536
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1536
+      ],
+      "output": "f32",
+      "admissible": true,
+      "dispatch_speedup": 5.062767043595022,
+      "event_speedup": 5.0601067666408275,
+      "completed_host_speedup": 0.8945854652634588,
+      "minimum_window_ms": 12.9838
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1536
+      ],
+      "output": "bf16",
+      "admissible": true,
+      "dispatch_speedup": 5.0802334008668995,
+      "event_speedup": 5.078101146567546,
+      "completed_host_speedup": 1.0691563417603283,
+      "minimum_window_ms": 13.05868
+    },
+    {
+      "shape": [
+        256,
+        4096,
+        2048
+      ],
+      "output": "f32",
+      "admissible": true,
+      "dispatch_speedup": 2.033621367606325,
+      "event_speedup": 2.0363912647386244,
+      "completed_host_speedup": 0.8853453632242873,
+      "minimum_window_ms": 12.95228
+    },
+    {
+      "shape": [
+        256,
+        4096,
+        2048
+      ],
+      "output": "bf16",
+      "admissible": true,
+      "dispatch_speedup": 2.020036827981521,
+      "event_speedup": 2.021463294767032,
+      "completed_host_speedup": 1.0191944623623834,
+      "minimum_window_ms": 13.05796
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        4096
+      ],
+      "output": "f32",
+      "admissible": true,
+      "dispatch_speedup": 3.295836174695423,
+      "event_speedup": 3.2933481504263336,
+      "completed_host_speedup": 1.0572075494798951,
+      "minimum_window_ms": 19.38516
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        4096
+      ],
+      "output": "bf16",
+      "admissible": true,
+      "dispatch_speedup": 3.3188411687482984,
+      "event_speedup": 3.3147864796388458,
+      "completed_host_speedup": 1.0876211843148522,
+      "minimum_window_ms": 19.58992
+    },
+    {
+      "shape": [
+        256,
+        1024,
+        4096
+      ],
+      "output": "f32",
+      "admissible": true,
+      "dispatch_speedup": 1.6423012718249903,
+      "event_speedup": 1.6426986931564072,
+      "completed_host_speedup": 0.9943334940981765,
+      "minimum_window_ms": 11.53876
+    },
+    {
+      "shape": [
+        256,
+        1024,
+        4096
+      ],
+      "output": "bf16",
+      "admissible": true,
+      "dispatch_speedup": 1.6269106871248913,
+      "event_speedup": 1.6287690407563775,
+      "completed_host_speedup": 0.9912068806158848,
+      "minimum_window_ms": 11.6474
+    },
+    {
+      "shape": [
+        185,
+        3072,
+        1792
+      ],
+      "output": "f32",
+      "admissible": true,
+      "dispatch_speedup": 6.295594318581262,
+      "event_speedup": 6.284142119074076,
+      "completed_host_speedup": 0.9699134128539872,
+      "minimum_window_ms": 12.8358
+    },
+    {
+      "shape": [
+        185,
+        3072,
+        1792
+      ],
+      "output": "bf16",
+      "admissible": true,
+      "dispatch_speedup": 7.252872933001491,
+      "event_speedup": 7.249254771745129,
+      "completed_host_speedup": 1.0172812552172965,
+      "minimum_window_ms": 12.6046
+    },
+    {
+      "shape": [
+        217,
+        6144,
+        3072
+      ],
+      "output": "f32",
+      "admissible": true,
+      "dispatch_speedup": 3.626657500791461,
+      "event_speedup": 3.620878866204003,
+      "completed_host_speedup": 1.2978093033603075,
+      "minimum_window_ms": 13.03976
+    },
+    {
+      "shape": [
+        217,
+        6144,
+        3072
+      ],
+      "output": "bf16",
+      "admissible": true,
+      "dispatch_speedup": 3.626160056908055,
+      "event_speedup": 3.621164760197793,
+      "completed_host_speedup": 1.0290347860423135,
+      "minimum_window_ms": 13.21268
+    }
+  ],
+  "dispatch_speedup_range": [
+    1.3740598168304616,
+    7.252872933001491
+  ],
+  "completed_host_speedup_range": [
+    0.8799474996164284,
+    1.2978093033603075
+  ]
+}

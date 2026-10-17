@@ -1,0 +1,310 @@
+{
+  "scope": "corrected counterbalanced10hostwindows per arm; oracle outside timers; all20ms floors checked",
+  "rows": [
+    {
+      "shape": [
+        128,
+        1024,
+        1024
+      ],
+      "output": "f32",
+      "host_admissible": true,
+      "host_old_ms": 3.8650534375,
+      "host_lds_ms": 3.857726375,
+      "paired_host_speedup": 1.001899321462373,
+      "device_admissible": true,
+      "dispatch_speedup": 1.3748924700631677,
+      "host_min_window_ms": 29.599194
+    },
+    {
+      "shape": [
+        128,
+        1024,
+        1024
+      ],
+      "output": "bf16",
+      "host_admissible": true,
+      "host_old_ms": 3.8325903125,
+      "host_lds_ms": 3.7884469375,
+      "paired_host_speedup": 1.0116521032835504,
+      "device_admissible": true,
+      "dispatch_speedup": 1.328586241116786,
+      "host_min_window_ms": 29.753348
+    },
+    {
+      "shape": [
+        129,
+        2048,
+        1536
+      ],
+      "output": "f32",
+      "host_admissible": true,
+      "host_old_ms": 4.261807125,
+      "host_lds_ms": 4.214944125,
+      "paired_host_speedup": 1.0111182968528676,
+      "device_admissible": true,
+      "dispatch_speedup": 3.755000762890534,
+      "host_min_window_ms": 29.71701
+    },
+    {
+      "shape": [
+        129,
+        2048,
+        1536
+      ],
+      "output": "bf16",
+      "host_admissible": true,
+      "host_old_ms": 4.30360625,
+      "host_lds_ms": 4.1928564375,
+      "paired_host_speedup": 1.026413929060265,
+      "device_admissible": true,
+      "dispatch_speedup": 3.7003192475907616,
+      "host_min_window_ms": 29.915347
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "output": "f32",
+      "host_admissible": true,
+      "host_old_ms": 5.4495331,
+      "host_lds_ms": 5.3486077000000005,
+      "paired_host_speedup": 1.0188694713953315,
+      "device_admissible": true,
+      "dispatch_speedup": 2.5821327009898343,
+      "host_min_window_ms": 24.393283
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "output": "bf16",
+      "host_admissible": true,
+      "host_old_ms": 5.1182121,
+      "host_lds_ms": 5.0711595,
+      "paired_host_speedup": 1.0092784697464159,
+      "device_admissible": true,
+      "dispatch_speedup": 2.5583914753459602,
+      "host_min_window_ms": 22.646193
+    },
+    {
+      "shape": [
+        200,
+        2048,
+        2048
+      ],
+      "output": "f32",
+      "host_admissible": true,
+      "host_old_ms": 4.2080528571428575,
+      "host_lds_ms": 4.388471428571428,
+      "paired_host_speedup": 0.9588880606003394,
+      "device_admissible": true,
+      "dispatch_speedup": 3.2602289761985612,
+      "host_min_window_ms": 26.666055
+    },
+    {
+      "shape": [
+        200,
+        2048,
+        2048
+      ],
+      "output": "bf16",
+      "host_admissible": true,
+      "host_old_ms": 4.424456428571428,
+      "host_lds_ms": 4.2441727857142855,
+      "paired_host_speedup": 1.0424779225445229,
+      "device_admissible": true,
+      "dispatch_speedup": 3.19356218290147,
+      "host_min_window_ms": 26.635707
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1536
+      ],
+      "output": "f32",
+      "host_admissible": true,
+      "host_old_ms": 6.2090357,
+      "host_lds_ms": 5.736736,
+      "paired_host_speedup": 1.082328993350923,
+      "device_admissible": true,
+      "dispatch_speedup": 5.043851922643794,
+      "host_min_window_ms": 27.108047
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1536
+      ],
+      "output": "bf16",
+      "host_admissible": true,
+      "host_old_ms": 5.6893898,
+      "host_lds_ms": 5.4079562999999995,
+      "paired_host_speedup": 1.0520406387159602,
+      "device_admissible": true,
+      "dispatch_speedup": 5.031106673736839,
+      "host_min_window_ms": 24.889714
+    },
+    {
+      "shape": [
+        256,
+        4096,
+        2048
+      ],
+      "output": "f32",
+      "host_admissible": true,
+      "host_old_ms": 5.2118977,
+      "host_lds_ms": 5.2233495,
+      "paired_host_speedup": 0.997807575388168,
+      "device_admissible": true,
+      "dispatch_speedup": 2.0344569930301226,
+      "host_min_window_ms": 24.694256
+    },
+    {
+      "shape": [
+        256,
+        4096,
+        2048
+      ],
+      "output": "bf16",
+      "host_admissible": true,
+      "host_old_ms": 5.0671989,
+      "host_lds_ms": 5.0947664,
+      "paired_host_speedup": 0.9945890551527544,
+      "device_admissible": true,
+      "dispatch_speedup": 2.0201153352707397,
+      "host_min_window_ms": 24.086288
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        4096
+      ],
+      "output": "f32",
+      "host_admissible": true,
+      "host_old_ms": 8.61494625,
+      "host_lds_ms": 8.33127725,
+      "paired_host_speedup": 1.0340486808310214,
+      "device_admissible": true,
+      "dispatch_speedup": 3.28628806978979,
+      "host_min_window_ms": 31.738163
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        4096
+      ],
+      "output": "bf16",
+      "host_admissible": true,
+      "host_old_ms": 8.21438275,
+      "host_lds_ms": 7.711030875,
+      "paired_host_speedup": 1.0652768589776915,
+      "device_admissible": true,
+      "dispatch_speedup": 3.3124357322560063,
+      "host_min_window_ms": 30.156293
+    },
+    {
+      "shape": [
+        256,
+        1024,
+        4096
+      ],
+      "output": "f32",
+      "host_admissible": true,
+      "host_old_ms": 4.502040083333333,
+      "host_lds_ms": 4.5771135,
+      "paired_host_speedup": 0.9835980871641774,
+      "device_admissible": true,
+      "dispatch_speedup": 1.6422298623677622,
+      "host_min_window_ms": 25.696848
+    },
+    {
+      "shape": [
+        256,
+        1024,
+        4096
+      ],
+      "output": "bf16",
+      "host_admissible": true,
+      "host_old_ms": 4.4927165,
+      "host_lds_ms": 4.562896,
+      "paired_host_speedup": 0.9846195267216259,
+      "device_admissible": true,
+      "dispatch_speedup": 1.675048842161194,
+      "host_min_window_ms": 25.129322
+    },
+    {
+      "shape": [
+        185,
+        3072,
+        1792
+      ],
+      "output": "f32",
+      "host_admissible": true,
+      "host_old_ms": 5.09082725,
+      "host_lds_ms": 4.82052825,
+      "paired_host_speedup": 1.0560724854169252,
+      "device_admissible": true,
+      "dispatch_speedup": 6.177352389454004,
+      "host_min_window_ms": 26.0364
+    },
+    {
+      "shape": [
+        185,
+        3072,
+        1792
+      ],
+      "output": "bf16",
+      "host_admissible": true,
+      "host_old_ms": 4.407438,
+      "host_lds_ms": 4.201318166666667,
+      "paired_host_speedup": 1.0490607531152227,
+      "device_admissible": true,
+      "dispatch_speedup": 7.281265424555201,
+      "host_min_window_ms": 24.642598
+    },
+    {
+      "shape": [
+        217,
+        6144,
+        3072
+      ],
+      "output": "f32",
+      "host_admissible": true,
+      "host_old_ms": 6.4131627,
+      "host_lds_ms": 6.1190565999999995,
+      "paired_host_speedup": 1.048063961362933,
+      "device_admissible": true,
+      "dispatch_speedup": 3.6140527859237537,
+      "host_min_window_ms": 29.854801
+    },
+    {
+      "shape": [
+        217,
+        6144,
+        3072
+      ],
+      "output": "bf16",
+      "host_admissible": true,
+      "host_old_ms": 6.2053572,
+      "host_lds_ms": 5.9079949,
+      "paired_host_speedup": 1.0503321863057125,
+      "device_admissible": true,
+      "dispatch_speedup": 3.6161361239308163,
+      "host_min_window_ms": 26.842275
+    }
+  ],
+  "all_admissible": true,
+  "host_speedup_range": [
+    0.9588880606003394,
+    1.082328993350923
+  ]
+}

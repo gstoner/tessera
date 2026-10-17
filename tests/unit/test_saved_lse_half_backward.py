@@ -66,8 +66,20 @@ def test_half_reverse_keeps_sibling_physical_gate(compiler, target, arch):
     assert result.returncode != 0
 
 
-def test_half_tangent_not_admitted_by_reverse_storage_change(compiler):
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+def test_half_tangent_now_has_its_own_native_graph_product(compiler, storage):
+    text = source(storage, saved=True).replace('"reverse"', '"forward"')
+    result = subprocess.run([str(compiler), "--tessera-autodiff-forward"], input=text,
+                            capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stderr
+    assert "tessera_attn.checkpoint_jvp" in result.stdout
+    assert f"x{storage}>" in result.stdout
+
+
+@pytest.mark.parametrize("target,arch", [("rocm", "gfx1201"), ("apple_gpu", "apple7"), ("x86", "zen5-avx512")])
+def test_half_tangent_keeps_sibling_physical_gate(compiler, target, arch):
     text = source(saved=True).replace('"reverse"', '"forward"')
+    text = text.replace('"nvidia_sm120"', f'"{target}"').replace('"sm_120"', f'"{arch}"')
     result = subprocess.run([str(compiler), "--tessera-autodiff-forward"], input=text,
                             capture_output=True, text=True, timeout=60)
     assert result.returncode != 0

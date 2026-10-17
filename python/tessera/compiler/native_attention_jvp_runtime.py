@@ -3,30 +3,17 @@ from __future__ import annotations
 
 def execute_unprepared(metadata,args):
     import numpy as np
-    from .native_attention_program import NativeAttentionJVPProgram
     from .emit.nvidia_cuda import NvidiaDeviceSession, CudaOwnedDeviceBuffer
-    program=NativeAttentionJVPProgram.from_json(
-        metadata["program_json"],expected_digest=metadata["program_digest"])
-    count=len(program.input_indices)
-    names=[f"primal_{i}" for i in range(count)]+[
-        f"tangent_{program.input_indices[i]}" for i in program.active]
-    if metadata.get("arg_names")!=names:
+    owner=PreparedAttentionJVP(metadata)
+    program=owner.program
+    count=owner.count
+    if tuple(metadata.get("arg_names",()))!=owner.names:
         raise ValueError("attention JVP launch names disagree with native activity")
-    if len(args)!=len(names):
+    if len(args)!=len(owner.names):
         raise ValueError("attention JVP launch arity disagrees")
     values=tuple(np.asarray(x) for x in args)
-    physical_shapes=program.pair.forward.descriptor.provenance["shape"]
-    b,hq,hkv,sq,sk,d,dv=physical_shapes
-    policy=program.pair.forward.descriptor.provenance
-    bias_shape=tuple(policy.get("bias_shape",())) or (b,hq,sq,sk)
-    physical=((b,hq,sq,d),(b,hkv,sk,d),(b,hkv,sk,dv)) + (
-        (bias_shape,) if policy.get("bias",False) else ())
-    frontend=[None]*count
-    for i,index in enumerate(program.input_indices):
-        frontend[index]=physical[i]
-    expected=tuple(frontend)+tuple(physical[i] for i in program.active)
-    if any(x.dtype!=np.float32 or x.shape!=shape
-           for x,shape in zip(values,expected,strict=True)):
+    if any(x.dtype!=dtype or x.shape!=shape
+           for x,shape,dtype in zip(values,owner.shapes,owner.dtypes,strict=True)):
         raise ValueError("attention JVP host storage disagrees with native contract")
     # Native session owns uploads. Capture owns its private O/LSE generation;
     # downloads complete before either owner releases its allocations.
@@ -34,15 +21,16 @@ def execute_unprepared(metadata,args):
         resident=[session.upload(x) for x in values]
         with program.capture(*resident[:count]) as frame:
             result=frame.jvp(*resident[count:])
-            def download(value):
+            def download(value,dtype):
                 if isinstance(value,tuple):
-                    return tuple(download(item) for item in value)
+                    return tuple(download(item,item_dtype) for item,item_dtype in zip(
+                        value,(owner.output_dtype,np.dtype("float32")),strict=True))
                 interface=value.__cuda_array_interface__
                 view=CudaOwnedDeviceBuffer(session,int(interface["data"][0]),
-                    tuple(interface["shape"]),np.float32,
-                    int(np.prod(interface["shape"]))*4,owns=False)
+                    tuple(interface["shape"]),dtype,
+                    int(np.prod(interface["shape"]))*dtype.itemsize,owns=False)
                 return session.download(view)
-            return download(frame.primal),download(result)
+            return download(frame.primal,owner.output_dtype),download(result,owner.output_dtype)
 
 # CUDA ownership, module retention, arena layout and call binding are native.
 # The Python LRU only retains bounded registration handles for immutable pins.

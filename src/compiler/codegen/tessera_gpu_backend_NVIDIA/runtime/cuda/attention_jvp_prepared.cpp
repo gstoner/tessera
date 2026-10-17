@@ -189,8 +189,13 @@ static int prepareAttentionJvp(
       std::string prefix="tessera_tile_attention_lse_";
       prefix+=storage==2?"f16_":"bf16_";
       if(outputStorage!=1)prefix+=outputStorage==2?"out_f16_":"out_bf16_";
-      if(std::strncmp(fentry,prefix.c_str(),prefix.size()))
+      if(std::strncmp(fentry,prefix.c_str(),prefix.size()) ||
+         std::strlen(fentry)!=prefix.size()+10)
         return bad("typed JVP forward entry storage disagrees");
+      for(size_t i=prefix.size();i<prefix.size()+10;++i)
+        if(!((fentry[i]>='0' && fentry[i]<='9') ||
+             (fentry[i]>='a' && fentry[i]<='f')))
+          return bad("typed JVP forward entry storage digest disagrees");
     }
     if (bool(std::strstr(tentry,"_with_lse")) != savedLse)
       return bad("prepared JVP output contract differs from tangent entry");

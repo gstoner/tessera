@@ -1,0 +1,40 @@
+{
+  "measured_source": "8556ca7d8dc70d8a3b4a9a91b563d2768debe26d",
+  "native_compiler_increment": "6b734cd19",
+  "log_sha256": {
+    "device-kernels-first.txt": "0473d6b04632118df4a88208198add32b60037ef9ad411e812fbe8d4c4857aee",
+    "bounded-package-owner.txt": "7864967f9fffe19b8d6e416dfeacc88abb43c42802a6cbe5760aadb6e41093e9",
+    "device-public-capture.txt": "1ec306072a38441f898298ae5a95b079636d124345997e5c06ca7d3412e778c9",
+    "device-pending-streams.txt": "2be3efc3c4a0d7b116187a9b0051ae7d1a583700573bbd6d3113efd11e88fd8a",
+    "device-original-frontend.txt": "93dac5030caad1f94c01aa52a03bb8cd37784c4033cd8232b461e62b2ebaf8e8",
+    "device-fresh-process.txt": "af8e01c0c270a4cd4f3ad4d76360886b74c826e1abab3a5271f6c38b16a4aa32",
+    "device-static-typed-regression.txt": "86fa9af1fbce8e589561b9d6a54459a4d72458aed2847df6d6a2f3f665cf8cb0",
+    "static-target-equivalence.json": "fe4906502651a89af55410b133b3d9e53c1219b794e5775526df214924258e9f",
+    "build-provider.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mypy-package.txt": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8",
+    "mypy-capture.txt": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8",
+    "mypy-final-repaired.txt": "050c52a2b0c61e8b681ef5c485e0bc03340b8d55148e0acef27d744c8be42033",
+    "package-docs-final.txt": "e90528f91a4a40ebfc9c9dc8060da58432ff05264fc968644d99c199077ce882"
+  },
+  "validation_scope": "51 new public/capture device cases = 37 initial + 4 pending-stream + 8 frontend + 2 fresh-process; 172 existing regressions; portable/prepared 70; raw native kernels16; selections overlap across phases and are not summed into a unique total",
+  "publication": "private; broader unit/compiler/drift gates and review/CI still required; PR975 is the only open public PR",
+  "post_measurement_recorder_change": {
+    "commit": "70e8e88c2",
+    "scope": "type annotation, Any import and explicit spelling of the same six reference arguments; compiler/runtime/image files unchanged"
+  },
+  "validation_updates": {
+    "typing": "zero errors across seven files",
+    "routing_and_package_audit": "89 passed",
+    "broad_host_unit": {
+      "session": 50179,
+      "log": "/home/angstorms/scratch/sm120-bounded-row-correction-20261017/full-unit-final.txt",
+      "state": "running"
+    },
+    "generated_docs": {
+      "session": 75899,
+      "write_log": "/home/angstorms/scratch/sm120-bounded-row-correction-20261017/generated-write.txt",
+      "check_log": "/home/angstorms/scratch/sm120-bounded-row-correction-20261017/generated-check.txt",
+      "state": "running"
+    }
+  }
+}

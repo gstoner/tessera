@@ -6,6 +6,16 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## SM120-BOUNDED-ROW-OWNER-20261017 — bounded native row residuals
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-BOUNDED-ROW-OWNER-20261017.
+
+Follow-up required before apple-owned adoption of the shared bounded shape helper or resident tape hooks. The new VJP v4 row owner, CUDA parameter-count checks and PTX arithmetic are NVIDIA-specific; no apple package, native ABI, physical schedule or selector is promoted. Shared signatures keep their existing default behavior. No SM120 numerical or performance evidence transfers.
+
+Evidence: benchmarks/baselines/sm120_bounded_row_owner_20261017/README.md.
+
+
 ## SM120-TYPED-RESIDENT-CAPTURE-20261017 — typed bounded resident generations
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

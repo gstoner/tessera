@@ -13295,3 +13295,23 @@ Remaining: half JVP, composed AD, wider masks, ordinary dynamic reverse
 breadth, performance optimization and original five-slice closure.
 Evidence: benchmarks/baselines/sm120_typed_resident_capture_20261017/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-17 — bounded native attention row ownership
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-BOUNDED-ROW-OWNER-20261017.
+
+Outcome: Original frontend and native Graph/AD/Schedule/Tile/Target products
+retain bounded sequences through portable VJP v4, public prepared replay and
+resident reverse capture. Static v3 retains its meaning. 51 new RTX5070 device
+cases, 172 existing regressions and 70 portable/prepared gates pass. Six matched
+source timing rows separate native forward/producer/consumer/full intervals
+from completed public calls. All four backend plans assess shared changes.
+
+Remaining: Matched inline/prepass A/B, final broad publication gates, wider
+layouts/masks, half JVP, composed AD and all original aggregate obligations.
+No speedup, default-selector, sibling execution or model-quality promotion.
+
+Evidence: benchmarks/baselines/sm120_bounded_row_owner_20261017/README.md.
+<!-- entry-fields:end -->

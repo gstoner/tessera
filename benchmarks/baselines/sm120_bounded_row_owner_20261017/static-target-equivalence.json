@@ -1,0 +1,178 @@
+[
+  {
+    "storage": "f16",
+    "wide": false,
+    "bias": false,
+    "role": "row_correction",
+    "identical": true,
+    "sha256": [
+      "abfeff9109f20707257cb8478a1a144cbd830dd88b0e3730675ab6820eae8306",
+      "abfeff9109f20707257cb8478a1a144cbd830dd88b0e3730675ab6820eae8306"
+    ]
+  },
+  {
+    "storage": "f16",
+    "wide": false,
+    "bias": false,
+    "role": "backward_rows",
+    "identical": true,
+    "sha256": [
+      "b6211dcc346936e643923da3b6ed95929566177629e3960d9abe7f1645eaf79a",
+      "b6211dcc346936e643923da3b6ed95929566177629e3960d9abe7f1645eaf79a"
+    ]
+  },
+  {
+    "storage": "f16",
+    "wide": false,
+    "bias": true,
+    "role": "row_correction",
+    "identical": true,
+    "sha256": [
+      "fa9818e622c2547377c03bc800deac80e916b1aa782a6a179096d816301ac81b",
+      "fa9818e622c2547377c03bc800deac80e916b1aa782a6a179096d816301ac81b"
+    ]
+  },
+  {
+    "storage": "f16",
+    "wide": false,
+    "bias": true,
+    "role": "backward_rows",
+    "identical": true,
+    "sha256": [
+      "8a56a31615dd561d4270ed707cab3050c5532b50b2e9c26c0d6cb79b97b4ef87",
+      "8a56a31615dd561d4270ed707cab3050c5532b50b2e9c26c0d6cb79b97b4ef87"
+    ]
+  },
+  {
+    "storage": "f16",
+    "wide": true,
+    "bias": false,
+    "role": "row_correction",
+    "identical": true,
+    "sha256": [
+      "b124612a3e3e274e2771c1bf08a1398a7610828de9b99c2f1758c1def029e046",
+      "b124612a3e3e274e2771c1bf08a1398a7610828de9b99c2f1758c1def029e046"
+    ]
+  },
+  {
+    "storage": "f16",
+    "wide": true,
+    "bias": false,
+    "role": "backward_rows",
+    "identical": true,
+    "sha256": [
+      "118d032179b991f504502d429fc631bfb3d1926991e934d7d933efc3712cbf94",
+      "118d032179b991f504502d429fc631bfb3d1926991e934d7d933efc3712cbf94"
+    ]
+  },
+  {
+    "storage": "f16",
+    "wide": true,
+    "bias": true,
+    "role": "row_correction",
+    "identical": true,
+    "sha256": [
+      "4c25cdd821fddabd39315cb7321248822a499a92960c12bad2a048a40485d0d4",
+      "4c25cdd821fddabd39315cb7321248822a499a92960c12bad2a048a40485d0d4"
+    ]
+  },
+  {
+    "storage": "f16",
+    "wide": true,
+    "bias": true,
+    "role": "backward_rows",
+    "identical": true,
+    "sha256": [
+      "72aa174c1560b1b0cb92ad3744f924a98ccb78322eddddafb0dda1478fd299a0",
+      "72aa174c1560b1b0cb92ad3744f924a98ccb78322eddddafb0dda1478fd299a0"
+    ]
+  },
+  {
+    "storage": "bf16",
+    "wide": false,
+    "bias": false,
+    "role": "row_correction",
+    "identical": true,
+    "sha256": [
+      "1a4fa789da26b362db57c76333e21b978d0bd8968502f035ce6aca004b0701df",
+      "1a4fa789da26b362db57c76333e21b978d0bd8968502f035ce6aca004b0701df"
+    ]
+  },
+  {
+    "storage": "bf16",
+    "wide": false,
+    "bias": false,
+    "role": "backward_rows",
+    "identical": true,
+    "sha256": [
+      "2c1a8257e4e4032131b973d7f4dc8bf5cec4f52d887549afa7b83bcef5384b95",
+      "2c1a8257e4e4032131b973d7f4dc8bf5cec4f52d887549afa7b83bcef5384b95"
+    ]
+  },
+  {
+    "storage": "bf16",
+    "wide": false,
+    "bias": true,
+    "role": "row_correction",
+    "identical": true,
+    "sha256": [
+      "5563b9e4acc617168837b949c1034ca52d641ea4b1c0f18161e7f66d4c8eb28d",
+      "5563b9e4acc617168837b949c1034ca52d641ea4b1c0f18161e7f66d4c8eb28d"
+    ]
+  },
+  {
+    "storage": "bf16",
+    "wide": false,
+    "bias": true,
+    "role": "backward_rows",
+    "identical": true,
+    "sha256": [
+      "028f3d9e7d53da08d6b1ae72daff1e3c974f46902f51f956cddc1921bb5163d0",
+      "028f3d9e7d53da08d6b1ae72daff1e3c974f46902f51f956cddc1921bb5163d0"
+    ]
+  },
+  {
+    "storage": "bf16",
+    "wide": true,
+    "bias": false,
+    "role": "row_correction",
+    "identical": true,
+    "sha256": [
+      "09b3b23c5570e0dc818446246bd64936f3c21106c6a878deca9516920c0380fd",
+      "09b3b23c5570e0dc818446246bd64936f3c21106c6a878deca9516920c0380fd"
+    ]
+  },
+  {
+    "storage": "bf16",
+    "wide": true,
+    "bias": false,
+    "role": "backward_rows",
+    "identical": true,
+    "sha256": [
+      "79ac3603f8cba48898c2e53bef9d775b06515ee20244f9d2d1c6e991e407926a",
+      "79ac3603f8cba48898c2e53bef9d775b06515ee20244f9d2d1c6e991e407926a"
+    ]
+  },
+  {
+    "storage": "bf16",
+    "wide": true,
+    "bias": true,
+    "role": "row_correction",
+    "identical": true,
+    "sha256": [
+      "cc7a2063293ace35b3cd8d620ab4d7b6c74efc2be4b7c8b9a9b24786cd0366bf",
+      "cc7a2063293ace35b3cd8d620ab4d7b6c74efc2be4b7c8b9a9b24786cd0366bf"
+    ]
+  },
+  {
+    "storage": "bf16",
+    "wide": true,
+    "bias": true,
+    "role": "backward_rows",
+    "identical": true,
+    "sha256": [
+      "fa4a6d6dd14f838bd2b264a912518d4a22ba40131a1638d4d51fbb5bbf224388",
+      "fa4a6d6dd14f838bd2b264a912518d4a22ba40131a1638d4d51fbb5bbf224388"
+    ]
+  }
+]

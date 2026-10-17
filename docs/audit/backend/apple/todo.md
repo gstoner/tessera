@@ -6,6 +6,18 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## ROCM-RESIDENT-QUANT-PRODUCT-20261017 — native SSA edge
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-RESIDENT-QUANT-PRODUCT-20261017.
+
+Evidence: benchmarks/baselines/rocm_resident_quantized_product_20261017/README.md.
+
+Not applicable to this physical partition: its admission requires gfx1201.
+The quantizer semantic validator is shared between standalone and composed
+Graph paths, with no change to sibling schedules, ABI or dtype admission.
+Follow-up required before any sibling consumes the new composed profile.
+
 ## ROCM-K16-QUANT-PUBLIC-20261017 — authored two-result package
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.

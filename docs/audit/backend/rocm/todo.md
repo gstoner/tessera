@@ -5,6 +5,21 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-RESIDENT-QUANT-PRODUCT-20261017 — native SSA edge
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-RESIDENT-QUANT-PRODUCT-20261017.
+
+Evidence: benchmarks/baselines/rocm_resident_quantized_product_20261017/README.md.
+
+Native SSA partition work is in progress for a BF16 source quantized to
+private E4M3 codes and FP32 K16 scales, followed by an exact scaled product.
+The compiler derives two member graphs and all first-write/last-read lifetimes.
+Three exact gfx1201 composed numerical/changed-input/lifetime cases pass.
+Captured producer/consumer windows and ordinary composed/prepared windows are
+recorded separately. Public JIT and portable composed-package integration
+remain required; no full-MLP or model-quality closure is claimed.
+
 ## ROCM-K16-QUANT-PUBLIC-20261017 — authored two-result package
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.

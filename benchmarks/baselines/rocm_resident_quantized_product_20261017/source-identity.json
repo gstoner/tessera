@@ -1,0 +1,8 @@
+{
+  "src/compiler/ir/include/Tessera/IR/BlockQuantContract.h": "e1036fbbe5952378fbaec1ddcc6e26465d77b39f8c4b6dfd14da419ca2def628",
+  "src/compiler/programming_model/lib/NativeBlockQuantSchedule.h": "7b105725387f5bc381c8e2f6fdef31778af50fcdf10415f14bbc619587937c28",
+  "src/transforms/lib/NativeScaledMatmulProgram.h": "10f32a286e1e35d4e3d80c66595cc23733dbd781acd500ce96431bd84b486f6b",
+  "src/transforms/lib/NativeQuantizedProductProgram.h": "6ec3b3298776009ba798777317d0991eeca2f17d42fc8f60f24b4e4f721ee021",
+  "benchmarks/rocm/benchmark_resident_quantized_product.py": "ceab3b152f870022dcd99af6c4cd6b7a1ea8b344b44580313d5f39f7ec010297",
+  "tests/unit/test_native_quantized_product_program.py": "c164f4a1aaebb5f9eb6ea26ceff5da35ebb526001f69353a89a4bc370188bbc9"
+}

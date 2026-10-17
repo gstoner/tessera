@@ -1,0 +1,223 @@
+{
+  "architecture": "gfx1201",
+  "device": {
+    "uuid": "GPU-28d9e7efbf2ef716",
+    "name": "AMD Radeon RX 9070 XT"
+  },
+  "rocminfo": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD Ryzen 7 9800X3D 8-Core Processor\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            16                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    30801556(0x1d5fe94) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    30801556(0x1d5fe94) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    30801556(0x1d5fe94) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    30801556(0x1d5fe94) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1201                            \n  Uuid:                    GPU-28d9e7efbf2ef716               \n  Marketing Name:          AMD Radeon RX 9070 XT              \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L3:                      65536(0x10000) KB                  \n  Chip ID:                 30032(0x7550)                      \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2400                               \n  BDFID:                   768                                \n  Internal Node ID:        1                                  \n  Compute Unit:            64                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          4                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 358                                \n  SDMA engine uCode::      0                                  \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    16577056(0xfcf220) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1201         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx12-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "compiler_sha256": "1ab3d7a6be99cb105fb3171fd0ffd24aac0d77aa28df3e176d8a07d369e30511",
+  "runtime_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+  "recorder_sha256": "ceab3b152f870022dcd99af6c4cd6b7a1ea8b344b44580313d5f39f7ec010297",
+  "shape_mnk": [
+    19,
+    33,
+    64
+  ],
+  "output": "bf16",
+  "correctness": "passed_before_timing",
+  "max_abs_errors": [
+    0.0077149178689257525,
+    0.007399319861292497,
+    0.00723947545662007
+  ],
+  "changed_input_generations": 3,
+  "consumer_before_producer": "rejected",
+  "retained_outputs": "passed",
+  "producer_event_samples_ms": [
+    0.00458368007093668,
+    0.004647680092602968,
+    0.0045820800587534904,
+    0.004590080119669437,
+    0.004593280144035816,
+    0.004580480046570301,
+    0.0045820800587534904
+  ],
+  "consumer_event_samples_ms": [
+    0.006826720200479031,
+    0.006799520459026098,
+    0.006734739989042282,
+    0.006737919989973307,
+    0.006745140068233013,
+    0.006736320443451405,
+    0.006738740019500256
+  ],
+  "composed_event_samples_ms": [
+    0.011702779680490494,
+    0.011262420564889908,
+    0.011805579997599125,
+    0.01167358085513115,
+    0.01166900061070919,
+    0.011718200519680977,
+    0.011753779835999012
+  ],
+  "captured_member_samples_ms": [
+    [
+      0.004723680205643177,
+      0.0068763201124966145
+    ],
+    [
+      0.004710080102086067,
+      0.006889119744300842
+    ],
+    [
+      0.004711680114269257,
+      0.0068787201307713985
+    ],
+    [
+      0.004759680014103651,
+      0.006872320082038641
+    ],
+    [
+      0.004712480120360851,
+      0.006872320082038641
+    ],
+    [
+      0.004719660151749849,
+      0.006882720161229372
+    ],
+    [
+      0.004707680083811283,
+      0.006879619788378477
+    ]
+  ],
+  "prepared_invoke_read_samples_ms": [
+    0.24750400916673243,
+    0.2521130081731826,
+    0.2267640084028244,
+    0.24351599859073758,
+    0.2361220249440521,
+    0.2538860135246068,
+    0.22801599698141217
+  ],
+  "medians_ms": {
+    "producer": 0.00458368007093668,
+    "consumer": 0.006738740019500256,
+    "composed": 0.011702779680490494,
+    "captured_producer": 0.004712480120360851,
+    "captured_consumer": 0.0068787201307713985,
+    "prepared_invoke_read": 0.24351599859073758
+  },
+  "image_sha256": [
+    "18ee2db7e8c0c192080ac7931dc20b2942fad175727b091a618564bdb2449dc5",
+    "630996baf332a5704ac8dbdce57150cd7fe121414266c1179e27fd42c79429e1"
+  ],
+  "graph_sha256": "9b241ca266badce83e7f5f7a884b3c287ec7403baecc19bb2a4d193d1880d9d2",
+  "plan": {
+    "buffers": [
+      {
+        "bytes": 2432,
+        "first_write": -1,
+        "id": 0,
+        "last_read": 0,
+        "ownership": "readonly_input",
+        "shape": [
+          19,
+          64
+        ],
+        "storage": "bf16"
+      },
+      {
+        "bytes": 2112,
+        "first_write": -1,
+        "id": 1,
+        "last_read": 1,
+        "ownership": "readonly_input",
+        "shape": [
+          33,
+          64
+        ],
+        "storage": "f8E4M3FN"
+      },
+      {
+        "bytes": 528,
+        "first_write": -1,
+        "id": 2,
+        "last_read": 1,
+        "ownership": "readonly_input",
+        "shape": [
+          4,
+          33
+        ],
+        "storage": "f32"
+      },
+      {
+        "bytes": 1216,
+        "first_write": 0,
+        "id": 3,
+        "last_read": 1,
+        "ownership": "private_scratch",
+        "shape": [
+          19,
+          64
+        ],
+        "storage": "f8E4M3FN"
+      },
+      {
+        "bytes": 304,
+        "first_write": 0,
+        "id": 4,
+        "last_read": 1,
+        "ownership": "private_scratch",
+        "shape": [
+          19,
+          4
+        ],
+        "storage": "f32"
+      },
+      {
+        "bytes": 1254,
+        "first_write": 1,
+        "id": 5,
+        "last_read": 2,
+        "ownership": "returned_output",
+        "shape": [
+          19,
+          33
+        ],
+        "storage": "bf16"
+      }
+    ],
+    "member_graphs": [
+      "module attributes {tessera.arch = \"gfx1201\", tessera.native.block_quant, tessera.target = \"rocm_gfx1201\"} {\n  func.func @quantize(%arg0: tensor<19x64xbf16>) -> (tensor<19x64xf8E4M3FN>, tensor<19x4xf32>) {\n    %0 = tessera.reshape %arg0 {shape = [76, 16]} : (tensor<19x64xbf16>) -> tensor<76x16xbf16>\n    %1 = tessera.cast %0 {dtype = \"fp32\"} : (tensor<76x16xbf16>) -> tensor<76x16xf32>\n    %2 = tessera.absolute %1 : (tensor<76x16xf32>) -> tensor<76x16xf32>\n    %3 = tessera.reduce %2 {axis = 1 : i64, keepdims = true, kind = \"max\"} : (tensor<76x16xf32>) -> tensor<76x1xf32>\n    %cst = arith.constant dense<4.480000e+02> : tensor<76x1xf32>\n    %4 = tessera.div %3, %cst : (tensor<76x1xf32>, tensor<76x1xf32>) -> tensor<76x1xf32>\n    %cst_0 = arith.constant dense<1.17549435E-38> : tensor<76x1xf32>\n    %5 = tessera.maximum %4, %cst_0 : (tensor<76x1xf32>, tensor<76x1xf32>) -> tensor<76x1xf32>\n    %6 = tessera.expand %5 {shape = [76, 16]} : (tensor<76x1xf32>) -> tensor<76x16xf32>\n    %7 = tessera.div %1, %6 : (tensor<76x16xf32>, tensor<76x16xf32>) -> tensor<76x16xf32>\n    %8 = tessera.cast %7 {dtype = \"fp8_e4m3\"} : (tensor<76x16xf32>) -> tensor<76x16xf8E4M3FN>\n    %9 = tessera.reshape %8 {shape = [19, 64]} : (tensor<76x16xf8E4M3FN>) -> tensor<19x64xf8E4M3FN>\n    %10 = tessera.reshape %5 {shape = [19, 4]} : (tensor<76x1xf32>) -> tensor<19x4xf32>\n    return %9, %10 : tensor<19x64xf8E4M3FN>, tensor<19x4xf32>\n  }\n}\n\n",
+      "module attributes {tessera.arch = \"gfx1201\", tessera.target = \"rocm\"} {\n  func.func @quantized_product(%arg0: tensor<19x64xf8E4M3FN>, %arg1: tensor<33x64xf8E4M3FN>, %arg2: tensor<19x4xf32>, %arg3: tensor<4x33xf32>) -> tensor<19x33xbf16> {\n    %0 = tessera.scaled_matmul %arg0, %arg1 scales(%arg2, %arg3) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [1, 16], format = \"fp32\", granularity = \"block\"}, transposeB = true} : (tensor<19x64xf8E4M3FN>, tensor<33x64xf8E4M3FN>, tensor<19x4xf32>, tensor<4x33xf32>) -> tensor<19x33xbf16>\n    return %0 : tensor<19x33xbf16>\n  }\n}\n\n"
+    ],
+    "output": 5,
+    "schema": "tessera.native.quantized_product.v1",
+    "source_graph_ir": "module attributes {tessera.arch = \"gfx1201\", tessera.native.quantized_product, tessera.target = \"rocm_gfx1201\"} {\n  func.func @block_quant(%arg0: tensor<19x64xbf16>, %arg1: tensor<33x64xf8E4M3FN>, %arg2: tensor<4x33xf32>) -> tensor<19x33xbf16> {\n    %0 = tessera.reshape %arg0 {shape = [76, 16]} : (tensor<19x64xbf16>) -> tensor<76x16xbf16>\n    %1 = tessera.cast %0 {dtype = \"fp32\"} : (tensor<76x16xbf16>) -> tensor<76x16xf32>\n    %2 = tessera.absolute %1 : (tensor<76x16xf32>) -> tensor<76x16xf32>\n    %3 = tessera.reduce %2 {axis = 1 : i64, keepdims = true, kind = \"max\"} : (tensor<76x16xf32>) -> tensor<76x1xf32>\n    %cst = arith.constant dense<4.480000e+02> : tensor<76x1xf32>\n    %4 = tessera.div %3, %cst : (tensor<76x1xf32>, tensor<76x1xf32>) -> tensor<76x1xf32>\n    %cst_0 = arith.constant dense<1.17549435E-38> : tensor<76x1xf32>\n    %5 = tessera.maximum %4, %cst_0 : (tensor<76x1xf32>, tensor<76x1xf32>) -> tensor<76x1xf32>\n    %6 = tessera.expand %5 {shape = [76, 16]} : (tensor<76x1xf32>) -> tensor<76x16xf32>\n    %7 = tessera.div %1, %6 : (tensor<76x16xf32>, tensor<76x16xf32>) -> tensor<76x16xf32>\n    %8 = tessera.cast %7 {dtype = \"fp8_e4m3\"} : (tensor<76x16xf32>) -> tensor<76x16xf8E4M3FN>\n    %9 = tessera.reshape %8 {shape = [19, 64]} : (tensor<76x16xf8E4M3FN>) -> tensor<19x64xf8E4M3FN>\n    %10 = tessera.reshape %5 {shape = [19, 4]} : (tensor<76x1xf32>) -> tensor<19x4xf32>\n    %11 = tessera.scaled_matmul %9, %arg1 scales(%10, %arg2) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [1, 16], format = \"fp32\", granularity = \"block\"}, transposeB = true} : (tensor<19x64xf8E4M3FN>, tensor<33x64xf8E4M3FN>, tensor<19x4xf32>, tensor<4x33xf32>) -> tensor<19x33xbf16>\n    return %11 : tensor<19x33xbf16>\n  }\n}\n\n",
+    "steps": [
+      {
+        "inputs": [
+          0
+        ],
+        "member": "block_quant__quantized_member_0",
+        "operation": "native_block_quant",
+        "outputs": [
+          3,
+          4
+        ],
+        "step": 0
+      },
+      {
+        "inputs": [
+          3,
+          1,
+          4,
+          2
+        ],
+        "member": "block_quant__quantized_member_1",
+        "operation": "tessera.scaled_matmul",
+        "outputs": [
+          5
+        ],
+        "step": 1
+      }
+    ]
+  },
+  "outlined_ir": "module attributes {tessera.arch = \"gfx1201\", tessera.native.quantized_product, tessera.native.quantized_product_json = \"eyJidWZmZXJzIjpbeyJieXRlcyI6MjQzMiwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MCwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOiJyZWFkb25seV9pbnB1dCIsInNoYXBlIjpbMTksNjRdLCJzdG9yYWdlIjoiYmYxNiJ9LHsiYnl0ZXMiOjIxMTIsImZpcnN0X3dyaXRlIjotMSwiaWQiOjEsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoicmVhZG9ubHlfaW5wdXQiLCJzaGFwZSI6WzMzLDY0XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6NTI4LCJmaXJzdF93cml0ZSI6LTEsImlkIjoyLCJsYXN0X3JlYWQiOjEsIm93bmVyc2hpcCI6InJlYWRvbmx5X2lucHV0Iiwic2hhcGUiOls0LDMzXSwic3RvcmFnZSI6ImYzMiJ9LHsiYnl0ZXMiOjEyMTYsImZpcnN0X3dyaXRlIjowLCJpZCI6MywibGFzdF9yZWFkIjoxLCJvd25lcnNoaXAiOiJwcml2YXRlX3NjcmF0Y2giLCJzaGFwZSI6WzE5LDY0XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6MzA0LCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoicHJpdmF0ZV9zY3JhdGNoIiwic2hhcGUiOlsxOSw0XSwic3RvcmFnZSI6ImYzMiJ9LHsiYnl0ZXMiOjEyNTQsImZpcnN0X3dyaXRlIjoxLCJpZCI6NSwibGFzdF9yZWFkIjoyLCJvd25lcnNoaXAiOiJyZXR1cm5lZF9vdXRwdXQiLCJzaGFwZSI6WzE5LDMzXSwic3RvcmFnZSI6ImJmMTYifV0sIm1lbWJlcl9ncmFwaHMiOlsibW9kdWxlIGF0dHJpYnV0ZXMge3Rlc3NlcmEuYXJjaCA9IFwiZ2Z4MTIwMVwiLCB0ZXNzZXJhLm5hdGl2ZS5ibG9ja19xdWFudCwgdGVzc2VyYS50YXJnZXQgPSBcInJvY21fZ2Z4MTIwMVwifSB7XG4gIGZ1bmMuZnVuYyBAcXVhbnRpemUoJWFyZzA6IHRlbnNvcjwxOXg2NHhiZjE2PikgLT4gKHRlbnNvcjwxOXg2NHhmOEU0TTNGTj4sIHRlbnNvcjwxOXg0eGYzMj4pIHtcbiAgICAlMCA9IHRlc3NlcmEucmVzaGFwZSAlYXJnMCB7c2hhcGUgPSBbNzYsIDE2XX0gOiAodGVuc29yPDE5eDY0eGJmMTY+KSAtPiB0ZW5zb3I8NzZ4MTZ4YmYxNj5cbiAgICAlMSA9IHRlc3NlcmEuY2FzdCAlMCB7ZHR5cGUgPSBcImZwMzJcIn0gOiAodGVuc29yPDc2eDE2eGJmMTY+KSAtPiB0ZW5zb3I8NzZ4MTZ4ZjMyPlxuICAgICUyID0gdGVzc2VyYS5hYnNvbHV0ZSAlMSA6ICh0ZW5zb3I8NzZ4MTZ4ZjMyPikgLT4gdGVuc29yPDc2eDE2eGYzMj5cbiAgICAlMyA9IHRlc3NlcmEucmVkdWNlICUyIHtheGlzID0gMSA6IGk2NCwga2VlcGRpbXMgPSB0cnVlLCBraW5kID0gXCJtYXhcIn0gOiAodGVuc29yPDc2eDE2eGYzMj4pIC0+IHRlbnNvcjw3NngxeGYzMj5cbiAgICAlY3N0ID0gYXJpdGguY29uc3RhbnQgZGVuc2U8NC40ODAwMDBlKzAyPiA6IHRlbnNvcjw3NngxeGYzMj5cbiAgICAlNCA9IHRlc3NlcmEuZGl2ICUzLCAlY3N0IDogKHRlbnNvcjw3NngxeGYzMj4sIHRlbnNvcjw3NngxeGYzMj4pIC0+IHRlbnNvcjw3NngxeGYzMj5cbiAgICAlY3N0XzAgPSBhcml0aC5jb25zdGFudCBkZW5zZTwxLjE3NTQ5NDM1RS0zOD4gOiB0ZW5zb3I8NzZ4MXhmMzI+XG4gICAgJTUgPSB0ZXNzZXJhLm1heGltdW0gJTQsICVjc3RfMCA6ICh0ZW5zb3I8NzZ4MXhmMzI+LCB0ZW5zb3I8NzZ4MXhmMzI+KSAtPiB0ZW5zb3I8NzZ4MXhmMzI+XG4gICAgJTYgPSB0ZXNzZXJhLmV4cGFuZCAlNSB7c2hhcGUgPSBbNzYsIDE2XX0gOiAodGVuc29yPDc2eDF4ZjMyPikgLT4gdGVuc29yPDc2eDE2eGYzMj5cbiAgICAlNyA9IHRlc3NlcmEuZGl2ICUxLCAlNiA6ICh0ZW5zb3I8NzZ4MTZ4ZjMyPiwgdGVuc29yPDc2eDE2eGYzMj4pIC0+IHRlbnNvcjw3NngxNnhmMzI+XG4gICAgJTggPSB0ZXNzZXJhLmNhc3QgJTcge2R0eXBlID0gXCJmcDhfZTRtM1wifSA6ICh0ZW5zb3I8NzZ4MTZ4ZjMyPikgLT4gdGVuc29yPDc2eDE2eGY4RTRNM0ZOPlxuICAgICU5ID0gdGVzc2VyYS5yZXNoYXBlICU4IHtzaGFwZSA9IFsxOSwgNjRdfSA6ICh0ZW5zb3I8NzZ4MTZ4ZjhFNE0zRk4+KSAtPiB0ZW5zb3I8MTl4NjR4ZjhFNE0zRk4+XG4gICAgJTEwID0gdGVzc2VyYS5yZXNoYXBlICU1IHtzaGFwZSA9IFsxOSwgNF19IDogKHRlbnNvcjw3NngxeGYzMj4pIC0+IHRlbnNvcjwxOXg0eGYzMj5cbiAgICByZXR1cm4gJTksICUxMCA6IHRlbnNvcjwxOXg2NHhmOEU0TTNGTj4sIHRlbnNvcjwxOXg0eGYzMj5cbiAgfVxufVxuXG4iLCJtb2R1bGUgYXR0cmlidXRlcyB7dGVzc2VyYS5hcmNoID0gXCJnZngxMjAxXCIsIHRlc3NlcmEudGFyZ2V0ID0gXCJyb2NtXCJ9IHtcbiAgZnVuYy5mdW5jIEBxdWFudGl6ZWRfcHJvZHVjdCglYXJnMDogdGVuc29yPDE5eDY0eGY4RTRNM0ZOPiwgJWFyZzE6IHRlbnNvcjwzM3g2NHhmOEU0TTNGTj4sICVhcmcyOiB0ZW5zb3I8MTl4NHhmMzI+LCAlYXJnMzogdGVuc29yPDR4MzN4ZjMyPikgLT4gdGVuc29yPDE5eDMzeGJmMTY+IHtcbiAgICAlMCA9IHRlc3NlcmEuc2NhbGVkX21hdG11bCAlYXJnMCwgJWFyZzEgc2NhbGVzKCVhcmcyLCAlYXJnMykge251bWVyaWNfcG9saWN5ID0ge2FjY3VtID0gXCJmcDMyXCIsIGV4ZWN1dGlvbl9tb2RlID0gXCJleGFjdF9wZXJfYmxvY2tcIn0sIHNjYWxlX2xheW91dCA9IHtibG9jayA9IFsxLCAxNl0sIGZvcm1hdCA9IFwiZnAzMlwiLCBncmFudWxhcml0eSA9IFwiYmxvY2tcIn0sIHRyYW5zcG9zZUIgPSB0cnVlfSA6ICh0ZW5zb3I8MTl4NjR4ZjhFNE0zRk4+LCB0ZW5zb3I8MzN4NjR4ZjhFNE0zRk4+LCB0ZW5zb3I8MTl4NHhmMzI+LCB0ZW5zb3I8NHgzM3hmMzI+KSAtPiB0ZW5zb3I8MTl4MzN4YmYxNj5cbiAgICByZXR1cm4gJTAgOiB0ZW5zb3I8MTl4MzN4YmYxNj5cbiAgfVxufVxuXG4iXSwib3V0cHV0Ijo1LCJzY2hlbWEiOiJ0ZXNzZXJhLm5hdGl2ZS5xdWFudGl6ZWRfcHJvZHVjdC52MSIsInNvdXJjZV9ncmFwaF9pciI6Im1vZHVsZSBhdHRyaWJ1dGVzIHt0ZXNzZXJhLmFyY2ggPSBcImdmeDEyMDFcIiwgdGVzc2VyYS5uYXRpdmUucXVhbnRpemVkX3Byb2R1Y3QsIHRlc3NlcmEudGFyZ2V0ID0gXCJyb2NtX2dmeDEyMDFcIn0ge1xuICBmdW5jLmZ1bmMgQGJsb2NrX3F1YW50KCVhcmcwOiB0ZW5zb3I8MTl4NjR4YmYxNj4sICVhcmcxOiB0ZW5zb3I8MzN4NjR4ZjhFNE0zRk4+LCAlYXJnMjogdGVuc29yPDR4MzN4ZjMyPikgLT4gdGVuc29yPDE5eDMzeGJmMTY+IHtcbiAgICAlMCA9IHRlc3NlcmEucmVzaGFwZSAlYXJnMCB7c2hhcGUgPSBbNzYsIDE2XX0gOiAodGVuc29yPDE5eDY0eGJmMTY+KSAtPiB0ZW5zb3I8NzZ4MTZ4YmYxNj5cbiAgICAlMSA9IHRlc3NlcmEuY2FzdCAlMCB7ZHR5cGUgPSBcImZwMzJcIn0gOiAodGVuc29yPDc2eDE2eGJmMTY+KSAtPiB0ZW5zb3I8NzZ4MTZ4ZjMyPlxuICAgICUyID0gdGVzc2VyYS5hYnNvbHV0ZSAlMSA6ICh0ZW5zb3I8NzZ4MTZ4ZjMyPikgLT4gdGVuc29yPDc2eDE2eGYzMj5cbiAgICAlMyA9IHRlc3NlcmEucmVkdWNlICUyIHtheGlzID0gMSA6IGk2NCwga2VlcGRpbXMgPSB0cnVlLCBraW5kID0gXCJtYXhcIn0gOiAodGVuc29yPDc2eDE2eGYzMj4pIC0+IHRlbnNvcjw3NngxeGYzMj5cbiAgICAlY3N0ID0gYXJpdGguY29uc3RhbnQgZGVuc2U8NC40ODAwMDBlKzAyPiA6IHRlbnNvcjw3NngxeGYzMj5cbiAgICAlNCA9IHRlc3NlcmEuZGl2ICUzLCAlY3N0IDogKHRlbnNvcjw3NngxeGYzMj4sIHRlbnNvcjw3NngxeGYzMj4pIC0+IHRlbnNvcjw3NngxeGYzMj5cbiAgICAlY3N0XzAgPSBhcml0aC5jb25zdGFudCBkZW5zZTwxLjE3NTQ5NDM1RS0zOD4gOiB0ZW5zb3I8NzZ4MXhmMzI+XG4gICAgJTUgPSB0ZXNzZXJhLm1heGltdW0gJTQsICVjc3RfMCA6ICh0ZW5zb3I8NzZ4MXhmMzI+LCB0ZW5zb3I8NzZ4MXhmMzI+KSAtPiB0ZW5zb3I8NzZ4MXhmMzI+XG4gICAgJTYgPSB0ZXNzZXJhLmV4cGFuZCAlNSB7c2hhcGUgPSBbNzYsIDE2XX0gOiAodGVuc29yPDc2eDF4ZjMyPikgLT4gdGVuc29yPDc2eDE2eGYzMj5cbiAgICAlNyA9IHRlc3NlcmEuZGl2ICUxLCAlNiA6ICh0ZW5zb3I8NzZ4MTZ4ZjMyPiwgdGVuc29yPDc2eDE2eGYzMj4pIC0+IHRlbnNvcjw3NngxNnhmMzI+XG4gICAgJTggPSB0ZXNzZXJhLmNhc3QgJTcge2R0eXBlID0gXCJmcDhfZTRtM1wifSA6ICh0ZW5zb3I8NzZ4MTZ4ZjMyPikgLT4gdGVuc29yPDc2eDE2eGY4RTRNM0ZOPlxuICAgICU5ID0gdGVzc2VyYS5yZXNoYXBlICU4IHtzaGFwZSA9IFsxOSwgNjRdfSA6ICh0ZW5zb3I8NzZ4MTZ4ZjhFNE0zRk4+KSAtPiB0ZW5zb3I8MTl4NjR4ZjhFNE0zRk4+XG4gICAgJTEwID0gdGVzc2VyYS5yZXNoYXBlICU1IHtzaGFwZSA9IFsxOSwgNF19IDogKHRlbnNvcjw3NngxeGYzMj4pIC0+IHRlbnNvcjwxOXg0eGYzMj5cbiAgICAlMTEgPSB0ZXNzZXJhLnNjYWxlZF9tYXRtdWwgJTksICVhcmcxIHNjYWxlcyglMTAsICVhcmcyKSB7bnVtZXJpY19wb2xpY3kgPSB7YWNjdW0gPSBcImZwMzJcIiwgZXhlY3V0aW9uX21vZGUgPSBcImV4YWN0X3Blcl9ibG9ja1wifSwgc2NhbGVfbGF5b3V0ID0ge2Jsb2NrID0gWzEsIDE2XSwgZm9ybWF0ID0gXCJmcDMyXCIsIGdyYW51bGFyaXR5ID0gXCJibG9ja1wifSwgdHJhbnNwb3NlQiA9IHRydWV9IDogKHRlbnNvcjwxOXg2NHhmOEU0TTNGTj4sIHRlbnNvcjwzM3g2NHhmOEU0TTNGTj4sIHRlbnNvcjwxOXg0eGYzMj4sIHRlbnNvcjw0eDMzeGYzMj4pIC0+IHRlbnNvcjwxOXgzM3hiZjE2PlxuICAgIHJldHVybiAlMTEgOiB0ZW5zb3I8MTl4MzN4YmYxNj5cbiAgfVxufVxuXG4iLCJzdGVwcyI6W3siaW5wdXRzIjpbMF0sIm1lbWJlciI6ImJsb2NrX3F1YW50X19xdWFudGl6ZWRfbWVtYmVyXzAiLCJvcGVyYXRpb24iOiJuYXRpdmVfYmxvY2tfcXVhbnQiLCJvdXRwdXRzIjpbMyw0XSwic3RlcCI6MH0seyJpbnB1dHMiOlszLDEsNCwyXSwibWVtYmVyIjoiYmxvY2tfcXVhbnRfX3F1YW50aXplZF9tZW1iZXJfMSIsIm9wZXJhdGlvbiI6InRlc3NlcmEuc2NhbGVkX21hdG11bCIsIm91dHB1dHMiOls1XSwic3RlcCI6MX1dfQ==\", tessera.native.quantized_product_members = [@block_quant__quantized_member_0, @block_quant__quantized_member_1], tessera.target = \"rocm_gfx1201\"} {\n  func.func @block_quant(%arg0: tensor<19x64xbf16>, %arg1: tensor<33x64xf8E4M3FN>, %arg2: tensor<4x33xf32>) -> tensor<19x33xbf16> {\n    %0 = tessera.reshape %arg0 {shape = [76, 16]} : (tensor<19x64xbf16>) -> tensor<76x16xbf16>\n    %1 = tessera.cast %0 {dtype = \"fp32\"} : (tensor<76x16xbf16>) -> tensor<76x16xf32>\n    %2 = tessera.absolute %1 : (tensor<76x16xf32>) -> tensor<76x16xf32>\n    %3 = tessera.reduce %2 {axis = 1 : i64, keepdims = true, kind = \"max\"} : (tensor<76x16xf32>) -> tensor<76x1xf32>\n    %cst = arith.constant dense<4.480000e+02> : tensor<76x1xf32>\n    %4 = tessera.div %3, %cst : (tensor<76x1xf32>, tensor<76x1xf32>) -> tensor<76x1xf32>\n    %cst_0 = arith.constant dense<1.17549435E-38> : tensor<76x1xf32>\n    %5 = tessera.maximum %4, %cst_0 : (tensor<76x1xf32>, tensor<76x1xf32>) -> tensor<76x1xf32>\n    %6 = tessera.expand %5 {shape = [76, 16]} : (tensor<76x1xf32>) -> tensor<76x16xf32>\n    %7 = tessera.div %1, %6 : (tensor<76x16xf32>, tensor<76x16xf32>) -> tensor<76x16xf32>\n    %8 = tessera.cast %7 {dtype = \"fp8_e4m3\"} : (tensor<76x16xf32>) -> tensor<76x16xf8E4M3FN>\n    %9 = tessera.reshape %8 {shape = [19, 64]} : (tensor<76x16xf8E4M3FN>) -> tensor<19x64xf8E4M3FN>\n    %10 = tessera.reshape %5 {shape = [19, 4]} : (tensor<76x1xf32>) -> tensor<19x4xf32>\n    %11 = tessera.scaled_matmul %9, %arg1 scales(%10, %arg2) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [1, 16], format = \"fp32\", granularity = \"block\"}, transposeB = true} : (tensor<19x64xf8E4M3FN>, tensor<33x64xf8E4M3FN>, tensor<19x4xf32>, tensor<4x33xf32>) -> tensor<19x33xbf16>\n    return %11 : tensor<19x33xbf16>\n  }\n  func.func private @block_quant__quantized_member_0(%arg0: tensor<19x64xbf16>) -> (tensor<19x64xf8E4M3FN>, tensor<19x4xf32>) attributes {tessera.native.quantized_product_member = 0 : i64} {\n    %0 = tessera.reshape %arg0 {shape = [76, 16]} : (tensor<19x64xbf16>) -> tensor<76x16xbf16>\n    %1 = tessera.cast %0 {dtype = \"fp32\"} : (tensor<76x16xbf16>) -> tensor<76x16xf32>\n    %2 = tessera.absolute %1 : (tensor<76x16xf32>) -> tensor<76x16xf32>\n    %3 = tessera.reduce %2 {axis = 1 : i64, keepdims = true, kind = \"max\"} : (tensor<76x16xf32>) -> tensor<76x1xf32>\n    %cst = arith.constant dense<4.480000e+02> : tensor<76x1xf32>\n    %4 = tessera.div %3, %cst : (tensor<76x1xf32>, tensor<76x1xf32>) -> tensor<76x1xf32>\n    %cst_0 = arith.constant dense<1.17549435E-38> : tensor<76x1xf32>\n    %5 = tessera.maximum %4, %cst_0 : (tensor<76x1xf32>, tensor<76x1xf32>) -> tensor<76x1xf32>\n    %6 = tessera.expand %5 {shape = [76, 16]} : (tensor<76x1xf32>) -> tensor<76x16xf32>\n    %7 = tessera.div %1, %6 : (tensor<76x16xf32>, tensor<76x16xf32>) -> tensor<76x16xf32>\n    %8 = tessera.cast %7 {dtype = \"fp8_e4m3\"} : (tensor<76x16xf32>) -> tensor<76x16xf8E4M3FN>\n    %9 = tessera.reshape %8 {shape = [19, 64]} : (tensor<76x16xf8E4M3FN>) -> tensor<19x64xf8E4M3FN>\n    %10 = tessera.reshape %5 {shape = [19, 4]} : (tensor<76x1xf32>) -> tensor<19x4xf32>\n    return %9, %10 : tensor<19x64xf8E4M3FN>, tensor<19x4xf32>\n  }\n  func.func private @block_quant__quantized_member_1(%arg0: tensor<19x64xf8E4M3FN>, %arg1: tensor<33x64xf8E4M3FN>, %arg2: tensor<19x4xf32>, %arg3: tensor<4x33xf32>) -> tensor<19x33xbf16> attributes {tessera.native.quantized_product_member = 1 : i64} {\n    %0 = tessera.scaled_matmul %arg0, %arg1 scales(%arg2, %arg3) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [1, 16], format = \"fp32\", granularity = \"block\"}, transposeB = true} : (tensor<19x64xf8E4M3FN>, tensor<33x64xf8E4M3FN>, tensor<19x4xf32>, tensor<4x33xf32>) -> tensor<19x33xbf16>\n    return %0 : tensor<19x33xbf16>\n  }\n}\n\n",
+  "timing_domains": {
+    "event": "ordinary HIP event windows include launch gaps; native API already divides by repeats",
+    "captured": "grouped captured member device windows include graph dispatch, exclude capture/instantiation/copies",
+    "prepared": "invoke plus returned-output readback; excludes package compilation/preparation"
+  },
+  "scope": "native authored Graph partition plus prepared C++ owner; no public JIT or speedup claim"
+}

@@ -190,6 +190,15 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201") ->
     def tiles(tm: int, tn: int) -> int:
         return -(-shape.m // tm) * -(-shape.n // tn)
 
+    # Differential mirror only: native Schedule selects the measured KN
+    # physical route; the Python frontend does not choose a backend schedule.
+    if (shape.weight_layout == "kn" and arch == "gfx1201" and units is not None
+            and shape.scale_k == 128 and shape.scale_n == 128
+            and 128 <= shape.m <= 256
+            and 1024 <= shape.n <= 8192 and shape.n % 128 == 0
+            and 1024 <= shape.k <= 4096 and shape.k % 128 == 0):
+        return BlockScalePanel("lds", 128, 64, 8)
+
     # Differential mirror of the measured four-wave small-grid rule. Native
     # Schedule owns selection; aligned rows and wider N retain their controls.
     if (shape.weight_layout == "nk" and arch == "gfx1201" and units is not None

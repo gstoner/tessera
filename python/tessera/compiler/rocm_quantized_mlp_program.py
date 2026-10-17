@@ -8,6 +8,7 @@ import json
 import math
 from typing import Any
 
+from .quantized_binding_cache import memoized_validation,memoized_binding
 from .native_scaled_program import PreparedScaledProgram,_BoundScaledABI,_Buffer,_StorageSpec,_status
 from .rocm_nvfp4_expansion_program import _MultiOutputStep
 from .rocm_quantized_product_program import NativeQuantizedProductProgram,PreparedQuantizedProductProgram,_frame_shape,package_quantized_product_graph
@@ -105,6 +106,7 @@ class NativeQuantizedMLPProgram:
         return hashlib.sha256(json.dumps([self.program_json,self.graph_ir,
             self.gate.binding_digest,self.down.binding_digest],separators=(',',':')).encode()).hexdigest()
 
+    @memoized_validation
     def validate(self):
         self.gate.validate();self.down.validate()
         plan=json.loads(self.program_json)
@@ -166,6 +168,7 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
             raise RuntimeError('native quantized MLP requires owning gfx1201')
         super().__init__(package,inputs,runtime_library=runtime_library)
 
+    @memoized_binding
     def _bind_abi(self,package):
         package.validate()
         plan=json.loads(package.program_json);roles,_,maps=_frame(plan)

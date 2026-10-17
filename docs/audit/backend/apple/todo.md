@@ -14938,3 +14938,10 @@ Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
 Not applicable to Metal execution: common frontend/runtime changes recognize an exact gfx1201 ABI only. Apple expansion remains unsupported, and existing Apple JIT/AD obligations require their own native program and Mac proof.
 
 Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.
+
+
+## SM120-NATIVE-ROW-GRAPH-20261016
+
+Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to Metal execution: no Apple source or physical policy changes. CUDA graph experimental results and Python dispatch profiles transfer no Mac execution or timing proof.

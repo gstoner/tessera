@@ -1,0 +1,44 @@
+{
+  "owning_architecture": "sm_120",
+  "implementation": "Rejected unmerged native CUDA graph experiment; production APIs/flag removed. Exact reproduction patch retained.",
+  "proof": "50 final device gates pass, zero skips; initial330 adjacent passes36optin skips were followed by enabled36 in final50",
+  "controls": {
+    "default_submission": "direct",
+    "row_policy": "inline default unchanged; graph requires existing prepass row program",
+    "portable_schema": "VJPv3 unchanged; VJPv1/v2 and JVP5/6 unchanged"
+  },
+  "methodology": {
+    "first_trial": "Graphify AST update running on one CPU core concurrently. Keep numerical proof and raw samples; do not promote from its host timings.",
+    "fresh_trial": "Completed8rows in fresh process after Graphify terminal, no concurrent GPU tests; all independent FP64/bitwise checks pass."
+  },
+  "limitations": [
+    "No consistent performance gain in initial8rows; no automatic promotion",
+    "No dynamic shapes or generic CUDA graph capture",
+    "Driver failure injection covers pre-submission instantiation and launch errors, not GPU/context loss"
+  ],
+  "files": {
+    "README.md": "649e47df7fe86a5ddea8ab42ec6491faf646ed0b6d9861cecf20bc8d390bf355",
+    "measured_profile_dispatch.py.gz": "bc26293c92e3476ed7d4427258c2c7878c8cc78d96cfab6722bd228aced7a362",
+    "graph-ab-recheck.log": "94e1418c928020fe1d11d2799b8e8a95abcada2912b3e0d707e240e89a45c84b",
+    "public-profile.txt.gz": "fc27d13d1cc90b51a354ec8bf2d1d26a8ec068d287ca7bc8afaf488f355153b8",
+    "initial-device.txt": "45ced6a45f94809ead0530cc7a9f8dad98f989ecce6f7e9bee5f2aeae33d093c",
+    "graph-ab-recheck.json.gz": "ef5e1afc60939e3bfa3a71b24e2e5026d75d98e5d64ab5be6af6bea18c7cc708",
+    "graph-ab.json.gz": "1fb6bfa727b331a4cd0b459b6781c19d9a630b707eca0453a8124aef3f08a5f4",
+    "abi-adjacent.txt": "09b6d9e5b3ac16c38d2e649e161daa35dc8195ac986b007a1917de8f05df16a6",
+    "drift.txt": "ae6db0f3ddfb46d56325c2bf5084e131b75b9ef643f0941bd9794b24ee4292cb",
+    "profile_dispatch.py": "e16f9236ea6eb7228d0b9eb489e23abc96e4c03292b067e80a7f941eb702c830",
+    "final-device.txt": "6323e74db2b481afbd6fefd92f9a36f82e7dac88ee97141c73050c60d0e8ad7e",
+    "profile.json": "b8e1568d6ac94bf6afc3047f713246b4a91d92ef5858ef6ed8e4754812a53bc4",
+    "prepared-profile.txt.gz": "82056abdb7f7d9c0d6667f4aa6adc0770994a759fc94b87ee5bb543c63d1389c",
+    "experimental_graph_replay.patch.gz": "d0de4af5bce7eb26a8e49126dba72d446671da30c5915cf720af7c681e6af7e9",
+    "record_graph_replay.py": "872298eb9cb1cdebf2bef6328f78a0cb1eacb155c9b1103e976c05055b523e23",
+    "graph-ab.log": "4299e9c2164dae27022d237a3b2d3b52d43a13e32c83905d5382dc01956df843"
+  },
+  "decision": "No consistent speedup; do not ship the experimental ABI or promote graph replay. Continue original public/native integration with mutation and Graph authority checks intact.",
+  "profile_recorder": {
+    "measured_sha256": "2872364329e5bf690231aa71f82051901ee6abc2e9499f4ea08ebe1bd31606e9",
+    "self_contained_companion_sha256": "e16f9236ea6eb7228d0b9eb489e23abc96e4c03292b067e80a7f941eb702c830",
+    "difference": "helper imports resolved directly instead of runpy of prior scratch recorder; measured script unchanged in gzip"
+  },
+  "compression": "graph-ab*.json.gz decompress to exact measured JSON bytes; all samples retained"
+}

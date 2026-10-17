@@ -12856,3 +12856,27 @@ Remaining: wider W8A8, narrow-N/large-M AITER gaps, broader ROCm closure and the
 full original five-slice completion audit. Device and public timings are separate.
 Evidence: benchmarks/baselines/gfx1201_w8a8_small_grid_20261016/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-16 — bounded source NVFP4 merged and row graph experiment rejected
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: #960 merged; current evidence sync SM120-NATIVE-ROW-GRAPH-20261016.
+Outcome: PR960 merged at 6480571c0f after exact-head required CI passed
+(21,996 unit passes, 9,958 skips; 1,265 production compiler-route passes, zero skips).
+Its bounded source-preserving gfx1201 NVFP4 contract and original checkpoint
+proof remain separate from full MLP/model-quality acceptance.
+An unmerged SM120 static row CUDA graph candidate passes 50 owning-device
+checks, including host/resident numerics, producer ordering and fault retirement.
+Two trials with eight profiles each timing trials show no consistent gain; experimental production
+APIs and flag were removed. Frozen patch, recorder, raw samples and profiles
+remain reproducible. No portable schema, default submission or physical selector
+changes. The 200-call instrumented profile identifies repeated Graph serialization,
+certificate construction and path resolution in original public dispatch; native
+blocking dominates prepared invoke. This is attribution evidence, not a speedup.
+All four backend queues assess scope without transferring physical evidence.
+Remaining: redundant public-dispatch work with mutation/Graph authority intact;
+full original five-slice obligations, broad CI and review remain open.
+Evidence: benchmarks/baselines/sm120_native_row_graph_20261016/README.md,
+benchmarks/baselines/nvfp4_source_bounded_20261016/README.md.
+<!-- entry-fields:end -->

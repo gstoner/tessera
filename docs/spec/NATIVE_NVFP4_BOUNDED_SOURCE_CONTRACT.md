@@ -9,7 +9,7 @@ Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Sync: NVFP4-SOURCE-BOUNDED-20261016.
 
 Status: native export, arbitrary-active-M image projection and prepared/public
-execution are implemented in the current candidate. Owning gfx1201 validation
+execution merged in PR960 at 6480571c0f. Owning gfx1201 validation
 passes the named bounded envelopes below; broader integration and performance
 gates remain open.
 
@@ -74,7 +74,7 @@ actual runtime row count in the consumer's M scalar and grid.
 
 The focused native export/projection and diagnostic/pass gates pass 375 cases.
 On RX 9070 XT/gfx1201, 59 bounded/static source, public replay and native
-partition tests pass with matching rebuilt compiler tools and the candidate
+partition tests pass with matching rebuilt compiler tools and the native
 HIP owner. Fifteen bounded cases cover FP32/BF16 output, root permutations,
 M1/19/33/64 shrink/grow, full-root re-import, activation-only weight reuse,
 stale output rejection, retained output independence and eight malformed
@@ -103,7 +103,8 @@ These scopes differ and establish no speedup or pure-kernel latency.
 A further owning-device compatibility gate passes 226 legacy bounded NVFP4,
 FP8 W8A8, MXFP8, exact MXFP4 and generic scaled-owner cases. Adjacent host gates
 pass 544 cases with 22 hardware-dependent skips. Generated-document, ABI and registry final gates pass 401 cases.
-Final PR validation remains open. No full-model quality
+PR960 required CI and review passed before merge: 21,996 unit passes with 9,958
+skips and 1,265 production compiler-route passes with zero skips. No full-model quality
 acceptance, broad performance closure or gfx1151 FP8 execution is inferred.
 
 ## Representative original checkpoint follow-through

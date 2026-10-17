@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-15
+last_updated: 2026-10-16
 ---
 
 # Native source-preserving NVFP4 program
@@ -17,8 +17,10 @@ the expansion's precise numerical policy. Conflicting consumer policies reject.
 
 Schema tessera.native.nvfp4_program.v3 means this static source-preserving
 program specifically. It does not reinterpret v1 (lossy static), v2 (lossy
-bounded), or any attention schema. Bounded source-preserving frames currently
-reject at native export and require a separate future contract.
+bounded), or any attention schema. Schema v4 now admits bounded
+source-preserving frames through the separate checked capacity/active-row
+contract in [NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md](../NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md).
+Static v3 retains the original meaning; bounded requests are not relabeled v3.
 
 Native MLIR assigns roots 0..4 in original argument order, expansion outputs
 5 and 6, and product output 7. Role indices preserve permuted frontend arguments.
@@ -104,5 +106,7 @@ separate native modules, not one monolithic lowered IR.
 
 Fresh-process tests disable both compiler paths and eager numerical oracles.
 Original checkpoint validation additionally checks source identities and
-captured model inputs; full-model quality, bounded frames and wider composition
+captured model inputs. PR960 adds bounded v4 public/prepared/compiler-free
+replay, allocation retention and original gate/up projection evidence; see the
+bounded contract above. Full MLP/model-quality acceptance and wider composition
 remain open.

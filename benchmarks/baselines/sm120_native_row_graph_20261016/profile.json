@@ -1,0 +1,22 @@
+{
+  "shape": [
+    1,
+    4,
+    2,
+    1,
+    129,
+    32,
+    24
+  ],
+  "storage": "float16",
+  "arms": {
+    "prepass": {
+      "profiled_calls": 200,
+      "profiled_wall_ms": 409.034611,
+      "profiled_source": "Python cProfile includes instrumentation and native blocking; attribution diagnostic only",
+      "program_json_bytes": 219288,
+      "profile_sha256": "7ff76b12d9769a47d5a69c577cfe7b9db395e1a111d2765452357e0686624bc9"
+    }
+  },
+  "not_a_speedup_measurement": true
+}

@@ -17,8 +17,8 @@ dO, optional physical FP32 broadcast bias and optional FP32 dLSE seed. The row
 producer computes ordered FP32 probability-weighted dot(dO,V) minus that seed.
 The consumer uses the explicit residual and never subtracts the seed twice.
 
-The native owner is executable and tested directly. Its public Python program
-packaging, portable schema and original frontend replay integration remain open.
+The native owner and portable VJP v3 public program execute through the original
+frontend and compiler-free replay. See the public program section below.
 Existing VJP v1/v2 and JVP schema 5 bounded / schema 6 static are unchanged.
 
 ## Private frame
@@ -110,3 +110,25 @@ VJP v1/v2 and JVP schema 5 bounded / schema 6 static retain their meanings.
 
 Public proof and separate public/device/stage timings:
 benchmarks/baselines/sm120_native_row_correction_20261016/public_program/README.md.
+
+
+## Graph replay experiment and public dispatch attribution
+
+Synchronization: SM120-NATIVE-ROW-GRAPH-20261016.
+
+An unmerged static native graph replay candidate passed 50 RTX 5070 gates,
+including FP16/BF16 host/resident gradients, independent FP64 checks, delayed
+producer ordering, fresh root/stream rebinding, retained outputs, invalid-call
+recovery and injected driver graph-failure retirement. Two matched eight-profile
+timing trials showed no consistent completed-call gain. The candidate APIs and
+Python flag were removed from production; the exact source patch and measured
+recorder are retained for reproduction. Existing submission and schemas remain.
+
+The public/prepared timing difference is not causal attribution. A separate
+instrumented 200-call profile shows repeated Graph IR serialization, certificate
+construction and path resolution in public dispatch. Native blocking time is
+included in PreparedAttentionVJP.invoke. Those profiles are diagnostic, not
+speedup measurements. Further integration must retain mutation checks and
+original frontend/Graph authority while avoiding redundant work.
+
+Evidence: benchmarks/baselines/sm120_native_row_graph_20261016/README.md.

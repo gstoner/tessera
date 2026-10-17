@@ -11344,3 +11344,10 @@ Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
 Not applicable to native x86 execution: no CPU package or byte-storage promotion is added. The shared JIT allocation change is guarded by the gfx1201 expansion ABI; x86 expansion remains unsupported and no CPU proof is inferred.
 
 Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.
+
+
+## SM120-NATIVE-ROW-GRAPH-20261016
+
+Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to CPU execution: no CPU source, ABI or physical policy changes. CUDA experiment and SM120 public dispatch profiles transfer no CPU evidence.

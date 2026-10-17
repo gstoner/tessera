@@ -15437,3 +15437,10 @@ Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
 Not applicable to SM120 execution: the new common runtime branch is restricted to the gfx1201 expansion ABI, including its FP8 output allocation. NVIDIA expansion remains unsupported. No RTX 5070 numerical or timing proof is transferred; the queued W1.1/attention programs remain independently owned.
 
 Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.
+
+
+## SM120-NATIVE-ROW-GRAPH-20261016
+
+Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+
+Completed experiment, no promotion: an unmerged native row CUDA graph candidate passes 50 exact RTX5070 gates. Two trials with eight profiles each timing trials show no consistent speedup; production graph APIs/flag were removed and the frozen patch retained. The 200-call public/prepared profiles identify repeated Graph IR serialization, certificate and path work for further attribution. Existing direct submission, inline/prepass policy and VJP/JVP schemas remain unchanged. Evidence: benchmarks/baselines/sm120_native_row_graph_20261016/README.md.

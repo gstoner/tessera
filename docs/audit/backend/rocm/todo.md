@@ -17963,3 +17963,10 @@ Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
 Exact gfx1201 public @jit and serialized replay now execute the two-result expansion without eager arithmetic. Pinned checkpoint gate/up and synthetic K16/K48/K80 outputs are bitwise checked; host and device timing remain separate. Capability readiness is restricted to the named packed-byte ingress. Next: multi-output SSA ownership in the native HIP owner and a compiled resident K16 matmul chain. Existing gfx1151 and unrelated cache/schedule obligations remain open.
 
 Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.
+
+
+## SM120-NATIVE-ROW-GRAPH-20261016
+
+Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to HIP execution: this is a rejected NVIDIA submission experiment plus source/profile evidence. No ROCm runtime or physical policy changes. PR960 bounded source-preserving NVFP4 has merged with exact gfx1201 evidence; full MLP/model-quality, W8A8/MXFP4 and broader route obligations remain open.

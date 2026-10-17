@@ -62,8 +62,9 @@ code, provider and compiler configuration when comparing reruns.
 
 ## Open gates
 
-Final local generated-document and ABI drift gates pass; broader PR CI and
-review remain pending. Legacy schema
+PR960 merged after exact-head required CI and review passed: 21,996 unit passes
+with 9,958 skips and 1,265 production compiler-route passes with zero skips.
+Final local generated-document and ABI drift gates also pass. Legacy schema
 meanings are unchanged. No general shape/layout/AD or model-quality closure,
 performance promotion, gfx1151 FP8 execution or sibling-device proof is claimed.
 

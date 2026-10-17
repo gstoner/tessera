@@ -39,7 +39,7 @@ def payload(program):
         return dict(tile_ir=x.tile_ir,target_ir=x.target_ir,backend_ir=x.backend_ir,
                     image=x.image.to_dict(),descriptor=x.descriptor.to_dict())
     if row_program:
-        return dict(schema="tessera.native_attention_vjp_program.v3",
+        return dict(schema="tessera.native_attention_vjp_program.v4" if p.get("shape_bounds") else "tessera.native_attention_vjp_program.v3",
                     forward=package(program.pair.forward),backward=package(program.pair.backward),
                     correction=package(program.correction) if program.correction is not None else None,
                     checkpoint_digest=program.pair.contract_digest,active=list(active),
@@ -67,9 +67,9 @@ def from_json(text,*,expected_digest):
     if actual!=expected_digest or actual!=envelope["program_digest"]:
         raise ValueError("portable VJP differs from pinned identity")
     fields={"schema","forward","backward","checkpoint_digest","active","frontend_argument_indices"}
-    row_program = isinstance(data,dict) and data.get("schema")=="tessera.native_attention_vjp_program.v3"
+    row_program = isinstance(data,dict) and data.get("schema") in {"tessera.native_attention_vjp_program.v3", "tessera.native_attention_vjp_program.v4"}
     if row_program: fields.add("correction")
-    if not isinstance(data,dict) or set(data)!=fields or data.get("schema") not in {"tessera.native_attention_vjp_program.v1", "tessera.native_attention_vjp_program.v2", "tessera.native_attention_vjp_program.v3"}:
+    if not isinstance(data,dict) or set(data)!=fields or data.get("schema") not in {"tessera.native_attention_vjp_program.v1", "tessera.native_attention_vjp_program.v2", "tessera.native_attention_vjp_program.v3", "tessera.native_attention_vjp_program.v4"}:
         raise ValueError("unsupported portable attention VJP schema")
     def package(raw):
         if not isinstance(raw,dict) or set(raw)!={"tile_ir","target_ir","backend_ir","image","descriptor"}:

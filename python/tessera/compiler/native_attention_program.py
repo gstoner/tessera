@@ -194,19 +194,25 @@ class NativeAttentionVJPProgram:
         return from_json(text,expected_digest=expected_digest)
 
     def capture(self, *args, bias=None, asynchronous=False):
-        mapping = self.input_indices or tuple(range(len(args) + int(bias is not None)))
-        if bias is not None:
-            if len(mapping) != 4 or len(args) != 3:
-                raise ValueError("attention capture bias keyword disagrees with frontend arity")
-            index = mapping[3]
-            args = (*args[:index], bias, *args[index:])
-        if len(args) != len(mapping):
-            raise ValueError("attention capture arity disagrees with frontend argument mapping")
-        roles = tuple(args[index] for index in mapping)
-        if len(roles) not in (3, 4):
-            raise ValueError("attention capture requires Q/K/V and optional bias")
+        roles = capture_attention_roles(self,args,bias)
         return AutomaticAttentionVJPFrame(
             self.pair.capture(*roles[:3], bias=roles[3] if len(roles)==4 else None, asynchronous=asynchronous), self.active)
+
+
+def capture_attention_roles(program,args,bias):
+    """Map frontend operands to the native Q/K/V/bias capture order."""
+    mapping = program.input_indices or tuple(range(len(args) + int(bias is not None)))
+    if bias is not None:
+        if len(mapping) != 4 or len(args) != 3:
+            raise ValueError("attention capture bias keyword disagrees with frontend arity")
+        index = mapping[3]
+        args = (*args[:index], bias, *args[index:])
+    if len(args) != len(mapping):
+        raise ValueError("attention capture arity disagrees with frontend argument mapping")
+    roles = tuple(args[index] for index in mapping)
+    if len(roles) not in (3, 4):
+        raise ValueError("attention capture requires Q/K/V and optional bias")
+    return roles
 
 
 class AutomaticAttentionVJPFrame:

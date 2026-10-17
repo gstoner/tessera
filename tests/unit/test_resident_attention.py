@@ -70,6 +70,7 @@ def test_failed_backward_releases_only_new_generation_allocations(bias_gradient,
     prior=SimpleNamespace(pointer=ct.c_void_p(128))
     frame.buffers=[prior]
     frame._saved=[prior]*5
+    frame._input_dtype=frame._output_dtype="fp32"
     frame._has_backward=True
     frame._has_lse_cotangent=lse_cotangent
     frame._has_bias=bias_gradient

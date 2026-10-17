@@ -15,6 +15,10 @@ from .native_device_tape import _Buffer
 
 def checkpoint_shapes(pair, *, runtime_dims=None):
     """Validate the bounded physical ABI before loading a driver or image."""
+    if pair.forward.descriptor.provenance.get("storage") in ("f16","bf16"):
+        from .typed_attention_backward import checkpoint_pair_shapes,checkpoint_forward_shapes
+        verify=checkpoint_pair_shapes if hasattr(pair,"backward") else checkpoint_forward_shapes
+        return verify(pair,runtime_dims=runtime_dims)
     from .nvidia_native import (SM120_ATTN_LSE_F32_ABI, SM120_ATTN_BWD_LSE_F32_ABI,
                                 SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_BWD_LSE_BIAS_F32_ABI,
                                 SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI,
@@ -217,6 +221,11 @@ class ResidentAttentionTape:
             self.dims,self.shapes = checkpoint_shapes(pair,runtime_dims=actual)
         else:
             self.dims, self.shapes = checkpoint_shapes(pair)
+        forward_policy=pair.forward.descriptor.provenance
+        dtype_names={"f16":"fp16","bf16":"bf16","f32":"fp32"}
+        self._input_dtype=dtype_names[forward_policy["storage"]]
+        self._output_dtype=dtype_names[forward_policy["output"]]
+        self._saved_dtypes=(self._input_dtype,)*3+(self._output_dtype,"fp32")
         self._has_bias = pair.forward.descriptor.provenance.get("bias", False)
         backward = getattr(pair, "backward", None)
         self._has_backward = backward is not None
@@ -299,8 +308,9 @@ class ResidentAttentionTape:
                 self._functions.append(function)
             inputs = (q,k,v) + ((bias,) if self._has_bias else ())
             input_shapes = self.shapes[:3] + ((self._bias_shape,) if self._has_bias else ())
-            pointers = self._resident_group(inputs,input_shapes)
-            self._saved = [self._allocate(shape) for shape in self.shapes]
+            input_dtypes=(self._input_dtype,)*3+(("fp32",) if self._has_bias else ())
+            pointers = self._resident_group(inputs,input_shapes,dtypes=input_dtypes)
+            self._saved = [self._allocate(shape,dtype) for shape,dtype in zip(self.shapes,self._saved_dtypes,strict=True)]
             for pointer, saved in zip(pointers[:3],self._saved[:3],strict=True):
                 self.check(self.copy(saved.pointer,P(pointer),saved.nbytes))
             if self._has_bias:
@@ -315,8 +325,8 @@ class ResidentAttentionTape:
             self.close()
             raise
 
-    def _allocate(self, shape):
-        return _Buffer(self, shape,
+    def _allocate(self, shape, dtype="fp32"):
+        return _Buffer(self, shape, dtype,
                        stream=self._stream.value if self.asynchronous else None)
 
     def _protect_snapshot_sources(self, values):
@@ -375,22 +385,31 @@ class ResidentAttentionTape:
         if current.value != self.context.value:
             raise ValueError('resident attention requires its owning CUDA context')
 
-    def _resident(self, value, shape, *, producer_streams=None):
+    def _resident(self, value, shape, *, producer_streams=None, storage="fp32"):
         interface = getattr(value,'__cuda_array_interface__',None)
         if not isinstance(interface,dict) or type(interface.get('version')) is not int or interface['version'] not in (2,3):
             raise ValueError('resident attention requires a CUDA tensor')
         dtype = np.dtype(interface.get('typestr'))
+        if storage=="bf16":
+            import ml_dtypes
+            expected_dtype=np.dtype(ml_dtypes.bfloat16)
+            semantic_dtype=np.dtype(getattr(value,"dtype",dtype))
+            if semantic_dtype!=expected_dtype:
+                raise ValueError("resident attention BF16 input lacks its semantic dtype")
+        else:
+            expected_dtype=np.dtype("float16" if storage=="fp16" else "float32")
+        item_bytes=expected_dtype.itemsize
         actual = interface.get('shape',())
         pointer, readonly = interface.get('data',(None,None))
         strides: list[int] = []
-        stride = 4
+        stride = item_bytes
         for dim in reversed(shape):
             strides.insert(0,stride)
             stride *= dim
-        if (dtype != np.dtype('float32') or not dtype.isnative or tuple(actual) != shape or
+        if (dtype != np.dtype(expected_dtype.str) or not dtype.isnative or tuple(actual) != shape or
                 any(type(d) is not int for d in actual) or
                 (interface.get('strides') is not None and tuple(interface['strides']) != tuple(strides)) or
-                type(pointer) is not int or pointer <= 0 or pointer % 4 or type(readonly) is not bool):
+                type(pointer) is not int or pointer <= 0 or pointer % item_bytes or type(readonly) is not bool):
             raise ValueError('resident attention tensor shape, dtype or storage disagrees')
         owner, base, size = ct.c_void_p(), ct.c_void_p(), ct.c_size_t()
         # Attribute 1 is the allocation's CUDA context, not merely its device.
@@ -407,12 +426,13 @@ class ResidentAttentionTape:
             producer_streams.append(stream)
         return pointer
 
-    def _resident_group(self, values, shapes):
+    def _resident_group(self, values, shapes, *, dtypes=None):
         # One dependency after validating the entire group covers all previously
         # submitted writes on each producer stream. Never reuse across calls.
         streams: list[int | None] = []
-        pointers = [self._resident(value,shape,producer_streams=streams)
-                    for value,shape in zip(values,shapes,strict=True)]
+        dtypes=("fp32",)*len(shapes) if dtypes is None else dtypes
+        pointers = [self._resident(value,shape,producer_streams=streams,storage=dtype)
+                    for value,shape,dtype in zip(values,shapes,dtypes,strict=True)]
         if self.asynchronous and any(stream is None for stream in streams):
             raise ValueError("asynchronous attention requires declared producer streams")
         seen = set()
@@ -481,14 +501,15 @@ class ResidentAttentionTape:
                 if not isinstance(cotangent, (tuple,list)) or len(cotangent)!=2:
                     raise ValueError("saved O/LSE attention requires two result cotangents")
                 seed_shapes = (self.shapes[3],self.shapes[4])
-                pointers = self._resident_group(cotangent,seed_shapes)
+                pointers = self._resident_group(cotangent,seed_shapes,dtypes=(self._output_dtype,"fp32"))
             else:
                 seed_shapes = (self.shapes[3],)
-                pointers = self._resident_group((cotangent,),seed_shapes)
+                pointers = self._resident_group((cotangent,),seed_shapes,dtypes=(self._output_dtype,))
 
             start = len(self.buffers)
             try:
-                seeds = [self._allocate(shape) for shape in seed_shapes]
+                seed_dtypes=(self._output_dtype,"fp32")[:len(seed_shapes)]
+                seeds = [self._allocate(shape,dtype) for shape,dtype in zip(seed_shapes,seed_dtypes,strict=True)]
                 for buffer,pointer in zip(seeds,pointers,strict=True):
                     self.check(self.copy(buffer.pointer,ct.c_void_p(pointer),buffer.nbytes))
                 self._protect_snapshot_sources(cotangent if self._has_lse_cotangent else (cotangent,))
@@ -496,7 +517,7 @@ class ResidentAttentionTape:
                 if self._has_bias_gradient:
                     b,hq,_,sq,sk,_,_ = self.dims
                     gradient_shapes = (*gradient_shapes, getattr(self, "_bias_shape", (b,hq,sq,sk)))
-                gradients = [self._allocate(gradient_shapes[i]) for i in self._gradient_roles]
+                gradients = [self._allocate(gradient_shapes[i],self._input_dtype if i<3 else "fp32") for i in self._gradient_roles]
                 self._execute(True,[seeds[0],*self._saved[:4], *([self._bias] if self._has_bias else []), self._saved[4],*seeds[1:],*gradients])
             except BaseException:
                 self._release(start)
@@ -608,6 +629,9 @@ class _ReadOnly:
 
     @property
     def dtype(self):
+        if self._buffer.dtype=="bf16":
+            import ml_dtypes
+            return np.dtype(ml_dtypes.bfloat16)
         return np.dtype(self._buffer.typestr)
 
     @property

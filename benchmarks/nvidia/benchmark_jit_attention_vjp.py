@@ -52,7 +52,11 @@ def reference(q,k,v,seed,causal):
 
 def download(session,value):
     spec=value.__cuda_array_interface__
-    output=np.empty(spec["shape"],np.dtype(spec["typestr"]))
+    physical=np.dtype(spec["typestr"])
+    dtype=np.dtype(getattr(value,"dtype",physical))
+    if np.dtype(dtype.str)!=physical or (dtype.kind=="V" and dtype==physical):
+        raise ValueError("CUDA reference download requires matching semantic storage")
+    output=np.empty(spec["shape"],dtype)
     copy=ctypes.CDLL("libcuda.so.1").cuMemcpyDtoH_v2
     copy.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.c_size_t]
     copy.restype=ctypes.c_int

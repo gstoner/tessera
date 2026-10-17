@@ -9,6 +9,7 @@ from statistics import median
 import subprocess
 import time
 import lzma
+from typing import Any
 
 import ml_dtypes
 import numpy as np
@@ -58,8 +59,8 @@ def record(output: Path,samples: int):
             cases=[]
             for sq,sk in ((3,5),(17,129),(33,129)):
                 values=operands(storage,sq,sk)
-                _,expected=reference(*values[:4],None,values[4])
-                case=dict(storage=name,shape=[1,4,2,sq,sk,32,16],public_ms=[],stages_ms=[])
+                _,expected=reference(values[0],values[1],values[2],values[3],None,values[4])
+                case: dict[str, Any]=dict(storage=name,shape=[1,4,2,sq,sk,32,16],public_ms=[],stages_ms=[])
                 for _ in range(3):
                     receipt=rt.launch(artifact,values)
                     if not receipt.get("ok"):raise RuntimeError(receipt)

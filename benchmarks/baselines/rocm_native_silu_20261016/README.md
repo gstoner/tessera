@@ -6,8 +6,8 @@ Sync: ROCM-NATIVE-SWIGLU-ACTIVATION-20261016.
 RX9070XT/gfx1201, LLVM/MLIR23.1.1 assertions, ROCm10.0. This is an isolated
 activation dependency, not full NVFP4 MLP or model-quality closure.
 
-45 owning numerical/JIT/portable replay cases pass. The unit file now has 60
-cases: 47 compiler-dependent proofs and 13 pure frontend/capability cases.
+45 owning numerical/JIT/portable replay cases pass. The unit file now has 81
+cases: 47 compiler-dependent proofs and 34 pure frontend/capability cases.
 Fresh-process replay forbids compiler access and eager/legacy arithmetic;
 FP16/BF16 matching-store and widened FP32 outputs are checked independently.
 Adjacent native math/widening and owner lifetime tests pass 91 cases. Focused
@@ -43,7 +43,7 @@ python -m benchmarks.rocm.benchmark_native_silu_schedule --legacy-first --output
 ```
 
 CI lane classification is explicit: 47 compiler-dependent proofs execute in the
-production compiler lane, while 13 pure frontend/capability tests stay in the
+production compiler lane, while 34 pure frontend/capability tests stay in the
 CPU lane. Existing production compiler-route coverage passes 1,265 tests with
 zero skips. The generated-document gate confirms 33 documents are synchronized;
 plan ownership and public claim lint pass. The broad host unit lane recorded 26,109 passes and 5,902 skips, with one
@@ -68,3 +68,23 @@ The complete shared provider preserves all 47 baseline exports and adds only
 cases plus existing bounded/public/prepared NVFP4 programs. The earlier
 math-only scratch provider was a build-isolation aid; final timing packets
 bind the complete provider.
+
+## Post-review storage and rank checks
+
+The final review found two real boundaries not exercised by the original lane:
+non-floating concrete promotion and public rank admission. Shape-only capture
+now requires matching canonical FP16/BF16/FP32 inputs and verifies concrete
+storage metadata. Other concrete inputs retain the registered eager precision
+policy; abstract integer/mixed promotion requires values. This does not add
+integer activation execution. The selector, support predicate and portable
+record validator all enforce the existing ranks 1–3 certificate.
+
+The unit module has 81 cases (47 compiler-dependent and 34 pure cases).
+Nine genuine red cases plus six controls were recorded before implementation;
+the initial alias-spelling-only fixture mistakes remain in scratch, not proof.
+Final focused admission/registry gates: 628 passed. Tracer regression selection:
+115 passed/32 skipped. Full-provider owning device follow-through: 87 passed.
+Ruff and the zero-error mypy ratchet pass. All five measured native storage
+images and the complete provider bytes remain identical. Timing packets bind
+fe02b4c5a2 before these frontend/rank guards; public host costs were not remeasured.
+New exact-head CI is required before merge.

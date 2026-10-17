@@ -304,3 +304,110 @@ def test_public_silu_selection_does_not_preempt_unproved_sibling_route(target, a
     assert native.requests_public_math(graph, target) is admitted
     graph.functions[0].body[-1].op_name = "tessera.div"
     assert native.requests_public_math(graph, target) is (target in {"rocm_gfx1151", "rocm_gfx1201"})
+
+
+@pytest.mark.parametrize("dtype", ["int8", "int16", "int32", "int64", "float64", "complex64"])
+def test_silu_non_native_storage_keeps_concrete_result_promotion(dtype):
+    import numpy as np
+    import tessera as ts
+    from tessera.compiler.trace import trace
+
+    def call(a, b):
+        return ts.ops.silu_mul(a, b)
+
+    a = np.array([[1, 2], [3, 4]], dtype=dtype)
+    b = np.array([[4, 3], [2, 1]], dtype=dtype)
+    # The registered public primitive owns concrete promotion policy.
+    expected = call(a, b)
+    traced = trace(call, a, b, evaluate_catalog_outputs=False)
+    spelling = {"float16": "f16", "float32": "f32", "float64": "f64", "complex64": "complex64"}[expected.dtype.name]
+    assert traced.output_specs == ((a.shape, spelling),)
+    assert traced.output_values[0] is not None
+    assert traced.output_values[0].dtype == expected.dtype
+    np.testing.assert_array_equal(traced.output_values[0], expected)
+
+
+@pytest.mark.parametrize("rank", [0, 1, 2, 3, 4, 5])
+def test_public_silu_selection_and_support_enforce_proved_rank_envelope(rank):
+    from tessera.compiler import rocm_math_native as native
+    from tessera.compiler.graph_ir import tensor_ir_type
+
+    graph = module("div", "f32")
+    fn = graph.functions[0]
+    ty = tensor_ir_type(tuple("2" for _ in range(rank)), "fp32")
+    for arg in fn.args:
+        arg.ir_type = ty
+    op = fn.body[-1]
+    op.op_name, op.operands = "tessera.silu_mul", ["%a", "%b"]
+    op.operand_types, op.result_type = [str(ty), str(ty)], str(ty)
+    fn.body, fn.result_types = [op], [ty]
+    assert native.requests_math(graph)  # Keep compiler recognition separate.
+    assert native.requests_public_math(graph, "rocm_gfx1201") is (rank in {1, 2, 3})
+    assert native.supports_math(graph) is (rank in {1, 2, 3})
+
+
+@pytest.mark.parametrize("dtype,spelling", [("fp16", "f16"), ("bf16", "bf16"), ("fp32", "f32")])
+def test_supported_abstract_silu_storage_aliases_stay_shape_only(dtype, spelling, monkeypatch):
+    import numpy as np
+    import tessera as ts
+    from tessera.compiler.trace import trace
+
+    def call(a, b):
+        return ts.ops.silu_mul(a, b)
+
+    def forbidden(*a, **k):
+        pytest.fail("abstract floating SiLU evaluated eager arithmetic")
+
+    monkeypatch.setattr(np, "exp", forbidden)
+    traced = trace(call, ((3, 17), dtype), ((3, 17), dtype))
+    from tessera.dtype import canonicalize_dtype
+    assert traced.output_specs[0][0] == (3, 17)
+    assert canonicalize_dtype(traced.output_specs[0][1]) == canonicalize_dtype(spelling)
+    assert all(value is None for value in traced.output_values)
+
+
+@pytest.mark.parametrize("shape,valid", [((3, 17), True), ((1, 1, 3, 17), False)])
+def test_portable_silu_record_enforces_same_public_rank_envelope(shape, valid):
+    from tessera.compiler import rocm_math_native as native
+
+    info = {"shape": shape, "bindings": ("a", "b", "out"), "roles": (0, 1),
+            "family": "binary", "kind": "silu_mul", "architecture": "gfx1201",
+            "storage": "f32", "output_storage": "f32", "numeric_policy": "f32_compute",
+            "elements": 51, "rows": 3, "columns": 17, "schedule_digest": "a" * 64}
+    if valid:
+        native._validate_info(info)
+    else:
+        with pytest.raises(ValueError, match="rank"):
+            native._validate_info(info)
+
+
+@pytest.mark.parametrize("dtype", ["int32", "i64"])
+def test_abstract_integer_silu_requires_values_for_promotion(dtype):
+    import tessera as ts
+    from tessera.compiler.trace import TesseraTraceError, trace
+
+    def call(a, b):
+        return ts.ops.silu_mul(a, b)
+
+    with pytest.raises(TesseraTraceError, match="concrete values"):
+        trace(call, ((3, 17), dtype), ((3, 17), dtype))
+
+
+@pytest.mark.parametrize("right_dtype", ["float32", "bfloat16"])
+def test_mixed_floating_silu_preserves_registered_concrete_result(right_dtype):
+    import numpy as np
+    import tessera as ts
+    from tessera.compiler.trace import trace
+    from tessera.dtype import canonicalize_dtype
+
+    def call(a, b):
+        return ts.ops.silu_mul(a, b)
+
+    dtype = np.float32 if right_dtype == "float32" else pytest.importorskip("ml_dtypes").bfloat16
+    a = np.array([[1, 2]], dtype=np.float16)
+    b = np.array([[2, 3]], dtype=dtype)
+    expected = call(a, b)
+    traced = trace(call, a, b)
+    assert canonicalize_dtype(traced.output_specs[0][1]) == canonicalize_dtype(str(expected.dtype))
+    assert traced.output_values[0] is not None
+    np.testing.assert_array_equal(traced.output_values[0], expected)

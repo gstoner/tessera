@@ -4,8 +4,8 @@
   "measurement_source_commit": "fe02b4c5a2fca7d1d4db1f11e739510383f22344",
   "artifacts": {
     "README.md": {
-      "sha256": "e61e06f17e0af84b5be9fbd33ccd038ec7aea0bc98d82b5c936ac4759bbb56f6",
-      "bytes": 4251
+      "sha256": "ed992766c85dcfcaf5c2af9f75aa283509289e0f15f0b3351a8a70dd2bb7a533",
+      "bytes": 5492
     },
     "adjacent-device-and-owner.log": {
       "sha256": "cb20151540ce4802a940662d1833dee7729f61d04c923d73987cf7b4cdc93694",
@@ -110,6 +110,34 @@
     "recorder-selector-followup.log": {
       "sha256": "4b28a612108df462c3ed148651c5be58f379a2316556bb2b0392e2af1fe55913",
       "bytes": 329
+    },
+    "review-admission-gates.log": {
+      "sha256": "7b50993dfea08c3502cca1637e43f49993933510f2bd846dca8f84f7c193b90e",
+      "bytes": 809
+    },
+    "review-doc-abi-gates.log": {
+      "sha256": "b10c725ab1be4b555840e22f877873842e10618c4a7e7f634e33f8e821ce1875",
+      "bytes": 99
+    },
+    "review-full-owner-device.log": {
+      "sha256": "b8dfd4cc93a01ee89f4650bc3a04a83d9d9ebdb197f2069ca90d12d6f68571d0",
+      "bytes": 180
+    },
+    "review-image-parity.json": {
+      "sha256": "17ea26f3e337779f835432d3a33fb13f7a3c9c74187c2135b0c5869ce4d1ded5",
+      "bytes": 1234
+    },
+    "review-plan-gate.log": {
+      "sha256": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+      "bytes": 54
+    },
+    "review-red-corrected-fixture.log": {
+      "sha256": "3131a811aa007e4a8e00e3d51ccdd1844c70d6c07dd546dda8682565ad09524f",
+      "bytes": 12548
+    },
+    "review-tracer-regression.log": {
+      "sha256": "66ec3cd948b68cd8481295e5d46c0fc52d4280c9fd0202a812630e2a0d91d91b",
+      "bytes": 272
     },
     "ruff-full.log": {
       "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",

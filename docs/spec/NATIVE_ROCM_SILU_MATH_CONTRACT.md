@@ -59,7 +59,7 @@ Apple, NVIDIA or x86 binary-math storage. Existing sibling FP32 rules remain.
 ## Validation boundaries
 
 The final focused compiler/registry lane passes 556 cases after the final selector/recorder follow-through. The owning gfx1201 lane passes 45 device cases
-plus the separately selected 47 compiler-dependent and 13 pure frontend/capability cases, including matching-half fresh-process replay
+plus the separately selected 47 compiler-dependent and 34 pure frontend/capability cases, including matching-half fresh-process replay
 with compiler access and eager/legacy arithmetic forbidden. Adjacent native
 math/widening and native owner lifetime validation passes 91 cases. These counts
 have different scopes and are not independent cumulative coverage totals.
@@ -93,3 +93,17 @@ The final broad CPU lane passes 26,067 cases with 5,902 skips; the production
 compiler lane passes 1,312 with zero skips. The full shared provider preserves
 47 existing C exports and adds only the v2 entry. Its owning SiLU plus
 bounded/public/prepared NVFP4 regression lane passes 87 cases.
+
+## Review boundary checks
+
+Shape-only SiLU capture requires matching canonical FP16/BF16/FP32 inputs and
+checks actual concrete dtype metadata as well as tracer spelling. Other concrete
+storages retain the registered public primitive's eager output dtype. That
+wrapper uses FP32 results for integer inputs; raw NumPy expressions can choose
+a different promotion and are not the registered wrapper's policy. No new
+integer activation execution support is added. Abstract integer or mixed
+promotion requires values; supported floating aliases retain shape-only capture.
+
+The gfx1201 public selector, support predicate and portable package validator
+all enforce ranks 1–3. Broader low-level C++ artifact recognition does not widen
+the public execution certificate.

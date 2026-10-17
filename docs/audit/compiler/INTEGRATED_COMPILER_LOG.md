@@ -12914,4 +12914,9 @@ numerical replay passes all 45 cases again. Exact-head CI remains required.
 Final local broad CPU: 26,067 passed/5,902 skipped; final production compiler:
 1,312 passed, zero skips. The complete HIP provider preserves 47 baseline
 exports and passes 87 owning SiLU plus bounded/public/prepared NVFP4 cases.
+Review follow-through: integer/other concrete result promotion and rank 1–3
+admission are now checked in tracing, selection and portable validation.
+628 focused gates, 115 tracer cases (32 skips), and 87 owning device cases pass.
+Five measured kernel images and complete provider bytes remain unchanged;
+new exact-head CI is required after the guards land in the PR.
 <!-- entry-fields:end -->

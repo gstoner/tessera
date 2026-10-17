@@ -50,11 +50,18 @@ def requests_math(module):
     return body[-1].op_name in OPS and all(op.op_name == "tessera.cast" for op in body[:-1])
 
 
+def _silu_public_rank_envelope(module):
+    fn = module.functions[0]
+    return (bool(fn.args) and len(fn.result_types) == 1
+            and all(ty.rank in {1, 2, 3}
+                    for ty in [*(arg.ir_type for arg in fn.args), *fn.result_types]))
+
+
 def requests_public_math(module, target):
     """Select only owning-device-proved public routes; compiler admission is separate."""
     return (target in {"rocm_gfx1151", "rocm_gfx1201"} and requests_math(module)
             and (module.functions[0].body[-1].op_name != "tessera.silu_mul"
-                 or target == "rocm_gfx1201"))
+                 or (target == "rocm_gfx1201" and _silu_public_rank_envelope(module))))
 
 
 def supports_math(module):
@@ -62,6 +69,7 @@ def supports_math(module):
         return False
     fn = module.functions[0]
     return (bool(fn.args) and len(fn.result_types) == 1
+            and (fn.body[-1].op_name != "tessera.silu_mul" or _silu_public_rank_envelope(module))
             and all(arg.ir_type.dtype in {"fp32","fp16","bf16"} for arg in fn.args)
             and (fn.result_types[0].dtype == "fp32" or
                  (fn.body[-1].op_name == "tessera.silu_mul" and
@@ -147,6 +155,8 @@ def _validate_info(info):
             or info["rows"] != math.prod(shape[:-1])
             or re.fullmatch(r"[0-9a-f]{64}",info["schedule_digest"]) is None):
         raise ValueError("native math descriptor ownership record differs")
+    if kind == "silu_mul" and len(shape) not in {1, 2, 3}:
+        raise ValueError("native SiLU public package rank must be 1, 2 or 3")
     # Public isolated binary entries bind each argument exactly once.
     if len(set(roles)) != arity:
         raise ValueError("native math requires distinct operand roles")

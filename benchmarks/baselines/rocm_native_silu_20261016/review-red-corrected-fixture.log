@@ -1,0 +1,238 @@
+FFFFFFF...FF...                                                          [100%]
+=================================== FAILURES ===================================
+______ test_silu_non_native_storage_keeps_concrete_result_promotion[int8] ______
+
+dtype = 'int8'
+
+    @pytest.mark.parametrize("dtype", ["int8", "int16", "int32", "int64", "float64", "complex64"])
+    def test_silu_non_native_storage_keeps_concrete_result_promotion(dtype):
+        import numpy as np
+        import tessera as ts
+        from tessera.compiler.trace import trace
+    
+        def call(a, b):
+            return ts.ops.silu_mul(a, b)
+    
+        a = np.array([[1, 2], [3, 4]], dtype=dtype)
+        b = np.array([[4, 3], [2, 1]], dtype=dtype)
+        # NumPy owns promotion for non-native storage; do not inherit the input dtype.
+        expected = (a / (1.0 + np.exp(-a))) * b
+        traced = trace(call, a, b, evaluate_catalog_outputs=False)
+        spelling = {"float16": "f16", "float32": "f32", "float64": "f64", "complex64": "complex64"}[expected.dtype.name]
+>       assert traced.output_specs == ((a.shape, spelling),)
+E       AssertionError: assert (((2, 2), 'f32'),) == (((2, 2), 'f16'),)
+E         
+E         At index 0 diff: ((2, 2), 'f32') != ((2, 2), 'f16')
+E         Use -v to get more diff
+
+tests/unit/test_native_rocm_silu_schedule.py:324: AssertionError
+_____ test_silu_non_native_storage_keeps_concrete_result_promotion[int16] ______
+
+dtype = 'int16'
+
+    @pytest.mark.parametrize("dtype", ["int8", "int16", "int32", "int64", "float64", "complex64"])
+    def test_silu_non_native_storage_keeps_concrete_result_promotion(dtype):
+        import numpy as np
+        import tessera as ts
+        from tessera.compiler.trace import trace
+    
+        def call(a, b):
+            return ts.ops.silu_mul(a, b)
+    
+        a = np.array([[1, 2], [3, 4]], dtype=dtype)
+        b = np.array([[4, 3], [2, 1]], dtype=dtype)
+        # NumPy owns promotion for non-native storage; do not inherit the input dtype.
+        expected = (a / (1.0 + np.exp(-a))) * b
+        traced = trace(call, a, b, evaluate_catalog_outputs=False)
+        spelling = {"float16": "f16", "float32": "f32", "float64": "f64", "complex64": "complex64"}[expected.dtype.name]
+        assert traced.output_specs == ((a.shape, spelling),)
+>       assert traced.output_values[0] is not None
+E       assert None is not None
+
+tests/unit/test_native_rocm_silu_schedule.py:325: AssertionError
+_____ test_silu_non_native_storage_keeps_concrete_result_promotion[int32] ______
+
+dtype = 'int32'
+
+    @pytest.mark.parametrize("dtype", ["int8", "int16", "int32", "int64", "float64", "complex64"])
+    def test_silu_non_native_storage_keeps_concrete_result_promotion(dtype):
+        import numpy as np
+        import tessera as ts
+        from tessera.compiler.trace import trace
+    
+        def call(a, b):
+            return ts.ops.silu_mul(a, b)
+    
+        a = np.array([[1, 2], [3, 4]], dtype=dtype)
+        b = np.array([[4, 3], [2, 1]], dtype=dtype)
+        # NumPy owns promotion for non-native storage; do not inherit the input dtype.
+        expected = (a / (1.0 + np.exp(-a))) * b
+        traced = trace(call, a, b, evaluate_catalog_outputs=False)
+        spelling = {"float16": "f16", "float32": "f32", "float64": "f64", "complex64": "complex64"}[expected.dtype.name]
+>       assert traced.output_specs == ((a.shape, spelling),)
+E       AssertionError: assert (((2, 2), 'int32'),) == (((2, 2), 'f64'),)
+E         
+E         At index 0 diff: ((2, 2), 'int32') != ((2, 2), 'f64')
+E         Use -v to get more diff
+
+tests/unit/test_native_rocm_silu_schedule.py:324: AssertionError
+_____ test_silu_non_native_storage_keeps_concrete_result_promotion[int64] ______
+
+dtype = 'int64'
+
+    @pytest.mark.parametrize("dtype", ["int8", "int16", "int32", "int64", "float64", "complex64"])
+    def test_silu_non_native_storage_keeps_concrete_result_promotion(dtype):
+        import numpy as np
+        import tessera as ts
+        from tessera.compiler.trace import trace
+    
+        def call(a, b):
+            return ts.ops.silu_mul(a, b)
+    
+        a = np.array([[1, 2], [3, 4]], dtype=dtype)
+        b = np.array([[4, 3], [2, 1]], dtype=dtype)
+        # NumPy owns promotion for non-native storage; do not inherit the input dtype.
+        expected = (a / (1.0 + np.exp(-a))) * b
+        traced = trace(call, a, b, evaluate_catalog_outputs=False)
+        spelling = {"float16": "f16", "float32": "f32", "float64": "f64", "complex64": "complex64"}[expected.dtype.name]
+>       assert traced.output_specs == ((a.shape, spelling),)
+E       AssertionError: assert (((2, 2), 'i64'),) == (((2, 2), 'f64'),)
+E         
+E         At index 0 diff: ((2, 2), 'i64') != ((2, 2), 'f64')
+E         Use -v to get more diff
+
+tests/unit/test_native_rocm_silu_schedule.py:324: AssertionError
+____ test_silu_non_native_storage_keeps_concrete_result_promotion[float64] _____
+
+dtype = 'float64'
+
+    @pytest.mark.parametrize("dtype", ["int8", "int16", "int32", "int64", "float64", "complex64"])
+    def test_silu_non_native_storage_keeps_concrete_result_promotion(dtype):
+        import numpy as np
+        import tessera as ts
+        from tessera.compiler.trace import trace
+    
+        def call(a, b):
+            return ts.ops.silu_mul(a, b)
+    
+        a = np.array([[1, 2], [3, 4]], dtype=dtype)
+        b = np.array([[4, 3], [2, 1]], dtype=dtype)
+        # NumPy owns promotion for non-native storage; do not inherit the input dtype.
+        expected = (a / (1.0 + np.exp(-a))) * b
+        traced = trace(call, a, b, evaluate_catalog_outputs=False)
+        spelling = {"float16": "f16", "float32": "f32", "float64": "f64", "complex64": "complex64"}[expected.dtype.name]
+        assert traced.output_specs == ((a.shape, spelling),)
+>       assert traced.output_values[0] is not None
+E       assert None is not None
+
+tests/unit/test_native_rocm_silu_schedule.py:325: AssertionError
+___ test_silu_non_native_storage_keeps_concrete_result_promotion[complex64] ____
+
+dtype = 'complex64'
+
+    @pytest.mark.parametrize("dtype", ["int8", "int16", "int32", "int64", "float64", "complex64"])
+    def test_silu_non_native_storage_keeps_concrete_result_promotion(dtype):
+        import numpy as np
+        import tessera as ts
+        from tessera.compiler.trace import trace
+    
+        def call(a, b):
+            return ts.ops.silu_mul(a, b)
+    
+        a = np.array([[1, 2], [3, 4]], dtype=dtype)
+        b = np.array([[4, 3], [2, 1]], dtype=dtype)
+        # NumPy owns promotion for non-native storage; do not inherit the input dtype.
+        expected = (a / (1.0 + np.exp(-a))) * b
+        traced = trace(call, a, b, evaluate_catalog_outputs=False)
+        spelling = {"float16": "f16", "float32": "f32", "float64": "f64", "complex64": "complex64"}[expected.dtype.name]
+        assert traced.output_specs == ((a.shape, spelling),)
+>       assert traced.output_values[0] is not None
+E       assert None is not None
+
+tests/unit/test_native_rocm_silu_schedule.py:325: AssertionError
+____ test_public_silu_selection_and_support_enforce_proved_rank_envelope[0] ____
+
+rank = 0
+
+    @pytest.mark.parametrize("rank", [0, 1, 2, 3, 4, 5])
+    def test_public_silu_selection_and_support_enforce_proved_rank_envelope(rank):
+        from tessera.compiler import rocm_math_native as native
+        from tessera.compiler.graph_ir import tensor_ir_type
+    
+        graph = module("div", "f32")
+        fn = graph.functions[0]
+        ty = tensor_ir_type(tuple("2" for _ in range(rank)), "fp32")
+        for arg in fn.args:
+            arg.ir_type = ty
+        op = fn.body[-1]
+        op.op_name, op.operands = "tessera.silu_mul", ["%a", "%b"]
+        op.operand_types, op.result_type = [str(ty), str(ty)], str(ty)
+        fn.body, fn.result_types = [op], [ty]
+        assert native.requests_math(graph)  # Keep compiler recognition separate.
+>       assert native.requests_public_math(graph, "rocm_gfx1201") is (rank in {1, 2, 3})
+E       AssertionError: assert True is (0 in {1, 2, 3})
+E        +  where True = <function requests_public_math at 0x753e53bab060>(GraphIRModule(1 functions), 'rocm_gfx1201')
+E        +    where <function requests_public_math at 0x753e53bab060> = <module 'tessera.compiler.rocm_math_native' from '/home/angstorms/scratch/sm120-relu-producer-20261014/tests/unit/../../python/tessera/compiler/rocm_math_native.py'>.requests_public_math
+
+tests/unit/test_native_rocm_silu_schedule.py:345: AssertionError
+____ test_public_silu_selection_and_support_enforce_proved_rank_envelope[4] ____
+
+rank = 4
+
+    @pytest.mark.parametrize("rank", [0, 1, 2, 3, 4, 5])
+    def test_public_silu_selection_and_support_enforce_proved_rank_envelope(rank):
+        from tessera.compiler import rocm_math_native as native
+        from tessera.compiler.graph_ir import tensor_ir_type
+    
+        graph = module("div", "f32")
+        fn = graph.functions[0]
+        ty = tensor_ir_type(tuple("2" for _ in range(rank)), "fp32")
+        for arg in fn.args:
+            arg.ir_type = ty
+        op = fn.body[-1]
+        op.op_name, op.operands = "tessera.silu_mul", ["%a", "%b"]
+        op.operand_types, op.result_type = [str(ty), str(ty)], str(ty)
+        fn.body, fn.result_types = [op], [ty]
+        assert native.requests_math(graph)  # Keep compiler recognition separate.
+>       assert native.requests_public_math(graph, "rocm_gfx1201") is (rank in {1, 2, 3})
+E       AssertionError: assert True is (4 in {1, 2, 3})
+E        +  where True = <function requests_public_math at 0x753e53bab060>(GraphIRModule(1 functions), 'rocm_gfx1201')
+E        +    where <function requests_public_math at 0x753e53bab060> = <module 'tessera.compiler.rocm_math_native' from '/home/angstorms/scratch/sm120-relu-producer-20261014/tests/unit/../../python/tessera/compiler/rocm_math_native.py'>.requests_public_math
+
+tests/unit/test_native_rocm_silu_schedule.py:345: AssertionError
+____ test_public_silu_selection_and_support_enforce_proved_rank_envelope[5] ____
+
+rank = 5
+
+    @pytest.mark.parametrize("rank", [0, 1, 2, 3, 4, 5])
+    def test_public_silu_selection_and_support_enforce_proved_rank_envelope(rank):
+        from tessera.compiler import rocm_math_native as native
+        from tessera.compiler.graph_ir import tensor_ir_type
+    
+        graph = module("div", "f32")
+        fn = graph.functions[0]
+        ty = tensor_ir_type(tuple("2" for _ in range(rank)), "fp32")
+        for arg in fn.args:
+            arg.ir_type = ty
+        op = fn.body[-1]
+        op.op_name, op.operands = "tessera.silu_mul", ["%a", "%b"]
+        op.operand_types, op.result_type = [str(ty), str(ty)], str(ty)
+        fn.body, fn.result_types = [op], [ty]
+        assert native.requests_math(graph)  # Keep compiler recognition separate.
+>       assert native.requests_public_math(graph, "rocm_gfx1201") is (rank in {1, 2, 3})
+E       AssertionError: assert True is (5 in {1, 2, 3})
+E        +  where True = <function requests_public_math at 0x753e53bab060>(GraphIRModule(1 functions), 'rocm_gfx1201')
+E        +    where <function requests_public_math at 0x753e53bab060> = <module 'tessera.compiler.rocm_math_native' from '/home/angstorms/scratch/sm120-relu-producer-20261014/tests/unit/../../python/tessera/compiler/rocm_math_native.py'>.requests_public_math
+
+tests/unit/test_native_rocm_silu_schedule.py:345: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_rocm_silu_schedule.py::test_silu_non_native_storage_keeps_concrete_result_promotion[int8]
+FAILED tests/unit/test_native_rocm_silu_schedule.py::test_silu_non_native_storage_keeps_concrete_result_promotion[int16]
+FAILED tests/unit/test_native_rocm_silu_schedule.py::test_silu_non_native_storage_keeps_concrete_result_promotion[int32]
+FAILED tests/unit/test_native_rocm_silu_schedule.py::test_silu_non_native_storage_keeps_concrete_result_promotion[int64]
+FAILED tests/unit/test_native_rocm_silu_schedule.py::test_silu_non_native_storage_keeps_concrete_result_promotion[float64]
+FAILED tests/unit/test_native_rocm_silu_schedule.py::test_silu_non_native_storage_keeps_concrete_result_promotion[complex64]
+FAILED tests/unit/test_native_rocm_silu_schedule.py::test_public_silu_selection_and_support_enforce_proved_rank_envelope[0]
+FAILED tests/unit/test_native_rocm_silu_schedule.py::test_public_silu_selection_and_support_enforce_proved_rank_envelope[4]
+FAILED tests/unit/test_native_rocm_silu_schedule.py::test_public_silu_selection_and_support_enforce_proved_rank_envelope[5]
+9 failed, 6 passed, 60 deselected in 0.42s

@@ -358,7 +358,33 @@ class TraceBuilder:
         cast_types_only = graph_name == "tessera.cast" and (
             not self.evaluate_catalog_outputs or not tracer_args
             or not all(value.value is not None for value in tracer_args))
-        silu_types_only = (graph_name == "tessera.silu_mul" and len(tracer_args) == 2
+        silu_float_storage = False
+        if graph_name == "tessera.silu_mul" and len(tracer_args) == 2:
+            from ..dtype import TesseraDtypeError, canonicalize_dtype
+            supported = {"fp16", "bf16", "fp32"}
+            try:
+                # Some legacy trace spellings collapse other NumPy storages to
+                # f32. Check concrete dtype metadata too; no input arithmetic.
+                silu_float_storage = (tracer_args[0].dtype == tracer_args[1].dtype) and all(
+                    canonicalize_dtype(value.dtype) in supported
+                    and (value.value is None or canonicalize_dtype(
+                        str(getattr(value.value, "dtype", None))) in supported)
+                    for value in tracer_args)
+            except TesseraDtypeError:
+                silu_float_storage = False
+        if graph_name == "tessera.silu_mul" and not all(
+                value.value is not None for value in tracer_args):
+            from ..dtype import TesseraDtypeError, canonicalize_dtype
+            try:
+                abstract_dtypes = tuple(canonicalize_dtype(
+                    value.dtype, allow_planned_gated=True) for value in tracer_args)
+            except TesseraDtypeError as error:
+                raise TesseraTraceError("abstract SiLU requires concrete values for dtype promotion") from error
+            if (len(set(abstract_dtypes)) != 1
+                    or any(dtype not in {"fp16", "bf16", "fp32", "fp64", "complex64", "complex128"}
+                           for dtype in abstract_dtypes)):
+                raise TesseraTraceError("abstract SiLU requires concrete values for dtype promotion")
+        silu_types_only = (silu_float_storage
             and tracer_args[0].shape == tracer_args[1].shape
             and tracer_args[0].dtype == tracer_args[1].dtype
             and (not self.evaluate_catalog_outputs
@@ -450,7 +476,8 @@ class TraceBuilder:
             for item in tracer_args
         ]
         from .op_catalog import shape_rule_for
-        if tracer_args and shape_rule_for(graph_name) in {"same_as_first", "attention_value_width"}:
+        if (tracer_args and shape_rule_for(graph_name) in {"same_as_first", "attention_value_width"}
+                and not (graph_name == "tessera.silu_mul" and not silu_float_storage)):
             # The concrete NumPy reference can promote low-precision storage
             # (notably bfloat16 RMSNorm) through scalar arithmetic. Graph IR's
             # canonical same_as_first contract owns storage dtype; eager values

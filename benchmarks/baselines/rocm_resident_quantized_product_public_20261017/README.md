@@ -94,3 +94,8 @@ owning gfx1201). `review-source-identity.json` binds the corrected sources and
 `review-regressions.json` records this validation. Existing timing packets keep
 their measured pre-review source hashes; no native arithmetic or timing claim
 changes.
+
+The execution-kind property also checks the current quantized program and its
+complete successful native receipts explicitly. Missing, partial or failed
+receipts do not establish native execution. The resulting package/device gate
+passes 27 tests (22 package, five owning gfx1201).

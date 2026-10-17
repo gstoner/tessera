@@ -15,6 +15,8 @@ PR969 review: the gfx1201 JIT clears prior per-call program/receipts/artifact
 before validation, and portable consumer Target witnesses must equal the
 image-bound Target. Both red regressions are fixed; 26 owning package/device
 tests pass. No sibling physical admission or arithmetic changes.
+The execution-kind property now requires complete current quantized-program
+receipts explicitly; the affected package/device gate passes 27 tests.
 
 Shared runtime assessment: a distinct gfx1201 program executor/portable schema
 binds existing member ABIs; no sibling execution row, physical schedule or ABI

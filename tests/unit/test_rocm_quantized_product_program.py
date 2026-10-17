@@ -158,3 +158,21 @@ def test_new_call_clears_previous_quantized_product_before_validation(monkeypatc
     assert fn._rocm_quantized_product_last_program is None
     assert fn._rocm_quantized_product_last_receipts == ()
     assert fn._cached_artifact is None
+
+
+def test_execution_kind_uses_complete_current_native_program_receipts():
+    from types import SimpleNamespace
+    import tessera as ts
+    from tests.device.rocm.test_native_quantized_product_jit import make_product
+    fn=ts.jit(target="rocm_gfx1201",native_required=True)(make_product())
+    fn._rocm_quantized_product_last_program=SimpleNamespace(native=SimpleNamespace(native_stages=(object(),object())))
+    receipt={"ok":True,"execution_kind":"native_gpu"}
+    fn._rocm_quantized_product_last_receipts=(receipt,receipt)
+    assert fn._has_native_quantized_product_receipts()
+    assert fn.execution_kind=="native_gpu"
+    for receipts in ((),(receipt,),({"ok":False,"execution_kind":"native_gpu"},receipt),({"ok":True,"execution_kind":"fallback_eager"},receipt)):
+        fn._rocm_quantized_product_last_receipts=receipts
+        assert not fn._has_native_quantized_product_receipts()
+    fn._rocm_quantized_product_last_program=None
+    fn._rocm_quantized_product_last_receipts=(receipt,receipt)
+    assert not fn._has_native_quantized_product_receipts()

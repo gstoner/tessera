@@ -3914,8 +3914,16 @@ class JitFn:
             and _nvidia_mma_lane_available()
         )
 
+    def _has_native_quantized_product_receipts(self) -> bool:
+        program=getattr(self,"_rocm_quantized_product_last_program",None)
+        receipts=getattr(self,"_rocm_quantized_product_last_receipts",())
+        return (program is not None and len(receipts)==len(program.native.native_stages)
+                and all(r.get("ok") and r.get("execution_kind")=="native_gpu" for r in receipts))
+
     @property
     def execution_kind(self) -> str:
+        if self._has_native_quantized_product_receipts():
+            return "native_gpu"
         if (self._nvidia_lhs_last_program is not None
                 and len(self._nvidia_lhs_last_receipts) == len(self.native_lhs_packages())
                 and all(r.get("ok") and r.get("execution_kind") == "native_gpu"

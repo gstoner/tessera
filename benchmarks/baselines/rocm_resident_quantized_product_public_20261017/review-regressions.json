@@ -6,5 +6,7 @@
   "architecture": "gfx1201",
   "device_uuid": "GPU-28d9e7efbf2ef716",
   "native_math_changed": false,
-  "timing_packets": "retain measured pre-review source identity; no new timing claim"
+  "timing_packets": "retain measured pre-review source identity; no new timing claim",
+  "receipt_metadata": "execution_kind requires a current program and complete successful native receipts, rather than relying on the generic compile bundle",
+  "latest_affected_gate": "27 passed (22 package + 5 owning gfx1201 device tests)"
 }

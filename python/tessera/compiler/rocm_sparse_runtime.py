@@ -236,6 +236,11 @@ def _worker(connection, package, a, b, device):
         check(hip.hipModuleUnload(module))
         connection.send(('result',output) if valid else ('invalid',))
         connection.close()
+        # Every explicitly owned HIP object has been released above. Avoid
+        # interpreter/driver finalizers in this isolated process: concurrent
+        # WSL workers can otherwise hang after successful result delivery.
+        # The parent still requires confirmed zero-status death before output.
+        os._exit(0)
     except BaseException as error:
         try:
             connection.send(('error',type(error).__name__,str(error)))

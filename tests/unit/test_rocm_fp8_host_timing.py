@@ -1,4 +1,4 @@
-"""Completed-host measurement must exclude validation and balance actual call order."""
+"""Host-free: synthetic-clock checks of sampler order and excluded oracle time; no device."""
 from __future__ import annotations
 
 import math

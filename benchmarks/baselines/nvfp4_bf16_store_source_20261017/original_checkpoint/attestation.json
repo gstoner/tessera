@@ -1,0 +1,22 @@
+{
+  "recorder_sha256": "02e9999f71401554e0c956d49dd1292096495661215c78902cf119a09736805e",
+  "packet_sha256": "56c6677bf83c43dd004d549692b4c5bcd863baa4870ff1e0c4ac1317502fffb3",
+  "compiler_matches_source_packet": true,
+  "source_shapes": [
+    [
+      19,
+      12288,
+      4096
+    ],
+    [
+      256,
+      12288,
+      4096
+    ]
+  ],
+  "interval_violations": [
+    0,
+    0
+  ],
+  "remaining": "native activation quantizer/down projection, full MLP and full model/corpus quality/performance"
+}

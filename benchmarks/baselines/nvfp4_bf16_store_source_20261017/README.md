@@ -50,3 +50,13 @@ Three-member bounded runtime expressions, K16 activation quantization/down
 projection, original NVFP4 MLP and representative model quality/performance
 acceptance remain open. W1.1, saved-LSE forward/backward and broader ROCm
 route/performance obligations retain their own acceptance gates.
+
+
+## Original-checkpoint follow-through
+
+See original_checkpoint/README.md for hash-checked Qwen gate/up weights and
+captured activations at M19/M256, N24576/K4096. Both authored native
+three-member programs pass independent numerical intervals and compiler-disabled
+portable replay, with separate device-member and completed-host timings.
+This closes the representative gate/up activation connection; native activation
+quantization/down projection and full-model acceptance remain open.

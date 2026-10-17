@@ -20,6 +20,11 @@ Three synthetic captured member windows have minima 20.12–23.09 ms;
 completed retained-owner activation-update/invoke/read medians are
 0.485–0.565 ms. No matched speedup or full-model quality is claimed.
 Evidence: benchmarks/baselines/nvfp4_bf16_store_source_20261017/README.md.
+Original Qwen gate/up follow-through at M19/M256, N24576/K4096 passes
+independent numerical intervals and compiler-disabled portable replay.
+M256 captured expansion/product/activation medians are 0.711/1.386/0.0339ms;
+completed retained-owner host median is 4.997ms. Native activation quantization,
+down projection and full MLP/model-quality acceptance remain open.
 gfx1151 requires its own profile and cannot inherit FP8 WMMA evidence.
 
 ## ROCM-BF16-PARENT-VIEW-20261017 — resident activation candidate

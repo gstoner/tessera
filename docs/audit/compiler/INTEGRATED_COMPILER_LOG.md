@@ -13054,6 +13054,11 @@ fresh-process replay, changed inputs, ownership and existing bounded controls.
 and three binaries/libraries. Three synthetic timing cases have captured
 windows above 20ms and separate completed host medians 0.485–0.565ms.
 No matched speedup, default promotion or full-model quality is claimed.
+Original-checkpoint follow-through: pinned gate/up weights and captured model
+inputs pass at M19/M256 with N24576/K4096, private BF16 parent ownership,
+independent numerical intervals and compiler-disabled portable execution.
+M256 captured expansion/product/activation is 0.711/1.386/0.0339ms, separately
+from completed prepared host time 4.997ms. This is not full-model acceptance.
 Remaining: three-member bounded runtime expressions, K16 activation quantization/
 down projection, original-model MLP/quality and all outstanding five-slice gates.
 Evidence: benchmarks/baselines/nvfp4_bf16_store_source_20261017/README.md.

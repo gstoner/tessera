@@ -32,5 +32,21 @@
     "compiler-build.txt": "063d71c3faaf92a414154d889322f95139eb7a18073c4f2d2726109eca2a7677",
     "bf16-store-native-final.txt": "042ae8f1a03c397186e02a3a147ed8d9e4378a81f2074ba3d61f8322dd54d86d",
     "bf16-store-mypy.txt": "71144743c83babea384888a735db0c4daba3d4d7b7942b6839984bd5c21b52bb"
-  }
+  },
+  "original_checkpoint_rows": [
+    [
+      19,
+      12288,
+      4096
+    ],
+    [
+      256,
+      12288,
+      4096
+    ]
+  ],
+  "original_checkpoint_interval_violations": [
+    0,
+    0
+  ]
 }

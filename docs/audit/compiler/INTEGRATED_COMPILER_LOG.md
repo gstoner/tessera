@@ -12898,7 +12898,7 @@ and compiler tests pass 551 cases. Ruff and zero-error mypy pass.
 Two 15-row timing trials reverse device-arm order. At M256/N12288 activation
 shape native device windows are about 25–28 us, within 2% of same-store legacy
 kernels. Smaller rows vary by order; no speedup or schedule promotion is claimed.
-Completed public calls remain 4.84–6.13 ms. Device and host scopes are separate.
+Completed public calls remain 4.55–5.98 ms. Device and host scopes are separate.
 All four backend queues assessed. No gfx1151 or sibling physical proof transfers.
 Remaining: broad validation/CI and publication, full resident gate/up views and
 lifetimes, activation quantization/downprojection, original-model quality and

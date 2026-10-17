@@ -21,9 +21,9 @@ exclude allocation/transfers/readback, but may include host submission gaps.
 Public-call samples include checked dispatch, staging, transfers and completed
 readback; cold calls also include compilation/cache lookup. Domains are separate.
 
-At 256x12288 native device medians are 25.47–27.56 us, and same-store
-legacy/native ratios are 0.993–1.018 across arm orders. No speedup is claimed.
-Completed public calls at that shape take 4.84–6.13 ms. Smaller rows vary with
+At 256x12288 native device medians are 25.40–27.15 us, and same-store
+legacy/native ratios are 0.989–1.005 across arm orders. No speedup is claimed.
+Completed public calls at that shape take 4.55–5.98 ms. Smaller rows vary with
 trial order; no performance promotion or host-overhead closure follows.
 The earlier exploratory packet/logs remain in owned scratch, not final evidence.
 
@@ -51,7 +51,7 @@ recorder-citation failure. The missing citation is fixed without changing its
 test; 146 follow-up tests and 556 final registry/ABI/compiler/recorder gates
 pass. Final CI remains a required publication/merge gate.
 
-Final timing packets bind committed source a6ae03792190f30a6c39eee5642afe488c27ca98.
+Final timing packets bind committed source fe02b4c5a2fca7d1d4db1f11e739510383f22344.
 The earlier uncommitted-source trial is retained in owned scratch/history; these
 packets replace it as the final measurement evidence. No arithmetic changed.
 
@@ -59,9 +59,7 @@ Recorder: [`benchmarks/rocm/benchmark_native_silu_schedule.py`](../../rocm/bench
 
 Final public selector review keeps unproved gfx1151 SiLU on its existing route
 selection; low-level compiler artifact recognition remains shared. All 45
-gfx1201 device cases pass again after that selector correction. Timings are
-explicitly from a6ae037921, before this metadata-only selector follow-through;
-the compiled arithmetic, native ABI and HIP provider are unchanged.
+gfx1201 device cases pass again after that selector correction. Timings include the final public selector and complete shared HIP provider.
 
 Final local gates: corrected broad CPU lane 26,067 passed/5,902 skipped;
 production compiler lane 1,312 passed with zero skips and executed-proof gate.
@@ -69,4 +67,4 @@ The complete shared provider preserves all 47 baseline exports and adds only
 `tessera_rocm_math_launch_v2`. Its 87 owning gfx1201 cases include all 45 SiLU
 cases plus existing bounded/public/prepared NVFP4 programs. The earlier
 math-only scratch provider was a build-isolation aid; final timing packets
-will bind the complete provider before publication.
+bind the complete provider.

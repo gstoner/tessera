@@ -8,7 +8,7 @@ audit_role: reference
 Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
 Synchronization: ROCM-NATIVE-SWIGLU-ACTIVATION-20261016.
 
-Status: owning gfx1201 numerical/replay validation passed; benchmark and publication gates are in progress.
+Status: owning gfx1201 numerical/replay, benchmark and local validation gates passed; exact-head PR checks remain.
 This is an activation dependency for full source-preserving NVFP4 MLP
 composition, not full MLP or model-quality acceptance.
 

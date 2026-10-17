@@ -1,10 +1,11 @@
 {
   "schema": "tessera.native-silu-evidence.v1",
   "scope": "isolated gfx1201 SiLU; full NVFP4 MLP remains open",
+  "measurement_source_commit": "fe02b4c5a2fca7d1d4db1f11e739510383f22344",
   "artifacts": {
     "README.md": {
-      "sha256": "0f9b5c3d3e321b627565aed39b203e707de2c2abba60811b1e99c96a99ea4a37",
-      "bytes": 4358
+      "sha256": "e61e06f17e0af84b5be9fbd33ccd038ec7aea0bc98d82b5c936ac4759bbb56f6",
+      "bytes": 4251
     },
     "adjacent-device-and-owner.log": {
       "sha256": "cb20151540ce4802a940662d1833dee7729f61d04c923d73987cf7b4cdc93694",
@@ -114,6 +115,10 @@
       "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
       "bytes": 19
     },
+    "runtime-build-receipt.json": {
+      "sha256": "94cbbf09b8cbf98cac8fc054740ff1636b1c14ea2850535c8da6a429ec58cf68",
+      "bytes": 2493
+    },
     "silu-cpu-classification.log": {
       "sha256": "3cc6232e30f667612c93bc84f0fe57e466e6184b1c2685da1c60b2626adee4b3",
       "bytes": 113
@@ -123,12 +128,12 @@
       "bytes": 224
     },
     "silu-timings-legacy-first.json": {
-      "sha256": "140f104dfaed8d90a0064f3c8ba5d5818c4bf6176ccc9bc403d7108c31ad0ab9",
-      "bytes": 34525
+      "sha256": "4dc90d7e5a0c11bcc6080099082b481b9309e7cf3d27f28b1eb0db9c0a90eba1",
+      "bytes": 36167
     },
     "silu-timings-native-first.json": {
-      "sha256": "91e28ccf7d8a6abe8d506d66798aa838b7480e4496c3bcc4723deea3a5abf81a",
-      "bytes": 34518
+      "sha256": "bed2f5bbd7f8e24aa7cf48804b4846a9af1b5db18162dc29c1e0cb654e3d8cec",
+      "bytes": 36169
     }
   }
 }

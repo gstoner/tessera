@@ -6,7 +6,7 @@ import subprocess
 from types import SimpleNamespace
 import numpy as np
 import pytest
-from tessera.compiler.native_scaled_program import PreparedScaledProgram
+from tessera.compiler.native_scaled_program import PreparedScaledProgram, _StorageSpec
 
 @pytest.fixture(scope="module")
 def library(tmp_path_factory):
@@ -96,7 +96,8 @@ def owner_for(lib,rows=4):
     owner.handle=c.c_uint64(7);owner.lib=lib
     owner._read_many=lib.tessera_rocm_program_read_many
     owner._binding=SimpleNamespace(outputs=(1,2,3),storage=[
-        SimpleNamespace(shape=(rows,),storage="f32") for _ in range(4)])
+        _StorageSpec(shape=(rows,), storage="f32", bytes=rows * 4,
+                     numpy_dtype=np.dtype("float32")) for _ in range(4)])
     return owner
 
 @pytest.mark.parametrize("pinned",[0,1])

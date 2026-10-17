@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-16
+last_updated: 2026-10-17
 audit_role: plan
 plan_state: open
 ---
@@ -167,10 +167,12 @@ the next action's host requirement; it is not a live fleet-availability claim.
   separate. The new BF16 profile additionally preserves explicit FP32
   widening/compute and BF16 storage through native row schema 3, with seven
   public JIT/fresh-process cases. A three-member textual NVFP4 program proves
-  private resident parent lifetime in two named static cases. Python authoring
-  of BF16 product storage, three-member bounded expressions, activation
-  quantization/down projection and original full-model quality remain open.
-- Latest: [2026-10-17 — native BF16 parent views and resident activation](INTEGRATED_COMPILER_LOG.md#2026-10-17--native-bf16-parent-views-and-resident-activation)
+  private resident parent lifetime in two named static cases. Ordinary Python
+  authoring now retains the explicit FP32-product/BF16-store Graph and reaches
+  three native members, with compiler-disabled fresh-process replay proved on
+  gfx1201. Three-member bounded expressions, activation quantization/down
+  projection and original full-model quality remain open.
+- Latest: [2026-10-17 — authored NVFP4 BF16 store composition](INTEGRATED_COMPILER_LOG.md#2026-10-17--authored-nvfp4-bf16-store-composition)
 
 ### ROCM-SPLIT-K-1
 

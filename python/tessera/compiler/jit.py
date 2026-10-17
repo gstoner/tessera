@@ -2431,7 +2431,7 @@ class JitFn:
             return ()
         from .rocm_nvfp4_source_frontend import TracedSourceNVFP4Program
         if isinstance(program, TracedSourceNVFP4Program):
-            return (program.native.producer.native, program.native.consumer)
+            return program.native.native_stages
         return (program.native.ingest.native,program.native.storage.native,program.native.consumer.package)
 
 
@@ -3699,6 +3699,8 @@ class JitFn:
                 program = self._rocm_nvfp4_last_program
                 if isinstance(program, TracedSourceNVFP4Program):
                     schedules: tuple[str, ...] = (program.native.producer.schedule_ir, program.native.consumer_schedule_ir)
+                    if program.native.activation is not None:
+                        schedules += (program.native.activation_schedule_ir,)
                 else:
                     schedules = (program.native.ingest.schedule_ir, program.native.storage.schedule_ir,
                                  program.native.consumer.schedule_ir)

@@ -1,0 +1,57 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__ test_explicit_product_store_stays_in_native_member_without_f32_allocation ___
+
+    @pytest.mark.usefixtures("production_compiler")
+    def test_explicit_product_store_stays_in_native_member_without_f32_allocation():
+        from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
+    
+        source = explicit_store_source()
+>       program = export_native_nvfp4_program(source)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_nvfp4_parent_view_program.py:74: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_nvfp4_program.py:57: in export_native_nvfp4_program
+    ir = run_tessera_opt(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/rocm-bf16-parent-view-20261017/.build-bf16/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.target = "rocm_gfx1201", tessera.arch = "gfx1201"} {\n func.func @source_product(%arg0: te...st %product {dtype = "bf16"} : (tensor<3x17xf32>) -> tensor<3x17xbf16>\n return %activation : tensor<3x17xbf16>\n }\n}'
+option = '--tessera-autodiff-forward=export-scaled-primal=true'
+
+    def run_tessera_opt(tool: Path, source: str, option: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", option],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                f"scheduled compiler boundary {option} failed: "
+                + (result.stderr.strip() or str(result.returncode))
+            )
+E           RuntimeError: scheduled compiler boundary --tessera-autodiff-forward=export-scaled-primal=true failed: <stdin>:2:2: error: NVFP4 native program requires its five-input conversion/product Graph
+E            func.func @source_product(%arg0: tensor<34x24xi8>, %arg1: tensor<34x3xf8E4M3FN>, %arg2: tensor<2xf64>, %arg3: tensor<3x48xf8E4M3FN>, %arg4: tensor<3x3xf32>) -> tensor<3x17xbf16> {
+E            ^
+E           <stdin>:2:2: note: see current operation: 
+E           "func.func"() <{function_type = (tensor<34x24xi8>, tensor<34x3xf8E4M3FN>, tensor<2xf64>, tensor<3x48xf8E4M3FN>, tensor<3x3xf32>) -> tensor<3x17xbf16>, sym_name = "source_product"}> ({
+E           ^bb0(%arg0: tensor<34x24xi8>, %arg1: tensor<34x3xf8E4M3FN>, %arg2: tensor<2xf64>, %arg3: tensor<3x48xf8E4M3FN>, %arg4: tensor<3x3xf32>):
+E             %0:2 = "tessera.nvfp4_expand"(%arg0, %arg1, %arg2) <{numeric_policy = {destination_code_selection = "exact_e2m1_signed_zero", destination_format = "fp8_e4m3_k16_f32_scales", destination_scale_order = "k_group_n", execution_mode = "source_preserving_expansion", scale_rounding = "f64_product_to_f32_rne", source_format = "nvfp4_e2m1_e4m3_k16", source_scale_application = "projection_global_times_e4m3"}, row_offsets = [0, 3, 34]}> : (tensor<34x24xi8>, tensor<34x3xf8E4M3FN>, tensor<2xf64>) -> (tensor<34x48xf8E4M3FN>, tensor<3x34xf32>)
+E             %1 = "tessera.scaled_matmul"(%arg3, %0#0, %arg4, %0#1) <{numeric_policy = {accum = "fp32", execution_mode = "exact_per_block"}, scale_layout = {block = [1, 16], format = "fp32", granularity = "block"}, transposeA = false, transposeB = true}> : (tensor<3x48xf8E4M3FN>, tensor<34x48xf8E4M3FN>, tensor<3x3xf32>, tensor<3x34xf32>) -> tensor<3x34xf32>
+E             %2 = "tessera.cast"(%1) {dtype = "bf16"} : (tensor<3x34xf32>) -> tensor<3x34xbf16>
+E             %3 = "tessera.slice"(%2) <{slice_sizes = [3, 17], start_indices = [0, 0]}> : (tensor<3x34xbf16>) -> tensor<3x17xbf16>
+E             %4 = "tessera.slice"(%2) <{slice_sizes = [3, 17], start_indices = [0, 17]}> : (tensor<3x34xbf16>) -> tensor<3x17xbf16>
+E             %5 = "tessera.cast"(%3) {dtype = "fp32"} : (tensor<3x17xbf16>) -> tensor<3x17xf32>
+E             %6 = "tessera.cast"(%4) {dtype = "fp32"} : (tensor<3x17xbf16>) -> tensor<3x17xf32>
+E             %7 = "tessera.silu_mul"(%5, %6) : (tensor<3x17xf32>, tensor<3x17xf32>) -> tensor<3x17xf32>
+E             %8 = "tessera.cast"(%7) {dtype = "bf16"} : (tensor<3x17xf32>) -> tensor<3x17xbf16>
+E             "func.return"(%8) : (tensor<3x17xbf16>) -> ()
+E           }) : () -> ()
+
+python/tessera/compiler/scheduled_matmul.py:1044: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_nvfp4_parent_view_program.py::test_explicit_product_store_stays_in_native_member_without_f32_allocation
+1 failed, 2 deselected in 0.52s

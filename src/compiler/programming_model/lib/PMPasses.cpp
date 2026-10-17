@@ -1,4 +1,5 @@
 #include "NativeGateUpSchedule.h"
+#include "NativeFP8StoreFusion.h"
 #include "NativeRowSchedule.h"
 //===- PMPasses.cpp — Programming Model v1.1 passes and pipelines ---------===//
 //
@@ -3288,6 +3289,7 @@ struct GraphToSchedulePass
     bool nativeRowSelected = false;
     if (failed(row_region::schedule(mod,nativeRowSelected))) return signalPassFailure();
     if (nativeRowSelected) return;
+    if (failed(fuseNativeFP8StoreCast(mod))) return signalPassFailure();
     bool scaleTransposeSelected = false;
     if (scaleTransposeWave && scaleTransposeAuto) {
       mod.emitError("scale transpose cannot request both explicit wave and automatic schedules");

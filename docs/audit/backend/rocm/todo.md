@@ -5,6 +5,23 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-NVFP4-BF16-STORE-20261017 — authored source composition
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: ROCM-NVFP4-BF16-STORE-20261017.
+
+Implementation in progress. The ordinary Python source retains its FP32
+scaled product, explicit BF16 store cast, complementary views, FP32 SiLU and
+BF16 output. Native partitioning and Schedule store fusion preserve those
+semantics with nine physical buffers and no FP32 parent allocation. Portable
+source schema v2 adds three-member replay; v1 and native program v3/v4/v5 retain
+their meanings. Owning gfx1201 passes 56 final-source numerical/replay/compatibility cases.
+Three synthetic captured member windows have minima 20.12–23.09 ms;
+completed retained-owner activation-update/invoke/read medians are
+0.485–0.565 ms. No matched speedup or full-model quality is claimed.
+Evidence: benchmarks/baselines/nvfp4_bf16_store_source_20261017/README.md.
+gfx1151 requires its own profile and cannot inherit FP8 WMMA evidence.
+
 ## ROCM-BF16-PARENT-VIEW-20261017 — resident activation candidate
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.

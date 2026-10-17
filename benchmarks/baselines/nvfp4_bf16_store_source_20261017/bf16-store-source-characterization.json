@@ -1,0 +1,217 @@
+{
+  "scope": "synthetic Python-authored Graph resident characterization; no model-quality or performance promotion",
+  "architecture": "gfx1201",
+  "device_probe": {
+    "architecture": "gfx1201",
+    "device": "AMD Radeon RX 9070 XT",
+    "device_index": 0,
+    "compiler_sha256": "7aa87457c1750fe39781c6a74bf2da0159085456a1b68cd5779e422bbf03ace9",
+    "runtime_provider": "/home/angstorms/scratch/rocm-native-silu-mlp-20261016/runtime-candidate/libtessera_rocm_native_movement.full.so"
+  },
+  "timing_scope": {
+    "captured_members": "device graph dispatch included; capture/instantiation/host enqueue excluded; grouped members are not interleaved whole-program time",
+    "resident_event": "HIP event range includes host enqueue gaps; average returned by native API; not divided again",
+    "completed_host": "retained owner/weights; activation upload, product+activation invocation and readback; package compilation/preparation excluded"
+  },
+  "model_quality_acceptance": false,
+  "rows": [
+    {
+      "shape_m_width_k": [
+        3,
+        17,
+        48
+      ],
+      "compile_package_ms": 599.7425619862042,
+      "prepare_upload_ms": 36.55781099223532,
+      "member_order": [
+        "expansion",
+        "bf16_product",
+        "bf16_activation"
+      ],
+      "captured_member_samples_ms_per_iteration": [
+        [
+          0.004968379158526659,
+          0.007569612469524145,
+          0.002438608556985855
+        ],
+        [
+          0.00496236328035593,
+          0.006538917776197195,
+          0.002435654401779175
+        ],
+        [
+          0.005007574334740639,
+          0.007630988024175167,
+          0.002441054442897439
+        ],
+        [
+          0.00396171398460865,
+          0.00648958794772625,
+          0.0024399012327194214
+        ],
+        [
+          0.005038131028413773,
+          0.007655347231775522,
+          0.002434190595522523
+        ]
+      ],
+      "captured_repeats": 9485,
+      "captured_minimum_window_ms": 23.08829779853113,
+      "resident_product_activation_event_samples_ms": [
+        0.008763226680457592,
+        0.00875747762620449,
+        0.008804608136415482,
+        0.008753268979489803,
+        0.008794629946351051
+      ],
+      "resident_event_repeats": 4096,
+      "completed_activation_update_invoke_read_samples_ms": [
+        0.5034099740441889,
+        0.48015598440542817,
+        0.3877889830619097,
+        0.48474399955011904,
+        0.4865179944317788
+      ],
+      "completed_activation_update_invoke_read_median_ms": 0.48474399955011904,
+      "correctness": "independent_e2m1_f64_product_bf16_parent_f64_silu_bf16_store_before_and_after_every_window",
+      "program_sha256": "97e3a162c1943c4990748e4c1217321692e78f326d0fd1bcb2f4cb541c127107",
+      "image_digests": [
+        "4bf23d5da7f47bfb17c76845464f3bb1d1fee5cc20962ffad8e7e7ace4e71af8",
+        "d2ce6ac9effa315ac42104d90bb8683f72dcdf81e63b95eff10b05b0402fd38c",
+        "240e9c1f7e853e583fbc75ca69a7889caa56efe2503bf12742cfbb9cfb142bf6"
+      ]
+    },
+    {
+      "shape_m_width_k": [
+        16,
+        64,
+        80
+      ],
+      "compile_package_ms": 501.5941159799695,
+      "prepare_upload_ms": 17.439419985748827,
+      "member_order": [
+        "expansion",
+        "bf16_product",
+        "bf16_activation"
+      ],
+      "captured_member_samples_ms_per_iteration": [
+        [
+          0.003672380931675434,
+          0.00860651209950447,
+          0.002322529675439
+        ],
+        [
+          0.0036648898385465145,
+          0.006807989906519651,
+          0.002326793735846877
+        ],
+        [
+          0.0036669813562184572,
+          0.007061566226184368,
+          0.002323304070159793
+        ],
+        [
+          0.003658067900687456,
+          0.006801667623221874,
+          0.00232461909763515
+        ],
+        [
+          0.0033402186818420887,
+          0.007168677169829607,
+          0.002343367552384734
+        ]
+      ],
+      "captured_repeats": 8663,
+      "captured_minimum_window_ms": 20.120074578328058,
+      "resident_product_activation_event_samples_ms": [
+        0.010850337333977222,
+        0.010833232663571835,
+        0.010822677053511143,
+        0.010809149593114853,
+        0.010818189941346645
+      ],
+      "resident_event_repeats": 4096,
+      "completed_activation_update_invoke_read_samples_ms": [
+        0.8190310036297888,
+        0.46805202146060765,
+        0.3603360091801733,
+        0.49538398161530495,
+        0.4899540217593312
+      ],
+      "completed_activation_update_invoke_read_median_ms": 0.4899540217593312,
+      "correctness": "independent_e2m1_f64_product_bf16_parent_f64_silu_bf16_store_before_and_after_every_window",
+      "program_sha256": "4e92f80ffdc7c90efdbc64ac7e4e09d7c590d3a8795868f3c4c1f8e40c36a749",
+      "image_digests": [
+        "75147726f0aec4fe5e7add73e447dd98a5ab77aec45c0cc219918a05c33b3130",
+        "7e9ed93a75284834c93cee0a2043e77330223694b5e0a517906d5c7b93c0aaa2",
+        "775c8acdbdbd7da046408ba22b0f17dbdeff628990b7c1059ee872b8ab02a54c"
+      ]
+    },
+    {
+      "shape_m_width_k": [
+        256,
+        128,
+        256
+      ],
+      "compile_package_ms": 310.9068330086302,
+      "prepare_upload_ms": 24.217856989707798,
+      "member_order": [
+        "expansion",
+        "bf16_product",
+        "bf16_activation"
+      ],
+      "captured_member_samples_ms_per_iteration": [
+        [
+          0.0045017763040959835,
+          0.013408295810222626,
+          0.0022027073428034782
+        ],
+        [
+          0.004285973962396383,
+          0.013811266049742699,
+          0.0022414568811655045
+        ],
+        [
+          0.003336327848955989,
+          0.013778714463114738,
+          0.002215917455032468
+        ],
+        [
+          0.00318578677251935,
+          0.013372596353292465,
+          0.002196796238422394
+        ],
+        [
+          0.0032879114151000977,
+          0.013478701934218407,
+          0.0021978525910526514
+        ]
+      ],
+      "captured_repeats": 10218,
+      "captured_minimum_window_ms": 22.44686396420002,
+      "resident_product_activation_event_samples_ms": [
+        0.014079255983233452,
+        0.014012890867888927,
+        0.014055334031581879,
+        0.013885806314647198,
+        0.014012428931891918
+      ],
+      "resident_event_repeats": 4096,
+      "completed_activation_update_invoke_read_samples_ms": [
+        0.6609190022572875,
+        0.5367829871829599,
+        0.586787995416671,
+        0.5632330139633268,
+        0.5653070111293346
+      ],
+      "completed_activation_update_invoke_read_median_ms": 0.5653070111293346,
+      "correctness": "independent_e2m1_f64_product_bf16_parent_f64_silu_bf16_store_before_and_after_every_window",
+      "program_sha256": "dd739faf65b84a21f61e7eedb5615b154c4a849821298d606a1db5f5afd74ca0",
+      "image_digests": [
+        "aeb1d97234cb59418228a2fc7c5a2bcba9654d3b1623fca93ad49510cf0ec917",
+        "7e9ed93a75284834c93cee0a2043e77330223694b5e0a517906d5c7b93c0aaa2",
+        "2bb3103275d8a737d5b53c5823ca911a9d96c3dbd7a5bc318232d16bbff902d6"
+      ]
+    }
+  ]
+}

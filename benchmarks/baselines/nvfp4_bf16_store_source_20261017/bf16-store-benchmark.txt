@@ -1,0 +1,3 @@
+{"shape": [3, 17, 48], "host_ms": 0.48474399955011904, "captured_min_window_ms": 23.08829779853113}
+{"shape": [16, 64, 80], "host_ms": 0.4899540217593312, "captured_min_window_ms": 20.120074578328058}
+{"shape": [256, 128, 256], "host_ms": 0.5653070111293346, "captured_min_window_ms": 22.44686396420002}

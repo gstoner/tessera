@@ -6,6 +6,15 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## ROCM-NVFP4-BF16-STORE-20261017 — authored source composition
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: ROCM-NVFP4-BF16-STORE-20261017.
+
+Not applicable to Apple physical execution: native store fusion is gated
+to the exact gfx1201 E4M3 scaled-product contract. Shared frontend and portable
+descriptor gates are required; no Metal execution or datatype claim is added.
+
 ## ROCM-BF16-PARENT-VIEW-20261017 — resident activation candidate
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.

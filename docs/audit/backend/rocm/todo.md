@@ -5,6 +5,27 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-NATIVE-E4M3-CAST-20261017 — typed quantizer storage primitive
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
+Sync: ROCM-NATIVE-E4M3-CAST-20261017.
+
+Implementation in progress. Standard scalar FP32-to-E4M3 arith.truncf
+survives the generic GPU conversion and fails HSACO emission. The existing
+native Target-to-ROCDL pass now selects the archived RDNA4 packed RNE
+conversion for exact gfx1201 GPU bodies, leaving host functions and other
+architectures unchanged. Diagnostic owning-device comparison has zero
+mismatches on 266,560 values, including rounding boundaries, all FP16 bit
+patterns, random FP32, signed zero, infinity and NaN. Final native/WMMA/parent-view scope guards pass 19 tests; dtype/target/
+cache/diagnostic/pass/audit gates pass 546. The final scoped cast image is
+byte-identical to the device-validated image. All six existing original Qwen
+member payloads, Target digests, entries and kernel metadata match under a
+same-host SDK control.
+Evidence: benchmarks/baselines/rocm_native_e4m3_cast_20261017/README.md. This is a typed code-generation primitive,
+not a public Graph quantizer, native K16 scale reduction or full MLP closure.
+Existing per-tensor fake-quant semantics are unchanged. gfx1151 cannot inherit
+RDNA4 conversion admission; it needs a separate implementation.
+
 ## ROCM-NVFP4-BF16-STORE-20261017 — authored source composition
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.

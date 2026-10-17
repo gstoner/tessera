@@ -254,6 +254,41 @@ bool lowerRealMFMA(Operation *op, PatternRewriter &rewriter) {
   return false;
 }
 
+// The standard GPU converter stores Float8 as i8, but does not legalize a
+// scalar arith.truncf into that storage. Keep the numerical cast in native
+// IR and select the RDNA4 RNE instruction only on the owning exact target.
+static LogicalResult lowerScalarE4M3Casts(ModuleOp module) {
+  auto authored = module->getAttrOfType<StringAttr>("tessera.arch");
+  auto selected = module->getAttrOfType<StringAttr>("tessera.pipeline.arch");
+  if (selected && authored && selected.getValue() != authored.getValue())
+    return module.emitError("selected ROCm pipeline architecture differs from tessera.arch");
+  // Executable pipelines own their target. Standalone legalization retains
+  // the explicitly authored architecture when no pipeline has selected one.
+  auto arch = selected ? selected : authored;
+  if (!arch || arch.getValue() != "gfx1201") return success();
+  SmallVector<arith::TruncFOp> casts;
+  module.walk([&](arith::TruncFOp op) {
+    if (op->getParentOfType<gpu::GPUModuleOp>() &&
+        op.getIn().getType().isF32() && isa<Float8E4M3FNType>(op.getType())) {
+      auto mode = op->getAttrOfType<arith::RoundingModeAttr>("roundingmode");
+      if (!mode || mode.getValue() == arith::RoundingMode::to_nearest_even)
+        casts.push_back(op);
+    }
+  });
+  for (auto op : casts) {
+    OpBuilder b(op);
+    auto loc = op.getLoc();
+    Value zero = arith::ConstantIntOp::create(b, loc, 0, 32);
+    Value packed = ROCDL::CvtPkFp8F32Op::create(
+        b, loc, b.getI32Type(), op.getIn(), op.getIn(), zero, false);
+    Value byte = arith::TruncIOp::create(b, loc, b.getI8Type(), packed);
+    Value stored = arith::BitcastOp::create(b, loc, op.getType(), byte);
+    op.replaceAllUsesWith(stored);
+    op.erase();
+  }
+  return success();
+}
+
 struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<LLVM::LLVMDialect, ROCDL::ROCDLDialect, gpu::GPUDialect, memref::MemRefDialect,
@@ -271,6 +306,7 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
   void runOnOperation() override {
     ModuleOp module = getOperation();
     if (failed(materializeGateUpViews(module))) return signalPassFailure();
+    if (failed(lowerScalarE4M3Casts(module))) return signalPassFailure();
     SmallVector<Operation *> waitOps;
     SmallVector<Operation *> rocmOps;
 

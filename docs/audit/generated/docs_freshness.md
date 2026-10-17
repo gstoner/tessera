@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-17**.
 
 ## Headline
 
-- **175** docs catalogued across the canonical doc tree.
-- **174** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **40** updated within the last 30 days.
+- **176** docs catalogued across the canonical doc tree.
+- **175** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **41** updated within the last 30 days.
 - **69** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -38,6 +38,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `LOWERING_PIPELINE_SPEC.md` | Normative | 2026-07-13 | 96 | ✓ |
 | `MEMORY_MODEL_SPEC.md` | Normative | 2026-05-22 | 148 | ✓ |
 | `NATIVE_ARTIFACT_SPEC.md` | Normative | 2026-07-19 | 90 | ✓ |
+| `NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md` | - | 2026-10-17 | 0 | ✓ |
 | `NATIVE_GRAPH_SLICE_CONTRACT.md` | - | 2026-10-16 | 1 | ✓ |
 | `NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md` | - | 2026-10-16 | 1 | ✓ |
 | `NATIVE_PARENT_VIEW_CONTRACT.md` | - | 2026-10-17 | 0 | ✓ |
@@ -198,7 +199,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-09-07 | 40 | ✓ |
 | `compiler/HEAP_BARRIER_ARCHITECTURE_REVIEW.md` | - | 2026-09-11 | 36 | ✓ |
 | `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-10-17 | 0 | ✓ |
-| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-10-16 | 1 | ✓ |
+| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-10-17 | 0 | ✓ |
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-09-23 | 24 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 76 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 82 | ✓ |

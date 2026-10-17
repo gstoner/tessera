@@ -135,7 +135,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="lower-tessera-target-to-rocdl",
         cpp_class="LoweringPass",
-        summary="Consumes executable ROCm Target primitives and materializes the sealed gfx1201 parent-view scalar region into a checked-count GPU wrapper. Numerical and addressing SSA are cloned from the native body; native export owns buffer bytes, read/write lifetimes and launch geometry. This does not enable public JIT admission or sibling physical schedules.",
+        summary="Consumes executable ROCm Target primitives and materializes the sealed gfx1201 parent-view scalar region into a checked-count GPU wrapper. Numerical and addressing SSA are cloned from the native body; native export owns buffer bytes, read/write lifetimes and launch geometry. Also legalizes scalar FP32-to-E4M3 RNE casts inside exact gfx1201 GPU modules using the RDNA4 packed conversion. Host functions and directed rounding requests are unchanged. This does not enable public JIT admission or sibling physical schedules.",
         input_dialects=("tessera_rocm", "llvm", "arith", "math", "scf", "memref", "gpu"),
         output_dialects=("llvm", "rocdl", "arith", "math", "scf", "memref", "gpu"),
         preserved_attrs=("tessera.rocm.parent_view_source", "tessera.rocm.parent_view_program_json", "tessera.rocm.parent_view_member_json"),

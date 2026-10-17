@@ -1,0 +1,86 @@
+{
+  "final_diagnostic_image_unchanged": true,
+  "diagnostic_image_sha256": "5a6b6b499ec5e02909c1000e60c8956f1cdf1822e71cc6e7a5d193539a8446da",
+  "final_compiler_sha256": "d31171816f00f328f5661239c8f8bff2c664e90967e713d2eb86362c96477e9c",
+  "source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp": "749890793b36b052e84feb76eca8590da05dc16ae7541e6224b751d6bc826eeb",
+    "tests/unit/test_rocm_fp8_cast_lowering.py": "b8f3d02866c9ddbbb05d47a30e2b55a9cf68dc1bb079889acdfa6b550780fdc2",
+    "docs/reference/isa/rdna/rdna4/instructions.json": "cc7b84862e42092f9ba2d2d4794ff08ad351d2e9fd44fd22e483d05bc32cd981",
+    "python/tessera/compiler/pass_metadata.py": "c97c605b3c9a0c449f8cf42ac16e43091dbcb0ca4a170693c4e97a908c89fbb8"
+  },
+  "existing_same_host_image_comparison": [
+    {
+      "m": 19,
+      "member": 0,
+      "checks": {
+        "entry": true,
+        "target_ir_digest": true,
+        "payload_sha256": true,
+        "semantic_sections": true,
+        "device_libraries": true
+      }
+    },
+    {
+      "m": 19,
+      "member": 1,
+      "checks": {
+        "entry": true,
+        "target_ir_digest": true,
+        "payload_sha256": true,
+        "semantic_sections": true,
+        "device_libraries": true
+      }
+    },
+    {
+      "m": 19,
+      "member": 2,
+      "checks": {
+        "entry": true,
+        "target_ir_digest": true,
+        "payload_sha256": true,
+        "semantic_sections": true,
+        "device_libraries": true
+      }
+    },
+    {
+      "m": 256,
+      "member": 0,
+      "checks": {
+        "entry": true,
+        "target_ir_digest": true,
+        "payload_sha256": true,
+        "semantic_sections": true,
+        "device_libraries": true
+      }
+    },
+    {
+      "m": 256,
+      "member": 1,
+      "checks": {
+        "entry": true,
+        "target_ir_digest": true,
+        "payload_sha256": true,
+        "semantic_sections": true,
+        "device_libraries": true
+      }
+    },
+    {
+      "m": 256,
+      "member": 2,
+      "checks": {
+        "entry": true,
+        "target_ir_digest": true,
+        "payload_sha256": true,
+        "semantic_sections": true,
+        "device_libraries": true
+      }
+    }
+  ],
+  "cross_host_comparison": "not accepted as payload-identity evidence; Target/entry matched but payloads differed. Same-host comparisons isolate this change and pass.",
+  "rounding_scope": "scalar FP32-to-E4M3 RNE only, exact gfx1201 GPU modules; other targets, host functions and directed rounding requests unchanged",
+  "public_quantizer_ready": false,
+  "recorder_sha256": {
+    "check_native_cast.py": "3f36266a55221955ba40b2cda9d23bf4fb7bf63aa3c9e2a2779029b3ae10ac0d",
+    "check_existing_images.py": "209a7e1affd6f0a59d6ed2cd94705f613b6764ebf5e6a3d2ced73249cc565063"
+  }
+}

@@ -1,0 +1,362 @@
+[1/4] Building CXX object src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/CMakeFiles/obj.TesseraROCMConversion.dir/TesseraTargetToROCDL.cpp.o
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp: In function ‘bool {anonymous}::lowerRealWMMA(mlir::Operation*, mlir::PatternRewriter&)’:
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:66:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_f32_16x16x32_f16; Args = {mlir::Type&, mlir::Value&, mlir::Value&, mlir::ROCDL::WMMACModifier, mlir::Value&, bool, bool}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   66 |       real = rewriter.create<ROCDL::wmma_f32_16x16x32_f16>(
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+   67 |           loc, resTy, a, b, ROCDL::WMMACModifier::none, c,
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ 
+   68 |           /*reuseA=*/false, /*reuseB=*/false);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+In file included from /home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/../../../../ir/include/Tessera/Dialect/Tile/TileDialect.h:11,
+                 from /home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/../../../../ir/include/Tessera/IR/RowRegionContract.h:2,
+                 from /home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ParentViewProgramExport.h:2,
+                 from /home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeGateUpMaterializer.h:1,
+                 from /home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:1:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:71:60: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_f32_16x16x32_bf16; Args = {mlir::Type&, mlir::Value&, mlir::Value&, mlir::ROCDL::WMMACModifier, mlir::Value&, bool, bool}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   71 |       real = rewriter.create<ROCDL::wmma_f32_16x16x32_bf16>(
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+   72 |           loc, resTy, a, b, ROCDL::WMMACModifier::none, c,
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
+   73 |           /*reuseA=*/false, /*reuseB=*/false);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~               
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:89:70: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_f32_16x16x16_f16; Args = {mlir::Type&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   89 |       Operation *real = rewriter.create<ROCDL::wmma_f32_16x16x16_f16>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+   90 |           loc, resTy, ValueRange{a, b, c});
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                            
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:100:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::Type&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  100 |       Value ai = rewriter.create<LLVM::BitcastOp>(loc, i16Vec, a);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:101:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::Type&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  101 |       Value bi = rewriter.create<LLVM::BitcastOp>(loc, i16Vec, b);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:102:71: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_f32_16x16x16_bf16; Args = {mlir::Type&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  102 |       Operation *real = rewriter.create<ROCDL::wmma_f32_16x16x16_bf16>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  103 |           loc, resTy, ValueRange{ai, bi, c});
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                           
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:115:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_f32_16x16x16_fp8_fp8; Args = {mlir::Type&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  115 |         real = rewriter.create<ROCDL::wmma_f32_16x16x16_fp8_fp8>(loc, resTy, ValueRange{a,b,c});
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:117:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_f32_16x16x16_fp8_bf8; Args = {mlir::Type&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  117 |         real = rewriter.create<ROCDL::wmma_f32_16x16x16_fp8_bf8>(loc, resTy, ValueRange{a,b,c});
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:119:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_f32_16x16x16_bf8_fp8; Args = {mlir::Type&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  119 |         real = rewriter.create<ROCDL::wmma_f32_16x16x16_bf8_fp8>(loc, resTy, ValueRange{a,b,c});
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:121:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_f32_16x16x16_bf8_bf8; Args = {mlir::Type&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  121 |         real = rewriter.create<ROCDL::wmma_f32_16x16x16_bf8_bf8>(loc, resTy, ValueRange{a,b,c});
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:135:64: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_f16_16x16x16_f16; Args = {mlir::Type&, mlir::Value&, mlir::Value&, mlir::Value&, bool}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  135 |       auto real = rewriter.create<ROCDL::wmma_f16_16x16x16_f16>(loc,resTy,a,b,c,false);
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:141:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::Type&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  141 |       Value ai = rewriter.create<LLVM::BitcastOp>(loc,bits,a);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:142:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::Type&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  142 |       Value bi = rewriter.create<LLVM::BitcastOp>(loc,bits,b);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:143:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::Type&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  143 |       Value ci = rewriter.create<LLVM::BitcastOp>(loc,bits,c);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:144:66: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_bf16_16x16x16_bf16; Args = {mlir::Type&, mlir::Value&, mlir::Value&, mlir::Value&, bool}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  144 |       auto real = rewriter.create<ROCDL::wmma_bf16_16x16x16_bf16>(loc,bits,ai,bi,ci,false);
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:145:54: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::Type&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  145 |       Value result = rewriter.create<LLVM::BitcastOp>(loc,resTy,real.getResult());
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:157:68: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_f16_16x16x16_f16; Args = {mlir::Type&, mlir::Value&, mlir::Value&, mlir::Value&, bool}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  157 |     Operation *real = rewriter.create<ROCDL::wmma_f16_16x16x16_f16>(
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  158 |         loc, resTy, a, b, c, /*opsel=*/false);
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                       
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:185:70: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_i32_16x16x16_iu8; Args = {mlir::TypeRange, mlir::ValueRange, llvm::SmallVector<mlir::NamedAttribute, 3>&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  185 |       Operation *real = rewriter.create<ROCDL::wmma_i32_16x16x16_iu8>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  186 |           loc, TypeRange{resTy}, ValueRange{a, b, c}, attrs);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~          
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:193:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::ConstantOp; Args = {mlir::Type&, mlir::IntegerAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  193 |           rewriter.create<LLVM::ConstantOp>(loc, i32, rewriter.getI32IntegerAttr(0)));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:192:57: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::ExtractElementOp; Args = {mlir::Value&, mlir::LLVM::ConstantOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  192 |       Value ai = rewriter.create<LLVM::ExtractElementOp>(loc, a,
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+  193 |           rewriter.create<LLVM::ConstantOp>(loc, i32, rewriter.getI32IntegerAttr(0)));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:195:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::ConstantOp; Args = {mlir::Type&, mlir::IntegerAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  195 |           rewriter.create<LLVM::ConstantOp>(loc, i32, rewriter.getI32IntegerAttr(0)));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:194:57: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::ExtractElementOp; Args = {mlir::Value&, mlir::LLVM::ConstantOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  194 |       Value bi = rewriter.create<LLVM::ExtractElementOp>(loc, b,
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+  195 |           rewriter.create<LLVM::ConstantOp>(loc, i32, rewriter.getI32IntegerAttr(0)));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:196:64: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_i32_16x16x16_iu4; Args = {mlir::TypeRange, mlir::ValueRange, llvm::SmallVector<mlir::NamedAttribute, 3>&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  196 |       auto real = rewriter.create<ROCDL::wmma_i32_16x16x16_iu4>(
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  197 |           loc, TypeRange{resTy}, ValueRange{ai, bi, c}, attrs);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:204:61: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_i32_16x16x32_iu4; Args = {mlir::TypeRange, mlir::ValueRange, llvm::SmallVector<mlir::NamedAttribute, 3>&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  204 |         real = rewriter.create<ROCDL::wmma_i32_16x16x32_iu4>(
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  205 |             loc, TypeRange{resTy}, ValueRange{a, b, c}, attrs);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:207:61: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::wmma_i32_16x16x16_iu4; Args = {mlir::TypeRange, mlir::ValueRange, llvm::SmallVector<mlir::NamedAttribute, 3>&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  207 |         real = rewriter.create<ROCDL::wmma_i32_16x16x16_iu4>(
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  208 |             loc, TypeRange{resTy}, ValueRange{a, b, c}, attrs);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp: In function ‘bool {anonymous}::lowerRealMFMA(mlir::Operation*, mlir::PatternRewriter&)’:
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:237:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::mfma_f32_16x16x16f16; Args = {mlir::Type&, mlir::Value&, mlir::Value&, mlir::Value&, int, int, mlir::ROCDL::MFMAPermB}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  237 |     Operation *real = rewriter.create<ROCDL::mfma_f32_16x16x16f16>(
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  238 |         loc, resTy, a, b, c, /*cbsz=*/0, /*abid=*/0,
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~               
+  239 |         ROCDL::MFMAPermB::none);
+      |         ~~~~~~~~~~~~~~~~~~~~~~~                                    
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:246:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::Type&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  246 |     Value ai = rewriter.create<LLVM::BitcastOp>(loc, i16Vec, a);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:247:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::Type&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  247 |     Value bi = rewriter.create<LLVM::BitcastOp>(loc, i16Vec, b);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:248:71: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::ROCDL::mfma_f32_16x16x16bf16_1k; Args = {mlir::Type&, mlir::Value&, mlir::Value&, mlir::Value&, int, int, mlir::ROCDL::MFMAPermB}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  248 |     Operation *real = rewriter.create<ROCDL::mfma_f32_16x16x16bf16_1k>(
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  249 |         loc, resTy, ai, bi, c, /*cbsz=*/0, /*abid=*/0,
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                 
+  250 |         ROCDL::MFMAPermB::none);
+      |         ~~~~~~~~~~~~~~~~~~~~~~~                                        
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp: In member function ‘virtual void {anonymous}::LoweringPass::runOnOperation()’:
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:343:56: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::BitcastOp; Args = {mlir::VectorType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  343 |             args[0] = rewriter.create<arith::BitcastOp>(op->getLoc(), VectorType::get({8}, rewriter.getI8Type()), args[0]);
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:344:56: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::BitcastOp; Args = {mlir::VectorType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  344 |             args[1] = rewriter.create<arith::BitcastOp>(op->getLoc(), VectorType::get({16}, rewriter.getI8Type()), args[1]);
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp: In lambda function:
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:351:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::ConstantOp; Args = {mlir::IntegerType&, mlir::IntegerAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  351 |               return rewriter.create<LLVM::ConstantOp>(op->getLoc(), i32, rewriter.getI32IntegerAttr(value));
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp: In member function ‘virtual void {anonymous}::LoweringPass::runOnOperation()’:
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:356:60: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::UndefOp; Args = {mlir::VectorType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  356 |               Value packed = rewriter.create<LLVM::UndefOp>(op->getLoc(), packedTy);
+      |                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:360:71: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::ExtractElementOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  360 |                   Value byte = rewriter.create<LLVM::ExtractElementOp>(op->getLoc(), args[side], constant(word * 8 + nibble));
+      |                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:361:61: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::ZExtOp; Args = {mlir::IntegerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  361 |                   Value wide = rewriter.create<LLVM::ZExtOp>(op->getLoc(), i32, byte);
+      |                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:362:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::AndOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  362 |                   Value low = rewriter.create<LLVM::AndOp>(op->getLoc(), wide, constant(15));
+      |                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:363:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::ShlOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  363 |                   Value shifted = rewriter.create<LLVM::ShlOp>(op->getLoc(), low, constant(nibble * 4));
+      |                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:364:53: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::OrOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  364 |                   bits = rewriter.create<LLVM::OrOp>(op->getLoc(), bits, shifted);
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:366:64: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::InsertElementOp; Args = {mlir::VectorType&, mlir::Value&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  366 |                 packed = rewriter.create<LLVM::InsertElementOp>(op->getLoc(), packedTy, packed, bits, constant(word));
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:369:69: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::ExtractElementOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  369 |                 args[side] = rewriter.create<LLVM::ExtractElementOp>(op->getLoc(), packed, constant(0));
+      |                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:374:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::VectorType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  374 |             args[0] = rewriter.create<LLVM::BitcastOp>(op->getLoc(),
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+  375 |                 VectorType::get({2}, rewriter.getI32Type()), args[0]);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:376:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::VectorType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  376 |             args[1] = rewriter.create<LLVM::BitcastOp>(op->getLoc(),
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+  377 |                 VectorType::get({4}, rewriter.getI32Type()), args[1]);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp: In lambda function:
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:382:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::ConstantOp; Args = {mlir::IntegerType, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  382 |               return rewriter.create<LLVM::ConstantOp>(op->getLoc(), rewriter.getI1Type(), rewriter.getBoolAttr(!attr || attr.getValue()));
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp: In member function ‘virtual void {anonymous}::LoweringPass::runOnOperation()’:
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:384:56: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::ConstantOp; Args = {mlir::IntegerType, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  384 |             auto no = rewriter.create<LLVM::ConstantOp>(op->getLoc(), rewriter.getI1Type(), rewriter.getBoolAttr(false));
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:391:61: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::CallIntrinsicOp; Args = {mlir::Type, mlir::StringAttr, llvm::SmallVector<mlir::Value, 6>&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  391 |           auto call = rewriter.create<LLVM::CallIntrinsicOp>(op->getLoc(),
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+  392 |               op->getResult(0).getType(), rewriter.getStringAttr(intrinsicName), args);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:398:53: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::VectorType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  398 |           args[0] = rewriter.create<LLVM::BitcastOp>(op->getLoc(),
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+  399 |               VectorType::get({8}, rewriter.getI16Type()), args[0]);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:400:53: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::VectorType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  400 |           args[1] = rewriter.create<LLVM::BitcastOp>(op->getLoc(),
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+  401 |               VectorType::get({16}, rewriter.getI16Type()), args[1]);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:408:53: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::Type&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  408 |           args[2] = rewriter.create<LLVM::BitcastOp>(op->getLoc(), intrinsicTy, args[2]);
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:413:64: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::CallIntrinsicOp; Args = {mlir::Type&, mlir::StringAttr, llvm::SmallVector<mlir::Value, 6>&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  413 |         auto intrinsic = rewriter.create<LLVM::CallIntrinsicOp>(op->getLoc(),
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+  414 |             intrinsicTy, rewriter.getStringAttr(name), args);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~    
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp:417:52: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::BitcastOp; Args = {mlir::VectorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  417 |           result = rewriter.create<LLVM::BitcastOp>(op->getLoc(), resultTy, result);
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+[2/4] Linking CXX static library src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/libTesseraROCMConversion.a
+[3/4] Linking CXX executable src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt
+[4/4] Linking CXX executable tools/tessera-opt/tessera-opt

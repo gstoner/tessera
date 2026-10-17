@@ -7,6 +7,16 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## ROCM-NATIVE-E4M3-CAST-20261017 — typed quantizer storage primitive
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
+Sync: ROCM-NATIVE-E4M3-CAST-20261017.
+
+Not applicable to x86 physical lowering: the new RDNA4 conversion is
+restricted to gfx1201 GPU modules and never inserted into host functions.
+No CPU cast, quantization semantics, ABI or execution row is promoted.
+Shared registry/drift gates remain required.
+
 ## ROCM-NVFP4-BF16-STORE-20261017 — authored source composition
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.

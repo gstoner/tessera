@@ -172,7 +172,12 @@ the next action's host requirement; it is not a live fleet-availability claim.
   three native members, with compiler-disabled fresh-process replay proved on
   gfx1201. Three-member bounded expressions, activation quantization/down
   projection and original full-model quality remain open.
-- Latest: [2026-10-17 — authored NVFP4 BF16 store composition](INTEGRATED_COMPILER_LOG.md#2026-10-17--authored-nvfp4-bf16-store-composition)
+- The native E4M3 RNE storage prerequisite now passes exact gfx1201
+  diagnostic checks on 266,560 values and preserves six existing member
+  images under same-host controls. This does not establish the explicit K16
+  quantizer Graph or mixed-width two-result ABI; those precede resident down
+  projection and full-model acceptance.
+- Latest: [2026-10-17 — native gfx1201 E4M3 storage conversion](INTEGRATED_COMPILER_LOG.md#2026-10-17--native-gfx1201-e4m3-storage-conversion)
 
 ### ROCM-SPLIT-K-1
 

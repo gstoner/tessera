@@ -13063,3 +13063,26 @@ Remaining: three-member bounded runtime expressions, K16 activation quantization
 down projection, original-model MLP/quality and all outstanding five-slice gates.
 Evidence: benchmarks/baselines/nvfp4_bf16_store_source_20261017/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-17 — native gfx1201 E4M3 storage conversion
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: queued; sync ROCM-NATIVE-E4M3-CAST-20261017.
+Outcome: scalar FP32-to-E4M3 RNE now lowers inside exact gfx1201 GPU modules
+through the existing Target-to-ROCDL pass to the archived RDNA4 conversion.
+The prior partial GPU conversion left arith.truncf behind and failed HSACO
+emission. Directed rounding, host functions and other targets are unchanged.
+Owning gfx1201 checks 266,560 inputs with zero mismatches: finite encodings
+and signed zero compare bitwise, NaNs semantically. Changed roots/retained
+outputs and three duration-gated captured windows pass. Final native guards/
+WMMA/parent-view controls pass 19 cases; adjacent drift gates pass 546.
+All six original Qwen member payloads, Target digests, entries, executable
+sections and AMDGPU metadata match under the same host SDK. Earlier
+cross-host byte differences were excluded from the no-change claim.
+Remaining: explicit semantic K16 max/scale/normalize Graph, mixed-width
+two-result ownership, resident activation quantization/down projection,
+full MLP/model-quality/performance and the broader five-slice objective.
+Evidence: benchmarks/baselines/rocm_native_e4m3_cast_20261017/README.md;
+docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md.
+<!-- entry-fields:end -->

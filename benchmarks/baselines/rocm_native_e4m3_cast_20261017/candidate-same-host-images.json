@@ -1,0 +1,302 @@
+[
+  {
+    "m": 19,
+    "recorder_sha256": "209a7e1affd6f0a59d6ed2cd94705f613b6764ebf5e6a3d2ced73249cc565063",
+    "members": [
+      {
+        "payload_sha256": "95838e87cd00925f5454214d1bcf8ffaded33fe3a755a2b21446cc30456c9fc3",
+        "target_ir_digest": "667a9f124bd607b5469c9f567dac8b8a55f41a168ba8965a3c73f955afcf71c0",
+        "entry": "tessera_nvfp4_expand_14e5b0ec3076a142",
+        "artifact_image_digest": "36a4c4e15284d2f51dd620d64fe78b4c53af361f0a784276d4804c67121c8ef7",
+        "semantic_sections": {
+          "AMDGPU_note_32": "ad829a3940736d5a77f67f86d225cb9e4a357e509eda2540a20b581b0fcc1eb5",
+          ".rodata": "8a1de4b037adc94a6f57b65d34cb159a21ee42f958781425aac2c582d026a38d",
+          ".text": "6b4603fa8c2b56357ae1326e38a61f757f725c9e4396d54142160801fd2c9a2e"
+        },
+        "device_libraries": [
+          {
+            "logical_name": "rocm.ocml",
+            "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.ockl",
+            "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_unsafe_math_off",
+            "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_finite_only_off",
+            "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_wavefrontsize64_off",
+            "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_isa_version_1201",
+            "content_digest": "8f3c8216812d0fad3bc93da344f7edcbae39d6f2461209161139b93c97acf3c0",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_abi_version_600",
+            "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+            "link_mode": "compiler_driver"
+          }
+        ]
+      },
+      {
+        "payload_sha256": "eba4fe2e5fc55d866ce14e1c45884a223042c3df95cbe645f68e36028eb05816",
+        "target_ir_digest": "84bb840515d1830279b4ed5b6c1a0aa70e96646a5db3efc46cd6d59e4c36738b",
+        "entry": "tessera_rocm_scaled_matmul_2b3920a788a4d45f",
+        "artifact_image_digest": "7e9ed93a75284834c93cee0a2043e77330223694b5e0a517906d5c7b93c0aaa2",
+        "semantic_sections": {
+          "AMDGPU_note_32": "2a89270cebc3e9a25daa925aea4c349fe62d4062714fa9b53be9ce21b4e4f545",
+          ".rodata": "eba5ea1db788effe18b1f00905e261b3a962f9de3c833252ed002a594ae6a460",
+          ".text": "011da3a1cbd97f32d10f7cea3a47222f37c25a27e7b27e5acae884aa45801d44"
+        },
+        "device_libraries": [
+          {
+            "logical_name": "rocm.ocml",
+            "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.ockl",
+            "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_unsafe_math_off",
+            "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_finite_only_off",
+            "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_wavefrontsize64_off",
+            "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_isa_version_1201",
+            "content_digest": "8f3c8216812d0fad3bc93da344f7edcbae39d6f2461209161139b93c97acf3c0",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_abi_version_600",
+            "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+            "link_mode": "compiler_driver"
+          }
+        ]
+      },
+      {
+        "payload_sha256": "3fd3253760e0a116707a490ec47af3c71cb725a931becde5dde237d7245d2a31",
+        "target_ir_digest": "ee12d152409e1d95f25ae93a9624894396504eb83c4b85d1717f7637660f07ff",
+        "entry": "tessera_gate_up_view_af5bb1f2dcfac13c",
+        "artifact_image_digest": "520106e9c8c5513eb0fad09e6251f9a35c497478cc620c76341361463c008525",
+        "semantic_sections": {
+          "AMDGPU_note_32": "f8fd2589db5b734b53bb7fd12e18062ab84e749efc5ce06330e537f9c98ae087",
+          ".rodata": "a1b78f6f86438c24990d5c9750f98612cd414c0f8824160bfc0eae5aa1a82681",
+          ".text": "f313dbaa82aae825c71287c8a257fa04e7dddcbbb07eb00e88d6da5a1c847bfb"
+        },
+        "device_libraries": [
+          {
+            "logical_name": "rocm.ocml",
+            "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.ockl",
+            "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_unsafe_math_off",
+            "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_finite_only_off",
+            "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_wavefrontsize64_off",
+            "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_isa_version_1201",
+            "content_digest": "8f3c8216812d0fad3bc93da344f7edcbae39d6f2461209161139b93c97acf3c0",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_abi_version_600",
+            "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+            "link_mode": "compiler_driver"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "m": 256,
+    "recorder_sha256": "209a7e1affd6f0a59d6ed2cd94705f613b6764ebf5e6a3d2ced73249cc565063",
+    "members": [
+      {
+        "payload_sha256": "95838e87cd00925f5454214d1bcf8ffaded33fe3a755a2b21446cc30456c9fc3",
+        "target_ir_digest": "667a9f124bd607b5469c9f567dac8b8a55f41a168ba8965a3c73f955afcf71c0",
+        "entry": "tessera_nvfp4_expand_14e5b0ec3076a142",
+        "artifact_image_digest": "36a4c4e15284d2f51dd620d64fe78b4c53af361f0a784276d4804c67121c8ef7",
+        "semantic_sections": {
+          "AMDGPU_note_32": "ad829a3940736d5a77f67f86d225cb9e4a357e509eda2540a20b581b0fcc1eb5",
+          ".rodata": "8a1de4b037adc94a6f57b65d34cb159a21ee42f958781425aac2c582d026a38d",
+          ".text": "6b4603fa8c2b56357ae1326e38a61f757f725c9e4396d54142160801fd2c9a2e"
+        },
+        "device_libraries": [
+          {
+            "logical_name": "rocm.ocml",
+            "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.ockl",
+            "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_unsafe_math_off",
+            "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_finite_only_off",
+            "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_wavefrontsize64_off",
+            "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_isa_version_1201",
+            "content_digest": "8f3c8216812d0fad3bc93da344f7edcbae39d6f2461209161139b93c97acf3c0",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_abi_version_600",
+            "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+            "link_mode": "compiler_driver"
+          }
+        ]
+      },
+      {
+        "payload_sha256": "254f07e7c65ef0d64904d05725b2c4d3c9917d0a938057d1d0ab8712d1b58e49",
+        "target_ir_digest": "7eea24911662d14502572a03e067a4f986503031d5e1039d196ef28a8d8fb593",
+        "entry": "tessera_rocm_scaled_matmul_lds_92b666cdc82d2b9d",
+        "artifact_image_digest": "963808bed8f702e73644afeeec1e70a7322baba892d4f2fdd9a41a90b2c2677d",
+        "semantic_sections": {
+          "AMDGPU_note_32": "6557d5f6bc99053d1719c9d8b2319fb235d76b624eb46daef74c58073290b51f",
+          ".rodata": "413bcde638f1daafd0eadc6ffc3509865279a63bf5455a5a051784f76f2ad6a6",
+          ".text": "f2c5a2ec16c0b60a3c51b72652690aff12edc531f9355f711c3e2421a6711611"
+        },
+        "device_libraries": [
+          {
+            "logical_name": "rocm.ocml",
+            "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.ockl",
+            "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_unsafe_math_off",
+            "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_finite_only_off",
+            "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_wavefrontsize64_off",
+            "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_isa_version_1201",
+            "content_digest": "8f3c8216812d0fad3bc93da344f7edcbae39d6f2461209161139b93c97acf3c0",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_abi_version_600",
+            "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+            "link_mode": "compiler_driver"
+          }
+        ]
+      },
+      {
+        "payload_sha256": "3fd3253760e0a116707a490ec47af3c71cb725a931becde5dde237d7245d2a31",
+        "target_ir_digest": "b11178e8ec6446e9264c4db87573b68f907550cfd1e3f3c11106acda0b7c0e85",
+        "entry": "tessera_gate_up_view_af5bb1f2dcfac13c",
+        "artifact_image_digest": "d54f8c9375138942edf4649a2a031086d616380d0cf7bfb0cdef4d4b1a886a9e",
+        "semantic_sections": {
+          "AMDGPU_note_32": "f8fd2589db5b734b53bb7fd12e18062ab84e749efc5ce06330e537f9c98ae087",
+          ".rodata": "a1b78f6f86438c24990d5c9750f98612cd414c0f8824160bfc0eae5aa1a82681",
+          ".text": "f313dbaa82aae825c71287c8a257fa04e7dddcbbb07eb00e88d6da5a1c847bfb"
+        },
+        "device_libraries": [
+          {
+            "logical_name": "rocm.ocml",
+            "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.ockl",
+            "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_unsafe_math_off",
+            "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_finite_only_off",
+            "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_wavefrontsize64_off",
+            "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_isa_version_1201",
+            "content_digest": "8f3c8216812d0fad3bc93da344f7edcbae39d6f2461209161139b93c97acf3c0",
+            "link_mode": "compiler_driver"
+          },
+          {
+            "logical_name": "rocm.oclc_abi_version_600",
+            "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+            "link_mode": "compiler_driver"
+          }
+        ]
+      }
+    ]
+  }
+]

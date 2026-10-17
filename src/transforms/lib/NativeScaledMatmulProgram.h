@@ -14,6 +14,7 @@
 #include "llvm/Support/Base64.h"
 
 #include "NativeNVFP4Program.h"
+#include "NativeQuantizedProductProgram.h"
 #include "NativeSM120TensorProgram.h"
 #include "NativeFloatingScaledProduct.h"
 #include "NativeScaledCarrier.h"
@@ -30,6 +31,8 @@ static bool isNativeExactMXFP4Product(mlir::Operation *op) {
 }
 static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, bool primal = false, bool reverse = false, llvm::StringRef originalSource = {}) {
   using namespace mlir;
+  if (primal && module->hasAttr("tessera.native.quantized_product"))
+    return emitNativeQuantizedProductProgram(module);
   if (primal && hasNativeNVFP4Graph(module))
     return emitNativeNVFP4Program(module);
   if (primal && hasNativeSM120TensorGraph(module))
@@ -501,6 +504,8 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
 static mlir::LogicalResult projectNativeScaledMatmulMember(
     mlir::ModuleOp module, int64_t index) {
   using namespace mlir;
+  if (module->hasAttr("tessera.native.quantized_product_members"))
+    return projectNativeQuantizedProductMember(module, index);
   if (module->hasAttr("tessera.native.nvfp4_program"))
     return projectNativeNVFP4Member(module, index);
   if (module->hasAttr("tessera.native.sm120_tensor_program"))

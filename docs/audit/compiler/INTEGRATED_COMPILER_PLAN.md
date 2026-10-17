@@ -180,7 +180,16 @@ the next action's host requirement; it is not a live fleet-availability claim.
   canonical image passes full BF16-pattern and midpoint checks. Retained
   quantizer/gate-up/activation/down composition and full-model acceptance
   remain the next gate; standalone views/casts/constants are not promoted.
-- Latest: [2026-10-17 — public native K16 quantizer and whole-program constants](INTEGRATED_COMPILER_LOG.md#2026-10-17--public-native-k16-quantizer-and-whole-program-constants)
+- The named BF16 quantizer-to-exact-scaled-product edge now executes through
+  public Python JIT, native source partition, Schedule/Tile and checked private
+  HIP buffers. Five gfx1201 public/portable/fresh-process/inspection-isolation
+  tests and nineteen package contracts pass. Public FP32 outputs cover three
+  static shapes through K12288. Warm calls reuse the verified private program;
+  artifact construction remains an inspection/portable boundary. Native BF16
+  output has separate prepared-route proof. Quantizer plus NVFP4 expansion,
+  gate/up/activation/down chaining, general layouts/AD and full-model quality
+  remain open; this does not close the full ingest program.
+- Latest: [2026-10-17 — public native quantized product and private SSA edges](INTEGRATED_COMPILER_LOG.md#2026-10-17--public-native-quantized-product-and-private-ssa-edges)
 
 ### ROCM-SPLIT-K-1
 

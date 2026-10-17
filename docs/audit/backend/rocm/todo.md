@@ -5,6 +5,39 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-RESIDENT-QUANT-PRODUCT-20261017 — native SSA edge
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-RESIDENT-QUANT-PRODUCT-20261017.
+
+PR969 review: the gfx1201 JIT clears prior per-call program/receipts/artifact
+before validation, and portable consumer Target witnesses must equal the
+image-bound Target. Both red regressions are fixed; 26 owning package/device
+tests pass. No sibling physical admission or arithmetic changes.
+The execution-kind property now requires complete current quantized-program
+receipts explicitly; the affected package/device gate passes 27 tests.
+
+Production integration: the named three-root public JIT now packages both
+original native members, validates private code/scale lifetimes, and replays
+serialized member images without a compiler. Five gfx1201 public/portable/
+fresh-process and inspection-isolation tests pass, including no-eager-quantization traps and changed
+roots. The production owner binding replaces the benchmark-only binding.
+Public FP32-output calls reuse the private verified program; artifact
+construction is deferred to inspection and portable export. Controlled public
+versus serialized-dispatch timings are recorded separately. Wider public
+envelopes and NVFP4/full-MLP/quality closure remain open.
+
+Evidence: benchmarks/baselines/rocm_resident_quantized_product_20261017/README.md.
+
+Native SSA partition packages a BF16 source quantized to
+private E4M3 codes and FP32 K16 scales, followed by an exact scaled product.
+The compiler derives two member graphs and all first-write/last-read lifetimes.
+Three exact gfx1201 composed numerical/changed-input/lifetime cases pass.
+Captured producer/consumer windows and ordinary composed/prepared windows are
+recorded separately. The public JIT and portable composed-package integration
+are proved in the production checkpoint above; full-MLP and model-quality
+closure remain open.
+
 ## ROCM-K16-QUANT-PUBLIC-20261017 — authored two-result package
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.

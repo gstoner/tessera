@@ -1,0 +1,17 @@
+{
+  "architecture": "sm_120",
+  "device": "NVIDIA GeForce RTX 5070",
+  "uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "cuda": "13.3 V13.3.73",
+  "source_revision": "57b9809d1b779d5483eea1f1bbd91397295c4a24",
+  "test_file": "tests/unit/test_native_sm120_active_source_jvp_runtime.py",
+  "selector": "public_edge_and_ragged_shapes or producer_preserves_declared_storage_relu_semantics",
+  "result": "12 passed, 73 deselected",
+  "sha256": {
+    "core": "1ab3d7a6be99cb105fb3171fd0ffd24aac0d77aa28df3e176d8a07d369e30511",
+    "nvidia": "1fb1e911b4072b671f89e65937cd4d1515b5e1cbecda385154708d0702eaacbe",
+    "provider": "37e9b2574217434840448b1d400e9b8509f0103c908098d7d8238024df3ba07f",
+    "fixture": "9e31a32ffcdb35e4390392b8a1558fb00e5c6275cdd5398458f7028c98be4ff1"
+  },
+  "scope": "regression proof for existing SM120 producer/ragged/ReLU profiles after shared runtime changes; no adoption of the gfx1201 quantized-product program"
+}

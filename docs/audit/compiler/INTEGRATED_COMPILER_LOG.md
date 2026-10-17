@@ -13107,3 +13107,32 @@ Remaining: Retained private quantizer/gate-up/activation/down composition,
 full checkpoint MLP/model-quality and the wider five-slice obligations.
 Evidence: benchmarks/baselines/rocm_native_k16_quant_public_20261017/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-17 — public native quantized product and private SSA edges
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; follows merged #968. Sync: ROCM-RESIDENT-QUANT-PRODUCT-20261017.
+
+Outcome: the original BF16 K16 quantizer and exact E4M3 scaled product are
+partitioned by native MLIR, including two private output buffers and their
+first-write/last-read lifetimes. Both original members descend through
+Schedule/Tile/Target/ROCDL/LLVM/HSACO into one checked C++ HIP owner. Python
+marshals the native plan and performs no numerical lowering or intermediate
+host readback. The new consumer uses its unprojected checked native Target IR.
+
+Proof: five gfx1201 public/portable/fresh-process/inspection-isolation cases,
+nineteen package contracts, three prepared numerical/timing packets and twelve
+existing RTX5070 SM120 regression controls pass. The public-call optimization
+reuses the verified private program; portable launch still validates serialized
+artifacts. Public/serialized-control, captured-member, ordinary event and
+prepared invoke/read timing domains remain distinct. All four backend queues
+are assessed; the physical program remains gfx1201-specific.
+
+Remaining: native composition with NVFP4 weight expansion, full resident
+quantizer/gate-up/activation/down MLP, bounded/general layouts, encoded AD and
+model-quality acceptance. Original five-slice NVIDIA/ROCm obligations remain
+open. No general compiler or full-ingest completion is claimed.
+
+Evidence: benchmarks/baselines/rocm_resident_quantized_product_public_20261017/README.md;
+benchmarks/baselines/rocm_resident_quantized_product_20261017/README.md.
+<!-- entry-fields:end -->

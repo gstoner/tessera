@@ -1,0 +1,15 @@
+{
+  "old_validator_revision": "fcb3172994d12f7814f1a6d452dcf331396e2d94",
+  "old_validator": "accepted individually valid incompatible quantizer",
+  "new_validator": "rejected before provider",
+  "message": "native quantized-product producer/shared buffer interface differs",
+  "shared_shape_mk": [
+    3,
+    32
+  ],
+  "substituted_quantizer_shape_mk": [
+    3,
+    64
+  ],
+  "malformed_kernel_launch": "not performed"
+}

@@ -1151,6 +1151,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "loads + launches it. Interleaved-pair RoPE over "
                             "[M, D] (one workgroup per row); f32/f16/bf16",
     "rocm_nvfp4_program": "Checked native checkpoint conversion/storage/packed matmul on one owned HIP stream",
+    "rocm_quantized_product_program": "Native BF16 K16 quantization and exact scaled matmul on one checked HIP owner",
     "nvidia_active_source_jvp_program": "Compiler-owned static source-active RMSNorm/ReLU JVP and transactional two-result native CUDA owner",
     "nvidia_tensor_rhs_jvp_program": "Compiler-owned static paired producer/RHS-JVP SSA, native Schedule/Tile members and transactional two-output CUDA owner",
     "nvidia_lhs_program": "Checked native LHS normalization/softmax/ReLU producer members and complete matmul epilogue on one owned CUDA stream",
@@ -3788,6 +3789,15 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
     # rocm_compiled analog) is a later follow-up. The row targets the proven arch
     # nvidia_sm120 — the NVRTC symbol auto-detects compute_XX, but only sm_120 is
     # hardware-proven, so the other arches stay unimplemented.
+    ("rocm_gfx1201", "canonical_rocm_quantized_product_program"): ExecutionRow(
+        target="rocm_gfx1201",compiler_path="canonical_rocm_quantized_product_program",
+        execution_kind="native_gpu",executable=True,executor_id="rocm_quantized_product_program",
+        runtime_status="success",execution_mode="hip_runtime",owns_stream=True,
+        reason="Named static BF16 K16 max/scale/normalize/RNE quantizer feeding an exact "
+               "FP32-output E4M3 scaled product through original native Graph partitions, Schedule/Tile, "
+               "ROCDL/LLVM/HSACO and checked private HIP buffers. No full MLP or encoded AD claim.",
+        numerical_fixture="tests/device/rocm/test_native_quantized_product_jit.py",
+        evidence_target="rocm_gfx1201",proof_build=".build-bf16",device_proof="device_verified_jit"),
     ("rocm_gfx1201", "canonical_rocm_nvfp4_program"): ExecutionRow(
         target="rocm_gfx1201",compiler_path="canonical_rocm_nvfp4_program",
         execution_kind="native_gpu",executable=True,executor_id="rocm_nvfp4_program",

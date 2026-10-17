@@ -1,0 +1,12 @@
+{
+  "base_revision": "52994f497eb670e0a9501c61997601fcafe23c76",
+  "before": "2 regressions failed: stale per-call program/receipts/artifact; resealed independent Target witness admitted",
+  "after": "26 affected package and owning-device tests passed (21 package tests, 5 gfx1201 public/portable device tests)",
+  "device": "AMD Radeon RX 9070 XT",
+  "architecture": "gfx1201",
+  "device_uuid": "GPU-28d9e7efbf2ef716",
+  "native_math_changed": false,
+  "timing_packets": "retain measured pre-review source identity; no new timing claim",
+  "receipt_metadata": "execution_kind requires a current program and complete successful native receipts, rather than relying on the generic compile bundle",
+  "latest_affected_gate": "27 passed (22 package + 5 owning gfx1201 device tests)"
+}

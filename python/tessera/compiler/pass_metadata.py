@@ -527,7 +527,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         input_dialects=("tessera", "func", "arith", "tensor", "scf"),
         output_dialects=("cf", "tessera", "tessera_attn", "func", "arith", "gpu", "llvm", "memref", "tile", "math", "scf", "tensor"),
         required_attrs=("tessera.autodiff",),
-        preserved_attrs=("tessera.native.sm120_tensor_program", "tessera.native.sm120_tensor_program_json", "tessera.native.scaled_carrier", "tessera.autodiff.scaled_program_json", "tessera.autodiff.scaled_member", "tessera.autodiff.scaled_program_witness", "tessera.autodiff.scaled_program", "tessera.autodiff.product_abi", "tessera.autodiff.product_pair", "tessera.autodiff.attention_jvp_contract", "tessera.autodiff.jvp", "tessera.autodiff.role",
+        preserved_attrs=("tessera.native.quantized_product", "tessera.native.quantized_product_json", "tessera.native.quantized_product_members", "tessera.native.quantized_product_member", "tessera.native.sm120_tensor_program", "tessera.native.sm120_tensor_program_json", "tessera.native.scaled_carrier", "tessera.autodiff.scaled_program_json", "tessera.autodiff.scaled_member", "tessera.autodiff.scaled_program_witness", "tessera.autodiff.scaled_program", "tessera.autodiff.product_abi", "tessera.autodiff.product_pair", "tessera.autodiff.attention_jvp_contract", "tessera.autodiff.jvp", "tessera.autodiff.role",
                          "tessera.native_jvp_pair", "tessera.native_jvp_inputs",
                          "tessera.native_jvp_input_widths", "tessera.native_jvp_output_widths",
                          "tessera.native_jvp_width", "tessera.native_jvp_output_width", "tessera.native_jvp_wrt"),

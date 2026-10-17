@@ -6,6 +6,30 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## ROCM-RESIDENT-QUANT-PRODUCT-20261017 — native SSA edge
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-RESIDENT-QUANT-PRODUCT-20261017.
+
+PR969 review: the gfx1201 JIT clears prior per-call program/receipts/artifact
+before validation, and portable consumer Target witnesses must equal the
+image-bound Target. Both red regressions are fixed; 26 owning package/device
+tests pass. No sibling physical admission or arithmetic changes.
+The execution-kind property now requires complete current quantized-program
+receipts explicitly; the affected package/device gate passes 27 tests.
+
+Shared runtime assessment: a distinct gfx1201 program executor/portable schema
+binds existing member ABIs; no sibling execution row, physical schedule or ABI
+is changed. Follow-up required before adopting this program contract on a
+sibling architecture. No gfx1151, NVIDIA, Apple or x86 device parity is inferred.
+
+Evidence: benchmarks/baselines/rocm_resident_quantized_product_20261017/README.md.
+
+Not applicable to this physical partition: its admission requires gfx1201.
+The quantizer semantic validator is shared between standalone and composed
+Graph paths, with no change to sibling schedules, ABI or dtype admission.
+Follow-up required before any sibling consumes the new composed profile.
+
 ## ROCM-K16-QUANT-PUBLIC-20261017 — authored two-result package
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.

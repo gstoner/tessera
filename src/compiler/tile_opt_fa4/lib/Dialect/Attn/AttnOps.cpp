@@ -780,9 +780,10 @@ mlir::LogicalResult CheckpointJVPOp::verify() {
   SmallVector<RankedTensorType> types;
   for (Type type : getOperandTypes()) {
     auto tensor = dyn_cast<RankedTensorType>(type);
-    if (!tensor || tensor.getEncoding() || !tensor.getElementType().isF32() ||
+    if (!tensor || tensor.getEncoding() || !(tensor.getElementType().isF32() || tensor.getElementType().isF16() ||
+          tensor.getElementType().isBF16()) ||
         llvm::any_of(tensor.getShape(), [](int64_t d) { return !ShapedType::isDynamic(d) && d <= 0; }))
-      return emitOpError("JVP operands require positive or bounded f32 tensors");
+      return emitOpError("JVP operands require positive or bounded f16/bf16/f32 tensors");
     types.push_back(tensor);
   }
   auto q=types[0], k=types[1], v=types[2];
@@ -791,12 +792,16 @@ mlir::LogicalResult CheckpointJVPOp::verify() {
   SmallVector<int64_t> dimensions{q.getDimSize(0), q.getDimSize(1), k.getDimSize(1),
       q.getDimSize(2), k.getDimSize(2), q.getDimSize(3), v.getDimSize(3)};
   if (failed(tessera::resolveNativeAttentionShape(*this, dimensions))) return failure();
-  auto tensor=[&](ArrayRef<int64_t> shape) { return RankedTensorType::get(shape,q.getElementType()); };
+  Type storage = q.getElementType(), output = types[3].getElementType();
+  if (k.getElementType() != storage || v.getElementType() != storage ||
+      (output != storage && !output.isF32()))
+    return emitOpError("JVP data/output storage roles disagree");
+  auto tensor=[&](ArrayRef<int64_t> shape, Type element) { return RankedTensorType::get(shape,element); };
   auto b=q.getDimSize(0), h=q.getDimSize(1), n=q.getDimSize(2);
   if (k.getDimSize(0)!=b || v.getDimSize(0)!=b || h%k.getDimSize(1) ||
       k.getDimSize(1)!=v.getDimSize(1) || k.getDimSize(2)!=v.getDimSize(2) ||
-      q.getDimSize(3)!=k.getDimSize(3) || types[3]!=tensor({b,h,n,v.getDimSize(3)}) ||
-      types[4]!=tensor({b,h,n}) || types[5]!=q || types[6]!=k || types[7]!=v ||
+      q.getDimSize(3)!=k.getDimSize(3) || types[3]!=tensor({b,h,n,v.getDimSize(3)},output) ||
+      types[4]!=tensor({b,h,n},Float32Type::get(getContext())) || types[5]!=q || types[6]!=k || types[7]!=v ||
       getDOutput().getType()!=types[3])
     return emitOpError("JVP tangent, output or LSE shapes disagree");
   if (getNumResults() != 1 && getNumResults() != 2)
@@ -806,7 +811,7 @@ mlir::LogicalResult CheckpointJVPOp::verify() {
   if (bias) {
     const auto shape = types[8].getShape();
     const int64_t scores[4] = {b,h,n,k.getDimSize(2)};
-    if (types[8].getRank()!=4 || types[9]!=types[8])
+    if (types[8].getRank()!=4 || !types[8].getElementType().isF32() || types[9]!=types[8])
       return emitOpError("JVP score bias and its tangent require matching rank-four shapes");
     for (unsigned axis=0;axis<4;++axis)
       if (shape[axis]!=1 && shape[axis]!=scores[axis])

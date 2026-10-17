@@ -1,0 +1,89 @@
+{
+  "combined": {
+    "passed": 650,
+    "skipped": 0,
+    "warnings": 4,
+    "seconds": 164.85
+  },
+  "focused_registry": {
+    "passed": 484,
+    "skipped": 0,
+    "cohort_overlap": true
+  },
+  "bounded_cases": 8,
+  "fresh_process_cases": 8,
+  "textual_f32_output_cases": 8,
+  "typed_stream_cases": 4,
+  "fp32_native_artifact_controls": 16,
+  "compiler_control_provider_matches_final": true,
+  "prepared_diagnostic_bitwise_cases": 16,
+  "malformed_binding_cases": 12,
+  "full_mypy": "errors0_baseline0",
+  "ruff": "pass",
+  "broader_unit": {
+    "initial": {
+      "passed": 26310,
+      "failed": 4,
+      "skipped": 5904,
+      "warnings": 11,
+      "seconds": 599.91
+    },
+    "root_causes": [
+      "new contract missing last_updated date",
+      "recorder check executed before its evidence README was tracked"
+    ],
+    "focused_repair": {
+      "passed": 37,
+      "failed": 0
+    },
+    "stable_head_rerun": {
+      "head": "3f1e24a26023d301e6a03a0267beb8b885d2ae8f",
+      "passed": 26314,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 5904,
+      "warnings": 11,
+      "seconds": 615.08,
+      "scope": "exact CI CPU marker lane,4workers,timeout180"
+    }
+  },
+  "generated_docs": 33,
+  "public_ci_review": "pending",
+  "scope": "Counts overlap; no sum and no aggregate five-slice closure or sibling physical transfer",
+  "production_compiler_route": {
+    "passed": 1587,
+    "skipped": 0,
+    "seconds": 126.48,
+    "every_selected_proof_executed": true
+  },
+  "audit_routing_cases": 19,
+  "public_surface_audits": "all5 surfaces and both public claim linters pass; stale opbench CMake cache refreshed without source/gate changes",
+  "revision_coverage_evidence": "generated successfully; complete3-file archive retained",
+  "graph": "offline AST update terminal success",
+  "shared_producer_numerical_regression": {
+    "passed": 12,
+    "skipped": 0,
+    "seconds": 16.38,
+    "scope": "RTX5070 existing FP16/BF16 resident producer-to-matmul JVP; complete/ragged,permuted roots,independent oracle"
+  },
+  "publication_source_scope": "Reviewed implementation3bfa92c1a is timed and numerically checked; following receipt/doc commits preserve that src/python/tests/recorder tree.",
+  "direct_tape_review": {
+    "finding": "PR978 discussion_r4304562477: source-backed ResidentAttentionTape.prepare_jvp omitted captured storage arguments",
+    "red": "1 owning-device failure reproduced before fix",
+    "half_cases": {
+      "passed": 32,
+      "seconds": 51.41
+    },
+    "fp32_and_producer": {
+      "passed": 20,
+      "seconds": 30.34,
+      "composition": "8 direct FP32 plus12 existing producer JVP cases"
+    },
+    "implementation": "3bfa92c1af4d3792a4294eae67bf33322044a0ac",
+    "native_image_parity": "all8 refreshed profiles retain forward/tangent images,host sizers and entry symbols",
+    "ruff": "pass",
+    "mypy": "errors0_baseline0",
+    "base_gate_scope": "650 combined,1587 compiler-route and26314 CPU receipts precede this4-line Python-only review fix; no C++/native ABI change. New exact-head public CI must pass.",
+    "doc_gates": 37
+  }
+}

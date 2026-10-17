@@ -143,7 +143,23 @@ class NativeTensorCall:
                 raise ValueError(f'{spec.name} requires a resident CUDA/HIP array interface')
             dtype = np.dtype(interface['typestr'])
             shape = tuple(interface['shape'])
-            if canonicalize_dtype(str(dtype)) != canonicalize_dtype(spec.dtype) or not dtype.isnative:
+            expected_dtype = canonicalize_dtype(spec.dtype)
+            if expected_dtype == 'bf16':
+                # CUDA/HIP's array interface represents BF16 as opaque bytes.
+                # Its explicit semantic dtype supplies width and alignment;
+                # a bare void/uint16 payload is never a BF16 declaration.
+                semantic = getattr(value, "dtype", dtype)
+                if isinstance(semantic, str) and canonicalize_dtype(semantic) == "bf16":
+                    from ml_dtypes import bfloat16
+                    semantic = bfloat16
+                semantic_dtype = np.dtype(semantic)
+                if (canonicalize_dtype(str(semantic_dtype)) != 'bf16' or
+                        not semantic_dtype.isnative or semantic_dtype.itemsize != 2 or
+                        dtype != np.dtype(semantic_dtype.str) or
+                        interface['typestr'] not in (semantic_dtype.str, '|V2', '=V2')):
+                    raise ValueError(f'{spec.name} native dtype disagrees')
+                dtype = semantic_dtype
+            elif canonicalize_dtype(str(dtype)) != expected_dtype or not dtype.isnative:
                 raise ValueError(f'{spec.name} native dtype disagrees')
             if shape != tuple(resolve(d) for d in spec.shape) or any(type(d) is not int for d in shape):
                 raise ValueError(f'{spec.name} native shape disagrees')

@@ -1,0 +1,22 @@
+{
+  "rows": [
+    {
+      "storage": "fp16",
+      "cases": 24,
+      "elements": 2304,
+      "stored_tangent_bit_mismatches": 598,
+      "max_pre_store_abs_error": 0.001037191569243312,
+      "max_finite_difference_error": 1.4640111345443074e-10
+    },
+    {
+      "storage": "bf16",
+      "cases": 24,
+      "elements": 2304,
+      "stored_tangent_bit_mismatches": 570,
+      "max_pre_store_abs_error": 0.005693045326801371,
+      "max_finite_difference_error": 1.5192824776022462e-10
+    }
+  ],
+  "scope": "Independent CPU float64 calculus check only; no native half-JVP admission or GPU proof",
+  "conclusion": "Rounded forward O is not an adequate half-JVP correction residual. Accumulate the FP32 weighted-value moment from the same probabilities, or retain an unrounded compatible residual; preserve existing FP32 native image behavior."
+}

@@ -13,15 +13,16 @@ inline mlir::Value buildAttentionDynamicZero(mlir::OpBuilder &b,
   using namespace mlir;
   auto type = dyn_cast<RankedTensorType>(source.getType());
   if (!type || type.hasStaticShape() || type.getEncoding() ||
-      !type.getElementType().isF32()) return {};
+      !(type.getElementType().isF32() || type.getElementType().isF16() ||
+        type.getElementType().isBF16())) return {};
   SmallVector<Value> extents;
   for (int64_t axis = 0; axis < type.getRank(); ++axis)
     if (type.isDynamicDim(axis))
       extents.push_back(tensor::DimOp::create(b, loc, source, axis));
   return tensor::GenerateOp::create(b, loc, type, extents,
-      [](OpBuilder &body, Location location, ValueRange) {
+      [type](OpBuilder &body, Location location, ValueRange) {
         Value zero = arith::ConstantOp::create(body, location,
-                                               body.getF32FloatAttr(0));
+            body.getFloatAttr(cast<FloatType>(type.getElementType()),0.0));
         tensor::YieldOp::create(body, location, zero);
       }).getResult();
 }
@@ -41,7 +42,7 @@ inline bool isAttentionZeroLike(mlir::Value value, mlir::Value source) {
   auto zero = dyn_cast<arith::ConstantOp>(block.front());
   auto yield = dyn_cast<tensor::YieldOp>(block.back());
   auto number = zero ? dyn_cast<FloatAttr>(zero.getValue()) : FloatAttr();
-  if (!number || !number.getType().isF32() || !number.getValue().isZero() ||
+  if (!number || number.getType() != type.getElementType() || !number.getValue().isZero() ||
       !yield || yield.getValue() != zero.getResult()) return false;
   unsigned position = 0;
   for (int64_t axis = 0; axis < type.getRank(); ++axis) {

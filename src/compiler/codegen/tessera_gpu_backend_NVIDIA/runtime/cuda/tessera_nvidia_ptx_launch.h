@@ -264,6 +264,16 @@ int tessera_nvidia_attention_jvp_prepare_lse(
     const char* sizer_path, const char* sizer_entry, const int64_t* dims,
     const int64_t* bias_shape, const int* frontend_mapping,
     const int* active_roles, size_t active_count, uint64_t* handle);
+// Typed static JVP owner; storage IDs: 1=f32, 2=f16, 3=bf16.
+// Q/K/V and their tangents share storage; O/dO may use f32 or data storage.
+// Bias, bias tangent and row LSE remain f32. Legacy prepare ABIs stay f32.
+int tessera_nvidia_attention_jvp_prepare_typed(
+    const void* forward_image, size_t forward_bytes, const char* forward_entry,
+    const void* tangent_image, size_t tangent_bytes, const char* tangent_entry,
+    const char* sizer_path, const char* sizer_entry, const int64_t* dims,
+    const int64_t* bias_shape, const int* frontend_mapping,
+    const int* active_roles, size_t active_count, int storage,
+    int output_storage, int saved_lse, uint64_t* handle);
 int tessera_nvidia_attention_jvp_invoke_lse(
     uint64_t handle, const void* const* inputs, const size_t* input_bytes,
     size_t input_count, void* const* outputs, const size_t* output_bytes,

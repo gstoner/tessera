@@ -1,5 +1,5 @@
 // Bounded dense attention products use the registered checkpoint dialect.
-// Half-storage reverse products require the explicit SM120 storage contract.
+// Half-storage products require the explicit SM120 storage contract.
 // Forward and reverse products admit rank-four f32 score biases broadcast on any axis.
 // JVP products carry bias and its tangent explicitly; cache, dropout and
 // numeric-policy variants require separate contracts.

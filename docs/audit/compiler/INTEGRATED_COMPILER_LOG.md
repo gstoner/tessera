@@ -13329,7 +13329,7 @@ Evidence: benchmarks/baselines/sm120_bounded_row_owner_20261017/README.md.
 ### 2026-10-17 — bounded AD witness digest reuse
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
-PRs: pending; sync SM120-AD-WITNESS-DIGEST-20261017.
+PRs: [#977](https://github.com/gstoner/tessera/pull/977); sync SM120-AD-WITNESS-DIGEST-20261017.
 
 Outcome: exact attribute-name guards reject four reproduced lookalike cases.
 A process-local bounded pure-digest LRU retains all member validation and
@@ -13339,8 +13339,50 @@ The eager workspace prototype was rejected after neutral matched measurements.
 All four backend queues are assessed; no sibling physical proof transfers.
 
 Broad WSL gate: 27886 passed, 7678 skipped, 876 deselected, 11 warnings in 2172.65s (0:36:12).
-Remaining: public CI/review and the original five-slice requirements.
+PR977 merged after exact-head CI and a fresh complete review audit.
+Remaining: the original five-slice requirements.
 No kernel or automatic selection promotion.
 
 Evidence: benchmarks/baselines/sm120_ad_witness_digest_20261017/README.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-17 — typed attention JVP public and portable integration
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-TYPED-JVP-20261017.
+
+Outcome: authored FP16/BF16 Graph attention now differentiates through native
+Graph AD/Schedule/Tile/NVIDIA/LLVM PTX with role-specific public, portable
+resident and static prepared execution. Half-output score derivatives use an
+unrounded FP32 weighted-V moment. Bias and row LSE stay FP32; schemas 5/6
+retain their bounded/static saved-LSE meaning. Full symbol identity prevents
+conflicting native output-storage flags.
+
+Final matching-runtime combined gate passes 650 tests. Proof includes trace-
+at-one bounded reuse, capacity guards, compiler-absent fresh processes, typed
+producer stream ordering, activity/bias, authored FP32 output, malformed ABI
+recovery and legacy FP32 ownership. Sixteen native FP32 artifact controls
+remain identical. Eight independent-oracle characterization rows separate
+forward/JVP event windows from completed public costs; no default promotion.
+All four backend queues assess shared helper impact without physical transfer.
+The complete production compiler-route gate passes 1,587 cases with zero
+skips; all 33 generated documents pass drift checks.
+Clean-head broad CI CPU gate: 26,314 passed, 5,904 skipped, zero failures,
+11 warnings in 615.08 seconds. Twelve existing FP16/BF16 resident producer
+JVP cases also pass their independent oracle. Initial documentation/date and
+tracked-recorder failures are repaired; 37 focused gates pass. All five
+public surface audits and both claim linters pass.
+
+PR978 review: the direct source-backed tape caller now retains/forwards its
+captured native storage roles. Forty direct cases and twelve producer
+regressions pass; eight refreshed numerical timing profiles retain native
+image, sizer and entry identities. Exact-head public CI remains required.
+
+Remaining: public CI/review, ordinary bounded host JVP preparation,
+wider layouts/masks, mixed formats, nested/composed AD and original five-slice
+closure. The static prepared owner and bounded portable generations are
+separate execution envelopes.
+
+Evidence: benchmarks/baselines/sm120_typed_attention_jvp_20261017/README.md.
 <!-- entry-fields:end -->

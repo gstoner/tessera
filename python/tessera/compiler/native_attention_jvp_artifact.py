@@ -62,8 +62,25 @@ def payload(program):
         *((shapes[4],) if saved_lse else ()))
     tensor_names=("q","k","v","primal","lse","dq","dk","dv") + (
         ("bias","dbias") if biased else ()) + ("tangent",) + (("dlse",) if saved_lse else ())
-    expected=[dict(kind="tensor",name=n,dtype="fp32",shape=list(s),writable=i>=len(tensor_names)-(2 if saved_lse else 1))
-              for i,(n,s) in enumerate(zip(tensor_names,expected_shapes,strict=True))]
+    dtype_names = {"f16":"fp16", "bf16":"bf16", "f32":"fp32"}
+    storage, output_storage = p["storage"], p["output"]
+    input_dtype, output_dtype = dtype_names[storage], dtype_names[output_storage]
+    if storage != "f32":
+        for key, value in (("storage",storage),("output_storage",output_storage),("row_lse_storage","f32")):
+            matches = re.findall(r'(?<![\w])'+key+r' = "([^"]*)"',contract[0])
+            if matches != [value]:
+                raise ValueError("portable JVP native storage differs from checkpoint")
+        scores_active = any(i != 2 for i in active)
+        algorithm = ("cooperative_saved_lse_unrounded_value_moments_v1"
+                     if scores_active and output_storage != "f32" else
+                     "cooperative_saved_lse_moments_v1" if scores_active else
+                     "cooperative_saved_lse_value_linear_v1")
+        if f'algorithm = "{algorithm}"' not in contract[0]:
+            raise ValueError("portable JVP native correction policy disagrees")
+    tensor_dtypes = (input_dtype,)*3+(output_dtype,"fp32")+(input_dtype,)*3+(
+        ("fp32","fp32") if biased else ())+(output_dtype,)+(("fp32",) if saved_lse else ())
+    expected=[dict(kind="tensor",name=n,dtype=t,shape=list(s),writable=i>=len(tensor_names)-(2 if saved_lse else 1))
+              for i,(n,s,t) in enumerate(zip(tensor_names,expected_shapes,tensor_dtypes,strict=True))]
     expected.append(dict(kind="index",name="scratch",minimum=128,maximum=128))
     grid=[dims[0]*dims[1]*dims[3],1,1]
     if bounds:

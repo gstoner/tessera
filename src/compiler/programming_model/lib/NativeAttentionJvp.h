@@ -1,5 +1,10 @@
 // Native saved-LSE tangent product. Included inside namespace tessera.
 namespace {
+static StringRef nativeAttentionJvpStorage(Type type, bool manifest = false) {
+  if (type.isF16()) return manifest ? "fp16" : "f16";
+  if (type.isBF16()) return "bf16";
+  return manifest ? "fp32" : "f32";
+}
 static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
   const bool bias=op->getNumOperands()==10;
   auto mod=op->getParentOfType<ModuleOp>();
@@ -44,13 +49,20 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
   SmallVector<RankedTensorType> types;
   for (Type t:op->getOperandTypes()) {
     auto tensor=dyn_cast<RankedTensorType>(t);
-    if (!tensor || tensor.getEncoding() || !tensor.getElementType().isF32())
-      return op->emitError("attention JVP requires unencoded f32 tensors"),failure();
+    if (!tensor || tensor.getEncoding() || !(tensor.getElementType().isF32() ||
+        tensor.getElementType().isF16() || tensor.getElementType().isBF16()))
+      return op->emitError("attention JVP requires unencoded f16/bf16/f32 tensors"),failure();
     types.push_back(tensor);
   }
   auto q=types[0],k=types[1],v=types[2];
   if (q.getRank()!=4 || k.getRank()!=4 || v.getRank()!=4)
     return op->emitError("attention JVP Q/K/V require rank four"),failure();
+  Type storageType = q.getElementType(), outputType = types[3].getElementType();
+  if (k.getElementType() != storageType || v.getElementType() != storageType ||
+      (outputType != storageType && !outputType.isF32()) ||
+      !types[4].getElementType().isF32() || types[5] != q || types[6] != k || types[7] != v ||
+      (bias && (!types[8].getElementType().isF32() || types[9] != types[8])))
+    return op->emitError("attention JVP data/output/LSE/bias storage roles disagree"),failure();
   SmallVector<int64_t> dims{q.getDimSize(0),q.getDimSize(1),k.getDimSize(1),
       q.getDimSize(2),k.getDimSize(2),q.getDimSize(3),v.getDimSize(3)};
   // One verified policy supplies physical capacities; symbolic sequence
@@ -59,7 +71,7 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
   if (failed(shape)) return failure();
   auto capacities=shape->dynamicSequence?shape->bounds.asArrayRef():ArrayRef<int64_t>(dims);
   for (unsigned i=0;i<types.size();++i) {
-    uint64_t bytes=4;
+    uint64_t bytes=types[i].getElementTypeBitWidth()/8;
     for (auto entry:llvm::enumerate(types[i].getShape())) {
       int64_t d=entry.value();
       if (ShapedType::isDynamic(d)) {
@@ -169,9 +181,16 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
       b.getNamedAttr("causal",causal),b.getNamedAttr("active",b.getArrayAttr(active)),
       b.getNamedAttr("argument_roles",b.getDenseI64ArrayAttr(roles)),
       b.getNamedAttr("target",target),b.getNamedAttr("arch",arch),
-      b.getNamedAttr("algorithm",b.getStringAttr(scoresActive ? "cooperative_saved_lse_moments_v1" : "cooperative_saved_lse_value_linear_v1")),
+      b.getNamedAttr("algorithm",b.getStringAttr(scoresActive ? (!outputType.isF32() ? "cooperative_saved_lse_unrounded_value_moments_v1" : "cooperative_saved_lse_moments_v1") : "cooperative_saved_lse_value_linear_v1")),
       b.getNamedAttr("workgroup_size",b.getI64IntegerAttr(128)),
       b.getNamedAttr("ownership",b.getStringAttr("private_saved_generation_distinct_tangent"))});
+  if (!storageType.isF32()) {
+    NamedAttrList attrs(contract);
+    attrs.set("storage",b.getStringAttr(nativeAttentionJvpStorage(storageType)));
+    attrs.set("output_storage",b.getStringAttr(nativeAttentionJvpStorage(outputType)));
+    attrs.set("row_lse_storage",b.getStringAttr("f32"));
+    contract=attrs.getDictionary(op->getContext());
+  }
   if (savedLse || shape->dynamicSequence) {
     NamedAttrList attrs(contract);
     if (savedLse) attrs.set("saved_lse",b.getBoolAttr(true));
@@ -242,6 +261,8 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   const unsigned outputIndex = graph->getNumOperands();
   for (Type type : graph->getResultTypes())
     tensorTypes.push_back(cast<RankedTensorType>(type));
+  const bool unroundedValueMoment = scoresActive &&
+      !tensorTypes[outputIndex].getElementType().isF32();
   SmallVector<StringRef> names{"q","k","v","primal","lse","dq","dk","dv"};
   if (bias) {names.push_back("bias");names.push_back("dbias");}
   names.push_back("tangent");
@@ -257,7 +278,7 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
         extents.push_back(keyAxis?"key_size":"query_size");
       }
     }
-    specs.push_back(llvm::json::Object{{"kind","tensor"},{"name",names[i]},{"dtype","fp32"},
+    specs.push_back(llvm::json::Object{{"kind","tensor"},{"name",names[i]},{"dtype",nativeAttentionJvpStorage(tensorTypes[i].getElementType(),true)},
         {"shape",std::move(extents)},{"writable",i>=outputIndex}});
   }
   specs.push_back(llvm::json::Object{{"kind","index"},{"name","scratch"},{"minimum",128},{"maximum",128}});
@@ -283,6 +304,7 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   mod->setAttr("tessera.attention_jvp_contract",*c);
   uint32_t bits=scale.getValue().bitcastToAPInt().getZExtValue();
   uint8_t bytes[]{uint8_t(bits>>24),uint8_t(bits>>16),uint8_t(bits>>8),uint8_t(bits)};
+  const bool typedStorage = !tensorTypes[0].getElementType().isF32();
   std::string identity;llvm::raw_string_ostream ios(identity);
   ios<<"{";
   bool broadcast=false;
@@ -297,9 +319,13 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
     }
   }
   ios<<"\"causal\":"<<(causal?"true":"false")
-     <<",\"lse\":\"natural_log\",\"mask_alignment\":\"end_aligned_v1\",\"scale_f32_bits\":\""
+     <<",\"lse\":\"natural_log\",\"mask_alignment\":\"end_aligned_v1\"";
+  if (typedStorage)
+    ios<<",\"output_storage\":\""<<nativeAttentionJvpStorage(tensorTypes[3].getElementType())
+       <<"\",\"row_lse_storage\":\"f32\"";
+  ios<<",\"scale_f32_bits\":\""
      <<llvm::toHex(ArrayRef<uint8_t>(bytes),true)
-     <<"\",\"schema\":\""+std::string(dynamic?"tessera.attention_checkpoint.bounded_sequences.v1":broadcast?"tessera.attention_checkpoint.broadcast.v1":"tessera.attention_checkpoint.v1")+"\",\"shape\":[";
+     <<"\",\"schema\":\""+std::string(typedStorage?"tessera.attention_checkpoint.typed_forward.v1":dynamic?"tessera.attention_checkpoint.bounded_sequences.v1":broadcast?"tessera.attention_checkpoint.broadcast.v1":"tessera.attention_checkpoint.v1")+"\",\"shape\":[";
   for(unsigned i=0;i<7;++i){if(i)ios<<",";ios<<dims[i];}
   ios<<"]";
   if (dynamic) {
@@ -307,7 +333,7 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
     for(unsigned i=0;i<7;++i){if(i)ios<<",";ios<<capacities[i];}
     ios<<"]";
   }
-  ios<<",\"storage\":\"f32\"}";ios.flush();
+  ios<<",\"storage\":\""<<nativeAttentionJvpStorage(tensorTypes[0].getElementType())<<"\"}";ios.flush();
   mod->setAttr("tessera.attention_checkpoint_identity",b.getStringAttr(
       llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(identity)),true)));
   b.setInsertionPointToEnd(mod.getBody());
@@ -332,8 +358,11 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   auto fmul=[&](Value x,Value y)->Value{return arith::MulFOp::create(b,loc,x,y);};
   auto fsub=[&](Value x,Value y)->Value{return arith::SubFOp::create(b,loc,x,y);};
   auto load=[&](unsigned arg,Value offset)->Value{
-    Value p=LLVM::GEPOp::create(b,loc,ptr,b.getF32Type(),args[arg],ValueRange{offset});
-    return LLVM::LoadOp::create(b,loc,b.getF32Type(),p,4);
+    Type element = tensorTypes[arg].getElementType();
+    Value p=LLVM::GEPOp::create(b,loc,ptr,element,args[arg],ValueRange{offset});
+    Value value=LLVM::LoadOp::create(b,loc,element,p,element.getIntOrFloatBitWidth()/8);
+    if (element.isF32()) return value;
+    return arith::ExtFOp::create(b,loc,b.getF32Type(),value);
   };
   Value tid=gpu::ThreadIdOp::create(b,loc,gpu::Dimension::x);
   Value row=cast64(gpu::BlockIdOp::create(b,loc,gpu::Dimension::x));
@@ -358,7 +387,7 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   Value L=load(4,row);
   auto scratchType=MemRefType::get({ShapedType::kDynamic},b.getF32Type());
   SmallVector<Value> scratch;
-  for(unsigned i=0;i<(scoresActive?2u:1u);++i) {
+  for(unsigned i=0;i<(scoresActive?(unroundedValueMoment?3u:2u):1u);++i) {
     Value buffer=memref::AllocaOp::create(b,loc,scratchType,ValueRange{args[tensorTypes.size()]});
     OperationState shared(loc,"tile.alloc_shared");shared.addOperands(buffer);b.create(shared);
     scratch.push_back(buffer);
@@ -366,12 +395,15 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   auto cols=scf::ForOp::create(b,loc,z,ci(dims[6]),one);
   b.setInsertionPointToStart(cols.getBody());
   Value col=cast64(cols.getInductionVar());
-  auto keys=scf::ForOp::create(b,loc,tid,keyExtent,width,ValueRange{zero,zero});
+  SmallVector<Value> keyInitials{zero,zero};
+  if (unroundedValueMoment) keyInitials.push_back(zero);
+  auto keys=scf::ForOp::create(b,loc,tid,keyExtent,width,ValueRange(keyInitials));
   b.setInsertionPointToStart(keys.getBody());
   Value key=cast64(keys.getInductionVar());
   Value legal=causal?Value(arith::CmpIOp::create(b,loc,arith::CmpIPredicate::ule,key,limit))
       :Value(arith::ConstantOp::create(b,loc,b.getBoolAttr(true)));
-  auto mask=scf::IfOp::create(b,loc,TypeRange{b.getF32Type(),b.getF32Type()},legal,true);
+  SmallVector<Type> keyTypes(keyInitials.size(),b.getF32Type());
+  auto mask=scf::IfOp::create(b,loc,TypeRange(keyTypes),legal,true);
   b.setInsertionPointToStart(mask.thenBlock());
   Value kr=add(kvbase,key),kbase=mul(kr,c64(dims[5]));
   auto dot=scf::ForOp::create(b,loc,z,ci(dims[5]),one,ValueRange{zero,zero});
@@ -397,8 +429,11 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   Value vi=add(mul(kr,c64(dims[6])),col);
   Value vv=scoresActive?load(2,vi):zero,dv=cast<BoolAttr>(active[2]).getValue()?load(7,vi):zero;
   Value pd=fmul(probability,direction);
-  scf::YieldOp::create(b,loc,ValueRange{fadd(keys.getRegionIterArgs()[0],pd),
-      fadd(keys.getRegionIterArgs()[1],fadd(fmul(pd,vv),fmul(probability,dv)))});
+  SmallVector<Value> contributions{fadd(keys.getRegionIterArgs()[0],pd),
+      fadd(keys.getRegionIterArgs()[1],fadd(fmul(pd,vv),fmul(probability,dv)))};
+  if (unroundedValueMoment)
+    contributions.push_back(fadd(keys.getRegionIterArgs()[2],fmul(probability,vv)));
+  scf::YieldOp::create(b,loc,ValueRange(contributions));
   b.setInsertionPointToStart(mask.elseBlock());
   scf::YieldOp::create(b,loc,keys.getRegionIterArgs());
   b.setInsertionPointAfter(mask);scf::YieldOp::create(b,loc,mask.getResults());
@@ -423,10 +458,16 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   Value result=product;
   if (scoresActive) {
     Value moment=memref::LoadOp::create(b,loc,scratch[0],ValueRange{z});
-    result=fsub(product,fmul(load(3,oi),moment));
+    // A half-stored O has already rounded away part of this moment. Reuse
+    // the same FP32 probabilities and V values, without a second global load.
+    Value primal = unroundedValueMoment
+        ? Value(memref::LoadOp::create(b,loc,scratch[2],ValueRange{z})) : load(3,oi);
+    result=fsub(product,fmul(primal,moment));
   }
-  Value out=LLVM::GEPOp::create(b,loc,ptr,b.getF32Type(),args[outputIndex],ValueRange{oi});
-  LLVM::StoreOp::create(b,loc,result,out,4);
+  Type outputElement=tensorTypes[outputIndex].getElementType();
+  if (!outputElement.isF32()) result=arith::TruncFOp::create(b,loc,outputElement,result);
+  Value out=LLVM::GEPOp::create(b,loc,ptr,outputElement,args[outputIndex],ValueRange{oi});
+  LLVM::StoreOp::create(b,loc,result,out,outputElement.getIntOrFloatBitWidth()/8);
   if (savedLse) {
     auto firstColumn=scf::IfOp::create(b,loc,
         arith::CmpIOp::create(b,loc,arith::CmpIPredicate::eq,col,c64(0)),false);

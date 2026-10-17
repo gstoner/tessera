@@ -1,0 +1,194 @@
+[
+  {
+    "case": "saved0_bias0_causal0_bounded0",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved0_bias0_causal0_bounded1",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved0_bias0_causal1_bounded0",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved0_bias0_causal1_bounded1",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved0_bias1_causal0_bounded0",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved0_bias1_causal0_bounded1",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved0_bias1_causal1_bounded0",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved0_bias1_causal1_bounded1",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved1_bias0_causal0_bounded0",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved1_bias0_causal0_bounded1",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved1_bias0_causal1_bounded0",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved1_bias0_causal1_bounded1",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved1_bias1_causal0_bounded0",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved1_bias1_causal0_bounded1",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved1_bias1_causal1_bounded0",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  },
+  {
+    "case": "saved1_bias1_causal1_bounded1",
+    "equal": {
+      "native_schema": true,
+      "arena_sha256": true,
+      "image_sha256": true,
+      "abi": true,
+      "entry": true,
+      "forward_target_sha256": true,
+      "forward_image_sha256": true
+    }
+  }
+]

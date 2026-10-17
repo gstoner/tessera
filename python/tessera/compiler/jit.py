@@ -2995,8 +2995,9 @@ class JitFn:
             if not resident_source_active and not resident_attention:
                 raise TesseraJitError("resident JVP requires native attention or an admitted source-active Graph")
             if resident_attention and any(
-                    dtype!=np.dtype("float32") for _,dtype in (*resident_specs,*tangent_specs)):
-                raise TesseraJitError("resident attention AD requires fp32 storage")
+                    dtype.name not in ("float16","bfloat16","float32")
+                    for _,dtype in (*resident_specs,*tangent_specs)):
+                raise TesseraJitError("resident attention AD requires supported floating storage")
         permitted_effect_ops: tuple[str, ...] = ()
         if len(graph_ops) == 1 and graph_ops[0].op_name == "tessera.dropout":
             dropout = graph_ops[0]

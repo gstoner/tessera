@@ -3,30 +3,17 @@ from __future__ import annotations
 
 def execute_unprepared(metadata,args):
     import numpy as np
-    from .native_attention_program import NativeAttentionJVPProgram
     from .emit.nvidia_cuda import NvidiaDeviceSession, CudaOwnedDeviceBuffer
-    program=NativeAttentionJVPProgram.from_json(
-        metadata["program_json"],expected_digest=metadata["program_digest"])
-    count=len(program.input_indices)
-    names=[f"primal_{i}" for i in range(count)]+[
-        f"tangent_{program.input_indices[i]}" for i in program.active]
-    if metadata.get("arg_names")!=names:
+    owner=PreparedAttentionJVP(metadata)
+    program=owner.program
+    count=owner.count
+    if tuple(metadata.get("arg_names",()))!=owner.names:
         raise ValueError("attention JVP launch names disagree with native activity")
-    if len(args)!=len(names):
+    if len(args)!=len(owner.names):
         raise ValueError("attention JVP launch arity disagrees")
     values=tuple(np.asarray(x) for x in args)
-    physical_shapes=program.pair.forward.descriptor.provenance["shape"]
-    b,hq,hkv,sq,sk,d,dv=physical_shapes
-    policy=program.pair.forward.descriptor.provenance
-    bias_shape=tuple(policy.get("bias_shape",())) or (b,hq,sq,sk)
-    physical=((b,hq,sq,d),(b,hkv,sk,d),(b,hkv,sk,dv)) + (
-        (bias_shape,) if policy.get("bias",False) else ())
-    frontend=[None]*count
-    for i,index in enumerate(program.input_indices):
-        frontend[index]=physical[i]
-    expected=tuple(frontend)+tuple(physical[i] for i in program.active)
-    if any(x.dtype!=np.float32 or x.shape!=shape
-           for x,shape in zip(values,expected,strict=True)):
+    if any(x.dtype!=dtype or x.shape!=shape
+           for x,shape,dtype in zip(values,owner.shapes,owner.dtypes,strict=True)):
         raise ValueError("attention JVP host storage disagrees with native contract")
     # Native session owns uploads. Capture owns its private O/LSE generation;
     # downloads complete before either owner releases its allocations.
@@ -34,15 +21,16 @@ def execute_unprepared(metadata,args):
         resident=[session.upload(x) for x in values]
         with program.capture(*resident[:count]) as frame:
             result=frame.jvp(*resident[count:])
-            def download(value):
+            def download(value,dtype):
                 if isinstance(value,tuple):
-                    return tuple(download(item) for item in value)
+                    return tuple(download(item,item_dtype) for item,item_dtype in zip(
+                        value,(owner.output_dtype,np.dtype("float32")),strict=True))
                 interface=value.__cuda_array_interface__
                 view=CudaOwnedDeviceBuffer(session,int(interface["data"][0]),
-                    tuple(interface["shape"]),np.float32,
-                    int(np.prod(interface["shape"]))*4,owns=False)
+                    tuple(interface["shape"]),dtype,
+                    int(np.prod(interface["shape"]))*dtype.itemsize,owns=False)
                 return session.download(view)
-            return download(frame.primal),download(result)
+            return download(frame.primal,owner.output_dtype),download(result,owner.output_dtype)
 
 # CUDA ownership, module retention, arena layout and call binding are native.
 # The Python LRU only retains bounded registration handles for immutable pins.
@@ -77,6 +65,20 @@ class PreparedAttentionJVP:
         frontend=[None]*self.count
         for i,index in enumerate(program.input_indices):frontend[index]=physical[i]
         self.shapes=tuple(frontend)+tuple(physical[i] for i in program.active)
+        import numpy as np
+        policy=program.pair.forward.descriptor.provenance
+        self.storage=policy["storage"]
+        self.output_storage=policy["output"]
+        types={"f32":np.dtype("float32"),"f16":np.dtype("float16")}
+        if "bf16" in (self.storage,self.output_storage):
+            from ml_dtypes import bfloat16
+            types["bf16"]=np.dtype(bfloat16)
+        roles=(types[self.storage],)*3 + ((types["f32"],) if self.biased else ())
+        frontend_types=[None]*self.count
+        for role,index in enumerate(program.input_indices):
+            frontend_types[index]=roles[role]
+        self.dtypes=tuple(frontend_types)+tuple(roles[i] for i in program.active)
+        self.output_dtype=types[self.output_storage]
         self.output_shape=(b,hq,sq,dv)
         self.lse_shape=(b,hq,sq)
         self.handle=0
@@ -103,14 +105,16 @@ class PreparedAttentionJVP:
         if lib is None:raise RuntimeError("native PTX runtime unavailable")
         self.lib=lib
         P,S,I,U=ct.c_void_p,ct.c_size_t,ct.c_int,ct.c_uint64
-        prepare=(lib.tessera_nvidia_attention_jvp_prepare_lse if self.saved_lse else
+        typed=self.storage!="f32"
+        prepare=(lib.tessera_nvidia_attention_jvp_prepare_typed if typed else
+                 lib.tessera_nvidia_attention_jvp_prepare_lse if self.saved_lse else
                  lib.tessera_nvidia_attention_jvp_prepare_bias if self.biased
                  else lib.tessera_nvidia_attention_jvp_prepare)
         signature: list[Any] = [
             P,S,ct.c_char_p,P,S,ct.c_char_p,ct.c_char_p,ct.c_char_p,
             ct.POINTER(ct.c_int64)] + (
-                [ct.POINTER(ct.c_int64)] if self.biased or self.saved_lse else []) + [
-            ct.POINTER(I),ct.POINTER(I),S,ct.POINTER(U)]
+                [ct.POINTER(ct.c_int64)] if self.biased or self.saved_lse or typed else []) + [
+            ct.POINTER(I),ct.POINTER(I),S] + ([I,I,I] if typed else []) + [ct.POINTER(U)]
         prepare.argtypes=signature
         prepare.restype=I
         lib.tessera_nvidia_attention_jvp_invoke.argtypes=[
@@ -129,7 +133,7 @@ class PreparedAttentionJVP:
         mapping=(I*self.count)(*program.input_indices)
         roles=(I*len(program.active))(*program.active)
         handle=U()
-        bias=(((ct.c_int64*4)(*self.bias_shape) if self.biased else None),) if self.biased or self.saved_lse else ()
+        bias=(((ct.c_int64*4)(*self.bias_shape) if self.biased else None),) if self.biased or self.saved_lse or typed else ()
         with tempfile.TemporaryDirectory(prefix="tessera-prepared-attention-sizer-") as directory:
             path=Path(directory)/"sizer.so";path.write_bytes(program.tangent.host_library)
             self._check(prepare(
@@ -137,7 +141,9 @@ class PreparedAttentionJVP:
                 program.pair.forward.descriptor.entry_symbol.encode(),
                 tangent,len(program.tangent.image),program.tangent.entry.encode(),
                 str(path).encode(),program.tangent.sizer.encode(),dims,*bias,mapping,roles,
-                len(program.active),ct.byref(handle)))
+                len(program.active),*(({"f32":1,"f16":2,"bf16":3}[self.storage],
+                    {"f32":1,"f16":2,"bf16":3}[self.output_storage],int(self.saved_lse)) if typed else ()),
+                ct.byref(handle)))
         self.handle=handle.value
 
     def invoke(self,metadata,args):
@@ -157,19 +163,20 @@ class PreparedAttentionJVP:
                 if not all(hasattr(value,"__cuda_array_interface__") for value in args):
                     raise ValueError("attention JVP requires all resident roots or all host roots")
                 specs=cuda_frontend_specs(args,ranks=(4,))
-                if any(dtype!=np.dtype("float32") or shape!=expected
-                       for (shape,dtype),expected in zip(specs,self.shapes,strict=True)):
+                if any(dtype!=wanted or shape!=expected
+                       for (shape,dtype),expected,wanted in zip(specs,self.shapes,self.dtypes,strict=True)):
                     raise ValueError("attention JVP resident storage disagrees with native contract")
                 values=tuple(args)
             else:
                 values=tuple(np.asarray(x) for x in args)
-                if any(x.dtype!=np.float32 or x.shape!=shape
-                       for x,shape in zip(values,self.shapes,strict=True)):
+                if any(x.dtype!=dtype or x.shape!=shape
+                       for x,shape,dtype in zip(values,self.shapes,self.dtypes,strict=True)):
                     raise ValueError("attention JVP host storage disagrees with native contract")
                 values=tuple(np.ascontiguousarray(x) for x in values)
             if not self.handle:self._prepare()
             output_shapes=(self.output_shape,self.lse_shape,self.output_shape,self.lse_shape) if self.saved_lse else (self.output_shape,)*2
-            outputs=tuple(np.empty(shape,np.float32) for shape in output_shapes)
+            output_types=(self.output_dtype,np.dtype("float32"))*2 if self.saved_lse else (self.output_dtype,)*2
+            outputs=tuple(np.empty(shape,dtype) for shape,dtype in zip(output_shapes,output_types,strict=True))
             if resident:
                 import math
                 interfaces=tuple(value.__cuda_array_interface__ for value in values)

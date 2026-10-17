@@ -712,7 +712,9 @@ class AutodiffForwardPass
         auto tensor = mlir::dyn_cast<mlir::RankedTensorType>(type);
         bool admissibleTensor =
             tensor && (tensor.hasStaticShape() ||
-                       (boundedAttentionExport && !tensor.getEncoding() && tensor.getElementType().isF32()) ||
+                       (boundedAttentionExport && !tensor.getEncoding() &&
+                        (tensor.getElementType().isF32() || tensor.getElementType().isF16() ||
+                         tensor.getElementType().isBF16())) ||
                        ((symbolicRelu || symbolicNormalization) && !tensor.getEncoding() &&
                         (tensor.getElementType().isF16() || tensor.getElementType().isBF16() ||
                          tensor.getElementType().isF32() || tensor.getElementType().isF64()))) &&
@@ -1069,6 +1071,14 @@ class AutodiffForwardPass
         // Saved-LSE schema 5 is specifically bounded; 6 is static.
         contract["schema"] = module->hasAttr("tessera.attention_shape_bounds") ? 5 : 6;
         contract["saved_lse"] = true;
+      }
+      if (!q.getElementType().isF32()) {
+        auto spelling=[](mlir::Type t)->llvm::StringRef {
+          return t.isF16()?"f16":t.isBF16()?"bf16":"f32";
+        };
+        contract["storage"]=spelling(q.getElementType());
+        contract["output_storage"]=spelling(mlir::cast<mlir::RankedTensorType>(op->getResult(0).getType()).getElementType());
+        contract["row_lse_storage"]="f32";
       }
       std::string text; llvm::raw_string_ostream os(text); os<<llvm::json::Value(std::move(contract)); os.flush();
       module->setAttr("tessera.autodiff.attention_jvp_contract",mlir::StringAttr::get(&getContext(),text));

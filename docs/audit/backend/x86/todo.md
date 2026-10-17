@@ -7,6 +7,17 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## SM120-TYPED-JVP-20261017 — typed forward-mode integration
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-TYPED-JVP-20261017.
+
+Not applicable to x86 execution: the half attention TangentInterface admission remains gated to exact nvidia_sm120/sm_120. Existing f32 artifact controls are retained; CUDA buffer ownership and the typed prepared JVP ABI have no x86 consumer. No AVX numerical/performance proof or new attention admission is claimed.
+
+Contract: docs/spec/SM120_TYPED_ATTENTION_JVP_CONTRACT.md.
+Evidence: benchmarks/baselines/sm120_typed_attention_jvp_20261017/README.md.
+
+
 ## SM120-AD-WITNESS-DIGEST-20261017 — bounded metadata digest reuse
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

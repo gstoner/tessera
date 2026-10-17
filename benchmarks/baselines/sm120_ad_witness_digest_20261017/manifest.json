@@ -1,0 +1,20 @@
+{
+  "measured_implementation": "e6804ac81aa5c840d4f7d8181ef105ffc6298835",
+  "files": {
+    "README.md": "eccc28a47616f5a911dfa12e553618c90ff38f714135ae0cc7b9d1f098e23c7d",
+    "bfloat16.program.json.xz": "bd1d495d6971a8ce8760f7cd8e131e9b09a2b71c3f5a51b2a236d23025a634c5",
+    "broad-unit.txt.xz": "725d8061b00cf33a1f8e0e624d06a11ae0364aebc6769270204f4714edeb2f45",
+    "canonical-gates.txt.xz": "80485a111d5a1b5d536592b62d15284f07a6669d038ac084fb6af0fa75392cf6",
+    "capture-profile.json.xz": "031b76123f609d4de4d19c9ac1a515855553030fe3cc9d829316b2b967c66e70",
+    "failure-cleanup.json.xz": "ef86aa9a226fcf607f2df030fa23ec3b5cf84b4186a9dd6fbc862ddb4a895743",
+    "float16.program.json.xz": "55083c07ddfa99ca28fd3ab09c259b6ddeca49dc793eb86f465c7284cf1a0d49",
+    "publication-focused.txt.xz": "bce3dae74a56cbebbe214378cff2137bb9b24ab1f22015830a92b7dd7d626924",
+    "rejected-workspace-timings.json.xz": "3ea870ae2bded048e074dbdcd96f1e2d7a5216a7c2c55676dcc2000857538cf3",
+    "timings.json": "b186435190573e5aeebbfbcb33a25e82b0ab95629b39f8ccd8331c3c02890a5d",
+    "validation.json": "af0ab5504a6f8e9c71448584bf72c3e4aee356b05727b1a4ca9def89cec0b6a0",
+    "witness-guards.json.xz": "4bd4c1f60dfc5ee70621794e1f61ae6807295c70e2599133950d4bc6da4fa3a0",
+    "witness-name-red.txt.xz": "5e1a84db5e1a6fb2f1ee7bfc83313c9e434faeea81893af489b91831591e7788",
+    "witness-production-full.txt.xz": "219082d6abbe98f84158899628ddf12fd298444ab14b9154af4343ce1f30a5f2",
+    "workspace-decision.json.xz": "ef85460f29d8cc362da686a1ffd141945a2cd17ec8a30d8ac88a9ebc364f1414"
+  }
+}

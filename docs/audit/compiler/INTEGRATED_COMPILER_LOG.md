@@ -17,6 +17,8 @@ audit_role: reference
 
 
 
+
+
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -13321,4 +13323,24 @@ No universal performance/default-selector, sibling execution or model-quality
 promotion.
 
 Evidence: benchmarks/baselines/sm120_bounded_row_owner_20261017/README.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-17 — bounded AD witness digest reuse
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-AD-WITNESS-DIGEST-20261017.
+
+Outcome: exact attribute-name guards reject four reproduced lookalike cases.
+A process-local bounded pure-digest LRU retains all member validation and
+unchanged native images. 135 focused cases and six RTX5070 profiles pass;
+capture plus first reverse improves 1.33-1.37x, warm reverse largely unchanged.
+The eager workspace prototype was rejected after neutral matched measurements.
+All four backend queues are assessed; no sibling physical proof transfers.
+
+Broad WSL gate: 27886 passed, 7678 skipped, 876 deselected, 11 warnings in 2172.65s (0:36:12).
+Remaining: public CI/review and the original five-slice requirements.
+No kernel or automatic selection promotion.
+
+Evidence: benchmarks/baselines/sm120_ad_witness_digest_20261017/README.md.
 <!-- entry-fields:end -->

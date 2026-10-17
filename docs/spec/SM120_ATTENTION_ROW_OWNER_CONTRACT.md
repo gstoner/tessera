@@ -166,3 +166,16 @@ Evidence: benchmarks/baselines/sm120_bounded_row_owner_20261017/README.md.
 Matched bounded inline/prepass A/B now records long-row gains and tiny host
 regressions; no default promotion follows. Wider masks/layouts and composed
 AD remain open.
+
+
+## Bounded immutable witness digest reuse
+
+Sync: SM120-AD-WITNESS-DIGEST-20261017. Every member validation still
+requires exactly one literal `tessera.attention_ad_pair` attribute, outside
+any larger qualified name. Only its immutable encoded-string digest may be
+reused. The process-local LRU admits at most 32 strings of at most 256 KiB
+UTF8 each; oversized strings decode without caching, and PID changes replace
+the cache. Invalid decoding never populates it. No certificate, metadata,
+shape, native handle, allocation or stream validation is skipped.
+
+Evidence: benchmarks/baselines/sm120_ad_witness_digest_20261017/README.md.

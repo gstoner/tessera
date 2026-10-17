@@ -5,9 +5,11 @@ All arithmetic and Schedule/Tile creation stay in the production MLIR compiler.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 import hashlib
 import json
 import math
+import os
 import re
 import struct
 from typing import TYPE_CHECKING
@@ -78,11 +80,12 @@ def contract(tile):
     return raw, result
 
 
-def pair_witness(text):
-    found = re.findall(r'tessera.attention_ad_pair = "((?:[^"\\]|\\.)*)"', text)
-    if len(found) != 1:
-        raise ValueError("row program requires one retained native paired AD witness")
-    encoded = found[0]
+_WITNESS_CACHE_ENTRIES = 32
+_WITNESS_CACHE_BYTE_LIMIT = 256*1024
+_PAIR_WITNESS = re.compile(r'tessera\.attention_ad_pair = "((?:[^"\\]|\\.)*)"')
+
+
+def _decode_pair_witness(encoded: str) -> str:
     data = bytearray(); index = 0
     while index < len(encoded):
         if encoded[index] != "\\":
@@ -94,6 +97,33 @@ def pair_witness(text):
         else:
             raise ValueError("row paired AD witness has unsupported MLIR escaping")
     return hashlib.sha256(data).hexdigest()
+
+
+
+_WITNESS_DIGEST_CACHE = lru_cache(maxsize=_WITNESS_CACHE_ENTRIES)(_decode_pair_witness)
+_WITNESS_CACHE_PROCESS = os.getpid()
+
+
+def pair_witness(text):
+    # Literal attribute name, with no match inside another qualified name.
+    found = [match.group(1) for match in _PAIR_WITNESS.finditer(text)
+             if match.start() == 0 or not (
+                 text[match.start()-1].isalnum() or text[match.start()-1] in "_.$-")]
+    if len(found) != 1:
+        raise ValueError("row program requires one retained native paired AD witness")
+    encoded = found[0]
+    global _WITNESS_DIGEST_CACHE, _WITNESS_CACHE_PROCESS
+    process = os.getpid()
+    if process != _WITNESS_CACHE_PROCESS:
+        # Replace the CPU-only cache before accessing inherited cache state.
+        _WITNESS_DIGEST_CACHE = lru_cache(maxsize=_WITNESS_CACHE_ENTRIES)(_decode_pair_witness)
+        _WITNESS_CACHE_PROCESS = process
+    if (len(encoded) > _WITNESS_CACHE_BYTE_LIMIT or
+            (not encoded.isascii() and len(encoded.encode("utf-8")) > _WITNESS_CACHE_BYTE_LIMIT)):
+        return _decode_pair_witness(encoded)
+    # Only immutable encoded source -> immutable digest is memoized. All
+    # package/provenance/ABI/shape/device checks still execute for each call.
+    return _WITNESS_DIGEST_CACHE(encoded)
 
 
 def _facts(c, backward, runtime_dims=None):

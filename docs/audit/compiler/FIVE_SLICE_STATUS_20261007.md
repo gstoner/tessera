@@ -5,16 +5,24 @@ audit_role: reference
 
 # Five compiler slices after PR 892: completion evidence
 
-## Bounded row-owner integration candidate — 2026-10-17
+## AD witness validation overhead — 2026-10-17
+
+Six RTX5070 profiles retain identical native images and strict validation while
+bounded pure digest reuse reduces capture plus first reverse 1.33-1.37x.
+135 focused parser/package/device cases pass. The broad WSL lane passes 27886 passed, 7678 skipped, 876 deselected, 11 warnings in 2172.65s (0:36:12). Public CI/review remain pending. This host-cost increment closes no aggregate row. Evidence: benchmarks/baselines/sm120_ad_witness_digest_20261017/README.md.
+
+
+## Bounded row-owner integration delivered — 2026-10-17
 
 Source 8556ca7d8 extends native Graph/AD/Schedule/Tile/Target row correction
 through bounded VJP v4 and original frontend/public/resident capture. 55 new
 RTX5070 cases and 172 existing regressions pass. Six numerical timing rows
 separate forward, row producer, backward, complete native interval and public
 cost. Six matched inline/prepass resident profiles now retain long-row gains
-and tiny host regressions without default promotion. Final broad gates remain
-open. This does
-not close any aggregate requirement below. Evidence:
+and tiny host regressions without default promotion. PR976 merged after all
+required CI and a complete review-thread audit. Its final matching-tool broad
+WSL lane passes 27,867 tests with 5,902 skips. This does not close any aggregate
+requirement below. Evidence:
 benchmarks/baselines/sm120_bounded_row_owner_20261017/README.md.
 
 
@@ -277,8 +285,8 @@ proved envelopes and remaining work are:
 | --- | --- | --- |
 | GFX1201 NVFP4 ingest | Native resident ingest/storage/product and serialized replay; nvfp4_model_activations_20261015 adds actual BF16 model layer inputs, 18 native format arms and separately labeled decoded-weight projection error. Source-preserving K16 consumers now pass on identical captured inputs (6.23% native RMS at M256; one shared native image), with separate device/host costs; see nvfp4_checkpoint_k16_20261015. PR949 adds native expansion plus ordinary public JIT, serialized/fresh-process replay without compiler tools, and bitwise pinned-checkpoint output proof under gfx1201_nvfp4_public_expand_20261015. | Merged PR950 proves resident source-preserving composition, import-once ownership, ordinary static FP32 JIT and compiler-free replay with original checkpoint inputs; see rocm_nvfp4_public_source_20261015. Bounded/wider composition and representative-corpus/full-model quality acceptance remain open. |
 | NVIDIA W1.1 | Merged PR954 extends PR951's named static FP16/BF16 active-source RMSNorm -> ReLU -> matmul JVP to compact resident roots, native stream ordering and completed host outputs through Graph/Schedule/Tile/NVIDIA/LLVM-PTX. Frozen 46a5dd8da passes 26,889 non-slow unit cases, 912 required compiler-route cases and 416 RTX5070 cases; eight timed packages replay numerically. See sm120_resident_source_jvp_20261016/rms-review. Older RHS-only, primal and PR951 receipts retain their own source scope. | Generic producer/accumulator reconstruction, mixed/pitched/dynamic roots, wider composition, resident results and reverse composition. |
-| NVIDIA saved-LSE forward | Bounded FP32 saved-LSE preserves O/LSE through native projection, schemas 5/6 and replay. The current static FP16/BF16 storage slice adds public host/resident forward, independent FP32 LSE, authored FP32 O, 24 timed standalone numerical replays and unchanged legacy FP32 native bytes. See sm120_saved_lse_storage_20261016. | Mixed/quantized storage, wider masks, nested/composed outputs, dynamic resident storage and half JVP/capture/dynamic AD. |
-| NVIDIA attention backward | Bounded paired JVP/reverse, broadcast physical bias extents, trace-at-one replay and retained generations are covered by bounded_saved_lse_jvp_20261011; static resident reverse has its own sm120_resident_attention_vjp_20261009 receipt.  Static typed/F32 public owner, binding and textual cases add 172 checks within 339 combined owning-device cases; see sm120_saved_lse_half_backward_20261016/public-stage. | Dynamic/composed resident reverse, broader AD and independent performance promotion.  Half GPU-generation capture and typed dynamic public reverse remain open. |
+| NVIDIA saved-LSE forward | Bounded FP32 saved-LSE preserves O/LSE through native projection, schemas 5/6 and replay. The current static FP16/BF16 storage slice adds public host/resident forward, independent FP32 LSE, authored FP32 O, 24 timed standalone numerical replays and unchanged legacy FP32 native bytes. See sm120_saved_lse_storage_20261016. | Mixed/quantized storage, wider masks, nested/composed outputs and half JVP/composed AD remain open. Merged PR975 adds FP16/BF16 bounded resident forward capture with independent FP32 O/LSE roles; see sm120_typed_resident_capture_20261017. This does not establish arbitrary mixed QKV storage. |
+| NVIDIA attention backward | Bounded paired JVP/reverse, broadcast physical bias extents, trace-at-one replay and retained generations are covered by bounded_saved_lse_jvp_20261011; static resident reverse has its own sm120_resident_attention_vjp_20261009 receipt.  Static typed/F32 public owner, binding and textual cases add 172 checks within 339 combined owning-device cases; see sm120_saved_lse_half_backward_20261016/public-stage. | Composed resident reverse, broader AD and independent performance promotion remain open. Merged PR975 covers half GPU-generation capture and typed bounded public reverse. Merged PR976 adds bounded native row correction, VJP v4 and public/resident replay with 55 owning-device cases plus 172 regressions; see sm120_bounded_row_owner_20261017. Its matched long-row gains and tiny host regressions do not establish a universal default. |
 | ROCm routes/performance | The current FP8 candidate records independent RHS formats, shape-independent unsplit images, ordinary textual JIT, 60 gfx1201 cases and separate gfx1151 LDS proof in rocm_fp8_shape_cache_20261014. | PR948 candidate delivery is merged. Wider image families/layouts, W8A8 short/ragged coverage and MXFP4 M256 Radiance attribution remain open. A queued native folded fragment-read policy adds regular-grid gfx1201 evidence: 458 focused, 44 device and bidirectional timing/ISA proof under gfx1201_folded_fragment_groups_20261015. It does not close the Radiance gap or transfer sibling schedules. |
 
 The historical red full-unit results below are superseded for their merged

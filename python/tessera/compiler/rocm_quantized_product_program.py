@@ -41,7 +41,7 @@ def _export(tool, source):
     if len(encoded) != 1:
         raise ValueError("requires one native quantized-product SSA record")
     plan = json.loads(base64.b64decode(encoded[0],validate=True))
-    if not isinstance(plan,dict) or plan.get("schema") not in _NATIVE_SCHEMAS:
+    if not isinstance(plan,dict) or plan.get("schema") not in (*_NATIVE_SCHEMAS,"tessera.native.quantized_product.v4"):
         raise ValueError("native quantized-product schema differs")
     return plan
 
@@ -309,6 +309,9 @@ def package_quantized_product_graph(graph_ir):
     if tool is None:
         raise RuntimeError("native quantized product requires matching tessera-opt")
     plan = _export(tool,graph_ir)
+    if plan["schema"]=="tessera.native.quantized_product.v4":
+        from .rocm_quantized_mlp_program import package_quantized_mlp_plan
+        return package_quantized_mlp_plan(plan,tool)
     _,shape = _frame_shape(plan)
     # Replay normalized source before accepting a package witness.
     if _export(tool,plan["source_graph_ir"]) != plan:

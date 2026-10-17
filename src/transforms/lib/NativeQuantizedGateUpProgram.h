@@ -40,7 +40,7 @@ static mlir::LogicalResult outlineNativeQuantizedMembers(
     mlir::ModuleOp module, mlir::func::FuncOp root,
     llvm::ArrayRef<llvm::SmallVector<mlir::Operation *>> groups,
     llvm::SmallVectorImpl<mlir::OwningOpRef<mlir::ModuleOp>> &projections,
-    llvm::StringRef schema) {
+    llvm::StringRef schema, llvm::ArrayRef<llvm::StringRef> subprograms = {}) {
   using namespace mlir;
   auto refuse = [&]() -> LogicalResult {
     return module.emitError("native quantized member interfaces and SSA lifetimes must match their certified projections");
@@ -139,6 +139,11 @@ static mlir::LogicalResult outlineNativeQuantizedMembers(
   llvm::json::Object plan{{"schema",schema},{"source_graph_ir",source+"\n"},
     {"member_graphs",std::move(members)},{"buffers",std::move(buffers)},{"steps",std::move(steps)},
     {"output",ids.lookup(ret.getOperand(0))}};
+  if (!subprograms.empty()) {
+    llvm::json::Array regions;
+    for (auto value:subprograms) regions.push_back(value);
+    plan["subprograms"]=std::move(regions);
+  }
   std::string json;llvm::raw_string_ostream os(json);os<<llvm::json::Value(std::move(plan));os.flush();
   module->setAttr("tessera.native.quantized_product_json",b.getStringAttr(llvm::encodeBase64(json)));
   module->setAttr("tessera.native.quantized_product_members",b.getArrayAttr(symbols));
@@ -233,8 +238,11 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
   groups.emplace_back(ops.begin()+16,ops.begin()+22);
   groups.emplace_back(ops.begin()+22,ops.begin()+35);
   groups.push_back({ops[35]});groups.push_back({ops[36]});
+  SmallVector<llvm::StringRef> subprograms{
+      gate.get()->getAttrOfType<StringAttr>("tessera.native.quantized_product_json").getValue(),
+      down.get()->getAttrOfType<StringAttr>("tessera.native.quantized_product_json").getValue()};
   return outlineNativeQuantizedMembers(module,root,groups,projections,
-      "tessera.native.quantized_product.v4");
+      "tessera.native.quantized_product.v4",subprograms);
 }
 
 } // namespace tessera

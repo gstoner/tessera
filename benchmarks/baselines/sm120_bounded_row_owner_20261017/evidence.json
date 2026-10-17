@@ -14,7 +14,8 @@
     "mypy-package.txt": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8",
     "mypy-capture.txt": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8",
     "mypy-final-repaired.txt": "050c52a2b0c61e8b681ef5c485e0bc03340b8d55148e0acef27d744c8be42033",
-    "package-docs-final.txt": "e90528f91a4a40ebfc9c9dc8060da58432ff05264fc968644d99c199077ce882"
+    "package-docs-final.txt": "e90528f91a4a40ebfc9c9dc8060da58432ff05264fc968644d99c199077ce882",
+    "generated_docs.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d"
   },
   "validation_scope": "51 new public/capture device cases = 37 initial + 4 pending-stream + 8 frontend + 2 fresh-process; 172 existing regressions; portable/prepared 70; raw native kernels16; selections overlap across phases and are not summed into a unique total",
   "publication": "private; broader unit/compiler/drift gates and review/CI still required; PR975 is the only open public PR",
@@ -31,10 +32,9 @@
       "state": "running"
     },
     "generated_docs": {
-      "session": 75899,
-      "write_log": "/home/angstorms/scratch/sm120-bounded-row-correction-20261017/generated-write.txt",
-      "check_log": "/home/angstorms/scratch/sm120-bounded-row-correction-20261017/generated-check.txt",
-      "state": "running"
+      "result": "33 generated documents in sync",
+      "log": "generated_docs.txt",
+      "terminal": true
     }
   }
 }

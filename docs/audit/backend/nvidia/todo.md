@@ -6,6 +6,16 @@ target: nvidia_sm120
 last_updated: 2026-10-17
 ---
 
+## SM120-AD-WITNESS-DIGEST-20261017 — bounded metadata digest reuse
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-AD-WITNESS-DIGEST-20261017.
+
+RTX5070 numerical parity validated in six FP16/BF16 profiles; 135 focused parser/package/device cases pass. Bounded immutable AD-witness digest reuse improves capture plus first reverse 1.33-1.37x with the same strict parser and native images. Exact-name and multiplicity guards still execute every call. No kernel/default promotion. Wider attention/AD and aggregate closure remain open.
+
+Evidence: benchmarks/baselines/sm120_ad_witness_digest_20261017/README.md.
+
+
 ## SM120-BOUNDED-ROW-OWNER-20261017 — bounded native row residuals
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

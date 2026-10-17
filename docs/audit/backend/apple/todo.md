@@ -6,6 +6,16 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## SM120-AD-WITNESS-DIGEST-20261017 — bounded metadata digest reuse
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-AD-WITNESS-DIGEST-20261017.
+
+Not applicable to apple physical execution: only the NVIDIA row-program metadata witness helper changes. No apple caller, native ABI, dtype admission, lowering, kernel or selector changes. No RTX5070 numerical or timing evidence transfers.
+
+Evidence: benchmarks/baselines/sm120_ad_witness_digest_20261017/README.md.
+
+
 ## SM120-BOUNDED-ROW-OWNER-20261017 — bounded native row residuals
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

@@ -1,0 +1,9 @@
+{
+  "image_sha256": "5a6b6b499ec5e02909c1000e60c8956f1cdf1822e71cc6e7a5d193539a8446da",
+  "compiler_sha256": "e8bc9624ccc6fcd51c4cf74ff8abc6ff224103317bcd7fd6d988dcc763e723af",
+  "source_sha256": "23d0ea01f0a8ce1918192aff6cf742d96a91ef895ca48c43a49005a5956bc71a",
+  "lowering_sha256": "a0711097583c5787b285d534740301ae8fc17de278faf00b2895ea61a0377bb3",
+  "architecture": "gfx1201",
+  "entry": "fp8_cast",
+  "profile": "diagnostic scalar conversion; no Graph quantizer or public ABI claim"
+}

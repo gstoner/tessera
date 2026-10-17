@@ -1,0 +1,88 @@
+/home/angstorms/scratch/rocm-native-gate-up-views-20261016/block-quant-probe/fp8-cast-rocdl.mlir:29:13: error: cannot be converted to LLVM IR: missing `LLVMTranslationDialectInterface` registration for dialect for op: arith.truncf
+      %23 = arith.truncf %22 : f32 to f8E4M3FN
+            ^
+/home/angstorms/scratch/rocm-native-gate-up-views-20261016/block-quant-probe/fp8-cast-rocdl.mlir:29:13: note: see current operation: %23 = "arith.truncf"(%22) : (f32) -> f8E4M3FN
+/home/angstorms/scratch/rocm-native-gate-up-views-20261016/block-quant-probe/fp8-cast-rocdl.mlir:2:3: error: Failed creating the llvm::Module.
+  gpu.module @probe attributes {llvm.data_layout = "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9"} {
+  ^
+/home/angstorms/scratch/rocm-native-gate-up-views-20261016/block-quant-probe/fp8-cast-rocdl.mlir:2:3: note: see current operation: 
+"gpu.module"() <{sym_name = "probe", targets = [#rocdl.target<chip = "gfx1201", flags = {no_wave64}>]}> ({
+  "llvm.func"() <{CConv = #llvm.cconv<ccc>, function_type = !llvm.func<void (ptr, ptr, i64, i64, i64, ptr, ptr, i64, i64, i64, i64)>, linkage = #llvm.linkage<external>, sym_name = "fp8_cast", unnamed_addr = 0 : i64, visibility_ = 0 : i64}> ({
+  ^bb0(%arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: i64, %arg3: i64, %arg4: i64, %arg5: !llvm.ptr, %arg6: !llvm.ptr, %arg7: i64, %arg8: i64, %arg9: i64, %arg10: i64):
+    %0 = "llvm.mlir.poison"() : () -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %1 = "llvm.insertvalue"(%0, %arg5) <{position = array<i64: 0>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, !llvm.ptr) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %2 = "llvm.insertvalue"(%1, %arg6) <{position = array<i64: 1>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, !llvm.ptr) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %3 = "llvm.insertvalue"(%2, %arg7) <{position = array<i64: 2>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, i64) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %4 = "llvm.insertvalue"(%3, %arg8) <{position = array<i64: 3, 0>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, i64) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %5 = "llvm.insertvalue"(%4, %arg9) <{position = array<i64: 4, 0>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, i64) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %6 = "llvm.mlir.poison"() : () -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %7 = "llvm.insertvalue"(%6, %arg0) <{position = array<i64: 0>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, !llvm.ptr) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %8 = "llvm.insertvalue"(%7, %arg1) <{position = array<i64: 1>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, !llvm.ptr) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %9 = "llvm.insertvalue"(%8, %arg2) <{position = array<i64: 2>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, i64) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %10 = "llvm.insertvalue"(%9, %arg3) <{position = array<i64: 3, 0>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, i64) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %11 = "llvm.insertvalue"(%10, %arg4) <{position = array<i64: 4, 0>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, i64) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %12 = "llvm.mlir.constant"() <{value = 256 : index}> : () -> i64
+    %13 = "rocdl.workitem.id.x"() : () -> i32
+    %14 = "llvm.sext"(%13) : (i32) -> i64
+    %15 = "rocdl.workgroup.id.x"() : () -> i32
+    %16 = "llvm.sext"(%15) : (i32) -> i64
+    %17 = "llvm.mul"(%16, %12) <{overflowFlags = 0 : i32}> : (i64, i64) -> i64
+    %18 = "llvm.add"(%17, %14) <{overflowFlags = 0 : i32}> : (i64, i64) -> i64
+    %19 = "llvm.icmp"(%18, %arg10) <{predicate = 6 : i64}> : (i64, i64) -> i1
+    "llvm.cond_br"(%19)[^bb1, ^bb2] <{operandSegmentSizes = array<i32: 1, 0, 0>}> : (i1) -> ()
+  ^bb1:  // pred: ^bb0
+    %20 = "llvm.extractvalue"(%11) <{position = array<i64: 1>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>) -> !llvm.ptr
+    %21 = "llvm.getelementptr"(%20, %18) <{elem_type = f32, noWrapFlags = 7 : i32, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %22 = "llvm.load"(%21) <{ordering = 0 : i64}> : (!llvm.ptr) -> f32
+    %23 = "arith.truncf"(%22) : (f32) -> f8E4M3FN
+    %24 = "builtin.unrealized_conversion_cast"(%23) : (f8E4M3FN) -> i8
+    %25 = "llvm.extractvalue"(%5) <{position = array<i64: 1>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>) -> !llvm.ptr
+    %26 = "llvm.getelementptr"(%25, %18) <{elem_type = i8, noWrapFlags = 7 : i32, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    "llvm.store"(%24, %26) <{ordering = 0 : i64}> : (i8, !llvm.ptr) -> ()
+    "llvm.br"()[^bb2] : () -> ()
+  ^bb2:  // 2 preds: ^bb0, ^bb1
+    "llvm.return"() : () -> ()
+  }) {gpu.kernel, rocdl.kernel} : () -> ()
+}) {llvm.data_layout = "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9"} : () -> ()
+/home/angstorms/scratch/rocm-native-gate-up-views-20261016/block-quant-probe/fp8-cast-rocdl.mlir:2:3: error: An error happened while serializing the module.
+  gpu.module @probe attributes {llvm.data_layout = "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9"} {
+  ^
+/home/angstorms/scratch/rocm-native-gate-up-views-20261016/block-quant-probe/fp8-cast-rocdl.mlir:2:3: note: see current operation: 
+"gpu.module"() <{sym_name = "probe", targets = [#rocdl.target<chip = "gfx1201", flags = {no_wave64}>]}> ({
+  "llvm.func"() <{CConv = #llvm.cconv<ccc>, function_type = !llvm.func<void (ptr, ptr, i64, i64, i64, ptr, ptr, i64, i64, i64, i64)>, linkage = #llvm.linkage<external>, sym_name = "fp8_cast", unnamed_addr = 0 : i64, visibility_ = 0 : i64}> ({
+  ^bb0(%arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: i64, %arg3: i64, %arg4: i64, %arg5: !llvm.ptr, %arg6: !llvm.ptr, %arg7: i64, %arg8: i64, %arg9: i64, %arg10: i64):
+    %0 = "llvm.mlir.poison"() : () -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %1 = "llvm.insertvalue"(%0, %arg5) <{position = array<i64: 0>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, !llvm.ptr) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %2 = "llvm.insertvalue"(%1, %arg6) <{position = array<i64: 1>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, !llvm.ptr) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %3 = "llvm.insertvalue"(%2, %arg7) <{position = array<i64: 2>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, i64) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %4 = "llvm.insertvalue"(%3, %arg8) <{position = array<i64: 3, 0>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, i64) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %5 = "llvm.insertvalue"(%4, %arg9) <{position = array<i64: 4, 0>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, i64) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %6 = "llvm.mlir.poison"() : () -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %7 = "llvm.insertvalue"(%6, %arg0) <{position = array<i64: 0>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, !llvm.ptr) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %8 = "llvm.insertvalue"(%7, %arg1) <{position = array<i64: 1>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, !llvm.ptr) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %9 = "llvm.insertvalue"(%8, %arg2) <{position = array<i64: 2>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, i64) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %10 = "llvm.insertvalue"(%9, %arg3) <{position = array<i64: 3, 0>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, i64) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %11 = "llvm.insertvalue"(%10, %arg4) <{position = array<i64: 4, 0>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>, i64) -> !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+    %12 = "llvm.mlir.constant"() <{value = 256 : index}> : () -> i64
+    %13 = "rocdl.workitem.id.x"() : () -> i32
+    %14 = "llvm.sext"(%13) : (i32) -> i64
+    %15 = "rocdl.workgroup.id.x"() : () -> i32
+    %16 = "llvm.sext"(%15) : (i32) -> i64
+    %17 = "llvm.mul"(%16, %12) <{overflowFlags = 0 : i32}> : (i64, i64) -> i64
+    %18 = "llvm.add"(%17, %14) <{overflowFlags = 0 : i32}> : (i64, i64) -> i64
+    %19 = "llvm.icmp"(%18, %arg10) <{predicate = 6 : i64}> : (i64, i64) -> i1
+    "llvm.cond_br"(%19)[^bb1, ^bb2] <{operandSegmentSizes = array<i32: 1, 0, 0>}> : (i1) -> ()
+  ^bb1:  // pred: ^bb0
+    %20 = "llvm.extractvalue"(%11) <{position = array<i64: 1>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>) -> !llvm.ptr
+    %21 = "llvm.getelementptr"(%20, %18) <{elem_type = f32, noWrapFlags = 7 : i32, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    %22 = "llvm.load"(%21) <{ordering = 0 : i64}> : (!llvm.ptr) -> f32
+    %23 = "arith.truncf"(%22) : (f32) -> f8E4M3FN
+    %24 = "builtin.unrealized_conversion_cast"(%23) : (f8E4M3FN) -> i8
+    %25 = "llvm.extractvalue"(%5) <{position = array<i64: 1>}> : (!llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>) -> !llvm.ptr
+    %26 = "llvm.getelementptr"(%25, %18) <{elem_type = i8, noWrapFlags = 7 : i32, rawConstantIndices = array<i32: -2147483648>}> : (!llvm.ptr, i64) -> !llvm.ptr
+    "llvm.store"(%24, %26) <{ordering = 0 : i64}> : (i8, !llvm.ptr) -> ()
+    "llvm.br"()[^bb2] : () -> ()
+  ^bb2:  // 2 preds: ^bb0, ^bb1
+    "llvm.return"() : () -> ()
+  }) {gpu.kernel, rocdl.kernel} : () -> ()
+}) {llvm.data_layout = "e-p:64:64-p1:64:64-p2:32:32-p3:32:32-p4:64:64-p5:32:32-p6:32:32-p7:160:256:256:32-p8:128:128:128:48-p9:192:256:256:32-i64:64-v16:16-v24:32-v32:32-v48:64-v96:128-v192:256-v256:256-v512:512-v1024:1024-v2048:2048-n32:64-S32-A5-G1-ni:7:8:9"} : () -> ()

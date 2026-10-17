@@ -1,0 +1,28 @@
+{
+  "native_regressions": {
+    "passed": 19
+  },
+  "dtype_target_cache_registry_drift": {
+    "passed": 546
+  },
+  "final_recorder_metadata_diagnostic_audit": {
+    "passed": 312
+  },
+  "counts_overlap": true,
+  "exact_gfx1201": {
+    "values": 266560,
+    "mismatches": 0
+  },
+  "same_host_existing_image_controls": 6,
+  "native_quantizer_graph_ready": false,
+  "log_sha256": {
+    "cast-final-doc-metadata.txt": "774a4bd6803099d3ad3c90f8fa351a4a1278d65a4449d80adcb358080e6ce1c5",
+    "cast-drift-gates.txt": "49d3e9719cae2ec2e4674bcc9374e7d51b17658b012b825cd9fd98f5a399cca0",
+    "cast-generated-docs.txt": "9d8b85d764f7e4ee9cddcad4256bc591602b3561b272a9d99fe967c4d938cd18",
+    "cast-native-red.txt": "0b4d6fa2c821c22ffc09a3ac092d8f6eaa31045b70d98e18b5ab087740178316",
+    "fp8-cast-binary.txt": "53e85bc7c676c8e77e9fbe1e2f1cdd8c1f35b71e67b716da55923a520a5c33d5",
+    "cast-final-build.txt": "1d5da5191210ac8f229e610c81acc5b043fcf4b97340360797cae1b658cdff6e",
+    "cast-final-native-tests2.txt": "3db4d7ecabbc8b129209cca43a9e29f0da3663905cfb177e64848054fb3ccca4",
+    "device-check.txt": "820f26523c7ed03c855c319b2d3cbd6d6254fd6a901ab0af42074f5278ea4465"
+  }
+}

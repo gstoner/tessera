@@ -6,6 +6,16 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## ROCM-NATIVE-E4M3-CAST-20261017 — typed quantizer storage primitive
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
+Sync: ROCM-NATIVE-E4M3-CAST-20261017.
+
+Not applicable to Apple physical lowering: the change selects an RDNA4
+conversion inside the existing ROCm Target-to-ROCDL pass, for gfx1201 GPU
+modules only. No Metal storage, converter, ABI or execution row is promoted.
+Shared registry/drift gates remain required.
+
 ## ROCM-NVFP4-BF16-STORE-20261017 — authored source composition
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.

@@ -1,0 +1,15 @@
+F..                                                                      [100%]
+=================================== FAILURES ===================================
+________ test_scalar_fp32_to_e4m3_reaches_real_rocdl_storage_conversion ________
+
+    @pytest.mark.usefixtures("production_compiler")
+    def test_scalar_fp32_to_e4m3_reaches_real_rocdl_storage_conversion():
+        output = run_tessera_opt(find_tessera_opt(), source(),
+                                "--lower-tessera-target-to-rocdl")
+>       assert "rocdl.cvt.pk.fp8.f32" in output
+E       assert 'rocdl.cvt.pk.fp8.f32' in 'module attributes {gpu.container_module, tessera.arch = "gfx1201"} {\n  gpu.module @probe {\n    gpu.func @fp8_cast(%...f32 to f8E4M3FN\n        memref.store %4, %arg1[%1] : memref<?xf8E4M3FN>\n      }\n      gpu.return\n    }\n  }\n}\n\n'
+
+tests/unit/test_rocm_fp8_cast_lowering.py:19: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_rocm_fp8_cast_lowering.py::test_scalar_fp32_to_e4m3_reaches_real_rocdl_storage_conversion
+1 failed, 2 passed in 0.32s

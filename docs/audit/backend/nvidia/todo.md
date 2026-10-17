@@ -6,6 +6,16 @@ target: nvidia_sm120
 last_updated: 2026-10-17
 ---
 
+## ROCM-NATIVE-E4M3-CAST-20261017 — typed quantizer storage primitive
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
+Sync: ROCM-NATIVE-E4M3-CAST-20261017.
+
+Not applicable to NVIDIA physical lowering: the new scalar legalization is
+inside the ROCm Target-to-ROCDL pass and gated to gfx1201 GPU modules. No
+NVVM conversion, storage contract, schedule or attention schema changes.
+Shared registry/drift gates remain required; no HIP timing proof transfers.
+
 ## ROCM-NVFP4-BF16-STORE-20261017 — authored source composition
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.

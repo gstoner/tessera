@@ -1,0 +1,68 @@
+[
+  {
+    "m": 19,
+    "member": 0,
+    "checks": {
+      "entry": true,
+      "target_ir_digest": true,
+      "payload_sha256": true,
+      "semantic_sections": true,
+      "device_libraries": true
+    }
+  },
+  {
+    "m": 19,
+    "member": 1,
+    "checks": {
+      "entry": true,
+      "target_ir_digest": true,
+      "payload_sha256": true,
+      "semantic_sections": true,
+      "device_libraries": true
+    }
+  },
+  {
+    "m": 19,
+    "member": 2,
+    "checks": {
+      "entry": true,
+      "target_ir_digest": true,
+      "payload_sha256": true,
+      "semantic_sections": true,
+      "device_libraries": true
+    }
+  },
+  {
+    "m": 256,
+    "member": 0,
+    "checks": {
+      "entry": true,
+      "target_ir_digest": true,
+      "payload_sha256": true,
+      "semantic_sections": true,
+      "device_libraries": true
+    }
+  },
+  {
+    "m": 256,
+    "member": 1,
+    "checks": {
+      "entry": true,
+      "target_ir_digest": true,
+      "payload_sha256": true,
+      "semantic_sections": true,
+      "device_libraries": true
+    }
+  },
+  {
+    "m": 256,
+    "member": 2,
+    "checks": {
+      "entry": true,
+      "target_ir_digest": true,
+      "payload_sha256": true,
+      "semantic_sections": true,
+      "device_libraries": true
+    }
+  }
+]

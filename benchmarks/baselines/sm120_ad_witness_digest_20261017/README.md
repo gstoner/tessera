@@ -33,6 +33,11 @@ matched total time did not improve consistently. Its decision and failure
 cleanup evidence are retained; the candidate was not integrated. Profiler
 counts attribute repeated witness decoding only and are not timing denominators.
 
-All five aggregate engineering slices remain open. Broader gates and public
+Canonical source Ruff and the changed recorder/tests pass. The full mypy
+ratchet passes with zero errors against baseline zero. The generated-document
+drift check passes; publication-focused tests pass 38 cases and the recorder
+naming gate passes. Broad unit validation is still running.
+
+All five aggregate engineering slices remain open. Broad unit and public
 CI/review are pending for this increment; previous PR evidence is not reused
 as validation of this source.

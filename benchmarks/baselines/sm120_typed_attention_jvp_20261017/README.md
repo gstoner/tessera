@@ -17,7 +17,8 @@ No derivative kernel arithmetic is constructed in Python.
 Half-output score-active JVP accumulates an unrounded FP32 weighted-V moment
 from the existing V load. Reusing rounded half O produces a different
 derivative: rounding-moment.json records the independent FP64 finite-difference
-distinguishing controls. Existing FP32 artifacts retain identical native
+distinguishing controls; rounding-reference.py.xz retains their frozen CPU
+recorder. This source does not provide GPU proof. Existing FP32 artifacts retain identical native
 arena, image, forward image, ABI, entry and schema across sixteen controls.
 Schema 5 still means saved-LSE plus bounded; schema 6 is static saved-LSE.
 
@@ -48,7 +49,12 @@ pass/half-AD gates separately pass 484 cases; cohorts overlap and are not summed
 The complete production compiler-route gate passes **1,587** cases with zero
 skips and a non-empty execution certificate. All **33** generated documents
 pass drift checking; audit ownership/routing passes 19 cases.
-Broad WSL CI CPU marker lane and public surface audits remain pending.
+All five public surface audits and both claim linters pass. The broad CI CPU
+lane initially passed 26,310 with four documentation/recorder failures: the
+new contract lacked its date, and the recorder check ran before the packet
+README was tracked. The date is fixed and the reference is committed; all
+37 focused spec/naming/freshness/routing gates now pass. A stable-head broad
+rerun remains required. The initial red receipt is retained.
 Public CI and complete review-thread audit remain required before merge.
 
 ## Timing scope

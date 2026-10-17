@@ -1,3 +1,7 @@
+---
+last_updated: 2026-10-17
+---
+
 # SM120 typed attention JVP contract
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

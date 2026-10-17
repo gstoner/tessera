@@ -20,7 +20,24 @@
   "malformed_binding_cases": 12,
   "full_mypy": "errors0_baseline0",
   "ruff": "pass",
-  "broader_unit": "pending",
+  "broader_unit": {
+    "initial": {
+      "passed": 26310,
+      "failed": 4,
+      "skipped": 5904,
+      "warnings": 11,
+      "seconds": 599.91
+    },
+    "root_causes": [
+      "new contract missing last_updated date",
+      "recorder check executed before its evidence README was tracked"
+    ],
+    "focused_repair": {
+      "passed": 37,
+      "failed": 0
+    },
+    "stable_head_rerun": "pending"
+  },
   "generated_docs": 33,
   "public_ci_review": "pending",
   "scope": "Counts overlap; no sum and no aggregate five-slice closure or sibling physical transfer",
@@ -30,5 +47,8 @@
     "seconds": 126.48,
     "every_selected_proof_executed": true
   },
-  "audit_routing_cases": 19
+  "audit_routing_cases": 19,
+  "public_surface_audits": "all5 surfaces and both public claim linters pass; stale opbench CMake cache refreshed without source/gate changes",
+  "revision_coverage_evidence": "generated successfully; complete3-file archive retained",
+  "graph": "offline AST update terminal success"
 }

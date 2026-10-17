@@ -2718,6 +2718,7 @@ class _OpExtractor(ast.NodeVisitor):
         inferred_operands = [
             self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands
         ]
+        _canonicalize_slice_attrs(mlir_name, inferred_operands, kwargs)
         _canonicalize_spectral_attrs(mlir_name, inferred_operands, kwargs)
         if mlir_name == "tessera.depth_attn":
             # Resolve public defaults at the frontend boundary. The typed Graph
@@ -3542,14 +3543,58 @@ def _shape_insert_axis(operand_types: List[IRType],
                           layout=x.layout)
 
 
+def _slice_index_attributes(attrs: Dict[str, Any], rank: int) -> tuple[list[int], list[int]]:
+    """Normalize eager int-coercible coordinates into the native signed-i64 ABI."""
+    starts, sizes = attrs.get("start_indices"), attrs.get("slice_sizes")
+    if not isinstance(starts, (tuple, list)) or not isinstance(sizes, (tuple, list)):
+        raise ValueError("slice coordinates must be static lists or tuples")
+    if len(starts) != rank or len(sizes) != rank:
+        raise ValueError("start_indices and slice_sizes must match input rank")
+    normalized = ([int(value) for value in starts], [int(value) for value in sizes])
+    if any(value < -(1 << 63) or value >= (1 << 63)
+           for coordinates in normalized for value in coordinates):
+        raise ValueError("slice coordinates must fit signed i64 attributes")
+    return normalized
+
+
+def _canonicalize_slice_attrs(op_name: str, operand_types: List[IRType],
+                              attrs: Dict[str, Any]) -> None:
+    """Persist native coordinates at an owning frontend emission boundary."""
+    if op_name not in {"tessera.slice", "tessera.dynamic_slice"} or not operand_types:
+        return
+    rank = operand_types[0].rank
+    if rank is None:
+        # Unknown-rank AST candidates still need well-formed static attributes;
+        # the ranked native contract is checked after specialization.
+        starts = attrs.get("start_indices")
+        if not isinstance(starts, (tuple, list)):
+            raise ValueError("slice coordinates must be static lists or tuples")
+        rank = len(starts)
+    starts, sizes = _slice_index_attributes(attrs, rank)
+    attrs["start_indices"], attrs["slice_sizes"] = starts, sizes
+
+
 def _shape_from_slice_sizes(operand_types: List[IRType],
                             attrs: Optional[Dict[str, Any]] = None) -> IRType:
-    """`slice` / `dynamic_slice`: the result IS `slice_sizes`."""
+    """Preserve the public unit-stride Python slice, including clipped bounds.
+
+    Both public spellings evaluate ``x[start:start + size]``. In particular,
+    negative sizes are end-coordinate offsets rather than output extents.
+    Python integer addition deliberately avoids signed-64 end overflow.
+    """
     x = operand_types[0]
-    sizes = (attrs or {}).get("slice_sizes")
-    if not isinstance(sizes, (tuple, list)) or not sizes:
+    if x.rank is None:
         return _unknown_like(x)
-    return tensor_ir_type(tuple(str(s) for s in sizes), x.dtype, layout=x.layout)
+    starts, sizes = _slice_index_attributes(attrs or {}, x.rank)
+    dims = []
+    for extent, start, size in zip(x.shape, starts, sizes, strict=True):
+        n = _dim(extent)
+        if n is None:
+            dims.append("?")
+            continue
+        first, end, _ = slice(int(start), int(start) + int(size)).indices(n)
+        dims.append(str(max(0, end - first)))
+    return tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
 
 
 def _shape_pad(operand_types: List[IRType],
@@ -5195,6 +5240,7 @@ def specialize_module_from_values(
             # before result inference; otherwise shape-derived spectral identity
             # (notably convolution logical_length) differs between the retained
             # AST candidate and the tracer for the same concrete call.
+            _canonicalize_slice_attrs(op.op_name, inferred_operands, op.kwargs)
             _canonicalize_spectral_attrs(
                 op.op_name, inferred_operands, op.kwargs
             )

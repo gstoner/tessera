@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 297 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 299 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 297 | |
+| **Total** | 299 | |
 
 ## Per-dialect details
 
@@ -100,6 +100,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `DistributionLossBackwardOp` | `real` |
 | `DivOp` | `real` |
 | `DropoutOp` | `real` |
+| `DynamicSliceOp` | `real` |
 | `EBMBivectorLangevinStepOp` | `real` |
 | `EBMDecodeInitOp` | `real` |
 | `EBMEnergyQuadraticOp` | `real` |
@@ -263,6 +264,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `SiluOp` | `real` |
 | `SinOp` | `real` |
 | `SinhOp` | `real` |
+| `SliceOp` | `real` |
 | `SmoothL1LossOp` | `real` |
 | `SoftmaxFinalizeOp` | `real` |
 | `SoftmaxMergeOp` | `real` |

@@ -1,3 +1,4 @@
+#include "Tessera/IR/SliceContract.h"
 #include "Tessera/IR/ScaledBatchContract.h"
 #include "Tessera/IR/NVFP4IngestContract.h"
 #include "Tessera/IR/TesseraOps.h"
@@ -4483,6 +4484,9 @@ OpFoldResult FlattenOp::fold(FoldAdaptor) {
 OpFoldResult ViewOp::fold(FoldAdaptor) {
   return foldStructuralIdentity(*this, getX(), getY());
 }
+LogicalResult SliceOp::verify() { return slice_contract::verify(getOperation()); }
+LogicalResult DynamicSliceOp::verify() { return slice_contract::verify(getOperation()); }
+
 LogicalResult ViewOp::verify() {
   // A contiguous view shares storage, so it must preserve the element count —
   // the same static-product invariant as ReshapeOp (dtype is already enforced

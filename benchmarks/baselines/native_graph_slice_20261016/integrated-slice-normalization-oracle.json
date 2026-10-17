@@ -1,0 +1,12 @@
+{
+  "cases": 101210,
+  "passed": true,
+  "oracle": "CPython slice.indices with unbounded Python start+size arithmetic; no tensor allocation",
+  "cpp": "LLVM APInt signed 65-bit end-coordinate normalization",
+  "extent_max": 9223372036854775807,
+  "seed": 20261017,
+  "source_sha256": "a8ec913ef1d81c28f3d9f503203d53a4be5b20f510cfd5ad8b9385ffc6f36e78",
+  "binary_sha256": "66b87cc4dcaec0ecf7444d4f346ac85013548a812e625d22260165c258270b4b",
+  "scope": "actual Graph SliceContract.h algorithm differential proof; compiler parser cases tested separately; no Schedule/GPU or performance proof",
+  "contract_header_sha256": "9f964b934540317fa9dbe2b2c7c39b97e9aeb2ba63182bc722bec3291bdf59ee"
+}

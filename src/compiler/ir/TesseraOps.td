@@ -2472,6 +2472,21 @@ def Tessera_ViewOp : Op<Tessera_Dialect, "view", [Pure, SameOperandsAndResultEle
   let hasFolder = 1;
 }
 
+// Existing public unit-stride Python slices. Attribute sizes are end offsets,
+// not guaranteed result extents; bounds clip exactly as the eager frontend.
+class Tessera_SliceBaseOp<string mnemonic> : Op<Tessera_Dialect, mnemonic,
+    [Pure, SameOperandsAndResultElementType,
+     DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface>,
+     DeclareOpInterfaceMethods<Tessera_TangentInterface>]> {
+  let summary = "Rank-preserving Python slice with clipped unit-stride bounds";
+  let arguments = (ins TensorType:$x, I64ArrayAttr:$start_indices, I64ArrayAttr:$slice_sizes);
+  let results = (outs TensorType:$y);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+def Tessera_SliceOp : Tessera_SliceBaseOp<"slice">;
+def Tessera_DynamicSliceOp : Tessera_SliceBaseOp<"dynamic_slice">;
+
 def Tessera_DropoutOp : Op<
   Tessera_Dialect, "dropout",
   [MemoryEffects<[MemWrite]>,

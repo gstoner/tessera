@@ -48,6 +48,7 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
             "add", "sub", "broadcast", "expand", "flatten", "gelu", "huber_loss",
             "mae_loss", "mse_loss", "mul", "matmul", "scaled_matmul", "permute", "reshape",
             "squeeze", "transpose", "unsqueeze", "view", "reduce", "sgd",
+            "slice", "dynamic_slice",
             "silu", "smooth_l1_loss",
             "softmax", "tanh", "sigmoid", "relu", "rmsnorm", "layer_norm",
             # 2026-09-16 (EBM nonlinear energies): softplus' adjoint is
@@ -80,6 +81,7 @@ def test_native_tangents_are_compiler_grounded() -> None:
     assert native == {
         "add", "sub", "mul", "matmul", "scaled_matmul", "transpose", "reshape", "squeeze",
         "unsqueeze", "expand", "broadcast", "permute", "flatten", "view",
+        "slice", "dynamic_slice",
         "stop_gradient", "sigmoid", "tanh", "relu", "softmax", "reduce",
         "fft", "ifft", "rfft", "irfft", "dct", "dropout", "layer_norm",
         "rmsnorm", "stft", "istft", "spectral_filter", "spectral_conv",

@@ -15457,3 +15457,30 @@ Shared frontend follow-through: same-shape/same-storage SiLU shape-only capture 
 Native-owner follow-through: the existing FP32 C staging ABI is preserved; an additive explicit-output-width export supports the two checked matching-half SiLU descriptors. Shape-only frontend capture and JIT output allocation follow the descriptor. Not applicable to this backend's physical execution: output-width C staging is HIP-only and native math admission remains ROCm-owned. Shared registry/compiler gates pass; no sibling device proof or performance claim is added.
 
 Review follow-through (PR962): SiLU shape-only capture is restricted to matching canonical FP16/BF16/FP32 storage, including concrete dtype metadata. Other concrete inputs retain the registered eager result promotion; abstract integer/mixed promotion requires concrete values. The new gfx1201 public selector, support predicate and portable package validator agree on ranks 1–3. No sibling dtype or execution promotion follows. Existing shared integer-ingress spelling gaps remain a separate frontend foundation follow-up.
+
+
+## ROCM-NATIVE-GATE-UP-VIEWS-20261016
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Synchronization key: ROCM-NATIVE-GATE-UP-VIEWS-20261016.
+
+Shared contract: public `slice`/`dynamic_slice` preserve unit-stride Python
+clipping, including negative coordinates and end offsets. Abstract tracing
+uses canonical Graph shape inference; positional attributes use the existing
+canonical binding table. Native Graph declarations verify rank, element type
+and normalized extents with overflow-safe end arithmetic. Linear tangents
+preserve the slice; the initial native transpose scatters into a static zero
+source. Dynamic transpose remains follow-up required.
+
+Follow-up required for use by the NVIDIA sealed row/producer profiles; their SM120 physical policy and native ABI remain unchanged. Shared typed buffer addressing can be reused, but host LLVM addressing tests are not CUDA proof.
+
+Concrete frontend follow-through: basic-index values retain the original
+parent pitch without compaction for downstream non-native dtype inference.
+This is frontend alias metadata, not a device buffer, schedule or new
+physical execution claim. Native forward admission and authored derivative
+proof contracts now register both existing slice spellings.
+
+PR963 review follow-through: the AST emission and copied first-call
+specialization boundaries persist eager-int-coerced slice coordinates before
+serialization. Pure result inference and caller-owned Graph attributes remain
+unchanged. This is shared frontend correctness; physical admission is unchanged.

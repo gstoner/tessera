@@ -1,0 +1,44 @@
+{
+  "recorded_utc": "2026-10-17T03:18:33.514282+00:00",
+  "source_base": "c02b662dfc4d92056c31e9d6935568976936780e",
+  "source_state": "Earlier per-case capture used uncommitted candidate bytes; final broad unit/compiler/doc gates ran on committed 95010a9276 with identical implementation source hashes.",
+  "host": "Super-Bear WSL, CPU compiler tests only",
+  "source_sha256": {
+    "python/tessera/compiler/graph_ir.py": "fac38dc8ac81cc594681f754789b6306efbde76b6b6535917d536bec0677a4ec",
+    "python/tessera/compiler/trace.py": "94b87e45b63e2db1aea87c3e29a391617e207b49a318d217a102298f0e8941eb",
+    "python/tessera/compiler/pass_metadata.py": "4058661028961f76a99855f82793ae68e65ba1af290d86f75218ebf711915168",
+    "src/compiler/ir/TesseraOps.td": "a3f61282f4f92a5ce10582046e030fa07c4c25b4d1fa47d8b1303a4c8c6ee2ce",
+    "src/compiler/ir/TesseraOps.cpp": "29e935a233be225f83c9870b41708defee08d359f805e3b1fac98e2574dcd7b4",
+    "src/compiler/ir/TangentInterface.cpp": "90efca4616efe87eb567757ddced738fd6728f4d9a8b3c5e2aa77ea4e3d5a098",
+    "src/compiler/ir/LinearTransposeInterface.cpp": "ff0cb84a9ccd72e8ed993e2cdb4a6a29443a8dd57eb91e794f87edee8275eec3",
+    "src/compiler/ir/include/Tessera/IR/SliceContract.h": "9f964b934540317fa9dbe2b2c7c39b97e9aeb2ba63182bc722bec3291bdf59ee",
+    "src/transforms/lib/TesseraToLinalgPass.cpp": "5cde3dbc314204157a429d823c804076bcda522f8a05c970f9b7e86c6218e871",
+    "tests/unit/test_slice_semantic_contract.py": "e3f345f56e7fcb8a4fe27b486d2f1ae363b3fc5bacc3cdfcac2e7a2e8edfb114",
+    "python/tessera/compiler/autodiff_request.py": "ea86105f03bbde7d257042383bdccbc09b1473cd67a14d7d81b18e9ab6f498cb",
+    "python/tessera/compiler/autodiff_proof.py": "569d00136a10618d66a84b68c5abb69be4da1d78b2afeb3f1e83a2d719f2e8bb",
+    "tests/unit/test_autodiff_ledger.py": "c67c7baac5799e084f5a9e050c19e65f06036cdbfd504158a041de3c010124cb",
+    "tests/unit/test_autodiff_proof_matrix.py": "56450bf373c1dc437677be2bdcce72a2c87672e3cda802e7a835142c8de9bce0",
+    "tests/unit/test_ods_op_has_consumer.py": "7cfd6effe544357ac88bb4a6ab83c677c4ac8e9a354ac27165ab93de633fde97"
+  },
+  "tools": {
+    ".build-relu/tools/tessera-opt/tessera-opt": "7fba5ad107ac8c981d6341653a2011057e499b427b0bef861a7a1a721b326183",
+    ".build-relu/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "ec4eb543df32dd11296b1f28ffc7df2b8337b87091c73401627c951ae9a0b9a8",
+    ".build-relu/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt": "0df69d04856c96ebeb6f98aaea8eda6a9fcc7fb5e9f9cd72361f9e12e90c1501"
+  },
+  "scope": "native Graph semantic/verifier/AD/structured lowering and independent addressing diagnostics; no new owning GPU package or benchmark proof",
+  "tool_versions": {
+    ".build-relu/tools/tessera-opt/tessera-opt": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.",
+    ".build-relu/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.",
+    ".build-relu/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions."
+  },
+  "broad_validation_source_commit": "95010a927601a2612540d8bf932f31e40db6d41f",
+  "ast_review_fix": {
+    "base_head": "e0f04f352984d7063c4a010c848a8bbf68f2eca3",
+    "recorded_utc": "2026-10-17T04:01:39.353383+00:00",
+    "source_sha256": {
+      "python/tessera/compiler/graph_ir.py": "ddb9b0fc1756627aaad5995296100c310b08c5a4a0589da9903356b059c74523",
+      "tests/unit/test_slice_semantic_contract.py": "c22a83bc7aabf38b64deda9bf20ebd0f8cf67f8f09d22c35b337876267727ed7"
+    },
+    "scope": "AST emission and copy-based specialization persist normalized coordinates; pure inference remains non-mutating. 97 slice cases; 572 broader Graph/frontend/registry cases with 33 unrelated skips; 1,345 production compiler-route cases with zero skips and executed-case gate; mypy zero. Original broad 950 proof remains explicitly historical; fresh exact-head CI required."
+  }
+}

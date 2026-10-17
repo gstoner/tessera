@@ -17976,10 +17976,37 @@ Not applicable to HIP execution: this is a rejected NVIDIA submission experiment
 
 Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
 
-Implementation in progress: migrate the existing silu_mul operation into compiler-owned native Graph/Schedule/Tile, preserving FP32 computation through the final FP32 or matching FP16/BF16 store. Exact widening casts retain FP32 output. The existing binary pointer/count frame is reused with two additive matching-half-store ABI identities; old ABI meanings remain unchanged. Six genuine missing-Schedule baseline cases and six existing division controls are recorded; exact-device/public replay/timing gates remain open. Full original NVFP4 MLP composition, views/lifetimes, activation quantization, down projection and model-quality gates remain separate.
+Landed in PR962: the existing silu_mul operation now uses compiler-owned native Graph/Schedule/Tile, preserving FP32 computation through the final FP32 or matching FP16/BF16 store. Exact widening casts retain FP32 output. The existing binary pointer/count frame is reused with two additive matching-half-store ABI identities; old ABI meanings remain unchanged. Six genuine missing-Schedule baseline cases and six existing division controls are recorded; the published packet records exact gfx1201 public/replay and separate device/host timing proof. Full original NVFP4 MLP composition, views/lifetimes, activation quantization, down projection and model-quality gates remain separate.
 
-Native-owner follow-through: the existing FP32 C staging ABI is preserved; an additive explicit-output-width export supports the two checked matching-half SiLU descriptors. Shape-only frontend capture and JIT output allocation follow the descriptor. Exact RX9070XT/gfx1201: 45 native numerical/JIT/replay cases and 56 compiler-contract cases pass; adjacent math/widening and owner fault injection pass 91 cases. gfx1151 SiLU native execution remains follow-up required; no physical proof transfers. Correctness-gated separate device/public timing trials are in progress. Full NVFP4 MLP/model-quality remains open.
+Native-owner follow-through: the existing FP32 C staging ABI is preserved; an additive explicit-output-width export supports the two checked matching-half SiLU descriptors. Shape-only frontend capture and JIT output allocation follow the descriptor. Exact RX9070XT/gfx1201: 45 native numerical/JIT/replay cases and 56 compiler-contract cases pass; adjacent math/widening and owner fault injection pass 91 cases. gfx1151 SiLU native execution remains follow-up required; no physical proof transfers. Two final 15-row timing trials bind the complete native provider. M256x12288 device windows are 25.40–27.15 us, with legacy/native ratios 0.989–1.005; no speedup or selector promotion follows. Full NVFP4 MLP/model-quality remains open.
 
 Public selector review: gfx1201 alone admits the new native SiLU JIT route. gfx1151 retains its existing route selection until its independent native device proof; shared compiler artifact admission does not intercept public sibling calls.
 
 Review follow-through (PR962): SiLU shape-only capture is restricted to matching canonical FP16/BF16/FP32 storage, including concrete dtype metadata. Other concrete inputs retain the registered eager result promotion; abstract integer/mixed promotion requires concrete values. The new gfx1201 public selector, support predicate and portable package validator agree on ranks 1–3. No sibling dtype or execution promotion follows. Existing shared integer-ingress spelling gaps remain a separate frontend foundation follow-up.
+
+
+## ROCM-NATIVE-GATE-UP-VIEWS-20261016
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Synchronization key: ROCM-NATIVE-GATE-UP-VIEWS-20261016.
+
+Shared contract: public `slice`/`dynamic_slice` preserve unit-stride Python
+clipping, including negative coordinates and end offsets. Abstract tracing
+uses canonical Graph shape inference; positional attributes use the existing
+canonical binding table. Native Graph declarations verify rank, element type
+and normalized extents with overflow-safe end arithmetic. Linear tangents
+preserve the slice; the initial native transpose scatters into a static zero
+source. Dynamic transpose remains follow-up required.
+
+Implementation in progress: preserve one gate/up parent [M,2I] through public Graph slices into typed Tile buffer views and native SiLU. Frontend clipping/binding and native Graph verifier/linear AD are being integrated. Pitched buffer LLVM host diagnostics pass; Schedule/Target/image/runtime lifetime and exact gfx1201 execution/timing are still required. Full activation quantization/down projection/model quality remain open.
+
+Concrete frontend follow-through: basic-index values retain the original
+parent pitch without compaction for downstream non-native dtype inference.
+This is frontend alias metadata, not a device buffer, schedule or new
+physical execution claim. Native forward admission and authored derivative
+proof contracts now register both existing slice spellings.
+
+PR963 review follow-through: the AST emission and copied first-call
+specialization boundaries persist eager-int-coerced slice coordinates before
+serialization. Pure result inference and caller-owned Graph attributes remain
+unchanged. This is shared frontend correctness; physical admission is unchanged.

@@ -218,3 +218,25 @@ def test_exact_block_scaled_product_all_floating_roles_directional_and_dual():
                                   rtol=1e-10,atol=1e-10)
     policy=DERIVATIVE_PROOF_MATRIX["scaled_matmul"].boundary_policy
     assert "encoded" in policy and "scale" in policy
+
+
+def test_slice_linear_identity_directional_and_reverse_duality():
+    from tessera.autodiff.jvp import jvp_slice
+    from tessera.autodiff.vjp import vjp_slice
+
+    rng = np.random.default_rng(20261017)
+    x = rng.normal(size=(4, 5))
+    dx = rng.normal(size=x.shape)
+    for starts, sizes in [([1, 2], [2, 2]), ([3, 4], [4, 5]),
+                          ([-2, 0], [1, 5]), ([2, 0], [-3, 5]), ([0, 8], [4, 2])]:
+        coordinates = tuple(slice(start, start + size) for start, size in zip(starts, sizes))
+        primal, tangent = jvp_slice((x,), (dx,), start_indices=starts, slice_sizes=sizes)
+        np.testing.assert_array_equal(primal, x[coordinates])
+        finite = central_directional_difference(lambda value: value[coordinates], (x,), (dx,))
+        assert_directional_close(tangent, finite)
+        seed = rng.normal(size=tangent.shape)
+        (cotangent,) = vjp_slice(seed, x, start_indices=starts, slice_sizes=sizes)
+        assert_forward_reverse_duality(tangent, seed, (dx,), (cotangent,))
+    for family in ("slice", "dynamic_slice"):
+        assert DERIVATIVE_PROOF_MATRIX[family].kind is ProofKind.LINEAR_IDENTITY
+        assert "static source extents" in DERIVATIVE_PROOF_MATRIX[family].domain

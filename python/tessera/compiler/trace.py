@@ -280,6 +280,16 @@ class TraceBuilder:
                     raise TesseraTraceError("trace: duplicate transpose axes")
                 ir_kwargs["axes"] = a
                 call_args.append(a)
+            elif graph_name in {"tessera.slice", "tessera.dynamic_slice"} and position in (1, 2):
+                from .graph_ir import _POSITIONAL_ATTR_PARAMS
+                attribute = _POSITIONAL_ATTR_PARAMS[graph_name][position - 1]
+                if isinstance(a, Tracer) or not isinstance(a, (tuple, list)) or any(
+                        isinstance(value, Tracer) for value in a):
+                    raise TesseraTraceError(f"{name} {attribute} must be static attributes")
+                if attribute in kwargs:
+                    raise TesseraTraceError(f"trace: duplicate {name} {attribute}")
+                ir_kwargs[attribute] = a
+                call_args.append(a)
             elif graph_name == "tessera.kv_cache.read" and position in (1, 2):
                 if isinstance(a, Tracer):
                     raise TesseraTraceError("paged cache bounds must be static attributes")
@@ -333,6 +343,10 @@ class TraceBuilder:
         # to structural parity: a fact recorded by one and not the other is a
         # frontend divergence, and the differential certificate rejects it --
         # which is exactly how this omission was caught.
+        if graph_name in {"tessera.slice", "tessera.dynamic_slice"} and tracer_args:
+            from .graph_ir import _slice_index_attributes
+            starts, sizes = _slice_index_attributes(ir_kwargs, len(tracer_args[0].shape))
+            ir_kwargs["start_indices"], ir_kwargs["slice_sizes"] = starts, sizes
         apply_presence_flags(
             graph_name, ir_kwargs, positional_operand_count,
             keyword_operand_names)
@@ -356,6 +370,9 @@ class TraceBuilder:
             not self.evaluate_catalog_outputs or not tracer_args
             or not all(value.value is not None for value in tracer_args))
         cast_types_only = graph_name == "tessera.cast" and (
+            not self.evaluate_catalog_outputs or not tracer_args
+            or not all(value.value is not None for value in tracer_args))
+        slice_types_only = graph_name in {"tessera.slice", "tessera.dynamic_slice"} and (
             not self.evaluate_catalog_outputs or not tracer_args
             or not all(value.value is not None for value in tracer_args))
         silu_float_storage = False
@@ -395,7 +412,7 @@ class TraceBuilder:
             and all(type(dim) is int and dim > 0 for dim in reshape_shape)
             and (not self.evaluate_catalog_outputs or not tracer_args
                  or not all(value.value is not None for value in tracer_args)))
-        if physical_movement or attention_types_only or scaled_types_only or cast_types_only or silu_types_only or reshape_types_only or graph_name in {"tessera.nvfp4_expand","tessera.nvfp4_requantize","tessera.mxfp4_folded_storage"}:
+        if physical_movement or attention_types_only or scaled_types_only or cast_types_only or slice_types_only or silu_types_only or reshape_types_only or graph_name in {"tessera.nvfp4_expand","tessera.nvfp4_requantize","tessera.mxfp4_folded_storage"}:
             # Catalog-owned result contracts avoid host arithmetic during tracing,
             # including attention output/row-LSE and packed conversion results.
             from .graph_ir import _infer_result_types, tensor_ir_type
@@ -404,17 +421,28 @@ class TraceBuilder:
                 for value in tracer_args], ir_kwargs)
             out_shapes = tuple(tuple(map(int, value.shape)) for value in inferred)
             dtypes = tuple(value.dtype for value in inferred)
-            if cast_types_only or silu_types_only:
+            if cast_types_only or slice_types_only or silu_types_only:
                 # Tracer output specs use the same float element spellings as
                 # concrete NumPy tracing. Graph IR still canonicalizes them.
                 dtypes = tuple({"fp16": "f16", "fp32": "f32", "fp64": "f64"}.get(dtype, dtype)
                                for dtype in dtypes)
             values = (None,) * len(inferred)
+            if slice_types_only and tracer_args[0].value is not None:
+                # Basic indexing borrows the original concrete frontend value:
+                # no arithmetic, compaction or backend buffer is materialized.
+                # Keep it for downstream eager dtype/shape inference outside
+                # native profiles, while native SiLU still captures types only.
+                starts = ir_kwargs["start_indices"]
+                sizes = ir_kwargs["slice_sizes"]
+                coordinates = tuple(slice(start, start + size)
+                                    for start, size in zip(starts, sizes, strict=True))
+                values = (tracer_args[0].value[coordinates],)
+                dtypes = (tracer_args[0].dtype,)
         elif tracer_args and all(t.value is not None for t in tracer_args):
             def _concrete(x: Any) -> Any:
                 if isinstance(x, Tracer):
                     return x.value
-                if isinstance(x, list):
+                if isinstance(x, list) and x and all(isinstance(t, Tracer) for t in x):
                     return [t.value for t in x]  # variadic group
                 return x  # Static positional cache bounds.
             concrete_kwargs = {

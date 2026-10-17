@@ -1,0 +1,30 @@
+{
+  "shape": [
+    3,
+    34
+  ],
+  "output_shape": [
+    3,
+    17
+  ],
+  "source_sha256": "568f09db35c8f2e7564b3c86cde7832f9cb49ae3ad1edd81786c381d268c0609",
+  "compiler_sha256": "7fba5ad107ac8c981d6341653a2011057e499b427b0bef861a7a1a721b326183",
+  "original_parent_arguments": 1,
+  "shape_only_frontend": true,
+  "steps": [
+    {
+      "option": "--verify-each",
+      "returncode": 0,
+      "diagnostic": []
+    },
+    {
+      "option": "--tessera-graph-to-schedule",
+      "returncode": 1,
+      "diagnostic": [
+        "/home/angstorms/scratch/rocm-native-gate-up-views-20261016/record-post-slice-boundary.py:10:12: error: ROCm math requires isolated operands, target and launch bindings",
+        "    return ts.ops.silu_mul(gate,up)"
+      ]
+    }
+  ],
+  "scope": "public positional trace and registered native Graph verification pass; actual Schedule view consumer remains unimplemented, no new GPU or performance proof"
+}

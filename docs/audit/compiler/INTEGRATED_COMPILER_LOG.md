@@ -12920,3 +12920,44 @@ admission are now checked in tracing, selection and portable validation.
 Five measured kernel images and complete provider bytes remain unchanged;
 new exact-head CI is required after the guards land in the PR.
 <!-- entry-fields:end -->
+
+
+### 2026-10-16 — native Graph slice semantics for gate/up composition
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending; sync ROCM-NATIVE-GATE-UP-VIEWS-20261016.
+
+Outcome: existing public slice/dynamic_slice now retain eager Python clipping
+and integer-coercion semantics through abstract and shape-only tracing,
+canonical positional binding and registered C++ Graph verification. Signed
+65-bit end arithmetic prevents coordinate-add overflow. Static-source JVP/VJP
+preserve the slice/scatter relationship; dynamically typed cotangents have
+runtime extent guards before refinement and scatter. Structured lowering
+materializes upstream tensor.extract_slice and preserves activity/effects.
+The actual C++ header passes 101,210 independent Python oracle cases. The
+slice/transpose/shape selection passes 155 tests with four unrelated hardware
+skips; tracing/registry/typed-buffer gates pass 541 with 32 unrelated skips.
+Concrete borrowed frontend views preserve non-native result promotion and
+physical pitch without compaction. The authored AD/ODS/freshness/recorder
+reconciliation gate passes 904 tests; production compiler-route proof passes
+1,340 with zero skips. Required-scope Ruff and zero-error mypy pass. PR962 has merged after exact-head green CI and
+resolved review findings; both WSL main refs were synchronized before this work.
+
+Remaining: the original one-parent gate/up Graph now verifies but still stops
+at ROCm native math's isolated-operand Schedule contract. Its sealed typed
+view consumer, checked private-buffer lifetime, exact gfx1201 numerics and
+separate kernel/program/host timings are required. Dynamic-source transpose,
+activation quantization/downprojection, original-model quality and the full
+original five-slice obligations remain open. Host LLVM pitched-addressing
+diagnostics are not GPU execution evidence; sibling plans are assessed.
+
+Evidence: docs/spec/NATIVE_GRAPH_SLICE_CONTRACT.md;
+tests/unit/test_slice_semantic_contract.py;
+benchmarks/baselines/native_graph_slice_20261016/README.md.
+PR963 review follow-through: AST emission and copy-based first-call
+specialization now persist normalized coordinates before I64 serialization;
+pure inference and the caller-owned Graph remain unchanged. The concrete red
+baseline has 12 failures and one non-mutation control. Four public AST calling
+forms, native parsing, specialization and a real unannotated first-call path
+are covered; 572 Graph/frontend/registry tests pass with 33 unrelated skips.
+<!-- entry-fields:end -->

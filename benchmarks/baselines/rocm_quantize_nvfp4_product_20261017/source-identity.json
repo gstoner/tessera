@@ -1,0 +1,10 @@
+{
+  "src/transforms/lib/NativeQuantizedProductProgram.h": "935019bd743152b7a04c0de4bdb2959627d7e15a6ca378ca9dd0d9ea2ffffd2d",
+  "src/compiler/ir/include/Tessera/IR/BlockQuantContract.h": "e1036fbbe5952378fbaec1ddcc6e26465d77b39f8c4b6dfd14da419ca2def628",
+  "python/tessera/compiler/rocm_quantized_product_program.py": "804a8c14c6f1bef23d1adb6007e35a9c86d2d10ecf28b225ccec26437ad1879c",
+  "python/tessera/compiler/rocm_quantized_product_frontend.py": "74a41605a3d767edd5eca18fe6bbc593d076cf7b6634a7d00a51b7341df2ff04",
+  "python/tessera/compiler/jit.py": "1a5228064a6be85752b8768f698b58e16af169c679c9355c14bb5ff6789cb985",
+  "benchmarks/rocm/benchmark_public_quantized_nvfp4_product.py": "a568b2555601415a11d04b3be72c25d28ad8996fd23b129575a80f6deff7fda5",
+  "tests/device/rocm/test_native_quantized_nvfp4_product_jit.py": "23242d55df9c36a4acf24ec3ca2beb135363a5741d757692c9e25a53f1065533",
+  "tests/unit/test_rocm_quantized_nvfp4_product_program.py": "da1f16c2c52ee6dfd5e91b999ddf59be48dc1581df4f3d7167a4d79ee0e6bc5b"
+}

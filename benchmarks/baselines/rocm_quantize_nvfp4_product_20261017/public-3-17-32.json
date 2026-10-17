@@ -1,0 +1,124 @@
+{
+  "shape_mnk": [
+    3,
+    17,
+    32
+  ],
+  "architecture": "gfx1201",
+  "device_uuid": "GPU-28d9e7efbf2ef716",
+  "device_name": "AMD Radeon RX 9070 XT",
+  "source_revision": "bd9bdcf1c83b08602166a642d431c73cdc404038",
+  "recorder_sha256": "a568b2555601415a11d04b3be72c25d28ad8996fd23b129575a80f6deff7fda5",
+  "correctness": "passed_before_timing",
+  "max_abs_error": 4.907982598112426e-08,
+  "route": "authored Graph SSA -> native quantizer/expansion/product partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> checked multi-output HIP owner",
+  "native_schema": "tessera.native.quantized_product.v2",
+  "compiler_sha256": "797f9a715198423567658b9bd61b990d40d24737eed0be0986e5f8730a6b391e",
+  "binding_digest": "cf0e929ab9ff000f81525bf5210a8edb09beae6f958791472bef821c0c4535b7",
+  "component_receipts": [
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.block_quant.x_q_s_groups.bf16_e4m3_f32.v1",
+      "image_digest": "3fe0ff77208b1be5236c2cc6c204c101be12a5e2af42fc241c14ae866495754f",
+      "descriptor_digest": "a59730006170d14f0448b252e6c8ca6408dd971fb4f753bc06852eeb8300c72d",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.nvfp4_expand.five_memrefs.static.v1",
+      "image_digest": "daf99cc10c17ec5a1e4d304efa73c09b911bda28503cf8289b12cb4a8800e3f5",
+      "descriptor_digest": "874aa5fc96529f11ef16d8ecd1ad67170e6fedb33ef5c1d3aad3eb7e2e2e88ed",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+      "image_digest": "602a20800cbc5c49daa8d61a44865f3cfcbc6b4488298cbd7c5a9108c50075bd",
+      "descriptor_digest": "8da550ce9c56e737ac05d9d8ed2d34848501fb90876e00630abbff71cc74081d",
+      "native_call_binding": "native_cpp_multi_output"
+    }
+  ],
+  "public_cold_ms": 643.5754029953387,
+  "public_warm_samples_ms": [
+    4.382120141859299,
+    4.085524855846805,
+    4.0300134278368205,
+    3.9796144285771464,
+    4.047013000152739,
+    4.111920998963926,
+    4.089621286506632
+  ],
+  "prepared_invoke_read_samples_ms": [
+    0.41133398190140724,
+    0.35137898521497846,
+    0.42554098763503134,
+    0.33221300691366196,
+    0.3604570229072124,
+    0.3505079948808998,
+    0.24465701426379383
+  ],
+  "ordinary_program_event_samples_ms": [
+    0.02243974059820175,
+    0.022125139832496643,
+    0.022348739206790924,
+    0.022166939452290535,
+    0.02241973951458931,
+    0.022069741040468216,
+    0.022236159071326256
+  ],
+  "captured_member_samples_ms": [
+    [
+      0.009062624536454678,
+      0.005639882758259773,
+      0.007459538988769054
+    ],
+    [
+      0.008871070109307766,
+      0.005638632923364639,
+      0.007429539225995541
+    ],
+    [
+      0.00883232057094574,
+      0.005626453086733818,
+      0.007471406366676092
+    ],
+    [
+      0.008873257786035538,
+      0.005644890479743481,
+      0.007431718520820141
+    ],
+    [
+      0.008850133046507835,
+      0.005641445517539978,
+      0.007465156260877848
+    ],
+    [
+      0.008873257786035538,
+      0.00564925791695714,
+      0.007430156227201223
+    ],
+    [
+      0.008864508010447025,
+      0.005670195445418358,
+      0.007453281432390213
+    ]
+  ],
+  "public_warm_median_ms": 4.085524855846805,
+  "prepared_invoke_read_median_ms": 0.35137898521497846,
+  "ordinary_program_event_median_ms": 0.022236159071326256,
+  "captured_member_median_ms": [
+    0.008871070109307766,
+    0.005641445517539978,
+    0.007453281432390213
+  ],
+  "timing_scope": {
+    "public": "warm frontend, input validation, root copies, owner prepare/invoke/read",
+    "prepared": "invoke and returned readback; excludes prepare, compilation and root upload",
+    "ordinary_event": "per-program HIP event window; native API already averages repeats; includes enqueue gaps",
+    "captured_members": "quantizer, weight expansion, product; includes graph dispatch; excludes capture/instantiation/copies"
+  },
+  "artifact_sha256": "2f3a063aee939bae807a75241c43a75e0346ea4cf0cf672a54037b573b4dcf7d"
+}

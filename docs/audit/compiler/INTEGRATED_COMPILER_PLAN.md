@@ -190,7 +190,8 @@ the next action's host requirement; it is not a live fleet-availability claim.
   gate/up/activation/down chaining, general layouts/AD and full-model quality
   remain open; this does not close the full ingest program.
 - Named v2 edge: four-root BF16 quantization plus NVFP4 expansion and exact FP32 product now uses three native members and four private code/scale planes. Six owning public/portable/fresh-process/lifetime tests and separated timing packets prove this named profile; full MLP/quality and wider integration remain open.
-- Latest: [2026-10-17 — native quantizer NVFP4 expansion and product](INTEGRATED_COMPILER_LOG.md#2026-10-17--native-quantizer-nvfp4-expansion-and-product)
+- Named v3 gate/up: native MLIR composes four members through an explicit BF16 parent store and SiLU activation. Eleven new owning device cases plus eleven legacy controls pass; three packets separate device and public timings. Full down projection, model quality and wider integration remain open.
+- Latest: [2026-10-17 — native quantized gate/up four-member composition](INTEGRATED_COMPILER_LOG.md#2026-10-17--native-quantized-gateup-four-member-composition)
 
 ### ROCM-SPLIT-K-1
 

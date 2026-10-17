@@ -5,6 +5,16 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-QUANTIZED-GATEUP-20261017 — native quantizer through gate/up
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-QUANTIZED-GATEUP-20261017.
+
+Parity validated on RX9070XT/gfx1201: eleven gate/up public, portable, fresh-process, readiness and inspection-isolation tests pass; the combined gate including older v1/v2 profiles passes 22 tests. The native v3 partition derives four members and ten buffers from actual SSA, retaining only a BF16 parent between product and activation. Three correctness-gated timing packets separate captured members, ordinary program HIP events and full public calls. At M256/H128/K12288 the ordinary event window is 166.22 us, the captured product member 117.58 us and the warm public call 6.297 ms. No speedup promotion is asserted. Evidence: benchmarks/baselines/rocm_quantized_gate_up_20261017/README.md.
+
+Remaining: full resident down projection, checkpoint/model quality, wider layouts, dynamic shapes and encoded AD. gfx1151 requires a different consumer because it lacks FP8 WMMA. The original five-slice goal remains open.
+
+
 ## ROCM-QUANTIZE-NVFP4-PRODUCT-20261017 — three native producers/consumer members
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

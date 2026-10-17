@@ -7,6 +7,16 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## ROCM-QUANTIZED-GATEUP-20261017 — native quantizer through gate/up
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-QUANTIZED-GATEUP-20261017.
+
+Not applicable to x86 physical execution: this four-member profile admits only gfx1201. Shared contract assessment: distinct native/package/frontend v3 schemas and a dedicated execution row preserve v1/v2. No x86 schedule, datatype admission or runtime ABI changes. Follow-up required before physical adoption; gfx1201 evidence establishes no sibling parity.
+
+Remaining: full resident down projection, checkpoint/model quality, wider layouts, dynamic shapes and encoded AD. gfx1151 requires a different consumer because it lacks FP8 WMMA. The original five-slice goal remains open.
+
+
 ## ROCM-QUANTIZE-NVFP4-PRODUCT-20261017 — three native producers/consumer members
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

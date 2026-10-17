@@ -13,6 +13,7 @@ from .scheduled_matmul import find_tessera_opt
 
 _SCHEMA="tessera.rocm.quantized_product_frontend.v1"
 _EXPANDED_SCHEMA="tessera.rocm.quantized_product_frontend.v2"
+_ACTIVATED_SCHEMA="tessera.rocm.quantized_product_frontend.v3"
 _OWNER_PID=os.getpid()
 
 
@@ -23,7 +24,9 @@ def requests_quantized_product(module):
     names=[op.op_name for op in fn.body if op.op_name!="arith.constant"]
     return (len(fn.result_types)==1 and (
         (len(fn.args)==3 and names==[*_NAMES,"tessera.scaled_matmul"])
-        or (len(fn.args)==4 and names==[*_NAMES,"tessera.nvfp4_expand","tessera.scaled_matmul"])))
+        or (len(fn.args)==4 and names==[*_NAMES,"tessera.nvfp4_expand","tessera.scaled_matmul"])
+        or (len(fn.args)==4 and names==[*_NAMES,"tessera.nvfp4_expand","tessera.scaled_matmul",
+            "tessera.cast","tessera.slice","tessera.slice","tessera.cast","tessera.cast","tessera.silu_mul","tessera.cast"])))
 
 
 @dataclass(frozen=True)
@@ -46,7 +49,7 @@ class TracedQuantizedProduct:
 
     def manifest(self):
         self.validate()
-        return {"schema":_EXPANDED_SCHEMA if self.native.expansion is not None else _SCHEMA,"argument_names":list(self.argument_names),"native_program":self.native.to_manifest()}
+        return {"schema":_ACTIVATED_SCHEMA if self.native.activation is not None else _EXPANDED_SCHEMA if self.native.expansion is not None else _SCHEMA,"argument_names":list(self.argument_names),"native_program":self.native.to_manifest()}
 
     def execute(self,args):
         from tessera import runtime as rt
@@ -110,7 +113,8 @@ def package_traced_quantized_product(module):
 
 
 def _compiler_path(native):
-    return ("canonical_rocm_quantized_nvfp4_product_program" if native.expansion is not None
+    return ("canonical_rocm_quantized_gate_up_program" if native.activation is not None else
+            "canonical_rocm_quantized_nvfp4_product_program" if native.expansion is not None
             else "canonical_rocm_quantized_product_program")
 
 
@@ -131,11 +135,13 @@ def runtime_artifact(program):
 def _resolve(record,graph,names):
     value=json.loads(record)
     if (not isinstance(value,dict) or set(value)!={"schema","argument_names","native_program"}
-            or value["schema"] not in (_SCHEMA,_EXPANDED_SCHEMA) or not isinstance(value["argument_names"],list)):
+            or value["schema"] not in (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA) or not isinstance(value["argument_names"],list)):
         raise ValueError("native quantized-product frontend manifest differs")
     program=TracedQuantizedProduct(NativeQuantizedProductProgram.from_manifest(value["native_program"]),tuple(value["argument_names"]))
     program.validate()
-    if (value["schema"]==_EXPANDED_SCHEMA)!=(program.native.expansion is not None):
+    expected=(_ACTIVATED_SCHEMA if program.native.activation is not None else
+              _EXPANDED_SCHEMA if program.native.expansion is not None else _SCHEMA)
+    if value["schema"]!=expected:
         raise ValueError("native quantized-product frontend schema differs")
     if program.graph_ir!=graph or list(program.argument_names)!=json.loads(names):
         raise ValueError("native quantized-product parent Graph or arguments differ")

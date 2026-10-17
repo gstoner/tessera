@@ -20,11 +20,15 @@ from .rocm_fp8_blockscale import BlockScaleProgram, BlockScaleShape, PACKAGE_ABI
 from .rocm_native import ROCMNativePackage, _directive_symbol
 from .rocm_nvfp4_expansion_program import _MultiOutputStep
 from .rocm_nvfp4_expand_native import NVFP4ExpansionPackage, package_nvfp4_expansion, _contract as _expansion_contract
+from .rocm_parent_view_native import ParentViewRecipe,package_parent_view_recipe,validate_parent_view_runtime_artifact,_frame as _parent_view_frame
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
 _OPTION = "--tessera-autodiff-forward=export-scaled-primal=true"
 _SCHEMA = "tessera.native.quantized_product.v1"
 _EXPANDED_SCHEMA = "tessera.native.quantized_product.v2"
+_ACTIVATED_SCHEMA = "tessera.native.quantized_product.v3"
+_NATIVE_SCHEMAS = (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA)
+_PACKAGE_SCHEMAS = tuple(f"tessera.rocm.quantized_product_package.v{i}" for i in (1,2,3))
 
 
 def _digest(text):
@@ -37,7 +41,7 @@ def _export(tool, source):
     if len(encoded) != 1:
         raise ValueError("requires one native quantized-product SSA record")
     plan = json.loads(base64.b64decode(encoded[0],validate=True))
-    if not isinstance(plan,dict) or plan.get("schema") not in (_SCHEMA,_EXPANDED_SCHEMA):
+    if not isinstance(plan,dict) or plan.get("schema") not in _NATIVE_SCHEMAS:
         raise ValueError("native quantized-product schema differs")
     return plan
 
@@ -45,10 +49,11 @@ def _export(tool, source):
 def _frame_shape(plan):
     if not isinstance(plan,dict):
         raise ValueError("native quantized-product frame differs")
-    expanded = plan.get("schema") == _EXPANDED_SCHEMA
-    roots,members,total,output = (4,3,9,8) if expanded else (3,2,6,5)
+    activated = plan.get("schema") == _ACTIVATED_SCHEMA
+    expanded = plan.get("schema") in (_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA)
+    roots,members,total,output = (4,4,10,9) if activated else (4,3,9,8) if expanded else (3,2,6,5)
     if (set(plan) != {"schema","source_graph_ir","member_graphs","buffers","steps","output"}
-            or plan["schema"] not in (_SCHEMA,_EXPANDED_SCHEMA)
+            or plan["schema"] not in _NATIVE_SCHEMAS
             or type(plan["output"]) is not int or plan["output"] != output
             or not isinstance(plan["source_graph_ir"],str) or not plan["source_graph_ir"]
             or not isinstance(plan["member_graphs"],list) or len(plan["member_graphs"]) != members
@@ -57,7 +62,7 @@ def _frame_shape(plan):
             or not isinstance(plan["buffers"],list) or len(plan["buffers"]) != total):
         raise ValueError("native quantized-product frame differs")
     steps,rows = plan["steps"],plan["buffers"]
-    operations = ["native_block_quant"] + (["tessera.nvfp4_expand"] if expanded else []) + ["tessera.scaled_matmul"]
+    operations = ["native_block_quant"] + (["tessera.nvfp4_expand"] if expanded else []) + ["tessera.scaled_matmul"] + (["tessera.silu_mul"] if activated else [])
     for i,step in enumerate(steps):
         if (not isinstance(step,dict) or set(step) != {"step","operation","member","inputs","outputs"}
                 or type(step["step"]) is not int or step["step"] != i
@@ -66,13 +71,15 @@ def _frame_shape(plan):
                 or not isinstance(step["inputs"],list) or not isinstance(step["outputs"],list)
                 or any(type(v) is not int for v in step["inputs"]+step["outputs"])):
             raise ValueError("native quantized-product step encoding differs")
-    if len(steps[0]["inputs"]) != 1 or len(steps[-1]["inputs"]) != 4:
+    if len(steps[0]["inputs"]) != 1 or len(steps[2 if expanded else 1]["inputs"]) != 4:
         raise ValueError("native quantized-product step roles differ")
     roles = [steps[0]["inputs"][0]] + (steps[1]["inputs"] if expanded else [steps[1]["inputs"][1],steps[1]["inputs"][3]])
     if sorted(roles) != list(range(roots)):
         raise ValueError("native quantized-product original arguments differ")
     inputs = [[roles[0]],roles[1:],[4,6,5,7]] if expanded else [[roles[0]],[3,roles[1],4,roles[2]]]
     outputs = [[4,5],[6,7],[8]] if expanded else [[3,4],[5]]
+    if activated:
+        inputs.append([8]);outputs.append([9])
     if [step["inputs"] for step in steps] != inputs or [step["outputs"] for step in steps] != outputs:
         raise ValueError("native quantized-product lost its private producer edges")
     if not all(isinstance(row,dict) for row in rows):
@@ -87,9 +94,11 @@ def _frame_shape(plan):
     n,bk = bshape
     if bk != k or k%16 or m>2147483647 or k>2147483647 or m*(k//16)>2147483647:
         raise ValueError("native quantized-product K16 capacity differs")
-    out = rows[output].get("storage")
+    out = rows[8 if activated else output].get("storage")
     if not isinstance(out,str) or out not in {"f32","bf16"}:
         raise ValueError("native quantized-product output storage differs")
+    if activated and (out!="bf16" or n%2):
+        raise ValueError("native quantized gate/up requires BF16 parent and paired width")
     specs: list[tuple[list[int],str,int,int] | None] = [None]*total
     specs[roles[0]] = ([m,k],"bf16",-1,0)
     if expanded:
@@ -103,6 +112,8 @@ def _frame_shape(plan):
         specs[roles[3]] = (global_shape,"f64",-1,1)
         specs[4:] = [([m,k],"f8E4M3FN",0,2),([m,k//16],"f32",0,2),
                      ([n,k],"f8E4M3FN",1,2),([k//16,n],"f32",1,2),([m,n],out,2,3)]
+        if activated:
+            specs.append(([m,n//2],"bf16",3,4))
     else:
         specs[roles[1]] = ([n,k],"f8E4M3FN",-1,1)
         specs[roles[2]] = ([k//16,n],"f32",-1,1)
@@ -134,6 +145,8 @@ class NativeQuantizedProductProgram:
     checked_product_target_ir: str
     binding_digest: str
     expansion: NVFP4ExpansionPackage | None = None
+    activation_recipe: ParentViewRecipe | None = None
+    activation: ROCMNativePackage | None = None
 
     def _identity(self):
         parts = [self.program_json,self.graph_ir,self.quantizer_recipe.graph_ir,
@@ -142,6 +155,8 @@ class NativeQuantizedProductProgram:
                  self.checked_product_target_ir]
         if self.expansion is not None:
             parts.extend([self.expansion.graph_ir,self.expansion.schedule_ir])
+        if self.activation_recipe is not None:
+            parts.extend([self.activation_recipe.graph_ir,self.activation_recipe.schedule_ir,self.activation_recipe.tile_ir])
         for native in self.native_stages:
             parts.extend([native.tile_ir,native.target_ir,
                           native.image.image_digest,native.descriptor.descriptor_digest])
@@ -149,20 +164,30 @@ class NativeQuantizedProductProgram:
 
     @property
     def schedule_irs(self):
-        return ((self.quantizer_recipe.schedule_ir,self.expansion.schedule_ir,self.product_recipe.schedule_ir)
-                if self.expansion is not None else (self.quantizer_recipe.schedule_ir,self.product_recipe.schedule_ir))
+        stages: tuple[str,...]=(self.quantizer_recipe.schedule_ir,)
+        if self.expansion is not None:stages+=(self.expansion.schedule_ir,)
+        stages+=(self.product_recipe.schedule_ir,)
+        if self.activation_recipe is not None:stages+=(self.activation_recipe.schedule_ir,)
+        return stages
 
     @property
     def native_stages(self):
-        return (self.quantizer,self.expansion.native,self.product) if self.expansion is not None else (self.quantizer,self.product)
+        stages: tuple[ROCMNativePackage,...]=(self.quantizer,)
+        if self.expansion is not None:stages+=(self.expansion.native,)
+        stages+=(self.product,)
+        if self.activation is not None:stages+=(self.activation,)
+        return stages
 
     def validate(self):
         if self.binding_digest != self._identity():
             raise ValueError("native quantized-product member binding differs")
         plan = json.loads(self.program_json)
         roles,shape = _frame_shape(plan)
-        if (plan["schema"] == _EXPANDED_SCHEMA) != (self.expansion is not None):
+        if (plan["schema"] in (_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA)) != (self.expansion is not None):
             raise ValueError("native quantized-product expansion schema/member differs")
+        activated=plan["schema"]==_ACTIVATED_SCHEMA
+        if (activated!=(self.activation is not None) or activated!=(self.activation_recipe is not None)):
+            raise ValueError("native quantized-product activation schema/member differs")
         members = [self.quantizer_recipe.graph_ir]
         if self.expansion is not None:
             self.expansion.validate()
@@ -176,6 +201,8 @@ class NativeQuantizedProductProgram:
                 if row["shape"]!=dims or row["storage"]!=storage or row["bytes"]!=math.prod(dims)*width:
                     raise ValueError("native quantized-product expansion/shared buffer interface differs")
         members.append(self.product_recipe.graph_ir)
+        if self.activation_recipe is not None:
+            members.append(self.activation_recipe.graph_ir)
         if (plan["source_graph_ir"] != self.graph_ir
                 or plan["member_graphs"] != members
                 or self.product_recipe.shape != shape
@@ -193,6 +220,18 @@ class NativeQuantizedProductProgram:
         for local,shared in zip(quant_buffers,(plan["buffers"][slot] for slot in (roles[0],len(roles),len(roles)+1)),strict=True):
             if any(local[key]!=shared[key] for key in ("shape","storage","bytes")):
                 raise ValueError("native quantized-product producer/shared buffer interface differs")
+        if self.activation is not None and self.activation_recipe is not None:
+            if self.activation.tile_ir!=self.activation_recipe.tile_ir:
+                raise ValueError("native quantized-product activation Tile differs")
+            act=self.activation
+            act.descriptor.validate_image(act.image)
+            bound=validate_parent_view_runtime_artifact(RuntimeArtifact(
+                graph_ir=self.activation_recipe.graph_ir,schedule_ir=self.activation_recipe.schedule_ir,
+                tile_ir=act.tile_ir,target_ir=act.target_ir,native_image=act.image,
+                launch_descriptor=act.descriptor,metadata={"target":"rocm_gfx1201"}))
+            for local,shared in zip(json.loads(bound.program_json)["buffers"],(plan["buffers"][8],plan["buffers"][9]),strict=True):
+                if any(local[key]!=shared[key] for key in ("shape","storage","bytes")):
+                    raise ValueError("native quantized-product activation/shared buffer interface differs")
         native = self.product
         native.descriptor.validate_image(native.image)
         if native.target_ir != self.checked_product_target_ir:
@@ -219,7 +258,10 @@ class NativeQuantizedProductProgram:
         if self.expansion is not None:
             stages.append(_portable_stage(self.expansion.graph_ir,self.expansion.schedule_ir,self.expansion.native))
         stages.append(_portable_stage(self.product_recipe.graph_ir,self.product_recipe.schedule_ir,self.product))
-        return {"schema":"tessera.rocm.quantized_product_package.v2" if self.expansion is not None else "tessera.rocm.quantized_product_package.v1",
+        if self.activation is not None and self.activation_recipe is not None:
+            stages.append(_portable_stage(self.activation_recipe.graph_ir,self.activation_recipe.schedule_ir,self.activation))
+        version=3 if self.activation is not None else 2 if self.expansion is not None else 1
+        return {"schema":_PACKAGE_SCHEMAS[version-1],
                 "program_json":self.program_json,"graph_ir":self.graph_ir,
                 "checked_product_target_ir":self.checked_product_target_ir,
                 "binding_digest":self.binding_digest,
@@ -229,14 +271,15 @@ class NativeQuantizedProductProgram:
     def from_manifest(cls,record):
         from .native_artifact import NativeImageArtifact,LaunchDescriptor
         if (not isinstance(record,dict) or set(record)!={"schema","program_json","graph_ir","checked_product_target_ir","binding_digest","stages"}
-                or record["schema"] not in ("tessera.rocm.quantized_product_package.v1","tessera.rocm.quantized_product_package.v2")
+                or record["schema"] not in _PACKAGE_SCHEMAS
                 or any(not isinstance(record[key],str) for key in ("program_json","graph_ir","checked_product_target_ir","binding_digest"))
-                or not isinstance(record["stages"],list) or len(record["stages"])!=(3 if record["schema"].endswith(".v2") else 2)):
+                or not isinstance(record["stages"],list) or len(record["stages"])!=_PACKAGE_SCHEMAS.index(record["schema"])+2):
             raise ValueError("native quantized-product portable record differs")
         plan=json.loads(record["program_json"])
         _,shape=_frame_shape(plan)
-        expanded=record["schema"].endswith(".v2")
-        if expanded != (plan["schema"]==_EXPANDED_SCHEMA):
+        version=_PACKAGE_SCHEMAS.index(record["schema"])+1
+        expanded,activated=version>=2,version==3
+        if plan["schema"]!=_NATIVE_SCHEMAS[version-1]:
             raise ValueError("native quantized-product portable schema/frame differs")
         stages=[]
         for stage in record["stages"]:
@@ -246,12 +289,14 @@ class NativeQuantizedProductProgram:
             native=ROCMNativePackage(stage["tile_ir"],stage["target_ir"],"",
                 NativeImageArtifact.from_dict(stage["image"]),LaunchDescriptor.from_dict(stage["descriptor"]))
             stages.append((stage["graph_ir"],stage["schedule_ir"],native))
-        first,second=stages[0],stages[-1]
+        first,second=stages[0],stages[2 if expanded else 1]
         expansion=NVFP4ExpansionPackage(*stages[1]) if expanded else None
+        activation_recipe=ParentViewRecipe(stages[3][0],stages[3][1],stages[3][2].tile_ir) if activated else None
+        activation=stages[3][2] if activated else None
         program=cls(record["program_json"],record["graph_ir"],
             BlockQuantRecipe(first[0],first[1],first[2].tile_ir),first[2],
             BlockScaleProgram(shape,"quantized_product",second[0],second[1],second[2].tile_ir),second[2],
-            record["checked_product_target_ir"],record["binding_digest"],expansion)
+            record["checked_product_target_ir"],record["binding_digest"],expansion,activation_recipe,activation)
         program.validate()
         return program
 
@@ -270,15 +315,24 @@ def package_quantized_product_graph(graph_ir):
         raise ValueError("native quantized-product normalized source replay differs")
     quantizer_recipe = lower_block_quant_text(plan["member_graphs"][0])
     quantizer = package_block_quant_recipe(quantizer_recipe)
-    expansion = package_nvfp4_expansion(plan["member_graphs"][1]) if plan["schema"]==_EXPANDED_SCHEMA else None
-    child = plan["member_graphs"][-1]
+    expanded=plan["schema"] in (_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA)
+    activated=plan["schema"]==_ACTIVATED_SCHEMA
+    expansion = package_nvfp4_expansion(plan["member_graphs"][1]) if expanded else None
+    child = plan["member_graphs"][2 if expanded else 1]
     schedule = run_tessera_opt(tool,child,"--tessera-graph-to-schedule")
     verify_blockscale_schedule(shape,schedule)
     tile = run_tessera_opt(tool,schedule,"--tessera-schedule-to-tile")
     recipe = BlockScaleProgram(shape,"quantized_product",child,schedule,tile)
     product = package_blockscale(recipe,pipeline_name="tessera-rocm-executable",project_image_identity=False)
+    activation_recipe,activation=None,None
+    if activated:
+        graph=plan["member_graphs"][3]
+        schedule=run_tessera_opt(tool,graph,"--tessera-graph-to-schedule")
+        tile=run_tessera_opt(tool,schedule,"--tessera-schedule-to-tile")
+        activation_recipe=ParentViewRecipe(graph,schedule,tile)
+        activation=package_parent_view_recipe(activation_recipe,pipeline_name="tessera-rocm-executable")
     program = NativeQuantizedProductProgram(json.dumps(plan,sort_keys=True),plan["source_graph_ir"],
-        quantizer_recipe,quantizer,recipe,product,product.target_ir,"",expansion)
+        quantizer_recipe,quantizer,recipe,product,product.target_ir,"",expansion,activation_recipe,activation)
     program = replace(program,binding_digest=program._identity())
     program.validate()
     return program
@@ -316,6 +370,9 @@ class PreparedQuantizedProductProgram(PreparedScaledProgram):
                 if grid is None or workgroup is None:
                     raise ValueError("native quantized-product expansion geometry differs")
                 scalars,geometry=(),[*grid,*workgroup]
+            elif package.activation is not None and i==len(native)-1:
+                _,member=_parent_view_frame(p.target_ir)
+                scalars,geometry=member["scalars"],member["geometry"]
             else:
                 bm,bn = p.descriptor.provenance["macro_tile"]
                 scalars = [shape.m,shape.n,shape.k]

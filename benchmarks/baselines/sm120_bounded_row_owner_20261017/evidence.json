@@ -16,7 +16,10 @@
     "mypy-final-repaired.txt": "050c52a2b0c61e8b681ef5c485e0bc03340b8d55148e0acef27d744c8be42033",
     "package-docs-final.txt": "e90528f91a4a40ebfc9c9dc8060da58432ff05264fc968644d99c199077ce882",
     "generated_docs.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
-    "device-64-geometry.txt": "67f3aaea24bdbffdce1ec618a3cd8e597f952a87402d7328d06f3acf35632a7d"
+    "device-64-geometry.txt": "67f3aaea24bdbffdce1ec618a3cd8e597f952a87402d7328d06f3acf35632a7d",
+    "x86-naming-repair.txt": "62d83dec615d03cbb8db1e96aa342cd1f70d6df760b972b9d809bb4a9e521cae",
+    "post-ab-docs-ratchet.txt": "6cda58080c7ba266cfbd784485d53f22cf85a82cd64ead85fe00a05956406ca7",
+    "generated-post-ab-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d"
   },
   "validation_scope": "55 new public/capture device cases = 37 initial + 4 pending-stream + 8 frontend + 2 fresh-process + 4 packed/logical64; 172 existing regressions; portable/prepared70; raw native kernels16; overlapping selections not summed",
   "publication": "private; broader unit/compiler/drift gates and review/CI still required; PR975 is the only open public PR",
@@ -28,16 +31,24 @@
     "typing": "zero errors across seven files",
     "routing_and_package_audit": "89 passed",
     "broad_host_unit": {
-      "session": 50179,
-      "log": "/home/angstorms/scratch/sm120-bounded-row-correction-20261017/full-unit-final.txt",
-      "state": "running"
+      "result": "517 failed, 27347 passed, 5905 skipped, 11 warnings in 702.73s",
+      "terminal": true,
+      "state": "failed; x86 build configuration and untracked recorder README identified; repair gates pending",
+      "log_archive": "broad-unit-initial.txt.xz"
     },
     "generated_docs": {
-      "result": "33 generated documents in sync",
-      "log": "generated_docs.txt",
-      "terminal": true
+      "result": "33 generated documents in sync after A/B and geometry additions",
+      "terminal": true,
+      "log": "generated-post-ab-check.txt"
     },
-    "new_64_geometry": "4 passed, 51 deselected in 6.04s"
+    "new_64_geometry": "4 passed, 51 deselected in 6.04s",
+    "x86_recorder_repair": {
+      "result": "561 passed, 514 skipped in 15.38s",
+      "compiler_configuration": "TESSERA_BUILD_X86_BACKEND=ON",
+      "scope": "all three original failed file families, including existing owning hardware skips; not exact x86 device proof",
+      "log": "x86-naming-repair.txt"
+    },
+    "post_ab_routing_audit": "20 passed in 10.44s"
   },
   "initial_broad_unit": {
     "result": "517 failed, 27347 passed, 5905 skipped, 11 warnings in 702.73s",
@@ -64,5 +75,10 @@
     "event_windows": 3,
     "correctness": "independent FP64 and bit-identical gradient arms before/after",
     "selector_promotion": false
+  },
+  "previous_generated_docs": {
+    "result": "33 generated documents in sync",
+    "log": "generated_docs.txt",
+    "terminal": true
   }
 }

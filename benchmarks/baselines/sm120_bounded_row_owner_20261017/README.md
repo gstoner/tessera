@@ -124,8 +124,9 @@ was configured with `TESSERA_BUILD_X86_BACKEND=OFF`. The remaining naming gate
 ran before this packet README was tracked. Its focused rerun passes, and the
 README now explicitly names both recorder paths. No test is weakened.
 
-The compiler is being rebuilt with the x86 backend enabled; its owning gates
-and final broad validation remain required. The initial log is retained
+The compiler rebuilt with the x86 backend enabled passes 561 owning-file
+cases, with 514 existing hardware skips. Final broad validation remains
+required; this is compiler coverage, not exact x86 device proof. The initial log is retained
 losslessly. Rebase on merged PR975 preserves all 5,459 compared source/test
 files byte-for-byte; the duplicate fixture patch was verified against merged
 main before being reconciled.

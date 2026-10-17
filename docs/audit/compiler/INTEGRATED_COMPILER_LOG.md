@@ -13314,7 +13314,8 @@ independent FP64 and bit-identical arm checks. Default selection is unchanged.
 
 Remaining: final broad publication gates, wider layouts/masks, half JVP,
 composed AD and all original aggregate obligations.
-No speedup, default-selector, sibling execution or model-quality promotion.
+No universal performance/default-selector, sibling execution or model-quality
+promotion.
 
 Evidence: benchmarks/baselines/sm120_bounded_row_owner_20261017/README.md.
 <!-- entry-fields:end -->

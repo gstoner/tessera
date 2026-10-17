@@ -13245,3 +13245,26 @@ Remaining: checkpoint/model quality, residual host costs, wider/dynamic/AD
 and the original five-slice NVIDIA/ROCm objective.
 Evidence: benchmarks/baselines/rocm_quantized_binding_cache_20261017/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-17 — full pinned checkpoint MLP characterization
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; follows #972/#973. Sync: ROCM-CHECKPOINT-MLP-QUALITY-20261017.
+
+Outcome: original pinned gate/up/down weights and captured BF16 model inputs
+execute through the public seven-member native Graph/Schedule/Tile program.
+The checkpoint loader admits down projection under its existing pinned range,
+shape and storage contract. All four backend queues are assessed.
+
+Proof: M1/M16/M128 on RX9070XT/gfx1201 passes staged bitwise equality and
+unchanged per-stage/propagated gates. Flat-reference deviations 0/43/187 remain
+recorded. RMS versus shipped NVFP4 weights is 0.45–1.04%; versus BF16 weights
+4.68–6.92%. Public 100–107 ms and prepared invoke/read 2.76–3.77 ms are distinct
+from ordinary device windows 2.04–2.44 ms. 28 reference/checkpoint and 39 combined
+documentation tests pass; Ruff and recorder mypy pass.
+
+Remaining: full-model/corpus quality acceptance, retained-weight public
+ownership, bounded/wider/AD composition and the original five-slice objective.
+Evidence: benchmarks/baselines/rocm_checkpoint_mlp_20261017/README.md.
+<!-- entry-fields:end -->

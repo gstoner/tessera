@@ -5,6 +5,18 @@ audit_role: reference
 
 # Five compiler slices after PR 892: completion evidence
 
+## Full checkpoint MLP quality follow-up — 2026-10-17
+
+The next local slice executes all three pinned layer-0 Qwen3 gate/up/down
+projections through the existing seven-member public native program. Independent
+BF16-weight and shipped-NVFP4 references retain explicit BF16 parent/activation/
+down stores and omit activation quantization to measure its combined cost.
+Final-source M1/M16/M128 passes staged/propagated gates; the flat reference
+retains 0/43/187 deviations. RMS versus shipped NVFP4 weights is 0.45–1.04%.
+See benchmarks/baselines/rocm_checkpoint_mlp_20261017/README.md. This does not establish
+full-model accuracy or close any aggregate row below.
+
+
 This is an evidence ledger, not a closure declaration. The original
 PR895–903 stack is historical delivery context; later changes through merged
 PR954 extend the source and proof below; the current storage slice is recorded separately. PR949 and PR950 deliver native/public

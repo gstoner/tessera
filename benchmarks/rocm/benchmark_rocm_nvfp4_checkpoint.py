@@ -124,9 +124,10 @@ def _load_projection(tensor: str = TENSOR):
         TENSOR,
         "model.layers.0.mlp.gate_proj.weight",
         "model.layers.0.mlp.up_proj.weight",
+        "model.layers.0.mlp.down_proj.weight",
     }
     if tensor not in allowed:
-        raise ValueError("checkpoint recorder supports layer-0 q_proj or gate/up only")
+        raise ValueError("checkpoint recorder supports layer-0 q_proj or gate/up/down only")
     started = time.perf_counter()
     q_index, q_index_bytes = _get_json(_url(NVFP4_REPO, NVFP4_REVISION, "model.safetensors.index.json"))
     bf_index, bf_index_bytes = _get_json(_url(BF16_REPO, BF16_REVISION, "model.safetensors.index.json"))

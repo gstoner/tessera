@@ -63,7 +63,8 @@ def inputs(m,width,k,n,seed=731):
         np.array([.0123456789],np.float64)]
 
 
-def run(m,h,k,n,output_dir,repeats):
+def run(m,h,k,n,output_dir,repeats,*, supplied_roots=None, source_metadata=None,
+        quality_references=None, windows=7, member_repeats=128, event_repeats=50):
     import hashlib
     import json
     import os
@@ -74,13 +75,15 @@ def run(m,h,k,n,output_dir,repeats):
     import time
     from tessera import runtime as rt
     from benchmarks.rocm.quantized_mlp_reference import assert_compiled_chain
+    if any(type(v) is not int or v <= 0 for v in (m,h,k,n,repeats,windows,member_repeats,event_repeats)):
+        raise ValueError('positive shapes and timing counts required')
     if rt._rocm_live_arch()!='gfx1201':
         raise RuntimeError('requires owning gfx1201')
     info=subprocess.check_output(['/opt/rocm/bin/rocminfo'],text=True)
     identity=re.search(r'Name:\s+gfx1201\s+Uuid:\s+(GPU-\S+)\s+Marketing Name:\s+([^\n]+)',info)
     if identity is None:
         raise RuntimeError('owning device identity unavailable')
-    roots=inputs(m,h,k,n)
+    roots=inputs(m,h,k,n) if supplied_roots is None else supplied_roots
     fn=ts.jit(target='rocm_gfx1201',native_required=True)(make_mlp(m,h,k,n))
     start=time.perf_counter();first=fn(*roots);cold=(time.perf_counter()-start)*1000
     artifact=fn.runtime_artifact()
@@ -88,7 +91,16 @@ def run(m,h,k,n,output_dir,repeats):
         raise RuntimeError('public call did not execute the seven-member program')
     program=fn._rocm_quantized_product_last_program.native
     lib=rt._load_rocm_native_movement_runtime()
+    if lib is None:
+        raise RuntimeError("native ROCm movement runtime unavailable")
     certificate=assert_compiled_chain(program,roots,first,lib._name)
+    quality={}
+    if quality_references is not None:
+        from benchmarks.rocm.benchmark_rocm_nvfp4_checkpoint import _relative_rms
+        for name, expected in quality_references.items():
+            if not np.isfinite(expected).all() or not np.isfinite(first).all():
+                raise ValueError('nonfinite quality comparison')
+            quality[name]=_relative_rms(expected,first)
     receipts=list(fn._rocm_quantized_product_last_receipts)
     if len(receipts)!=7:
         raise RuntimeError('missing native member receipts')
@@ -102,22 +114,24 @@ def run(m,h,k,n,output_dir,repeats):
         'correctness':'per_stage_and_propagation_passed_before_timing','numerical_certificate':certificate,
         'route':'authored Graph SSA -> seven native partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> one checked multi-output HIP owner',
         'native_schema':json.loads(program.program_json)['schema'],'binding_digest':program.binding_digest,
+        'checkpoint_source':source_metadata,'quality_characterization':quality,'model_quality_acceptance':False,
+        'timing_counts':{'windows':windows,'member_repeats':member_repeats,'event_repeats':event_repeats,'public_repeats':repeats},
         'component_receipts':receipts,'host_binding_cache_enabled':os.environ.get('TESSERA_ROCM_PROGRAM_BINDING_CACHE','1')=='1','public_cold_ms':cold,'public_warm_samples_ms':[],
         'prepared_invoke_read_samples_ms':[],'ordinary_program_event_samples_ms':[],
         'captured_member_samples_ms':[],
         'member_order':['input_quantizer','gate_up_expansion','gate_up_product_bf16_store','silu_bf16_store',
                         'activation_quantizer','down_expansion','down_product_bf16_store']}
-    for _ in range(7):
+    for _ in range(windows):
         start=time.perf_counter()
         for _ in range(repeats):result=fn(*roots)
         record['public_warm_samples_ms'].append((time.perf_counter()-start)*1000/repeats)
     np.testing.assert_array_equal(result,first)
     with program.prepare(roots,runtime_library=lib._name) as owner:
         generation,_=owner.invoke();np.testing.assert_array_equal(owner.read(generation)[0],first)
-        for _ in range(7):
-            _,members=owner.profile_members(repeats=128)
+        for _ in range(windows):
+            _,members=owner.profile_members(repeats=member_repeats)
             record['captured_member_samples_ms'].append(list(members))
-            generation,event=owner.invoke(repeats=50,timed=True)
+            generation,event=owner.invoke(repeats=event_repeats,timed=True)
             record['ordinary_program_event_samples_ms'].append(event)
             start=time.perf_counter();generation,_=owner.invoke();held=owner.read(generation)[0]
             record['prepared_invoke_read_samples_ms'].append((time.perf_counter()-start)*1000)
@@ -138,6 +152,8 @@ def run(m,h,k,n,output_dir,repeats):
     record['artifact_sha256']=hashlib.sha256(payload.encode()).hexdigest()
     (output_dir/(stem+'.json')).write_text(json.dumps(record,indent=2)+'\n')
     print(json.dumps({key:record[key] for key in ('shape_mhkn','public_warm_median_ms','captured_member_median_ms','ordinary_program_event_median_ms','numerical_certificate')}),flush=True)
+
+    return record
 
 
 if __name__=='__main__':

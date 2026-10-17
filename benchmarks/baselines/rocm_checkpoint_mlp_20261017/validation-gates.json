@@ -1,0 +1,25 @@
+{
+  "source_revision": "a1df1af73f",
+  "gates": {
+    "focused_docs": {
+      "sha256": "63f88584794c6bd7d1c4d117dca0e5963c83e559680b399c91408af335c86f59",
+      "result": "39 passed in 0.74s"
+    },
+    "mypy": {
+      "sha256": "f9b031e5c45aa702cd4fef028d465551cb20a2c4698e0913c7b00766b20ac4d8",
+      "result": "Success: no issues found in 2 source files"
+    },
+    "ruff": {
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "result": "All checks passed!"
+    },
+    "generated_docs": {
+      "sha256": "c9feb23a97118215c08b778fc9727729e48d40bc4542991634591d97c64cc697",
+      "result": "ok: 33 generated doc(s) in sync"
+    },
+    "graphify": {
+      "sha256": "a26ce8f6fab0f76e0354f65e84a72fbe36f99df0844d53a36b6084fad1082990",
+      "result": "Tip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction."
+    }
+  }
+}

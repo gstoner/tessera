@@ -13374,6 +13374,11 @@ JVP cases also pass their independent oracle. Initial documentation/date and
 tracked-recorder failures are repaired; 37 focused gates pass. All five
 public surface audits and both claim linters pass.
 
+PR978 review: the direct source-backed tape caller now retains/forwards its
+captured native storage roles. Forty direct cases and twelve producer
+regressions pass; eight refreshed numerical timing profiles retain native
+image, sizer and entry identities. Exact-head public CI remains required.
+
 Remaining: public CI/review, ordinary bounded host JVP preparation,
 wider layouts/masks, mixed formats, nested/composed AD and original five-slice
 closure. The static prepared owner and bounded portable generations are

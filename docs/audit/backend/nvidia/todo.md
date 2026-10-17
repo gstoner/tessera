@@ -13,6 +13,8 @@ Sync: SM120-TYPED-JVP-20261017.
 
 Implementation: native typed Graph AD/Schedule/Tile JVP, portable resident replay and the typed static prepared owner now carry FP16/BF16 data and explicit FP32 row/bias roles. Half-output score derivatives use an unrounded FP32 weighted-V correction. Static, bounded trace-at-one, fresh-process compiler-absent replay, authored FP32 output and pending producer-stream proofs are separate from ordinary bounded host preparation, wider composition and publication gates. Native flag refusal now checks complete output-storage symbol identity. Existing FP32 native artifact controls remain identical. Aggregate five-slice closure stays open.
 
+PR978 review: source-backed direct tape preparation now forwards captured data/output storage. All 40 direct cases plus 12 producer regressions pass; 8 refreshed timing profiles retain native image/sizer/entry identity. New exact-head CI remains required.
+
 Contract: docs/spec/SM120_TYPED_ATTENTION_JVP_CONTRACT.md.
 Evidence: benchmarks/baselines/sm120_typed_attention_jvp_20261017/README.md.
 

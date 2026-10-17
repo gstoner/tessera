@@ -43,7 +43,7 @@ static/bounded replay and authored FP32 output. Prepared and diagnostic host
 paths compare bit-for-bit on sixteen cases; independent FP64 checks are
 separate. Owning native-member cases include both half and FP32 output roles.
 
-Final combined source/device/registry gate: **650 passed**, four existing
+Base combined source/device/registry gate: **650 passed**, four existing
 fork deprecation warnings, 164.85 seconds. Focused shared dtype/diagnostic/
 pass/half-AD gates separately pass 484 cases; cohorts overlap and are not summed.
 The complete production compiler-route gate passes **1,587** cases with zero
@@ -60,6 +60,23 @@ red receipt. Twelve existing FP16/BF16 resident producer-to-matmul JVP cases
 also pass their independent oracle on RTX5070; this is regression proof, not a
 new W1.1 migration.
 Public CI and complete review-thread audit remain required before merge.
+
+## Source-backed tape review fix
+
+PR978 review reproduced a direct preparation failure: the tape called
+materialize_generated without its captured storage/output roles, leaving the
+adapter's FP32 defaults. Source 3bfa92c1a retains those immutable validated roles
+on capture and forwards them without relaxing contract checks. Thirty-two
+FP16/BF16 direct-tape cases pass across static/bounded shapes, bias, saved LSE
+and half/FP32 outputs. Eight direct FP32 compatibility cases and twelve
+existing producer-to-matmul regressions pass separately. Ruff and the full
+zero-baseline mypy ratchet pass.
+
+The broad/base receipts above retain their original scope; exact-head public
+CI is required for this incremental review fix. All eight timing profiles were
+rerun on 3bfa92c1a. The refreshed source/tool/runtime pins and portable archives
+validate, and reviewed-image-parity.json confirms identical native images,
+sizers and entry symbols. No C++ arithmetic, ABI or selector changed.
 
 ## Timing scope
 

@@ -52,6 +52,10 @@ allocation capacities, snapshots, retained outputs and context ownership
 remain checked. Typed forward bias extents are passed explicitly, including
 degenerate physical broadcasts.
 
+Source-backed ResidentAttentionTape.prepare_jvp retains validated native data
+and output storage from its captured forward generation and supplies them to
+the AD materializer. Adapter defaults cannot replace the captured policy.
+
 ## Evidence and remaining envelope
 
 Exact-device execution is required on RTX5070 / sm_120. The current static

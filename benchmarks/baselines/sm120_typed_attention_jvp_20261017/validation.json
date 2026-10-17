@@ -66,5 +66,24 @@
     "seconds": 16.38,
     "scope": "RTX5070 existing FP16/BF16 resident producer-to-matmul JVP; complete/ragged,permuted roots,independent oracle"
   },
-  "publication_source_scope": "Final receipt/documentation commits retain the exact b63e09a2e measured src/python/tests/recorder tree."
+  "publication_source_scope": "Reviewed implementation3bfa92c1a is timed and numerically checked; following receipt/doc commits preserve that src/python/tests/recorder tree.",
+  "direct_tape_review": {
+    "finding": "PR978 discussion_r4304562477: source-backed ResidentAttentionTape.prepare_jvp omitted captured storage arguments",
+    "red": "1 owning-device failure reproduced before fix",
+    "half_cases": {
+      "passed": 32,
+      "seconds": 51.41
+    },
+    "fp32_and_producer": {
+      "passed": 20,
+      "seconds": 30.34,
+      "composition": "8 direct FP32 plus12 existing producer JVP cases"
+    },
+    "implementation": "3bfa92c1af4d3792a4294eae67bf33322044a0ac",
+    "native_image_parity": "all8 refreshed profiles retain forward/tangent images,host sizers and entry symbols",
+    "ruff": "pass",
+    "mypy": "errors0_baseline0",
+    "base_gate_scope": "650 combined,1587 compiler-route and26314 CPU receipts precede this4-line Python-only review fix; no C++/native ABI change. New exact-head public CI must pass.",
+    "doc_gates": 37
+  }
 }

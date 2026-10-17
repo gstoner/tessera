@@ -148,6 +148,11 @@ class NativeQuantizedProductProgram:
         return _digest(json.dumps(parts,separators=(",",":")))
 
     @property
+    def schedule_irs(self):
+        return ((self.quantizer_recipe.schedule_ir,self.expansion.schedule_ir,self.product_recipe.schedule_ir)
+                if self.expansion is not None else (self.quantizer_recipe.schedule_ir,self.product_recipe.schedule_ir))
+
+    @property
     def native_stages(self):
         return (self.quantizer,self.expansion.native,self.product) if self.expansion is not None else (self.quantizer,self.product)
 

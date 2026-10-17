@@ -114,7 +114,7 @@ def runtime_artifact(program):
     program.validate()
     native=program.native
     return RuntimeArtifact(graph_ir=program.graph_ir,
-        schedule_ir="\n".join((native.quantizer_recipe.schedule_ir,native.product_recipe.schedule_ir)),
+        schedule_ir="\n".join(native.schedule_irs),
         tile_ir="\n".join(p.tile_ir for p in native.native_stages),
         target_ir="\n".join(p.target_ir for p in native.native_stages),
         metadata={"target":"rocm_gfx1201","compiler_path":"canonical_rocm_quantized_product_program",
@@ -147,7 +147,7 @@ def execute_artifact(artifact,args):
     program=_resolve(json.dumps(metadata.get("native_program"),sort_keys=True,allow_nan=False),
                      artifact.graph_ir,json.dumps(metadata.get("arg_names")))
     native=program.native
-    if (artifact.schedule_ir!="\n".join((native.quantizer_recipe.schedule_ir,native.product_recipe.schedule_ir))
+    if (artifact.schedule_ir!="\n".join(native.schedule_irs)
             or artifact.tile_ir!="\n".join(p.tile_ir for p in native.native_stages)
             or artifact.target_ir!="\n".join(p.target_ir for p in native.native_stages)):
         raise ValueError("native quantized-product parent stage witnesses differ")

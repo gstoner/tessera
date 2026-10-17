@@ -3745,16 +3745,13 @@ class JitFn:
             ),
         }
         quantized_program=getattr(self,"_rocm_quantized_product_last_program",None)
-        quantized_receipts=getattr(self,"_rocm_quantized_product_last_receipts",())
-        if quantized_program is not None and len(quantized_receipts)==2 and all(
-                receipt.get("ok") and receipt.get("execution_kind")=="native_gpu" for receipt in quantized_receipts):
+        if self._has_native_quantized_product_receipts():
             import hashlib
             quant_native=quantized_program.native
             target_decision["rocm_gfx1201"]=f"canonical_rocm_quantized_product_program; {len(quantized_program.native.native_stages)} ordered native packages"
             plan_hash=quant_native.binding_digest
             ir_hashes["graph_ir"]=hashlib.sha256(quantized_program.graph_ir.encode()).hexdigest()
-            ir_hashes["schedule_ir"]=hashlib.sha256("\n".join((quant_native.quantizer_recipe.schedule_ir,
-                quant_native.product_recipe.schedule_ir)).encode()).hexdigest()
+            ir_hashes["schedule_ir"]=hashlib.sha256("\n".join(quant_native.schedule_irs).encode()).hexdigest()
             ir_hashes["tile_ir"]=hashlib.sha256("\n".join(p.tile_ir for p in quant_native.native_stages).encode()).hexdigest()
             ir_hashes["target_ir"]=hashlib.sha256("\n".join(p.target_ir for p in quant_native.native_stages).encode()).hexdigest()
         if self._rocm_nvfp4_last_program is not None:

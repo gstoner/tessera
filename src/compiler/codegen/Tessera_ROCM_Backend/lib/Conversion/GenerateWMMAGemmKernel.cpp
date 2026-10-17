@@ -2014,7 +2014,8 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
                                 bool foldedVectorScales = false,
                                 StringRef scaleFormat = "fp32", bool foldedPacked = false,
                                 bool foldedFragmentGroups = false,
-                                bool foldedRowPitched = false) {
+                                bool foldedRowPitched = false,
+                                bool rhsNK = true) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
@@ -2191,6 +2192,7 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
     SmallVector<Value> active;   // optional mask for a partial copy round
     SmallVector<Value> globalRows, kVectors;
     bool packed = false;
+    bool transposeKN = false;
   };
   auto planCopy = [&](Value src, Value dst, int64_t rows, Value origin,
                       Value bound, bool whole, Value rowStride) {
@@ -2230,15 +2232,87 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
     return plan;
   };
   CopyPlan planA = planCopy(A, ldsA, wgM, baseRow, M, wholeM, aRowStride);
-  CopyPlan planB = planCopy(B, ldsB, wgN, baseCol, N, wholeN, bRowStride);
+  auto planKN = [&]() {
+    CopyPlan plan{B, ldsB, wgN * ldsStride, {}, {}, {}, {}, {}, false};
+    plan.transposeKN = true;
+    const int64_t nVectors = wgN / vecW;
+    const int64_t vectors = stageK * nVectors;
+    const int64_t trips = (vectors + nthreads - 1) / nthreads;
+    for (int64_t i = 0; i < trips; ++i) {
+      Value e = b.create<arith::AddIOp>(loc, tx, ci(i * nthreads));
+      plan.active.push_back((i + 1) * nthreads > vectors
+          ? Value(b.create<arith::CmpIOp>(
+                loc, arith::CmpIPredicate::ult, e, ci(vectors)))
+          : Value());
+      Value kk = b.create<arith::DivUIOp>(loc, e, ci(nVectors));
+      Value nn = b.create<arith::MulIOp>(
+          loc, b.create<arith::RemUIOp>(loc, e, ci(nVectors)), ci(vecW));
+      Value col = b.create<arith::AddIOp>(loc, baseCol, nn);
+      plan.globalRows.push_back(col);
+      plan.kVectors.push_back(kk);
+      plan.rowBase.push_back(b.create<arith::AddIOp>(
+          loc, b.create<arith::MulIOp>(loc, kk, N), col));
+      plan.ldsDst.push_back(b.create<arith::AddIOp>(
+          loc, b.create<arith::MulIOp>(loc, nn, cStride), kk));
+    }
+    return plan;
+  };
+  CopyPlan planB = rhsNK
+      ? planCopy(B, ldsB, wgN, baseCol, N, wholeN, bRowStride)
+      : planKN();
   planB.packed = foldedPacked;
   const llvm::MaybeAlign align16(16);
 
   auto issue = [&](OpBuilder &kb, Location l, const CopyPlan &plan, Value k0) {
     SmallVector<Value> vals;
     for (size_t i = 0; i < plan.rowBase.size(); ++i) {
-      Value idx = kb.create<arith::AddIOp>(l, plan.rowBase[i], k0);
+      Value origin = plan.transposeKN
+          ? Value(kb.create<arith::MulIOp>(l, k0, N)) : k0;
+      Value idx = kb.create<arith::AddIOp>(l, plan.rowBase[i], origin);
       auto load = [&]() -> Value {
+        if (plan.transposeKN) {
+          // whole_n is a checked physical capacity contract: the N pitch and
+          // every scheduled 16-byte vector are aligned and fully in bounds.
+          // Do not retain the ragged fallback's live state in this body.
+          if (wholeN)
+            return kb.create<vector::LoadOp>(
+                l, vecTy, plan.src, ValueRange{idx},
+                /*nontemporal=*/false, align16);
+          // KN vectors run along physical N, whose pitch need not be aligned.
+          // A vector crossing the final physical row must use safe scalar
+          // addresses, including tiles wholly outside the logical N bound.
+          Value end = kb.create<arith::AddIOp>(
+              l, plan.globalRows[i], ci(vecW));
+          Value full = kb.create<arith::CmpIOp>(
+              l, arith::CmpIPredicate::ule, end, N);
+          auto branch = kb.create<scf::IfOp>(l, TypeRange{vecTy}, full, true);
+          OpBuilder::InsertionGuard guard(kb);
+          kb.setInsertionPointToStart(branch.thenBlock());
+          Value vector = kb.create<vector::LoadOp>(
+              l, vecTy, plan.src, ValueRange{idx},
+              /*nontemporal=*/false, llvm::MaybeAlign(1));
+          kb.create<scf::YieldOp>(l, vector);
+          kb.setInsertionPointToStart(branch.elseBlock());
+          Value result = kb.create<arith::ConstantOp>(
+              l, vecTy, kb.getZeroAttr(vecTy));
+          Value rowBase = kb.create<arith::AddIOp>(
+              l, origin, kb.create<arith::MulIOp>(l, plan.kVectors[i], N));
+          Value last = kb.create<arith::SubIOp>(l, N, ci(1));
+          for (int64_t j = 0; j < vecW; ++j) {
+            Value col = kb.create<arith::AddIOp>(l, plan.globalRows[i], ci(j));
+            Value safeCol = kb.create<arith::MinUIOp>(l, col, last);
+            Value address = kb.create<arith::AddIOp>(l, rowBase, safeCol);
+            Value byte = kb.create<memref::LoadOp>(l, plan.src, ValueRange{address});
+            Value valid = kb.create<arith::CmpIOp>(
+                l, arith::CmpIPredicate::ult, col, N);
+            Value zero = kb.create<arith::ConstantOp>(l, T.store, kb.getZeroAttr(T.store));
+            byte = kb.create<arith::SelectOp>(l, valid, byte, zero);
+            result = kb.create<vector::InsertOp>(
+                l, byte, result, ArrayRef<int64_t>{j});
+          }
+          kb.create<scf::YieldOp>(l, result);
+          return branch.getResult(0);
+        }
         if (plan.packed) {
           auto c32i = [&](int64_t x) -> Value { return kb.create<arith::ConstantIntOp>(l, x, 32); };
           Value row = plan.globalRows[i];
@@ -2357,18 +2431,29 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
       if (buf)
         dst = kb.create<arith::AddIOp>(
             l, dst, kb.create<arith::MulIOp>(l, buf, ci(plan.bufElems)));
-      // The row stride is a multiple of 16 bytes (checked at admission),
-      // so every LDS vector is 16-byte aligned: one ds_store_b128.
+      auto store = [&]() {
+        if (plan.transposeKN) {
+          // The consumer retains its [Ntile,Kstage] LDS view. Each physical
+          // N byte belongs to a different row; no barrier moves into a mask.
+          for (int64_t j = 0; j < vecW; ++j) {
+            Value byte = kb.create<vector::ExtractOp>(
+                l, vals[i], ArrayRef<int64_t>{j});
+            Value address = kb.create<arith::AddIOp>(l, dst, ci(j * ldsStride));
+            kb.create<memref::StoreOp>(l, byte, plan.dst, ValueRange{address});
+          }
+        } else {
+          kb.create<vector::StoreOp>(l, vals[i], plan.dst, ValueRange{dst},
+                                     /*nontemporal=*/false, align16);
+        }
+      };
       if (!plan.active[i]) {
-        kb.create<vector::StoreOp>(l, vals[i], plan.dst, ValueRange{dst},
-                                   /*nontemporal=*/false, align16);
+        store();
       } else {
         auto branch = kb.create<scf::IfOp>(
             l, plan.active[i], /*withElseRegion=*/false);
         OpBuilder::InsertionGuard guard(kb);
         kb.setInsertionPointToStart(branch.thenBlock());
-        kb.create<vector::StoreOp>(l, vals[i], plan.dst, ValueRange{dst},
-                                   /*nontemporal=*/false, align16);
+        store();
       }
     }
   };
@@ -3428,7 +3513,7 @@ struct GenerateWMMAGemmKernelPass
           blockM <= 0 || blockN <= 0 || blockM % 16 || blockN % 16 ||
           (text("staging") != "global" && text("staging") != "lds") ||
           (text("staging") == "global" && warps != 1) ||
-          (text("staging") == "lds" && (!nk || warps < 1 || warps > 16 ||
+          (text("staging") == "lds" && (warps < 1 || warps > 16 ||
              blockM % 32 || warps % (blockM / 32))) ||
           (depth != 1 && depth != 2)) {
         op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: executable W8A8 Target "
@@ -4088,9 +4173,9 @@ struct GenerateWMMAGemmKernelPass
             blockscalePrefetchMode = request.foldedPrefetch;
           }
           const int64_t waveRows = request.foldedFullK ? 64 : 32;
-          if (!request.bTransposed)
-            why = "the LDS-staged block-scale body reads the [N, K] weight "
-                  "(the _nk contract) only";
+          if (!request.bTransposed &&
+              (request.foldedFullK || request.scaleFormat != "fp32"))
+            why = "KN LDS staging requires the FP32-scale W8A8 contract";
           else if (macroM % waveRows != 0 || request.warps < 1 ||
                    request.warps > 16 || request.warps % (macroM / waveRows) != 0)
             why = (Twine("warps=") + Twine(request.warps) +
@@ -4344,7 +4429,9 @@ struct GenerateWMMAGemmKernelPass
                                                      : "rocm_mxfp4_w4a8_folded_prefill_v1")
                              : request.scaleFormat == "e8m0"
                                  ? "rocm_mxfp8_e4m3_e8m0_k32_nk_v1"
-                                 : "rocm_fp8_w8a8_blockscale_nk_v1"));
+                                 : (request.bTransposed
+                                        ? "rocm_fp8_w8a8_blockscale_nk_v1"
+                                        : "rocm_fp8_w8a8_blockscale_v1")));
         gpuFunc->setAttr("tessera.rocm.scale_k",
                          b.getI64IntegerAttr(request.scaleK));
         gpuFunc->setAttr("tessera.rocm.scale_n",
@@ -4358,7 +4445,8 @@ struct GenerateWMMAGemmKernelPass
             outputTy, request.runtimeMN, request.wholeM, request.wholeN,
             request.runtimeK, request.foldedFullK, request.foldedWaveGuard,
             request.foldedVectorScales, request.scaleFormat, request.foldedPacked,
-            request.foldedFragmentGroups, request.foldedRowPitched);
+            request.foldedFragmentGroups, request.foldedRowPitched,
+            request.bTransposed);
       } else if (scaled) {
         gpuFunc->setAttr("tessera.rocm.block_scale_contract",
                          b.getStringAttr(

@@ -1,0 +1,96 @@
+{
+  "source_commit": "2ca05af868f22e9126050f9e3db42b617fb8216a",
+  "scope": "ROCm isolated sparse worker shutdown; no IR/image/ABI arithmetic change",
+  "initial_cpu": {
+    "failed": 3,
+    "passed": 26323,
+    "skipped": 5897,
+    "seconds": 456.09
+  },
+  "deterministic_previous_worker": {
+    "failed": 1,
+    "seconds": 5.48
+  },
+  "focused_repaired": {
+    "passed": 1100,
+    "seconds": 14.09
+  },
+  "parallel_device_without_probe": {
+    "passed": 20,
+    "seconds": 8.74
+  },
+  "mypy": "errors=0 baseline=0",
+  "invariants": [
+    "checked HIP cleanup before result delivery",
+    "parent requires confirmed exit status zero",
+    "invalid-input and uncertain-ownership checks retained"
+  ],
+  "archives": {
+    "kn-sparse-finalizer-red.txt": {
+      "sha256": "06f2fe0e3c6965786ecef4a2f07ea6ab64da3045ecc0bcd5f3c9620874c260db",
+      "archive": "kn-sparse-finalizer-red.txt.xz",
+      "archive_sha256": "ddb9ced6369efb274b570eb3a27650a7ed43ebc57eac8a78e72eb59c0398989e"
+    },
+    "kn-sparse-finalizer-green.txt": {
+      "sha256": "ebeda2daebb07820328d1b5aa21eb0e225c478281c57f13d2e90ad720ea392ad",
+      "archive": "kn-sparse-finalizer-green.txt.xz",
+      "archive_sha256": "b83a1f5a6d252b109b63f170107c236a7db2145965dcd5dc0ea129bd3b7da1f7"
+    },
+    "kn-sparse-parallel-no-probe.txt": {
+      "sha256": "f88fd9abd4024974d63c8773df18563ffc171f365c5749b0b33eda64fb439082",
+      "archive": "kn-sparse-parallel-no-probe.txt.xz",
+      "archive_sha256": "7e75a1e9ba1937d527feee2150a5e2424fa0ce3ea402dc76147c1c045d658914"
+    },
+    "kn-sparse-repair-mypy.txt": {
+      "sha256": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+      "archive": "kn-sparse-repair-mypy.txt.xz",
+      "archive_sha256": "f34e2905e2bdc42a667d601c844f62a645e964b101a61136060f7382b911092d"
+    },
+    "kn-sparse-byte-parallel.txt": {
+      "sha256": "3eb1b916ea29c766b9cec9074386a1e18a366fbfd64846a5088aa17c777596d4",
+      "archive": "kn-sparse-byte-parallel.txt.xz",
+      "archive_sha256": "a0a57d0add8d44c76e0c714dac5373474dbd61c0fafe832e372cbef8b5cd7766"
+    },
+    "kn-sparse-byte-parallel-fixed.txt": {
+      "sha256": "9fa1536725be53e3aa6ddf5eef025034cf67660307374518e9b657d8762d8e3b",
+      "archive": "kn-sparse-byte-parallel-fixed.txt.xz",
+      "archive_sha256": "f6701062e3d47bb18c41b29c559f697471dedb3e771b665089658cfce2546d4e"
+    },
+    "kn-broad-cpu-initial-red.txt": {
+      "sha256": "fc64398e5ec951db50bf861fb76adca28358d42445d3ba60fd0e693a94f9fe73",
+      "archive": "kn-broad-cpu-initial-red.txt.xz",
+      "archive_sha256": "0efb0d9fdb89796cf3fa23412c70a4b3da26268231c14c5475e872a3a666374c"
+    },
+    "kn-broad-cpu.txt": {
+      "sha256": "5863a86b39bc3541986518d01d91e1ba1a40bb5834f86ecbcae5ecc0e66ce31e",
+      "archive": "kn-broad-cpu.txt.xz",
+      "archive_sha256": "374a15f0772600be9bfd27511ba706bf96b235005da25950b5a8ad439700fd3b"
+    },
+    "kn-broad-cpu.xml": {
+      "sha256": "88e2cd61200e4437563f58245392bd734c116e83016d639a4c6d2389623a5f74",
+      "archive": "kn-broad-cpu.xml.xz",
+      "archive_sha256": "c2b57aec13f515fc3e8a7213ad917893e5deea53358db5cf062427fcf045e56d"
+    },
+    "kn-broad-cpu-initial-red.xml": {
+      "sha256": "c91dcffff234bca7c9ae7c5d7b95b62b5f7428ee538e5bf4ea3724356497dfa3",
+      "archive": "kn-broad-cpu-initial-red.xml.xz",
+      "archive_sha256": "d5214e63c42e4d29ccc4a1cadf63adbcec9a3e7d7955ae8a93088466b38cc514"
+    },
+    "sparse-exit-probe.jsonl": {
+      "sha256": "4cdc0581dfda79704eb7d19b558e2b5cdab1d677e3d67416facb0f96fada4410",
+      "archive": "sparse-exit-probe.jsonl.xz",
+      "archive_sha256": "eb8b80358c68ca01c4d2bde02a7c01d9e51bab2b4d1241f044fe83aad4623cc9"
+    },
+    "kn-broad-cpu-repaired-source.json": {
+      "sha256": "30f45c8149bf640656ba0ae3499618c83106e7e8cee9fa181f27d3af18506b41",
+      "archive": "kn-broad-cpu-repaired-source.json.xz",
+      "archive_sha256": "f7c28df66496de1f6249183ca3d6d8d620ec6292b9e822d3ae414e158e9005ab"
+    }
+  },
+  "full_cpu": {
+    "passed": 26327,
+    "skipped": 5897,
+    "seconds": 401.53,
+    "source_commit": "2ca05af868f22e9126050f9e3db42b617fb8216a"
+  }
+}

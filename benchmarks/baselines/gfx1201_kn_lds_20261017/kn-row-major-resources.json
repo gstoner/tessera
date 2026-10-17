@@ -1,0 +1,18 @@
+{
+  "scope": "static disassembly; no dynamic counter attribution",
+  "vgprs_and_spills": [
+    200,
+    0
+  ],
+  "image_sha256": "a6cb787d047aa8e1a7ee5ce67dc1906fd24483e22eaf2ddf5f6aea36feaba230",
+  "instructions": {
+    "ds_load_2addr_b64": 8,
+    "ds_load_u8": 128,
+    "ds_store_b128": 6,
+    "global_load_b128": 6,
+    "global_load_b32": 16,
+    "s_barrier_signal": 2,
+    "s_barrier_wait": 2,
+    "v_wmma_f32_16x16x16_fp8_fp8": 32
+  }
+}

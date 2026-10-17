@@ -1,0 +1,59 @@
+{
+  "scope": "six same-source public register/NK image controls across KN-only whole-N emitter change",
+  "rows": [
+    {
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "arm": "tessera_kn+bf16",
+      "hsaco_sha256": "c0c86728690478442723f33f87981144d80118d13ee7649bad731abf888e7cd0"
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "arm": "tessera_nk+bf16",
+      "hsaco_sha256": "c865c3fff2a7086c1d6349829f0db5f05edfa9d0e546845c1a01432bc0f61dc3"
+    },
+    {
+      "shape": [
+        200,
+        2048,
+        2048
+      ],
+      "arm": "tessera_kn+bf16",
+      "hsaco_sha256": "c0c86728690478442723f33f87981144d80118d13ee7649bad731abf888e7cd0"
+    },
+    {
+      "shape": [
+        200,
+        2048,
+        2048
+      ],
+      "arm": "tessera_nk+bf16",
+      "hsaco_sha256": "c865c3fff2a7086c1d6349829f0db5f05edfa9d0e546845c1a01432bc0f61dc3"
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1536
+      ],
+      "arm": "tessera_kn+bf16",
+      "hsaco_sha256": "c0c86728690478442723f33f87981144d80118d13ee7649bad731abf888e7cd0"
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1536
+      ],
+      "arm": "tessera_nk+bf16",
+      "hsaco_sha256": "9472cdc7559a38b6ddb432856870dcb58dac9d4663aebf023efb6be7a9d437e2"
+    }
+  ]
+}

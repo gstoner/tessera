@@ -1,0 +1,14 @@
+{
+  "scope": "existing LLVM23.1.1 assertions-enabled tool was absent from test PATH; add only a scratch-owned symlink; no tests or certificates weakened",
+  "path": "/home/angstorms/toolchains/llvm-tools-build/bin/llc",
+  "sha256": "1b98d94b56b9d26dab73e30d171e48bf53644b1e2e1c6c05b8f0b974c82eecf8",
+  "version": [
+    "LLVM (http://llvm.org/):",
+    "  LLVM version 23.1.1",
+    "  Optimized build with assertions.",
+    "  Default target: x86_64-unknown-linux-gnu"
+  ],
+  "cache": "/home/angstorms/toolchains/llvm-tools-build/CMakeCache.txt",
+  "assertions": "ON",
+  "initial_skips": 153
+}

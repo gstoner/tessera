@@ -6,6 +6,20 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## GFX1201-KN-LDS-20261017 — native KN W8A8 staging
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync: GFX1201-KN-LDS-20261017.
+
+Not applicable to apple physical execution: only ROCm W8A8 Schedule verification/selection, LDS materialization and image projection change. Metal views and runtime ownership are unchanged. No shared operation, dtype or runtime ABI is added. Optional paired completed-host fields extend only the ROCm recorder; no sibling schema consumer changes. Follow-up required before adapting the layout or recorder to this backend; gfx1201 numerical/performance proof does not transfer.
+
+Evidence: benchmarks/baselines/gfx1201_kn_lds_20261017/README.md.
+
+Publication-gate follow-up: ROCm isolated sparse workers now confirm process
+completion after checked HIP cleanup. Parent zero-exit, invalid-input and
+uncertain-ownership guards remain; no IR/image or ABI arithmetic changes. Not applicable to apple execution: its runtime uses no ROCm sparse worker;
+no physical schedule, buffer lifetime implementation or device claim transfers.
+
 ## SM120-TYPED-JVP-20261017 — typed forward-mode integration
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

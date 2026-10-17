@@ -1,0 +1,8 @@
+{
+  "scope": "frozen diagnostic scalar-scatter prototype; intentional A/B control, no default promotion",
+  "sha256": {
+    "tessera-opt-kn-scalar-v1": "94bdd290724b30762f62dbecdce0fde1089d348dc1f60637ae92c1a96155d28e",
+    "kn-scalar-v1-source.cpp": "4c56fae24f58f0bcc851cf85782714a38ab70746662a44b6f8a7b89dc9d5af81",
+    "kn-lds-first-timings.json": "2334b495edbec8078dd780da38c8dfde906c386277467973f8b3f799a7b0976e"
+  }
+}

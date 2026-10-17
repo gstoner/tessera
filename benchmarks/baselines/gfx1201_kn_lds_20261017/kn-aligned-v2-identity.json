@@ -1,0 +1,5 @@
+{
+  "scope": "intentional frozen aligned scalar-scatter A/B baseline",
+  "source_commit": "6d22d41b2b01587a76b96d622ad7f3993d74dbfe",
+  "compiler_sha256": "a9847f49ceeff7a394e39916ffa19e18bb582b70cbb78c3c9279825e36d395ba"
+}

@@ -148,7 +148,8 @@ LogicalResult MatmulOp::verify() {
   }
   // ROCM-FP8-BLOCKSCALE-1: the W8A8 contract's LDS-staged body runs 8 waves.
   const bool fp8W8A8Lds =
-      (getPhysicalContract() == "rocm_fp8_w8a8_blockscale_nk_v1" ||
+      (getPhysicalContract() == "rocm_fp8_w8a8_blockscale_v1" ||
+       getPhysicalContract() == "rocm_fp8_w8a8_blockscale_nk_v1" ||
        getPhysicalContract() == "rocm_mxfp8_e4m3_e8m0_k32_nk_v1") &&
       getStaging() == "lds";
   if (getWarps() != 1 && getWarps() != 4 &&
@@ -158,8 +159,8 @@ LogicalResult MatmulOp::verify() {
   if (getStaging() != "global" && getStaging() != "lds")
     return emitOpError("staging must be global or lds");
   if (getStaging() == "lds" && !fp8W8A8Lds)
-    return emitOpError("staging = lds is stated only by the [N, K] W8A8 "
-                       "block-scale contract's LDS-staged body");
+    return emitOpError("staging = lds requires a W8A8 block-scale "
+                       "contract or the checked NK MXFP8 profile");
   if (getPipelineDepth() <= 0)
     return emitOpError("pipeline_depth must be positive");
   if (getStorage().empty() || getAccum().empty())

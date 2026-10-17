@@ -1,0 +1,42 @@
+[
+  {
+    "layout": "kn",
+    "entry": "tessera_rocm_scaled_matmul_lds_c6e92e38cfae595d",
+    "image_sha256": "4dd89f45ad76371872d40de4982eab636f34dcaf535c9f8d6a41845f39e11b06",
+    "vgprs_and_spills": [
+      191,
+      0
+    ],
+    "instruction_counts": {
+      "ds_load_2addr_b64": 16,
+      "ds_store_b128": 4,
+      "ds_store_b8": 24,
+      "ds_store_b8_d16_hi": 8,
+      "global_load_b128": 6,
+      "global_load_b32": 16,
+      "s_barrier_signal": 2,
+      "s_barrier_wait": 2,
+      "v_wmma_f32_16x16x16_fp8_fp8": 32
+    },
+    "scope": "static disassembly counts, not dynamic profiler counters"
+  },
+  {
+    "layout": "nk",
+    "entry": "tessera_rocm_scaled_matmul_lds_0ac40669ce7dd492",
+    "image_sha256": "c865c3fff2a7086c1d6349829f0db5f05edfa9d0e546845c1a01432bc0f61dc3",
+    "vgprs_and_spills": [
+      192,
+      0
+    ],
+    "instruction_counts": {
+      "ds_load_2addr_b64": 16,
+      "ds_store_b128": 6,
+      "global_load_b128": 6,
+      "global_load_b32": 16,
+      "s_barrier_signal": 2,
+      "s_barrier_wait": 2,
+      "v_wmma_f32_16x16x16_fp8_fp8": 32
+    },
+    "scope": "static disassembly counts, not dynamic profiler counters"
+  }
+]

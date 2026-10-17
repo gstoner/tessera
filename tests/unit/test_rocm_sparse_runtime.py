@@ -144,3 +144,97 @@ def test_int4_range_and_identity_preflight(dtype,low,high,monkeypatch):
     for width in (True,0,3,16):
         with pytest.raises(ValueError,match='integer width'):
             sparse_logical_schedule_ir(16,16,32,dtype,accum='i32',integer_bits=width)
+
+
+class _ProtocolHip:
+    """Host-only byte buffers; this mock proves lifecycle, not GPU arithmetic."""
+
+    def __init__(self):
+        self.buffers = {}
+        self.order = []
+        self.stream_closed = False
+        self.released = False
+
+    def __getattr__(self, name):
+        if name in {"hipSetDevice", "hipStreamSynchronize"}:
+            return lambda *args: 0
+        if name in {"hipModuleLoadData", "hipModuleGetFunction", "hipStreamCreateWithFlags"}:
+            def create(pointer, *args):
+                pointer._obj.value = 1
+                return 0
+            return create
+        raise AttributeError(name)
+
+    def hipMalloc(self, pointer, size):
+        import ctypes as ct
+        buffer = ct.create_string_buffer(size)
+        address = ct.addressof(buffer)
+        self.buffers[address] = buffer
+        self.order.append(address)
+        pointer._obj.value = address
+        return 0
+
+    def hipMemcpyAsync(self, dst, src, size, kind, stream):
+        import ctypes as ct
+        ct.memmove(dst, src, size)
+        return 0
+
+    def hipMemsetAsync(self, dst, value, size, stream):
+        import ctypes as ct
+        ct.memset(dst, value, size)
+        return 0
+
+    def hipModuleLaunchKernel(self, *args):
+        import ctypes as ct
+        status = self.buffers[self.order[3]]
+        words = ct.cast(ct.addressof(status), ct.POINTER(ct.c_int32))
+        for index in range(ct.sizeof(status) // 4):
+            words[index] = 1
+        return 0
+
+    def hipFree(self, pointer):
+        del self.buffers[pointer.value]
+        return 0
+
+    def hipStreamDestroy(self, stream):
+        assert not self.buffers
+        self.stream_closed = True
+        return 0
+
+    def hipModuleUnload(self, module):
+        assert self.stream_closed
+        self.released = True
+        return 0
+
+
+def _worker_with_blocked_late_shutdown(connection, package, a, b, device):
+    import atexit
+    from tessera import runtime as rt
+    from tessera.compiler import rocm_sparse_runtime as sparse
+    hip = _ProtocolHip()
+    rt._load_hip_for_launch = lambda: hip
+    rt._rocm_live_arch = lambda: "gfx1201"
+    atexit.register(time.sleep, 60)
+
+    class CheckedDelivery:
+        def send(self, value):
+            assert hip.released
+            connection.send(value)
+
+        def close(self):
+            connection.close()
+
+    sparse._worker(CheckedDelivery(), package, a, b, device)
+
+
+def test_sparse_checked_worker_exit_avoids_late_finalizers(monkeypatch):
+    """Host-free: checked mock cleanup must finish without interpreter shutdown."""
+    from tessera.compiler import rocm_sparse_runtime as runtime
+    monkeypatch.setattr(runtime, "_worker", _worker_with_blocked_late_shutdown)
+    before = {process.pid for process in mp.active_children()}
+    result = package().run(
+        np.zeros((16, 32), np.float16), np.zeros((32, 16), np.float16),
+        timeout_seconds=5)
+    assert result.shape == (16, 16) and result.dtype == np.float32
+    assert {process.pid for process in mp.active_children()} == before
+    assert not runtime._UNCERTAIN

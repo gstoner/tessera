@@ -34,6 +34,8 @@ window is bracketed by the compiler-built device-clock marker
 Windows are sized to at least ``--min-window-ms`` so the ROCm device-clock
 admission (>= 5 ms windows) applies. The device clock is the reported source;
 events and host wall are cross-checks recorded per window.
+Optional --paired-host-windows separately counterbalances completed public
+calls, including transfers/staging, with oracle checks outside each window.
 """
 from __future__ import annotations
 
@@ -514,6 +516,57 @@ def paired_windows(clock: Clock, arms: dict, *, windows: int, min_window_ms: flo
 
 
 # --------------------------------------------------------------------------
+def paired_completed_host_windows(arms: dict, *, windows: int, min_window_ms: float) -> dict:
+    """Counterbalanced completed public calls; validation stays outside timers."""
+    if not arms or windows < 1 or not math.isfinite(min_window_ms) or min_window_ms < 10:
+        raise ValueError("paired host timing needs arms, positive windows and at least 10 ms")
+    estimates = []
+    for launch, validate in arms.values():
+        for _ in range(5):
+            launch()
+        validate()
+        start = time.perf_counter_ns()
+        for _ in range(3):
+            launch()
+        estimates.append((time.perf_counter_ns() - start) / 3)
+        validate()
+    repeats = max(1, math.ceil(min_window_ms * 1e6 * 1.25 / min(estimates)))
+    samples = {name: [] for name in arms}
+    orders = []
+    names = list(arms)
+    for window in range(windows):
+        # Rotate and reverse whole windows so compilation/order does not
+        # systematically favor either physical schedule.
+        offset = (window // 2) % len(names)
+        order = names[offset:] + names[:offset]
+        if window % 2:
+            order.reverse()
+        orders.append(order)
+        for name in order:
+            launch, validate = arms[name]
+            validate()
+            start = time.perf_counter_ns()
+            for _ in range(repeats):
+                launch()
+            elapsed = time.perf_counter_ns() - start
+            validate()
+            samples[name].append(elapsed)
+    return {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": False, "validation_included": False,
+        "calls_per_window": repeats, "window_orders": orders,
+        "arms": {
+            name: {
+                "window_ns": values,
+                "median_ms_per_call": float(np.median(values)) / repeats / 1e6,
+                "minimum_window_ms": min(values) / 1e6,
+                "admissible": min(values) >= min_window_ms * 1e6,
+            }
+            for name, values in samples.items()
+        },
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--compiler", type=Path, required=True)
@@ -547,8 +600,14 @@ def main() -> None:
                         help="add matched static-Target image arms to isolate identity projection")
     parser.add_argument("--windows", type=int, default=10)
     parser.add_argument("--min-window-ms", type=float, default=6.0)
+    parser.add_argument("--paired-host-windows", type=int, default=0,
+                        help="also counterbalance completed public-call windows (0 disables)")
+    parser.add_argument("--paired-host-min-window-ms", type=float, default=20.0)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+    if (args.paired_host_windows < 0 or not math.isfinite(args.paired_host_min_window_ms)
+            or args.paired_host_min_window_ms < 10):
+        parser.error("paired host windows must be nonnegative and the minimum window at least 10 ms")
     # Assigned, not defaulted: an inherited TESSERA_OPT would otherwise
     # compile every arm with a binary other than the one recorded below.
     os.environ["TESSERA_OPT"] = str(args.compiler.resolve())
@@ -623,6 +682,7 @@ def main() -> None:
         }
         row: dict = {"shape": [m, n, k], "scale_block": [128, 128], "flop": 2 * m * n * k}
         arms: dict = {}
+        completed_host_arms: dict = {}
         # Production arms: both named weight layouts, generator defaults.
         # Sweep spec: PMxPN:U:G:L -- panel, whole groups per iteration, panels
         # per inner group step (-1 = default), weight layout kn|nk.
@@ -720,6 +780,16 @@ def main() -> None:
                 "samples_ms": samples, "median_ms": float(np.median(samples)),
                 "warmups": 5, "compile_included": False,
                 "domain": "public runtime launch including staging, transfers and completion"}
+            def completed_launch(artifact=artifact, host_args=host_args):
+                receipt = rt.launch(artifact, host_args)
+                if not receipt.get("ok") or receipt.get("execution_kind") != "native_gpu":
+                    raise RuntimeError(f"Paired public launch failed: {receipt}")
+
+            def validate_completed(host_out=host_out, want=want, magnitude=magnitude,
+                                   rel=2 ** -7 if shape.output == "bf16" else 1e-5):
+                check_close(host_out, want, magnitude, rel=rel)
+
+            completed_host_arms[label] = (completed_launch, validate_completed)
             row[label] = meta
             arms[label] = launch
         if fn is not None:
@@ -739,6 +809,10 @@ def main() -> None:
                 row["aiter"] = {"not_measured": str(why), "config": config, "config_source": source}
         timing = paired_windows(clock, arms, windows=args.windows, min_window_ms=args.min_window_ms)
         row["timing"] = timing
+        if args.paired_host_windows:
+            row["paired_completed_host"] = paired_completed_host_windows(
+                completed_host_arms, windows=args.paired_host_windows,
+                min_window_ms=args.paired_host_min_window_ms)
         for name, summary in timing.items():
             summary["tflops"] = row["flop"] / (summary["median_us"] * 1e-6) / 1e12
         if "aiter" in timing:

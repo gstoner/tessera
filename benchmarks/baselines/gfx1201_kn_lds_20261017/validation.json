@@ -1,0 +1,68 @@
+{
+  "implementation_revision": "da0ac7720b5c701950651604580850589110d652",
+  "selections_overlap_do_not_sum": true,
+  "native_schedule_public_and_sampler": {
+    "passed": 210,
+    "seconds": 20.15
+  },
+  "post_selection_registry_identity_w8a8_mx": {
+    "passed": 612,
+    "seconds": 101.15
+  },
+  "public_scale_jvp": {
+    "passed": 15,
+    "deselected": 11,
+    "seconds": 6.21
+  },
+  "sampler": {
+    "passed": 5,
+    "seconds": 0.15
+  },
+  "mypy": "zero errors baseline zero",
+  "production_image_controls": 20,
+  "adjacent_image_controls": 3,
+  "publication_gates": "local CPU, generated docs, routing/audit, claim lint and code equivalence passed; public CI/review pending",
+  "commands": {
+    "integration": "python -m pytest tests/unit/test_rocm_fp8_blockscale.py tests/unit/test_rocm_fp8_host_timing.py tests/device/rocm/test_public_typed_scaled_primal.py -q",
+    "production_regressions": "python -m pytest tests/unit/test_rocm_kernel_identity_native.py tests/unit/test_diagnostic_code_registry.py tests/unit/test_pass_metadata.py tests/device/rocm/test_fp8_blockscale_w8a8.py tests/device/rocm/test_mxfp8_checked_package.py tests/device/rocm/test_mxfp8_lds_package.py tests/device/rocm/test_mxfp4_folded_native_package.py -q",
+    "public_jvp": "python -m pytest tests/device/rocm/test_public_scaled_jvp.py -q -k test_public_scale_jvp"
+  },
+  "production_compiler_route": {
+    "passed": 1600,
+    "skipped": 0,
+    "seconds": 84.33,
+    "execution_certificate": "every selected proof test executed"
+  },
+  "generated_docs": 33,
+  "publication_document_tests": {
+    "passed": 37,
+    "seconds": 8.09
+  },
+  "public_audits": "all five surfaces and both claim linters pass",
+  "initial_compiler_route": "153 unexpected skips from a missing PATH llc; certificate correctly rejected; exact existing LLVM23.1.1 assertions tool exposed and full lane rerun",
+  "broad_cpu": {
+    "passed": 26327,
+    "skipped": 5897,
+    "seconds": 401.53,
+    "source_commit": "2ca05af868f22e9126050f9e3db42b617fb8216a"
+  },
+  "sparse_worker_repair": {
+    "revision": "2ca05af868f22e9126050f9e3db42b617fb8216a",
+    "focused_passed": 1100,
+    "parallel_device_without_probe_passed": 20,
+    "deterministic_old_worker_failed": 1,
+    "receipt": "sparse-repair-validation.json"
+  },
+  "final_publication_tests": {
+    "initial": {
+      "passed": 92,
+      "failed": 3,
+      "reason": "new authored log field formatting; no source-code failures"
+    },
+    "corrected_routing_audit": {
+      "passed": 19,
+      "seconds": 0.49
+    },
+    "code_equivalence": "src/python/tests/benchmarks-rocm unchanged from passing CPU head 2ca05af868f22e9126050f9e3db42b617fb8216a"
+  }
+}

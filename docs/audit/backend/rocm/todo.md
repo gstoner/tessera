@@ -5,6 +5,21 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## GFX1201-KN-LDS-20261017 — native KN W8A8 staging
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync: GFX1201-KN-LDS-20261017.
+
+Native KN Schedule/Tile/Target/LLVM/image admission and the measured compact gfx1201 W8A8 envelope execute on RX9070XT. 210 integration, 612 post-selection and 15 public JVP cases pass; selections overlap. All 20 measured candidate images match production selection. Dispatch improves 1.33-7.28x; completed host calls are roughly flat with mixed raw results retained. The row-major LDS alternative is numerically correct but slower and is rejected. Adjacent NK/MXFP8/M256 MXFP4 images are unchanged. Wider shapes, AITER gaps, MXFP4 attribution and original five-slice closure remain open. gfx1151 has no FP8 WMMA and inherits no admission; gfx1200 needs separate exact-device proof.
+
+Evidence: benchmarks/baselines/gfx1201_kn_lds_20261017/README.md.
+
+Publication-gate follow-up: ROCm isolated sparse workers now confirm process
+completion after checked HIP cleanup. Parent zero-exit, invalid-input and
+uncertain-ownership guards remain; no IR/image or ABI arithmetic changes. Owning gfx1201 parallel device checks pass 20 cases; the deterministic
+host-free shutdown regression and focused isolation checks pass. gfx1151
+physical parity is follow-up required.
+
 ## SM120-TYPED-JVP-20261017 — typed forward-mode integration
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

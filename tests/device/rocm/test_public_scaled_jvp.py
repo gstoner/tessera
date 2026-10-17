@@ -8,8 +8,8 @@ pytestmark = pytest.mark.skipif(
     os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
     reason="explicit owning gfx1201 execution required")
 
-def scaled(a:ts.Tensor["M","K","fp8_e4m3"], b:ts.Tensor["K","N","fp8_e4m3"],
-           sa:ts.Tensor["M","G","fp32"], sb:ts.Tensor["G","C","fp32"]):
+def scaled(a:ts.Tensor["M","K","fp8_e4m3"], b:ts.Tensor["K","N","fp8_e4m3"],  # noqa: F821 - Tessera symbolic dimensions and dtype spellings
+           sa:ts.Tensor["M","G","fp32"], sb:ts.Tensor["G","C","fp32"]):  # noqa: F821 - Tessera symbolic dimensions and dtype spellings
     import tessera as ts
     return ts.ops.scaled_matmul(a,b,sa,sb,
         numeric_policy={"accum":"fp32","execution_mode":"exact_per_block"},
@@ -27,7 +27,7 @@ def oracle(a,b,sa,sb,da,db):
         tangent += product*(da[:,g,None]*sb[g,columns][None,:]+sa[:,g,None]*db[g,columns][None,:])
     return primal,tangent
 
-@pytest.mark.parametrize("shape",[(17,19,256),(32,32,256),(200,19,256)])
+@pytest.mark.parametrize("shape",[(17,19,256),(32,32,256),(200,19,256),(128,1024,1024)])
 @pytest.mark.parametrize("wrt",[("sa",),("sb",),("sa","sb")])
 def test_public_scale_jvp(shape,wrt,monkeypatch):
     import ml_dtypes
@@ -131,8 +131,8 @@ def test_native_owner_cache_isolation(monkeypatch):
     assert stats()[2]==2
     assert lib.tessera_rocm_program_cache_clear()==0
 
-def scaled_nk(a:ts.Tensor["M","K","fp8_e4m3"],b:ts.Tensor["N","K","fp8_e4m3"],
-              sa:ts.Tensor["M","G","fp32"],sb:ts.Tensor["G","C","fp32"]):
+def scaled_nk(a:ts.Tensor["M","K","fp8_e4m3"],b:ts.Tensor["N","K","fp8_e4m3"],  # noqa: F821 - Tessera symbolic dimensions and dtype spellings
+              sa:ts.Tensor["M","G","fp32"],sb:ts.Tensor["G","C","fp32"]):  # noqa: F821 - Tessera symbolic dimensions and dtype spellings
     return ts.ops.scaled_matmul(a,b,sa,sb,transposeB=True,
         numeric_policy={"accum":"fp32","execution_mode":"exact_per_block"},
         scale_layout={"granularity":"block","block":[128,128],"format":"fp32"})

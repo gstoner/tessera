@@ -265,3 +265,36 @@ def test_immutable_host_binding_preserves_distinct_active_native_owners(monkeypa
             assert b.program["buffers"][0]["shape"][0]==3
             g,_=b.invoke()
             np.testing.assert_allclose(b.read(g)[0],oracle,rtol=4e-5,atol=1e-4)
+
+
+@pytest.mark.parametrize("shape", [(128, 1024, 1024), (200, 2048, 2048), (256, 1024, 4096)])
+def test_public_kn_lds_schedule_executes_without_warm_compiler(shape, monkeypatch):
+    """Ordinary frontend capture selects the native KN route without Tile rewrites."""
+    from tessera import runtime
+    from tessera.compiler.rocm_fp8_blockscale import blockscale_reference
+
+    assert runtime._rocm_live_arch() == "gfx1201"
+    m, n, k = shape
+    rng = np.random.default_rng(1517)
+    a = rng.choice([-.5, 0, .25, 1], (m, k)).astype(ml_dtypes.float8_e4m3fn)
+    b = rng.choice([-1, 0, .5, 2], (k, n)).astype(ml_dtypes.float8_e4m3fn)
+    sa = rng.uniform(.2, 1, (m, k // 128)).astype(np.float32)
+    sb = rng.uniform(.2, 1, (k // 128, n // 128)).astype(np.float32)
+    want = blockscale_reference(a, b, sa, sb, scale_k=128, scale_n=128)
+    magnitude = blockscale_reference(
+        np.abs(a.astype(np.float32)), np.abs(b.astype(np.float32)),
+        sa, sb, scale_k=128, scale_n=128)
+    fn = ts.jit(target="rocm_gfx1201")(scaled)
+    got = fn(a, b, sa, sb)
+    assert 'staging = "lds"' in fn.compile_result.tile_ir
+    assert fn._native_descriptor_last_receipt["execution_kind"] == "native_gpu"
+    bound = 4 * k * np.finfo(np.float32).eps * magnitude + 1e-30
+    assert np.all(np.abs(got.astype(np.float64) - want) <= bound)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("warm KN execution attempted compiler subprocess")
+
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    repeated = fn(a, b, sa * .5, sb)
+    assert fn._native_descriptor_last_receipt["execution_kind"] == "native_gpu"
+    np.testing.assert_array_equal(repeated, got * .5)

@@ -678,6 +678,26 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
   };
   const bool nk =
       schedule.physicalContract == "rocm_fp8_w8a8_blockscale_nk_v1";
+  // GFX1201-KN-LDS-20261017: coalesced physical KN reads feed the
+  // transposed LDS consumer. Twenty matched FP32/BF16 comparisons on ten
+  // boundary/interior profiles improve dispatch 1.3-7.3x. Completed host
+  // windows are measured separately and remain roughly flat; this is not
+  // an end-to-end speedup claim. Keep scale, architecture and shape bounds
+  // explicit; NK and MX schedules retain their own measured policies.
+  if (schedule.physicalContract == "rocm_fp8_w8a8_blockscale_v1" &&
+      schedule.arch == "gfx1201" && computeUnits &&
+      schedule.scaleBlockK == 128 && schedule.scaleBlockN == 128 &&
+      schedule.m >= 128 && schedule.m <= 256 &&
+      schedule.n >= 1024 && schedule.n <= 8192 && schedule.n % 128 == 0 &&
+      schedule.k >= 1024 && schedule.k <= 4096 && schedule.k % 128 == 0) {
+    schedule.staging = "lds";
+    schedule.warps = 8;
+    schedule.pipelineDepth = 1;
+    schedule.macroTileM = 128;
+    schedule.macroTileN = 64;
+    return;
+  }
+
   // At least one whole 128-row block: below it the workgroup computes rows
   // that do not exist (M=32 would waste three quarters of every tile).
   //

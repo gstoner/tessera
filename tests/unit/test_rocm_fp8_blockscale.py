@@ -101,15 +101,15 @@ def test_target_check_accepts_the_bound_directive(layout):
     assert (checked["staging"], checked["warps"], checked["pipeline_depth"]) == ("global", 1, 1)
 
 
-def test_target_check_binds_the_lds_body_and_the_bf16_output():
-    tile, target = _pair("nk", "bf16", staging="lds", warps=8, block=(128, 128))
+@pytest.mark.parametrize("layout", ["kn", "nk"])
+def test_target_check_binds_the_lds_body_and_the_bf16_output(layout):
+    tile, target = _pair(layout, "bf16", staging="lds", warps=8, block=(128, 128))
     checked = check_blockscale_target_ir(
-        BlockScaleShape(64, 96, 256, 128, 128, "nk", "bf16"), tile, target)
+        BlockScaleShape(64, 96, 256, 128, 128, layout, "bf16"), tile, target)
     assert (checked["staging"], checked["warps"], checked["block_m"]) == ("lds", 8, 128)
 
 
 @pytest.mark.parametrize(("layout", "staging", "warps", "depth", "block"), [
-    ("kn", "lds", 8, 1, (128, 128)),     # the LDS body reads the [N, K] weight only
     ("nk", "lds", 6, 1, (128, 128)),     # 4 wave rows of 32 do not divide 6 waves
     ("nk", "lds", 32, 1, (128, 128)),    # more than 16 waves
     ("nk", "global", 8, 1, (32, 32)),    # the register panel is one wave
@@ -447,3 +447,36 @@ def test_small_grid_does_not_admit_sibling_contracts(layout, scale_n, scale_k, a
     from tessera.compiler.rocm_fp8_blockscale import BlockScalePanel, blockscale_panel_oracle
     shape = BlockScaleShape(127, 2048, 2048, scale_k, scale_n, layout)
     assert blockscale_panel_oracle(shape, arch=arch) != BlockScalePanel("lds", 64, 64, 4)
+
+
+@pytest.mark.parametrize("shape", [
+    BlockScaleShape(128, 1024, 1024, 128, 128, "kn"),
+    BlockScaleShape(129, 2048, 1536, 128, 128, "kn"),
+    BlockScaleShape(185, 3072, 1792, 128, 128, "kn", "bf16"),
+    BlockScaleShape(256, 8192, 4096, 128, 128, "kn", "bf16"),
+], ids=str)
+@pytest.mark.compiler_route
+def test_native_kn_measured_envelope_selects_lds(shape):
+    from tessera.compiler.rocm_fp8_blockscale import verify_blockscale_schedule
+    schedule = _schedule_ir(shape)
+    assert 'staging = "lds"' in schedule
+    verify_blockscale_schedule(shape, schedule)
+
+
+@pytest.mark.parametrize("shape", [
+    BlockScaleShape(127, 2048, 1536, 128, 128, "kn"),
+    BlockScaleShape(257, 2048, 1536, 128, 128, "kn"),
+    BlockScaleShape(200, 896, 1536, 128, 128, "kn"),
+    BlockScaleShape(200, 8320, 1536, 128, 128, "kn"),
+    BlockScaleShape(200, 1153, 1536, 128, 128, "kn"),
+    BlockScaleShape(200, 2048, 896, 128, 128, "kn"),
+    BlockScaleShape(200, 2048, 4224, 128, 128, "kn"),
+    BlockScaleShape(200, 2048, 1536, 64, 128, "kn"),
+    BlockScaleShape(200, 2048, 1536, 128, 64, "kn"),
+], ids=str)
+@pytest.mark.compiler_route
+def test_native_kn_unmeasured_envelope_keeps_register(shape):
+    from tessera.compiler.rocm_fp8_blockscale import verify_blockscale_schedule
+    schedule = _schedule_ir(shape)
+    native = verify_blockscale_schedule(shape, schedule)
+    assert native.staging == "global" and native.warps == 1

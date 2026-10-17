@@ -190,6 +190,15 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201") ->
     def tiles(tm: int, tn: int) -> int:
         return -(-shape.m // tm) * -(-shape.n // tn)
 
+    # Differential mirror only: native Schedule selects the measured KN
+    # physical route; the Python frontend does not choose a backend schedule.
+    if (shape.weight_layout == "kn" and arch == "gfx1201" and units is not None
+            and shape.scale_k == 128 and shape.scale_n == 128
+            and 128 <= shape.m <= 256
+            and 1024 <= shape.n <= 8192 and shape.n % 128 == 0
+            and 1024 <= shape.k <= 4096 and shape.k % 128 == 0):
+        return BlockScalePanel("lds", 128, 64, 8)
+
     # Differential mirror of the measured four-wave small-grid rule. Native
     # Schedule owns selection; aligned rows and wider N retain their controls.
     if (shape.weight_layout == "nk" and arch == "gfx1201" and units is not None
@@ -367,10 +376,9 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
     if staging == "global" and warps != 1:
         raise ValueError("W8A8 Target IR register panel is one wave")
     if staging == "lds" and (not 1 <= warps <= 16 or block_m % 32
-                             or warps % (block_m // 32)
-                             or shape.weight_layout != "nk"):
+                             or warps % (block_m // 32)):
         raise ValueError(
-            "W8A8 Target IR LDS body needs the [N, K] weight and warps a whole "
+            "W8A8 Target IR LDS body needs warps a whole "
             "multiple of its 32-row wave rows (at most 16 waves)")
     if pipeline_depth not in (1, 2):
         raise ValueError("W8A8 Target IR pipeline_depth must be 1 or 2")

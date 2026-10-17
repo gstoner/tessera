@@ -12,16 +12,22 @@ pytestmark=[pytest.mark.hardware_rocm,pytest.mark.compiler_route]
 @pytest.mark.parametrize("m,n,k",[(1,1,16),(3,17,32),(19,33,64),(256,128,12288)])
 def test_public_three_member_program_and_portable_replay(m,n,k,monkeypatch):
     assert rt._rocm_live_arch()=="gfx1201","owning gfx1201 required"
-    values=inputs(m,n,k);expected=oracle(values)
+    values=inputs(m,n,k);expected=oracle(values);snapshots=[value.copy() for value in values]
     fn=ts.jit(target="rocm_gfx1201",native_required=True)(make_product(m,n,k))
     from tessera.compiler import nvfp4_expansion
     def forbidden(*a,**kw):raise AssertionError("compiled program called eager expansion")
     monkeypatch.setattr(nvfp4_expansion,"reference_nvfp4_expand",forbidden)
     first=fn(*values)
     np.testing.assert_allclose(first,expected,rtol=.0002,atol=.0002)
+    for before,after in zip(snapshots,values,strict=True):
+        np.testing.assert_array_equal(before.view(np.uint8),after.view(np.uint8))
     assert fn.execution_kind=="native_gpu"
     assert len(fn._rocm_quantized_product_last_receipts)==3
+    report=fn.compile_report()
+    assert "3 ordered native packages" in report.target_decision["rocm_gfx1201"]
+    assert all(len(report.ir_hashes[layer])==64 for layer in ("graph_ir","schedule_ir","tile_ir","target_ir"))
     artifact=fn.runtime_artifact()
+    assert artifact.schedule_ir.count("schedule.artifact")==3
     assert artifact.metadata["native_program"]["schema"]=="tessera.rocm.quantized_product_frontend.v2"
     restored=rt.RuntimeArtifact.from_json(artifact.to_json())
     monkeypatch.setenv("TESSERA_OPT","/missing/compiler")

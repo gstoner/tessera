@@ -85,3 +85,15 @@ the routing checker unchanged, and passes 19 routing/audit tests. Raw CI
 identities and failure-log hashes are in ci-routing-repair.json. Exact-head
 CI and full review remain required before merge. Native evidence retains
 its original source scope.
+
+
+## Production compiler fixture repair
+
+The production compiler lane on 74d2a5b975 failed six obsolete assertions in
+`test_saved_lse_storage_contract.py`: the forward-only fixture still expected
+FP16/BF16 resident shape validation to refuse the newly implemented route.
+The test now checks the exact Q/K/V/O/LSE shapes for all three storage types
+and all three bias forms. No runtime, compiler, descriptor validation or
+numerical tolerance changes. The affected suite passes 63 tests with the
+frozen matching PR975 compiler on Super-Bear. Required CI on the repaired
+head remains the publication gate.

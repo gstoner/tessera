@@ -153,10 +153,13 @@ def test_forward_only_wrapper_preserves_native_storage_identity(compiler, monkey
         bias=forward.bias, bias_shape=forward.bias_shape, shape_bounds=forward.shape_bounds,
         storage=forward.storage, output_storage=forward.output_storage)
     assert wrapper.contract_digest == expected
-    if storage != "f32":
-        from tessera.compiler.resident_attention import checkpoint_shapes
-        with pytest.raises(ValueError, match="legacy saved-LSE AD tape requires f32 storage"):
-            checkpoint_shapes(wrapper)
+    from tessera.compiler.resident_attention import checkpoint_shapes
+    dims, shapes = checkpoint_shapes(wrapper)
+    assert tuple(dims) == (1, 2, 1, 3, 5, 4, 3)
+    assert tuple(shapes) == (
+        (1, 2, 3, 4), (1, 1, 5, 4), (1, 1, 5, 3),
+        (1, 2, 3, 3), (1, 2, 3),
+    )
 
 
 @pytest.mark.parametrize("storage", ["f16", "bf16"])

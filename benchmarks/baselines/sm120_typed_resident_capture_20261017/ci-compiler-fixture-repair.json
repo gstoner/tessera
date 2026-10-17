@@ -1,0 +1,11 @@
+{
+  "failed_head": "74d2a5b97519600984e1deb870eedb1fbb748430",
+  "job_url": "https://github.com/gstoner/tessera/actions/runs/39051620296/job/117451209763",
+  "failed_log_sha256": "9491c03cad219491bf40024cbe608d34c1eb662abfc66d136adcd80284cc5ecc",
+  "result": "6 failed, 1516 passed",
+  "cause": "forward-only fixture retained legacy half-storage refusal after typed resident capture integration",
+  "repair": "assert exact declared Q/K/V/O/LSE shapes across f16/bf16/f32 and three bias forms",
+  "focused_result": "63 passed in 4.58s",
+  "compiler": "frozen PR975 tessera-opt 620ed50bfe4eefb826e538063a4d7bd69bc1d42774b8b94cb199de8310b0f4a5",
+  "runtime_changed": false
+}

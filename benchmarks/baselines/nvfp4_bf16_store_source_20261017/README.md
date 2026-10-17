@@ -10,6 +10,9 @@ Graph-to-Schedule folds it into the BF16 store, with FP32 accumulation unchanged
 There are three native members and nine physical buffers; the BF16 parent is
 private, with no FP32 parent allocation or host arithmetic.
 
+Recorded by [record_bf16_store_source.py](record_bf16_store_source.py):
+synthetic three-member correctness-gated timing characterization.
+
 ## Evidence
 
 - source-identity.json binds 54 source/dependency files and three matching

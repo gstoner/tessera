@@ -11,6 +11,9 @@ explicit BF16 store, and view/FP32-SiLU/BF16 output. There are nine physical
 buffers; the BF16 parent remains private. Portable replay executes with
 compiler subprocess calls forbidden.
 
+Recorded by [record_original_store_source.py](record_original_store_source.py):
+hash-checked checkpoint validation and separated native/host timing.
+
 ## Numerical scope
 
 Both rows have zero violations against independent decoded-weight FP64

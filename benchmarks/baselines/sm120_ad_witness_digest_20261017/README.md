@@ -12,6 +12,9 @@ program with zero versus default digest-cache byte budget. Alternating order,
 30 warm reverse samples and 12 capture-plus-first-reverse samples per arm
 retain every numerical/metadata/ABI check. Independent FP64 comparisons run
 outside each timed region; control/candidate outputs are bit-identical.
+Packages are constructed before measurement and the candidate digest cache is
+warm. Compilation, package construction, external uploads, oracle/readback and
+close are excluded; each measured capture creates a fresh resident generation.
 Capture plus first reverse improves 1.33-1.37x (13.76-15.13 ms versus
 10.03-11.39 ms). Warm reverse is largely unchanged. These are completed host
 intervals, not isolated device-kernel speedups. Allocations remain 6/3 per

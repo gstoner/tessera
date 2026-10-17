@@ -86,7 +86,7 @@ def record(samples,reps,shapes=None):
         rng=np.random.default_rng(120_303)
         values=[(rng.normal(size=s)*.2).astype(np.float32) for s in
             ((b,hq,sq,d),(b,hkv,sk,d),(b,hkv,sk,dv),(b,hq,sq,dv))]
-        expected,lse,grad=reference(*values,causal)
+        expected,lse,grad=reference(values[0],values[1],values[2],values[3],causal)
         start=time.perf_counter_ns()
         program=function(wrt,causal).compile_native_attention_vjp(
             *values[:3],compiler=Path(os.environ["TESSERA_OPT"]))

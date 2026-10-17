@@ -13086,3 +13086,24 @@ full MLP/model-quality/performance and the broader five-slice objective.
 Evidence: benchmarks/baselines/rocm_native_e4m3_cast_20261017/README.md;
 docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-17 — public native K16 quantizer and whole-program constants
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: queued; sync ROCM-K16-QUANT-PUBLIC-20261017.
+Outcome: Original Python max/scale/normalize/cast source reaches typed Graph,
+native Schedule/Tile, ROCm Target/ROCDL/LLVM, HSACO and checked C++ ownership
+of real E4M3 codes plus FP32 scales. AST and abstract tracing share immutable
+FP32 splat snapshots; reduction axis/keepdims is inferred consistently.
+Upstream arith.constant has explicit coverage and stays in whole-program gates.
+Four owning gfx1201 JIT/portable/fresh-process cases pass. The exact canonical
+image passes all BF16 patterns, midpoint neighbors and nonfinite cases with
+zero code/scale mismatches. 725 final registry/audit/naming cases and twelve
+exact RTX5070 controls pass; mypy remains at zero errors. Timing scopes are
+separate: three shapes have captured members 4.5–30.3us, retained-owner host
+0.34–0.80ms and ordinary public host 1.78–2.76ms. No speedup is claimed.
+Remaining: Retained private quantizer/gate-up/activation/down composition,
+full checkpoint MLP/model-quality and the wider five-slice obligations.
+Evidence: benchmarks/baselines/rocm_native_k16_quant_public_20261017/README.md.
+<!-- entry-fields:end -->

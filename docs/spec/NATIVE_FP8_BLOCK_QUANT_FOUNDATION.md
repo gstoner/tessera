@@ -93,3 +93,19 @@ Evidence for the implemented primitive:
 benchmarks/baselines/rocm_native_e4m3_cast_20261017/README.md.
 
 Native Target/device evidence: benchmarks/baselines/rocm_native_k16_quant_20261017/README.md.
+
+## Canonical authored quantizer package
+
+The distinct gfx1201 `block_quant` family now packages the verified typed Tile
+body through tessera-rocm-executable. Ordinary Python JIT returns real E4M3
+codes plus FP32 scales through the checked C++ two-output owner. Serialized
+artifacts replay in a fresh process with no compiler. Immutable FP32 splats
+have shared AST/trace value snapshots and canonical upstream arith.constant
+SSA; reduction axis/keepdims inference is shared by both frontends. The
+upstream operation has explicit coverage and stays in whole-program gates.
+Only the exact named source contract is executable; this does not expose
+standalone view/cast/constant kernels or alter fake-quant reference semantics.
+
+Exact public and canonical-image numerical/timing evidence:
+benchmarks/baselines/rocm_native_k16_quant_public_20261017/README.md.
+Resident activation/down projection and full MLP/model-quality gates remain open.

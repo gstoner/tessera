@@ -675,6 +675,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             ("ordering_sort", ("generate-rocm-sort-kernel",)),
             ("paged_kv", ("generate-rocm-paged-kv-read-kernel",)),
             # This profile carries numerical SSA rather than a generator directive.
+            ("block_quant", ("lower-tile-to-rocm", "lower-tessera-target-to-rocdl")),
             ("parent_view", ("lower-tile-to-rocm", "lower-tessera-target-to-rocdl")),
             ("position_alibi", ("generate-rocm-alibi-kernel",)),
             ("position_rope", ("generate-rocm-rope-kernel",)),

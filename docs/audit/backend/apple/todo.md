@@ -6,6 +6,21 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## ROCM-K16-QUANT-PUBLIC-20261017 — authored two-result package
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
+Sync: ROCM-K16-QUANT-PUBLIC-20261017.
+
+Shared frontend assessment: immutable read-only FP32 splats now emit upstream
+arith.constant SSA in both AST and trace, with value-based cache identity.
+Canonical reduction inference respects axis/keepdims; upstream constants remain
+in whole-program coverage gates. Follow-up required for any sibling physical
+literal consumer; no new apple native schedule or ABI is admitted. Twelve
+exact RTX5070 producer controls pass; that proof is NVIDIA-specific and does
+not transfer to other architectures.
+
+Evidence: benchmarks/baselines/rocm_native_k16_quant_public_20261017/README.md.
+
 ## ROCM-K16-QUANT-SCHEDULE-20261017 — explicit Graph admission
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.

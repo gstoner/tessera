@@ -18,8 +18,8 @@ packet to resolve the supported envelope.
 
 - Operators: **362**
 - TSOL operators: **51**
-- Operator/logical-dtype rows: **984**
-- Rows retaining at least one compiler/evidence gap: **395**
+- Operator/logical-dtype rows: **985**
+- Rows retaining at least one compiler/evidence gap: **391**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states
@@ -198,7 +198,6 @@ for the complete per-dtype and per-target matrix.
 | `permute` | layout_transform | no | bf16,fp32 | direct_test,physical,tile |
 | `rearrange` | layout_transform | yes | bf16,fp32 | direct_test,physical,tile |
 | `repeat` | layout_transform | no | bf16,fp32 | direct_test,physical,tile |
-| `reshape` | layout_transform | no | bf16,fp32 | direct_test,physical,tile |
 | `roll` | layout_transform | no | bf16,fp32 | direct_test,physical,tile |
 | `rope_merge` | layout_transform | no | bf16,fp32 | direct_test,physical,tile |
 | `rope_split` | layout_transform | no | bf16,fp32 | direct_test,physical,tile |

@@ -159,7 +159,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `cast` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `cat` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `chunk` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
-| `expand` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
+| `expand` | layout_transform | public | public | registered | complete | fused | no_kernel_required | ready | none |
 | `flatten` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
 | `flip` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `masked_fill` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -172,7 +172,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `permute` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `rearrange` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `repeat` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `reshape` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
+| `reshape` | layout_transform | public | public | registered | complete | fused | no_kernel_required | ready | none |
 | `roll` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `rope_merge` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `rope_split` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
@@ -393,7 +393,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | fused_epilogue | 1 | PPGCFCN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPn·FFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 16 | PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB |
-| layout_transform | 33 | PPGCnnN· PPGCnnN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCnnN· PPGCFCN· PPGCFnN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCpRN· PPGCnnN· |
+| layout_transform | 33 | PPGCnnN· PPGCnnN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCnnN· PPGCFCN· PPGCFnN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCpRN· PPGCnnN· |
 | linalg_decomposition | 5 | PPGCFCN· PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | linalg_function | 5 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_multilinear | 2 | PPGCpRN· PPGCpRN· |

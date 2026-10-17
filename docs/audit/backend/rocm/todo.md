@@ -5,6 +5,22 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-K16-QUANT-PUBLIC-20261017 — authored two-result package
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
+Sync: ROCM-K16-QUANT-PUBLIC-20261017.
+
+Ordinary Python JIT now carries the thirteen original Graph operations
+through native Schedule/Tile/Target/ROCDL/LLVM to a checked two-output owner.
+Four owning gfx1201 JIT/portable/fresh-process cases pass. The exact canonical
+image passes the full BF16-domain and midpoint oracle with zero mismatches.
+Device, retained-owner and complete public call timings are recorded separately.
+Canonical family and ABI are gfx1201-only; component rows do not admit standalone
+views or arbitrary casts. Quantizer-to-gate/up/down resident chaining, full MLP
+and checkpoint/model-quality acceptance remain required.
+
+Evidence: benchmarks/baselines/rocm_native_k16_quant_public_20261017/README.md.
+
 ## ROCM-K16-QUANT-SCHEDULE-20261017 — explicit Graph admission
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
@@ -12,7 +28,8 @@ Sync: ROCM-K16-QUANT-SCHEDULE-20261017.
 
 Native Target/device evidence: benchmarks/baselines/rocm_native_k16_quant_20261017/README.md.
 The two outputs retain E4M3/FP32 storage and independent lifetimes. Public
-JIT, resident chaining and full MLP/model-quality closure remain required.
+quantizer JIT/replay is proved by the newer public packet above. Resident
+chaining and full MLP/model-quality closure remain required.
 
 Shared typed buffer views now admit real E4M3FN storage for the quantizer
 output. This does not admit sibling execution: native schema 4 requires

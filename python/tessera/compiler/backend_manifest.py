@@ -2799,6 +2799,9 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
+    ("arith.constant","rocm_gfx1201"):"tests/device/rocm/test_native_block_quant_jit.py",
+    **{(op,"rocm_gfx1201"):"tests/device/rocm/test_native_block_quant_jit.py"
+       for op in ("reshape","cast","absolute","reduce","maximum","expand")},
     ("slice", "rocm_gfx1201"): "tests/device/rocm/test_native_parent_view_jit.py",
     ("silu_mul", "rocm_gfx1201"): "tests/device/rocm/test_native_silu_math_jit.py",
     ("softmax_safe", "nvidia_sm120"): "tests/device/nvidia/test_scheduled_semantic_kernels.py",
@@ -6603,6 +6606,14 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # tables outside OP_SPECS. They must still honor _NUMERICAL_FIXTURES —
     # audit 2026-06-10 found these early returns bypassed the attach on the
     # main path below, so a domain op could never receive a numerical fixture.
+    if op_name == "arith.constant":
+        return [BackendKernelEntry(
+            target="rocm_gfx1201",status=_DEVICE_VERIFIED_JIT_STATUS,dtypes=("fp32",),
+            feature_flags=("native_schedule","checked_descriptor","block_quant","upstream_mlir"),
+            notes="Upstream FP32 tensor splats consumed only by the exact source-sealed K16 quantizer. "
+                  "No standalone public constant launch or sibling execution is admitted.",
+            execute_compare_fixture="tests/device/rocm/test_native_block_quant_jit.py",
+            shape_envelope="two exact FP32 K16 scale-policy splats in the thirteen-operation quantizer")]
     if op_name.startswith("clifford_"):
         return _attach_numerical_fixtures(op_name, clifford_manifest_for(op_name))
     if op_name.startswith("ebm_"):
@@ -7059,6 +7070,16 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 benchmark_json="benchmarks/baselines/rocm_native_math_20261006/package-"
                                +target.removeprefix("rocm_")+".json",
             ))
+    if op_name in {"reshape","cast","absolute","reduce","maximum","expand"}:
+        entries.append(BackendKernelEntry(
+            target="rocm_gfx1201",status=_DEVICE_VERIFIED_JIT_STATUS,
+            dtypes=("bf16","fp32","fp8_e4m3") if op_name in {"reshape","cast"} else ("fp32",),
+            feature_flags=("native_schedule","checked_descriptor","block_quant"),
+            notes="Component consumed only inside the source-sealed schema-4 BF16 K16 quantizer. "
+                  "This does not admit standalone view, cast or reduction execution. Native source "
+                  "max/floor/normalize/RNE operations produce real E4M3 codes and FP32 scales.",
+            execute_compare_fixture="tests/device/rocm/test_native_block_quant_jit.py",
+            shape_envelope="one compact static BF16 [M,K], K%16=0; the exact thirteen-operation two-result source profile"))
     if op_name == "slice":
         entries = [entry for entry in entries if entry.target != "rocm_gfx1201"]
         entries.append(BackendKernelEntry(

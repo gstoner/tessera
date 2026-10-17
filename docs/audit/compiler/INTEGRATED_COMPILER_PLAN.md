@@ -174,10 +174,13 @@ the next action's host requirement; it is not a live fleet-availability claim.
   projection and original full-model quality remain open.
 - The native E4M3 RNE storage prerequisite now passes exact gfx1201
   diagnostic checks on 266,560 values and preserves six existing member
-  images under same-host controls. This does not establish the explicit K16
-  quantizer Graph or mixed-width two-result ABI; those precede resident down
-  projection and full-model acceptance.
-- Latest: [2026-10-17 — native gfx1201 E4M3 storage conversion](INTEGRATED_COMPILER_LOG.md#2026-10-17--native-gfx1201-e4m3-storage-conversion)
+  images under same-host controls. The explicit K16 quantizer now additionally
+  executes through ordinary Python JIT and canonical native packaging, with
+  E4M3/FP32 outputs and compiler-disabled fresh-process replay. The exact
+  canonical image passes full BF16-pattern and midpoint checks. Retained
+  quantizer/gate-up/activation/down composition and full-model acceptance
+  remain the next gate; standalone views/casts/constants are not promoted.
+- Latest: [2026-10-17 — public native K16 quantizer and whole-program constants](INTEGRATED_COMPILER_LOG.md#2026-10-17--public-native-k16-quantizer-and-whole-program-constants)
 
 ### ROCM-SPLIT-K-1
 

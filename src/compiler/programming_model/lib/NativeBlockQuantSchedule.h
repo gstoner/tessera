@@ -27,7 +27,16 @@ inline mlir::FailureOr<Profile> inspect(mlir::ModuleOp module) {
     StringRef key = attr.getName().getValue();
     if (key != "tessera.target" && key != "tessera.arch" &&
         key != "tessera.native.block_quant" && key != "tessera.ir.version" &&
-        key != "tessera.frontend.authority") return refuse();
+        key != "tessera.frontend.authority" && key != "tessera.launch_bindings") return refuse();
+  }
+  if (auto raw=module->getAttr("tessera.launch_bindings")) {
+    auto names=dyn_cast<ArrayAttr>(raw);
+    if (!names || names.size()!=3) return refuse();
+    for (unsigned i=0;i<3;++i) {
+      auto name=dyn_cast<StringAttr>(names[i]);
+      if (!name || name.getValue().empty()) return refuse();
+      for (unsigned j=0;j<i;++j) if (names[i]==names[j]) return refuse();
+    }
   }
   auto roots = module.getOps<func::FuncOp>();
   if (llvm::range_size(roots) != 1) return refuse();
@@ -82,6 +91,8 @@ inline mlir::FailureOr<Profile> inspect(mlir::ModuleOp module) {
       StringRef key = attr.getName().getValue();
       if (key == "tessera.effect_kind" &&
           attr.getValue() == StringAttr::get(module.getContext(),"pure")) continue;
+      if ((i==0 || i==8 || i==11 || i==12) && key=="tessera.aliasing" &&
+          attr.getValue()==StringAttr::get(module.getContext(),"operand_0")) continue;
       if ((i==0 || i==8 || i==11 || i==12) && key=="shape") {
         auto shape = dyn_cast<ArrayAttr>(attr.getValue());
         auto result = cast<RankedTensorType>(expected[i]);

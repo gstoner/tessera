@@ -4631,7 +4631,9 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
 
     from tessera.compiler.rocm_math_native import MATH_ABIS
     from tessera.compiler.rocm_parent_view_native import PARENT_VIEW_ABIS
+    from tessera.compiler.rocm_block_quant_native import BLOCK_QUANT_ABI
     return frozenset({
+        BLOCK_QUANT_ABI,
         *PARENT_VIEW_ABIS,
         *MATH_ABIS.values(),
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
@@ -4958,6 +4960,9 @@ def _submit_rocm_gfx1151_native(
     stream: Any,
 ) -> Any:
     """Submit compiler-owned gfx1151 typed softmax/reduction/movement HSACOs."""
+    from .compiler.rocm_block_quant_native import BLOCK_QUANT_ABI, submit_block_quant
+    if getattr(descriptor, "abi_id", None) == BLOCK_QUANT_ABI:
+        return submit_block_quant(image, descriptor, buffers, scalars, stream)
     from .compiler.rocm_parent_view_native import PARENT_VIEW_ABIS, submit_parent_view
     if getattr(descriptor, "abi_id", None) in PARENT_VIEW_ABIS:
         return submit_parent_view(image, descriptor, buffers, scalars, stream)
@@ -6626,6 +6631,11 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                                      submit=_submit_rocm_gfx1151_native)
         return
 
+    from tessera.compiler.rocm_block_quant_native import BLOCK_QUANT_ABI
+    if target == "rocm_gfx1201" and abi_id == BLOCK_QUANT_ABI:
+        if target not in _native_launchers:
+            register_native_launcher(target,binary_formats=("hsaco",),submit=_submit_rocm_gfx1151_native)
+        return
     from tessera.compiler.rocm_parent_view_native import PARENT_VIEW_ABIS
     if target == "rocm_gfx1201" and abi_id in PARENT_VIEW_ABIS:
         if target not in _native_launchers:
@@ -35880,6 +35890,13 @@ def _launch_native_descriptor(
             except (ValueError,TypeError,KeyError,AttributeError) as exc:
                 raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
                     f"MXFP4 storage artifact lineage differs: {exc}") from exc
+        from tessera.compiler.rocm_block_quant_native import BLOCK_QUANT_ABI, validate_block_quant_runtime_artifact
+        if descriptor.abi_id == BLOCK_QUANT_ABI:
+            try:
+                validate_block_quant_runtime_artifact(artifact)
+            except (ValueError,TypeError,KeyError,AttributeError) as exc:
+                raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
+                    f"native block quantization artifact lineage differs: {exc}") from exc
         from tessera.compiler.rocm_parent_view_native import PARENT_VIEW_ABIS, validate_parent_view_runtime_artifact
         if descriptor.abi_id in PARENT_VIEW_ABIS:
             try:

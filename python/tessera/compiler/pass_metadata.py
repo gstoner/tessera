@@ -138,7 +138,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         summary="Consumes executable ROCm Target primitives and materializes sealed gfx1201 K16 quantizer or parent-view scalar regions into a checked-count GPU wrapper. Numerical and addressing SSA are cloned from the native body; native export owns buffer bytes, read/write lifetimes and launch geometry. Also legalizes scalar FP32-to-E4M3 RNE casts inside exact gfx1201 GPU modules using the RDNA4 packed conversion. Host functions and directed rounding requests are unchanged. This does not enable public JIT admission or sibling physical schedules.",
         input_dialects=("tessera_rocm", "llvm", "arith", "math", "scf", "memref", "gpu"),
         output_dialects=("llvm", "rocdl", "arith", "math", "scf", "memref", "gpu"),
-        preserved_attrs=("tessera.rocm.block_quant_source", "tessera.rocm.block_quant_program_json", "tessera.rocm.block_quant_member_json", "tessera.rocm.parent_view_source", "tessera.rocm.parent_view_program_json", "tessera.rocm.parent_view_member_json"),
+        preserved_attrs=("tessera.launch_bindings", "tessera.rocm.block_quant_source", "tessera.rocm.block_quant_program_json", "tessera.rocm.block_quant_member_json", "tessera.rocm.parent_view_source", "tessera.rocm.parent_view_program_json", "tessera.rocm.parent_view_member_json"),
         pass_kind="lowering", sprint="ROCM-NATIVE-GATE-UP-CONSUMER-20261016",
     ),
     PassMetadata(
@@ -1070,7 +1070,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         input_dialects=("schedule", "func", "tessera", "tensor", "scf", "arith"),
         output_dialects=("tile", "gpu", "llvm", "arith", "scf", "tensor", "memref", "math"),
         required_attrs=("chunk_size", "artifact_hash", "storage", "accum", "output", "a_layout", "b_layout", "contract", "bias_shape"),
-        preserved_attrs=("source_hash", "tessera.rocm.block_quant_source", "tessera.ssd.source", "tessera.ssd.cooperative", "tessera.autodiff.temporary_bytes", "tessera.schedule_hash", "numeric_policy", "tile.epilogue", "tile.residual", "tile.epilogue_order"),
+        preserved_attrs=("tessera.launch_bindings", "source_hash", "tessera.rocm.block_quant_source", "tessera.ssd.source", "tessera.ssd.cooperative", "tessera.autodiff.temporary_bytes", "tessera.schedule_hash", "numeric_policy", "tile.epilogue", "tile.residual", "tile.epilogue_order"),
         pass_kind="lowering", sprint="W5.2f",
     ),
     PassMetadata(

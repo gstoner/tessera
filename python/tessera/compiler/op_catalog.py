@@ -810,7 +810,8 @@ OP_SHAPE_RULE: dict = {
     # Full reductions to a scalar; storage dtype preserved.
     **{f"tessera.{n}": "reduce_all" for n in
        ("amax", "amin", "max", "mean", "min", "prod", "std", "var",
-        "logsumexp", "reduce")},
+        "logsumexp")},
+    "tessera.reduce": "reduce_axes",
     # Full reductions yielding an index.
     **{f"tessera.{n}": "reduce_all_index" for n in
        ("argmax", "argmin", "count_nonzero")},
@@ -1153,6 +1154,7 @@ SHAPE_RULE_NAMES = frozenset({
     "transpose",
     "same_shape_bool",
     "reduce_all",
+    "reduce_axes",
     "reduce_all_index",
     "same_shape_index",
     "flatten",

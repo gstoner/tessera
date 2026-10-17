@@ -40,11 +40,21 @@ inline mlir::LogicalResult exportBlockQuantProgram(mlir::ModuleOp module,mlir::O
     {"root_ir_sha256",llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(original.getValue())),true)}};
   std::string programText;llvm::raw_string_ostream ps(programText);
   ps<<llvm::json::Value(std::move(program));ps.flush();
+  llvm::json::Array bindings;
+  if (auto names=module->getAttrOfType<ArrayAttr>("tessera.launch_bindings")) {
+    if (names.size()!=3) return module.emitError("K16 native binding arity differs");
+    for (unsigned i=0;i<3;++i) {
+      auto name=dyn_cast<StringAttr>(names[i]);
+      if (!name || name.getValue().empty()) return module.emitError("K16 native binding name differs");
+      for (unsigned j=0;j<i;++j) if (names[i]==names[j]) return module.emitError("K16 native binding roles alias");
+      bindings.push_back(name.getValue().str());
+    }
+  } else bindings=llvm::json::Array{"input","codes","scales"};
   llvm::json::Object member{{"schema",1},{"profile","gfx1201_block_quant_bf16_e4m3_f32_k16_v1"},
     {"architecture","gfx1201"},{"entry",name.str()},
     {"abi","flattened_rank1_memref_then_i64"},{"step",0},
     {"inputs",llvm::json::Array{0}},{"outputs",llvm::json::Array{1,2}},
-    {"bindings",llvm::json::Array{"input","codes","scales"}},
+    {"bindings",std::move(bindings)},
     {"program_base64",llvm::encodeBase64(programText)},
     {"scalars",llvm::json::Array{groups}},
     {"geometry",llvm::json::Array{(groups+255)/256,1,1,256,1,1}},

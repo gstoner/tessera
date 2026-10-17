@@ -377,12 +377,12 @@ each row into a single E2E tier.
 | ``nonzero`` | indexing | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``arange`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``broadcast`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
-| ``expand`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
+| ``expand`` | layout_transform | public | public | registered | fused | no_kernel_required | ready | none |
 | ``flatten`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
 | ``mor_partition`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``mor_router`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``mor_scatter`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
-| ``reshape`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
+| ``reshape`` | layout_transform | public | public | registered | fused | no_kernel_required | ready | none |
 | ``squeeze`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
 | ``stop_gradient`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``tile_view`` | layout_transform | public | public | registered | fused | no_kernel_required | ready | none |

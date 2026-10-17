@@ -1,0 +1,7 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_index": 0,
+  "compiler_sha256": "7aa87457c1750fe39781c6a74bf2da0159085456a1b68cd5779e422bbf03ace9",
+  "runtime_provider": "/home/angstorms/scratch/rocm-native-silu-mlp-20261016/runtime-candidate/libtessera_rocm_native_movement.full.so"
+}

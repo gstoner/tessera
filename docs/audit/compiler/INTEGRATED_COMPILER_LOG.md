@@ -13010,3 +13010,29 @@ slice execution is not admitted by the named composed profile.
 Evidence: benchmarks/baselines/native_parent_view_public_20261017/README.md;
 docs/spec/NATIVE_PARENT_VIEW_CONTRACT.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-17 — native BF16 parent views and resident activation
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync ROCM-BF16-PARENT-VIEW-20261017.
+Outcome: native row schema 3 preserves BF16 load/storage and explicit FP32
+SiLU arithmetic through Graph/Schedule/Tile/Target/LLVM. Native NVFP4 program
+v5 groups the activation's six logical ops into one member, with nine physical
+buffers and one private BF16 matmul parent. Existing row schema 1/2 and program
+v3/v4 retain their meanings. The captured-Boolean AST assignment repair keeps
+the original selected call's SSA without executing conditions or eager math.
+Matching native stages pass 31 cases; portable contracts/frontend pass 45.
+Owning gfx1201 has seven BF16 public JIT/fresh-process cases, two resident
+lifetime cases and existing static/bounded regressions. Exact RTX5070 schema-1
+source-active regression passes twelve cases. Synthetic captured windows pass
+the 10ms duration gate; grouped member/device-event/completed host scopes stay
+separate. No speedup or model-quality promotion is claimed.
+PR964 merged at 42f16b9a89 after exact-head required CI and a resolved review
+audit; both WSL main refs were refreshed and owned mirrored files reconciled.
+Remaining: Python authoring of BF16 product storage; three-member bounded
+runtime expressions; activation quantization/down projection; full NVFP4
+MLP/original-model quality and the original five-slice objective.
+Evidence: benchmarks/baselines/native_bf16_parent_view_20261017/README.md;
+docs/spec/NATIVE_PARENT_VIEW_CONTRACT.md.
+<!-- entry-fields:end -->

@@ -2449,6 +2449,19 @@ class _OpExtractor(ast.NodeVisitor):
         return None
 
     def _emit_expr(self, node: ast.expr, result_name: Optional[str] = None) -> Optional[str]:
+        if isinstance(node, ast.IfExp):
+            try:
+                condition = self._attribute_literal(node.test)
+            except ValueError:
+                self._unsupported(node, "conditional expressions require a captured Boolean or structured runtime control flow")
+                return None
+            if type(condition) is not bool:
+                self._unsupported(node, "conditional expression condition must be a captured Boolean")
+                return None
+            # Static frontend specialization only. Never evaluate tensor truth,
+            # call the condition, or inspect/emit the unselected expression.
+            selected = node.body if condition else node.orelse
+            return self._emit_expr(selected, result_name=result_name)
         if isinstance(node, ast.Call):
             op = self._try_map_call(node)
             if op is None:

@@ -7062,14 +7062,17 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     if op_name == "slice":
         entries = [entry for entry in entries if entry.target != "rocm_gfx1201"]
         entries.append(BackendKernelEntry(
-            target="rocm_gfx1201", status=_DEVICE_VERIFIED_JIT_STATUS, dtypes=("fp32",),
+            target="rocm_gfx1201", status=_DEVICE_VERIFIED_JIT_STATUS, dtypes=("fp32", "bf16"),
             feature_flags=("native_schedule", "checked_descriptor", "parent_view"),
             notes="Slice is consumed only inside the named complementary gate/up parent-view "
                   "Graph; this is not standalone slice admission. Native Schedule/Tile/Target/LLVM "
-                  "produce a checked parent/output program frame. Thirteen owning-device literal/closure JIT and fresh-process replay cases pass.",
+                  "produce a checked parent/output program frame. Thirteen f32 cases and seven BF16 "
+                  "cases with explicit f32 widenings/BF16 storage pass, including fresh-process replay. "
+                  "BF16 fixture: tests/device/rocm/test_native_parent_view_bf16_jit.py. "
+                  "Two textual Graph NVFP4 resident activation programs additionally prove private parent ownership.",
             execute_compare_fixture="tests/device/rocm/test_native_parent_view_jit.py",
-            shape_envelope="one compact f32 rank-2 parent [M,2I], complementary unit-stride "
-                           "half views consumed by SiLU multiplication; static literal/captured-literal coordinates"))
+            shape_envelope="one compact f32 or explicit-widen/compute/store bf16 rank-2 parent [M,2I], "
+                           "complementary unit-stride half views consumed by SiLU; static literal/captured coordinates"))
     if op_name == "silu_mul":
         entries = [entry for entry in entries if entry.target != "rocm_gfx1201"]
         entries.append(BackendKernelEntry(

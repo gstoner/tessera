@@ -27,7 +27,8 @@ inline FailureOr<Source> validateSource(ModuleOp source) {
   auto outputType = dyn_cast<RankedTensorType>(graph.getResultTypes()[0]);
   if (!inputType || !outputType || inputType.getRank() != 2 || outputType.getRank() != 2 ||
       !inputType.hasStaticShape() || !outputType.hasStaticShape() ||
-      !inputType.getElementType().isF32() || !outputType.getElementType().isF32() ||
+      (!inputType.getElementType().isF32() && !inputType.getElementType().isBF16()) ||
+      inputType.getElementType() != outputType.getElementType() ||
       inputType.getEncoding() || outputType.getEncoding()) return failure();
   for (auto type : {inputType, outputType}) {
     for (auto extent : type.getShape()) if (extent <= 0 || extent > INT32_MAX) return failure();
@@ -55,7 +56,8 @@ inline FailureOr<Source> validateSource(ModuleOp source) {
   if (auto attributes = graph.getResultAttrDict(0); attributes && !attributes.empty()) return failure();
   auto ret = dyn_cast<func::ReturnOp>(graph.getBody().front().back());
   if (!ret || ret.getNumOperands() != 1) return failure();
-  unsigned slices = 0, products = 0;
+  bool bf16 = inputType.getElementType().isBF16();
+  unsigned slices = 0, products = 0, casts = 0;
   for (Operation &op : graph.getBody().front().without_terminator()) {
     auto name = op.getName().getStringRef();
     bool slice = name == "tessera.slice" || name == "tessera.dynamic_slice";
@@ -64,18 +66,36 @@ inline FailureOr<Source> validateSource(ModuleOp source) {
       ++slices;
     } else if (name == "tessera.silu_mul") {
       if (op.getNumOperands() != 2 || op.getNumResults() != 1 ||
-          op.getResult(0).getType() != outputType) return failure();
+          op.getResult(0).getType() != RankedTensorType::get(outputType.getShape(), Float32Type::get(source.getContext())))
+        return failure();
       ++products;
+    } else if (name == "tessera.cast" && bf16) {
+      if (op.getNumOperands() != 1 || op.getNumResults() != 1) return failure();
+      auto from = dyn_cast<RankedTensorType>(op.getOperand(0).getType());
+      auto to = dyn_cast<RankedTensorType>(op.getResult(0).getType());
+      auto dtype = op.getAttrOfType<StringAttr>("dtype");
+      if (!from || !to || from.getShape() != outputType.getShape() || to.getShape() != outputType.getShape() ||
+          from.getEncoding() || to.getEncoding() || !dtype ||
+          !((from.getElementType().isBF16() && to.getElementType().isF32() && dtype.getValue() == "fp32") ||
+            (from.getElementType().isF32() && to.getElementType().isBF16() && dtype.getValue() == "bf16")))
+        return failure();
+      ++casts;
     } else return failure();
     for (NamedAttribute attr : op.getAttrs()) {
       if (slice && (attr.getName() == "start_indices" || attr.getName() == "slice_sizes")) continue;
+      if (name == "tessera.cast" && attr.getName() == "dtype") continue;
       if (attr.getName() == "tessera.effect_kind" &&
           attr.getValue() == StringAttr::get(source.getContext(), "pure")) continue;
       return failure();
     }
   }
   auto root = ret.getOperand(0).getDefiningOp();
-  if (slices != 2 || products != 1 || !root ||
+  if (bf16) {
+    if (!root || root->getName().getStringRef() != "tessera.cast" ||
+        root->getResult(0).getType() != outputType || casts != 3) return failure();
+    root = root->getOperand(0).getDefiningOp();
+  }
+  if (slices != 2 || products != 1 || (!bf16 && casts) || !root ||
       root->getName().getStringRef() != "tessera.silu_mul") return failure();
 
   // This runtime-row profile is the named gate/up split, not an arbitrary
@@ -85,6 +105,12 @@ inline FailureOr<Source> validateSource(ModuleOp source) {
   int64_t origins[2] = {-1, -1};
   for (unsigned i = 0; i < 2; ++i) {
     auto producer = root->getOperand(i).getDefiningOp();
+    if (bf16) {
+      if (!producer || producer->getName().getStringRef() != "tessera.cast" ||
+          !cast<RankedTensorType>(producer->getResult(0).getType()).getElementType().isF32())
+        return failure();
+      producer = producer->getOperand(0).getDefiningOp();
+    }
     if (!producer || producer->getNumOperands() != 1 || producer->getOperand(0) != graph.getArgument(0)) return failure();
     auto bounds = tessera::slice_contract::staticBounds(producer);
     if (!bounds || bounds->sizes != outputType.getShape() || bounds->offsets[0] != 0 ||
@@ -115,8 +141,8 @@ inline FailureOr<ModuleOp> buildScalarModule(ModuleOp source) {
   Value elements = entry->getArgument(3);
   Value rows = arith::DivUIOp::create(b, loc, elements, columns);
   Value inputRows = rows, inputColumns = c(inputType.getDimSize(1));
-  auto readType = tile::BufferViewType::get(source.getContext(), b.getF32Type(), "read", inputOrder);
-  auto writeType = tile::BufferViewType::get(source.getContext(), b.getF32Type(), "write", "row_major");
+  auto readType = tile::BufferViewType::get(source.getContext(), inputType.getElementType(), "read", inputOrder);
+  auto writeType = tile::BufferViewType::get(source.getContext(), outputType.getElementType(), "write", "row_major");
   Value parent = tile::BufferViewOp::create(b, loc, readType, entry->getArgument(0), inputRows, inputColumns, inputOrder == "row_major" ? inputColumns : inputRows);
   Value out = tile::BufferViewOp::create(b, loc, writeType, entry->getArgument(1), rows, columns, columns);
   Value gid = entry->getArgument(2);
@@ -132,7 +158,7 @@ inline FailureOr<ModuleOp> buildScalarModule(ModuleOp source) {
   scalar = [&](Value value, Value r, Value col) -> FailureOr<Value> {
     if (auto arg = dyn_cast<BlockArgument>(value)) {
       if (arg != graph.getArgument(0)) return failure();
-      return Value(tile::LoadElementOp::create(b, loc, b.getF32Type(), parent, r, col));
+      return Value(tile::LoadElementOp::create(b, loc, inputType.getElementType(), parent, r, col));
     }
     Operation *op = value.getDefiningOp();
     if (!op) return failure();
@@ -141,6 +167,13 @@ inline FailureOr<ModuleOp> buildScalarModule(ModuleOp source) {
       auto bounds = tessera::slice_contract::staticBounds(op);
       if (!bounds || bounds->offsets.size() != 2) return failure();
       return scalar(op->getOperand(0), offset(r, bounds->offsets[0]), offset(col, bounds->offsets[1]));
+    }
+    if (name == "tessera.cast") {
+      auto operand = scalar(op->getOperand(0), r, col);
+      if (failed(operand)) return failure();
+      auto element = cast<RankedTensorType>(value.getType()).getElementType();
+      if (element.isF32()) return Value(arith::ExtFOp::create(b, loc, element, *operand));
+      return Value(arith::TruncFOp::create(b, loc, element, *operand));
     }
     if (name != "tessera.silu_mul") return failure();
     auto lhs = scalar(op->getOperand(0), r, col), rhs = scalar(op->getOperand(1), r, col);
@@ -195,8 +228,13 @@ inline FailureOr<func::FuncOp> graphRoot(ModuleOp module) {
   return fn;
 }
 inline std::string sourceHash(func::FuncOp fn) { return row_region::sourceDigest(fn); }
+inline bool bf16Profile(func::FuncOp fn) {
+  return cast<RankedTensorType>(fn.getResultTypes()[0]).getElementType().isBF16();
+}
 inline std::string artifactHash(func::FuncOp fn) {
-  std::string text = sourceHash(fn) + ";gate_up_view_schema=2;flat_gid;threads=256;parent=1;output=1;f32";
+  std::string text = sourceHash(fn) + (bf16Profile(fn)
+      ? ";gate_up_view_schema=3;flat_gid;threads=256;parent=1;output=1;bf16_f32_compute"
+      : ";gate_up_view_schema=2;flat_gid;threads=256;parent=1;output=1;f32");
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(text)), true);
 }
 inline DictionaryAttr artifactAttributes(func::FuncOp fn) {
@@ -205,12 +243,12 @@ inline DictionaryAttr artifactAttributes(func::FuncOp fn) {
   return b.getDictionaryAttr({
     b.getNamedAttr("hash", b.getStringAttr(artifactHash(fn))),
     b.getNamedAttr("arch", b.getStringAttr("gfx1201")),
-    b.getNamedAttr("shape_key", b.getStringAttr("family=gate_up_view;rows=" + std::to_string(shape[0]) + ";columns=" + std::to_string(shape[1]) + ";storage=f32")),
-    b.getNamedAttr("numeric_policy", b.getStringAttr("explicit_fp32;source_order_silu_mul")),
+    b.getNamedAttr("shape_key", b.getStringAttr("family=gate_up_view;rows=" + std::to_string(shape[0]) + ";columns=" + std::to_string(shape[1]) + (bf16Profile(fn) ? ";storage=bf16" : ";storage=f32"))),
+    b.getNamedAttr("numeric_policy", b.getStringAttr(bf16Profile(fn) ? "bf16_load;explicit_fp32;source_order_silu_mul;bf16_rne_store" : "explicit_fp32;source_order_silu_mul")),
     b.getNamedAttr("tile", b.getDictionaryAttr({
       b.getNamedAttr("source_hash", b.getStringAttr(sourceHash(fn))),
       b.getNamedAttr("algorithm", b.getStringAttr("flat_pointwise_views")),
-      b.getNamedAttr("schema", b.getI64IntegerAttr(2)),
+      b.getNamedAttr("schema", b.getI64IntegerAttr(bf16Profile(fn) ? 3 : 2)),
       b.getNamedAttr("workgroup_size", b.getI64IntegerAttr(256))}))});
 }
 inline LogicalResult schedule(ModuleOp module, bool &selected) {
@@ -255,9 +293,9 @@ inline LogicalResult lower(ModuleOp module, bool &selected) {
   state.addAttribute("arch", b.getStringAttr("gfx1201"));
   state.addAttribute("rows", b.getI64IntegerAttr(type.getDimSize(0)));
   state.addAttribute("columns", b.getI64IntegerAttr(type.getDimSize(1)));
-  state.addAttribute("storage", TypeAttr::get(b.getF32Type()));
+  state.addAttribute("storage", TypeAttr::get(type.getElementType()));
   state.addAttribute("workgroup_size", b.getI64IntegerAttr(256));
-  state.addAttribute("schema", b.getI64IntegerAttr(2));
+  state.addAttribute("schema", b.getI64IntegerAttr(bf16Profile(*root) ? 3 : 2));
   state.addAttribute("source_hash", b.getStringAttr(sourceHash(*root)));
   state.addAttribute("artifact_hash", b.getStringAttr(artifactHash(*root)));
   state.addAttribute("body_hash", b.getStringAttr(row_region::digest(fn)));

@@ -1,0 +1,39 @@
+{
+  "base_main": "42f16b9a89886a5dd11fa37be117315074086e51",
+  "source_identity_sha256": "baefe5eae519c73dc117128b8da69e506e29184a0f5908e57f0bb965715822bc",
+  "registry_gates": {
+    "passed": 711,
+    "skipped": 4
+  },
+  "native_stages": {
+    "passed": 31
+  },
+  "portable_contracts": {
+    "passed": 45
+  },
+  "gfx1201_affected_regressions": {
+    "passed": 71,
+    "skipped": 0
+  },
+  "sm120_source_active_regression": {
+    "passed": 12,
+    "skipped": 0
+  },
+  "mypy": {
+    "source_files": 657,
+    "errors": 0
+  },
+  "ruff": "passed",
+  "compiler_plan": "passed",
+  "generated_documents": {
+    "in_sync": 33
+  },
+  "selection_note": "overlapping selections are not summed",
+  "log_sha256": {
+    "bf16-final-registry-gates.txt": "5e04f145f154435d94836955bc054c4b5fc0e6f7e5c4b93f7ff498625ee16416",
+    "bf16-final-generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "bf16-final-plan-check.txt": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+    "bf16-final-mypy.txt": "75ddb4e2361023fe9d22913c1d6483a6758b5c66799eefcf18e4b302e18d2ba8",
+    "bf16-final-ruff.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  }
+}

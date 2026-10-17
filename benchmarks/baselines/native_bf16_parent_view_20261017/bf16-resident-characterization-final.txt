@@ -1,0 +1,5 @@
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/rocm_native.py:1619: RuntimeWarning: /home/angstorms/scratch/rocm-native-gate-up-views-20261016/bf16-compiler/tools/tessera-opt/tessera-opt is older than 192 generator source(s) -- newest src/transforms/lib/X86GraphLayoutMaterializationPass.cpp. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).
+  warn_if_generator_is_stale(tool)
+{"shape": [3, 17, 48], "host_ms": 0.4733920213766396, "captured_min_window_ms": 22.69103435985744}
+{"shape": [16, 64, 80], "host_ms": 0.5179370054975152, "captured_min_window_ms": 22.131499633193016}
+{"shape": [256, 128, 256], "host_ms": 0.5593959940597415, "captured_min_window_ms": 17.7850957098417}

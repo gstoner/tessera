@@ -731,9 +731,12 @@ class PreparedScaledProgram:
         outputs = []
         for slot in self._binding.outputs:
             contract = self._binding.storage[slot]
-            if contract.storage != "f32":
-                raise ValueError("native paired outputs require f32 storage")
-            outputs.append(np.empty(contract.shape, dtype=np.float32))
+            if contract.storage not in {"f32", "bf16"}:
+                raise ValueError("native program outputs require checked f32 or bf16 storage")
+            output = np.empty(contract.shape, dtype=contract.numpy_dtype)
+            if output.nbytes != contract.bytes:
+                raise ValueError("native output storage byte span differs from its compiler frame")
+            outputs.append(output)
         read_many = getattr(self, "_read_many", None)
         if batched and len(outputs) > 1 and read_many is not None:
             count = len(outputs)

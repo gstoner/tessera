@@ -6,6 +6,16 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## ROCM-BF16-PARENT-VIEW-20261017 — resident activation candidate
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: ROCM-BF16-PARENT-VIEW-20261017.
+
+Not applicable to Apple physical execution: the candidate row schema 3,
+NVFP4 program v5, target-capability change and checked ABI are gated to
+gfx1201. Shared Python native-runtime/descriptor changes require host drift
+regression checks; no Metal datatype or executable route is promoted.
+
 ## ROCM-NATIVE-GATE-UP-CONSUMER-20261016 — parent-view native integration
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.

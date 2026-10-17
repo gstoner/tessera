@@ -4630,9 +4630,9 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
     )
 
     from tessera.compiler.rocm_math_native import MATH_ABIS
-    from tessera.compiler.rocm_parent_view_native import PARENT_VIEW_ABI
+    from tessera.compiler.rocm_parent_view_native import PARENT_VIEW_ABIS
     return frozenset({
-        PARENT_VIEW_ABI,
+        *PARENT_VIEW_ABIS,
         *MATH_ABIS.values(),
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
         rn.GFX_NORM_F16_ABI, rn.GFX_NORM_BF16_ABI, rn.GFX_NORM_F32_ABI,
@@ -4958,8 +4958,8 @@ def _submit_rocm_gfx1151_native(
     stream: Any,
 ) -> Any:
     """Submit compiler-owned gfx1151 typed softmax/reduction/movement HSACOs."""
-    from .compiler.rocm_parent_view_native import PARENT_VIEW_ABI, submit_parent_view
-    if getattr(descriptor, "abi_id", None) == PARENT_VIEW_ABI:
+    from .compiler.rocm_parent_view_native import PARENT_VIEW_ABIS, submit_parent_view
+    if getattr(descriptor, "abi_id", None) in PARENT_VIEW_ABIS:
         return submit_parent_view(image, descriptor, buffers, scalars, stream)
     provenance = getattr(descriptor, "provenance", {})
     if "native_scaled_primal_program" in provenance:
@@ -6626,8 +6626,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                                      submit=_submit_rocm_gfx1151_native)
         return
 
-    from tessera.compiler.rocm_parent_view_native import PARENT_VIEW_ABI
-    if target == "rocm_gfx1201" and abi_id == PARENT_VIEW_ABI:
+    from tessera.compiler.rocm_parent_view_native import PARENT_VIEW_ABIS
+    if target == "rocm_gfx1201" and abi_id in PARENT_VIEW_ABIS:
         if target not in _native_launchers:
             register_native_launcher(target, binary_formats=("hsaco",), submit=_submit_rocm_gfx1151_native)
         return
@@ -35880,8 +35880,8 @@ def _launch_native_descriptor(
             except (ValueError,TypeError,KeyError,AttributeError) as exc:
                 raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
                     f"MXFP4 storage artifact lineage differs: {exc}") from exc
-        from tessera.compiler.rocm_parent_view_native import PARENT_VIEW_ABI, validate_parent_view_runtime_artifact
-        if descriptor.abi_id == PARENT_VIEW_ABI:
+        from tessera.compiler.rocm_parent_view_native import PARENT_VIEW_ABIS, validate_parent_view_runtime_artifact
+        if descriptor.abi_id in PARENT_VIEW_ABIS:
             try:
                 validate_parent_view_runtime_artifact(artifact)
             except (ValueError, TypeError, KeyError, AttributeError) as exc:

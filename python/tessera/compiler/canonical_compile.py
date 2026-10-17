@@ -278,6 +278,9 @@ class CompileResult:
                 if self.launch_descriptor.abi_id in MATH_ABIS.values():
                     meta["compiler_path"] = "rocm_math_native_descriptor"
             if self.target == "rocm_gfx1201":
+                from .rocm_block_quant_native import BLOCK_QUANT_ABI
+                if self.launch_descriptor.abi_id == BLOCK_QUANT_ABI:
+                    meta["compiler_path"] = "rocm_block_quant_native_descriptor"
                 from .rocm_parent_view_native import PARENT_VIEW_ABIS
                 if self.launch_descriptor.abi_id in PARENT_VIEW_ABIS:
                     meta["compiler_path"] = "rocm_parent_view_native_descriptor"

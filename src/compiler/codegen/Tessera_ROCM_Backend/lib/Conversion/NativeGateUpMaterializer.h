@@ -1,4 +1,5 @@
 #include "ParentViewProgramExport.h"
+#include "NativeBlockQuantMaterializer.h"
 #pragma once
 #include "Tessera/IR/RowRegionContract.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
@@ -21,6 +22,8 @@ inline mlir::LogicalResult materializeGateUpViews(mlir::ModuleOp module) {
   if (carriers.size() != 1 || module.getBody()->getOperations().size() != 1)
     return module.emitError("parent-view native materialization requires one isolated Target body");
   Operation *carrier = carriers.front();
+  if (auto schema=carrier->getAttrOfType<IntegerAttr>("schema"); schema && schema.getInt()==4)
+    return materializeBlockQuant(module,carrier);
   if (failed(tessera::row_region::verifyGateUpKernel(carrier))) return failure();
   auto body = cast<LLVM::LLVMFuncOp>(carrier->getRegion(0).front().front());
   auto name = carrier->getAttrOfType<StringAttr>("name").getValue();

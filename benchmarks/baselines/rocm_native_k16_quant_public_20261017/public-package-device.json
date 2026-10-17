@@ -1,0 +1,119 @@
+[
+  {
+    "shape": [
+      3,
+      32
+    ],
+    "architecture": "gfx1201",
+    "device": "AMD Radeon RX 9070 XT",
+    "gpu_uuid": "GPU-28d9e7efbf2ef716",
+    "route": "Python frontend -> typed Graph -> native Schedule -> typed Tile -> ROCm Target -> ROCDL/LLVM -> HSACO -> checked C++ owner",
+    "abi": "tessera.rocm.block_quant.x_q_s_groups.bf16_e4m3_f32.v1",
+    "compiler_path": "rocm_block_quant_native_descriptor",
+    "image_sha256": "18ee2db7e8c0c192080ac7931dc20b2942fad175727b091a618564bdb2449dc5",
+    "cold_public_ms": 680.7722869853023,
+    "public_warm_ms": [
+      2.206443023169413,
+      1.6962570080067962,
+      1.7752170097082853
+    ],
+    "captured_member_ms": [
+      0.0044943648390471935,
+      0.0045594037510454655,
+      0.004516631364822388
+    ],
+    "captured_repeats": 5012,
+    "prepared_invoke_read_ms": [
+      0.3419049899093807,
+      0.27838198002427816,
+      0.36080097197555006
+    ],
+    "public_scope": "complete ordinary JIT call, including frontend replay, binding and native prepare/execute/readback",
+    "device_scope": "captured native graph dispatch; excludes capture, instantiate, host enqueue and copies",
+    "prepared_scope": "retained C++ owner invoke plus two output readbacks; excludes compilation and preparation",
+    "recorder_sha256": "922b57de2045908c40417231d7600ebddafbb5dc213312303ee8f21e6365cb0c",
+    "compiler_sha256": "454b8a31c460547e7d8a82cb6589e1d7a5ad8b2f96fe387691f4637566205ab4",
+    "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+    "correctness": "bitwise FP8 codes and FP32 scales before all timing samples",
+    "program_executable": true,
+    "manual_diagnostic_image_equal": false
+  },
+  {
+    "shape": [
+      19,
+      12288
+    ],
+    "architecture": "gfx1201",
+    "device": "AMD Radeon RX 9070 XT",
+    "gpu_uuid": "GPU-28d9e7efbf2ef716",
+    "route": "Python frontend -> typed Graph -> native Schedule -> typed Tile -> ROCm Target -> ROCDL/LLVM -> HSACO -> checked C++ owner",
+    "abi": "tessera.rocm.block_quant.x_q_s_groups.bf16_e4m3_f32.v1",
+    "compiler_path": "rocm_block_quant_native_descriptor",
+    "image_sha256": "18ee2db7e8c0c192080ac7931dc20b2942fad175727b091a618564bdb2449dc5",
+    "cold_public_ms": 310.12710501090623,
+    "public_warm_ms": [
+      2.1981959871482104,
+      1.8967299838550389,
+      1.879296003608033
+    ],
+    "captured_member_ms": [
+      0.004990489687770605,
+      0.00492795230820775,
+      0.004919443279504776
+    ],
+    "captured_repeats": 4354,
+    "prepared_invoke_read_ms": [
+      0.43874001130461693,
+      0.39622801705263555,
+      0.34387901541776955
+    ],
+    "public_scope": "complete ordinary JIT call, including frontend replay, binding and native prepare/execute/readback",
+    "device_scope": "captured native graph dispatch; excludes capture, instantiate, host enqueue and copies",
+    "prepared_scope": "retained C++ owner invoke plus two output readbacks; excludes compilation and preparation",
+    "recorder_sha256": "922b57de2045908c40417231d7600ebddafbb5dc213312303ee8f21e6365cb0c",
+    "compiler_sha256": "454b8a31c460547e7d8a82cb6589e1d7a5ad8b2f96fe387691f4637566205ab4",
+    "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+    "correctness": "bitwise FP8 codes and FP32 scales before all timing samples",
+    "program_executable": true,
+    "manual_diagnostic_image_equal": false
+  },
+  {
+    "shape": [
+      256,
+      12288
+    ],
+    "architecture": "gfx1201",
+    "device": "AMD Radeon RX 9070 XT",
+    "gpu_uuid": "GPU-28d9e7efbf2ef716",
+    "route": "Python frontend -> typed Graph -> native Schedule -> typed Tile -> ROCm Target -> ROCDL/LLVM -> HSACO -> checked C++ owner",
+    "abi": "tessera.rocm.block_quant.x_q_s_groups.bf16_e4m3_f32.v1",
+    "compiler_path": "rocm_block_quant_native_descriptor",
+    "image_sha256": "18ee2db7e8c0c192080ac7931dc20b2942fad175727b091a618564bdb2449dc5",
+    "cold_public_ms": 310.4720519913826,
+    "public_warm_ms": [
+      2.9151689959689975,
+      2.758499002084136,
+      2.6351730048190802
+    ],
+    "captured_member_ms": [
+      0.030337905511260033,
+      0.030171940103173256,
+      0.030843989923596382
+    ],
+    "captured_repeats": 584,
+    "prepared_invoke_read_ms": [
+      0.6765949947293848,
+      0.8031569886952639,
+      0.8455179922748357
+    ],
+    "public_scope": "complete ordinary JIT call, including frontend replay, binding and native prepare/execute/readback",
+    "device_scope": "captured native graph dispatch; excludes capture, instantiate, host enqueue and copies",
+    "prepared_scope": "retained C++ owner invoke plus two output readbacks; excludes compilation and preparation",
+    "recorder_sha256": "922b57de2045908c40417231d7600ebddafbb5dc213312303ee8f21e6365cb0c",
+    "compiler_sha256": "454b8a31c460547e7d8a82cb6589e1d7a5ad8b2f96fe387691f4637566205ab4",
+    "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+    "correctness": "bitwise FP8 codes and FP32 scales before all timing samples",
+    "program_executable": true,
+    "manual_diagnostic_image_equal": false
+  }
+]

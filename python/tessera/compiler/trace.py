@@ -301,6 +301,23 @@ class TraceBuilder:
             elif isinstance(a, Tracer):
                 tracer_args.append(a)
                 call_args.append(a)
+            elif isinstance(a, np.ndarray) and not a.flags.writeable:
+                # Explicit immutable frontend tensor literals become upstream
+                # MLIR constants, never implicit runtime operands or Python
+                # backend arithmetic. This first envelope is finite FP32 splats.
+                from .tensor_literal import capture
+                literal = capture(a)
+                if literal is None:
+                    raise TesseraTraceError("immutable tensor literals require finite bit-identical FP32 splats")
+                from .graph_ir import tensor_ir_type
+                snapshot = literal.array()
+                ty = tensor_ir_type(tuple(str(n) for n in literal.shape), "f32")
+                ssa = self._fresh()
+                self.body.append(IROp(ssa,"arith.constant",[],[],str(ty),
+                    attrs=literal.attributes(ty),inferred_type=ty,
+                    source_span=_user_source_span()))
+                tracer_args.append(Tracer(literal.shape,"f32",ssa,snapshot))
+                call_args.append(snapshot)
             elif (isinstance(a, (list, tuple)) and a
                   and all(isinstance(x, Tracer) for x in a)):
                 # Variadic tensor-list operand (e.g. ``cat([a, b], axis=…)``):
@@ -412,7 +429,14 @@ class TraceBuilder:
             and all(type(dim) is int and dim > 0 for dim in reshape_shape)
             and (not self.evaluate_catalog_outputs or not tracer_args
                  or not all(value.value is not None for value in tracer_args)))
-        if physical_movement or attention_types_only or scaled_types_only or cast_types_only or slice_types_only or silu_types_only or reshape_types_only or graph_name in {"tessera.nvfp4_expand","tessera.nvfp4_requantize","tessera.mxfp4_folded_storage"}:
+        # Binary Graph operations currently require matching operand shapes.
+        # Preserve the existing broadcast-aware trace path for unequal shapes;
+        # its result must not inherit the first operand's catalog shape.
+        metadata_binary_shape = (graph_name not in {"tessera.div", "tessera.maximum"}
+            or len({value.shape for value in tracer_args}) == 1)
+        metadata_only_math = metadata_binary_shape and graph_name in {"tessera.reduce", "tessera.absolute", "tessera.maximum", "tessera.expand", "tessera.div"} and (
+            not self.evaluate_catalog_outputs or not all(value.value is not None for value in tracer_args))
+        if metadata_only_math or physical_movement or attention_types_only or scaled_types_only or cast_types_only or slice_types_only or silu_types_only or reshape_types_only or graph_name in {"tessera.nvfp4_expand","tessera.nvfp4_requantize","tessera.mxfp4_folded_storage"}:
             # Catalog-owned result contracts avoid host arithmetic during tracing,
             # including attention output/row-LSE and packed conversion results.
             from .graph_ir import _infer_result_types, tensor_ir_type

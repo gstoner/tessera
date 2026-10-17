@@ -165,7 +165,7 @@ squeeze,layout_transform,public,public,registered,complete,no_kernel_required,no
 stack,layout_transform,public,public,registered,complete,fused,device_verified_jit,ready,none
 stop_gradient,layout_transform,public,public,registered,complete,not_applicable,not_applicable,ready,none
 tile,layout_transform,public,public,registered,complete,fused,device_verified_jit,ready,none
-tile_view,layout_transform,public,public,registered,complete,fused,no_kernel_required,ready,none
+tile_view,layout_transform,public,public,registered,complete,no_kernel_required,no_kernel_required,ready,none
 transpose,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
 unpack,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
 unsqueeze,layout_transform,public,public,registered,complete,no_kernel_required,no_kernel_required,ready,none

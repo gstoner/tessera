@@ -6,6 +6,52 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## ROCM-K16-QUANT-PUBLIC-20261017 — authored two-result package
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
+Sync: ROCM-K16-QUANT-PUBLIC-20261017.
+
+Registry reconciliation: zero-operand immutable upstream literals have explicit
+no-batch-axis, no-linear-transpose and replicated-literal contracts. Component
+view evidence preserves no-kernel-required audit status. The architecture
+census includes block_quant only for gfx1201; sibling physical scope is unchanged.
+
+Review follow-up: metadata-only binary tracing uses catalog inference only for
+matching operand shapes, preserving existing broadcast-aware tracing otherwise.
+Quantizer route admission now replays the cached native Graph-to-Schedule
+validator against full source semantics before selection. This changes shared
+frontend/admission behavior, not sibling physical schedules or execution claims.
+
+Shared frontend assessment: immutable read-only FP32 splats now emit upstream
+arith.constant SSA in both AST and trace, with value-based cache identity.
+Canonical reduction inference respects axis/keepdims; upstream constants remain
+in whole-program coverage gates. Follow-up required for any sibling physical
+literal consumer; no new apple native schedule or ABI is admitted. Twelve
+exact RTX5070 producer controls pass; that proof is NVIDIA-specific and does
+not transfer to other architectures.
+
+Evidence: benchmarks/baselines/rocm_native_k16_quant_public_20261017/README.md.
+
+## ROCM-K16-QUANT-SCHEDULE-20261017 — explicit Graph admission
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
+Sync: ROCM-K16-QUANT-SCHEDULE-20261017.
+
+Shared memory lowering now bitcasts E4M3FN values to physical byte stores,
+and checked native readback can return logical FP8 with no numerical
+conversion. Follow-up required before a sibling uses this memory path; the
+new Target wrapper and device packet are gfx1201-specific. Existing sibling
+profiles do not select schema 4, and no physical parity is inferred.
+
+Shared typed buffer views now admit real E4M3FN storage for the quantizer
+output. This does not admit sibling execution: native schema 4 requires
+gfx1201. Follow-up required for any sibling E4M3 view consumer and its
+architecture-specific ABI and numerical proof.
+
+Not applicable to Metal execution: this artifact-only Schedule/Tile profile is
+explicitly gated to gfx1201. Shared typed Graph verification is retained, and
+no Apple kernel, storage ABI or numerical support is promoted.
+
 ## ROCM-NATIVE-E4M3-CAST-20261017 — typed quantizer storage primitive
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.

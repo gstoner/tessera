@@ -106,9 +106,18 @@ inline mlir::LogicalResult lowerScalarBufferAccesses(mlir::Operation *root) {
       Value minorIndex = rowMajor ? col : row;
       Value origin = arith::MulIOp::create(b, loc, major, view.getLeadingDim());
       Value index = arith::AddIOp::create(b, loc, origin, minorIndex);
-      Value address = LLVM::GEPOp::create(b, loc, view.getBase().getType(), type.getElementType(), view.getBase(), ValueRange{index});
-      if (load) return LLVM::LoadOp::create(b, loc, type.getElementType(), address, alignment);
-      LLVM::StoreOp::create(b, loc, store.getValue(), address, alignment);
+      // LLVM memory uses byte storage for E4M3. Keep the numerical value
+      // typed until its explicit storage bitcast; no arithmetic conversion.
+      bool fp8 = isa<Float8E4M3FNType>(type.getElementType());
+      Type physical = fp8 ? Type(b.getI8Type()) : type.getElementType();
+      Value address = LLVM::GEPOp::create(b, loc, view.getBase().getType(), physical, view.getBase(), ValueRange{index});
+      if (load) {
+        Value value = LLVM::LoadOp::create(b, loc, physical, address, alignment);
+        return fp8 ? arith::BitcastOp::create(b,loc,type.getElementType(),value).getResult() : value;
+      }
+      Value value = store.getValue();
+      if (fp8) value = arith::BitcastOp::create(b,loc,physical,value);
+      LLVM::StoreOp::create(b, loc, value, address, alignment);
       return {};
     };
     if (dimensions && scalarViewCoordinateInBounds(op,row,view.getRows()) &&

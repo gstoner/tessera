@@ -14,7 +14,7 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 429 | backend_pathway_owned=414, multi_gpu_deferred=15 | backend_codegen=414, distributed_validation=15 |
+| `backend_kernel` | 430 | backend_pathway_owned=415, multi_gpu_deferred=15 | backend_codegen=415, distributed_validation=15 |
 | `benchmark_evidence` | 2 | benchmark_required=2 | benchmarks=2 |
 | `sharding_rule` | 61 | local_layout_transform=2, multi_gpu_deferred=2, needs_mesh_or_domain_proof=50, single_device_identity=7 | compiler_middle_end=2, distributed_validation=2, primitive_registry=57 |
 | `target_ir` | 29 | architecture_evidence_gated=24, multi_gpu_deferred=4, single_gpu_promote=1 | backend_codegen=25, distributed_validation=4 |
@@ -449,6 +449,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `split` | tensor_algebra | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `stack` | tensor_algebra | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `tile` | tensor_algebra | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `arith.constant` | upstream_literal | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `center_crop` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `image_normalize` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `image_resize` | vision | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |

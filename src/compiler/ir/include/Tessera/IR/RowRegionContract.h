@@ -101,8 +101,91 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
     return op->emitOpError("parent-view body requires two parent reads and one distinct output store");
   return success();
 }
+// Schema 4 is a distinct mixed-width K16 quantizer, never a gate/up recipe.
+inline mlir::LogicalResult verifyBlockQuantKernel(mlir::Operation *op) {
+  using namespace mlir;
+  bool target=op->getName().getStringRef()=="tessera_rocm.row_region_kernel";
+  auto fail=[&]() { return op->emitOpError("requires the sealed gfx1201 schema-4 typed K16 quantizer"); };
+  auto arch=op->getAttrOfType<StringAttr>("arch");
+  auto name=op->getAttrOfType<StringAttr>("name");
+  auto rows=op->getAttrOfType<IntegerAttr>("rows");
+  auto columns=op->getAttrOfType<IntegerAttr>("columns");
+  auto threads=op->getAttrOfType<IntegerAttr>("workgroup_size");
+  auto hex=[](Attribute raw) {
+    auto text=dyn_cast_or_null<StringAttr>(raw);
+    return text && text.getValue().size()==64 && llvm::all_of(text.getValue(),[](char c) {
+      return (c>='0' && c<='9') || (c>='a' && c<='f');
+    });
+  };
+  if ((!target && op->getName().getStringRef()!="tile.row_region_kernel") ||
+      !arch || arch.getValue()!="gfx1201" || !name || name.getValue().empty() ||
+      op->getAttrOfType<TypeAttr>("storage")!=TypeAttr::get(BFloat16Type::get(op->getContext())) ||
+      !rows || rows.getInt()<=0 || rows.getInt()>INT32_MAX ||
+      !columns || columns.getInt()<=0 || columns.getInt()>INT32_MAX || columns.getInt()%16 ||
+      rows.getInt()>INT32_MAX/(columns.getInt()/16) ||
+      !threads || threads.getInt()!=256 ||
+      !hex(op->getAttr("source_hash")) || !hex(op->getAttr("artifact_hash")) ||
+      !hex(op->getAttr("body_hash")) || (target && !hex(op->getAttr("tile_body_hash"))) || op->getNumRegions()!=1 ||
+      !op->getRegion(0).hasOneBlock() || op->getRegion(0).front().getNumArguments() ||
+      op->getRegion(0).front().getOperations().size()!=1) return fail();
+  auto fn=dyn_cast<LLVM::LLVMFuncOp>(op->getRegion(0).front().front());
+  if (!fn || fn.getName()!=name.getValue() || !fn.getBody().hasOneBlock() ||
+      fn.getNumArguments()!=5 || !isa<LLVM::LLVMVoidType>(fn.getFunctionType().getReturnType()) ||
+      fn->hasAttr("nvvm.kernel") || fn->hasAttr("rocdl.kernel") || fn->hasAttr("passthrough") ||
+      digest(fn)!=cast<StringAttr>(op->getAttr("body_hash")).getValue()) return fail();
+  for (unsigned i=0;i<5;++i)
+    if (i<3 ? !isa<LLVM::LLVMPointerType>(fn.getArgument(i).getType()) :
+              !fn.getArgument(i).getType().isInteger(64)) return fail();
+  bool valid=true;
+  unsigned roots=0,loads=0,stores=0;
+  fn.walk([&](Operation *nested) {
+    auto n=nested->getName().getStringRef();
+    if (target && isa<LLVM::LoadOp,LLVM::StoreOp,LLVM::GEPOp>(nested)) {
+      Value address; Type element; bool read=false,write=false;
+      if (auto load=dyn_cast<LLVM::LoadOp>(nested)) {
+        address=load.getAddr(); element=load.getType(); read=true; ++loads;
+      } else if (auto store=dyn_cast<LLVM::StoreOp>(nested)) {
+        address=store.getAddr(); element=store.getValue().getType(); write=true; ++stores;
+      } else {
+        auto gep=cast<LLVM::GEPOp>(nested); address=gep.getBase(); element=gep.getElemType();
+      }
+      while (auto gep=address.getDefiningOp<LLVM::GEPOp>()) address=gep.getBase();
+      auto arg=dyn_cast<BlockArgument>(address);
+      if (!arg || arg.getOwner()!=&fn.getBody().front() || arg.getArgNumber()>=3) { valid=false; return; }
+      unsigned i=arg.getArgNumber();
+      if ((read && i!=0) || (write && i==0) ||
+          (i==0 ? !element.isBF16() : i==1 ? !element.isInteger(8) : !element.isF32())) valid=false;
+      roots|=1u<<i;
+    } else if (!target && isa<tile::BufferViewOp>(nested)) {
+      auto view=cast<tile::BufferViewOp>(nested);
+      auto arg=dyn_cast<BlockArgument>(view.getBase());
+      auto type=cast<tile::BufferViewType>(view.getType());
+      if (!arg || arg.getOwner()!=&fn.getBody().front() || arg.getArgNumber()>=3) { valid=false; return; }
+      unsigned i=arg.getArgNumber();
+      if ((roots & (1u<<i)) || type.getOrder()!="row_major" ||
+          type.getAccess()!=(i==0?"read":"write") ||
+          (i==0 ? !type.getElementType().isBF16() :
+           i==1 ? !isa<Float8E4M3FNType>(type.getElementType()) : !type.getElementType().isF32())) valid=false;
+      roots|=1u<<i;
+    } else if (!target && isa<tile::LoadElementOp>(nested)) {
+      auto load=cast<tile::LoadElementOp>(nested);
+      ++loads;
+      auto view=load->getOperand(0).getDefiningOp<tile::BufferViewOp>();
+      if (!view || view.getBase()!=fn.getArgument(0)) valid=false;
+    } else if (!target && isa<tile::StoreElementOp>(nested)) {
+      auto store=cast<tile::StoreElementOp>(nested);
+      ++stores;
+      auto view=store->getOperand(0).getDefiningOp<tile::BufferViewOp>();
+      if (!view || (view.getBase()!=fn.getArgument(1) && view.getBase()!=fn.getArgument(2))) valid=false;
+    } else if (n!="llvm.func" && n!="llvm.return" && !n.starts_with("arith.") &&
+               !n.starts_with("math.") && !n.starts_with("scf.")) valid=false;
+  });
+  if (!valid || roots!=7 || loads!=2 || stores!=2) return fail();
+  return success();
+}
 inline mlir::LogicalResult verifyKernel(mlir::Operation *op) {
   auto schemaProfile = op->getAttrOfType<mlir::IntegerAttr>("schema");
+  if (schemaProfile && schemaProfile.getInt()==4) return verifyBlockQuantKernel(op);
   if (schemaProfile && (schemaProfile.getInt() == 2 || schemaProfile.getInt() == 3))
     return verifyGateUpKernel(op);
   using namespace mlir;

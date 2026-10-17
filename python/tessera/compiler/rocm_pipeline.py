@@ -28,7 +28,7 @@ class ROCMOutputLevel(str, Enum):
 
 #: The gfx1201 promotions, by name. Every other RDNA4/CDNA arch has none.
 _GFX1201_PROMOTED_FAMILIES = frozenset({
-    "parent_view",
+    "parent_view", "block_quant",
     "softmax", "reduction", "matmul", "attention", "attention_backward",
     # Two scalar per-thread families with no WMMA fragment in them, promoted
     # 2026-09-17 on exact-device evidence from Tajasarus (RX 9070 XT):
@@ -101,7 +101,7 @@ _GFX1201_PROMOTED_FAMILIES = frozenset({
 RDNA4_ONLY_FAMILIES = frozenset({"sparse_matmul_2to4"})
 
 # Named physical profiles; hardware ISA availability alone is insufficient.
-ARCHITECTURE_OWNED_FAMILIES = frozenset({"parent_view"})
+ARCHITECTURE_OWNED_FAMILIES = frozenset({"parent_view", "block_quant"})
 
 
 def generic_lane_families() -> frozenset[str]:
@@ -145,6 +145,7 @@ FAMILY_PLUGINS: dict[str, ROCMFamilyPlugin] = {
         backend_codegen="rocdl_hsaco",
     )
     for family in (
+        "block_quant",  # gfx1201 schema-4 source-derived K16 quantizer
         "parent_view",  # gfx1201 schema-2 source-preserving native region
         "sparse_matmul_2to4",  # RDNA4-only (SWMMAC); see RDNA4_ONLY_FAMILIES
         "attention",
@@ -283,6 +284,8 @@ class ROCMExecutablePipeline:
             raise ValueError(
                 "family 'control_state_machine' has no Target-IR boundary; "
                 "only output=binary is supported")
+        if self.family == "block_quant" and self.input_level is not ROCMInputLevel.TILE:
+            raise ValueError("ROCm block_quant enters from native Graph -> Schedule -> Tile")
         if self.family == "parent_view" and self.input_level is ROCMInputLevel.GRAPH:
             raise ValueError("ROCm parent_view enters from native Graph -> Schedule -> Tile")
         if self.family == "matmul" and self.input_level is ROCMInputLevel.GRAPH:
@@ -298,7 +301,7 @@ class ROCMExecutablePipeline:
             if self.family in ARCHITECTURE_OWNED_FAMILIES:
                 raise ValueError(
                     f"ROCm executable pipeline has no promoted family plugins for {self.arch}; "
-                    "parent_view requires its owning gfx1201 physical profile")
+                    f"{self.family} requires its owning gfx1201 physical profile")
             if self.family in RDNA4_ONLY_FAMILIES:
                 raise ValueError(
                     f"ROCm executable pipeline has no promoted family plugins for {self.arch}; "

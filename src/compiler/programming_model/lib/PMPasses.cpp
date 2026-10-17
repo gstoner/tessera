@@ -1,4 +1,5 @@
 #include "NativeGateUpSchedule.h"
+#include "NativeBlockQuantSchedule.h"
 #include "NativeFP8StoreFusion.h"
 #include "NativeRowSchedule.h"
 //===- PMPasses.cpp — Programming Model v1.1 passes and pipelines ---------===//
@@ -3279,6 +3280,9 @@ struct GraphToSchedulePass
 
   void runOnOperation() override {
     ModuleOp mod = getOperation();
+    bool blockQuantSelected = false;
+    if (failed(block_quant::schedule(mod,blockQuantSelected))) return signalPassFailure();
+    if (blockQuantSelected) return;
     if (mod->hasAttr("tessera.sparse_policy")) {
       if (failed(scheduleNativeSparse(mod))) signalPassFailure();
       return;
@@ -4326,6 +4330,9 @@ struct ScheduleToTilePass
       if (failed(lowerCooperativeSSD(mod, ssdGPU))) signalPassFailure();
       return;
     }
+    bool blockQuantSelected=false;
+    if (failed(block_quant::lower(mod,blockQuantSelected))) return signalPassFailure();
+    if (blockQuantSelected) return;
     bool gateUpSelected = false;
     if (failed(gate_up_view::lower(mod,gateUpSelected))) return signalPassFailure();
     if (gateUpSelected) return;

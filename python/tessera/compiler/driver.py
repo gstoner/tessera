@@ -547,6 +547,7 @@ def compile_graph_module(
     scheduled_rocm_movement_artifact: ScheduledPagedKVArtifact | ScheduledMoeDispatchArtifact | None = None
     scheduled_rocm_movement_kind = None
     scheduled_math_recipe = None
+    scheduled_block_quant_recipe = None
     scheduled_parent_view_recipe = None
     scheduled_typed_scaled_program = None
     scheduled_checkpoint_storage_module = None
@@ -574,7 +575,11 @@ def compile_graph_module(
         from .rocm_math_native import supports_math, lower_math_graph
         from .rocm_typed_scaled_native import supports_typed_scaled, lower_typed_scaled
         from .rocm_parent_view_native import supports_parent_view, lower_parent_view_graph
-        if target_kind == "rocm_gfx1201" and supports_parent_view(module):
+        from .rocm_block_quant_native import supports_block_quant, lower_block_quant_graph
+        if target_kind == "rocm_gfx1201" and supports_block_quant(module):
+            scheduled_block_quant_recipe = lower_block_quant_graph(module, target_kind)
+            graph_text = scheduled_block_quant_recipe.graph_ir
+        elif target_kind == "rocm_gfx1201" and supports_parent_view(module):
             scheduled_parent_view_recipe = lower_parent_view_graph(module, target_kind)
             graph_text = scheduled_parent_view_recipe.graph_ir
         elif target_kind == "rocm_gfx1201" and supports_typed_scaled(module):
@@ -699,7 +704,7 @@ def compile_graph_module(
         function_name=function_name,
         graph_ir=graph_text,
         target=target_kind,
-        pipeline_name="tessera-rocm-executable" if scheduled_parent_view_recipe is not None else "",
+        pipeline_name="tessera-rocm-executable" if (scheduled_parent_view_recipe is not None or scheduled_block_quant_recipe is not None) else "",
         options=options or {},
         example_id=example_id,
     )
@@ -957,7 +962,15 @@ def compile_graph_module(
             (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
         )
         package_start = time.perf_counter()
-        if scheduled_parent_view_recipe is not None:
+        if scheduled_block_quant_recipe is not None:
+            from .rocm_block_quant_native import package_block_quant_recipe
+            producer = "tessera-rocm-executable"
+            rocm_package = package_block_quant_recipe(scheduled_block_quant_recipe,pipeline_name=producer)
+            package_kind = "block_quant"
+            schedule,tile,target_artifact,backend_artifact = _scheduled_package_artifacts(
+                graph,scheduled_block_quant_recipe.schedule_ir,rocm_package.tile_ir,
+                target_kind,rocm_package.target_ir,rocm_package.backend_ir)
+        elif scheduled_parent_view_recipe is not None:
             from .rocm_parent_view_native import package_parent_view_recipe
             producer = "tessera-rocm-executable"
             rocm_package = package_parent_view_recipe(scheduled_parent_view_recipe, pipeline_name=producer)
@@ -1560,9 +1573,10 @@ def canonical_compile_options(
         from .rocm_typed_scaled_native import supports_typed_scaled
         from .rocm_parent_view_native import supports_parent_view
         from .scheduled_matmul import supports_scheduled_matmul
+        from .rocm_block_quant_native import supports_block_quant
         resolved["package_native"] = (
             supports_scheduled_matmul(module, target=target_kind) or
-            supports_parent_view(module) or supports_typed_scaled(module) or supports_nvfp4_expansion(module) or supports_nvfp4_ingest(module) or supports_mxfp4_storage(module)
+            supports_block_quant(module) or supports_parent_view(module) or supports_typed_scaled(module) or supports_nvfp4_expansion(module) or supports_nvfp4_ingest(module) or supports_mxfp4_storage(module)
             or supports_paged_kv_read(module) or supports_math(module)
             or (requests_softmax(module) and supports_scheduled_kernel(module,target=target_kind))
         ) and native_packaging_available()

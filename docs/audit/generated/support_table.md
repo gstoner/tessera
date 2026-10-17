@@ -181,7 +181,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `stack` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `stop_gradient` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `tile` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `tile_view` | layout_transform | public | public | registered | complete | fused | no_kernel_required | ready | none |
+| `tile_view` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
 | `transpose` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `unpack` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `unsqueeze` | layout_transform | public | public | registered | complete | no_kernel_required | no_kernel_required | ready | none |
@@ -393,7 +393,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | fused_epilogue | 1 | PPGCFCN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPn·FFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 16 | PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB |
-| layout_transform | 33 | PPGCnnN· PPGCnnN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCnnN· PPGCFCN· PPGCFnN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCpRN· PPGCnnN· |
+| layout_transform | 33 | PPGCnnN· PPGCnnN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCnnN· PPGCFCN· PPGCnnN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCpRN· PPGCnnN· |
 | linalg_decomposition | 5 | PPGCFCN· PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | linalg_function | 5 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_multilinear | 2 | PPGCpRN· PPGCpRN· |

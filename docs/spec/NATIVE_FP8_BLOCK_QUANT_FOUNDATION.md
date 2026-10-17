@@ -21,7 +21,26 @@ bitwise; NaNs match semantically. The packet covers 266,560 values and preserves
 changed-input/retained-output ownership. This is a GPU storage primitive,
 not proof of a public Graph quantizer or complete native MLP.
 
-## Next semantic Graph contract — not implemented yet
+## Explicit semantic Graph, Schedule, Tile and native Target
+
+The native Graph-to-Schedule pass now validates the complete explicit textual
+source, including tensor broadcasts, IEEE scale-floor constants, SSA edges,
+output shapes and RNE storage conversion. A content-sealed Schedule artifact
+retains the original Graph. Schedule-to-Tile now projects the actual source
+SSA into a sealed schema-4 body with three typed non-owning views, one K16
+FP32 maximum loop, one scale store and one E4M3 encoding loop. Logical
+reshapes and broadcasts allocate no storage. The physical body accepts three
+pointers, a group index and a group count; its identity contains no source
+M/I constants. Source-specific extents remain in the sealed envelope. Native
+Target lowering now materializes BF16/byte/FP32 accesses from that body and
+exports a checked three-buffer/two-output frame. The GPU adapter checks flat
+memref spans and launches the cloned SSA. Matching LLVM serialization emits
+HSACO; three exact gfx1201 envelopes pass the independent oracle through
+the diagnostic C++ multi-output owner. Public packaging/JIT and resident
+composition remain required; diagnostic execution is not public closure.
+The ordinary Python trace still needs constructor/shape-metadata integration;
+the current verified input is textual Graph IR. Schedule profile schema 4
+belongs to the row-region namespace; attention schema numbering is unchanged.
 
 For compact BF16 input X[M,I], with positive static extents and I divisible
 by 16, define groups along the last axis. Each group widens exactly to FP32,
@@ -44,6 +63,17 @@ a native implementation must test those cases instead of assuming finite
 checkpoint data establishes general behavior. BF16 subnormals and FP32
 denormal behavior at the scale floor need exact-device proof.
 
+## Typed Tile verification
+
+Fourteen focused K16 cases cover three source shapes, exact source policy,
+changed Schedule metadata and a tampered scalar body. Adjacent parent-view,
+FP8 cast, canonical dtype, tensor-attribute, diagnostic, pass-metadata and
+audit gates pass 500 combined cases after a clean incremental rebuild with no
+source-mtime warning. Physical body hashes are identical across the three
+source shapes while source and artifact seals remain distinct.
+Those checks establish compiler artifacts; the separate native Target/device
+packet below establishes its named diagnostic execution envelope.
+
 ## Required integration gates
 
 - Verified Graph shape, dtype, effects, axes, scalar constants and RNE policy.
@@ -61,3 +91,21 @@ denormal behavior at the scale floor need exact-device proof.
 
 Evidence for the implemented primitive:
 benchmarks/baselines/rocm_native_e4m3_cast_20261017/README.md.
+
+Native Target/device evidence: benchmarks/baselines/rocm_native_k16_quant_20261017/README.md.
+
+## Canonical authored quantizer package
+
+The distinct gfx1201 `block_quant` family now packages the verified typed Tile
+body through tessera-rocm-executable. Ordinary Python JIT returns real E4M3
+codes plus FP32 scales through the checked C++ two-output owner. Serialized
+artifacts replay in a fresh process with no compiler. Immutable FP32 splats
+have shared AST/trace value snapshots and canonical upstream arith.constant
+SSA; reduction axis/keepdims inference is shared by both frontends. The
+upstream operation has explicit coverage and stays in whole-program gates.
+Only the exact named source contract is executable; this does not expose
+standalone view/cast/constant kernels or alter fake-quant reference semantics.
+
+Exact public and canonical-image numerical/timing evidence:
+benchmarks/baselines/rocm_native_k16_quant_public_20261017/README.md.
+Resident activation/down projection and full MLP/model-quality gates remain open.

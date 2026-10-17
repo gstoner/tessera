@@ -385,7 +385,7 @@ each row into a single E2E tier.
 | ``reshape`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
 | ``squeeze`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
 | ``stop_gradient`` | layout_transform | public | public | registered | not_applicable | not_applicable | ready | none |
-| ``tile_view`` | layout_transform | public | public | registered | fused | no_kernel_required | ready | none |
+| ``tile_view`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
 | ``unsqueeze`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
 | ``view`` | layout_transform | public | public | registered | no_kernel_required | no_kernel_required | ready | none |
 | ``entmax15`` | normalization | public | public | registered | not_applicable | not_applicable | ready | none |

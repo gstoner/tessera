@@ -1063,6 +1063,8 @@ _EXPLICIT_SEMANTIC_NAMES: frozenset[str] = frozenset(_EXISTING_CONTRACT_OVERRIDE
 # ─────────────────────────────────────────────────────────────────────────────
 
 _SHARDING_RULE_BY_CATEGORY: dict[str, str] = {
+    # Zero-operand immutable literals carry no mapped data input or linear dual.
+    "upstream_literal": "replicated_or_non_tensor",
     # SD1 speculative-decode acceptance: verification ops, not a
     # differentiable/batchable/shardable tensor map.
     "acceptance_verification": "not_applicable",
@@ -1329,6 +1331,8 @@ def _sharding_rule_for_category(category: str | None, current: str) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
+    # Zero-operand immutable literals carry no mapped data input or linear dual.
+    "upstream_literal": "no_batch_axis",
     # SD1 speculative-decode acceptance: verification ops, not a
     # differentiable/batchable/shardable tensor map.
     "acceptance_verification": "not_applicable",
@@ -1517,6 +1521,8 @@ _BATCHING_RULE_BY_CATEGORY: dict[str, str] = {
 }
 
 _TRANSPOSE_RULE_BY_CATEGORY: dict[str, str] = {
+    # Zero-operand immutable literals carry no mapped data input or linear dual.
+    "upstream_literal": "no_linear_transpose",
     # SD1 speculative-decode acceptance: verification ops, not a
     # differentiable/batchable/shardable tensor map.
     "acceptance_verification": "not_applicable",
@@ -4170,6 +4176,20 @@ def primitive_graph_names() -> dict[str, "str | None"]:
 
 def all_primitive_coverages() -> dict[str, PrimitiveCoverage]:
     entries = _existing_coverage()
+    # Upstream Graph SSA is not a new public Tessera operation. It still needs
+    # an explicit coverage row: whole-program gates must not omit constants.
+    entries["arith.constant"] = PrimitiveCoverage(
+        name="arith.constant",category="upstream_literal",status="partial",
+        contract_status=_contracts(lowering_rule="complete",math_semantics="complete",
+            shape_rule="complete",dtype_layout_rule="complete",
+            batching_rule="no_batch_axis",transpose_rule="no_linear_transpose",
+            sharding_rule="replicated_or_non_tensor",masking_effect_rule="pure_no_effect"),
+        graph_name="arith.constant",effect="pure",lowering="upstream_arith",
+        notes="Finite immutable FP32 splats have explicit typed Graph SSA and upstream MLIR verification. "
+              "Native execution is proved only as a component of the gfx1201 K16 quantizer; "
+              "this does not expose a standalone public constant operation or generic backend closure.",
+        metadata={"graph_ir_lowering":"registered","compiler_ir_operation":True})
+
     # Consult the live autodiff registries so a `_planned`/`_partial` entry whose
     # VJP/JVP is actually registered (e.g. the GA clifford_* + EBM flat ops) flips
     # its vjp/jvp axis planned→complete — the same hook the OP_SPECS + python-

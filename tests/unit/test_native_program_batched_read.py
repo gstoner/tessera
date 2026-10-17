@@ -169,3 +169,20 @@ def test_bounded_read_publishes_only_active_rows_and_refuses_capacity_span(libra
         (c.c_void_p*3)(*[a.ctypes.data for a in capacity]),(c.c_uint64*3)(16,16,16))
     assert code==1 and library.stats(0)==copied and library.stats(2)==0
     for output in capacity:np.testing.assert_array_equal(output,-99)
+
+
+@pytest.mark.parametrize("pinned",[0,1])
+@pytest.mark.parametrize("batched",[False,True])
+def test_mixed_fp8_and_scale_read_preserves_raw_storage_and_completion(library,pinned,batched):
+    import ml_dtypes
+
+    library.setup(pinned)
+    owner=owner_for(library)
+    owner._binding.outputs=(1,2)
+    owner._binding.storage[1]=_StorageSpec((16,),"f8E4M3FN",16,np.dtype("uint8"))
+    codes,scales=owner.read(3,batched=batched)
+    assert codes.dtype==np.dtype(ml_dtypes.float8_e4m3fn)
+    np.testing.assert_array_equal(codes.view(np.uint8),(np.arange(4,dtype=np.float32)+10).view(np.uint8))
+    np.testing.assert_array_equal(scales,np.arange(4,dtype=np.float32)+20)
+    assert library.stats(0)==2 and library.stats(1)==(1 if batched else 2)
+    assert not np.shares_memory(codes,scales)

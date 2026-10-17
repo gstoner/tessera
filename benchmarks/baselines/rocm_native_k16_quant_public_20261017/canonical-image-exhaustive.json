@@ -1,0 +1,239 @@
+[
+  {
+    "device": "AMD Radeon RX 9070 XT",
+    "gpu_uuid": "GPU-28d9e7efbf2ef716",
+    "architecture": "gfx1201",
+    "checker_sha256": "4e41e49d3769f5d74dfd35ee32bf631a2d9a0753e9daa89653241112412c2f7c",
+    "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+    "shape": [
+      3,
+      32
+    ],
+    "identity": {
+      "shape": [
+        3,
+        32
+      ],
+      "member": {
+        "abi": "flattened_rank1_memref_then_i64",
+        "architecture": "gfx1201",
+        "artifact_hash": "e5daa3aa7470786b0fcd8ea0a5e8bf1ae303a0d37c0a2e407b9a100846fbefb7",
+        "bindings": [
+          "a0",
+          "v11",
+          "v12"
+        ],
+        "entry": "tessera_block_quant_8b4fff131b825038",
+        "geometry": [
+          1,
+          1,
+          1,
+          256,
+          1,
+          1
+        ],
+        "inputs": [
+          0
+        ],
+        "outputs": [
+          1,
+          2
+        ],
+        "profile": "gfx1201_block_quant_bf16_e4m3_f32_k16_v1",
+        "program_base64": "eyJhcmd1bWVudF9jb3VudCI6MSwiYnVmZmVycyI6W3siYnl0ZXMiOjE5MiwiZWxlbWVudHMiOjk2LCJmaXJzdF93cml0ZSI6LTEsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzMsMzJdLCJzdG9yYWdlIjoiYmYxNiJ9LHsiYnl0ZXMiOjk2LCJlbGVtZW50cyI6OTYsImZpcnN0X3dyaXRlIjowLCJsYXN0X3JlYWQiOjEsIm93bmVyc2hpcCI6Miwic2hhcGUiOlszLDMyXSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6MjQsImVsZW1lbnRzIjo2LCJmaXJzdF93cml0ZSI6MCwibGFzdF9yZWFkIjoxLCJvd25lcnNoaXAiOjIsInNoYXBlIjpbMywyXSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6ImJsb2NrX3F1YW50Iiwib3V0cHV0cyI6WzEsMl0sInJvb3RfaXIiOiJmdW5jLmZ1bmMgQHF1YW50KCVhcmcwOiB0ZW5zb3I8M3gzMnhiZjE2PikgLT4gKHRlbnNvcjwzeDMyeGY4RTRNM0ZOPiwgdGVuc29yPDN4MnhmMzI+KSBhdHRyaWJ1dGVzIHt0ZXNzZXJhLmZyb250ZW5kLmF1dGhvcml0eSA9IFwidHJhY2VyXCIsIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuYmxvY2tzID0gMiA6IGk2NCwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5kaWdlc3QgPSBcImJmOTI0ODQyYTkwYjdkYWU0MjkxN2YxOTY3ZWYyZTNkOGRkNWJmMmNkYThhYzMyMWMzMzM4ZTA4ZWVlMmE0MzZcIiwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5zY2hlbWEgPSBcInRlc3NlcmEuc3RydWN0dXJlZF9jZmcudjFcIn0ge1xuICAlMCA9IHRlc3NlcmEucmVzaGFwZSAlYXJnMCB7c2hhcGUgPSBbNiwgMTZdLCB0ZXNzZXJhLmFsaWFzaW5nID0gXCJvcGVyYW5kXzBcIiwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8M3gzMnhiZjE2PikgLT4gdGVuc29yPDZ4MTZ4YmYxNj5cbiAgJTEgPSB0ZXNzZXJhLmNhc3QgJTAge2R0eXBlID0gXCJmcDMyXCIsIHRlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIn0gOiAodGVuc29yPDZ4MTZ4YmYxNj4pIC0+IHRlbnNvcjw2eDE2eGYzMj5cbiAgJTIgPSB0ZXNzZXJhLmFic29sdXRlICUxIHt0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCJ9IDogKHRlbnNvcjw2eDE2eGYzMj4pIC0+IHRlbnNvcjw2eDE2eGYzMj5cbiAgJTMgPSB0ZXNzZXJhLnJlZHVjZSAlMiB7YXhpcyA9IDEgOiBpNjQsIGtlZXBkaW1zID0gdHJ1ZSwga2luZCA9IFwibWF4XCIsIHRlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIn0gOiAodGVuc29yPDZ4MTZ4ZjMyPikgLT4gdGVuc29yPDZ4MXhmMzI+XG4gICVjc3QgPSBhcml0aC5jb25zdGFudCBkZW5zZTw0LjQ4MDAwMGUrMDI+IDogdGVuc29yPDZ4MXhmMzI+XG4gICU0ID0gdGVzc2VyYS5kaXYgJTMsICVjc3Qge3Rlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIn0gOiAodGVuc29yPDZ4MXhmMzI+LCB0ZW5zb3I8NngxeGYzMj4pIC0+IHRlbnNvcjw2eDF4ZjMyPlxuICAlY3N0XzAgPSBhcml0aC5jb25zdGFudCBkZW5zZTwxLjE3NTQ5NDM1RS0zOD4gOiB0ZW5zb3I8NngxeGYzMj5cbiAgJTUgPSB0ZXNzZXJhLm1heGltdW0gJTQsICVjc3RfMCB7dGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8NngxeGYzMj4sIHRlbnNvcjw2eDF4ZjMyPikgLT4gdGVuc29yPDZ4MXhmMzI+XG4gICU2ID0gdGVzc2VyYS5leHBhbmQgJTUge3NoYXBlID0gWzYsIDE2XSwgdGVzc2VyYS5hbGlhc2luZyA9IFwib3BlcmFuZF8wXCIsIHRlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIn0gOiAodGVuc29yPDZ4MXhmMzI+KSAtPiB0ZW5zb3I8NngxNnhmMzI+XG4gICU3ID0gdGVzc2VyYS5kaXYgJTEsICU2IHt0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCJ9IDogKHRlbnNvcjw2eDE2eGYzMj4sIHRlbnNvcjw2eDE2eGYzMj4pIC0+IHRlbnNvcjw2eDE2eGYzMj5cbiAgJTggPSB0ZXNzZXJhLmNhc3QgJTcge2R0eXBlID0gXCJmcDhfZTRtM1wiLCB0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCJ9IDogKHRlbnNvcjw2eDE2eGYzMj4pIC0+IHRlbnNvcjw2eDE2eGY4RTRNM0ZOPlxuICAlOSA9IHRlc3NlcmEucmVzaGFwZSAlOCB7c2hhcGUgPSBbMywgMzJdLCB0ZXNzZXJhLmFsaWFzaW5nID0gXCJvcGVyYW5kXzBcIiwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8NngxNnhmOEU0TTNGTj4pIC0+IHRlbnNvcjwzeDMyeGY4RTRNM0ZOPlxuICAlMTAgPSB0ZXNzZXJhLnJlc2hhcGUgJTUge3NoYXBlID0gWzMsIDJdLCB0ZXNzZXJhLmFsaWFzaW5nID0gXCJvcGVyYW5kXzBcIiwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8NngxeGYzMj4pIC0+IHRlbnNvcjwzeDJ4ZjMyPlxuICByZXR1cm4gJTksICUxMCA6IHRlbnNvcjwzeDMyeGY4RTRNM0ZOPiwgdGVuc29yPDN4MnhmMzI+XG59Iiwicm9vdF9pcl9zaGEyNTYiOiIwZTMxMzc0YmQyY2EzNjAzNzg3NDNhNzBlNDJmYTYzNjU4YWNhOGFiYzEzZWRlYzFhYzRmNGU4NTM0YTdlYzM2Iiwic2NoZW1hIjoxLCJzdGVwcyI6W3siaW5wdXRzIjpbMF0sImxvd2VyaW5nIjoibmF0aXZlX2Jsb2NrX3F1YW50X3NzYSIsIm9wZXJhdGlvbiI6ImV4cGxpY2l0X2sxNl9xdWFudGl6YXRpb24iLCJvdXRwdXRzIjpbMSwyXSwic3RlcCI6MH1dfQ==",
+        "scalars": [
+          6
+        ],
+        "schema": 1,
+        "source_hash": "db0114aab4a7152983a5d3dccac67c225555c1e9a140525afdcc309f2214e4d4",
+        "step": 0,
+        "target_body_hash": "81e40d7a1b2eb4ef9c1b0988e87fa6933730f3298c35c6d91d6e903fd0136449",
+        "tile_body_hash": "776f506f8d3237a09fe8785aacb90d14d27942a2bbfa7fe0f78b359bb00f3626"
+      },
+      "image_sha256": "18ee2db7e8c0c192080ac7931dc20b2942fad175727b091a618564bdb2449dc5",
+      "compiler_sha256": "454b8a31c460547e7d8a82cb6589e1d7a5ad8b2f96fe387691f4637566205ab4",
+      "artifact_sha256": "491b0ead6e791cb4cad0dd75b44a6cb38d27b2136efa0cce16e4e968e79f802f"
+    },
+    "comparison": {
+      "code_mismatches": 0,
+      "scale_mismatches": 0,
+      "code_examples": [],
+      "scale_examples": []
+    },
+    "scope": "diagnostic native C++ ownership; public package/JIT still required",
+    "uniform_bf16_patterns": 0,
+    "rounding_boundary_groups": 0,
+    "changed_input_and_held_outputs": "passed",
+    "captured_repeats": 4937,
+    "captured_member_ms": [
+      0.004457549657672644,
+      0.004549847450107336,
+      0.004521036986261606
+    ],
+    "completed_invoke_read_ms": [
+      0.4894670273642987,
+      0.35052100429311395,
+      0.3058660076931119
+    ],
+    "device_scope": "captured native graph dispatch; excludes host enqueue/copy/capture",
+    "host_scope": "prepared invoke plus two output readbacks; excludes compilation and preparation"
+  },
+  {
+    "device": "AMD Radeon RX 9070 XT",
+    "gpu_uuid": "GPU-28d9e7efbf2ef716",
+    "architecture": "gfx1201",
+    "checker_sha256": "4e41e49d3769f5d74dfd35ee32bf631a2d9a0753e9daa89653241112412c2f7c",
+    "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+    "shape": [
+      19,
+      12288
+    ],
+    "identity": {
+      "shape": [
+        19,
+        12288
+      ],
+      "member": {
+        "abi": "flattened_rank1_memref_then_i64",
+        "architecture": "gfx1201",
+        "artifact_hash": "fbf56b895c67685991d174af8bd477ff9d6172d4adb8fc6eec5d3713ebf73523",
+        "bindings": [
+          "a0",
+          "v11",
+          "v12"
+        ],
+        "entry": "tessera_block_quant_8b4fff131b825038",
+        "geometry": [
+          57,
+          1,
+          1,
+          256,
+          1,
+          1
+        ],
+        "inputs": [
+          0
+        ],
+        "outputs": [
+          1,
+          2
+        ],
+        "profile": "gfx1201_block_quant_bf16_e4m3_f32_k16_v1",
+        "program_base64": "eyJhcmd1bWVudF9jb3VudCI6MSwiYnVmZmVycyI6W3siYnl0ZXMiOjQ2Njk0NCwiZWxlbWVudHMiOjIzMzQ3MiwiZmlyc3Rfd3JpdGUiOi0xLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxOSwxMjI4OF0sInN0b3JhZ2UiOiJiZjE2In0seyJieXRlcyI6MjMzNDcyLCJlbGVtZW50cyI6MjMzNDcyLCJmaXJzdF93cml0ZSI6MCwibGFzdF9yZWFkIjoxLCJvd25lcnNoaXAiOjIsInNoYXBlIjpbMTksMTIyODhdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjo1ODM2OCwiZWxlbWVudHMiOjE0NTkyLCJmaXJzdF93cml0ZSI6MCwibGFzdF9yZWFkIjoxLCJvd25lcnNoaXAiOjIsInNoYXBlIjpbMTksNzY4XSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6ImJsb2NrX3F1YW50Iiwib3V0cHV0cyI6WzEsMl0sInJvb3RfaXIiOiJmdW5jLmZ1bmMgQHF1YW50KCVhcmcwOiB0ZW5zb3I8MTl4MTIyODh4YmYxNj4pIC0+ICh0ZW5zb3I8MTl4MTIyODh4ZjhFNE0zRk4+LCB0ZW5zb3I8MTl4NzY4eGYzMj4pIGF0dHJpYnV0ZXMge3Rlc3NlcmEuZnJvbnRlbmQuYXV0aG9yaXR5ID0gXCJ0cmFjZXJcIiwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5ibG9ja3MgPSAyIDogaTY0LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmRpZ2VzdCA9IFwiYmY5MjQ4NDJhOTBiN2RhZTQyOTE3ZjE5NjdlZjJlM2Q4ZGQ1YmYyY2RhOGFjMzIxYzMzMzhlMDhlZWUyYTQzNlwiLCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnNjaGVtYSA9IFwidGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy52MVwifSB7XG4gICUwID0gdGVzc2VyYS5yZXNoYXBlICVhcmcwIHtzaGFwZSA9IFsxNDU5MiwgMTZdLCB0ZXNzZXJhLmFsaWFzaW5nID0gXCJvcGVyYW5kXzBcIiwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTl4MTIyODh4YmYxNj4pIC0+IHRlbnNvcjwxNDU5MngxNnhiZjE2PlxuICAlMSA9IHRlc3NlcmEuY2FzdCAlMCB7ZHR5cGUgPSBcImZwMzJcIiwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTQ1OTJ4MTZ4YmYxNj4pIC0+IHRlbnNvcjwxNDU5MngxNnhmMzI+XG4gICUyID0gdGVzc2VyYS5hYnNvbHV0ZSAlMSB7dGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTQ1OTJ4MTZ4ZjMyPikgLT4gdGVuc29yPDE0NTkyeDE2eGYzMj5cbiAgJTMgPSB0ZXNzZXJhLnJlZHVjZSAlMiB7YXhpcyA9IDEgOiBpNjQsIGtlZXBkaW1zID0gdHJ1ZSwga2luZCA9IFwibWF4XCIsIHRlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIn0gOiAodGVuc29yPDE0NTkyeDE2eGYzMj4pIC0+IHRlbnNvcjwxNDU5MngxeGYzMj5cbiAgJWNzdCA9IGFyaXRoLmNvbnN0YW50IGRlbnNlPDQuNDgwMDAwZSswMj4gOiB0ZW5zb3I8MTQ1OTJ4MXhmMzI+XG4gICU0ID0gdGVzc2VyYS5kaXYgJTMsICVjc3Qge3Rlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIn0gOiAodGVuc29yPDE0NTkyeDF4ZjMyPiwgdGVuc29yPDE0NTkyeDF4ZjMyPikgLT4gdGVuc29yPDE0NTkyeDF4ZjMyPlxuICAlY3N0XzAgPSBhcml0aC5jb25zdGFudCBkZW5zZTwxLjE3NTQ5NDM1RS0zOD4gOiB0ZW5zb3I8MTQ1OTJ4MXhmMzI+XG4gICU1ID0gdGVzc2VyYS5tYXhpbXVtICU0LCAlY3N0XzAge3Rlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIn0gOiAodGVuc29yPDE0NTkyeDF4ZjMyPiwgdGVuc29yPDE0NTkyeDF4ZjMyPikgLT4gdGVuc29yPDE0NTkyeDF4ZjMyPlxuICAlNiA9IHRlc3NlcmEuZXhwYW5kICU1IHtzaGFwZSA9IFsxNDU5MiwgMTZdLCB0ZXNzZXJhLmFsaWFzaW5nID0gXCJvcGVyYW5kXzBcIiwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTQ1OTJ4MXhmMzI+KSAtPiB0ZW5zb3I8MTQ1OTJ4MTZ4ZjMyPlxuICAlNyA9IHRlc3NlcmEuZGl2ICUxLCAlNiB7dGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTQ1OTJ4MTZ4ZjMyPiwgdGVuc29yPDE0NTkyeDE2eGYzMj4pIC0+IHRlbnNvcjwxNDU5MngxNnhmMzI+XG4gICU4ID0gdGVzc2VyYS5jYXN0ICU3IHtkdHlwZSA9IFwiZnA4X2U0bTNcIiwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTQ1OTJ4MTZ4ZjMyPikgLT4gdGVuc29yPDE0NTkyeDE2eGY4RTRNM0ZOPlxuICAlOSA9IHRlc3NlcmEucmVzaGFwZSAlOCB7c2hhcGUgPSBbMTksIDEyMjg4XSwgdGVzc2VyYS5hbGlhc2luZyA9IFwib3BlcmFuZF8wXCIsIHRlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIn0gOiAodGVuc29yPDE0NTkyeDE2eGY4RTRNM0ZOPikgLT4gdGVuc29yPDE5eDEyMjg4eGY4RTRNM0ZOPlxuICAlMTAgPSB0ZXNzZXJhLnJlc2hhcGUgJTUge3NoYXBlID0gWzE5LCA3NjhdLCB0ZXNzZXJhLmFsaWFzaW5nID0gXCJvcGVyYW5kXzBcIiwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTQ1OTJ4MXhmMzI+KSAtPiB0ZW5zb3I8MTl4NzY4eGYzMj5cbiAgcmV0dXJuICU5LCAlMTAgOiB0ZW5zb3I8MTl4MTIyODh4ZjhFNE0zRk4+LCB0ZW5zb3I8MTl4NzY4eGYzMj5cbn0iLCJyb290X2lyX3NoYTI1NiI6IjA4NmU0ZDFlZWM4MWE4NDI3M2ZjZmNjODdmNjA3MTBhMWFhNzc1OWNkM2I3MDhmOTU1NDgwMDliMjM0NjczMjEiLCJzY2hlbWEiOjEsInN0ZXBzIjpbeyJpbnB1dHMiOlswXSwibG93ZXJpbmciOiJuYXRpdmVfYmxvY2tfcXVhbnRfc3NhIiwib3BlcmF0aW9uIjoiZXhwbGljaXRfazE2X3F1YW50aXphdGlvbiIsIm91dHB1dHMiOlsxLDJdLCJzdGVwIjowfV19",
+        "scalars": [
+          14592
+        ],
+        "schema": 1,
+        "source_hash": "a1cb0177f71d161dda55d0387b184604012dfec7f79064135ad90f09849076e3",
+        "step": 0,
+        "target_body_hash": "81e40d7a1b2eb4ef9c1b0988e87fa6933730f3298c35c6d91d6e903fd0136449",
+        "tile_body_hash": "776f506f8d3237a09fe8785aacb90d14d27942a2bbfa7fe0f78b359bb00f3626"
+      },
+      "image_sha256": "18ee2db7e8c0c192080ac7931dc20b2942fad175727b091a618564bdb2449dc5",
+      "compiler_sha256": "454b8a31c460547e7d8a82cb6589e1d7a5ad8b2f96fe387691f4637566205ab4",
+      "artifact_sha256": "3ae9f961f2ecdc99052c878c2cf696e2b1a7b51554ceb7729aadb4899776ae97"
+    },
+    "comparison": {
+      "code_mismatches": 0,
+      "scale_mismatches": 0,
+      "code_examples": [],
+      "scale_examples": []
+    },
+    "scope": "diagnostic native C++ ownership; public package/JIT still required",
+    "uniform_bf16_patterns": 0,
+    "rounding_boundary_groups": 252,
+    "changed_input_and_held_outputs": "passed",
+    "captured_repeats": 4429,
+    "captured_member_ms": [
+      0.004997249227017164,
+      0.005061223171651363,
+      0.004963918589055538
+    ],
+    "completed_invoke_read_ms": [
+      0.5811630107928067,
+      0.32555300276726484,
+      0.28605799889191985
+    ],
+    "device_scope": "captured native graph dispatch; excludes host enqueue/copy/capture",
+    "host_scope": "prepared invoke plus two output readbacks; excludes compilation and preparation"
+  },
+  {
+    "device": "AMD Radeon RX 9070 XT",
+    "gpu_uuid": "GPU-28d9e7efbf2ef716",
+    "architecture": "gfx1201",
+    "checker_sha256": "4e41e49d3769f5d74dfd35ee32bf631a2d9a0753e9daa89653241112412c2f7c",
+    "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+    "shape": [
+      256,
+      12288
+    ],
+    "identity": {
+      "shape": [
+        256,
+        12288
+      ],
+      "member": {
+        "abi": "flattened_rank1_memref_then_i64",
+        "architecture": "gfx1201",
+        "artifact_hash": "f3d41f1badcab6b63721383353507a125f4d166666aeeb86e12b46c5d5034056",
+        "bindings": [
+          "a0",
+          "v11",
+          "v12"
+        ],
+        "entry": "tessera_block_quant_8b4fff131b825038",
+        "geometry": [
+          768,
+          1,
+          1,
+          256,
+          1,
+          1
+        ],
+        "inputs": [
+          0
+        ],
+        "outputs": [
+          1,
+          2
+        ],
+        "profile": "gfx1201_block_quant_bf16_e4m3_f32_k16_v1",
+        "program_base64": "eyJhcmd1bWVudF9jb3VudCI6MSwiYnVmZmVycyI6W3siYnl0ZXMiOjYyOTE0NTYsImVsZW1lbnRzIjozMTQ1NzI4LCJmaXJzdF93cml0ZSI6LTEsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzI1NiwxMjI4OF0sInN0b3JhZ2UiOiJiZjE2In0seyJieXRlcyI6MzE0NTcyOCwiZWxlbWVudHMiOjMxNDU3MjgsImZpcnN0X3dyaXRlIjowLCJsYXN0X3JlYWQiOjEsIm93bmVyc2hpcCI6Miwic2hhcGUiOlsyNTYsMTIyODhdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjo3ODY0MzIsImVsZW1lbnRzIjoxOTY2MDgsImZpcnN0X3dyaXRlIjowLCJsYXN0X3JlYWQiOjEsIm93bmVyc2hpcCI6Miwic2hhcGUiOlsyNTYsNzY4XSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6ImJsb2NrX3F1YW50Iiwib3V0cHV0cyI6WzEsMl0sInJvb3RfaXIiOiJmdW5jLmZ1bmMgQHF1YW50KCVhcmcwOiB0ZW5zb3I8MjU2eDEyMjg4eGJmMTY+KSAtPiAodGVuc29yPDI1NngxMjI4OHhmOEU0TTNGTj4sIHRlbnNvcjwyNTZ4NzY4eGYzMj4pIGF0dHJpYnV0ZXMge3Rlc3NlcmEuZnJvbnRlbmQuYXV0aG9yaXR5ID0gXCJ0cmFjZXJcIiwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5ibG9ja3MgPSAyIDogaTY0LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmRpZ2VzdCA9IFwiYmY5MjQ4NDJhOTBiN2RhZTQyOTE3ZjE5NjdlZjJlM2Q4ZGQ1YmYyY2RhOGFjMzIxYzMzMzhlMDhlZWUyYTQzNlwiLCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnNjaGVtYSA9IFwidGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy52MVwifSB7XG4gICUwID0gdGVzc2VyYS5yZXNoYXBlICVhcmcwIHtzaGFwZSA9IFsxOTY2MDgsIDE2XSwgdGVzc2VyYS5hbGlhc2luZyA9IFwib3BlcmFuZF8wXCIsIHRlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIn0gOiAodGVuc29yPDI1NngxMjI4OHhiZjE2PikgLT4gdGVuc29yPDE5NjYwOHgxNnhiZjE2PlxuICAlMSA9IHRlc3NlcmEuY2FzdCAlMCB7ZHR5cGUgPSBcImZwMzJcIiwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTk2NjA4eDE2eGJmMTY+KSAtPiB0ZW5zb3I8MTk2NjA4eDE2eGYzMj5cbiAgJTIgPSB0ZXNzZXJhLmFic29sdXRlICUxIHt0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCJ9IDogKHRlbnNvcjwxOTY2MDh4MTZ4ZjMyPikgLT4gdGVuc29yPDE5NjYwOHgxNnhmMzI+XG4gICUzID0gdGVzc2VyYS5yZWR1Y2UgJTIge2F4aXMgPSAxIDogaTY0LCBrZWVwZGltcyA9IHRydWUsIGtpbmQgPSBcIm1heFwiLCB0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCJ9IDogKHRlbnNvcjwxOTY2MDh4MTZ4ZjMyPikgLT4gdGVuc29yPDE5NjYwOHgxeGYzMj5cbiAgJWNzdCA9IGFyaXRoLmNvbnN0YW50IGRlbnNlPDQuNDgwMDAwZSswMj4gOiB0ZW5zb3I8MTk2NjA4eDF4ZjMyPlxuICAlNCA9IHRlc3NlcmEuZGl2ICUzLCAlY3N0IHt0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCJ9IDogKHRlbnNvcjwxOTY2MDh4MXhmMzI+LCB0ZW5zb3I8MTk2NjA4eDF4ZjMyPikgLT4gdGVuc29yPDE5NjYwOHgxeGYzMj5cbiAgJWNzdF8wID0gYXJpdGguY29uc3RhbnQgZGVuc2U8MS4xNzU0OTQzNUUtMzg+IDogdGVuc29yPDE5NjYwOHgxeGYzMj5cbiAgJTUgPSB0ZXNzZXJhLm1heGltdW0gJTQsICVjc3RfMCB7dGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTk2NjA4eDF4ZjMyPiwgdGVuc29yPDE5NjYwOHgxeGYzMj4pIC0+IHRlbnNvcjwxOTY2MDh4MXhmMzI+XG4gICU2ID0gdGVzc2VyYS5leHBhbmQgJTUge3NoYXBlID0gWzE5NjYwOCwgMTZdLCB0ZXNzZXJhLmFsaWFzaW5nID0gXCJvcGVyYW5kXzBcIiwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTk2NjA4eDF4ZjMyPikgLT4gdGVuc29yPDE5NjYwOHgxNnhmMzI+XG4gICU3ID0gdGVzc2VyYS5kaXYgJTEsICU2IHt0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCJ9IDogKHRlbnNvcjwxOTY2MDh4MTZ4ZjMyPiwgdGVuc29yPDE5NjYwOHgxNnhmMzI+KSAtPiB0ZW5zb3I8MTk2NjA4eDE2eGYzMj5cbiAgJTggPSB0ZXNzZXJhLmNhc3QgJTcge2R0eXBlID0gXCJmcDhfZTRtM1wiLCB0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCJ9IDogKHRlbnNvcjwxOTY2MDh4MTZ4ZjMyPikgLT4gdGVuc29yPDE5NjYwOHgxNnhmOEU0TTNGTj5cbiAgJTkgPSB0ZXNzZXJhLnJlc2hhcGUgJTgge3NoYXBlID0gWzI1NiwgMTIyODhdLCB0ZXNzZXJhLmFsaWFzaW5nID0gXCJvcGVyYW5kXzBcIiwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTk2NjA4eDE2eGY4RTRNM0ZOPikgLT4gdGVuc29yPDI1NngxMjI4OHhmOEU0TTNGTj5cbiAgJTEwID0gdGVzc2VyYS5yZXNoYXBlICU1IHtzaGFwZSA9IFsyNTYsIDc2OF0sIHRlc3NlcmEuYWxpYXNpbmcgPSBcIm9wZXJhbmRfMFwiLCB0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCJ9IDogKHRlbnNvcjwxOTY2MDh4MXhmMzI+KSAtPiB0ZW5zb3I8MjU2eDc2OHhmMzI+XG4gIHJldHVybiAlOSwgJTEwIDogdGVuc29yPDI1NngxMjI4OHhmOEU0TTNGTj4sIHRlbnNvcjwyNTZ4NzY4eGYzMj5cbn0iLCJyb290X2lyX3NoYTI1NiI6ImIzZDYwYjk4NjE2YmZlZjM0ZWZjOTY3NzkzZmI2NDcyOWMxODkxYjY0ZWJmZTI4ZmMyYTAyMzZhMGIxOGJlZTYiLCJzY2hlbWEiOjEsInN0ZXBzIjpbeyJpbnB1dHMiOlswXSwibG93ZXJpbmciOiJuYXRpdmVfYmxvY2tfcXVhbnRfc3NhIiwib3BlcmF0aW9uIjoiZXhwbGljaXRfazE2X3F1YW50aXphdGlvbiIsIm91dHB1dHMiOlsxLDJdLCJzdGVwIjowfV19",
+        "scalars": [
+          196608
+        ],
+        "schema": 1,
+        "source_hash": "9c8f763fef209817913d8622ef0409905e6fb787dfb5f25b1ee4d534dbec7c8d",
+        "step": 0,
+        "target_body_hash": "81e40d7a1b2eb4ef9c1b0988e87fa6933730f3298c35c6d91d6e903fd0136449",
+        "tile_body_hash": "776f506f8d3237a09fe8785aacb90d14d27942a2bbfa7fe0f78b359bb00f3626"
+      },
+      "image_sha256": "18ee2db7e8c0c192080ac7931dc20b2942fad175727b091a618564bdb2449dc5",
+      "compiler_sha256": "454b8a31c460547e7d8a82cb6589e1d7a5ad8b2f96fe387691f4637566205ab4",
+      "artifact_sha256": "263eb7392b34615253b650f69e85ede6e2e67d5de34c12abf7c801120c17c510"
+    },
+    "comparison": {
+      "code_mismatches": 0,
+      "scale_mismatches": 0,
+      "code_examples": [],
+      "scale_examples": []
+    },
+    "scope": "diagnostic native C++ ownership; public package/JIT still required",
+    "uniform_bf16_patterns": 65536,
+    "rounding_boundary_groups": 252,
+    "changed_input_and_held_outputs": "passed",
+    "captured_repeats": 716,
+    "captured_member_ms": [
+      0.02677236497402191,
+      0.026850881054997444,
+      0.0268593467772007
+    ],
+    "completed_invoke_read_ms": [
+      0.6128730019554496,
+      0.4918320046272129,
+      0.4620139952749014
+    ],
+    "device_scope": "captured native graph dispatch; excludes host enqueue/copy/capture",
+    "host_scope": "prepared invoke plus two output readbacks; excludes compilation and preparation"
+  }
+]

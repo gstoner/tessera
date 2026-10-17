@@ -407,8 +407,10 @@ def _scalar_const_env(fn: Any) -> Dict[str, Any]:
     so a positional scalar param passed by *name* (``top_k(x, k)`` with ``k`` a
     free variable) resolves to its value as an op attribute, like a literal.
     Plain literal lists/tuples/dictionaries are copied for structured attributes;
-    tensors, arbitrary objects and executable expressions are never captured."""
+    explicitly read-only finite FP32 tensor splats use immutable value snapshots;
+    mutable tensors, arbitrary objects and executable expressions are never captured."""
     from copy import deepcopy
+    from .tensor_literal import capture as tensor_literal
     def attribute_literal(value: Any, depth: int = 0) -> bool:
         if depth > 16:
             return False
@@ -430,13 +432,20 @@ def _scalar_const_env(fn: Any) -> Dict[str, Any]:
                 val = cell.cell_contents
             except ValueError:
                 continue
-            if attribute_literal(val):
+            literal = tensor_literal(val)
+            if literal is not None:
+                env[name] = literal
+            elif attribute_literal(val):
                 env[name] = deepcopy(val)
     g = getattr(fn, "__globals__", None)
     if isinstance(g, dict) and code is not None:
         for name in code.co_names:
-            if name not in env and name in g and attribute_literal(g[name]):
-                env[name] = deepcopy(g[name])
+            if name not in env and name in g:
+                literal = tensor_literal(g[name])
+                if literal is not None:
+                    env[name] = literal
+                elif attribute_literal(g[name]):
+                    env[name] = deepcopy(g[name])
     return env
 
 
@@ -2513,6 +2522,16 @@ class _OpExtractor(ast.NodeVisitor):
                 self._unsupported(node, "multi-result tuple selection requires an in-range integer index")
                 return None
         if isinstance(node, ast.Name):
+            from .tensor_literal import FP32Splat
+            literal = self._const_env.get(node.id)
+            if node.id not in self._name_alias and isinstance(literal,FP32Splat):
+                name = result_name or self._fresh()
+                ty = tensor_ir_type(tuple(map(str,literal.shape)),"f32")
+                self.ops.append(IROp(name,"arith.constant",[],[],str(ty),
+                    attrs=literal.attributes(ty),inferred_type=ty,source_span=_span_from_ast(node)))
+                self._value_types["%"+name] = ty
+                self._name_alias[node.id] = name
+                return "%"+name
             if node.id in self._tuple_alias:
                 self._unsupported(node, "multi-result tuple requires destructuring or component selection")
                 return None
@@ -3004,6 +3023,25 @@ def _shape_reduce_all(operand_types: List[IRType], attrs: Optional[Dict[str, Any
     """
     first = operand_types[0]
     return tensor_ir_type((), first.dtype, layout=first.layout)
+
+
+def _shape_reduce_axes(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """The axis/keepdims contract of the canonical tessera.reduce operation."""
+    first = operand_types[0]
+    if first.rank is None:
+        return _unknown_like(first)
+    attrs = attrs or {}
+    axis, keep = attrs.get("axis"), attrs.get("keepdims", False)
+    if type(keep) is not bool:
+        raise ValueError("reduce keepdims must be a static boolean")
+    if axis is None:
+        shape = tuple("1" for _ in first.shape) if keep else ()
+    else:
+        if type(axis) is not int or not -first.rank <= axis < first.rank:
+            raise ValueError("reduce axis must be a static in-range integer")
+        axis %= first.rank
+        shape = tuple("1" if i == axis else dim for i, dim in enumerate(first.shape)) if keep else first.shape[:axis] + first.shape[axis+1:]
+    return tensor_ir_type(shape, first.dtype, layout=first.layout)
 
 
 def _shape_reduce_all_index(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
@@ -4591,6 +4629,7 @@ _SHAPE_RULES = {
     "batched_gemm_3d": _shape_batched_gemm_3d,
     "same_shape_bool": _shape_same_shape_bool,
     "reduce_all": _shape_reduce_all,
+    "reduce_axes": _shape_reduce_axes,
     "reduce_all_index": _shape_reduce_all_index,
     "same_shape_index": _shape_same_shape_index,
     "flatten": _shape_flatten,

@@ -1,0 +1,19 @@
+{
+  "python/tessera/compiler/rocm_block_quant_native.py": "f9660dcbfd7a01579fbde9fda2c8e76c40d1072b6479e3244cb6052a535d2492",
+  "python/tessera/compiler/tensor_literal.py": "bf852290e5e3cdad365118e5dc9990e8c8469da76aceeeace8329b96a0658390",
+  "python/tessera/compiler/trace.py": "4f1bed18b564f3fc33783b71b5bf77f8e496c5ff0e02929bfb128ad250501dc9",
+  "python/tessera/compiler/graph_ir.py": "e61c910cf4c420347effb61635bba8a58c5f38b9e6c951ee2fbea52d3914b7d8",
+  "python/tessera/compiler/op_catalog.py": "216adb518f16968d84be1b40924cbdf8e0550699f45dd63e27fded1fcbc975db",
+  "python/tessera/compiler/primitive_coverage.py": "a0306f056b9d6b5c272bc8ced633d7347c1e82f20269df8e696761dcf728993b",
+  "python/tessera/compiler/backend_manifest.py": "a72f6bde1e04f7fa8f4d0c937683c9e8ffac4a6c8c113ecdc25d7dfd7f5098e9",
+  "python/tessera/compiler/jit.py": "c3ce06f49ce3d41e19e1dc493ed3a10d3af627e096e033cf79273781a7b638e1",
+  "python/tessera/compiler/driver.py": "3587a81b9eab97a3c649f1f951df9f34ca1acc1c700b81564fe6206d1d19416a",
+  "python/tessera/compiler/canonical_compile.py": "5b011b194919c06774bfc606d229cbdf786d079ab277ade062f120280261fe02",
+  "python/tessera/compiler/rocm_pipeline.py": "db3f8c651adf871e11d24dc978590a3fc775ae77446adae4ca5a09934b2a8eaa",
+  "python/tessera/compiler/pipeline_registry.py": "3c79fd14dc2a5618cb17dc509963e29aecd9b9b40cb750ddf5707f66ed42c619",
+  "python/tessera/runtime.py": "b9b442b33abf6161368b18cf649b260bd04b70d6956c5cccac1acbbfe51e90b5",
+  "src/compiler/programming_model/lib/NativeBlockQuantSchedule.h": "a470cc493c093f00c07eb5dff341374fc7371ad4247abeae5b6bf59de1392457",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeBlockQuantMaterializer.h": "ce246b3c6b4323f9ddc0eeb9917e41367bf430b58ec6e5e1cdeebc96c1ca8051",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp": "935fa1d58ab4bec67ee731459f8106678ff84595ef58fca1ad686c200f7e9e9f",
+  "tests/device/rocm/test_native_block_quant_jit.py": "77d1e3b050801eadf55dd0445b2b7238a74c3122d84fbe1f2c3c6c0457fb5f62"
+}

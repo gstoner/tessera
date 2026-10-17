@@ -261,7 +261,7 @@ projection, wider layouts/dynamic shapes, encoded derivatives and model
 quality remain open.
 
 
-## Seven-member full MLP native partition (v4, compiler proof)
+## Seven-member full MLP native partition (v4)
 
 `tessera.native.quantized_product.v4` reuses the validated v3 gate/up prefix
 and v2 quantizer/expansion/product suffix over the original Graph SSA. Seven
@@ -305,3 +305,21 @@ per-stage numerical allowance. A pointwise relative tolerance against an
 ideal earlier activation alone is insufficient across discontinuous
 requantization and nonlinear SiLU. No numerical policy or physical kernel
 was changed to pass these cases.
+
+### Authored public MLP and final BF16 store
+
+The flat public Python function carries both quantizers and both NVFP4
+projections in its original Graph. Its final FP32 product is followed by an
+explicit BF16 cast: the 38-operation form joins the earlier 37-operation
+direct-result form. The down product/cast remain one physical member using
+the same pure, single-use FP32-to-BF16 validator as the gate/up store. The
+three-member v2 component frame retains its schema and storage semantics.
+
+`canonical_rocm_quantized_mlp_program` binds native/package/frontend v4 through
+the existing program executor. Eight exact-gfx1201 tests prove public JIT,
+compiler-disabled warm and portable replay, fresh-process replay, current
+seven receipts and nested inspection isolation. Three numerical/timing
+packets preserve store-boundary and propagation certificates, including flat
+FP64-reference disagreements. This is a named static public profile, not
+checkpoint/model-quality, dynamic, encoded-AD or sibling physical closure.
+Evidence: benchmarks/baselines/rocm_quantized_mlp_20261017/README.md.

@@ -1,0 +1,32 @@
+{
+  "resident_vs_staged": {
+    "unequal": 0,
+    "max_abs": 0.0,
+    "outside_gate": 0,
+    "bad_rows": []
+  },
+  "activation_vs_independent": {
+    "unequal": 22,
+    "max_abs": 0.125,
+    "outside_gate": 0,
+    "bad_rows": []
+  },
+  "down_vs_reference_at_actual_activation": {
+    "unequal": 2,
+    "max_abs": 0.00390625,
+    "outside_gate": 0,
+    "bad_rows": []
+  },
+  "full_vs_independent": {
+    "unequal": 101,
+    "max_abs": 0.0625,
+    "outside_gate": 13,
+    "bad_rows": [
+      183
+    ]
+  },
+  "second_quant_codes_differ": 1,
+  "second_quant_code_rows": [
+    252
+  ]
+}

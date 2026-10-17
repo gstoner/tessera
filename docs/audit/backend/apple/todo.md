@@ -11,8 +11,9 @@ last_updated: 2026-10-17
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
 Sync: ROCM-QUANTIZED-MLP-20261017.
 
-Not applicable to apple physical execution: this new native partition admits only gfx1201. Shared assessment: a distinct native v4 schema reuses the SSA-derived outliner, existing quantizer and expansion/product validators; earlier v1/v2/v3 partition regressions pass. No runtime ABI or apple physical schedule changes. Follow-up required before sibling adoption; no physical parity is inferred.
+Not applicable to apple physical execution: the seven-member public profile admits only gfx1201. Shared assessment: native/package/frontend v4, the common pure FP32-to-BF16 store verifier and checked portable binding preserve earlier schemas. No apple runtime ABI, physical schedule or datatype admission is changed. Follow-up required before physical adoption; no gfx1201 proof transfers.
 
+Evidence: benchmarks/baselines/rocm_quantized_mlp_20261017/README.md.
 
 ## ROCM-QUANTIZED-GATEUP-20261017 — native quantizer through gate/up
 

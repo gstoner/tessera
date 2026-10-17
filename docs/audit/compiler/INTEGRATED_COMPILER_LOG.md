@@ -13187,3 +13187,32 @@ Remaining: full resident down projection, checkpoint/model quality, wider and
 dynamic layouts, encoded AD and the original five-slice NVIDIA/ROCm goal.
 Evidence: benchmarks/baselines/rocm_quantized_gate_up_20261017/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-17 — native quantized MLP public integration
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; follows merged #971. Sync: ROCM-QUANTIZED-MLP-20261017.
+
+Outcome: original authored Graph carries BF16 K16 quantization, NVFP4
+gate/up expansion, explicit BF16 parent store, SiLU activation, a second
+quantizer and independent down projection with an explicit BF16 store. Native
+MLIR exports seven members, two certified component plans and eighteen
+SSA-derived buffers; one checked C++ HIP owner executes all members. Distinct
+native/package/frontend v4 schemas preserve earlier profiles.
+
+Proof: 362 native/public trace/store/legacy/registry tests and 15 execution
+registry cases pass. Eight gfx1201 tests cover public/prepared execution,
+compiler-free warm/portable/fresh-process replay, readiness, retained outputs
+and inspection isolation. Fresh matching NVIDIA tools pass 85 existing
+RTX5070 controls. Three packets distinguish captured members, ordinary
+program events, prepared invoke/read and public calls. Store-boundary and
+propagation certificates retain flat FP64-reference disagreements; no
+checkpoint-quality or speedup promotion follows. All four plans are assessed.
+Broad WSL CPU validation passes 22,206 cases (9,946 skipped; 11 warnings);
+audit/metadata/diagnostic gates pass 311 cases. All 33 generated documents pass the final drift check.
+
+Remaining: checkpoint/model quality, host dispatch/performance closure, wider
+layouts/dynamic/encoded AD and the original five-slice NVIDIA/ROCm objective.
+Evidence: benchmarks/baselines/rocm_quantized_mlp_20261017/README.md.
+<!-- entry-fields:end -->

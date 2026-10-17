@@ -11,8 +11,9 @@ last_updated: 2026-10-17
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
 Sync: ROCM-QUANTIZED-MLP-20261017.
 
-Not applicable to nvidia physical execution: this new native partition admits only gfx1201. Shared assessment: a distinct native v4 schema reuses the SSA-derived outliner, existing quantizer and expansion/product validators; earlier v1/v2/v3 partition regressions pass. No runtime ABI or nvidia physical schedule changes. Follow-up required before sibling adoption; no physical parity is inferred.
+Regression parity validated: freshly rebuilt core/NVIDIA tools pass all 85 existing active-source JVP/runtime fixture cases on RTX5070, including hardware execution and host contracts. No adoption of the gfx1201 seven-member physical program is inferred. Shared assessment: native/package/frontend v4, a common pure FP32-to-BF16 store verifier and portable runtime binding preserve earlier schemas. NVIDIA physical producer/attention/model obligations remain open; separate evidence is required before adoption.
 
+Evidence: benchmarks/baselines/rocm_quantized_mlp_20261017/README.md.
 
 ## ROCM-QUANTIZED-GATEUP-20261017 — native quantizer through gate/up
 

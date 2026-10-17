@@ -343,3 +343,14 @@ Runtime input validation/copies, device identity, native readiness and actual
 execution still run for each call. Portable restoration retains all existing
 checks, and the zero setting supplies the uncached A/B control. No lowering,
 image, descriptor, numerical policy or ABI changes follow from a cache hit.
+
+The content budget charges UTF-8 string bytes, mapping keys and integer
+magnitude as well as container/field overhead. Large metadata keys cannot
+bypass the limit. Keyword `self` validation calls use the same complete
+package key as ordinary bound-method calls. Cache inspection/reset also
+checks the process before taking any inherited lock.
+
+Floating metadata is keyed by its binary64 bits, preserving signed zero and
+NaN bit patterns rather than Python numeric equality. A real native-package
+regression verifies that a +0.0-to--0.0 metadata mutation cannot reuse the
+earlier valid certificate or ABI binding.

@@ -1,0 +1,227 @@
+{
+  "shape_mhkn": [
+    3,
+    32,
+    48,
+    19
+  ],
+  "architecture": "gfx1201",
+  "device_uuid": "GPU-28d9e7efbf2ef716",
+  "device_name": "AMD Radeon RX 9070 XT",
+  "source_revision": "95be6a2f3b6ed94b7fd157a372bb3b1cd31c2fdb",
+  "recorder_sha256": "0e5842d7784bb44e61884777a85c44e58cb1bdceca65ff2a54e99a718c260c8e",
+  "reference_sha256": "bd439fd68fd7879f703cc0599919ef45ac5f5ded046da086084b14679e63c459",
+  "compiler_sha256": "620ed50bfe4eefb826e538063a4d7bd69bc1d42774b8b94cb199de8310b0f4a5",
+  "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+  "correctness": "per_stage_and_propagation_passed_before_timing",
+  "numerical_certificate": {
+    "resident_staged_bitwise_equal": true,
+    "parent_store_max_abs_error": 0.0,
+    "activation_at_parent_max_abs_error": 0.0,
+    "down_at_activation_max_abs_error": 0.0,
+    "full_independent_max_abs_error": 0.0,
+    "full_independent_outside_flat_gate": 0,
+    "propagated_bound_passed": true,
+    "propagation_max_abs_bound": 0.0,
+    "per_stage_rtol": 0.015625,
+    "per_stage_atol": 2e-05
+  },
+  "route": "authored Graph SSA -> seven native partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> one checked multi-output HIP owner",
+  "native_schema": "tessera.native.quantized_product.v4",
+  "binding_digest": "d931a16facdf89ae121730c85f775cce77487b882eea8bb18fa38f57f93b469d",
+  "component_receipts": [
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.block_quant.x_q_s_groups.bf16_e4m3_f32.v1",
+      "image_digest": "055c1fe019538fea7f20b4cd02ea1878d09809a19227a06f1a60e600e4c93200",
+      "descriptor_digest": "e24c27b51b427e75f9deeb224d14a6c454f52703c5517111bf466d48ed872c03",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.nvfp4_expand.five_memrefs.static.v1",
+      "image_digest": "74e1327fd80bd5fc883560587102b1bae8a09edcf634c1e0a71181ddb0deb289",
+      "descriptor_digest": "476f8d18ba298b439604d0b0929ea76ea469a6e9f21f4417755ee6c3a893067f",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+      "image_digest": "591cc4412b188f9de978eb9e1b93062670bf3c8151aaf7979298c1cb75187584",
+      "descriptor_digest": "07d3c31290fb94a1da3cb94f3cae09e6994f75cb8e55bbdfd856d7ce0c4a269b",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.parent_view.parent_o_n.bf16_f32.v1",
+      "image_digest": "c754c48358e0537e80c1842de3810b68430eb15b54e79de96c4b08937c988c3c",
+      "descriptor_digest": "4ec10f4a5e06aac8d8bca3bada7adde64a1cc1ea135d8b8a580b23737cba1acc",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.block_quant.x_q_s_groups.bf16_e4m3_f32.v1",
+      "image_digest": "3fe0ff77208b1be5236c2cc6c204c101be12a5e2af42fc241c14ae866495754f",
+      "descriptor_digest": "a59730006170d14f0448b252e6c8ca6408dd971fb4f753bc06852eeb8300c72d",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.nvfp4_expand.five_memrefs.static.v1",
+      "image_digest": "1e08d6224737f6e4b2a8df25a0c254bc73b517697fcfe53f559d3124361bf2ec",
+      "descriptor_digest": "c3c3040c11c9a8eaa50c490ae3ccf5d74915bdae5ebee8155db6edb036f6bbc5",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+      "image_digest": "0517c5d97093b87060f52a4f398c080d9494bcab1c4547608517a6902268b8ad",
+      "descriptor_digest": "bd3fa3ff97c4fb68678eee3b663ac0c7761423e20f3e9e85b06e8f04c3742333",
+      "native_call_binding": "native_cpp_multi_output"
+    }
+  ],
+  "host_binding_cache_enabled": true,
+  "public_cold_ms": 956.5933389822021,
+  "public_warm_samples_ms": [
+    4.364580998662859,
+    3.9866763981990516,
+    3.978749003726989,
+    5.815991398412734,
+    3.937339992262423,
+    3.978502401150763,
+    4.003835201729089
+  ],
+  "prepared_invoke_read_samples_ms": [
+    0.30536402482539415,
+    0.28474500868469477,
+    0.2739239716902375,
+    0.2687239903025329,
+    0.26763201458379626,
+    0.3138899919576943,
+    0.25221199030056596
+  ],
+  "ordinary_program_event_samples_ms": [
+    0.03825272247195244,
+    0.03701011836528778,
+    0.03757632151246071,
+    0.037110161036252975,
+    0.03792355954647064,
+    0.0370531789958477,
+    0.038612160831689835
+  ],
+  "captured_member_samples_ms": [
+    [
+      0.005590617191046476,
+      0.004156867042183876,
+      0.008199820294976234,
+      0.002371562412008643,
+      0.005574359558522701,
+      0.003711867146193981,
+      0.005575929768383503
+    ],
+    [
+      0.005584046710282564,
+      0.004076867364346981,
+      0.008049046620726585,
+      0.0027478046249598265,
+      0.005568117368966341,
+      0.00404366385191679,
+      0.0055668591521680355
+    ],
+    [
+      0.005574359558522701,
+      0.004107492044568062,
+      0.008185523562133312,
+      0.0025146796833723783,
+      0.005580296739935875,
+      0.003711867146193981,
+      0.005577171687036753
+    ],
+    [
+      0.00557749206200242,
+      0.004205617122352123,
+      0.008162249810993671,
+      0.0023759296163916588,
+      0.005566554609686136,
+      0.003923507872968912,
+      0.007121445145457983
+    ],
+    [
+      0.005575281102210283,
+      0.004154663998633623,
+      0.00806619506329298,
+      0.002406234387308359,
+      0.005578398238867521,
+      0.004058484453707933,
+      0.005930515471845865
+    ],
+    [
+      0.005582773592323065,
+      0.004100289195775986,
+      0.008031507954001427,
+      0.002507484285160899,
+      0.005566218867897987,
+      0.0037374766543507576,
+      0.005549656227231026
+    ],
+    [
+      0.0055749686434865,
+      0.004089664202183485,
+      0.008068078197538853,
+      0.0029909999575465918,
+      0.005589656066149473,
+      0.003699976485222578,
+      0.005565273575484753
+    ]
+  ],
+  "member_order": [
+    "input_quantizer",
+    "gate_up_expansion",
+    "gate_up_product_bf16_store",
+    "silu_bf16_store",
+    "activation_quantizer",
+    "down_expansion",
+    "down_product_bf16_store"
+  ],
+  "host_validation_cache": {
+    "hits": 84,
+    "misses": 2,
+    "size": 2,
+    "maxsize": 16,
+    "entry_byte_limit": 4194304
+  },
+  "host_abi_cache": {
+    "hits": 72,
+    "misses": 2,
+    "size": 2,
+    "maxsize": 16,
+    "entry_byte_limit": 4194304
+  },
+  "public_warm_median_ms": 3.9866763981990516,
+  "prepared_invoke_read_median_ms": 0.2739239716902375,
+  "ordinary_program_event_median_ms": 0.03757632151246071,
+  "captured_member_median_ms": [
+    0.00557749206200242,
+    0.004107492044568062,
+    0.008068078197538853,
+    0.002507484285160899,
+    0.005574359558522701,
+    0.0037374766543507576,
+    0.005575929768383503
+  ],
+  "timing_scope": {
+    "public": "warm frontend, input validation, root copies, owner prepare/invoke/read",
+    "prepared": "invoke and returned readback; excludes prepare, compilation and root upload",
+    "ordinary_event": "per-program HIP event window; native API already averages repeats; includes enqueue gaps",
+    "captured_members": "seven individual graph dispatch windows; excludes capture/instantiation/copies",
+    "numerical_diagnostics": "independent math and staged native controls precede timing and are excluded from all timing windows"
+  },
+  "artifact_sha256": "860f76dd5d1434e6f71feb888e6322a9e9c4ea45857c2bc3ed22834849f29022"
+}

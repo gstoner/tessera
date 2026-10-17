@@ -1,7 +1,7 @@
 # Quantized host binding reuse — gfx1201, 2026-10-17
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
-Sync: ROCM-QUANTIZED-BINDING-CACHE-20261017. Depends on PR972.
+Sync: ROCM-QUANTIZED-BINDING-CACHE-20261017. Follows merged PR972.
 
 The cache memoizes full package validation and host ABI construction. Original
 Graph capture, per-call input checks/uploads, native device identity, private
@@ -20,25 +20,31 @@ work and ABI reconstruction.
 ## Exact-source paired measurements
 
 Owning RX9070XT / gfx1201, UUID GPU-28d9e7efbf2ef716. Final source is
-f136213ed645a1f98cbe9a7808202c247b6cd780; compiler/provider are pinned in each
-record. All seven image/descriptor receipts, complete portable artifacts and
-numerical certificates are byte-identical between every arm and the existing
-rocm_quantized_mlp_20261017 packet. Portable payloads are referenced there,
-not duplicated here.
+95be6a2f3b6ed94b7fd157a372bb3b1cd31c2fdb (`zero-off` / `zero-on`);
+compiler/provider are pinned in each record. All seven receipts, complete
+portable artifacts and numerical certificates match every earlier arm and
+the canonical rocm_quantized_mlp_20261017 packet byte-for-byte. Portable
+payloads are referenced there, not duplicated here.
 
 | M / H / K / N | Cache off public ms | Cache on public ms | Public speedup | Device program off/on us |
 |---|---:|---:|---:|---|
-| 1 / 16 / 16 / 1 | 11.537 | 3.778 | 3.05x | 36.11 / 36.38 |
-| 3 / 32 / 48 / 19 | 11.665 | 3.823 | 3.05x | 37.37 / 37.20 |
-| 256 / 128 / 12288 / 256 | 13.348 | 4.851 | 2.75x | 177.63 / 177.79 |
+| 1 / 16 / 16 / 1 | 11.761 | 4.219 | 2.79x | 35.89 / 35.73 |
+| 3 / 32 / 48 / 19 | 11.847 | 3.987 | 2.97x | 37.41 / 37.58 |
+| 256 / 128 / 12288 / 256 | 12.981 | 5.340 | 2.43x | 177.43 / 178.28 |
 
-The earlier 3c568a0e2a four-arm off/on/on/off repeat records retain their
-source scope and show 2.65–3.15x in both orders. Final keyword/process guard
-fixes were retested in `final-off` / `final-on`. Thirty owning device tests
-pass on the final source, covering quantized v1/v2/v3/v4 public/portable and
-lifetime behavior. Twelve final host cache guards and three native mutation
-cases cover nested provenance, recipe-shape changes, bool/int separation,
-keyword calls, entry bounds, disabled/oversized fallback and process reset.
+Earlier records retain their source scope: 3c568a0e2a off/on/on/off repeats,
+f136213ed6 keyword/process guards in final-off/final-on, and 92bb69760d
+UTF-8/key-budget guards in budget-off/budget-on. Final signed-zero source
+passes thirty owning device cases. The final focused gate passes 387 cases:
+76 cache/native package controls and 311 audit/metadata/diagnostic checks.
+Fifteen host guards include typed numeric content, nested mutation, keyword
+calls, process reset and UTF-8/key bounds. Four actual native mutation cases
+refuse changed descriptor metadata, recipe shape and signed-zero metadata.
+
+The signed-zero case was reproduced red: Python's numeric equality treated
++0.0/-0.0 metadata as the same snapshot although descriptor digests differ.
+Float keys now preserve binary64 bits. The genuine native-package regression
+passes; no validation rule or numerical tolerance was weakened.
 
 Public samples include frontend capture, input checks/copies, preparation,
 native execution and readback. Ordinary program events and captured member
@@ -46,6 +52,7 @@ windows are separate device scopes. The gain is host-side only; no image,
 physical schedule, numerical policy or runtime ABI changed. The original
 flat-reference disagreements and model-quality limits are unchanged.
 
-Broad final-source CPU, lifecycle/generated-doc and publication gates remain
-active. Checkpoint/model quality, remaining host costs, wider/dynamic/AD and
+Final-source WSL CPU validation passes 22,223 tests (9,946 skipped;
+11 warnings). All 33 generated documents pass drift checks. Public CI and
+review gates remain active. Checkpoint/model quality, remaining host costs, wider/dynamic/AD and
 the original five-slice objective remain open. No sibling performance claim.

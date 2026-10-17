@@ -1,0 +1,53 @@
+[
+  {
+    "shape_mhkn": [
+      1,
+      16,
+      16,
+      1
+    ],
+    "source_revision": "92bb69760d4b880044d3943386698bf7162cdc32",
+    "artifact_sha256": "fabf388e62c88a5858bbe7bcaa4a992d30673570530807a8e50720fac997efd3",
+    "canonical_artifact": "../rocm_quantized_mlp_20261017/public-1-16-16-1-artifact.json",
+    "off_ms": 11.71331739751622,
+    "on_ms": 3.9715516031719744,
+    "public_speedup": 2.949305099840853,
+    "ordinary_off_ms": 0.035791538655757904,
+    "ordinary_on_ms": 0.036089520901441574,
+    "numerical_certificate_unchanged": true
+  },
+  {
+    "shape_mhkn": [
+      3,
+      32,
+      48,
+      19
+    ],
+    "source_revision": "92bb69760d4b880044d3943386698bf7162cdc32",
+    "artifact_sha256": "860f76dd5d1434e6f71feb888e6322a9e9c4ea45857c2bc3ed22834849f29022",
+    "canonical_artifact": "../rocm_quantized_mlp_20261017/public-3-32-48-19-artifact.json",
+    "off_ms": 11.476766795385629,
+    "on_ms": 4.071414598729461,
+    "public_speedup": 2.8188646764117578,
+    "ordinary_off_ms": 0.037271760404109955,
+    "ordinary_on_ms": 0.03674865886569023,
+    "numerical_certificate_unchanged": true
+  },
+  {
+    "shape_mhkn": [
+      256,
+      128,
+      12288,
+      256
+    ],
+    "source_revision": "92bb69760d4b880044d3943386698bf7162cdc32",
+    "artifact_sha256": "a680aea012dc3484bedf420883654f30412adb169a52c2315c3cfb6719563066",
+    "canonical_artifact": "../rocm_quantized_mlp_20261017/public-256-128-12288-256-artifact.json",
+    "off_ms": 13.085588195826858,
+    "on_ms": 5.262841400690377,
+    "public_speedup": 2.4864112747365517,
+    "ordinary_off_ms": 0.17724260687828064,
+    "ordinary_on_ms": 0.17757897078990936,
+    "numerical_certificate_unchanged": true
+  }
+]

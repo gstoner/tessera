@@ -2087,3 +2087,8 @@ separate dispatch/completed-host measurements. The row-major experiment is
 retained as a measured negative. ROCm performance, MXFP4 attribution, generic
 frontend/AD and every original aggregate row remain open.
 Evidence: benchmarks/baselines/gfx1201_kn_lds_20261017/README.md.
+
+The repaired clean-head CPU gate passes 26,327 cases with 5,897 skips.
+The 21 sparse-byte and shutdown regression cases execute without skips or
+failures; parent confirmed-death and checked HIP cleanup remain required.
+Public CI/review and all five aggregate obligations remain open.

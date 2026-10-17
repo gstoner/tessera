@@ -11,11 +11,13 @@
     "python/tessera/compiler/rocm_pipeline.py": "db3f8c651adf871e11d24dc978590a3fc775ae77446adae4ca5a09934b2a8eaa",
     "python/tessera/runtime.py": "c4aa7f6db382422fe5cf8ec42d0535fec9f891912d6a62fec2607d5e4aabce48",
     "benchmarks/rocm/benchmark_gfx1201_fp8_blockscale.py": "528616d68d999af386c8858e881e7ff8ee6117af9f77569ad95adfc9f117024f",
-    "tests/unit/test_rocm_fp8_host_timing.py": "53f70aea8be2f7394b3313be05183b48dff71b8548518290e56178334b77e2c8",
+    "tests/unit/test_rocm_fp8_host_timing.py": "a0b41d70a3bf4410b4f90d09fe2b0192f6ad39efc0d7b9972674704e696f72ef",
     "tests/unit/test_rocm_fp8_blockscale.py": "90671ff1d8ec6fe1d0f319a6158d3acce6a11db1005d40b3a5ed2a323af446d2",
     "tests/device/rocm/test_public_typed_scaled_primal.py": "90b722791f5107a3c776cb13c466124c67a63202ac71551a4c2c5f8cc8359568",
     "tests/device/rocm/test_public_scaled_jvp.py": "4c190d4c8ac39947cca574d95c27087bd79d73ee4652d2b90728f396ca65e079",
-    "tests/device/rocm/test_fp8_blockscale_w8a8.py": "3ec1aa2b6be4ed5a2666eb463b992acc13ffb9301593b13a768cbaaa8ef47142"
+    "tests/device/rocm/test_fp8_blockscale_w8a8.py": "3ec1aa2b6be4ed5a2666eb463b992acc13ffb9301593b13a768cbaaa8ef47142",
+    "python/tessera/compiler/rocm_sparse_runtime.py": "4bdb906c45b6e8230d299bb7a6270a84597b7b1fbaddb9504bf8547092386dba",
+    "tests/unit/test_rocm_sparse_runtime.py": "39affa8669937e9090c3052ad9268373cf07497fad7f608f80a49ea005e0fa42"
   },
   "tools": {
     "TESSERA_OPT": {
@@ -57,5 +59,23 @@
   "native_cpu_llc": {
     "path": "/home/angstorms/toolchains/llvm-tools-build/bin/llc",
     "sha256": "1b98d94b56b9d26dab73e30d171e48bf53644b1e2e1c6c05b8f0b974c82eecf8"
-  }
+  },
+  "measured_implementation_source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "b4c1172db03012c95a6e061cec20162d5fc1bddc84ff898ef56d095f5f147407",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "fb3bc5d338b5fe5bf2a41960f867d876cf49448bee1e61139d5b66c43a8f61c2",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "c60e7c9f75af08d006a7c1f0ecb6eb38ba0665b329b5ef4d735f40e87d5b2a41",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "4d82b6ba9b20b6baf579193df5995d783a612add4607c931f459c39284f57272",
+    "python/tessera/compiler/rocm_fp8_blockscale.py": "7bb3f3912cbe409814d7cb3db2bf8ac6acae3fa20abf99e8cb9cf08f454cd1d1",
+    "python/tessera/compiler/rocm_native.py": "eee05e1af5bd170492fe02f3be4c18702af0a5287fa778139620813eafdcdeb7",
+    "python/tessera/compiler/rocm_pipeline.py": "db3f8c651adf871e11d24dc978590a3fc775ae77446adae4ca5a09934b2a8eaa",
+    "python/tessera/runtime.py": "c4aa7f6db382422fe5cf8ec42d0535fec9f891912d6a62fec2607d5e4aabce48",
+    "benchmarks/rocm/benchmark_gfx1201_fp8_blockscale.py": "528616d68d999af386c8858e881e7ff8ee6117af9f77569ad95adfc9f117024f",
+    "tests/unit/test_rocm_fp8_host_timing.py": "53f70aea8be2f7394b3313be05183b48dff71b8548518290e56178334b77e2c8",
+    "tests/unit/test_rocm_fp8_blockscale.py": "90671ff1d8ec6fe1d0f319a6158d3acce6a11db1005d40b3a5ed2a323af446d2",
+    "tests/device/rocm/test_public_typed_scaled_primal.py": "90b722791f5107a3c776cb13c466124c67a63202ac71551a4c2c5f8cc8359568",
+    "tests/device/rocm/test_public_scaled_jvp.py": "4c190d4c8ac39947cca574d95c27087bd79d73ee4652d2b90728f396ca65e079",
+    "tests/device/rocm/test_fp8_blockscale_w8a8.py": "3ec1aa2b6be4ed5a2666eb463b992acc13ffb9301593b13a768cbaaa8ef47142"
+  },
+  "runtime_repair_revision": "2ca05af868f22e9126050f9e3db42b617fb8216a",
+  "repair_scope": "isolated sparse worker exits only after checked HIP cleanup and pipe delivery; parent zero-exit and uncertain-owner guards unchanged"
 }

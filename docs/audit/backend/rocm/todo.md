@@ -14,6 +14,12 @@ Native KN Schedule/Tile/Target/LLVM/image admission and the measured compact gfx
 
 Evidence: benchmarks/baselines/gfx1201_kn_lds_20261017/README.md.
 
+Publication-gate follow-up: ROCm isolated sparse workers now confirm process
+completion after checked HIP cleanup. Parent zero-exit, invalid-input and
+uncertain-ownership guards remain; no IR/image or ABI arithmetic changes. Owning gfx1201 parallel device checks pass 20 cases; the deterministic
+host-free shutdown regression and focused isolation checks pass. gfx1151
+physical parity is follow-up required.
+
 ## SM120-TYPED-JVP-20261017 — typed forward-mode integration
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

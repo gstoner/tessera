@@ -48,8 +48,8 @@ are read through the canonical Schedule parser.
 The complete production compiler-route lane passes 1,600 tests with zero
 skips; its execution certificate confirms every selected proof ran. All 33
 generated documents, 37 focused publication tests, five public surface
-audits and both claim linters pass. The broad CPU lane and public CI remain
-pending.
+audits and both claim linters pass. The repaired clean-head CPU lane passes 26,327 cases with
+5,897 skips. Public CI remains pending.
 
 The first compiler-route run had 153 skips because llc was absent from
 PATH; the certificate rejected it. The exact existing LLVM 23.1.1
@@ -112,3 +112,23 @@ KN remains 21-37% slower than matched AITER in the three recorded M200 rows.
 Broader KN shapes/layouts, MXFP4 M256 attribution, W8A8 performance closure,
 general compiled-route/AD integration and the original five-slice goal remain
 open. No gfx1151, gfx1200, NVIDIA, Apple or x86 physical proof transfers.
+
+## CPU gate repair and process ownership
+
+The initial CPU run had three failures: the synthetic host sampler lacked an
+explicit host-free declaration, and two sparse device cases received a result
+but could not confirm worker exit. No test was removed or reclassified.
+The isolated sparse worker now exits with status zero after checked HIP buffer,
+stream and module cleanup and result-channel closure. The parent still requires
+confirmed zero-status death before exposing output; failure/recovery guards remain.
+A deterministic late-finalizer test fails on the old worker and passes on the repair.
+The focused lane passes 1,100 checks; the uninstrumented parallel device lane
+passes 20 cases. Raw red/green receipts are in sparse-repair-validation.json.
+coverage-repaired.tar.xz contains a revision-bound static reference inventory,
+not additional execution or device proof. The compiler-route receipt predates
+this process-only repair; no compiler IR/image source changed in the repair.
+
+The final authored log initially failed three routing checks due to field
+formatting; 92 other publication tests passed. Corrected log/plan routing
+and audit lifecycle pass all 19 focused cases. No implementation changed
+from the passing repaired CPU commit; public CI/review remain required.

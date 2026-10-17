@@ -16,6 +16,11 @@ Not applicable to x86 physical execution: only ROCm W8A8 Schedule verification/s
 
 Evidence: benchmarks/baselines/gfx1201_kn_lds_20261017/README.md.
 
+Publication-gate follow-up: ROCm isolated sparse workers now confirm process
+completion after checked HIP cleanup. Parent zero-exit, invalid-input and
+uncertain-ownership guards remain; no IR/image or ABI arithmetic changes. Not applicable to x86 execution: its runtime uses no ROCm sparse worker;
+no physical schedule, buffer lifetime implementation or device claim transfers.
+
 ## SM120-TYPED-JVP-20261017 — typed forward-mode integration
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

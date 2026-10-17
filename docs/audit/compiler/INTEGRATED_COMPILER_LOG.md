@@ -13420,3 +13420,23 @@ and the original five-slice objective.
 
 Evidence: benchmarks/baselines/gfx1201_kn_lds_20261017/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-17 — KN publication gate and sparse worker completion
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync GFX1201-KN-LDS-20261017.
+
+Outcome: Initial CPU validation exposed one host-free declaration omission and two
+sparse-worker late-shutdown failures. The repair preserves checked HIP cleanup,
+zero-status death before output, and uncertain-owner recovery. The old worker
+fails a deterministic late-finalizer test; 1,100 focused checks and 20 parallel
+device cases pass after repair. The clean repaired-head CPU lane passes
+26,327 cases (5,897 skipped). Compiler images are unchanged
+by this process-only repair. All four backend plans assess this boundary.
+
+Remaining: public CI/review, wider ROCm performance envelopes and all five
+aggregate requirements.
+
+Evidence: benchmarks/baselines/gfx1201_kn_lds_20261017/README.md.
+<!-- entry-fields:end -->

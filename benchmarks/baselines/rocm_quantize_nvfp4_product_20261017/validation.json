@@ -1,13 +1,16 @@
 {
-  "source_revision": "bd9bdcf1c8",
+  "source_revision": "437eb9ae51be9b7f3873af41e073db9eb7b04fd7",
   "architecture": "gfx1201",
   "device_name": "AMD Radeon RX 9070 XT",
   "device_uuid": "GPU-28d9e7efbf2ef716",
   "native_partition_and_v1_gate": "19 passed",
   "package_and_v1_gate": "36 passed (35 before the shared receipt-classification regression was added)",
   "prior_combined_gate": "64 passed before strengthened report/root checks and two additional device tests",
-  "final_new_device_gate": "6 passed: four public shapes, fresh-process compiler-free replay, missing-producer and update invalidation checks",
+  "final_new_device_gate": "6 passed on dedicated canonical_rocm_quantized_nvfp4_product_program route",
   "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
   "compiler_warning": "Checkout mtimes changed during rebase; native partition source contents match compiled implementation. Warning retained in test/benchmark logs.",
-  "remaining": "Full gate/up/activation/down MLP, wider layouts/dynamic shapes/encoded AD and quality acceptance remain open."
+  "remaining": "Full gate/up/activation/down MLP, wider layouts/dynamic shapes/encoded AD and quality acceptance remain open.",
+  "route_registry_drift": "363 passed",
+  "runtime_path": "canonical_rocm_quantized_nvfp4_product_program",
+  "timing_repeat": "identical native member images; repeated timing variation recorded separately"
 }

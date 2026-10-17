@@ -43,9 +43,9 @@ Prepared invoke/read and complete public calls are recorded separately.
 
 | M,N,K | Warm public ms | Quantizer / expansion / product captured microseconds | Ordinary program event microseconds |
 |---|---:|---:|---:|
-| 3,17,32 | 4.086 | 8.87 / 5.64 / 7.45 | 22.24 |
-| 19,33,64 | 3.844 | 9.51 / 6.17 / 19.15 | 35.10 |
-| 256,128,12288 | 4.693 | 27.62 / 7.81 / 115.74 | 154.99 |
+| 3,17,32 | 4.005 | 4.67 / 3.09 / 4.59 | 12.34 |
+| 19,33,64 | 3.916 | 5.59 / 3.74 / 10.37 | 19.91 |
+| 256,128,12288 | 4.694 | 27.61 / 7.83 / 115.67 | 154.98 |
 
 Correctness gates timing. These are distinct regions, with no kernel-speedup or
 default-strategy promotion claim. Source hashes, native image/descriptor receipts,
@@ -66,3 +66,9 @@ python benchmarks/rocm/benchmark_public_quantized_nvfp4_product.py --output-dir 
 This proves the named static four-root product. Full gate/up/activation/down MLP,
 model-quality acceptance, encoded AD, dynamic/general layouts and sibling
 backend physical adoption remain open.
+
+The final route-label rerun retains identical native member image digests.
+Small-shape ordinary event windows varied from about 22.24 to 12.34 us and
+35.10 to 19.91 us across the two runs, while the largest remained about 155 us.
+`timing-repeat-control.json` preserves both observations. These measurements
+are not evidence of an optimization or a stable speedup.

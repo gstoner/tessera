@@ -74,3 +74,16 @@ def test_individually_valid_activation_cannot_overrun_the_shared_parent(package)
     changed=replace(changed,binding_digest=changed._identity())
     with pytest.raises(ValueError,match="activation/shared buffer"):
         changed.validate()
+
+
+def test_public_four_member_capture_uses_native_semantic_admission(production_compiler):
+    from benchmarks.rocm.benchmark_public_quantized_gate_up import make_gate_up
+    from tessera.compiler.trace import trace,to_graph_ir_module
+    from tessera.compiler.rocm_quantized_product_frontend import supports_quantized_product,package_traced_quantized_product
+    result=trace(make_gate_up(),((3,48),"bf16"),((34,24),"uint8"),((34,3),"fp8_e4m3"),((2,),"fp64"),
+        arg_names=["x","packed","weight_scales","globals_"],evaluate_catalog_outputs=False)
+    module=to_graph_ir_module(result,name="gate_up",target="rocm_gfx1201")
+    assert supports_quantized_product(module)
+    program=package_traced_quantized_product(module)
+    assert program.native.activation is not None
+    assert program.manifest()["schema"]=="tessera.rocm.quantized_product_frontend.v3"

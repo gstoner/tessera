@@ -698,8 +698,10 @@ static mlir::LogicalResult verifyCheckpointRowProduct(mlir::Operation *op, bool 
   for (Type type : op->getOperandTypes()) {
     auto tensor = dyn_cast<RankedTensorType>(type);
     if (!tensor || tensor.getEncoding() ||
-        llvm::any_of(tensor.getShape(), [](int64_t dim) { return dim <= 0; }))
-      return op->emitOpError("row correction requires positive static unencoded tensor shapes");
+        llvm::any_of(tensor.getShape(), [](int64_t dim) {
+          return !ShapedType::isDynamic(dim) && dim <= 0;
+        }))
+      return op->emitOpError("row correction requires positive or bounded unencoded tensor shapes");
     types.push_back(tensor);
   }
   auto dout = types[0], q = types[1], k = types[2], v = types[3];
@@ -712,6 +714,17 @@ static mlir::LogicalResult verifyCheckpointRowProduct(mlir::Operation *op, bool 
     return op->emitOpError("row correction requires homogeneous half Q/K/V and matching half or f32 dO");
   int64_t b = q.getDimSize(0), hq = q.getDimSize(1), sq = q.getDimSize(2), d = q.getDimSize(3);
   int64_t hkv = k.getDimSize(1), sk = k.getDimSize(2), dv = v.getDimSize(3);
+  SmallVector<int64_t> symbolic{b,hq,hkv,sq,sk,d,dv};
+  auto shape = tessera::resolveNativeAttentionShape(op,symbolic);
+  if (failed(shape)) return failure();
+  if (shape->dynamicSequence) {
+    auto module = op->getParentOfType<ModuleOp>();
+    auto target = module->getAttrOfType<StringAttr>("tessera.target");
+    auto arch = module->getAttrOfType<StringAttr>("tessera.arch");
+    if (!target || target.getValue() != "nvidia_sm120" ||
+        !arch || arch.getValue() != "sm_120")
+      return op->emitOpError("bounded row correction requires its SM120 target contract");
+  }
   auto tensor = [&](ArrayRef<int64_t> shape, Type element) {
     return RankedTensorType::get(shape, element);
   };

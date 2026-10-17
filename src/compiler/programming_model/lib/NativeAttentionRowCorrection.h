@@ -40,30 +40,41 @@ attentionRowCorrectionContract(Operation *graph) {
         return graph->emitError("row correction Schedule currently requires compact row-major argument layouts"), failure();
     }
   }
-  // A physical launch may only index byte spans representable by its signed
-  // i64 address arithmetic. Check every role before outlining opaque pointers.
-  auto span = [&](RankedTensorType type) -> FailureOr<int64_t> {
-    int64_t bytes = type.getElementTypeBitWidth() / 8;
-    for (int64_t dim : type.getShape()) {
-      if (dim <= 0 || bytes > std::numeric_limits<int64_t>::max() / dim)
-        return failure();
-      bytes *= dim;
-    }
-    return bytes;
-  };
-  for (Type type : graph->getOperandTypes())
-    if (failed(span(cast<RankedTensorType>(type))))
-      return graph->emitError("row correction physical input byte span overflows i64"), failure();
-  bool bias = graph->getAttrOfType<BoolAttr>("bias").getValue();
-  auto rowBytes = span(cast<RankedTensorType>(graph->getOperand(4 + unsigned(bias)).getType()));
-  if (failed(rowBytes) || *rowBytes / 4 > int64_t(INT32_MAX) * 32)
-    return graph->emitError("row correction result exceeds byte or launch-grid capacity"), failure();
   auto q = cast<RankedTensorType>(graph->getOperand(1).getType());
   auto k = cast<RankedTensorType>(graph->getOperand(2).getType());
   auto v = cast<RankedTensorType>(graph->getOperand(3).getType());
   auto dout = cast<RankedTensorType>(graph->getOperand(0).getType());
   SmallVector<int64_t> dims{q.getDimSize(0), q.getDimSize(1), k.getDimSize(1),
       q.getDimSize(2), k.getDimSize(2), q.getDimSize(3), v.getDimSize(3)};
+  auto shape = resolveNativeAttentionShape(graph,dims);
+  if (failed(shape)) return failure();
+  ArrayRef<int64_t> capacity = shape->bounds ? shape->bounds.asArrayRef() : ArrayRef<int64_t>(dims);
+  bool bias = graph->getAttrOfType<BoolAttr>("bias").getValue();
+  // A physical launch may only index byte spans representable by its signed
+  // i64 address arithmetic. Check every role before outlining opaque pointers.
+  auto span = [&](RankedTensorType type, bool keyRows = false,
+                  bool physicalBias = false) -> FailureOr<int64_t> {
+    int64_t bytes = type.getElementTypeBitWidth() / 8;
+    for (auto [axis, symbolic] : llvm::enumerate(type.getShape())) {
+      int64_t dim = symbolic;
+      if (ShapedType::isDynamic(dim)) {
+        if (physicalBias && axis == 3) dim = capacity[4];
+        else if (axis == 2) dim = capacity[keyRows ? 4 : 3];
+        else return failure();
+      }
+      if (dim <= 0 || bytes > std::numeric_limits<int64_t>::max() / dim)
+        return failure();
+      bytes *= dim;
+    }
+    return bytes;
+  };
+  for (auto [role, type] : llvm::enumerate(graph->getOperandTypes()))
+    if (failed(span(cast<RankedTensorType>(type), role == 2 || role == 3,
+                    bias && role == 4)))
+      return graph->emitError("row correction physical input byte span overflows i64"), failure();
+  auto rowBytes = span(cast<RankedTensorType>(graph->getOperand(4 + unsigned(bias)).getType()));
+  if (failed(rowBytes) || *rowBytes / 4 > int64_t(INT32_MAX) * 32)
+    return graph->emitError("row correction result exceeds byte or launch-grid capacity"), failure();
   auto rawNames = fn->getAttrOfType<ArrayAttr>("tessera.argument_bindings");
   auto results = fn->getAttrOfType<ArrayAttr>("tessera.result_bindings");
   if (!rawNames || rawNames.size() != roles.size() || !results || results.size() != graph->getNumResults())
@@ -86,6 +97,10 @@ attentionRowCorrectionContract(Operation *graph) {
   NamedAttrList fields;
   fields.set("family", b.getStringAttr(backward ? "attention_backward_rows" : "attention_row_correction"));
   fields.set("shape", b.getDenseI64ArrayAttr(dims));
+  if (shape->dynamicSequence) {
+    fields.set("shape_bounds",shape->bounds);
+    fields.set("shape_policy",b.getStringAttr("bounded_sequences_v1"));
+  }
   fields.set("storage", b.getStringAttr(checkpointStorageSpelling(q.getElementType())));
   fields.set("output_storage", b.getStringAttr(checkpointStorageSpelling(dout.getElementType())));
   fields.set("row_storage", b.getStringAttr("f32"));
@@ -137,8 +152,9 @@ attentionRowCorrectionContract(Operation *graph) {
       return graph->emitError("row-corrected backward launch overrides require compact output"), failure();
     }
     int64_t count = 0;
-    for (Type type : graph->getResultTypes()) {
-      auto bytes = span(cast<RankedTensorType>(type));
+    for (auto [role, type] : llvm::enumerate(graph->getResultTypes())) {
+      auto bytes = span(cast<RankedTensorType>(type),role == 1 || role == 2,
+                        bias && role == 3);
       if (failed(bytes))
         return graph->emitError("row-corrected backward result byte span overflows i64"), failure();
       int64_t elements = *bytes / (cast<RankedTensorType>(type).getElementTypeBitWidth() / 8);
@@ -258,7 +274,7 @@ static LogicalResult lowerNativeRowCorrections(ModuleOp mod, bool &selected) {
     auto *block = fn.addEntryBlock(b); b.setInsertionPointToStart(block);
     OperationState kernel(graph->getLoc(), c->backward ? "tile.attention_backward_rows_kernel" : "tile.attention_row_correction_kernel");
     kernel.addOperands(block->getArguments());
-    for (StringRef name : {"shape", "storage", "output_storage", "row_storage", "accum",
+    for (StringRef name : {"shape", "shape_bounds", "shape_policy", "storage", "output_storage", "row_storage", "accum",
                           "row_correction", "scale", "causal", "bias", "lse_cotangent",
                           "row_bytes", "block_threads", "bias_shape", "bias_gradient",
                           "gradient_activity", "gradient_output", "gradient_launch", "row_correction_usage"})

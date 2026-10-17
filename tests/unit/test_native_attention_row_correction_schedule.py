@@ -129,3 +129,25 @@ def test_direct_tile_thread_contract_matches_native_owner(storage, backward, thr
     else:
         with pytest.raises(RuntimeError, match="row correction.*(threads|thread)"):
             lower(direct, "--canonicalize")
+
+
+@pytest.mark.parametrize('storage',['f16','bf16'])
+@pytest.mark.parametrize('role',['row_correction','backward_rows'])
+def test_bounded_row_schedule_seals_capacity_without_relabeling_shapes(storage,role):
+    from tests.unit.test_saved_lse_half_backward import source
+    from tessera.compiler.scheduled_matmul import find_tessera_opt,run_tessera_opt
+    tool=find_tessera_opt();assert tool is not None
+    text=source(storage,bias=True,saved=True).replace('tessera.arch = "sm_120"',
+        'tessera.arch = "sm_120", tessera.attention_sequence_bounds = array<i64: 7, 11>')
+    graph=run_tessera_opt(tool,text,'--tessera-autodiff-paired=checkpoint-product='+role)
+    scheduled=run_tessera_opt(tool,graph,'--tessera-graph-to-schedule')
+    assert 'schedule.attention_'+role in scheduled
+    from tessera.compiler.attention_shape_contract import DYNAMIC_DIM
+    assert f'shape = array<i64: 1, 2, 1, {DYNAMIC_DIM}, {DYNAMIC_DIM}, 4, 3>' in scheduled
+    assert 'shape_bounds = array<i64: 1, 2, 1, 7, 11, 4, 3>' in scheduled
+    assert 'shape_policy = "bounded_sequences_v1"' in scheduled
+    assert 'row_bytes = 56 : i64' in scheduled
+    assert 'tensor<1x2x?xf32>' in scheduled
+    wrong=graph.replace('tessera.target = "nvidia_sm120"','tessera.target = "rocm_gfx1201"')
+    with pytest.raises(RuntimeError,match='SM120 target contract'):
+        run_tessera_opt(tool,wrong,'--canonicalize')

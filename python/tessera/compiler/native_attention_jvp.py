@@ -65,7 +65,7 @@ def materialize(dims, scale, causal, *, compiler, llvm_bin, shape_bounds=()):
                                     llvm_bin=Path(llvm_bin),backend='nvidia',chip='sm_120')
 
 
-def materialize_generated(graph_source, dims, scale, causal, *, compiler, llvm_bin, bias_shape=(), shape_bounds=()):
+def materialize_generated(graph_source, dims, scale, causal, *, compiler, llvm_bin, bias_shape=(), shape_bounds=(), storage="f32", output_storage="f32"):
     """Lower the native AD contract of one isolated attention function.
 
     The compiler verifies the source's complete argument/return mapping and the
@@ -89,6 +89,13 @@ def materialize_generated(graph_source, dims, scale, causal, *, compiler, llvm_b
     attention_dimensions(dims,shape_bounds)
     if biased:
         physical_attention_bias_shape(dims,bias_shape)
+    if storage not in {"f16", "bf16", "f32"} or output_storage not in {storage, "f32"}:
+        raise ValueError("automatic JVP data/output storage disagrees")
+    typed_fields = ("storage", "output_storage", "row_lse_storage")
+    expected_storage = ({} if storage == "f32" else
+                        dict(storage=storage, output_storage=output_storage, row_lse_storage="f32"))
+    if {key:contract[key] for key in typed_fields if key in contract} != expected_storage:
+        raise ValueError("automatic JVP native storage differs from its checkpoint")
     # AD's portable JSON sentinel is -1; native checkpoint policy retains
     # MLIR's kDynamic. Convert only at this adapter boundary.
     portable=lambda shape:[-1 if d==DYNAMIC_DIM else d for d in shape]

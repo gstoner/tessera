@@ -68,3 +68,10 @@ def test_fp16_storage_still_uses_its_physical_dtype_without_semantic_override():
         version=3, shape=(32,), typestr=np.dtype("float16").str,
         data=(4096, False), strides=(2,)))
     assert typed_binding("fp16").prepare(value, 32)[1] == [(4096, 64)]
+
+
+@pytest.mark.parametrize("semantic", ["bf16", "bfloat16"])
+def test_bf16_semantic_aliases_preserve_resident_tape_storage(semantic):
+    value = tensor()
+    value.dtype = semantic
+    assert typed_binding().prepare(value, 32)[1] == [(4096, 64)]

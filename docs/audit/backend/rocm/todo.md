@@ -5,6 +5,16 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## SM120-TYPED-JVP-20261017 — typed forward-mode integration
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-TYPED-JVP-20261017.
+
+Follow-up required for any HIP adoption of semantic BF16 tensor binding. The shared buffer validator now recognizes explicit BF16 semantic aliases while retaining width, physical storage, alignment and span guards. The typed attention JVP product and prepared ABI are NVIDIA-specific; gfx1151/gfx1201 receive no new physical admission or CUDA numerical/performance evidence.
+
+Contract: docs/spec/SM120_TYPED_ATTENTION_JVP_CONTRACT.md.
+
+
 ## SM120-AD-WITNESS-DIGEST-20261017 — bounded metadata digest reuse
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

@@ -6,6 +6,16 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## SM120-TYPED-JVP-20261017 — typed forward-mode integration
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-TYPED-JVP-20261017.
+
+Not applicable to Apple execution: the half attention TangentInterface admission remains gated to exact nvidia_sm120/sm_120. Shared typed zero construction and dtype helpers do not establish an Apple JVP image or ABI. No Metal numerical/performance result or datatype admission is claimed.
+
+Contract: docs/spec/SM120_TYPED_ATTENTION_JVP_CONTRACT.md.
+
+
 ## SM120-AD-WITNESS-DIGEST-20261017 — bounded metadata digest reuse
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

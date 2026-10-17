@@ -111,6 +111,12 @@ int prepareResidentDependencies(Owner &s,const void *const *inputs,
       size_t capacity=0;CUcontext allocationContext=nullptr,streamContext=nullptr;
       unsigned memoryType=0;
       unsigned alignment=s.forwardOnly && i<3 && s.storage!=1?2:4;
+      if(!s.reverse && !s.forwardOnly && s.storage!=1){
+        for(unsigned role=0;role<3;++role)
+          if(i==size_t(s.mapping[role]))alignment=2;
+        for(size_t j=0;j<s.activeCount;++j)
+          if(i==3+unsigned(s.bias)+j && s.roles[j]<3)alignment=2;
+      }
       if(s.reverse){
         for(size_t role=0;role<3;++role)
           if(i==size_t(s.mapping[role]) && s.storage!=1)alignment=2;
@@ -163,18 +169,29 @@ static int prepareAttentionJvp(
   const void *timage,size_t tbytes,const char *tentry,
   const char *sizerPath,const char *sizerEntry,const int64_t *dims,
   const int64_t *biasShape,const int *mapping,const int *roles,size_t activeCount,uint64_t *handle,
-  bool savedLse=false){
+  bool savedLse=false,int storage=1,int outputStorage=1){
   ownerError.clear();if(handle)*handle=0;
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
   if(!handle || !fimage || !fbytes || !fentry || !*fentry ||
      !timage || !tbytes || !tentry || !*tentry || !sizerPath || !*sizerPath ||
      !sizerEntry || !*sizerEntry || !dims || !mapping || !roles ||
-     activeCount<1 || activeCount>4)return bad("invalid prepared image or ABI");
+     activeCount<1 || activeCount>4 || storage<1 || storage>3 ||
+     outputStorage<1 || outputStorage>3 || (outputStorage!=1 && outputStorage!=storage))
+    return bad("invalid prepared image or ABI");
   try{
     auto state=std::make_unique<Owner>();
     state->bias=biasShape!=nullptr;
     state->savedLse=savedLse;
+    state->storage=storage;state->outputStorage=outputStorage;
+    state->forwardBiasScalars=storage!=1;
+    if(storage!=1){
+      std::string prefix="tessera_tile_attention_lse_";
+      prefix+=storage==2?"f16_":"bf16_";
+      if(outputStorage!=1)prefix+=outputStorage==2?"out_f16_":"out_bf16_";
+      if(std::strncmp(fentry,prefix.c_str(),prefix.size()))
+        return bad("typed JVP forward entry storage disagrees");
+    }
     if (bool(std::strstr(tentry,"_with_lse")) != savedLse)
       return bad("prepared JVP output contract differs from tangent entry");
     const size_t primals=3+unsigned(state->bias),slots=(state->bias?11:9)+unsigned(savedLse);
@@ -212,6 +229,11 @@ static int prepareAttentionJvp(
     uint64_t rows=uint64_t(b)*hq*sq,outputs=state->bytes[3]/4;
     if(rows>INT_MAX || (outputs+127)/128>UINT_MAX)return bad("grid exceeds bounds");
     state->tangentGrid=unsigned(rows);state->forwardGrid=unsigned((outputs+127)/128);
+    if(storage!=1)
+      for(unsigned slot: {0u,1u,2u,5u,6u,7u})state->bytes[slot]/=2;
+    if(outputStorage!=1){
+      state->bytes[3]/=2;state->bytes[state->bias?10:8]/=2;
+    }
     size_t total=0;std::array<size_t,12> offsets{};
     for(size_t i=0;i<slots;++i){
       if(total>std::numeric_limits<size_t>::max()-255)return bad("alignment overflow");
@@ -292,6 +314,20 @@ extern "C" int tessera_nvidia_attention_jvp_prepare_lse(
   return prepareAttentionJvp(fimage,fbytes,fentry,timage,tbytes,tentry,
     sizerPath,sizerEntry,dims,biasShape,mapping,roles,activeCount,handle,true);
 }
+extern "C" int tessera_nvidia_attention_jvp_prepare_typed(
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *timage,size_t tbytes,const char *tentry,
+  const char *sizerPath,const char *sizerEntry,const int64_t *dims,
+  const int64_t *biasShape,const int *mapping,const int *roles,
+  size_t activeCount,int storage,int outputStorage,int savedLse,uint64_t *handle){
+  if(storage==1 || (savedLse!=0 && savedLse!=1)){
+    if(handle)*handle=0;
+    return bad("typed JVP storage or saved-LSE flag disagrees");
+  }
+  return prepareAttentionJvp(fimage,fbytes,fentry,timage,tbytes,tentry,
+    sizerPath,sizerEntry,dims,biasShape,mapping,roles,activeCount,handle,
+    bool(savedLse),storage,outputStorage);
+}
 static int invokeAttentionJvp(
   uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
   void *const *outputs,const size_t *outputBytes,float *deviceMilliseconds,
@@ -369,7 +405,7 @@ static int invokeAttentionJvp(
   if(s.bias){
     const int64_t scores[4]={s.dims[0],s.dims[1],s.dims[3],s.dims[4]};
     bool broadcast=false;for(size_t i=0;i<4;++i)broadcast|=s.biasShape[i]!=scores[i];
-    if(broadcast)for(size_t i=0;i<4;++i)fa[arg++]=&s.biasShape[i];
+    if(broadcast || s.forwardBiasScalars)for(size_t i=0;i<4;++i)fa[arg++]=&s.biasShape[i];
   }
   void *ta[13];for(size_t i=0;i<slots;++i)ta[i]=&s.buffers[i];
   int64_t scratch=128;ta[slots]=&scratch;

@@ -724,8 +724,8 @@ def _plan_attention_checkpoint(*, primal_inputs, wrt_indices, target,
     from .scheduled_matmul import find_tessera_opt
     if (target,architecture,execution_mode)!=("nvidia_sm120","sm120","cuda_runtime"):
         raise ValueError("attention JVP requires its native SM120 consumer")
-    if len(primal_inputs) not in (3,4) or any(str(x.dtype)!="float32" for x in primal_inputs):
-        raise ValueError("attention JVP requires fp32 Q/K/V and optional bias frontend inputs")
+    if len(primal_inputs) not in (3,4) or any(str(x.dtype) not in ("float16","bfloat16","float32") for x in primal_inputs):
+        raise ValueError("attention JVP requires typed floating Q/K/V and optional fp32 bias frontend inputs")
     if not isinstance(ir_contract,Mapping):
         raise ValueError("attention JVP requires its traced native IR binding")
     compiler=find_tessera_opt()

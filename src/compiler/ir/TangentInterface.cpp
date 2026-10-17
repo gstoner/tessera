@@ -16,7 +16,7 @@ using normalization_ad::normalizationGuard;
 
 llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
-  if (!denseAttentionAD(*this, true, true, true) || tangents.size() != getNumOperands()) return {};
+  if (!denseAttentionAD(*this, true, true, true, true) || tangents.size() != getNumOperands()) return {};
   bool scoresActive = false;
   for (auto [index, value] : llvm::enumerate(tangents)) {
     if (index == 2) continue;
@@ -34,7 +34,8 @@ llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
       auto type=mlir::cast<mlir::RankedTensorType>(primal.getType());
       if (!type.hasStaticShape()) return buildAttentionDynamicZero(builder, getLoc(), primal);
       return builder.create<mlir::arith::ConstantOp>(getLoc(),
-          mlir::DenseElementsAttr::get(type,builder.getF32FloatAttr(0.0))).getResult();
+          mlir::DenseElementsAttr::get(type,builder.getFloatAttr(
+              mlir::cast<mlir::FloatType>(type.getElementType()),0.0))).getResult();
     };
     for (auto [primal,tangent] : llvm::zip(getOperands().take_front(3),tangents.take_front(3))) {
       tangent = zeroIfInactive(primal, tangent);

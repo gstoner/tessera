@@ -69,7 +69,7 @@ class NativeAttentionJVPProgram:
             policy=self.pair.forward.descriptor.provenance
             expected=_checkpoint_identity(_policy_indices(policy, "shape"),frame._scale,frame._causal,
                 bias=biased,bias_shape=_policy_indices(policy, "bias_shape") if biased else (),
-                shape_bounds=_policy_indices(policy, "shape_bounds"), storage="f32", output_storage="f32")
+                shape_bounds=_policy_indices(policy, "shape_bounds"), storage=str(policy["storage"]), output_storage=str(policy["output"]))
             if f'tessera.attention_checkpoint_identity = "{expected}"' not in self.tangent.arena_ir:
                 raise ValueError('automatic attention program forward/tangent generations disagree')
             tensor_names=('q','k','v','primal','lse','dq','dk','dv') + (
@@ -80,7 +80,8 @@ class NativeAttentionJVPProgram:
             frame._jvp_binding=generate_tensor_binding(self.tangent,signature)
             frame._jvp_saved_lse = self.saved_lse
             shapes=(*frame.shapes[:3], *((frame._bias_shape,) if biased else ()))
-            zeros={i:_Buffer(frame,shapes[i]) for i in range(count) if i not in self.active}
+            zeros={i:_Buffer(frame,shapes[i],frame._input_dtype if i<3 else "fp32")
+                   for i in range(count) if i not in self.active}
             # Inactive loads are removed by native lowering. Distinct allocated
             # placeholders preserve the no-alias argument ABI.
             return AutomaticAttentionFrame(frame,self.active,zeros,self.saved_lse)
@@ -156,7 +157,8 @@ def compile_attention_program(source,active,*,compiler,llvm_bin,input_names=(),r
     bias_shape=_policy_indices(policy, "bias_shape") or ((symbolic[0],symbolic[1],symbolic[3],symbolic[4]) if biased else ())
     tangent=materialize_generated(source,_policy_indices(policy, "shape"),policy['scale'],policy['causal'],
         compiler=compiler,llvm_bin=llvm_bin,bias_shape=bias_shape,
-        shape_bounds=_policy_indices(policy, "shape_bounds"))
+        shape_bounds=_policy_indices(policy, "shape_bounds"),
+        storage=policy["storage"],output_storage=policy["output"])
     # Both independently generated native products must agree on activity after
     # projecting frontend indices into physical Q/K/V roles.
     contract=re.findall(r'tessera.attention_jvp_contract = \{([^\n]*?)\}',tangent.arena_ir)

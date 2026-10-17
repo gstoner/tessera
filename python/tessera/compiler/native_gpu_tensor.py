@@ -148,7 +148,11 @@ class NativeTensorCall:
                 # CUDA/HIP's array interface represents BF16 as opaque bytes.
                 # Its explicit semantic dtype supplies width and alignment;
                 # a bare void/uint16 payload is never a BF16 declaration.
-                semantic_dtype = np.dtype(getattr(value, 'dtype', dtype))
+                semantic = getattr(value, "dtype", dtype)
+                if isinstance(semantic, str) and canonicalize_dtype(semantic) == "bf16":
+                    from ml_dtypes import bfloat16
+                    semantic = bfloat16
+                semantic_dtype = np.dtype(semantic)
                 if (canonicalize_dtype(str(semantic_dtype)) != 'bf16' or
                         not semantic_dtype.isnative or semantic_dtype.itemsize != 2 or
                         dtype != np.dtype(semantic_dtype.str) or

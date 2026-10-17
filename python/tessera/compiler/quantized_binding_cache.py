@@ -26,9 +26,13 @@ def _snapshot(value):
         remaining-=32
         if remaining<0:raise _Uncacheable
         kind=type(item)
-        if item is None or kind in (bool,int,float):return (kind,item)
+        if item is None or kind in (bool,float):return (kind,item)
+        if kind is int:
+            remaining-=(item.bit_length()+7)//8
+            if remaining<0:raise _Uncacheable
+            return (kind,item)
         if kind in (str,bytes):
-            remaining-=len(item)
+            remaining-=len(item) if kind is bytes or item.isascii() else len(item.encode("utf-8"))
             if remaining<0:raise _Uncacheable
             return (kind,item)
         identity=id(item)
@@ -38,10 +42,10 @@ def _snapshot(value):
             if is_dataclass(item) and not isinstance(item,type):
                 params=getattr(item,"__dataclass_params__",None)
                 if params is None or not params.frozen:raise _Uncacheable
-                return (kind,tuple((field.name,freeze(getattr(item,field.name))) for field in fields(item)))
+                return (kind,tuple((freeze(field.name),freeze(getattr(item,field.name))) for field in fields(item)))
             if kind in (tuple,list):return (kind,tuple(freeze(v) for v in item))
             if isinstance(item,Mapping) and all(type(k) is str for k in item):
-                return (kind,tuple((k,freeze(item[k])) for k in sorted(item)))
+                return (kind,tuple((freeze(k),freeze(item[k])) for k in sorted(item)))
             raise _Uncacheable
         finally:
             active.remove(identity)

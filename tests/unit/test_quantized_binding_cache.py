@@ -102,3 +102,16 @@ def test_process_change_resets_inspection_before_lock_access(fixture,monkeypatch
     assert binder.bind.cache_info()['size']==0
     binder.bind.cache_clear()
     assert binder.bind.cache_info()['size']==0
+
+
+def test_unicode_content_is_charged_by_utf8_bytes(monkeypatch):
+    monkeypatch.setattr(cache,'_ENTRY_BYTES',128)
+    with pytest.raises(cache._Uncacheable):cache._snapshot('é'*65)
+
+
+def test_large_metadata_keys_cannot_escape_the_content_budget(fixture,monkeypatch):
+    Package,_,calls=fixture;monkeypatch.setattr(cache,'_ENTRY_BYTES',2048)
+    p=Package(policy={'nested':{'layout':'nk'},'é'*1024:None})
+    p.validate();p.validate()
+    assert calls==['validate','validate']
+    assert p.validate.cache_info()['size']==0

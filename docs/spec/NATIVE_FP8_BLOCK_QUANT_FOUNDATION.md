@@ -323,3 +323,23 @@ packets preserve store-boundary and propagation certificates, including flat
 FP64-reference disagreements. This is a named static public profile, not
 checkpoint/model-quality, dynamic, encoded-AD or sibling physical closure.
 Evidence: benchmarks/baselines/rocm_quantized_mlp_20261017/README.md.
+
+
+## Quantized package certificate and ABI reuse
+
+`TESSERA_ROCM_PROGRAM_BINDING_CACHE=1` (the existing default) also enables
+complete-content memoization for quantized v1/v2/v3/v4 package validation and
+ABI construction. Each decorator retains at most sixteen entries, with a
+4 MiB content-budget limit per entry. Keys recursively include every frozen
+dataclass field, raw image bytes, recipe fields and mutable nested descriptor
+metadata; bool and int are distinct. No certificate is keyed by an object id
+or the declared binding digest alone.
+
+Unsupported, cyclic or oversized snapshots take the original full validation
+path. Content changing during certification is refused. Process changes
+reset locks and cached host bindings before access. The cache holds host ABI
+metadata and image bytes, with no native handles, streams or runtime tensor values.
+Runtime input validation/copies, device identity, native readiness and actual
+execution still run for each call. Portable restoration retains all existing
+checks, and the zero setting supplies the uncached A/B control. No lowering,
+image, descriptor, numerical policy or ABI changes follow from a cache hit.

@@ -1,0 +1,97 @@
+Source: c7e0b6e57b; 20 warm calls; profiler attribution only.
+/home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/rocm_native.py:1619: RuntimeWarning: /home/angstorms/scratch/rocm-native-gate-up-views-20261016/k16-quant/full-mlp/public-compiler/tessera-opt is older than 3 generator source(s) -- newest src/transforms/lib/NativeQuantizedProductProgram.h. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).
+  warn_if_generator_is_stale(tool)
+         825621 function calls (814441 primitive calls) in 0.399 seconds
+
+   Ordered by: cumulative time
+   List reduced from 377 to 45 due to restriction <45>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       20    0.000    0.000    0.405    0.020 jit.py:978(__call__)
+       20    0.000    0.000    0.400    0.020 jit.py:2373(_try_rocm_quantized_product_call)
+       20    0.000    0.000    0.330    0.016 rocm_quantized_product_frontend.py:59(execute)
+       20    0.000    0.000    0.224    0.011 rocm_quantized_mlp_program.py:140(prepare)
+       20    0.000    0.000    0.224    0.011 rocm_quantized_mlp_program.py:163(__init__)
+       20    0.027    0.001    0.224    0.011 native_scaled_program.py:622(__init__)
+      120    0.004    0.000    0.203    0.002 rocm_quantized_product_program.py:185(validate)
+       20    0.001    0.000    0.173    0.009 rocm_quantized_mlp_program.py:169(_bind_abi)
+       40    0.001    0.000    0.157    0.004 rocm_quantized_mlp_program.py:108(validate)
+       40    0.002    0.000    0.089    0.002 rocm_quantized_product_program.py:362(_bind_abi)
+       20    0.000    0.000    0.086    0.004 rocm_quantized_product_frontend.py:46(validate)
+       20    0.000    0.000    0.068    0.003 graph_ir.py:1388(to_mlir)
+      120    0.001    0.000    0.066    0.001 rocm_block_quant_native.py:245(validate_block_quant_runtime_artifact)
+       20    0.001    0.000    0.053    0.003 graph_ir.py:1467(to_mlir)
+      760    0.003    0.000    0.052    0.000 graph_ir.py:1049(to_mlir)
+      480    0.001    0.000    0.046    0.000 native_scaled_program.py:21(_manifest)
+      160    0.000    0.000    0.045    0.000 rocm_block_quant_native.py:165(_frame)
+      760    0.001    0.000    0.043    0.000 graph_ir.py:766(_loc_suffix)
+      760    0.001    0.000    0.041    0.000 graph_ir.py:784(_loc_path)
+      720    0.041    0.000    0.041    0.000 {method 'findall' of 're.Pattern' objects}
+      600    0.000    0.000    0.040    0.000 __init__.py:270(findall)
+     2860    0.002    0.000    0.035    0.000 __init__.py:185(dumps)
+     2860    0.002    0.000    0.033    0.000 encoder.py:185(encode)
+      120    0.002    0.000    0.032    0.000 rocm_fp8_blockscale.py:317(check_blockscale_target_ir)
+      120    0.000    0.000    0.031    0.000 rocm_quantized_product_program.py:155(_identity)
+     1440    0.030    0.000    0.030    0.000 encoder.py:207(iterencode)
+     2800    0.002    0.000    0.030    0.000 __init__.py:304(loads)
+     6120    0.002    0.000    0.029    0.000 __init__.py:174(search)
+       60    0.000    0.000    0.026    0.000 rocm_parent_view_native.py:233(validate_parent_view_runtime_artifact)
+     2800    0.003    0.000    0.026    0.000 decoder.py:340(decode)
+     6120    0.025    0.000    0.025    0.000 {method 'search' of 're.Pattern' objects}
+      100    0.005    0.000    0.025    0.000 rocm_quantized_mlp_program.py:35(_frame)
+  380/340    0.013    0.000    0.024    0.000 rocm_quantized_product_program.py:49(_frame_shape)
+      400    0.011    0.000    0.024    0.000 rocm_block_quant_native.py:116(_validate_frame)
+       20    0.000    0.000    0.024    0.001 rocm_quantized_mlp_program.py:191(_inputs)
+     2800    0.021    0.000    0.021    0.000 decoder.py:351(raw_decode)
+      120    0.000    0.000    0.021    0.000 rocm_nvfp4_expand_native.py:84(validate)
+      760    0.001    0.000    0.021    0.000 __init__.py:475(relative_to)
+      560    0.001    0.000    0.018    0.000 native_artifact.py:879(descriptor_digest)
+      120    0.001    0.000    0.018    0.000 rocm_block_quant_native.py:172(_descriptor)
+      760    0.000    0.000    0.018    0.000 __init__.py:933(resolve)
+      760    0.004    0.000    0.017    0.000 <frozen posixpath>:388(realpath)
+       80    0.000    0.000    0.016    0.000 rocm_parent_view_native.py:114(_frame)
+     2400    0.001    0.000    0.016    0.000 rocm_fp8_blockscale.py:278(_string_attr)
+       20    0.000    0.000    0.015    0.001 graph_ir.py:1385(verify)
+
+
+
+EXCLUSIVE TIME
+
+         825621 function calls (814441 primitive calls) in 0.399 seconds
+
+   Ordered by: internal time
+   List reduced from 377 to 30 due to restriction <30>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      720    0.041    0.000    0.041    0.000 {method 'findall' of 're.Pattern' objects}
+     1440    0.030    0.000    0.030    0.000 encoder.py:207(iterencode)
+       20    0.027    0.001    0.224    0.011 native_scaled_program.py:622(__init__)
+     6120    0.025    0.000    0.025    0.000 {method 'search' of 're.Pattern' objects}
+     2800    0.021    0.000    0.021    0.000 decoder.py:351(raw_decode)
+  380/340    0.013    0.000    0.024    0.000 rocm_quantized_product_program.py:49(_frame_shape)
+      400    0.011    0.000    0.024    0.000 rocm_block_quant_native.py:116(_validate_frame)
+       20    0.011    0.001    0.011    0.001 native_scaled_program.py:699(invoke)
+     2840    0.010    0.000    0.010    0.000 {built-in method _hashlib.openssl_sha256}
+     5320    0.009    0.000    0.009    0.000 {built-in method posix.lstat}
+121900/120220    0.008    0.000    0.009    0.000 {built-in method builtins.isinstance}
+      100    0.007    0.000    0.007    0.000 {method 'astype' of 'numpy.ndarray' objects}
+       40    0.006    0.000    0.014    0.000 nvfp4_expansion.py:22(checked_expansion_inputs)
+     1360    0.005    0.000    0.005    0.000 {built-in method binascii.a2b_base64}
+      200    0.005    0.000    0.010    0.000 rocm_parent_view_native.py:121(_validate_frame)
+      100    0.005    0.000    0.025    0.000 rocm_quantized_mlp_program.py:35(_frame)
+   104000    0.004    0.000    0.004    0.000 rocm_block_quant_native.py:159(<genexpr>)
+    56580    0.004    0.000    0.004    0.000 {method 'get' of 'dict' objects}
+      760    0.004    0.000    0.017    0.000 <frozen posixpath>:388(realpath)
+      120    0.004    0.000    0.203    0.002 rocm_quantized_product_program.py:185(validate)
+      760    0.003    0.000    0.052    0.000 graph_ir.py:1049(to_mlir)
+38300/33740    0.003    0.000    0.004    0.000 {built-in method builtins.len}
+       20    0.003    0.000    0.003    0.000 native_scaled_program.py:730(read)
+ 4500/300    0.003    0.000    0.006    0.000 native_artifact.py:95(_json_value)
+     2800    0.003    0.000    0.026    0.000 decoder.py:340(decode)
+      300    0.003    0.000    0.010    0.000 native_artifact.py:777(__post_init__)
+    17100    0.002    0.000    0.003    0.000 rocm_quantized_product_program.py:135(<genexpr>)
+     4560    0.002    0.000    0.004    0.000 __init__.py:134(__init__)
+    52000    0.002    0.000    0.002    0.000 rocm_parent_view_native.py:161(<genexpr>)
+     2800    0.002    0.000    0.030    0.000 __init__.py:304(loads)
+
+

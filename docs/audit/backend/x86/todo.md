@@ -7,6 +7,14 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## ROCM-QUANTIZED-BINDING-CACHE-20261017 — verified host binding reuse
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-QUANTIZED-BINDING-CACHE-20261017.
+
+Not applicable to x86 physical execution: memoization is attached only to gfx1201 quantized package validators and host ABI binders. No x86 caller uses the new helper, and no shared IR, datatype, target selector, kernel or runtime ABI changes. Complete-content snapshot behavior is host-tested; follow-up required before adopting it in a x86 package path. No gfx1201 physical or performance proof transfers.
+
+
 ## ROCM-QUANTIZED-MLP-20261017 — native gate/up-to-down partition
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

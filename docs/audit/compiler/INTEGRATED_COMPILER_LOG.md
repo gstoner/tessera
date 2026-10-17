@@ -13216,3 +13216,29 @@ Remaining: checkpoint/model quality, host dispatch/performance closure, wider
 layouts/dynamic/encoded AD and the original five-slice NVIDIA/ROCm objective.
 Evidence: benchmarks/baselines/rocm_quantized_mlp_20261017/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-17 — content-certified quantized host binding reuse
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; depends on #972. Sync: ROCM-QUANTIZED-BINDING-CACHE-20261017.
+
+Outcome: bounded complete-content memoization reuses quantized v1/v2/v3/v4
+package validation and host ABI construction. Snapshot keys include nested
+metadata, recipe shape and image bytes; the declared digest or object id is
+insufficient. Keyword calls, process resets and mutations during certification
+are checked; unsupported/oversized content and the zero cache setting retain
+full validation. Per-call inputs, device identity and native readiness remain
+checked. No physical IR/image/ABI or numerical-policy change.
+
+Proof: thirty final-source gfx1201 device cases pass. Final source paired
+public calls improve 2.75-3.05x, with unchanged seven-member receipts, complete
+artifacts and numerical certificates. Earlier bidirectional repeats retain
+their own source scope and corroborate the gain. Twelve host cache guards and
+three native mutation cases pass; broader final-source gates are active.
+All four backend queues are assessed; no sibling performance proof transfers.
+
+Remaining: checkpoint/model quality, residual host costs, wider/dynamic/AD
+and the original five-slice NVIDIA/ROCm objective.
+Evidence: benchmarks/baselines/rocm_quantized_binding_cache_20261017/README.md.
+<!-- entry-fields:end -->

@@ -5,6 +5,16 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-QUANTIZED-BINDING-CACHE-20261017 — verified host binding reuse
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-QUANTIZED-BINDING-CACHE-20261017.
+
+Host validation and ABI construction for quantized v1/v2/v3/v4 packages now reuse bounded complete-content certificates. Every dataclass field, image payload, nested descriptor/provenance and recipe shape participates; in-place mutation, bool/int differences, process changes and oversized/unsupported content cannot reuse a stale certificate. Input values, device identity, native readiness and execution remain checked per call. The existing cache environment switch provides an uncached control.
+
+Seventy focused/unit/native mutation tests and thirty owning gfx1201 v1-v4 device cases pass. Final image-identical cache-off/on measurements reduce public MLP cost from 11.5-13.3 ms to 3.8-4.9 ms (2.75-3.05x). Earlier reverse-order repeats show 2.65-3.15x with unchanged artifacts and numerical certificates; device timings are unchanged. Broader final-source gates are active. Evidence: benchmarks/baselines/rocm_quantized_binding_cache_20261017/README.md. This is host overhead reduction, not a kernel-speedup or physical schedule promotion. Gfx1151 receives no FP8 WMMA admission.
+
+
 ## ROCM-QUANTIZED-MLP-20261017 — native gate/up-to-down partition
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

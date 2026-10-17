@@ -9,8 +9,7 @@ audit_role: reference
 
 Six RTX5070 profiles retain identical native images and strict validation while
 bounded pure digest reuse reduces capture plus first reverse 1.33-1.37x.
-135 focused parser/package/device cases pass; broader publication gates remain
-pending. This host-cost increment closes no aggregate row. Evidence: benchmarks/baselines/sm120_ad_witness_digest_20261017/README.md.
+135 focused parser/package/device cases pass. The broad WSL lane passes 27886 passed, 7678 skipped, 876 deselected, 11 warnings in 2172.65s (0:36:12). Public CI/review remain pending. This host-cost increment closes no aggregate row. Evidence: benchmarks/baselines/sm120_ad_witness_digest_20261017/README.md.
 
 
 ## Bounded row-owner integration delivered — 2026-10-17

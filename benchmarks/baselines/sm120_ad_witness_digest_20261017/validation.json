@@ -12,6 +12,17 @@
   "focused_publication_tests": 38,
   "recorder_naming_tests": 1,
   "package_device_tests": 135,
-  "broad_unit": "running; not yet a passing certificate",
+  "broad_unit": {
+    "summary": "27886 passed, 7678 skipped, 876 deselected, 11 warnings in 2172.65s (0:36:12)",
+    "command": "python -m pytest tests/unit -m \"not slow\" -q",
+    "host": "Super-Bear WSL RTX5070",
+    "implementation": "e6804ac81aa5c840d4f7d8181ef105ffc6298835",
+    "source_test_trees": {
+      "python": "4fd51cd798a4a650bc56660802d10421133356c8",
+      "src": "9873d4918969326574ae44b6b8a25cdb6f090540",
+      "tests": "db8220ee4bb6b3a1df1c38eeb8287af550087a22"
+    },
+    "scope": "current Python/C++/test trees unchanged during run; evidence/documentation-only commits followed implementation"
+  },
   "graph_update": "terminal exit 0, AST only; 98544 nodes, 239870 edges, 3536 communities"
 }

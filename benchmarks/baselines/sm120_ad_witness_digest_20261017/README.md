@@ -36,8 +36,7 @@ counts attribute repeated witness decoding only and are not timing denominators.
 Canonical source Ruff and the changed recorder/tests pass. The full mypy
 ratchet passes with zero errors against baseline zero. The generated-document
 drift check passes; publication-focused tests pass 38 cases and the recorder
-naming gate passes. Broad unit validation is still running.
+naming gate passes. Broad WSL unit/compiler validation passes: 27886 passed, 7678 skipped, 876 deselected, 11 warnings in 2172.65s (0:36:12).
 
-All five aggregate engineering slices remain open. Broad unit and public
-CI/review are pending for this increment; previous PR evidence is not reused
+All five aggregate engineering slices remain open. Public CI/review are pending for this increment; previous PR evidence is not reused
 as validation of this source.

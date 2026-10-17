@@ -13338,7 +13338,8 @@ capture plus first reverse improves 1.33-1.37x, warm reverse largely unchanged.
 The eager workspace prototype was rejected after neutral matched measurements.
 All four backend queues are assessed; no sibling physical proof transfers.
 
-Remaining: broader gates/public CI and the original five-slice requirements.
+Broad WSL gate: 27886 passed, 7678 skipped, 876 deselected, 11 warnings in 2172.65s (0:36:12).
+Remaining: public CI/review and the original five-slice requirements.
 No kernel or automatic selection promotion.
 
 Evidence: benchmarks/baselines/sm120_ad_witness_digest_20261017/README.md.

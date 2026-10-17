@@ -211,16 +211,16 @@ class ResidentAttentionTape:
         self._consumer_streams = set()
         if pair.forward.descriptor.provenance.get("shape_bounds"):
             # Validate the sealed capacity before inspecting producer shapes.
-            checkpoint_shapes(pair)
+            self._checkpoint_shapes(pair)
             interfaces = [getattr(x,"__cuda_array_interface__",None) for x in (q,k,v)]
             if any(not isinstance(spec,dict) or not isinstance(spec.get("shape"),(tuple,list))
                    or len(spec["shape"])!=4 for spec in interfaces):
                 raise ValueError("bounded attention capture requires rank-four CUDA inputs")
             qs,ks,vs = (cast(dict[str, Any], spec)["shape"] for spec in interfaces)
             actual = (qs[0],qs[1],ks[1],qs[2],ks[2],qs[3],vs[3])
-            self.dims,self.shapes = checkpoint_shapes(pair,runtime_dims=actual)
+            self.dims,self.shapes = self._checkpoint_shapes(pair,runtime_dims=actual)
         else:
-            self.dims, self.shapes = checkpoint_shapes(pair)
+            self.dims, self.shapes = self._checkpoint_shapes(pair)
         forward_policy=pair.forward.descriptor.provenance
         dtype_names={"f16":"fp16","bf16":"bf16","f32":"fp32"}
         self._input_dtype=dtype_names[forward_policy["storage"]]
@@ -299,7 +299,7 @@ class ResidentAttentionTape:
         self.contract_digest = pair.contract_digest
         try:
             self.check(self._stream_create(ct.byref(self._stream),1))  # CU_STREAM_NON_BLOCKING
-            for package in ((pair.forward, backward) if backward is not None else (pair.forward,)):
+            for package in self._packages(pair):
                 module, function = P(), P()
                 blob = ct.create_string_buffer(package.image.payload)
                 self.check(load(ct.byref(module), ct.cast(blob,P)))
@@ -324,6 +324,13 @@ class ResidentAttentionTape:
         except BaseException:
             self.close()
             raise
+
+    def _checkpoint_shapes(self, pair, *, runtime_dims=None):
+        return checkpoint_shapes(pair,runtime_dims=runtime_dims)
+
+    def _packages(self, pair):
+        backward=getattr(pair,"backward",None)
+        return (pair.forward,backward) if backward is not None else (pair.forward,)
 
     def _allocate(self, shape, dtype="fp32"):
         return _Buffer(self, shape, dtype,

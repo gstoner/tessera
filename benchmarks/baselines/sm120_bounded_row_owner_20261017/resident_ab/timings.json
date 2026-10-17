@@ -1,0 +1,655 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "rows": [
+    {
+      "storage": "float16",
+      "shape": [
+        1,
+        4,
+        2,
+        3,
+        5,
+        32,
+        16
+      ],
+      "host_reverse_ms": {
+        "inline": [
+          0.291483,
+          0.266262,
+          0.266402,
+          0.265692,
+          0.310123,
+          0.286172,
+          0.232862,
+          0.275352,
+          0.269182,
+          0.323962,
+          0.254222,
+          0.356603
+        ],
+        "prepass": [
+          0.300823,
+          0.298163,
+          0.271922,
+          0.295072,
+          0.317962,
+          0.290142,
+          0.295903,
+          0.284122,
+          0.289382,
+          0.252662,
+          0.298352,
+          0.356193
+        ]
+      },
+      "host_reverse_medians_ms": {
+        "inline": 0.272267,
+        "prepass": 0.2954875
+      },
+      "dispatch_stages_ms": {
+        "inline": {
+          "forward_ms": [
+            0.008264999836683273,
+            0.008376000449061394,
+            0.008337999694049358
+          ],
+          "backward_ms": [
+            0.04066000133752823,
+            0.040667999535799026,
+            0.04064600169658661
+          ]
+        },
+        "prepass": {
+          "forward_ms": [
+            0.008341999724507332,
+            0.008298000320792198,
+            0.00825200043618679
+          ],
+          "row_producer_ms": [
+            0.0072929998859763145,
+            0.006430000066757202,
+            0.006200000178068876
+          ],
+          "backward_consumer_ms": [
+            0.012737000361084938,
+            0.012507000006735325,
+            0.012737000361084938
+          ],
+          "combined_reverse_ms": [
+            0.0188400000333786,
+            0.018664000555872917,
+            0.01998800039291382
+          ]
+        }
+      },
+      "dispatch_medians_ms": {
+        "inline": {
+          "forward_ms": 0.008337999694049358,
+          "backward_ms": 0.04066000133752823
+        },
+        "prepass": {
+          "forward_ms": 0.008298000320792198,
+          "row_producer_ms": 0.006430000066757202,
+          "backward_consumer_ms": 0.012737000361084938,
+          "combined_reverse_ms": 0.0188400000333786
+        }
+      },
+      "host_ratio_inline_over_prepass": 0.9214163035661406,
+      "dispatch_ratio_inline_over_prepass": 2.1581741648349997,
+      "correctness": "independent_fp64_before_after; arms bit-identical before_after"
+    },
+    {
+      "storage": "float16",
+      "shape": [
+        1,
+        4,
+        2,
+        17,
+        129,
+        32,
+        16
+      ],
+      "host_reverse_ms": {
+        "inline": [
+          5.768385,
+          5.779657,
+          5.986297,
+          5.781995,
+          5.774565,
+          5.762715,
+          5.777265,
+          5.773525,
+          5.748685,
+          5.765955,
+          5.791465,
+          5.767265
+        ],
+        "prepass": [
+          0.538224,
+          0.517044,
+          0.582655,
+          0.540354,
+          0.545934,
+          0.511624,
+          0.584815,
+          0.541745,
+          0.542514,
+          0.557674,
+          0.552164,
+          0.526714
+        ]
+      },
+      "host_reverse_medians_ms": {
+        "inline": 5.774045,
+        "prepass": 0.5421295
+      },
+      "dispatch_stages_ms": {
+        "inline": {
+          "forward_ms": [
+            0.18110699951648712,
+            0.18301500380039215,
+            0.18012599647045135
+          ],
+          "backward_ms": [
+            5.548254013061523,
+            5.547912120819092,
+            5.548305034637451
+          ]
+        },
+        "prepass": {
+          "forward_ms": [
+            0.1809220016002655,
+            0.18063999712467194,
+            0.1806820034980774
+          ],
+          "row_producer_ms": [
+            0.15671899914741516,
+            0.1556050032377243,
+            0.1558620035648346
+          ],
+          "backward_consumer_ms": [
+            0.157150000333786,
+            0.1570180058479309,
+            0.1570039987564087
+          ],
+          "combined_reverse_ms": [
+            0.31304898858070374,
+            0.3128739893436432,
+            0.31264498829841614
+          ]
+        }
+      },
+      "dispatch_medians_ms": {
+        "inline": {
+          "forward_ms": 0.18110699951648712,
+          "backward_ms": 5.548254013061523
+        },
+        "prepass": {
+          "forward_ms": 0.1806820034980774,
+          "row_producer_ms": 0.1558620035648346,
+          "backward_consumer_ms": 0.1570180058479309,
+          "combined_reverse_ms": 0.3128739893436432
+        }
+      },
+      "host_ratio_inline_over_prepass": 10.650674792646406,
+      "dispatch_ratio_inline_over_prepass": 17.733190364276762,
+      "correctness": "independent_fp64_before_after; arms bit-identical before_after"
+    },
+    {
+      "storage": "float16",
+      "shape": [
+        1,
+        4,
+        2,
+        33,
+        129,
+        32,
+        16
+      ],
+      "host_reverse_ms": {
+        "inline": [
+          10.981407,
+          10.940795,
+          11.059136,
+          10.984716,
+          12.020824,
+          10.930405,
+          10.969645,
+          10.987137,
+          10.994025,
+          11.041386,
+          10.980637,
+          10.926465
+        ],
+        "prepass": [
+          0.575775,
+          0.553285,
+          0.573604,
+          0.550305,
+          0.594144,
+          0.548485,
+          0.603005,
+          0.590755,
+          0.582205,
+          0.563424,
+          0.612255,
+          0.619055
+        ]
+      },
+      "host_reverse_medians_ms": {
+        "inline": 10.983061500000002,
+        "prepass": 0.57899
+      },
+      "dispatch_stages_ms": {
+        "inline": {
+          "forward_ms": [
+            0.18002399802207947,
+            0.1803169995546341,
+            0.18014299869537354
+          ],
+          "backward_ms": [
+            10.744815826416016,
+            10.7453031539917,
+            10.743906021118164
+          ]
+        },
+        "prepass": {
+          "forward_ms": [
+            0.1818840056657791,
+            0.1809290051460266,
+            0.18078899383544922
+          ],
+          "row_producer_ms": [
+            0.1554419994354248,
+            0.15484200417995453,
+            0.15480799973011017
+          ],
+          "backward_consumer_ms": [
+            0.16476799547672272,
+            0.16479399800300598,
+            0.16522499918937683
+          ],
+          "combined_reverse_ms": [
+            0.3202829957008362,
+            0.32013699412345886,
+            0.32030200958251953
+          ]
+        }
+      },
+      "dispatch_medians_ms": {
+        "inline": {
+          "forward_ms": 0.18014299869537354,
+          "backward_ms": 10.744815826416016
+        },
+        "prepass": {
+          "forward_ms": 0.1809290051460266,
+          "row_producer_ms": 0.15484200417995453,
+          "backward_consumer_ms": 0.16479399800300598,
+          "combined_reverse_ms": 0.3202829957008362
+        }
+      },
+      "host_ratio_inline_over_prepass": 18.969345757266968,
+      "dispatch_ratio_inline_over_prepass": 33.54788100100178,
+      "correctness": "independent_fp64_before_after; arms bit-identical before_after"
+    },
+    {
+      "storage": "bfloat16",
+      "shape": [
+        1,
+        4,
+        2,
+        3,
+        5,
+        32,
+        16
+      ],
+      "host_reverse_ms": {
+        "inline": [
+          0.275532,
+          0.341053,
+          0.237082,
+          0.246332,
+          0.362453,
+          0.243832,
+          0.370053,
+          0.328162,
+          0.326322,
+          0.364562,
+          0.328022,
+          0.355173
+        ],
+        "prepass": [
+          0.448424,
+          0.453414,
+          0.448083,
+          0.442583,
+          0.457353,
+          0.428513,
+          0.446464,
+          0.257872,
+          0.262552,
+          0.394984,
+          0.307053,
+          0.447014
+        ]
+      },
+      "host_reverse_medians_ms": {
+        "inline": 0.328092,
+        "prepass": 0.4445235
+      },
+      "dispatch_stages_ms": {
+        "inline": {
+          "forward_ms": [
+            0.009460999630391598,
+            0.008119000121951103,
+            0.008088000118732452
+          ],
+          "backward_ms": [
+            0.0402740016579628,
+            0.04027099907398224,
+            0.04033299908041954
+          ]
+        },
+        "prepass": {
+          "forward_ms": [
+            0.008485999889671803,
+            0.00810800027102232,
+            0.008150000125169754
+          ],
+          "row_producer_ms": [
+            0.0061980001628398895,
+            0.006422999780625105,
+            0.006298999767750502
+          ],
+          "backward_consumer_ms": [
+            0.012621000409126282,
+            0.012547999620437622,
+            0.012517999857664108
+          ],
+          "combined_reverse_ms": [
+            0.018711000680923462,
+            0.01871900074183941,
+            0.018658999353647232
+          ]
+        }
+      },
+      "dispatch_medians_ms": {
+        "inline": {
+          "forward_ms": 0.008119000121951103,
+          "backward_ms": 0.0402740016579628
+        },
+        "prepass": {
+          "forward_ms": 0.008150000125169754,
+          "row_producer_ms": 0.006298999767750502,
+          "backward_consumer_ms": 0.012547999620437622,
+          "combined_reverse_ms": 0.018711000680923462
+        }
+      },
+      "host_ratio_inline_over_prepass": 0.7380757147822331,
+      "dispatch_ratio_inline_over_prepass": 2.152423718258083,
+      "correctness": "independent_fp64_before_after; arms bit-identical before_after"
+    },
+    {
+      "storage": "bfloat16",
+      "shape": [
+        1,
+        4,
+        2,
+        17,
+        129,
+        32,
+        16
+      ],
+      "host_reverse_ms": {
+        "inline": [
+          5.858206,
+          5.879045,
+          5.796655,
+          5.800915,
+          5.803735,
+          5.789936,
+          5.955947,
+          5.856455,
+          5.745295,
+          5.764865,
+          5.856567,
+          5.777285
+        ],
+        "prepass": [
+          0.647845,
+          0.520184,
+          0.665545,
+          0.636635,
+          0.661975,
+          0.612196,
+          0.526634,
+          0.599525,
+          0.609644,
+          0.633005,
+          0.663836,
+          0.589975
+        ]
+      },
+      "host_reverse_medians_ms": {
+        "inline": 5.802325,
+        "prepass": 0.6226005
+      },
+      "dispatch_stages_ms": {
+        "inline": {
+          "forward_ms": [
+            0.17887699604034424,
+            0.17869800329208374,
+            0.17946800589561462
+          ],
+          "backward_ms": [
+            5.517926216125488,
+            5.517271995544434,
+            5.518346786499023
+          ]
+        },
+        "prepass": {
+          "forward_ms": [
+            0.1795790046453476,
+            0.17932899296283722,
+            0.17926399409770966
+          ],
+          "row_producer_ms": [
+            0.15522700548171997,
+            0.155117005109787,
+            0.1549459993839264
+          ],
+          "backward_consumer_ms": [
+            0.15599000453948975,
+            0.15508000552654266,
+            0.15522100031375885
+          ],
+          "combined_reverse_ms": [
+            0.311053991317749,
+            0.3100239932537079,
+            0.3101550042629242
+          ]
+        }
+      },
+      "dispatch_medians_ms": {
+        "inline": {
+          "forward_ms": 0.17887699604034424,
+          "backward_ms": 5.517926216125488
+        },
+        "prepass": {
+          "forward_ms": 0.17932899296283722,
+          "row_producer_ms": 0.155117005109787,
+          "backward_consumer_ms": 0.15522100031375885,
+          "combined_reverse_ms": 0.3101550042629242
+        }
+      },
+      "host_ratio_inline_over_prepass": 9.31949942218164,
+      "dispatch_ratio_inline_over_prepass": 17.79086630969797,
+      "correctness": "independent_fp64_before_after; arms bit-identical before_after"
+    },
+    {
+      "storage": "bfloat16",
+      "shape": [
+        1,
+        4,
+        2,
+        33,
+        129,
+        32,
+        16
+      ],
+      "host_reverse_ms": {
+        "inline": [
+          10.899686,
+          10.934306,
+          10.970026,
+          11.001228,
+          10.926225,
+          10.903704,
+          10.921775,
+          10.925526,
+          10.946885,
+          10.908835,
+          10.899476,
+          10.905715
+        ],
+        "prepass": [
+          0.565514,
+          0.546164,
+          0.561514,
+          0.559984,
+          0.557454,
+          0.590415,
+          0.611665,
+          0.537675,
+          0.542544,
+          0.541344,
+          0.583625,
+          0.560415
+        ]
+      },
+      "host_reverse_medians_ms": {
+        "inline": 10.9236505,
+        "prepass": 0.5601995
+      },
+      "dispatch_stages_ms": {
+        "inline": {
+          "forward_ms": [
+            0.17930899560451508,
+            0.18004800379276276,
+            0.17894500494003296
+          ],
+          "backward_ms": [
+            10.69982624053955,
+            10.701674461364746,
+            10.70248794555664
+          ]
+        },
+        "prepass": {
+          "forward_ms": [
+            0.17967699468135834,
+            0.1792750060558319,
+            0.17928199470043182
+          ],
+          "row_producer_ms": [
+            0.15534700453281403,
+            0.15398700535297394,
+            0.15393400192260742
+          ],
+          "backward_consumer_ms": [
+            0.16301299631595612,
+            0.16400499641895294,
+            0.16306699812412262
+          ],
+          "combined_reverse_ms": [
+            0.3170909881591797,
+            0.3170520067214966,
+            0.31722500920295715
+          ]
+        }
+      },
+      "dispatch_medians_ms": {
+        "inline": {
+          "forward_ms": 0.17930899560451508,
+          "backward_ms": 10.701674461364746
+        },
+        "prepass": {
+          "forward_ms": 0.17928199470043182,
+          "row_producer_ms": 0.15398700535297394,
+          "backward_consumer_ms": 0.16306699812412262,
+          "combined_reverse_ms": 0.3170909881591797
+        }
+      },
+      "host_ratio_inline_over_prepass": 19.49957202746522,
+      "dispatch_ratio_inline_over_prepass": 33.74953833753391,
+      "correctness": "independent_fp64_before_after; arms bit-identical before_after"
+    }
+  ],
+  "programs": [
+    {
+      "storage": "float16",
+      "arm": "inline",
+      "program_digest": "2960e9bd8d08cc8d241e1f7890abb51358fc81599486a9823741a97d3b52e8a4",
+      "archive": "float16-inline.program.json.xz",
+      "decompressed_sha256": "9882568656cd0ca64f0d31cf6210ebebf62e7d50cd7fe3097c32245b2d027e41",
+      "image_hashes": [
+        "bef61c9e706321a18e60412d86136e527c2df32ac13e3a17e988ceafb76ce924",
+        "f46a5bb34fb8b30a33db05207191548f45f1b0a8250fc6e9bc63ae3ac164a077"
+      ]
+    },
+    {
+      "storage": "float16",
+      "arm": "prepass",
+      "program_digest": "edb9dd90dbcb0621c83ab9621587062fe938cc4cc5d233b912e6c4fe60c65661",
+      "archive": "float16-prepass.program.json.xz",
+      "decompressed_sha256": "533feb18a7fd6ddfdaae341cbc1d78b9d9b95639ff6f1edaa3fea819db72d9c7",
+      "image_hashes": [
+        "bef61c9e706321a18e60412d86136e527c2df32ac13e3a17e988ceafb76ce924",
+        "ca0b7863d83836b092bc8e4dd290d7c7e384e6248ab4ef3a9e5fabcb45aa02fa",
+        "d5f98f95870d24dda97cb4ee777772f923a1b37a6708f10a7e377016dfbca188"
+      ]
+    },
+    {
+      "storage": "bfloat16",
+      "arm": "inline",
+      "program_digest": "23067b4d0b701d676276e16d93afd8b1116d2b611ef2aa4d8fc6725e63fd7d24",
+      "archive": "bfloat16-inline.program.json.xz",
+      "decompressed_sha256": "57f484de0e8953495e1239f01bb6341fc9acd26f6422151325f4d1ca6e7a02f2",
+      "image_hashes": [
+        "6526588edf180dc5b66fe4807b07ac917717be9edde8aad0529332e514fdb520",
+        "ca1c7b2bf9c37aedffb247fd891b4ef2d643807cfa4ba959c8832d114e9f4ea1"
+      ]
+    },
+    {
+      "storage": "bfloat16",
+      "arm": "prepass",
+      "program_digest": "2a9f7e79b649cdd2e4423122e1aab7ccbf63b616bf173b47f1c335cb5e03942d",
+      "archive": "bfloat16-prepass.program.json.xz",
+      "decompressed_sha256": "5034fb623007a12e04004d0b78f21a235ab3baaa2cd063c4537d8f0cec5f1caf",
+      "image_hashes": [
+        "6526588edf180dc5b66fe4807b07ac917717be9edde8aad0529332e514fdb520",
+        "a3c6f3437a4489d0536321309b8d6974d99170b2761905b3df41bfc35683e092",
+        "cd69b217370e7278eb24b9dabe10f3fdca3e852bc23cc74e7505aef82d156f6d"
+      ]
+    }
+  ],
+  "samples": 12,
+  "repeats": 32,
+  "windows": 3,
+  "recorder_sha256": "6a50178a2be93c687f4f8a3d44a54f7101d33c8009b04e9030f9d6bdec998b55",
+  "source_revision": "e89c4afcdeefadc5a9bda8ff991a0b6f8da6026e",
+  "source_sha256": {
+    "python/tessera/compiler/native_attention_rows.py": "3752bf273be5ec82b650f9df9171f6a8959e21f84a19312f5dace81cb4de3d20",
+    "python/tessera/compiler/resident_attention_rows.py": "4a5e409ffa89b40fc95ffd8256b6dd2c81a04742591c7b3c65379a20c1a46116",
+    "python/tessera/compiler/resident_attention.py": "e9a16f2f1a1d8dd659d94e7c88ea3108048b42a2893dc0773e162bd45ae84c14",
+    "python/tessera/compiler/native_attention_program.py": "b241da8ab35bb1c81a3e524086082decb86411ad1cf25de3ddb8a20d9e9c19b3"
+  },
+  "compiler_hashes": {
+    "TESSERA_OPT": "fa751a8207e2132029b001466c6cdad6d7e2cf44e7d4585a9d838079a83b2266",
+    "TESSERA_NVIDIA_OPT": "5b77dbcabbff00eeb4ae348a371bc4f4f9d485783f70d7ed731e96afa92d3af6"
+  },
+  "timing_scope": {
+    "host": "resident completed backward with seed snapshots and fresh gradient allocations; forward, external upload/readback and oracle excluded",
+    "dispatch": "CUDA graphs repeat exact owned native functions on preallocated buffers; separate producer and consumer; excludes allocations/copies; graph dispatch overhead included"
+  },
+  "selector_promotion": false
+}

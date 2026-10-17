@@ -2062,9 +2062,19 @@ private:
     if (!query || (!query.getElementType().isF16() && !query.getElementType().isBF16()) ||
         llvm::any_of(backward->getOperandTypes(), [](mlir::Type type) {
           auto tensor = mlir::dyn_cast<mlir::RankedTensorType>(type);
-          return !tensor || !tensor.hasStaticShape();
+          return !tensor || tensor.getEncoding() ||
+              llvm::any_of(tensor.getShape(), [](int64_t dim) {
+                return !mlir::ShapedType::isDynamic(dim) && dim <= 0;
+              });
         }))
-      return backward->emitError("row correction export requires static half checkpoint inputs");
+      return backward->emitError("row correction export requires verified half checkpoint inputs");
+    auto key = mlir::cast<mlir::RankedTensorType>(backward->getOperand(2).getType());
+    auto value = mlir::cast<mlir::RankedTensorType>(backward->getOperand(3).getType());
+    llvm::SmallVector<int64_t> symbolic{query.getDimSize(0), query.getDimSize(1),
+        key.getDimSize(1), query.getDimSize(2), key.getDimSize(2),
+        query.getDimSize(3), value.getDimSize(3)};
+    if (mlir::failed(tessera::resolveNativeAttentionShape(backward, symbolic)))
+      return mlir::failure();
     llvm::SmallVector<mlir::Type> argumentTypes;
     for (auto [index, operand] : llvm::enumerate(backward->getOperands())) {
       if (index == 4 || (consumer && seeded && index + 1 == backward->getNumOperands())) continue;

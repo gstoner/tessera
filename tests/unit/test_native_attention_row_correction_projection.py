@@ -55,15 +55,29 @@ def test_native_projection_preserves_reordered_frontend_and_requested_activity()
 
 
 def test_explicit_correction_export_does_not_change_legacy_f32_policy():
-    with pytest.raises(RuntimeError, match='static half checkpoint inputs'):
+    with pytest.raises(RuntimeError, match='verified half checkpoint inputs'):
         project(source('f32', saved=True))
 
 
-def test_correction_projection_retains_initial_static_envelope():
-    text = source('f16', saved=True).replace('tessera.arch = "sm_120"',
+@pytest.mark.parametrize('storage',['f16','bf16'])
+@pytest.mark.parametrize('role',['row_correction','backward_rows'])
+def test_bounded_projection_retains_symbolic_sequence_and_capacity(storage,role):
+    text = source(storage, saved=True,bias=True).replace('tessera.arch = "sm_120"',
         'tessera.arch = "sm_120", tessera.attention_sequence_bounds = array<i64: 7, 11>')
-    with pytest.raises(RuntimeError, match='static half checkpoint inputs'):
-        project(text)
+    tool=find_tessera_opt();assert tool is not None
+    result=run_tessera_opt(tool,text,'--tessera-autodiff-paired=checkpoint-product='+role)
+    assert 'tessera_attn.checkpoint_'+role in result
+    assert 'tessera.attention_shape_bounds = array<i64: 1, 2, 1, 7, 11, 4, 3>' in result
+    assert 'tensor<1x2x?x4x'+storage+'>' in result
+    assert 'tensor<1x2x?xf32>' in result
+    assert 'tessera.attention_ad_pair' in result
+    run_tessera_opt(tool,result,'--canonicalize')
+    missing=re.sub(r'tessera.attention_shape_bounds = array<i64: [^>]+>,? ?', '', result)
+    with pytest.raises(RuntimeError,match='explicit native shape bounds'):
+        run_tessera_opt(tool,missing,'--canonicalize')
+    wrong=result.replace('array<i64: 1, 2, 1, 7, 11, 4, 3>','array<i64: 2, 2, 1, 7, 11, 4, 3>')
+    with pytest.raises(RuntimeError,match='preserve fixed dimensions'):
+        run_tessera_opt(tool,wrong,'--canonicalize')
 
 
 @pytest.mark.parametrize('reorder', [False, True])

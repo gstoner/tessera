@@ -5,6 +5,19 @@ audit_role: reference
 
 # Five compiler slices after PR 892: completion evidence
 
+## Bounded row-owner integration candidate — 2026-10-17
+
+Source 8556ca7d8 extends native Graph/AD/Schedule/Tile/Target row correction
+through bounded VJP v4 and original frontend/public/resident capture. 55 new
+RTX5070 cases and 172 existing regressions pass. Six numerical timing rows
+separate forward, row producer, backward, complete native interval and public
+cost. Six matched inline/prepass resident profiles now retain long-row gains
+and tiny host regressions without default promotion. Final broad gates remain
+open. This does
+not close any aggregate requirement below. Evidence:
+benchmarks/baselines/sm120_bounded_row_owner_20261017/README.md.
+
+
 ## Typed bounded resident attention candidate — 2026-10-17
 
 Queued source 99e389916 closes the named FP16/BF16 GPU-generation capture

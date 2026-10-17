@@ -582,7 +582,15 @@ static int prepareAttentionVjp(
        !ok(cuMemAlloc(&state->arena,total),"allocate reverse arena") ||
        !ok(cuMemHostAlloc(&state->hostArena,total,0),"allocate reverse staging"))return 3;
     if(externalRows){
-      if(!attentionKernelParameters(state->forward,5+bias+7) ||
+      // Bounded physical bias axes add four forward-only scalar extents.
+      // Row producer/consumer always use the seven logical dimensions.
+      const size_t forwardBase=5+bias+7;
+      size_t parameterOffset=0,parameterWidth=0;
+      CUresult tail=cuFuncGetParamInfo(state->forward,forwardBase,&parameterOffset,&parameterWidth);
+      state->forwardBiasScalars=tail==CUDA_SUCCESS;
+      if((tail!=CUDA_SUCCESS && tail!=CUDA_ERROR_INVALID_VALUE) ||
+         (state->forwardBiasScalars && !bias) ||
+         !attentionKernelParameters(state->forward,forwardBase+(state->forwardBiasScalars?4:0)) ||
          !attentionKernelParameters(state->tangent,6+bias+activeCount+7))return 3;
       if(rowStage){
         if(!ok(cuModuleLoadData(&state->rowModule,rimage),"load row producer") ||
@@ -695,7 +703,7 @@ static int invokeAttentionVjp(
     const int64_t score[4]={s.dims[0],s.dims[1],s.dims[3],s.dims[4]};
     broadcast=false;for(size_t i=0;i<4;++i)broadcast|=score[i]!=s.biasShape[i];
   }
-  const size_t scalarCount=broadcast?11:7;
+  const size_t scalarCount=s.reverseRows?(s.forwardBiasScalars?11:7):(broadcast?11:7);
   void *fa[17]{};size_t arg=0;
   for(size_t i=0;i<3;++i)fa[arg++]=&s.buffers[i];
   if(s.bias)fa[arg++]=&s.buffers[6];
@@ -710,7 +718,7 @@ static int invokeAttentionVjp(
   if(s.reverseRows)ba[arg++]=&s.buffers[12];
   else if(s.reverseLseSeed)ba[arg++]=&s.buffers[11];
   for(size_t role=0;role<4;++role)if(s.bytes[7+role])ba[arg++]=&s.buffers[7+role];
-  for(size_t i=0;i<scalarCount;++i)ba[arg++]=&scalars[i];
+  for(size_t i=0;i<(s.reverseRows?7:scalarCount);++i)ba[arg++]=&scalars[i];
   // Pinned uploads and both consumers share the owner stream.
   if(!ok(cuEventRecord(s.events[0],s.stream),"start saved forward") ||
      !ok(cuLaunchKernel(s.forward,s.forwardGrid,1,1,128,1,1,0,s.stream,fa,nullptr),"launch saved forward") ||

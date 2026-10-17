@@ -17,12 +17,16 @@ struct NativeAttentionShape {
   bool dynamicSequence;
 };
 inline mlir::FailureOr<NativeAttentionShape> resolveNativeAttentionShape(
-    mlir::Operation *op, llvm::ArrayRef<int64_t> symbolic) {
+    mlir::Operation *op, llvm::ArrayRef<int64_t> symbolic,
+    mlir::DenseI64ArrayAttr explicitBounds = {}) {
   using namespace mlir;
   if (symbolic.size() != 7)
     return op->emitError("attention shape requires seven logical dimensions"), failure();
   auto mod = op->getParentOfType<ModuleOp>();
-  auto boundsRaw = mod ? mod->getAttr("tessera.attention_shape_bounds") : Attribute();
+  auto moduleBounds = mod ? mod->getAttr("tessera.attention_shape_bounds") : Attribute();
+  if (explicitBounds && moduleBounds && explicitBounds != moduleBounds)
+    return op->emitError("attention operation capacity differs from its module bounds"), failure();
+  Attribute boundsRaw = explicitBounds ? Attribute(explicitBounds) : moduleBounds;
   auto bounds = dyn_cast_or_null<DenseI64ArrayAttr>(boundsRaw);
   bool dynamicSequence = ShapedType::isDynamic(symbolic[3]) || ShapedType::isDynamic(symbolic[4]);
   if (boundsRaw && (!bounds || bounds.size() != 7))

@@ -1,3 +1,4 @@
+#include "Tessera/IR/AttentionShapeContract.h"
 #include "Tessera/IR/TileBufferViewContract.h"
 #include "Tessera/IR/RowRegionContract.h"
 #include "Tessera/IR/StaticPermutationContract.h"
@@ -2389,9 +2390,22 @@ static LogicalResult verifyAttentionRowKernel(Operation *op, bool backward) {
   if (!scale || !scale.getType().isF32() || !scale.getValue().isFinite() ||
       scale.getValue().isNegative() || scale.getValue().isZero())
     return op->emitOpError("row correction requires finite positive f32 scale");
-  if (!shape || shape.size() != 7 ||
-      llvm::any_of(shape.asArrayRef(), [](int64_t x) { return x <= 0; }) || shape[1] % shape[2])
-    return op->emitOpError("row correction requires positive B/Hq/Hkv/Sq/Sk/D/Dv and divisible query heads");
+  if (!shape || shape.size() != 7)
+    return op->emitOpError("row correction requires seven logical dimensions");
+  auto symbolicShape = shape;
+  auto bounds = op->getAttrOfType<DenseI64ArrayAttr>("shape_bounds");
+  auto policy = op->getAttrOfType<StringAttr>("shape_policy");
+  auto resolved = tessera::resolveNativeAttentionShape(op,shape.asArrayRef(),bounds);
+  if (failed(resolved)) return failure();
+  if (resolved->dynamicSequence) {
+    if (!bounds || !policy || policy.getValue() != "bounded_sequences_v1")
+      return op->emitOpError("row correction requires its explicit bounded sequence policy");
+    shape = bounds;
+  } else if (op->hasAttr("shape_bounds") || op->hasAttr("shape_policy")) {
+    return op->emitOpError("static row correction cannot carry a bounded sequence policy");
+  }
+  if (shape[1] % shape[2])
+    return op->emitOpError("row correction requires divisible query heads");
   if (!threads || !threads.getType().isInteger(64) ||
       (backward ? (threads.getInt() != 64 && threads.getInt() != 128)
                 : threads.getInt() != 32))
@@ -2445,12 +2459,20 @@ static LogicalResult verifyAttentionRowKernel(Operation *op, bool backward) {
   if (bias.getValue()) {
     if (!physicalBias || physicalBias.size() != 4)
       return op->emitOpError("row correction requires its physical bias shape");
-    SmallVector<int64_t, 4> scores{shape[0], shape[1], shape[3], shape[4]};
+    SmallVector<int64_t, 4> scores{symbolicShape[0], symbolicShape[1], symbolicShape[3], symbolicShape[4]};
     for (unsigned i = 0; i < 4; ++i)
       if (physicalBias[i] != 1 && physicalBias[i] != scores[i])
         return op->emitOpError("row correction bias shape must broadcast to logical scores");
   } else if (op->hasAttr("bias_shape")) {
     return op->emitOpError("row correction bias shape requires a bias input");
+  }
+  SmallVector<int64_t,4> physicalBiasCapacity;
+  if (physicalBias) {
+    physicalBiasCapacity.assign(physicalBias.asArrayRef().begin(),physicalBias.asArrayRef().end());
+    SmallVector<int64_t,4> logicalCapacity{shape[0],shape[1],shape[3],shape[4]};
+    for (unsigned axis=0;axis<4;++axis)
+      if (ShapedType::isDynamic(physicalBiasCapacity[axis]))
+        physicalBiasCapacity[axis]=logicalCapacity[axis];
   }
   auto spanFits = [&](int64_t width, ArrayRef<int64_t> dims) {
     for (int64_t dim : dims) {
@@ -2463,7 +2485,7 @@ static LogicalResult verifyAttentionRowKernel(Operation *op, bool backward) {
       !spanFits(2, {shape[0], shape[2], shape[4], shape[5]}) ||
       !spanFits(2, {shape[0], shape[2], shape[4], shape[6]}) ||
       !spanFits(output.getValue() == "f32" ? 4 : 2, {shape[0], shape[1], shape[3], shape[6]}) ||
-      (physicalBias && !spanFits(4, physicalBias.asArrayRef())))
+      (physicalBias && !spanFits(4, physicalBiasCapacity)))
     return op->emitOpError("row correction physical input byte span overflows i64");
   if (backward) {
     int64_t total = 0;
@@ -2481,12 +2503,12 @@ static LogicalResult verifyAttentionRowKernel(Operation *op, bool backward) {
     if (!addElements({shape[0], shape[1], shape[3], shape[5]}) ||
         !addElements({shape[0], shape[2], shape[4], shape[5]}) ||
         !addElements({shape[0], shape[2], shape[4], shape[6]}) ||
-        (physicalBias && !addElements(physicalBias.asArrayRef())))
+        (physicalBias && !addElements(physicalBiasCapacity)))
       return op->emitOpError("row-corrected backward output launch exceeds grid capacity");
   }
   for (NamedAttribute attr : op->getAttrs()) {
     StringRef name = attr.getName().strref();
-    if (name != "shape" && name != "storage" && name != "output_storage" &&
+    if (name != "shape" && name != "shape_bounds" && name != "shape_policy" && name != "storage" && name != "output_storage" &&
         name != "row_storage" && name != "accum" && name != "row_correction" &&
         name != "scale" && name != "causal" && name != "bias" &&
         name != "lse_cotangent" && name != "row_bytes" && name != "block_threads" &&

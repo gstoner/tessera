@@ -2645,15 +2645,15 @@ class JitFn:
         program = package_traced_norm_rhs(module, pipeline_name="tessera-nvidia-pipeline-sm120")
         return replace(program, argument_names=tuple(self.arg_names))
 
-    def compile_native_attention_vjp(self, *args, compiler, compact_gradients=False, compact_launch="packed_v1", compact_threads=128, sequence_bounds=None, **kwargs):
+    def compile_native_attention_vjp(self, *args, compiler, compact_gradients=False, compact_launch="packed_v1", compact_threads=128, sequence_bounds=None, row_correction=False, **kwargs):
         """Compile this isolated attention trace into a resident reverse program.
 
         Capture arguments follow the traced frontend argument order and own
         one native forward O/LSE generation. Backward returns requested Q/K/V
         and supported bias gradients in wrt order from that saved generation.
-        Explicit GPU-generation capture remains the FP32 tape API. Half-storage
-        programs use the checked synchronous public native_backward/portable
-        owner; resident gradient-result generations remain a separate extension.
+        FP16/BF16 and FP32 captures retain their declared physical storage.
+        Explicit row_correction selects the native compact half row producer
+        and consumer, including verified bounded sequence replay.
         """
         import re
         from .native_attention_program import compile_attention_vjp_program
@@ -2671,7 +2671,7 @@ class JitFn:
             module = replace(module,module_attrs={**module.module_attrs,
                 "tessera.attention_sequence_bounds": "array<i64: " + ", ".join(map(str,sequence_bounds)) + ">"})
         source = re.sub(r"=\s+(tessera\.[A-Za-z0-9_.]+)\(", r'= "\1"(', module.to_mlir())
-        return compile_attention_vjp_program(source, request.wrt_indices, compiler=compiler, compact_gradients=compact_gradients, compact_launch=compact_launch, compact_threads=compact_threads)
+        return compile_attention_vjp_program(source, request.wrt_indices, compiler=compiler, compact_gradients=compact_gradients, compact_launch=compact_launch, compact_threads=compact_threads, row_correction=row_correction)
 
     def _prepare_native_movement_binding(self, args, kwargs):
         if self.target not in {"rocm_gfx1151", "rocm_gfx1201"}:

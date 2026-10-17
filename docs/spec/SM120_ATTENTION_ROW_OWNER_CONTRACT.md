@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-16
+last_updated: 2026-10-17
 audit_role: reference
 ---
 
@@ -132,3 +132,37 @@ speedup measurements. Further integration must retain mutation checks and
 original frontend/Graph authority while avoiding redundant work.
 
 Evidence: benchmarks/baselines/sm120_native_row_graph_20261016/README.md.
+
+
+## Bounded sequence extension — portable VJP v4
+
+Sync: SM120-BOUNDED-ROW-OWNER-20261017. Only Sq/Sk may be symbolic, with
+positive capacity bounds preserving all fixed dimensions. Native Graph, Schedule
+and Tile verify this envelope before Target lowering. `row_bytes` in the sealed
+native dictionary is the maximum capacity span; a concrete native frame owns
+only its actual row extent. Role-specific query/key/bias guards remain mandatory.
+
+VJP v4 means a bounded row program; v3 continues to mean a static row program.
+Re-pinning an envelope after relabelling these schemas refuses. All member
+images, paired lineage, policies, physical bias extents and bounds contribute to
+the immutable program identity. Existing JVP schema 5/6 meanings do not change.
+
+Preparation still takes seven concrete dimensions, after checking them against
+the portable envelope. Its thread-local bounded cache may retain a distinct
+native frame for each concrete shape while reusing the same images. Native
+parameter introspection distinguishes forward seven-scalar versus eleven-scalar
+bias ABIs. Row producer/consumer have exactly seven logical scalars independently
+of the forward tail; their bias strides derive from runtime logical dimensions.
+
+`compile_native_attention_vjp(..., compact_gradients=True,
+row_correction=True, sequence_bounds=(SqCap, SkCap))` exposes the original
+frontend route explicitly. Restored programs support public native replay and
+resident `capture`; existing typed input, producer-stream, private snapshot,
+result retention, asynchronous release and close rules apply. A row buffer is
+regenerated for each reverse call. dV-only consumers omit the producer and do
+not read their row operand. No automatic schedule promotion is implied.
+
+Evidence: benchmarks/baselines/sm120_bounded_row_owner_20261017/README.md.
+Matched bounded inline/prepass A/B now records long-row gains and tiny host
+regressions; no default promotion follows. Wider masks/layouts and composed
+AD remain open.

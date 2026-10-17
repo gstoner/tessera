@@ -6,6 +6,16 @@ target: nvidia_sm120
 last_updated: 2026-10-17
 ---
 
+## SM120-BOUNDED-ROW-OWNER-20261017 — bounded native row residuals
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-BOUNDED-ROW-OWNER-20261017.
+
+Parity validated on RTX5070 for bounded native Graph/AD/Schedule/Tile/Target row correction and public/resident replay: 55 new cases and 172 existing source/device regressions pass. VJP v4 seals bounded row capacity; v3 stays static. Six correctness-gated stage/public timing rows characterize the route; default selection is unchanged. Matched bounded resident A/B now preserves bit-identical arms: Sq17/33 with Sk129 improves completed reverse by 9.3–19.5x, while tiny host calls regress. Dispatch stages are measured separately. No default promotion. Wider masks/layouts, half JVP, composed AD and aggregate closure remain open.
+
+Evidence: benchmarks/baselines/sm120_bounded_row_owner_20261017/README.md.
+
+
 ## SM120-TYPED-RESIDENT-CAPTURE-20261017 — typed bounded resident generations
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

@@ -96,12 +96,13 @@ def pair_witness(text):
     return hashlib.sha256(data).hexdigest()
 
 
-def _facts(c, backward):
+def _facts(c, backward, runtime_dims=None):
     common = {"accum", "arch", "arguments", "bias", "block_threads", "causal", "family",
               "frontend_argument_indices", "gradient_activity", "lse_cotangent", "mask_alignment",
               "output_storage", "results", "row_bytes", "row_correction", "row_storage", "scale",
               "shape", "source_ad_pair_digest", "storage", "target"}
     if c.get("bias") is True: common.add("bias_shape")
+    if "shape_bounds" in c or "shape_policy" in c: common |= {"shape_bounds", "shape_policy"}
     if backward: common |= {"bias_gradient", "gradient_output", "gradient_launch", "row_correction_usage"}
     if set(c) != common:
         raise ValueError("row native policy fields disagree")
@@ -113,13 +114,17 @@ def _facts(c, backward):
             c["accum"] != "f32" or c["row_storage"] != "f32" or
             c["mask_alignment"] != "end_aligned_v1" or c["row_correction"] != "probability_dot_v_f32_v1"):
         raise ValueError("row native storage/numerical policy disagrees")
-    shape = c["shape"]
-    if (not isinstance(shape, list) or len(shape) != 7 or
-            any(type(x) is not int or x <= 0 or x >= 2**31 for x in shape)):
+    from .attention_shape_contract import attention_dimensions, physical_attention_bias_shape
+    bounds = c.get("shape_bounds", ())
+    if (bool(bounds) != (c.get("shape_policy") == "bounded_sequences_v1") or
+            ("shape_policy" in c and c["shape_policy"] != "bounded_sequences_v1")):
+        raise ValueError("row native sequence capacity policy disagrees")
+    capacity = attention_dimensions(c["shape"], bounds)
+    shape = attention_dimensions(c["shape"], bounds, runtime_dims)
+    if any(x >= 2**31 for x in capacity):
         raise ValueError("row native dimensions disagree")
     b, hq, hkv, sq, sk, d, dv = shape
-    if hq % hkv: raise ValueError("row native GQA heads disagree")
-    if (type(c["row_bytes"]) is not int or c["row_bytes"] != b*hq*sq*4 or
+    if (type(c["row_bytes"]) is not int or c["row_bytes"] != math.prod(capacity[:2])*capacity[3]*4 or
             type(c["block_threads"]) is not int or
             c["block_threads"] not in ((64, 128) if backward else (32,))):
         raise ValueError("row native byte span/thread policy disagrees")
@@ -142,10 +147,10 @@ def _facts(c, backward):
     storages = [c["output_storage"]] + [c["storage"]]*3
     bias_shape = c.get("bias_shape", [])
     if c["bias"]:
-        if (not isinstance(bias_shape, list) or len(bias_shape) != 4 or
-                any(type(x) is not int or x not in (1, extent)
-                    for x, extent in zip(bias_shape,(b,hq,sq,sk),strict=True))):
+        if not isinstance(bias_shape, list) or len(bias_shape) != 4:
             raise ValueError("row physical bias shape disagrees")
+        physical_attention_bias_shape(c["shape"], bias_shape)
+        bias_shape = list(physical_attention_bias_shape(shape, bias_shape))
         shapes.append(tuple(bias_shape)); names.append("bias"); storages.append("f32")
     shapes.append(row); names.append("lse"); storages.append("f32")
     if backward:
@@ -190,15 +195,38 @@ def _descriptor(image, c, tile, target, backward):
     digest = hashlib.sha256(_native_dictionary(tile).encode()).hexdigest()
     buffers = tuple(BufferBinding(i,name,"input" if i < len(names) else "output",_DTYPE[t],len(shape),"row_major",4 if t == "f32" else 2)
                     for i,(name,shape,t) in enumerate(zip(names+outputs,shapes+out_shapes,types+out_types,strict=True)))
-    guards = tuple(ShapeGuard(name,axis,"eq",extent) for name,shape in zip(names+outputs,shapes+out_shapes,strict=True)
-                   for axis,extent in enumerate(shape))
-    b,hq,hkv,sq,sk,d,dv = c["shape"]
+    bounds = c.get("shape_bounds", ())
+    symbolic = c if not bounds else {**c, "shape": list(bounds)}
+    # The compiler owns role order and the query/key sequence relationships.
+    # Preserve physical extent-one broadcast axes when deriving guards.
+    if bounds:
+        from .attention_shape_contract import DYNAMIC_DIM
+        q, k = c["shape"][3:5]
+        sq_symbol = DYNAMIC_DIM if q == DYNAMIC_DIM else q
+        sk_symbol = DYNAMIC_DIM if k == DYNAMIC_DIM else k
+        b,hq,hkv,_,_,d,dv = bounds
+        row = (b,hq,sq_symbol)
+        role_shapes = {"dO": (b,hq,sq_symbol,dv), "q": (b,hq,sq_symbol,d),
+            "k": (b,hkv,sk_symbol,d), "v": (b,hkv,sk_symbol,dv),
+            "lse": row, "row_seed": row, "row_correction": row,
+            "dq": (b,hq,sq_symbol,d), "dk": (b,hkv,sk_symbol,d),
+            "dv": (b,hkv,sk_symbol,dv), "bias": tuple(c.get("bias_shape", ())),
+            "dbias": tuple(c.get("bias_shape", ()))}
+        symbolic_shapes = [role_shapes[name] for name in names+outputs]
+        guards = tuple(guard for name, shape, cap in zip(names+outputs,symbolic_shapes,shapes+out_shapes,strict=True)
+            for axis,(extent,limit) in enumerate(zip(shape,cap,strict=True))
+            for guard in ((ShapeGuard(name,axis,"min",1), ShapeGuard(name,axis,"max",limit))
+                          if extent == DYNAMIC_DIM else (ShapeGuard(name,axis,"eq",extent),)))
+    else:
+        guards = tuple(ShapeGuard(name,axis,"eq",extent) for name,shape in zip(names+outputs,shapes+out_shapes,strict=True)
+                       for axis,extent in enumerate(shape))
+    b,hq,hkv,sq,sk,d,dv = symbolic["shape"]
     count = (sum(math.prod(x) for x in out_shapes) if c.get("gradient_launch") != "logical_v1" else
-             b*hq*sq*d+b*hkv*sk*(d+dv)+(math.prod(c["bias_shape"]) if c["bias"] else 0)) if backward else b*hq*sq
+             b*hq*sq*d+b*hkv*sk*(d+dv)+(math.prod(shapes[names.index("bias")]) if c["bias"] else 0)) if backward else b*hq*sq
     threads = c["block_threads"]
     if count > (2**31-1)*threads: raise ValueError("row launch grid exceeds native capacity")
     identity = _checkpoint_identity(tuple(c["shape"]),c["scale"],c["causal"],bias=c["bias"],
-        bias_shape=tuple(c.get("bias_shape",())),storage=c["storage"],output_storage=c["output_storage"])
+        bias_shape=tuple(c.get("bias_shape",())),shape_bounds=tuple(c.get("shape_bounds",())),storage=c["storage"],output_storage=c["output_storage"])
     return LaunchDescriptor(image_digest=image.image_digest,entry_symbol=_entry(c,digest,backward),
         abi_id=BACKWARD_ROWS_ABI if backward else ROW_ABI,buffers=buffers,
         scalars=tuple(ScalarArgument(len(buffers)+i,name,"int64") for i,name in enumerate(_SCALARS)),
@@ -211,6 +239,7 @@ def _descriptor(image, c, tile, target, backward):
             gradient_activity=c["gradient_activity"],physical_gradient_roles=list(roles),bias=c["bias"],
             bias_gradient=c["bias"] if backward else False,lse_cotangent=c["lse_cotangent"],
             storage=c["storage"],output=c["output_storage"],shape=c["shape"],scale=c["scale"],causal=c["causal"],
+            **({"shape_bounds": list(bounds), "shape_policy": c["shape_policy"]} if bounds else {}),
             bias_shape=c.get("bias_shape",[]),checkpoint_role="backward_rows_load" if backward else "row_correction_save"))
 
 
@@ -281,6 +310,14 @@ class NativeAttentionRowsProgram:
     def validate(self):
         validate_program(self)
 
+    def capture(self, *args, bias=None, asynchronous=False):
+        from .native_attention_program import capture_attention_roles,AutomaticAttentionVJPFrame
+        from .resident_attention_rows import ResidentAttentionRowsTape
+        roles=capture_attention_roles(self,args,bias)
+        return AutomaticAttentionVJPFrame(ResidentAttentionRowsTape(
+            self,*roles[:3],bias=roles[3] if len(roles)==4 else None,
+            asynchronous=asynchronous),self.active)
+
     @property
     def program_digest(self):
         from .native_attention_vjp_artifact import canonical,payload
@@ -291,7 +328,7 @@ class NativeAttentionRowsProgram:
         return to_json(self)
 
 
-def validate_program(program):
+def validate_program(program, *, runtime_dims=None):
     from .typed_attention_backward import _verify_package
     from .typed_attention_checkpoint import validate_typed_saved_lse_descriptor
     from .nvidia_native import _checkpoint_identity
@@ -308,6 +345,9 @@ def validate_program(program):
     if any(fingerprints(member.image)!=fingerprints(fimage) for member in program.members):
         raise ValueError("row program member compiler/toolchain identity differs")
     f=forward.provenance
+    if (tuple(f.get("shape_bounds", ())) != tuple(c.get("shape_bounds", ())) or
+            f.get("shape_policy") != c.get("shape_policy")):
+        raise ValueError("row program forward/consumer sequence capacity differs")
     b,hq,hkv,sq,sk,d,dv=c["shape"]
     physical_bias=list(f.get("bias_shape",())) or ([b,hq,sq,sk] if c["bias"] else [])
     for key,value in (("shape",list(f["shape"])),("storage",storage),("output_storage",output),
@@ -333,11 +373,14 @@ def validate_program(program):
             if key not in ("family","arguments","results","block_threads") and _canonical(producer[key])!=_canonical(c.get(key)):
                 raise ValueError("row program producer/consumer policy differs: "+key)
     identity=_checkpoint_identity(tuple(c["shape"]),c["scale"],c["causal"],bias=c["bias"],
-        bias_shape=tuple(c.get("bias_shape",())),storage=storage,output_storage=output)
+        bias_shape=tuple(c.get("bias_shape",())),shape_bounds=tuple(c.get("shape_bounds",())),storage=storage,output_storage=output)
     if program.pair.contract_digest!=identity or f["checkpoint_contract"]!=identity:
         raise ValueError("row program checkpoint identity differs")
-    b,hq,hkv,sq,sk,d,dv=c["shape"]
-    return tuple(c["shape"]),((b,hq,sq,d),(b,hkv,sk,d),(b,hkv,sk,dv),(b,hq,sq,dv),(b,hq,sq))
+    from .attention_shape_contract import attention_dimensions
+    dims=attention_dimensions(c["shape"],c.get("shape_bounds",()),runtime_dims)
+    _facts(c,True,runtime_dims)
+    b,hq,hkv,sq,sk,d,dv=dims
+    return dims,((b,hq,sq,d),(b,hkv,sk,d),(b,hkv,sk,dv),(b,hq,sq,dv),(b,hq,sq))
 
 
 def compile_program(source, active, *, threads=128, launch="packed_v1"):
@@ -350,7 +393,7 @@ def compile_program(source, active, *, threads=128, launch="packed_v1"):
     physical=tuple(mapping.index(x) for x in active)
     correction=None if set(physical)=={2} else package_member(source,backward=False)
     identity=_checkpoint_identity(tuple(c["shape"]),c["scale"],c["causal"],bias=c["bias"],
-        bias_shape=tuple(c.get("bias_shape",())),storage=c["storage"],output_storage=c["output_storage"])
+        bias_shape=tuple(c.get("bias_shape",())),shape_bounds=tuple(c.get("shape_bounds",())),storage=c["storage"],output_storage=c["output_storage"])
     result=NativeAttentionRowsProgram(AttentionCheckpointPair(forward,backward,identity),correction,physical,mapping)
     validate_program(result)
     return result

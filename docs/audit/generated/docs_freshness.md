@@ -48,7 +48,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `ROCM_FOLDED_INPUT_VIEWS.md` | - | 2026-10-16 | 1 | ✓ |
 | `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 91 | ✓ |
 | `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 148 | ✓ |
-| `SM120_ATTENTION_ROW_OWNER_CONTRACT.md` | - | 2026-10-16 | 1 | ✓ |
+| `SM120_ATTENTION_ROW_OWNER_CONTRACT.md` | - | 2026-10-17 | 0 | ✓ |
 | `SM120_SAVED_LSE_STORAGE_CONTRACT.md` | - | 2026-10-16 | 1 | ✓ |
 | `SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md` | - | 2026-10-17 | 0 | ✓ |
 | `TARGET_IR_SPEC.md` | Normative | 2026-08-24 | 54 | ✓ |

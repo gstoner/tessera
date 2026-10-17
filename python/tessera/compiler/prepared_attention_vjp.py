@@ -8,12 +8,12 @@ import threading
 
 _PROCESS = os.getpid()
 _CACHE_LIMIT = 24
-_cache: OrderedDict[tuple[threading.Thread, str, str], PreparedAttentionVJP] = OrderedDict()
+_cache: OrderedDict[tuple[threading.Thread, str, str, tuple[int, ...]], PreparedAttentionVJP] = OrderedDict()
 _lock = threading.RLock()
 
 
 class PreparedAttentionVJP:
-    def __init__(self, metadata):
+    def __init__(self, metadata, *, runtime_dims=None):
         from .native_attention_program import NativeAttentionVJPProgram
         from .typed_attention_backward import vjp_checkpoint_shapes as checkpoint_shapes
         self.identity = (metadata["program_digest"], metadata["program_json"])
@@ -23,13 +23,16 @@ class PreparedAttentionVJP:
         self.row_program=getattr(self.program,"row_program",False)
         if self.row_program:
             from .native_attention_rows import validate_program
-            dims,physical=validate_program(self.program)
+            dims,physical=validate_program(self.program,runtime_dims=runtime_dims)
         else:
             dims, physical = checkpoint_shapes(self.program.pair)
         self.dims = dims
         b, hq, _, sq, sk, _, _ = dims
         provenance = self.program.pair.forward.descriptor.provenance
-        self.bias_shape = (tuple(provenance.get("bias_shape", ())) or (b, hq, sq, sk)) if provenance.get("bias") else None
+        self.shape_bounds = tuple(provenance.get("shape_bounds", ()))
+        self.symbolic_dims = tuple(provenance["shape"])
+        from .attention_shape_contract import physical_attention_bias_shape
+        self.bias_shape = physical_attention_bias_shape(dims, provenance.get("bias_shape", ())) if provenance.get("bias") else None
         physical_inputs = (*physical[:3], *((self.bias_shape,) if self.bias_shape else ()))
         frontend = [None] * len(physical_inputs)
         for role, index in enumerate(self.program.input_indices):
@@ -57,6 +60,27 @@ class PreparedAttentionVJP:
         self.lock = threading.RLock()
         self.lib: ct.CDLL | None = None
         self.last_device_ms = None
+
+    def runtime_dimensions(self, args):
+        """Infer only logical extents; checked invoke still verifies every role."""
+        if not self.row_program or not self.shape_bounds:
+            return self.dims
+        if len(args) != len(self.shapes):
+            raise ValueError("attention VJP launch arity differs from native contract")
+        if any(hasattr(value, "__cuda_array_interface__") for value in args):
+            if not all(hasattr(value, "__cuda_array_interface__") for value in args):
+                raise ValueError("attention VJP requires all resident roots or all host roots")
+            from .resident_nvidia_tensor import cuda_frontend_specs
+            shapes = [shape for shape, _ in cuda_frontend_specs(args, ranks=(3,4))]
+        else:
+            import numpy as np
+            shapes = [np.asarray(value).shape for value in args]
+        q,k,v=(shapes[self.program.input_indices[i]] for i in range(3))
+        if any(len(shape) != 4 for shape in (q,k,v)):
+            raise ValueError("attention VJP Q/K/V must have rank four")
+        from .attention_shape_contract import attention_dimensions
+        return attention_dimensions(self.symbolic_dims,self.shape_bounds,
+            (q[0],q[1],k[1],q[2],k[2],q[3],v[3]))
 
     def _library(self) -> ct.CDLL:
         lib = self.lib
@@ -205,14 +229,14 @@ class PreparedAttentionVJP:
             self.closed = True
 
 
-def prepared(metadata):
+def prepared(metadata, *, runtime_dims=None):
     if os.getpid() != _PROCESS:
         raise ValueError("prepared reverse service cannot cross fork")
-    key = (threading.current_thread(), metadata["program_digest"], metadata["program_json"])
+    key = (threading.current_thread(), metadata["program_digest"], metadata["program_json"], tuple(runtime_dims or ()))
     with _lock:
         owner = _cache.get(key)
         if owner is None or owner.closed:
-            owner = PreparedAttentionVJP(metadata)
+            owner = PreparedAttentionVJP(metadata, runtime_dims=runtime_dims)
             _cache[key] = owner
         _cache.move_to_end(key)
         while len(_cache) > _CACHE_LIMIT:
@@ -231,7 +255,11 @@ def clear_prepared():
 
 
 def execute(metadata, args):
-    return prepared(metadata).invoke(metadata, args)
+    owner = prepared(metadata)
+    dims = owner.runtime_dimensions(args)
+    if dims != owner.dims:
+        owner = prepared(metadata, runtime_dims=dims)
+    return owner.invoke(metadata, args)
 
 
 def _forget_inherited():

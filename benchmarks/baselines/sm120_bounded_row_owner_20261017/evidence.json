@@ -1,0 +1,105 @@
+{
+  "measured_source": "8556ca7d8dc70d8a3b4a9a91b563d2768debe26d",
+  "native_compiler_increment": "6b734cd19",
+  "log_sha256": {
+    "device-kernels-first.txt": "0473d6b04632118df4a88208198add32b60037ef9ad411e812fbe8d4c4857aee",
+    "bounded-package-owner.txt": "7864967f9fffe19b8d6e416dfeacc88abb43c42802a6cbe5760aadb6e41093e9",
+    "device-public-capture.txt": "1ec306072a38441f898298ae5a95b079636d124345997e5c06ca7d3412e778c9",
+    "device-pending-streams.txt": "2be3efc3c4a0d7b116187a9b0051ae7d1a583700573bbd6d3113efd11e88fd8a",
+    "device-original-frontend.txt": "93dac5030caad1f94c01aa52a03bb8cd37784c4033cd8232b461e62b2ebaf8e8",
+    "device-fresh-process.txt": "af8e01c0c270a4cd4f3ad4d76360886b74c826e1abab3a5271f6c38b16a4aa32",
+    "device-static-typed-regression.txt": "86fa9af1fbce8e589561b9d6a54459a4d72458aed2847df6d6a2f3f665cf8cb0",
+    "static-target-equivalence.json": "fe4906502651a89af55410b133b3d9e53c1219b794e5775526df214924258e9f",
+    "build-provider.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mypy-package.txt": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8",
+    "mypy-capture.txt": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8",
+    "mypy-final-repaired.txt": "050c52a2b0c61e8b681ef5c485e0bc03340b8d55148e0acef27d744c8be42033",
+    "package-docs-final.txt": "e90528f91a4a40ebfc9c9dc8060da58432ff05264fc968644d99c199077ce882",
+    "generated_docs.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "device-64-geometry.txt": "67f3aaea24bdbffdce1ec618a3cd8e597f952a87402d7328d06f3acf35632a7d",
+    "x86-naming-repair.txt": "62d83dec615d03cbb8db1e96aa342cd1f70d6df760b972b9d809bb4a9e521cae",
+    "post-ab-docs-ratchet.txt": "6cda58080c7ba266cfbd784485d53f22cf85a82cd64ead85fe00a05956406ca7",
+    "generated-post-ab-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "full-unit-repaired.txt": "cf590322b7c2dce7d57cd6645ef22f69a2f19bdbc32ccc5684328e2930f00900",
+    "device-full-config.txt": "ed571c89aa784acf36f3120818b57eb237e9d0cc94a5a1944ae3579224b31a5d",
+    "post-x86-image-equivalence.json": "1cc001a5a300984f680e77ab9cf5fe608c7901dda1a743653176c263dc311d30",
+    "generated-current-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "final-validation.json": "b7570e47c16c45ef1a979fed95b36c26617ae97ecd0b2643542d63b3908635de",
+    "final-mypy-ratchet.txt": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "final-routing-docs.txt": "2b2597c9903af36e0062e40ad6f39562b2a6212788208632763e381ac3459907",
+    "final-generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d"
+  },
+  "validation_scope": "55 new public/capture device cases = 37 initial + 4 pending-stream + 8 frontend + 2 fresh-process + 4 packed/logical64; 172 existing regressions; portable/prepared70; raw native kernels16; overlapping selections not summed",
+  "publication": "Ready for PR; exact-head public CI and review remain required before merge",
+  "post_measurement_recorder_change": {
+    "commit": "70e8e88c2",
+    "scope": "type annotation, Any import and explicit spelling of the same six reference arguments; compiler/runtime/image files unchanged"
+  },
+  "validation_updates": {
+    "typing": "zero errors across seven files",
+    "routing_and_package_audit": "89 passed",
+    "broad_host_unit": {
+      "terminal": true,
+      "state": "passed",
+      "result": "27867 passed,5902 skipped,11 warnings in432.42s",
+      "log": "full-unit-repaired.txt",
+      "tested_source": "13307df372f707088218174b32d0910b84ec31bc"
+    },
+    "generated_docs": {
+      "result": "33 generated documents in sync after A/B and geometry additions",
+      "terminal": true,
+      "log": "generated-post-ab-check.txt"
+    },
+    "new_64_geometry": "4 passed, 51 deselected in 6.04s",
+    "x86_recorder_repair": {
+      "result": "561 passed, 514 skipped in 15.38s",
+      "compiler_configuration": "TESSERA_BUILD_X86_BACKEND=ON",
+      "scope": "all three original failed file families, including existing owning hardware skips; not exact x86 device proof",
+      "log": "x86-naming-repair.txt"
+    },
+    "post_ab_routing_audit": "20 passed in 10.44s",
+    "owning_final_tools": "55 passed in63.06s",
+    "measured_image_equivalence": "10/10 Target/PTX members byte-identical"
+  },
+  "initial_broad_unit": {
+    "result": "517 failed, 27347 passed, 5905 skipped, 11 warnings in 702.73s",
+    "failure_families": {
+      "x86_native_configuration": 516,
+      "recorder_registration": 1
+    },
+    "compiler_configuration": "TESSERA_BUILD_X86_BACKEND=OFF, verified in CMakeCache.txt",
+    "recorder_note": "naming test ran before packet README was tracked; README now also names full recorder path explicitly; focused gate passes",
+    "log_archive": "broad-unit-initial.txt.xz",
+    "decompressed_sha256": "c13fbeba7da852eebcf76d85aa7f3f3bbcf9afa0513ec2e72fb0b0cda7f95980",
+    "aggregate_green": false
+  },
+  "rebase": {
+    "base_main": "c8936170545226f274c861be0f15d5d465988d16",
+    "tested_source_equivalence": "5459 files, zero differences",
+    "duplicate_fixture": "byte-identical to merged PR975; reconciled before rebase"
+  },
+  "resident_ab": {
+    "packet": "resident_ab/timings.json",
+    "cases": 6,
+    "samples_per_arm": 12,
+    "dispatch_repeats": 32,
+    "event_windows": 3,
+    "correctness": "independent FP64 and bit-identical gradient arms before/after",
+    "selector_promotion": false
+  },
+  "previous_generated_docs": {
+    "result": "33 generated documents in sync",
+    "log": "generated_docs.txt",
+    "terminal": true
+  },
+  "final_local_gates": {
+    "mypy": "0 errors, baseline0",
+    "ruff": "all Python source passes",
+    "routing_audit_naming": "20 passed",
+    "generated_documents": "33 in sync",
+    "broad_unit": "27867 passed,5902 skipped,11 warnings",
+    "owning_device_final_tools": "55 passed",
+    "post_rebuild_images": "10/10 identical Target/PTX members",
+    "graph": "offline AST update complete"
+  }
+}

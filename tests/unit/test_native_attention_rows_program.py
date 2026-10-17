@@ -19,9 +19,12 @@ pytestmark=pytest.mark.compiler_route
 @pytest.fixture
 def package(monkeypatch):
     monkeypatch.setattr(native,"_compile_tile_ir",lambda text,entry:(text,"// PTX",{},"compiler","tools",(),"cold"))
-    def create(storage="f16",wide=False,bias=True,seeded=True,active=None,threads=128):
+    def create(storage="f16",wide=False,bias=True,seeded=True,active=None,threads=128,bounded=False):
         active=active or tuple(range(3+int(bias)))
         text=source(storage,bias=bias,saved=seeded,output="f32" if wide else storage)
+        if bounded:
+            text=text.replace('tessera.arch = "sm_120"',
+                'tessera.arch = "sm_120", tessera.attention_sequence_bounds = array<i64: 9, 11>')
         text=text.replace('tessera.autodiff = "reverse"',
             'tessera.autodiff = "reverse", tessera.autodiff.wrt_indices = ['+', '.join(map(str,active))+']')
         tool=find_tessera_opt();assert tool is not None

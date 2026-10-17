@@ -1,0 +1,32 @@
+{
+  "tested_source": "13307df372f707088218174b32d0910b84ec31bc",
+  "host": "Super-Bear WSL",
+  "broad_unit": {
+    "passed": 27867,
+    "skipped": 5902,
+    "warnings": 11,
+    "failed": 0,
+    "seconds": 432.42,
+    "hardware_markers_excluded": [
+      "hardware_apple_gpu",
+      "hardware_nvidia",
+      "hardware_rocm",
+      "hardware_amx",
+      "hardware_avx512"
+    ]
+  },
+  "owning_device": {
+    "device": "RTX5070 / SM120",
+    "passed": 55,
+    "seconds": 63.06,
+    "compiler_pair": "final x86-enabled core/NVIDIA tools"
+  },
+  "target_ptx_comparison": "10/10 measured members byte-identical with final compiler configuration",
+  "initial_broad_failure_retained": true,
+  "source_code_changes_after_test": "none; final publication changes are evidence/documents only",
+  "tools": {
+    "tessera-opt": "131561d4d963b157240ba6fbc79dae6f7b045a5f20a5f4161d7f1a5bca65737a",
+    "tessera-nvidia-opt": "5b77dbcabbff00eeb4ae348a371bc4f4f9d485783f70d7ed731e96afa92d3af6",
+    "native_provider": "f37839ce1543e103ada39e4e5014a2f77f0c11ad28d0035fd19edf599aaa6979"
+  }
+}

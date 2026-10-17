@@ -368,3 +368,15 @@ keeps CUDA kernel events separate from completed public host/resident calls,
 and saves standalone packages for numerical replay without compiler subprocesses.
 The named contract and scope are in
 `docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md`.
+
+
+### Native parent-view public recorder
+
+- `benchmarks/rocm/record_native_parent_view.py` records checked gfx1201 public
+  parent-view activation, launch-loop windows, captured-member windows and
+  completed public-call wall time. Its packet and boundaries are documented in
+  [native_parent_view_public_20261017](baselines/native_parent_view_public_20261017/README.md).
+- `benchmarks/baselines/native_parent_view_public_20261017/record_native_parent_view_initial.py`
+  is the frozen `record_native_parent_view_initial` recorder for the initial
+  launch-loop-only packet in that directory. It preserves exact historical
+  recorder bytes; use `record_native_parent_view` for current reproduction.

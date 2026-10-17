@@ -2590,6 +2590,29 @@ class _OpExtractor(ast.NodeVisitor):
             inferred_type=result_type,
         )
 
+    def _attribute_literal(self, node: ast.expr, depth: int = 0) -> Any:
+        """Compose safe captured constants; never execute calls or tensor expressions."""
+        from copy import deepcopy
+        if depth > 16:
+            raise ValueError("captured attribute nesting exceeds the literal envelope")
+        try:
+            return ast.literal_eval(node)
+        except (ValueError, TypeError, SyntaxError):
+            pass
+        if isinstance(node, ast.Name) and node.id in self._const_env and node.id not in self._name_alias:
+            return deepcopy(self._const_env[node.id])
+        if isinstance(node, (ast.List, ast.Tuple)):
+            values = [self._attribute_literal(item, depth + 1) for item in node.elts]
+            return tuple(values) if isinstance(node, ast.Tuple) else values
+        if isinstance(node, ast.Dict) and all(key is not None for key in node.keys):
+            return {self._attribute_literal(key, depth + 1): self._attribute_literal(value, depth + 1)
+                    for key, value in zip(node.keys, node.values, strict=True) if key is not None}
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            value = self._attribute_literal(node.operand, depth + 1)
+            if type(value) in (int, float):
+                return -value if isinstance(node.op, ast.USub) else value
+        raise ValueError("attribute requires literal values or captured literal names")
+
     def _try_map_call(self, call: ast.Call) -> Optional[IROp]:
         name = self._resolve_name(call.func)
         if not name:
@@ -2632,11 +2655,9 @@ class _OpExtractor(ast.NodeVisitor):
                 continue
             literal: Any = None
             try:
-                literal = ast.literal_eval(arg)
+                literal = self._attribute_literal(arg)
             except (ValueError, TypeError, SyntaxError):
-                # a positional scalar passed by name (closure / global constant)
-                if isinstance(arg, ast.Name) and arg.id in self._const_env:
-                    literal = self._const_env[arg.id]
+                pass
             if literal is not None and scalar_seen < len(attr_params):
                 kwargs[attr_params[scalar_seen]] = literal
                 scalar_seen += 1
@@ -2655,9 +2676,9 @@ class _OpExtractor(ast.NodeVisitor):
             if kw.arg is None:
                 continue
             try:
-                kwargs[kw.arg] = ast.literal_eval(kw.value)
+                kwargs[kw.arg] = self._attribute_literal(kw.value)
                 continue
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, SyntaxError):
                 pass
             value_name = self._emit_expr(kw.value)
             # A keyword that binds a DEFINED SSA value is a tensor operand, not

@@ -1,3 +1,4 @@
+#include "ParentViewProgramExport.h"
 #include "Tessera/IR/RowRegionContract.h"
 #include "Tessera/IR/TileBufferViewContract.h"
 #include "ROCMFoldedW4A8Contract.h"
@@ -2770,7 +2771,8 @@ struct LowerTileToROCMPass
       if (failed(tessera::tile::lowerScalarBufferAccesses(fn))) return signalPassFailure();
       target->setAttr("body_hash",b.getStringAttr(tessera::row_region::digest(fn)));
       kernel.erase();
-      if (failed(tessera::row_region::verifyGateUpKernel(target))) return signalPassFailure();
+      if (failed(tessera::row_region::verifyGateUpKernel(target)) ||
+          failed(exportParentViewProgram(getOperation(),target))) return signalPassFailure();
       return;
     }
     if (failed(lowerROCMResultPermutations(getOperation(), arch)))

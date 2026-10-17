@@ -639,7 +639,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera", "tile", "tessera_rocm", "gpu", "llvm", "rocdl",
             "func", "scf", "arith", "memref", "math",
         ),
-        targets=("rocm_gfx1151",),
+        targets=("rocm_gfx1151", "rocm_gfx1201"),
         family_plugins=(
             ("algebra_clifford", ("generate-rocm-clifford-kernel",)),
             ("attention", ("generate-wmma-flash-attn-kernel",)),
@@ -674,6 +674,8 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             ("optimizer", ("generate-rocm-optimizer-kernel",)),
             ("ordering_sort", ("generate-rocm-sort-kernel",)),
             ("paged_kv", ("generate-rocm-paged-kv-read-kernel",)),
+            # This profile carries numerical SSA rather than a generator directive.
+            ("parent_view", ("lower-tile-to-rocm", "lower-tessera-target-to-rocdl")),
             ("position_alibi", ("generate-rocm-alibi-kernel",)),
             ("position_rope", ("generate-rocm-rope-kernel",)),
             ("quant_dequant_gemm", ("generate-rocm-dequant-gemm-kernel",)),

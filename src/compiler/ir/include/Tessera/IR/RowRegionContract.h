@@ -45,7 +45,7 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
       !name || name.getValue().empty() || !rows || rows.getInt() <= 0 || rows.getInt() > INT32_MAX ||
       !columns || columns.getInt() <= 0 || columns.getInt() > INT32_MAX / 2 ||
       rows.getInt() > INT64_MAX / 8 / columns.getInt() ||
-      rows.getInt() * columns.getInt() > int64_t(INT32_MAX) * 256 ||
+      rows.getInt() * columns.getInt() > (int64_t(1) << 31) / 12 ||
       !storage || !storage.getValue().isF32() || !threads || threads.getInt() != 256 ||
       !hex(op->getAttr("body_hash")) || !hex(op->getAttr("source_hash")) ||
       !hex(op->getAttr("artifact_hash")) || (target && !hex(op->getAttr("tile_body_hash"))) ||

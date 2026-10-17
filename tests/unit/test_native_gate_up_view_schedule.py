@@ -127,3 +127,44 @@ def test_rocm_rejects_relabelled_schema_at_target_boundary():
     assert changed != tile
     with pytest.raises(RuntimeError):
         run_tessera_opt(tool(), changed, "--lower-tile-to-rocm=arch=gfx1201")
+
+
+def test_parent_view_canonical_package_preserves_native_frame():
+    from tessera.compiler.rocm_parent_view_native import (
+        ParentViewRecipe, PARENT_VIEW_ABI, _frame, package_parent_view_recipe,
+    )
+    graph = source(3, 17)
+    schedule = run_tessera_opt(tool(), graph, "--tessera-graph-to-schedule")
+    tile = run_tessera_opt(tool(), schedule, "--tessera-schedule-to-tile")
+    package = package_parent_view_recipe(
+        ParentViewRecipe(graph, schedule, tile), pipeline_name="tessera-rocm-executable")
+    assert package.image.payload.startswith(b"\x7fELF")
+    assert package.image.architecture == "gfx1201"
+    assert package.descriptor.abi_id == PARENT_VIEW_ABI
+    program, member = _frame(package.target_ir)
+    assert _frame(package.backend_ir) == (program, member)
+    assert member["bindings"] == ["parent", "out"]
+    assert package.descriptor.entry_symbol == member["entry"]
+    assert "gpu.binary" in package.backend_ir
+
+
+def test_parent_view_frontend_compiles_through_driver_without_mutating_graph():
+    from tessera.compiler.driver import compile_graph_module
+    from tessera.compiler.rocm_parent_view_native import PARENT_VIEW_ABI
+
+    def original(parent):
+        left = ts.ops.slice(parent, [0, 0], [3, 17])
+        right = ts.ops.slice(parent, [0, 17], [3, 17])
+        return ts.ops.silu_mul(left, right)
+
+    module = to_graph_ir_module(
+        trace(original, np.ones((3, 34), np.float32), arg_names=["parent"]),
+        name="gate_up", target="rocm_gfx1201")
+    before = module.to_mlir(target="rocm_gfx1201", canonical=True)
+    bundle = compile_graph_module(module, source_origin="native-parent-view-test",
+        target="rocm_gfx1201", options={"package_native": True})
+    assert module.to_mlir(target="rocm_gfx1201", canonical=True) == before
+    assert bundle.native_image.payload.startswith(b"\x7fELF")
+    assert bundle.launch_descriptor.abi_id == PARENT_VIEW_ABI
+    assert bundle.request.pipeline_name == bundle.native_image.pipeline_name == "tessera-rocm-executable"
+    assert tuple(item.name for item in bundle.launch_descriptor.buffers) == ("parent", "v2")

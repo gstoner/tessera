@@ -1,0 +1,8 @@
+.............                                                            [100%]
+=============================== warnings summary ===============================
+tests/device/rocm/test_native_parent_view_jit.py::test_public_parent_view_jit_and_portable_replay[literal-False-3-17]
+  /home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_native.py:1619: RuntimeWarning: /home/angstorms/scratch/rocm-native-gate-up-views-20261016/compiler/tools/tessera-opt/tessera-opt is older than 5 generator source(s) -- newest src/compiler/programming_model/lib/PMPasses.cpp. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).
+    warn_if_generator_is_stale(tool)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+13 passed, 1 warning in 5.37s

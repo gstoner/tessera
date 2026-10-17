@@ -1,0 +1,68 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_uuid": "32386439653765666266326566373136",
+  "runtime_library_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+  "timing_boundary": "HIP-event windows include device dispatch; warm public wall time includes validation, owner preparation, upload, invocation, completion and readback. Cold wall time also includes compiler work; process/compiler caches are not cleared.",
+  "scope": "static f32 parent-view activation only; no resident matmul composition, low-storage model-quality, speedup or default-route promotion claim",
+  "rows": [
+    {
+      "shape_m_i": [
+        3,
+        17
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 9.5367431640625e-07,
+      "image_digest": "e8dfedeb2513dbf928f4887cc231ce9f031144d9f3d23ce30576e827e8ed149d",
+      "abi": "tessera.rocm.parent_view.parent_o_n.f32.v1",
+      "compiler_fingerprint": "2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000",
+      "cold_public_call_ms": 584.834522,
+      "device_repeats": 8192,
+      "device_launch_window_samples_ms": [
+        0.0018901124130934477,
+        0.0017594569362699986,
+        0.0017624758183956146,
+        0.001776738790795207,
+        0.0018064850009977818
+      ],
+      "device_launch_window_median_ms": 0.001776738790795207,
+      "warm_completed_public_samples_ms": [
+        1.28079,
+        1.222179,
+        1.13324,
+        1.115496,
+        1.164639
+      ],
+      "warm_completed_public_median_ms": 1.164639
+    },
+    {
+      "shape_m_i": [
+        256,
+        12288
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 3.814697265625e-06,
+      "image_digest": "6e52e00e68ad0c3bd644c91bd0e77d62c8f4fd36e6de02ab054ab9b77aa63277",
+      "abi": "tessera.rocm.parent_view.parent_o_n.f32.v1",
+      "compiler_fingerprint": "2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000",
+      "cold_public_call_ms": 229.711462,
+      "device_repeats": 8192,
+      "device_launch_window_samples_ms": [
+        0.03374473750591278,
+        0.03444613143801689,
+        0.03446441888809204,
+        0.03449217602610588,
+        0.034679707139730453
+      ],
+      "device_launch_window_median_ms": 0.03446441888809204,
+      "warm_completed_public_samples_ms": [
+        9.371559,
+        13.119732,
+        12.825296,
+        12.982295,
+        12.935285
+      ],
+      "warm_completed_public_median_ms": 12.935285
+    }
+  ]
+}

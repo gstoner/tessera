@@ -34,7 +34,7 @@ inline FailureOr<Source> validateSource(ModuleOp source) {
     if (type.getDimSize(0) > INT64_MAX / 4 / type.getDimSize(1)) return failure();
   }
   if (outputType.getDimSize(0) > INT64_MAX / outputType.getDimSize(1)) return failure();
-  if (outputType.getDimSize(0) * outputType.getDimSize(1) > int64_t(INT32_MAX) * 256) return failure();
+  if (outputType.getDimSize(0) * outputType.getDimSize(1) > (int64_t(1) << 31) / 12) return failure();
   std::string inputOrder = "row_major";
   if (auto attributes = graph.getArgAttrDict(0))
     for (NamedAttribute attr : attributes) {
@@ -172,7 +172,14 @@ inline FailureOr<func::FuncOp> graphRoot(ModuleOp module) {
   for (NamedAttribute attr : module->getAttrs()) {
     StringRef n = attr.getName().strref();
     if (n != "tessera.native.gate_up_view" && n != "tessera.target" && n != "tessera.arch" &&
-        n != "tessera.ir.version" && n != "tessera.frontend.authority") return reject();
+        n != "tessera.ir.version" && n != "tessera.frontend.authority" &&
+        n != "tessera.launch_bindings") return reject();
+  }
+  if (auto raw = module->getAttr("tessera.launch_bindings")) {
+    auto names = dyn_cast<ArrayAttr>(raw);
+    if (!names || names.size() != 2 || !isa<StringAttr>(names[0]) || !isa<StringAttr>(names[1]) ||
+        cast<StringAttr>(names[0]).getValue().empty() || cast<StringAttr>(names[1]).getValue().empty() ||
+        names[0] == names[1]) return reject();
   }
   if (auto version = module->getAttr("tessera.ir.version")) {
     auto text = dyn_cast<StringAttr>(version);

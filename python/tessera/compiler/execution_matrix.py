@@ -4536,6 +4536,20 @@ for _movement_target in ("rocm_gfx1151", "rocm_gfx1201"):
         proof_build="llvm23.1.1+owning-rocm-movement-20261005",
     )
 
+# Named parent-view public JIT and compiler-free replay are owning-device verified.
+_MATRIX[("rocm_gfx1201", "rocm_parent_view_native_descriptor")] = ExecutionRow(
+    target="rocm_gfx1201", compiler_path="rocm_parent_view_native_descriptor",
+    execution_kind="native_gpu", executable=True,
+    executor_id="rocm_native_descriptor", runtime_status="success",
+    reason="Named static f32 one-parent gate/up views through native Graph/Schedule/Tile/Target/LLVM "
+           "and checked program ABI; thirteen gfx1201 literal/closure public JIT/fresh-process cases pass. "
+           "Resident producer composition and low-storage model-quality remain open.",
+    execution_mode="hip_runtime", direction="forward", op_family="parent_view",
+    device_proof="device_verified_jit", evidence_target="rocm_gfx1201",
+    numerical_fixture="tests/device/rocm/test_native_parent_view_jit.py",
+    proof_build="llvm23.1.1+gfx1201-parent-view-public-20261017",
+)
+
 # Bounded original Graph math packages; owning architecture proof is separate.
 for _math_target in ("rocm_gfx1151","rocm_gfx1201"):
     _MATRIX[(_math_target,"rocm_math_native_descriptor")] = ExecutionRow(

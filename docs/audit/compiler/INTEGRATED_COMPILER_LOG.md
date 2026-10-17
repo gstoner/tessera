@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-16
+last_updated: 2026-10-17
 audit_role: reference
 ---
 
@@ -12983,5 +12983,30 @@ Remaining: canonical family/plugin and public JIT integration, resident producer
 chain, low storage/rounding, K16 activation quantization/down projection,
 original-model quality, matched timing and the full five-slice obligations.
 Evidence: benchmarks/baselines/native_gate_up_view_20261016/README.md;
+docs/spec/NATIVE_PARENT_VIEW_CONTRACT.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-17 — public gfx1201 parent-view integration
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync ROCM-NATIVE-GATE-UP-CONSUMER-20261016.
+Outcome: the native parent-view family now enters the canonical compiler driver
+and checked public JIT/runtime ABI. Native Target export retains program frames
+through binary lowering; Python binds buffers without constructing Tile or
+kernel arithmetic. Thirteen RX9070XT/gfx1201 literal/closure tests pass, including both operand
+roles, changed roots, retained results and fresh-process compiler-disabled replay.
+409 focused shared compiler/registry/audit tests pass; broader validation is
+running. Cross-host fingerprints match 33 source files and three compiler/library
+files. M256/I12288 has separate 34.464 us device launch-window and 12.935 ms
+completed warm public-call medians; no matched speedup/default promotion.
+All four backend queues assess the shared schema/ABI boundary.
+Safe captured literal composition additionally passes 53 frontend tests (one
+existing skip), with SSA shadowing and executable-expression refusal checks.
+Remaining: resident producer chaining, explicit
+low-storage rounding, K16 activation quantization/down projection, original
+NVFP4 MLP/model quality and the full five-slice objective. Standalone/general
+slice execution is not admitted by the named composed profile.
+Evidence: benchmarks/baselines/native_parent_view_public_20261017/README.md;
 docs/spec/NATIVE_PARENT_VIEW_CONTRACT.md.
 <!-- entry-fields:end -->

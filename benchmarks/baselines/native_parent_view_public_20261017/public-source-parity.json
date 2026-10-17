@@ -1,0 +1,7 @@
+{
+  "source_identity_sha256": "6fd8380ef1b6d329c8fe13f54031be4c98d9bac8c3a50ae868c6ee96344ff299",
+  "matching_source_files": 35,
+  "matching_tools_and_libraries": 3,
+  "mismatches": [],
+  "note": "Final canonical-producer binding and captured-literal implementation match the gfx1201 validation host; compiler bytes unchanged."
+}

@@ -277,6 +277,10 @@ class CompileResult:
                 from .rocm_math_native import MATH_ABIS
                 if self.launch_descriptor.abi_id in MATH_ABIS.values():
                     meta["compiler_path"] = "rocm_math_native_descriptor"
+            if self.target == "rocm_gfx1201":
+                from .rocm_parent_view_native import PARENT_VIEW_ABI
+                if self.launch_descriptor.abi_id == PARENT_VIEW_ABI:
+                    meta["compiler_path"] = "rocm_parent_view_native_descriptor"
             if self.target in ("apple_cpu", "apple_gpu"):
                 meta["apple_target_ir_kind"] = "native_descriptor"
         elif self.target in ("apple_cpu", "apple_gpu"):

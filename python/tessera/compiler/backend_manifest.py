@@ -2799,6 +2799,7 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
+    ("slice", "rocm_gfx1201"): "tests/device/rocm/test_native_parent_view_jit.py",
     ("silu_mul", "rocm_gfx1201"): "tests/device/rocm/test_native_silu_math_jit.py",
     ("softmax_safe", "nvidia_sm120"): "tests/device/nvidia/test_scheduled_semantic_kernels.py",
     ("scaled_matmul", "nvidia_sm120"): "tests/device/nvidia/test_nvfp4_transpose_jit.py",
@@ -7058,6 +7059,17 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 benchmark_json="benchmarks/baselines/rocm_native_math_20261006/package-"
                                +target.removeprefix("rocm_")+".json",
             ))
+    if op_name == "slice":
+        entries = [entry for entry in entries if entry.target != "rocm_gfx1201"]
+        entries.append(BackendKernelEntry(
+            target="rocm_gfx1201", status=_DEVICE_VERIFIED_JIT_STATUS, dtypes=("fp32",),
+            feature_flags=("native_schedule", "checked_descriptor", "parent_view"),
+            notes="Slice is consumed only inside the named complementary gate/up parent-view "
+                  "Graph; this is not standalone slice admission. Native Schedule/Tile/Target/LLVM "
+                  "produce a checked parent/output program frame. Thirteen owning-device literal/closure JIT and fresh-process replay cases pass.",
+            execute_compare_fixture="tests/device/rocm/test_native_parent_view_jit.py",
+            shape_envelope="one compact f32 rank-2 parent [M,2I], complementary unit-stride "
+                           "half views consumed by SiLU multiplication; static literal/captured-literal coordinates"))
     if op_name == "silu_mul":
         entries = [entry for entry in entries if entry.target != "rocm_gfx1201"]
         entries.append(BackendKernelEntry(

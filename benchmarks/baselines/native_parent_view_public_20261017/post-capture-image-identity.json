@@ -1,0 +1,24 @@
+{
+  "architecture": "gfx1201",
+  "scope": "shared frontend captured-literal enhancement preserves measured literal-profile image bytes; old timing packets retain their measurement boundaries",
+  "rows": [
+    {
+      "shape_m_i": [
+        3,
+        17
+      ],
+      "image_digest": "e8dfedeb2513dbf928f4887cc231ce9f031144d9f3d23ce30576e827e8ed149d",
+      "same_as_captured_timing_packet": true,
+      "correctness": "passed"
+    },
+    {
+      "shape_m_i": [
+        256,
+        12288
+      ],
+      "image_digest": "6e52e00e68ad0c3bd644c91bd0e77d62c8f4fd36e6de02ab054ab9b77aa63277",
+      "same_as_captured_timing_packet": true,
+      "correctness": "passed"
+    }
+  ]
+}

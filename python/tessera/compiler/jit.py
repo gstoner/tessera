@@ -1849,11 +1849,15 @@ class JitFn:
         Compilation and launch errors propagate once this operation is selected.
         """
         target = normalize_target_kind(self.target)
+        parent_view_request = False
+        if self.differentiation_request is None and target in {"rocm", "rocm_gfx1201"}:
+            from .rocm_parent_view_native import requests_parent_view
+            parent_view_request = requests_parent_view(self.graph_ir)
         rocm_product = (self.differentiation_request is None
                         and len(self.graph_ir.functions) == 1
                         and len(self.graph_ir.functions[0].body) == 1
                         and self.graph_ir.functions[0].body[0].op_name in {"tessera.matmul", "tessera.gemm"})
-        if target == "rocm" and rocm_product:
+        if target == "rocm" and (rocm_product or parent_view_request):
             from tessera import runtime as rt
             chip = rt._rocm_live_arch()
             if chip in {"gfx1151", "gfx1201"}:
@@ -1884,7 +1888,9 @@ class JitFn:
             GFX_SOFTMAX_F32_ABI, requests_softmax,
         )
         from .rocm_math_native import supports_math, requests_public_math, MATH_ABIS
+        from .rocm_parent_view_native import supports_parent_view, PARENT_VIEW_ABI
         native_math = requests_public_math(self.graph_ir, target)
+        parent_view = target == "rocm_gfx1201" and parent_view_request
         nvidia_softmax = target == "nvidia_sm120" and requests_softmax(self.graph_ir)
         softmax = (target.startswith("rocm_") or nvidia_softmax) and requests_softmax(self.graph_ir)
         movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)
@@ -1894,7 +1900,7 @@ class JitFn:
         typed_scaled = target == "rocm_gfx1201" and requests_typed_scaled(self.graph_ir)
         checkpoint = target == "rocm_gfx1201" and (
             supports_nvfp4_expansion(self.graph_ir) or supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
-        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4 and not typed_scaled and not rocm_matmul:
+        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4 and not typed_scaled and not rocm_matmul and not parent_view:
             return _JIT_FALLBACK
         if self.differentiation_request is not None:
             raise ValueError("native descriptor call has no differentiation contract")
@@ -1971,6 +1977,8 @@ class JitFn:
             from .scheduled_matmul import supports_scheduled_matmul
             if not supports_scheduled_matmul(module, target=target):
                 return _JIT_FALLBACK
+        if parent_view and not supports_parent_view(module):
+            raise ValueError("native parent-view requires static rank-2 f32 parent and output")
         if native_math and not supports_math(module):
             raise ValueError("native math requires explicit f32 Graph computation and supported input storage")
         if attention and not (supports_attention(module) or supports_attention_lse(module)):
@@ -2061,6 +2069,12 @@ class JitFn:
                 values = dict(zip((arg.name for arg in module.functions[0].args), ordered, strict=True))
                 _, strides = checked_page_span(values[movement_contract[0]])
                 scalars.update(zip(("StrideP", "StridePage", "StrideH", "StrideD"), strides, strict=True))
+        elif parent_view:
+            import json
+            if descriptor.abi_id != PARENT_VIEW_ABI:
+                raise ValueError("parent-view compilation did not produce its checked ABI")
+            info = json.loads(descriptor.provenance["native_parent_view"]["member_json"])
+            scalars = {"N": info["scalars"][0]}
         elif native_math:
             info = descriptor.provenance.get("native_math")
             if descriptor.abi_id not in MATH_ABIS.values() or not isinstance(info, dict):
@@ -2271,7 +2285,7 @@ class JitFn:
                 compiled, module, artifact, movement_contract, ordered=ordered)
         if attention_saved_lse:
             return tuple(arrays)
-        return arrays[0] if movement or softmax or matmul or rocm_matmul or attention or native_math or nvfp4 or typed_scaled else tuple(arrays)
+        return arrays[0] if movement or softmax or matmul or rocm_matmul or attention or native_math or nvfp4 or typed_scaled or parent_view else tuple(arrays)
 
 
     def _try_rocm_composed_scaled_call(self,args,kwargs):

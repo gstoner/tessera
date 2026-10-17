@@ -7066,7 +7066,9 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 notes="Exact f16/bf16 widening to f32 feeding one native math consumer. "
                       "General standalone cast/layout/AD remains outside this proof.",
                 execute_compare_fixture="tests/device/rocm/test_native_math_widening.py",
-                shape_envelope="static compact row-major rank 2/3; same-storage operands",
+                shape_envelope=("static compact row-major rank 1/2/3; same-storage operands"
+                                if target == "rocm_gfx1201" else
+                                "static compact row-major rank 2/3; same-storage operands"),
                 benchmark_json="benchmarks/baselines/rocm_native_math_20261006/widen-"
                                +target.removeprefix("rocm_")+".json"))
     if op_name == "scaled_matmul":

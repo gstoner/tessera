@@ -17970,3 +17970,10 @@ Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.
 Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
 
 Not applicable to HIP execution: this is a rejected NVIDIA submission experiment plus source/profile evidence. No ROCm runtime or physical policy changes. PR960 bounded source-preserving NVFP4 has merged with exact gfx1201 evidence; full MLP/model-quality, W8A8/MXFP4 and broader route obligations remain open.
+
+
+## ROCM-NATIVE-SWIGLU-ACTIVATION-20261016
+
+Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+
+Implementation in progress: migrate the existing silu_mul operation into compiler-owned native Graph/Schedule/Tile, preserving FP32 computation through the final FP32 or matching FP16/BF16 store. Exact widening casts retain FP32 output. The existing binary pointer/count frame is reused with two additive matching-half-store ABI identities; old ABI meanings remain unchanged. Six genuine missing-Schedule baseline cases and six existing division controls are recorded; exact-device/public replay/timing gates remain open. Full original NVFP4 MLP composition, views/lifetimes, activation quantization, down projection and model-quality gates remain separate.

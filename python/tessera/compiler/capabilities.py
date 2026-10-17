@@ -893,7 +893,7 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         default_runtime_status="artifact_only",
         supported_ops={
             "tessera.cast": OpCapability(
-                "tessera.cast","ready",dtypes=("fp16","bf16"),ranks=(2,3),
+                "tessera.cast","ready",dtypes=("fp16","bf16"),ranks=(1,2,3),
                 reason="Exact widening to fp32 feeding one native math consumer; "
                        "original Graph casts are verified and fused into loads. "
                        "General standalone cast/layout/AD routes remain separate."),

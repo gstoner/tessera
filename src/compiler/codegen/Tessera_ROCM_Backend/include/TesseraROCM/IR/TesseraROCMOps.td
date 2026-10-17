@@ -1250,7 +1250,7 @@ def ROCM_UnaryKernelOp : TesseraROCM_Op<"unary"> {
 }
 
 def ROCM_BinaryKernelOp : TesseraROCM_Op<"binary"> {
-  let summary = "Elementwise binary arithmetic kernel (sub / div / pow / max / min)";
+  let summary = "Elementwise binary arithmetic and SiLU gate-multiply kernel";
   let description = [{
     The directive `generate-rocm-binary-kernel` expands into a flat 2-operand
     elementwise gpu kernel applying a pointwise binary arithmetic function over
@@ -1263,7 +1263,10 @@ def ROCM_BinaryKernelOp : TesseraROCM_Op<"binary"> {
       * `maximum` / `minimum` — IEEE NaN-propagating
 
     `N` is a runtime `index` arg; `dtype` is the f16/bf16/f32 storage.
-    Validated vs numpy on gfx1151.
+    `silu_mul` computes `(a / (1 + exp(-a))) * b` in f32. Its native
+    Schedule contract preserves argument order and permits exact f16/bf16
+    widening. With `output_dtype = "f32"`, output storage is f32 independently
+    of the input dtype; otherwise the legacy matching-storage rule applies.
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<ROCM_BinaryKindAttr, "\"sub\"">:$kind,

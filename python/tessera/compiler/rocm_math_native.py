@@ -26,14 +26,21 @@ for _family, _signature in (("unary","x_o_n"),("binary","a_b_o_n"),("scan","x_o_
         MATH_ABIS[_family+"_"+_storage] = "tessera.rocm.math."+_signature+"."+_storage+"_f32.v1"
 
 
+for _storage in ("f16", "bf16"):
+    MATH_ABIS["binary_"+_storage+"_store"] = (
+        "tessera.rocm.math.a_b_o_n."+_storage+"_"+_storage+".v1")
+
+
 def math_abi(info):
+    if info["output_storage"] != "f32":
+        return MATH_ABIS["binary_"+info["storage"]+"_store"]
     key = info["family"] if info["storage"] == "f32" else info["family"]+"_"+info["storage"]
     return MATH_ABIS[key]
 
 
 # Public isolated recipes retain their proved envelope. Multiplication is a
 # compiler-owned scaled-program member, decoded by _validate_info below.
-OPS = frozenset("tessera."+x for x in ("sqrt","exp","add","div","cumsum","cummax"))
+OPS = frozenset("tessera."+x for x in ("sqrt","exp","add","div","silu_mul","cumsum","cummax"))
 
 
 def requests_math(module):
@@ -49,7 +56,10 @@ def supports_math(module):
     fn = module.functions[0]
     return (bool(fn.args) and len(fn.result_types) == 1
             and all(arg.ir_type.dtype in {"fp32","fp16","bf16"} for arg in fn.args)
-            and fn.result_types[0].dtype == "fp32")
+            and (fn.result_types[0].dtype == "fp32" or
+                 (fn.body[-1].op_name == "tessera.silu_mul" and
+                  fn.result_types[0].dtype == fn.args[0].ir_type.dtype and
+                  fn.result_types[0].dtype in {"fp16", "bf16"})))
 
 
 def project_math_graph(module, target):
@@ -111,11 +121,14 @@ def _info(tile):
 def _validate_info(info):
     shape, names, roles = info["shape"], info["bindings"], info["roles"]
     family, kind = info["family"], info["kind"]
-    allowed = {"unary":{"sqrt","exp"}, "binary":{"add","div","mul"}, "scan":{"sum","max"}}
+    allowed = {"unary":{"sqrt","exp"}, "binary":{"add","div","mul","silu_mul"}, "scan":{"sum","max"}}
     arity = 2 if family == "binary" else 1
     if (family not in allowed or kind not in allowed[family]
             or info["architecture"] not in {"gfx1151","gfx1201"}
-            or info["storage"] not in {"f32","f16","bf16"} or info["output_storage"] != "f32"
+            or info["storage"] not in {"f32","f16","bf16"}
+            or (info["output_storage"] != "f32" and not (
+                family == "binary" and kind == "silu_mul" and
+                info["storage"] in {"f16","bf16"} and info["output_storage"] == info["storage"]))
             or info["numeric_policy"] != ("f32_inclusive_scan" if family == "scan" else "f32_compute")
             or not shape or any(type(x) is not int or x <= 0 for x in shape)
             or math.prod(shape) > 2**63-1
@@ -179,8 +192,8 @@ def _descriptor(image, info, lineage):
         image_digest=image.image_digest,entry_symbol=image.entry_points[0].symbol,
         abi_id=math_abi(info),
         buffers=tuple(BufferBinding(i,name,"output" if i == count-1 else "input",
-                                    "fp32" if i == count-1 else {"f32":"fp32","f16":"fp16","bf16":"bf16"}[info["storage"]],
-                                    len(shape),"row_major",4 if i == count-1 or info["storage"]=="f32" else 2)
+                                    {"f32":"fp32","f16":"fp16","bf16":"bf16"}[info["output_storage"] if i == count-1 else info["storage"]],
+                                    len(shape),"row_major",4 if (info["output_storage"] if i == count-1 else info["storage"])=="f32" else 2)
                       for i,name in enumerate(ordered)),
         scalars=tuple(ScalarArgument(count+i,name,"int64") for i,name in enumerate(scalar_names)),
         shape_guards=tuple(ShapeGuard(name,i,"eq",extent) for name in ordered
@@ -241,7 +254,7 @@ def validate_math_runtime_artifact(artifact):
     actual_kind = kinds[0] if len(kinds) == 1 else {"unary":"exp","binary":"sub","scan":"cumsum"}[family]
     if (len(kinds) > 1 or actual_kind != expected_kind
             or len(dtypes) > 1 or (dtypes[0] if dtypes else "f32") != info["storage"]
-            or output_dtypes != ["f32"]
+            or output_dtypes != [info["output_storage"]]
             or f'name = "{desc.entry_symbol}"' not in attrs):
         raise ValueError("native math Target arithmetic differs from Tile")
 
@@ -267,9 +280,10 @@ def runtime_projection(image, desc, buffers, scalars):
     if info["storage"]=="bf16":
         import ml_dtypes
         input_dtype = np.dtype(ml_dtypes.bfloat16)
-    if any(not isinstance(a,np.ndarray) or a.dtype != (np.dtype(np.float32) if i==len(arrays)-1 else input_dtype)
+    output_dtype = np.dtype(np.float32) if info["output_storage"]=="f32" else input_dtype
+    if any(not isinstance(a,np.ndarray) or a.dtype != (output_dtype if i==len(arrays)-1 else input_dtype)
            or a.shape != tuple(info["shape"]) or not a.flags.c_contiguous for i,a in enumerate(arrays)):
-        raise ValueError("native math requires exact compact input storage and f32 output")
+        raise ValueError("native math requires exact compact input and declared output storage")
     if not arrays[-1].flags.writeable or any(np.shares_memory(arrays[-1],a) for a in arrays[:-1]):
         raise ValueError("native math output must be writeable and independent of inputs")
     return arrays[:-1],arrays[-1],tuple(wanted.values()),desc.geometry.grid[0]

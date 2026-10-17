@@ -6,6 +6,7 @@ static StringRef rocmMathKind(Operation *op) {
   return llvm::StringSwitch<StringRef>(op->getName().getStringRef())
       .Case("tessera.sqrt", "sqrt").Case("tessera.exp", "exp")
       .Case("tessera.add", "add").Case("tessera.div", "div").Case("tessera.mul", "mul")
+      .Case("tessera.silu_mul", "silu_mul")
       .Case("tessera.cumsum", "sum").Case("tessera.cummax", "max")
       .Default("");
 }
@@ -15,7 +16,8 @@ static bool rocmMathScan(Operation *op) {
 }
 static bool rocmMathBinary(Operation *op) {
   auto n = op->getName().getStringRef();
-  return n == "tessera.add" || n == "tessera.div" || n == "tessera.mul";
+  return n == "tessera.add" || n == "tessera.div" || n == "tessera.mul" ||
+         n == "tessera.silu_mul";
 }
 static FailureOr<DictionaryAttr> rocmMathContract(Operation *op) {
   auto mod = op->getParentOfType<ModuleOp>();
@@ -31,11 +33,13 @@ static FailureOr<DictionaryAttr> rocmMathContract(Operation *op) {
       op->getNumOperands() != inputs || op->getNumResults() != 1 ||
       !names || names.size() != inputs + 1)
     return op->emitError("ROCm math requires isolated operands, target and launch bindings"), failure();
+  bool silu = op->getName().getStringRef() == "tessera.silu_mul";
   auto ty = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
   if (!ty || !ty.hasStaticShape() || ty.getRank() < 1 ||
-      !ty.getElementType().isF32() || ty.getEncoding() ||
+      (!ty.getElementType().isF32() &&
+       !(silu && (ty.getElementType().isF16() || ty.getElementType().isBF16()))) || ty.getEncoding() ||
       op->getResult(0).getType() != ty || fn.getResultTypes()[0] != ty)
-    return op->emitError("ROCm math requires plain static shape-preserving f32 tensors"), failure();
+    return op->emitError("ROCm math requires static shape-preserving f32 tensors or matching half SiLU storage"), failure();
   llvm::StringSet<> distinct;
   for (auto name : names) {
     auto s = dyn_cast<StringAttr>(name);
@@ -119,7 +123,7 @@ static FailureOr<DictionaryAttr> rocmMathContract(Operation *op) {
       b.getNamedAttr("architecture", arch), b.getNamedAttr("kind", b.getStringAttr(rocmMathKind(op))),
       b.getNamedAttr("family", b.getStringAttr(rocmMathScan(op) ? "scan" : rocmMathBinary(op) ? "binary" : "unary")),
       b.getNamedAttr("storage", b.getStringAttr(inputTy.getElementType().isF16() ? "f16" : inputTy.getElementType().isBF16() ? "bf16" : "f32")),
-      b.getNamedAttr("output_storage", b.getStringAttr("f32")),
+      b.getNamedAttr("output_storage", b.getStringAttr(ty.getElementType().isF16() ? "f16" : ty.getElementType().isBF16() ? "bf16" : "f32")),
       b.getNamedAttr("elements", b.getI64IntegerAttr(count)),
       b.getNamedAttr("rows", b.getI64IntegerAttr(count / ty.getShape().back())),
       b.getNamedAttr("columns", b.getI64IntegerAttr(ty.getShape().back())),
@@ -193,7 +197,7 @@ static LogicalResult lowerNativeROCMMath(ModuleOp mod) {
     tile.addAttribute("output_storage", c->get("output_storage"));
     if (rocmMathScan(op)) tile.addAttribute("inclusive", b.getBoolAttr(true));
     else {
-      tile.addAttribute("family", b.getStringAttr(op->getName().getStringRef() == "tessera.exp" ? "transcendental" : rocmMathBinary(op) ? "binary" : "unary"));
+      tile.addAttribute("family", b.getStringAttr(op->getName().getStringRef() == "tessera.silu_mul" ? "binary_math" : op->getName().getStringRef() == "tessera.exp" ? "transcendental" : rocmMathBinary(op) ? "binary" : "unary"));
     }
     b.create(tile); LLVM::ReturnOp::create(b, op->getLoc(), ValueRange{}); fn.erase();
   }

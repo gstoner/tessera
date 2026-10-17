@@ -196,7 +196,7 @@ def ROCM_UnaryKindAttr
                        "ROCm unary math kind">;
 def ROCM_BinaryKindAttr
     : ROCM_EnumStrAttr<["sub", "div", "pow", "maximum", "minimum", "add",
-                        "mul", "mod", "floor_div"], "ROCm binary math kind">;
+                        "mul", "silu_mul", "mod", "floor_div"], "ROCm binary math kind">;
 def ROCM_CompareKindAttr
     : ROCM_EnumStrAttr<["eq", "ne", "lt", "le", "gt", "ge"],
                        "ROCm comparison kind">;

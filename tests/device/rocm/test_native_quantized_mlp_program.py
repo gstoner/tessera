@@ -91,4 +91,13 @@ def test_full_native_mlp_correctness_portable_replay_and_root_updates(shape,monk
         generation,_=owner.invoke()
         actual=owner.read(generation)[0]
         assert_compiled_chain(restored,changed,actual,lib)
+        actual_before=actual.copy()
+        updated=inputs(*shape,seed=1123)
+        owner.update(updated)
+        with pytest.raises(RuntimeError,match='10'):
+            owner.invoke_range(6,1)
+        generation,_=owner.invoke()
+        refreshed=owner.read(generation)[0]
+        assert_compiled_chain(restored,updated,refreshed,lib)
+        np.testing.assert_array_equal(actual,actual_before)
     np.testing.assert_array_equal(held,held_before)

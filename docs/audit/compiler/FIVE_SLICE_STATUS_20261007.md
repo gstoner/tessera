@@ -12,6 +12,21 @@ NVFP4 expansion and source-preserving multi-output ownership. Older entries reta
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
 
+## Quantized public host overhead — 2026-10-17
+
+PR972 is merged as 739c62aca1c3e418cf1458350f86718b4b82e700. It passed all
+required checks on c7e0b6e57b and a fresh complete empty review-thread audit.
+The queued complete-content validation/ABI cache retains the exact same
+seven-member artifacts and numerical certificates. Guarded source timing
+reduces completed public calls 2.43-2.97x; native event windows are unchanged.
+Evidence: benchmarks/baselines/rocm_quantized_binding_cache_20261017/README.md.
+Final signed-zero/byte-budget guards pass 387 focused cases, thirty owning
+device cases and 22,223 CPU cases; all 33 generated documents are in sync.
+Publication/CI/review and the remaining quality/performance requirements
+remain active.
+All five aggregate requirements remain open.
+
+
 ## Native quantized MLP public profile — 2026-10-17
 
 Following merged PR971, the authored BF16 quantizer/gate-up/activation/down

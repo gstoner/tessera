@@ -6,6 +6,14 @@ target: apple_gpu
 last_updated: 2026-10-17
 ---
 
+## ROCM-QUANTIZED-BINDING-CACHE-20261017 — verified host binding reuse
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-QUANTIZED-BINDING-CACHE-20261017.
+
+Not applicable to apple physical execution: memoization is attached only to gfx1201 quantized package validators and host ABI binders. No apple caller uses the new helper, and no shared IR, datatype, target selector, kernel or runtime ABI changes. Complete-content snapshot behavior is host-tested; follow-up required before adopting it in a apple package path. No gfx1201 physical or performance proof transfers.
+
+
 ## ROCM-QUANTIZED-MLP-20261017 — native gate/up-to-down partition
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

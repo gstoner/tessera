@@ -1,0 +1,45 @@
+{
+  "source_revision": "95be6a2f3b6ed94b7fd157a372bb3b1cd31c2fdb",
+  "parent_merge": "739c62aca1c3e418cf1458350f86718b4b82e700",
+  "source_sha256": {
+    "python/tessera/compiler/quantized_binding_cache.py": "85e95f09bbac12d8bd71e624bea3b893a82857db0b96f349dbb52f4d9dc451d6",
+    "python/tessera/compiler/rocm_quantized_product_program.py": "3501c49cba8809af8d46a1645d78307cd09211c53c185d69ce9bc9b6908b99ef",
+    "python/tessera/compiler/rocm_quantized_mlp_program.py": "d29783813d7bf5b969c4f14b53286202002edbb374b797129ebb1c5566bfeed9",
+    "benchmarks/rocm/benchmark_public_quantized_mlp.py": "0e5842d7784bb44e61884777a85c44e58cb1bdceca65ff2a54e99a718c260c8e",
+    "tests/unit/test_quantized_binding_cache.py": "b3bb5c08a773edf2f84ee2a0b37df380184396f0c3f7bea86598656adbc7e9b1",
+    "tests/unit/test_rocm_quantized_binding_cache.py": "a2ea57aad19d1a3e037258147cc70920776062eab08ae5c9a5cc0862a13c519a"
+  },
+  "gates": {
+    "focused": {
+      "result": "387 passed",
+      "log_sha256": "ca64c790b57d5daac1f509db82fb37f580d808be634d06ffed8a5052051600cf"
+    },
+    "gfx1201": {
+      "result": "30 passed",
+      "log_sha256": "e55c6103e4ce790322ce659d07450dd6ef7d5cbb07b8ec91557170235063a548"
+    },
+    "mypy": {
+      "result": "Success: no issues found in 3 source files",
+      "log_sha256": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8"
+    },
+    "cpu_unit": {
+      "result": "22223 passed, 9946 skipped, 11 warnings",
+      "log_sha256": "b4adc30c7e528afa8c3e6912af298c1d17b125ef3ee7f75347f5835dcaa0cbbb"
+    },
+    "generated_docs": {
+      "result": "33 generated doc(s) in sync",
+      "log_sha256": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d"
+    }
+  },
+  "artifact_deduplication": "All ten timing arms match the canonical parent artifacts by complete hash, seven receipts and numerical certificates; no repeated portable payloads stored.",
+  "remaining": [
+    "public CI and complete review before merge",
+    "checkpoint/model quality and original five-slice objective"
+  ],
+  "signed_zero_regression": {
+    "red_source": "92bb69760d",
+    "red_test": "test_signed_zero_metadata_cannot_reuse_positive_zero_certificate",
+    "red_log_sha256": "ac6ea5fcf94be758991890478754e69d3b5baf8e1d970b897bfab4fccac40a36",
+    "green_source": "95be6a2f3b6ed94b7fd157a372bb3b1cd31c2fdb"
+  }
+}

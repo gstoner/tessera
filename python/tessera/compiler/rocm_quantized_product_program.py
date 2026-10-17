@@ -14,6 +14,7 @@ import math
 import re
 
 from .native_artifact import LaunchGeometry, ScalarArgument
+from .quantized_binding_cache import memoized_validation,memoized_binding
 from .native_scaled_program import PreparedScaledProgram, _BoundScaledABI, _Buffer, _StorageSpec, _storage_numpy_dtype
 from .rocm_block_quant_native import BlockQuantRecipe, lower_block_quant_text, package_block_quant_recipe, validate_block_quant_runtime_artifact, _frame
 from .rocm_fp8_blockscale import BlockScaleProgram, BlockScaleShape, PACKAGE_ABIS, check_blockscale_target_ir, package_blockscale, verify_blockscale_schedule
@@ -182,6 +183,7 @@ class NativeQuantizedProductProgram:
         if self.activation is not None:stages+=(self.activation,)
         return stages
 
+    @memoized_validation
     def validate(self):
         if self.binding_digest != self._identity():
             raise ValueError("native quantized-product member binding differs")
@@ -359,6 +361,7 @@ class PreparedQuantizedProductProgram(PreparedScaledProgram):
             raise RuntimeError("native quantized product requires owning gfx1201")
         super().__init__(package,inputs,runtime_library=runtime_library)
 
+    @memoized_binding
     def _bind_abi(self,package):
         package.validate()
         plan = json.loads(package.program_json)

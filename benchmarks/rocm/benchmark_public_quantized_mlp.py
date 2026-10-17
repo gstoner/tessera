@@ -102,7 +102,7 @@ def run(m,h,k,n,output_dir,repeats):
         'correctness':'per_stage_and_propagation_passed_before_timing','numerical_certificate':certificate,
         'route':'authored Graph SSA -> seven native partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> one checked multi-output HIP owner',
         'native_schema':json.loads(program.program_json)['schema'],'binding_digest':program.binding_digest,
-        'component_receipts':receipts,'public_cold_ms':cold,'public_warm_samples_ms':[],
+        'component_receipts':receipts,'host_binding_cache_enabled':os.environ.get('TESSERA_ROCM_PROGRAM_BINDING_CACHE','1')=='1','public_cold_ms':cold,'public_warm_samples_ms':[],
         'prepared_invoke_read_samples_ms':[],'ordinary_program_event_samples_ms':[],
         'captured_member_samples_ms':[],
         'member_order':['input_quantizer','gate_up_expansion','gate_up_product_bf16_store','silu_bf16_store',
@@ -122,6 +122,8 @@ def run(m,h,k,n,output_dir,repeats):
             start=time.perf_counter();generation,_=owner.invoke();held=owner.read(generation)[0]
             record['prepared_invoke_read_samples_ms'].append((time.perf_counter()-start)*1000)
         np.testing.assert_array_equal(held,first)
+    record['host_validation_cache']=program.validate.cache_info()
+    record['host_abi_cache']=owner._bind_abi.cache_info()
     for label in ('public_warm','prepared_invoke_read','ordinary_program_event'):
         record[label+'_median_ms']=median(record[label+'_samples_ms'])
     record['captured_member_median_ms']=[median(row[i] for row in record['captured_member_samples_ms']) for i in range(7)]

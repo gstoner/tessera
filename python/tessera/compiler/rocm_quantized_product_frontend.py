@@ -8,10 +8,11 @@ import json
 import os
 
 from .rocm_block_quant_native import _NAMES
-from .rocm_quantized_product_program import NativeQuantizedProductProgram,package_quantized_product_graph,_export
+from .rocm_quantized_product_program import NativeQuantizedProductProgram,package_quantized_product_graph,_export,_frame_shape
 from .scheduled_matmul import find_tessera_opt
 
 _SCHEMA="tessera.rocm.quantized_product_frontend.v1"
+_EXPANDED_SCHEMA="tessera.rocm.quantized_product_frontend.v2"
 _OWNER_PID=os.getpid()
 
 
@@ -19,8 +20,10 @@ def requests_quantized_product(module):
     if module is None or len(module.functions)!=1:
         return False
     fn=module.functions[0]
-    return (len(fn.args)==3 and len(fn.result_types)==1
-            and [op.op_name for op in fn.body if op.op_name!="arith.constant"]==[*_NAMES,"tessera.scaled_matmul"])
+    names=[op.op_name for op in fn.body if op.op_name!="arith.constant"]
+    return (len(fn.result_types)==1 and (
+        (len(fn.args)==3 and names==[*_NAMES,"tessera.scaled_matmul"])
+        or (len(fn.args)==4 and names==[*_NAMES,"tessera.nvfp4_expand","tessera.scaled_matmul"])))
 
 
 @dataclass(frozen=True)
@@ -34,7 +37,8 @@ class TracedQuantizedProduct:
 
     def validate(self):
         self.native.validate()
-        if (len(self.argument_names)!=3 or len(set(self.argument_names))!=3
+        roles,_=_frame_shape(json.loads(self.native.program_json))
+        if (len(self.argument_names)!=len(roles) or len(set(self.argument_names))!=len(roles)
                 or any(not isinstance(name,str) or not name.isidentifier() for name in self.argument_names)):
             raise ValueError("native quantized-product frontend argument names differ")
         for name in self.argument_names:
@@ -42,7 +46,7 @@ class TracedQuantizedProduct:
 
     def manifest(self):
         self.validate()
-        return {"schema":_SCHEMA,"argument_names":list(self.argument_names),"native_program":self.native.to_manifest()}
+        return {"schema":_EXPANDED_SCHEMA if self.native.expansion is not None else _SCHEMA,"argument_names":list(self.argument_names),"native_program":self.native.to_manifest()}
 
     def execute(self,args):
         from tessera import runtime as rt
@@ -55,7 +59,7 @@ class TracedQuantizedProduct:
         elif isinstance(args,(tuple,list)):
             bound=signature.bind(*args)
         else:
-            raise TypeError("native quantized product requires three tensor bindings")
+            raise TypeError("native quantized product requires its tensor bindings")
         values=[bound.arguments[name] for name in self.argument_names]
         lib=rt._load_rocm_native_movement_runtime()
         if lib is None:
@@ -71,7 +75,7 @@ class TracedQuantizedProduct:
 
 def _source(module):
     if not requests_quantized_product(module):
-        raise ValueError("requires the original three-input quantizer/product Graph")
+        raise ValueError("requires the original typed quantizer/product Graph")
     source=deepcopy(module)
     for key,value in (("tessera.target","rocm_gfx1201"),("tessera.arch","gfx1201")):
         old=source.module_attrs.get(key)
@@ -105,15 +109,20 @@ def package_traced_quantized_product(module):
     return program
 
 
+def _compiler_path(native):
+    return ("canonical_rocm_quantized_nvfp4_product_program" if native.expansion is not None
+            else "canonical_rocm_quantized_product_program")
+
+
 def runtime_artifact(program):
     from tessera.runtime import RuntimeArtifact
     program.validate()
     native=program.native
     return RuntimeArtifact(graph_ir=program.graph_ir,
-        schedule_ir="\n".join((native.quantizer_recipe.schedule_ir,native.product_recipe.schedule_ir)),
+        schedule_ir="\n".join(native.schedule_irs),
         tile_ir="\n".join(p.tile_ir for p in native.native_stages),
         target_ir="\n".join(p.target_ir for p in native.native_stages),
-        metadata={"target":"rocm_gfx1201","compiler_path":"canonical_rocm_quantized_product_program",
+        metadata={"target":"rocm_gfx1201","compiler_path":_compiler_path(native),
                   "execution_kind":"native_gpu","runtime_status":"ready","executable":True,
                   "native_graph_verified":True,"arg_names":list(program.argument_names),"native_program":program.manifest()})
 
@@ -122,10 +131,12 @@ def runtime_artifact(program):
 def _resolve(record,graph,names):
     value=json.loads(record)
     if (not isinstance(value,dict) or set(value)!={"schema","argument_names","native_program"}
-            or value["schema"]!=_SCHEMA or not isinstance(value["argument_names"],list)):
+            or value["schema"] not in (_SCHEMA,_EXPANDED_SCHEMA) or not isinstance(value["argument_names"],list)):
         raise ValueError("native quantized-product frontend manifest differs")
     program=TracedQuantizedProduct(NativeQuantizedProductProgram.from_manifest(value["native_program"]),tuple(value["argument_names"]))
     program.validate()
+    if (value["schema"]==_EXPANDED_SCHEMA)!=(program.native.expansion is not None):
+        raise ValueError("native quantized-product frontend schema differs")
     if program.graph_ir!=graph or list(program.argument_names)!=json.loads(names):
         raise ValueError("native quantized-product parent Graph or arguments differ")
     return program
@@ -141,7 +152,9 @@ def execute_artifact(artifact,args):
     program=_resolve(json.dumps(metadata.get("native_program"),sort_keys=True,allow_nan=False),
                      artifact.graph_ir,json.dumps(metadata.get("arg_names")))
     native=program.native
-    if (artifact.schedule_ir!="\n".join((native.quantizer_recipe.schedule_ir,native.product_recipe.schedule_ir))
+    if metadata.get("compiler_path")!=_compiler_path(native):
+        raise ValueError("native quantized-product parent compiler path differs")
+    if (artifact.schedule_ir!="\n".join(native.schedule_irs)
             or artifact.tile_ir!="\n".join(p.tile_ir for p in native.native_stages)
             or artifact.target_ir!="\n".join(p.target_ir for p in native.native_stages)):
         raise ValueError("native quantized-product parent stage witnesses differ")

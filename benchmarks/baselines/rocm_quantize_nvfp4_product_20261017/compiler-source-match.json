@@ -1,0 +1,7 @@
+{
+  "native_partition_source_reference": "69a4e2acb9",
+  "native_partition_sha256": "935019bd743152b7a04c0de4bdb2959627d7e15a6ca378ca9dd0d9ea2ffffd2d",
+  "current_source_identical_to_compiled_partition": true,
+  "compiler_sha256": "797f9a715198423567658b9bd61b990d40d24737eed0be0986e5f8730a6b391e",
+  "build_log_sha256": "5fe1e8631c3d651b85bbb0878a86a5b5dc5789645a90f4207e691fa3f6196f56"
+}

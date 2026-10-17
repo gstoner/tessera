@@ -169,3 +169,57 @@ This names one compiled source envelope. Combining the quantizer with NVFP4
 weight expansion and the complete gate/up/activation/down MLP, general layouts,
 bounded shapes, encoded AD and model-quality acceptance remain open. No
 sibling architecture or attention schema is promoted or renumbered.
+
+## Native quantizer / NVFP4 expansion / product v2
+
+The namespace `tessera.native.quantized_product.v2` adds weight expansion to
+the original quantizer/product SSA partition. It does not change v1 or any
+attention/NVFP4-program schema numbering. The requested Graph still uses the
+`tessera.native.quantized_product` unit marker; the native exporter derives
+v1 versus v2 from the verified original SSA and root/member structure.
+
+The v2 Graph has four distinct original roots: BF16 X[M,K], packed NVFP4
+byte weights[N,K/2], E4M3 scales[N,K/16], and FP64 projection globals[G].
+The existing expansion policy and complete increasing projection row boundaries
+remain mandatory. The original thirteen-operation K16 quantizer is validated
+by the same native semantic contract as standalone quantization. The expansion
+feeds the product's RHS codes and scale plane directly; the quantizer feeds
+its LHS codes and scale plane. Conflicting policies and wrong SSA edges are
+rejected without numerical normalization or reconstruction.
+
+| Frame | Ownership | First write | Last read |
+|---|---|---:|---:|
+| Original X root | readonly input | -1 | 0 |
+| Three weight roots | readonly input | -1 | 1 |
+| Q and SA | private scratch | 0 | 2 |
+| Expanded B and SB | private scratch | 1 | 2 |
+| Returned product | returned output | 2 | 3 |
+
+The compiler derives original root-role indices, byte extents and all three
+member Graphs. Each member is projected through native Schedule/Tile and ROCm
+Target IR to LLVM/HSACO. The portable package and frontend use their respective
+`quantized_product_package.v2` and `quantized_product_frontend.v2` namespaces;
+v1 continues to describe exactly two members. The consumer's checked Target
+witness must equal its image-bound Target, and both producer interfaces must
+match the shared frame in shape, storage and bytes. Portable replay performs
+these checks without requiring a compiler.
+
+The existing multi-output C++ HIP owner receives all three existing member ABIs,
+allocates the four private planes, validates producer readiness, and invalidates
+private generations after root updates. Python validates current expansion
+scales/globals and marshals the compiler-derived bindings; it performs no
+intermediate numerical lowering or host readback. Successful current receipts
+establish the public execution kind; prior-call receipts cannot describe a
+rejected new specialization. Reports retain all three Schedule/Tile/Target
+witnesses. The distinct execution path is
+`canonical_rocm_quantized_nvfp4_product_program`.
+
+The owning public numerical certificate is the named static FP32-output,
+single-projection fixture at M/N/K=1/1/16, 3/17/32, 19/33/64 and
+256/128/12288. Native component emission admits additional envelopes; this
+certificate does not promote them. Six device tests additionally cover fresh
+process replay, unchanged roots, retained outputs, absent producers and root
+update invalidation. Source-pinned captured-member, ordinary HIP-event,
+prepared invoke/read and public timings remain distinct. Full gate/up/
+activation/down MLP, model quality, dynamic/general layouts, wider composed
+storage envelopes and encoded AD remain open.

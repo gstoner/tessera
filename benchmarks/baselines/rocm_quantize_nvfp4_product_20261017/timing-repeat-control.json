@@ -1,0 +1,35 @@
+[
+  {
+    "shape_mnk": [
+      3,
+      17,
+      32
+    ],
+    "identical_member_images": true,
+    "first_ordinary_program_event_median_ms": 0.022236159071326256,
+    "final_ordinary_program_event_median_ms": 0.012341899797320366,
+    "scope": "repeated measurement with unchanged native images, not an optimization speedup"
+  },
+  {
+    "shape_mnk": [
+      19,
+      33,
+      64
+    ],
+    "identical_member_images": true,
+    "first_ordinary_program_event_median_ms": 0.03509923815727234,
+    "final_ordinary_program_event_median_ms": 0.01990607939660549,
+    "scope": "repeated measurement with unchanged native images, not an optimization speedup"
+  },
+  {
+    "shape_mnk": [
+      256,
+      128,
+      12288
+    ],
+    "identical_member_images": true,
+    "first_ordinary_program_event_median_ms": 0.15498904883861542,
+    "final_ordinary_program_event_median_ms": 0.15497754514217377,
+    "scope": "repeated measurement with unchanged native images, not an optimization speedup"
+  }
+]

@@ -1,0 +1,124 @@
+{
+  "shape_mnk": [
+    256,
+    128,
+    12288
+  ],
+  "architecture": "gfx1201",
+  "device_uuid": "GPU-28d9e7efbf2ef716",
+  "device_name": "AMD Radeon RX 9070 XT",
+  "source_revision": "437eb9ae51be9b7f3873af41e073db9eb7b04fd7",
+  "recorder_sha256": "a568b2555601415a11d04b3be72c25d28ad8996fd23b129575a80f6deff7fda5",
+  "correctness": "passed_before_timing",
+  "max_abs_error": 2.0443421041349552e-05,
+  "route": "authored Graph SSA -> native quantizer/expansion/product partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> checked multi-output HIP owner",
+  "native_schema": "tessera.native.quantized_product.v2",
+  "compiler_sha256": "797f9a715198423567658b9bd61b990d40d24737eed0be0986e5f8730a6b391e",
+  "binding_digest": "3ee2fd2c8f9b076d6dff9f04bdec5a5ea66eceab18a4f10165d11104794edd74",
+  "component_receipts": [
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.block_quant.x_q_s_groups.bf16_e4m3_f32.v1",
+      "image_digest": "4fbc045ac22d19ffb2586284b81f991ddd84c8a85da444fd6bba9ee02add8463",
+      "descriptor_digest": "f14be607b3dd52a0537562e801e21c43babf49f8ae4188dfb4bae70697c84b4b",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.nvfp4_expand.five_memrefs.static.v1",
+      "image_digest": "19b247cb90dd6e91c8912ee4557068f28dd821aaf0ce8a1da2564457cc267446",
+      "descriptor_digest": "a8e3e621bb92ce62f1f10ae3a61944744152213d5ef5ed2fb9e60086b893ae7f",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+      "image_digest": "43b49d1c8ac0bd6850b5328401d313d3aea9f5b0c0011297362c74a76e7533f7",
+      "descriptor_digest": "aabc50c3e972c59dc55bbff16b7b2b0180bc455e202d48850a267cfa58111f32",
+      "native_call_binding": "native_cpp_multi_output"
+    }
+  ],
+  "public_cold_ms": 529.9261190230027,
+  "public_warm_samples_ms": [
+    5.284993855249403,
+    4.792605426960757,
+    4.68422585566129,
+    4.6371935708780905,
+    4.634283711701365,
+    4.694030428903976,
+    4.701510283796649
+  ],
+  "prepared_invoke_read_samples_ms": [
+    0.4702760197687894,
+    0.3841519937850535,
+    0.40143501246348023,
+    0.442443008068949,
+    0.44396601151674986,
+    0.4314619873184711,
+    0.4176660149823874
+  ],
+  "ordinary_program_event_samples_ms": [
+    0.15480436384677887,
+    0.1545327752828598,
+    0.1562633067369461,
+    0.15482771396636963,
+    0.15519413352012634,
+    0.15556971728801727,
+    0.15497754514217377
+  ],
+  "captured_member_samples_ms": [
+    [
+      0.03613961860537529,
+      0.00890803150832653,
+      0.1254846155643463
+    ],
+    [
+      0.02742939069867134,
+      0.007733984384685755,
+      0.11558495461940765
+    ],
+    [
+      0.027565328404307365,
+      0.008053812198340893,
+      0.11555498838424683
+    ],
+    [
+      0.027694694697856903,
+      0.00782764796167612,
+      0.11560031026601791
+    ],
+    [
+      0.027612827718257904,
+      0.007760539185255766,
+      0.11608961969614029
+    ],
+    [
+      0.027785945683717728,
+      0.007920226082205772,
+      0.1156744584441185
+    ],
+    [
+      0.027434078976511955,
+      0.007808976341038942,
+      0.11572907865047455
+    ]
+  ],
+  "public_warm_median_ms": 4.694030428903976,
+  "prepared_invoke_read_median_ms": 0.4314619873184711,
+  "ordinary_program_event_median_ms": 0.15497754514217377,
+  "captured_member_median_ms": [
+    0.027612827718257904,
+    0.00782764796167612,
+    0.1156744584441185
+  ],
+  "timing_scope": {
+    "public": "warm frontend, input validation, root copies, owner prepare/invoke/read",
+    "prepared": "invoke and returned readback; excludes prepare, compilation and root upload",
+    "ordinary_event": "per-program HIP event window; native API already averages repeats; includes enqueue gaps",
+    "captured_members": "quantizer, weight expansion, product; includes graph dispatch; excludes capture/instantiation/copies"
+  },
+  "artifact_sha256": "9c7e574773379f0ea2b13af4c590cecf0ef174c793e3d25d937cfbe0332eaf92"
+}

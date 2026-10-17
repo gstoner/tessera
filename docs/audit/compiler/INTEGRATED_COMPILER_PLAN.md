@@ -189,7 +189,8 @@ the next action's host requirement; it is not a live fleet-availability claim.
   output has separate prepared-route proof. Quantizer plus NVFP4 expansion,
   gate/up/activation/down chaining, general layouts/AD and full-model quality
   remain open; this does not close the full ingest program.
-- Latest: [2026-10-17 — public native quantized product and private SSA edges](INTEGRATED_COMPILER_LOG.md#2026-10-17--public-native-quantized-product-and-private-ssa-edges)
+- Named v2 edge: four-root BF16 quantization plus NVFP4 expansion and exact FP32 product now uses three native members and four private code/scale planes. Six owning public/portable/fresh-process/lifetime tests and separated timing packets prove this named profile; full MLP/quality and wider integration remain open.
+- Latest: [2026-10-17 — native quantizer NVFP4 expansion and product](INTEGRATED_COMPILER_LOG.md#2026-10-17--native-quantizer-nvfp4-expansion-and-product)
 
 ### ROCM-SPLIT-K-1
 

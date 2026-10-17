@@ -1,0 +1,17 @@
+{
+  "source_revision": "18967d2c82d53fd516bc9e45ec43bc961bdeb210",
+  "device": "NVIDIA GeForce RTX 5070",
+  "architecture": "sm_120",
+  "device_uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "cuda": "13.3 V13.3.73",
+  "tests": "12 passed, 73 deselected",
+  "scope": "existing active-source JVP/ragged/declared-storage ReLU controls; no adoption of new gfx1201 program",
+  "hashes": {
+    "core": "797f9a715198423567658b9bd61b990d40d24737eed0be0986e5f8730a6b391e",
+    "nvidia": "1fb1e911b4072b671f89e65937cd4d1515b5e1cbecda385154708d0702eaacbe",
+    "provider": "37e9b2574217434840448b1d400e9b8509f0103c908098d7d8238024df3ba07f",
+    "fixture": "9e31a32ffcdb35e4390392b8a1558fb00e5c6275cdd5398458f7028c98be4ff1"
+  },
+  "fresh_core_rebuild_matches_measured_gfx1201_compiler": true,
+  "log_sha256": "765719e5b0be1a1efd0f1d5846cbf189983cdf74afa8bd5cb04a6397b34abde1"
+}

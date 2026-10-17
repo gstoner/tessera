@@ -109,6 +109,11 @@ def package_traced_quantized_product(module):
     return program
 
 
+def _compiler_path(native):
+    return ("canonical_rocm_quantized_nvfp4_product_program" if native.expansion is not None
+            else "canonical_rocm_quantized_product_program")
+
+
 def runtime_artifact(program):
     from tessera.runtime import RuntimeArtifact
     program.validate()
@@ -117,7 +122,7 @@ def runtime_artifact(program):
         schedule_ir="\n".join(native.schedule_irs),
         tile_ir="\n".join(p.tile_ir for p in native.native_stages),
         target_ir="\n".join(p.target_ir for p in native.native_stages),
-        metadata={"target":"rocm_gfx1201","compiler_path":"canonical_rocm_quantized_product_program",
+        metadata={"target":"rocm_gfx1201","compiler_path":_compiler_path(native),
                   "execution_kind":"native_gpu","runtime_status":"ready","executable":True,
                   "native_graph_verified":True,"arg_names":list(program.argument_names),"native_program":program.manifest()})
 
@@ -147,6 +152,8 @@ def execute_artifact(artifact,args):
     program=_resolve(json.dumps(metadata.get("native_program"),sort_keys=True,allow_nan=False),
                      artifact.graph_ir,json.dumps(metadata.get("arg_names")))
     native=program.native
+    if metadata.get("compiler_path")!=_compiler_path(native):
+        raise ValueError("native quantized-product parent compiler path differs")
     if (artifact.schedule_ir!="\n".join(native.schedule_irs)
             or artifact.tile_ir!="\n".join(p.tile_ir for p in native.native_stages)
             or artifact.target_ir!="\n".join(p.target_ir for p in native.native_stages)):

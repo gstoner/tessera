@@ -91,3 +91,14 @@ def test_public_capture_selects_only_native_four_root_contract(production_compil
     program=package_traced_quantized_product(module)
     assert program.native.expansion is not None
     assert program.manifest()["schema"]=="tessera.rocm.quantized_product_frontend.v2"
+
+
+def test_portable_profile_cannot_be_relabelled_as_two_member_route(package,monkeypatch):
+    from tessera.compiler.rocm_quantized_product_frontend import TracedQuantizedProduct,runtime_artifact,execute_artifact
+    from tessera import runtime as rt
+    artifact=runtime_artifact(TracedQuantizedProduct(package,("x","packed","weight_scales","globals_")))
+    artifact.metadata["compiler_path"]="canonical_rocm_quantized_product_program"
+    def forbidden():raise AssertionError("wrong compiler path reached provider")
+    monkeypatch.setattr(rt,"_load_rocm_native_movement_runtime",forbidden)
+    with pytest.raises(ValueError,match="compiler path"):
+        execute_artifact(artifact,[])

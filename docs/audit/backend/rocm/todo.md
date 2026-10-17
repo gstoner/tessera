@@ -5,6 +5,28 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-QUANTIZE-NVFP4-PRODUCT-20261017 — three native producers/consumer members
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-QUANTIZE-NVFP4-PRODUCT-20261017.
+
+The named four-root BF16 quantizer / NVFP4 weight expansion / exact FP32
+product now has a native three-member SSA partition and checked private
+Q/SA/B/SB frames. Six owning RX9070XT/gfx1201 device tests pass: four public
+shapes, immutable roots/retained results, complete IR reports, compiler-free
+portable/fresh-process replay, and native readiness/invalidation after updates.
+Native/v1 partition controls pass 19 tests; the earlier 64-case combined gate
+includes package and sibling two-member controls. Three correctness-gated
+packets separate captured members, ordinary program events, retained-owner
+invoke/read and full public calls. No kernel-speedup promotion is asserted.
+
+Follow-up required: full quantizer/gate-up/activation/down MLP, checkpoint/model
+quality, wider layouts/dynamic shapes and encoded AD. gfx1151 has no FP8 WMMA
+and receives no physical admission from these gfx1201 packets.
+
+Evidence: benchmarks/baselines/rocm_quantize_nvfp4_product_20261017/README.md.
+
+
 ## ROCM-RESIDENT-QUANT-PRODUCT-20261017 — native SSA edge
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

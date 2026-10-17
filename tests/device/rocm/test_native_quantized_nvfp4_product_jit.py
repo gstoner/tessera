@@ -31,6 +31,7 @@ def test_public_three_member_program_and_portable_replay(m,n,k,monkeypatch):
     assert "3 ordered native packages" in report.target_decision["rocm_gfx1201"]
     assert all(len(report.ir_hashes[layer])==64 for layer in ("graph_ir","schedule_ir","tile_ir","target_ir"))
     artifact=fn.runtime_artifact()
+    assert artifact.metadata["compiler_path"]=="canonical_rocm_quantized_nvfp4_product_program"
     assert sum(line.lstrip().startswith("schedule.artifact {") for line in artifact.schedule_ir.splitlines())==3
     assert artifact.metadata["native_program"]["schema"]=="tessera.rocm.quantized_product_frontend.v2"
     restored=rt.RuntimeArtifact.from_json(artifact.to_json())

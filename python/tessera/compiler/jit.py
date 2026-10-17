@@ -3748,7 +3748,8 @@ class JitFn:
         if quantized_program is not None and self._has_native_quantized_product_receipts():
             import hashlib
             quant_native=quantized_program.native
-            target_decision["rocm_gfx1201"]=f"canonical_rocm_quantized_product_program; {len(quantized_program.native.native_stages)} ordered native packages"
+            from .rocm_quantized_product_frontend import _compiler_path
+            target_decision["rocm_gfx1201"]=f"{_compiler_path(quant_native)}; {len(quant_native.native_stages)} ordered native packages"
             plan_hash=quant_native.binding_digest
             ir_hashes["graph_ir"]=hashlib.sha256(quantized_program.graph_ir.encode()).hexdigest()
             ir_hashes["schedule_ir"]=hashlib.sha256("\n".join(quant_native.schedule_irs).encode()).hexdigest()

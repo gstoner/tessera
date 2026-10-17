@@ -13136,3 +13136,28 @@ open. No general compiler or full-ingest completion is claimed.
 Evidence: benchmarks/baselines/rocm_resident_quantized_product_public_20261017/README.md;
 benchmarks/baselines/rocm_resident_quantized_product_20261017/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-17 — native quantizer NVFP4 expansion and product
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; follows #969. Sync: ROCM-QUANTIZE-NVFP4-PRODUCT-20261017.
+
+Outcome: native MLIR partitions the original four-root quantizer/expansion/
+product Graph into three members and derives the four private code/scale
+planes. Versioned native/package/frontend v2 records preserve v1. All three
+members descend through Schedule/Tile/Target/LLVM/HSACO to one C++ HIP owner;
+portable restoration validates both producer interfaces and the image-bound
+consumer Target. The dedicated execution row and reports distinguish this
+profile from the two-member program.
+
+Proof: nineteen native partition/v1 tests and an earlier 64-case combined
+owning gate pass; six final gfx1201 public/portable/fresh-process/lifetime tests
+pass. Three timing packets distinguish captured members, ordinary program
+HIP events, prepared invoke/read and complete public calls. All four backend
+queues are assessed. No sibling physical parity or speedup promotion is claimed.
+
+Remaining: full resident quantizer/gate-up/activation/down MLP, model-quality
+acceptance, wider/dynamic layouts, encoded AD and the original five-slice
+NVIDIA/ROCm obligations.
+Evidence: benchmarks/baselines/rocm_quantize_nvfp4_product_20261017/README.md.
+<!-- entry-fields:end -->

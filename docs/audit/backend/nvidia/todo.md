@@ -6,6 +6,21 @@ target: nvidia_sm120
 last_updated: 2026-10-17
 ---
 
+## ROCM-QUANTIZE-NVFP4-PRODUCT-20261017 — three native producers/consumer members
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-QUANTIZE-NVFP4-PRODUCT-20261017.
+
+Not applicable to nvidia physical execution: the new four-root program is
+admitted only for gfx1201. No nvidia kernel, schedule, dtype or runtime ABI
+is changed. Shared runtime assessment: distinct native/portable/frontend v2
+schemas and an explicit three-member execution row preserve the two-member v1
+contract. Follow-up required before adopting the new physical composition on
+this backend; owning gfx1201 receipts do not establish nvidia parity.
+
+Evidence: benchmarks/baselines/rocm_quantize_nvfp4_product_20261017/README.md.
+
+
 ## ROCM-RESIDENT-QUANT-PRODUCT-20261017 — native SSA edge
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

@@ -2877,8 +2877,12 @@ static LogicalResult materializeSm120AttentionRowCorrectionKernel(
         auto shape = op->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
         Value bb = shape[0] == 1 ? zero : b, hh = shape[1] == 1 ? zero : h;
         Value qq = shape[2] == 1 ? zero : q, kk = shape[3] == 1 ? zero : key;
-        Value index = index4(bb, hh, qq, kk, i64Constant(builder, loc, shape[1]),
-            i64Constant(builder, loc, shape[2]), i64Constant(builder, loc, shape[3]));
+        auto physicalExtent = [&](unsigned axis, Value logical) -> Value {
+          return ShapedType::isDynamic(shape[axis]) ? logical
+              : i64Constant(builder,loc,shape[axis]);
+        };
+        Value index = index4(bb, hh, qq, kk, physicalExtent(1,Hq),
+            physicalExtent(2,Sq),physicalExtent(3,Sk));
         value = arith::AddFOp::create(builder, loc, value, load(4, index));
       }
       if (causal) {
@@ -2972,7 +2976,7 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   auto biasShape = op->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
   bool dynamicBias = biasShape && llvm::any_of(biasShape.asArrayRef(),
       [](int64_t dim) { return ShapedType::isDynamic(dim); });
-  if (in.size() != 14 + unsigned(hasBias) + unsigned(hasSavedLse) + unsigned(hasSavedOutput) + unsigned(hasBiasGradient) + unsigned(hasLseCotangent) - removed + 4 * unsigned(dynamicBias) || !storage ||
+  if (in.size() != 14 + unsigned(hasBias) + unsigned(hasSavedLse) + unsigned(hasSavedOutput) + unsigned(hasBiasGradient) + unsigned(hasLseCotangent) - removed + 4 * unsigned(dynamicBias && !externalRows) || !storage ||
       (!f16Storage && !bf16Storage && storage.getValue() != "f32") ||
       (hasLseCotangent && (!hasSavedLse || !hasSavedOutput || (storage.getValue() != "f32" && !halfSaved))) ||
       (hasBiasGradient && (!hasBias || !hasSavedOutput || !hasSavedLse || (storage.getValue() != "f32" && !halfSaved))) ||
@@ -3028,6 +3032,15 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   Value B = in[dimIndex], Hq = in[dimIndex + 1], Hkv = in[dimIndex + 2];
   Value Sq = in[dimIndex + 3], Sk = in[dimIndex + 4];
   Value D = in[dimIndex + 5], Dv = in[dimIndex + 6];
+  auto physicalBiasExtent = [&](unsigned axis) -> Value {
+    SmallVector<Value,4> logical{B,Hq,Sq,Sk};
+    if (!biasShape) return logical[axis];
+    int64_t extent=biasShape[axis];
+    if (!ShapedType::isDynamic(extent)) return i64Constant(builder,loc,extent);
+    // Row products use exactly seven scalar dimensions. Their symbolic
+    // physical bias axes are either broadcast-one or the logical sequence.
+    return externalRows ? logical[axis] : in[dimIndex+7+axis];
+  };
   Value zero = i64Constant(builder, loc, 0);
   Value one = i64Constant(builder, loc, 1);
   Value scale = arith::ConstantFloatOp::create(
@@ -3130,9 +3143,9 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
       Value bh = biasShape && biasShape[1] == 1 ? zero : hq;
       Value bq = biasShape && biasShape[2] == 1 ? zero : q;
       Value bk = biasShape && biasShape[3] == 1 ? zero : key;
-      Value ph = biasShape ? (ShapedType::isDynamic(biasShape[1]) ? in[dimIndex + 7 + 1] : i64Constant(builder, loc, biasShape[1])) : Hq;
-      Value pq = biasShape ? (ShapedType::isDynamic(biasShape[2]) ? in[dimIndex + 7 + 2] : i64Constant(builder, loc, biasShape[2])) : Sq;
-      Value pk = biasShape ? (ShapedType::isDynamic(biasShape[3]) ? in[dimIndex + 7 + 3] : i64Constant(builder, loc, biasShape[3])) : Sk;
+      Value ph = physicalBiasExtent(1);
+      Value pq = physicalBiasExtent(2);
+      Value pk = physicalBiasExtent(3);
       Value index = addI64(builder, loc,
           mulI64(builder, loc,
               addI64(builder, loc,
@@ -3503,9 +3516,7 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
     SmallVector<Value, 4> physical, logical{B,Hq,Sq,Sk};
     Value count = one;
     for (unsigned axis = 0; axis < 4; ++axis) {
-      int64_t extent = biasShape[axis];
-      physical.push_back(ShapedType::isDynamic(extent) ?
-          in[dimIndex + 7 + axis] : i64Constant(builder, loc, extent));
+      physical.push_back(physicalBiasExtent(axis));
       count = mulI64(builder, loc, count, physical.back());
     }
     auto biasGuard = scf::IfOp::create(builder, loc,

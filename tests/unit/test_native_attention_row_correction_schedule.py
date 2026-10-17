@@ -148,6 +148,13 @@ def test_bounded_row_schedule_seals_capacity_without_relabeling_shapes(storage,r
     assert 'shape_policy = "bounded_sequences_v1"' in scheduled
     assert 'row_bytes = 56 : i64' in scheduled
     assert 'tensor<1x2x?xf32>' in scheduled
+    tile=run_tessera_opt(tool,scheduled,'--tessera-schedule-to-tile')
+    assert 'tile.attention_'+role+'_kernel' in tile
+    assert 'shape_policy = "bounded_sequences_v1"' in tile
+    assert f'shape = array<i64: 1, 2, 1, {DYNAMIC_DIM}, {DYNAMIC_DIM}, 4, 3>' in tile
+    malformed=tile.replace('shape_policy = "bounded_sequences_v1"','shape_policy = "unknown"')
+    with pytest.raises(RuntimeError,match='explicit bounded sequence policy'):
+        run_tessera_opt(tool,malformed,'--canonicalize')
     wrong=graph.replace('tessera.target = "nvidia_sm120"','tessera.target = "rocm_gfx1201"')
     with pytest.raises(RuntimeError,match='SM120 target contract'):
         run_tessera_opt(tool,wrong,'--canonicalize')

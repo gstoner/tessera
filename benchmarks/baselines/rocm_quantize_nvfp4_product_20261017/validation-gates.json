@@ -1,0 +1,21 @@
+{
+  "tested_source_revision": "18967d2c82",
+  "rebased_source_revision": "3105fa0fb06b8e8a4a4e62fedbcf64ea102fc8df",
+  "base_main": "f80c590c699a8075a2a6786e8184f5f727d8e663",
+  "complete_source_tree_identical_across_rebase": true,
+  "tree": "c433e142c187593750ac5c5b9917ed32d545b64a",
+  "cpu_unit": "22202 passed, 9946 skipped, 11 warnings in 353.11s",
+  "focused_registry_package_drift": "363 passed",
+  "generated_docs": "33 in sync",
+  "gfx1201_final_route_device": "6 passed",
+  "sm120_existing_profile_regression": "12 passed",
+  "mypy": "0 issues in 3 source files",
+  "ruff": "passed",
+  "logs_sha256": {
+    "cpu-unit.txt": "f71a100006053dda2e025722fa4c8dfcab96a1a689f221ba9d9fb47067541670",
+    "route-drift.txt": "9fb2decfa7f600880f3b82a5d56bee57ea16c04422046bda7bb274e9c62602a4",
+    "generated-final-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "gfx1201-final-route.txt": "068633853979629b17ede2292efe0d50aebffbbc5c8edd780cb88d787f60b659",
+    "sm120-regression.txt": "765719e5b0be1a1efd0f1d5846cbf189983cdf74afa8bd5cb04a6397b34abde1"
+  }
+}

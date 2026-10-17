@@ -72,3 +72,14 @@ Small-shape ordinary event windows varied from about 22.24 to 12.34 us and
 35.10 to 19.91 us across the two runs, while the largest remained about 155 us.
 `timing-repeat-control.json` preserves both observations. These measurements
 are not evidence of an optimization or a stable speedup.
+
+## Final shared gates and synchronization
+
+The clean host CPU unit lane passes 22,202 tests (9,946 legitimate skips).
+The focused package/registry/audit lane passes 363 tests and all 33 generated
+documents are in sync. Fresh matching core and NVIDIA tools pass 12 existing
+RTX5070 active-source JVP/ragged/ReLU controls; this is existing-profile
+regression parity, with no adoption of the new gfx1201 program. Core rebuild
+SHA is byte-identical to the measured gfx1201 compiler. `validation-gates.json`
+proves full source-tree identity when rebasing this slice onto merged PR969;
+`sm120-regression.json` binds the separate owning CUDA evidence.

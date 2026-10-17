@@ -11,6 +11,11 @@ last_updated: 2026-10-17
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
 Sync: ROCM-QUANTIZE-NVFP4-PRODUCT-20261017.
 
+Regression parity validated for twelve existing RTX5070 SM120 active-source
+JVP/ragged/declared-storage ReLU controls with fresh matching core/NVIDIA tools.
+This does not adopt the gfx1201 physical composition. Receipt:
+benchmarks/baselines/rocm_quantize_nvfp4_product_20261017/sm120-regression.json.
+
 Not applicable to nvidia physical execution: the new four-root program is
 admitted only for gfx1201. No nvidia kernel, schedule, dtype or runtime ABI
 is changed. Shared runtime assessment: distinct native/portable/frontend v2

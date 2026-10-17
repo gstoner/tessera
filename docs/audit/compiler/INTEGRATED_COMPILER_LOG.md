@@ -13140,7 +13140,7 @@ benchmarks/baselines/rocm_resident_quantized_product_20261017/README.md.
 ### 2026-10-17 — native quantizer NVFP4 expansion and product
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: pending; follows #969. Sync: ROCM-QUANTIZE-NVFP4-PRODUCT-20261017.
+PRs: pending; follows merged #969. Sync: ROCM-QUANTIZE-NVFP4-PRODUCT-20261017.
 
 Outcome: native MLIR partitions the original four-root quantizer/expansion/
 product Graph into three members and derives the four private code/scale

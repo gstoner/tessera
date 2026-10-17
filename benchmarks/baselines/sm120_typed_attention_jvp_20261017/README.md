@@ -53,8 +53,12 @@ All five public surface audits and both claim linters pass. The broad CI CPU
 lane initially passed 26,310 with four documentation/recorder failures: the
 new contract lacked its date, and the recorder check ran before the packet
 README was tracked. The date is fixed and the reference is committed; all
-37 focused spec/naming/freshness/routing gates now pass. A stable-head broad
-rerun remains required. The initial red receipt is retained.
+37 focused spec/naming/freshness/routing gates now pass. The clean stable-head
+rerun passes **26,314**, with 5,904 skips, zero failures and 11 warnings in
+615.08 seconds. Its XML and stdout receipts are retained along with the initial
+red receipt. Twelve existing FP16/BF16 resident producer-to-matmul JVP cases
+also pass their independent oracle on RTX5070; this is regression proof, not a
+new W1.1 migration.
 Public CI and complete review-thread audit remain required before merge.
 
 ## Timing scope

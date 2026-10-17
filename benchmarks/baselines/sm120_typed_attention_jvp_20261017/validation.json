@@ -36,7 +36,16 @@
       "passed": 37,
       "failed": 0
     },
-    "stable_head_rerun": "pending"
+    "stable_head_rerun": {
+      "head": "3f1e24a26023d301e6a03a0267beb8b885d2ae8f",
+      "passed": 26314,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 5904,
+      "warnings": 11,
+      "seconds": 615.08,
+      "scope": "exact CI CPU marker lane,4workers,timeout180"
+    }
   },
   "generated_docs": 33,
   "public_ci_review": "pending",
@@ -50,5 +59,12 @@
   "audit_routing_cases": 19,
   "public_surface_audits": "all5 surfaces and both public claim linters pass; stale opbench CMake cache refreshed without source/gate changes",
   "revision_coverage_evidence": "generated successfully; complete3-file archive retained",
-  "graph": "offline AST update terminal success"
+  "graph": "offline AST update terminal success",
+  "shared_producer_numerical_regression": {
+    "passed": 12,
+    "skipped": 0,
+    "seconds": 16.38,
+    "scope": "RTX5070 existing FP16/BF16 resident producer-to-matmul JVP; complete/ragged,permuted roots,independent oracle"
+  },
+  "publication_source_scope": "Final receipt/documentation commits retain the exact b63e09a2e measured src/python/tests/recorder tree."
 }

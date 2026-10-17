@@ -17,7 +17,9 @@ and malformed ABI recovery. Sixteen FP32 native artifact controls remain
 identical. Eight correctness-gated profiles separate native event and completed
 public timing scopes. The complete production compiler-route gate passes
 1,587 cases with zero skips; all 33 generated documents pass drift checks.
-The broad CPU lane and public publication gates remain pending.
+The clean-head CI CPU lane passes 26,314 cases (5,904 skipped), with zero
+failures. Twelve existing resident producer JVP regressions pass. Public CI
+and complete review-thread audit remain pending.
 Evidence: benchmarks/baselines/sm120_typed_attention_jvp_20261017/README.md.
 Ordinary bounded host preparation, mixed formats, wider composition and all
 five aggregate requirements remain open.

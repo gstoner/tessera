@@ -13368,8 +13368,13 @@ forward/JVP event windows from completed public costs; no default promotion.
 All four backend queues assess shared helper impact without physical transfer.
 The complete production compiler-route gate passes 1,587 cases with zero
 skips; all 33 generated documents pass drift checks.
+Clean-head broad CI CPU gate: 26,314 passed, 5,904 skipped, zero failures,
+11 warnings in 615.08 seconds. Twelve existing FP16/BF16 resident producer
+JVP cases also pass their independent oracle. Initial documentation/date and
+tracked-recorder failures are repaired; 37 focused gates pass. All five
+public surface audits and both claim linters pass.
 
-Remaining: broad/publication gates, ordinary bounded host JVP preparation,
+Remaining: public CI/review, ordinary bounded host JVP preparation,
 wider layouts/masks, mixed formats, nested/composed AD and original five-slice
 closure. The static prepared owner and bounded portable generations are
 separate execution envelopes.

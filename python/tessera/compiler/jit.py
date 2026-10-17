@@ -3745,7 +3745,7 @@ class JitFn:
             ),
         }
         quantized_program=getattr(self,"_rocm_quantized_product_last_program",None)
-        if self._has_native_quantized_product_receipts():
+        if quantized_program is not None and self._has_native_quantized_product_receipts():
             import hashlib
             quant_native=quantized_program.native
             target_decision["rocm_gfx1201"]=f"canonical_rocm_quantized_product_program; {len(quantized_program.native.native_stages)} ordered native packages"

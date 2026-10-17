@@ -1,0 +1,8 @@
+.....................................                                    [100%]
+=============================== warnings summary ===============================
+tests/unit/test_rocm_public_matmul.py::test_public_matmul_executes_owning_native_profile[fp16-fp16-matmul-True-gfx1201]
+  /home/angstorms/scratch/jvp-schema-reconcile-20261011/tests/unit/../../python/tessera/compiler/rocm_native.py:1720: RuntimeWarning: /home/angstorms/scratch/rocm-native-gate-up-views-20261016/compiler/tools/tessera-opt/tessera-opt is older than 5 generator source(s) -- newest src/compiler/programming_model/lib/PMPasses.cpp. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).
+    warn_if_generator_is_stale(tool)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+37 passed, 24 deselected, 1 warning in 13.32s

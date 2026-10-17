@@ -10,6 +10,8 @@ scope: ROCm backend implementation and exact-device proof
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
 Sync: ROCM-NATIVE-GATE-UP-CONSUMER-20261016.
 
+PR964 registry review: gfx1201 now resolves to tessera-rocm-executable with Level-C partial coverage in the canonical spine inventory. This reflects named proved packages and does not promote unproved operations/envelopes. Existing gfx1201 packagers share the corrected producer label; numerical and serialization controls pass separately. NVFP4 expansion/ingest and MXFP4 folded-storage constructors now name the actual executable producer; 23 expansion/ingest and 13 folded-storage tests pass on owning gfx1201.
+
 Captured-coordinate follow-up (2026-10-17): safe closure/global literals now
 compose inside list/tuple/dictionary attributes. Runtime SSA names retain
 precedence; calls, subscripts and tensor expressions are not evaluated as

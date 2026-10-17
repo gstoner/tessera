@@ -102,3 +102,38 @@ MLP/model-quality acceptance and matched performance remain open. The other
 four original goal slices retain their own architecture-specific obligations.
 The public path currently prepares a native owner per call; host overhead is
 substantial and is not hidden by the device timing figure.
+
+
+## PR964 canonical target-resolution review
+
+The canonical gfx1201 resolution now names tessera-rocm-executable with partial
+Level-C coverage. The compiler-spine CSV/Markdown and dependent scoreboard are
+regenerated; unknown operations/envelopes and gfx1200/gfx1250 remain unpromoted.
+The resolution/package host group passes 90 tests. Owning gfx1201 controls pass
+37 cases: 24 ordinary public FP16/BF16/four-FP8-pair matmul/GEMM cases and the
+13 parent-view/replay cases (24 foreign-gfx1151 cases explicitly deselected).
+
+resolution-compatibility-replay.json proves that legacy serialized FP16 and
+mixed-FP8 artifacts still execute after the metadata change. New packages use
+the corrected producer label and retain identical physical machine-code bytes.
+The frozen resolution_compatibility_control.py records the tested two-phase
+method with original scratch paths. Its capture phase ran at pre-fix head
+010b675c9091f139bde2ae0c703c1e656484c3a8; replay ran after the resolution fix.
+This is compatibility evidence, not a performance or wider-family promotion.
+
+The target-resolution correction exposed three storage constructors that still
+named the old pipeline. Expansion, ingest and folded-storage constructors now
+name their actual executable producer. The pre-fix NVFP4 expansion test failed
+at the compile-request/image identity guard; after correction, 23 expansion/
+ingest tests and 13 folded-storage tests pass on owning gfx1201. The 402-test
+registry/conformance/audit lane and all 33 generated documents also pass.
+These checks establish route and bitwise/numerical compatibility, not speedup.
+
+Final recorder/audit/reference/package gates: 43 passed, seven device-gated
+skips on the NVIDIA build host; gfx1201 storage execution is covered by the
+separate owning-host suites above. Final mypy: no issues in 657 source files.
+review-source-parity.json binds all 39 source files and three tool/library
+identities with zero mismatches.
+
+The preserved failing-test transcript trims trailing whitespace only; the raw
+transcript remains in the owning validation scratch directory.

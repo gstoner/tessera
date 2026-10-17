@@ -90,16 +90,16 @@ taj_cpu,Tajasarus,Zen 5 AVX-512,replay_ssm,bypass,unmeasured,unrouted,partial,ab
 taj_cpu,Tajasarus,Zen 5 AVX-512,ppo,bypass,unmeasured,unrouted,partial,absent,no
 taj_cpu,Tajasarus,Zen 5 AVX-512,ebm,bypass,unmeasured,unrouted,partial,absent,no
 taj_cpu,Tajasarus,Zen 5 AVX-512,clifford,bypass,unmeasured,unrouted,partial,absent,no
-taj_gpu,Tajasarus,gfx1201,matmul,bypass,unmeasured,unrouted,absent,absent,no
-taj_gpu,Tajasarus,gfx1201,softmax,bypass,unmeasured,native,absent,absent,no
-taj_gpu,Tajasarus,gfx1201,reduction,bypass,unmeasured,native,absent,absent,no
-taj_gpu,Tajasarus,gfx1201,norm,bypass,unmeasured,unrouted,absent,absent,no
-taj_gpu,Tajasarus,gfx1201,attention,bypass,unmeasured,native,absent,absent,no
-taj_gpu,Tajasarus,gfx1201,paged_kv,bypass,unmeasured,bypass,absent,absent,no
-taj_gpu,Tajasarus,gfx1201,moe,bypass,unmeasured,bypass,absent,absent,no
-taj_gpu,Tajasarus,gfx1201,linalg,bypass,unmeasured,unrouted,absent,absent,no
-taj_gpu,Tajasarus,gfx1201,epilogue,bypass,unmeasured,unrouted,absent,absent,no
-taj_gpu,Tajasarus,gfx1201,replay_ssm,bypass,unmeasured,unrouted,absent,absent,no
-taj_gpu,Tajasarus,gfx1201,ppo,bypass,unmeasured,unrouted,absent,absent,no
-taj_gpu,Tajasarus,gfx1201,ebm,bypass,unmeasured,unrouted,absent,absent,no
-taj_gpu,Tajasarus,gfx1201,clifford,bypass,unmeasured,unrouted,absent,absent,no
+taj_gpu,Tajasarus,gfx1201,matmul,bypass,unmeasured,unrouted,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,softmax,bypass,unmeasured,native,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,reduction,bypass,unmeasured,native,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,norm,bypass,unmeasured,unrouted,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,attention,bypass,unmeasured,native,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,paged_kv,bypass,unmeasured,bypass,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,moe,bypass,unmeasured,bypass,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,linalg,bypass,unmeasured,unrouted,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,epilogue,bypass,unmeasured,unrouted,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,ppo,bypass,unmeasured,unrouted,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,ebm,bypass,unmeasured,unrouted,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,clifford,bypass,unmeasured,unrouted,partial,absent,no

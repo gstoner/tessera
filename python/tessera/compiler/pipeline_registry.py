@@ -845,10 +845,11 @@ TARGET_PIPELINE_RESOLUTIONS: tuple[TargetPipelineResolution, ...] = (
         "partial", "absent", "The ROCm pipeline is family-shared and exact-device execution remains gated.",
     ),
     TargetPipelineResolution(
-        "rocm_gfx1201", "tessera-target-artifact", "tessera-lower-to-rocm",
-        "declared_shared_builder", "exact_architecture", "rocm",
+        "rocm_gfx1201", "tessera-target-artifact", "tessera-rocm-executable",
+        "declared_exact", "exact_architecture", "rocm",
         "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
-        "partial", "absent", "The ROCm pipeline is family-shared and exact-device execution remains gated.",
+        "partial", "partial", "The exact typed family-plugin pipeline owns the proved gfx1201 native package boundaries, including the named f32 parent-view route. Unsupported operations, storage/layout envelopes and sibling architectures remain gated.",
+        driver_registration_source="src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
     ),
     TargetPipelineResolution(
         "rocm_gfx1250", "tessera-target-artifact", "tessera-lower-to-rocm",

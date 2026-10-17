@@ -11,7 +11,10 @@
     "python/tessera/compiler/jit.py": "0e3eb7e3e7d92651b06aa298212ec5f9b527e758350e09e4d00f785daa5c3cd7",
     "python/tessera/compiler/native_scaled_program.py": "3b70c627d6a5ac83144caced38cb24eb2418f89fecedc7add33873a1e53d7467",
     "python/tessera/compiler/pass_metadata.py": "2e365a2f1ef8a9d52cf12257d3fe070e861993446a3d59d1ad87dbde816a85cb",
-    "python/tessera/compiler/pipeline_registry.py": "3e81099e3a4a8b66b7b6e050d1308237584e7b3995409d93c923f008fe4cee12",
+    "python/tessera/compiler/pipeline_registry.py": "c5f6b66e3385e5dd849ae8fae53fda03a35416df8b9f6f9c8b2937dfe96f7124",
+    "python/tessera/compiler/rocm_mxfp4_storage_native.py": "1a47f3ca4a4b85aeab71dd7293e8301d89922796a6f81646da5cdd84792e1261",
+    "python/tessera/compiler/rocm_nvfp4_expand_native.py": "44bafbe505952d9c064c7e643ed02118670ca8307f42692129fc7bba2fcd3f63",
+    "python/tessera/compiler/rocm_nvfp4_ingest_native.py": "92ccfc40521cebf4cd007e71a6047d82cf1074a8100d9fd367c2cddd35ac535f",
     "python/tessera/compiler/rocm_parent_view_native.py": "716c2ef5f7149515a7b7fc5391b7c07cffdc9442860d2f3e1e1e3133d5d1c138",
     "python/tessera/compiler/rocm_pipeline.py": "0692c8c8f7222860b0b7131588ee71bdd990ee807f48b4b9cae8f78b1ac8cff4",
     "python/tessera/runtime.py": "46ea0f69fc80f57943a56f015fab092afd2e102ab63ca5617dbb234df0e12c31",
@@ -35,6 +38,7 @@
     "tests/unit/test_graph_ir_captured_coordinates.py": "43d88d445048aab79b320a5c363ea4c3d5e94d1b05054a98627e851c37cabde3",
     "tests/unit/test_native_gate_up_view_schedule.py": "baaa232ab2791ec790d66f3c6827317e56bca0f0c71c4e60dd948edae3485f49",
     "tests/unit/test_ods_op_has_consumer.py": "ed560aeb3cbf1f645a9c1a2fa6d27fb60b209da65b3b4d29f96c1c4f03e2fb40",
+    "tests/unit/test_pipeline_registry.py": "2167bf1a2691889863a0b8ab0710c54e7b5e1277d1d5b389138799f258acc08f",
     "tests/unit/test_rocm_compiled_family_gate.py": "a3576b5bcb6c5bd9b50a8049ec35c8244589a8493f50da8e5f7429bf0824fdd9",
     "tests/unit/test_rocm_parent_view_native_package.py": "23b7816c2d4d11dedc5f1fad81427801a0e3a0041a02940a0e4da2413cd4709b"
   },
@@ -51,5 +55,10 @@
   "captured_timing_recorder": {
     "path": "benchmarks/rocm/record_native_parent_view.py",
     "timing_packet": "public-parent-view-captured-timings.json"
+  },
+  "resolution_compatibility_control": {
+    "path": "resolution_compatibility_control.py",
+    "capture_revision": "010b675c9091f139bde2ae0c703c1e656484c3a8",
+    "sha256": "749b06f48752f9825815de36d341ca2e4d7bd8fed867316c3c9e6dec47a4bad3"
   }
 }

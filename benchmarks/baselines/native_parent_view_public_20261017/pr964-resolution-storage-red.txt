@@ -1,0 +1,67 @@
+F
+=================================== FAILURES ===================================
+____________ test_public_jit_cached_image_and_serialized_replay[16] ____________
+
+k = 16, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x73747054cd60>
+
+    @DEVICE
+    @pytest.mark.parametrize("k", [16, 48, 80])
+    def test_public_jit_cached_image_and_serialized_replay(k, monkeypatch):
+        from tessera import runtime as rt
+        from tessera.compiler import nvfp4_expansion as reference
+        assert rt._rocm_live_arch() == "gfx1201"
+        args = operands(k)
+        expected = reference.reference_nvfp4_expand(*args, row_offsets=[0, 3, 7],
+                                                    numeric_policy=nvfp4_expansion_policy())
+        def forbidden(*a, **kw):
+            pytest.fail("compiled execution called the eager expansion oracle")
+        monkeypatch.setattr(reference, "reference_nvfp4_expand", forbidden)
+>       first = expand(*args)
+                ^^^^^^^^^^^^^
+
+tests/unit/test_rocm_nvfp4_expansion_jit.py:60:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+python/tessera/compiler/jit.py:1052: in __call__
+    native_descriptor = self._try_native_descriptor_call(args, kwargs)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:2037: in _try_native_descriptor_call
+    compiled = canonical_compile(module, target=target,
+python/tessera/compiler/canonical_compile.py:1200: in canonical_compile
+    bundle = _compile_graph_module(
+python/tessera/compiler/driver.py:1355: in compile_graph_module
+    bundle = CompileArtifactBundle(
+<string>:20: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = CompileArtifactBundle(request=CompileRequest(source_origin='inspect', function_name='expand', graph_ir='module attribu...f55eb9dc4fb24ac98e0964e9e2f92bee', 'work_item': 'ROCM-NVFP4-INGEST-1'}, schema_version='tessera.launch_descriptor.v1'))
+
+    def __post_init__(self) -> None:
+        if self.launch_descriptor is not None and self.native_image is None:
+            raise ValueError("a launch descriptor requires a native image")
+        if self.native_image is None:
+            return
+        if self.native_image.target != self.request.target:
+            raise ValueError("native image target does not match compile request")
+        if self.native_image.pipeline_name != self.request.pipeline_name:
+            resolution = target_pipeline_lookup(self.request.target)
+            declared_producer = (
+                resolution.declared_pipeline
+                if resolution is not None and self.request.pipeline_name == resolution.current_driver_pipeline
+                else None
+            )
+            if self.native_image.pipeline_name != declared_producer:
+>               raise ValueError("native image pipeline does not match compile request")
+E               ValueError: native image pipeline does not match compile request
+
+python/tessera/compiler/driver.py:216: ValueError
+=============================== warnings summary ===============================
+tests/unit/test_rocm_nvfp4_expansion_jit.py::test_public_jit_cached_image_and_serialized_replay[16]
+  /home/angstorms/scratch/jvp-schema-reconcile-20261011/tests/unit/../../python/tessera/compiler/rocm_native.py:1619: RuntimeWarning: /home/angstorms/scratch/rocm-native-gate-up-views-20261016/compiler/tools/tessera-opt/tessera-opt is older than 5 generator source(s) -- newest src/compiler/programming_model/lib/PMPasses.cpp. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).
+    warn_if_generator_is_stale(tool)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/unit/test_rocm_nvfp4_expansion_jit.py::test_public_jit_cached_image_and_serialized_replay[16]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 1 warning in 1.20s

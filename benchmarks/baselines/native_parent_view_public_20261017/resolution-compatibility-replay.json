@@ -1,0 +1,22 @@
+{
+  "architecture": "gfx1201",
+  "scope": "canonical producer metadata and legacy serialized replay; no schedule/performance promotion",
+  "rows": [
+    {
+      "case": "f16",
+      "legacy_replay": "native_gpu_numerically_passed",
+      "old_producer": "tessera-lower-to-rocm",
+      "new_producer": "tessera-rocm-executable",
+      "payload_sha256": "dcd43c841fbebd7bd5007dac3631a77cc6d8487869eac79bc9ec139bb33cf518",
+      "physical_bytes_unchanged": true
+    },
+    {
+      "case": "mixed_fp8",
+      "legacy_replay": "native_gpu_numerically_passed",
+      "old_producer": "tessera-lower-to-rocm",
+      "new_producer": "tessera-rocm-executable",
+      "payload_sha256": "ab023853c3b54cb907de224cc7f8b12896f9e4b7eae6be188c83f0e29fdb0e50",
+      "physical_bytes_unchanged": true
+    }
+  ]
+}

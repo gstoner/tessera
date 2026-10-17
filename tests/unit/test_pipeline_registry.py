@@ -402,9 +402,15 @@ def test_compilation_spine_inventory_is_machine_readable_and_truthful() -> None:
     assert all(
         row.level_c == "absent"
         for row in rows
-        if row.target not in {"apple_gpu", "apple_cpu", "rocm_gfx1151", "x86"}
+        if row.target not in {"apple_gpu", "apple_cpu", "rocm_gfx1151", "rocm_gfx1201", "x86"}
     )
     assert next(row for row in rows if row.target == "rocm_gfx1151").level_c == "partial"
+    assert next(row for row in rows if row.target == "rocm_gfx1201").level_c == "partial"
+    gfx1201 = target_pipeline_lookup("rocm_gfx1201")
+    assert gfx1201 is not None and gfx1201.declared_pipeline == "tessera-rocm-executable"
+    assert gfx1201.resolution_state == "declared_exact"
+    assert next(row for row in rows if row.target == "rocm_gfx1200").level_c == "absent"
+    assert next(row for row in rows if row.target == "rocm_gfx1250").level_c == "absent"
     assert next(row for row in rows if row.target == "x86").level_c == "partial"
     assert target_pipeline_lookup("nvidia_sm80").declared_pipeline is None  # type: ignore[union-attr]
     assert next(row for row in rows if row.target == "nvidia_sm120").level_a == "native"

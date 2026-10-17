@@ -109,7 +109,7 @@ def package_nvfp4_expansion(graph: str | GraphIRModule):
         tile, directive="tessera_rocm.nvfp4_expand", family="quant_fp", architecture="gfx1201")
     info = _contract(tile, target)
     image = NativeImageArtifact(
-        target="rocm_gfx1201", architecture="gfx1201", pipeline_name="tessera-lower-to-rocm",
+        target="rocm_gfx1201", architecture="gfx1201", pipeline_name="tessera-rocm-executable",
         compiler_fingerprint=compiler, toolchain_fingerprint=toolchain,
         target_ir_digest=_digest(target), binary_format="hsaco", payload=binary,
         entry_points=(NativeEntryPoint(info[-1], NVFP4_EXPAND_ABI),),

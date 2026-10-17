@@ -12,6 +12,8 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
 Sync: ROCM-NATIVE-GATE-UP-CONSUMER-20261016.
 
+PR964 registry review assessment: the exact gfx1201 pipeline resolution now exposes partial Level-C coverage. Not applicable to this backend's physical execution; its target resolution and numerical schedules are unchanged. No ROCm proof is transferred.
+
 Captured-coordinate follow-up (2026-10-17): safe closure/global literals now
 compose inside list/tuple/dictionary attributes. Runtime SSA names retain
 precedence; calls, subscripts and tensor expressions are not evaluated as

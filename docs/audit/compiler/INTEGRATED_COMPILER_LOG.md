@@ -13121,7 +13121,7 @@ marshals the native plan and performs no numerical lowering or intermediate
 host readback. The new consumer uses its unprojected checked native Target IR.
 
 Proof: five gfx1201 public/portable/fresh-process/inspection-isolation cases,
-eighteen package contracts, three prepared numerical/timing packets and twelve
+nineteen package contracts, three prepared numerical/timing packets and twelve
 existing RTX5070 SM120 regression controls pass. The public-call optimization
 reuses the verified private program; portable launch still validates serialized
 artifacts. Public/serialized-control, captured-member, ordinary event and

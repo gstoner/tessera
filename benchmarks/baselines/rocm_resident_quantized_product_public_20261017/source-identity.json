@@ -1,5 +1,5 @@
 {
-  "python/tessera/compiler/rocm_quantized_product_program.py": "49b8defb1ee28d6430d01a8be5d2c1fe2d06c084a3ddf864ddb45d4487670e3d",
+  "python/tessera/compiler/rocm_quantized_product_program.py": "72ed5658510a14a152c4c15e245936fdd41a99523168256dded86cdf165fe945",
   "python/tessera/compiler/rocm_quantized_product_frontend.py": "c3c6dd757119de3ecb36178558d99f2fc55548f816406214b141f09098ba700b",
   "python/tessera/compiler/jit.py": "c8d59f6ebe646a8c2beb5d54fe2af4ba7f4c50dff5aed1b7b02a61e4688c4f0f",
   "python/tessera/compiler/execution_matrix.py": "0de0565b255f05a918576262687336cd943998aef6e65dfa072c2666f33e200a",
@@ -10,6 +10,6 @@
   "src/transforms/lib/NativeQuantizedProductProgram.h": "6ec3b3298776009ba798777317d0991eeca2f17d42fc8f60f24b4e4f721ee021",
   "benchmarks/rocm/benchmark_public_quantized_product.py": "18c20bab26410e88bac1f78cb42b6bd0f34842e2ec8f79408c10afa0aac5da16",
   "benchmarks/rocm/benchmark_resident_quantized_product.py": "8e20a92d3e553874fca3eba1f27f49d4d7316043cff17904c4eeb529b3fbde0e",
-  "tests/unit/test_rocm_quantized_product_program.py": "421e6b25510c4f6d6a42ede305c9275e4eb40d84130191d0e4ecce3a458bd7ab",
+  "tests/unit/test_rocm_quantized_product_program.py": "14df0e56d77de7c365a64cf0ef5a514a6260f0c4068168465e1dbfe2713fbc03",
   "tests/device/rocm/test_native_quantized_product_jit.py": "6c277050d14ab342f1aa651499893472e65bd9a58ed4f5c97ade54783091bd32"
 }

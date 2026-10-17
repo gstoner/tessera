@@ -132,7 +132,7 @@ class NativeQuantizedProductProgram:
         if self.binding_digest != self._identity():
             raise ValueError("native quantized-product member binding differs")
         plan = json.loads(self.program_json)
-        _,shape = _frame_shape(plan)
+        roles,shape = _frame_shape(plan)
         if (plan["source_graph_ir"] != self.graph_ir
                 or plan["member_graphs"] != [self.quantizer_recipe.graph_ir,self.product_recipe.graph_ir]
                 or self.product_recipe.shape != shape
@@ -141,11 +141,15 @@ class NativeQuantizedProductProgram:
             raise ValueError("native quantized-product projected Graph differs")
         from tessera.runtime import RuntimeArtifact
         quant = self.quantizer
-        validate_block_quant_runtime_artifact(RuntimeArtifact(
+        quant_bound=validate_block_quant_runtime_artifact(RuntimeArtifact(
             graph_ir=self.quantizer_recipe.graph_ir,schedule_ir=self.quantizer_recipe.schedule_ir,
             tile_ir=quant.tile_ir,target_ir=quant.target_ir,native_image=quant.image,
             launch_descriptor=quant.descriptor,
             metadata={"target":"rocm_gfx1201","compiler_path":"rocm_block_quant_native_descriptor"}))
+        quant_buffers=json.loads(quant_bound.program_json)["buffers"]
+        for local,shared in zip(quant_buffers,(plan["buffers"][slot] for slot in (roles[0],3,4)),strict=True):
+            if any(local[key]!=shared[key] for key in ("shape","storage","bytes")):
+                raise ValueError("native quantized-product producer/shared buffer interface differs")
         native = self.product
         native.descriptor.validate_image(native.image)
         checked = check_blockscale_target_ir(shape,native.tile_ir,self.checked_product_target_ir)

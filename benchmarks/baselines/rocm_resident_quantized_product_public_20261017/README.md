@@ -16,7 +16,7 @@ RX 9070 XT / gfx1201 / GPU-28d9e7efbf2ef716. Five public device tests cover
 three shapes, changed roots, retained results, no-eager-quantization traps,
 keyword and positional portable bindings, compiler-disabled warm calls and
 fresh-process replay. A mutated inspection artifact cannot rewrite the cached
-private compiler product. Eighteen package/contract tests cover source admission,
+private compiler product. Nineteen package/contract tests cover source admission,
 re-sealed buffer/lifetime corruption and parent-stage mutation before provider
 access. FP32 composed outputs use rtol/atol 0.0002; this is a tolerance-based
 comparison with an independent float64 block-scaled oracle.
@@ -25,9 +25,9 @@ comparison with an independent float64 block-scaled oracle.
 
 | M×N×K | Warm public call ms | Serialized-dispatch control ms | Max absolute error |
 |---|---:|---:|---:|
-| 19×33×64 | 3.177 | 5.922 | 3.33765e-07 |
-| 256×128×12288 | 4.063 | 6.776 | 5.47557e-05 |
-| 3×17×32 | 3.403 | 5.981 | 1.01893e-07 |
+| 19×33×64 | 3.153 | 5.962 | 3.33765e-07 |
+| 256×128×12288 | 5.625 | 6.714 | 5.47557e-05 |
+| 3×17×32 | 3.270 | 5.968 | 1.01893e-07 |
 
 The control reconstructs the artifact and uses portable dispatch with the same
 native members. It omits frontend dispatch, so it is not a reconstruction of
@@ -74,3 +74,11 @@ Twelve existing RTX5070 SM120 producer/ragged/ReLU controls pass with matching
 core and NVIDIA tools. `sm120-regression.json` records the exact UUID, source
 revision and compiler/provider/fixture hashes. This is existing-profile
 regression evidence; the new quantized-product program remains gfx1201-only.
+
+## Cross-member interface check
+
+`producer-interface-counterexample.json` records an individually valid K64
+quantizer substituted into a K32 composed plan. The old validator admitted the
+re-sealed record; the new validator compares native producer shape/storage/byte
+spans with all three shared interfaces and rejects it before provider access.
+The malformed program was not launched.

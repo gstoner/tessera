@@ -109,3 +109,19 @@ def test_portable_parent_stage_mutation_refuses_before_provider(package,stage,mo
     monkeypatch.setattr(rt,"_load_rocm_native_movement_runtime",forbidden)
     with pytest.raises(ValueError,match="Graph|witness"):
         execute_artifact(artifact,[])
+
+
+@pytest.mark.compiler_route
+@pytest.mark.compiler_rocm
+def test_individually_valid_wrong_shape_quantizer_cannot_bind_shared_buffers(package):
+    from tessera.compiler.rocm_block_quant_native import lower_block_quant_text,package_block_quant_recipe
+    from tests.unit.test_native_k16_quant_graph import source as quant_source
+    # All member descriptors remain valid; only the composed edge is wrong.
+    recipe=lower_block_quant_text(quant_source(3,64))
+    other=package_block_quant_recipe(recipe)
+    plan=json.loads(package.program_json)
+    plan["member_graphs"][0]=recipe.graph_ir
+    changed=replace(package,program_json=json.dumps(plan),quantizer_recipe=recipe,quantizer=other)
+    changed=replace(changed,binding_digest=changed._identity())
+    with pytest.raises(ValueError,match="producer/shared buffer"):
+        changed.validate()

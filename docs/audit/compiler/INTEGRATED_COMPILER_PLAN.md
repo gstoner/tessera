@@ -183,7 +183,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - The named BF16 quantizer-to-exact-scaled-product edge now executes through
   public Python JIT, native source partition, Schedule/Tile and checked private
   HIP buffers. Five gfx1201 public/portable/fresh-process/inspection-isolation
-  tests and eighteen package contracts pass. Public FP32 outputs cover three
+  tests and nineteen package contracts pass. Public FP32 outputs cover three
   static shapes through K12288. Warm calls reuse the verified private program;
   artifact construction remains an inspection/portable boundary. Native BF16
   output has separate prepared-route proof. Quantizer plus NVFP4 expansion,

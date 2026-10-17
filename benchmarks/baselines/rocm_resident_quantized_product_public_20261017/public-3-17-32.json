@@ -30,27 +30,27 @@
       "native_call_binding": "native_cpp_multi_output"
     }
   ],
-  "cold_call_ms": 555.1626219821628,
+  "cold_call_ms": 584.0092539729085,
   "warm_public_samples_ms": [
-    3.432047998233299,
-    3.3964159998244474,
-    3.4077445743605494,
-    3.403204568063042,
-    3.3898004289117774,
-    3.3543041416643455,
-    3.491113714907052
+    3.2021571449669346,
+    3.2338932880000875,
+    3.2750115704922274,
+    3.2698789977335503,
+    3.250378998927772,
+    3.3358534274157137,
+    3.3016652866665805
   ],
-  "warm_public_median_ms": 3.403204568063042,
+  "warm_public_median_ms": 3.2698789977335503,
   "serialized_dispatch_control_samples_ms": [
-    6.010804857526507,
-    5.980964429909363,
-    6.004419285870556,
-    6.021035003608891,
-    5.9812551439141055,
-    5.937556000260104,
-    5.905436285372291
+    5.882258996799854,
+    5.932254429873345,
+    5.907883859306041,
+    6.0421552833369265,
+    5.967749282717705,
+    5.993731573523421,
+    6.055847142956087
   ],
-  "serialized_dispatch_control_median_ms": 5.9812551439141055,
+  "serialized_dispatch_control_median_ms": 5.967749282717705,
   "control_scope": "fresh compiler artifact construction plus portable launch using the same native members; excludes frontend dispatch",
   "artifact_sha256": "aeec0782696486845af934cafdc378a7dce450ca8700ed603027ababc8071e29",
   "recorder_sha256": "18c20bab26410e88bac1f78cb42b6bd0f34842e2ec8f79408c10afa0aac5da16",

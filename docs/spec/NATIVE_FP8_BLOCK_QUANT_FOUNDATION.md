@@ -259,3 +259,67 @@ Random numerical comparisons use BF16 tolerances; separate analytic cases
 prove bitwise parent rounding and both SiLU operand orientations. Full down
 projection, wider layouts/dynamic shapes, encoded derivatives and model
 quality remain open.
+
+
+## Seven-member full MLP native partition (v4)
+
+`tessera.native.quantized_product.v4` reuses the validated v3 gate/up prefix
+and v2 quantizer/expansion/product suffix over the original Graph SSA. Seven
+read-only roots contain the input plus independent gate/up and down packed
+weights, scales and projection globals. Seven members derive eighteen
+buffers: roots 0..6, first Q/SA 7/8, first B/SB 9/10, BF16 parent 11, BF16
+activation 12, second Q/SA 13/14, second B/SB 15/16 and returned output 17.
+The activation is written by member 3 and read by member 4; second quantized
+planes are read by member 6. The actual product result type controls the
+final FP32 or BF16 store under the existing exact product contract.
+
+A common native SSA outliner derives root order, private allocations and
+first-write/last-read bounds from certified original operation groups. Both
+quantizers and expansions retain their original math and numerical policies.
+The native partition was established first; prepared-owner evidence is scoped
+below. Public frontend admission, production runtime replay, separate timings
+and broader numerical/model acceptance remain required.
+
+### Prepared v4 owner and numerical boundaries
+
+The compiler exports two base64 native component plans in `subprograms`: v3
+gate/up and v2 down projection. The v4 package validates those plans, their
+seven member graphs and the shared activation interface against the outer
+eighteen-buffer frame. It binds all seven steps into one multi-output C++ HIP
+owner. Component owners are used only in diagnostic comparisons.
+
+On RX9070XT/gfx1201, three prepared shapes (M/H/K/N = 1/16/16/1,
+3/32/48/19 and 256/128/12288/256) pass original-root, compiler-free restored
+and retained-owner updated-root checks. Updating roots invalidates downstream
+readiness; old returned arrays remain stable. This is prepared execution, not
+yet the public authored frontend route or fresh-process full-MLP replay.
+
+Independent checks follow explicit rounding boundaries. FP64 product
+references validate the BF16 parent store; the activation is checked against
+FP32 SiLU applied to the actual stored parent. The resident result is bitwise
+equal to the same native components run separately. The down product is
+checked against independent math at its actual activation input. The final
+comparison bounds the quantized-input perturbation by the absolute decoded
+weight product, with explicit terminal-store rounding and the unchanged
+per-stage numerical allowance. A pointwise relative tolerance against an
+ideal earlier activation alone is insufficient across discontinuous
+requantization and nonlinear SiLU. No numerical policy or physical kernel
+was changed to pass these cases.
+
+### Authored public MLP and final BF16 store
+
+The flat public Python function carries both quantizers and both NVFP4
+projections in its original Graph. Its final FP32 product is followed by an
+explicit BF16 cast: the 38-operation form joins the earlier 37-operation
+direct-result form. The down product/cast remain one physical member using
+the same pure, single-use FP32-to-BF16 validator as the gate/up store. The
+three-member v2 component frame retains its schema and storage semantics.
+
+`canonical_rocm_quantized_mlp_program` binds native/package/frontend v4 through
+the existing program executor. Eight exact-gfx1201 tests prove public JIT,
+compiler-disabled warm and portable replay, fresh-process replay, current
+seven receipts and nested inspection isolation. Three numerical/timing
+packets preserve store-boundary and propagation certificates, including flat
+FP64-reference disagreements. This is a named static public profile, not
+checkpoint/model-quality, dynamic, encoded-AD or sibling physical closure.
+Evidence: benchmarks/baselines/rocm_quantized_mlp_20261017/README.md.

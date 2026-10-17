@@ -5,6 +5,17 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-QUANTIZED-MLP-20261017 — native gate/up-to-down partition
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-QUANTIZED-MLP-20261017.
+
+Eight owning gfx1201 cases now prove the authored seven-root public JIT, native seven-member partition, explicit BF16 parent and down stores, eighteen private/root/result buffers, readiness invalidation, retained arrays, compiler-free warm/portable/fresh-process replay and inspection isolation. The 362-case focused gate and 15 execution-registry checks pass. Three timing packets keep captured members, ordinary events, prepared invoke/read and public calls separate. At M256/H128/K12288/N256 the ordinary event is 177.70 us and public warm call 12.934 ms. No speedup promotion is claimed. Numerical certificates retain the 13 flat-reference discrepancies and validate explicit stores and propagated quantization error.
+
+Remaining: checkpoint/model quality, host dispatch cost, representative layouts/dynamic/AD and the original five-slice NVIDIA/ROCm obligations. gfx1151 has no FP8 WMMA and receives no physical admission.
+
+Evidence: benchmarks/baselines/rocm_quantized_mlp_20261017/README.md.
+
 ## ROCM-QUANTIZED-GATEUP-20261017 — native quantizer through gate/up
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

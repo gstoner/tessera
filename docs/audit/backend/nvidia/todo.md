@@ -6,6 +6,15 @@ target: nvidia_sm120
 last_updated: 2026-10-17
 ---
 
+## ROCM-QUANTIZED-MLP-20261017 — native gate/up-to-down partition
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-QUANTIZED-MLP-20261017.
+
+Regression parity validated: freshly rebuilt core/NVIDIA tools pass all 85 existing active-source JVP/runtime fixture cases on RTX5070, including hardware execution and host contracts. No adoption of the gfx1201 seven-member physical program is inferred. Shared assessment: native/package/frontend v4, a common pure FP32-to-BF16 store verifier and portable runtime binding preserve earlier schemas. NVIDIA physical producer/attention/model obligations remain open; separate evidence is required before adoption.
+
+Evidence: benchmarks/baselines/rocm_quantized_mlp_20261017/README.md.
+
 ## ROCM-QUANTIZED-GATEUP-20261017 — native quantizer through gate/up
 
 Regression parity validated: the freshly rebuilt core/NVIDIA tools pass all 85 existing active-source JVP/runtime fixture cases on the owning RTX5070. These include hardware execution and host contract controls. Receipt: benchmarks/baselines/rocm_quantized_gate_up_20261017/sm120-regression.json.

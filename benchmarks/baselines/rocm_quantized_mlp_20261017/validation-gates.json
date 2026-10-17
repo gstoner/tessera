@@ -1,0 +1,41 @@
+{
+  "source_revision": "4485c746ca",
+  "gates": {
+    "native_frontend_registry": {
+      "result": "362 passed",
+      "log_sha256": "91452d5af80f5c15b320582965ffac09e8101b2c6540b5af8e8ba8a46aea2aad"
+    },
+    "route_registry": {
+      "result": "15 passed",
+      "log_sha256": "ff73c3b52ec6f9e718effa95c0d20b197d8448ce77ac3ccff7acce737a494962"
+    },
+    "gfx1201": {
+      "result": "8 passed",
+      "log_sha256": "70f36b46fda8754b4cc51ef7c58118921480037757e1a9aba6171a956b461c99"
+    },
+    "sm120_existing_profile": {
+      "result": "85 passed",
+      "log_sha256": "f5eb925b772c49267622c132021dfb4c27158e9ec708649980363381381e5ea0"
+    },
+    "cpu_unit": {
+      "result": "22206 passed, 9946 skipped, 11 warnings",
+      "log_sha256": "63580df7dfedd4ec4cbd59b678a844390cb29d892961831f246176fdb721e4c4"
+    },
+    "audit_metadata_diagnostics": {
+      "result": "311 passed",
+      "log_sha256": "eb52a6c52827217298f346593e2b3adbde293894b5b358c79b6bf731e662109b"
+    },
+    "mypy": {
+      "result": "Success: no issues found in 3 source files",
+      "log_sha256": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8"
+    },
+    "generated_docs": {
+      "result": "33 generated docs in sync",
+      "log_sha256": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d"
+    }
+  },
+  "remaining": [
+    "public CI and complete review before merge",
+    "model quality and remaining full goal"
+  ]
+}

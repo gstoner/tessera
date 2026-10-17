@@ -1,0 +1,15 @@
+{
+  "source_revision": "4485c746ca",
+  "device": "NVIDIA GeForce RTX 5070",
+  "architecture": "sm_120",
+  "device_uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "tests": "85 passed",
+  "scope": "existing active-source JVP/runtime fixture; no adoption of gfx1201 physical composition",
+  "hashes": {
+    "core": "620ed50bfe4eefb826e538063a4d7bd69bc1d42774b8b94cb199de8310b0f4a5",
+    "nvidia": "1fb1e911b4072b671f89e65937cd4d1515b5e1cbecda385154708d0702eaacbe",
+    "provider": "37e9b2574217434840448b1d400e9b8509f0103c908098d7d8238024df3ba07f",
+    "fixture": "9e31a32ffcdb35e4390392b8a1558fb00e5c6275cdd5398458f7028c98be4ff1",
+    "log": "f5eb925b772c49267622c132021dfb4c27158e9ec708649980363381381e5ea0"
+  }
+}

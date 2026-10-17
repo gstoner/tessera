@@ -4,6 +4,7 @@
 
 namespace tessera {
 static mlir::LogicalResult emitNativeQuantizedGateUpProgram(mlir::ModuleOp module);
+static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module);
 static mlir::func::FuncOp cloneQuantizedProductMember(mlir::func::FuncOp member,
                                                     int64_t index) {
   auto child = mlir::cast<mlir::func::FuncOp>(member->clone());
@@ -44,23 +45,28 @@ static mlir::LogicalResult emitNativeQuantizedProductProgram(mlir::ModuleOp modu
   if (llvm::range_size(roots) != 1) return refuse();
   auto root = *roots.begin();
   if (root.isDeclaration() || !root.getBody().hasOneBlock() ||
-      (root.getNumArguments() != 3 && root.getNumArguments() != 4) || root.getNumResults() != 1) return refuse();
+      (root.getNumArguments() != 3 && root.getNumArguments() != 4 && root.getNumArguments() != 7) || root.getNumResults() != 1) return refuse();
   for (unsigned i=0; i<root.getNumArguments(); ++i)
     if (auto attrs = root.getArgAttrDict(i); attrs && !attrs.empty()) return refuse();
   SmallVector<Operation *> ops;
   for (Operation &op : root.getBody().front().without_terminator()) ops.push_back(&op);
+  if (ops.size()==37 || ops.size()==38) return emitNativeQuantizedMLPProgram(module);
   if (ops.size()==22) return emitNativeQuantizedGateUpProgram(module);
-  bool expansion = ops.size() == 15 &&
+  bool expansion = (ops.size() == 15 || ops.size() == 16) &&
       ops[13]->getName().getStringRef() == "tessera.nvfp4_expand";
   if ((!expansion && ops.size() != 14) ||
       root.getNumArguments() != (expansion ? 4u : 3u)) return refuse();
-  auto product = dyn_cast<ScaledMatmulOp>(ops.back());
+  bool storeCast=expansion && ops.size()==16;
+  if (storeCast && ops.back()->getNumResults()!=1) return refuse();
+  auto product = dyn_cast<ScaledMatmulOp>(ops[storeCast?14:ops.size()-1]);
   auto ret = dyn_cast<func::ReturnOp>(root.getBody().front().back());
   if (!product || product->getNumOperands() != 4 || product->getNumResults() != 1 ||
-      !ret || ret.getNumOperands() != 1 || ret.getOperand(0) != product->getResult(0) ||
+      !ret || ret.getNumOperands() != 1 ||
+      ret.getOperand(0) != (storeCast?ops.back()->getResult(0):product->getResult(0)) ||
       ops[0]->getNumOperands() != 1 || ops[11]->getNumResults() != 1 || ops[12]->getNumResults() != 1 ||
       product->getOperand(0) != ops[11]->getResult(0) ||
       product->getOperand(2) != ops[12]->getResult(0)) return refuse();
+  if (storeCast && failed(verifyNativeFP32ToBF16Store(product->getResult(0),ops.back()))) return failure();
   SmallVector<Value> roles{ops[0]->getOperand(0)};
   if (expansion) {
     auto weight = ops[13];
@@ -100,7 +106,7 @@ static mlir::LogicalResult emitNativeQuantizedProductProgram(mlir::ModuleOp modu
   int64_t m=profile->rows,k=profile->columns;
   auto rhs = dyn_cast<RankedTensorType>(product->getOperand(1).getType());
   auto scales = dyn_cast<RankedTensorType>(product->getOperand(3).getType());
-  auto output = dyn_cast<RankedTensorType>(product->getResult(0).getType());
+  auto output = dyn_cast<RankedTensorType>(ret.getOperand(0).getType());
   auto trans = product->getAttrOfType<BoolAttr>("transposeB");
   auto scale = product->getAttrOfType<DictionaryAttr>("scale_layout");
   auto numeric = product->getAttrOfType<DictionaryAttr>("numeric_policy");
@@ -143,10 +149,11 @@ static mlir::LogicalResult emitNativeQuantizedProductProgram(mlir::ModuleOp modu
     inputs.push_back({roles[1],roles[2],roles[3]});
     outputs.push_back({ops[13]->getResult(0),ops[13]->getResult(1)});
   }
-  groups.push_back({product});
+  if (storeCast) groups.push_back({product,ops.back()});
+  else groups.push_back({product});
   inputs.push_back({product->getOperand(0),product->getOperand(1),
                     product->getOperand(2),product->getOperand(3)});
-  outputs.push_back({product->getResult(0)});
+  outputs.push_back({ret.getOperand(0)});
   llvm::DenseMap<Value,int64_t> ids; SmallVector<Value> values;
   SmallVector<int64_t> writes,reads;
   for (Value value : root.getArguments()) {
@@ -196,6 +203,12 @@ static mlir::LogicalResult emitNativeQuantizedProductProgram(mlir::ModuleOp modu
     projected->setAttr("tessera.target",i+1==groups.size()?b.getStringAttr("rocm"):target);
     projected->setAttr("tessera.arch",arch);
     if (i==0) projected->setAttr("tessera.native.block_quant",b.getUnitAttr());
+    if (storeCast && i+1==groups.size()) {
+      projected->setAttr("tessera.target",target);
+      projected->setAttr("tessera.native.fp8_store_cast",b.getUnitAttr());
+      member->setAttr("tessera.native.quantized_product_projection",b.getDictionaryAttr(projected->getAttrs()));
+      member->setAttr("tessera.native.quantized_product_projection_name",b.getStringAttr("quantized_product"));
+    }
     projected.getBody()->push_back(cloneQuantizedProductMember(member,i));
     std::string text; llvm::raw_string_ostream os(text); projected.print(os);os.flush();
     members.push_back(text+"\n"); projected.erase();

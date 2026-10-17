@@ -39,6 +39,33 @@ static mlir::func::FuncOp cloneNativeNVFP4Member(mlir::func::FuncOp member, int6
   return child;
 }
 
+static mlir::LogicalResult verifyNativeFP32ToBF16Store(
+    mlir::Value parentValue, mlir::Operation *store) {
+  using namespace mlir;
+  auto productType = dyn_cast<RankedTensorType>(parentValue.getType());
+  auto storedType = store->getNumResults() == 1
+      ? dyn_cast<RankedTensorType>(store->getResult(0).getType()) : RankedTensorType{};
+  auto dtype = store->getAttrOfType<StringAttr>("dtype");
+  if (store->getName().getStringRef() != "tessera.cast" ||
+      store->getNumOperands() != 1 || store->getOperand(0) != parentValue ||
+      !parentValue.hasOneUse() || !productType || !productType.getElementType().isF32() ||
+      !storedType || !storedType.getElementType().isBF16() ||
+      productType.getShape() != storedType.getShape() ||
+      !dtype || dtype.getValue() != "bf16")
+    return store->emitError("NVFP4 product store requires a single-use explicit FP32-to-BF16 cast");
+  for (auto attr : store->getAttrs())
+    if (attr.getName() != "dtype" && attr.getName() != "pure" &&
+        attr.getName() != "tessera.effect_kind")
+      return store->emitError("NVFP4 product store cast metadata needs its own contract");
+  if (auto effect = store->getAttr("tessera.effect_kind"))
+    if (!isa<StringAttr>(effect) || cast<StringAttr>(effect).getValue() != "pure")
+      return store->emitError("NVFP4 product store requires a pure cast");
+  if (auto pure = store->getAttr("pure"))
+    if (!isa<BoolAttr>(pure) || !cast<BoolAttr>(pure).getValue())
+      return store->emitError("NVFP4 product store requires a pure cast");
+  return success();
+}
+
 static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
   using namespace mlir;
   if (failed(verify(module))) return failure();
@@ -115,27 +142,7 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
     Value parentValue = product->getResult(0);
     if (explicitStore) {
       auto store = ops[2];
-      auto productType = dyn_cast<RankedTensorType>(parentValue.getType());
-      auto storedType = store->getNumResults() == 1
-          ? dyn_cast<RankedTensorType>(store->getResult(0).getType()) : RankedTensorType{};
-      auto dtype = store->getAttrOfType<StringAttr>("dtype");
-      if (store->getName().getStringRef() != "tessera.cast" ||
-          store->getNumOperands() != 1 || store->getOperand(0) != parentValue ||
-          !parentValue.hasOneUse() || !productType || !productType.getElementType().isF32() ||
-          !storedType || !storedType.getElementType().isBF16() ||
-          productType.getShape() != storedType.getShape() ||
-          !dtype || dtype.getValue() != "bf16")
-        return root.emitError("NVFP4 product store requires a single-use explicit FP32-to-BF16 cast");
-      for (auto attr : store->getAttrs())
-        if (attr.getName() != "dtype" && attr.getName() != "pure" &&
-            attr.getName() != "tessera.effect_kind")
-          return root.emitError("NVFP4 product store cast metadata needs its own contract");
-      if (auto effect = store->getAttr("tessera.effect_kind"))
-        if (!isa<StringAttr>(effect) || cast<StringAttr>(effect).getValue() != "pure")
-          return root.emitError("NVFP4 product store requires a pure cast");
-      if (auto pure = store->getAttr("pure"))
-        if (!isa<BoolAttr>(pure) || !cast<BoolAttr>(pure).getValue())
-          return root.emitError("NVFP4 product store requires a pure cast");
+      if (failed(verifyNativeFP32ToBF16Store(parentValue,store))) return failure();
       parentValue = store->getResult(0);
     }
     auto parent = dyn_cast<RankedTensorType>(parentValue.getType());

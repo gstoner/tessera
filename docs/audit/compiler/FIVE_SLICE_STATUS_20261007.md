@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-16
+last_updated: 2026-10-17
 audit_role: reference
 ---
 
@@ -11,6 +11,22 @@ PR954 extend the source and proof below; the current storage slice is recorded s
 NVFP4 expansion and source-preserving multi-output ownership. Older entries retain their original
 revision-bound outcomes. An older packet does not validate later source,
 and a passing test lane does not close a wider capability envelope.
+
+## Native quantized MLP public profile — 2026-10-17
+
+Following merged PR971, the authored BF16 quantizer/gate-up/activation/down
+Graph now has seven native Schedule/Tile/Target/LLVM/HSACO members, explicit
+BF16 stores and one checked HIP owner on gfx1201. Eight owning device cases
+prove public/portable/fresh-process/current-root/lifetime behavior. Three
+packets retain independent store-boundary numerical certificates, flat
+reference disagreements and distinct device/public timing windows.
+Evidence: benchmarks/baselines/rocm_quantized_mlp_20261017/README.md.
+
+This named static profile does not establish checkpoint/model quality, host
+dispatch/performance closure, wider/dynamic/encoded AD or sibling execution.
+All five aggregate requirements remain open. Broad/final publication gates
+are still active for this slice.
+
 
 ## Static typed public reverse proof — 2026-10-16
 

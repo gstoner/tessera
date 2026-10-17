@@ -41,12 +41,16 @@ def _export(tool, source):
     if len(encoded) != 1:
         raise ValueError("requires one native quantized-product SSA record")
     plan = json.loads(base64.b64decode(encoded[0],validate=True))
-    if not isinstance(plan,dict) or plan.get("schema") not in _NATIVE_SCHEMAS:
+    if not isinstance(plan,dict) or plan.get("schema") not in (*_NATIVE_SCHEMAS,"tessera.native.quantized_product.v4"):
         raise ValueError("native quantized-product schema differs")
     return plan
 
 
 def _frame_shape(plan):
+    if isinstance(plan,dict) and plan.get("schema")=="tessera.native.quantized_product.v4":
+        from .rocm_quantized_mlp_program import _frame as mlp_frame
+        roles,shape,_=mlp_frame(plan)
+        return roles,shape
     if not isinstance(plan,dict):
         raise ValueError("native quantized-product frame differs")
     activated = plan.get("schema") == _ACTIVATED_SCHEMA
@@ -269,6 +273,9 @@ class NativeQuantizedProductProgram:
 
     @classmethod
     def from_manifest(cls,record):
+        if isinstance(record,dict) and record.get("schema")=="tessera.rocm.quantized_product_package.v4":
+            from .rocm_quantized_mlp_program import NativeQuantizedMLPProgram
+            return NativeQuantizedMLPProgram.from_manifest(record)
         from .native_artifact import NativeImageArtifact,LaunchDescriptor
         if (not isinstance(record,dict) or set(record)!={"schema","program_json","graph_ir","checked_product_target_ir","binding_digest","stages"}
                 or record["schema"] not in _PACKAGE_SCHEMAS
@@ -309,6 +316,9 @@ def package_quantized_product_graph(graph_ir):
     if tool is None:
         raise RuntimeError("native quantized product requires matching tessera-opt")
     plan = _export(tool,graph_ir)
+    if plan["schema"]=="tessera.native.quantized_product.v4":
+        from .rocm_quantized_mlp_program import package_quantized_mlp_plan
+        return package_quantized_mlp_plan(plan,tool)
     _,shape = _frame_shape(plan)
     # Replay normalized source before accepting a package witness.
     if _export(tool,plan["source_graph_ir"]) != plan:

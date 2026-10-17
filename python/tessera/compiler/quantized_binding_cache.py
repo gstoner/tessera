@@ -53,17 +53,19 @@ def _memoize(package_position):
         cache: OrderedDict[object,object]=OrderedDict()
         lock=threading.RLock();process=os.getpid()
         hits=misses=0
-        @wraps(method)
-        def wrapped(*args,**kwargs):
+        def ensure_process():
             nonlocal process,cache,lock,hits,misses
             if os.getpid()!=process:
-                # No lock or ctypes binding inherited from another process is
-                # used before resetting the process-local host certificate.
                 cache=OrderedDict();lock=threading.RLock();process=os.getpid()
                 hits=misses=0
+        @wraps(method)
+        def wrapped(*args,**kwargs):
+            nonlocal hits,misses
+            # Reset even inspection locks before touching inherited state.
+            ensure_process()
             if os.environ.get('TESSERA_ROCM_PROGRAM_BINDING_CACHE','1')!='1':
                 return method(*args,**kwargs)
-            package=args[package_position] if len(args)>package_position else kwargs.get('package')
+            package=args[package_position] if len(args)>package_position else kwargs.get('self' if package_position==0 else 'package')
             try:key=_snapshot(package)
             except _Uncacheable:return method(*args,**kwargs)
             with lock:
@@ -81,8 +83,10 @@ def _memoize(package_position):
                 return result
         def clear():
             nonlocal hits,misses
+            ensure_process()
             with lock:cache.clear();hits=misses=0
         def info():
+            ensure_process()
             with lock:return {'hits':hits,'misses':misses,'size':len(cache),'maxsize':_ENTRIES,'entry_byte_limit':_ENTRY_BYTES}
         setattr(wrapped,"cache_clear",clear)
         setattr(wrapped,"cache_info",info)

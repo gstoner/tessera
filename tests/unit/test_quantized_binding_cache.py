@@ -87,3 +87,18 @@ def test_process_change_discards_cached_host_bindings(fixture,monkeypatch):
     binder.bind(p)
     assert calls==['validate','bind','validate','bind']
     assert binder.bind.cache_info()['size']==1
+
+
+def test_keyword_self_cannot_share_a_certificate_with_other_content(fixture):
+    Package,_,calls=fixture;p=Package()
+    Package.validate(self=p)
+    with pytest.raises(ValueError):Package.validate(self=replace(p,graph='wrong'))
+    assert calls==['validate','validate']
+
+
+def test_process_change_resets_inspection_before_lock_access(fixture,monkeypatch):
+    Package,Binder,_=fixture;binder=Binder();binder.bind(Package())
+    pid=cache.os.getpid();monkeypatch.setattr(cache.os,'getpid',lambda:pid+1)
+    assert binder.bind.cache_info()['size']==0
+    binder.bind.cache_clear()
+    assert binder.bind.cache_info()['size']==0

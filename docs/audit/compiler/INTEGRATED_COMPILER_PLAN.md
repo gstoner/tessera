@@ -193,7 +193,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Named v3 gate/up: native MLIR composes four members through an explicit BF16 parent store and SiLU activation. Eleven new owning device cases plus eleven legacy controls pass; three packets separate device and public timings. Full down projection, model quality and wider integration remain open.
 - Named v4 public MLP: original quantizer/gate-up/activation/down Graph executes through seven native members and checked resident buffers. Eight owning cases and separated timing packets pass; checkpoint/model quality, host dispatch cost and wider integration remain open.
 - Quantized host binding reuse: content-certified validation and ABI memoization pass thirty owning v1-v4 cases and image-identical final-source public timing improves 2.43-2.97x. Runtime input/readiness checks remain per call; broader/model-quality closure remains open.
-- Latest: [2026-10-17 — content-certified quantized host binding reuse](INTEGRATED_COMPILER_LOG.md#2026-10-17--full-pinned-checkpoint-mlp-characterization)
+- Latest: [2026-10-17 — full pinned checkpoint MLP characterization](INTEGRATED_COMPILER_LOG.md#2026-10-17--full-pinned-checkpoint-mlp-characterization)
 
 ### ROCM-SPLIT-K-1
 
@@ -431,7 +431,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 
 - Current slice (2026-09-30, sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30): The Graph-to-package contract composes bounded dynamic M/N/K on gfx1201 and sm_120. Exact-device fp16/bf16 parity, padded host ingress, allocation residency, and image reuse pass. Separate fp16 and bf16 event packets support stage attribution only; gfx1201 variation is high. Apple and x86 need independent resident consumers; wider physical layouts and remaining W1.1 producers stay open. [Evidence](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 
-- Latest: [2026-10-16 — native ROCm SiLU activation and explicit store-width ownership](INTEGRATED_COMPILER_LOG.md#2026-10-16--native-rocm-silu-activation-and-explicit-store-width-ownership)
+- Latest: [2026-10-17 — typed bounded resident attention generations](INTEGRATED_COMPILER_LOG.md#2026-10-17--typed-bounded-resident-attention-generations)
 
 Current increment: checked rank-four broadcast saved-LSE packages and private tape execute on SM120; physical bias extents, deterministic reduction and saved-state pairing are bound through native Graph/Schedule/Tile and checked CUDA descriptors. [Evidence](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md). Broader W1.1, frontend/AD and sibling routes remain open.
 

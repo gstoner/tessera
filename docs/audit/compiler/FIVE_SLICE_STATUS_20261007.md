@@ -5,6 +5,18 @@ audit_role: reference
 
 # Five compiler slices after PR 892: completion evidence
 
+## Typed bounded resident attention candidate — 2026-10-17
+
+Queued source 99e389916 closes the named FP16/BF16 GPU-generation capture
+boundary through the existing native forward/reverse checkpoint images.
+56 new RTX5070 cases and 317 existing source/device regressions pass; broad
+WSL CPU validation passes 22,240 with 9,946 skips. Six independent-oracle
+timing packets separate captured native dispatch from completed owner host
+cost. Half JVP, composed/dynamic ordinary reverse breadth, wider masks,
+producer reconstruction and aggregate five-slice closure remain open.
+Evidence: benchmarks/baselines/sm120_typed_resident_capture_20261017/README.md.
+
+
 ## Full checkpoint MLP quality follow-up — 2026-10-17
 
 The next local slice executes all three pinned layer-0 Qwen3 gate/up/down

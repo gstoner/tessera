@@ -1,0 +1,24 @@
+{
+  "failed_head": "f0493b96c14ed9a1c24085ac37e4c10f80d8f3e6",
+  "cause": "E2E-REAL-6 Latest predates its newest log entry; the new anchor was attached to the ROCm task instead of the E2E task",
+  "unit_result": "1 failed, 22209 passed, 9976 skipped",
+  "affected_owners": [
+    "E2E-REAL-6",
+    "ROCM-NVFP4-INGEST-1"
+  ],
+  "repair": "owner-specific Latest labels and anchors corrected; routing checker and tests unchanged",
+  "focused_repair_result": "19 passed",
+  "logs": {
+    "unit": {
+      "sha256": "81b8147240c0567e73f683f3f86c797f8031338ac72ec268bdcd145d4c5d7d7f",
+      "url": "https://github.com/gstoner/tessera/actions/runs/39050155976/job/117446917163"
+    },
+    "audit": {
+      "sha256": "590faa06188c98ed280b54f80d60a75c96058c273a137f52aea1dd82ebbfbc92",
+      "url": "https://github.com/gstoner/tessera/actions/runs/39050155976/job/117446916964"
+    }
+  },
+  "generated_docs": "33 generated documents in sync",
+  "transition_against_origin_main": "passed",
+  "repair_scope": "documentation pointers and publication evidence only; no runtime or tests/checker changes"
+}

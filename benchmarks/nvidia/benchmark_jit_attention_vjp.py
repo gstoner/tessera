@@ -52,7 +52,11 @@ def reference(q,k,v,seed,causal):
 
 def download(session,value):
     spec=value.__cuda_array_interface__
-    output=np.empty(spec["shape"],np.dtype(spec["typestr"]))
+    physical=np.dtype(spec["typestr"])
+    dtype=np.dtype(getattr(value,"dtype",physical))
+    if np.dtype(dtype.str)!=physical or (dtype.kind=="V" and dtype==physical):
+        raise ValueError("CUDA reference download requires matching semantic storage")
+    output=np.empty(spec["shape"],dtype)
     copy=ctypes.CDLL("libcuda.so.1").cuMemcpyDtoH_v2
     copy.argtypes=[ctypes.c_void_p,ctypes.c_void_p,ctypes.c_size_t]
     copy.restype=ctypes.c_int
@@ -82,7 +86,7 @@ def record(samples,reps,shapes=None):
         rng=np.random.default_rng(120_303)
         values=[(rng.normal(size=s)*.2).astype(np.float32) for s in
             ((b,hq,sq,d),(b,hkv,sk,d),(b,hkv,sk,dv),(b,hq,sq,dv))]
-        expected,lse,grad=reference(*values,causal)
+        expected,lse,grad=reference(values[0],values[1],values[2],values[3],causal)
         start=time.perf_counter_ns()
         program=function(wrt,causal).compile_native_attention_vjp(
             *values[:3],compiler=Path(os.environ["TESSERA_OPT"]))

@@ -62,7 +62,7 @@ def test_driver_failure_destroys_event(failed):
 
 def test_group_waits_once_per_stream_but_repeats_for_next_call():
     owner,calls=frame()
-    def resident(value,shape,*,producer_streams):
+    def resident(value,shape,*,producer_streams,storage="fp32"):
         producer_streams.append(value)
         return 512
     owner._resident=resident
@@ -77,7 +77,7 @@ def test_group_waits_once_per_stream_but_repeats_for_next_call():
 
 def test_group_validates_all_buffers_before_ordering_any_stream():
     owner,calls=frame()
-    def resident(value,shape,*,producer_streams):
+    def resident(value,shape,*,producer_streams,storage="fp32"):
         if value=="invalid":
             raise ValueError("allocation extent")
         producer_streams.append(value)
@@ -98,7 +98,7 @@ def test_async_snapshot_orders_future_producer_writes_after_private_reads():
 
 def test_async_source_group_requires_declared_stream_before_dependencies():
     owner,calls=frame();owner.asynchronous=True
-    def resident(value,shape,*,producer_streams):
+    def resident(value,shape,*,producer_streams,storage="fp32"):
         producer_streams.append(None);return 512
     owner._resident=resident
     with pytest.raises(ValueError,match="declared producer"):

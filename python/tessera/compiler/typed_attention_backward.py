@@ -223,7 +223,26 @@ def _verify_package(package, backward):
     return descriptor
 
 
-def checkpoint_pair_shapes(pair):
+def checkpoint_forward_shapes(pair, *, runtime_dims=None):
+    """Verify a typed forward-only resident generation without a reverse image."""
+    from .typed_attention_checkpoint import validate_typed_saved_lse_descriptor
+    from .attention_shape_contract import attention_dimensions,descriptor_attention_shapes
+    from .nvidia_native import _checkpoint_identity
+    forward=_verify_package(pair.forward,False)
+    storage,output=validate_typed_saved_lse_descriptor(forward)
+    p=forward.provenance
+    identity=_checkpoint_identity(tuple(p['shape']),p['scale'],p['causal'],
+        bias=p['bias'],bias_shape=tuple(p.get('bias_shape',())),
+        shape_bounds=tuple(p.get('shape_bounds',())),storage=storage,output_storage=output)
+    if pair.contract_digest!=identity:
+        raise ValueError("typed forward checkpoint generation differs")
+    dims=attention_dimensions(p['shape'],p.get('shape_bounds',()),runtime_dims)
+    descriptor_attention_shapes(forward,runtime_dims)
+    b,hq,hkv,sq,sk,d,dv=dims
+    return dims,((b,hq,sq,d),(b,hkv,sk,d),(b,hkv,sk,dv),(b,hq,sq,dv),(b,hq,sq))
+
+
+def checkpoint_pair_shapes(pair, *, runtime_dims=None):
     """Validate the typed pair for the synchronous public owner, without tools."""
     from .typed_attention_checkpoint import validate_typed_saved_lse_descriptor
     from .attention_shape_contract import attention_dimensions, descriptor_attention_shapes
@@ -249,8 +268,9 @@ def checkpoint_pair_shapes(pair):
             (biased and fn[3] != bn[5]) or
             f.get('frontend_argument_indices') != b.get('frontend_argument_indices')):
         raise ValueError("typed checkpoint saved/front-end roles differ")
-    dims = attention_dimensions(f['shape'], f.get('shape_bounds', ()))
-    descriptor_attention_shapes(forward)
+    dims = attention_dimensions(f['shape'], f.get('shape_bounds', ()),runtime_dims)
+    descriptor_attention_shapes(forward,runtime_dims)
+    descriptor_attention_shapes(backward,runtime_dims)
     d, hq, hkv, sq, sk, width, value_width = dims
     return dims, ((d, hq, sq, width), (d, hkv, sk, width), (d, hkv, sk, value_width),
                   (d, hq, sq, value_width), (d, hq, sq))

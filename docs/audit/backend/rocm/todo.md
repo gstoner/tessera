@@ -5,6 +5,16 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## SM120-TYPED-RESIDENT-CAPTURE-20261017 — typed bounded resident generations
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-TYPED-RESIDENT-CAPTURE-20261017.
+
+Shared assessment: the low-level native GPU buffer owner can now represent existing FP16/BF16 storage and the CUDA benchmark reference preserves BF16 numeric tags. ROCm NativeDeviceTape callers continue requesting their prior default FP32 allocations; no ROCm package, native ABI, physical dtype admission, kernel or selector changes. Host byte-width/dtype tests cover the shared helper. Follow-up required before ROCm typed adoption; no SM120 execution/performance proof transfers.
+
+Evidence: benchmarks/baselines/sm120_typed_resident_capture_20261017/README.md.
+
+
 ## ROCM-CHECKPOINT-MLP-QUALITY-20261017 — full pinned layer characterization
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

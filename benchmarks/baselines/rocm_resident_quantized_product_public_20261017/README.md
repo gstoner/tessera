@@ -66,3 +66,10 @@ general layouts, nested frontend helper inlining, encoded AD, NVFP4 expansion
 chaining, full gate/up/activation/down MLP and model-quality acceptance remain
 open. No sibling hardware parity, kernel speedup or complete NVFP4-ingest
 closure is claimed.
+
+## Shared-runtime regression gate
+
+Twelve existing RTX5070 SM120 producer/ragged/ReLU controls pass with matching
+core and NVIDIA tools. `sm120-regression.json` records the exact UUID, source
+revision and compiler/provider/fixture hashes. This is existing-profile
+regression evidence; the new quantized-product program remains gfx1201-only.

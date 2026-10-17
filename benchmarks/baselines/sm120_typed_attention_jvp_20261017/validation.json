@@ -1,0 +1,34 @@
+{
+  "combined": {
+    "passed": 650,
+    "skipped": 0,
+    "warnings": 4,
+    "seconds": 164.85
+  },
+  "focused_registry": {
+    "passed": 484,
+    "skipped": 0,
+    "cohort_overlap": true
+  },
+  "bounded_cases": 8,
+  "fresh_process_cases": 8,
+  "textual_f32_output_cases": 8,
+  "typed_stream_cases": 4,
+  "fp32_native_artifact_controls": 16,
+  "compiler_control_provider_matches_final": true,
+  "prepared_diagnostic_bitwise_cases": 16,
+  "malformed_binding_cases": 12,
+  "full_mypy": "errors0_baseline0",
+  "ruff": "pass",
+  "broader_unit": "pending",
+  "generated_docs": 33,
+  "public_ci_review": "pending",
+  "scope": "Counts overlap; no sum and no aggregate five-slice closure or sibling physical transfer",
+  "production_compiler_route": {
+    "passed": 1587,
+    "skipped": 0,
+    "seconds": 126.48,
+    "every_selected_proof_executed": true
+  },
+  "audit_routing_cases": 19
+}

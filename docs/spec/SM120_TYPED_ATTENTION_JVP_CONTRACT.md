@@ -41,7 +41,8 @@ The new native prepare_typed entry takes explicit storage IDs (1=f32, 2=f16,
 3=bf16), output storage and a boolean saved-LSE flag. Its typed entry admits
 half data; legacy prepare entries retain f32 semantics. Q/K/V and their
 tangent buffers use two bytes per element for half data. O/dO follow output
-storage; bias and all row quantities retain four bytes. Grid calculations use
+storage; bias and all row quantities retain four bytes. The complete canonical forward symbol and its digest suffix must match the
+output storage; a common prefix is insufficient. Grid calculations use
 element counts before byte-width projection. Producer stream dependencies,
 allocation capacities, snapshots, retained outputs and context ownership
 remain checked. Typed forward bias extents are passed explicitly, including
@@ -60,7 +61,9 @@ Four exact-device cases also order pending writes from independent producer
 streams through the typed prepared ABI. Eight correctness-gated timing rows
 characterize tiny and longer static sequences with common quantized-value f32
 controls, keeping CUDA event windows separate from completed public calls.
-Bounded typed sequence replay, fresh-process public replay, wider layout and
-lifetime stress, and broader derivative composition remain required before
-broader closure.
+Bounded typed sequence replay, trace-at-one shrink/grow/capacity checks,
+fresh-process compiler-absent static/bounded replay and authored FP32 output
+now have separate public proofs. The ordinary native prepared host owner is
+static; bounded programs use portable resident generations. Wider layouts,
+lifetime composition and derivatives remain open before broader closure.
 No numerical or performance proof transfers to ROCm, Apple or x86.

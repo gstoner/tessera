@@ -11,9 +11,10 @@ last_updated: 2026-10-17
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
 Sync: SM120-TYPED-JVP-20261017.
 
-Private integration candidate: native typed Graph AD/Schedule/Tile JVP, portable resident replay and the typed static prepared owner now carry FP16/BF16 data and explicit FP32 row/bias roles. Half-output score derivatives use an unrounded FP32 weighted-V correction. Static owning checks pass separately from the remaining bounded/fresh-process/wider-lifetime and publication gates. Existing FP32 native artifact controls remain identical. Aggregate five-slice closure stays open.
+Implementation: native typed Graph AD/Schedule/Tile JVP, portable resident replay and the typed static prepared owner now carry FP16/BF16 data and explicit FP32 row/bias roles. Half-output score derivatives use an unrounded FP32 weighted-V correction. Static, bounded trace-at-one, fresh-process compiler-absent replay, authored FP32 output and pending producer-stream proofs are separate from ordinary bounded host preparation, wider composition and publication gates. Native flag refusal now checks complete output-storage symbol identity. Existing FP32 native artifact controls remain identical. Aggregate five-slice closure stays open.
 
 Contract: docs/spec/SM120_TYPED_ATTENTION_JVP_CONTRACT.md.
+Evidence: benchmarks/baselines/sm120_typed_attention_jvp_20261017/README.md.
 
 
 ## SM120-AD-WITNESS-DIGEST-20261017 — bounded metadata digest reuse

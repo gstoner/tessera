@@ -14,6 +14,7 @@ Sync: SM120-TYPED-JVP-20261017.
 Not applicable to Apple execution: the half attention TangentInterface admission remains gated to exact nvidia_sm120/sm_120. Shared typed zero construction and dtype helpers do not establish an Apple JVP image or ABI. No Metal numerical/performance result or datatype admission is claimed.
 
 Contract: docs/spec/SM120_TYPED_ATTENTION_JVP_CONTRACT.md.
+Evidence: benchmarks/baselines/sm120_typed_attention_jvp_20261017/README.md.
 
 
 ## SM120-AD-WITNESS-DIGEST-20261017 — bounded metadata digest reuse

@@ -1,0 +1,627 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, 12.0",
+  "source_revision": "b63e09a2e4ea4d6ead288ae66fdd56a754d355e5",
+  "source_dirty": true,
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_typed_attention_jvp.py": "b616f5d61abd8deb6da3a5f777ad41d2f6565b2580c8432bf4c463f516db9698",
+    "python/tessera/compiler/native_attention_jvp_runtime.py": "be35385f4d1408fa35ca0e5b25ca44a23174a82f1f8d2d83c69c2ebc2348c833",
+    "python/tessera/compiler/native_attention_jvp.py": "f33db12af0ff082d068bd2cbf4df280e86a0c0fb76a1354af9e57a440e06708a",
+    "python/tessera/compiler/native_attention_jvp_artifact.py": "fb76db885bc7a463a21d52f9ac638c4efaf7b5facebb81c90acdad4e28773ef3",
+    "python/tessera/compiler/native_attention_program.py": "6fe3c42508b25fd266e8793c3031a0d3d3e2d08f51ad420dc007934a0c2ec98c",
+    "python/tessera/compiler/native_gpu_tensor.py": "425303b4bece007270414215850218f4c83e4a076e24e30f33075f0a89fee67c",
+    "python/tessera/compiler/native_jvp_plugins.py": "787ea2900aa61c66cba047ef222ddda11c021313f8fc0438f8089385469f9643",
+    "python/tessera/compiler/jit.py": "6b9e3a11983df8b5c9dd44b560b6932f7188fb75657354b40d88316b3e251fb0",
+    "python/tessera/compiler/resident_attention.py": "e37f6e98460ddd9f538d12ddd9ce47645e5b7f2367fa394da3149a03c82eeead",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "dabde6b867f4b8f371c1cebd1c32f04f9a6027ba0db755c7ac49d906d2f38f0b",
+    "src/compiler/programming_model/lib/NativeAttentionJvp.h": "02aae74992591c9a074d5b9f8ff76b960f5d9b36e786a3cbfffac096ab5a5cc9",
+    "src/compiler/ir/TangentInterface.cpp": "5de21cb8730c513d214c06a6c355fab3ac77fa42e16387d8e37a4b807d60eb89",
+    "src/compiler/ir/include/Tessera/IR/AttentionTangentZero.h": "0e7fe3886a2cf166db5c534ea44a27efc0ed00df4d33339f86e1b2693e07e52d",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "5d1fb1ee4f0c860741819b465704877e43f4518ae3f78088e2a1662f5c19cc7b",
+    "src/transforms/lib/AutodiffForwardPass.cpp": "09a80e0fc55a79c5ceccf4dce0873d0e5604a030fb79a6e2ceef5ca2a7ed95af"
+  },
+  "runtime_sha256": "277465f65cf9b93308230d32ee96311b3a9706b994ceafde1272f7ca5ae50859",
+  "compiler_sha256": "41e0d35b4cf07ea733e08db2d7a6d41d7ff9dce9afbcfef93ebc9ce9d5a3bacd",
+  "scope": "static saved-LSE, causal, GQA2, no bias; quantized-common-value f32 controls; compile, initial preparation and oracle excluded; public calls include validation/upload/readback; CUDA event dispatch windows reported separately, not hardware-counter isolated kernel proof; no default or speedup promotion",
+  "rows": [
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        16,
+        16
+      ],
+      "source_quantization": "float16",
+      "storage": "float16",
+      "saved_lse": true,
+      "correctness": "independent_fp64_before_timing",
+      "program_digest": "35eeeac6b12e891afbd5ed6e1d0c09bfc6a4baf49a48107b3b79d3d276711e1e",
+      "program_artifact": "artifacts/35eeeac6b12e891afbd5ed6e1d0c09bfc6a4baf49a48107b3b79d3d276711e1e.json.xz",
+      "program_artifact_sha256": "6268aeaf500dea72ea71094afd891e7fb134c7a1e04e5a3a1b3960b720077d9b",
+      "forward_image_sha256": "c452cc82da7f2bba6173574eab43908d246dec7d47831110819dc7b28a477adc",
+      "tangent_image_sha256": "34ee0bb5485f8fd3e7a4b22b2834df76c0fbdb0dd6505fd792e5ac8e3283d46b",
+      "host_sizer_sha256": "b876f202a8397b81548bf3841ac78cdf872d20aba4957959267b779526d58ed6",
+      "forward_entry": "tessera_tile_attention_lse_f16_out_f16_36523f0867",
+      "tangent_entry": "saved_lse_jvp_with_lse",
+      "completed_public_host_samples_ms": [
+        1.609523023944348,
+        1.5474330284632742,
+        1.5418929979205132,
+        1.6355630359612405,
+        1.5595430159009993,
+        1.5149329556152225,
+        1.5613429713994265,
+        1.6527230036444962,
+        1.5749920275993645
+      ],
+      "completed_public_host_median_ms": 1.5613429713994265,
+      "native_forward_jvp_event_samples_ms": [
+        [
+          0.02127999998629093,
+          0.02316799946129322
+        ],
+        [
+          0.02070399932563305,
+          0.025567999109625816
+        ],
+        [
+          0.04947200044989586,
+          0.02457600086927414
+        ],
+        [
+          0.017472000792622566,
+          0.022816000506281853
+        ],
+        [
+          0.05632000043988228,
+          0.016448000445961952
+        ],
+        [
+          0.024351999163627625,
+          0.022655999287962914
+        ],
+        [
+          0.024480000138282776,
+          0.02195199951529503
+        ],
+        [
+          0.06111999973654747,
+          0.016383999958634377
+        ],
+        [
+          0.057920001447200775,
+          0.017184000462293625
+        ]
+      ],
+      "native_forward_event_median_ms": 0.024480000138282776,
+      "native_jvp_event_median_ms": 0.022655999287962914
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        16,
+        16
+      ],
+      "source_quantization": "float16",
+      "storage": "float32",
+      "saved_lse": true,
+      "correctness": "independent_fp64_before_timing",
+      "program_digest": "4be52e01f0ec5c0083b180df017e079ad4dc53e9d1b8ea8ae5b59deaa4a152c9",
+      "program_artifact": "artifacts/4be52e01f0ec5c0083b180df017e079ad4dc53e9d1b8ea8ae5b59deaa4a152c9.json.xz",
+      "program_artifact_sha256": "96ae23221dea9113ba8011d2986df15e6e80fc132434c0353a7c9d3fbafe3039",
+      "forward_image_sha256": "e9f04c703c3bfafe8c71d346be8ceb1e11553031b4db0ffcad6103415a9d7e94",
+      "tangent_image_sha256": "cc8f469022e566b6cea94c8b458bb8e3f8148cf50e4e2dcc7cd65db2cf89fac6",
+      "host_sizer_sha256": "9b099c3007c67efaf373c4c95e2c6ee4ee64554105238ab9becbd55411f80979",
+      "forward_entry": "tessera_tile_attention_lse_a774cd2a69",
+      "tangent_entry": "saved_lse_jvp_with_lse",
+      "completed_public_host_samples_ms": [
+        1.5443220036104321,
+        1.599513052497059,
+        1.6069840057753026,
+        1.5146519872359931,
+        1.5287930145859718,
+        1.5834129881113768,
+        1.5160320326685905,
+        1.5509829972870648,
+        1.5218019834719598
+      ],
+      "completed_public_host_median_ms": 1.5443220036104321,
+      "native_forward_jvp_event_samples_ms": [
+        [
+          0.07107199728488922,
+          0.014399999752640724
+        ],
+        [
+          0.027583999559283257,
+          0.017216000705957413
+        ],
+        [
+          0.040383998304605484,
+          0.0522879995405674
+        ],
+        [
+          0.04956800118088722,
+          0.013407999649643898
+        ],
+        [
+          0.058400001376867294,
+          0.02627200074493885
+        ],
+        [
+          0.029823999851942062,
+          0.01759999990463257
+        ],
+        [
+          0.07699199765920639,
+          0.013952000066637993
+        ],
+        [
+          0.05958399921655655,
+          0.017184000462293625
+        ],
+        [
+          0.07039999961853027,
+          0.014399999752640724
+        ]
+      ],
+      "native_forward_event_median_ms": 0.058400001376867294,
+      "native_jvp_event_median_ms": 0.017184000462293625
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        16,
+        16
+      ],
+      "source_quantization": "bfloat16",
+      "storage": "bfloat16",
+      "saved_lse": true,
+      "correctness": "independent_fp64_before_timing",
+      "program_digest": "be12c07b79cd0c36d88c34b61ef209aa9003f4742c6403637bc01666780527cf",
+      "program_artifact": "artifacts/be12c07b79cd0c36d88c34b61ef209aa9003f4742c6403637bc01666780527cf.json.xz",
+      "program_artifact_sha256": "9a16621fe2dd4314d0740b9e6f95b48878cf1845c23cb84a18423a004216da5c",
+      "forward_image_sha256": "2743184a845c9f1b1788abd648d68c8237039e8e414feb4770e14aa9d2cf929d",
+      "tangent_image_sha256": "4b6b1adaf0c03281c246fb76fa52ef654222c46605b17d236b281c2a8b3a5d07",
+      "host_sizer_sha256": "b876f202a8397b81548bf3841ac78cdf872d20aba4957959267b779526d58ed6",
+      "forward_entry": "tessera_tile_attention_lse_bf16_out_bf16_b57e7db22b",
+      "tangent_entry": "saved_lse_jvp_with_lse",
+      "completed_public_host_samples_ms": [
+        1.6480429912917316,
+        1.691684010438621,
+        1.6005620127543807,
+        1.6163630061782897,
+        1.6172929899767041,
+        1.5629429835826159,
+        1.610192994121462,
+        1.641083974391222,
+        1.556052011437714
+      ],
+      "completed_public_host_median_ms": 1.6163630061782897,
+      "native_forward_jvp_event_samples_ms": [
+        [
+          0.0719359964132309,
+          0.019071999937295914
+        ],
+        [
+          0.02783999964594841,
+          0.04335999861359596
+        ],
+        [
+          0.04633599892258644,
+          0.01708799973130226
+        ],
+        [
+          0.027488000690937042,
+          0.03862399980425835
+        ],
+        [
+          0.04662400111556053,
+          0.016448000445961952
+        ],
+        [
+          0.04575999826192856,
+          0.017503999173641205
+        ],
+        [
+          0.07123199850320816,
+          0.016863999888300896
+        ],
+        [
+          0.07302399724721909,
+          0.01648000068962574
+        ],
+        [
+          0.044895999133586884,
+          0.016543999314308167
+        ]
+      ],
+      "native_forward_event_median_ms": 0.04633599892258644,
+      "native_jvp_event_median_ms": 0.01708799973130226
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        16,
+        16
+      ],
+      "source_quantization": "bfloat16",
+      "storage": "float32",
+      "saved_lse": true,
+      "correctness": "independent_fp64_before_timing",
+      "program_digest": "7711af8b53ed682bde2fad2fb92752aa51ad9fb605f13c39e72ea6860d872321",
+      "program_artifact": "artifacts/7711af8b53ed682bde2fad2fb92752aa51ad9fb605f13c39e72ea6860d872321.json.xz",
+      "program_artifact_sha256": "bac57b17d208a162717c71fe3e5ec2710157e54bb7fecaf1b4a5afa9343ed50e",
+      "forward_image_sha256": "e9f04c703c3bfafe8c71d346be8ceb1e11553031b4db0ffcad6103415a9d7e94",
+      "tangent_image_sha256": "cc8f469022e566b6cea94c8b458bb8e3f8148cf50e4e2dcc7cd65db2cf89fac6",
+      "host_sizer_sha256": "9b099c3007c67efaf373c4c95e2c6ee4ee64554105238ab9becbd55411f80979",
+      "forward_entry": "tessera_tile_attention_lse_a774cd2a69",
+      "tangent_entry": "saved_lse_jvp_with_lse",
+      "completed_public_host_samples_ms": [
+        1.4619919820688665,
+        1.675164035987109,
+        1.526222040411085,
+        1.4505719882436097,
+        1.4278920134529471,
+        1.5487229684367776,
+        1.4574319939129055,
+        1.5248419949784875,
+        1.5205229865387082
+      ],
+      "completed_public_host_median_ms": 1.5205229865387082,
+      "native_forward_jvp_event_samples_ms": [
+        [
+          0.07286400347948074,
+          0.014271999709308147
+        ],
+        [
+          0.059039998799562454,
+          0.04390399903059006
+        ],
+        [
+          0.07264000177383423,
+          0.038784001022577286
+        ],
+        [
+          0.020640000700950623,
+          0.02006400004029274
+        ],
+        [
+          0.05190400034189224,
+          0.01235199999064207
+        ],
+        [
+          0.043296001851558685,
+          0.013952000066637993
+        ],
+        [
+          0.03984000161290169,
+          0.014399999752640724
+        ],
+        [
+          0.044863998889923096,
+          0.0144640002399683
+        ],
+        [
+          0.06998399645090103,
+          0.01235199999064207
+        ]
+      ],
+      "native_forward_event_median_ms": 0.05190400034189224,
+      "native_jvp_event_median_ms": 0.014399999752640724
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        17,
+        129,
+        16,
+        16
+      ],
+      "source_quantization": "float16",
+      "storage": "float16",
+      "saved_lse": true,
+      "correctness": "independent_fp64_before_timing",
+      "program_digest": "c7625e8b786a0570de568a16c282a30fd9c90f9e51b2deee3f706345a50592e2",
+      "program_artifact": "artifacts/c7625e8b786a0570de568a16c282a30fd9c90f9e51b2deee3f706345a50592e2.json.xz",
+      "program_artifact_sha256": "c591334df57f3f90c719abc1f86276bb20b6570a1ca473d92da7b78850289783",
+      "forward_image_sha256": "3cdde34d1de4faa0c3041979e3288c9be1cd530fbff5feab6deffbf2e914ba57",
+      "tangent_image_sha256": "de475880bf055ed46b73372eb9603b5b454ef47aa671d0745bccf44d66a83639",
+      "host_sizer_sha256": "b876f202a8397b81548bf3841ac78cdf872d20aba4957959267b779526d58ed6",
+      "forward_entry": "tessera_tile_attention_lse_f16_out_f16_4c14537ddd",
+      "tangent_entry": "saved_lse_jvp_with_lse",
+      "completed_public_host_samples_ms": [
+        2.1624480141326785,
+        1.6805430059321225,
+        1.7681249883025885,
+        1.7465539858676493,
+        1.716043974738568,
+        1.7312249983660877,
+        1.7818740452639759,
+        1.8070749938488007,
+        1.7750449478626251
+      ],
+      "completed_public_host_median_ms": 1.7681249883025885,
+      "native_forward_jvp_event_samples_ms": [
+        [
+          0.1475200057029724,
+          0.0225600004196167
+        ],
+        [
+          0.1416960060596466,
+          0.022816000506281853
+        ],
+        [
+          0.15695999562740326,
+          0.022911999374628067
+        ],
+        [
+          0.16383999586105347,
+          0.024191999807953835
+        ],
+        [
+          0.16515199840068817,
+          0.024224000051617622
+        ],
+        [
+          0.1642560064792633,
+          0.02425600029528141
+        ],
+        [
+          0.16444799304008484,
+          0.07923199981451035
+        ],
+        [
+          0.16121600568294525,
+          0.022752000018954277
+        ],
+        [
+          0.18537600338459015,
+          0.02271999977529049
+        ]
+      ],
+      "native_forward_event_median_ms": 0.16383999586105347,
+      "native_jvp_event_median_ms": 0.022911999374628067
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        17,
+        129,
+        16,
+        16
+      ],
+      "source_quantization": "float16",
+      "storage": "float32",
+      "saved_lse": true,
+      "correctness": "independent_fp64_before_timing",
+      "program_digest": "79b08aceb628c46517da55f96ceff537feb3e1e83b146449f16eb67dcbc48bd0",
+      "program_artifact": "artifacts/79b08aceb628c46517da55f96ceff537feb3e1e83b146449f16eb67dcbc48bd0.json.xz",
+      "program_artifact_sha256": "1ccc9a6f1cda6cda7a6d58ccd5a908052bfaffc7f088a9611c930c2aaa2e54d4",
+      "forward_image_sha256": "d6c008da0811d005cc0eabd6fc99e2b112f0d325c5f929b0d46c35828d648b24",
+      "tangent_image_sha256": "858fd52126920f67e3b556079c64dd91a2ce74ac0da22b5a1dc9680c1a04fb71",
+      "host_sizer_sha256": "9b099c3007c67efaf373c4c95e2c6ee4ee64554105238ab9becbd55411f80979",
+      "forward_entry": "tessera_tile_attention_lse_49b7ec8a7a",
+      "tangent_entry": "saved_lse_jvp_with_lse",
+      "completed_public_host_samples_ms": [
+        1.67561398120597,
+        1.7043640254996717,
+        1.7100939876399934,
+        1.7033540061675012,
+        1.5640630153939128,
+        1.7791640129871666,
+        1.6683939611539245,
+        1.748854003380984,
+        1.6800640150904655
+      ],
+      "completed_public_host_median_ms": 1.7033540061675012,
+      "native_forward_jvp_event_samples_ms": [
+        [
+          0.14959999918937683,
+          0.027008000761270523
+        ],
+        [
+          0.15094399452209473,
+          0.026815999299287796
+        ],
+        [
+          0.1727360039949417,
+          0.026784000918269157
+        ],
+        [
+          0.19881600141525269,
+          0.026847999542951584
+        ],
+        [
+          0.16697600483894348,
+          0.027103999629616737
+        ],
+        [
+          0.16908800601959229,
+          0.026815999299287796
+        ],
+        [
+          0.16499200463294983,
+          0.02691200003027916
+        ],
+        [
+          0.19091199338436127,
+          0.026847999542951584
+        ],
+        [
+          0.19513599574565887,
+          0.026784000918269157
+        ]
+      ],
+      "native_forward_event_median_ms": 0.16908800601959229,
+      "native_jvp_event_median_ms": 0.026847999542951584
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        17,
+        129,
+        16,
+        16
+      ],
+      "source_quantization": "bfloat16",
+      "storage": "bfloat16",
+      "saved_lse": true,
+      "correctness": "independent_fp64_before_timing",
+      "program_digest": "f7a529ec6e339bfb93b910eda6cf725fafa568650bae7df07749b1c79749992f",
+      "program_artifact": "artifacts/f7a529ec6e339bfb93b910eda6cf725fafa568650bae7df07749b1c79749992f.json.xz",
+      "program_artifact_sha256": "f4d9ff528a67eeef4c5163560f91a4440eb22109ea949854914958e5d034813f",
+      "forward_image_sha256": "bd76080741ce77c8524bf4769cc889aa45529f279f62c76bfe49e86c77c125b6",
+      "tangent_image_sha256": "3a50e0c46ae50281d5dccd61991cf35d17095ba71d5d501b94573923c1983d92",
+      "host_sizer_sha256": "b876f202a8397b81548bf3841ac78cdf872d20aba4957959267b779526d58ed6",
+      "forward_entry": "tessera_tile_attention_lse_bf16_out_bf16_5e1a9b938e",
+      "tangent_entry": "saved_lse_jvp_with_lse",
+      "completed_public_host_samples_ms": [
+        1.8152549746446311,
+        1.709244039375335,
+        1.7066139844246209,
+        1.671313017141074,
+        1.770485017914325,
+        1.7543440335430205,
+        1.8361060065217316,
+        1.8395949737168849,
+        1.692573947366327
+      ],
+      "completed_public_host_median_ms": 1.7543440335430205,
+      "native_forward_jvp_event_samples_ms": [
+        [
+          0.1780479997396469,
+          0.024512000381946564
+        ],
+        [
+          0.20336000621318817,
+          0.024800000712275505
+        ],
+        [
+          0.19123199582099915,
+          0.024831999093294144
+        ],
+        [
+          0.1777919977903366,
+          0.02486399933695793
+        ],
+        [
+          0.20003199577331543,
+          0.02470399998128414
+        ],
+        [
+          0.20732800662517548,
+          0.02486399933695793
+        ],
+        [
+          0.27564799785614014,
+          0.024768000468611717
+        ],
+        [
+          0.182559996843338,
+          0.022911999374628067
+        ],
+        [
+          0.1690240055322647,
+          0.022624000906944275
+        ]
+      ],
+      "native_forward_event_median_ms": 0.19123199582099915,
+      "native_jvp_event_median_ms": 0.024768000468611717
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        17,
+        129,
+        16,
+        16
+      ],
+      "source_quantization": "bfloat16",
+      "storage": "float32",
+      "saved_lse": true,
+      "correctness": "independent_fp64_before_timing",
+      "program_digest": "197734019ef476a1a89cd43b24c7b55a3fcd8d27f06c23c486afd9f30d1d878b",
+      "program_artifact": "artifacts/197734019ef476a1a89cd43b24c7b55a3fcd8d27f06c23c486afd9f30d1d878b.json.xz",
+      "program_artifact_sha256": "104dda93059afb0c48415a20eb99c46a0ce27251fab51f1b7fcfcc3809563a58",
+      "forward_image_sha256": "d6c008da0811d005cc0eabd6fc99e2b112f0d325c5f929b0d46c35828d648b24",
+      "tangent_image_sha256": "858fd52126920f67e3b556079c64dd91a2ce74ac0da22b5a1dc9680c1a04fb71",
+      "host_sizer_sha256": "9b099c3007c67efaf373c4c95e2c6ee4ee64554105238ab9becbd55411f80979",
+      "forward_entry": "tessera_tile_attention_lse_49b7ec8a7a",
+      "tangent_entry": "saved_lse_jvp_with_lse",
+      "completed_public_host_samples_ms": [
+        1.6942740185186267,
+        1.643662981223315,
+        1.6383340116590261,
+        1.7651640227995813,
+        1.737234997563064,
+        1.938735949806869,
+        1.632313011214137,
+        1.652073988225311,
+        1.8861450371332467
+      ],
+      "completed_public_host_median_ms": 1.6942740185186267,
+      "native_forward_jvp_event_samples_ms": [
+        [
+          0.17664000391960144,
+          0.027103999629616737
+        ],
+        [
+          0.19465599954128265,
+          0.02627200074493885
+        ],
+        [
+          0.1871359944343567,
+          0.02687999978661537
+        ],
+        [
+          0.18371200561523438,
+          0.026815999299287796
+        ],
+        [
+          0.19407999515533447,
+          0.02675200067460537
+        ],
+        [
+          0.20608000457286835,
+          0.027103999629616737
+        ],
+        [
+          0.16355200111865997,
+          0.026815999299287796
+        ],
+        [
+          0.16476799547672272,
+          0.027008000761270523
+        ],
+        [
+          0.23235200345516205,
+          0.026815999299287796
+        ]
+      ],
+      "native_forward_event_median_ms": 0.1871359944343567,
+      "native_jvp_event_median_ms": 0.026815999299287796
+    }
+  ]
+}

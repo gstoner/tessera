@@ -6,8 +6,8 @@ Reference date for staleness: **2026-10-17**.
 
 ## Headline
 
-- **176** docs catalogued across the canonical doc tree.
-- **175** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **177** docs catalogued across the canonical doc tree.
+- **175** carry a `last_updated:` marker; **2** are undated (invisible to the freshness audit until tagged).
 - **41** updated within the last 30 days.
 - **69** older than 90 days; **0** older than 180 days.
 
@@ -15,6 +15,7 @@ Reference date for staleness: **2026-10-17**.
 
 These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-form `Last updated:` line to participate in the audit.  Until tagged, the freshness signal is unavailable.
 
+- `docs/spec/SM120_TYPED_ATTENTION_JVP_CONTRACT.md`
 - `docs/reference/tessera_frontend_lanes.md`
 
 ## Per-root inventory
@@ -51,6 +52,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `SM120_ATTENTION_ROW_OWNER_CONTRACT.md` | - | 2026-10-17 | 0 | ✓ |
 | `SM120_SAVED_LSE_STORAGE_CONTRACT.md` | - | 2026-10-16 | 1 | ✓ |
 | `SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md` | - | 2026-10-17 | 0 | ✓ |
+| `SM120_TYPED_ATTENTION_JVP_CONTRACT.md` | - | _undated_ | - | _body_ |
 | `TARGET_IR_SPEC.md` | Normative | 2026-08-24 | 54 | ✓ |
 | `TILE_IR.md` | Normative | 2026-10-02 | 15 | ✓ |
 | `VALIDATION_SPINE.md` | Normative | 2026-08-02 | 76 | ✓ |

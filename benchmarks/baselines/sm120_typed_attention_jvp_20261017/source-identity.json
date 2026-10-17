@@ -1,0 +1,27 @@
+{
+  "measured_implementation": "b63e09a2e4ea4d6ead288ae66fdd56a754d355e5",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_typed_attention_jvp.py": "b616f5d61abd8deb6da3a5f777ad41d2f6565b2580c8432bf4c463f516db9698",
+    "python/tessera/compiler/native_attention_jvp_runtime.py": "be35385f4d1408fa35ca0e5b25ca44a23174a82f1f8d2d83c69c2ebc2348c833",
+    "python/tessera/compiler/native_attention_jvp.py": "f33db12af0ff082d068bd2cbf4df280e86a0c0fb76a1354af9e57a440e06708a",
+    "python/tessera/compiler/native_attention_jvp_artifact.py": "fb76db885bc7a463a21d52f9ac638c4efaf7b5facebb81c90acdad4e28773ef3",
+    "python/tessera/compiler/native_attention_program.py": "6fe3c42508b25fd266e8793c3031a0d3d3e2d08f51ad420dc007934a0c2ec98c",
+    "python/tessera/compiler/native_gpu_tensor.py": "425303b4bece007270414215850218f4c83e4a076e24e30f33075f0a89fee67c",
+    "python/tessera/compiler/native_jvp_plugins.py": "787ea2900aa61c66cba047ef222ddda11c021313f8fc0438f8089385469f9643",
+    "python/tessera/compiler/jit.py": "6b9e3a11983df8b5c9dd44b560b6932f7188fb75657354b40d88316b3e251fb0",
+    "python/tessera/compiler/resident_attention.py": "e37f6e98460ddd9f538d12ddd9ce47645e5b7f2367fa394da3149a03c82eeead",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "dabde6b867f4b8f371c1cebd1c32f04f9a6027ba0db755c7ac49d906d2f38f0b",
+    "src/compiler/programming_model/lib/NativeAttentionJvp.h": "02aae74992591c9a074d5b9f8ff76b960f5d9b36e786a3cbfffac096ab5a5cc9",
+    "src/compiler/ir/TangentInterface.cpp": "5de21cb8730c513d214c06a6c355fab3ac77fa42e16387d8e37a4b807d60eb89",
+    "src/compiler/ir/include/Tessera/IR/AttentionTangentZero.h": "0e7fe3886a2cf166db5c534ea44a27efc0ed00df4d33339f86e1b2693e07e52d",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "5d1fb1ee4f0c860741819b465704877e43f4518ae3f78088e2a1662f5c19cc7b",
+    "src/transforms/lib/AutodiffForwardPass.cpp": "09a80e0fc55a79c5ceccf4dce0873d0e5604a030fb79a6e2ceef5ca2a7ed95af"
+  },
+  "compiler_sha256": "41e0d35b4cf07ea733e08db2d7a6d41d7ff9dce9afbcfef93ebc9ce9d5a3bacd",
+  "runtime_sha256": "277465f65cf9b93308230d32ee96311b3a9706b994ceafde1272f7ca5ae50859",
+  "device": "NVIDIA GeForce RTX 5070, 12.0",
+  "source_dirty_at_measurement": true,
+  "source_dirt_scope": "documentation/evidence only; measured implementation source hashes are authoritative",
+  "mathematical_control_scope": "CPU FP64 finite differences; no GPU inference",
+  "fp32_control_scope": "native arena/image/forward/schema/ABI/entry; full package archive identity is not claimed"
+}

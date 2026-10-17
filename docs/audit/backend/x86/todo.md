@@ -15,6 +15,7 @@ Sync: SM120-TYPED-JVP-20261017.
 Not applicable to x86 execution: the half attention TangentInterface admission remains gated to exact nvidia_sm120/sm_120. Existing f32 artifact controls are retained; CUDA buffer ownership and the typed prepared JVP ABI have no x86 consumer. No AVX numerical/performance proof or new attention admission is claimed.
 
 Contract: docs/spec/SM120_TYPED_ATTENTION_JVP_CONTRACT.md.
+Evidence: benchmarks/baselines/sm120_typed_attention_jvp_20261017/README.md.
 
 
 ## SM120-AD-WITNESS-DIGEST-20261017 — bounded metadata digest reuse

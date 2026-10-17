@@ -72,3 +72,16 @@ Final committed-source validation (`95010a9276`): broad host units pass
 **26,146 cases**, with 5,902 expected skips and 11 warnings. The complete
 production compiler lane passes **1,340 cases with zero skips**, including
 its executed-case gate; all 33 generated documents are in sync.
+
+## PR963 AST review follow-through
+
+The AST emitter and copied first-call specialization now persist normalized
+slice coordinates before I64 serialization. Pure shape inference leaves caller
+attributes unchanged. The red baseline has 12 failures and one non-mutation
+control. The complete updated slice selection passes **97 cases** (64 pure
+frontend and 33 production compiler cases); broader Graph/frontend/registry
+coverage passes **572 cases**, with 33 unrelated skips. Final type checking
+remains at zero errors. The complete updated production compiler lane passes
+**1,345 cases with zero skips**, including its executed-case gate. These are
+review-fix gates, separate from the historical
+full broad run on 95010a9276 above. Fresh exact-head CI is required.

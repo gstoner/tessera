@@ -12954,4 +12954,10 @@ diagnostics are not GPU execution evidence; sibling plans are assessed.
 Evidence: docs/spec/NATIVE_GRAPH_SLICE_CONTRACT.md;
 tests/unit/test_slice_semantic_contract.py;
 benchmarks/baselines/native_graph_slice_20261016/README.md.
+PR963 review follow-through: AST emission and copy-based first-call
+specialization now persist normalized coordinates before I64 serialization;
+pure inference and the caller-owned Graph remain unchanged. The concrete red
+baseline has 12 failures and one non-mutation control. Four public AST calling
+forms, native parsing, specialization and a real unannotated first-call path
+are covered; 572 Graph/frontend/registry tests pass with 33 unrelated skips.
 <!-- entry-fields:end -->

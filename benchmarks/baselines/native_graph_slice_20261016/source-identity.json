@@ -31,5 +31,14 @@
     ".build-relu/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.",
     ".build-relu/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions."
   },
-  "broad_validation_source_commit": "95010a927601a2612540d8bf932f31e40db6d41f"
+  "broad_validation_source_commit": "95010a927601a2612540d8bf932f31e40db6d41f",
+  "ast_review_fix": {
+    "base_head": "e0f04f352984d7063c4a010c848a8bbf68f2eca3",
+    "recorded_utc": "2026-10-17T04:01:39.353383+00:00",
+    "source_sha256": {
+      "python/tessera/compiler/graph_ir.py": "ddb9b0fc1756627aaad5995296100c310b08c5a4a0589da9903356b059c74523",
+      "tests/unit/test_slice_semantic_contract.py": "c22a83bc7aabf38b64deda9bf20ebd0f8cf67f8f09d22c35b337876267727ed7"
+    },
+    "scope": "AST emission and copy-based specialization persist normalized coordinates; pure inference remains non-mutating. 97 slice cases; 572 broader Graph/frontend/registry cases with 33 unrelated skips; 1,345 production compiler-route cases with zero skips and executed-case gate; mypy zero. Original broad 950 proof remains explicitly historical; fresh exact-head CI required."
+  }
 }

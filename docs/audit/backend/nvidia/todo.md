@@ -15479,3 +15479,8 @@ parent pitch without compaction for downstream non-native dtype inference.
 This is frontend alias metadata, not a device buffer, schedule or new
 physical execution claim. Native forward admission and authored derivative
 proof contracts now register both existing slice spellings.
+
+PR963 review follow-through: the AST emission and copied first-call
+specialization boundaries persist eager-int-coerced slice coordinates before
+serialization. Pure result inference and caller-owned Graph attributes remain
+unchanged. This is shared frontend correctness; physical admission is unchanged.

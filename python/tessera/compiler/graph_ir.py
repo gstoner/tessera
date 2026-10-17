@@ -2718,6 +2718,7 @@ class _OpExtractor(ast.NodeVisitor):
         inferred_operands = [
             self._value_types.get(operand, TENSOR_OPAQUE) for operand in operands
         ]
+        _canonicalize_slice_attrs(mlir_name, inferred_operands, kwargs)
         _canonicalize_spectral_attrs(mlir_name, inferred_operands, kwargs)
         if mlir_name == "tessera.depth_attn":
             # Resolve public defaults at the frontend boundary. The typed Graph
@@ -3554,6 +3555,23 @@ def _slice_index_attributes(attrs: Dict[str, Any], rank: int) -> tuple[list[int]
            for coordinates in normalized for value in coordinates):
         raise ValueError("slice coordinates must fit signed i64 attributes")
     return normalized
+
+
+def _canonicalize_slice_attrs(op_name: str, operand_types: List[IRType],
+                              attrs: Dict[str, Any]) -> None:
+    """Persist native coordinates at an owning frontend emission boundary."""
+    if op_name not in {"tessera.slice", "tessera.dynamic_slice"} or not operand_types:
+        return
+    rank = operand_types[0].rank
+    if rank is None:
+        # Unknown-rank AST candidates still need well-formed static attributes;
+        # the ranked native contract is checked after specialization.
+        starts = attrs.get("start_indices")
+        if not isinstance(starts, (tuple, list)):
+            raise ValueError("slice coordinates must be static lists or tuples")
+        rank = len(starts)
+    starts, sizes = _slice_index_attributes(attrs, rank)
+    attrs["start_indices"], attrs["slice_sizes"] = starts, sizes
 
 
 def _shape_from_slice_sizes(operand_types: List[IRType],
@@ -5222,6 +5240,7 @@ def specialize_module_from_values(
             # before result inference; otherwise shape-derived spectral identity
             # (notably convolution logical_length) differs between the retained
             # AST candidate and the tracer for the same concrete call.
+            _canonicalize_slice_attrs(op.op_name, inferred_operands, op.kwargs)
             _canonicalize_spectral_attrs(
                 op.op_name, inferred_operands, op.kwargs
             )

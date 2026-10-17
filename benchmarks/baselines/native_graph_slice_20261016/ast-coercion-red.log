@@ -1,0 +1,344 @@
+FFFFFFFFFFFF.                                                            [100%]
+=================================== FAILURES ===================================
+_____ test_ast_slice_persists_eager_coerced_attributes[ast_slice_keyword] ______
+
+function = <function ast_slice_keyword at 0x7422cb0fb7f0>
+
+    @pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+    def test_ast_slice_persists_eager_coerced_attributes(function):
+        from tessera.compiler.graph_ir import GraphIRBuilder
+    
+        builder = GraphIRBuilder()
+        graph = builder.lower(function)
+        op = graph.body[0]
+>       assert op.kwargs["start_indices"] == [1, 1]
+E       assert [True, 1.75] == [1, 1]
+E         
+E         At index 1 diff: 1.75 != 1
+E         Use -v to get more diff
+
+tests/unit/test_slice_semantic_contract.py:230: AssertionError
+____ test_ast_slice_persists_eager_coerced_attributes[ast_slice_positional] ____
+
+function = <function ast_slice_positional at 0x7422cb0fb950>
+
+    @pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+    def test_ast_slice_persists_eager_coerced_attributes(function):
+        from tessera.compiler.graph_ir import GraphIRBuilder
+    
+        builder = GraphIRBuilder()
+        graph = builder.lower(function)
+        op = graph.body[0]
+>       assert op.kwargs["start_indices"] == [1, 1]
+E       assert [True, 1.75] == [1, 1]
+E         
+E         At index 1 diff: 1.75 != 1
+E         Use -v to get more diff
+
+tests/unit/test_slice_semantic_contract.py:230: AssertionError
+_ test_ast_slice_persists_eager_coerced_attributes[ast_dynamic_slice_keyword] __
+
+function = <function ast_dynamic_slice_keyword at 0x7422cb0fbab0>
+
+    @pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+    def test_ast_slice_persists_eager_coerced_attributes(function):
+        from tessera.compiler.graph_ir import GraphIRBuilder
+    
+        builder = GraphIRBuilder()
+        graph = builder.lower(function)
+        op = graph.body[0]
+>       assert op.kwargs["start_indices"] == [1, 1]
+E       assert [True, 1.75] == [1, 1]
+E         
+E         At index 1 diff: 1.75 != 1
+E         Use -v to get more diff
+
+tests/unit/test_slice_semantic_contract.py:230: AssertionError
+_ test_ast_slice_persists_eager_coerced_attributes[ast_dynamic_slice_positional] _
+
+function = <function ast_dynamic_slice_positional at 0x7422cb0fbc10>
+
+    @pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+    def test_ast_slice_persists_eager_coerced_attributes(function):
+        from tessera.compiler.graph_ir import GraphIRBuilder
+    
+        builder = GraphIRBuilder()
+        graph = builder.lower(function)
+        op = graph.body[0]
+>       assert op.kwargs["start_indices"] == [1, 1]
+E       assert [True, 1.75] == [1, 1]
+E         
+E         At index 1 diff: 1.75 != 1
+E         Use -v to get more diff
+
+tests/unit/test_slice_semantic_contract.py:230: AssertionError
+__ test_ast_slice_coercion_reaches_native_tensor_lowering[ast_slice_keyword] ___
+
+tool = PosixPath('/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt')
+function = <function ast_slice_keyword at 0x7422cb0fb7f0>
+
+    @pytest.mark.compiler_route
+    @pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+    def test_ast_slice_coercion_reaches_native_tensor_lowering(tool, function):
+        from tessera.compiler.graph_ir import GraphIRBuilder
+    
+        builder = GraphIRBuilder()
+        builder.lower(function)
+>       text = run_tessera_opt(tool, builder.context.module.to_mlir(canonical=True), "--tessera-to-linalg")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_slice_semantic_contract.py:243: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.ir.version = "1.0"} {\n  func.func @ast_slice_keyword(%x: tensor<4x4xf32>) -> (tensor<2x3x... -> tensor<2x3xf32> loc("tests/unit/test_slice_semantic_contract.py":204:12)\n    return %v0 : tensor<2x3xf32>\n  }\n}'
+option = '--tessera-to-linalg'
+
+    def run_tessera_opt(tool: Path, source: str, option: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", option],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                f"scheduled compiler boundary {option} failed: "
+                + (result.stderr.strip() or str(result.returncode))
+            )
+E           RuntimeError: scheduled compiler boundary --tessera-to-linalg failed: <stdin>:3:28: error: custom op 'tessera.slice' 'tessera.slice' op attribute 'slice_sizes' failed to satisfy constraint: 64-bit integer array attribute
+E               %v0 = tessera.slice %x {start_indices = [true, 1.75], slice_sizes = [2.9, 3.25], tessera.effect_kind = "pure"} : (tensor<4x4xf32>) -> tensor<2x3xf32> loc("tests/unit/test_slice_semantic_contract.py":204:12)
+E                                      ^
+
+python/tessera/compiler/scheduled_matmul.py:1044: RuntimeError
+_ test_ast_slice_coercion_reaches_native_tensor_lowering[ast_slice_positional] _
+
+tool = PosixPath('/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt')
+function = <function ast_slice_positional at 0x7422cb0fb950>
+
+    @pytest.mark.compiler_route
+    @pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+    def test_ast_slice_coercion_reaches_native_tensor_lowering(tool, function):
+        from tessera.compiler.graph_ir import GraphIRBuilder
+    
+        builder = GraphIRBuilder()
+        builder.lower(function)
+>       text = run_tessera_opt(tool, builder.context.module.to_mlir(canonical=True), "--tessera-to-linalg")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_slice_semantic_contract.py:243: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.ir.version = "1.0"} {\n  func.func @ast_slice_positional(%x: tensor<4x4xf32>) -> (tensor<2... -> tensor<2x3xf32> loc("tests/unit/test_slice_semantic_contract.py":208:12)\n    return %v0 : tensor<2x3xf32>\n  }\n}'
+option = '--tessera-to-linalg'
+
+    def run_tessera_opt(tool: Path, source: str, option: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", option],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                f"scheduled compiler boundary {option} failed: "
+                + (result.stderr.strip() or str(result.returncode))
+            )
+E           RuntimeError: scheduled compiler boundary --tessera-to-linalg failed: <stdin>:3:28: error: custom op 'tessera.slice' 'tessera.slice' op attribute 'slice_sizes' failed to satisfy constraint: 64-bit integer array attribute
+E               %v0 = tessera.slice %x {start_indices = [true, 1.75], slice_sizes = [2.9, 3.25], tessera.effect_kind = "pure"} : (tensor<4x4xf32>) -> tensor<2x3xf32> loc("tests/unit/test_slice_semantic_contract.py":208:12)
+E                                      ^
+
+python/tessera/compiler/scheduled_matmul.py:1044: RuntimeError
+_ test_ast_slice_coercion_reaches_native_tensor_lowering[ast_dynamic_slice_keyword] _
+
+tool = PosixPath('/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt')
+function = <function ast_dynamic_slice_keyword at 0x7422cb0fbab0>
+
+    @pytest.mark.compiler_route
+    @pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+    def test_ast_slice_coercion_reaches_native_tensor_lowering(tool, function):
+        from tessera.compiler.graph_ir import GraphIRBuilder
+    
+        builder = GraphIRBuilder()
+        builder.lower(function)
+>       text = run_tessera_opt(tool, builder.context.module.to_mlir(canonical=True), "--tessera-to-linalg")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_slice_semantic_contract.py:243: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.ir.version = "1.0"} {\n  func.func @ast_dynamic_slice_keyword(%x: tensor<4x4xf32>) -> (ten... -> tensor<2x3xf32> loc("tests/unit/test_slice_semantic_contract.py":212:12)\n    return %v0 : tensor<2x3xf32>\n  }\n}'
+option = '--tessera-to-linalg'
+
+    def run_tessera_opt(tool: Path, source: str, option: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", option],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                f"scheduled compiler boundary {option} failed: "
+                + (result.stderr.strip() or str(result.returncode))
+            )
+E           RuntimeError: scheduled compiler boundary --tessera-to-linalg failed: <stdin>:3:36: error: custom op 'tessera.dynamic_slice' 'tessera.dynamic_slice' op attribute 'slice_sizes' failed to satisfy constraint: 64-bit integer array attribute
+E               %v0 = tessera.dynamic_slice %x {start_indices = [true, 1.75], slice_sizes = [2.9, 3.25], tessera.effect_kind = "pure"} : (tensor<4x4xf32>) -> tensor<2x3xf32> loc("tests/unit/test_slice_semantic_contract.py":212:12)
+E                                              ^
+
+python/tessera/compiler/scheduled_matmul.py:1044: RuntimeError
+_ test_ast_slice_coercion_reaches_native_tensor_lowering[ast_dynamic_slice_positional] _
+
+tool = PosixPath('/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt')
+function = <function ast_dynamic_slice_positional at 0x7422cb0fbc10>
+
+    @pytest.mark.compiler_route
+    @pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+    def test_ast_slice_coercion_reaches_native_tensor_lowering(tool, function):
+        from tessera.compiler.graph_ir import GraphIRBuilder
+    
+        builder = GraphIRBuilder()
+        builder.lower(function)
+>       text = run_tessera_opt(tool, builder.context.module.to_mlir(canonical=True), "--tessera-to-linalg")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_slice_semantic_contract.py:243: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/sm120-relu-producer-20261014/.build-relu/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.ir.version = "1.0"} {\n  func.func @ast_dynamic_slice_positional(%x: tensor<4x4xf32>) -> (... -> tensor<2x3xf32> loc("tests/unit/test_slice_semantic_contract.py":216:12)\n    return %v0 : tensor<2x3xf32>\n  }\n}'
+option = '--tessera-to-linalg'
+
+    def run_tessera_opt(tool: Path, source: str, option: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", option],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                f"scheduled compiler boundary {option} failed: "
+                + (result.stderr.strip() or str(result.returncode))
+            )
+E           RuntimeError: scheduled compiler boundary --tessera-to-linalg failed: <stdin>:3:36: error: custom op 'tessera.dynamic_slice' 'tessera.dynamic_slice' op attribute 'slice_sizes' failed to satisfy constraint: 64-bit integer array attribute
+E               %v0 = tessera.dynamic_slice %x {start_indices = [true, 1.75], slice_sizes = [2.9, 3.25], tessera.effect_kind = "pure"} : (tensor<4x4xf32>) -> tensor<2x3xf32> loc("tests/unit/test_slice_semantic_contract.py":216:12)
+E                                              ^
+
+python/tessera/compiler/scheduled_matmul.py:1044: RuntimeError
+______ test_specialization_normalizes_owned_slice_copy[ast_slice_keyword] ______
+
+function = <function ast_slice_keyword at 0x7422cb0fb7f0>
+
+    @pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+    def test_specialization_normalizes_owned_slice_copy(function):
+        from copy import deepcopy
+        from tessera.compiler.graph_ir import GraphIRBuilder, specialize_module_from_values
+    
+        builder = GraphIRBuilder()
+        builder.lower(function)
+        original = builder.context.module
+        op = original.functions[0].body[0]
+        op.kwargs["start_indices"], op.kwargs["slice_sizes"] = [True, 1.75], [2.9, 3.25]
+        before = deepcopy(op.kwargs)
+        specialized = specialize_module_from_values(original, {"x": np.ones((4, 4), np.float32)})
+        projected = specialized.functions[0].body[0].kwargs
+>       assert projected["start_indices"] == [1, 1] and projected["slice_sizes"] == [2, 3]
+E       assert ([True, 1.75] == [1, 1]
+E         
+E         At index 1 diff: 1.75 != 1
+E         Use -v to get more diff)
+
+tests/unit/test_slice_semantic_contract.py:262: AssertionError
+____ test_specialization_normalizes_owned_slice_copy[ast_slice_positional] _____
+
+function = <function ast_slice_positional at 0x7422cb0fb950>
+
+    @pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+    def test_specialization_normalizes_owned_slice_copy(function):
+        from copy import deepcopy
+        from tessera.compiler.graph_ir import GraphIRBuilder, specialize_module_from_values
+    
+        builder = GraphIRBuilder()
+        builder.lower(function)
+        original = builder.context.module
+        op = original.functions[0].body[0]
+        op.kwargs["start_indices"], op.kwargs["slice_sizes"] = [True, 1.75], [2.9, 3.25]
+        before = deepcopy(op.kwargs)
+        specialized = specialize_module_from_values(original, {"x": np.ones((4, 4), np.float32)})
+        projected = specialized.functions[0].body[0].kwargs
+>       assert projected["start_indices"] == [1, 1] and projected["slice_sizes"] == [2, 3]
+E       assert ([True, 1.75] == [1, 1]
+E         
+E         At index 1 diff: 1.75 != 1
+E         Use -v to get more diff)
+
+tests/unit/test_slice_semantic_contract.py:262: AssertionError
+__ test_specialization_normalizes_owned_slice_copy[ast_dynamic_slice_keyword] __
+
+function = <function ast_dynamic_slice_keyword at 0x7422cb0fbab0>
+
+    @pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+    def test_specialization_normalizes_owned_slice_copy(function):
+        from copy import deepcopy
+        from tessera.compiler.graph_ir import GraphIRBuilder, specialize_module_from_values
+    
+        builder = GraphIRBuilder()
+        builder.lower(function)
+        original = builder.context.module
+        op = original.functions[0].body[0]
+        op.kwargs["start_indices"], op.kwargs["slice_sizes"] = [True, 1.75], [2.9, 3.25]
+        before = deepcopy(op.kwargs)
+        specialized = specialize_module_from_values(original, {"x": np.ones((4, 4), np.float32)})
+        projected = specialized.functions[0].body[0].kwargs
+>       assert projected["start_indices"] == [1, 1] and projected["slice_sizes"] == [2, 3]
+E       assert ([True, 1.75] == [1, 1]
+E         
+E         At index 1 diff: 1.75 != 1
+E         Use -v to get more diff)
+
+tests/unit/test_slice_semantic_contract.py:262: AssertionError
+_ test_specialization_normalizes_owned_slice_copy[ast_dynamic_slice_positional] _
+
+function = <function ast_dynamic_slice_positional at 0x7422cb0fbc10>
+
+    @pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+    def test_specialization_normalizes_owned_slice_copy(function):
+        from copy import deepcopy
+        from tessera.compiler.graph_ir import GraphIRBuilder, specialize_module_from_values
+    
+        builder = GraphIRBuilder()
+        builder.lower(function)
+        original = builder.context.module
+        op = original.functions[0].body[0]
+        op.kwargs["start_indices"], op.kwargs["slice_sizes"] = [True, 1.75], [2.9, 3.25]
+        before = deepcopy(op.kwargs)
+        specialized = specialize_module_from_values(original, {"x": np.ones((4, 4), np.float32)})
+        projected = specialized.functions[0].body[0].kwargs
+>       assert projected["start_indices"] == [1, 1] and projected["slice_sizes"] == [2, 3]
+E       assert ([True, 1.75] == [1, 1]
+E         
+E         At index 1 diff: 1.75 != 1
+E         Use -v to get more diff)
+
+tests/unit/test_slice_semantic_contract.py:262: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_slice_semantic_contract.py::test_ast_slice_persists_eager_coerced_attributes[ast_slice_keyword]
+FAILED tests/unit/test_slice_semantic_contract.py::test_ast_slice_persists_eager_coerced_attributes[ast_slice_positional]
+FAILED tests/unit/test_slice_semantic_contract.py::test_ast_slice_persists_eager_coerced_attributes[ast_dynamic_slice_keyword]
+FAILED tests/unit/test_slice_semantic_contract.py::test_ast_slice_persists_eager_coerced_attributes[ast_dynamic_slice_positional]
+FAILED tests/unit/test_slice_semantic_contract.py::test_ast_slice_coercion_reaches_native_tensor_lowering[ast_slice_keyword]
+FAILED tests/unit/test_slice_semantic_contract.py::test_ast_slice_coercion_reaches_native_tensor_lowering[ast_slice_positional]
+FAILED tests/unit/test_slice_semantic_contract.py::test_ast_slice_coercion_reaches_native_tensor_lowering[ast_dynamic_slice_keyword]
+FAILED tests/unit/test_slice_semantic_contract.py::test_ast_slice_coercion_reaches_native_tensor_lowering[ast_dynamic_slice_positional]
+FAILED tests/unit/test_slice_semantic_contract.py::test_specialization_normalizes_owned_slice_copy[ast_slice_keyword]
+FAILED tests/unit/test_slice_semantic_contract.py::test_specialization_normalizes_owned_slice_copy[ast_slice_positional]
+FAILED tests/unit/test_slice_semantic_contract.py::test_specialization_normalizes_owned_slice_copy[ast_dynamic_slice_keyword]
+FAILED tests/unit/test_slice_semantic_contract.py::test_specialization_normalizes_owned_slice_copy[ast_dynamic_slice_positional]
+12 failed, 1 passed, 83 deselected in 0.67s

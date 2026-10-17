@@ -198,3 +198,103 @@ def test_concrete_slice_carries_a_borrowed_view_without_compaction():
     assert view is not None and np.shares_memory(view, source)
     assert view.strides == source.strides and not view.flags.c_contiguous
     np.testing.assert_array_equal(view, source[:, 1:3])
+
+
+def ast_slice_keyword(x: ts.f32[4, 4]):
+    return ts.ops.slice(x, start_indices=[True, 1.75], slice_sizes=[2.9, 3.25])
+
+
+def ast_slice_positional(x: ts.f32[4, 4]):
+    return ts.ops.slice(x, [True, 1.75], [2.9, 3.25])
+
+
+def ast_dynamic_slice_keyword(x: ts.f32[4, 4]):
+    return ts.ops.dynamic_slice(x, start_indices=[True, 1.75], slice_sizes=[2.9, 3.25])
+
+
+def ast_dynamic_slice_positional(x: ts.f32[4, 4]):
+    return ts.ops.dynamic_slice(x, [True, 1.75], [2.9, 3.25])
+
+
+AST_COERCION_FUNCTIONS = [
+    ast_slice_keyword,
+    ast_slice_positional,
+    ast_dynamic_slice_keyword,
+    ast_dynamic_slice_positional,
+]
+
+
+@pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+def test_ast_slice_persists_eager_coerced_attributes(function):
+    from tessera.compiler.graph_ir import GraphIRBuilder
+
+    builder = GraphIRBuilder()
+    graph = builder.lower(function)
+    op = graph.body[0]
+    assert op.kwargs["start_indices"] == [1, 1]
+    assert op.kwargs["slice_sizes"] == [2, 3]
+    assert all(type(value) is int for key in ("start_indices", "slice_sizes") for value in op.kwargs[key])
+    assert graph.result_types[0].shape == ("2", "3")
+
+
+@pytest.mark.compiler_route
+@pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+def test_ast_slice_coercion_reaches_native_tensor_lowering(tool, function):
+    from tessera.compiler.graph_ir import GraphIRBuilder
+
+    builder = GraphIRBuilder()
+    builder.lower(function)
+    text = run_tessera_opt(tool, builder.context.module.to_mlir(canonical=True), "--tessera-to-linalg")
+    run_tessera_opt(tool, text, "--verify-each")
+    assert "tensor.extract_slice" in text
+    assert "[1, 1] [2, 3] [1, 1]" in text
+
+
+@pytest.mark.parametrize("function", AST_COERCION_FUNCTIONS)
+def test_specialization_normalizes_owned_slice_copy(function):
+    from copy import deepcopy
+    from tessera.compiler.graph_ir import GraphIRBuilder, specialize_module_from_values
+
+    builder = GraphIRBuilder()
+    builder.lower(function)
+    original = builder.context.module
+    op = original.functions[0].body[0]
+    op.kwargs["start_indices"], op.kwargs["slice_sizes"] = [True, 1.75], [2.9, 3.25]
+    before = deepcopy(op.kwargs)
+    specialized = specialize_module_from_values(original, {"x": np.ones((4, 4), np.float32)})
+    projected = specialized.functions[0].body[0].kwargs
+    assert projected["start_indices"] == [1, 1] and projected["slice_sizes"] == [2, 3]
+    assert all(type(value) is int for key in ("start_indices", "slice_sizes") for value in projected[key])
+    assert original.functions[0].body[0].kwargs == before
+    assert type(original.functions[0].body[0].kwargs["start_indices"][0]) is bool
+
+
+def test_slice_shape_inference_does_not_mutate_caller_attributes():
+    from copy import deepcopy
+    from tessera.compiler.graph_ir import _infer_result_types, tensor_ir_type
+
+    attributes = {"start_indices": [True, 1.75], "slice_sizes": [2.9, 3.25]}
+    before = deepcopy(attributes)
+    result = _infer_result_types("tessera.slice", [tensor_ir_type((4, 4), "fp32")], attributes)
+    assert result[0].shape == ("2", "3") and attributes == before
+    assert type(attributes["start_indices"][0]) is bool
+
+
+def ast_unannotated_slice(x):
+    return ts.ops.slice(x, [True, 1.75], [2.9, 3.25])
+
+
+@pytest.mark.compiler_route
+def test_ast_unannotated_slice_specializes_to_coerced_native_attributes(tool):
+    from tessera.compiler.graph_ir import GraphIRBuilder, specialize_module_from_values
+
+    builder = GraphIRBuilder()
+    builder.lower(ast_unannotated_slice)
+    source = builder.context.module
+    projected = specialize_module_from_values(source, {"x": np.arange(16, dtype=np.float32).reshape(4, 4)})
+    op = projected.functions[0].body[0]
+    assert op.kwargs["start_indices"] == [1, 1] and op.kwargs["slice_sizes"] == [2, 3]
+    assert projected.functions[0].result_types[0].shape == ("2", "3")
+    text = run_tessera_opt(tool, projected.to_mlir(canonical=True), "--tessera-to-linalg")
+    run_tessera_opt(tool, text, "--verify-each")
+    assert "tensor.extract_slice" in text and "[1, 1] [2, 3] [1, 1]" in text

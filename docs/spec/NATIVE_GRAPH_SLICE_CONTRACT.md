@@ -63,3 +63,11 @@ Column-major diagnostics add no public physical layout admission.
 Full NVFP4 MLP closure additionally needs explicit activation quantization,
 down projection and original-checkpoint/model-quality gates. The independent
 NVIDIA, Apple and x86 physical contracts inherit no ROCm execution evidence.
+
+## AST and specialization attribute ownership
+
+Both AST emission and first-call specialization persist the normalized
+signed-i64 lists before serialization. Pure result inference does not mutate
+caller attributes, and specialization operates on a copied Graph. This keeps
+coerced boolean/float constants from leaking into I64ArrayAttr declarations
+while preserving the original caller-owned Graph.

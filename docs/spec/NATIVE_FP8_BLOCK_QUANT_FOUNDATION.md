@@ -276,6 +276,32 @@ final FP32 or BF16 store under the existing exact product contract.
 A common native SSA outliner derives root order, private allocations and
 first-write/last-read bounds from certified original operation groups. Both
 quantizers and expansions retain their original math and numerical policies.
-This native schema currently has compiler proof only; Python package/frontend
-admission, native-owner execution, portable replay, hardware numerical proof
-and timings remain required before any execution claim.
+The native partition was established first; prepared-owner evidence is scoped
+below. Public frontend admission, production runtime replay, separate timings
+and broader numerical/model acceptance remain required.
+
+### Prepared v4 owner and numerical boundaries
+
+The compiler exports two base64 native component plans in `subprograms`: v3
+gate/up and v2 down projection. The v4 package validates those plans, their
+seven member graphs and the shared activation interface against the outer
+eighteen-buffer frame. It binds all seven steps into one multi-output C++ HIP
+owner. Component owners are used only in diagnostic comparisons.
+
+On RX9070XT/gfx1201, three prepared shapes (M/H/K/N = 1/16/16/1,
+3/32/48/19 and 256/128/12288/256) pass original-root, compiler-free restored
+and retained-owner updated-root checks. Updating roots invalidates downstream
+readiness; old returned arrays remain stable. This is prepared execution, not
+yet the public authored frontend route or fresh-process full-MLP replay.
+
+Independent checks follow explicit rounding boundaries. FP64 product
+references validate the BF16 parent store; the activation is checked against
+FP32 SiLU applied to the actual stored parent. The resident result is bitwise
+equal to the same native components run separately. The down product is
+checked against independent math at its actual activation input. The final
+comparison bounds the quantized-input perturbation by the absolute decoded
+weight product, with explicit terminal-store rounding and the unchanged
+per-stage numerical allowance. A pointwise relative tolerance against an
+ideal earlier activation alone is insufficient across discontinuous
+requantization and nonlinear SiLU. No numerical policy or physical kernel
+was changed to pass these cases.

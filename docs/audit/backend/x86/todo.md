@@ -12,6 +12,11 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
 Sync: ROCM-RESIDENT-QUANT-PRODUCT-20261017.
 
+PR969 review: the gfx1201 JIT clears prior per-call program/receipts/artifact
+before validation, and portable consumer Target witnesses must equal the
+image-bound Target. Both red regressions are fixed; 26 owning package/device
+tests pass. No sibling physical admission or arithmetic changes.
+
 Shared runtime assessment: a distinct gfx1201 program executor/portable schema
 binds existing member ABIs; no sibling execution row, physical schedule or ABI
 is changed. Follow-up required before adopting this program contract on a

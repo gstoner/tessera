@@ -1,0 +1,5 @@
+{
+  "python/tessera/compiler/jit.py": "ae2b59e19b1fba811ebe990630fc8f2973fb7f12c78515a2045160e71fbcd3f7",
+  "python/tessera/compiler/rocm_quantized_product_program.py": "4e5e1a9a9fd4bf00ef578b212f379c6af19fd6c799e1f40f08763f329c872117",
+  "tests/unit/test_rocm_quantized_product_program.py": "b7be168a3e82e12f274a1e59e448f70dcda6164e641a4579e044d55dbacea1ce"
+}

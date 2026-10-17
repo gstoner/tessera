@@ -568,6 +568,8 @@ class JitFn:
         self._nvidia_rhs_program_cache: Dict[str, Any] = {}
         self._rocm_nvfp4_program_cache: Dict[str, Any] = {}
         self._rocm_quantized_product_cache: Dict[str, Any] = {}
+        self._rocm_quantized_product_last_program: Any = None
+        self._rocm_quantized_product_last_receipts: tuple[Any, ...] = ()
         self._rocm_nvfp4_call_signature = inspect.signature(fn)
         self._rocm_nvfp4_last_program: Any = None
         self._rocm_nvfp4_last_receipts: Any = ()
@@ -986,7 +988,8 @@ class JitFn:
         Step 4 (2026-05-18): auto-emits a :class:`CompileReport` to
         the active sink (no-op when no sink is active).
         """
-        if self._nvidia_rhs_last_program is not None:
+        if (self._nvidia_rhs_last_program is not None
+                or self._rocm_quantized_product_last_program is not None):
             self._cached_artifact = None
         self._native_descriptor_last_receipt = None
         self._nvidia_lhs_last_program = None
@@ -995,6 +998,8 @@ class JitFn:
         self._nvidia_rhs_last_receipts = ()
         self._rocm_nvfp4_last_program = None
         self._rocm_nvfp4_last_receipts = ()
+        self._rocm_quantized_product_last_program = None
+        self._rocm_quantized_product_last_receipts = ()
         self._enforce_call_time_constraints(args, kwargs)
         self._enforce_call_time_stochastic_certificate(args, kwargs)
         if self._bounded_lhs is not None:

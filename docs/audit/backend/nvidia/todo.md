@@ -11,6 +11,11 @@ last_updated: 2026-10-17
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
 Sync: ROCM-RESIDENT-QUANT-PRODUCT-20261017.
 
+PR969 review: the gfx1201 JIT clears prior per-call program/receipts/artifact
+before validation, and portable consumer Target witnesses must equal the
+image-bound Target. Both red regressions are fixed; 26 owning package/device
+tests pass. No sibling physical admission or arithmetic changes.
+
 Regression parity validated: twelve existing RTX5070 SM120 active-source JVP,
 ragged and declared-storage ReLU controls pass with matching core/NVIDIA tools.
 This does not adopt the gfx1201 physical program or broaden NVIDIA coverage.

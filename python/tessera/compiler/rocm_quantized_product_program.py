@@ -152,7 +152,9 @@ class NativeQuantizedProductProgram:
                 raise ValueError("native quantized-product producer/shared buffer interface differs")
         native = self.product
         native.descriptor.validate_image(native.image)
-        checked = check_blockscale_target_ir(shape,native.tile_ir,self.checked_product_target_ir)
+        if native.target_ir != self.checked_product_target_ir:
+            raise ValueError("native quantized-product checked Target differs from image-bound Target")
+        checked = check_blockscale_target_ir(shape,native.tile_ir,native.target_ir)
         descriptor = native.descriptor
         if (native.image.target != "rocm_gfx1201" or native.image.architecture != "gfx1201"
                 or native.image.binary_format != "hsaco" or native.image.pipeline_name != "tessera-rocm-executable"

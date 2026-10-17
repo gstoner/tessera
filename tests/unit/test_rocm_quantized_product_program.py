@@ -125,3 +125,36 @@ def test_individually_valid_wrong_shape_quantizer_cannot_bind_shared_buffers(pac
     changed=replace(changed,binding_digest=changed._identity())
     with pytest.raises(ValueError,match="producer/shared buffer"):
         changed.validate()
+
+
+@pytest.mark.compiler_route
+@pytest.mark.compiler_rocm
+def test_portable_consumer_checked_target_must_be_image_bound(package):
+    # Independently serialized witnesses cannot be resealed into a different
+    # Target record, even when the exposed ABI fields still agree.
+    from tessera.compiler.rocm_quantized_product_program import _digest
+    target = package.product.target_ir + "\n// independently serialized consumer target\n"
+    image = replace(package.product.image, target_ir_digest=_digest(target))
+    descriptor = replace(package.product.descriptor, image_digest=image.image_digest)
+    native = replace(package.product,target_ir=target,image=image,descriptor=descriptor)
+    changed = replace(package, product=native)
+    changed = replace(changed,binding_digest=changed._identity())
+    with pytest.raises(ValueError,match="checked Target"):
+        changed.validate()
+
+
+def test_new_call_clears_previous_quantized_product_before_validation(monkeypatch):
+    import tessera as ts
+    from tests.device.rocm.test_native_quantized_product_jit import make_product
+    fn=ts.jit(target="rocm_gfx1201",native_required=True)(make_product())
+    fn._rocm_quantized_product_last_program=object()
+    fn._rocm_quantized_product_last_receipts=({"ok":True},)
+    fn._cached_artifact=object()
+    def unsupported(*args,**kwargs):
+        raise ValueError("unsupported specialization")
+    monkeypatch.setattr(fn,"_enforce_call_time_constraints",unsupported)
+    with pytest.raises(ValueError,match="unsupported specialization"):
+        fn(None,None,None)
+    assert fn._rocm_quantized_product_last_program is None
+    assert fn._rocm_quantized_product_last_receipts == ()
+    assert fn._cached_artifact is None

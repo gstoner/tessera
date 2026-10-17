@@ -46,7 +46,7 @@ windows through the production package. The native API already averages over
 repetitions; the recorder does not divide its result a second time.
 
 Portable public artifacts are checked in beside the packets. Source hashes
-bind the current Python package, runtime integration and original native
+bind the measured Python package, runtime integration and original native
 partition/quantizer sources. Native compiler SHA and runtime SHA are recorded
 in each prepared packet. The compiler-age warning reflects checkout mtimes;
 the native source hashes remain those of the compiled 554c74ef9f implementation.
@@ -82,3 +82,15 @@ quantizer substituted into a K32 composed plan. The old validator admitted the
 re-sealed record; the new validator compares native producer shape/storage/byte
 spans with all three shared interfaces and rejects it before provider access.
 The malformed program was not launched.
+
+## PR969 review corrections
+
+Per-call quantized-product state, receipts and its inspection cache are reset
+before call validation, including a rejected later specialization. The portable
+consumer now requires the checked Target witness to equal the Target bound to
+its executable image. Both regressions fail before the fix and pass afterward;
+the complete affected package/device lane passes 26 tests (21 package, five
+owning gfx1201). `review-source-identity.json` binds the corrected sources and
+`review-regressions.json` records this validation. Existing timing packets keep
+their measured pre-review source hashes; no native arithmetic or timing claim
+changes.

@@ -2757,8 +2757,9 @@ struct LowerTileToROCMPass
     for (auto kernel : getOperation().getOps<tessera::tile::RowRegionKernelOp>()) viewKernels.push_back(kernel);
     if (!viewKernels.empty()) {
       if (arch != "gfx1201" || viewKernels.size() != 1 || getOperation().getBody()->getOperations().size() != 1 ||
-          viewKernels.front().getArch() != "gfx1201" || viewKernels.front().getSchema() != 2) {
-        getOperation().emitError("ROCm parent-view lowering requires its isolated gfx1201 schema-2 profile");
+          viewKernels.front().getArch() != "gfx1201" ||
+          (viewKernels.front().getSchema() != 2 && viewKernels.front().getSchema() != 3)) {
+        getOperation().emitError("ROCm parent-view lowering requires its isolated gfx1201 schema-2/3 profile");
         return signalPassFailure();
       }
       auto kernel = viewKernels.front();

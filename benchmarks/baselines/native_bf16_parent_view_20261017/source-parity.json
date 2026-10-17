@@ -1,0 +1,8 @@
+{
+  "source_identity_sha256": "baefe5eae519c73dc117128b8da69e506e29184a0f5908e57f0bb965715822bc",
+  "matching_sources": 51,
+  "matching_compiler_libraries": 3,
+  "mismatches": [],
+  "runtime_provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+  "note": "Checkout timestamps may be newer than copied tools; exact source and binary bytes match the owning build. No timestamps touched."
+}

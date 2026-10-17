@@ -1,0 +1,44 @@
+{
+  "bf16-parent-explicit-red.txt": {
+    "sha256": "15b442eab12c471aa8302f0d184ff140ec0a70432322fa41192b85b7763d6bf6",
+    "terminal_summary": "1 failed in 0.30s",
+    "errors": [
+      "E           tessera.compiler.trace.TesseraTraceError: ERROR [E_GRAPH_INVALID] [LEGALITY_TARGET_CAPABILITY] at /home/angstorms/scratch/rocm-bf16-parent-view-20261017/tests/unit/test_native_gate_up_view_bf16.py:23:16-23:42: dtype 'fp32' is not supported for tessera.cast on rocm_gfx1201",
+      "E             where: graph-ir, pass=verifier"
+    ]
+  },
+  "bf16-parent-explicit-native-red.txt": {
+    "sha256": "374fc2d2aa7771da8024edc9973ff637cac3df3e0b9ed1769c15a3710c176712",
+    "terminal_summary": "1 failed in 0.29s",
+    "errors": [
+      "E           RuntimeError: scheduled compiler boundary --tessera-graph-to-schedule failed: <stdin>:1:1: error: gate/up view source is outside the native parent-view profile",
+      "E           module attributes {tessera.ir.version = \"1.0\", tessera.frontend.authority = \"tracer\", tessera.native.gate_up_view = unit, tessera.target = \"rocm\", tessera.arch = \"gfx1201\"} {",
+      "E           ^",
+      "E           <stdin>:1:1: note: see current operation:",
+      "E           \"builtin.module\"() ({",
+      "E             \"func.func\"() <{function_type = (tensor<3x34xbf16>) -> tensor<3x17xbf16>, sym_name = \"gate_up_bf16\"}> ({"
+    ]
+  },
+  "bf16-resident-partition-red.txt": {
+    "sha256": "79f4a7111be637bf409c6d8be175eaa3fcbf55855784140a2d1c07814bb2adab",
+    "terminal_summary": "1 failed in 0.57s",
+    "errors": [
+      "E           RuntimeError: scheduled compiler boundary --tessera-autodiff-forward=export-scaled-primal=true failed: <stdin>:2:2: error: NVFP4 native program requires its five-input conversion/product Graph",
+      "E            func.func @source_product(%arg0: tensor<34x24xi8>, %arg1: tensor<34x3xf8E4M3FN>, %arg2: tensor<2xf64>, %arg3: tensor<3x48xf8E4M3FN>, %arg4: tensor<3x3xf32>) -> tensor<3x17xbf16> {",
+      "E            ^",
+      "E           <stdin>:2:2: note: see current operation:",
+      "E           \"func.func\"() <{function_type = (tensor<34x24xi8>, tensor<34x3xf8E4M3FN>, tensor<2xf64>, tensor<3x48xf8E4M3FN>, tensor<3x3xf32>) -> tensor<3x17xbf16>, sym_name = \"source_product\"}> ({",
+      "E           ^bb0(%arg0: tensor<34x24xi8>, %arg1: tensor<34x3xf8E4M3FN>, %arg2: tensor<2xf64>, %arg3: tensor<3x48xf8E4M3FN>, %arg4: tensor<3x3xf32>):"
+    ]
+  },
+  "bf16-exact-device-first.txt": {
+    "sha256": "580a5ea04a77c10b3a68a15882c2b52fb50bcda1dc5f52307165032a927c3076",
+    "terminal_summary": "1 failed in 0.60s",
+    "errors": [
+      "E               tessera.compiler.graph_ir.GraphIRVerificationError: ERROR [E_GRAPH_INVALID] [GRAPH_IR_UNDEFINED_OPERAND] at /home/angstorms/scratch/rocm-bf16-parent-view-20261017/tests/device/rocm/test_native_parent_view_bf16_jit.py:25:16-25:44: op 'tessera.cast' uses undefined operand %product",
+      "E                 where: graph-ir, pass=verifier",
+      "E               tessera._jit_boundary.TesseraJitError: Graph IR emission failed for 'gate_up': ERROR [E_GRAPH_INVALID] [GRAPH_IR_UNDEFINED_OPERAND] at /home/angstorms/scratch/rocm-bf16-parent-view-20261017/tests/device/rocm/test_native_parent_view_bf16_jit.py:25:16-25:44: op 'tessera.cast' uses undefined operand %product",
+      "E                 where: graph-ir, pass=verifier"
+    ]
+  }
+}

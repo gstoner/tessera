@@ -22,7 +22,8 @@ inline std::string sourceDigest(mlir::func::FuncOp fn) {
   auto value = digest(copy); copy->destroy(); return value;
 }
 // Schema 2 is the gfx1201 one-parent gate/up view profile. Schema 1 retains
-// its original SM120 four-pointer row/reduction meaning.
+// its original SM120 four-pointer row/reduction meaning. Schema 3 requires
+// BF16 parent/output storage with explicit FP32 computation.
 inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
   using namespace mlir;
   StringRef opName = op->getName().getStringRef();
@@ -41,18 +42,18 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
     });
   };
   if ((!target && opName != "tile.row_region_kernel") ||
-      !arch || arch.getValue() != "gfx1201" || !schema || schema.getInt() != 2 ||
+      !arch || arch.getValue() != "gfx1201" || !schema || (schema.getInt() != 2 && schema.getInt() != 3) ||
       !name || name.getValue().empty() || !rows || rows.getInt() <= 0 || rows.getInt() > INT32_MAX ||
       !columns || columns.getInt() <= 0 || columns.getInt() > INT32_MAX / 2 ||
       rows.getInt() > INT64_MAX / 8 / columns.getInt() ||
       rows.getInt() * columns.getInt() > (int64_t(1) << 31) / 12 ||
-      !storage || !storage.getValue().isF32() || !threads || threads.getInt() != 256 ||
+      !storage || (schema.getInt() == 2 ? !storage.getValue().isF32() : !storage.getValue().isBF16()) || !threads || threads.getInt() != 256 ||
       !hex(op->getAttr("body_hash")) || !hex(op->getAttr("source_hash")) ||
       !hex(op->getAttr("artifact_hash")) || (target && !hex(op->getAttr("tile_body_hash"))) ||
       op->getNumRegions() != 1 || !op->getRegion(0).hasOneBlock() ||
       op->getRegion(0).front().getNumArguments() != 0 ||
       op->getRegion(0).front().getOperations().size() != 1)
-    return op->emitOpError("requires the sealed gfx1201 schema-2 parent-view profile");
+    return op->emitOpError("requires the sealed gfx1201 schema-2 FP32 or schema-3 BF16 parent-view profile");
   auto fn = dyn_cast<LLVM::LLVMFuncOp>(op->getRegion(0).front().front());
   auto ptr = LLVM::LLVMPointerType::get(op->getContext());
   if (!fn || fn.getName() != name.getValue() || !fn.getBody().hasOneBlock() ||
@@ -78,7 +79,7 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
       } else { auto gep = cast<LLVM::GEPOp>(nested); address = gep.getBase(); element = gep.getElemType(); }
       while (auto gep = address.getDefiningOp<LLVM::GEPOp>()) address = gep.getBase();
       auto arg = dyn_cast<BlockArgument>(address);
-      if (!arg || arg.getOwner() != &fn.getBody().front() || arg.getArgNumber() >= 2 || !element.isF32()) valid = false;
+      if (!arg || arg.getOwner() != &fn.getBody().front() || arg.getArgNumber() >= 2 || element != storage.getValue()) valid = false;
       else if (isa<LLVM::LoadOp>(nested)) { if (arg.getArgNumber() != 0) valid = false; else reads |= 1; }
       else if (write) { if (arg.getArgNumber() != 1) valid = false; else writes |= 2; }
     } else if (!target && isa<tile::BufferViewOp>(nested)) {
@@ -86,7 +87,7 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
       auto arg = dyn_cast<BlockArgument>(view.getBase());
       auto type = cast<tile::BufferViewType>(view.getResult().getType());
       if (!arg || arg.getOwner() != &fn.getBody().front() || arg.getArgNumber() >= 2 ||
-          !type.getElementType().isF32() || type.getOrder() != "row_major" ||
+          type.getElementType() != storage.getValue() || type.getOrder() != "row_major" ||
           type.getAccess() != (arg.getArgNumber() == 0 ? "read" : "write")) valid = false;
       else roots.insert(arg.getAsOpaquePointer());
       views.insert(nested);
@@ -102,7 +103,8 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
 }
 inline mlir::LogicalResult verifyKernel(mlir::Operation *op) {
   auto schemaProfile = op->getAttrOfType<mlir::IntegerAttr>("schema");
-  if (schemaProfile && schemaProfile.getInt() == 2) return verifyGateUpKernel(op);
+  if (schemaProfile && (schemaProfile.getInt() == 2 || schemaProfile.getInt() == 3))
+    return verifyGateUpKernel(op);
   using namespace mlir;
   bool targetBody = op->getName().getStringRef() == "tessera_nvidia.row_region_kernel";
   if (!targetBody && op->getName().getStringRef() != "tile.row_region_kernel")

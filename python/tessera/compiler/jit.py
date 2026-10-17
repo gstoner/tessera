@@ -1888,7 +1888,7 @@ class JitFn:
             GFX_SOFTMAX_F32_ABI, requests_softmax,
         )
         from .rocm_math_native import supports_math, requests_public_math, MATH_ABIS
-        from .rocm_parent_view_native import supports_parent_view, PARENT_VIEW_ABI
+        from .rocm_parent_view_native import supports_parent_view, PARENT_VIEW_ABIS
         native_math = requests_public_math(self.graph_ir, target)
         parent_view = target == "rocm_gfx1201" and parent_view_request
         nvidia_softmax = target == "nvidia_sm120" and requests_softmax(self.graph_ir)
@@ -2071,7 +2071,7 @@ class JitFn:
                 scalars.update(zip(("StrideP", "StridePage", "StrideH", "StrideD"), strides, strict=True))
         elif parent_view:
             import json
-            if descriptor.abi_id != PARENT_VIEW_ABI:
+            if descriptor.abi_id not in PARENT_VIEW_ABIS:
                 raise ValueError("parent-view compilation did not produce its checked ABI")
             info = json.loads(descriptor.provenance["native_parent_view"]["member_json"])
             scalars = {"N": info["scalars"][0]}
@@ -2234,7 +2234,7 @@ class JitFn:
             if dtype is None and descriptor.abi_id == NVFP4_EXPAND_ABI and output.dtype == "fp8_e4m3":
                 import ml_dtypes
                 dtype = ml_dtypes.float8_e4m3fn
-            if dtype is None and (nvidia_softmax or native_math) and output.dtype == "bf16":
+            if dtype is None and (nvidia_softmax or native_math or parent_view) and output.dtype == "bf16":
                 import ml_dtypes
                 dtype = ml_dtypes.bfloat16
             if dtype is None or output.layout != "row_major":

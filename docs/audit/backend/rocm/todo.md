@@ -5,6 +5,31 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-BF16-PARENT-VIEW-20261017 — resident activation candidate
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: ROCM-BF16-PARENT-VIEW-20261017.
+
+Candidate work extends original BF16 parent views with explicit FP32 widening,
+SiLU computation and BF16 storage through native row schema 3. Row schema 2
+retains its FP32 meaning. The source-preserving NVFP4 program schema v5 groups
+the six activation operations into a third native member: nine physical
+buffers, one private BF16 parent, no allocations for logical views/casts.
+Existing v3/v4 static/bounded two-member contracts retain their meanings;
+three-member bounded replay requires a separate runtime-expression contract.
+
+The FP32-source cast capability is Graph-only on gfx1201; it does not advertise
+a standalone executable cast. Native ABI/frame validation and raw-byte BF16
+readback are extended for the named profile. Matching native stages pass 31
+tests. Owning gfx1201 passes seven public BF16 JIT/fresh-process cases, two
+resident lifetime cases, 22 existing prepared cases and 27 existing bounded
+regressions. The captured-Boolean frontend assignment repair has ten focused
+tests. Final-source synthetic timing windows are 19.99–22.77 ms; device member windows and
+completed host calls are separate. No speedup, model-quality, full-MLP or
+general composition closure is claimed.
+gfx1151 follow-up is required for its own BF16 parent-view ABI/profile;
+it cannot inherit gfx1201 FP8/NVFP4 product evidence.
+
 ## ROCM-NATIVE-GATE-UP-CONSUMER-20261016 — parent-view native integration
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.

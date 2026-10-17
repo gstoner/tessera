@@ -4541,9 +4541,11 @@ _MATRIX[("rocm_gfx1201", "rocm_parent_view_native_descriptor")] = ExecutionRow(
     target="rocm_gfx1201", compiler_path="rocm_parent_view_native_descriptor",
     execution_kind="native_gpu", executable=True,
     executor_id="rocm_native_descriptor", runtime_status="success",
-    reason="Named static f32 one-parent gate/up views through native Graph/Schedule/Tile/Target/LLVM "
-           "and checked program ABI; thirteen gfx1201 literal/closure public JIT/fresh-process cases pass. "
-           "Resident producer composition and low-storage model-quality remain open.",
+    reason="Named static f32 or explicit BF16-load/FP32-compute/BF16-store gate/up views through "
+           "native Graph/Schedule/Tile/Target/LLVM and checked program ABI. Thirteen f32 and seven "
+           "BF16 JIT/fresh-process cases pass; BF16 fixture tests/device/rocm/test_native_parent_view_bf16_jit.py. "
+           "Two static textual NVFP4 expansion/product/activation programs prove private parent lifetime. "
+           "Full MLP, broader dynamic composition and model-quality remain open.",
     execution_mode="hip_runtime", direction="forward", op_family="parent_view",
     device_proof="device_verified_jit", evidence_target="rocm_gfx1201",
     numerical_fixture="tests/device/rocm/test_native_parent_view_jit.py",

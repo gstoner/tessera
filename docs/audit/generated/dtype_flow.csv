@@ -407,7 +407,7 @@ scatter_reduce,tessera.scatter_reduce,indexing,no,fp32,fp32,int32,public,registe
 scatter_reduce,tessera.scatter_reduce,indexing,no,int32,int32,int32,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,absent,unsupported,absent,absent,absent,absent,tile/physical/direct_test
 select,tessera.select,indexing,no,fp32,fp32,int32,public,registered,complete,reference,reference,legal_only,reference,absent,absent,absent,absent,absent,absent,absent,physical/direct_test
 select,tessera.select,indexing,no,int32,int32,int32,public,registered,complete,planned,unsupported,unsupported,unsupported,absent,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
-slice,tessera.slice,indexing,no,bf16,bf16,int32,public,registered,complete,fused,unsupported,legal_only,unsupported,fused,absent,absent,absent,unsupported,absent,absent,
+slice,tessera.slice,indexing,no,bf16,bf16,int32,public,registered,complete,fused,unsupported,legal_only,unsupported,fused,absent,absent,absent,device_verified_jit,absent,absent,
 slice,tessera.slice,indexing,no,fp16,fp16,int32,public,registered,complete,fused,unsupported,unsupported,unsupported,fused,absent,absent,absent,unsupported,absent,absent,
 slice,tessera.slice,indexing,no,fp32,fp32,int32,public,registered,complete,fused,reference,legal_only,reference,fused,absent,absent,absent,device_verified_jit,absent,absent,
 slice,tessera.slice,indexing,no,int32,int32,int32,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,absent,absent,absent,unsupported,absent,absent,tile/physical/direct_test
@@ -419,7 +419,7 @@ broadcast,tessera.broadcast,layout_transform,no,bf16,bf16,fp64,public,registered
 broadcast,tessera.broadcast,layout_transform,no,fp32,fp32,fp64,public,registered,complete,reference,reference,legal_only,reference,absent,absent,absent,absent,absent,absent,absent,physical/direct_test
 cast,tessera.cast,layout_transform,no,bf16,bf16,fp64,public,registered,complete,fused,unsupported,unsupported,unsupported,fused,absent,unsupported,absent,ready,absent,absent,direct_test
 cast,tessera.cast,layout_transform,no,fp16,fp16,fp64,public,registered,complete,fused,unsupported,unsupported,unsupported,fused,absent,unsupported,absent,ready,absent,absent,direct_test
-cast,tessera.cast,layout_transform,no,fp32,fp32,fp64,public,registered,complete,fused,reference,device_verified_jit,reference,fused,absent,device_verified_jit,absent,unsupported,absent,absent,
+cast,tessera.cast,layout_transform,no,fp32,fp32,fp64,public,registered,complete,fused,reference,device_verified_jit,reference,fused,absent,device_verified_jit,absent,legal_only,absent,absent,
 cat,tessera.cat,layout_transform,no,bf16,bf16,fp64,public,registered,complete,planned,unsupported,unsupported,unsupported,absent,absent,unsupported,absent,absent,absent,absent,tile/physical/direct_test
 cat,tessera.cat,layout_transform,no,fp32,fp32,fp64,public,registered,complete,fused,reference,device_verified_jit,reference,absent,absent,device_verified_jit,absent,absent,absent,absent,
 chunk,tessera.chunk,layout_transform,no,bf16,bf16,fp64,public,registered,complete,planned,unsupported,legal_only,unsupported,absent,absent,absent,absent,absent,absent,absent,tile/physical/direct_test

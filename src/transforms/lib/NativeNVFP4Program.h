@@ -1,6 +1,7 @@
 // Compiler-owned partition of the named NVFP4 conversion/storage/product Graph.
 #pragma once
 #include "mlir/IR/Verifier.h"
+#include "Tessera/IR/SliceContract.h"
 
 namespace tessera {
 static bool hasNativeNVFP4Graph(mlir::ModuleOp module) {
@@ -17,11 +18,12 @@ static mlir::func::FuncOp cloneNativeNVFP4Member(mlir::func::FuncOp member, int6
   auto child = cast<func::FuncOp>(member->clone());
   bool expansion = member->hasAttr("tessera.native.nvfp4_expansion_member");
   const char *names[] = {"ingest", "storage", "packed_folded_w4a8"};
-  const char *expansionNames[] = {"expand", "w8a8_blockscale"};
+  const char *expansionNames[] = {"expand", "w8a8_blockscale", "gate_up_activation"};
   child.setSymName(expansion ? expansionNames[index] : names[index]); child.setPublic();
   child->removeAttr("tessera.native.nvfp4_member");
   OpBuilder b(member.getContext());
   child->removeAttr("tessera.native.nvfp4_expansion_member");
+  child->removeAttr("tessera.native.nvfp4_activation_member");
   if (expansion && index == 0) {
     child->setAttr("tessera.bindings", b.getStrArrayAttr(
         {"codes", "scales", "globals", "values", "scale_plane"}));
@@ -53,17 +55,19 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
   auto root = roots[0];
   auto first = root.getBody().front().begin();
   bool expansion = first->getName().getStringRef() == "tessera.nvfp4_expand";
-  unsigned stageCount = expansion ? 2 : 3;
+  bool activation = expansion && root.getBody().front().getOperations().size() == 9;
+  unsigned stageCount = expansion ? (activation ? 3 : 2) : 3;
   if (root.getNumArguments() != 5 || root.getNumResults() != 1 ||
-      root.getBody().front().getOperations().size() != stageCount + 1)
+      root.getBody().front().getOperations().size() != (activation ? 9 : stageCount + 1))
     return root.emitError("NVFP4 native program requires its five-input conversion/product Graph");
   SmallVector<Operation *> ops;
   for (auto &op : root.getBody().front().without_terminator()) ops.push_back(&op);
   auto ret = dyn_cast<func::ReturnOp>(root.getBody().front().back());
-  Operation *product = ops.back();
+  Operation *product = activation ? ops[1] : ops.back();
   bool productEdge = product->getName().getStringRef() == "tessera.scaled_matmul" &&
       product->getNumOperands() == 4 && product->getNumResults() == 1 &&
-      ret && ret.getNumOperands() == 1 && ret.getOperand(0) == product->getResult(0);
+      ret && ret.getNumOperands() == 1 &&
+      (activation || ret.getOperand(0) == product->getResult(0));
   if (!productEdge)
     return root.emitError("NVFP4 native program requires a returned scaled product");
   bool producerEdge = false;
@@ -103,6 +107,59 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
   }
   if (!productEdge || !producerEdge)
     return root.emitError("NVFP4 native program lost its conversion/storage/product SSA edges");
+  if (activation) {
+    auto parent = dyn_cast<RankedTensorType>(product->getResult(0).getType());
+    auto result = dyn_cast<RankedTensorType>(ret.getOperand(0).getType());
+    if (!parent || !result || !parent.hasStaticShape() || !result.hasStaticShape() ||
+        parent.getRank() != 2 || result.getRank() != 2 || parent.getEncoding() || result.getEncoding() ||
+        !parent.getElementType().isBF16() || !result.getElementType().isBF16() ||
+        parent.getDimSize(0) != result.getDimSize(0) || parent.getDimSize(1) != 2*result.getDimSize(1) ||
+        result.getDimSize(0) <= 0 || result.getDimSize(1) <= 0)
+      return root.emitError("NVFP4 resident activation requires its static BF16 parent/output storage");
+    int64_t origins[2] = {-1, -1};
+    for (unsigned i=0; i<2; ++i) {
+      auto slice = ops[2+i]; auto castOp = ops[4+i];
+      auto bounds = slice_contract::staticBounds(slice);
+      auto castType = castOp->getNumResults() == 1
+          ? dyn_cast<RankedTensorType>(castOp->getResult(0).getType()) : RankedTensorType{};
+      if (!bounds || slice->getNumOperands() != 1 || slice->getNumResults() != 1 ||
+          slice->getOperand(0) != product->getResult(0) || slice->getResult(0).getType() != result ||
+          bounds->sizes != result.getShape() || bounds->offsets[0] != 0 ||
+          (bounds->offsets[1] != 0 && bounds->offsets[1] != result.getDimSize(1)) ||
+          castOp->getName().getStringRef() != "tessera.cast" || castOp->getNumOperands() != 1 ||
+          castOp->getOperand(0) != slice->getResult(0) || !castType ||
+          castType.getShape() != result.getShape() || !castType.getElementType().isF32())
+        return root.emitError("NVFP4 resident activation lost its original view/widening SSA");
+      origins[i] = bounds->offsets[1];
+    }
+    auto silu = ops[6]; auto storeCast = ops[7];
+    bool ordered = silu->getNumOperands() == 2 &&
+        ((silu->getOperand(0) == ops[4]->getResult(0) && silu->getOperand(1) == ops[5]->getResult(0)) ||
+         (silu->getOperand(1) == ops[4]->getResult(0) && silu->getOperand(0) == ops[5]->getResult(0)));
+    if (origins[0] == origins[1] || silu->getName().getStringRef() != "tessera.silu_mul" ||
+        !ordered || silu->getNumResults() != 1 ||
+        storeCast->getName().getStringRef() != "tessera.cast" || storeCast->getNumOperands() != 1 ||
+        storeCast->getNumResults() != 1 || storeCast->getOperand(0) != silu->getResult(0) ||
+        storeCast->getResult(0).getType() != result || ret.getOperand(0) != storeCast->getResult(0))
+      return root.emitError("NVFP4 resident activation lost its SiLU/store SSA");
+  }
+  // A physical member may own several logical operations. Views and explicit
+  // register casts stay inside the activation member, never device allocations.
+  SmallVector<SmallVector<Operation *>> groups;
+  for (unsigned i=0; i<(activation ? 2u : ops.size()); ++i) groups.push_back({ops[i]});
+  if (activation) groups.emplace_back(ops.begin()+2, ops.end());
+  SmallVector<SmallVector<Value>> stageInputs, stageOutputs;
+  for (const auto &group : groups) {
+    llvm::SmallDenseSet<Value> internal;
+    SmallVector<Value> inputs;
+    for (Operation *op : group) {
+      for (Value input : op->getOperands())
+        if (!internal.contains(input) && !llvm::is_contained(inputs, input)) inputs.push_back(input);
+      for (Value output : op->getResults()) internal.insert(output);
+    }
+    stageInputs.push_back(std::move(inputs));
+    stageOutputs.emplace_back(group.back()->getResults().begin(),group.back()->getResults().end());
+  }
   SmallVector<Value> roles(ops[0]->getOperands());
   roles.push_back(product->getOperand(0));
   roles.push_back(product->getOperand(2));
@@ -126,6 +183,8 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
   bool boundedRows = module->hasAttr(rowBoundKey);
   int64_t activeRows = 0, rowBound = 0;
   std::string originalIR;
+  if (boundedRows && activation)
+    return root.emitError("NVFP4 resident activation bounded rows require a three-member runtime expression contract");
   if (boundedRows) {
     auto activation = dyn_cast<RankedTensorType>(roles[3].getType());
     auto scale = dyn_cast<RankedTensorType>(roles[4].getType());
@@ -176,19 +235,19 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
     ids[value] = values.size(); values.push_back(value);
     writes.push_back(-1); reads.push_back(-1);
   }
-  for (auto [index, op] : llvm::enumerate(ops)) {
-    for (Value input : op->getOperands()) {
+  for (auto [index, inputs] : llvm::enumerate(stageInputs)) {
+    for (Value input : inputs) {
       auto found = ids.find(input);
       if (found == ids.end())
-        return op->emitError("NVFP4 native program captured a value outside its SSA prefix");
+        return root.emitError("NVFP4 native program captured a value outside its SSA prefix");
       reads[found->second] = index;
     }
-    for (Value output : op->getResults()) {
+    for (Value output : stageOutputs[index]) {
       ids[output] = values.size(); values.push_back(output);
       writes.push_back(index); reads.push_back(index);
     }
   }
-  reads[ids.lookup(ret.getOperand(0))] = ops.size();
+  reads[ids.lookup(ret.getOperand(0))] = groups.size();
   std::string sourceIR; llvm::raw_string_ostream sourceStream(sourceIR);
   module.print(sourceStream); sourceStream.flush();
   OpBuilder b(module.getContext());
@@ -224,45 +283,61 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
   }
   // Complete all admission before cloning actual operations; retain root witness.
   SmallVector<Attribute> memberSymbols;
-  for (auto [index, op] : llvm::enumerate(ops)) {
+  for (auto [index, group] : llvm::enumerate(groups)) {
+    Operation *op = group.front();
+    SmallVector<Type> inputTypes, outputTypes;
+    for (Value value : stageInputs[index]) inputTypes.push_back(value.getType());
+    for (Value value : stageOutputs[index]) outputTypes.push_back(value.getType());
     b.setInsertionPointToEnd(module.getBody());
     auto name = (root.getSymName() + "__nvfp4_member_" + llvm::Twine(index)).str();
     auto member = b.create<func::FuncOp>(op->getLoc(), name,
-        b.getFunctionType(op->getOperandTypes(), op->getResultTypes()));
+        b.getFunctionType(inputTypes, outputTypes));
     member.setPrivate();
     member->setAttr("tessera.native.nvfp4_member", b.getI64IntegerAttr(index));
     if (expansion)
       member->setAttr("tessera.native.nvfp4_expansion_member", b.getUnitAttr());
+    if (activation && index == 2)
+      member->setAttr("tessera.native.nvfp4_activation_member", b.getUnitAttr());
     memberSymbols.push_back(FlatSymbolRefAttr::get(member));
     auto block = member.addEntryBlock();
     OpBuilder body(block, block->begin());
     IRMapping mapping;
     llvm::json::Array inputs, outputs;
-    for (auto [input, arg] : llvm::zip(op->getOperands(), block->getArguments())) {
+    for (auto [input, arg] : llvm::zip(stageInputs[index], block->getArguments())) {
       mapping.map(input, arg); inputs.push_back(ids.lookup(input));
     }
-    auto cloned = body.clone(*op, mapping);
-    body.create<func::ReturnOp>(op->getLoc(), cloned->getResults());
-    for (Value output : op->getResults()) outputs.push_back(ids.lookup(output));
+    for (Operation *logical : group) body.clone(*logical, mapping);
+    SmallVector<Value> returned;
+    for (Value output : stageOutputs[index]) {
+      returned.push_back(mapping.lookup(output)); outputs.push_back(ids.lookup(output));
+    }
+    body.create<func::ReturnOp>(op->getLoc(), returned);
     // Serialize the exact projected member with the original module contract.
     // Portable packaging consumes this native record; it never rebuilds Graph.
     auto projected = ModuleOp::create(module.getLoc());
     projected->setAttrs(module->getAttrs());
+    if (activation && index == 2) {
+      projected->setAttr("tessera.target", b.getStringAttr("rocm"));
+      projected->setAttr("tessera.native.gate_up_view", b.getUnitAttr());
+    }
     projected.getBody()->push_back(cloneNativeNVFP4Member(member, index));
     std::string projectedIR; llvm::raw_string_ostream projectedStream(projectedIR);
     projected.print(projectedStream); projectedStream.flush();
     memberGraphs.push_back(projectedIR + "\n");
     projected.erase();
     stepJSON.push_back(llvm::json::Object{
-      {"step", int64_t(index)}, {"operation", op->getName().getStringRef().str()},
+      {"step", int64_t(index)}, {"operation", activation && index == 2
+          ? "tessera.silu_mul" : op->getName().getStringRef().str()},
       {"member", name}, {"inputs", std::move(inputs)}, {"outputs", std::move(outputs)}});
   }
   for (int64_t index : roleIndices) roleJSON.push_back(index);
   std::string rootIR; llvm::raw_string_ostream rootStream(rootIR);
   root.print(rootStream); rootStream.flush();
   // v4 adds bounded source expansion. v1/v2 retain lossy static/bounded
-  // meanings and v3 remains static source expansion; no schema is repurposed.
-  const char *schema = expansion
+  // meanings and v3 remains static source expansion. v5 adds a static BF16
+  // activation member; bounded three-member updates need their own schema.
+  // No prior schema is repurposed.
+  const char *schema = activation ? "tessera.native.nvfp4_program.v5" : expansion
       ? (boundedRows ? "tessera.native.nvfp4_program.v4" : "tessera.native.nvfp4_program.v3")
       : (boundedRows ? "tessera.native.nvfp4_program.v2" : "tessera.native.nvfp4_program.v1");
   llvm::json::Object plan{{"schema", schema},
@@ -311,8 +386,14 @@ static mlir::LogicalResult projectNativeNVFP4Member(mlir::ModuleOp module, int64
   auto lineage = member ? member->getAttrOfType<IntegerAttr>("tessera.native.nvfp4_member") : IntegerAttr{};
   if (!member || !lineage || lineage.getInt() != index)
     return module.emitError("NVFP4 native member lineage differs");
+  bool activationMember = member->hasAttr("tessera.native.nvfp4_activation_member");
   auto child = cloneNativeNVFP4Member(member, index);
-  module.getBody()->clear(); module.getBody()->push_back(child);
+  module.getBody()->clear();
+  if (activationMember) {
+    OpBuilder b(module.getContext());
+    module->setAttr("tessera.target", b.getStringAttr("rocm"));
+    module->setAttr("tessera.native.gate_up_view", b.getUnitAttr());
+  } module.getBody()->push_back(child);
   module->removeAttr("tessera.native.nvfp4_program");
   module->removeAttr("tessera.native.nvfp4_program_json");
   return success();

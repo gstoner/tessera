@@ -59,9 +59,12 @@ class NativeNVFP4ExpansionProgram:
     consumer_schedule_ir: str
     consumer_checked_target_ir: str
     binding_digest: str
+    activation: ROCMNativePackage | None = None
+    activation_graph_ir: str = ""
+    activation_schedule_ir: str = ""
 
     def _identity(self):
-        return _digest(json.dumps([
+        parts = [
             self.program_json, self.graph_ir, self.producer.graph_ir,
             self.producer.schedule_ir, self.producer.native.tile_ir,
             self.producer.native.target_ir, self.producer.native.image.image_digest,
@@ -69,7 +72,13 @@ class NativeNVFP4ExpansionProgram:
             self.consumer_graph_ir, self.consumer_schedule_ir, self.consumer_checked_target_ir,
             self.consumer.tile_ir, self.consumer.target_ir,
             self.consumer.image.image_digest, self.consumer.descriptor.descriptor_digest,
-        ], separators=(",", ":")))
+        ]
+        if self.activation is not None:
+            parts.extend([self.activation_graph_ir, self.activation_schedule_ir,
+                          self.activation.tile_ir, self.activation.target_ir,
+                          self.activation.image.image_digest,
+                          self.activation.descriptor.descriptor_digest])
+        return _digest(json.dumps(parts, separators=(",", ":")))
 
     def validate(self):
         if self.binding_digest != self._identity():
@@ -77,16 +86,34 @@ class NativeNVFP4ExpansionProgram:
         self.producer.validate()
         p = json.loads(self.program_json)
         roles = p["role_indices"]
-        if (p.get("schema") not in {"tessera.native.nvfp4_program.v3", "tessera.native.nvfp4_program.v4"}
+        if (not isinstance(roles, list) or len(roles) != 5
+                or any(type(i) is not int for i in roles) or sorted(roles) != list(range(5))):
+            raise ValueError("native expansion original argument roles differ")
+        has_activation = p.get("schema") == "tessera.native.nvfp4_program.v5"
+        if has_activation != (self.activation is not None):
+            raise ValueError("native expansion activation schema/member differs")
+        if not has_activation and (self.activation_graph_ir or self.activation_schedule_ir):
+            raise ValueError("two-member expansion cannot carry an unbound activation witness")
+        if has_activation and any(key in p for key in ("active_m", "m_bound", "row_frame", "original_graph_ir")):
+            raise ValueError("static activation program cannot reuse a bounded two-member frame")
+        members = [self.producer.graph_ir, self.consumer_graph_ir]
+        operations = ["tessera.nvfp4_expand", "tessera.scaled_matmul"]
+        inputs = [roles[:3], [roles[3], 5, roles[4], 6]]
+        outputs = [[5, 6], [7]]
+        if has_activation:
+            members.append(self.activation_graph_ir)
+            operations.append("tessera.silu_mul")
+            inputs.append([7]); outputs.append([8])
+        if (p.get("schema") not in {"tessera.native.nvfp4_program.v3", "tessera.native.nvfp4_program.v4", "tessera.native.nvfp4_program.v5"}
                 or p["source_graph_ir"] != self.graph_ir
-                or p["member_graphs"] != [self.producer.graph_ir, self.consumer_graph_ir]
+                or p["member_graphs"] != members
                 or len(roles) != 5 or any(type(i) is not int for i in roles)
-                or sorted(roles) != list(range(5)) or len(p["buffers"]) != 8
-                or p["output"] != 7 or len(p["steps"]) != 2
-                or [s["operation"] for s in p["steps"]] != ["tessera.nvfp4_expand", "tessera.scaled_matmul"]
-                or [s["inputs"] for s in p["steps"]] != [roles[:3], [roles[3], 5, roles[4], 6]]
-                or [s["outputs"] for s in p["steps"]] != [[5, 6], [7]]
-                or [s["step"] for s in p["steps"]] != [0, 1]):
+                or sorted(roles) != list(range(5)) or len(p["buffers"]) != (9 if has_activation else 8)
+                or p["output"] != (8 if has_activation else 7) or len(p["steps"]) != len(operations)
+                or [s["operation"] for s in p["steps"]] != operations
+                or [s["inputs"] for s in p["steps"]] != inputs
+                or [s["outputs"] for s in p["steps"]] != outputs
+                or [s["step"] for s in p["steps"]] != list(range(len(operations)))):
             raise ValueError("native expansion program SSA frame differs")
         provenance = self.producer.native.descriptor.provenance
         n, k = cast(Sequence[int], provenance["shape_nk"])
@@ -116,22 +143,29 @@ class NativeNVFP4ExpansionProgram:
             ((m, k), "f8E4M3FN"), ((m, k // 16), "f32"),
             ((n, k), "f8E4M3FN"), ((k // 16, n), "f32"), ((m, n), out),
         ]
+        if has_activation:
+            if out != "bf16" or n % 2:
+                raise ValueError("native expansion activation requires an even BF16 parent")
+            specs.append(((m, n // 2), "bf16"))
         ordered = list(specs)
         for role, slot in enumerate(roles):
             ordered[slot] = specs[role]
         ordered[5:] = specs[5:]
-        reads = [-1] * 8
+        reads = [-1] * len(specs)
+        writes = [-1] * len(specs)
         for i, step in enumerate(p["steps"]):
             for slot in step["inputs"] + step["outputs"]:
                 reads[slot] = i
-        reads[7] = 2
+            for slot in step["outputs"]:
+                writes[slot] = i
+        reads[p["output"]] = len(operations)
         sizes = {"ui8": 1, "i8": 1, "f8E4M3FN": 1, "f64": 8, "f32": 4, "bf16": 2}
         for i, (row, spec) in enumerate(zip(p["buffers"], ordered, strict=True)):
             dimensions, storage = spec
             if (row["id"] != i or row["shape"] != list(dimensions) or row["storage"] != storage
                     or row["bytes"] != math.prod(dimensions) * sizes[storage]
-                    or row["ownership"] != ("readonly_input" if i < 5 else "private_scratch" if i < 7 else "returned_output")
-                    or row["first_write"] != (-1 if i < 5 else 0 if i < 7 else 1)
+                    or row["ownership"] != ("readonly_input" if i < 5 else "returned_output" if i == p["output"] else "private_scratch")
+                    or row["first_write"] != writes[i]
                     or row["last_read"] != reads[i]):
                 raise ValueError("native expansion program buffer lifetime/storage differs")
         native = self.consumer
@@ -158,6 +192,23 @@ class NativeNVFP4ExpansionProgram:
                 or descriptor.provenance["staging"] != checked["staging"]):
             raise ValueError("native expansion product launch geometry/ABI differs")
 
+        if self.activation is not None:
+            from .rocm_parent_view_native import (
+                PARENT_VIEW_BF16_ABI, _frame, validate_parent_view_runtime_artifact,
+            )
+            from tessera.runtime import RuntimeArtifact
+            activation = self.activation
+            artifact = RuntimeArtifact(graph_ir=self.activation_graph_ir,
+                schedule_ir=self.activation_schedule_ir, tile_ir=activation.tile_ir,
+                target_ir=activation.target_ir, native_image=activation.image,
+                launch_descriptor=activation.descriptor,
+                metadata={"target": "rocm_gfx1201", "compiler_path": "rocm_parent_view_native_descriptor"})
+            validate_parent_view_runtime_artifact(artifact)
+            _, frame = _frame(activation.target_ir)
+            if (activation.descriptor.abi_id != PARENT_VIEW_BF16_ABI or
+                    frame["parent_shape"] != [m, n] or frame["output_shape"] != [m, n // 2]):
+                raise ValueError("native expansion activation shape/storage edge differs")
+
     def prepare(self, inputs, *, runtime_library):
         return PreparedNVFP4ExpansionProgram(self, inputs, runtime_library=runtime_library)
 
@@ -176,7 +227,7 @@ def package_native_nvfp4_expansion_program(graph):
         source = graph.to_mlir(target="rocm_gfx1201", canonical=True)
     program = export_native_nvfp4_program(source)
     plan = program.manifest
-    if plan["schema"] not in {"tessera.native.nvfp4_program.v3", "tessera.native.nvfp4_program.v4"}:
+    if plan["schema"] not in {"tessera.native.nvfp4_program.v3", "tessera.native.nvfp4_program.v4", "tessera.native.nvfp4_program.v5"}:
         raise ValueError("prepared expansion requires the native source-preserving program")
     bounded = plan["schema"] == "tessera.native.nvfp4_program.v4"
     producer = package_nvfp4_expansion(program.project_member(0))
@@ -211,8 +262,18 @@ def package_native_nvfp4_expansion_program(graph):
     if projection != consumer.target_ir:
         raise ValueError("native expansion consumer image projection differs")
     fields = (program.plan_json, plan["source_graph_ir"], producer, consumer, consumer_graph, schedule, checked_target)
-    unsealed = NativeNVFP4ExpansionProgram(*fields, "")
-    package = NativeNVFP4ExpansionProgram(*fields, unsealed._identity())
+    activation, activation_graph, activation_schedule = None, "", ""
+    if plan["schema"] == "tessera.native.nvfp4_program.v5":
+        from .rocm_parent_view_native import ParentViewRecipe, package_parent_view_recipe
+        activation_graph = program.project_member(2)
+        activation_schedule = run_tessera_opt(tool, activation_graph, "--tessera-graph-to-schedule")
+        activation_tile = run_tessera_opt(tool, activation_schedule, "--tessera-schedule-to-tile")
+        activation = package_parent_view_recipe(
+            ParentViewRecipe(activation_graph, activation_schedule, activation_tile),
+            pipeline_name="tessera-rocm-executable")
+    tail = (activation, activation_graph, activation_schedule)
+    unsealed = NativeNVFP4ExpansionProgram(*fields, "", *tail)
+    package = NativeNVFP4ExpansionProgram(*fields, unsealed._identity(), *tail)
     package.validate()
     return package
 
@@ -238,10 +299,12 @@ class PreparedNVFP4ExpansionProgram(PreparedScaledProgram):
                 frame["consumer_step"], 0, 1, bm)
         self._roles = tuple(plan["role_indices"])
         self._offsets = tuple(package.producer.native.descriptor.provenance["row_offsets"])
-        native = (package.producer.native, package.consumer)
+        native: tuple[ROCMNativePackage, ...] = (package.producer.native, package.consumer)
+        if package.activation is not None:
+            native += (package.activation,)
         blobs = tuple(C.create_string_buffer(p.image.payload) for p in native)
         entries = tuple(p.descriptor.entry_symbol.encode() for p in native)
-        steps = (_MultiOutputStep * 2)()
+        steps = (_MultiOutputStep * len(native))()
         m, k = rows[self._roles[3]]["shape"]
         n = rows[5]["shape"][0]
         for i, p in enumerate(native):
@@ -251,22 +314,32 @@ class PreparedNVFP4ExpansionProgram(PreparedScaledProgram):
             step.input_count, step.output_count = len(spec["inputs"]), len(spec["outputs"])
             step.inputs[:step.input_count], step.outputs[:step.output_count] = spec["inputs"], spec["outputs"]
             if i == 0:
-                step.geometry[:] = (*p.descriptor.geometry.grid, *p.descriptor.geometry.workgroup)
-            else:
-                bm, bn = p.descriptor.provenance["macro_tile"]
+                grid, workgroup = p.descriptor.geometry.grid, p.descriptor.geometry.workgroup
+                if grid is None or workgroup is None:
+                    raise ValueError("native expansion producer requires explicit launch geometry")
+                step.geometry[:] = (*grid, *workgroup)
+            elif i == 1:
+                bm, bn = cast(Sequence[int], p.descriptor.provenance["macro_tile"])
                 step.geometry[:] = ((n + bn - 1) // bn, (m + bm - 1) // bm, 1,
-                                    *p.descriptor.provenance["workgroup"])
+                                    *cast(Sequence[int], p.descriptor.provenance["workgroup"]))
                 step.scalar_count = 3
                 step.scalars[:3] = (m, n, k)
+            else:
+                info = cast(dict, p.descriptor.provenance["native_parent_view"])
+                frame = json.loads(info["member_json"])
+                step.geometry[:] = frame["geometry"]
+                step.scalar_count = len(frame["scalars"])
+                step.scalars[:step.scalar_count] = frame["scalars"]
         dtypes = {"ui8": np.dtype("uint8"), "i8": np.dtype("uint8"), "f8E4M3FN": np.dtype("uint8"),
                   "f64": np.dtype("float64"), "f32": np.dtype("float32"),
                   "bf16": np.dtype(ml_dtypes.bfloat16)}
-        contracts = (_Buffer * 8)(*[
+        contracts = (_Buffer * len(rows))(*[
             _Buffer(b["bytes"], math.prod(b["shape"]), b["first_write"], b["last_read"],
-                    0 if i < 5 else 1 if i < 7 else 2, 0) for i, b in enumerate(rows)])
+                    0 if b["ownership"] == "readonly_input" else 2 if b["ownership"] == "returned_output" else 1, 0)
+            for b in rows])
         return _BoundScaledABI(contracts, steps, blobs, entries, 5,
             tuple(_StorageSpec(tuple(b["shape"]), b["storage"], b["bytes"], dtypes[b["storage"]]) for b in rows),
-            (7,), ())
+            (plan["output"],), ())
 
     def _prepare_tail(self):
         if not self._bounded:
@@ -341,11 +414,12 @@ class PreparedNVFP4ExpansionProgram(PreparedScaledProgram):
         return capacity.value, active.value, size.value, count.value
 
     def read(self, generation, *, batched=True):
-        contract = self._storage(self._active_m)[7]
+        output_slot = self._binding.outputs[0]
+        contract = self._storage(self._active_m)[output_slot]
         output = np.empty(contract.shape, dtype=contract.numpy_dtype)
         from .native_scaled_program import _status
         _status(self.lib.tessera_rocm_program_read(
-            self.handle, 7, generation, C.c_void_p(output.ctypes.data), output.nbytes))
+            self.handle, output_slot, generation, C.c_void_p(output.ctypes.data), output.nbytes))
         return (output,)
 
 
@@ -368,7 +442,7 @@ class PreparedNVFP4ExpansionProgram(PreparedScaledProgram):
 
     def invoke_consumer(self, *, repeats=1, timed=False):
         """Use resident expanded weights; native readiness checks precede launch."""
-        return self._invoke_range(1, 1, repeats=repeats, timed=timed)
+        return self._invoke_range(1, len(self._binding.steps)-1, repeats=repeats, timed=timed)
 
     def update_activations(self, activation, scales):
         from .native_scaled_program import _status, pack_host_view

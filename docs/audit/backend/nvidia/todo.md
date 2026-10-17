@@ -6,6 +6,18 @@ target: nvidia_sm120
 last_updated: 2026-10-17
 ---
 
+## ROCM-BF16-PARENT-VIEW-20261017 — resident activation candidate
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: ROCM-BF16-PARENT-VIEW-20261017.
+
+Parity validated for the existing exact RTX 5070 schema-1 source-active
+producer regression: all twelve cases pass after the shared row-region,
+captured-Boolean frontend and typed runtime changes. The new row
+schema 3 and native NVFP4 program v5 are gfx1201 contracts; they provide no
+SM120 schedule, datatype, or numerical proof. The attention schema namespace
+is unchanged, including schema 5 meaning bounded saved-LSE specifically.
+
 ## ROCM-NATIVE-GATE-UP-CONSUMER-20261016 — parent-view native integration
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.

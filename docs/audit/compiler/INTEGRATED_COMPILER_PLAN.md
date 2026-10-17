@@ -159,13 +159,18 @@ the next action's host requirement; it is not a live fleet-availability claim.
   updates with native dependency checks, including normal frontend capture and
   FP32/BF16 outputs. Ordinary static FP32 JIT, compiler-free replay and the original Qwen3
   projection now have exact-device proof through both native stages.
-  Remaining: bounded frames, wider composition and model-quality acceptance.
+  Remaining: wider composition and model-quality acceptance; existing two-member
+  bounded frames have their own proof.
 - Parent-view public integration now has thirteen owning gfx1201 literal/closure JIT/replay cases,
   including compiler-disabled fresh-process execution, and a checked f32 ABI.
   Device launch-loop, captured-member and completed public wall windows are
-  separate. Resident producer chaining, explicit low-storage rounding, down
-  projection and original full-model quality remain open.
-- Latest: [2026-10-17 — public gfx1201 parent-view integration](INTEGRATED_COMPILER_LOG.md#2026-10-17--public-gfx1201-parent-view-integration)
+  separate. The new BF16 profile additionally preserves explicit FP32
+  widening/compute and BF16 storage through native row schema 3, with seven
+  public JIT/fresh-process cases. A three-member textual NVFP4 program proves
+  private resident parent lifetime in two named static cases. Python authoring
+  of BF16 product storage, three-member bounded expressions, activation
+  quantization/down projection and original full-model quality remain open.
+- Latest: [2026-10-17 — native BF16 parent views and resident activation](INTEGRATED_COMPILER_LOG.md#2026-10-17--native-bf16-parent-views-and-resident-activation)
 
 ### ROCM-SPLIT-K-1
 

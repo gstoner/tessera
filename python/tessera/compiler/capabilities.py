@@ -900,7 +900,9 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                        "dynamic shapes and full MLP composition require separate proof."),
             "tessera.cast": OpCapability(
                 "tessera.cast","ready",dtypes=("fp16","bf16"),ranks=(1,2,3),
-                reason="Exact widening to fp32 feeding one native math consumer; "
+                graph_only_dtypes=("fp32",),
+                reason="FP32-source casts are semantic Graph storage only until a named native consumer proves the narrowing policy. "
+                       "Exact widening to fp32 feeding one native math consumer; "
                        "original Graph casts are verified and fused into loads. "
                        "General standalone cast/layout/AD routes remain separate."),
             **{

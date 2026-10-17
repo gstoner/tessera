@@ -17,9 +17,10 @@ from tests.unit.test_native_gate_up_view_schedule import source, tool
 pytestmark = pytest.mark.compiler_route
 
 
-@pytest.fixture(scope="module")
-def packaged():
-    graph = source(3, 17)
+@pytest.fixture(scope="module", params=["f32", "bf16"])
+def packaged(request):
+    from tests.unit.test_native_gate_up_view_bf16 import bf16_source
+    graph = source(3, 17) if request.param == "f32" else bf16_source(3, 17)
     schedule = run_tessera_opt(tool(), graph, "--tessera-graph-to-schedule")
     tile = run_tessera_opt(tool(), schedule, "--tessera-schedule-to-tile")
     recipe = native.ParentViewRecipe(graph, schedule, tile)
@@ -75,15 +76,18 @@ def test_native_parent_view_invocation_rejected_before_runtime(packaged, monkeyp
     monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1201")
     monkeypatch.setattr(rt, "_load_rocm_native_movement_runtime",
                         lambda: pytest.fail("invalid invocation reached the program owner"))
-    parent = np.ones((3, 34), np.float32)
-    output = np.empty((3, 17), np.float32)
+    from tessera.compiler.native_scaled_program import _storage_numpy_dtype
+    program, _ = native._frame(package.target_ir)
+    dtype = _storage_numpy_dtype(program["buffers"][0]["storage"])
+    parent = np.ones((3, 34), dtype)
+    output = np.empty((3, 17), dtype)
     scalars = {"N": 51}
     if bad == "count":
         scalars["N"] = 52
     if bad == "shape":
-        parent = np.ones((3, 35), np.float32)
+        parent = np.ones((3, 35), dtype)
     if bad == "noncompact":
-        parent = np.ones((3, 68), np.float32)[:, ::2]
+        parent = np.ones((3, 68), dtype)[:, ::2]
     if bad == "readonly":
         output.flags.writeable = False
     if bad == "alias":

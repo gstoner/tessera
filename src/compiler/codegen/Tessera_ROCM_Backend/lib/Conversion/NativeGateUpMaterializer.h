@@ -28,7 +28,8 @@ inline mlir::LogicalResult materializeGateUpViews(mlir::ModuleOp module) {
   OpBuilder b(carrier); auto loc = carrier->getLoc();
   auto gpuModule = gpu::GPUModuleOp::create(b,loc,name.str()+"_module");
   b.setInsertionPointToStart(&gpuModule.getBodyRegion().front());
-  auto memref = MemRefType::get({ShapedType::kDynamic},b.getF32Type());
+  auto storage = carrier->getAttrOfType<TypeAttr>("storage").getValue();
+  auto memref = MemRefType::get({ShapedType::kDynamic},storage);
   auto function = gpu::GPUFuncOp::create(b,loc,name,b.getFunctionType({memref,memref,b.getI64Type()},{}));
   function.setKernel(true);
   b.setInsertionPointToStart(&function.getBody().front());

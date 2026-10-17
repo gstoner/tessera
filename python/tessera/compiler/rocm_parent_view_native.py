@@ -20,6 +20,12 @@ from .native_scaled_program import _manifest
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
 PARENT_VIEW_ABI = "tessera.rocm.parent_view.parent_o_n.f32.v1"
+PARENT_VIEW_BF16_ABI = "tessera.rocm.parent_view.parent_o_n.bf16_f32.v1"
+PARENT_VIEW_ABIS = frozenset({PARENT_VIEW_ABI, PARENT_VIEW_BF16_ABI})
+_PROFILES = {
+    "gfx1201_parent_view_f32_v1": ("f32", "fp32", 4, PARENT_VIEW_ABI),
+    "gfx1201_parent_view_bf16_f32_v1": ("bf16", "bf16", 2, PARENT_VIEW_BF16_ABI),
+}
 _TARGET = "rocm_gfx1201"
 
 
@@ -27,22 +33,26 @@ def requests_parent_view(module: GraphIRModule) -> bool:
     if len(module.functions) != 1:
         return False
     fn = module.functions[0]
-    return (len(fn.args) == 1 and len(fn.result_types) == 1 and len(fn.body) == 3
-            and all(op.op_name in {"tessera.slice", "tessera.dynamic_slice"} for op in fn.body[:2])
-            and fn.body[-1].op_name == "tessera.silu_mul")
+    names = [op.op_name for op in fn.body]
+    return (len(fn.args) == 1 and len(fn.result_types) == 1
+            and len(names) in (3, 6)
+            and all(name in {"tessera.slice", "tessera.dynamic_slice"} for name in names[:2])
+            and (names[2:] == ["tessera.silu_mul"] or
+                 names[2:] == ["tessera.cast", "tessera.cast", "tessera.silu_mul", "tessera.cast"]))
 
 
 def supports_parent_view(module: GraphIRModule) -> bool:
     if not requests_parent_view(module):
         return False
     fn = module.functions[0]
-    return (fn.args[0].ir_type.dtype == "fp32" and fn.args[0].ir_type.rank == 2
-            and fn.result_types[0].dtype == "fp32" and fn.result_types[0].rank == 2)
+    storage = "fp32" if len(fn.body) == 3 else "bf16"
+    return (fn.args[0].ir_type.dtype == storage and fn.args[0].ir_type.rank == 2
+            and fn.result_types[0].dtype == storage and fn.result_types[0].rank == 2)
 
 
 def project_parent_view_graph(module: GraphIRModule, target: str) -> GraphIRModule:
     if target != _TARGET or not supports_parent_view(module):
-        raise ValueError("native parent-view requires the named static gfx1201 f32 Graph")
+        raise ValueError("native parent-view requires the named static gfx1201 f32 or explicit-cast BF16 Graph")
     source = deepcopy(module)
     for key, value in (("tessera.target", "rocm"), ("tessera.arch", "gfx1201")):
         existing = source.module_attrs.get(key)
@@ -113,7 +123,7 @@ def _validate_frame(program: dict, member: dict) -> None:
             or program.get("argument_count") != 1 or program.get("outputs") != [1]
             or member.get("schema") != 1 or member.get("step") != 0
             or member.get("architecture") != "gfx1201"
-            or member.get("profile") != "gfx1201_parent_view_f32_v1"
+            or member.get("profile") not in _PROFILES
             or member.get("abi") != "flattened_rank1_memref_then_i64"
             or member.get("inputs") != [0] or member.get("output") != 1):
         raise ValueError("parent-view native frame profile differs")
@@ -130,11 +140,12 @@ def _validate_frame(program: dict, member: dict) -> None:
             or member.get("scalars") != [count]
             or member.get("geometry") != [(count+255)//256, 1, 1, 256, 1, 1]):
         raise ValueError("parent-view capacity/count/geometry differs")
+    storage, _, element_bytes, _ = _PROFILES[member["profile"]]
     expected_buffers = [
-        {"shape": [rows, 2*width], "storage": "f32", "elements": 2*count,
-         "bytes": 8*count, "first_write": -1, "last_read": 0, "ownership": 0},
-        {"shape": shape, "storage": "f32", "elements": count,
-         "bytes": 4*count, "first_write": 0, "last_read": 1, "ownership": 2},
+        {"shape": [rows, 2*width], "storage": storage, "elements": 2*count,
+         "bytes": 2*element_bytes*count, "first_write": -1, "last_read": 0, "ownership": 0},
+        {"shape": shape, "storage": storage, "elements": count,
+         "bytes": element_bytes*count, "first_write": 0, "last_read": 1, "ownership": 2},
     ]
     if (program.get("buffers") != expected_buffers
             or program.get("steps") != [{"step": 0, "operation": "tessera.silu_mul",
@@ -178,10 +189,11 @@ def _program(image: NativeImageArtifact, program: dict, member: dict, graph_ir: 
 def _descriptor(image: NativeImageArtifact, program: dict, member: dict, lineage: dict) -> LaunchDescriptor:
     _validate_frame(program, member)
     names = member["bindings"]
+    _, dtype, element_bytes, abi = _PROFILES[member["profile"]]
     return LaunchDescriptor(
-        image_digest=image.image_digest, entry_symbol=member["entry"], abi_id=PARENT_VIEW_ABI,
-        buffers=tuple(BufferBinding(i, name, "input" if i == 0 else "output", "fp32", 2,
-                                    "row_major", 4) for i, name in enumerate(names)),
+        image_digest=image.image_digest, entry_symbol=member["entry"], abi_id=abi,
+        buffers=tuple(BufferBinding(i, name, "input" if i == 0 else "output", dtype, 2,
+                                    "row_major", element_bytes) for i, name in enumerate(names)),
         scalars=(ScalarArgument(2, "N", "int64"),),
         shape_guards=tuple(ShapeGuard(name, axis, "eq", extent)
             for name, row in zip(names, program["buffers"], strict=True)
@@ -210,7 +222,7 @@ def package_parent_view_recipe(recipe: ParentViewRecipe, *, pipeline_name: str):
     image = NativeImageArtifact(target=_TARGET, architecture="gfx1201", pipeline_name=pipeline_name,
         compiler_fingerprint=compiler, toolchain_fingerprint=toolchain,
         target_ir_digest=hashlib.sha256(target.encode()).hexdigest(), binary_format="hsaco",
-        payload=payload, entry_points=(NativeEntryPoint(member["entry"], PARENT_VIEW_ABI),),
+        payload=payload, entry_points=(NativeEntryPoint(member["entry"], _PROFILES[member["profile"]][3]),),
         compile_state=state, device_libraries=libraries)
     lineage = {key+"_digest": hashlib.sha256(text.encode()).hexdigest() for key, text in
                (("graph", recipe.graph_ir), ("schedule_ir", recipe.schedule_ir), ("tile_ir", recipe.tile_ir))}
@@ -226,7 +238,7 @@ def validate_parent_view_runtime_artifact(artifact) -> ParentViewProgram:
     if (image.target != _TARGET or image.architecture != "gfx1201" or image.binary_format != "hsaco"
             or image.pipeline_name != "tessera-rocm-executable"
             or image.target_ir_digest != hashlib.sha256(artifact.target_ir.encode()).hexdigest()
-            or image.entry_points != (NativeEntryPoint(member["entry"], PARENT_VIEW_ABI),)
+            or image.entry_points != (NativeEntryPoint(member["entry"], _PROFILES[member["profile"]][3]),)
             or desc != _descriptor(image, program, member, lineage)):
         raise ValueError("parent-view artifact stage/ABI lineage differs")
     return _program(image, program, member, artifact.graph_ir)
@@ -246,9 +258,10 @@ def submit_parent_view(image, descriptor, buffers, scalars, stream):
     if (set(buffers) != set(member["bindings"]) or set(scalars) != {"N"}
             or type(scalars["N"]) is not int or [scalars["N"]] != member["scalars"]):
         raise ValueError("parent-view invocation bindings/count differ")
+    from .native_scaled_program import _storage_numpy_dtype
     parent, output = (buffers[name] for name in member["bindings"])
     for array, row in zip((parent, output), program["buffers"], strict=True):
-        if (not isinstance(array, np.ndarray) or array.dtype != np.dtype(np.float32)
+        if (not isinstance(array, np.ndarray) or array.dtype != _storage_numpy_dtype(row["storage"])
                 or list(array.shape) != row["shape"] or not array.flags.c_contiguous
                 or array.nbytes != row["bytes"]):
             raise ValueError("parent-view invocation storage/capacity differs")

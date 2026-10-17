@@ -11,16 +11,19 @@ inline mlir::LogicalResult exportParentViewProgram(mlir::ModuleOp module, mlir::
   int64_t rows = carrier->getAttrOfType<IntegerAttr>("rows").getInt();
   int64_t columns = carrier->getAttrOfType<IntegerAttr>("columns").getInt();
   int64_t elements = rows * columns;
+  bool bf16 = carrier->getAttrOfType<TypeAttr>("storage").getValue().isBF16();
+  const char *storage = bf16 ? "bf16" : "f32";
+  int64_t elementBytes = bf16 ? 2 : 4;
   auto original = module->getAttrOfType<StringAttr>("tessera.rocm.parent_view_source");
   if (!original || original.getValue().empty())
     return module.emitError("parent-view frame requires the retained original Graph source witness");
   llvm::json::Array buffers;
   buffers.push_back(llvm::json::Object{
-    {"shape",llvm::json::Array{rows,2*columns}},{"storage","f32"},
-    {"elements",2*elements},{"bytes",8*elements},{"first_write",-1},{"last_read",0},{"ownership",0}});
+    {"shape",llvm::json::Array{rows,2*columns}},{"storage",storage},
+    {"elements",2*elements},{"bytes",2*elementBytes*elements},{"first_write",-1},{"last_read",0},{"ownership",0}});
   buffers.push_back(llvm::json::Object{
-    {"shape",llvm::json::Array{rows,columns}},{"storage","f32"},
-    {"elements",elements},{"bytes",4*elements},{"first_write",0},{"last_read",1},{"ownership",2}});
+    {"shape",llvm::json::Array{rows,columns}},{"storage",storage},
+    {"elements",elements},{"bytes",elementBytes*elements},{"first_write",0},{"last_read",1},{"ownership",2}});
   llvm::json::Array steps;
   steps.push_back(llvm::json::Object{{"step",0},{"operation","tessera.silu_mul"},
     {"lowering","native_parent_view"},{"inputs",llvm::json::Array{0}},{"output",1}});
@@ -44,7 +47,7 @@ inline mlir::LogicalResult exportParentViewProgram(mlir::ModuleOp module, mlir::
     for (auto name : bindings) names.push_back(cast<StringAttr>(name).getValue().str());
   } else { names.push_back("parent"); names.push_back("out"); }
   llvm::json::Object manifest{
-    {"schema",1},{"profile","gfx1201_parent_view_f32_v1"},{"architecture","gfx1201"},
+    {"schema",1},{"profile",bf16 ? "gfx1201_parent_view_bf16_f32_v1" : "gfx1201_parent_view_f32_v1"},{"architecture","gfx1201"},
     {"entry",name.str()},{"abi","flattened_rank1_memref_then_i64"},
     {"step",0},{"inputs",llvm::json::Array{0}},{"output",1},
     {"bindings",std::move(names)},

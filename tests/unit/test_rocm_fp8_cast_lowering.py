@@ -53,3 +53,21 @@ def test_e4m3_cast_preserves_an_explicit_directed_rounding_request():
                             "--lower-tessera-target-to-rocdl")
     assert "arith.truncf" in output and "toward_zero" in output
     assert "rocdl.cvt.pk.fp8.f32" not in output
+
+
+@pytest.mark.usefixtures("production_compiler")
+def test_e4m3_legalization_uses_pipeline_selected_architecture_without_authored_copy():
+    selected = SOURCE.replace("gpu.container_module",
+        'gpu.container_module, tessera.pipeline.arch = "gfx1201"')
+    output = run_tessera_opt(find_tessera_opt(), selected,
+                            "--lower-tessera-target-to-rocdl")
+    assert "rocdl.cvt.pk.fp8.f32" in output and "arith.truncf" not in output
+
+
+@pytest.mark.usefixtures("production_compiler")
+@pytest.mark.parametrize("authored,selected", [("gfx1201","gfx1151"),("gfx1151","gfx1201")])
+def test_e4m3_legalization_rejects_conflicting_authored_and_selected_architectures(authored,selected):
+    conflicting = source(authored).replace("gpu.container_module",
+        f'gpu.container_module, tessera.pipeline.arch = "{selected}"')
+    with pytest.raises(RuntimeError,match="pipeline architecture differs"):
+        run_tessera_opt(find_tessera_opt(), conflicting,"--lower-tessera-target-to-rocdl")

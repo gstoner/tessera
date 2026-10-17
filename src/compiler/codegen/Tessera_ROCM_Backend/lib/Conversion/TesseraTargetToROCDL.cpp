@@ -257,9 +257,15 @@ bool lowerRealMFMA(Operation *op, PatternRewriter &rewriter) {
 // The standard GPU converter stores Float8 as i8, but does not legalize a
 // scalar arith.truncf into that storage. Keep the numerical cast in native
 // IR and select the RDNA4 RNE instruction only on the owning exact target.
-static void lowerScalarE4M3Casts(ModuleOp module) {
-  auto arch = module->getAttrOfType<StringAttr>("tessera.arch");
-  if (!arch || arch.getValue() != "gfx1201") return;
+static LogicalResult lowerScalarE4M3Casts(ModuleOp module) {
+  auto authored = module->getAttrOfType<StringAttr>("tessera.arch");
+  auto selected = module->getAttrOfType<StringAttr>("tessera.pipeline.arch");
+  if (selected && authored && selected.getValue() != authored.getValue())
+    return module.emitError("selected ROCm pipeline architecture differs from tessera.arch");
+  // Executable pipelines own their target. Standalone legalization retains
+  // the explicitly authored architecture when no pipeline has selected one.
+  auto arch = selected ? selected : authored;
+  if (!arch || arch.getValue() != "gfx1201") return success();
   SmallVector<arith::TruncFOp> casts;
   module.walk([&](arith::TruncFOp op) {
     if (op->getParentOfType<gpu::GPUModuleOp>() &&
@@ -280,6 +286,7 @@ static void lowerScalarE4M3Casts(ModuleOp module) {
     op.replaceAllUsesWith(stored);
     op.erase();
   }
+  return success();
 }
 
 struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
@@ -299,7 +306,7 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
   void runOnOperation() override {
     ModuleOp module = getOperation();
     if (failed(materializeGateUpViews(module))) return signalPassFailure();
-    lowerScalarE4M3Casts(module);
+    if (failed(lowerScalarE4M3Casts(module))) return signalPassFailure();
     SmallVector<Operation *> waitOps;
     SmallVector<Operation *> rocmOps;
 

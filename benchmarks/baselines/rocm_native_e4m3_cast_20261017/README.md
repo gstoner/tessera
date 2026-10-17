@@ -52,3 +52,13 @@ ABI, resident activation quantization, down projection or full-model quality.
 The existing quantize_fp8 fake-quant operation keeps its dequantized payload
 contract. Those integration steps must preserve explicit semantic Graph IR,
 native Schedule/Tile, native image and checked runtime ownership.
+
+## Pipeline architecture review correction
+
+The executable pipeline-selected `tessera.pipeline.arch` now owns scalar
+E4M3 legalization. Standalone lowering uses `tessera.arch` when no pipeline
+has selected a target. Conflicting authored and selected architectures fail
+before inserting device conversions. The regression cases cover a selected
+gfx1201 target without a redundant authored attribute and both conflict
+directions. The original exact-device packet remains historical evidence
+for the matching gfx1201 conversion, not proof for a different architecture.

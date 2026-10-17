@@ -19,10 +19,18 @@
     "device-64-geometry.txt": "67f3aaea24bdbffdce1ec618a3cd8e597f952a87402d7328d06f3acf35632a7d",
     "x86-naming-repair.txt": "62d83dec615d03cbb8db1e96aa342cd1f70d6df760b972b9d809bb4a9e521cae",
     "post-ab-docs-ratchet.txt": "6cda58080c7ba266cfbd784485d53f22cf85a82cd64ead85fe00a05956406ca7",
-    "generated-post-ab-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d"
+    "generated-post-ab-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "full-unit-repaired.txt": "cf590322b7c2dce7d57cd6645ef22f69a2f19bdbc32ccc5684328e2930f00900",
+    "device-full-config.txt": "ed571c89aa784acf36f3120818b57eb237e9d0cc94a5a1944ae3579224b31a5d",
+    "post-x86-image-equivalence.json": "1cc001a5a300984f680e77ab9cf5fe608c7901dda1a743653176c263dc311d30",
+    "generated-current-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "final-validation.json": "b7570e47c16c45ef1a979fed95b36c26617ae97ecd0b2643542d63b3908635de",
+    "final-mypy-ratchet.txt": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "final-routing-docs.txt": "2b2597c9903af36e0062e40ad6f39562b2a6212788208632763e381ac3459907",
+    "final-generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d"
   },
   "validation_scope": "55 new public/capture device cases = 37 initial + 4 pending-stream + 8 frontend + 2 fresh-process + 4 packed/logical64; 172 existing regressions; portable/prepared70; raw native kernels16; overlapping selections not summed",
-  "publication": "private; broader unit/compiler/drift gates and review/CI still required; PR975 is the only open public PR",
+  "publication": "Ready for PR; exact-head public CI and review remain required before merge",
   "post_measurement_recorder_change": {
     "commit": "70e8e88c2",
     "scope": "type annotation, Any import and explicit spelling of the same six reference arguments; compiler/runtime/image files unchanged"
@@ -31,10 +39,11 @@
     "typing": "zero errors across seven files",
     "routing_and_package_audit": "89 passed",
     "broad_host_unit": {
-      "result": "517 failed, 27347 passed, 5905 skipped, 11 warnings in 702.73s",
       "terminal": true,
-      "state": "failed; x86 build configuration and untracked recorder README identified; repair gates pending",
-      "log_archive": "broad-unit-initial.txt.xz"
+      "state": "passed",
+      "result": "27867 passed,5902 skipped,11 warnings in432.42s",
+      "log": "full-unit-repaired.txt",
+      "tested_source": "13307df372f707088218174b32d0910b84ec31bc"
     },
     "generated_docs": {
       "result": "33 generated documents in sync after A/B and geometry additions",
@@ -48,7 +57,9 @@
       "scope": "all three original failed file families, including existing owning hardware skips; not exact x86 device proof",
       "log": "x86-naming-repair.txt"
     },
-    "post_ab_routing_audit": "20 passed in 10.44s"
+    "post_ab_routing_audit": "20 passed in 10.44s",
+    "owning_final_tools": "55 passed in63.06s",
+    "measured_image_equivalence": "10/10 Target/PTX members byte-identical"
   },
   "initial_broad_unit": {
     "result": "517 failed, 27347 passed, 5905 skipped, 11 warnings in 702.73s",
@@ -80,5 +91,15 @@
     "result": "33 generated documents in sync",
     "log": "generated_docs.txt",
     "terminal": true
+  },
+  "final_local_gates": {
+    "mypy": "0 errors, baseline0",
+    "ruff": "all Python source passes",
+    "routing_audit_naming": "20 passed",
+    "generated_documents": "33 in sync",
+    "broad_unit": "27867 passed,5902 skipped,11 warnings",
+    "owning_device_final_tools": "55 passed",
+    "post_rebuild_images": "10/10 identical Target/PTX members",
+    "graph": "offline AST update complete"
   }
 }

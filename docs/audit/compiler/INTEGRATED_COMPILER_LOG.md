@@ -13311,6 +13311,9 @@ from completed public calls. All four backend plans assess shared changes.
 
 Matched resident A/B retains long-row gains and tiny host regressions, with
 independent FP64 and bit-identical arm checks. Default selection is unchanged.
+Final host WSL unit/compiler gate: 27,867 passed, 5,902 skipped; final matching
+tool pair: 55 owning RTX5070 cases passed and ten measured Target/PTX members
+remain byte-identical. Exact-head public CI/review remains required.
 
 Remaining: final broad publication gates, wider layouts/masks, half JVP,
 composed AD and all original aggregate obligations.

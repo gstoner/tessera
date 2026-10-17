@@ -1,0 +1,88 @@
+{
+  "rows": [
+    {
+      "archive": "bfloat16-inline.program.json.xz",
+      "entry": "tessera_tile_attention_lse_bf16_out_bf16_ca966159b3",
+      "identical_ptx": true,
+      "identical_target": true,
+      "old_sha256": "6b4820287370dc2042ef9c7a82e0caaa436b11b9795e7bf5012ccb9ac191d510",
+      "new_sha256": "6b4820287370dc2042ef9c7a82e0caaa436b11b9795e7bf5012ccb9ac191d510"
+    },
+    {
+      "archive": "bfloat16-inline.program.json.xz",
+      "entry": "tessera_tile_attention_backward_lse_output_compact_m7_b0_g0_l0_t128_bf16_out_bf16_ea8879a0bf_cotangent_",
+      "identical_ptx": true,
+      "identical_target": true,
+      "old_sha256": "0cffe985861ee180d40480516097d3ea4f69d1b6d027c4ce011cfc098127a806",
+      "new_sha256": "0cffe985861ee180d40480516097d3ea4f69d1b6d027c4ce011cfc098127a806"
+    },
+    {
+      "archive": "bfloat16-prepass.program.json.xz",
+      "entry": "tessera_tile_attention_lse_bf16_out_bf16_ca966159b3",
+      "identical_ptx": true,
+      "identical_target": true,
+      "old_sha256": "6b4820287370dc2042ef9c7a82e0caaa436b11b9795e7bf5012ccb9ac191d510",
+      "new_sha256": "6b4820287370dc2042ef9c7a82e0caaa436b11b9795e7bf5012ccb9ac191d510"
+    },
+    {
+      "archive": "bfloat16-prepass.program.json.xz",
+      "entry": "tessera_tile_attention_row_correction_b0_s1_bf16_out_bf16_054cb56525",
+      "identical_ptx": true,
+      "identical_target": true,
+      "old_sha256": "1943630de418edafa5ea69dc8837103ae91c5ea7d2831c15abee35dbd5130f66",
+      "new_sha256": "1943630de418edafa5ea69dc8837103ae91c5ea7d2831c15abee35dbd5130f66"
+    },
+    {
+      "archive": "bfloat16-prepass.program.json.xz",
+      "entry": "tessera_tile_attention_backward_rows_compact_m7_b0_g0_l0_t128_bf16_out_bf16_f65f6d28d7_cotangent_",
+      "identical_ptx": true,
+      "identical_target": true,
+      "old_sha256": "e44437d774b12d4716edb4b67fade9b644c59452e72213d17b97f0e6e6532822",
+      "new_sha256": "e44437d774b12d4716edb4b67fade9b644c59452e72213d17b97f0e6e6532822"
+    },
+    {
+      "archive": "float16-inline.program.json.xz",
+      "entry": "tessera_tile_attention_lse_f16_out_f16_d3753b7612",
+      "identical_ptx": true,
+      "identical_target": true,
+      "old_sha256": "9be55c5a8c3fb91f8a97a22536564a7f9ded62176329acd77ca97d4d821d4b8e",
+      "new_sha256": "9be55c5a8c3fb91f8a97a22536564a7f9ded62176329acd77ca97d4d821d4b8e"
+    },
+    {
+      "archive": "float16-inline.program.json.xz",
+      "entry": "tessera_tile_attention_backward_lse_output_compact_m7_b0_g0_l0_t128_f16_out_f16_6c250b2c43_cotangent_",
+      "identical_ptx": true,
+      "identical_target": true,
+      "old_sha256": "f2440e544c2a7c636132c165f639f83b6a87681d02478c4783fe4dae4ddab096",
+      "new_sha256": "f2440e544c2a7c636132c165f639f83b6a87681d02478c4783fe4dae4ddab096"
+    },
+    {
+      "archive": "float16-prepass.program.json.xz",
+      "entry": "tessera_tile_attention_lse_f16_out_f16_d3753b7612",
+      "identical_ptx": true,
+      "identical_target": true,
+      "old_sha256": "9be55c5a8c3fb91f8a97a22536564a7f9ded62176329acd77ca97d4d821d4b8e",
+      "new_sha256": "9be55c5a8c3fb91f8a97a22536564a7f9ded62176329acd77ca97d4d821d4b8e"
+    },
+    {
+      "archive": "float16-prepass.program.json.xz",
+      "entry": "tessera_tile_attention_row_correction_b0_s1_f16_out_f16_44506beef2",
+      "identical_ptx": true,
+      "identical_target": true,
+      "old_sha256": "fb23532e1a3163844f8680ad124242363bc0c17958b511ce7aac1a67f6a5cd61",
+      "new_sha256": "fb23532e1a3163844f8680ad124242363bc0c17958b511ce7aac1a67f6a5cd61"
+    },
+    {
+      "archive": "float16-prepass.program.json.xz",
+      "entry": "tessera_tile_attention_backward_rows_compact_m7_b0_g0_l0_t128_f16_out_f16_0a537a3e75_cotangent_",
+      "identical_ptx": true,
+      "identical_target": true,
+      "old_sha256": "97c66503b0bec33f6cade7e3cf437e7160cdc744225213a9a20d3c9e3df6b15a",
+      "new_sha256": "97c66503b0bec33f6cade7e3cf437e7160cdc744225213a9a20d3c9e3df6b15a"
+    }
+  ],
+  "compiler_hashes": {
+    "TESSERA_OPT": "131561d4d963b157240ba6fbc79dae6f7b045a5f20a5f4161d7f1a5bca65737a",
+    "TESSERA_NVIDIA_OPT": "5b77dbcabbff00eeb4ae348a371bc4f4f9d485783f70d7ed731e96afa92d3af6"
+  }
+}

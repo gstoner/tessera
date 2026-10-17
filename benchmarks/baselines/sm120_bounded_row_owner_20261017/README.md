@@ -130,3 +130,20 @@ required; this is compiler coverage, not exact x86 device proof. The initial log
 losslessly. Rebase on merged PR975 preserves all 5,459 compared source/test
 files byte-for-byte; the duplicate fixture patch was verified against merged
 main before being reconciled.
+
+
+## Final local publication gates
+
+Final frozen source 13307df372 passes **27,867** host WSL unit/compiler cases,
+with 5,902 skips and eleven warnings, zero failures. All 55 new bounded owning
+RTX5070 cases pass again with the final matching compiler pair. That pair
+emits byte-identical Target IR and PTX for all ten measured A/B members, so
+adding x86 registration did not change the measured physical NVIDIA images.
+Final recorder/routing/audit gates pass twenty cases, focused typing is clean,
+and all 33 generated documents pass. AST graph update completes offline.
+
+The initial 517-failure run remains preserved and is not used as a green gate.
+Its x86 configuration/naming repairs pass 561 cases with 514 existing skips.
+No checker, tolerance or admission rule was weakened. Final local gates do not
+substitute for exact-head public CI and a fresh complete review audit before
+merge. The original five-slice objective remains open.

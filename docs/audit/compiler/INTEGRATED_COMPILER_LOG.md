@@ -13036,3 +13036,30 @@ MLP/original-model quality and the original five-slice objective.
 Evidence: benchmarks/baselines/native_bf16_parent_view_20261017/README.md;
 docs/spec/NATIVE_PARENT_VIEW_CONTRACT.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-17 — authored NVFP4 BF16 store composition
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: queued; sync ROCM-NVFP4-BF16-STORE-20261017.
+Outcome: ordinary Python source retains its FP32 scaled product and explicit
+BF16 cast before complementary views/FP32 SiLU/BF16 storage. Native partition
+and Schedule single-use store fusion avoid an allocated FP32 parent while
+preserving FP32 accumulation and the original source witness. Portable source
+schema v2 records all three members; v1 and native v3/v4/v5 meanings remain.
+Exact gfx1201 passes 56 final-source cases including compiler/eager-disabled
+fresh-process replay, changed inputs, ownership and existing bounded controls.
+81 native/portable/NVIDIA cases include twelve exact RTX5070 producer controls;
+477 shared drift checks pass. Counts overlap. Source parity matches 54 files
+and three binaries/libraries. Three synthetic timing cases have captured
+windows above 20ms and separate completed host medians 0.485–0.565ms.
+No matched speedup, default promotion or full-model quality is claimed.
+Original-checkpoint follow-through: pinned gate/up weights and captured model
+inputs pass at M19/M256 with N24576/K4096, private BF16 parent ownership,
+independent numerical intervals and compiler-disabled portable execution.
+M256 captured expansion/product/activation is 0.711/1.386/0.0339ms, separately
+from completed prepared host time 4.997ms. This is not full-model acceptance.
+Remaining: three-member bounded runtime expressions, K16 activation quantization/
+down projection, original-model MLP/quality and all outstanding five-slice gates.
+Evidence: benchmarks/baselines/nvfp4_bf16_store_source_20261017/README.md.
+<!-- entry-fields:end -->

@@ -1,0 +1,8 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "ordinal": 0,
+  "compiler_sha256": "f4d8265fb45bda3d899e0fe93ea82c7dee1cf6c1bdb691b4ff2399d2437372b9",
+  "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+  "scope": "post-run supplementary live probe; original packet records architecture/compiler/provider during execution"
+}

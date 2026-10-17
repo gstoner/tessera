@@ -12,34 +12,46 @@ from .rocm_nvfp4_expansion_program import (
 from .rocm_nvfp4_resident import _portable_stage, _program_digest
 
 SCHEMA = "tessera.rocm.nvfp4_source_frontend_program.v1"
+ACTIVATION_SCHEMA = "tessera.rocm.nvfp4_source_frontend_program.v2"
+SOURCE_SCHEMAS = frozenset({SCHEMA, ACTIVATION_SCHEMA})
 
 
 def supports_source_trace(module):
-    return (module is not None and len(module.functions) == 1
-            and [op.op_name for op in module.functions[0].body]
-            == ["tessera.nvfp4_expand", "tessera.scaled_matmul"])
+    if module is None or len(module.functions) != 1:
+        return False
+    names = [op.op_name for op in module.functions[0].body]
+    return names in (
+        ["tessera.nvfp4_expand", "tessera.scaled_matmul"],
+        ["tessera.nvfp4_expand", "tessera.scaled_matmul", "tessera.cast",
+         "tessera.slice", "tessera.slice", "tessera.cast", "tessera.cast",
+         "tessera.silu_mul", "tessera.cast"],
+    )
 
 
 def _package_record(package):
     package.validate()
+    stages = [
+        _portable_stage(package.producer.graph_ir, package.producer.schedule_ir, package.producer.native),
+        _portable_stage(package.consumer_graph_ir, package.consumer_schedule_ir, package.consumer),
+    ]
+    if package.activation is not None:
+        stages.append(_portable_stage(package.activation_graph_ir,
+                                      package.activation_schedule_ir, package.activation))
     return {
         "program_json": package.program_json, "graph_ir": package.graph_ir,
         "consumer_checked_target_ir": package.consumer_checked_target_ir,
         "binding_digest": package.binding_digest,
-        "stages": [
-            _portable_stage(package.producer.graph_ir, package.producer.schedule_ir, package.producer.native),
-            _portable_stage(package.consumer_graph_ir, package.consumer_schedule_ir, package.consumer),
-        ],
+        "stages": stages,
     }
 
 
-def _restore_package(record):
+def _restore_package(record, *, activation=False):
     if not isinstance(record, dict) or set(record) != {
             "program_json", "graph_ir", "consumer_checked_target_ir", "binding_digest", "stages"}:
         raise ValueError("source-preserving program record fields differ")
     if (any(not isinstance(record[key], str) for key in (
             "program_json", "graph_ir", "consumer_checked_target_ir", "binding_digest"))
-            or not isinstance(record["stages"], list) or len(record["stages"]) != 2):
+            or not isinstance(record["stages"], list) or len(record["stages"]) != (3 if activation else 2)):
         raise ValueError("source-preserving program record types differ")
     stages = []
     for stage in record["stages"]:
@@ -54,7 +66,10 @@ def _restore_package(record):
     package = NativeNVFP4ExpansionProgram(
         record["program_json"], record["graph_ir"], NVFP4ExpansionPackage(*stages[0]),
         stages[1][2], stages[1][0], stages[1][1], record["consumer_checked_target_ir"],
-        record["binding_digest"])
+        record["binding_digest"],
+        activation=stages[2][2] if activation else None,
+        activation_graph_ir=stages[2][0] if activation else "",
+        activation_schedule_ir=stages[2][1] if activation else "")
     package.validate()
     return package
 
@@ -93,12 +108,12 @@ class TracedSourceNVFP4Program:
             "ok": True, "execution_kind": "native_gpu",
             "image_digest": p.image.image_digest, "descriptor_digest": p.descriptor.descriptor_digest,
             "abi_id": p.descriptor.abi_id, "native_call_binding": "native_cpp_multi_output",
-        } for p in (self.native.producer.native, self.native.consumer))
+        } for p in self.native.native_stages)
         return output, receipts
 
     def manifest(self):
         self.validate()
-        record = {"schema": SCHEMA, "native_program": _package_record(self.native),
+        record = {"schema": ACTIVATION_SCHEMA if self.native.activation is not None else SCHEMA, "native_program": _package_record(self.native),
                   "argument_names": list(self.argument_names), "graph_ir": self.graph_ir}
         return {**record, "contract_digest": _program_digest(record)}
 
@@ -108,12 +123,13 @@ def source_program_from_manifest(data):
             "schema", "native_program", "argument_names", "graph_ir", "contract_digest"}:
         raise ValueError("source-preserving frontend manifest fields differ")
     record = {key: value for key, value in data.items() if key != "contract_digest"}
-    if data["schema"] != SCHEMA or data["contract_digest"] != _program_digest(record):
+    if (not isinstance(data["schema"], str) or data["schema"] not in SOURCE_SCHEMAS
+            or data["contract_digest"] != _program_digest(record)):
         raise ValueError("source-preserving frontend manifest identity differs")
     if not isinstance(data["argument_names"], list) or not isinstance(data["graph_ir"], str):
         raise ValueError("source-preserving frontend manifest types differ")
-    program = TracedSourceNVFP4Program(_restore_package(data["native_program"]),
-                                      tuple(data["argument_names"]), data["graph_ir"])
+    native = _restore_package(data["native_program"], activation=data["schema"] == ACTIVATION_SCHEMA)
+    program = TracedSourceNVFP4Program(native, tuple(data["argument_names"]), data["graph_ir"])
     program.validate()
     return program
 

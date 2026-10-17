@@ -6,6 +6,17 @@ target: nvidia_sm120
 last_updated: 2026-10-17
 ---
 
+## ROCM-NVFP4-BF16-STORE-20261017 — authored source composition
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: ROCM-NVFP4-BF16-STORE-20261017.
+
+Parity validated for twelve existing exact RTX5070 source-active producer
+cases with matching final-source tools. Broader SM120 integration remains
+follow-up required. The native store-fusion marker and portable source schema v2 select
+gfx1201 only; no CUDA physical schedule, attention schema or ABI is changed.
+Existing W1.1 and attention obligations remain independently owned.
+
 ## ROCM-BF16-PARENT-VIEW-20261017 — resident activation candidate
 
 Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.

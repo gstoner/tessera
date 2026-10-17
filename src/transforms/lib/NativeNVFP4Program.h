@@ -24,6 +24,7 @@ static mlir::func::FuncOp cloneNativeNVFP4Member(mlir::func::FuncOp member, int6
   OpBuilder b(member.getContext());
   child->removeAttr("tessera.native.nvfp4_expansion_member");
   child->removeAttr("tessera.native.nvfp4_activation_member");
+  child->removeAttr("tessera.native.nvfp4_store_cast_member");
   if (expansion && index == 0) {
     child->setAttr("tessera.bindings", b.getStrArrayAttr(
         {"codes", "scales", "globals", "values", "scale_plane"}));
@@ -55,10 +56,13 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
   auto root = roots[0];
   auto first = root.getBody().front().begin();
   bool expansion = first->getName().getStringRef() == "tessera.nvfp4_expand";
-  bool activation = expansion && root.getBody().front().getOperations().size() == 9;
+  const auto operationCount = root.getBody().front().getOperations().size();
+  bool explicitStore = expansion && operationCount == 10;
+  bool activation = expansion && (operationCount == 9 || explicitStore);
+  const unsigned activationStart = explicitStore ? 3 : 2;
   unsigned stageCount = expansion ? (activation ? 3 : 2) : 3;
   if (root.getNumArguments() != 5 || root.getNumResults() != 1 ||
-      root.getBody().front().getOperations().size() != (activation ? 9 : stageCount + 1))
+      root.getBody().front().getOperations().size() != (activation ? (explicitStore ? 10 : 9) : stageCount + 1))
     return root.emitError("NVFP4 native program requires its five-input conversion/product Graph");
   SmallVector<Operation *> ops;
   for (auto &op : root.getBody().front().without_terminator()) ops.push_back(&op);
@@ -108,7 +112,33 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
   if (!productEdge || !producerEdge)
     return root.emitError("NVFP4 native program lost its conversion/storage/product SSA edges");
   if (activation) {
-    auto parent = dyn_cast<RankedTensorType>(product->getResult(0).getType());
+    Value parentValue = product->getResult(0);
+    if (explicitStore) {
+      auto store = ops[2];
+      auto productType = dyn_cast<RankedTensorType>(parentValue.getType());
+      auto storedType = store->getNumResults() == 1
+          ? dyn_cast<RankedTensorType>(store->getResult(0).getType()) : RankedTensorType{};
+      auto dtype = store->getAttrOfType<StringAttr>("dtype");
+      if (store->getName().getStringRef() != "tessera.cast" ||
+          store->getNumOperands() != 1 || store->getOperand(0) != parentValue ||
+          !parentValue.hasOneUse() || !productType || !productType.getElementType().isF32() ||
+          !storedType || !storedType.getElementType().isBF16() ||
+          productType.getShape() != storedType.getShape() ||
+          !dtype || dtype.getValue() != "bf16")
+        return root.emitError("NVFP4 product store requires a single-use explicit FP32-to-BF16 cast");
+      for (auto attr : store->getAttrs())
+        if (attr.getName() != "dtype" && attr.getName() != "pure" &&
+            attr.getName() != "tessera.effect_kind")
+          return root.emitError("NVFP4 product store cast metadata needs its own contract");
+      if (auto effect = store->getAttr("tessera.effect_kind"))
+        if (!isa<StringAttr>(effect) || cast<StringAttr>(effect).getValue() != "pure")
+          return root.emitError("NVFP4 product store requires a pure cast");
+      if (auto pure = store->getAttr("pure"))
+        if (!isa<BoolAttr>(pure) || !cast<BoolAttr>(pure).getValue())
+          return root.emitError("NVFP4 product store requires a pure cast");
+      parentValue = store->getResult(0);
+    }
+    auto parent = dyn_cast<RankedTensorType>(parentValue.getType());
     auto result = dyn_cast<RankedTensorType>(ret.getOperand(0).getType());
     if (!parent || !result || !parent.hasStaticShape() || !result.hasStaticShape() ||
         parent.getRank() != 2 || result.getRank() != 2 || parent.getEncoding() || result.getEncoding() ||
@@ -118,12 +148,12 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
       return root.emitError("NVFP4 resident activation requires its static BF16 parent/output storage");
     int64_t origins[2] = {-1, -1};
     for (unsigned i=0; i<2; ++i) {
-      auto slice = ops[2+i]; auto castOp = ops[4+i];
+      auto slice = ops[activationStart+i]; auto castOp = ops[activationStart+2+i];
       auto bounds = slice_contract::staticBounds(slice);
       auto castType = castOp->getNumResults() == 1
           ? dyn_cast<RankedTensorType>(castOp->getResult(0).getType()) : RankedTensorType{};
       if (!bounds || slice->getNumOperands() != 1 || slice->getNumResults() != 1 ||
-          slice->getOperand(0) != product->getResult(0) || slice->getResult(0).getType() != result ||
+          slice->getOperand(0) != parentValue || slice->getResult(0).getType() != result ||
           bounds->sizes != result.getShape() || bounds->offsets[0] != 0 ||
           (bounds->offsets[1] != 0 && bounds->offsets[1] != result.getDimSize(1)) ||
           castOp->getName().getStringRef() != "tessera.cast" || castOp->getNumOperands() != 1 ||
@@ -132,10 +162,10 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
         return root.emitError("NVFP4 resident activation lost its original view/widening SSA");
       origins[i] = bounds->offsets[1];
     }
-    auto silu = ops[6]; auto storeCast = ops[7];
+    auto silu = ops[activationStart+4]; auto storeCast = ops[activationStart+5];
     bool ordered = silu->getNumOperands() == 2 &&
-        ((silu->getOperand(0) == ops[4]->getResult(0) && silu->getOperand(1) == ops[5]->getResult(0)) ||
-         (silu->getOperand(1) == ops[4]->getResult(0) && silu->getOperand(0) == ops[5]->getResult(0)));
+        ((silu->getOperand(0) == ops[activationStart+2]->getResult(0) && silu->getOperand(1) == ops[activationStart+3]->getResult(0)) ||
+         (silu->getOperand(1) == ops[activationStart+2]->getResult(0) && silu->getOperand(0) == ops[activationStart+3]->getResult(0)));
     if (origins[0] == origins[1] || silu->getName().getStringRef() != "tessera.silu_mul" ||
         !ordered || silu->getNumResults() != 1 ||
         storeCast->getName().getStringRef() != "tessera.cast" || storeCast->getNumOperands() != 1 ||
@@ -147,7 +177,10 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
   // register casts stay inside the activation member, never device allocations.
   SmallVector<SmallVector<Operation *>> groups;
   for (unsigned i=0; i<(activation ? 2u : ops.size()); ++i) groups.push_back({ops[i]});
-  if (activation) groups.emplace_back(ops.begin()+2, ops.end());
+  if (activation) {
+    if (explicitStore) groups[1].push_back(ops[2]);
+    groups.emplace_back(ops.begin()+activationStart, ops.end());
+  }
   SmallVector<SmallVector<Value>> stageInputs, stageOutputs;
   for (const auto &group : groups) {
     llvm::SmallDenseSet<Value> internal;
@@ -298,6 +331,8 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
       member->setAttr("tessera.native.nvfp4_expansion_member", b.getUnitAttr());
     if (activation && index == 2)
       member->setAttr("tessera.native.nvfp4_activation_member", b.getUnitAttr());
+    if (explicitStore && index == 1)
+      member->setAttr("tessera.native.nvfp4_store_cast_member", b.getUnitAttr());
     memberSymbols.push_back(FlatSymbolRefAttr::get(member));
     auto block = member.addEntryBlock();
     OpBuilder body(block, block->begin());
@@ -320,6 +355,8 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
       projected->setAttr("tessera.target", b.getStringAttr("rocm"));
       projected->setAttr("tessera.native.gate_up_view", b.getUnitAttr());
     }
+    if (explicitStore && index == 1)
+      projected->setAttr("tessera.native.fp8_store_cast", b.getUnitAttr());
     projected.getBody()->push_back(cloneNativeNVFP4Member(member, index));
     std::string projectedIR; llvm::raw_string_ostream projectedStream(projectedIR);
     projected.print(projectedStream); projectedStream.flush();
@@ -387,13 +424,17 @@ static mlir::LogicalResult projectNativeNVFP4Member(mlir::ModuleOp module, int64
   if (!member || !lineage || lineage.getInt() != index)
     return module.emitError("NVFP4 native member lineage differs");
   bool activationMember = member->hasAttr("tessera.native.nvfp4_activation_member");
+  bool storeCastMember = member->hasAttr("tessera.native.nvfp4_store_cast_member");
   auto child = cloneNativeNVFP4Member(member, index);
   module.getBody()->clear();
   if (activationMember) {
     OpBuilder b(module.getContext());
     module->setAttr("tessera.target", b.getStringAttr("rocm"));
     module->setAttr("tessera.native.gate_up_view", b.getUnitAttr());
-  } module.getBody()->push_back(child);
+  }
+  if (storeCastMember)
+    module->setAttr("tessera.native.fp8_store_cast", UnitAttr::get(module.getContext()));
+  module.getBody()->push_back(child);
   module->removeAttr("tessera.native.nvfp4_program");
   module->removeAttr("tessera.native.nvfp4_program_json");
   return success();

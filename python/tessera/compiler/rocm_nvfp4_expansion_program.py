@@ -209,6 +209,11 @@ class NativeNVFP4ExpansionProgram:
                     frame["parent_shape"] != [m, n] or frame["output_shape"] != [m, n // 2]):
                 raise ValueError("native expansion activation shape/storage edge differs")
 
+    @property
+    def native_stages(self) -> tuple[ROCMNativePackage, ...]:
+        stages = (self.producer.native, self.consumer)
+        return stages if self.activation is None else (*stages, self.activation)
+
     def prepare(self, inputs, *, runtime_library):
         return PreparedNVFP4ExpansionProgram(self, inputs, runtime_library=runtime_library)
 
@@ -299,9 +304,7 @@ class PreparedNVFP4ExpansionProgram(PreparedScaledProgram):
                 frame["consumer_step"], 0, 1, bm)
         self._roles = tuple(plan["role_indices"])
         self._offsets = tuple(package.producer.native.descriptor.provenance["row_offsets"])
-        native: tuple[ROCMNativePackage, ...] = (package.producer.native, package.consumer)
-        if package.activation is not None:
-            native += (package.activation,)
+        native = package.native_stages
         blobs = tuple(C.create_string_buffer(p.image.payload) for p in native)
         entries = tuple(p.descriptor.entry_symbol.encode() for p in native)
         steps = (_MultiOutputStep * len(native))()

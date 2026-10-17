@@ -218,8 +218,9 @@ class TracedNVFP4Program:
 
 
 def program_from_manifest(data):
-    from .rocm_nvfp4_source_frontend import SCHEMA, source_program_from_manifest
-    if isinstance(data, dict) and data.get("schema") == SCHEMA:
+    from .rocm_nvfp4_source_frontend import SOURCE_SCHEMAS, source_program_from_manifest
+    if (isinstance(data, dict) and isinstance(data.get("schema"), str)
+            and data["schema"] in SOURCE_SCHEMAS):
         return source_program_from_manifest(data)
     if not isinstance(data,dict) or set(data)!={"schema","native_program","argument_names",
             "role_indices","graph_ir","contract_digest"}:

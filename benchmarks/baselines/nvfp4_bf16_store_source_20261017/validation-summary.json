@@ -1,0 +1,52 @@
+{
+  "validation_groups": {
+    "gfx1201": {
+      "passed": 56,
+      "skipped": 0
+    },
+    "native_portable_and_nvidia": {
+      "passed": 81,
+      "skipped": 0,
+      "exact_nvidia_subset": 12
+    },
+    "shared_drift": {
+      "passed": 477
+    }
+  },
+  "counts_overlap": true,
+  "recorder_sha256": "f98264ab18b3b9302432208e8e99840ba1b6955d583765235b0c91c63a430211",
+  "timing_packet_sha256": "80640164f16be1c0afe30a8df581cafa30c20eddb8d1dc5d913b9c0dd95a0b48",
+  "generated_docs": "33 in sync",
+  "compiler_plan": "passed ownership/log links/start view",
+  "final_audit": {
+    "passed": 11
+  },
+  "artifact_log_sha256": {
+    "bf16-store-device-final.txt": "05207d45f96d6739eb2a66f3759a7673bbe90a1ec0b2d4d3f93c130ff00cb2e5",
+    "bf16-store-generated-docs.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "bf16-store-drift.txt": "e67e16d2b2a97de5a7b1de5e10dda5d293ed5ac3e244b4b2dbde8587b0b7765d",
+    "bf16-store-final-audit.txt": "9420e1c2fa229c60ba298003d1c07c7714bd0fa4d6cc704d2f01fe9515146ad6",
+    "bf16-store-red.txt": "d65ebd5d70dea4f15e23ae1f9faf13609a40da13cbf794e8cdb1cffddac12c00",
+    "bf16-store-final-native-nvidia.txt": "6fbd9208a742b4cda883d135a59c1f8745d168ab5d178d8c603e27f7d0a8ad15",
+    "bf16-store-benchmark.txt": "080c220113ba3bdd90cb1875961bb9786716646a0087471b83e99dfe88f337c2",
+    "compiler-build.txt": "063d71c3faaf92a414154d889322f95139eb7a18073c4f2d2726109eca2a7677",
+    "bf16-store-native-final.txt": "042ae8f1a03c397186e02a3a147ed8d9e4378a81f2074ba3d61f8322dd54d86d",
+    "bf16-store-mypy.txt": "71144743c83babea384888a735db0c4daba3d4d7b7942b6839984bd5c21b52bb"
+  },
+  "original_checkpoint_rows": [
+    [
+      19,
+      12288,
+      4096
+    ],
+    [
+      256,
+      12288,
+      4096
+    ]
+  ],
+  "original_checkpoint_interval_violations": [
+    0,
+    0
+  ]
+}

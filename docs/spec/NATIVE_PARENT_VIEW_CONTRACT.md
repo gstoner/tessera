@@ -112,3 +112,22 @@ quantization, down projection, original-checkpoint/full-MLP quality and matched
 model-sized performance remain open. This static textual Graph proof does not
 close them. Evidence and synthetic timing boundaries are in
 benchmarks/baselines/native_bf16_parent_view_20261017/README.md.
+
+
+## Explicit scaled-product store composition
+
+The queued ROCM-NVFP4-BF16-STORE-20261017 extension retains the frontend's
+FP32 scaled product and its explicit BF16 cast in the original Graph and
+projected consumer witness. Native partitioning groups that single-use cast
+with the product. The existing Graph-to-Schedule pass consumes the internal
+tessera.native.fp8_store_cast marker after checking the exact gfx1201 E4M3
+K16 FP32-scale contract, static compact rank-2 shapes, SSA ownership and cast
+policy. FP32 accumulation is unchanged; conversion occurs once at the BF16
+store. There is no allocated FP32 parent or host numerical conversion.
+
+Native program v5 retains its static three-member BF16 activation meaning.
+Portable source frontend v1 remains two-member expansion/product; v2 carries
+all three member images, descriptors, Graph/Schedule witnesses and receipts.
+Bounded three-member replay still requires its own runtime-expression contract.
+This extension is under validation and does not establish full-model quality
+or performance acceptance.

@@ -1,0 +1,29 @@
+{
+  "artifacts": {
+    "slice-mypy-final.log": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "README.md": "137598a85294e1c78298fe784e994fcdd3c6e2de112a7b83c8bc71d154f5debf",
+    "slice-compiler-route-junit.xml": "136f42003f22f7f455b21c06d9d13a8d7d7f028bd805ef57f2a3b0c7db559736",
+    "check_integrated_slice_normalization.py": "ca3fe2b8e82010a4ec9c3becee1302d9638dd32ae1ba20e28d3e6cfdc49f5b4f",
+    "post-slice-boundary.log": "24378b3a6a91e1d8e403a80e63446b6b2898731395188915e5441aec79d5d316",
+    "public-gate-up-registered.mlir": "568f09db35c8f2e7564b3c86cde7832f9cb49ae3ad1edd81786c381d268c0609",
+    "slice-junit.xml": "105f0c2737d522a0acf18ee3bc805a4961f0ef7c8768125e02827900ab6037c2",
+    "post-slice-boundary.json": "24378b3a6a91e1d8e403a80e63446b6b2898731395188915e5441aec79d5d316",
+    "slice-borrowed-view-gates.log": "55a63adc3687d363a4f978f0acaeb2578564403407d4964e0c29a7807090c87b",
+    "integrated-slice-normalization-oracle.log": "7367b3a798b3eceb436c79cf49d3e0a8a1958f276d5fb0a288a0c3e6bf9376a5",
+    "slice-compiler-route.log": "a9c22dd1d28eca3ce56f0fbd9d135a7e73343b1c755047f44a39316a57e6a253",
+    "slice-generated-docs-check.log": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "buffer-view-lowering-proof.json": "9fe6344e9a79be2a9b3a5fd21020ee014cec48e15725d7d924443825c3b2b62b",
+    "build_slice_contract_normalize.py": "32422386cac30273b6418761e295f067a0981579073dbe31ed09bf19064d92ee",
+    "slice-reconcile-gates.log": "34799cd4fe3f5965f87a5441598a1766fdd0faba867a43d887841e0f0186a45f",
+    "source-identity.json": "dc4657ded88f6aadd1e242c5a919c0a06c41e7e54622b9d2fb7da78d15d01410",
+    "slice-doc-gates.log": "e1684c98c9c0ab43bf5be86066cb02edabe2cb1fdf200d63da9212dc8977a511",
+    "slice-owning-contract.log": "7e5df585263ff33b8bf950a95b59e14ef88fcaee180ccb1aa78cc36d64cb41ce",
+    "slice-contract-normalize.cpp": "a8ec913ef1d81c28f3d9f503203d53a4be5b20f510cfd5ad8b9385ffc6f36e78",
+    "integrated-slice-normalization-oracle.json": "7367b3a798b3eceb436c79cf49d3e0a8a1958f276d5fb0a288a0c3e6bf9376a5",
+    "slice-ruff-ci.log": "d63ab3df51a50c66f9c57056288c7d4faf9dce413552d89215714320ac2b748e",
+    "slice-shared-regression.log": "54113da10c5e90282661e332951f0f48558aac5999d88c7bd16117d4ddce0a7b",
+    "slice-final-contract.log": "391cbd8987f96d474d4d42127f2c8315773f332020b0aecb677326cd396dcbdf",
+    "slice-borrowed-view-red.log": "5682a9bea9d0007b70f653fb3523b42e9c069f701548b6b32b947b22ace35017"
+  },
+  "scope": "host compiler/semantic foundation evidence, not native GPU completion"
+}

@@ -551,6 +551,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "RMSNorm/LayerNorm derivatives preserve an explicitly wider accumulator in working Graph types, "
             "round only returned storage values and guard symbolic seed extents before reads. "
             "Optional export-scaled-transpose outlines actual native static typed FP8/f32-scale and continuous four-f32 matrix/scale adjoint tensor/scf regions with verified captured input order, requested gradient order, immutable Graph witness and first-write/last-read buffer lifetimes. Native inverse output-cotangent transpose chains retain distinct private storage and seed lineage before the scale reductions. select-scaled-transpose-member projects the actual permutation or reduction for Schedule/Tile lowering; export alone is not execution proof. "
+            "Public slice/dynamic_slice with static source bounds scatter cotangents into a zero source after runtime seed-extent guards; dynamic source transpose remains open. "
             "Index-only tensor.generate gathers transpose to serial accumulating scatters with exact cotangent-shape guards; nonlinear generator bodies remain unsupported. "
             "Optional normalize-counted-while converts proven counted whiles; normalize-data-while freezes data-dependent state after exit when an SSA counter guard proves the capacity, including nonnegative initial counters, positive constant strides, signed inclusive/exclusive upper bounds and false-else short-circuit scf.if/arith.select guards. box-product-scalars projects index/predicate residuals into i64/i8 tensor storage. "
             "Bounded pure native CFG replay accepts execute regions or bounded multi-block function bodies, supports typed cf.br, cf.cond_br and cf.switch edges, and promotes cross-block SSA definitions to distinct state slots. "
@@ -1287,6 +1288,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "Lowers supported Tessera tensor math to upstream DPS Linalg. "
             "Dynamic same-rank binary operations guard operand/result extents; "
             "zeros_like adjoints allocate from logical primal dimensions. "
+            "Static public slice/dynamic_slice normalize clipped Python bounds into tensor.extract_slice with preserved activity/effects. "
             "Matmul remains within its independently checked physical envelope."
         ),
         input_dialects=("tessera", "func", "tensor", "arith"),

@@ -61,6 +61,12 @@ def _contracts() -> tuple[DerivativeProofContract, ...]:
                                 "floating tensors; legal static shape/axis")
         for name, identity in linear.items()
     ]
+    for family in ("slice", "dynamic_slice"):
+        out.append(DerivativeProofContract(
+            family, ProofKind.LINEAR_IDENTITY,
+            "d slice(x)=slice(dx); its transpose inserts the seed into a zero source",
+            "ranked floating tensors and static signed-i64 coordinates; native reverse requires static source extents",
+            "unit-stride Python clipping applies to start and start+size; dynamically typed seed extents are guarded before scatter. No device execution is inferred."))
     out.extend((
         DerivativeProofContract(
             "flash_attn", ProofKind.LINEAR_IDENTITY,

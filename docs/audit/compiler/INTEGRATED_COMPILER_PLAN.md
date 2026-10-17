@@ -160,7 +160,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
   FP32/BF16 outputs. Ordinary static FP32 JIT, compiler-free replay and the original Qwen3
   projection now have exact-device proof through both native stages.
   Remaining: bounded frames, wider composition and model-quality acceptance.
-- Latest: [2026-10-15 — public native NVFP4 checkpoint composition](INTEGRATED_COMPILER_LOG.md#2026-10-15--public-native-nvfp4-checkpoint-composition)
+- Latest: [Native Graph slice semantics for gate/up composition](INTEGRATED_COMPILER_LOG.md#2026-10-16--native-graph-slice-semantics-for-gateup-composition)
 
 ### ROCM-SPLIT-K-1
 
@@ -465,7 +465,7 @@ Current increment: checked rank-four broadcast saved-LSE packages and private ta
 - Current increment (2026-10-05, sync NVIDIA-JVP-NATIVE-SCHEDULE-2026-10-05): bounded static f32 SM120 saved-LSE JVP now lowers the actual native AD Graph through replay-sealed C++ Schedule/Tile, native arena and NVVM/LLVM. Python GPU arithmetic construction and inactive-load string rewriting are retired. Ten ordinary JIT oracle cases, direct/automatic saved-state products and separate dispatch/wall measurements are retained; general dynamic/composed/bias/dropout/value-only AD and sibling routes remain open. [Evidence](../../../benchmarks/baselines/nvidia_jvp_native_schedule_20261005/README.md).
 - Current compiler overhead increment (2026-10-05, sync NATIVE-COMPILE-ORCHESTRATION-2026-10-05): native JVP passes retain SSA in one MLIR pass manager; GPU packaging reuses exact tool SHA-256 for stable file identities and rejects read-time rebuilds. Image/arena bytes remain identical in balanced A/B packages; cold and warm identities are measured separately. Native persistent compiler sessions and image-validator overhead remain open. [Evidence](../../../benchmarks/baselines/native_compile_orchestration_20261005/README.md).
 - Current increment (2026-10-08, sync SCALED-MAP-AXIS-INTEGRATION-20261008): non-leading static typed FP8/MXFP8 input maps preserve alias views, scalar bounds, native scale JVP seeds and original VJP axis order. Checked C++ host packing retains compact compiler ABI admission. Owning gfx1201 execution and separate completed-public/native-event timings are recorded. Generic closure, dynamic/nonzero-output maps, wider storage AD and sibling packed/native routes remain open. [Evidence](../../../benchmarks/baselines/scaled_map_axes_20261008/README.md).
-- Latest: [Typed SM120 saved-LSE public reverse ownership](INTEGRATED_COMPILER_LOG.md#2026-10-16--typed-sm120-saved-lse-public-reverse-ownership)
+- Latest: [Native Graph slice semantics for gate/up composition](INTEGRATED_COMPILER_LOG.md#2026-10-16--native-graph-slice-semantics-for-gateup-composition)
 
 ### MSW-9
 

@@ -1,0 +1,50 @@
+{
+  "scope": "isolated existing shared Tile buffer-view materializer -> LLVM -> host CPU diagnostic; no Graph/Schedule/ROCm GPU package or SiLU arithmetic proof",
+  "rows": [
+    {
+      "rows": 3,
+      "half_columns": 17,
+      "order": "row_major",
+      "pitch_elements": 41,
+      "numerical": "exact",
+      "parent_unchanged": true,
+      "invalid_store_cases": 6,
+      "tile_source_sha256": "1026755b9da842b2819ca2249a2e675e1bc5dce41f154915d484d6b7ea704d1e",
+      "materialized_sha256": "6a0948aa1cc0079c704720bfd54dfc4b33e27c22f012fbb8054d15fc8b02d27e"
+    },
+    {
+      "rows": 3,
+      "half_columns": 17,
+      "order": "col_major",
+      "pitch_elements": 8,
+      "numerical": "exact",
+      "parent_unchanged": true,
+      "invalid_store_cases": 6,
+      "tile_source_sha256": "79287b2b67a86462487505934d9c303ffc40f0634ac98f1770042e5904c38643",
+      "materialized_sha256": "43d95c3877706e6cb39e78cd614faad60c194448af8684cf45acd013b9ad7278"
+    },
+    {
+      "rows": 16,
+      "half_columns": 64,
+      "order": "row_major",
+      "pitch_elements": 135,
+      "numerical": "exact",
+      "parent_unchanged": true,
+      "invalid_store_cases": 6,
+      "tile_source_sha256": "be44747ce8e287083eb596ea925e3d8aa86a4dc586be06e10b89df4ab38f894b",
+      "materialized_sha256": "aa43d99d5614c226b535482f563159ad8cda0e63108efb98e398a435d65a38ab"
+    },
+    {
+      "rows": 16,
+      "half_columns": 64,
+      "order": "col_major",
+      "pitch_elements": 21,
+      "numerical": "exact",
+      "parent_unchanged": true,
+      "invalid_store_cases": 6,
+      "tile_source_sha256": "6358842239f8ac0405cdcda440d58cfc9250353562e59d6076c6284e7f1781b5",
+      "materialized_sha256": "33b23c7d1f540e4c4c90697709c1aa23882cd0b9c3b46d9544742a6ee6fc7932"
+    }
+  ],
+  "passed": true
+}

@@ -1,0 +1,417 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+________ test_concrete_slice_preserves_non_native_silu_promotion[int32] ________
+
+dtype = <class 'numpy.int32'>
+
+    @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float64])
+    def test_concrete_slice_preserves_non_native_silu_promotion(dtype):
+        def fn(x):
+            gate = ts.ops.slice(x, [0, 0], [2, 2])
+            up = ts.ops.slice(x, [0, 2], [2, 2])
+            return ts.ops.silu_mul(gate, up)
+    
+        source = np.arange(8, dtype=dtype).reshape(2, 4)
+        expected = np.asarray(fn(source))
+>       traced = trace(fn, source)
+                 ^^^^^^^^^^^^^^^^^
+
+tests/unit/test_slice_semantic_contract.py:184: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/trace.py:843: in trace
+    result = fn(*arg_tracers)
+             ^^^^^^^^^^^^^^^^
+tests/unit/test_slice_semantic_contract.py:180: in fn
+    return ts.ops.silu_mul(gate, up)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/autodiff/tape.py:1000: in wrapped
+    return _tracer.record_op(name, original, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = TraceBuilder(args=[('a0', (2, 4), 'int32')], body=[IROp(result='v0', op_name='tessera.slice', operands=['%a0'], operan...policy=None, value_kind=None, verification_facts=frozenset())], outputs=[], evaluate_catalog_outputs=False, _counter=2)
+name = 'silu_mul'
+original = <function _make_ops_namespace.<locals>.silu_mul at 0x7264e53a3ab0>
+args = (Tracer(shape=(2, 2), dtype='int32', ssa='v0'), Tracer(shape=(2, 2), dtype='int32', ssa='v1'))
+kwargs = {}
+
+    def record_op(
+        self, name: str, original, args: tuple, kwargs: dict
+    ) -> Tracer | tuple[Tracer, ...]:
+        graph_name = graph_name_for(name)
+        if graph_name is None:
+            raise TesseraTraceError(f"trace: op {name!r} is not in the op catalog")
+        # `call_args` mirrors `args` with Tracer→value substituted lazily; it
+        # preserves variadic-operand *grouping* (a list/tuple of Tracers, the
+        # cat/stack pattern) so the concrete-execution path can reconstruct the
+        # original call.  `tracer_args` is the flattened operand set used for the
+        # IR (one SSA ref per tensor) and shape inference.
+        tracer_args: List[Tracer] = []
+        call_args: List[Any] = []
+        call_kwargs = dict(kwargs)
+        ir_kwargs = dict(kwargs)
+        for position, a in enumerate(args):
+            if graph_name == "tessera.cast" and position == 1:
+                if not isinstance(a, str):
+                    raise TesseraTraceError("cast dtype must be a static dtype spelling")
+                if "dtype" in kwargs:
+                    raise TesseraTraceError("trace: duplicate cast dtype")
+                ir_kwargs["dtype"] = a
+                call_args.append(a)
+            elif graph_name == "tessera.transpose" and position == 1:
+                if isinstance(a, Tracer) or not (a is None or isinstance(a, (tuple, list))):
+                    raise TesseraTraceError("transpose axes must be static attributes")
+                if "axes" in kwargs:
+                    raise TesseraTraceError("trace: duplicate transpose axes")
+                ir_kwargs["axes"] = a
+                call_args.append(a)
+            elif graph_name in {"tessera.slice", "tessera.dynamic_slice"} and position in (1, 2):
+                from .graph_ir import _POSITIONAL_ATTR_PARAMS
+                attribute = _POSITIONAL_ATTR_PARAMS[graph_name][position - 1]
+                if isinstance(a, Tracer) or not isinstance(a, (tuple, list)) or any(
+                        isinstance(value, Tracer) for value in a):
+                    raise TesseraTraceError(f"{name} {attribute} must be static attributes")
+                if attribute in kwargs:
+                    raise TesseraTraceError(f"trace: duplicate {name} {attribute}")
+                ir_kwargs[attribute] = a
+                call_args.append(a)
+            elif graph_name == "tessera.kv_cache.read" and position in (1, 2):
+                if isinstance(a, Tracer):
+                    raise TesseraTraceError("paged cache bounds must be static attributes")
+                attribute = ("start", "end")[position - 1]
+                if attribute in kwargs:
+                    raise TesseraTraceError(f"trace: duplicate cache bound {attribute!r}")
+                ir_kwargs[attribute] = a
+                call_args.append(a)
+            elif isinstance(a, Tracer):
+                tracer_args.append(a)
+                call_args.append(a)
+            elif (isinstance(a, (list, tuple)) and a
+                  and all(isinstance(x, Tracer) for x in a)):
+                # Variadic tensor-list operand (e.g. ``cat([a, b], axis=…)``):
+                # flatten its tracers into the operand set but keep the group so
+                # ``original`` is still called as ``op([v0, v1], …)``.
+                tracer_args.extend(a)
+                call_args.append(list(a))
+            else:
+                raise TesseraTraceError(
+                    f"trace: op {name!r} got a non-Tracer positional operand "
+                    f"({type(a).__name__}); tensor inputs must be traced values "
+                    "(pass constants as keyword args)")
+        # Tensor-valued keyword operands are dataflow, not attributes. Preserve
+        # the Python signature's parameter order so ``gamma=``/``beta=`` and
+        # similar optional operands cannot change the ODS operand ABI merely by
+        # changing call-site keyword order.
+        try:
+            parameter_order = tuple(inspect.signature(original).parameters)
+        except (TypeError, ValueError):
+            parameter_order = tuple(kwargs)
+        ordered_keys = [key for key in parameter_order if key in kwargs]
+        ordered_keys.extend(key for key in kwargs if key not in ordered_keys)
+        positional_operand_count = len(tracer_args)
+        keyword_operand_names: List[str] = []
+        for key in ordered_keys:
+            item = kwargs[key]
+            if isinstance(item, Tracer):
+                tracer_args.append(item)
+                ir_kwargs.pop(key, None)
+                keyword_operand_names.append(key)
+            elif (isinstance(item, (list, tuple)) and item
+                  and all(isinstance(value, Tracer) for value in item)):
+                tracer_args.extend(item)
+                ir_kwargs.pop(key, None)
+                keyword_operand_names.append(key)
+        # Presence of each optional operand, for ops whose operand list cannot
+        # be decoded from position alone (`graph_ir._PRESENCE_FLAGGED_OPERANDS`).
+        #
+        # Emitted here as well as in the AST frontend because the two are held
+        # to structural parity: a fact recorded by one and not the other is a
+        # frontend divergence, and the differential certificate rejects it --
+        # which is exactly how this omission was caught.
+        if graph_name in {"tessera.slice", "tessera.dynamic_slice"} and tracer_args:
+            from .graph_ir import _slice_index_attributes
+            starts, sizes = _slice_index_attributes(ir_kwargs, len(tracer_args[0].shape))
+            ir_kwargs["start_indices"], ir_kwargs["slice_sizes"] = starts, sizes
+        apply_presence_flags(
+            graph_name, ir_kwargs, positional_operand_count,
+            keyword_operand_names)
+        # F6 concrete tracing: when every input carries a concrete value, run the
+        # real numpy op to get the result's shape/dtype (works for ANY op, no
+        # per-op shape rule). Falls back to the shape-rule path for value-less
+        # specs (the executable subset only).
+        physical_movement = (
+            (graph_name == "tessera.kv_cache.read" and len(tracer_args) == 2)
+            or (graph_name == "tessera.moe_dispatch" and len(tracer_args) == 2
+                and len(tracer_args[1].shape) == 1 and tracer_args[1].dtype in {"int32", "i32"}))
+        if graph_name == "tessera.kv_cache.read" and physical_movement and ir_kwargs.get("end") is None:
+            start = ir_kwargs.get("start")
+            if isinstance(start, int) and not isinstance(start, bool):
+                ir_kwargs["end"] = start + 1
+        values: tuple[Any, ...]
+        attention_types_only = graph_name == "tessera.flash_attn" and (
+            not self.evaluate_catalog_outputs or not tracer_args
+            or not all(value.value is not None for value in tracer_args))
+        scaled_types_only = graph_name == "tessera.scaled_matmul" and (
+            not self.evaluate_catalog_outputs or not tracer_args
+            or not all(value.value is not None for value in tracer_args))
+        cast_types_only = graph_name == "tessera.cast" and (
+            not self.evaluate_catalog_outputs or not tracer_args
+            or not all(value.value is not None for value in tracer_args))
+        slice_types_only = graph_name in {"tessera.slice", "tessera.dynamic_slice"} and (
+            not self.evaluate_catalog_outputs or not tracer_args
+            or not all(value.value is not None for value in tracer_args))
+        silu_float_storage = False
+        if graph_name == "tessera.silu_mul" and len(tracer_args) == 2:
+            from ..dtype import TesseraDtypeError, canonicalize_dtype
+            supported = {"fp16", "bf16", "fp32"}
+            try:
+                # Some legacy trace spellings collapse other NumPy storages to
+                # f32. Check concrete dtype metadata too; no input arithmetic.
+                silu_float_storage = (tracer_args[0].dtype == tracer_args[1].dtype) and all(
+                    canonicalize_dtype(value.dtype) in supported
+                    and (value.value is None or canonicalize_dtype(
+                        str(getattr(value.value, "dtype", None))) in supported)
+                    for value in tracer_args)
+            except TesseraDtypeError:
+                silu_float_storage = False
+        if graph_name == "tessera.silu_mul" and not all(
+                value.value is not None for value in tracer_args):
+            from ..dtype import TesseraDtypeError, canonicalize_dtype
+            try:
+                abstract_dtypes = tuple(canonicalize_dtype(
+                    value.dtype, allow_planned_gated=True) for value in tracer_args)
+            except TesseraDtypeError as error:
+                raise TesseraTraceError("abstract SiLU requires concrete values for dtype promotion") from error
+            if (len(set(abstract_dtypes)) != 1
+                    or any(dtype not in {"fp16", "bf16", "fp32", "fp64", "complex64", "complex128"}
+                           for dtype in abstract_dtypes)):
+>               raise TesseraTraceError("abstract SiLU requires concrete values for dtype promotion")
+E               tessera.compiler.trace.TesseraTraceError: abstract SiLU requires concrete values for dtype promotion
+
+python/tessera/compiler/trace.py:403: TesseraTraceError
+________ test_concrete_slice_preserves_non_native_silu_promotion[int64] ________
+
+dtype = <class 'numpy.int64'>
+
+    @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float64])
+    def test_concrete_slice_preserves_non_native_silu_promotion(dtype):
+        def fn(x):
+            gate = ts.ops.slice(x, [0, 0], [2, 2])
+            up = ts.ops.slice(x, [0, 2], [2, 2])
+            return ts.ops.silu_mul(gate, up)
+    
+        source = np.arange(8, dtype=dtype).reshape(2, 4)
+        expected = np.asarray(fn(source))
+>       traced = trace(fn, source)
+                 ^^^^^^^^^^^^^^^^^
+
+tests/unit/test_slice_semantic_contract.py:184: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/trace.py:843: in trace
+    result = fn(*arg_tracers)
+             ^^^^^^^^^^^^^^^^
+tests/unit/test_slice_semantic_contract.py:180: in fn
+    return ts.ops.silu_mul(gate, up)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/autodiff/tape.py:1000: in wrapped
+    return _tracer.record_op(name, original, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = TraceBuilder(args=[('a0', (2, 4), 'i64')], body=[IROp(result='v0', op_name='tessera.slice', operands=['%a0'], operand_...policy=None, value_kind=None, verification_facts=frozenset())], outputs=[], evaluate_catalog_outputs=False, _counter=2)
+name = 'silu_mul'
+original = <function _make_ops_namespace.<locals>.silu_mul at 0x7264e53a3ab0>
+args = (Tracer(shape=(2, 2), dtype='i64', ssa='v0'), Tracer(shape=(2, 2), dtype='i64', ssa='v1'))
+kwargs = {}
+
+    def record_op(
+        self, name: str, original, args: tuple, kwargs: dict
+    ) -> Tracer | tuple[Tracer, ...]:
+        graph_name = graph_name_for(name)
+        if graph_name is None:
+            raise TesseraTraceError(f"trace: op {name!r} is not in the op catalog")
+        # `call_args` mirrors `args` with Tracer→value substituted lazily; it
+        # preserves variadic-operand *grouping* (a list/tuple of Tracers, the
+        # cat/stack pattern) so the concrete-execution path can reconstruct the
+        # original call.  `tracer_args` is the flattened operand set used for the
+        # IR (one SSA ref per tensor) and shape inference.
+        tracer_args: List[Tracer] = []
+        call_args: List[Any] = []
+        call_kwargs = dict(kwargs)
+        ir_kwargs = dict(kwargs)
+        for position, a in enumerate(args):
+            if graph_name == "tessera.cast" and position == 1:
+                if not isinstance(a, str):
+                    raise TesseraTraceError("cast dtype must be a static dtype spelling")
+                if "dtype" in kwargs:
+                    raise TesseraTraceError("trace: duplicate cast dtype")
+                ir_kwargs["dtype"] = a
+                call_args.append(a)
+            elif graph_name == "tessera.transpose" and position == 1:
+                if isinstance(a, Tracer) or not (a is None or isinstance(a, (tuple, list))):
+                    raise TesseraTraceError("transpose axes must be static attributes")
+                if "axes" in kwargs:
+                    raise TesseraTraceError("trace: duplicate transpose axes")
+                ir_kwargs["axes"] = a
+                call_args.append(a)
+            elif graph_name in {"tessera.slice", "tessera.dynamic_slice"} and position in (1, 2):
+                from .graph_ir import _POSITIONAL_ATTR_PARAMS
+                attribute = _POSITIONAL_ATTR_PARAMS[graph_name][position - 1]
+                if isinstance(a, Tracer) or not isinstance(a, (tuple, list)) or any(
+                        isinstance(value, Tracer) for value in a):
+                    raise TesseraTraceError(f"{name} {attribute} must be static attributes")
+                if attribute in kwargs:
+                    raise TesseraTraceError(f"trace: duplicate {name} {attribute}")
+                ir_kwargs[attribute] = a
+                call_args.append(a)
+            elif graph_name == "tessera.kv_cache.read" and position in (1, 2):
+                if isinstance(a, Tracer):
+                    raise TesseraTraceError("paged cache bounds must be static attributes")
+                attribute = ("start", "end")[position - 1]
+                if attribute in kwargs:
+                    raise TesseraTraceError(f"trace: duplicate cache bound {attribute!r}")
+                ir_kwargs[attribute] = a
+                call_args.append(a)
+            elif isinstance(a, Tracer):
+                tracer_args.append(a)
+                call_args.append(a)
+            elif (isinstance(a, (list, tuple)) and a
+                  and all(isinstance(x, Tracer) for x in a)):
+                # Variadic tensor-list operand (e.g. ``cat([a, b], axis=…)``):
+                # flatten its tracers into the operand set but keep the group so
+                # ``original`` is still called as ``op([v0, v1], …)``.
+                tracer_args.extend(a)
+                call_args.append(list(a))
+            else:
+                raise TesseraTraceError(
+                    f"trace: op {name!r} got a non-Tracer positional operand "
+                    f"({type(a).__name__}); tensor inputs must be traced values "
+                    "(pass constants as keyword args)")
+        # Tensor-valued keyword operands are dataflow, not attributes. Preserve
+        # the Python signature's parameter order so ``gamma=``/``beta=`` and
+        # similar optional operands cannot change the ODS operand ABI merely by
+        # changing call-site keyword order.
+        try:
+            parameter_order = tuple(inspect.signature(original).parameters)
+        except (TypeError, ValueError):
+            parameter_order = tuple(kwargs)
+        ordered_keys = [key for key in parameter_order if key in kwargs]
+        ordered_keys.extend(key for key in kwargs if key not in ordered_keys)
+        positional_operand_count = len(tracer_args)
+        keyword_operand_names: List[str] = []
+        for key in ordered_keys:
+            item = kwargs[key]
+            if isinstance(item, Tracer):
+                tracer_args.append(item)
+                ir_kwargs.pop(key, None)
+                keyword_operand_names.append(key)
+            elif (isinstance(item, (list, tuple)) and item
+                  and all(isinstance(value, Tracer) for value in item)):
+                tracer_args.extend(item)
+                ir_kwargs.pop(key, None)
+                keyword_operand_names.append(key)
+        # Presence of each optional operand, for ops whose operand list cannot
+        # be decoded from position alone (`graph_ir._PRESENCE_FLAGGED_OPERANDS`).
+        #
+        # Emitted here as well as in the AST frontend because the two are held
+        # to structural parity: a fact recorded by one and not the other is a
+        # frontend divergence, and the differential certificate rejects it --
+        # which is exactly how this omission was caught.
+        if graph_name in {"tessera.slice", "tessera.dynamic_slice"} and tracer_args:
+            from .graph_ir import _slice_index_attributes
+            starts, sizes = _slice_index_attributes(ir_kwargs, len(tracer_args[0].shape))
+            ir_kwargs["start_indices"], ir_kwargs["slice_sizes"] = starts, sizes
+        apply_presence_flags(
+            graph_name, ir_kwargs, positional_operand_count,
+            keyword_operand_names)
+        # F6 concrete tracing: when every input carries a concrete value, run the
+        # real numpy op to get the result's shape/dtype (works for ANY op, no
+        # per-op shape rule). Falls back to the shape-rule path for value-less
+        # specs (the executable subset only).
+        physical_movement = (
+            (graph_name == "tessera.kv_cache.read" and len(tracer_args) == 2)
+            or (graph_name == "tessera.moe_dispatch" and len(tracer_args) == 2
+                and len(tracer_args[1].shape) == 1 and tracer_args[1].dtype in {"int32", "i32"}))
+        if graph_name == "tessera.kv_cache.read" and physical_movement and ir_kwargs.get("end") is None:
+            start = ir_kwargs.get("start")
+            if isinstance(start, int) and not isinstance(start, bool):
+                ir_kwargs["end"] = start + 1
+        values: tuple[Any, ...]
+        attention_types_only = graph_name == "tessera.flash_attn" and (
+            not self.evaluate_catalog_outputs or not tracer_args
+            or not all(value.value is not None for value in tracer_args))
+        scaled_types_only = graph_name == "tessera.scaled_matmul" and (
+            not self.evaluate_catalog_outputs or not tracer_args
+            or not all(value.value is not None for value in tracer_args))
+        cast_types_only = graph_name == "tessera.cast" and (
+            not self.evaluate_catalog_outputs or not tracer_args
+            or not all(value.value is not None for value in tracer_args))
+        slice_types_only = graph_name in {"tessera.slice", "tessera.dynamic_slice"} and (
+            not self.evaluate_catalog_outputs or not tracer_args
+            or not all(value.value is not None for value in tracer_args))
+        silu_float_storage = False
+        if graph_name == "tessera.silu_mul" and len(tracer_args) == 2:
+            from ..dtype import TesseraDtypeError, canonicalize_dtype
+            supported = {"fp16", "bf16", "fp32"}
+            try:
+                # Some legacy trace spellings collapse other NumPy storages to
+                # f32. Check concrete dtype metadata too; no input arithmetic.
+                silu_float_storage = (tracer_args[0].dtype == tracer_args[1].dtype) and all(
+                    canonicalize_dtype(value.dtype) in supported
+                    and (value.value is None or canonicalize_dtype(
+                        str(getattr(value.value, "dtype", None))) in supported)
+                    for value in tracer_args)
+            except TesseraDtypeError:
+                silu_float_storage = False
+        if graph_name == "tessera.silu_mul" and not all(
+                value.value is not None for value in tracer_args):
+            from ..dtype import TesseraDtypeError, canonicalize_dtype
+            try:
+                abstract_dtypes = tuple(canonicalize_dtype(
+                    value.dtype, allow_planned_gated=True) for value in tracer_args)
+            except TesseraDtypeError as error:
+                raise TesseraTraceError("abstract SiLU requires concrete values for dtype promotion") from error
+            if (len(set(abstract_dtypes)) != 1
+                    or any(dtype not in {"fp16", "bf16", "fp32", "fp64", "complex64", "complex128"}
+                           for dtype in abstract_dtypes)):
+>               raise TesseraTraceError("abstract SiLU requires concrete values for dtype promotion")
+E               tessera.compiler.trace.TesseraTraceError: abstract SiLU requires concrete values for dtype promotion
+
+python/tessera/compiler/trace.py:403: TesseraTraceError
+_______ test_concrete_slice_preserves_non_native_silu_promotion[float64] _______
+
+dtype = <class 'numpy.float64'>
+
+    @pytest.mark.parametrize("dtype", [np.int32, np.int64, np.float64])
+    def test_concrete_slice_preserves_non_native_silu_promotion(dtype):
+        def fn(x):
+            gate = ts.ops.slice(x, [0, 0], [2, 2])
+            up = ts.ops.slice(x, [0, 2], [2, 2])
+            return ts.ops.silu_mul(gate, up)
+    
+        source = np.arange(8, dtype=dtype).reshape(2, 4)
+        expected = np.asarray(fn(source))
+        traced = trace(fn, source)
+>       assert traced.output_values[0] is not None
+E       assert None is not None
+
+tests/unit/test_slice_semantic_contract.py:185: AssertionError
+________ test_concrete_slice_carries_a_borrowed_view_without_compaction ________
+
+    def test_concrete_slice_carries_a_borrowed_view_without_compaction():
+        def fn(x):
+            return ts.ops.slice(x, [0, 1], [3, 2])
+    
+        source = np.arange(12, dtype=np.float32).reshape(3, 4)
+        traced = trace(fn, source)
+        view = traced.output_values[0]
+>       assert view is not None and np.shares_memory(view, source)
+E       assert (None is not None)
+
+tests/unit/test_slice_semantic_contract.py:197: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_slice_semantic_contract.py::test_concrete_slice_preserves_non_native_silu_promotion[int32]
+FAILED tests/unit/test_slice_semantic_contract.py::test_concrete_slice_preserves_non_native_silu_promotion[int64]
+FAILED tests/unit/test_slice_semantic_contract.py::test_concrete_slice_preserves_non_native_silu_promotion[float64]
+FAILED tests/unit/test_slice_semantic_contract.py::test_concrete_slice_carries_a_borrowed_view_without_compaction
+4 failed, 79 deselected in 0.44s

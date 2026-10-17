@@ -3542,14 +3542,41 @@ def _shape_insert_axis(operand_types: List[IRType],
                           layout=x.layout)
 
 
+def _slice_index_attributes(attrs: Dict[str, Any], rank: int) -> tuple[list[int], list[int]]:
+    """Normalize eager int-coercible coordinates into the native signed-i64 ABI."""
+    starts, sizes = attrs.get("start_indices"), attrs.get("slice_sizes")
+    if not isinstance(starts, (tuple, list)) or not isinstance(sizes, (tuple, list)):
+        raise ValueError("slice coordinates must be static lists or tuples")
+    if len(starts) != rank or len(sizes) != rank:
+        raise ValueError("start_indices and slice_sizes must match input rank")
+    normalized = ([int(value) for value in starts], [int(value) for value in sizes])
+    if any(value < -(1 << 63) or value >= (1 << 63)
+           for coordinates in normalized for value in coordinates):
+        raise ValueError("slice coordinates must fit signed i64 attributes")
+    return normalized
+
+
 def _shape_from_slice_sizes(operand_types: List[IRType],
                             attrs: Optional[Dict[str, Any]] = None) -> IRType:
-    """`slice` / `dynamic_slice`: the result IS `slice_sizes`."""
+    """Preserve the public unit-stride Python slice, including clipped bounds.
+
+    Both public spellings evaluate ``x[start:start + size]``. In particular,
+    negative sizes are end-coordinate offsets rather than output extents.
+    Python integer addition deliberately avoids signed-64 end overflow.
+    """
     x = operand_types[0]
-    sizes = (attrs or {}).get("slice_sizes")
-    if not isinstance(sizes, (tuple, list)) or not sizes:
+    if x.rank is None:
         return _unknown_like(x)
-    return tensor_ir_type(tuple(str(s) for s in sizes), x.dtype, layout=x.layout)
+    starts, sizes = _slice_index_attributes(attrs or {}, x.rank)
+    dims = []
+    for extent, start, size in zip(x.shape, starts, sizes, strict=True):
+        n = _dim(extent)
+        if n is None:
+            dims.append("?")
+            continue
+        first, end, _ = slice(int(start), int(start) + int(size)).indices(n)
+        dims.append(str(max(0, end - first)))
+    return tensor_ir_type(tuple(dims), x.dtype, layout=x.layout)
 
 
 def _shape_pad(operand_types: List[IRType],

@@ -43,6 +43,7 @@ COMPILER_FORWARD_FAMILIES: frozenset[str] = frozenset(
         "reduce_scatter", "reshape", "rfft", "relu", "rmsnorm", "sigmoid", "softmax", "squeeze",
         "spectral_conv", "spectral_filter", "stft", "istft", "stop_gradient",
         "sub", "tanh", "transpose", "unsqueeze", "view",
+        "slice", "dynamic_slice",
     }
 )
 

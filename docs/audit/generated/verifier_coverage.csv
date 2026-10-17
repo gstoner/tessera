@@ -81,6 +81,7 @@ src/compiler/ir/TesseraOps.td,DigammaOp,1,1,real
 src/compiler/ir/TesseraOps.td,DistributionLossBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,DivOp,1,1,real
 src/compiler/ir/TesseraOps.td,DropoutOp,1,1,real
+src/compiler/ir/TesseraOps.td,DynamicSliceOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMBivectorLangevinStepOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMDecodeInitOp,1,1,real
 src/compiler/ir/TesseraOps.td,EBMEnergyQuadraticOp,1,1,real
@@ -244,6 +245,7 @@ src/compiler/ir/TesseraOps.td,SiluMulOp,1,1,real
 src/compiler/ir/TesseraOps.td,SiluOp,1,1,real
 src/compiler/ir/TesseraOps.td,SinOp,1,1,real
 src/compiler/ir/TesseraOps.td,SinhOp,1,1,real
+src/compiler/ir/TesseraOps.td,SliceOp,1,1,real
 src/compiler/ir/TesseraOps.td,SmoothL1LossOp,1,1,real
 src/compiler/ir/TesseraOps.td,SoftmaxFinalizeOp,1,1,real
 src/compiler/ir/TesseraOps.td,SoftmaxMergeOp,1,1,real

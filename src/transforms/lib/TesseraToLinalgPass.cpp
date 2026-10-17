@@ -1,3 +1,4 @@
+#include "Tessera/IR/SliceContract.h"
 #include "Tessera/IR/NumericPolicyAccumulator.h"
 //===- TesseraToLinalgPass.cpp --------------------------------------------===//
 // Phase 0–1 of the production MLIR/LLVM compiler
@@ -3142,6 +3143,39 @@ struct TransposeLowering : public RewritePattern {
   }
 };
 
+struct SliceLowering : public RewritePattern {
+  SliceLowering(MLIRContext *ctx, StringRef name) : RewritePattern(name, 1, ctx) {}
+  LogicalResult matchAndRewrite(Operation *op, PatternRewriter &rewriter) const override {
+    auto bounds = tessera::slice_contract::staticBounds(op);
+    auto result = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+    if (!bounds || !result)
+      return rewriter.notifyMatchFailure(op, "static slice source bounds required");
+    for (NamedAttribute attr : op->getAttrs()) {
+      if (attr.getName() == "start_indices" || attr.getName() == "slice_sizes") continue;
+      if (attr.getName() == "tessera.effect_kind" && attr.getValue() == rewriter.getStringAttr("pure")) continue;
+      auto activity = dyn_cast<StringAttr>(attr.getValue());
+      if (attr.getName() == "tessera.autodiff.activity" && activity &&
+          (activity.getValue() == "active" || activity.getValue() == "inactive")) continue;
+      return rewriter.notifyMatchFailure(op, "slice policy requires its native consumer");
+    }
+    SmallVector<OpFoldResult> offsets, sizes, strides;
+    for (auto [offset, size] : llvm::zip(bounds->offsets, bounds->sizes)) {
+      offsets.push_back(rewriter.getIndexAttr(offset));
+      sizes.push_back(rewriter.getIndexAttr(size));
+      strides.push_back(rewriter.getIndexAttr(1));
+    }
+    auto refinedType = RankedTensorType::get(bounds->sizes, result.getElementType(), result.getEncoding());
+    auto slice = tensor::ExtractSliceOp::create(rewriter, op->getLoc(), refinedType,
+        op->getOperand(0), offsets, sizes, strides);
+    for (StringRef name : {"tessera.autodiff.activity", "tessera.effect_kind"})
+      if (auto attr = op->getAttr(name)) slice->setAttr(name, attr);
+    Value value = slice.getResult();
+    if (refinedType != result) value = tensor::CastOp::create(rewriter, op->getLoc(), result, value);
+    rewriter.replaceOp(op, value);
+    return success();
+  }
+};
+
 struct StopGradientLowering : public RewritePattern {
   StopGradientLowering(MLIRContext *ctx)
       : RewritePattern("tessera.stop_gradient", /*benefit=*/1, ctx) {}
@@ -3194,6 +3228,8 @@ public:
     patterns.add<BatchedGemmLowering>(ctx);
     patterns.add<StopGradientLowering>(ctx);
     patterns.add<TransposeLowering>(ctx);
+    patterns.add<SliceLowering>(ctx, "tessera.slice");
+    patterns.add<SliceLowering>(ctx, "tessera.dynamic_slice");
     patterns.add<ReduceLowering>(ctx);
     patterns.add<ReduceBackwardLowering>(ctx);
     patterns.add<UnsqueezeLowering>(ctx);

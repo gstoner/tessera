@@ -1,3 +1,5 @@
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "Tessera/IR/SliceContract.h"
 #include "Tessera/IR/ScaledBatchContract.h"
 #include "Tessera/IR/TransposeUtils.h"
 //===- LinearTransposeInterface.cpp - Graph IR linear transpose -*- C++ -*-===//
@@ -508,6 +510,58 @@ llvm::SmallVector<mlir::Value> FlattenOp::buildLinearTranspose(
               .create<ReshapeOp>(getLoc(), getX().getType(),
                                  outputCotangents[0])
               .getY()};
+}
+
+static llvm::SmallVector<mlir::Value> buildStaticSliceTranspose(
+    mlir::Operation *op, mlir::OpBuilder &builder, mlir::ValueRange seeds) {
+  if (seeds.size() != 1 || !seeds.front()) return {mlir::Value()};
+  auto bounds = slice_contract::staticBounds(op);
+  if (!bounds) {
+    op->emitError("slice linear transpose requires static source bounds");
+    return {mlir::Value()};
+  }
+  auto source = mlir::cast<mlir::RankedTensorType>(op->getOperand(0).getType());
+  auto seedType = mlir::dyn_cast<mlir::RankedTensorType>(seeds.front().getType());
+  if (!seedType || seedType.getRank() != source.getRank() ||
+      seedType.getElementType() != source.getElementType()) {
+    op->emitError("slice cotangent requires matching rank and element type");
+    return {mlir::Value()};
+  }
+  for (int64_t axis = 0; axis < source.getRank(); ++axis) {
+    if (!seedType.isDynamicDim(axis)) {
+      if (seedType.getDimSize(axis) != bounds->sizes[axis]) {
+        op->emitError("slice cotangent shape mismatch");
+        return {mlir::Value()};
+      }
+      continue;
+    }
+    auto actual = mlir::tensor::DimOp::create(builder, op->getLoc(), seeds.front(), axis);
+    auto expected = mlir::arith::ConstantIndexOp::create(builder, op->getLoc(), bounds->sizes[axis]);
+    auto equal = mlir::arith::CmpIOp::create(builder, op->getLoc(), mlir::arith::CmpIPredicate::eq, actual, expected);
+    mlir::cf::AssertOp::create(builder, op->getLoc(), equal,
+                             builder.getStringAttr("slice cotangent shape mismatch"));
+  }
+  auto zero = mlir::arith::ConstantOp::create(builder, op->getLoc(), source, builder.getZeroAttr(source));
+  llvm::SmallVector<mlir::OpFoldResult> offsets, sizes, strides;
+  for (auto [offset, size] : llvm::zip(bounds->offsets, bounds->sizes)) {
+    offsets.push_back(builder.getIndexAttr(offset));
+    sizes.push_back(builder.getIndexAttr(size));
+    strides.push_back(builder.getIndexAttr(1));
+  }
+  mlir::Value seed = seeds.front();
+  auto refinedType = mlir::RankedTensorType::get(bounds->sizes, seedType.getElementType(), seedType.getEncoding());
+  if (seedType != refinedType)
+    seed = mlir::tensor::CastOp::create(builder, op->getLoc(), refinedType, seed);
+  return {mlir::tensor::InsertSliceOp::create(builder, op->getLoc(), seed, zero,
+                                             offsets, sizes, strides).getResult()};
+}
+llvm::SmallVector<mlir::Value> SliceOp::buildLinearTranspose(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildStaticSliceTranspose(getOperation(), builder, outputCotangents);
+}
+llvm::SmallVector<mlir::Value> DynamicSliceOp::buildLinearTranspose(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  return buildStaticSliceTranspose(getOperation(), builder, outputCotangents);
 }
 
 llvm::SmallVector<mlir::Value> ViewOp::buildLinearTranspose(

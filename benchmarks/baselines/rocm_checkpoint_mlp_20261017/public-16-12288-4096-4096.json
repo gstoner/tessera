@@ -1,0 +1,1101 @@
+{
+  "shape_mhkn": [
+    16,
+    12288,
+    4096,
+    4096
+  ],
+  "architecture": "gfx1201",
+  "device_uuid": "GPU-28d9e7efbf2ef716",
+  "device_name": "AMD Radeon RX 9070 XT",
+  "source_revision": "a1df1af73f00924a00d05f70824b59830f689c52",
+  "recorder_sha256": "debcdbc6fd732956c05988bdbfaf53952ee86f6970c07f6a9a6707717a05ba42",
+  "reference_sha256": "bd439fd68fd7879f703cc0599919ef45ac5f5ded046da086084b14679e63c459",
+  "compiler_sha256": "620ed50bfe4eefb826e538063a4d7bd69bc1d42774b8b94cb199de8310b0f4a5",
+  "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+  "correctness": "per_stage_and_propagation_passed_before_timing",
+  "numerical_certificate": {
+    "resident_staged_bitwise_equal": true,
+    "parent_store_max_abs_error": 0.001953125,
+    "activation_at_parent_max_abs_error": 0.0,
+    "down_at_activation_max_abs_error": 0.0009765625,
+    "full_independent_max_abs_error": 0.001953125,
+    "full_independent_outside_flat_gate": 43,
+    "propagated_bound_passed": true,
+    "propagation_max_abs_bound": 0.00023857569566517047,
+    "per_stage_rtol": 0.015625,
+    "per_stage_atol": 2e-05
+  },
+  "route": "authored Graph SSA -> seven native partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> one checked multi-output HIP owner",
+  "native_schema": "tessera.native.quantized_product.v4",
+  "binding_digest": "b673278e24f142d0a02b37c704908f5e0fe82d4ce032625bd553c17546648372",
+  "checkpoint_source": {
+    "checkpoints": [
+      {
+        "nvfp4_repo": "nvidia/Qwen3-8B-NVFP4",
+        "nvfp4_revision": "ccd10a893cbca613259517c3efe08e151ddf2b8e",
+        "bf16_repo": "Qwen/Qwen3-8B",
+        "bf16_revision": "b968826d9c46dd6066d109eabc6255188de91218",
+        "tensor": "model.layers.0.mlp.gate_proj.weight",
+        "nvfp4_shard": "model-00001-of-00002.safetensors",
+        "bf16_shard": "model-00001-of-00005.safetensors",
+        "nvfp4_index_sha256": "d7cddcad23c80b41201f23e3fccb22ef200ed551da067c61afb0b09f67864f47",
+        "bf16_index_sha256": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc",
+        "nvfp4_tensor_sha256": "aff199166d0bd99966c2d89811736da829fca680ae3ec89df4f575992d2a6d05",
+        "nvfp4_scale_sha256": "e97fc0a1c076a1edfa409026b08ab731c69f811e68f1a2dfaa325fdd344d8353",
+        "nvfp4_global_scale_sha256": "747dd02d217db1cb705236847e1592fd76c9b7a918b90bce196f0432c86bc736",
+        "bf16_tensor_sha256": "1f9e6bddfbbfff53f82b684776dd1b36643277b72d40f70abcd287e02ab7ea9e",
+        "nvfp4_storage": {
+          "weight": {
+            "dtype": "U8",
+            "shape": [
+              12288,
+              2048
+            ],
+            "data_offsets": [
+              1686163120,
+              1711328944
+            ]
+          },
+          "scale": {
+            "dtype": "F8_E4M3",
+            "shape": [
+              12288,
+              256
+            ],
+            "data_offsets": [
+              1248382640,
+              1251528368
+            ]
+          },
+          "global_scale": {
+            "dtype": "F32",
+            "shape": [],
+            "data_offsets": [
+              12,
+              16
+            ]
+          }
+        },
+        "bf16_storage": {
+          "dtype": "BF16",
+          "shape": [
+            12288,
+            4096
+          ],
+          "data_offsets": [
+            1345331200,
+            1445994496
+          ]
+        },
+        "nvfp4_global_scale": 0.00021943592582829297,
+        "downloaded_tensor_bytes": 128974852,
+        "download_note": "Only the selected tensor byte ranges and small indexes/headers were fetched; no model shard was saved."
+      },
+      {
+        "nvfp4_repo": "nvidia/Qwen3-8B-NVFP4",
+        "nvfp4_revision": "ccd10a893cbca613259517c3efe08e151ddf2b8e",
+        "bf16_repo": "Qwen/Qwen3-8B",
+        "bf16_revision": "b968826d9c46dd6066d109eabc6255188de91218",
+        "tensor": "model.layers.0.mlp.up_proj.weight",
+        "nvfp4_shard": "model-00001-of-00002.safetensors",
+        "bf16_shard": "model-00001-of-00005.safetensors",
+        "nvfp4_index_sha256": "d7cddcad23c80b41201f23e3fccb22ef200ed551da067c61afb0b09f67864f47",
+        "bf16_index_sha256": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc",
+        "nvfp4_tensor_sha256": "a0fca785098afc1eb226da153c9064ec99a31ab0621de503410185a409819e2d",
+        "nvfp4_scale_sha256": "e6a1a5eb6c7dd13ad0a59250777ff052e15fb6c184deafd123eb0e174b296d61",
+        "nvfp4_global_scale_sha256": "747dd02d217db1cb705236847e1592fd76c9b7a918b90bce196f0432c86bc736",
+        "bf16_tensor_sha256": "ac3f743828a20694255953a4290079eda84f38e48e608a24731fb0510780db35",
+        "nvfp4_storage": {
+          "weight": {
+            "dtype": "U8",
+            "shape": [
+              12288,
+              2048
+            ],
+            "data_offsets": [
+              1711328944,
+              1736494768
+            ]
+          },
+          "scale": {
+            "dtype": "F8_E4M3",
+            "shape": [
+              12288,
+              256
+            ],
+            "data_offsets": [
+              1251528368,
+              1254674096
+            ]
+          },
+          "global_scale": {
+            "dtype": "F32",
+            "shape": [],
+            "data_offsets": [
+              20,
+              24
+            ]
+          }
+        },
+        "bf16_storage": {
+          "dtype": "BF16",
+          "shape": [
+            12288,
+            4096
+          ],
+          "data_offsets": [
+            1445994496,
+            1546657792
+          ]
+        },
+        "nvfp4_global_scale": 0.00021943592582829297,
+        "downloaded_tensor_bytes": 128974852,
+        "download_note": "Only the selected tensor byte ranges and small indexes/headers were fetched; no model shard was saved."
+      },
+      {
+        "nvfp4_repo": "nvidia/Qwen3-8B-NVFP4",
+        "nvfp4_revision": "ccd10a893cbca613259517c3efe08e151ddf2b8e",
+        "bf16_repo": "Qwen/Qwen3-8B",
+        "bf16_revision": "b968826d9c46dd6066d109eabc6255188de91218",
+        "tensor": "model.layers.0.mlp.down_proj.weight",
+        "nvfp4_shard": "model-00001-of-00002.safetensors",
+        "bf16_shard": "model-00001-of-00005.safetensors",
+        "nvfp4_index_sha256": "d7cddcad23c80b41201f23e3fccb22ef200ed551da067c61afb0b09f67864f47",
+        "bf16_index_sha256": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc",
+        "nvfp4_tensor_sha256": "873812a4e2ab9dcd12b5ec2ffcbcc7528afa21d8aeeff1fb1345215dceb3b9fc",
+        "nvfp4_scale_sha256": "905b6971a5d3c2dd1b79f8212dfad357a924a46515ecdaeb999e9a029829d98b",
+        "nvfp4_global_scale_sha256": "23bd3da24e9b5bf1e248445591ed3ed0f549498b779e0243598ef94ac68ed202",
+        "bf16_tensor_sha256": "56ca545862b9b22d1feb9e00433b6cc8b5c22787c215b911902d3d40ce1e8096",
+        "nvfp4_storage": {
+          "weight": {
+            "dtype": "U8",
+            "shape": [
+              4096,
+              6144
+            ],
+            "data_offsets": [
+              1660997296,
+              1686163120
+            ]
+          },
+          "scale": {
+            "dtype": "F8_E4M3",
+            "shape": [
+              4096,
+              768
+            ],
+            "data_offsets": [
+              1245236912,
+              1248382640
+            ]
+          },
+          "global_scale": {
+            "dtype": "F32",
+            "shape": [],
+            "data_offsets": [
+              4,
+              8
+            ]
+          }
+        },
+        "bf16_storage": {
+          "dtype": "BF16",
+          "shape": [
+            4096,
+            12288
+          ],
+          "data_offsets": [
+            1244667904,
+            1345331200
+          ]
+        },
+        "nvfp4_global_scale": 0.0003197079640813172,
+        "downloaded_tensor_bytes": 128974852,
+        "download_note": "Only the selected tensor byte ranges and small indexes/headers were fetched; no model shard was saved."
+      }
+    ],
+    "activation_capture": {
+      "schema": "tessera.checkpoint.model_activations.v1",
+      "capture_kind": "pinned_bf16_model_layer_input",
+      "repo": "Qwen/Qwen3-8B",
+      "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+      "tensor": "model.layers.0.mlp.input",
+      "capture_boundary": "upstream_decoder_mlp_forward_pre_hook",
+      "reference_execution": "torch_cpu_bfloat16_eager",
+      "host": "tajasarus",
+      "shape": [
+        256,
+        4096
+      ],
+      "batch_sequence_shape": [
+        2,
+        128
+      ],
+      "config_sha256": "f7c4eadfbbf522470667b797a3c89be2524832d2d599797248dc304fff447c30",
+      "tokenizer_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+      "token_ids_sha256": "13573d862d0e5876860ed0dd0e67163da3ff1b32c6185b18ba65865ef47fde63",
+      "activation_sha256": "2f8585a601aeb7c412b4e7c7f69d0aa23eb40139c06ff364e148545e13f3922c",
+      "npz_sha256": "bd77bea8b923703a924b12be44a7dfb667a027a7b898a41d7d248b0532952c17",
+      "prompt_texts": [
+        "A compiler translates a typed mathematical program into operations that a processor can execute. The graph describes values and effects. A schedule chooses parallel work and storage. Verification checks shapes, numerical policies and buffer lifetimes before execution. Measurements distinguish compilation, transfers, kernel time and completed application calls. Explain the tradeoffs using a matrix product and a reduction. ",
+        "Consider a numerical simulation of heat flowing through a metal plate. At each time step, neighboring cells exchange energy while the boundary conditions remain fixed. Describe how conservation, stability and rounding error affect the result. Write a short Python function for a finite difference update, then explain how to test it. "
+      ],
+      "versions": {
+        "torch": "2.14.1+cpu",
+        "transformers": "4.57.1",
+        "tokenizers": "0.22.2",
+        "numpy": "2.5.4"
+      },
+      "sources_sha256": {
+        "capture": "e074978d0875cf7e41b2d6654566f36fe7f5f233949c4e5038e6de6193d34fe2",
+        "checkpoint_loader": "e43e8a50cefa95e68df6f770fe8c7ff8dd968e1a92679fc5b83d87dabc6db8c1",
+        "upstream_qwen3": "4b95c371fd26d40c69083dab36ac1eafd8cf82b415a0bb827275097c5ad2305b",
+        "upstream_masking": "7a963feed8173b8265298dd24350c166222ce6b4719442fce48ab414d0478a6a"
+      },
+      "weight_source": {
+        "repo": "Qwen/Qwen3-8B",
+        "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+        "index_sha256": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc",
+        "tensors": {
+          "model.embed_tokens.weight": {
+            "shard": "model-00001-of-00005.safetensors",
+            "storage": {
+              "dtype": "BF16",
+              "shape": [
+                151936,
+                4096
+              ],
+              "data_offsets": [
+                0,
+                1244659712
+              ]
+            },
+            "selected_row_sha256": "14221f4919fa5f64363b1d14a36f0d0cfe5562427b6fd81a06e42fe19d5c3266",
+            "windows": [
+              {
+                "row_start": 0,
+                "row_stop": 128,
+                "byte_start": 9336,
+                "byte_end": 1057911,
+                "sha256": "f1c1d80bdc5b0f6287c4be5bd4f669d7e5205fb99147101b9d53b5369e2cad20"
+              },
+              {
+                "row_start": 256,
+                "row_stop": 384,
+                "byte_start": 2106488,
+                "byte_end": 3155063,
+                "sha256": "6933649d1c57efe5eaebfe36018a2d16468a3a13f1e866789efc512cbdd378a2"
+              },
+              {
+                "row_start": 384,
+                "row_stop": 512,
+                "byte_start": 3155064,
+                "byte_end": 4203639,
+                "sha256": "f335bb56ac59a6d428d4a58770a72de76591d86e9e27191194788047d24b1492"
+              },
+              {
+                "row_start": 512,
+                "row_stop": 640,
+                "byte_start": 4203640,
+                "byte_end": 5252215,
+                "sha256": "ea69e990d8231afe75cbc4d2949f294f11e2846a7d32d76e19a67a29c4aab38b"
+              },
+              {
+                "row_start": 640,
+                "row_stop": 768,
+                "byte_start": 5252216,
+                "byte_end": 6300791,
+                "sha256": "01ab8dca15a688631afcb8ed1f47fc9e04d01ac080b0ea2a122ef6ab83673f9f"
+              },
+              {
+                "row_start": 768,
+                "row_stop": 896,
+                "byte_start": 6300792,
+                "byte_end": 7349367,
+                "sha256": "70035e1b921286267f6951e01667f7052a2d7489e20a6ad95638c68b61583160"
+              },
+              {
+                "row_start": 896,
+                "row_stop": 1024,
+                "byte_start": 7349368,
+                "byte_end": 8397943,
+                "sha256": "cb0d4bbf1aaf7b0358173811db0804fe5bd7f85444533a7b2a048ccc301a0477"
+              },
+              {
+                "row_start": 1024,
+                "row_stop": 1152,
+                "byte_start": 8397944,
+                "byte_end": 9446519,
+                "sha256": "ee2509263e37bcac007bd4781458fcba70fdc7665dacc5b8a273ce467c49fe6d"
+              },
+              {
+                "row_start": 1152,
+                "row_stop": 1280,
+                "byte_start": 9446520,
+                "byte_end": 10495095,
+                "sha256": "0b4e783f5a85c7e621b41524019f872530ff054ad293c0b97440de703166b620"
+              },
+              {
+                "row_start": 1280,
+                "row_stop": 1408,
+                "byte_start": 10495096,
+                "byte_end": 11543671,
+                "sha256": "56dc50a1dd70c17192a9143ed4c8d6694003b4b2beaaa203131a02f6cbc539cd"
+              },
+              {
+                "row_start": 1408,
+                "row_stop": 1536,
+                "byte_start": 11543672,
+                "byte_end": 12592247,
+                "sha256": "6371695ad30763dcc4d2ae9a631ee451569e5ee8b07b8a7e02fcab7607deed22"
+              },
+              {
+                "row_start": 1536,
+                "row_stop": 1664,
+                "byte_start": 12592248,
+                "byte_end": 13640823,
+                "sha256": "4aacc0ef9f071bbfc173d3cdaf8af68c738a93fc140cb76f79a2f73fde9faf4e"
+              },
+              {
+                "row_start": 1664,
+                "row_stop": 1792,
+                "byte_start": 13640824,
+                "byte_end": 14689399,
+                "sha256": "9c9f991a0f8e2cccbcc2b31386e1af9e063688b6e1a73b8b9bb810d765184dbe"
+              },
+              {
+                "row_start": 1792,
+                "row_stop": 1920,
+                "byte_start": 14689400,
+                "byte_end": 15737975,
+                "sha256": "3ec6792822fe1d90449b0dc6f2fcd34dfa9b460677cb7428897b36e74633e6bc"
+              },
+              {
+                "row_start": 1920,
+                "row_stop": 2048,
+                "byte_start": 15737976,
+                "byte_end": 16786551,
+                "sha256": "a1a443ed74d63253c74fdc726330ca07c59b2def668b391ed6fd69e5f46d4e7c"
+              },
+              {
+                "row_start": 2304,
+                "row_stop": 2432,
+                "byte_start": 18883704,
+                "byte_end": 19932279,
+                "sha256": "7e3fb1e1bb8d1bcb77115acf607793ede360f29b161fb3cc5d8c14a51be72d73"
+              },
+              {
+                "row_start": 2560,
+                "row_stop": 2688,
+                "byte_start": 20980856,
+                "byte_end": 22029431,
+                "sha256": "cbeeeafb3bf8b42366b583a30bb86dd15a70d944824eb7ac03e5410c07793842"
+              },
+              {
+                "row_start": 2688,
+                "row_stop": 2816,
+                "byte_start": 22029432,
+                "byte_end": 23078007,
+                "sha256": "d4bff0c0739ed422611edff275c8e210627e83281e4c3ec11629df26b85db1fa"
+              },
+              {
+                "row_start": 2944,
+                "row_stop": 3072,
+                "byte_start": 24126584,
+                "byte_end": 25175159,
+                "sha256": "0f95c1322f2226e46282f98ae82f9169342d616f5102b0996a41a7bcb886d4fa"
+              },
+              {
+                "row_start": 3712,
+                "row_stop": 3840,
+                "byte_start": 30418040,
+                "byte_end": 31466615,
+                "sha256": "27138d83651271e8d67c0389e710df5f8ea9099c00078d112f7729b6966b7ab6"
+              },
+              {
+                "row_start": 4096,
+                "row_stop": 4224,
+                "byte_start": 33563768,
+                "byte_end": 34612343,
+                "sha256": "0ccb5c4fb11b2f0f7684d13ff831d9ea142a048e5aee85d7a5a38f16bec15ebf"
+              },
+              {
+                "row_start": 4608,
+                "row_stop": 4736,
+                "byte_start": 37758072,
+                "byte_end": 38806647,
+                "sha256": "8269528d3569d6b13f79beb19079ff92797588d2b18b3b173ea1b0310676d9bc"
+              },
+              {
+                "row_start": 4736,
+                "row_stop": 4864,
+                "byte_start": 38806648,
+                "byte_end": 39855223,
+                "sha256": "b8d8ab0dd0a5db85b7df96940b6f96b5c6604b7a0bcf869eb4f67ece4d2bc45e"
+              },
+              {
+                "row_start": 5760,
+                "row_stop": 5888,
+                "byte_start": 47195256,
+                "byte_end": 48243831,
+                "sha256": "2f5bfe907c3f3cc5c6c894cca1ea6cceb81d60be2a06fab9006290483ac562f9"
+              },
+              {
+                "row_start": 6144,
+                "row_stop": 6272,
+                "byte_start": 50340984,
+                "byte_end": 51389559,
+                "sha256": "927c45e7a5af79fc5c6b23aa418456563061c8cbadc8a1d2d663f8aa09f932cf"
+              },
+              {
+                "row_start": 6528,
+                "row_stop": 6656,
+                "byte_start": 53486712,
+                "byte_end": 54535287,
+                "sha256": "0288047bd909e55bf0dae0495873bb55f4f964b0850f28ab5996337db468f741"
+              },
+              {
+                "row_start": 6656,
+                "row_stop": 6784,
+                "byte_start": 54535288,
+                "byte_end": 55583863,
+                "sha256": "8b0d02061dcff3818009d32facc087d6c7083f8281977fc55ea56a3a23422efe"
+              },
+              {
+                "row_start": 6784,
+                "row_stop": 6912,
+                "byte_start": 55583864,
+                "byte_end": 56632439,
+                "sha256": "fe9628a26af2b736164a796f40205e9ea73e6ef2710046fd56dc3d7013107f1a"
+              },
+              {
+                "row_start": 7040,
+                "row_stop": 7168,
+                "byte_start": 57681016,
+                "byte_end": 58729591,
+                "sha256": "a0992ef2f85f9acc99c053d9462e7644b42d1144882ba2298c76edcb7564e82f"
+              },
+              {
+                "row_start": 7424,
+                "row_stop": 7552,
+                "byte_start": 60826744,
+                "byte_end": 61875319,
+                "sha256": "cb2e6ecd36292534e1c1ca37db9e1c740ae9d16cb7f47307c4472879fc7de88c"
+              },
+              {
+                "row_start": 7680,
+                "row_stop": 7808,
+                "byte_start": 62923896,
+                "byte_end": 63972471,
+                "sha256": "9373c9d67cb593d929991b3e5dcfb9c6df7e8606e0e1860b2258585dfb1fd932"
+              },
+              {
+                "row_start": 8064,
+                "row_stop": 8192,
+                "byte_start": 66069624,
+                "byte_end": 67118199,
+                "sha256": "c7da604b681ec1a9b18250565d6597964587cab82fa59ffe9c3980b835c608a4"
+              },
+              {
+                "row_start": 8320,
+                "row_stop": 8448,
+                "byte_start": 68166776,
+                "byte_end": 69215351,
+                "sha256": "ff4093acbb22c77671a967d5b4464057fd5b14f3fd6d99bf07a634eadf06cd46"
+              },
+              {
+                "row_start": 8576,
+                "row_stop": 8704,
+                "byte_start": 70263928,
+                "byte_end": 71312503,
+                "sha256": "f70ae6a146d5dd948a774c951844407b1ec56fadd5d284ee0bc363d8b84a78d3"
+              },
+              {
+                "row_start": 8960,
+                "row_stop": 9088,
+                "byte_start": 73409656,
+                "byte_end": 74458231,
+                "sha256": "1a14a101dea14e7054154ac88789ea85a3c72aea3b462a84deff275bebaba983"
+              },
+              {
+                "row_start": 9216,
+                "row_stop": 9344,
+                "byte_start": 75506808,
+                "byte_end": 76555383,
+                "sha256": "8849b1cfb02d11d29d3f0bb3495e14abaaa6fc8ad0985f275348cbe74a7783c1"
+              },
+              {
+                "row_start": 9600,
+                "row_stop": 9728,
+                "byte_start": 78652536,
+                "byte_end": 79701111,
+                "sha256": "cf83e21f0b1c7077462f20f589f1d482f98c781be0e47ba9a01af0560b22eaed"
+              },
+              {
+                "row_start": 9984,
+                "row_stop": 10112,
+                "byte_start": 81798264,
+                "byte_end": 82846839,
+                "sha256": "bead291f57bd61aedfb9ef297a004f9ff69b1324e2dbd9871372da0525aa2842"
+              },
+              {
+                "row_start": 10112,
+                "row_stop": 10240,
+                "byte_start": 82846840,
+                "byte_end": 83895415,
+                "sha256": "373d223fad4d05ce9a809dd1c96a0dd31a18805d04d48be267267694e7f173c0"
+              },
+              {
+                "row_start": 10240,
+                "row_stop": 10368,
+                "byte_start": 83895416,
+                "byte_end": 84943991,
+                "sha256": "ca66bfb8f7592375e2ab36d8dfc9a55a8bd4b2575104b6aabc018e34b55dfd9a"
+              },
+              {
+                "row_start": 11264,
+                "row_stop": 11392,
+                "byte_start": 92284024,
+                "byte_end": 93332599,
+                "sha256": "09c2f2701c6f30070580d3b9e0e927bacffa4907bea4b381c392ddc32fcc697a"
+              },
+              {
+                "row_start": 11904,
+                "row_stop": 12032,
+                "byte_start": 97526904,
+                "byte_end": 98575479,
+                "sha256": "8b673311298f53e102fdba65734cc4ee685b661b0f0e4b7c44c2c076ae845a79"
+              },
+              {
+                "row_start": 12288,
+                "row_stop": 12416,
+                "byte_start": 100672632,
+                "byte_end": 101721207,
+                "sha256": "76dc85b3537bc17399cf851fe720a6b4737b0db5743c8f7f8c036374b4e9839a"
+              },
+              {
+                "row_start": 12928,
+                "row_stop": 13056,
+                "byte_start": 105915512,
+                "byte_end": 106964087,
+                "sha256": "c955323d8bcf56bd467f79388117c8f055380c8f963c64ff4d706c04ff052a32"
+              },
+              {
+                "row_start": 13824,
+                "row_stop": 13952,
+                "byte_start": 113255544,
+                "byte_end": 114304119,
+                "sha256": "5938044b6a1913b91e74d74449017f62c2e862b70fdd23ce1c8cfbcb082fc28e"
+              },
+              {
+                "row_start": 15232,
+                "row_stop": 15360,
+                "byte_start": 124789880,
+                "byte_end": 125838455,
+                "sha256": "396a2cb03e0cb4c8be8258d48989f76cfcfd34683778e3fa6261007cb5ebef7f"
+              },
+              {
+                "row_start": 16512,
+                "row_stop": 16640,
+                "byte_start": 135275640,
+                "byte_end": 136324215,
+                "sha256": "bae0fd99fe355b2018bf510af0d05325ea10725aa080e11f08936ec4c3e01c29"
+              },
+              {
+                "row_start": 17536,
+                "row_stop": 17664,
+                "byte_start": 143664248,
+                "byte_end": 144712823,
+                "sha256": "6bb223d6879d8aaa8192cfd2d29a7ccf40c3536126c4e670b1d7ce0e9199f6ee"
+              },
+              {
+                "row_start": 18688,
+                "row_stop": 18816,
+                "byte_start": 153101432,
+                "byte_end": 154150007,
+                "sha256": "1edc9bb25cf6d19a7e0fda99bddac40302285ab871b4c2415b48534c1c54a3f1"
+              },
+              {
+                "row_start": 18944,
+                "row_stop": 19072,
+                "byte_start": 155198584,
+                "byte_end": 156247159,
+                "sha256": "7cb6bdab995a1b74647f918e1b2c98e65fd9dc650fb97ffeed599ddef1616f6d"
+              },
+              {
+                "row_start": 19328,
+                "row_stop": 19456,
+                "byte_start": 158344312,
+                "byte_end": 159392887,
+                "sha256": "0f033891899311d16a073a36117baacd0fb6520801beb73cd60cab374ec17326"
+              },
+              {
+                "row_start": 19712,
+                "row_stop": 19840,
+                "byte_start": 161490040,
+                "byte_end": 162538615,
+                "sha256": "529462f1c4f203ba9ec31843c6dd35a96803d77a805bdd23dcd03e1ddfacd84d"
+              },
+              {
+                "row_start": 20736,
+                "row_stop": 20864,
+                "byte_start": 169878648,
+                "byte_end": 170927223,
+                "sha256": "ed9e4e8b315cb5494251cdf1d334710b3bac82ee5032e1f9b2e1b8a0e7ab7135"
+              },
+              {
+                "row_start": 21120,
+                "row_stop": 21248,
+                "byte_start": 173024376,
+                "byte_end": 174072951,
+                "sha256": "301cac86a9492477f6ed022be5535a642661c78d6cde1f0027d6a213c80e7866"
+              },
+              {
+                "row_start": 28544,
+                "row_stop": 28672,
+                "byte_start": 233841784,
+                "byte_end": 234890359,
+                "sha256": "6c31884106e535c07bbf8d747b54652097b53aa574e3c76d05e9b7c32daebe24"
+              },
+              {
+                "row_start": 28672,
+                "row_stop": 28800,
+                "byte_start": 234890360,
+                "byte_end": 235938935,
+                "sha256": "83b47e369bd93cde48fa1aa6290735077ea9d5d43f256c8b47c9a82259386e14"
+              },
+              {
+                "row_start": 30592,
+                "row_stop": 30720,
+                "byte_start": 250619000,
+                "byte_end": 251667575,
+                "sha256": "eed9ff4216387525b0881a73661b05835c20708d780b2ccb4f86ae36ab7d4a1e"
+              },
+              {
+                "row_start": 31872,
+                "row_stop": 32000,
+                "byte_start": 261104760,
+                "byte_end": 262153335,
+                "sha256": "2e47ed3325929ba4d8005d01d8a32e3575b90416070b25bb70fd2d876d55d98f"
+              },
+              {
+                "row_start": 32000,
+                "row_stop": 32128,
+                "byte_start": 262153336,
+                "byte_end": 263201911,
+                "sha256": "0f216e330193a933cafd42a40b353744e754a29fbc2675828e6bcc2bde74411c"
+              },
+              {
+                "row_start": 32384,
+                "row_stop": 32512,
+                "byte_start": 265299064,
+                "byte_end": 266347639,
+                "sha256": "2845cd1a594a53a094396c6e335595f8bd786ebd754489248cfbceae26f0916b"
+              },
+              {
+                "row_start": 34176,
+                "row_stop": 34304,
+                "byte_start": 279979128,
+                "byte_end": 281027703,
+                "sha256": "6b748886b81150868d7c8a10d6eb91f6427e23618b78447e95b3031608a98106"
+              },
+              {
+                "row_start": 34688,
+                "row_stop": 34816,
+                "byte_start": 284173432,
+                "byte_end": 285222007,
+                "sha256": "a7561fbdc5105e278085834856eb81ab162841bffe73ded557d301f5d52ae0ad"
+              },
+              {
+                "row_start": 35456,
+                "row_stop": 35584,
+                "byte_start": 290464888,
+                "byte_end": 291513463,
+                "sha256": "4bb5cf8cd5395123b53c89312903606d8bd10de463a52a3eeaf33132669e748e"
+              },
+              {
+                "row_start": 35968,
+                "row_stop": 36096,
+                "byte_start": 294659192,
+                "byte_end": 295707767,
+                "sha256": "413ac7879566b305d7f227e9d75d9cdf7cea6a2cae8bc2d88fcd795527cae802"
+              },
+              {
+                "row_start": 37120,
+                "row_stop": 37248,
+                "byte_start": 304096376,
+                "byte_end": 305144951,
+                "sha256": "4453ee29176ed1d3f5e39e900370bc8cc22bcbba83c5dfbce4e479397449c754"
+              },
+              {
+                "row_start": 39808,
+                "row_stop": 39936,
+                "byte_start": 326116472,
+                "byte_end": 327165047,
+                "sha256": "88748072deb4acb90cc4db49ab99fdf47cecde5d5fa1b30fef022b55cbff84b8"
+              },
+              {
+                "row_start": 41472,
+                "row_stop": 41600,
+                "byte_start": 339747960,
+                "byte_end": 340796535,
+                "sha256": "4d03c08c0400e038cc7d19e66d59d3fa8bf9c0cc280af1eb660e284a591f7f84"
+              },
+              {
+                "row_start": 46848,
+                "row_stop": 46976,
+                "byte_start": 383788152,
+                "byte_end": 384836727,
+                "sha256": "190932a6d701a87bb80437b653aea0331f6b48943d002cf9551474b2366c0013"
+              },
+              {
+                "row_start": 51456,
+                "row_stop": 51584,
+                "byte_start": 421536888,
+                "byte_end": 422585463,
+                "sha256": "b10437cf3bee17df16dd0f61ae8e593826dd9063d4c6a9c9b22e99cced230197"
+              },
+              {
+                "row_start": 55424,
+                "row_stop": 55552,
+                "byte_start": 454042744,
+                "byte_end": 455091319,
+                "sha256": "b0cf55d22d039c3c6795337aa0ade4775fa304e02b42abc6ddf8d461f0c337d2"
+              },
+              {
+                "row_start": 60672,
+                "row_stop": 60800,
+                "byte_start": 497034360,
+                "byte_end": 498082935,
+                "sha256": "2e3358073cd3eab951a4cbd41d1e45b44b774d595a0bf4440d160654ad83c564"
+              },
+              {
+                "row_start": 76800,
+                "row_stop": 76928,
+                "byte_start": 629154936,
+                "byte_end": 630203511,
+                "sha256": "6a85a9fd8aec4d26771cac0eb434903f1d191bc0f676bb48543a99fb246cad98"
+              },
+              {
+                "row_start": 81792,
+                "row_stop": 81920,
+                "byte_start": 670049400,
+                "byte_end": 671097975,
+                "sha256": "235b445afabffa303bedcc5cb9f97f674b48ca3a9e8d000efea5e9495f04a5f0"
+              }
+            ],
+            "note": "Only selected row windows were fetched; no full embedding-tensor checksum is claimed."
+          },
+          "model.layers.0.self_attn.q_proj.weight": {
+            "shard": "model-00001-of-00005.safetensors",
+            "storage": {
+              "dtype": "BF16",
+              "shape": [
+                4096,
+                4096
+              ],
+              "data_offsets": [
+                1588609536,
+                1622163968
+              ]
+            },
+            "sha256": "fd56b85bf301661c8655ed517928304d25df7d6b3ea3d9be85c021159d61bad8",
+            "bytes": 33554432
+          },
+          "model.layers.0.self_attn.k_proj.weight": {
+            "shard": "model-00001-of-00005.safetensors",
+            "storage": {
+              "dtype": "BF16",
+              "shape": [
+                1024,
+                4096
+              ],
+              "data_offsets": [
+                1546666240,
+                1555054848
+              ]
+            },
+            "sha256": "3ce9fdf6ee30ef2f24ad3629b506415ca91fe40f790e568a9ea3fea2978feee0",
+            "bytes": 8388608
+          },
+          "model.layers.0.self_attn.v_proj.weight": {
+            "shard": "model-00001-of-00005.safetensors",
+            "storage": {
+              "dtype": "BF16",
+              "shape": [
+                1024,
+                4096
+              ],
+              "data_offsets": [
+                1622163968,
+                1630552576
+              ]
+            },
+            "sha256": "767a6c48457974bb02dd90aeec270f4d68289527a353c3c28964ab2069a966ee",
+            "bytes": 8388608
+          },
+          "model.layers.0.self_attn.o_proj.weight": {
+            "shard": "model-00001-of-00005.safetensors",
+            "storage": {
+              "dtype": "BF16",
+              "shape": [
+                4096,
+                4096
+              ],
+              "data_offsets": [
+                1555054848,
+                1588609280
+              ]
+            },
+            "sha256": "d6fec091373ead7a102c480d4642a9b135e9e2cf0d0c289e0425967c96877ac2",
+            "bytes": 33554432
+          },
+          "model.layers.0.self_attn.q_norm.weight": {
+            "shard": "model-00001-of-00005.safetensors",
+            "storage": {
+              "dtype": "BF16",
+              "shape": [
+                128
+              ],
+              "data_offsets": [
+                1588609280,
+                1588609536
+              ]
+            },
+            "sha256": "ad88a3013b2d8ecd138c36460751296c56bed2eff2d5d3a66377db04fd9e0799",
+            "bytes": 256
+          },
+          "model.layers.0.self_attn.k_norm.weight": {
+            "shard": "model-00001-of-00005.safetensors",
+            "storage": {
+              "dtype": "BF16",
+              "shape": [
+                128
+              ],
+              "data_offsets": [
+                1546665984,
+                1546666240
+              ]
+            },
+            "sha256": "aaf5042c20082b5c13daed62ad9627f426cda5edc38eca48bd3f956da4eb05cd",
+            "bytes": 256
+          },
+          "model.layers.0.input_layernorm.weight": {
+            "shard": "model-00001-of-00005.safetensors",
+            "storage": {
+              "dtype": "BF16",
+              "shape": [
+                4096
+              ],
+              "data_offsets": [
+                1244659712,
+                1244667904
+              ]
+            },
+            "sha256": "00695bad97c2abc77a9d1ce57e4d4a5e5c2b574387fcb4029ef5ce12239b2530",
+            "bytes": 8192
+          },
+          "model.layers.0.post_attention_layernorm.weight": {
+            "shard": "model-00001-of-00005.safetensors",
+            "storage": {
+              "dtype": "BF16",
+              "shape": [
+                4096
+              ],
+              "data_offsets": [
+                1546657792,
+                1546665984
+              ]
+            },
+            "sha256": "3df17c58e1832b24111c91cb19088b06f816de21702ce58acb514c91568cde5d",
+            "bytes": 8192
+          }
+        }
+      },
+      "unmaterialized_unexecuted_parameters": [
+        "mlp.down_proj.weight",
+        "mlp.gate_proj.weight",
+        "mlp.up_proj.weight"
+      ],
+      "repeat_bitwise_equal": true,
+      "threads": 4,
+      "model_quality_acceptance": false,
+      "scope": "BF16 original layer-0 inputs on two authored text sequences; no full-model PPL or Tessera execution proof",
+      "activation_statistics": {
+        "rms": 0.06870995638961856,
+        "max_abs": 1.4453125
+      }
+    },
+    "reference_policy": "FP64 products; FP32 then BF16 parent/down stores; FP32 SiLU and BF16 activation; no activation quantization",
+    "recorder_sha256": "2a489d36202044e4ac41b7ea26bf8ccd0e9372714ebf5aeffa9f3550e4c55584",
+    "loader_sha256": "d119368c4188aafc1ed1659f5366011c01babc62d362214dc12cd6183bf2518f",
+    "input_bf16_sha256": "f78695c45aec8f7222e31326ba55daa69449c5cdc706a1723c31cfd9f0be65de"
+  },
+  "quality_characterization": {
+    "bf16_weights": {
+      "relative_rms_error": 0.06523681184290044,
+      "sqnr_db": 23.71014542623066,
+      "max_abs_error": 0.1875
+    },
+    "shipped_nvfp4_weights": {
+      "relative_rms_error": 0.00996718147788006,
+      "sqnr_db": 40.028552684636935,
+      "max_abs_error": 0.03125
+    }
+  },
+  "model_quality_acceptance": false,
+  "timing_counts": {
+    "windows": 3,
+    "member_repeats": 8,
+    "event_repeats": 5,
+    "public_repeats": 1
+  },
+  "component_receipts": [
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.block_quant.x_q_s_groups.bf16_e4m3_f32.v1",
+      "image_digest": "fb61ffceddcb28fe08e5542e1a83bf58647035d4d2fab861c8de5d116c2d0629",
+      "descriptor_digest": "b6fa33fff11faa3dc9f5aafd81ba170a52f03f471e6ffe831b23961f81aeff9f",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.nvfp4_expand.five_memrefs.static.v1",
+      "image_digest": "9a723bcabbb97bf64562612b5657ba43f028b201816a58a4c92786fd9d0b2d64",
+      "descriptor_digest": "b31970e52f67d4d5e320e0a57837d293e6f597cb81cb40baf9b5bad11a1941b0",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+      "image_digest": "322477e5e860c71598d14fed082d7f312d63db07a196f93813565e00023ba619",
+      "descriptor_digest": "b17efba04255a33f6628c77a555e5178eb1495b666c42ead39305730d3bf6fbe",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.parent_view.parent_o_n.bf16_f32.v1",
+      "image_digest": "f501085d334aad0642bebd75b237d745bb66efffd9d0839dae4433f6db3c1d5b",
+      "descriptor_digest": "ae9556002d9000918ed16d43a4bd91d54ce9cab687b7e8d87037948f73031fab",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.block_quant.x_q_s_groups.bf16_e4m3_f32.v1",
+      "image_digest": "ef3fd666b21681d379566a49f57137819c11bd33694539ee09e32d46a8d50253",
+      "descriptor_digest": "79b085e5c6b494a857aa093cd4b9ab98ba36e59c977ef08f9d8da5fd87f44ded",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.nvfp4_expand.five_memrefs.static.v1",
+      "image_digest": "181f24ad61fe3ad9b87627f124566e6caccfba81f6c3064a809418a420e4542d",
+      "descriptor_digest": "ecc9c4f2d23c54ebdec313e5a7ae9188c55ad23cc1ecf765ba07b6649d7be097",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+      "image_digest": "e98bacb27bb122366c40cf8ca402cb027b6025e2d66c9175e2fccc927599827e",
+      "descriptor_digest": "1299d724beef998140698c1840b17af6925bf66de1c133ab8e23d21175a80d48",
+      "native_call_binding": "native_cpp_multi_output"
+    }
+  ],
+  "host_binding_cache_enabled": true,
+  "public_cold_ms": 1151.651669992134,
+  "public_warm_samples_ms": [
+    109.26016099983826,
+    106.12888302421197,
+    105.37156602367759
+  ],
+  "prepared_invoke_read_samples_ms": [
+    3.4167569829151034,
+    3.0533690005540848,
+    3.1347949989140034
+  ],
+  "ordinary_program_event_samples_ms": [
+    2.2529141902923584,
+    2.034635543823242,
+    2.0378835201263428
+  ],
+  "captured_member_samples_ms": [
+    [
+      0.01250499952584505,
+      1.1802376508712769,
+      0.6363610029220581,
+      0.005704999901354313,
+      0.008038749918341637,
+      0.602391242980957,
+      0.13509924709796906
+    ],
+    [
+      0.005969999823719263,
+      0.7033406496047974,
+      0.6412511467933655,
+      0.005864874925464392,
+      0.006214874796569347,
+      0.513076901435852,
+      0.12491799890995026
+    ],
+    [
+      0.006444999948143959,
+      0.7137057185173035,
+      0.6415359973907471,
+      0.005174874793738127,
+      0.0065449997782707214,
+      0.5093169808387756,
+      0.12402550131082535
+    ]
+  ],
+  "member_order": [
+    "input_quantizer",
+    "gate_up_expansion",
+    "gate_up_product_bf16_store",
+    "silu_bf16_store",
+    "activation_quantizer",
+    "down_expansion",
+    "down_product_bf16_store"
+  ],
+  "host_validation_cache": {
+    "hits": 20,
+    "misses": 2,
+    "size": 2,
+    "maxsize": 16,
+    "entry_byte_limit": 4194304
+  },
+  "host_abi_cache": {
+    "hits": 8,
+    "misses": 2,
+    "size": 2,
+    "maxsize": 16,
+    "entry_byte_limit": 4194304
+  },
+  "public_warm_median_ms": 106.12888302421197,
+  "prepared_invoke_read_median_ms": 3.1347949989140034,
+  "ordinary_program_event_median_ms": 2.0378835201263428,
+  "captured_member_median_ms": [
+    0.006444999948143959,
+    0.7137057185173035,
+    0.6412511467933655,
+    0.005704999901354313,
+    0.0065449997782707214,
+    0.513076901435852,
+    0.12491799890995026
+  ],
+  "timing_scope": {
+    "public": "warm frontend, input validation, root copies, owner prepare/invoke/read",
+    "prepared": "invoke and returned readback; excludes prepare, compilation and root upload",
+    "ordinary_event": "per-program HIP event window; native API already averages repeats; includes enqueue gaps",
+    "captured_members": "seven individual graph dispatch windows; excludes capture/instantiation/copies",
+    "numerical_diagnostics": "independent math and staged native controls precede timing and are excluded from all timing windows"
+  },
+  "artifact_sha256": "02165e8147db2a3ea66181df3fb7702a297f7e478c6ce4128ffca09946ee11c4"
+}

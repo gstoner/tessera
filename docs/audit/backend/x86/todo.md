@@ -7,6 +7,14 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## ROCM-CHECKPOINT-MLP-QUALITY-20261017 — full pinned layer characterization
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-CHECKPOINT-MLP-QUALITY-20261017.
+
+Not applicable to x86 physical execution: this recorder exercises the existing gfx1201 seven-member quantized MLP only. No shared IR, dtype admission, numerical policy, runtime ABI or target selector changes. The pinned checkpoint loader now includes down projection for reference measurements. Follow-up required before adopting the layer-quality recorder on x86; no gfx1201 evidence transfers.
+
+
 ## ROCM-QUANTIZED-BINDING-CACHE-20261017 — verified host binding reuse
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

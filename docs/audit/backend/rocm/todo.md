@@ -5,6 +5,14 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-CHECKPOINT-MLP-QUALITY-20261017 — full pinned layer characterization
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-CHECKPOINT-MLP-QUALITY-20261017.
+
+The pinned Qwen3 layer-0 full gate/up/down MLP now has a recorder through the existing seven-member public native Graph/Schedule/Tile/Target program. Down projection loading uses the same pinned byte-range, storage and shape checks as gate/up. Independent BF16-weight and shipped-NVFP4 references expose combined activation quantization and arithmetic cost. Final committed-source M1/M16/M128 execution passes on gfx1201; this is layer characterization, not full-model quality acceptance. The final M1/M16/M128 certificates retain 0/43/187 flat-reference deviations while passing the existing staged and propagated gates; no tolerance is widened. RMS error versus shipped NVFP4 weights is 0.45–1.04%; versus BF16 weights it is 4.68–6.92%. Public cost is 100–107 ms versus 2.76–3.77 ms prepared invoke/read. Wider/dynamic/AD and remaining five-slice obligations stay open. Evidence: benchmarks/baselines/rocm_checkpoint_mlp_20261017/README.md.
+
+
 ## ROCM-QUANTIZED-BINDING-CACHE-20261017 — verified host binding reuse
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

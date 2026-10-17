@@ -1,0 +1,16 @@
+{
+  "candidate_revision": "a1df1af73f",
+  "matching_parent_manifest": {
+    "source_revision": "4485c746ca",
+    "compiler_sha256": "620ed50bfe4eefb826e538063a4d7bd69bc1d42774b8b94cb199de8310b0f4a5",
+    "owning_snapshot": "full-mlp/public-compiler",
+    "native_sources": {
+      "src/transforms/lib/NativeNVFP4Program.h": "c2346671718d02286b35a28761de20804fd6b6f6de9db611ba230f0ba4308b51",
+      "src/transforms/lib/NativeQuantizedProductProgram.h": "868009b401c19ce947226687ff23601bd0f9ff57bcbaaa7b338734d62efa5766",
+      "src/transforms/lib/NativeQuantizedGateUpProgram.h": "dfa67f7c31686907b4c099f615a0b69ef21512a9f2f26bfc196a8e096149e4e4"
+    },
+    "matching_build_log_sha256": "49b72d95337794feb5d4ee268119fc31acc23d7c75672bec55d6da3db0e00340",
+    "checkout_mtime_warning": "retained; matching native source bytes and identical deployed/core compiler hash verified; no timestamp changes"
+  },
+  "verified_current_source_and_compiler_hashes": true
+}

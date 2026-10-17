@@ -3,6 +3,9 @@
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
 Sync: SM120-BOUNDED-ROW-OWNER-20261017.
 
+Recorded by `benchmarks/nvidia/benchmark_bounded_attention_rows.py` and
+`benchmarks/nvidia/benchmark_bounded_attention_rows_ab.py`.
+
 ## Implemented and executed envelope
 
 Original Python frontend and textual Graph export retain bounded Sq/Sk through
@@ -33,9 +36,9 @@ RTX5070 / SM120 device evidence is recorded, not inferred from parsing:
 
 - 16 raw bounded native kernel cases include explicit residual perturbation,
   independent FP64 comparisons and guarded output spans.
-- 51 new public/capture cases: 37 replay/capture, four pending producer/snapshot
-  checks, eight original frontend exports and two fresh-process compiler-absent
-  replays. Actual Sq/Sk prefixes include trace-at-one, capacity and ragged rows.
+- 55 new public/capture cases: 37 replay/capture, four pending producer/snapshot
+  checks, eight original frontend exports, two fresh-process compiler-absent
+  replays and four 64-thread packed/logical partial-gradient cases. Actual Sq/Sk prefixes include trace-at-one, capacity and ragged rows.
 - 172 existing static-row/prepared-owner/typed-capture regressions pass.
 - 70 portable/static/prepared host gates pass, including capacity mutation,
   schema downgrade/upgrade refusal, role activity and value-only elision.
@@ -78,7 +81,51 @@ python -m benchmarks.nvidia.benchmark_bounded_attention_rows \
 
 ## Remaining
 
-Matched inline/prepass A/B, wider masks/layouts, half JVP, composed/higher-order
+Wider masks/layouts, half JVP, composed/higher-order
 AD, automatic schedule selection, broader required gates and publication remain
 open. Sibling backend plans assess the shared contract but inherit no SM120
 physical proof. The original five-slice objective remains open.
+
+
+## Matched bounded resident inline/prepass A/B
+
+Recorded by `benchmarks/nvidia/benchmark_bounded_attention_rows_ab.py`.
+Both arms trace the same original Python attention function, carry the same
+bounded Sq/Sk contract and have byte-identical forward images and checkpoint
+identity. Stored roots and seeds are identical. Independent FP64 comparisons
+and bit-identical arm outputs pass before and after profiling. Twelve host
+samples per arm alternate AB/BA order. Each captured stage repeats exact native
+functions 32 times in three event windows; a preallocated diagnostic residual
+keeps allocation cost out of those dispatch windows.
+
+| Storage | Sq/Sk | Inline / prepass completed resident reverse ms | Host ratio | Captured reverse dispatch ratio |
+|---|---|---:|---:|---:|
+| float16 | 3/5 | 0.272 / 0.295 | 0.92x | 2.16x |
+| float16 | 17/129 | 5.774 / 0.542 | 10.65x | 17.73x |
+| float16 | 33/129 | 10.983 / 0.579 | 18.97x | 33.55x |
+| bfloat16 | 3/5 | 0.328 / 0.445 | 0.74x | 2.15x |
+| bfloat16 | 17/129 | 5.802 / 0.623 | 9.32x | 17.79x |
+| bfloat16 | 33/129 | 10.924 / 0.560 | 19.50x | 33.75x |
+
+The host interval includes seed snapshots, fresh gradient allocations, native
+reverse execution and completion. It excludes forward capture, external upload,
+readback and oracle work; it is not a whole public-call interval. Dispatch
+windows exclude copies/allocations and include CUDA graph dispatch overhead.
+Producer, consumer and combined prepass samples are separate in the packet.
+Tiny completed calls regress despite faster captured dispatch. The default
+stays inline; these six profiles do not justify universal selection.
+
+## Broad gate failure and repair in progress
+
+The first broad host run completed with 27,347 passes, 5,905 skips and 517
+failures. 516 failed x86 packaging/differential cases report the same explicit
+missing-backend build diagnostic; CMakeCache confirms the selected compiler
+was configured with `TESSERA_BUILD_X86_BACKEND=OFF`. The remaining naming gate
+ran before this packet README was tracked. Its focused rerun passes, and the
+README now explicitly names both recorder paths. No test is weakened.
+
+The compiler is being rebuilt with the x86 backend enabled; its owning gates
+and final broad validation remain required. The initial log is retained
+losslessly. Rebase on merged PR975 preserves all 5,459 compared source/test
+files byte-for-byte; the duplicate fixture patch was verified against merged
+main before being reconciled.

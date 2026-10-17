@@ -16,7 +16,7 @@ from tests.unit.test_saved_lse_half_backward import source
 pytestmark=pytest.mark.hardware_nvidia
 
 
-def make_program(storage,wide,bias_kind,active=None):
+def make_program(storage,wide,bias_kind,active=None,threads=128,launch="packed_v1"):
     trace_sq,trace_sk=(1,4) if bias_kind=="query" else (3,1) if bias_kind=="key" else (3,4)
     biased=bias_kind!="none"
     active=active or tuple(reversed(range(3+int(biased))))
@@ -30,7 +30,7 @@ def make_program(storage,wide,bias_kind,active=None):
     original=original.replace('tessera.autodiff = "reverse"',
         'tessera.autodiff = "reverse", tessera.autodiff.wrt_indices = ['+', '.join(map(str,active))+']')
     program=compile_attention_vjp_program(original,active,compiler=os.environ["TESSERA_OPT"],
-        compact_gradients=True,row_correction=True)
+        compact_gradients=True,compact_threads=threads,compact_launch=launch,row_correction=True)
     artifact=rt.RuntimeArtifact(graph_ir=original,target_ir=program.pair.backward.target_ir,
         metadata=dict(target="nvidia_sm120",compiler_path="nvidia_sm120_attention_vjp_compiled",
             execution_kind="native_gpu",execution_mode="cuda_runtime",executable=True,
@@ -246,3 +246,23 @@ print("fresh-bounded-v4-passed")
     completed=subprocess.run([sys.executable,str(script),str(tmp_path)],text=True,capture_output=True,env=env,timeout=120)
     assert completed.returncode==0,completed.stdout+completed.stderr
     assert "fresh-bounded-v4-passed" in completed.stdout
+
+
+@pytest.mark.parametrize("storage",["f16","bf16"])
+@pytest.mark.parametrize("launch",["packed_v1","logical_v1"])
+def test_bounded_64_thread_compact_geometry_has_public_and_resident_parity(storage,launch):
+    from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
+    from benchmarks.nvidia.benchmark_jit_attention_vjp import download
+    program,artifact,_=make_program(storage,True,"query",active=(3,0),threads=64,launch=launch)
+    values,expected=inputs(storage,True,"query",9,11)
+    try:
+        receipt=rt.launch(artifact,values)
+        assert receipt["ok"],receipt
+        for value,role in zip(receipt["output"],program.active,strict=True):compare(value,expected[role])
+        with NvidiaDeviceSession() as session:
+            with program.capture(*(session.upload(x) for x in values[:-2]),asynchronous=True) as frame:
+                outputs=frame.backward(tuple(session.upload(x) for x in values[-2:]))
+                frame.wait_on(session.stream)
+                for value,control in zip(outputs,receipt["output"],strict=True):
+                    np.testing.assert_array_equal(download(session,value),control)
+    finally:clear_prepared()

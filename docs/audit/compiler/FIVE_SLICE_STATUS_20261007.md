@@ -8,10 +8,12 @@ audit_role: reference
 ## Bounded row-owner integration candidate — 2026-10-17
 
 Source 8556ca7d8 extends native Graph/AD/Schedule/Tile/Target row correction
-through bounded VJP v4 and original frontend/public/resident capture. 51 new
+through bounded VJP v4 and original frontend/public/resident capture. 55 new
 RTX5070 cases and 172 existing regressions pass. Six numerical timing rows
 separate forward, row producer, backward, complete native interval and public
-cost. Matched inline/prepass A/B and final broad gates remain open. This does
+cost. Six matched inline/prepass resident profiles now retain long-row gains
+and tiny host regressions without default promotion. Final broad gates remain
+open. This does
 not close any aggregate requirement below. Evidence:
 benchmarks/baselines/sm120_bounded_row_owner_20261017/README.md.
 

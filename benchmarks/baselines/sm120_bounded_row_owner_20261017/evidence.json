@@ -15,9 +15,10 @@
     "mypy-capture.txt": "8228fcc5ce46d42d01caf3cd941f4e9c5f2bcc372bb5b147a2f0572d2dd675a8",
     "mypy-final-repaired.txt": "050c52a2b0c61e8b681ef5c485e0bc03340b8d55148e0acef27d744c8be42033",
     "package-docs-final.txt": "e90528f91a4a40ebfc9c9dc8060da58432ff05264fc968644d99c199077ce882",
-    "generated_docs.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d"
+    "generated_docs.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "device-64-geometry.txt": "67f3aaea24bdbffdce1ec618a3cd8e597f952a87402d7328d06f3acf35632a7d"
   },
-  "validation_scope": "51 new public/capture device cases = 37 initial + 4 pending-stream + 8 frontend + 2 fresh-process; 172 existing regressions; portable/prepared 70; raw native kernels16; selections overlap across phases and are not summed into a unique total",
+  "validation_scope": "55 new public/capture device cases = 37 initial + 4 pending-stream + 8 frontend + 2 fresh-process + 4 packed/logical64; 172 existing regressions; portable/prepared70; raw native kernels16; overlapping selections not summed",
   "publication": "private; broader unit/compiler/drift gates and review/CI still required; PR975 is the only open public PR",
   "post_measurement_recorder_change": {
     "commit": "70e8e88c2",
@@ -35,6 +36,33 @@
       "result": "33 generated documents in sync",
       "log": "generated_docs.txt",
       "terminal": true
-    }
+    },
+    "new_64_geometry": "4 passed, 51 deselected in 6.04s"
+  },
+  "initial_broad_unit": {
+    "result": "517 failed, 27347 passed, 5905 skipped, 11 warnings in 702.73s",
+    "failure_families": {
+      "x86_native_configuration": 516,
+      "recorder_registration": 1
+    },
+    "compiler_configuration": "TESSERA_BUILD_X86_BACKEND=OFF, verified in CMakeCache.txt",
+    "recorder_note": "naming test ran before packet README was tracked; README now also names full recorder path explicitly; focused gate passes",
+    "log_archive": "broad-unit-initial.txt.xz",
+    "decompressed_sha256": "c13fbeba7da852eebcf76d85aa7f3f3bbcf9afa0513ec2e72fb0b0cda7f95980",
+    "aggregate_green": false
+  },
+  "rebase": {
+    "base_main": "c8936170545226f274c861be0f15d5d465988d16",
+    "tested_source_equivalence": "5459 files, zero differences",
+    "duplicate_fixture": "byte-identical to merged PR975; reconciled before rebase"
+  },
+  "resident_ab": {
+    "packet": "resident_ab/timings.json",
+    "cases": 6,
+    "samples_per_arm": 12,
+    "dispatch_repeats": 32,
+    "event_windows": 3,
+    "correctness": "independent FP64 and bit-identical gradient arms before/after",
+    "selector_promotion": false
   }
 }

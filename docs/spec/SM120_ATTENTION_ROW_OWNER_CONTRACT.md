@@ -163,4 +163,6 @@ regenerated for each reverse call. dV-only consumers omit the producer and do
 not read their row operand. No automatic schedule promotion is implied.
 
 Evidence: benchmarks/baselines/sm120_bounded_row_owner_20261017/README.md.
-Matched inline/prepass A/B, wider masks/layouts and composed AD remain open.
+Matched bounded inline/prepass A/B now records long-row gains and tiny host
+regressions; no default promotion follows. Wider masks/layouts and composed
+AD remain open.

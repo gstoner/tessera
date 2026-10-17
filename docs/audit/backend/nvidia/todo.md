@@ -6,6 +6,16 @@ target: nvidia_sm120
 last_updated: 2026-10-17
 ---
 
+## SM120-TYPED-RESIDENT-CAPTURE-20261017 — typed bounded resident generations
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-TYPED-RESIDENT-CAPTURE-20261017.
+
+The queued source 99e389916 carries existing FP16/BF16 checkpoint contracts through resident forward/reverse generations and bounded Sq/Sk replay. QKV and gradients retain half storage; authored O/dO may independently use FP32, while LSE, row seeds and bias stay FP32. Native Graph/AD/Schedule/Tile/NVIDIA images are unchanged; the owner now allocates and validates their actual byte widths and BF16 semantic tags. Fifty-six new RTX5070 cases and 317 existing owning-source regressions pass, including compiler-free package replay, trace-at-one bias, private snapshots, delayed producer writes, async consumers, forward-only packages and retained results. The broad WSL CPU lane passes 22,240 tests (9,946 skips). Six correctness-gated dispatch/host packets are recorded. Largest backward dispatch remains about 10.44 ms; completed forward capture remains 5.7–9.0 ms. This is integration and characterization, not performance promotion. Half JVP, composed AD, wider masks and other five-slice requirements remain open.
+
+Evidence: benchmarks/baselines/sm120_typed_resident_capture_20261017/README.md.
+
+
 ## ROCM-CHECKPOINT-MLP-QUALITY-20261017 — full pinned layer characterization
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.

@@ -1,0 +1,54 @@
+{
+  "shape": [
+    1,
+    4,
+    2,
+    16,
+    33,
+    16,
+    8
+  ],
+  "storage": "float16",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "source_revision": "faf3a82c55436a4f49f980edd74ecf7b9ce74d8d",
+  "recorder_sha256": "2d729b5fe601cbda7a73dae5edcc51ab35810d849242e424f37c2f9c83e2861b",
+  "compiler_sha256": "620ed50bfe4eefb826e538063a4d7bd69bc1d42774b8b94cb199de8310b0f4a5",
+  "program_digest": "ea7cae6917d8d361d99ae7859734df5f2f04b3e02f0364ed04fea1bb579ff91e",
+  "program_sha256": "c2f6e167dbe4d438a24f9c27e0a48e335eafe34aa65dd4ec1a574241aa0a6912",
+  "forward_image_sha256": "6497c8228d643aad38a869d29a83dc1a5917e175936698381c0dcc2f21792331",
+  "backward_image_sha256": "c9ac40cfbb5ac873953502114b5f10a44adfcc44b9a27cf0b5993cf2f9aeacc4",
+  "forward_schedule_digest": "4034bcdc80adb0fa9a4d6cc1b616488cd2eafec2b6fc18358e66a768197affc7",
+  "backward_schedule_digest": "882e62fbed2584d580e78c227ddc05c93ab3ea10444ed224980c1c27ab8eb73d",
+  "correctness": "forward and reverse independent oracle before and after profiling",
+  "compile_ms": 823.8682610099204,
+  "forward_dispatch_samples_ms": [
+    0.02691500075161457,
+    0.026739999651908875,
+    0.02666899934411049
+  ],
+  "backward_dispatch_samples_ms": [
+    0.6523000001907349,
+    0.6532049775123596,
+    0.6527850031852722
+  ],
+  "forward_capture_host_samples_ms": [
+    10.1948999799788,
+    6.003927031997591,
+    8.98918102029711
+  ],
+  "backward_owner_host_samples_ms": [
+    0.9719179943203926,
+    0.8538059773854911,
+    0.8523869910277426
+  ],
+  "timing_scope": {
+    "dispatch": "32 exact native kernels captured on the owned stream; averaged per dispatch; includes CUDA graph dispatch overhead; excludes copies and owner preparation",
+    "forward_host": "completed capture with private snapshots, allocations and module load; excludes compilation, root upload and close",
+    "backward_host": "completed reverse with seed copies and new gradient allocations; excludes external seed upload and readback"
+  },
+  "selector_promotion": false,
+  "forward_dispatch_median_ms": 0.026739999651908875,
+  "backward_dispatch_median_ms": 0.6527850031852722,
+  "forward_capture_host_median_ms": 8.98918102029711,
+  "backward_owner_host_median_ms": 0.8538059773854911
+}

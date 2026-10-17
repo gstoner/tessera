@@ -13268,3 +13268,27 @@ Remaining: full-model/corpus quality acceptance, retained-weight public
 ownership, bounded/wider/AD composition and the original five-slice objective.
 Evidence: benchmarks/baselines/rocm_checkpoint_mlp_20261017/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-17 — typed bounded resident attention generations
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending. Sync: SM120-TYPED-RESIDENT-CAPTURE-20261017.
+
+Outcome: existing native half checkpoint products now execute resident
+forward/reverse captures with actual storage widths, FP32 row/bias roles,
+independent FP32 output support and bounded runtime sequence guards. Shared
+native buffer metadata retains BF16 numeric identity over CUDA void storage.
+No native numerical lowering, image, selector or ABI change.
+
+Proof: source 99e389916 passes 56 new RTX5070 cases and 317 existing
+source/device regressions; broad WSL CPU passes 22,240 (9,946 skips). Recorder
+checks an independent oracle before and after profiling exact compiled
+functions. Six packets separate captured dispatch and completed host scopes.
+Largest backward dispatch is about 10.44 ms; forward capture is 5.7–9.0 ms.
+All four backend plans assess shared helper adoption without physical transfer.
+
+Remaining: half JVP, composed AD, wider masks, ordinary dynamic reverse
+breadth, performance optimization and original five-slice closure.
+Evidence: benchmarks/baselines/sm120_typed_resident_capture_20261017/README.md.
+<!-- entry-fields:end -->

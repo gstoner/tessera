@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-16
+last_updated: 2026-10-17
 audit_role: reference
 ---
 
@@ -67,9 +67,18 @@ the same checked owner at 64/128 reverse block sizes. Library/device discovery
 precedes the strict subprocess guard; first package preparation and launch
 remain inside the guard during cold portable replay.
 
-Explicit GPU-generation `program.capture()` remains the existing FP32 tape
-API. Half JVP, dynamic resident frames, pitched/mixed Q/K/V storage, resident
-returned gradients and wider composed/mask contracts remain required follow-ups.
+The queued SM120-TYPED-RESIDENT-CAPTURE-20261017 extension carries typed
+checkpoint products through explicit `program.capture()` generations. It uses
+the existing native images and typed descriptor ABIs, with runtime bounded
+Sq/Sk checks and private per-role storage. QKV/gradients use two bytes for FP16
+or BF16; O/dO independently use their declared half or FP32 storage; LSE,
+row seeds and bias/gradient remain four bytes. BF16 CUDA void storage requires
+an explicit semantic BF16 dtype, and exported read-only views preserve it.
+Capture orders producer streams before private snapshots and retains each
+backward result until frame close. Forward-only products validate without a
+reverse image. Compiler-free serialized replay and asynchronous consumers are
+covered on RTX5070. Half JVP, pitched/mixed Q/K/V, wider composed/mask contracts
+and ordinary dynamic reverse breadth remain required follow-ups.
 Unowned raw half backward submission is not the public composed owner route.
 
 ## Proof and delivery boundary

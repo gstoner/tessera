@@ -1,0 +1,52 @@
+{
+  "runtime_source": "99e389916681f264de9afe976ca3df11a44b3bf4",
+  "recorder_source": "faf3a82c55436a4f49f980edd74ecf7b9ce74d8d",
+  "logs": {
+    "cpu": {
+      "sha256": "e5f1fdc49f97842139410e7b070bcda2a58592dc1db46fde53da6a80d720e303",
+      "last_line": "22240 passed, 9946 skipped, 11 warnings in 363.02s (0:06:03)"
+    },
+    "owning_regressions": {
+      "sha256": "bfd427d54eac5adf32746ae4ffd4ac5481e43aadecc7004ddf0b674ff8be95e1",
+      "last_line": "317 passed in 244.45s (0:04:04)"
+    },
+    "new_device_capture": {
+      "sha256": "8ce13a68248252799a02e3ce5763206cd481f3b57eaeae491fc085f0fc2747b3",
+      "last_line": "54 passed in 52.50s"
+    },
+    "independent_fp32_output": {
+      "sha256": "79c9661ebc7165181975ccf32c662b099f2d8603681f4069971c527734f17f77",
+      "last_line": "2 passed, 54 deselected in 4.78s"
+    },
+    "focused": {
+      "sha256": "f779edfb51b26970c64cffb5d9360c91f29734b6cca34bcc3bdcd7b7e86630fd",
+      "last_line": "220 passed, 69 skipped in 1.65s"
+    },
+    "drift": {
+      "sha256": "b96e13dd3f7f4cadb4afe6617a00e7b9c2ad532f819e88a385564299b359a714",
+      "last_line": "319 passed in 1.94s"
+    },
+    "mypy": {
+      "sha256": "e317872697c2cbfdefa321527a6efe73290dff3a390b0fa8723b87092eccba6a",
+      "last_line": "Success: no issues found in 5 source files"
+    },
+    "generated_docs": {
+      "sha256": "c9feb23a97118215c08b778fc9727729e48d40bc4542991634591d97c64cc697",
+      "last_line": "ok: 33 generated doc(s) in sync"
+    },
+    "benchmark": {
+      "sha256": "de51763b9e7f03c063a30ae4976b0cc3140b4ef06eb96e8700a2d9e122c83e99",
+      "last_line": "{\"shape\": [1, 4, 2, 32, 129, 32, 16], \"storage\": \"bfloat16\", \"forward_dispatch_median_ms\": 0.18003499507904053, \"backward_dispatch_median_ms\": 10.422175407409668, \"forward_capture_host_median_ms\": 6.387790024746209, \"backward_owner_host_median_ms\": 10.758302989415824}"
+    },
+    "ruff": {
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "last_line": "All checks passed!"
+    }
+  },
+  "runtime_source_sha256": {
+    "python/tessera/compiler/resident_attention.py": "e6c8d5fdb87b2db701ea86b40f3e1a66763be6845b5aa2382d3439b706d3e552",
+    "python/tessera/compiler/native_device_tape.py": "0c22fe3cf315c4550a69ca4539252f9aa8be30f5d7d47e5352164c4a4d176670",
+    "python/tessera/compiler/typed_attention_backward.py": "89398600ac4de29a53f57549b17745f0faf0550b2a66c903e27b1710002eed92"
+  },
+  "runtime_tree_content_verified_against_cpu_source": true
+}

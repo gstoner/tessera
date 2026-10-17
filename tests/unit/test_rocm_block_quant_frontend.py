@@ -145,3 +145,15 @@ def test_quantizer_admission_uses_full_native_source_contract(mutation):
         fn.return_values.reverse()
     assert not supports_block_quant(module)
     assert supports_block_quant(original)
+
+
+def test_upstream_literal_axes_are_explicit_without_kernel_or_ad_promotion():
+    from tessera.compiler.primitive_coverage import all_primitive_coverages
+    coverage = all_primitive_coverages()["arith.constant"]
+    assert coverage.category == "upstream_literal"
+    assert coverage.contract_status["batching_rule"] == "no_batch_axis"
+    assert coverage.contract_status["transpose_rule"] == "no_linear_transpose"
+    assert coverage.contract_status["sharding_rule"] == "replicated_or_non_tensor"
+    assert coverage.status == "partial"
+    assert coverage.contract_status["backend_kernel"] != "complete"
+    assert coverage.contract_status["jvp"] != "complete"

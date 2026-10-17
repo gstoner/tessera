@@ -83,7 +83,7 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `tensor_algebra` | 19 | 2 | 0 | `host` |
 | `tokenizer` | 5 | 0 | 0 | `host` |
 | `transform` | 11 | 0 | 0 | `host` |
-| `upstream_mlir` | 1 | 0 | 0 | `host` |
+| `upstream_literal` | 1 | 0 | 0 | `host` |
 | `vision` | 4 | 0 | 0 | `host` |
 
 ## Eligible worklist (148) — the accelerator-proof gap

@@ -143,7 +143,7 @@ broadcast,layout_transform,public,public,registered,complete,no_kernel_required,
 cast,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
 cat,layout_transform,public,public,registered,complete,fused,device_verified_jit,ready,none
 chunk,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
-expand,layout_transform,public,public,registered,complete,fused,no_kernel_required,ready,none
+expand,layout_transform,public,public,registered,complete,no_kernel_required,no_kernel_required,ready,none
 flatten,layout_transform,public,public,registered,complete,no_kernel_required,no_kernel_required,ready,none
 flip,layout_transform,public,public,registered,complete,fused,device_verified_jit,ready,none
 masked_fill,layout_transform,public,public,registered,complete,fused,device_verified_jit,ready,none
@@ -156,7 +156,7 @@ pad,layout_transform,public,public,registered,complete,fused,device_verified_jit
 permute,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
 rearrange,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
 repeat,layout_transform,public,public,registered,complete,fused,device_verified_jit,ready,none
-reshape,layout_transform,public,public,registered,complete,fused,no_kernel_required,ready,none
+reshape,layout_transform,public,public,registered,complete,no_kernel_required,no_kernel_required,ready,none
 roll,layout_transform,public,public,registered,complete,fused,device_verified_jit,ready,none
 rope_merge,layout_transform,public,public,registered,complete,fused,device_verified_jit,ready,none
 rope_split,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
@@ -165,7 +165,7 @@ squeeze,layout_transform,public,public,registered,complete,no_kernel_required,no
 stack,layout_transform,public,public,registered,complete,fused,device_verified_jit,ready,none
 stop_gradient,layout_transform,public,public,registered,complete,not_applicable,not_applicable,ready,none
 tile,layout_transform,public,public,registered,complete,fused,device_verified_jit,ready,none
-tile_view,layout_transform,public,public,registered,complete,fused,no_kernel_required,ready,none
+tile_view,layout_transform,public,public,registered,complete,no_kernel_required,no_kernel_required,ready,none
 transpose,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
 unpack,layout_transform,public,public,registered,complete,fused,fused,ready,benchmarked
 unsqueeze,layout_transform,public,public,registered,complete,no_kernel_required,no_kernel_required,ready,none

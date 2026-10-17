@@ -100,10 +100,10 @@ Contract axes distinguish implemented rules from explicit by-design closures; on
 | `dtype_layout_rule` | 503 | 26 | 1 | 0 |
 | `vjp` | 317 | 167 | 1 | 45 |
 | `jvp` | 318 | 167 | 0 | 45 |
-| `batching_rule` | 472 | 56 | 1 | 1 |
-| `transpose_rule` | 363 | 165 | 0 | 2 |
-| `sharding_rule` | 412 | 56 | 60 | 2 |
-| `masking_effect_rule` | 75 | 454 | 0 | 1 |
+| `batching_rule` | 472 | 57 | 1 | 0 |
+| `transpose_rule` | 363 | 166 | 0 | 1 |
+| `sharding_rule` | 412 | 57 | 60 | 1 |
+| `masking_effect_rule` | 75 | 455 | 0 | 0 |
 | `lowering_rule` | 367 | 55 | 97 | 11 |
 | `backend_kernel` | 0 | 100 | 421 | 9 |
 | `tests` | 529 | 0 | 0 | 1 |
@@ -210,7 +210,7 @@ The compiler-facing table contains **362** callable/IR rows; the remaining **168
 | `frontend` | `public` 362 |
 | `graph_ir` | `registered` 329, `not_applicable` 33 |
 | `schedule_ir` | `not_applicable` 2, `complete` 357, `planned` 3 |
-| `tile_ir` | `not_applicable` 26, `complete` 4, `partial` 25, `fused` 302, `no_kernel_required` 5 |
+| `tile_ir` | `not_applicable` 26, `complete` 4, `partial` 25, `fused` 299, `no_kernel_required` 8 |
 | `target_ir` | `not_applicable` 26, `fused` 73, `device_verified_abi` 26, `device_verified_jit` 200, `reference` 29, `no_kernel_required` 8 |
 | `runtime` | `fused` 6, `ready` 356 |
 | `bench` | `benchmarked` 108, `none` 254 |
@@ -237,7 +237,7 @@ Current open queues derived from the same sources:
 |---|---:|---|
 | Tile IR partial | 25 | `adadelta`, `adagrad`, `binary_brier_loss`, `brier_loss`, `depth_attn`, `det`, `eigh`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue`, `inv`, `kron`, `logdet`, `matrix_power`, `norm`, `ntk_rope`, `ordinal_logistic_loss`, `rmsprop`, `shampoo`, `soft_binned_ece`, `solve`, `trace`, `vec` |
 | Backend contract planned | 9 | `broadcast_to_axis`, `collective_permute`, `named_sharding`, `partition_spec`, `pmax`, `pmean`, `pmin`, `psum`, `shard_map` |
-| Native/fused aggregate rows without benchmark inventory | 198 | See generated support table; this is an evidence queue, not proof of a missing kernel. |
+| Native/fused aggregate rows without benchmark inventory | 195 | See generated support table; this is an evidence queue, not proof of a missing kernel. |
 | VJP / JVP planned | 45 / 45 | Autodiff rules, not forward compiler execution. |
 | Sharding partial | 60 | Multi-device/domain proof. |
 

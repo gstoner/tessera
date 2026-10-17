@@ -22,7 +22,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Frontend capture` | closed | 362 | 362 | 0 | public=362 | Keep this layer drift-gated through support_table.csv. |
 | `Graph IR registration` | closed | 362 | 362 | 0 | not_applicable=33, registered=329 | Keep this layer drift-gated through support_table.csv. |
 | `Schedule IR` | mixed | 359 | 362 | 3 | complete=357, not_applicable=2, planned=3 | Keep this layer drift-gated through support_table.csv. |
-| `Tile IR` | mixed | 337 | 362 | 25 | complete=4, fused=302, no_kernel_required=5, not_applicable=26, partial=25 | Close partial Tile IR rows or explicitly classify them as fused/not-applicable. |
+| `Tile IR` | mixed | 337 | 362 | 25 | complete=4, fused=299, no_kernel_required=8, not_applicable=26, partial=25 | Close partial Tile IR rows or explicitly classify them as fused/not-applicable. |
 | `Target IR native/fused codegen` | mixed | 333 | 362 | 29 | device_verified_abi=26, device_verified_jit=200, fused=73, no_kernel_required=8, not_applicable=26, reference=29 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. |
 | `Runtime dispatch readiness` | closed | 362 | 362 | 0 | fused=6, ready=356 | Keep this layer drift-gated through support_table.csv. |
 | `Benchmark evidence` | mixed | 108 | 362 | 254 | benchmarked=108, none=254 | Attach benchmarks to native/hardware-promoted rows first. |
@@ -31,9 +31,9 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `batching_rule` | mixed | 528 | 530 | 2 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
-| `transpose_rule` | mixed | 528 | 530 | 2 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
-| `sharding_rule` | mixed | 468 | 530 | 62 | primitive contract axis; open means partial or planned, not necessarily missing API support | Prioritize model-facing collectives, layout, memory, and optimizer rows. |
+| `batching_rule` | mixed | 529 | 530 | 1 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
+| `transpose_rule` | mixed | 529 | 530 | 1 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
+| `sharding_rule` | mixed | 469 | 530 | 61 | primitive contract axis; open means partial or planned, not necessarily missing API support | Prioritize model-facing collectives, layout, memory, and optimizer rows. |
 | `lowering_rule` | mixed | 422 | 530 | 108 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
 | `backend_kernel` | mixed | 100 | 530 | 430 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. |
 

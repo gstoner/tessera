@@ -435,6 +435,13 @@ def _axis_tile_ir(op_name: str) -> AxisCell:
             "complete",
             "TileOps.td + schedule_ir.py:" + _TYPED_TILE_CONTRACTS[op_name],
         )
+    cov = _coverage_for(op_name)
+    if (cov is not None
+            and cov.contract_status.get("backend_kernel") == "no_kernel_required"):
+        # A view consumed inside a native package still needs no independent
+        # kernel. Component evidence must not turn metadata into kernel debt.
+        return AxisCell("no_kernel_required",
+                        "primitive_coverage.contract_status.backend_kernel.no_kernel_required")
     # Prefer the most concrete evidence: a fused manifest entry beats
     # a registry "partial" because the registry's backend_kernel axis
     # is intentionally the long-pole gate (Decision #25) and stays

@@ -14,9 +14,9 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 2 | 528 |
-| `transpose_rule` | 2 | 528 |
-| `sharding_rule` | 62 | 468 |
+| `batching_rule` | 1 | 529 |
+| `transpose_rule` | 1 | 529 |
+| `sharding_rule` | 61 | 469 |
 | `lowering_rule` | 108 | 422 |
 | `backend_kernel` | 430 | 100 |
 
@@ -104,7 +104,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | other | `state_update` | 6 | — | — | 2 | — | 6 |
 | other | `stencil` | 8 | — | — | — | — | 8 |
 | other | `transform` | 11 | — | — | — | 11 | — |
-| other | `upstream_mlir` | 1 | 1 | 1 | 1 | — | 1 |
+| other | `upstream_literal` | 1 | — | — | — | — | 1 |
 | other | `vision` | 4 | — | — | — | 4 | 4 |
 
 ## Roll-up by sprint
@@ -118,7 +118,7 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S11 | 37 | 0 | 0 | 0 | 37 |
 | S15 | 16 | 0 | 0 | 0 | 0 |
 | M6 | 15 | 0 | 0 | 7 | 15 |
-| other | 314 | 2 | 2 | 39 | 262 |
+| other | 314 | 1 | 1 | 38 | 262 |
 
 ## Closure trajectory
 

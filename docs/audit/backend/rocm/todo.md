@@ -10,6 +10,11 @@ scope: ROCm backend implementation and exact-device proof
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
 Sync: ROCM-K16-QUANT-PUBLIC-20261017.
 
+Registry reconciliation: zero-operand immutable upstream literals have explicit
+no-batch-axis, no-linear-transpose and replicated-literal contracts. Component
+view evidence preserves no-kernel-required audit status. The architecture
+census includes block_quant only for gfx1201; sibling physical scope is unchanged.
+
 Review follow-up: metadata-only binary tracing uses catalog inference only for
 matching operand shapes, preserving existing broadcast-aware tracing otherwise.
 Quantizer route admission now replays the cached native Graph-to-Schedule

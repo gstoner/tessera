@@ -21,7 +21,7 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
     assert promoted_families("gfx1151") == frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES - ARCHITECTURE_OWNED_FAMILIES
     assert generic_lane_families() == promoted_families("gfx1151")
     assert promoted_families("gfx1201") == {
-        "parent_view",
+        "parent_view", "block_quant",
         "softmax", "reduction", "matmul", "attention", "attention_backward",
         "control_state_machine", "ebm_affine_langevin",
         # GFX1201-PARITY slice 2 (2026-09-17): the scalar and row-program
@@ -82,6 +82,8 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
 @pytest.mark.parametrize("arch,family,accepted", [
     ("gfx1151", "scalar_unary", True),
     ("gfx1151", "parent_view", False),
+    ("gfx1151", "block_quant", False),
+    ("gfx1201", "block_quant", True),
     ("gfx1201", "parent_view", True),
     ("gfx1201", "softmax", True),
     ("gfx1201", "paged_kv", True),

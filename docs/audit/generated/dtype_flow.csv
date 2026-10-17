@@ -425,7 +425,7 @@ cat,tessera.cat,layout_transform,no,fp32,fp32,fp64,public,registered,complete,fu
 chunk,tessera.chunk,layout_transform,no,bf16,bf16,fp64,public,registered,complete,planned,unsupported,legal_only,unsupported,absent,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
 chunk,tessera.chunk,layout_transform,no,fp32,fp32,fp64,public,registered,complete,reference,reference,legal_only,reference,absent,absent,absent,absent,absent,absent,absent,physical/direct_test
 expand,tessera.expand,layout_transform,no,bf16,bf16,fp64,public,registered,complete,planned,unsupported,legal_only,unsupported,absent,absent,absent,absent,unsupported,absent,absent,tile/physical/direct_test
-expand,tessera.expand,layout_transform,no,fp32,fp32,fp64,public,registered,complete,fused,reference,legal_only,reference,absent,absent,absent,absent,device_verified_jit,absent,absent,
+expand,tessera.expand,layout_transform,no,fp32,fp32,fp64,public,registered,complete,no_kernel_required,reference,legal_only,reference,absent,absent,absent,absent,device_verified_jit,absent,absent,
 flatten,tessera.flatten,layout_transform,no,bf16,bf16,fp64,public,registered,complete,planned,unsupported,legal_only,unsupported,absent,absent,absent,absent,absent,absent,absent,tile/physical/direct_test
 flatten,tessera.flatten,layout_transform,no,fp32,fp32,fp64,public,registered,complete,reference,reference,legal_only,reference,absent,absent,absent,absent,absent,absent,absent,physical/direct_test
 flip,tessera.flip,layout_transform,no,bf16,bf16,fp64,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,absent,unsupported,absent,absent,absent,absent,tile/physical/direct_test
@@ -451,9 +451,9 @@ rearrange,tessera.rearrange,layout_transform,yes,bf16,bf16,fp64,public,registere
 rearrange,tessera.rearrange,layout_transform,yes,fp32,fp32,fp64,public,registered,complete,fused,reference,device_verified_jit,reference,device_verified_jit,absent,device_verified_jit,absent,absent,absent,absent,
 repeat,tessera.repeat,layout_transform,no,bf16,bf16,fp64,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,absent,unsupported,absent,absent,absent,absent,tile/physical/direct_test
 repeat,tessera.repeat,layout_transform,no,fp32,fp32,fp64,public,registered,complete,fused,reference,device_verified_jit,reference,device_verified_jit,absent,device_verified_jit,absent,absent,absent,absent,
-reshape,tessera.reshape,layout_transform,no,bf16,bf16,fp64,public,registered,complete,fused,unsupported,legal_only,unsupported,absent,absent,absent,absent,device_verified_jit,absent,absent,
-reshape,tessera.reshape,layout_transform,no,fp32,fp32,fp64,public,registered,complete,fused,reference,legal_only,reference,absent,absent,absent,absent,device_verified_jit,absent,absent,
-reshape,tessera.reshape,layout_transform,no,fp8_e4m3,fp8_e4m3,fp64,public,registered,complete,fused,unsupported,unsupported,unsupported,absent,absent,absent,absent,device_verified_jit,absent,absent,
+reshape,tessera.reshape,layout_transform,no,bf16,bf16,fp64,public,registered,complete,no_kernel_required,unsupported,legal_only,unsupported,absent,absent,absent,absent,device_verified_jit,absent,absent,
+reshape,tessera.reshape,layout_transform,no,fp32,fp32,fp64,public,registered,complete,no_kernel_required,reference,legal_only,reference,absent,absent,absent,absent,device_verified_jit,absent,absent,
+reshape,tessera.reshape,layout_transform,no,fp8_e4m3,fp8_e4m3,fp64,public,registered,complete,no_kernel_required,unsupported,unsupported,unsupported,absent,absent,absent,absent,device_verified_jit,absent,absent,
 roll,tessera.roll,layout_transform,no,bf16,bf16,fp64,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,absent,unsupported,absent,absent,absent,absent,tile/physical/direct_test
 roll,tessera.roll,layout_transform,no,fp32,fp32,fp64,public,registered,complete,fused,reference,device_verified_jit,reference,device_verified_jit,absent,device_verified_jit,absent,absent,absent,absent,
 rope_merge,tessera.rope_merge,layout_transform,no,bf16,bf16,fp64,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,absent,unsupported,absent,absent,absent,absent,tile/physical/direct_test
@@ -471,7 +471,7 @@ stop_gradient,tessera.stop_gradient,layout_transform,no,fp32,fp32,fp64,public,re
 tile,tessera.tile,layout_transform,no,bf16,bf16,fp64,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,absent,unsupported,absent,absent,absent,absent,tile/physical/direct_test
 tile,tessera.tile,layout_transform,no,fp32,fp32,fp64,public,registered,complete,fused,reference,device_verified_jit,reference,device_verified_jit,absent,device_verified_jit,absent,absent,absent,absent,
 tile_view,tessera.tile_view,layout_transform,yes,bf16,bf16,fp64,public,registered,complete,planned,unsupported,unsupported,unsupported,unsupported,absent,unsupported,absent,absent,absent,absent,tile/physical/direct_test
-tile_view,tessera.tile_view,layout_transform,yes,fp32,fp32,fp64,public,registered,complete,fused,reference,device_verified_jit,reference,device_verified_jit,absent,device_verified_jit,absent,absent,absent,absent,
+tile_view,tessera.tile_view,layout_transform,yes,fp32,fp32,fp64,public,registered,complete,no_kernel_required,reference,device_verified_jit,reference,device_verified_jit,absent,device_verified_jit,absent,absent,absent,absent,
 transpose,tessera.transpose,layout_transform,yes,bf16,bf16,fp64,public,registered,complete,fused,unsupported,unsupported,unsupported,fused,absent,unsupported,absent,absent,absent,absent,
 transpose,tessera.transpose,layout_transform,yes,fp16,fp16,fp64,public,registered,complete,fused,unsupported,unsupported,unsupported,fused,absent,unsupported,absent,absent,absent,absent,
 transpose,tessera.transpose,layout_transform,yes,fp32,fp32,fp64,public,registered,complete,fused,reference,device_verified_jit,reference,fused,absent,device_verified_jit,absent,absent,absent,absent,

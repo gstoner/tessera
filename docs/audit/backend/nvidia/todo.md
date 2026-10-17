@@ -3,8 +3,33 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-10-16
+last_updated: 2026-10-17
 ---
+
+## ROCM-NATIVE-GATE-UP-CONSUMER-20261016 — parent-view native integration
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: ROCM-NATIVE-GATE-UP-CONSUMER-20261016.
+
+PR964 registry review assessment: the exact gfx1201 pipeline resolution now exposes partial Level-C coverage. Not applicable to this backend's physical execution; its target resolution and numerical schedules are unchanged. No ROCm proof is transferred.
+
+Captured-coordinate follow-up (2026-10-17): safe closure/global literals now
+compose inside list/tuple/dictionary attributes. Runtime SSA names retain
+precedence; calls, subscripts and tensor expressions are not evaluated as
+attributes. 53 frontend tests pass (one existing skip), and thirteen owning
+gfx1201 public cases pass for literal and closure factories, including replay.
+This changes shared frontend capture only; sibling physical execution remains
+separately owned and no schedule or dtype admission transfers.
+
+Evidence: benchmarks/baselines/native_parent_view_public_20261017/README.md. Focused shared gates: 409 passed.
+
+Public integration checkpoint (2026-10-17): seven RX9070XT/gfx1201 tests prove literal-static f32 parent-view JIT, changed inputs, preserved roots/results and fresh-process replay with compiler/eager calls forbidden. The new ABI and canonical route remain scoped to this profile. Resident producer composition, low storage and full NVFP4 MLP/model-quality remain follow-up required. Sibling physical support is not implied.
+
+Shared-contract assessment: canonical gfx1201 parent-view family and ABI packaging do not admit this backend. Follow-up required for an owning physical consumer and exact-device proof; existing architecture/schema meanings are retained.
+Parity validated for the existing SM120 schema-1 source-active JVP: 12 exact RTX5070 numerical cases pass after the shared verifier change. This is regression evidence, not NVIDIA parent-view admission.
+
+Follow-up required for an owning parent-view consumer. The shared row-region verifier now pairs architecture and schema: SM120 schema 1 retains its original meaning, while gfx1201 schema 2 is separate. No nvidia physical schedule, ABI or execution proof transfers from ROCm.
+
 
 ## NVFP4-SOURCE-BOUNDED-20261016 — native source capacity contract
 

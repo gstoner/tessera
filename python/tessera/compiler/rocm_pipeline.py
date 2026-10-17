@@ -28,6 +28,7 @@ class ROCMOutputLevel(str, Enum):
 
 #: The gfx1201 promotions, by name. Every other RDNA4/CDNA arch has none.
 _GFX1201_PROMOTED_FAMILIES = frozenset({
+    "parent_view",
     "softmax", "reduction", "matmul", "attention", "attention_backward",
     # Two scalar per-thread families with no WMMA fragment in them, promoted
     # 2026-09-17 on exact-device evidence from Tajasarus (RX 9070 XT):
@@ -99,11 +100,14 @@ _GFX1201_PROMOTED_FAMILIES = frozenset({
 #: the generic compiled lane's "every family" reading on gfx1151.
 RDNA4_ONLY_FAMILIES = frozenset({"sparse_matmul_2to4"})
 
+# Named physical profiles; hardware ISA availability alone is insufficient.
+ARCHITECTURE_OWNED_FAMILIES = frozenset({"parent_view"})
+
 
 def generic_lane_families() -> frozenset[str]:
     """The families the generic compiled lane (a test that names no family)
     may assume on a fully promoted host."""
-    return frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES
+    return frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES - ARCHITECTURE_OWNED_FAMILIES
 
 
 def promoted_families(arch: str) -> frozenset[str]:
@@ -120,7 +124,7 @@ def promoted_families(arch: str) -> frozenset[str]:
     does not exist here" as "this proof is broken".
     """
     if arch == "gfx1151":
-        return frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES
+        return frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES - ARCHITECTURE_OWNED_FAMILIES
     if arch == "gfx1201":
         return _GFX1201_PROMOTED_FAMILIES
     return frozenset()
@@ -141,6 +145,7 @@ FAMILY_PLUGINS: dict[str, ROCMFamilyPlugin] = {
         backend_codegen="rocdl_hsaco",
     )
     for family in (
+        "parent_view",  # gfx1201 schema-2 source-preserving native region
         "sparse_matmul_2to4",  # RDNA4-only (SWMMAC); see RDNA4_ONLY_FAMILIES
         "attention",
         "attention_backward",
@@ -278,6 +283,8 @@ class ROCMExecutablePipeline:
             raise ValueError(
                 "family 'control_state_machine' has no Target-IR boundary; "
                 "only output=binary is supported")
+        if self.family == "parent_view" and self.input_level is ROCMInputLevel.GRAPH:
+            raise ValueError("ROCm parent_view enters from native Graph -> Schedule -> Tile")
         if self.family == "matmul" and self.input_level is ROCMInputLevel.GRAPH:
             # Lane B, retired 2026-09-26 (owner decision): a Graph->Tile
             # shortcut beside the scheduled route was a second lowering
@@ -288,6 +295,10 @@ class ROCMExecutablePipeline:
                 "level from the scheduled route (scheduled_matmul.lower_scheduled_matmul, "
                 "Graph -> Schedule -> Tile); the Graph->Tile shortcut was retired 2026-09-26")
         if self.family not in promoted_families(self.arch):
+            if self.family in ARCHITECTURE_OWNED_FAMILIES:
+                raise ValueError(
+                    f"ROCm executable pipeline has no promoted family plugins for {self.arch}; "
+                    "parent_view requires its owning gfx1201 physical profile")
             if self.family in RDNA4_ONLY_FAMILIES:
                 raise ValueError(
                     f"ROCm executable pipeline has no promoted family plugins for {self.arch}; "

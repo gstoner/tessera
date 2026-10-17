@@ -1,0 +1,7 @@
+{
+  "source_identity_sha256": "33d1272bb32c901c3345976b381b23ff7e4fe7d378df9bef31013873a967347e",
+  "matching_source_files": 39,
+  "matching_tools_and_libraries": 3,
+  "mismatches": [],
+  "note": "Current review resolution and storage constructor source matches owning gfx1201 validation; native compiler bytes unchanged."
+}

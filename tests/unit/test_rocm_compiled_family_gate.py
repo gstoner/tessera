@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from tessera.compiler.rocm_pipeline import (
-    FAMILY_PLUGINS, RDNA4_ONLY_FAMILIES, ROCMExecutablePipeline, generic_lane_families, promoted_families)
+    FAMILY_PLUGINS, RDNA4_ONLY_FAMILIES, ARCHITECTURE_OWNED_FAMILIES, ROCMExecutablePipeline, generic_lane_families, promoted_families)
 from tests._support import rocm_build
 
 
@@ -18,9 +18,10 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
     # gfx1151 has every family with a gfx11 form; the RDNA4-only SWMMAC family
     # (public 2:4 admission, 2026-09-18) never joins it.
     assert RDNA4_ONLY_FAMILIES == {"sparse_matmul_2to4"}
-    assert promoted_families("gfx1151") == frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES
+    assert promoted_families("gfx1151") == frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES - ARCHITECTURE_OWNED_FAMILIES
     assert generic_lane_families() == promoted_families("gfx1151")
     assert promoted_families("gfx1201") == {
+        "parent_view",
         "softmax", "reduction", "matmul", "attention", "attention_backward",
         "control_state_machine", "ebm_affine_langevin",
         # GFX1201-PARITY slice 2 (2026-09-17): the scalar and row-program
@@ -80,6 +81,8 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
 
 @pytest.mark.parametrize("arch,family,accepted", [
     ("gfx1151", "scalar_unary", True),
+    ("gfx1151", "parent_view", False),
+    ("gfx1201", "parent_view", True),
     ("gfx1201", "softmax", True),
     ("gfx1201", "paged_kv", True),
     ("gfx1201", "sparse_matmul_2to4", True),

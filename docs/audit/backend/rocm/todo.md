@@ -1,9 +1,35 @@
 ---
-last_updated: 2026-10-16
+last_updated: 2026-10-17
 audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+
+## ROCM-NATIVE-GATE-UP-CONSUMER-20261016 — parent-view native integration
+
+Owner: ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: ROCM-NATIVE-GATE-UP-CONSUMER-20261016.
+
+PR964 registry review: gfx1201 now resolves to tessera-rocm-executable with Level-C partial coverage in the canonical spine inventory. This reflects named proved packages and does not promote unproved operations/envelopes. Existing gfx1201 packagers share the corrected producer label; numerical and serialization controls pass separately. NVFP4 expansion/ingest and MXFP4 folded-storage constructors now name the actual executable producer; 23 expansion/ingest and 13 folded-storage tests pass on owning gfx1201.
+
+Captured-coordinate follow-up (2026-10-17): safe closure/global literals now
+compose inside list/tuple/dictionary attributes. Runtime SSA names retain
+precedence; calls, subscripts and tensor expressions are not evaluated as
+attributes. 53 frontend tests pass (one existing skip), and thirteen owning
+gfx1201 public cases pass for literal and closure factories, including replay.
+This changes shared frontend capture only; sibling physical execution remains
+separately owned and no schedule or dtype admission transfers.
+
+Evidence: benchmarks/baselines/native_parent_view_public_20261017/README.md. Focused shared gates: 409 passed.
+
+Public integration checkpoint (2026-10-17): seven RX9070XT/gfx1201 tests prove literal-static f32 parent-view JIT, changed inputs, preserved roots/results and fresh-process replay with compiler/eager calls forbidden. The new ABI and canonical route remain scoped to this profile. Resident producer composition, low storage and full NVFP4 MLP/model-quality remain follow-up required. Sibling physical support is not implied.
+
+Canonical packaging integration: the named gfx1201 f32 parent-view now crosses the registered executable family through the canonical compiler driver, preserving the native Target/binary program frame and caller Graph. Matching compiler build and 38 host compiler/admission tests pass. Public JIT/runtime dispatch and fresh owning-device package execution now pass the seven-case checkpoint below; timing attribution is recorded separately. The earlier five-row candidate packet is separate evidence.
+Evidence: benchmarks/baselines/native_gate_up_view_20261016/README.md.
+Contract: docs/spec/NATIVE_PARENT_VIEW_CONTRACT.md.
+
+Implementation in progress: the explicit one-parent gate/up profile reaches native Schedule, typed-view Tile, ROCm Target, GPU/ROCDL/LLVM and HSACO. Five RX9070XT/gfx1201 candidate rows execute through the checked C++ owner, including M256/I12288, changed inputs and ownership guards. Seventeen compiler cases pass; current shared gate counts are recorded in the candidate packet. Canonical plugin/public JIT passes the new checkpoint; resident producer chaining, low storage, full MLP/model quality and matched performance closure remain required; this is no default-route promotion.
+
 
 ## NVFP4-SOURCE-BOUNDED-20261016 — native source capacity contract
 

@@ -637,9 +637,9 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         ),
         required_dialects=(
             "tessera", "tile", "tessera_rocm", "gpu", "llvm", "rocdl",
-            "func", "scf", "arith", "memref",
+            "func", "scf", "arith", "memref", "math",
         ),
-        targets=("rocm_gfx1151",),
+        targets=("rocm_gfx1151", "rocm_gfx1201"),
         family_plugins=(
             ("algebra_clifford", ("generate-rocm-clifford-kernel",)),
             ("attention", ("generate-wmma-flash-attn-kernel",)),
@@ -674,6 +674,8 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             ("optimizer", ("generate-rocm-optimizer-kernel",)),
             ("ordering_sort", ("generate-rocm-sort-kernel",)),
             ("paged_kv", ("generate-rocm-paged-kv-read-kernel",)),
+            # This profile carries numerical SSA rather than a generator directive.
+            ("parent_view", ("lower-tile-to-rocm", "lower-tessera-target-to-rocdl")),
             ("position_alibi", ("generate-rocm-alibi-kernel",)),
             ("position_rope", ("generate-rocm-rope-kernel",)),
             ("quant_dequant_gemm", ("generate-rocm-dequant-gemm-kernel",)),
@@ -843,10 +845,11 @@ TARGET_PIPELINE_RESOLUTIONS: tuple[TargetPipelineResolution, ...] = (
         "partial", "absent", "The ROCm pipeline is family-shared and exact-device execution remains gated.",
     ),
     TargetPipelineResolution(
-        "rocm_gfx1201", "tessera-target-artifact", "tessera-lower-to-rocm",
-        "declared_shared_builder", "exact_architecture", "rocm",
+        "rocm_gfx1201", "tessera-target-artifact", "tessera-rocm-executable",
+        "declared_exact", "exact_architecture", "rocm",
         "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
-        "partial", "absent", "The ROCm pipeline is family-shared and exact-device execution remains gated.",
+        "partial", "partial", "The exact typed family-plugin pipeline owns the proved gfx1201 native package boundaries, including the named f32 parent-view route. Unsupported operations, storage/layout envelopes and sibling architectures remain gated.",
+        driver_registration_source="src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp",
     ),
     TargetPipelineResolution(
         "rocm_gfx1250", "tessera-target-artifact", "tessera-lower-to-rocm",

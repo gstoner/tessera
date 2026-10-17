@@ -1,3 +1,4 @@
+#include "NativeGateUpMaterializer.h"
 #include "TesseraROCM/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 
@@ -255,7 +256,8 @@ bool lowerRealMFMA(Operation *op, PatternRewriter &rewriter) {
 
 struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<LLVM::LLVMDialect, ROCDL::ROCDLDialect>();
+    registry.insert<LLVM::LLVMDialect, ROCDL::ROCDLDialect, gpu::GPUDialect, memref::MemRefDialect,
+                    math::MathDialect, arith::ArithDialect, scf::SCFDialect>();
   }
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LoweringPass)
 
@@ -268,6 +270,7 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
+    if (failed(materializeGateUpViews(module))) return signalPassFailure();
     SmallVector<Operation *> waitOps;
     SmallVector<Operation *> rocmOps;
 

@@ -114,6 +114,7 @@ rocm,nvfp4_requantize,requires,arch destination_layout source_layout,dst_space n
 rocm,nvfp4_expand,requires,arch numeric_policy schedule_hash,dst_space src_space
 rocm,mxfp4_folded_storage,requires,arch schedule_hash storage_contract,dst_space src_space
 rocm,structured_reduction,requires,arch,dst_space src_space
+rocm,row_region_kernel,requires,arch storage,dst_space src_space
 x86,amx_tile_load,requires,stride,
 x86,amx_tile_store,requires,stride,
 x86,amx_tile_zero,no-contract,,

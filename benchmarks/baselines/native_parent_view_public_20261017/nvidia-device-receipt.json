@@ -1,0 +1,12 @@
+{
+  "target": "nvidia_sm120",
+  "device": "NVIDIA GeForce RTX 5070",
+  "uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "compute_capability": "12.0",
+  "driver_version": "610.88",
+  "fixture": "tests/device/nvidia/test_resident_active_source_jvp.py",
+  "fixture_sha256": "072c2914b16592bab2b3ab617f89b2f655181a1edf1c967487c83c8f09b11d7c",
+  "result": "12 passed",
+  "scope": "existing schema-1 source-active JVP owning-device regression after shared frontend/schema work; no parent-view or general AD admission is transferred",
+  "log_sha256": "0817df87c1c9e4d2676e0488331fbd4c22ef219ae14e20862dacf4eb7991eabf"
+}

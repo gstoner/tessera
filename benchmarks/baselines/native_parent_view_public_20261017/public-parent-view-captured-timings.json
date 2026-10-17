@@ -1,0 +1,100 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_uuid": "32386439653765666266326566373136",
+  "runtime_library_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+  "timing_boundary": "Launch-loop HIP-event windows include dispatch and possible CPU enqueue gaps. Captured-member windows exclude capture/instantiation and CPU enqueue gaps, but include device graph dispatch; neither is instruction-counter time. Warm public wall time includes validation, owner preparation, upload, invocation, completion and readback. Cold wall time also includes compiler work; process/compiler caches are not cleared.",
+  "scope": "static f32 parent-view activation only; no resident matmul composition, low-storage model-quality, speedup or default-route promotion claim",
+  "rows": [
+    {
+      "shape_m_i": [
+        3,
+        17
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 9.5367431640625e-07,
+      "image_digest": "e8dfedeb2513dbf928f4887cc231ce9f031144d9f3d23ce30576e827e8ed149d",
+      "abi": "tessera.rocm.parent_view.parent_o_n.f32.v1",
+      "compiler_fingerprint": "2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000",
+      "cold_public_call_ms": 486.643254,
+      "device_repeats": 8192,
+      "device_launch_window_samples_ms": [
+        0.0019342496525496244,
+        0.0018105711787939072,
+        0.0018019437557086349,
+        0.001811486785300076,
+        0.0019822241738438606
+      ],
+      "device_launch_window_median_ms": 0.001811486785300076,
+      "captured_member_repeats": 32768,
+      "captured_member_samples_ms": [
+        0.0026519489474594593,
+        0.0026387006510049105,
+        0.0026592800859361887,
+        0.002646473702043295,
+        0.0026464140973985195
+      ],
+      "captured_member_median_ms": 0.002646473702043295,
+      "captured_member_window_totals_ms": [
+        86.89906311035156,
+        86.4649429321289,
+        87.13928985595703,
+        86.71965026855469,
+        86.71769714355469
+      ],
+      "warm_completed_public_samples_ms": [
+        1.608397,
+        1.415839,
+        1.273367,
+        1.281,
+        1.351797
+      ],
+      "warm_completed_public_median_ms": 1.351797
+    },
+    {
+      "shape_m_i": [
+        256,
+        12288
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 3.814697265625e-06,
+      "image_digest": "6e52e00e68ad0c3bd644c91bd0e77d62c8f4fd36e6de02ab054ab9b77aa63277",
+      "abi": "tessera.rocm.parent_view.parent_o_n.f32.v1",
+      "compiler_fingerprint": "2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000",
+      "cold_public_call_ms": 193.623584,
+      "device_repeats": 8192,
+      "device_launch_window_samples_ms": [
+        0.033699531108140945,
+        0.03440118208527565,
+        0.034422531723976135,
+        0.03460199385881424,
+        0.03443989157676697
+      ],
+      "device_launch_window_median_ms": 0.034422531723976135,
+      "captured_member_repeats": 32768,
+      "captured_member_samples_ms": [
+        0.034334417432546616,
+        0.03438699617981911,
+        0.03441267088055611,
+        0.03442370519042015,
+        0.034466639161109924
+      ],
+      "captured_member_median_ms": 0.03441267088055611,
+      "captured_member_window_totals_ms": [
+        1125.0701904296875,
+        1126.7930908203125,
+        1127.6343994140625,
+        1127.9959716796875,
+        1129.40283203125
+      ],
+      "warm_completed_public_samples_ms": [
+        9.783765,
+        20.854363,
+        16.771316,
+        16.170702,
+        17.048687
+      ],
+      "warm_completed_public_median_ms": 16.771316
+    }
+  ]
+}

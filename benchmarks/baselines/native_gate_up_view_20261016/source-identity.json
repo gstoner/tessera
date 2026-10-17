@@ -1,0 +1,31 @@
+{
+  "base_main": "77e8e71eb64cfbe328c26bcac1a022e748b1c7a6",
+  "source_scope": "Exact implementation fingerprints; local candidate, canonical public packaging/JIT remains open",
+  "source_sha256": {
+    "python/tessera/compiler/native_scaled_program.py": "3b70c627d6a5ac83144caced38cb24eb2418f89fecedc7add33873a1e53d7467",
+    "python/tessera/compiler/pass_metadata.py": "2e365a2f1ef8a9d52cf12257d3fe070e861993446a3d59d1ad87dbde816a85cb",
+    "python/tessera/compiler/pipeline_registry.py": "63c50c8b81cd30899a85b7ccf643053c850fae5551773b1f3560377c062798a3",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "a7700e7edddf9c7d5d7390ea58a4da352562739ba1a86d9bf019e5c6365206fe",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeGateUpMaterializer.h": "f8ccff63cb8ffe55d4a20a5a82192ec65da3de968f37293f616f7c95dfe80167",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp": "57232bca4534333a327baa49d1454be6332f554b8cb4e6f10bdb64ba11127793",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "cf065343b6d9f2b3054cf6927ff0e4ca53f8a222d20e57e9fe6716c47c981a83",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/CMakeLists.txt": "557d39306aa7fa5644b124004dce2af365ed44f8ec0f86cf40db7e5ab82ea107",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/TesseraROCMOps.cpp": "969173ece820206cf1f4a3ea7ab715c616e36ae41bfef45aa44eaec05fbd5025",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "780c2db5de9b1af827c61d8be2406e3593f8c91550dd2725f54318774ac9503f",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "928f52e8c5441db62f61b392490c31fb02e8ca0783204fb9481748915eaf8803",
+    "src/compiler/codegen/Tessera_ROCM_Backend/tools/CMakeLists.txt": "4f7f32a95dbee2f432a7335b1da561686ae1b57c2157827d4829fe9027bb2c77",
+    "src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera_rocm_opt.cpp": "6f0504222a8914a25a299dd02fe34436b0f2ecae70af93f2de8dda91679b01d4",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "7518acee1de9cae602f8ce81778372f48555cad96c91f3d10ad89645453de2bc",
+    "src/compiler/ir/include/Tessera/IR/RowRegionContract.h": "aa1a1ff3399e186090d56c3324b8582fb2147b5621c01dc089db156345daeffe",
+    "src/compiler/programming_model/lib/NativeGateUpSchedule.h": "31f4a6dd82aa8f8746def975e60076d0e846aa286d9386a38737eb47b663b1d8",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "ea576b6cf68ef98403aaec6b400f30129908f29370b3a794b485d58a7a3999bf",
+    "tests/unit/test_native_gate_up_view_schedule.py": "1d40b72462615d93434a469180e02d7ba45ee098cbd49bad4f52d878c72e3e34",
+    "tests/unit/test_ods_op_has_consumer.py": "ed560aeb3cbf1f645a9c1a2fa6d27fb60b209da65b3b4d29f96c1c4f03e2fb40"
+  },
+  "compiler_drivers": {
+    ".build-relu/tools/tessera-opt/tessera-opt": "7285cde0b4d4aa3f4515850a76a6b1e43d46504781bcef69470bfa89485c9534",
+    ".build-relu/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "5b194e036ac4652ff1ad6ab805e0e6e44d0745134248ee3019dd7bfedddf1c24"
+  },
+  "llvm_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+  "numerical_scope": "Five owning gfx1201 candidate frames; physical images unchanged after source admission hardening"
+}

@@ -1,0 +1,7 @@
+{
+  "source_identity_sha256": "7a8b125b42deba757184920de793647d22b5cc7d8bb48d0374e00b10165f2314",
+  "matching_source_files": 35,
+  "matching_tools_and_libraries": 3,
+  "mismatches": [],
+  "note": "Final guard-order correction and canonical public bindings match the exact-device validation source; native compiler bytes unchanged."
+}

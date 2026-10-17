@@ -5681,6 +5681,10 @@ struct LowerTileToNVIDIAPass
         return signalPassFailure();
       }
       auto kernel = rowKernels.front();
+      if (kernel.getArch() != "sm_120" || kernel.getSchema() != 1) {
+        kernel.emitError("NVIDIA row lowering requires its SM120 schema-1 profile");
+        return signalPassFailure();
+      }
       if (failed(tessera::row_region::verifyKernel(kernel))) return signalPassFailure();
       OpBuilder b(kernel);
       OperationState state(kernel.getLoc(),"tessera_nvidia.row_region_kernel");

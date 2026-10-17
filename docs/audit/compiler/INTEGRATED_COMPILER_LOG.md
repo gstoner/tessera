@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-16
+last_updated: 2026-10-17
 audit_role: reference
 ---
 
@@ -12885,7 +12885,7 @@ benchmarks/baselines/nvfp4_source_bounded_20261016/README.md.
 ### 2026-10-16 — native ROCm SiLU activation and explicit store-width ownership
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
-PRs: pending; sync ROCM-NATIVE-SWIGLU-ACTIVATION-20261016.
+PRs: #962 merged; sync ROCM-NATIVE-SWIGLU-ACTIVATION-20261016.
 Outcome: isolated original SiLU Graph reaches native Schedule, typed Tile,
 ROCm Target, GPU/ROCDL/LLVM and HSACO with FP32 arithmetic and a single final
 FP32 or matching FP16/BF16 store. Additive descriptor identities and an explicit
@@ -12925,7 +12925,7 @@ new exact-head CI is required after the guards land in the PR.
 ### 2026-10-16 — native Graph slice semantics for gate/up composition
 
 Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
-PRs: pending; sync ROCM-NATIVE-GATE-UP-VIEWS-20261016.
+PRs: #963 merged; sync ROCM-NATIVE-GATE-UP-VIEWS-20261016.
 
 Outcome: existing public slice/dynamic_slice now retain eager Python clipping
 and integer-coercion semantics through abstract and shape-only tracing,
@@ -12960,4 +12960,53 @@ pure inference and the caller-owned Graph remain unchanged. The concrete red
 baseline has 12 failures and one non-mutation control. Four public AST calling
 forms, native parsing, specialization and a real unannotated first-call path
 are covered; 572 Graph/frontend/registry tests pass with 33 unrelated skips.
+<!-- entry-fields:end -->
+
+
+### 2026-10-16 — native gfx1201 parent-view candidate
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: local candidate; sync ROCM-NATIVE-GATE-UP-CONSUMER-20261016.
+Outcome: actual complementary gate/up Graph slices and SiLU reach explicit
+native Schedule, typed Tile views, sealed ROCm Target, GPU/ROCDL/LLVM and HSACO.
+Native export owns byte spans, lifetimes and launch frames; the existing C++
+HIP owner executes five exact RX9070XT/gfx1201 candidate cases. Seventeen compiler
+cases pass; the final shared gate selection is recorded in the candidate packet. M3/I17 and M16/I17 bind identical image bytes
+with separate source guards. Changed inputs, malformed-shape refusal, unchanged
+parents and retained host results pass without compiler or eager arithmetic.
+Maximum absolute error is 3.814697265625e-6 versus the independent f64/f32 oracle.
+M256/I12288 median activation device window is 34.419 us; completed host upload,
+invoke and readback is 7.047 ms. No matched speedup or default promotion is claimed.
+PR963 merged at 77e8e71eb6 after exact-head green CI and a clear review audit;
+both WSL main refs are synchronized and all four backend plans were reread.
+Remaining: canonical family/plugin and public JIT integration, resident producer
+chain, low storage/rounding, K16 activation quantization/down projection,
+original-model quality, matched timing and the full five-slice obligations.
+Evidence: benchmarks/baselines/native_gate_up_view_20261016/README.md;
+docs/spec/NATIVE_PARENT_VIEW_CONTRACT.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-17 — public gfx1201 parent-view integration
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync ROCM-NATIVE-GATE-UP-CONSUMER-20261016.
+Outcome: the native parent-view family now enters the canonical compiler driver
+and checked public JIT/runtime ABI. Native Target export retains program frames
+through binary lowering; Python binds buffers without constructing Tile or
+kernel arithmetic. Thirteen RX9070XT/gfx1201 literal/closure tests pass, including both operand
+roles, changed roots, retained results and fresh-process compiler-disabled replay.
+409 focused shared compiler/registry/audit tests pass; broader validation is
+running. Cross-host fingerprints match 33 source files and three compiler/library
+files. M256/I12288 has separate 34.464 us device launch-window and 12.935 ms
+completed warm public-call medians; no matched speedup/default promotion.
+All four backend queues assess the shared schema/ABI boundary.
+Safe captured literal composition additionally passes 53 frontend tests (one
+existing skip), with SSA shadowing and executable-expression refusal checks.
+Remaining: resident producer chaining, explicit
+low-storage rounding, K16 activation quantization/down projection, original
+NVFP4 MLP/model quality and the full five-slice objective. Standalone/general
+slice execution is not admitted by the named composed profile.
+Evidence: benchmarks/baselines/native_parent_view_public_20261017/README.md;
+docs/spec/NATIVE_PARENT_VIEW_CONTRACT.md.
 <!-- entry-fields:end -->

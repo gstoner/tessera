@@ -160,7 +160,12 @@ the next action's host requirement; it is not a live fleet-availability claim.
   FP32/BF16 outputs. Ordinary static FP32 JIT, compiler-free replay and the original Qwen3
   projection now have exact-device proof through both native stages.
   Remaining: bounded frames, wider composition and model-quality acceptance.
-- Latest: [Native Graph slice semantics for gate/up composition](INTEGRATED_COMPILER_LOG.md#2026-10-16--native-graph-slice-semantics-for-gateup-composition)
+- Parent-view public integration now has thirteen owning gfx1201 literal/closure JIT/replay cases,
+  including compiler-disabled fresh-process execution, and a checked f32 ABI.
+  Device launch-loop, captured-member and completed public wall windows are
+  separate. Resident producer chaining, explicit low-storage rounding, down
+  projection and original full-model quality remain open.
+- Latest: [2026-10-17 — public gfx1201 parent-view integration](INTEGRATED_COMPILER_LOG.md#2026-10-17--public-gfx1201-parent-view-integration)
 
 ### ROCM-SPLIT-K-1
 

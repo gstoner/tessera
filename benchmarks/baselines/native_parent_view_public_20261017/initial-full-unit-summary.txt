@@ -1,0 +1,11 @@
+Initial exploratory host-unit run; source was corrected while this process retained imported registry state. This is not a final-head full-pass certificate. All seven failure nodes are replayed on current source in all-failure-replays.txt; exact-head required CI remains mandatory.
+
+7 failed, 27547 passed, 7678 skipped, 876 deselected, 11 warnings in 2145.08s (0:35:45)
+
+FAILED tests/unit/test_benchmark_recorders_are_named.py::test_every_recorder_is_named_or_frozen
+FAILED tests/unit/test_compiler_plan_routing.py::test_compiler_plan_routing_and_log_are_consistent
+FAILED tests/unit/test_foreign_target_host_claims.py::test_execution_named_module_is_gated_or_declares_host_free[test_rocm_parent_view_native_package]
+FAILED tests/unit/test_pipeline_registry.py::test_rocm_executable_family_plugins_are_cross_registry_total
+FAILED tests/unit/test_rocm_gfx1201_scheduled.py::test_native_scaled_program_refuses_mislabeled_image_before_preparation[rocm_gfx1201-gfx1151]
+FAILED tests/unit/test_rocm_gfx1201_scheduled.py::test_native_scaled_program_refuses_mislabeled_image_before_preparation[rocm_gfx1151-gfx1201]
+FAILED tests/unit/test_runtime_execution_matrix.py::test_dashboard_matches_live_data

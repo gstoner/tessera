@@ -1,0 +1,64 @@
+{
+  "base_main": "77e8e71eb64cfbe328c26bcac1a022e748b1c7a6",
+  "source_scope": "current public literal/captured-literal parent-view integration; older timing boundaries retain frozen recorder and unchanged-image receipts",
+  "source_sha256": {
+    "benchmarks/rocm/record_native_parent_view.py": "5e37f835090eabaf4942d6ffe6f16b8af579a00cbc665bad494dce2566d1b768",
+    "python/tessera/compiler/backend_manifest.py": "3d698748061e3af2ae946e3c82318d96211cb619cf250eeb4d9dac839e4b6add",
+    "python/tessera/compiler/canonical_compile.py": "ea20ba19b9b66c6a6ca65130665740f437acd5521ec646dd41dccf5d980ada53",
+    "python/tessera/compiler/driver.py": "146f1207aa63363789213859fffb6af51de1fa7153c90593f28b30fcfb03eec9",
+    "python/tessera/compiler/execution_matrix.py": "35cef82b977be66c56f578c3dbc3749f46f734f6d754fad1248a80adc9a973af",
+    "python/tessera/compiler/graph_ir.py": "f4a9e6c2267f3fafcf46f137b5fcef3cd9f694638fa253650c34e723fe66a3a4",
+    "python/tessera/compiler/jit.py": "0e3eb7e3e7d92651b06aa298212ec5f9b527e758350e09e4d00f785daa5c3cd7",
+    "python/tessera/compiler/native_scaled_program.py": "3b70c627d6a5ac83144caced38cb24eb2418f89fecedc7add33873a1e53d7467",
+    "python/tessera/compiler/pass_metadata.py": "2e365a2f1ef8a9d52cf12257d3fe070e861993446a3d59d1ad87dbde816a85cb",
+    "python/tessera/compiler/pipeline_registry.py": "c5f6b66e3385e5dd849ae8fae53fda03a35416df8b9f6f9c8b2937dfe96f7124",
+    "python/tessera/compiler/rocm_mxfp4_storage_native.py": "1a47f3ca4a4b85aeab71dd7293e8301d89922796a6f81646da5cdd84792e1261",
+    "python/tessera/compiler/rocm_nvfp4_expand_native.py": "44bafbe505952d9c064c7e643ed02118670ca8307f42692129fc7bba2fcd3f63",
+    "python/tessera/compiler/rocm_nvfp4_ingest_native.py": "92ccfc40521cebf4cd007e71a6047d82cf1074a8100d9fd367c2cddd35ac535f",
+    "python/tessera/compiler/rocm_parent_view_native.py": "716c2ef5f7149515a7b7fc5391b7c07cffdc9442860d2f3e1e1e3133d5d1c138",
+    "python/tessera/compiler/rocm_pipeline.py": "0692c8c8f7222860b0b7131588ee71bdd990ee807f48b4b9cae8f78b1ac8cff4",
+    "python/tessera/runtime.py": "46ea0f69fc80f57943a56f015fab092afd2e102ab63ca5617dbb234df0e12c31",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "a7700e7edddf9c7d5d7390ea58a4da352562739ba1a86d9bf019e5c6365206fe",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeGateUpMaterializer.h": "32645f89ab1de242b90c3a9aa3411199ae93c419eced0b4d27d666f6336a6641",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ParentViewProgramExport.h": "56d3b7f949b7bf206d4f801463315a93a66a92ff33eef887938000623df5c62b",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp": "c91a16b6a5c6da020c124c339ef05b3d9aee85058bb711656d293d7d27986717",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp": "57232bca4534333a327baa49d1454be6332f554b8cb4e6f10bdb64ba11127793",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "d2cc50e6803f126abb7b2f6556914ded0c7ed204efcfba38f0f69181e7a8cff7",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/CMakeLists.txt": "557d39306aa7fa5644b124004dce2af365ed44f8ec0f86cf40db7e5ab82ea107",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/TesseraROCMOps.cpp": "969173ece820206cf1f4a3ea7ab715c616e36ae41bfef45aa44eaec05fbd5025",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "780c2db5de9b1af827c61d8be2406e3593f8c91550dd2725f54318774ac9503f",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "928f52e8c5441db62f61b392490c31fb02e8ca0783204fb9481748915eaf8803",
+    "src/compiler/codegen/Tessera_ROCM_Backend/tools/CMakeLists.txt": "4f7f32a95dbee2f432a7335b1da561686ae1b57c2157827d4829fe9027bb2c77",
+    "src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera_rocm_opt.cpp": "6f0504222a8914a25a299dd02fe34436b0f2ecae70af93f2de8dda91679b01d4",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "7518acee1de9cae602f8ce81778372f48555cad96c91f3d10ad89645453de2bc",
+    "src/compiler/ir/include/Tessera/IR/RowRegionContract.h": "64902ba14af55435730dc46b9ceb729feeacb434be0bbeb94702bca715796932",
+    "src/compiler/programming_model/lib/NativeGateUpSchedule.h": "a9eb9b8028c843129da18a1d19c705c76e54c2666f96476c2f9cd8b07a202543",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "ea576b6cf68ef98403aaec6b400f30129908f29370b3a794b485d58a7a3999bf",
+    "tests/device/rocm/test_native_parent_view_jit.py": "44eda20537bbca0f3fbcf94f32ea34e84a353af5357e1fad4896a2e29ea5c1b9",
+    "tests/unit/test_graph_ir_captured_coordinates.py": "43d88d445048aab79b320a5c363ea4c3d5e94d1b05054a98627e851c37cabde3",
+    "tests/unit/test_native_gate_up_view_schedule.py": "baaa232ab2791ec790d66f3c6827317e56bca0f0c71c4e60dd948edae3485f49",
+    "tests/unit/test_ods_op_has_consumer.py": "ed560aeb3cbf1f645a9c1a2fa6d27fb60b209da65b3b4d29f96c1c4f03e2fb40",
+    "tests/unit/test_pipeline_registry.py": "2167bf1a2691889863a0b8ab0710c54e7b5e1277d1d5b389138799f258acc08f",
+    "tests/unit/test_rocm_compiled_family_gate.py": "a3576b5bcb6c5bd9b50a8049ec35c8244589a8493f50da8e5f7429bf0824fdd9",
+    "tests/unit/test_rocm_parent_view_native_package.py": "23b7816c2d4d11dedc5f1fad81427801a0e3a0041a02940a0e4da2413cd4709b"
+  },
+  "compiler_sha256": {
+    "tools/tessera-opt/tessera-opt": "6420d0cb179d1e711ff0adc8479f6cd5954fc86e0dc5910c02466d2cc6fdbc72",
+    "src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "8b06dab823d90d5965932a86b3cc6e6cd4aca4c9898d9a1ec1b70fafb2b43a9c",
+    "src/compiler/layout_algebra/libtessera_layout_algebra.so": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8"
+  },
+  "initial_timing_recorder": {
+    "path": "record_native_parent_view_initial.py",
+    "sha256": "2a36e13d9911092ebe908130c6ae79ce965cf5db426fdf3f921664d3ba791ccc",
+    "timing_packet": "public-parent-view-timings.json"
+  },
+  "captured_timing_recorder": {
+    "path": "benchmarks/rocm/record_native_parent_view.py",
+    "timing_packet": "public-parent-view-captured-timings.json"
+  },
+  "resolution_compatibility_control": {
+    "path": "resolution_compatibility_control.py",
+    "capture_revision": "010b675c9091f139bde2ae0c703c1e656484c3a8",
+    "sha256": "749b06f48752f9825815de36d341ca2e4d7bd8fed867316c3c9e6dec47a4bad3"
+  }
+}

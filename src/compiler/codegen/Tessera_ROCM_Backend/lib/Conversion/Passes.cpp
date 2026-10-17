@@ -169,6 +169,7 @@ struct DeclareROCMPipelineContractPass
 
   void runOnOperation() override {
     static constexpr StringLiteral families[] = {
+        "parent_view",
         "algebra_clifford", "attention_mla_decode", "control_state_machine",
         "draft_dspark",
         "ebm_affine_langevin", "ebm_decode_init", "ebm_ebt_tiny",
@@ -205,6 +206,10 @@ struct DeclareROCMPipelineContractPass
     // scheduled route (Graph -> Schedule -> Tile). A Graph->Tile shortcut here
     // was a second GEMM lowering authority whose schedule never reached
     // Schedule IR (Decision #31). Mirrors rocm_pipeline.ROCMExecutablePipeline.
+    if (family == "parent_view" && (input == "graph" || arch != "gfx1201")) {
+      getOperation().emitError("parent_view requires owning gfx1201 native Graph -> Schedule -> Tile entry");
+      return signalPassFailure();
+    }
     if (family == "matmul" && input == "graph") {
       getOperation().emitError(
           "ROCm matmul has no Graph-level pipeline entry: it enters at Tile "
@@ -232,6 +237,7 @@ struct DeclareROCMPipelineContractPass
     // full-sweep measurement on Tajasarus; keep this list identical to the
     // Python one.
     static constexpr llvm::StringRef kGfx1201PromotedFamilies[] = {
+        "parent_view",
         "softmax", "reduction", "matmul", "attention", "attention_backward",
         "control_state_machine", "ebm_affine_langevin",
         "scalar_unary", "scalar_binary", "scalar_compare", "scalar_logical",
@@ -375,7 +381,11 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
   if (blockscalePrefetch >= 0)
     scaleGroupPanelsOption +=
         " blockscale-prefetch=" + std::to_string(blockscalePrefetch);
-  if (family == "algebra_clifford") {
+  if (family == "parent_view") {
+    // The sealed Target region already carries numerical/addressing SSA.
+    // lower-tessera-target-to-rocdl owns the native frame/wrapper projection.
+    return;
+  } else if (family == "algebra_clifford") {
     pm.addPass(createGenerateROCMCliffordKernelPass());
   } else if (family == "attention_mla_decode") {
     pm.addPass(createGenerateROCMMLAAbsorbDecodeKernelPass());
@@ -603,7 +613,7 @@ static void buildROCMExecutablePipeline(
   // nothing past the contract pass, whose run refuses it. Building the rest
   // would leave the refusal as the only thing standing between a caller and
   // a Graph->Tile GEMM lowering that skips Schedule IR.
-  if (family == "matmul" && input == "graph")
+  if ((family == "matmul" || family == "parent_view") && input == "graph")
     return;
 
   if (input == "graph") {

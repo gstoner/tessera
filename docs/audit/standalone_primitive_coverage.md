@@ -228,7 +228,7 @@ Exact-target backend-manifest rows:
 | `nvidia_sm90` | 103 | `artifact_only` 42, `planned` 61 |
 | `rocm` | 332 | `device_verified_abi` 3, `device_verified_jit` 316, `artifact_only` 1, `planned` 12 |
 | `rocm_gfx1151` | 10 | `device_verified_jit` 10 |
-| `rocm_gfx1201` | 14 | `device_verified_jit` 14 |
+| `rocm_gfx1201` | 15 | `device_verified_jit` 15 |
 | `x86` | 325 | `device_verified_jit` 274, `fused` 42, `reference` 9 |
 
 Current open queues derived from the same sources:

@@ -10,6 +10,12 @@ scope: ROCm backend implementation and exact-device proof
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
 Sync: ROCM-K16-QUANT-PUBLIC-20261017.
 
+Review follow-up: metadata-only binary tracing uses catalog inference only for
+matching operand shapes, preserving existing broadcast-aware tracing otherwise.
+Quantizer route admission now replays the cached native Graph-to-Schedule
+validator against full source semantics before selection. This changes shared
+frontend/admission behavior, not sibling physical schedules or execution claims.
+
 Ordinary Python JIT now carries the thirteen original Graph operations
 through native Schedule/Tile/Target/ROCDL/LLVM to a checked two-output owner.
 Four owning gfx1201 JIT/portable/fresh-process cases pass. The exact canonical

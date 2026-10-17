@@ -429,7 +429,12 @@ class TraceBuilder:
             and all(type(dim) is int and dim > 0 for dim in reshape_shape)
             and (not self.evaluate_catalog_outputs or not tracer_args
                  or not all(value.value is not None for value in tracer_args)))
-        metadata_only_math = graph_name in {"tessera.reduce", "tessera.absolute", "tessera.maximum", "tessera.expand", "tessera.div"} and (
+        # Binary Graph operations currently require matching operand shapes.
+        # Preserve the existing broadcast-aware trace path for unequal shapes;
+        # its result must not inherit the first operand's catalog shape.
+        metadata_binary_shape = (graph_name not in {"tessera.div", "tessera.maximum"}
+            or len({value.shape for value in tracer_args}) == 1)
+        metadata_only_math = metadata_binary_shape and graph_name in {"tessera.reduce", "tessera.absolute", "tessera.maximum", "tessera.expand", "tessera.div"} and (
             not self.evaluate_catalog_outputs or not all(value.value is not None for value in tracer_args))
         if metadata_only_math or physical_movement or attention_types_only or scaled_types_only or cast_types_only or slice_types_only or silu_types_only or reshape_types_only or graph_name in {"tessera.nvfp4_expand","tessera.nvfp4_requantize","tessera.mxfp4_folded_storage"}:
             # Catalog-owned result contracts avoid host arithmetic during tracing,

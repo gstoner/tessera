@@ -39,7 +39,20 @@ def supports_block_quant(module: GraphIRModule) -> bool:
     if not requests_block_quant(module):
         return False
     ty = module.functions[0].args[0].ir_type
-    return ty.rank == 2 and ty.dtype == "bf16"
+    if ty.rank != 2 or ty.dtype != "bf16":
+        return False
+    tool = find_tessera_opt()
+    if tool is None:
+        return False
+    from .rocm_pass_cache import run
+    try:
+        source = _block_quant_source(module, _TARGET)
+        # Admission and lowering share the native semantic validator: names
+        # alone cannot establish constants, SSA wiring, types or result roles.
+        run(tool, source, "--tessera-graph-to-schedule", execute=run_tessera_opt)
+    except (RuntimeError, ValueError):
+        return False
+    return True
 
 
 @dataclass(frozen=True)
@@ -70,8 +83,8 @@ def lower_block_quant_text(graph: str) -> BlockQuantRecipe:
     return recipe
 
 
-def lower_block_quant_graph(module: GraphIRModule,target: str) -> BlockQuantRecipe:
-    if target != _TARGET or not supports_block_quant(module):
+def _block_quant_source(module: GraphIRModule, target: str) -> str:
+    if target != _TARGET or not requests_block_quant(module):
         raise ValueError("block quantization requires its original compact BF16 gfx1201 source")
     source = deepcopy(module)
     for key,value in (("tessera.target",_TARGET),("tessera.arch","gfx1201")):
@@ -93,7 +106,11 @@ def lower_block_quant_graph(module: GraphIRModule,target: str) -> BlockQuantReci
     if old is not None and json.loads(old) != names:
         raise ValueError("block quantization source bindings conflict")
     source.module_attrs["tessera.launch_bindings"] = json.dumps(names)
-    return lower_block_quant_text(source.to_mlir(target=target,canonical=True))
+    return source.to_mlir(target=target,canonical=True)
+
+
+def lower_block_quant_graph(module: GraphIRModule, target: str) -> BlockQuantRecipe:
+    return lower_block_quant_text(_block_quant_source(module, target))
 
 
 def _validate_frame(program,member):

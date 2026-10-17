@@ -12,6 +12,12 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
 Sync: ROCM-K16-QUANT-PUBLIC-20261017.
 
+Review follow-up: metadata-only binary tracing uses catalog inference only for
+matching operand shapes, preserving existing broadcast-aware tracing otherwise.
+Quantizer route admission now replays the cached native Graph-to-Schedule
+validator against full source semantics before selection. This changes shared
+frontend/admission behavior, not sibling physical schedules or execution claims.
+
 Shared frontend assessment: immutable read-only FP32 splats now emit upstream
 arith.constant SSA in both AST and trace, with value-based cache identity.
 Canonical reduction inference respects axis/keepdims; upstream constants remain

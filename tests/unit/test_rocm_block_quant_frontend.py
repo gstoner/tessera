@@ -99,3 +99,49 @@ def test_canonical_frontend_artifact_restores_without_a_compiler(monkeypatch):
     package=validate_block_quant_runtime_artifact(restored)
     assert package.images[0].startswith(b"\x7fELF")
     assert len(package.members_json)==1
+
+
+@pytest.mark.parametrize("operation", ["div", "maximum"])
+@pytest.mark.parametrize("shapes", [((3, 1), (3, 16)), ((3, 16), (3, 1)),
+                                   ((16,), (3, 16)), ((3, 16), (16,))])
+def test_abstract_binary_math_preserves_broadcast_shape(operation, shapes):
+    def fn(x, y):
+        return getattr(ts.ops, operation)(x, y)
+    result = trace(fn, (shapes[0], "fp32"), (shapes[1], "fp32"),
+                   evaluate_catalog_outputs=False)
+    module = to_graph_ir_module(result, name="broadcast_math")
+    assert tuple(map(int, module.functions[0].result_types[0].shape)) == np.broadcast_shapes(*shapes)
+
+
+@pytest.mark.parametrize("operation", ["div", "maximum"])
+def test_abstract_binary_math_rejects_incompatible_broadcast(operation):
+    def fn(x, y):
+        return getattr(ts.ops, operation)(x, y)
+    with pytest.raises((ValueError, TesseraTraceError)):
+        trace(fn, ((3, 2), "fp32"), ((3, 16), "fp32"),
+              evaluate_catalog_outputs=False)
+
+
+@pytest.mark.usefixtures("production_compiler")
+@pytest.mark.parametrize("mutation", ["sum", "divisor", "floor", "wiring", "extra_constant", "returns"])
+def test_quantizer_admission_uses_full_native_source_contract(mutation):
+    from copy import deepcopy
+    from tessera.compiler.rocm_block_quant_native import supports_block_quant
+    original = captured()
+    assert supports_block_quant(original)
+    module = deepcopy(original)
+    fn = module.functions[0]
+    if mutation == "sum":
+        fn.body[3].kwargs["op"] = "sum"
+    elif mutation == "divisor":
+        fn.body[4].kwargs["value"] = "dense<449.0> : tensor<6x1xf32>"
+    elif mutation == "floor":
+        fn.body[6].kwargs["value"] = "dense<1.0> : tensor<6x1xf32>"
+    elif mutation == "wiring":
+        fn.body[5].operands[0] = fn.body[2].result
+    elif mutation == "extra_constant":
+        fn.body.insert(5, deepcopy(fn.body[4]))
+    else:
+        fn.return_values.reverse()
+    assert not supports_block_quant(module)
+    assert supports_block_quant(original)

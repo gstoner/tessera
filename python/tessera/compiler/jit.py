@@ -2398,7 +2398,7 @@ class JitFn:
         # is an inspection/portable boundary, not a prerequisite for every
         # invocation of its checked C++ owner with fresh host roots.
         output,receipts=program.execute(ordered)
-        if len(receipts)!=2 or not all(r.get("ok") and r.get("execution_kind")=="native_gpu" for r in receipts):
+        if len(receipts)!=len(program.native.native_stages) or not all(r.get("ok") and r.get("execution_kind")=="native_gpu" for r in receipts):
             raise RuntimeError(f"native quantized-product execution failed: {receipts}")
         self._rocm_quantized_product_last_program=program
         self._rocm_quantized_product_last_receipts=receipts
@@ -3750,7 +3750,7 @@ class JitFn:
                 receipt.get("ok") and receipt.get("execution_kind")=="native_gpu" for receipt in quantized_receipts):
             import hashlib
             quant_native=quantized_program.native
-            target_decision["rocm_gfx1201"]="canonical_rocm_quantized_product_program; 2 ordered native packages"
+            target_decision["rocm_gfx1201"]=f"canonical_rocm_quantized_product_program; {len(quantized_program.native.native_stages)} ordered native packages"
             plan_hash=quant_native.binding_digest
             ir_hashes["graph_ir"]=hashlib.sha256(quantized_program.graph_ir.encode()).hexdigest()
             ir_hashes["schedule_ir"]=hashlib.sha256("\n".join((quant_native.quantizer_recipe.schedule_ir,

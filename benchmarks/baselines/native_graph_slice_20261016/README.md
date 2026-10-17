@@ -67,3 +67,8 @@ without compaction so non-native downstream dtype promotion remains valid.
 The actual native SiLU capture still performs no eager element arithmetic.
 The reconciliation selection passes 904 tests; the production compiler lane
 passes 1,340 with zero skips and its executed-case gate.
+
+Final committed-source validation (`95010a9276`): broad host units pass
+**26,146 cases**, with 5,902 expected skips and 11 warnings. The complete
+production compiler lane passes **1,340 cases with zero skips**, including
+its executed-case gate; all 33 generated documents are in sync.

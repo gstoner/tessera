@@ -11,6 +11,11 @@ last_updated: 2026-10-17
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
 Sync: ROCM-K16-QUANT-SCHEDULE-20261017.
 
+Shared typed buffer views now admit real E4M3FN storage for the quantizer
+output. This does not admit sibling execution: native schema 4 requires
+gfx1201. Follow-up required for any sibling E4M3 view consumer and its
+architecture-specific ABI and numerical proof.
+
 Not applicable to SM120 execution: the new Schedule admission requires an
 explicit gfx1201 block-quant marker and rejects a sibling target. Twelve existing exact RTX5070 source-active producer regressions pass after
 the shared Graph/Schedule dispatch change;

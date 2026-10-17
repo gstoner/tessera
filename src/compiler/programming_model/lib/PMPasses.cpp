@@ -4330,6 +4330,9 @@ struct ScheduleToTilePass
       if (failed(lowerCooperativeSSD(mod, ssdGPU))) signalPassFailure();
       return;
     }
+    bool blockQuantSelected=false;
+    if (failed(block_quant::lower(mod,blockQuantSelected))) return signalPassFailure();
+    if (blockQuantSelected) return;
     bool gateUpSelected = false;
     if (failed(gate_up_view::lower(mod,gateUpSelected))) return signalPassFailure();
     if (gateUpSelected) return;

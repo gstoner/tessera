@@ -73,3 +73,55 @@ def test_quant_schedule_refuses_a_consistent_sibling_target():
     run_tessera_opt(find_tessera_opt(),graph,"--verify-each")
     with pytest.raises(RuntimeError,match="native K16 quantization"):
         run_tessera_opt(find_tessera_opt(),graph,"--tessera-graph-to-schedule")
+
+
+@pytest.mark.usefixtures("production_compiler")
+@pytest.mark.parametrize("rows,columns", [(3,32),(19,12288),(256,12288)])
+def test_quant_tile_has_distinct_typed_roots_and_no_tensor_allocations(rows,columns):
+    output = run_tessera_opt(find_tessera_opt(),source(rows,columns),
+        "--pass-pipeline=builtin.module(tessera-graph-to-schedule,tessera-schedule-to-tile)")
+    # Ignore the sealed original source string when counting physical operations.
+    body = output[output.index("tile.row_region_kernel"):]
+    assert "schema = 4" in body
+    assert body.count("tile.buffer_view ") == 3
+    assert body.count("tile.load_element ") == 2
+    assert body.count("tile.store_element ") == 2
+    assert body.count("scf.for ") == 2
+    assert "f8E4M3FN" in body and "bf16" in body and "f32" in body
+    assert "arith.maximumf" in body and body.count("arith.divf") == 2
+    assert "arith.truncf" in body and "arith.extf" in body
+    assert "memref.alloc" not in body and "tensor.empty" not in body
+    assert "tessera.rocm.block_quant_source" in output
+
+
+@pytest.mark.usefixtures("production_compiler")
+def test_quant_tile_refuses_a_changed_schedule_witness():
+    schedule = run_tessera_opt(find_tessera_opt(),source(),"--tessera-graph-to-schedule")
+    changed = schedule.replace('serial_k16_ssa','serial_k32_ssa')
+    assert changed != schedule
+    with pytest.raises(RuntimeError,match="Schedule differs"):
+        run_tessera_opt(find_tessera_opt(),changed,"--tessera-schedule-to-tile")
+
+
+@pytest.mark.usefixtures("production_compiler")
+def test_quant_tile_refuses_changed_sealed_scalar_body():
+    tile = run_tessera_opt(find_tessera_opt(),source(),
+        "--pass-pipeline=builtin.module(tessera-graph-to-schedule,tessera-schedule-to-tile)")
+    changed = tile.replace('arith.maximumf','arith.minimumf')
+    assert changed != tile
+    with pytest.raises(RuntimeError,match="schema-4"):
+        run_tessera_opt(find_tessera_opt(),changed,"--verify-each")
+
+
+@pytest.mark.usefixtures("production_compiler")
+def test_quant_tile_body_is_shape_independent_but_source_envelope_is_not():
+    import re
+
+    outputs = [run_tessera_opt(find_tessera_opt(),source(m,k),
+        "--pass-pipeline=builtin.module(tessera-graph-to-schedule,tessera-schedule-to-tile)")
+        for m,k in [(3,32),(19,12288),(256,12288)]]
+    def hashes(name):
+        return [re.search(rf'{name} = "([0-9a-f]{{64}})"',text).group(1) for text in outputs]
+    assert len(set(hashes("body_hash"))) == 1
+    assert len(set(hashes("source_hash"))) == 3
+    assert len(set(hashes("artifact_hash"))) == 3

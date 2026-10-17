@@ -822,10 +822,11 @@ namespace tessera::tile {
 mlir::LogicalResult BufferViewType::verify(
     llvm::function_ref<mlir::InFlightDiagnostic()> error, mlir::Type element,
     llvm::StringRef access, llvm::StringRef order) {
-  if ((!element.isF16() && !element.isBF16() && !element.isF32()) ||
+  if ((!element.isF16() && !element.isBF16() && !element.isF32() &&
+       !mlir::isa<mlir::Float8E4M3FNType>(element)) ||
       (access != "read" && access != "write" && access != "read_write") ||
       (order != "row_major" && order != "col_major"))
-    return error() << "requires f16/bf16/f32 storage, a read/write permission and row/column-major order";
+    return error() << "requires f16/bf16/f32/E4M3FN storage, a read/write permission and row/column-major order";
   return mlir::success();
 }
 }

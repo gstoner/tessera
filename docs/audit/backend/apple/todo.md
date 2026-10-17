@@ -11,7 +11,12 @@ last_updated: 2026-10-17
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
 Sync: ROCM-K16-QUANT-SCHEDULE-20261017.
 
-Not applicable to Metal execution: this artifact-only Schedule profile is
+Shared typed buffer views now admit real E4M3FN storage for the quantizer
+output. This does not admit sibling execution: native schema 4 requires
+gfx1201. Follow-up required for any sibling E4M3 view consumer and its
+architecture-specific ABI and numerical proof.
+
+Not applicable to Metal execution: this artifact-only Schedule/Tile profile is
 explicitly gated to gfx1201. Shared typed Graph verification is retained, and
 no Apple kernel, storage ABI or numerical support is promoted.
 

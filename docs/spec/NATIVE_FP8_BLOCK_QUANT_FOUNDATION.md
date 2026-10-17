@@ -21,13 +21,19 @@ bitwise; NaNs match semantically. The packet covers 266,560 values and preserves
 changed-input/retained-output ownership. This is a GPU storage primitive,
 not proof of a public Graph quantizer or complete native MLP.
 
-## Explicit semantic Graph and Schedule — artifact-only
+## Explicit semantic Graph, Schedule and typed Tile — artifact-only
 
 The native Graph-to-Schedule pass now validates the complete explicit textual
 source, including tensor broadcasts, IEEE scale-floor constants, SSA edges,
 output shapes and RNE storage conversion. A content-sealed Schedule artifact
-retains the original Graph. No Tile body, native image, mixed-width runtime
-package or public quantizer execution is implemented by this increment.
+retains the original Graph. Schedule-to-Tile now projects the actual source
+SSA into a sealed schema-4 body with three typed non-owning views, one K16
+FP32 maximum loop, one scale store and one E4M3 encoding loop. Logical
+reshapes and broadcasts allocate no storage. The physical body accepts three
+pointers, a group index and a group count; its identity contains no source
+M/I constants. Source-specific extents remain in the sealed envelope. Native
+Target/image lowering, mixed-width runtime packaging and public quantizer
+execution remain required; this is not executable quantizer evidence.
 The ordinary Python trace still needs constructor/shape-metadata integration;
 the current verified input is textual Graph IR. Schedule profile schema 4
 belongs to the row-region namespace; attention schema numbering is unchanged.
@@ -52,6 +58,16 @@ infinity behavior follows the explicit maximum/division/cast expression;
 a native implementation must test those cases instead of assuming finite
 checkpoint data establishes general behavior. BF16 subnormals and FP32
 denormal behavior at the scale floor need exact-device proof.
+
+## Typed Tile verification
+
+Fourteen focused K16 cases cover three source shapes, exact source policy,
+changed Schedule metadata and a tampered scalar body. Adjacent parent-view,
+FP8 cast, canonical dtype, tensor-attribute, diagnostic, pass-metadata and
+audit gates pass 500 combined cases after a clean incremental rebuild with no
+source-mtime warning. Physical body hashes are identical across the three
+source shapes while source and artifact seals remain distinct.
+This remains compiler artifact evidence, not owning-device execution.
 
 ## Required integration gates
 

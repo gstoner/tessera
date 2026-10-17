@@ -12,8 +12,13 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
 Sync: ROCM-K16-QUANT-SCHEDULE-20261017.
 
+Shared typed buffer views now admit real E4M3FN storage for the quantizer
+output. This does not admit sibling execution: native schema 4 requires
+gfx1201. Follow-up required for any sibling E4M3 view consumer and its
+architecture-specific ABI and numerical proof.
+
 Not applicable to x86 execution: the profile only seals an explicit
-gfx1201 Graph into Schedule metadata. No CPU lowering, cast behavior or ABI
+gfx1201 Graph into Schedule metadata and a typed Tile scalar body. No CPU lowering, cast behavior or ABI
 changes; shared registry and metadata gates remain required.
 
 ## ROCM-NATIVE-E4M3-CAST-20261017 — typed quantizer storage primitive

@@ -101,15 +101,15 @@ def test_target_check_accepts_the_bound_directive(layout):
     assert (checked["staging"], checked["warps"], checked["pipeline_depth"]) == ("global", 1, 1)
 
 
-def test_target_check_binds_the_lds_body_and_the_bf16_output():
-    tile, target = _pair("nk", "bf16", staging="lds", warps=8, block=(128, 128))
+@pytest.mark.parametrize("layout", ["kn", "nk"])
+def test_target_check_binds_the_lds_body_and_the_bf16_output(layout):
+    tile, target = _pair(layout, "bf16", staging="lds", warps=8, block=(128, 128))
     checked = check_blockscale_target_ir(
-        BlockScaleShape(64, 96, 256, 128, 128, "nk", "bf16"), tile, target)
+        BlockScaleShape(64, 96, 256, 128, 128, layout, "bf16"), tile, target)
     assert (checked["staging"], checked["warps"], checked["block_m"]) == ("lds", 8, 128)
 
 
 @pytest.mark.parametrize(("layout", "staging", "warps", "depth", "block"), [
-    ("kn", "lds", 8, 1, (128, 128)),     # the LDS body reads the [N, K] weight only
     ("nk", "lds", 6, 1, (128, 128)),     # 4 wave rows of 32 do not divide 6 waves
     ("nk", "lds", 32, 1, (128, 128)),    # more than 16 waves
     ("nk", "global", 8, 1, (32, 32)),    # the register panel is one wave

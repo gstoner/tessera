@@ -340,15 +340,11 @@ def test_blockscale_w8a8_lds_knobs_compute_the_same_bits_on_gfx1201(macro, warps
 
 def test_blockscale_w8a8_lds_body_refuses_what_it_cannot_emit_on_gfx1201():
     """Refused by name, never answered with the register panel: a
-    double-buffered 128x128 tile (72 KiB of LDS) and the [K, N] weight."""
+    double-buffered 128x128 tile (72 KiB of LDS)."""
     shape = BlockScaleShape(256, 4096, 256, 128, 128, "nk")
     program = _with_schedule(lower_blockscale(shape), staging="lds", warps=8,
                              macro=(128, 128), depth=2)
     with pytest.raises(RuntimeError, match="73728 LDS bytes exceed the 64 KiB"):
-        package_blockscale(program)
-    kn = BlockScaleShape(256, 4096, 256, 128, 128, "kn")
-    program = _with_schedule(lower_blockscale(kn), staging="lds", warps=8, macro=(128, 128))
-    with pytest.raises(ValueError, match=r"\[N, K\] weight"):
         package_blockscale(program)
 
 
@@ -732,3 +728,53 @@ def test_register_short_k_dispatch_and_fallback_reuse_image(layout, output):
     assert len({p.image.image_digest for p in packages}) == 1
     assert len({p.descriptor.entry_symbol for p in packages}) == 1
     assert len({p.descriptor.provenance["schedule_hash"] for p in packages}) == 5
+
+
+@pytest.mark.parametrize("m,n,k", [(17, 1, 128), (33, 17, 256), (65, 63, 256),
+                                  (129, 129, 384), (200, 520, 512), (256, 1024, 1536)])
+@pytest.mark.parametrize("output", ["f32", "bf16"])
+def test_w8a8_kn_lds_transpose_matches_register_on_gfx1201(m, n, k, output):
+    """Coalesced physical KN staging preserves group scales and ragged edges."""
+    assert rt._rocm_live_arch() == "gfx1201"
+    shape = BlockScaleShape(m, n, k, 128, 128, "kn", output)
+    a, b, sa, sb = _inputs(shape, exact=False, seed=1047)
+    program = _with_schedule(lower_blockscale(shape), staging="lds",
+                             warps=8, macro=(128, 64))
+    package = package_blockscale(program)
+    assert package.descriptor.provenance["staging"] == "lds"
+    got = _launch(package, a, b, sa, sb, shape)
+    reference = _register_reference(shape, a, b, sa, sb)
+    want = blockscale_reference(a, b, sa, sb, scale_k=128, scale_n=128)
+    magnitude = blockscale_reference(
+        np.abs(a.astype(np.float32)), np.abs(b.astype(np.float32)),
+        sa, sb, scale_k=128, scale_n=128)
+    bound = 4 * k * np.finfo(np.float32).eps * magnitude
+    if output == "bf16":
+        bound = bound + np.abs(want) * 2 ** -8
+    assert np.all(np.abs(got.astype(np.float64) - want) <= bound + 1e-30)
+    if output == "bf16":
+        reference = reference.astype(ml_dtypes.bfloat16)
+        np.testing.assert_array_equal(got.view(np.uint16), reference.view(np.uint16))
+    else:
+        np.testing.assert_array_equal(got.view(np.uint32), reference.view(np.uint32))
+
+
+@pytest.mark.parametrize("scale_k,scale_n", [(32, 1), (64, 16), (128, 128)])
+@pytest.mark.parametrize("depth,pad", [(1, 0), (2, 32)])
+def test_w8a8_kn_lds_static_projected_and_reuse_on_gfx1201(scale_k, scale_n, depth, pad):
+    """Pipeline buffers, physical padding and runtime extents preserve semantics."""
+    packages = []
+    for m, n, k in [(17, 17, 128), (33, 63, 256), (65, 129, 384)]:
+        shape = BlockScaleShape(m, n, k, scale_k, scale_n, "kn")
+        a, b, sa, sb = _inputs(shape, exact=True, seed=300 + n)
+        program = _with_schedule(lower_blockscale(shape), staging="lds",
+                                 warps=8, macro=(128, 64), depth=depth)
+        projected = package_blockscale(program, blockscale_lds_pad_bytes=pad)
+        static = package_blockscale(
+            program, blockscale_lds_pad_bytes=pad, project_image_identity=False)
+        want = blockscale_reference(a, b, sa, sb, scale_k=scale_k, scale_n=scale_n)
+        for package in (projected, static):
+            np.testing.assert_array_equal(_launch(package, a, b, sa, sb, shape), want)
+        packages.append(projected)
+    assert len({p.image.image_digest for p in packages}) == 1
+    assert len({p.descriptor.entry_symbol for p in packages}) == 1

@@ -367,10 +367,9 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
     if staging == "global" and warps != 1:
         raise ValueError("W8A8 Target IR register panel is one wave")
     if staging == "lds" and (not 1 <= warps <= 16 or block_m % 32
-                             or warps % (block_m // 32)
-                             or shape.weight_layout != "nk"):
+                             or warps % (block_m // 32)):
         raise ValueError(
-            "W8A8 Target IR LDS body needs the [N, K] weight and warps a whole "
+            "W8A8 Target IR LDS body needs warps a whole "
             "multiple of its 32-row wave rows (at most 16 waves)")
     if pipeline_depth not in (1, 2):
         raise ValueError("W8A8 Target IR pipeline_depth must be 1 or 2")

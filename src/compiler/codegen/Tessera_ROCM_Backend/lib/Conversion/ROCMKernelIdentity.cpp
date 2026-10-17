@@ -207,7 +207,7 @@ struct ProjectROCMKernelIdentityPass
                   (macroK != 64 || kernel->hasAttr("runtime_k") || integer("k") % 64 == 0))
                : (macroK == 32 && blockM == 16 && blockN == 16 && waves.getInt() == 1));
       bool stagingValid = (!mxfp8 || mxfp8Profile) && staging && waves &&
-          (lds ? (staging.getValue() == "lds" && nk && blockM > 0 &&
+          (lds ? (staging.getValue() == "lds" && blockM > 0 &&
                   blockM % 32 == 0 && waves.getInt() > 0 &&
                   waves.getInt() <= 16 && waves.getInt() % (blockM / 32) == 0 &&
                   blockN % (16 * (waves.getInt() / (blockM / 32))) == 0)

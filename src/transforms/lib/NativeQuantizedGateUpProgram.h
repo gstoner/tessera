@@ -207,12 +207,12 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
   SmallVector<Operation *> ops;
   for (Operation &op:root.getBody().front().without_terminator()) ops.push_back(&op);
   auto ret=dyn_cast<func::ReturnOp>(root.getBody().front().back());
-  if (root.getNumArguments()!=7 || ops.size()!=37 || !ret ||
+  if (root.getNumArguments()!=7 || (ops.size()!=37 && ops.size()!=38) || !ret ||
       ops[0]->getNumOperands()!=1 || ops[13]->getNumOperands()!=3 ||
       ops[21]->getNumResults()!=1 || ops[22]->getNumOperands()!=1 ||
       ops[22]->getOperand(0)!=ops[21]->getResult(0) ||
-      ops[35]->getNumOperands()!=3 || ops[36]->getNumResults()!=1 ||
-      ret.getNumOperands()!=1 || ret.getOperand(0)!=ops[36]->getResult(0)) return refuse();
+      ops[35]->getNumOperands()!=3 || ops[36]->getNumResults()!=1 || ops.back()->getNumResults()!=1 ||
+      ret.getNumOperands()!=1 || ret.getOperand(0)!=ops.back()->getResult(0)) return refuse();
   SmallVector<Value> gateInputs{ops[0]->getOperand(0)};
   llvm::append_range(gateInputs,ops[13]->getOperands());
   SmallVector<Value> gateOutputs{ops[21]->getResult(0)};
@@ -237,7 +237,8 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
   groups.push_back({ops[13]});groups.push_back({ops[14],ops[15]});
   groups.emplace_back(ops.begin()+16,ops.begin()+22);
   groups.emplace_back(ops.begin()+22,ops.begin()+35);
-  groups.push_back({ops[35]});groups.push_back({ops[36]});
+  groups.push_back({ops[35]});
+  groups.emplace_back(ops.begin()+36,ops.end());
   SmallVector<llvm::StringRef> subprograms{
       gate.get()->getAttrOfType<StringAttr>("tessera.native.quantized_product_json").getValue(),
       down.get()->getAttrOfType<StringAttr>("tessera.native.quantized_product_json").getValue()};

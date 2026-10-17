@@ -9,11 +9,13 @@ import os
 
 from .rocm_block_quant_native import _NAMES
 from .rocm_quantized_product_program import NativeQuantizedProductProgram,package_quantized_product_graph,_export,_frame_shape
+from .rocm_quantized_mlp_program import NativeQuantizedMLPProgram
 from .scheduled_matmul import find_tessera_opt
 
 _SCHEMA="tessera.rocm.quantized_product_frontend.v1"
 _EXPANDED_SCHEMA="tessera.rocm.quantized_product_frontend.v2"
 _ACTIVATED_SCHEMA="tessera.rocm.quantized_product_frontend.v3"
+_MLP_SCHEMA="tessera.rocm.quantized_product_frontend.v4"
 _OWNER_PID=os.getpid()
 
 
@@ -26,12 +28,15 @@ def requests_quantized_product(module):
         (len(fn.args)==3 and names==[*_NAMES,"tessera.scaled_matmul"])
         or (len(fn.args)==4 and names==[*_NAMES,"tessera.nvfp4_expand","tessera.scaled_matmul"])
         or (len(fn.args)==4 and names==[*_NAMES,"tessera.nvfp4_expand","tessera.scaled_matmul",
-            "tessera.cast","tessera.slice","tessera.slice","tessera.cast","tessera.cast","tessera.silu_mul","tessera.cast"])))
+            "tessera.cast","tessera.slice","tessera.slice","tessera.cast","tessera.cast","tessera.silu_mul","tessera.cast"])
+        or (len(fn.args)==7 and names==[*_NAMES,"tessera.nvfp4_expand","tessera.scaled_matmul",
+            "tessera.cast","tessera.slice","tessera.slice","tessera.cast","tessera.cast","tessera.silu_mul","tessera.cast",
+            *_NAMES,"tessera.nvfp4_expand","tessera.scaled_matmul","tessera.cast"])))
 
 
 @dataclass(frozen=True)
 class TracedQuantizedProduct:
-    native: NativeQuantizedProductProgram
+    native: NativeQuantizedProductProgram | NativeQuantizedMLPProgram
     argument_names: tuple[str,...]
 
     @property
@@ -49,7 +54,7 @@ class TracedQuantizedProduct:
 
     def manifest(self):
         self.validate()
-        return {"schema":_ACTIVATED_SCHEMA if self.native.activation is not None else _EXPANDED_SCHEMA if self.native.expansion is not None else _SCHEMA,"argument_names":list(self.argument_names),"native_program":self.native.to_manifest()}
+        return {"schema":_frontend_schema(self.native),"argument_names":list(self.argument_names),"native_program":self.native.to_manifest()}
 
     def execute(self,args):
         from tessera import runtime as rt
@@ -112,10 +117,17 @@ def package_traced_quantized_product(module):
     return program
 
 
+def _frontend_schema(native):
+    schema=json.loads(native.program_json)["schema"]
+    return dict(zip((f"tessera.native.quantized_product.v{i}" for i in (1,2,3,4)),
+        (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA,_MLP_SCHEMA),strict=True))[schema]
+
+
 def _compiler_path(native):
-    return ("canonical_rocm_quantized_gate_up_program" if native.activation is not None else
-            "canonical_rocm_quantized_nvfp4_product_program" if native.expansion is not None
-            else "canonical_rocm_quantized_product_program")
+    return {_SCHEMA:"canonical_rocm_quantized_product_program",
+            _EXPANDED_SCHEMA:"canonical_rocm_quantized_nvfp4_product_program",
+            _ACTIVATED_SCHEMA:"canonical_rocm_quantized_gate_up_program",
+            _MLP_SCHEMA:"canonical_rocm_quantized_mlp_program"}[_frontend_schema(native)]
 
 
 def runtime_artifact(program):
@@ -135,12 +147,11 @@ def runtime_artifact(program):
 def _resolve(record,graph,names):
     value=json.loads(record)
     if (not isinstance(value,dict) or set(value)!={"schema","argument_names","native_program"}
-            or value["schema"] not in (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA) or not isinstance(value["argument_names"],list)):
+            or value["schema"] not in (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA,_MLP_SCHEMA) or not isinstance(value["argument_names"],list)):
         raise ValueError("native quantized-product frontend manifest differs")
     program=TracedQuantizedProduct(NativeQuantizedProductProgram.from_manifest(value["native_program"]),tuple(value["argument_names"]))
     program.validate()
-    expected=(_ACTIVATED_SCHEMA if program.native.activation is not None else
-              _EXPANDED_SCHEMA if program.native.expansion is not None else _SCHEMA)
+    expected=_frontend_schema(program.native)
     if value["schema"]!=expected:
         raise ValueError("native quantized-product frontend schema differs")
     if program.graph_ir!=graph or list(program.argument_names)!=json.loads(names):

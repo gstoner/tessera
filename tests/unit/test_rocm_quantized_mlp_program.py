@@ -53,3 +53,23 @@ def test_full_mlp_rejects_recursive_portable_component(package):
     record=package.to_manifest();record['gate']=record.copy()
     with pytest.raises(ValueError,match='component schemas'):
         NativeQuantizedMLPProgram.from_manifest(record)
+
+
+@pytest.mark.parametrize('m,h,k,n',[(1,16,16,1),(3,32,48,19)])
+def test_public_trace_keeps_explicit_down_store_and_seven_native_members(production_compiler,m,h,k,n):
+    from benchmarks.rocm.benchmark_public_quantized_mlp import make_mlp
+    from tessera.compiler.trace import trace,to_graph_ir_module
+    from tessera.compiler.rocm_quantized_product_frontend import supports_quantized_product,package_traced_quantized_product,_resolve
+    names=['x','packed','weight_scales','globals_','down_packed','down_weight_scales','down_globals']
+    result=trace(make_mlp(m,h,k,n),((m,k),'bf16'),((2*h,k//2),'uint8'),((2*h,k//16),'fp8_e4m3'),((2,),'fp64'),
+        ((n,h//2),'uint8'),((n,h//16),'fp8_e4m3'),((1,),'fp64'),arg_names=names,evaluate_catalog_outputs=False)
+    module=to_graph_ir_module(result,name='mlp',target='rocm_gfx1201')
+    assert supports_quantized_product(module),module.to_mlir(target='rocm_gfx1201',canonical=True)
+    program=package_traced_quantized_product(module)
+    assert len(program.native.native_stages)==7
+    assert program.native.down.product_recipe.shape.output=='bf16'
+    assert 'tessera.native.fp8_store_cast' in json.loads(program.native.program_json)['member_graphs'][6]
+    record=program.manifest()
+    assert record['schema']=='tessera.rocm.quantized_product_frontend.v4'
+    restored=_resolve(json.dumps(record,sort_keys=True),program.graph_ir,json.dumps(names))
+    assert restored.native.binding_digest==program.native.binding_digest

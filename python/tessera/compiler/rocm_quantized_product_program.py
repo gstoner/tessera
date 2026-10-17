@@ -47,6 +47,10 @@ def _export(tool, source):
 
 
 def _frame_shape(plan):
+    if isinstance(plan,dict) and plan.get("schema")=="tessera.native.quantized_product.v4":
+        from .rocm_quantized_mlp_program import _frame as mlp_frame
+        roles,shape,_=mlp_frame(plan)
+        return roles,shape
     if not isinstance(plan,dict):
         raise ValueError("native quantized-product frame differs")
     activated = plan.get("schema") == _ACTIVATED_SCHEMA
@@ -269,6 +273,9 @@ class NativeQuantizedProductProgram:
 
     @classmethod
     def from_manifest(cls,record):
+        if isinstance(record,dict) and record.get("schema")=="tessera.rocm.quantized_product_package.v4":
+            from .rocm_quantized_mlp_program import NativeQuantizedMLPProgram
+            return NativeQuantizedMLPProgram.from_manifest(record)
         from .native_artifact import NativeImageArtifact,LaunchDescriptor
         if (not isinstance(record,dict) or set(record)!={"schema","program_json","graph_ir","checked_product_target_ir","binding_digest","stages"}
                 or record["schema"] not in _PACKAGE_SCHEMAS

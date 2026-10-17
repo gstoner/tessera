@@ -2772,7 +2772,10 @@ struct LowerTileToROCMPass
           (c.get("storage") != StringAttr::get(fn.getContext(), "f32") &&
            c.get("storage") != StringAttr::get(fn.getContext(), "f16") &&
            c.get("storage") != StringAttr::get(fn.getContext(), "bf16")) ||
-          c.get("output_storage") != StringAttr::get(fn.getContext(), "f32") ||
+          (c.get("output_storage") != StringAttr::get(fn.getContext(), "f32") &&
+           !(kind.getValue() == "silu_mul" && c.get("output_storage") == c.get("storage") &&
+             (c.get("storage") == StringAttr::get(fn.getContext(), "f16") ||
+              c.get("storage") == StringAttr::get(fn.getContext(), "bf16")))) ||
           !fn.getBody().hasOneBlock() || fn.getBody().front().getOperations().size() != 2) {
         fn.emitError("ROCm math requires an intact native Tile contract on the owning architecture");
         return signalPassFailure();
@@ -2807,10 +2810,10 @@ struct LowerTileToROCMPass
         valid &= tile->getAttr("output_storage") == c.get("output_storage");
         if (scan) valid &= tile->getAttr("inclusive") == BoolAttr::get(fn.getContext(), true);
         valid &= scan ? (kind.getValue() == "sum" || kind.getValue() == "max") :
-            binary ? (kind.getValue() == "add" || kind.getValue() == "div" || kind.getValue() == "mul") :
+            binary ? (kind.getValue() == "add" || kind.getValue() == "div" || kind.getValue() == "mul" || kind.getValue() == "silu_mul") :
             (kind.getValue() == "sqrt" || kind.getValue() == "exp");
         if (!scan) valid &= tile->getAttr("family") == StringAttr::get(
-            fn.getContext(), binary ? "binary" : kind.getValue() == "exp" ? "transcendental" : "unary");
+            fn.getContext(), binary ? (kind.getValue() == "silu_mul" ? "binary_math" : "binary") : kind.getValue() == "exp" ? "transcendental" : "unary");
         valid &= isa<LLVM::ReturnOp>(fn.getBody().front().back());
       }
       if (!valid) {

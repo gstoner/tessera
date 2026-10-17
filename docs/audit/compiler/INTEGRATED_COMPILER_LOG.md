@@ -12880,3 +12880,43 @@ full original five-slice obligations, broad CI and review remain open.
 Evidence: benchmarks/baselines/sm120_native_row_graph_20261016/README.md,
 benchmarks/baselines/nvfp4_source_bounded_20261016/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-16 — native ROCm SiLU activation and explicit store-width ownership
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync ROCM-NATIVE-SWIGLU-ACTIVATION-20261016.
+Outcome: isolated original SiLU Graph reaches native Schedule, typed Tile,
+ROCm Target, GPU/ROCDL/LLVM and HSACO with FP32 arithmetic and a single final
+FP32 or matching FP16/BF16 store. Additive descriptor identities and an explicit
+output-width C staging entry preserve existing FP32 ABI meanings. Shape-only
+tracing avoids eager arithmetic, and checked JIT allocation preserves output
+storage. 45 owning RX9070XT/gfx1201 cases pass, including all admitted ranks,
+changed inputs, IEEE classes, operand roles and fresh compiler-free replay.
+Adjacent math/widening/owner tests pass 91 cases; focused registry/ABI/lifecycle
+and compiler tests pass 551 cases. Ruff and zero-error mypy pass.
+Two 15-row timing trials reverse device-arm order. At M256/N12288 activation
+shape native device windows are about 25–28 us, within 2% of same-store legacy
+kernels. Smaller rows vary by order; no speedup or schedule promotion is claimed.
+Completed public calls remain 4.55–5.98 ms. Device and host scopes are separate.
+All four backend queues assessed. No gfx1151 or sibling physical proof transfers.
+Remaining: broad validation/CI and publication, full resident gate/up views and
+lifetimes, activation quantization/downprojection, original-model quality and
+the full five-slice obligations.
+Evidence: benchmarks/baselines/rocm_native_silu_20261016/README.md.
+Native SiLU publication follow-through: explicit CI markers separate 47 native
+compiler proofs from 13 pure frontend/capability cases. The 1,265 existing
+production compiler-route cases execute with zero skips. Broad host units report
+26,109 passed/5,902 skipped and one missing-recorder-citation failure; the
+citation is repaired, 146 follow-up cases and 556 final drift/compiler gates pass.
+The public selector preserves the unproved gfx1151 route; owning gfx1201
+numerical replay passes all 45 cases again. Exact-head CI remains required.
+Final local broad CPU: 26,067 passed/5,902 skipped; final production compiler:
+1,312 passed, zero skips. The complete HIP provider preserves 47 baseline
+exports and passes 87 owning SiLU plus bounded/public/prepared NVFP4 cases.
+Review follow-through: integer/other concrete result promotion and rank 1–3
+admission are now checked in tracing, selection and portable validation.
+628 focused gates, 115 tracer cases (32 skips), and 87 owning device cases pass.
+Five measured kernel images and complete provider bytes remain unchanged;
+new exact-head CI is required after the guards land in the PR.
+<!-- entry-fields:end -->

@@ -15444,3 +15444,16 @@ Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.
 Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
 
 Completed experiment, no promotion: an unmerged native row CUDA graph candidate passes 50 exact RTX5070 gates. Two trials with eight profiles each timing trials show no consistent speedup; production graph APIs/flag were removed and the frozen patch retained. The 200-call public/prepared profiles identify repeated Graph IR serialization, certificate and path work for further attribution. Existing direct submission, inline/prepass policy and VJP/JVP schemas remain unchanged. Evidence: benchmarks/baselines/sm120_native_row_graph_20261016/README.md.
+
+
+## ROCM-NATIVE-SWIGLU-ACTIVATION-20261016
+
+Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to CUDA physical scheduling: no NVIDIA generator or launch ABI changes. The shared Tile storage exception is restricted to owning ROCm SiLU contracts; existing NVIDIA paths retain their storage rules. Sibling refusal and registry gates require validation; no RTX 5070 numerical or timing claim is made.
+
+Shared frontend follow-through: same-shape/same-storage SiLU shape-only capture uses its existing catalog result contract instead of evaluating eager input arithmetic. Explicit numerical tracing remains available. This is frontend metadata parity only; owning physical proof is unchanged.
+
+Native-owner follow-through: the existing FP32 C staging ABI is preserved; an additive explicit-output-width export supports the two checked matching-half SiLU descriptors. Shape-only frontend capture and JIT output allocation follow the descriptor. Not applicable to this backend's physical execution: output-width C staging is HIP-only and native math admission remains ROCm-owned. Shared registry/compiler gates pass; no sibling device proof or performance claim is added.
+
+Review follow-through (PR962): SiLU shape-only capture is restricted to matching canonical FP16/BF16/FP32 storage, including concrete dtype metadata. Other concrete inputs retain the registered eager result promotion; abstract integer/mixed promotion requires concrete values. The new gfx1201 public selector, support predicate and portable package validator agree on ranks 1–3. No sibling dtype or execution promotion follows. Existing shared integer-ingress spelling gaps remain a separate frontend foundation follow-up.

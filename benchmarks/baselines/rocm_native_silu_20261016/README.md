@@ -1,0 +1,90 @@
+# Native gfx1201 SiLU activation
+
+Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Sync: ROCM-NATIVE-SWIGLU-ACTIVATION-20261016.
+
+RX9070XT/gfx1201, LLVM/MLIR23.1.1 assertions, ROCm10.0. This is an isolated
+activation dependency, not full NVFP4 MLP or model-quality closure.
+
+45 owning numerical/JIT/portable replay cases pass. The unit file now has 81
+cases: 47 compiler-dependent proofs and 34 pure frontend/capability cases.
+Fresh-process replay forbids compiler access and eager/legacy arithmetic;
+FP16/BF16 matching-store and widened FP32 outputs are checked independently.
+Adjacent native math/widening and owner lifetime tests pass 91 cases. Focused
+registry/compiler gates pass 603 cases; ABI/document gates pass 32 cases.
+Counts have different overlapping scopes; they are not summed as coverage.
+
+Two ordered trials each contain 15 correctness-gated rows and all raw samples.
+Both compare legacy/native device windows with matching input/output storage;
+explicit widened outputs have no mismatched legacy comparator. HIP events
+exclude allocation/transfers/readback, but may include host submission gaps.
+Public-call samples include checked dispatch, staging, transfers and completed
+readback; cold calls also include compilation/cache lookup. Domains are separate.
+
+At 256x12288 native device medians are 25.40–27.15 us, and same-store
+legacy/native ratios are 0.989–1.005 across arm orders. No speedup is claimed.
+Completed public calls at that shape take 4.55–5.98 ms. Smaller rows vary with
+trial order; no performance promotion or host-overhead closure follows.
+The earlier exploratory packet/logs remain in owned scratch, not final evidence.
+
+Compiler archive and installed-tool receipts bind the unchanged compiler core
+built at 05481f153. Packets additionally hash current changed sources, the
+compiler and candidate HIP provider. The native owner is rebuilt separately;
+source timestamps were never changed to manufacture compiler freshness.
+Original runtime providers are preserved. gfx1151 and sibling backends receive
+no physical execution or timing claim. Full resident views/lifetimes,
+activation quantization/downprojection and original-model quality remain open.
+
+Reproduce on Tajasaurus after sourcing the candidate environment:
+
+```sh
+python -m benchmarks.rocm.benchmark_native_silu_schedule --output native-first.json
+python -m benchmarks.rocm.benchmark_native_silu_schedule --legacy-first --output legacy-first.json
+```
+
+CI lane classification is explicit: 47 compiler-dependent proofs execute in the
+production compiler lane, while 34 pure frontend/capability tests stay in the
+CPU lane. Existing production compiler-route coverage passes 1,265 tests with
+zero skips. The generated-document gate confirms 33 documents are synchronized;
+plan ownership and public claim lint pass. The broad host unit lane recorded 26,109 passes and 5,902 skips, with one
+recorder-citation failure. The missing citation is fixed without changing its
+test; 146 follow-up tests and 556 final registry/ABI/compiler/recorder gates
+pass. Final CI remains a required publication/merge gate.
+
+Final timing packets bind committed source fe02b4c5a2fca7d1d4db1f11e739510383f22344.
+The earlier uncommitted-source trial is retained in owned scratch/history; these
+packets replace it as the final measurement evidence. No arithmetic changed.
+
+Recorder: [`benchmarks/rocm/benchmark_native_silu_schedule.py`](../../rocm/benchmark_native_silu_schedule.py).
+
+Final public selector review keeps unproved gfx1151 SiLU on its existing route
+selection; low-level compiler artifact recognition remains shared. All 45
+gfx1201 device cases pass again after that selector correction. Timings include the final public selector and complete shared HIP provider.
+
+Final local gates: corrected broad CPU lane 26,067 passed/5,902 skipped;
+production compiler lane 1,312 passed with zero skips and executed-proof gate.
+The complete shared provider preserves all 47 baseline exports and adds only
+`tessera_rocm_math_launch_v2`. Its 87 owning gfx1201 cases include all 45 SiLU
+cases plus existing bounded/public/prepared NVFP4 programs. The earlier
+math-only scratch provider was a build-isolation aid; final timing packets
+bind the complete provider.
+
+## Post-review storage and rank checks
+
+The final review found two real boundaries not exercised by the original lane:
+non-floating concrete promotion and public rank admission. Shape-only capture
+now requires matching canonical FP16/BF16/FP32 inputs and verifies concrete
+storage metadata. Other concrete inputs retain the registered eager precision
+policy; abstract integer/mixed promotion requires values. This does not add
+integer activation execution. The selector, support predicate and portable
+record validator all enforce the existing ranks 1–3 certificate.
+
+The unit module has 81 cases (47 compiler-dependent and 34 pure cases).
+Nine genuine red cases plus six controls were recorded before implementation;
+the initial alias-spelling-only fixture mistakes remain in scratch, not proof.
+Final focused admission/registry gates: 628 passed. Tracer regression selection:
+115 passed/32 skipped. Full-provider owning device follow-through: 87 passed.
+Ruff and the zero-error mypy ratchet pass. All five measured native storage
+images and the complete provider bytes remain identical. Timing packets bind
+fe02b4c5a2 before these frontend/rank guards; public host costs were not remeasured.
+New exact-head CI is required before merge.

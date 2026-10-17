@@ -4545,7 +4545,12 @@ for _math_target in ("rocm_gfx1151","rocm_gfx1201"):
         reason="Static row-major f32 sqrt/exp/add/div/cumsum/cummax, optionally "
                "preceded by exact same-storage f16/bf16 Graph widening casts, "
                "through native Graph/Schedule/Tile/Target/LLVM and checked ABI. "
-               "General composition and dynamic shapes remain gated.",
+               "General composition and dynamic shapes remain gated. "
+               + ("gfx1201 additionally executes isolated SiLU with f32 compute/f32 or matching-half "
+                  "store, rank 1/2/3; tests/device/rocm/test_native_silu_math_jit.py "
+                  "owns its exact-device and fresh-process proof (20261016)."
+                  if _math_target == "rocm_gfx1201" else
+                  "gfx1151 native SiLU execution remains follow-up required."),
         execution_mode="hip_runtime", direction="forward", op_family="math",
         device_proof="device_verified_jit", evidence_target=_math_target,
         numerical_fixture="tests/device/rocm/test_native_math_package_jit.py",

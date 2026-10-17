@@ -800,6 +800,7 @@ rocm,tessera_rocm_image_release,rocm_image_release,,src/compiler/codegen/Tessera
 rocm,tessera_rocm_image_release,rocm_image_release,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp
 rocm,tessera_rocm_image_stats,rocm_image_stats,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_image_cache.cpp
 rocm,tessera_rocm_math_launch,rocm_math_launch,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp
+rocm,tessera_rocm_math_launch_v2,rocm_math_launch_v2,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp
 rocm,tessera_rocm_movement_clear_current,rocm_movement_clear_current,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp
 rocm,tessera_rocm_movement_close,rocm_movement_close,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp
 rocm,tessera_rocm_movement_invoke,rocm_movement_invoke,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp

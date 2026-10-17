@@ -1,0 +1,37 @@
+{
+  "rows": [
+    {
+      "storage": "f32",
+      "explicit_widen": false,
+      "image_digest": "e175935aafb85712ee7cd5e35ef8423711ec9ad16250c5fb3a006273d7652991",
+      "unchanged": true
+    },
+    {
+      "storage": "f16",
+      "explicit_widen": false,
+      "image_digest": "7356b16bad3cae230efb52796c4c1e86eaa80749ff98e7d78c937300ba6cf68d",
+      "unchanged": true
+    },
+    {
+      "storage": "bf16",
+      "explicit_widen": false,
+      "image_digest": "7e696d9f921b3eeff13f09944673c65f6bdd7efedf62efa13b02810239b17a89",
+      "unchanged": true
+    },
+    {
+      "storage": "f16",
+      "explicit_widen": true,
+      "image_digest": "afbbcf979955e2ccbce8f195427e7381e21bcbb013455bd99ee76b2944f6231f",
+      "unchanged": true
+    },
+    {
+      "storage": "bf16",
+      "explicit_widen": true,
+      "image_digest": "f3fff67514b31b68e741ecf232f52176c8e54cb1d454f1133d53fec4971ecffa",
+      "unchanged": true
+    }
+  ],
+  "runtime_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+  "measurement_source": "fe02b4c5a2fca7d1d4db1f11e739510383f22344",
+  "scope": "all five native input/output storage images and complete provider unchanged after review guards; public host-call costs not remeasured"
+}

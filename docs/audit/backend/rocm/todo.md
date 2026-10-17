@@ -17970,3 +17970,16 @@ Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.
 Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
 
 Not applicable to HIP execution: this is a rejected NVIDIA submission experiment plus source/profile evidence. No ROCm runtime or physical policy changes. PR960 bounded source-preserving NVFP4 has merged with exact gfx1201 evidence; full MLP/model-quality, W8A8/MXFP4 and broader route obligations remain open.
+
+
+## ROCM-NATIVE-SWIGLU-ACTIVATION-20261016
+
+Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+
+Implementation in progress: migrate the existing silu_mul operation into compiler-owned native Graph/Schedule/Tile, preserving FP32 computation through the final FP32 or matching FP16/BF16 store. Exact widening casts retain FP32 output. The existing binary pointer/count frame is reused with two additive matching-half-store ABI identities; old ABI meanings remain unchanged. Six genuine missing-Schedule baseline cases and six existing division controls are recorded; exact-device/public replay/timing gates remain open. Full original NVFP4 MLP composition, views/lifetimes, activation quantization, down projection and model-quality gates remain separate.
+
+Native-owner follow-through: the existing FP32 C staging ABI is preserved; an additive explicit-output-width export supports the two checked matching-half SiLU descriptors. Shape-only frontend capture and JIT output allocation follow the descriptor. Exact RX9070XT/gfx1201: 45 native numerical/JIT/replay cases and 56 compiler-contract cases pass; adjacent math/widening and owner fault injection pass 91 cases. gfx1151 SiLU native execution remains follow-up required; no physical proof transfers. Correctness-gated separate device/public timing trials are in progress. Full NVFP4 MLP/model-quality remains open.
+
+Public selector review: gfx1201 alone admits the new native SiLU JIT route. gfx1151 retains its existing route selection until its independent native device proof; shared compiler artifact admission does not intercept public sibling calls.
+
+Review follow-through (PR962): SiLU shape-only capture is restricted to matching canonical FP16/BF16/FP32 storage, including concrete dtype metadata. Other concrete inputs retain the registered eager result promotion; abstract integer/mixed promotion requires concrete values. The new gfx1201 public selector, support predicate and portable package validator agree on ranks 1–3. No sibling dtype or execution promotion follows. Existing shared integer-ingress spelling gaps remain a separate frontend foundation follow-up.

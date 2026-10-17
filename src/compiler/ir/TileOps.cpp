@@ -1772,7 +1772,8 @@ LogicalResult SpectralBackwardKernelOp::verify() {
 
 // Narrow math storage is admitted only for the native ROCm widening recipe.
 // Sibling consumers retain their existing f32 Tile contract.
-static bool isNativeROCMWideningMath(Operation *op, StringRef storage) {
+static bool isNativeROCMWideningMath(Operation *op, StringRef storage,
+                                     bool matchingSiluStore = false) {
   auto fn = op->getParentOfType<LLVM::LLVMFuncOp>();
   auto mod = op->getParentOfType<ModuleOp>();
   auto contract = fn ? fn->getAttrOfType<DictionaryAttr>("tessera.rocm_math_contract") : DictionaryAttr();
@@ -1782,7 +1783,10 @@ static bool isNativeROCMWideningMath(Operation *op, StringRef storage) {
       (arch.getValue() == "gfx1151" || arch.getValue() == "gfx1201") &&
       contract.getAs<StringAttr>("architecture") == arch &&
       contract.get("storage") == StringAttr::get(op->getContext(), storage) &&
-      contract.get("output_storage") == StringAttr::get(op->getContext(), "f32") &&
+      (contract.get("output_storage") == StringAttr::get(op->getContext(), "f32") ||
+       (matchingSiluStore &&
+        contract.get("kind") == StringAttr::get(op->getContext(), "silu_mul") &&
+        contract.get("output_storage") == StringAttr::get(op->getContext(), storage))) &&
       (storage == "f16" || storage == "bf16");
 }
 
@@ -1822,9 +1826,13 @@ LogicalResult ElementwiseKernelOp::verify() {
   if (!getInputs().back().getType().isInteger(64))
     return emitOpError("flattened element count N must be i64");
   StringRef requiredStorage = logical ? "i8" : bitwise ? "i32" : "f32";
+  bool nativeSiluStorage = binaryMath && kind.getValue() == "silu_mul" &&
+      isNativeROCMWideningMath(getOperation(), storage.getValue(), true);
   if (storage.getValue() != requiredStorage &&
-      !((unary || binary || transcendental) && outputStorage.getValue() == "f32" &&
-        isNativeROCMWideningMath(getOperation(), storage.getValue())))
+      !(((unary || binary || transcendental ||
+          (binaryMath && kind.getValue() == "silu_mul")) &&
+         outputStorage.getValue() == "f32" &&
+         isNativeROCMWideningMath(getOperation(), storage.getValue())) || nativeSiluStorage))
     return emitOpError() << family.getValue() << " requires storage=\""
                          << requiredStorage << "\"";
   if (where) {
@@ -1876,7 +1884,8 @@ LogicalResult ElementwiseKernelOp::verify() {
         kind.getValue() != "digamma")
       return emitOpError("unsupported transcendental kind");
   } else if (binaryMath) {
-    if (outputStorage.getValue() != "f32" ||
+    if ((outputStorage.getValue() != "f32" &&
+         !(nativeSiluStorage && outputStorage.getValue() == storage.getValue())) ||
         (kind.getValue() != "pow" && kind.getValue() != "silu_mul"))
       return emitOpError("binary_math requires kind=pow|silu_mul and output_storage=\"f32\"");
   } else {

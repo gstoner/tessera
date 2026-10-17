@@ -240,7 +240,9 @@ struct ProjectROCMKernelIdentityPass
           c.get("architecture") == arch && c.get("family") == StringAttr::get(&getContext(), expectedFamily) &&
           (dtype.getValue() == "f32" || dtype.getValue() == "f16" || dtype.getValue() == "bf16") &&
           c.get("storage") == dtype &&
-          c.get("output_storage") == StringAttr::get(&getContext(), "f32") &&
+          (c.get("output_storage") == StringAttr::get(&getContext(), "f32") ||
+           (kind.getValue() == "silu_mul" && c.get("output_storage") == dtype &&
+            (dtype.getValue() == "f16" || dtype.getValue() == "bf16"))) &&
           kernel->getAttr("output_dtype") == c.get("output_storage") && contractKind &&
           c.get("numeric_policy") == StringAttr::get(&getContext(), family == "scan" ? "f32_inclusive_scan" : "f32_compute");
       if (valid) {
@@ -248,7 +250,7 @@ struct ProjectROCMKernelIdentityPass
             ((contractKind.getValue() == "sum" && kind.getValue() == "cumsum") ||
              (contractKind.getValue() == "max" && kind.getValue() == "cummax")) :
             kind == contractKind && (family == "scalar_binary" ?
-                (kind.getValue() == "add" || kind.getValue() == "div" || kind.getValue() == "mul") :
+                (kind.getValue() == "add" || kind.getValue() == "div" || kind.getValue() == "mul" || kind.getValue() == "silu_mul") :
                 (kind.getValue() == "sqrt" || kind.getValue() == "exp"));
         for (NamedAttribute attr : kernel->getAttrs())
           if (attr.getName() != "name" && attr.getName() != "kind" &&

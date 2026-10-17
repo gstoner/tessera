@@ -2799,6 +2799,7 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
+    ("silu_mul", "rocm_gfx1201"): "tests/device/rocm/test_native_silu_math_jit.py",
     ("softmax_safe", "nvidia_sm120"): "tests/device/nvidia/test_scheduled_semantic_kernels.py",
     ("scaled_matmul", "nvidia_sm120"): "tests/device/nvidia/test_nvfp4_transpose_jit.py",
     **{("cast",target): "tests/device/rocm/test_native_math_widening.py"
@@ -7057,6 +7058,18 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 benchmark_json="benchmarks/baselines/rocm_native_math_20261006/package-"
                                +target.removeprefix("rocm_")+".json",
             ))
+    if op_name == "silu_mul":
+        entries = [entry for entry in entries if entry.target != "rocm_gfx1201"]
+        entries.append(BackendKernelEntry(
+            target="rocm_gfx1201", status=_DEVICE_VERIFIED_JIT_STATUS,
+            dtypes=("fp32", "fp16", "bf16"),
+            feature_flags=("native_schedule", "checked_descriptor"),
+            notes="Original isolated static Graph SiLU -> native Schedule/Tile/Target/LLVM "
+                  "with f32 compute and a final f32 or matching-half store. Exact-device JIT "
+                  "and compiler-free replay pass. Full MLP, dynamic shapes and broadcasting remain open.",
+            execute_compare_fixture="tests/device/rocm/test_native_silu_math_jit.py",
+            shape_envelope="static compact same-shape rank 1/2/3; original or reversed argument roles",
+            benchmark_json="benchmarks/baselines/rocm_native_silu_20261016/silu-timings-native-first.json"))
     if op_name == "cast":
         for target in ("rocm_gfx1151","rocm_gfx1201"):
             entries=[entry for entry in entries if entry.target!=target]
@@ -7065,10 +7078,15 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                 feature_flags=("native_schedule","checked_descriptor"),
                 notes="Exact f16/bf16 widening to f32 feeding one native math consumer. "
                       "General standalone cast/layout/AD remains outside this proof.",
-                execute_compare_fixture="tests/device/rocm/test_native_math_widening.py",
-                shape_envelope="static compact row-major rank 2/3; same-storage operands",
-                benchmark_json="benchmarks/baselines/rocm_native_math_20261006/widen-"
-                               +target.removeprefix("rocm_")+".json"))
+                execute_compare_fixture=("tests/device/rocm/test_native_silu_math_jit.py"
+                                         if target == "rocm_gfx1201" else
+                                         "tests/device/rocm/test_native_math_widening.py"),
+                shape_envelope=("static compact row-major rank 1/2/3; same-storage operands"
+                                if target == "rocm_gfx1201" else
+                                "static compact row-major rank 2/3; same-storage operands"),
+                benchmark_json=("benchmarks/baselines/rocm_native_silu_20261016/silu-timings-native-first.json"
+                                if target == "rocm_gfx1201" else
+                                "benchmarks/baselines/rocm_native_math_20261006/widen-gfx1151.json")))
     if op_name == "scaled_matmul":
         entries = [entry for entry in entries if entry.target != "nvidia_sm120"]
         entries.append(BackendKernelEntry(

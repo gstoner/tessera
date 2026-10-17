@@ -5568,10 +5568,18 @@ def _submit_rocm_gfx1151_native(
             if not isinstance(family, str):
                 raise RuntimeError("native ROCm math family must be a string")
             reuse = os.environ.get("TESSERA_ROCM_MATH_STAGING_REUSE", "1").lower() not in {"0", "off", "false"}
-            rc = movement.tessera_rocm_math_launch(
+            output_width = int(output.dtype.itemsize)
+            launch_math = movement.tessera_rocm_math_launch
+            width_args: tuple[int, ...] = ()
+            if output_width != 4:
+                if not hasattr(movement, "tessera_rocm_math_launch_v2"):
+                    raise RuntimeError("native ROCm half-store math requires an output-width-aware runtime")
+                launch_math = movement.tessera_rocm_math_launch_v2
+                width_args = (output_width,)
+            rc = launch_math(
                 ctypes.cast(ctypes.c_char_p(image.payload), ctypes.c_void_p), len(image.payload),
                 descriptor.entry_symbol.encode(), image.architecture.encode(),
-                {"unary": 0, "binary": 1, "scan": 2}[family], int(input_arrays[0].dtype.itemsize),
+                {"unary": 0, "binary": 1, "scan": 2}[family], int(input_arrays[0].dtype.itemsize), *width_args,
                 input_arrays[0].ctypes.data_as(ctypes.c_void_p), int(input_arrays[0].nbytes),
                 rhs.ctypes.data_as(ctypes.c_void_p) if rhs is not None else None,
                 int(rhs.nbytes) if rhs is not None else 0,
@@ -8953,6 +8961,13 @@ def _load_rocm_native_movement_runtime() -> ctypes.CDLL | None:
             ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t,
             ctypes.POINTER(ctypes.c_int64), ctypes.c_size_t, ctypes.c_int]
         lib.tessera_rocm_math_launch.restype = ctypes.c_int
+    if hasattr(lib, "tessera_rocm_math_launch_v2"):
+        lib.tessera_rocm_math_launch_v2.argtypes = [
+            ctypes.c_void_p, ctypes.c_size_t, ctypes.c_char_p, ctypes.c_char_p,
+            ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t,
+            ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_int64), ctypes.c_size_t, ctypes.c_int]
+        lib.tessera_rocm_math_launch_v2.restype = ctypes.c_int
     lib.tessera_rocm_movement_clear_current.argtypes = []
     lib.tessera_rocm_movement_clear_current.restype = ctypes.c_int
     lib.tessera_rocm_movement_stats.argtypes = [ctypes.POINTER(ctypes.c_uint64)] * 4

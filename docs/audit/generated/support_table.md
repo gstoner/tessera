@@ -88,7 +88,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `score_combine` | elementwise | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `sigmoid` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `silu` | elementwise | public | public | registered | complete | fused | device_verified_abi | ready | none |
-| `silu_mul` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `silu_mul` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `sin` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `sinh` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `softcap` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -387,7 +387,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | collective | 4 | PPGCCRNB PPGCCRNB PPGCCRNB PPGCCRNB |
 | comparison | 6 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | contraction | 4 | PPGCFCN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| elementwise | 37 | PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCNB PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCNB |
+| elementwise | 37 | PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCNB PPGCFHN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCNB |
 | energy_based_models | 11 | PPnnFFFB PPn·FFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPn·FFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 11 | PPGCpRN· PPGCFCNB PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCFCN· |

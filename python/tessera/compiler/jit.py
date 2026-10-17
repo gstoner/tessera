@@ -1883,8 +1883,8 @@ class JitFn:
             GFX_PAGED_KV_F32_ABI, GFX_PAGED_KV_STRIDED_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
             GFX_SOFTMAX_F32_ABI, requests_softmax,
         )
-        from .rocm_math_native import supports_math, requests_math, MATH_ABIS
-        native_math = target.startswith("rocm_") and requests_math(self.graph_ir)
+        from .rocm_math_native import supports_math, requests_public_math, MATH_ABIS
+        native_math = requests_public_math(self.graph_ir, target)
         nvidia_softmax = target == "nvidia_sm120" and requests_softmax(self.graph_ir)
         softmax = (target.startswith("rocm_") or nvidia_softmax) and requests_softmax(self.graph_ir)
         movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)
@@ -2216,11 +2216,11 @@ class JitFn:
             if set(dimensions) != set(range(output.rank)):
                 raise ValueError("host tensor call requires fully static output guards")
             dtype = {"uint8": np.uint8, "fp64": np.float64, "fp32": np.float32,
-                     **({"fp16": np.float16} if matmul or nvidia_softmax else {})}.get(output.dtype)
+                     **({"fp16": np.float16} if matmul or nvidia_softmax or native_math else {})}.get(output.dtype)
             if dtype is None and descriptor.abi_id == NVFP4_EXPAND_ABI and output.dtype == "fp8_e4m3":
                 import ml_dtypes
                 dtype = ml_dtypes.float8_e4m3fn
-            if dtype is None and nvidia_softmax and output.dtype == "bf16":
+            if dtype is None and (nvidia_softmax or native_math) and output.dtype == "bf16":
                 import ml_dtypes
                 dtype = ml_dtypes.bfloat16
             if dtype is None or output.layout != "row_major":

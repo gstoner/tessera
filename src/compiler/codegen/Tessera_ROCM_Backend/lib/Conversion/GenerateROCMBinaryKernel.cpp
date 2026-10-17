@@ -36,7 +36,7 @@ namespace {
 
 static constexpr int64_t BD = 256;
 
-enum class Bin { Sub, Div, Pow, Maximum, Minimum, Add, Mul, Mod, FloorDiv };
+enum class Bin { Sub, Div, Pow, Maximum, Minimum, Add, Mul, SiluMul, Mod, FloorDiv };
 
 void emitBinaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy, Type outTy,
                     Bin bin) {
@@ -92,6 +92,13 @@ void emitBinaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy, 
   case Bin::Mul:
     y = b.create<arith::MulFOp>(loc, a, bb);
     break;
+  case Bin::SiluMul: {
+    Value one = b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(1.0f));
+    Value exponent = b.create<math::ExpOp>(loc, b.create<arith::NegFOp>(loc, a));
+    Value gate = b.create<arith::DivFOp>(loc, a, b.create<arith::AddFOp>(loc, one, exponent));
+    y = b.create<arith::MulFOp>(loc, gate, bb);
+    break;
+  }
   case Bin::FloorDiv:
   case Bin::Mod: {
     Value zero = b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(0.0f));
@@ -198,15 +205,16 @@ struct GenerateROCMBinaryKernelPass
                     .Case("minimum", Bin::Minimum)
                     .Case("add", Bin::Add)
                     .Case("mul", Bin::Mul)
+                    .Case("silu_mul", Bin::SiluMul)
                     .Case("mod", Bin::Mod)
                     .Case("floor_div", Bin::FloorDiv)
                     .Default(Bin::Sub);
       static const llvm::StringSet<> kValid = {
           "sub", "div", "pow", "maximum", "minimum",
-          "add", "mul", "mod", "floor_div"};
+          "add", "mul", "silu_mul", "mod", "floor_div"};
       if (!kValid.contains(kindStr)) {
         op->emitError("generate-rocm-binary-kernel: unknown kind '")
-            << kindStr << "' (sub/div/pow/maximum/minimum/add/mul/mod/floor_div)";
+            << kindStr << "' (sub/div/pow/maximum/minimum/add/mul/silu_mul/mod/floor_div)";
         return signalPassFailure();
       }
       OpBuilder b(module.getBodyRegion());
@@ -234,11 +242,16 @@ struct GenerateROCMBinaryKernelPass
       Type idxTy = b.getIndexType();
       Type outTy = storeTy;
       if (auto output = op->getAttrOfType<StringAttr>("output_dtype")) {
-        if (output.getValue() != "f32") {
-          op->emitError("mixed ROCm math output_dtype currently requires f32");
+        if (output.getValue() == "f32") {
+          outTy = b.getF32Type();
+        } else if (bin == Bin::SiluMul &&
+                   ((output.getValue() == "f16" && storeTy.isF16()) ||
+                    (output.getValue() == "bf16" && storeTy.isBF16()))) {
+          outTy = storeTy;
+        } else {
+          op->emitError("ROCm binary output requires f32 or matching half SiLU storage");
           return signalPassFailure();
         }
-        outTy = b.getF32Type();
       }
       auto outMemTy = MemRefType::get({ShapedType::kDynamic}, outTy);
       auto memTy = MemRefType::get({ShapedType::kDynamic}, storeTy);

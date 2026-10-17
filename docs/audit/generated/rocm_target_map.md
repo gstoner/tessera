@@ -13,7 +13,7 @@ A `device_verified_jit` or `device_verified_abi` row in this dashboard requires 
 |---|---|---|---|---|---|---:|
 | `rocm_gfx950` | `gfx950` | CDNA 4 | MI350X / MI355X / MI350P | `current_datacenter` | exact-device proof required | 8 |
 | `rocm_gfx1250` | `gfx1250` | CDNA 5 Wave32 XDL-WMMA | MI455X | `forward_datacenter` | upstream-LLVM artifact; exact-device proof required | 5 |
-| `rocm_gfx1201` | `gfx1201` | RDNA 4 | Radeon RX 9070 family / Radeon AI PRO R9700S, R9700, R9600D | `current_workstation` | exact-device proof required | 25 |
+| `rocm_gfx1201` | `gfx1201` | RDNA 4 | Radeon RX 9070 family / Radeon AI PRO R9700S, R9700, R9600D | `current_workstation` | exact-device proof required | 26 |
 | `rocm_gfx1200` | `gfx1200` | RDNA 4 | Radeon RX 9060 / RX 9050 families | `current_consumer` | exact-device proof required | 5 |
 | `rocm_gfx1151` | `gfx1151` | RDNA 3.5 Wave32 | Ryzen AI Max+ 395 / Radeon 8060S | `proven_development` | may use checked-in gfx1151 execution evidence | 40 |
 | `rocm_gfx1152` | `gfx1152` | Wave32 development bridge | development ISA | `compiler_bridge` | no execution inheritance | 0 |
@@ -75,7 +75,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | scaled_matmul | 6 | - | gfx1151, gfx1200, gfx1250, gfx942, gfx950 |
 | score_combine | 1 | gfx1151 | - |
 | silu | 1 | gfx1151 | - |
-| silu_mul | 1 | gfx1151 | - |
+| silu_mul | 2 | gfx1151 | - |
 | softmax | 4 | gfx1151, gfx1201 | gfx942, gfx950 |
 | softmax_safe | 1 | gfx1151 | - |
 | spectral_conv | 1 | - | - |
@@ -113,6 +113,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 
 | op | status | compiler | runtime | numerical | path | evidence arch | dtypes |
 |---|---|---|---|---|---|---|---|
+| silu_mul | ready | complete | missing | missing | - | - | fp32,fp16,bf16 |
 | softmax | device_verified_jit | complete | complete | complete | rocm_softmax_compiled | gfx1201 | fp32 |
 | flash_attn | device_verified_jit | complete | complete | complete | rocm_flash_attn_compiled | gfx1201 | bf16,fp16 |
 | add | ready | complete | missing | missing | - | - | fp32 |

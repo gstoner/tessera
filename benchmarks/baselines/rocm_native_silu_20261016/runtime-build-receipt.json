@@ -1,0 +1,35 @@
+{
+  "source_commit": "fe02b4c5a2fca7d1d4db1f11e739510383f22344",
+  "working_directory": "/home/angstorms/scratch/jvp-schema-reconcile-20261011",
+  "command": [
+    "/opt/rocm/bin/hipcc",
+    "-std=c++17",
+    "-O2",
+    "-fPIC",
+    "-shared",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp",
+    "-L/home/angstorms/scratch/rocm-reference-tools-20261016",
+    "-ltessera_rocm_native_image",
+    "-Wl,-rpath,/home/angstorms/scratch/rocm-reference-tools-20261016",
+    "-o",
+    "/home/angstorms/scratch/rocm-native-silu-mlp-20261016/runtime-candidate/libtessera_rocm_native_movement.full.so"
+  ],
+  "hipcc_version": "HIP version: 7.15.26333-0000000\nAMD clang version 23.0.0git (https://github.com/ROCm/llvm-project.git 8f497e0992fb7513f7f78a6f6b6f1056c375e961)\nTarget: x86_64-unknown-linux-gnu\nThread model: posix\nInstalledDir: /opt/rocm/core-10.0/lib/llvm/bin\n",
+  "source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "15317a35ab3763216c5c9c337a3504a018e3f05c35f05275d60a1993d373ed2c",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "780c2db5de9b1af827c61d8be2406e3593f8c91550dd2725f54318774ac9503f",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp": "bd3a1e4f85312c62d975ff06466e42fe540c28a24407ea423642129534d09843"
+  },
+  "header_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/loader.h": "e7ba322fc02f97da2444f2505c25ba5db5480198e373d61b5ae40d4c09a9cf0c",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/ProgramHostTransportPolicy.h": "990cfba9ea7bec25e3683c0235487c22b5e1dd955e90452db51ab8647863086b",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "928f52e8c5441db62f61b392490c31fb02e8ca0783204fb9481748915eaf8803",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/MovementPhysicalSpan.h": "6516084ee88c87f5d3280ece25e0abd2b2f3b8d29f01945fef982d0186120080"
+  },
+  "image_cache_sha256": "e0744891fb5a5a0891b15788292cd39cdc1ac00b34e7be60a9a8118a7ef5c571",
+  "runtime_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+  "export_receipt": "full-owner-export-parity.json",
+  "device_regressions": "full-owner-adjacent-device.log"
+}

@@ -14945,3 +14945,16 @@ Evidence: benchmarks/baselines/gfx1201_nvfp4_public_expand_20261015/README.md.
 Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
 
 Not applicable to Metal execution: no Apple source or physical policy changes. CUDA graph experimental results and Python dispatch profiles transfer no Mac execution or timing proof.
+
+
+## ROCM-NATIVE-SWIGLU-ACTIVATION-20261016
+
+Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+
+Not applicable to Metal lowering: the shared Tile binary_math verifier admits narrow SiLU storage only with a sealed owning ROCm contract. Existing Apple kernels and numerical policy are unchanged; sibling narrow-storage refusal and registry gates require validation. No Mac execution is claimed.
+
+Shared frontend follow-through: same-shape/same-storage SiLU shape-only capture uses its existing catalog result contract instead of evaluating eager input arithmetic. Explicit numerical tracing remains available. This is frontend metadata parity only; owning physical proof is unchanged.
+
+Native-owner follow-through: the existing FP32 C staging ABI is preserved; an additive explicit-output-width export supports the two checked matching-half SiLU descriptors. Shape-only frontend capture and JIT output allocation follow the descriptor. Not applicable to this backend's physical execution: output-width C staging is HIP-only and native math admission remains ROCm-owned. Shared registry/compiler gates pass; no sibling device proof or performance claim is added.
+
+Review follow-through (PR962): SiLU shape-only capture is restricted to matching canonical FP16/BF16/FP32 storage, including concrete dtype metadata. Other concrete inputs retain the registered eager result promotion; abstract integer/mixed promotion requires concrete values. The new gfx1201 public selector, support predicate and portable package validator agree on ranks 1–3. No sibling dtype or execution promotion follows. Existing shared integer-ingress spelling gaps remain a separate frontend foundation follow-up.

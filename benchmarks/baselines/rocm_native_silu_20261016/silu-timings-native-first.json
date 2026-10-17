@@ -1,0 +1,821 @@
+{
+  "schema": "tessera.rocm.native-silu.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "opaque_hip_uuid": "32386439653765666266326566373136",
+  "legacy_first": false,
+  "source_commit": "fe02b4c5a2fca7d1d4db1f11e739510383f22344",
+  "compiler_sha256": "d02a71578ec176b07cb1ca97fe9a33a6f640483462970bde15a0f084878b1126",
+  "source_sha256": {
+    "benchmarks/baselines/rocm_native_silu_20261016/README.md": "0f9b5c3d3e321b627565aed39b203e707de2c2abba60811b1e99c96a99ea4a37",
+    "benchmarks/baselines/rocm_native_silu_20261016/adjacent-device-and-owner.log": "cb20151540ce4802a940662d1833dee7729f61d04c923d73987cf7b4cdc93694",
+    "benchmarks/baselines/rocm_native_silu_20261016/build-full-owner.log": "24788af58ef8df9d124963e4f9d288e191a83e549b75380cade53eabe19d87f8",
+    "benchmarks/baselines/rocm_native_silu_20261016/build-half-owner.log": "ee98ab825b0f195469ab091d1fc7d8d6567b5dc918508c0206ef7833c56113e0",
+    "benchmarks/baselines/rocm_native_silu_20261016/capability-allocation-gates.log": "6fa414aa5ba10a8aece1e051758bce40445f04b50fbc69dff93b78f885b35dba",
+    "benchmarks/baselines/rocm_native_silu_20261016/claim-lint.log": "b7cabb6c341cf801ecd49c4d47463f73b43c581493a32da0645833c891959021",
+    "benchmarks/baselines/rocm_native_silu_20261016/compiler-plan-gate.log": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+    "benchmarks/baselines/rocm_native_silu_20261016/compiler-route-final.log": "ac0c9f1e72b5133a697a1636d9635250ab39266d548059fe3afc4089bcf9be62",
+    "benchmarks/baselines/rocm_native_silu_20261016/compiler-route.log": "4de5b73bf2ecdac38337806e25a6a4ce16369a1f86e010336271cc218bda82ac",
+    "benchmarks/baselines/rocm_native_silu_20261016/compiler-source-manifest-fixed.json": "ea8fdf6613a5b96113575b401b0430c6686e82eb57d1bfc2d081827a89794481",
+    "benchmarks/baselines/rocm_native_silu_20261016/evidence-manifest.json": "fed7df4723059f460bf9c221b9b7f22701e4d09efc1bd8e2555c6f0ddbaaf54b",
+    "benchmarks/baselines/rocm_native_silu_20261016/fifth-device-and-contract.log": "66328eb13c346e347cab4eb8bba2a9b62142a152fcf9eaf653b986603dc4e45e",
+    "benchmarks/baselines/rocm_native_silu_20261016/final-admission-and-recorder-gates.log": "6c6d6f628b328f5aacf62d4b5d47d9455b80b7544cf2cb7153d4058d5e07cc7c",
+    "benchmarks/baselines/rocm_native_silu_20261016/final-device-public-selector.log": "9b48a737edbde8b8cab0c3d141492722b95229820664e3f3a29a6258382c7408",
+    "benchmarks/baselines/rocm_native_silu_20261016/final-device-rank123.log": "994080ca7193e4ebfd4b7af2b84cc01eae63387d45b1f72880b8dabb5a4433ed",
+    "benchmarks/baselines/rocm_native_silu_20261016/final-focused-gates.log": "e7d1ef57e7a7619ac8653892944cb694085c738a6493955727fbcc83c786f99a",
+    "benchmarks/baselines/rocm_native_silu_20261016/full-owner-adjacent-device.log": "3bacb0744ebbad2f89c01a321516c40a6adcef8e55dbeea334ed8542c957aa42",
+    "benchmarks/baselines/rocm_native_silu_20261016/full-owner-export-parity.json": "4b71ab4b261d60ced721aca27460ae2b661576515fdd5d8152e4c6a021020e20",
+    "benchmarks/baselines/rocm_native_silu_20261016/full-unit-repaired.log": "b26e4e303f0216bffa145f00eaaaf052cbd0f343b2a49f51ec94b774f4bc4aaf",
+    "benchmarks/baselines/rocm_native_silu_20261016/full-unit.log": "32eea141955189e37bd04b84b9d97cd26435505f351fda1d4abf8e5d7a05964f",
+    "benchmarks/baselines/rocm_native_silu_20261016/generated-docs-check.log": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "benchmarks/baselines/rocm_native_silu_20261016/half-owner-lifetime.log": "8964ec0c2d96a99a0012763cb299d0385e0125f9a98c492b18fdae2e013f728a",
+    "benchmarks/baselines/rocm_native_silu_20261016/installed-compiler.json": "2efb11fcafb2c4226b0cd61f3a85a2b97d6cc479132c9c0a102754b28c67adcc",
+    "benchmarks/baselines/rocm_native_silu_20261016/mypy-ratchet.log": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "benchmarks/baselines/rocm_native_silu_20261016/owner-abi-doc-gates.log": "9ae7e965d8040405a5c95ecf0b81dab033bb1d3f37ac461d1d457d65f87b628c",
+    "benchmarks/baselines/rocm_native_silu_20261016/publication-doc-abi-gate.log": "6644d3dca4fdee4775cf60b1ee0bc6b44d4a0f03fde768561cf6b8fb912891a8",
+    "benchmarks/baselines/rocm_native_silu_20261016/publication-plan-gate.log": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+    "benchmarks/baselines/rocm_native_silu_20261016/recorder-selector-followup.log": "4b28a612108df462c3ed148651c5be58f379a2316556bb2b0392e2af1fe55913",
+    "benchmarks/baselines/rocm_native_silu_20261016/ruff-full.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "benchmarks/baselines/rocm_native_silu_20261016/silu-cpu-classification.log": "3cc6232e30f667612c93bc84f0fe57e466e6184b1c2685da1c60b2626adee4b3",
+    "benchmarks/baselines/rocm_native_silu_20261016/silu-route-classification.log": "a81f91f78285011fce798a25fab982f7d77524a65b50dce30809ed0c30f8378a",
+    "benchmarks/baselines/rocm_native_silu_20261016/silu-timings-legacy-first.json": "140f104dfaed8d90a0064f3c8ba5d5818c4bf6176ccc9bc403d7108c31ad0ab9",
+    "benchmarks/baselines/rocm_native_silu_20261016/silu-timings-native-first.json": "91e28ccf7d8a6abe8d506d66798aa838b7480e4496c3bcc4723deea3a5abf81a",
+    "benchmarks/rocm/benchmark_native_silu_schedule.py": "2355e751099e4079c940333e30522730c2c488dd804ee1cffb8df0942e6ee4b5",
+    "docs/audit/backend/apple/todo.md": "9d6a235fd6d0dd65ae3cfbc784a49083f1dd46c3be44b8ffb2c84c645ba715bc",
+    "docs/audit/backend/nvidia/todo.md": "8d930e8546295889c5106dcc1c3ae29e3d423c2c351bd87fc685951afe481f70",
+    "docs/audit/backend/rocm/todo.md": "daa877d70fd391e7f5acd1173c78cd1804620e3d2b0f37415abf1a556fb21097",
+    "docs/audit/backend/x86/todo.md": "7b01af94580aa7118372a4f4aa339d0b23c6b60f2d7c05d593cfc1df07021c47",
+    "docs/audit/compiler/INTEGRATED_COMPILER_LOG.md": "6ff475316830679a5133b3765b58c78d0bc07c2bee86e4671afda4112354a8b3",
+    "docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md": "4f5f6018e19aa1f52fbb3d80e3345546d735bc830b6da08c398e8a308018abad",
+    "docs/audit/generated/compiler_progress.csv": "cd7dfb16d927cec51c7298193e945f5e60c7c54252425e6dd537d2c1cde41d31",
+    "docs/audit/generated/compiler_progress.md": "cbc1dc44d0e1d241275785122953ae9a208192f90cb099ab841fde9a4d3060fd",
+    "docs/audit/generated/docs_freshness.md": "ebe1d174616e14286e4d2c8de53a1a153f12353721547dc0372b0b7435b5df48",
+    "docs/audit/generated/dtype_flow.csv": "54fda74bfa5ce3abd23aa3be7173c4b145abd73770ed0256dafb7d0dd4cfc19b",
+    "docs/audit/generated/e2e_op_coverage.md": "05f1b471927dfb9a5ef3114bb056ed3e03dacb60ba142cd299f4f928fcb3e5a1",
+    "docs/audit/generated/rocm_target_map.csv": "ecdd1efc7fe5a06da36fa38ad5b0e2245b8b99db06fd77ffa680f3d49a27c0b3",
+    "docs/audit/generated/rocm_target_map.md": "503cff4faadef7d27bbced5a99bfc259cb41682596fce3bae018fc80a035afc6",
+    "docs/audit/generated/runtime_abi.csv": "c3cae0b5449ee69a7d116dc89ec3957275d6e38006976642c0b00db84c2b1ec6",
+    "docs/audit/generated/runtime_abi.md": "d487939abcc221be0d02388ce0c97bb3f722d38c5f98c4d76912fa6dcadd8de5",
+    "docs/audit/generated/runtime_execution_matrix.csv": "38f78498d9274fc43dc4045884065b4a62936505f3e34af972a568eaa4030205",
+    "docs/audit/generated/runtime_execution_matrix.md": "eb1c9b02291b029359bf046558cf04f5c9d1c4b321c849cfbee61b61cecb933f",
+    "docs/audit/generated/s_series_status.md": "f88828d55e6b7bf9a8f5b7df772e5ebf045d37ea7859363b4258523be85189f9",
+    "docs/audit/generated/support_table.csv": "ed41d25d58486f6019512ce47a8d2791a763a7469f1be9ef56bd3ff2fca480a7",
+    "docs/audit/generated/support_table.md": "bf85718e85b43654e261712fb402a4c6a4898db6b4408979a4d8c9f5505c4fba",
+    "docs/audit/standalone_primitive_coverage.md": "e518e89bcf8e3987a22180381700b510201c5d278903ab1d5a8e4bdf28fae55b",
+    "docs/spec/NATIVE_ROCM_SILU_MATH_CONTRACT.md": "ac5877304bd3faae64fa40bcb9b91362bc6e5b9fe7e11976169f5d7936b637d4",
+    "python/tessera/compiler/backend_manifest.py": "ea1831df49b550fba94eb213626bc69e58b30207e99d3d445705cc62b439e17c",
+    "python/tessera/compiler/capabilities.py": "33d4cb4e5a01faea45c1395b5eae0fcaf1f44b74ef8e5bb496cce91d2fe69148",
+    "python/tessera/compiler/execution_matrix.py": "7dde284049be6ee860936ffcf3dcb932816495e126869453799b1268c1d981c6",
+    "python/tessera/compiler/jit.py": "780e6f3f389b35905ab09871b363d3d7507af8064434c5c4e49c3d2f05dd96eb",
+    "python/tessera/compiler/pass_metadata.py": "b4fac998e3a27cdbf39ae49b81a3da3b7865d48fdb08674a430fe2b033df0346",
+    "python/tessera/compiler/rocm_math_native.py": "3558f4cdfaff4a13f33ec1bf6b1b7b8262cb0200c17fb0af53768877499f67db",
+    "python/tessera/compiler/trace.py": "65ab6a8f850241e9e573e365584404f7c1fc52606b43c6403884012089834890",
+    "python/tessera/runtime.py": "6bb567ade8914409f107aa1cd0c96e3a3a1b44f79cca89ab70ec5c83238127f9",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMDialect.td": "ddfb40bf56dcfbf6490b8edf880d8af0a95d679817e6ee7d713976764bffbee4",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "5adc49af0ae436020089c70f60373162d087266958e7a8738dbb8cca2561140a",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMBinaryKernel.cpp": "b04e26da2790261c9faa0190267c1637f8e39202bcf9e8b1b630c5d8a71ecaf3",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "a69bd747eaa510bf26ce9e6ab93e0dbb3ed2ed65ab753b7528fb16eafa14bc12",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "30361f87cf924e7240f05f3fbe95e2287569c8f56e141a1ce1c6202ba652bf0e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "15317a35ab3763216c5c9c337a3504a018e3f05c35f05275d60a1993d373ed2c",
+    "src/compiler/ir/TileOps.cpp": "ca26d618887ea143e545c5e27781c25f687d7d173e5722e47028eba1df4b7e61",
+    "src/compiler/programming_model/lib/NativeROCMMath.h": "f4ea506977b81ff9abc56f62c71fe1d1eecffe4bd45ff5a0eb9a01616d4f1dad",
+    "tests/device/rocm/test_native_silu_math_jit.py": "79cca248bff89315f1fb603b199828e5ccc81af6b7237c5144389f98614408fb",
+    "tests/unit/test_native_rocm_silu_schedule.py": "ac14cc047cc23e8ecb3891ed7adb3258ca75c57e98323c681e95ff6bbccc6914",
+    "tests/unit/test_rocm_native_movement_lifetime.py": "a5a68a373b9ce2e00d11a32c23ac211ab1d9d0c86016778c3072c86d0590e274"
+  },
+  "runtime_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+  "samples": 7,
+  "iterations": 100,
+  "rows": [
+    {
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "f32",
+      "explicit_widen": false,
+      "output_dtype": "fp32",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "image_sha256": "e175935aafb85712ee7cd5e35ef8423711ec9ad16250c5fb3a006273d7652991",
+      "ir_sha256": {
+        "graph_ir": "5216e91d39625cb2bbd5ff5ef19a0a1315d53eae3e3640c5ef2da7cfbe1b0f09",
+        "schedule_ir": "cebb9122aae19774e72e6c039cad0770daed1b3464078007932bad09bc7b49d9",
+        "tile_ir": "4d25f1fef6fb65c6fc08a718efd6526de2c8e5ae67731ac329faaae50126f127",
+        "target_ir": "5216e90487a4ba54450e450bc7195e4d817fe725b7115845c036bad91c8def74"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 3.1094286718769126e-06,
+      "cold_public_call_ms": 411.289203,
+      "warm_public_call_samples_ms": [
+        1.111671,
+        0.816435,
+        0.820191,
+        0.832025,
+        0.848607,
+        0.835511,
+        0.831404
+      ],
+      "warm_public_call_median_ms": 0.832025,
+      "device_event_samples_ms": [
+        0.0034214699268341063,
+        0.0033418700098991395,
+        0.0034141600131988525,
+        0.003251180052757263,
+        0.003270969986915588,
+        0.0032781800627708435,
+        0.0032524800300598143
+      ],
+      "device_event_median_ms": 0.0032781800627708435,
+      "legacy_target_only_same_store": {
+        "image_sha256": "a2d275006074388bd3fadfd2b6a6519d1e404010f16daa569aa0a1e3fb431ac0",
+        "device_event_samples_ms": [
+          0.003472349941730499,
+          0.0032399800419807435,
+          0.0033032700419425966,
+          0.0032222798466682435,
+          0.003220190107822418,
+          0.003303169906139374,
+          0.0033032700419425966
+        ],
+        "device_event_median_ms": 0.003303169906139374
+      }
+    },
+    {
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "f16",
+      "explicit_widen": false,
+      "output_dtype": "fp16",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f16_f16.v1",
+      "image_sha256": "7356b16bad3cae230efb52796c4c1e86eaa80749ff98e7d78c937300ba6cf68d",
+      "ir_sha256": {
+        "graph_ir": "e39ce7aa3b393e9227d088eeb9e78fef4687e4b2d61a829a1b63003611feb181",
+        "schedule_ir": "c0fed55b6301c90c81ed4bd41b96af1ea4fbb34a6a437bfa4010327a518b1dbc",
+        "tile_ir": "00894989b00cbc2cb4cfc36b58524ea09adcf4ae2acabb450b0ee189e34857c5",
+        "target_ir": "4df8bdf593b0b2bcad7306e935bce9f6ed634153dd1381b5ba3a3c0b4fd05572"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 0.006015513171796272,
+      "cold_public_call_ms": 147.405608,
+      "warm_public_call_samples_ms": [
+        1.134345,
+        0.898582,
+        0.915364,
+        0.940422,
+        1.020035,
+        0.872653,
+        0.790865
+      ],
+      "warm_public_call_median_ms": 0.915364,
+      "device_event_samples_ms": [
+        0.003707680106163025,
+        0.0037114799022674562,
+        0.0037447699904441835,
+        0.0036992800235748293,
+        0.0037074801325798034,
+        0.0037217798829078676,
+        0.004017870128154755
+      ],
+      "device_event_median_ms": 0.0037114799022674562,
+      "legacy_target_only_same_store": {
+        "image_sha256": "ef3dfb6d8918dbfb1b45cda6d7421b5e1c9ca122514e927cd6a4b9246dcaf4dd",
+        "device_event_samples_ms": [
+          0.003662790060043335,
+          0.004148060083389282,
+          0.0036812800168991087,
+          0.0036841800808906557,
+          0.003918769955635071,
+          0.0036715799570083618,
+          0.003681179881095886
+        ],
+        "device_event_median_ms": 0.0036812800168991087
+      }
+    },
+    {
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "bf16",
+      "explicit_widen": false,
+      "output_dtype": "bf16",
+      "abi_id": "tessera.rocm.math.a_b_o_n.bf16_bf16.v1",
+      "image_sha256": "7e696d9f921b3eeff13f09944673c65f6bdd7efedf62efa13b02810239b17a89",
+      "ir_sha256": {
+        "graph_ir": "c31d0ff11fc188ba6f37990d9556f4be4d6ffaafeb8a6558bca40ffe5c8347e4",
+        "schedule_ir": "57e821448d5e4843a4d9d6a8afc19d7076f2063d4a6d60808a1263f9aa13dcb6",
+        "tile_ir": "21b0f38e866d3117b28ae6a99976c7549546cbea5e37d51628f074867d6a2e37",
+        "target_ir": "c31b3de780112d8053c93518b3b5e2915f63dc1ef9a3214cb8aa5e24427519a4"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 0.05532433475707421,
+      "cold_public_call_ms": 151.673088,
+      "warm_public_call_samples_ms": [
+        1.008112,
+        0.820543,
+        0.95956,
+        0.900531,
+        0.859638,
+        0.817988,
+        0.93935
+      ],
+      "warm_public_call_median_ms": 0.900531,
+      "device_event_samples_ms": [
+        0.003726600110530853,
+        0.0037480899691581726,
+        0.0038051998615264895,
+        0.003650299906730652,
+        0.004122889935970307,
+        0.0037473899126052855,
+        0.0037248000502586366
+      ],
+      "device_event_median_ms": 0.0037473899126052855,
+      "legacy_target_only_same_store": {
+        "image_sha256": "0315880e9f00816e49de00a0d18dd59732058bc20a1e22af95111dd306d4ac5f",
+        "device_event_samples_ms": [
+          0.0037105000019073487,
+          0.0037130901217460634,
+          0.003963890075683593,
+          0.003863300085067749,
+          0.003711699843406677,
+          0.003699299991130829,
+          0.004118790030479431
+        ],
+        "device_event_median_ms": 0.0037130901217460634
+      }
+    },
+    {
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "f16",
+      "explicit_widen": true,
+      "output_dtype": "fp32",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f16_f32.v1",
+      "image_sha256": "afbbcf979955e2ccbce8f195427e7381e21bcbb013455bd99ee76b2944f6231f",
+      "ir_sha256": {
+        "graph_ir": "0038a7960a46b64ea14732d6240fa03284c45d46cf839cf0d2427b1280f62bd8",
+        "schedule_ir": "d80ce0792110aca7b044e52a9cfb45aca645ff4380ede29879fe75226f205291",
+        "tile_ir": "21220ab605d0f6d1a24e532ee4f5f427d7d4a911010354bf6b027c527fbee91c",
+        "target_ir": "bce5f350eb3a541a1d09741d09a2927e20538a35c4acb1a76025ec093d6f6b6c"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 2.171764727165737e-06,
+      "cold_public_call_ms": 163.808796,
+      "warm_public_call_samples_ms": [
+        1.211722,
+        0.978566,
+        0.987012,
+        0.883283,
+        0.918992,
+        0.950742,
+        0.950071
+      ],
+      "warm_public_call_median_ms": 0.950742,
+      "device_event_samples_ms": [
+        0.0036434200406074524,
+        0.003728620111942291,
+        0.0043090999126434324,
+        0.003664320111274719,
+        0.003649120032787323,
+        0.0036677199602127074,
+        0.00365011990070343
+      ],
+      "device_event_median_ms": 0.003664320111274719,
+      "legacy_target_only_same_store": null
+    },
+    {
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "bf16",
+      "explicit_widen": true,
+      "output_dtype": "fp32",
+      "abi_id": "tessera.rocm.math.a_b_o_n.bf16_f32.v1",
+      "image_sha256": "f3fff67514b31b68e741ecf232f52176c8e54cb1d454f1133d53fec4971ecffa",
+      "ir_sha256": {
+        "graph_ir": "899435b1df5a54b575f74518c1abc018695eef7671106be08d00fbd7318ad412",
+        "schedule_ir": "c3bad79e5fa249cf26b3fea2220df51cda7c5b1af543627dd9d5d67a480aa5cf",
+        "tile_ir": "357d77b60194be1dc95104b45bb80928b1dfa908bcd27a6532ff15e4c1cdc0e7",
+        "target_ir": "3ef1757a3bd0eef2a1d79dfa5b2f129132b155d22aa558634beff86a7cc394bb"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 1.704085796916388e-06,
+      "cold_public_call_ms": 162.453889,
+      "warm_public_call_samples_ms": [
+        1.059651,
+        1.066414,
+        0.963097,
+        0.864767,
+        0.90768,
+        1.05409,
+        0.909142
+      ],
+      "warm_public_call_median_ms": 0.963097,
+      "device_event_samples_ms": [
+        0.003708420097827911,
+        0.0037709200382232667,
+        0.003678320050239563,
+        0.003694019913673401,
+        0.0037241300940513613,
+        0.003690229952335358,
+        0.0037489300966262818
+      ],
+      "device_event_median_ms": 0.003708420097827911,
+      "legacy_target_only_same_store": null
+    },
+    {
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "f32",
+      "explicit_widen": false,
+      "output_dtype": "fp32",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "image_sha256": "e175935aafb85712ee7cd5e35ef8423711ec9ad16250c5fb3a006273d7652991",
+      "ir_sha256": {
+        "graph_ir": "4df6c0b09347197cac9f5e940b3953869c751dc2ca5edfa1daa0ab51ab8bb043",
+        "schedule_ir": "5d3d53566f4a8935fbc320b4bdf2fa14682314f0d68eedb4f08bcbc15cbd2b47",
+        "tile_ir": "7ddee1d40420a3fe41ac0195056c143732787e33940231165f6cd5ed3445afb0",
+        "target_ir": "5216e90487a4ba54450e450bc7195e4d817fe725b7115845c036bad91c8def74"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 4.548682682070648e-06,
+      "cold_public_call_ms": 115.107214,
+      "warm_public_call_samples_ms": [
+        3.400889,
+        3.234239,
+        3.306578,
+        3.250872,
+        3.334982,
+        3.310205,
+        3.513544
+      ],
+      "warm_public_call_median_ms": 3.310205,
+      "device_event_samples_ms": [
+        0.006908869743347168,
+        0.009165229797363282,
+        0.007825250029563904,
+        0.007127370238304138,
+        0.005206310153007507,
+        0.006747779846191407,
+        0.004784109890460968
+      ],
+      "device_event_median_ms": 0.006908869743347168,
+      "legacy_target_only_same_store": {
+        "image_sha256": "a2d275006074388bd3fadfd2b6a6519d1e404010f16daa569aa0a1e3fb431ac0",
+        "device_event_samples_ms": [
+          0.004424319863319397,
+          0.004705609977245331,
+          0.0045756098628044126,
+          0.004694809913635254,
+          0.004584519863128662,
+          0.0045735201239585875,
+          0.004682520031929016
+        ],
+        "device_event_median_ms": 0.004584519863128662
+      }
+    },
+    {
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "f16",
+      "explicit_widen": false,
+      "output_dtype": "fp16",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f16_f16.v1",
+      "image_sha256": "7356b16bad3cae230efb52796c4c1e86eaa80749ff98e7d78c937300ba6cf68d",
+      "ir_sha256": {
+        "graph_ir": "d019c0e7266ce9644bca1ee3f7e030412733c31b2e84c62122350598afd488d5",
+        "schedule_ir": "9fa013c73a8088d6fcc5555d971210109a39a058fc00092736eb1c736c9661f7",
+        "tile_ir": "768d6174f5e3d0f6e6aa8ce0b0a8d4afe4656bdca0e541e2e7ec5bb0ccc20e38",
+        "target_ir": "4df8bdf593b0b2bcad7306e935bce9f6ed634153dd1381b5ba3a3c0b4fd05572"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 0.015616685629645133,
+      "cold_public_call_ms": 101.926298,
+      "warm_public_call_samples_ms": [
+        3.509387,
+        3.507132,
+        3.545687,
+        3.508826,
+        3.444472,
+        3.487284,
+        3.421829
+      ],
+      "warm_public_call_median_ms": 3.507132,
+      "device_event_samples_ms": [
+        0.006877890229225159,
+        0.007528870105743408,
+        0.007303979992866516,
+        0.009289039969444276,
+        0.007283170223236084,
+        0.007242469787597656,
+        0.0072163701057434086
+      ],
+      "device_event_median_ms": 0.007283170223236084,
+      "legacy_target_only_same_store": {
+        "image_sha256": "ef3dfb6d8918dbfb1b45cda6d7421b5e1c9ca122514e927cd6a4b9246dcaf4dd",
+        "device_event_samples_ms": [
+          0.007288669943809509,
+          0.0072134798765182495,
+          0.00754027009010315,
+          0.007212880253791809,
+          0.007200679779052734,
+          0.007284879684448242,
+          0.007149379849433899
+        ],
+        "device_event_median_ms": 0.0072134798765182495
+      }
+    },
+    {
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "bf16",
+      "explicit_widen": false,
+      "output_dtype": "bf16",
+      "abi_id": "tessera.rocm.math.a_b_o_n.bf16_bf16.v1",
+      "image_sha256": "7e696d9f921b3eeff13f09944673c65f6bdd7efedf62efa13b02810239b17a89",
+      "ir_sha256": {
+        "graph_ir": "0a93baa45682184a1d15d2be57f2c2423f90084fd961c12b890cbcc68ac7e529",
+        "schedule_ir": "ddb6cf92a2aa50684f8e14b291c05edf71f537e8d3b9fa100306ba7573c8f6f6",
+        "tile_ir": "c8b9ac73469faf9df267ce5f75bd7aca6c91b806e390ab710556c22b2d589b66",
+        "target_ir": "c31b3de780112d8053c93518b3b5e2915f63dc1ef9a3214cb8aa5e24427519a4"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 0.12451487488849722,
+      "cold_public_call_ms": 102.70954,
+      "warm_public_call_samples_ms": [
+        3.479775,
+        3.475832,
+        3.415065,
+        3.397413,
+        3.443761,
+        3.421729,
+        3.374468
+      ],
+      "warm_public_call_median_ms": 3.421729,
+      "device_event_samples_ms": [
+        0.010961029529571533,
+        0.008251870274543762,
+        0.010318039655685425,
+        0.0078507798910141,
+        0.00786068022251129,
+        0.009843249917030334,
+        0.007636680006980896
+      ],
+      "device_event_median_ms": 0.008251870274543762,
+      "legacy_target_only_same_store": {
+        "image_sha256": "0315880e9f00816e49de00a0d18dd59732058bc20a1e22af95111dd306d4ac5f",
+        "device_event_samples_ms": [
+          0.007715780138969421,
+          0.00769927978515625,
+          0.007708680033683777,
+          0.00768097996711731,
+          0.007677879929542541,
+          0.007708269953727722,
+          0.007735180258750915
+        ],
+        "device_event_median_ms": 0.007708269953727722
+      }
+    },
+    {
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "f16",
+      "explicit_widen": true,
+      "output_dtype": "fp32",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f16_f32.v1",
+      "image_sha256": "afbbcf979955e2ccbce8f195427e7381e21bcbb013455bd99ee76b2944f6231f",
+      "ir_sha256": {
+        "graph_ir": "fd17feaeb55b778de60becf630a66362ca0ccb52c087b83b19b1632a7cf56378",
+        "schedule_ir": "dd59bde7410e969e92a1464065b655c7e91a2d9412beb621812285f5766b5517",
+        "tile_ir": "e72ba47578a7881d0c9c27f30e45d0f27fff90128186a28a7afcfa841fef6514",
+        "target_ir": "bce5f350eb3a541a1d09741d09a2927e20538a35c4acb1a76025ec093d6f6b6c"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 4.6315808361896416e-06,
+      "cold_public_call_ms": 122.045254,
+      "warm_public_call_samples_ms": [
+        3.665657,
+        3.692267,
+        3.668457,
+        3.710562,
+        3.499237,
+        3.523399,
+        3.590813
+      ],
+      "warm_public_call_median_ms": 3.665657,
+      "device_event_samples_ms": [
+        0.008858870267868042,
+        0.011321450471878053,
+        0.010036259889602661,
+        0.007225899696350097,
+        0.007659599781036377,
+        0.007632989883422852,
+        0.0076184898614883425
+      ],
+      "device_event_median_ms": 0.007659599781036377,
+      "legacy_target_only_same_store": null
+    },
+    {
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "bf16",
+      "explicit_widen": true,
+      "output_dtype": "fp32",
+      "abi_id": "tessera.rocm.math.a_b_o_n.bf16_f32.v1",
+      "image_sha256": "f3fff67514b31b68e741ecf232f52176c8e54cb1d454f1133d53fec4971ecffa",
+      "ir_sha256": {
+        "graph_ir": "90b0d6c444c64fd758278655cd733f9a3f041e4ae44ec221bf216b628cfa231c",
+        "schedule_ir": "0e1b8c9244547cd138d34cdcfcecdfb0cf8ed883c090c71b27d25564141e9bf0",
+        "tile_ir": "59504540b3bfeee2a0b8b689fc7cd05cd031ea00222a9cd9771cf838e4c4e333",
+        "target_ir": "3ef1757a3bd0eef2a1d79dfa5b2f129132b155d22aa558634beff86a7cc394bb"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 4.138404726461431e-06,
+      "cold_public_call_ms": 124.412339,
+      "warm_public_call_samples_ms": [
+        3.710096,
+        3.555215,
+        3.561477,
+        3.558701,
+        3.529526,
+        3.509939,
+        3.626862
+      ],
+      "warm_public_call_median_ms": 3.558701,
+      "device_event_samples_ms": [
+        0.01036134958267212,
+        0.013198909759521484,
+        0.011696230173110961,
+        0.009231259822845459,
+        0.011087239980697631,
+        0.009227070212364196,
+        0.009173569679260253
+      ],
+      "device_event_median_ms": 0.01036134958267212,
+      "legacy_target_only_same_store": null
+    },
+    {
+      "shape": [
+        256,
+        12288
+      ],
+      "storage": "f32",
+      "explicit_widen": false,
+      "output_dtype": "fp32",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "image_sha256": "e175935aafb85712ee7cd5e35ef8423711ec9ad16250c5fb3a006273d7652991",
+      "ir_sha256": {
+        "graph_ir": "ef021980bece22f92043fdee1d6fe64f4dba923dddfd50540c74b613c5c3d46b",
+        "schedule_ir": "4726671b92011d939a7820f99bd0f830aa20aa5a7f5a6703f8e2771ffc0eb647",
+        "tile_ir": "20db10688ebf73ccfa365168fe001b44b9f44a23f706d8aadaddf179bfc22f8d",
+        "target_ir": "5216e90487a4ba54450e450bc7195e4d817fe725b7115845c036bad91c8def74"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 4.955197518086152e-06,
+      "cold_public_call_ms": 117.459699,
+      "warm_public_call_samples_ms": [
+        5.99403,
+        5.737232,
+        5.759845,
+        5.711363,
+        5.755746,
+        5.942877,
+        6.161986
+      ],
+      "warm_public_call_median_ms": 5.759845,
+      "device_event_samples_ms": [
+        0.0341170597076416,
+        0.02774071931838989,
+        0.027028119564056395,
+        0.02724761962890625,
+        0.02634783983230591,
+        0.02562164068222046,
+        0.025235249996185302
+      ],
+      "device_event_median_ms": 0.027028119564056395,
+      "legacy_target_only_same_store": {
+        "image_sha256": "a2d275006074388bd3fadfd2b6a6519d1e404010f16daa569aa0a1e3fb431ac0",
+        "device_event_samples_ms": [
+          0.027531619071960448,
+          0.027625720500946045,
+          0.02672713041305542,
+          0.026499428749084473,
+          0.026849730014801024,
+          0.026454930305480958,
+          0.02636833906173706
+        ],
+        "device_event_median_ms": 0.02672713041305542
+      }
+    },
+    {
+      "shape": [
+        256,
+        12288
+      ],
+      "storage": "f16",
+      "explicit_widen": false,
+      "output_dtype": "fp16",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f16_f16.v1",
+      "image_sha256": "7356b16bad3cae230efb52796c4c1e86eaa80749ff98e7d78c937300ba6cf68d",
+      "ir_sha256": {
+        "graph_ir": "d85a419f95cf61f3d7c2f77fd35a3e2752afc5eb5e4e0806c90eb078ae70b528",
+        "schedule_ir": "c5f1bde3c2db764b10d582bb081f0d754bc3623ab522ae6e14672fd5689738e0",
+        "tile_ir": "bdc848b61958408362bdee63e657c357c9058b9c3946913de00738538c43c6ac",
+        "target_ir": "4df8bdf593b0b2bcad7306e935bce9f6ed634153dd1381b5ba3a3c0b4fd05572"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 0.015622540233401594,
+      "cold_public_call_ms": 107.829805,
+      "warm_public_call_samples_ms": [
+        4.948976,
+        4.809764,
+        5.041198,
+        4.948205,
+        4.718589,
+        4.786019,
+        4.626242
+      ],
+      "warm_public_call_median_ms": 4.809764,
+      "device_event_samples_ms": [
+        0.031112220287322998,
+        0.027774970531463623,
+        0.02572788953781128,
+        0.025459489822387694,
+        0.02500580072402954,
+        0.02499169111251831,
+        0.025291190147399903
+      ],
+      "device_event_median_ms": 0.025459489822387694,
+      "legacy_target_only_same_store": {
+        "image_sha256": "ef3dfb6d8918dbfb1b45cda6d7421b5e1c9ca122514e927cd6a4b9246dcaf4dd",
+        "device_event_samples_ms": [
+          0.02667098045349121,
+          0.02662358045578003,
+          0.025973188877105712,
+          0.025572190284729002,
+          0.02530648946762085,
+          0.025106499195098875,
+          0.02502439022064209
+        ],
+        "device_event_median_ms": 0.025572190284729002
+      }
+    },
+    {
+      "shape": [
+        256,
+        12288
+      ],
+      "storage": "bf16",
+      "explicit_widen": false,
+      "output_dtype": "bf16",
+      "abi_id": "tessera.rocm.math.a_b_o_n.bf16_bf16.v1",
+      "image_sha256": "7e696d9f921b3eeff13f09944673c65f6bdd7efedf62efa13b02810239b17a89",
+      "ir_sha256": {
+        "graph_ir": "64db1f91eeb9cd9e3b8d3a0389b5a12166cf09d123134c31d9e16d0f5ad36168",
+        "schedule_ir": "a6db8fd3710bef2962eae904fca28bd0fead1d5ab9c16bb0dcf6027af15636fa",
+        "tile_ir": "359985520aa28efc39accddd1fc60a81148106d4d0de6cd0aa7f50b466638f0e",
+        "target_ir": "c31b3de780112d8053c93518b3b5e2915f63dc1ef9a3214cb8aa5e24427519a4"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 0.12451487488849722,
+      "cold_public_call_ms": 109.801113,
+      "warm_public_call_samples_ms": [
+        4.787286,
+        4.849571,
+        4.754279,
+        4.72422,
+        4.555007,
+        4.998976,
+        4.756773
+      ],
+      "warm_public_call_median_ms": 4.756773,
+      "device_event_samples_ms": [
+        0.03025125026702881,
+        0.031394050121307374,
+        0.027289988994598387,
+        0.027021889686584474,
+        0.026730589866638184,
+        0.026585500240325927,
+        0.026692988872528075
+      ],
+      "device_event_median_ms": 0.027021889686584474,
+      "legacy_target_only_same_store": {
+        "image_sha256": "0315880e9f00816e49de00a0d18dd59732058bc20a1e22af95111dd306d4ac5f",
+        "device_event_samples_ms": [
+          0.027758889198303223,
+          0.027483580112457277,
+          0.027460689544677733,
+          0.02669409990310669,
+          0.026708600521087648,
+          0.026552300453186035,
+          0.02687649965286255
+        ],
+        "device_event_median_ms": 0.02687649965286255
+      }
+    },
+    {
+      "shape": [
+        256,
+        12288
+      ],
+      "storage": "f16",
+      "explicit_widen": true,
+      "output_dtype": "fp32",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f16_f32.v1",
+      "image_sha256": "afbbcf979955e2ccbce8f195427e7381e21bcbb013455bd99ee76b2944f6231f",
+      "ir_sha256": {
+        "graph_ir": "372a1d85d7c7f88c29c060a0cf6cbd9bf58864d4be2e5e2182915800402304e4",
+        "schedule_ir": "f24756acf3c29d5866387bfd8e5febfdf4d2d1641a02224b1baabd693a2eb817",
+        "tile_ir": "9d45c8dfb2f5ea7fadcbd75a6fad33820fc79a8dc8972eb0deef2eea4d27d69a",
+        "target_ir": "bce5f350eb3a541a1d09741d09a2927e20538a35c4acb1a76025ec093d6f6b6c"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 5.039896436187519e-06,
+      "cold_public_call_ms": 130.920023,
+      "warm_public_call_samples_ms": [
+        5.50184,
+        5.210883,
+        9.221671,
+        5.481873,
+        6.874462,
+        5.231634,
+        6.486543
+      ],
+      "warm_public_call_median_ms": 5.50184,
+      "device_event_samples_ms": [
+        0.03298572063446045,
+        0.02895695924758911,
+        0.026845989227294923,
+        0.026400799751281737,
+        0.026130800247192384,
+        0.025987999439239504,
+        0.026089000701904296
+      ],
+      "device_event_median_ms": 0.026400799751281737,
+      "legacy_target_only_same_store": null
+    },
+    {
+      "shape": [
+        256,
+        12288
+      ],
+      "storage": "bf16",
+      "explicit_widen": true,
+      "output_dtype": "fp32",
+      "abi_id": "tessera.rocm.math.a_b_o_n.bf16_f32.v1",
+      "image_sha256": "f3fff67514b31b68e741ecf232f52176c8e54cb1d454f1133d53fec4971ecffa",
+      "ir_sha256": {
+        "graph_ir": "a31a8465d91dcb99e07950f9bd7596181ac57dc04093d52b19b70aafaae71c14",
+        "schedule_ir": "ab929a677cccf75b0a7213dd3933735d8bc914e814060a62af7085ff1e9a9789",
+        "tile_ir": "c0c27e480ba70033dd96de0cc4832742351395ebab18dad603fddccb5094d1c8",
+        "target_ir": "3ef1757a3bd0eef2a1d79dfa5b2f129132b155d22aa558634beff86a7cc394bb"
+      },
+      "correctness": "FP64 oracle checked before/after events and after every public call",
+      "max_abs_error": 4.138404726461431e-06,
+      "cold_public_call_ms": 131.968633,
+      "warm_public_call_samples_ms": [
+        5.390774,
+        5.66779,
+        7.735165,
+        5.395098,
+        6.38148,
+        5.581596,
+        6.648389
+      ],
+      "warm_public_call_median_ms": 5.66779,
+      "device_event_samples_ms": [
+        0.03239540100097656,
+        0.03127471923828125,
+        0.027012650966644288,
+        0.02681344985961914,
+        0.026446259021759032,
+        0.026500558853149413,
+        0.026532759666442873
+      ],
+      "device_event_median_ms": 0.02681344985961914,
+      "legacy_target_only_same_store": null
+    }
+  ],
+  "timing_domains": {
+    "device": "HIP events over resident launches; excludes transfers and allocation; may include host submission gaps",
+    "warm_public": "completed @jit call including validation, staging, transfers, launch and readback; compiler cached",
+    "cold_public": "first public call in this process including compilation/cache lookup and execution"
+  },
+  "scope": "isolated activation; no full MLP/model-quality or sibling-architecture claim"
+}

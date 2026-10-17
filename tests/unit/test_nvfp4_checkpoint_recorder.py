@@ -6,7 +6,7 @@ import pytest
 from benchmarks.rocm import benchmark_rocm_nvfp4_checkpoint as recorder
 
 
-@pytest.mark.parametrize("name", ["q_proj", "gate_proj", "up_proj"])
+@pytest.mark.parametrize("name", ["q_proj", "gate_proj", "up_proj", "down_proj"])
 def test_projection_loader_preserves_named_tensor_and_independent_global_scale(monkeypatch, name):
     tensor = (recorder.TENSOR if name == "q_proj" else f"model.layers.0.mlp.{name}.weight")
     prefix = tensor.removesuffix(".weight")
@@ -44,7 +44,7 @@ def test_projection_loader_rejects_unsupported_source_before_network(monkeypatch
     def network(*args):
         pytest.fail("invalid source must be rejected before fetching")
     monkeypatch.setattr(recorder, "_get_json", network)
-    with pytest.raises(ValueError, match="q_proj or gate/up"):
+    with pytest.raises(ValueError, match="q_proj or gate/up/down"):
         recorder._load_projection("model.layers.3.mlp.gate_proj.weight")
 
 

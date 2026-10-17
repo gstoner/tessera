@@ -292,3 +292,15 @@ def test_gfx1201_silu_capability_tracks_native_storage_and_rank(dtype):
     row = TARGET_CAPABILITIES["rocm_gfx1201"].supported_ops["tessera.silu_mul"]
     assert dtype in row.dtypes
     assert row.ranks == (1, 2, 3)
+
+
+@pytest.mark.parametrize("target,admitted", [("rocm_gfx1201", True), ("rocm_gfx1151", False), ("rocm", False), ("nvidia_sm120", False)])
+def test_public_silu_selection_does_not_preempt_unproved_sibling_route(target, admitted):
+    from tessera.compiler import rocm_math_native as native
+
+    graph = module("div", "f32")
+    graph.functions[0].body[-1].op_name = "tessera.silu_mul"
+    assert native.requests_math(graph)  # Artifact/native compiler recognition remains shared.
+    assert native.requests_public_math(graph, target) is admitted
+    graph.functions[0].body[-1].op_name = "tessera.div"
+    assert native.requests_public_math(graph, target) is (target in {"rocm_gfx1151", "rocm_gfx1201"})

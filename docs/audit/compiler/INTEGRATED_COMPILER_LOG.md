@@ -12896,12 +12896,22 @@ changed inputs, IEEE classes, operand roles and fresh compiler-free replay.
 Adjacent math/widening/owner tests pass 91 cases; focused registry/ABI/lifecycle
 and compiler tests pass 551 cases. Ruff and zero-error mypy pass.
 Two 15-row timing trials reverse device-arm order. At M256/N12288 activation
-shape native device windows are about25–27 us, within1.5% of same-store legacy
+shape native device windows are about 25–28 us, within 2% of same-store legacy
 kernels. Smaller rows vary by order; no speedup or schedule promotion is claimed.
-Completed public calls remain4.43–5.94 ms. Device and host scopes are separate.
+Completed public calls remain 4.84–6.13 ms. Device and host scopes are separate.
 All four backend queues assessed. No gfx1151 or sibling physical proof transfers.
 Remaining: broad validation/CI and publication, full resident gate/up views and
 lifetimes, activation quantization/downprojection, original-model quality and
 the full five-slice obligations.
 Evidence: benchmarks/baselines/rocm_native_silu_20261016/README.md.
+Native SiLU publication follow-through: explicit CI markers separate 47 native
+compiler proofs from 13 pure frontend/capability cases. The 1,265 existing
+production compiler-route cases execute with zero skips. Broad host units report
+26,109 passed/5,902 skipped and one missing-recorder-citation failure; the
+citation is repaired, 146 follow-up cases and 556 final drift/compiler gates pass.
+The public selector preserves the unproved gfx1151 route; owning gfx1201
+numerical replay passes all 45 cases again. Exact-head CI remains required.
+Final local broad CPU: 26,067 passed/5,902 skipped; final production compiler:
+1,312 passed, zero skips. The complete HIP provider preserves 47 baseline
+exports and passes 87 owning SiLU plus bounded/public/prepared NVFP4 cases.
 <!-- entry-fields:end -->

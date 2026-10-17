@@ -1883,8 +1883,8 @@ class JitFn:
             GFX_PAGED_KV_F32_ABI, GFX_PAGED_KV_STRIDED_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
             GFX_SOFTMAX_F32_ABI, requests_softmax,
         )
-        from .rocm_math_native import supports_math, requests_math, MATH_ABIS
-        native_math = target.startswith("rocm_") and requests_math(self.graph_ir)
+        from .rocm_math_native import supports_math, requests_public_math, MATH_ABIS
+        native_math = requests_public_math(self.graph_ir, target)
         nvidia_softmax = target == "nvidia_sm120" and requests_softmax(self.graph_ir)
         softmax = (target.startswith("rocm_") or nvidia_softmax) and requests_softmax(self.graph_ir)
         movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)

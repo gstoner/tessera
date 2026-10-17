@@ -1,0 +1,114 @@
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp:53:7: warning: 'hipCtxGetCurrent' is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   53 |       hipCtxGetCurrent(&context) != hipSuccess ||
+      |       ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6606:1: note: 'hipCtxGetCurrent' has been explicitly marked deprecated here
+ 6606 | HIP_DEPRECATED(HIP_DEPRECATED_MSG)
+      | ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:662:44: note: expanded from macro 'HIP_DEPRECATED'
+  662 | #define HIP_DEPRECATED(msg) __attribute__((deprecated(msg)))
+      |                                            ^
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp:615:10: warning: 'hipCtxGetCurrent' is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  615 |          hipCtxGetCurrent(&context)==hipSuccess &&
+      |          ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6606:1: note: 'hipCtxGetCurrent' has been explicitly marked deprecated here
+ 6606 | HIP_DEPRECATED(HIP_DEPRECATED_MSG)
+      | ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:662:44: note: expanded from macro 'HIP_DEPRECATED'
+  662 | #define HIP_DEPRECATED(msg) __attribute__((deprecated(msg)))
+      |                                            ^
+2 warnings generated when compiling for gfx1201.
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp:53:7: warning: 'hipCtxGetCurrent' is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   53 |       hipCtxGetCurrent(&context) != hipSuccess ||
+      |       ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6606:1: note: 'hipCtxGetCurrent' has been explicitly marked deprecated here
+ 6606 | HIP_DEPRECATED(HIP_DEPRECATED_MSG)
+      | ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:662:44: note: expanded from macro 'HIP_DEPRECATED'
+  662 | #define HIP_DEPRECATED(msg) __attribute__((deprecated(msg)))
+      |                                            ^
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp:615:10: warning: 'hipCtxGetCurrent' is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  615 |          hipCtxGetCurrent(&context)==hipSuccess &&
+      |          ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6606:1: note: 'hipCtxGetCurrent' has been explicitly marked deprecated here
+ 6606 | HIP_DEPRECATED(HIP_DEPRECATED_MSG)
+      | ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:662:44: note: expanded from macro 'HIP_DEPRECATED'
+  662 | #define HIP_DEPRECATED(msg) __attribute__((deprecated(msg)))
+      |                                            ^
+2 warnings generated when compiling for host.
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:116:10: warning: 'hipCtxGetCurrent' is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  116 |          hipCtxGetCurrent(&context) == hipSuccess &&
+      |          ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6606:1: note: 'hipCtxGetCurrent' has been explicitly marked deprecated here
+ 6606 | HIP_DEPRECATED(HIP_DEPRECATED_MSG)
+      | ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:662:44: note: expanded from macro 'HIP_DEPRECATED'
+  662 | #define HIP_DEPRECATED(msg) __attribute__((deprecated(msg)))
+      |                                            ^
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:358:7: warning: 'hipCtxGetCurrent' is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  358 |       hipCtxGetCurrent(&p->context) != hipSuccess) return 2;
+      |       ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6606:1: note: 'hipCtxGetCurrent' has been explicitly marked deprecated here
+ 6606 | HIP_DEPRECATED(HIP_DEPRECATED_MSG)
+      | ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:662:44: note: expanded from macro 'HIP_DEPRECATED'
+  662 | #define HIP_DEPRECATED(msg) __attribute__((deprecated(msg)))
+      |                                            ^
+2 warnings generated when compiling for gfx1201.
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:116:10: warning: 'hipCtxGetCurrent' is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  116 |          hipCtxGetCurrent(&context) == hipSuccess &&
+      |          ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6606:1: note: 'hipCtxGetCurrent' has been explicitly marked deprecated here
+ 6606 | HIP_DEPRECATED(HIP_DEPRECATED_MSG)
+      | ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:662:44: note: expanded from macro 'HIP_DEPRECATED'
+  662 | #define HIP_DEPRECATED(msg) __attribute__((deprecated(msg)))
+      |                                            ^
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:358:7: warning: 'hipCtxGetCurrent' is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  358 |       hipCtxGetCurrent(&p->context) != hipSuccess) return 2;
+      |       ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6606:1: note: 'hipCtxGetCurrent' has been explicitly marked deprecated here
+ 6606 | HIP_DEPRECATED(HIP_DEPRECATED_MSG)
+      | ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:662:44: note: expanded from macro 'HIP_DEPRECATED'
+  662 | #define HIP_DEPRECATED(msg) __attribute__((deprecated(msg)))
+      |                                            ^
+2 warnings generated when compiling for host.
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:89:5: warning: 'hipCtxGetCurrent' is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   89 |     hipCtxGetCurrent(&ctx)==hipSuccess && device==p.device && ctx==p.context;
+      |     ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6606:1: note: 'hipCtxGetCurrent' has been explicitly marked deprecated here
+ 6606 | HIP_DEPRECATED(HIP_DEPRECATED_MSG)
+      | ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:662:44: note: expanded from macro 'HIP_DEPRECATED'
+  662 | #define HIP_DEPRECATED(msg) __attribute__((deprecated(msg)))
+      |                                            ^
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:223:7: warning: 'hipCtxGetCurrent' is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  223 |       hipCtxGetCurrent(&p->context)!=hipSuccess)return 2;
+      |       ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6606:1: note: 'hipCtxGetCurrent' has been explicitly marked deprecated here
+ 6606 | HIP_DEPRECATED(HIP_DEPRECATED_MSG)
+      | ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:662:44: note: expanded from macro 'HIP_DEPRECATED'
+  662 | #define HIP_DEPRECATED(msg) __attribute__((deprecated(msg)))
+      |                                            ^
+2 warnings generated when compiling for gfx1201.
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:89:5: warning: 'hipCtxGetCurrent' is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   89 |     hipCtxGetCurrent(&ctx)==hipSuccess && device==p.device && ctx==p.context;
+      |     ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6606:1: note: 'hipCtxGetCurrent' has been explicitly marked deprecated here
+ 6606 | HIP_DEPRECATED(HIP_DEPRECATED_MSG)
+      | ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:662:44: note: expanded from macro 'HIP_DEPRECATED'
+  662 | #define HIP_DEPRECATED(msg) __attribute__((deprecated(msg)))
+      |                                            ^
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:223:7: warning: 'hipCtxGetCurrent' is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  223 |       hipCtxGetCurrent(&p->context)!=hipSuccess)return 2;
+      |       ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6606:1: note: 'hipCtxGetCurrent' has been explicitly marked deprecated here
+ 6606 | HIP_DEPRECATED(HIP_DEPRECATED_MSG)
+      | ^
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:662:44: note: expanded from macro 'HIP_DEPRECATED'
+  662 | #define HIP_DEPRECATED(msg) __attribute__((deprecated(msg)))
+      |                                            ^
+2 warnings generated when compiling for host.

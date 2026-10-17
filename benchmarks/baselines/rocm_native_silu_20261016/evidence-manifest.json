@@ -1,14 +1,18 @@
 {
   "schema": "tessera.native-silu-evidence.v1",
-  "scope": "isolated gfx1201 SiLU; full MLP and broad unit validation remain open",
+  "scope": "isolated gfx1201 SiLU; full NVFP4 MLP remains open",
   "artifacts": {
     "README.md": {
-      "sha256": "654d44d9068f7cda35d6a0673fe9cfc6ec0655522d2c59c28acef3b7ce835646",
-      "bytes": 2799
+      "sha256": "0f9b5c3d3e321b627565aed39b203e707de2c2abba60811b1e99c96a99ea4a37",
+      "bytes": 4358
     },
     "adjacent-device-and-owner.log": {
       "sha256": "cb20151540ce4802a940662d1833dee7729f61d04c923d73987cf7b4cdc93694",
       "bytes": 180
+    },
+    "build-full-owner.log": {
+      "sha256": "24788af58ef8df9d124963e4f9d288e191a83e549b75380cade53eabe19d87f8",
+      "bytes": 10279
     },
     "build-half-owner.log": {
       "sha256": "ee98ab825b0f195469ab091d1fc7d8d6567b5dc918508c0206ef7833c56113e0",
@@ -26,6 +30,10 @@
       "sha256": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
       "bytes": 54
     },
+    "compiler-route-final.log": {
+      "sha256": "ac0c9f1e72b5133a697a1636d9635250ab39266d548059fe3afc4089bcf9be62",
+      "bytes": 1717
+    },
     "compiler-route.log": {
       "sha256": "4de5b73bf2ecdac38337806e25a6a4ce16369a1f86e010336271cc218bda82ac",
       "bytes": 1631
@@ -38,6 +46,14 @@
       "sha256": "66328eb13c346e347cab4eb8bba2a9b62142a152fcf9eaf653b986603dc4e45e",
       "bytes": 180
     },
+    "final-admission-and-recorder-gates.log": {
+      "sha256": "6c6d6f628b328f5aacf62d4b5d47d9455b80b7544cf2cb7153d4058d5e07cc7c",
+      "bytes": 661
+    },
+    "final-device-public-selector.log": {
+      "sha256": "9b48a737edbde8b8cab0c3d141492722b95229820664e3f3a29a6258382c7408",
+      "bytes": 100
+    },
     "final-device-rank123.log": {
       "sha256": "994080ca7193e4ebfd4b7af2b84cc01eae63387d45b1f72880b8dabb5a4433ed",
       "bytes": 100
@@ -45,6 +61,22 @@
     "final-focused-gates.log": {
       "sha256": "e7d1ef57e7a7619ac8653892944cb694085c738a6493955727fbcc83c786f99a",
       "bytes": 661
+    },
+    "full-owner-adjacent-device.log": {
+      "sha256": "3bacb0744ebbad2f89c01a321516c40a6adcef8e55dbeea334ed8542c957aa42",
+      "bytes": 180
+    },
+    "full-owner-export-parity.json": {
+      "sha256": "4b71ab4b261d60ced721aca27460ae2b661576515fdd5d8152e4c6a021020e20",
+      "bytes": 4105
+    },
+    "full-unit-repaired.log": {
+      "sha256": "b26e4e303f0216bffa145f00eaaaf052cbd0f343b2a49f51ec94b774f4bc4aaf",
+      "bytes": 43058
+    },
+    "full-unit.log": {
+      "sha256": "32eea141955189e37bd04b84b9d97cd26435505f351fda1d4abf8e5d7a05964f",
+      "bytes": 44053
     },
     "generated-docs-check.log": {
       "sha256": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
@@ -66,6 +98,18 @@
       "sha256": "9ae7e965d8040405a5c95ecf0b81dab033bb1d3f37ac461d1d457d65f87b628c",
       "bytes": 99
     },
+    "publication-doc-abi-gate.log": {
+      "sha256": "6644d3dca4fdee4775cf60b1ee0bc6b44d4a0f03fde768561cf6b8fb912891a8",
+      "bytes": 99
+    },
+    "publication-plan-gate.log": {
+      "sha256": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+      "bytes": 54
+    },
+    "recorder-selector-followup.log": {
+      "sha256": "4b28a612108df462c3ed148651c5be58f379a2316556bb2b0392e2af1fe55913",
+      "bytes": 329
+    },
     "ruff-full.log": {
       "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
       "bytes": 19
@@ -79,12 +123,12 @@
       "bytes": 224
     },
     "silu-timings-legacy-first.json": {
-      "sha256": "9a73cf30cf4b9054764582be5a3dcd596f08d2903e7c5ad14d0105572fe6ddfd",
-      "bytes": 29196
+      "sha256": "140f104dfaed8d90a0064f3c8ba5d5818c4bf6176ccc9bc403d7108c31ad0ab9",
+      "bytes": 34525
     },
     "silu-timings-native-first.json": {
-      "sha256": "67c50808904bec9bb48fc124d6b767f6820a6e214699dd77a7d81190a44f75a1",
-      "bytes": 29184
+      "sha256": "91e28ccf7d8a6abe8d506d66798aa838b7480e4496c3bcc4723deea3a5abf81a",
+      "bytes": 34518
     }
   }
 }

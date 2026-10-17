@@ -58,9 +58,8 @@ Apple, NVIDIA or x86 binary-math storage. Existing sibling FP32 rules remain.
 
 ## Validation boundaries
 
-The final focused compiler/registry lane passes 603 cases after capability and
-JIT allocation follow-through. The owning gfx1201 lane passes 45 device cases
-plus 56 compiler-contract cases, including matching-half fresh-process replay
+The final focused compiler/registry lane passes 556 cases after the final selector/recorder follow-through. The owning gfx1201 lane passes 45 device cases
+plus the separately selected 47 compiler-dependent and 13 pure frontend/capability cases, including matching-half fresh-process replay
 with compiler access and eager/legacy arithmetic forbidden. Adjacent native
 math/widening and native owner lifetime validation passes 91 cases. These counts
 have different scopes and are not independent cumulative coverage totals.
@@ -84,3 +83,13 @@ Remaining gates include benchmark interpretation, generated registries and exact
 PR checks. Owning tests cover IEEE/signed-zero, ordinary JIT/changed-input/
 compiler-free replay and shape-independent images. Full resident gate/up views/lifetimes, activation quantization and
 down projection remain part of the full five-slice objective.
+
+Public SiLU selection is gfx1201-only until independent gfx1151 execution proof.
+The shared low-level compiler admission remains available for artifact testing;
+it does not preempt the sibling public route. Broad host validation found one
+missing benchmark citation; that citation and its unchanged gate now pass.
+
+The final broad CPU lane passes 26,067 cases with 5,902 skips; the production
+compiler lane passes 1,312 with zero skips. The full shared provider preserves
+47 existing C exports and adds only the v2 entry. Its owning SiLU plus
+bounded/public/prepared NVFP4 regression lane passes 87 cases.

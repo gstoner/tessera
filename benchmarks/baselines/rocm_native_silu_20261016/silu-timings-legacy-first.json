@@ -5,17 +5,57 @@
   "device_ordinal": 0,
   "opaque_hip_uuid": "32386439653765666266326566373136",
   "legacy_first": true,
-  "source_commit": "05481f153fe5df407759997bc15fec29497a3831",
+  "source_commit": "a6ae03792190f30a6c39eee5642afe488c27ca98",
   "compiler_sha256": "d02a71578ec176b07cb1ca97fe9a33a6f640483462970bde15a0f084878b1126",
   "source_sha256": {
+    "benchmarks/baselines/rocm_native_silu_20261016/README.md": "654d44d9068f7cda35d6a0673fe9cfc6ec0655522d2c59c28acef3b7ce835646",
+    "benchmarks/baselines/rocm_native_silu_20261016/adjacent-device-and-owner.log": "cb20151540ce4802a940662d1833dee7729f61d04c923d73987cf7b4cdc93694",
+    "benchmarks/baselines/rocm_native_silu_20261016/build-half-owner.log": "ee98ab825b0f195469ab091d1fc7d8d6567b5dc918508c0206ef7833c56113e0",
+    "benchmarks/baselines/rocm_native_silu_20261016/capability-allocation-gates.log": "6fa414aa5ba10a8aece1e051758bce40445f04b50fbc69dff93b78f885b35dba",
+    "benchmarks/baselines/rocm_native_silu_20261016/claim-lint.log": "b7cabb6c341cf801ecd49c4d47463f73b43c581493a32da0645833c891959021",
+    "benchmarks/baselines/rocm_native_silu_20261016/compiler-plan-gate.log": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3",
+    "benchmarks/baselines/rocm_native_silu_20261016/compiler-route.log": "4de5b73bf2ecdac38337806e25a6a4ce16369a1f86e010336271cc218bda82ac",
+    "benchmarks/baselines/rocm_native_silu_20261016/compiler-source-manifest-fixed.json": "ea8fdf6613a5b96113575b401b0430c6686e82eb57d1bfc2d081827a89794481",
+    "benchmarks/baselines/rocm_native_silu_20261016/evidence-manifest.json": "9409a1dcfb951581dd0c115df0795eb08f486cf5ef1c1342f7ecf0d226d92b34",
+    "benchmarks/baselines/rocm_native_silu_20261016/fifth-device-and-contract.log": "66328eb13c346e347cab4eb8bba2a9b62142a152fcf9eaf653b986603dc4e45e",
+    "benchmarks/baselines/rocm_native_silu_20261016/final-device-rank123.log": "994080ca7193e4ebfd4b7af2b84cc01eae63387d45b1f72880b8dabb5a4433ed",
+    "benchmarks/baselines/rocm_native_silu_20261016/final-focused-gates.log": "e7d1ef57e7a7619ac8653892944cb694085c738a6493955727fbcc83c786f99a",
+    "benchmarks/baselines/rocm_native_silu_20261016/generated-docs-check.log": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "benchmarks/baselines/rocm_native_silu_20261016/half-owner-lifetime.log": "8964ec0c2d96a99a0012763cb299d0385e0125f9a98c492b18fdae2e013f728a",
+    "benchmarks/baselines/rocm_native_silu_20261016/installed-compiler.json": "2efb11fcafb2c4226b0cd61f3a85a2b97d6cc479132c9c0a102754b28c67adcc",
+    "benchmarks/baselines/rocm_native_silu_20261016/mypy-ratchet.log": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "benchmarks/baselines/rocm_native_silu_20261016/owner-abi-doc-gates.log": "9ae7e965d8040405a5c95ecf0b81dab033bb1d3f37ac461d1d457d65f87b628c",
+    "benchmarks/baselines/rocm_native_silu_20261016/ruff-full.log": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "benchmarks/baselines/rocm_native_silu_20261016/silu-cpu-classification.log": "3cc6232e30f667612c93bc84f0fe57e466e6184b1c2685da1c60b2626adee4b3",
+    "benchmarks/baselines/rocm_native_silu_20261016/silu-route-classification.log": "a81f91f78285011fce798a25fab982f7d77524a65b50dce30809ed0c30f8378a",
+    "benchmarks/baselines/rocm_native_silu_20261016/silu-timings-legacy-first.json": "9a73cf30cf4b9054764582be5a3dcd596f08d2903e7c5ad14d0105572fe6ddfd",
+    "benchmarks/baselines/rocm_native_silu_20261016/silu-timings-native-first.json": "67c50808904bec9bb48fc124d6b767f6820a6e214699dd77a7d81190a44f75a1",
     "benchmarks/rocm/benchmark_native_silu_schedule.py": "2355e751099e4079c940333e30522730c2c488dd804ee1cffb8df0942e6ee4b5",
-    "docs/audit/backend/apple/todo.md": "790f605681de239c6bc420905a597bf15fc3b7cfe826f4603c2050a71a91c7e5",
-    "docs/audit/backend/nvidia/todo.md": "edd6f041832ddf28d47980d53afd656e3668605f68b0320158c3b2fa320759eb",
-    "docs/audit/backend/rocm/todo.md": "f9a319197d3278ccf72d32346e1cc58b0b8c7b2f7a515eec661eeefc6a4f827c",
-    "docs/audit/backend/x86/todo.md": "ba728134aff0f2fbde7312bc02270a9a30990c9d702a2ed971c3af8741854201",
-    "docs/spec/NATIVE_ROCM_SILU_MATH_CONTRACT.md": "1c242e345dea017748ead08cd82d29dc1ca826e4ab98b8b75545c4e7c93783eb",
-    "python/tessera/compiler/backend_manifest.py": "e685be3392567e8419645c2870272d91ab882e6cf111dbdd6234577319c56ffb",
+    "docs/audit/backend/apple/todo.md": "9d6a235fd6d0dd65ae3cfbc784a49083f1dd46c3be44b8ffb2c84c645ba715bc",
+    "docs/audit/backend/nvidia/todo.md": "8d930e8546295889c5106dcc1c3ae29e3d423c2c351bd87fc685951afe481f70",
+    "docs/audit/backend/rocm/todo.md": "e61e03450595b588868b4da086294b0828b1bb9d5406d34f7639d04d81a8eb72",
+    "docs/audit/backend/x86/todo.md": "7b01af94580aa7118372a4f4aa339d0b23c6b60f2d7c05d593cfc1df07021c47",
+    "docs/audit/compiler/INTEGRATED_COMPILER_LOG.md": "19b1252c71de3b2159b1155cb51a2c68b3a0abb7b0a1dd99705de9ee6ff7a541",
+    "docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md": "4f5f6018e19aa1f52fbb3d80e3345546d735bc830b6da08c398e8a308018abad",
+    "docs/audit/generated/compiler_progress.csv": "cd7dfb16d927cec51c7298193e945f5e60c7c54252425e6dd537d2c1cde41d31",
+    "docs/audit/generated/compiler_progress.md": "cbc1dc44d0e1d241275785122953ae9a208192f90cb099ab841fde9a4d3060fd",
+    "docs/audit/generated/docs_freshness.md": "ebe1d174616e14286e4d2c8de53a1a153f12353721547dc0372b0b7435b5df48",
+    "docs/audit/generated/dtype_flow.csv": "54fda74bfa5ce3abd23aa3be7173c4b145abd73770ed0256dafb7d0dd4cfc19b",
+    "docs/audit/generated/e2e_op_coverage.md": "05f1b471927dfb9a5ef3114bb056ed3e03dacb60ba142cd299f4f928fcb3e5a1",
+    "docs/audit/generated/rocm_target_map.csv": "ecdd1efc7fe5a06da36fa38ad5b0e2245b8b99db06fd77ffa680f3d49a27c0b3",
+    "docs/audit/generated/rocm_target_map.md": "503cff4faadef7d27bbced5a99bfc259cb41682596fce3bae018fc80a035afc6",
+    "docs/audit/generated/runtime_abi.csv": "c3cae0b5449ee69a7d116dc89ec3957275d6e38006976642c0b00db84c2b1ec6",
+    "docs/audit/generated/runtime_abi.md": "d487939abcc221be0d02388ce0c97bb3f722d38c5f98c4d76912fa6dcadd8de5",
+    "docs/audit/generated/runtime_execution_matrix.csv": "38f78498d9274fc43dc4045884065b4a62936505f3e34af972a568eaa4030205",
+    "docs/audit/generated/runtime_execution_matrix.md": "eb1c9b02291b029359bf046558cf04f5c9d1c4b321c849cfbee61b61cecb933f",
+    "docs/audit/generated/s_series_status.md": "f88828d55e6b7bf9a8f5b7df772e5ebf045d37ea7859363b4258523be85189f9",
+    "docs/audit/generated/support_table.csv": "ed41d25d58486f6019512ce47a8d2791a763a7469f1be9ef56bd3ff2fca480a7",
+    "docs/audit/generated/support_table.md": "bf85718e85b43654e261712fb402a4c6a4898db6b4408979a4d8c9f5505c4fba",
+    "docs/audit/standalone_primitive_coverage.md": "e518e89bcf8e3987a22180381700b510201c5d278903ab1d5a8e4bdf28fae55b",
+    "docs/spec/NATIVE_ROCM_SILU_MATH_CONTRACT.md": "b9e4d1276bea0115532994de56907aba9bc42ca3ce31fc69247b590fb6de7da9",
+    "python/tessera/compiler/backend_manifest.py": "ea1831df49b550fba94eb213626bc69e58b30207e99d3d445705cc62b439e17c",
     "python/tessera/compiler/capabilities.py": "33d4cb4e5a01faea45c1395b5eae0fcaf1f44b74ef8e5bb496cce91d2fe69148",
+    "python/tessera/compiler/execution_matrix.py": "7dde284049be6ee860936ffcf3dcb932816495e126869453799b1268c1d981c6",
     "python/tessera/compiler/jit.py": "2e7ecca5266250a23f1a2097cf87fbc89e9eca66173303f3913b8fa12c98669d",
     "python/tessera/compiler/pass_metadata.py": "b4fac998e3a27cdbf39ae49b81a3da3b7865d48fdb08674a430fe2b033df0346",
     "python/tessera/compiler/rocm_math_native.py": "84cf722d380d3ce59a61b16a28b90426880f04640e4adf3c3bf1fa360cdf8efe",
@@ -29,8 +69,8 @@
     "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "15317a35ab3763216c5c9c337a3504a018e3f05c35f05275d60a1993d373ed2c",
     "src/compiler/ir/TileOps.cpp": "ca26d618887ea143e545c5e27781c25f687d7d173e5722e47028eba1df4b7e61",
     "src/compiler/programming_model/lib/NativeROCMMath.h": "f4ea506977b81ff9abc56f62c71fe1d1eecffe4bd45ff5a0eb9a01616d4f1dad",
-    "tests/device/rocm/test_native_silu_math_jit.py": "f6d3d4dfe3eb3c60a8956ae580fa2c25b56a1c8ef3eb5d281562e0fb58479abc",
-    "tests/unit/test_native_rocm_silu_schedule.py": "88f6490dfc875b9114e29f0c266eca093797a39ad69e8e6a9c14aac162abb076",
+    "tests/device/rocm/test_native_silu_math_jit.py": "79cca248bff89315f1fb603b199828e5ccc81af6b7237c5144389f98614408fb",
+    "tests/unit/test_native_rocm_silu_schedule.py": "59548ae3bb6e095a1d80f3a84319fb5e85638c05d6854bec32aeba4d1af24122",
     "tests/unit/test_rocm_native_movement_lifetime.py": "a5a68a373b9ce2e00d11a32c23ac211ab1d9d0c86016778c3072c86d0590e274"
   },
   "runtime_sha256": "2a0e70c081b305ba8bf814d34eeaf296c7f81be8b233a812ea20cd68769fa2f5",
@@ -55,39 +95,39 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 3.1094286718769126e-06,
-      "cold_public_call_ms": 399.723365,
+      "cold_public_call_ms": 400.934207,
       "warm_public_call_samples_ms": [
-        1.012811,
-        0.843727,
-        0.835722,
-        0.773243,
-        0.936621,
-        0.820954,
-        0.957806
+        1.088867,
+        0.827115,
+        0.855479,
+        0.827125,
+        1.018908,
+        0.840071,
+        0.82426
       ],
-      "warm_public_call_median_ms": 0.843727,
+      "warm_public_call_median_ms": 0.840071,
       "device_event_samples_ms": [
-        0.0032042598724365233,
-        0.003205449879169464,
-        0.003272539973258972,
-        0.003944399952888489,
-        0.0032827401161193846,
-        0.0032436498999595643,
-        0.003212650120258331
+        0.003240259885787964,
+        0.003283360004425049,
+        0.003282960057258606,
+        0.0032800599932670594,
+        0.0032702600955963135,
+        0.0032809600234031677,
+        0.0032834601402282715
       ],
-      "device_event_median_ms": 0.0032436498999595643,
+      "device_event_median_ms": 0.0032809600234031677,
       "legacy_target_only_same_store": {
         "image_sha256": "a2d275006074388bd3fadfd2b6a6519d1e404010f16daa569aa0a1e3fb431ac0",
         "device_event_samples_ms": [
-          0.0033333399891853333,
-          0.0032169499993324278,
-          0.003324950039386749,
-          0.0032313498854637146,
-          0.0032302498817443847,
-          0.003265550136566162,
-          0.003494330048561096
+          0.003294059932231903,
+          0.003269360065460205,
+          0.0033001598715782167,
+          0.0033005499839782715,
+          0.003262360095977783,
+          0.003309449851512909,
+          0.0033286601305007935
         ],
-        "device_event_median_ms": 0.003265550136566162
+        "device_event_median_ms": 0.0033001598715782167
       }
     },
     {
@@ -108,39 +148,39 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 0.006015513171796272,
-      "cold_public_call_ms": 144.995591,
+      "cold_public_call_ms": 145.21159,
       "warm_public_call_samples_ms": [
-        1.019163,
-        0.896248,
-        0.904193,
-        0.958648,
-        0.784834,
-        0.779384,
-        0.891464
+        1.05861,
+        0.833418,
+        0.820333,
+        0.876711,
+        0.847379,
+        0.888783,
+        0.894936
       ],
-      "warm_public_call_median_ms": 0.896248,
+      "warm_public_call_median_ms": 0.876711,
       "device_event_samples_ms": [
-        0.0037030699849128724,
-        0.0037297698855400085,
-        0.0036926600337028504,
-        0.00397475004196167,
-        0.003685869872570038,
-        0.0036970698833465577,
-        0.0036947700381278993
+        0.0037719500064849853,
+        0.0037155500054359436,
+        0.0037257400155067443,
+        0.0037314498424530027,
+        0.0037100499868392943,
+        0.0037354499101638792,
+        0.003715749979019165
       ],
-      "device_event_median_ms": 0.0036970698833465577,
+      "device_event_median_ms": 0.0037257400155067443,
       "legacy_target_only_same_store": {
         "image_sha256": "ef3dfb6d8918dbfb1b45cda6d7421b5e1c9ca122514e927cd6a4b9246dcaf4dd",
         "device_event_samples_ms": [
-          0.003694170117378235,
-          0.004567820131778717,
-          0.0037186700105667114,
-          0.0036889699101448057,
-          0.003694069981575012,
-          0.003755060136318207,
-          0.0036919701099395754
+          0.0037259501218795776,
+          0.0037323400378227235,
+          0.003736349940299988,
+          0.003693250119686127,
+          0.0037156498432159425,
+          0.0037417399883270266,
+          0.0037207499146461485
         ],
-        "device_event_median_ms": 0.003694170117378235
+        "device_event_median_ms": 0.0037259501218795776
       }
     },
     {
@@ -161,39 +201,39 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 0.05532433475707421,
-      "cold_public_call_ms": 139.060465,
+      "cold_public_call_ms": 141.067777,
       "warm_public_call_samples_ms": [
-        1.015377,
-        0.836984,
-        0.837175,
-        1.06388,
-        0.858867,
-        0.869878,
-        0.902029
+        1.157338,
+        1.002001,
+        0.986852,
+        0.979889,
+        1.106732,
+        0.987472,
+        0.9701
       ],
-      "warm_public_call_median_ms": 0.869878,
+      "warm_public_call_median_ms": 0.987472,
       "device_event_samples_ms": [
-        0.0037007001042366028,
-        0.0037220001220703127,
-        0.003730500042438507,
-        0.003865189850330353,
-        0.003852199912071228,
-        0.003723500072956085,
-        0.0037071999907493593
+        0.0037498700618743895,
+        0.0037351700663566588,
+        0.003964160084724427,
+        0.0035342800617218016,
+        0.004299750030040741,
+        0.0037551701068878176,
+        0.003740369975566864
       ],
-      "device_event_median_ms": 0.003723500072956085,
+      "device_event_median_ms": 0.0037498700618743895,
       "legacy_target_only_same_store": {
         "image_sha256": "0315880e9f00816e49de00a0d18dd59732058bc20a1e22af95111dd306d4ac5f",
         "device_event_samples_ms": [
-          0.003985179960727692,
-          0.0037347999215126037,
-          0.0037804999947547912,
-          0.0038225001096725466,
-          0.00373879998922348,
-          0.003753100037574768,
-          0.0037193000316619873
+          0.0038137799501419068,
+          0.0038166698813438416,
+          0.0037826699018478393,
+          0.0037920698523521423,
+          0.003784970045089722,
+          0.0037878701090812684,
+          0.003754970133304596
         ],
-        "device_event_median_ms": 0.003753100037574768
+        "device_event_median_ms": 0.0037878701090812684
       }
     },
     {
@@ -214,27 +254,27 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 2.171764727165737e-06,
-      "cold_public_call_ms": 166.958651,
+      "cold_public_call_ms": 168.924964,
       "warm_public_call_samples_ms": [
-        1.189981,
-        1.032038,
-        1.007651,
-        0.958808,
-        1.085391,
-        0.975239,
-        1.000448
+        1.094909,
+        0.998193,
+        1.009465,
+        0.974198,
+        1.005978,
+        0.954279,
+        0.951714
       ],
-      "warm_public_call_median_ms": 1.007651,
+      "warm_public_call_median_ms": 0.998193,
       "device_event_samples_ms": [
-        0.0036937400698661806,
-        0.003780129849910736,
-        0.003690739870071411,
-        0.0037541300058364867,
-        0.003685239851474762,
-        0.0037698298692703247,
-        0.0036881399154663087
+        0.00379720002412796,
+        0.0038037899136543272,
+        0.0037206000089645384,
+        0.0037516999244689942,
+        0.0037141001224517823,
+        0.003797599971294403,
+        0.004168980121612549
       ],
-      "device_event_median_ms": 0.0036937400698661806,
+      "device_event_median_ms": 0.00379720002412796,
       "legacy_target_only_same_store": null
     },
     {
@@ -255,27 +295,27 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 1.704085796916388e-06,
-      "cold_public_call_ms": 162.042502,
+      "cold_public_call_ms": 162.361484,
       "warm_public_call_samples_ms": [
-        1.093406,
-        1.121665,
-        0.945342,
-        1.063167,
-        0.883193,
-        0.911477,
-        0.848677
+        1.164683,
+        0.985268,
+        0.975019,
+        1.068468,
+        0.87665,
+        0.861401,
+        0.946114
       ],
-      "warm_public_call_median_ms": 0.945342,
+      "warm_public_call_median_ms": 0.975019,
       "device_event_samples_ms": [
-        0.003710710108280182,
-        0.0037299200892448427,
-        0.0037098199129104613,
-        0.003693319857120514,
-        0.003990510106086731,
-        0.003738519847393036,
-        0.0037812098860740663
+        0.003723210096359253,
+        0.0038046100735664367,
+        0.0037324100732803343,
+        0.003749899864196777,
+        0.0037215098738670347,
+        0.0037707099318504333,
+        0.003717609941959381
       ],
-      "device_event_median_ms": 0.0037299200892448427,
+      "device_event_median_ms": 0.0037324100732803343,
       "legacy_target_only_same_store": null
     },
     {
@@ -296,39 +336,39 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 4.548682682070648e-06,
-      "cold_public_call_ms": 117.216509,
+      "cold_public_call_ms": 112.642411,
       "warm_public_call_samples_ms": [
-        3.494273,
-        3.326556,
-        3.342913,
-        3.309324,
-        3.355372,
-        3.387689,
-        3.556311
+        3.815889,
+        3.748525,
+        3.712942,
+        3.693134,
+        3.665306,
+        3.693409,
+        3.694763
       ],
-      "warm_public_call_median_ms": 3.355372,
+      "warm_public_call_median_ms": 3.694763,
       "device_event_samples_ms": [
-        0.004578700065612793,
-        0.004420909881591797,
-        0.004581399857997894,
-        0.00455949991941452,
-        0.004685699939727783,
-        0.004582209885120392,
-        0.004684610068798065
+        0.007634429931640625,
+        0.0076585298776626586,
+        0.007568830251693725,
+        0.007587130069732666,
+        0.00757112979888916,
+        0.007638030052185059,
+        0.007569819688796997
       ],
-      "device_event_median_ms": 0.004581399857997894,
+      "device_event_median_ms": 0.007587130069732666,
       "legacy_target_only_same_store": {
         "image_sha256": "a2d275006074388bd3fadfd2b6a6519d1e404010f16daa569aa0a1e3fb431ac0",
         "device_event_samples_ms": [
-          0.006804159879684448,
-          0.006781460046768189,
-          0.009247210025787354,
-          0.007865639925003052,
-          0.005224490165710449,
-          0.005125600099563599,
-          0.00697816014289856
+          0.009070889949798584,
+          0.011425039768218993,
+          0.00996957004070282,
+          0.007799429893493652,
+          0.007233830094337463,
+          0.007633929848670959,
+          0.00762162983417511
         ],
-        "device_event_median_ms": 0.006804159879684448
+        "device_event_median_ms": 0.007799429893493652
       }
     },
     {
@@ -349,39 +389,39 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 0.015616685629645133,
-      "cold_public_call_ms": 101.961387,
+      "cold_public_call_ms": 102.282443,
       "warm_public_call_samples_ms": [
-        3.502709,
-        3.574182,
-        3.491382,
-        3.459412,
-        3.525137,
-        3.740049,
-        3.605451
+        3.603146,
+        3.620179,
+        3.601253,
+        3.647482,
+        3.627103,
+        3.593007,
+        4.63272
       ],
-      "warm_public_call_median_ms": 3.525137,
+      "warm_public_call_median_ms": 3.620179,
       "device_event_samples_ms": [
-        0.007286760210990906,
-        0.0073771697282791135,
-        0.0071996599435806274,
-        0.007139970064163208,
-        0.007217170000076294,
-        0.007211470007896423,
-        0.007205569744110107
+        0.008578699827194215,
+        0.008524199724197387,
+        0.008588200211524963,
+        0.008544499874114991,
+        0.008540189862251281,
+        0.008534200191497802,
+        0.008524600267410278
       ],
-      "device_event_median_ms": 0.007211470007896423,
+      "device_event_median_ms": 0.008540189862251281,
       "legacy_target_only_same_store": {
         "image_sha256": "ef3dfb6d8918dbfb1b45cda6d7421b5e1c9ca122514e927cd6a4b9246dcaf4dd",
         "device_event_samples_ms": [
-          0.007346460223197937,
-          0.0073486602306365965,
-          0.00738086998462677,
-          0.009373819828033448,
-          0.0072308599948883055,
-          0.007236660122871399,
-          0.007247859835624695
+          0.009114580154418945,
+          0.011256730556488037,
+          0.008577499985694886,
+          0.008568900227546692,
+          0.008537489771842956,
+          0.008570389747619629,
+          0.008819000124931335
         ],
-        "device_event_median_ms": 0.007346460223197937
+        "device_event_median_ms": 0.008577499985694886
       }
     },
     {
@@ -402,39 +442,39 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 0.12451487488849722,
-      "cold_public_call_ms": 102.426238,
+      "cold_public_call_ms": 101.992746,
       "warm_public_call_samples_ms": [
-        3.656413,
-        3.518764,
-        3.520579,
-        3.49528,
-        3.54232,
-        3.480832,
-        3.465993
+        3.729719,
+        3.606563,
+        3.556117,
+        3.552449,
+        3.547049,
+        3.539434,
+        3.539264
       ],
-      "warm_public_call_median_ms": 3.518764,
+      "warm_public_call_median_ms": 3.552449,
       "device_event_samples_ms": [
-        0.00940892994403839,
-        0.00942812979221344,
-        0.009438729882240295,
-        0.009337930083274841,
-        0.00935962975025177,
-        0.009346129894256592,
-        0.009410439729690552
+        0.009326810240745545,
+        0.009341409802436829,
+        0.009299110174179077,
+        0.009314109683036803,
+        0.009550309777259826,
+        0.009318509697914123,
+        0.009283409714698791
       ],
-      "device_event_median_ms": 0.00940892994403839,
+      "device_event_median_ms": 0.009318509697914123,
       "legacy_target_only_same_store": {
         "image_sha256": "0315880e9f00816e49de00a0d18dd59732058bc20a1e22af95111dd306d4ac5f",
         "device_event_samples_ms": [
-          0.009906619787216187,
-          0.012106579542160035,
-          0.009372630119323731,
-          0.009349330067634583,
-          0.009363939762115478,
-          0.009537429809570312,
-          0.00935302972793579
+          0.010330090522766113,
+          0.013097829818725586,
+          0.011974159479141235,
+          0.009387609958648681,
+          0.009326810240745545,
+          0.009347010254859924,
+          0.009304810166358948
         ],
-        "device_event_median_ms": 0.009372630119323731
+        "device_event_median_ms": 0.009387609958648681
       }
     },
     {
@@ -455,27 +495,27 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 4.6315808361896416e-06,
-      "cold_public_call_ms": 128.229928,
+      "cold_public_call_ms": 129.144061,
       "warm_public_call_samples_ms": [
-        3.309248,
-        3.358103,
-        3.244219,
-        3.173929,
-        3.28905,
-        3.227567,
-        3.315665
+        3.783001,
+        3.736783,
+        3.64624,
+        3.603617,
+        3.659305,
+        3.74599,
+        3.66218
       ],
-      "warm_public_call_median_ms": 3.28905,
+      "warm_public_call_median_ms": 3.66218,
       "device_event_samples_ms": [
-        0.006396200060844421,
-        0.008989750146865845,
-        0.007894570231437683,
-        0.005051019787788391,
-        0.005317919850349426,
-        0.004353530108928681,
-        0.004873319864273072
+        0.010149610042572022,
+        0.012694669961929321,
+        0.010581009387969971,
+        0.008866639733314514,
+        0.008876140117645264,
+        0.008881739974021911,
+        0.00912672996520996
       ],
-      "device_event_median_ms": 0.005317919850349426,
+      "device_event_median_ms": 0.00912672996520996,
       "legacy_target_only_same_store": null
     },
     {
@@ -496,27 +536,27 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 4.138404726461431e-06,
-      "cold_public_call_ms": 125.921534,
+      "cold_public_call_ms": 123.654049,
       "warm_public_call_samples_ms": [
-        3.666939,
-        3.621613,
-        3.577447,
-        3.59175,
-        3.629767,
-        3.660722,
-        3.770538
+        3.846894,
+        3.708248,
+        3.731031,
+        3.750238,
+        3.707316,
+        3.685926,
+        3.620901
       ],
-      "warm_public_call_median_ms": 3.629767,
+      "warm_public_call_median_ms": 3.708248,
       "device_event_samples_ms": [
-        0.007855880260467529,
-        0.01036424994468689,
-        0.007793179750442505,
-        0.0076957899332046505,
-        0.007792779803276062,
-        0.007724589705467224,
-        0.007814390063285827
+        0.008976969718933105,
+        0.01169963002204895,
+        0.010444749593734742,
+        0.0097461599111557,
+        0.007757290005683899,
+        0.007787579894065857,
+        0.00775538980960846
       ],
-      "device_event_median_ms": 0.007793179750442505,
+      "device_event_median_ms": 0.008976969718933105,
       "legacy_target_only_same_store": null
     },
     {
@@ -537,39 +577,39 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 4.955197518086152e-06,
-      "cold_public_call_ms": 115.867823,
+      "cold_public_call_ms": 115.617374,
       "warm_public_call_samples_ms": [
-        5.984015,
-        5.849306,
-        5.616842,
-        6.046866,
-        5.985889,
-        5.943447,
-        5.708678
+        6.309955,
+        6.209072,
+        6.122075,
+        5.757926,
+        6.251773,
+        6.018887,
+        5.607704
       ],
-      "warm_public_call_median_ms": 5.943447,
+      "warm_public_call_median_ms": 6.122075,
       "device_event_samples_ms": [
-        0.027043659687042237,
-        0.027308449745178223,
-        0.02725085973739624,
-        0.026812961101531984,
-        0.0264497709274292,
-        0.026324169635772707,
-        0.026554770469665527
+        0.02730626106262207,
+        0.02716415882110596,
+        0.026637370586395263,
+        0.026711370944976807,
+        0.026239171028137206,
+        0.026395680904388426,
+        0.02655066967010498
       ],
-      "device_event_median_ms": 0.026812961101531984,
+      "device_event_median_ms": 0.026637370586395263,
       "legacy_target_only_same_store": {
         "image_sha256": "a2d275006074388bd3fadfd2b6a6519d1e404010f16daa569aa0a1e3fb431ac0",
         "device_event_samples_ms": [
-          0.036587140560150146,
-          0.02931823015213013,
-          0.027030858993530273,
-          0.0266196608543396,
-          0.026055469512939453,
-          0.025597469806671144,
-          0.025236289501190185
+          0.03336769104003906,
+          0.02898494005203247,
+          0.026723079681396485,
+          0.02676197052001953,
+          0.02610647916793823,
+          0.02587428092956543,
+          0.024956300258636474
         ],
-        "device_event_median_ms": 0.0266196608543396
+        "device_event_median_ms": 0.026723079681396485
       }
     },
     {
@@ -590,39 +630,39 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 0.015622540233401594,
-      "cold_public_call_ms": 107.144222,
+      "cold_public_call_ms": 107.373942,
       "warm_public_call_samples_ms": [
-        4.676219,
-        4.517004,
-        4.742214,
-        4.787362,
-        4.514589,
-        4.810226,
-        4.47362
+        5.098293,
+        5.089471,
+        4.790567,
+        4.820495,
+        4.924314,
+        4.910878,
+        4.946131
       ],
-      "warm_public_call_median_ms": 4.676219,
+      "warm_public_call_median_ms": 4.924314,
       "device_event_samples_ms": [
-        0.025957090854644774,
-        0.02595699071884155,
-        0.025905399322509765,
-        0.025346601009368898,
-        0.025292499065399168,
-        0.025174500942230223,
-        0.025341598987579345
+        0.02578964948654175,
+        0.026140329837799074,
+        0.025564939975738527,
+        0.02533824920654297,
+        0.025168449878692628,
+        0.025471949577331544,
+        0.025127339363098144
       ],
-      "device_event_median_ms": 0.025346601009368898,
+      "device_event_median_ms": 0.025471949577331544,
       "legacy_target_only_same_store": {
         "image_sha256": "ef3dfb6d8918dbfb1b45cda6d7421b5e1c9ca122514e927cd6a4b9246dcaf4dd",
         "device_event_samples_ms": [
-          0.030353140830993653,
-          0.02829416036605835,
-          0.026097691059112547,
-          0.02571829080581665,
-          0.025238699913024902,
-          0.025174000263214112,
-          0.02547420024871826
+          0.03342036008834839,
+          0.028823111057281494,
+          0.026610429286956786,
+          0.0259187388420105,
+          0.025180840492248537,
+          0.025291650295257567,
+          0.02520205020904541
         ],
-        "device_event_median_ms": 0.02571829080581665
+        "device_event_median_ms": 0.0259187388420105
       }
     },
     {
@@ -643,39 +683,39 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 0.12451487488849722,
-      "cold_public_call_ms": 110.426855,
+      "cold_public_call_ms": 106.388018,
       "warm_public_call_samples_ms": [
-        4.594287,
-        4.600623,
-        4.748743,
-        4.496193,
-        4.644318,
-        4.711416,
-        4.5203
+        4.997119,
+        4.922751,
+        4.996683,
+        4.892243,
+        4.907581,
+        5.326455,
+        4.990321
       ],
-      "warm_public_call_median_ms": 4.600623,
+      "warm_public_call_median_ms": 4.990321,
       "device_event_samples_ms": [
-        0.027554988861083984,
-        0.02721729040145874,
-        0.027310791015625,
-        0.027059500217437745,
-        0.026561999320983888,
-        0.026659600734710694,
-        0.026698501110076905
+        0.02800062894821167,
+        0.027642040252685546,
+        0.027192840576171873,
+        0.02705354928970337,
+        0.026748650074005127,
+        0.02677004098892212,
+        0.026726150512695314
       ],
-      "device_event_median_ms": 0.027059500217437745,
+      "device_event_median_ms": 0.02705354928970337,
       "legacy_target_only_same_store": {
         "image_sha256": "0315880e9f00816e49de00a0d18dd59732058bc20a1e22af95111dd306d4ac5f",
         "device_event_samples_ms": [
-          0.03150954008102417,
-          0.028683578968048094,
-          0.027050790786743165,
-          0.026917989253997802,
-          0.0266825008392334,
-          0.026837399005889894,
-          0.026809089183807373
+          0.03143529891967774,
+          0.027350940704345704,
+          0.027014639377593994,
+          0.02694504976272583,
+          0.026673250198364258,
+          0.026831839084625244,
+          0.026953349113464354
         ],
-        "device_event_median_ms": 0.026917989253997802
+        "device_event_median_ms": 0.026953349113464354
       }
     },
     {
@@ -696,27 +736,27 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 5.039896436187519e-06,
-      "cold_public_call_ms": 137.514266,
+      "cold_public_call_ms": 136.767535,
       "warm_public_call_samples_ms": [
-        5.293472,
-        5.074031,
-        10.201569,
-        5.389766,
-        5.768593,
-        5.045836,
-        5.998594
+        5.62136,
+        5.757912,
+        10.956636,
+        6.048439,
+        6.453495,
+        5.697045,
+        6.069539
       ],
-      "warm_public_call_median_ms": 5.389766,
+      "warm_public_call_median_ms": 6.048439,
       "device_event_samples_ms": [
-        0.03166013956069946,
-        0.028502480983734133,
-        0.02676578998565674,
-        0.0265162992477417,
-        0.026192400455474853,
-        0.025918700695037843,
-        0.02609149932861328
+        0.03298817873001099,
+        0.02647814989089966,
+        0.026332650184631348,
+        0.026308350563049317,
+        0.026010150909423827,
+        0.026122748851776123,
+        0.026358649730682374
       ],
-      "device_event_median_ms": 0.0265162992477417,
+      "device_event_median_ms": 0.026332650184631348,
       "legacy_target_only_same_store": null
     },
     {
@@ -737,27 +777,27 @@
       },
       "correctness": "FP64 oracle checked before/after events and after every public call",
       "max_abs_error": 4.138404726461431e-06,
-      "cold_public_call_ms": 128.521519,
+      "cold_public_call_ms": 128.802387,
       "warm_public_call_samples_ms": [
-        5.432423,
-        5.36057,
-        6.095359,
-        5.403533,
-        6.024292,
-        5.32871,
-        5.936264
+        5.692351,
+        5.511194,
+        6.715363,
+        5.685667,
+        6.232121,
+        5.736891,
+        6.435441
       ],
-      "warm_public_call_median_ms": 5.432423,
+      "warm_public_call_median_ms": 5.736891,
       "device_event_samples_ms": [
-        0.033935940265655516,
-        0.02928478956222534,
-        0.027260808944702147,
-        0.026785519123077393,
-        0.026628921031951903,
-        0.026488120555877685,
-        0.02660881996154785
+        0.03195770025253296,
+        0.029290719032287596,
+        0.027360339164733887,
+        0.026731250286102296,
+        0.026312849521636962,
+        0.02649825096130371,
+        0.02663105010986328
       ],
-      "device_event_median_ms": 0.026785519123077393,
+      "device_event_median_ms": 0.026731250286102296,
       "legacy_target_only_same_store": null
     }
   ],

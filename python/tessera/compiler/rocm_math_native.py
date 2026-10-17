@@ -50,6 +50,13 @@ def requests_math(module):
     return body[-1].op_name in OPS and all(op.op_name == "tessera.cast" for op in body[:-1])
 
 
+def requests_public_math(module, target):
+    """Select only owning-device-proved public routes; compiler admission is separate."""
+    return (target in {"rocm_gfx1151", "rocm_gfx1201"} and requests_math(module)
+            and (module.functions[0].body[-1].op_name != "tessera.silu_mul"
+                 or target == "rocm_gfx1201"))
+
+
 def supports_math(module):
     if not requests_math(module):
         return False

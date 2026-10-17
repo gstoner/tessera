@@ -21,7 +21,16 @@ bitwise; NaNs match semantically. The packet covers 266,560 values and preserves
 changed-input/retained-output ownership. This is a GPU storage primitive,
 not proof of a public Graph quantizer or complete native MLP.
 
-## Next semantic Graph contract — not implemented yet
+## Explicit semantic Graph and Schedule — artifact-only
+
+The native Graph-to-Schedule pass now validates the complete explicit textual
+source, including tensor broadcasts, IEEE scale-floor constants, SSA edges,
+output shapes and RNE storage conversion. A content-sealed Schedule artifact
+retains the original Graph. No Tile body, native image, mixed-width runtime
+package or public quantizer execution is implemented by this increment.
+The ordinary Python trace still needs constructor/shape-metadata integration;
+the current verified input is textual Graph IR. Schedule profile schema 4
+belongs to the row-region namespace; attention schema numbering is unchanged.
 
 For compact BF16 input X[M,I], with positive static extents and I divisible
 by 16, define groups along the last axis. Each group widens exactly to FP32,

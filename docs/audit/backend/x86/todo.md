@@ -7,6 +7,15 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## ROCM-K16-QUANT-SCHEDULE-20261017 — explicit Graph admission
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
+Sync: ROCM-K16-QUANT-SCHEDULE-20261017.
+
+Not applicable to x86 execution: the profile only seals an explicit
+gfx1201 Graph into Schedule metadata. No CPU lowering, cast behavior or ABI
+changes; shared registry and metadata gates remain required.
+
 ## ROCM-NATIVE-E4M3-CAST-20261017 — typed quantizer storage primitive
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.

@@ -6,6 +6,16 @@ target: nvidia_sm120
 last_updated: 2026-10-17
 ---
 
+## ROCM-K16-QUANT-SCHEDULE-20261017 — explicit Graph admission
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
+Sync: ROCM-K16-QUANT-SCHEDULE-20261017.
+
+Not applicable to SM120 execution: the new Schedule admission requires an
+explicit gfx1201 block-quant marker and rejects a sibling target. Twelve existing exact RTX5070 source-active producer regressions pass after
+the shared Graph/Schedule dispatch change;
+no NVIDIA physical profile or attention schema changes.
+
 ## ROCM-NATIVE-E4M3-CAST-20261017 — typed quantizer storage primitive
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.

@@ -5,6 +5,20 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-K16-QUANT-SCHEDULE-20261017 — explicit Graph admission
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
+Sync: ROCM-K16-QUANT-SCHEDULE-20261017.
+
+Artifact-only work in progress. Native admission preserves the thirteen
+original reshape/widen/absolute/max/constant/divide/maximum/broadcast/cast
+operations and their two typed outputs. Source-sealed Schedule schema 4
+checks exact K16 FP32 constants, SSA roles, axis, target, effects and shapes.
+Tile scalarization, native image, mixed-width ABI, public capture/replay,
+resident chaining and timing remain required. Eight new Schedule cases and adjacent metadata/diagnostic/audit gates pass
+332 combined cases; twelve existing RTX5070 producer controls pass separately.
+This creates no executable quantizer or gfx1151 support claim. Existing row schemas retain their meanings.
+
 ## ROCM-NATIVE-E4M3-CAST-20261017 — typed quantizer storage primitive
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.

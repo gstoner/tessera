@@ -3,12 +3,17 @@
 #include "Tessera/IR/BlockQuantContract.h"
 
 namespace tessera {
+static mlir::LogicalResult emitNativeQuantizedGateUpProgram(mlir::ModuleOp module);
 static mlir::func::FuncOp cloneQuantizedProductMember(mlir::func::FuncOp member,
                                                     int64_t index) {
   auto child = mlir::cast<mlir::func::FuncOp>(member->clone());
   bool expansion = member.getBody().front().front().getName().getStringRef() ==
                    "tessera.nvfp4_expand";
-  child.setSymName(index == 0 ? "quantize" : expansion ? "expand" : "quantized_product");
+  auto projectedName=member->getAttrOfType<mlir::StringAttr>("tessera.native.quantized_product_projection_name");
+  if (projectedName) child.setSymName(projectedName.getValue());
+  else child.setSymName(index == 0 ? "quantize" : expansion ? "expand" : "quantized_product");
+  child->removeAttr("tessera.native.quantized_product_projection");
+  child->removeAttr("tessera.native.quantized_product_projection_name");
   if (expansion) {
     mlir::OpBuilder b(member.getContext());
     child->setAttr("tessera.bindings", b.getStrArrayAttr(
@@ -44,6 +49,7 @@ static mlir::LogicalResult emitNativeQuantizedProductProgram(mlir::ModuleOp modu
     if (auto attrs = root.getArgAttrDict(i); attrs && !attrs.empty()) return refuse();
   SmallVector<Operation *> ops;
   for (Operation &op : root.getBody().front().without_terminator()) ops.push_back(&op);
+  if (ops.size()==22) return emitNativeQuantizedGateUpProgram(module);
   bool expansion = ops.size() == 15 &&
       ops[13]->getName().getStringRef() == "tessera.nvfp4_expand";
   if ((!expansion && ops.size() != 14) ||
@@ -216,7 +222,15 @@ static mlir::LogicalResult projectNativeQuantizedProductMember(mlir::ModuleOp mo
   auto lineage=member?member->getAttrOfType<IntegerAttr>("tessera.native.quantized_product_member"):IntegerAttr{};
   if (!member || !lineage || lineage.getInt()!=index)
     return module.emitError("quantized product member lost its source lineage");
+  auto projection=member->getAttrOfType<DictionaryAttr>("tessera.native.quantized_product_projection");
+  auto projectedName=member->getAttrOfType<StringAttr>("tessera.native.quantized_product_projection_name");
+  if (bool(projection)!=bool(projectedName))
+    return module.emitError("quantized product projection lost its native module contract");
   auto child=cloneQuantizedProductMember(member,index);
+  if (projection) {
+    module.getBody()->clear();module->setAttrs(projection);module.getBody()->push_back(child);
+    return success();
+  }
   auto arch=module->getAttr("tessera.arch"); OpBuilder b(module.getContext());
   module.getBody()->clear(); module->setAttrs(b.getDictionaryAttr({}));
   bool expansion = child.getBody().front().front().getName().getStringRef() ==
@@ -228,3 +242,5 @@ static mlir::LogicalResult projectNativeQuantizedProductMember(mlir::ModuleOp mo
   return success();
 }
 } // namespace tessera
+
+#include "NativeQuantizedGateUpProgram.h"

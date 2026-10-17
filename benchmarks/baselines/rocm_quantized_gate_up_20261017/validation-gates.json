@@ -28,11 +28,22 @@
     "audit_registry": {
       "result": "311 passed",
       "log_sha256": "eb52a6c52827217298f346593e2b3adbde293894b5b358c79b6bf731e662109b"
+    },
+    "cpu_unit": {
+      "result": "22204 passed, 9946 skipped, 11 warnings",
+      "log_sha256": "c910ed30aef2f9aa2fda4cc53ee0c72a7cd5c1cff4f7bcdf1be4db30d7a78919"
+    },
+    "route_final": {
+      "result": "33 passed",
+      "log_sha256": "4239202384b026046bcbd15df5f15aaabe1245f6bbeab7841c4d110fd1f0214b"
+    },
+    "generated_docs": {
+      "result": "33 generated docs in sync",
+      "log_sha256": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d"
     }
   },
   "remaining": [
-    "broad CPU suite",
-    "generated documentation drift check",
+    "public CI and complete review audit before merge",
     "full resident down projection",
     "model quality and original five-slice scope"
   ]

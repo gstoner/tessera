@@ -30,7 +30,7 @@ to infer public latency. No comparative speedup or selector promotion is claimed
 Device gate: 22 passed, including eleven v3 tests and eleven v1/v2 controls.
 Native/registry focused gate: 335 passed. Package gate: 47 passed. Audit/pass-metadata/diagnostic gates pass 311 tests. The rebuilt NVIDIA tool
 passes the 85-case existing active-source JVP/runtime fixture on RTX5070; this
-is sibling regression evidence, not adoption of the gfx1201 program. Broader
-CPU and final generated-document drift gates remain pending. Full resident down projection, model
+is sibling regression evidence, not adoption of the gfx1201 program. Broad WSL CPU validation passes 22,204 tests (9,946 skipped); the final
+route gate passes 33 tests. All 33 generated documents pass the final drift check. Full resident down projection, model
 quality, wider/dynamic layouts, encoded AD and the original five-slice goal
 remain open. No sibling physical parity follows from this packet.

@@ -13179,7 +13179,9 @@ Proof: 335 native/registry controls, 47 package controls and 22 owning gfx1201
 device tests pass. Three numerical/timing packets separate captured members,
 ordinary program events, prepared invoke/read and full public calls. All four
 backend queues are assessed; no sibling physical parity or speedup is claimed.
-Broader CPU and documentation validation remain pending.
+Broad WSL CPU validation passes 22,204 cases (9,946 skipped); the final
+route gate passes 33 cases, and the audit/metadata/diagnostic gate passes 311.
+All 33 generated documents pass the final drift check.
 
 Remaining: full resident down projection, checkpoint/model quality, wider and
 dynamic layouts, encoded AD and the original five-slice NVIDIA/ROCm goal.

@@ -8,6 +8,7 @@ from collections.abc import Mapping
 from dataclasses import fields,is_dataclass
 from functools import wraps
 import os
+import struct
 import threading
 
 _ENTRIES=16
@@ -26,7 +27,8 @@ def _snapshot(value):
         remaining-=32
         if remaining<0:raise _Uncacheable
         kind=type(item)
-        if item is None or kind in (bool,float):return (kind,item)
+        if item is None or kind is bool:return (kind,item)
+        if kind is float:return (kind,struct.pack("!d",item))
         if kind is int:
             remaining-=(item.bit_length()+7)//8
             if remaining<0:raise _Uncacheable

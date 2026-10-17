@@ -46,3 +46,16 @@ def test_recipe_shape_not_covered_by_old_identity_still_invalidates_cache(packag
     changed=replace(package,gate=replace(package.gate,product_recipe=recipe))
     assert changed.binding_digest==package.binding_digest
     with pytest.raises(ValueError):owner._bind_abi(changed)
+
+
+def test_signed_zero_metadata_cannot_reuse_positive_zero_certificate(package):
+    native=package.gate.product
+    descriptor=replace(native.descriptor,provenance={**native.descriptor.provenance,'zero_policy':0.0})
+    gate=replace(package.gate,product=replace(native,descriptor=descriptor))
+    gate=replace(gate,binding_digest=gate._identity())
+    changed=replace(package,gate=gate)
+    changed=replace(changed,binding_digest=changed._identity())
+    owner=binder();owner._bind_abi(changed)
+    changed.gate.product.descriptor.provenance['zero_policy']=-0.0
+    with pytest.raises(ValueError):changed.validate()
+    with pytest.raises(ValueError):owner._bind_abi(changed)

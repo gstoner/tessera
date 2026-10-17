@@ -115,3 +115,9 @@ def test_large_metadata_keys_cannot_escape_the_content_budget(fixture,monkeypatc
     p.validate();p.validate()
     assert calls==['validate','validate']
     assert p.validate.cache_info()['size']==0
+
+
+def test_signed_zero_float_bits_are_distinct_content(fixture):
+    Package,_,calls=fixture;p=Package(policy={'nested':{'layout':'nk'},'zero':0.0})
+    p.validate();p.policy['zero']=-0.0;p.validate()
+    assert calls==['validate','validate']

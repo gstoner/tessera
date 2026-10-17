@@ -1,0 +1,59 @@
+{
+  "device": {
+    "uuid": "GPU-28d9e7efbf2ef716",
+    "name": "AMD Radeon RX 9070 XT"
+  },
+  "architecture": "gfx1201",
+  "shape_mnk": [
+    256,
+    128,
+    12288
+  ],
+  "correctness": "passed_before_timing",
+  "max_abs_error": 5.475574054258914e-05,
+  "changed_roots_portable_replay": "passed",
+  "component_receipts": [
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.block_quant.x_q_s_groups.bf16_e4m3_f32.v1",
+      "image_digest": "4fbc045ac22d19ffb2586284b81f991ddd84c8a85da444fd6bba9ee02add8463",
+      "descriptor_digest": "f14be607b3dd52a0537562e801e21c43babf49f8ae4188dfb4bae70697c84b4b",
+      "native_call_binding": "native_cpp_multi_output"
+    },
+    {
+      "ok": true,
+      "execution_kind": "native_gpu",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+      "image_digest": "43b49d1c8ac0bd6850b5328401d313d3aea9f5b0c0011297362c74a76e7533f7",
+      "descriptor_digest": "aabc50c3e972c59dc55bbff16b7b2b0180bc455e202d48850a267cfa58111f32",
+      "native_call_binding": "native_cpp_multi_output"
+    }
+  ],
+  "cold_call_ms": 451.8998280109372,
+  "warm_public_samples_ms": [
+    4.149050285507526,
+    4.168924002442509,
+    4.063399857841432,
+    3.911861139515947,
+    4.091671002762658,
+    4.033251141663641,
+    3.968610715154292
+  ],
+  "warm_public_median_ms": 4.063399857841432,
+  "serialized_dispatch_control_samples_ms": [
+    6.683347430745406,
+    6.77594671391749,
+    6.852163430137027,
+    6.813600002455392,
+    6.748926717721458,
+    6.7534465716952194,
+    6.797788431867957
+  ],
+  "serialized_dispatch_control_median_ms": 6.77594671391749,
+  "control_scope": "fresh compiler artifact construction plus portable launch using the same native members; excludes frontend dispatch",
+  "artifact_sha256": "acb6aef9018e320d76bdce4f54f39cc106bf4c804f50581b3c48fd8ee75b0212",
+  "recorder_sha256": "18c20bab26410e88bac1f78cb42b6bd0f34842e2ec8f79408c10afa0aac5da16",
+  "route": "Python -> typed Graph -> native partition -> Schedule -> Tile -> ROCm Target -> ROCDL/LLVM/HSACO -> checked C++ HIP owner",
+  "timing_scope": "cold includes tracing/compilation/preparation/invoke/readback but excludes decorator construction; warm includes current host-root copies, checked owner preparation, invoke and readback; no kernel-time or speedup claim"
+}

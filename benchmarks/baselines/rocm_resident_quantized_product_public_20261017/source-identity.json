@@ -1,0 +1,15 @@
+{
+  "python/tessera/compiler/rocm_quantized_product_program.py": "49b8defb1ee28d6430d01a8be5d2c1fe2d06c084a3ddf864ddb45d4487670e3d",
+  "python/tessera/compiler/rocm_quantized_product_frontend.py": "c3c6dd757119de3ecb36178558d99f2fc55548f816406214b141f09098ba700b",
+  "python/tessera/compiler/jit.py": "c8d59f6ebe646a8c2beb5d54fe2af4ba7f4c50dff5aed1b7b02a61e4688c4f0f",
+  "python/tessera/compiler/execution_matrix.py": "0de0565b255f05a918576262687336cd943998aef6e65dfa072c2666f33e200a",
+  "python/tessera/runtime.py": "c4aa7f6db382422fe5cf8ec42d0535fec9f891912d6a62fec2607d5e4aabce48",
+  "src/compiler/ir/include/Tessera/IR/BlockQuantContract.h": "e1036fbbe5952378fbaec1ddcc6e26465d77b39f8c4b6dfd14da419ca2def628",
+  "src/compiler/programming_model/lib/NativeBlockQuantSchedule.h": "7b105725387f5bc381c8e2f6fdef31778af50fcdf10415f14bbc619587937c28",
+  "src/transforms/lib/NativeScaledMatmulProgram.h": "10f32a286e1e35d4e3d80c66595cc23733dbd781acd500ce96431bd84b486f6b",
+  "src/transforms/lib/NativeQuantizedProductProgram.h": "6ec3b3298776009ba798777317d0991eeca2f17d42fc8f60f24b4e4f721ee021",
+  "benchmarks/rocm/benchmark_public_quantized_product.py": "18c20bab26410e88bac1f78cb42b6bd0f34842e2ec8f79408c10afa0aac5da16",
+  "benchmarks/rocm/benchmark_resident_quantized_product.py": "8e20a92d3e553874fca3eba1f27f49d4d7316043cff17904c4eeb529b3fbde0e",
+  "tests/unit/test_rocm_quantized_product_program.py": "421e6b25510c4f6d6a42ede305c9275e4eb40d84130191d0e4ecce3a458bd7ab",
+  "tests/device/rocm/test_native_quantized_product_jit.py": "6c277050d14ab342f1aa651499893472e65bd9a58ed4f5c97ade54783091bd32"
+}

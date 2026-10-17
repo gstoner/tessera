@@ -567,6 +567,7 @@ class JitFn:
         self._nvidia_lhs_last_receipts: tuple = ()
         self._nvidia_rhs_program_cache: Dict[str, Any] = {}
         self._rocm_nvfp4_program_cache: Dict[str, Any] = {}
+        self._rocm_quantized_product_cache: Dict[str, Any] = {}
         self._rocm_nvfp4_call_signature = inspect.signature(fn)
         self._rocm_nvfp4_last_program: Any = None
         self._rocm_nvfp4_last_receipts: Any = ()
@@ -1043,6 +1044,9 @@ class JitFn:
         if self.differentiation_request is not None:
             self._specialized_autodiff_module(args, kwargs)
         try:
+            quantized_product = self._try_rocm_quantized_product_call(args,kwargs)
+            if quantized_product is not _JIT_FALLBACK:
+                return quantized_product
             native_ingest = self._try_rocm_nvfp4_program_call(args,kwargs)
             if native_ingest is not _JIT_FALLBACK:
                 return native_ingest
@@ -2360,6 +2364,42 @@ class JitFn:
         self._cached_artifact=artifact
         self.last_fallback_reason=None
         return receipt["output"]
+
+    def _try_rocm_quantized_product_call(self,args,kwargs):
+        if normalize_target_kind(self.target)!="rocm_gfx1201" or self.differentiation_request is not None:
+            return _JIT_FALLBACK
+        from .rocm_quantized_product_frontend import requests_quantized_product,supports_quantized_product,package_traced_quantized_product
+        if not requests_quantized_product(self.graph_ir):
+            return _JIT_FALLBACK
+        import hashlib
+        bound=self._rocm_nvfp4_call_signature.bind(*args,**kwargs)
+        bound.apply_defaults()
+        ordered=tuple(bound.arguments[name] for name in self.arg_names)
+        module,_=self._trace_frontend_capture(ordered,{})
+        if not requests_quantized_product(module):
+            raise ValueError("quantized-product source differs from its traced Graph")
+        key=hashlib.sha256(module.to_mlir(target="rocm_gfx1201",canonical=True).encode()).hexdigest()
+        program=self._rocm_quantized_product_cache.get(key)
+        if program is None:
+            if not supports_quantized_product(module):
+                return _JIT_FALLBACK
+            from dataclasses import replace
+            program=replace(package_traced_quantized_product(module),argument_names=tuple(self.arg_names))
+            program.validate()
+            self._rocm_quantized_product_cache[key]=program
+            if len(self._rocm_quantized_product_cache)>24:
+                del self._rocm_quantized_product_cache[next(iter(self._rocm_quantized_product_cache))]
+        # Reuse the verified immutable compiler product. Artifact serialization
+        # is an inspection/portable boundary, not a prerequisite for every
+        # invocation of its checked C++ owner with fresh host roots.
+        output,receipts=program.execute(ordered)
+        if len(receipts)!=2 or not all(r.get("ok") and r.get("execution_kind")=="native_gpu" for r in receipts):
+            raise RuntimeError(f"native quantized-product execution failed: {receipts}")
+        self._rocm_quantized_product_last_program=program
+        self._rocm_quantized_product_last_receipts=receipts
+        self._cached_artifact=None
+        self.last_fallback_reason=None
+        return output
 
     def _try_rocm_nvfp4_program_call(self,args,kwargs):
         if normalize_target_kind(self.target)!="rocm_gfx1201":
@@ -3699,6 +3739,19 @@ class JitFn:
                 f"{bool(self.compile_bundle and self.compile_bundle.executable)}"
             ),
         }
+        quantized_program=getattr(self,"_rocm_quantized_product_last_program",None)
+        quantized_receipts=getattr(self,"_rocm_quantized_product_last_receipts",())
+        if quantized_program is not None and len(quantized_receipts)==2 and all(
+                receipt.get("ok") and receipt.get("execution_kind")=="native_gpu" for receipt in quantized_receipts):
+            import hashlib
+            quant_native=quantized_program.native
+            target_decision["rocm_gfx1201"]="canonical_rocm_quantized_product_program; 2 ordered native packages"
+            plan_hash=quant_native.binding_digest
+            ir_hashes["graph_ir"]=hashlib.sha256(quantized_program.graph_ir.encode()).hexdigest()
+            ir_hashes["schedule_ir"]=hashlib.sha256("\n".join((quant_native.quantizer_recipe.schedule_ir,
+                quant_native.product_recipe.schedule_ir)).encode()).hexdigest()
+            ir_hashes["tile_ir"]=hashlib.sha256("\n".join(p.tile_ir for p in quant_native.native_stages).encode()).hexdigest()
+            ir_hashes["target_ir"]=hashlib.sha256("\n".join(p.target_ir for p in quant_native.native_stages).encode()).hexdigest()
         if self._rocm_nvfp4_last_program is not None:
             target_decision["rocm_gfx1201"] = f"canonical_rocm_nvfp4_program; {len(self.native_nvfp4_packages())} ordered native packages"
             packages = self.native_nvfp4_packages()
@@ -3948,6 +4001,10 @@ class JitFn:
 
         from tessera.runtime import RuntimeArtifact
 
+        quantized_program = getattr(self,"_rocm_quantized_product_last_program",None)
+        if quantized_program is not None:
+            from .rocm_quantized_product_frontend import runtime_artifact
+            return runtime_artifact(quantized_program)
         ingest_program = getattr(self, "_rocm_nvfp4_last_program", None)
         if ingest_program is not None:
             from .rocm_nvfp4_program import runtime_artifact

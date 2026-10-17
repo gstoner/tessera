@@ -10,6 +10,16 @@ scope: ROCm backend implementation and exact-device proof
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
 Sync: ROCM-RESIDENT-QUANT-PRODUCT-20261017.
 
+Production integration: the named three-root public JIT now packages both
+original native members, validates private code/scale lifetimes, and replays
+serialized member images without a compiler. Five gfx1201 public/portable/
+fresh-process and inspection-isolation tests pass, including no-eager-quantization traps and changed
+roots. The production owner binding replaces the benchmark-only binding.
+Public FP32-output calls reuse the private verified program; artifact
+construction is deferred to inspection and portable export. Controlled public
+versus serialized-dispatch timings are recorded separately. Wider public
+envelopes and NVFP4/full-MLP/quality closure remain open.
+
 Evidence: benchmarks/baselines/rocm_resident_quantized_product_20261017/README.md.
 
 Native SSA partition work is in progress for a BF16 source quantized to

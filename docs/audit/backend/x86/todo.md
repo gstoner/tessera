@@ -12,6 +12,11 @@ scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1.
 Sync: ROCM-RESIDENT-QUANT-PRODUCT-20261017.
 
+Shared runtime assessment: a distinct gfx1201 program executor/portable schema
+binds existing member ABIs; no sibling execution row, physical schedule or ABI
+is changed. Follow-up required before adopting this program contract on a
+sibling architecture. No gfx1151, NVIDIA, Apple or x86 device parity is inferred.
+
 Evidence: benchmarks/baselines/rocm_resident_quantized_product_20261017/README.md.
 
 Not applicable to this physical partition: its admission requires gfx1201.

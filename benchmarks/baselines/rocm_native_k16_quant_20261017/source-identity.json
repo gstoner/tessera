@@ -1,0 +1,13 @@
+{
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeBlockQuantMaterializer.h": "b8e1be2aa6099b8e9ac2e700a039f52d632e03bc0febf084fd6b16190dc2857c",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeGateUpMaterializer.h": "4157007f19adbec28c0dda6bae5af8dddd742cfe983a005f40bf3624e6630a3d",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "f8210ccb080edc0f5b6ac2259646e48bf3893bd13cbe1c6665cb3edcca49da48",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TesseraTargetToROCDL.cpp": "1c0afd2ef1e1232075a12210f919989a7ddb36a1bc215fe3ac41c4323ddeb32f",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/TesseraROCMOps.cpp": "cdccf0d8464bf73e8fcbcc81ee71d76db8385f1b8f13a0271406c702d1bf4745",
+  "src/compiler/ir/include/Tessera/IR/RowRegionContract.h": "052668f2c85decc3d8ebfdd254ea98e62b7752d65c0066879fc779e050bdb21e",
+  "src/compiler/ir/include/Tessera/IR/TileBufferViewContract.h": "d3120587c4d7a4c5d21c0392e0bf9ebdb83253653c628da1be8723fb79a7139c",
+  "src/compiler/programming_model/lib/NativeBlockQuantSchedule.h": "31411861270883d62c3c4c9b24c2b04f8a9a02446c43cdeb4d5e5e52cfa7d05e",
+  "python/tessera/compiler/native_scaled_program.py": "849effa65ff832dfda7e7018ac1685dc8ed816862cf9ed577b66d29ca7628956",
+  "tests/unit/test_native_k16_quant_graph.py": "d105267ec6def2acd66e5a85413c49b4f391152f152c30dc629400201910c377",
+  "tests/unit/test_native_k16_quant_target.py": "56be93abb3512cae6d1f8b55a154b5b6b9778d750db5e116f093c5c212a85f4d"
+}

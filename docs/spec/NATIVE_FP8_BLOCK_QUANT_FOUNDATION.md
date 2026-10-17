@@ -21,7 +21,7 @@ bitwise; NaNs match semantically. The packet covers 266,560 values and preserves
 changed-input/retained-output ownership. This is a GPU storage primitive,
 not proof of a public Graph quantizer or complete native MLP.
 
-## Explicit semantic Graph, Schedule and typed Tile — artifact-only
+## Explicit semantic Graph, Schedule, Tile and native Target
 
 The native Graph-to-Schedule pass now validates the complete explicit textual
 source, including tensor broadcasts, IEEE scale-floor constants, SSA edges,
@@ -32,8 +32,12 @@ FP32 maximum loop, one scale store and one E4M3 encoding loop. Logical
 reshapes and broadcasts allocate no storage. The physical body accepts three
 pointers, a group index and a group count; its identity contains no source
 M/I constants. Source-specific extents remain in the sealed envelope. Native
-Target/image lowering, mixed-width runtime packaging and public quantizer
-execution remain required; this is not executable quantizer evidence.
+Target lowering now materializes BF16/byte/FP32 accesses from that body and
+exports a checked three-buffer/two-output frame. The GPU adapter checks flat
+memref spans and launches the cloned SSA. Matching LLVM serialization emits
+HSACO; three exact gfx1201 envelopes pass the independent oracle through
+the diagnostic C++ multi-output owner. Public packaging/JIT and resident
+composition remain required; diagnostic execution is not public closure.
 The ordinary Python trace still needs constructor/shape-metadata integration;
 the current verified input is textual Graph IR. Schedule profile schema 4
 belongs to the row-region namespace; attention schema numbering is unchanged.
@@ -67,7 +71,8 @@ FP8 cast, canonical dtype, tensor-attribute, diagnostic, pass-metadata and
 audit gates pass 500 combined cases after a clean incremental rebuild with no
 source-mtime warning. Physical body hashes are identical across the three
 source shapes while source and artifact seals remain distinct.
-This remains compiler artifact evidence, not owning-device execution.
+Those checks establish compiler artifacts; the separate native Target/device
+packet below establishes its named diagnostic execution envelope.
 
 ## Required integration gates
 
@@ -86,3 +91,5 @@ This remains compiler artifact evidence, not owning-device execution.
 
 Evidence for the implemented primitive:
 benchmarks/baselines/rocm_native_e4m3_cast_20261017/README.md.
+
+Native Target/device evidence: benchmarks/baselines/rocm_native_k16_quant_20261017/README.md.

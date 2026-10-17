@@ -104,6 +104,7 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
 // Schema 4 is a distinct mixed-width K16 quantizer, never a gate/up recipe.
 inline mlir::LogicalResult verifyBlockQuantKernel(mlir::Operation *op) {
   using namespace mlir;
+  bool target=op->getName().getStringRef()=="tessera_rocm.row_region_kernel";
   auto fail=[&]() { return op->emitOpError("requires the sealed gfx1201 schema-4 typed K16 quantizer"); };
   auto arch=op->getAttrOfType<StringAttr>("arch");
   auto name=op->getAttrOfType<StringAttr>("name");
@@ -116,7 +117,7 @@ inline mlir::LogicalResult verifyBlockQuantKernel(mlir::Operation *op) {
       return (c>='0' && c<='9') || (c>='a' && c<='f');
     });
   };
-  if (op->getName().getStringRef()!="tile.row_region_kernel" ||
+  if ((!target && op->getName().getStringRef()!="tile.row_region_kernel") ||
       !arch || arch.getValue()!="gfx1201" || !name || name.getValue().empty() ||
       op->getAttrOfType<TypeAttr>("storage")!=TypeAttr::get(BFloat16Type::get(op->getContext())) ||
       !rows || rows.getInt()<=0 || rows.getInt()>INT32_MAX ||
@@ -124,7 +125,7 @@ inline mlir::LogicalResult verifyBlockQuantKernel(mlir::Operation *op) {
       rows.getInt()>INT32_MAX/(columns.getInt()/16) ||
       !threads || threads.getInt()!=256 ||
       !hex(op->getAttr("source_hash")) || !hex(op->getAttr("artifact_hash")) ||
-      !hex(op->getAttr("body_hash")) || op->getNumRegions()!=1 ||
+      !hex(op->getAttr("body_hash")) || (target && !hex(op->getAttr("tile_body_hash"))) || op->getNumRegions()!=1 ||
       !op->getRegion(0).hasOneBlock() || op->getRegion(0).front().getNumArguments() ||
       op->getRegion(0).front().getOperations().size()!=1) return fail();
   auto fn=dyn_cast<LLVM::LLVMFuncOp>(op->getRegion(0).front().front());
@@ -139,7 +140,24 @@ inline mlir::LogicalResult verifyBlockQuantKernel(mlir::Operation *op) {
   unsigned roots=0,loads=0,stores=0;
   fn.walk([&](Operation *nested) {
     auto n=nested->getName().getStringRef();
-    if (auto view=dyn_cast<tile::BufferViewOp>(nested)) {
+    if (target && isa<LLVM::LoadOp,LLVM::StoreOp,LLVM::GEPOp>(nested)) {
+      Value address; Type element; bool read=false,write=false;
+      if (auto load=dyn_cast<LLVM::LoadOp>(nested)) {
+        address=load.getAddr(); element=load.getType(); read=true; ++loads;
+      } else if (auto store=dyn_cast<LLVM::StoreOp>(nested)) {
+        address=store.getAddr(); element=store.getValue().getType(); write=true; ++stores;
+      } else {
+        auto gep=cast<LLVM::GEPOp>(nested); address=gep.getBase(); element=gep.getElemType();
+      }
+      while (auto gep=address.getDefiningOp<LLVM::GEPOp>()) address=gep.getBase();
+      auto arg=dyn_cast<BlockArgument>(address);
+      if (!arg || arg.getOwner()!=&fn.getBody().front() || arg.getArgNumber()>=3) { valid=false; return; }
+      unsigned i=arg.getArgNumber();
+      if ((read && i!=0) || (write && i==0) ||
+          (i==0 ? !element.isBF16() : i==1 ? !element.isInteger(8) : !element.isF32())) valid=false;
+      roots|=1u<<i;
+    } else if (!target && isa<tile::BufferViewOp>(nested)) {
+      auto view=cast<tile::BufferViewOp>(nested);
       auto arg=dyn_cast<BlockArgument>(view.getBase());
       auto type=cast<tile::BufferViewType>(view.getType());
       if (!arg || arg.getOwner()!=&fn.getBody().front() || arg.getArgNumber()>=3) { valid=false; return; }
@@ -149,11 +167,13 @@ inline mlir::LogicalResult verifyBlockQuantKernel(mlir::Operation *op) {
           (i==0 ? !type.getElementType().isBF16() :
            i==1 ? !isa<Float8E4M3FNType>(type.getElementType()) : !type.getElementType().isF32())) valid=false;
       roots|=1u<<i;
-    } else if (auto load=dyn_cast<tile::LoadElementOp>(nested)) {
+    } else if (!target && isa<tile::LoadElementOp>(nested)) {
+      auto load=cast<tile::LoadElementOp>(nested);
       ++loads;
       auto view=load->getOperand(0).getDefiningOp<tile::BufferViewOp>();
       if (!view || view.getBase()!=fn.getArgument(0)) valid=false;
-    } else if (auto store=dyn_cast<tile::StoreElementOp>(nested)) {
+    } else if (!target && isa<tile::StoreElementOp>(nested)) {
+      auto store=cast<tile::StoreElementOp>(nested);
       ++stores;
       auto view=store->getOperand(0).getDefiningOp<tile::BufferViewOp>();
       if (!view || (view.getBase()!=fn.getArgument(1) && view.getBase()!=fn.getArgument(2))) valid=false;

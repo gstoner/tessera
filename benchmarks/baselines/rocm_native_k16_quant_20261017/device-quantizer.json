@@ -1,0 +1,242 @@
+[
+  {
+    "device": "AMD Radeon RX 9070 XT",
+    "gpu_uuid": "GPU-28d9e7efbf2ef716",
+    "architecture": "gfx1201",
+    "checker_sha256": "4e41e49d3769f5d74dfd35ee32bf631a2d9a0753e9daa89653241112412c2f7c",
+    "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+    "shape": [
+      3,
+      32
+    ],
+    "identity": {
+      "shape": [
+        3,
+        32
+      ],
+      "member": {
+        "abi": "flattened_rank1_memref_then_i64",
+        "architecture": "gfx1201",
+        "artifact_hash": "72a66d98a46b12a4e5dea10751bf2e4176f0dbbe2a246332f9c7d53267b594c0",
+        "bindings": [
+          "input",
+          "codes",
+          "scales"
+        ],
+        "entry": "tessera_block_quant_8b4fff131b825038",
+        "geometry": [
+          1,
+          1,
+          1,
+          256,
+          1,
+          1
+        ],
+        "inputs": [
+          0
+        ],
+        "outputs": [
+          1,
+          2
+        ],
+        "profile": "gfx1201_block_quant_bf16_e4m3_f32_k16_v1",
+        "program_base64": "eyJhcmd1bWVudF9jb3VudCI6MSwiYnVmZmVycyI6W3siYnl0ZXMiOjE5MiwiZWxlbWVudHMiOjk2LCJmaXJzdF93cml0ZSI6LTEsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzMsMzJdLCJzdG9yYWdlIjoiYmYxNiJ9LHsiYnl0ZXMiOjk2LCJlbGVtZW50cyI6OTYsImZpcnN0X3dyaXRlIjowLCJsYXN0X3JlYWQiOjEsIm93bmVyc2hpcCI6Miwic2hhcGUiOlszLDMyXSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6MjQsImVsZW1lbnRzIjo2LCJmaXJzdF93cml0ZSI6MCwibGFzdF9yZWFkIjoxLCJvd25lcnNoaXAiOjIsInNoYXBlIjpbMywyXSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6ImJsb2NrX3F1YW50Iiwib3V0cHV0cyI6WzEsMl0sInJvb3RfaXIiOiJmdW5jLmZ1bmMgQGJsb2NrX3F1YW50KCVhcmcwOiB0ZW5zb3I8M3gzMnhiZjE2PikgLT4gKHRlbnNvcjwzeDMyeGY4RTRNM0ZOPiwgdGVuc29yPDN4MnhmMzI+KSB7XG4gICUwID0gdGVzc2VyYS5yZXNoYXBlICVhcmcwIHtzaGFwZSA9IFs2LCAxNl19IDogKHRlbnNvcjwzeDMyeGJmMTY+KSAtPiB0ZW5zb3I8NngxNnhiZjE2PlxuICAlMSA9IHRlc3NlcmEuY2FzdCAlMCB7ZHR5cGUgPSBcImZwMzJcIn0gOiAodGVuc29yPDZ4MTZ4YmYxNj4pIC0+IHRlbnNvcjw2eDE2eGYzMj5cbiAgJTIgPSB0ZXNzZXJhLmFic29sdXRlICUxIDogKHRlbnNvcjw2eDE2eGYzMj4pIC0+IHRlbnNvcjw2eDE2eGYzMj5cbiAgJTMgPSB0ZXNzZXJhLnJlZHVjZSAlMiB7YXhpcyA9IDEgOiBpNjQsIGtlZXBkaW1zID0gdHJ1ZSwga2luZCA9IFwibWF4XCJ9IDogKHRlbnNvcjw2eDE2eGYzMj4pIC0+IHRlbnNvcjw2eDF4ZjMyPlxuICAlY3N0ID0gYXJpdGguY29uc3RhbnQgZGVuc2U8NC40ODAwMDBlKzAyPiA6IHRlbnNvcjw2eDF4ZjMyPlxuICAlNCA9IHRlc3NlcmEuZGl2ICUzLCAlY3N0IDogKHRlbnNvcjw2eDF4ZjMyPiwgdGVuc29yPDZ4MXhmMzI+KSAtPiB0ZW5zb3I8NngxeGYzMj5cbiAgJWNzdF8wID0gYXJpdGguY29uc3RhbnQgZGVuc2U8MS4xNzU0OTQzNUUtMzg+IDogdGVuc29yPDZ4MXhmMzI+XG4gICU1ID0gdGVzc2VyYS5tYXhpbXVtICU0LCAlY3N0XzAgOiAodGVuc29yPDZ4MXhmMzI+LCB0ZW5zb3I8NngxeGYzMj4pIC0+IHRlbnNvcjw2eDF4ZjMyPlxuICAlNiA9IHRlc3NlcmEuZXhwYW5kICU1IHtzaGFwZSA9IFs2LCAxNl19IDogKHRlbnNvcjw2eDF4ZjMyPikgLT4gdGVuc29yPDZ4MTZ4ZjMyPlxuICAlNyA9IHRlc3NlcmEuZGl2ICUxLCAlNiA6ICh0ZW5zb3I8NngxNnhmMzI+LCB0ZW5zb3I8NngxNnhmMzI+KSAtPiB0ZW5zb3I8NngxNnhmMzI+XG4gICU4ID0gdGVzc2VyYS5jYXN0ICU3IHtkdHlwZSA9IFwiZnA4X2U0bTNcIn0gOiAodGVuc29yPDZ4MTZ4ZjMyPikgLT4gdGVuc29yPDZ4MTZ4ZjhFNE0zRk4+XG4gICU5ID0gdGVzc2VyYS5yZXNoYXBlICU4IHtzaGFwZSA9IFszLCAzMl19IDogKHRlbnNvcjw2eDE2eGY4RTRNM0ZOPikgLT4gdGVuc29yPDN4MzJ4ZjhFNE0zRk4+XG4gICUxMCA9IHRlc3NlcmEucmVzaGFwZSAlNSB7c2hhcGUgPSBbMywgMl19IDogKHRlbnNvcjw2eDF4ZjMyPikgLT4gdGVuc29yPDN4MnhmMzI+XG4gIHJldHVybiAlOSwgJTEwIDogdGVuc29yPDN4MzJ4ZjhFNE0zRk4+LCB0ZW5zb3I8M3gyeGYzMj5cbn0iLCJyb290X2lyX3NoYTI1NiI6IjVhMjY0MmMwYjYxMDBiNzJlNDM4ZjllOTlhOGFkMjE2MmZkYzA4NjVkYzkzNGY4YzEwZTE5ODNiNmUxZmFjMDAiLCJzY2hlbWEiOjEsInN0ZXBzIjpbeyJpbnB1dHMiOlswXSwibG93ZXJpbmciOiJuYXRpdmVfYmxvY2tfcXVhbnRfc3NhIiwib3BlcmF0aW9uIjoiZXhwbGljaXRfazE2X3F1YW50aXphdGlvbiIsIm91dHB1dHMiOlsxLDJdLCJzdGVwIjowfV19",
+        "scalars": [
+          6
+        ],
+        "schema": 1,
+        "source_hash": "bddf1907c0ad3b926e4b5bc06b4e33412cf1ad08c849456fe5f618915d7bf84c",
+        "step": 0,
+        "target_body_hash": "81e40d7a1b2eb4ef9c1b0988e87fa6933730f3298c35c6d91d6e903fd0136449",
+        "tile_body_hash": "776f506f8d3237a09fe8785aacb90d14d27942a2bbfa7fe0f78b359bb00f3626"
+      },
+      "image_sha256": "6be7bab64720e6d921fa6d2c8287eba2f3fd7f43a19739bcf7afd2a98afdaa97",
+      "tessera_opt_sha256": "f024aa9a37e16afe1063e321cdfeba549b0018d60e166008b65e56385548bb06",
+      "mlir_opt_sha256": "62a18523fcec89907cd9b0eade4d5976c549d11f85697089766242406ed1c271",
+      "recorder_sha256": "e291207f2f703d1a2793ec502301b7d9bb196432470a07cec411bc4016d513d7"
+    },
+    "comparison": {
+      "code_mismatches": 0,
+      "scale_mismatches": 0,
+      "code_examples": [],
+      "scale_examples": []
+    },
+    "scope": "diagnostic native C++ ownership; public package/JIT still required",
+    "uniform_bf16_patterns": 0,
+    "rounding_boundary_groups": 0,
+    "changed_input_and_held_outputs": "passed",
+    "captured_repeats": 4947,
+    "captured_member_ms": [
+      0.004446949809789658,
+      0.00456226384267211,
+      0.004070080351084471
+    ],
+    "completed_invoke_read_ms": [
+      0.5273350107017905,
+      0.3568800166249275,
+      0.3375740197952837
+    ],
+    "device_scope": "captured native graph dispatch; excludes host enqueue/copy/capture",
+    "host_scope": "prepared invoke plus two output readbacks; excludes compilation and preparation"
+  },
+  {
+    "device": "AMD Radeon RX 9070 XT",
+    "gpu_uuid": "GPU-28d9e7efbf2ef716",
+    "architecture": "gfx1201",
+    "checker_sha256": "4e41e49d3769f5d74dfd35ee32bf631a2d9a0753e9daa89653241112412c2f7c",
+    "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+    "shape": [
+      19,
+      12288
+    ],
+    "identity": {
+      "shape": [
+        19,
+        12288
+      ],
+      "member": {
+        "abi": "flattened_rank1_memref_then_i64",
+        "architecture": "gfx1201",
+        "artifact_hash": "f279c7f565417ec4dba94538ec1f93760426530415815182022473b2f0df592d",
+        "bindings": [
+          "input",
+          "codes",
+          "scales"
+        ],
+        "entry": "tessera_block_quant_8b4fff131b825038",
+        "geometry": [
+          57,
+          1,
+          1,
+          256,
+          1,
+          1
+        ],
+        "inputs": [
+          0
+        ],
+        "outputs": [
+          1,
+          2
+        ],
+        "profile": "gfx1201_block_quant_bf16_e4m3_f32_k16_v1",
+        "program_base64": "eyJhcmd1bWVudF9jb3VudCI6MSwiYnVmZmVycyI6W3siYnl0ZXMiOjQ2Njk0NCwiZWxlbWVudHMiOjIzMzQ3MiwiZmlyc3Rfd3JpdGUiOi0xLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxOSwxMjI4OF0sInN0b3JhZ2UiOiJiZjE2In0seyJieXRlcyI6MjMzNDcyLCJlbGVtZW50cyI6MjMzNDcyLCJmaXJzdF93cml0ZSI6MCwibGFzdF9yZWFkIjoxLCJvd25lcnNoaXAiOjIsInNoYXBlIjpbMTksMTIyODhdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjo1ODM2OCwiZWxlbWVudHMiOjE0NTkyLCJmaXJzdF93cml0ZSI6MCwibGFzdF9yZWFkIjoxLCJvd25lcnNoaXAiOjIsInNoYXBlIjpbMTksNzY4XSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6ImJsb2NrX3F1YW50Iiwib3V0cHV0cyI6WzEsMl0sInJvb3RfaXIiOiJmdW5jLmZ1bmMgQGJsb2NrX3F1YW50KCVhcmcwOiB0ZW5zb3I8MTl4MTIyODh4YmYxNj4pIC0+ICh0ZW5zb3I8MTl4MTIyODh4ZjhFNE0zRk4+LCB0ZW5zb3I8MTl4NzY4eGYzMj4pIHtcbiAgJTAgPSB0ZXNzZXJhLnJlc2hhcGUgJWFyZzAge3NoYXBlID0gWzE0NTkyLCAxNl19IDogKHRlbnNvcjwxOXgxMjI4OHhiZjE2PikgLT4gdGVuc29yPDE0NTkyeDE2eGJmMTY+XG4gICUxID0gdGVzc2VyYS5jYXN0ICUwIHtkdHlwZSA9IFwiZnAzMlwifSA6ICh0ZW5zb3I8MTQ1OTJ4MTZ4YmYxNj4pIC0+IHRlbnNvcjwxNDU5MngxNnhmMzI+XG4gICUyID0gdGVzc2VyYS5hYnNvbHV0ZSAlMSA6ICh0ZW5zb3I8MTQ1OTJ4MTZ4ZjMyPikgLT4gdGVuc29yPDE0NTkyeDE2eGYzMj5cbiAgJTMgPSB0ZXNzZXJhLnJlZHVjZSAlMiB7YXhpcyA9IDEgOiBpNjQsIGtlZXBkaW1zID0gdHJ1ZSwga2luZCA9IFwibWF4XCJ9IDogKHRlbnNvcjwxNDU5MngxNnhmMzI+KSAtPiB0ZW5zb3I8MTQ1OTJ4MXhmMzI+XG4gICVjc3QgPSBhcml0aC5jb25zdGFudCBkZW5zZTw0LjQ4MDAwMGUrMDI+IDogdGVuc29yPDE0NTkyeDF4ZjMyPlxuICAlNCA9IHRlc3NlcmEuZGl2ICUzLCAlY3N0IDogKHRlbnNvcjwxNDU5MngxeGYzMj4sIHRlbnNvcjwxNDU5MngxeGYzMj4pIC0+IHRlbnNvcjwxNDU5MngxeGYzMj5cbiAgJWNzdF8wID0gYXJpdGguY29uc3RhbnQgZGVuc2U8MS4xNzU0OTQzNUUtMzg+IDogdGVuc29yPDE0NTkyeDF4ZjMyPlxuICAlNSA9IHRlc3NlcmEubWF4aW11bSAlNCwgJWNzdF8wIDogKHRlbnNvcjwxNDU5MngxeGYzMj4sIHRlbnNvcjwxNDU5MngxeGYzMj4pIC0+IHRlbnNvcjwxNDU5MngxeGYzMj5cbiAgJTYgPSB0ZXNzZXJhLmV4cGFuZCAlNSB7c2hhcGUgPSBbMTQ1OTIsIDE2XX0gOiAodGVuc29yPDE0NTkyeDF4ZjMyPikgLT4gdGVuc29yPDE0NTkyeDE2eGYzMj5cbiAgJTcgPSB0ZXNzZXJhLmRpdiAlMSwgJTYgOiAodGVuc29yPDE0NTkyeDE2eGYzMj4sIHRlbnNvcjwxNDU5MngxNnhmMzI+KSAtPiB0ZW5zb3I8MTQ1OTJ4MTZ4ZjMyPlxuICAlOCA9IHRlc3NlcmEuY2FzdCAlNyB7ZHR5cGUgPSBcImZwOF9lNG0zXCJ9IDogKHRlbnNvcjwxNDU5MngxNnhmMzI+KSAtPiB0ZW5zb3I8MTQ1OTJ4MTZ4ZjhFNE0zRk4+XG4gICU5ID0gdGVzc2VyYS5yZXNoYXBlICU4IHtzaGFwZSA9IFsxOSwgMTIyODhdfSA6ICh0ZW5zb3I8MTQ1OTJ4MTZ4ZjhFNE0zRk4+KSAtPiB0ZW5zb3I8MTl4MTIyODh4ZjhFNE0zRk4+XG4gICUxMCA9IHRlc3NlcmEucmVzaGFwZSAlNSB7c2hhcGUgPSBbMTksIDc2OF19IDogKHRlbnNvcjwxNDU5MngxeGYzMj4pIC0+IHRlbnNvcjwxOXg3Njh4ZjMyPlxuICByZXR1cm4gJTksICUxMCA6IHRlbnNvcjwxOXgxMjI4OHhmOEU0TTNGTj4sIHRlbnNvcjwxOXg3Njh4ZjMyPlxufSIsInJvb3RfaXJfc2hhMjU2IjoiM2M5NTAzMzBjNjc2OTFhNjBkYTQ5ZTY5MDc5ODg3OWYwYTk4NzJlY2I0ZWZmZTcyOWFmMmViMDgxOTNkZDEzYSIsInNjaGVtYSI6MSwic3RlcHMiOlt7ImlucHV0cyI6WzBdLCJsb3dlcmluZyI6Im5hdGl2ZV9ibG9ja19xdWFudF9zc2EiLCJvcGVyYXRpb24iOiJleHBsaWNpdF9rMTZfcXVhbnRpemF0aW9uIiwib3V0cHV0cyI6WzEsMl0sInN0ZXAiOjB9XX0=",
+        "scalars": [
+          14592
+        ],
+        "schema": 1,
+        "source_hash": "b3c92ae58508e413ffa5cf92fdb0fff30ebfd1a5c4e2fcb88a8ebb8cb6376130",
+        "step": 0,
+        "target_body_hash": "81e40d7a1b2eb4ef9c1b0988e87fa6933730f3298c35c6d91d6e903fd0136449",
+        "tile_body_hash": "776f506f8d3237a09fe8785aacb90d14d27942a2bbfa7fe0f78b359bb00f3626"
+      },
+      "image_sha256": "6be7bab64720e6d921fa6d2c8287eba2f3fd7f43a19739bcf7afd2a98afdaa97",
+      "tessera_opt_sha256": "f024aa9a37e16afe1063e321cdfeba549b0018d60e166008b65e56385548bb06",
+      "mlir_opt_sha256": "62a18523fcec89907cd9b0eade4d5976c549d11f85697089766242406ed1c271",
+      "recorder_sha256": "e291207f2f703d1a2793ec502301b7d9bb196432470a07cec411bc4016d513d7"
+    },
+    "comparison": {
+      "code_mismatches": 0,
+      "scale_mismatches": 0,
+      "code_examples": [],
+      "scale_examples": []
+    },
+    "scope": "diagnostic native C++ ownership; public package/JIT still required",
+    "uniform_bf16_patterns": 0,
+    "rounding_boundary_groups": 252,
+    "changed_input_and_held_outputs": "passed",
+    "captured_repeats": 4401,
+    "captured_member_ms": [
+      0.005025969352573156,
+      0.00502726761624217,
+      0.00495530478656292
+    ],
+    "completed_invoke_read_ms": [
+      0.5429649900179356,
+      0.3155409940518439,
+      0.26627699844539165
+    ],
+    "device_scope": "captured native graph dispatch; excludes host enqueue/copy/capture",
+    "host_scope": "prepared invoke plus two output readbacks; excludes compilation and preparation"
+  },
+  {
+    "device": "AMD Radeon RX 9070 XT",
+    "gpu_uuid": "GPU-28d9e7efbf2ef716",
+    "architecture": "gfx1201",
+    "checker_sha256": "4e41e49d3769f5d74dfd35ee32bf631a2d9a0753e9daa89653241112412c2f7c",
+    "provider_sha256": "8c3fcd18a3e17db481ac21e317d153c671fc7b121f2ea1d5868e08e1b67ab203",
+    "shape": [
+      256,
+      12288
+    ],
+    "identity": {
+      "shape": [
+        256,
+        12288
+      ],
+      "member": {
+        "abi": "flattened_rank1_memref_then_i64",
+        "architecture": "gfx1201",
+        "artifact_hash": "851bb86b65edcbe156ae4d5ae307a70fa367f64b66824148507917975cdd6a14",
+        "bindings": [
+          "input",
+          "codes",
+          "scales"
+        ],
+        "entry": "tessera_block_quant_8b4fff131b825038",
+        "geometry": [
+          768,
+          1,
+          1,
+          256,
+          1,
+          1
+        ],
+        "inputs": [
+          0
+        ],
+        "outputs": [
+          1,
+          2
+        ],
+        "profile": "gfx1201_block_quant_bf16_e4m3_f32_k16_v1",
+        "program_base64": "eyJhcmd1bWVudF9jb3VudCI6MSwiYnVmZmVycyI6W3siYnl0ZXMiOjYyOTE0NTYsImVsZW1lbnRzIjozMTQ1NzI4LCJmaXJzdF93cml0ZSI6LTEsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzI1NiwxMjI4OF0sInN0b3JhZ2UiOiJiZjE2In0seyJieXRlcyI6MzE0NTcyOCwiZWxlbWVudHMiOjMxNDU3MjgsImZpcnN0X3dyaXRlIjowLCJsYXN0X3JlYWQiOjEsIm93bmVyc2hpcCI6Miwic2hhcGUiOlsyNTYsMTIyODhdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjo3ODY0MzIsImVsZW1lbnRzIjoxOTY2MDgsImZpcnN0X3dyaXRlIjowLCJsYXN0X3JlYWQiOjEsIm93bmVyc2hpcCI6Miwic2hhcGUiOlsyNTYsNzY4XSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6ImJsb2NrX3F1YW50Iiwib3V0cHV0cyI6WzEsMl0sInJvb3RfaXIiOiJmdW5jLmZ1bmMgQGJsb2NrX3F1YW50KCVhcmcwOiB0ZW5zb3I8MjU2eDEyMjg4eGJmMTY+KSAtPiAodGVuc29yPDI1NngxMjI4OHhmOEU0TTNGTj4sIHRlbnNvcjwyNTZ4NzY4eGYzMj4pIHtcbiAgJTAgPSB0ZXNzZXJhLnJlc2hhcGUgJWFyZzAge3NoYXBlID0gWzE5NjYwOCwgMTZdfSA6ICh0ZW5zb3I8MjU2eDEyMjg4eGJmMTY+KSAtPiB0ZW5zb3I8MTk2NjA4eDE2eGJmMTY+XG4gICUxID0gdGVzc2VyYS5jYXN0ICUwIHtkdHlwZSA9IFwiZnAzMlwifSA6ICh0ZW5zb3I8MTk2NjA4eDE2eGJmMTY+KSAtPiB0ZW5zb3I8MTk2NjA4eDE2eGYzMj5cbiAgJTIgPSB0ZXNzZXJhLmFic29sdXRlICUxIDogKHRlbnNvcjwxOTY2MDh4MTZ4ZjMyPikgLT4gdGVuc29yPDE5NjYwOHgxNnhmMzI+XG4gICUzID0gdGVzc2VyYS5yZWR1Y2UgJTIge2F4aXMgPSAxIDogaTY0LCBrZWVwZGltcyA9IHRydWUsIGtpbmQgPSBcIm1heFwifSA6ICh0ZW5zb3I8MTk2NjA4eDE2eGYzMj4pIC0+IHRlbnNvcjwxOTY2MDh4MXhmMzI+XG4gICVjc3QgPSBhcml0aC5jb25zdGFudCBkZW5zZTw0LjQ4MDAwMGUrMDI+IDogdGVuc29yPDE5NjYwOHgxeGYzMj5cbiAgJTQgPSB0ZXNzZXJhLmRpdiAlMywgJWNzdCA6ICh0ZW5zb3I8MTk2NjA4eDF4ZjMyPiwgdGVuc29yPDE5NjYwOHgxeGYzMj4pIC0+IHRlbnNvcjwxOTY2MDh4MXhmMzI+XG4gICVjc3RfMCA9IGFyaXRoLmNvbnN0YW50IGRlbnNlPDEuMTc1NDk0MzVFLTM4PiA6IHRlbnNvcjwxOTY2MDh4MXhmMzI+XG4gICU1ID0gdGVzc2VyYS5tYXhpbXVtICU0LCAlY3N0XzAgOiAodGVuc29yPDE5NjYwOHgxeGYzMj4sIHRlbnNvcjwxOTY2MDh4MXhmMzI+KSAtPiB0ZW5zb3I8MTk2NjA4eDF4ZjMyPlxuICAlNiA9IHRlc3NlcmEuZXhwYW5kICU1IHtzaGFwZSA9IFsxOTY2MDgsIDE2XX0gOiAodGVuc29yPDE5NjYwOHgxeGYzMj4pIC0+IHRlbnNvcjwxOTY2MDh4MTZ4ZjMyPlxuICAlNyA9IHRlc3NlcmEuZGl2ICUxLCAlNiA6ICh0ZW5zb3I8MTk2NjA4eDE2eGYzMj4sIHRlbnNvcjwxOTY2MDh4MTZ4ZjMyPikgLT4gdGVuc29yPDE5NjYwOHgxNnhmMzI+XG4gICU4ID0gdGVzc2VyYS5jYXN0ICU3IHtkdHlwZSA9IFwiZnA4X2U0bTNcIn0gOiAodGVuc29yPDE5NjYwOHgxNnhmMzI+KSAtPiB0ZW5zb3I8MTk2NjA4eDE2eGY4RTRNM0ZOPlxuICAlOSA9IHRlc3NlcmEucmVzaGFwZSAlOCB7c2hhcGUgPSBbMjU2LCAxMjI4OF19IDogKHRlbnNvcjwxOTY2MDh4MTZ4ZjhFNE0zRk4+KSAtPiB0ZW5zb3I8MjU2eDEyMjg4eGY4RTRNM0ZOPlxuICAlMTAgPSB0ZXNzZXJhLnJlc2hhcGUgJTUge3NoYXBlID0gWzI1NiwgNzY4XX0gOiAodGVuc29yPDE5NjYwOHgxeGYzMj4pIC0+IHRlbnNvcjwyNTZ4NzY4eGYzMj5cbiAgcmV0dXJuICU5LCAlMTAgOiB0ZW5zb3I8MjU2eDEyMjg4eGY4RTRNM0ZOPiwgdGVuc29yPDI1Nng3Njh4ZjMyPlxufSIsInJvb3RfaXJfc2hhMjU2IjoiZjlhZTkzMzcxZmFmYmU5NDkyOGU1YmNhYzk0MGZjYWIwNDc3ZGEyNzE0ZmIzZTUzYTVjMTUxMmEyMmRkODk1NiIsInNjaGVtYSI6MSwic3RlcHMiOlt7ImlucHV0cyI6WzBdLCJsb3dlcmluZyI6Im5hdGl2ZV9ibG9ja19xdWFudF9zc2EiLCJvcGVyYXRpb24iOiJleHBsaWNpdF9rMTZfcXVhbnRpemF0aW9uIiwib3V0cHV0cyI6WzEsMl0sInN0ZXAiOjB9XX0=",
+        "scalars": [
+          196608
+        ],
+        "schema": 1,
+        "source_hash": "db17dd1d2a4c07f6f0287562a04f68eecdc8d3559c44767023c19da6fbb4ce7b",
+        "step": 0,
+        "target_body_hash": "81e40d7a1b2eb4ef9c1b0988e87fa6933730f3298c35c6d91d6e903fd0136449",
+        "tile_body_hash": "776f506f8d3237a09fe8785aacb90d14d27942a2bbfa7fe0f78b359bb00f3626"
+      },
+      "image_sha256": "6be7bab64720e6d921fa6d2c8287eba2f3fd7f43a19739bcf7afd2a98afdaa97",
+      "tessera_opt_sha256": "f024aa9a37e16afe1063e321cdfeba549b0018d60e166008b65e56385548bb06",
+      "mlir_opt_sha256": "62a18523fcec89907cd9b0eade4d5976c549d11f85697089766242406ed1c271",
+      "recorder_sha256": "e291207f2f703d1a2793ec502301b7d9bb196432470a07cec411bc4016d513d7"
+    },
+    "comparison": {
+      "code_mismatches": 0,
+      "scale_mismatches": 0,
+      "code_examples": [],
+      "scale_examples": []
+    },
+    "scope": "diagnostic native C++ ownership; public package/JIT still required",
+    "uniform_bf16_patterns": 65536,
+    "rounding_boundary_groups": 252,
+    "changed_input_and_held_outputs": "passed",
+    "captured_repeats": 720,
+    "captured_member_ms": [
+      0.02673809602856636,
+      0.026821564882993698,
+      0.026859577745199203
+    ],
+    "completed_invoke_read_ms": [
+      0.767933001043275,
+      0.6205319950822741,
+      0.5996330000925809
+    ],
+    "device_scope": "captured native graph dispatch; excludes host enqueue/copy/capture",
+    "host_scope": "prepared invoke plus two output readbacks; excludes compilation and preparation"
+  }
+]

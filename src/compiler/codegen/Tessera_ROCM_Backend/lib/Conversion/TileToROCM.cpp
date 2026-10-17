@@ -1,4 +1,5 @@
 #include "ParentViewProgramExport.h"
+#include "NativeBlockQuantMaterializer.h"
 #include "Tessera/IR/RowRegionContract.h"
 #include "Tessera/IR/TileBufferViewContract.h"
 #include "ROCMFoldedW4A8Contract.h"
@@ -2758,12 +2759,12 @@ struct LowerTileToROCMPass
     if (!viewKernels.empty()) {
       if (arch != "gfx1201" || viewKernels.size() != 1 || getOperation().getBody()->getOperations().size() != 1 ||
           viewKernels.front().getArch() != "gfx1201" ||
-          (viewKernels.front().getSchema() != 2 && viewKernels.front().getSchema() != 3)) {
-        getOperation().emitError("ROCm parent-view lowering requires its isolated gfx1201 schema-2/3 profile");
+          (viewKernels.front().getSchema() != 2 && viewKernels.front().getSchema() != 3 && viewKernels.front().getSchema() != 4)) {
+        getOperation().emitError("ROCm native row lowering requires its isolated gfx1201 schema-2/3/4 profile");
         return signalPassFailure();
       }
       auto kernel = viewKernels.front();
-      if (failed(tessera::row_region::verifyGateUpKernel(kernel))) return signalPassFailure();
+      if (failed(tessera::row_region::verifyKernel(kernel))) return signalPassFailure();
       OpBuilder b(kernel); OperationState state(kernel.getLoc(), "tessera_rocm.row_region_kernel");
       state.addAttributes(kernel->getAttrs()); state.addRegion();
       Operation *target = b.create(state); target->getRegion(0).takeBody(kernel->getRegion(0));
@@ -2772,8 +2773,10 @@ struct LowerTileToROCMPass
       if (failed(tessera::tile::lowerScalarBufferAccesses(fn))) return signalPassFailure();
       target->setAttr("body_hash",b.getStringAttr(tessera::row_region::digest(fn)));
       kernel.erase();
-      if (failed(tessera::row_region::verifyGateUpKernel(target)) ||
-          failed(exportParentViewProgram(getOperation(),target))) return signalPassFailure();
+      if (failed(tessera::row_region::verifyKernel(target))) return signalPassFailure();
+      if (target->getAttrOfType<IntegerAttr>("schema").getInt()==4) {
+        if (failed(exportBlockQuantProgram(getOperation(),target))) return signalPassFailure();
+      } else if (failed(exportParentViewProgram(getOperation(),target))) return signalPassFailure();
       return;
     }
     if (failed(lowerROCMResultPermutations(getOperation(), arch)))

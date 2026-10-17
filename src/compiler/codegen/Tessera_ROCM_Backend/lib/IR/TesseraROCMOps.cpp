@@ -145,5 +145,5 @@ mlir::LogicalResult NVFP4ExpandOp::verify() {
 }
 
 mlir::LogicalResult RowRegionKernelOp::verify() {
-  return tessera::row_region::verifyGateUpKernel(getOperation());
+  return tessera::row_region::verifyKernel(getOperation());
 }

@@ -731,8 +731,8 @@ class PreparedScaledProgram:
         outputs = []
         for slot in self._binding.outputs:
             contract = self._binding.storage[slot]
-            if contract.storage not in {"f32", "bf16"}:
-                raise ValueError("native program outputs require checked f32 or bf16 storage")
+            if contract.storage not in {"f32", "bf16", "f8E4M3FN"}:
+                raise ValueError("native program outputs require checked f32, bf16 or E4M3FN storage")
             output = np.empty(contract.shape, dtype=contract.numpy_dtype)
             if output.nbytes != contract.bytes:
                 raise ValueError("native output storage byte span differs from its compiler frame")
@@ -750,6 +750,11 @@ class PreparedScaledProgram:
             for slot, out in zip(self._binding.outputs, outputs, strict=True):
                 _status(self.lib.tessera_rocm_program_read(
                     self.handle,slot,generation,c.c_void_p(out.ctypes.data),out.nbytes))
+        # Return logical FP8 storage without converting or evaluating values.
+        for i, slot in enumerate(self._binding.outputs):
+            if self._binding.storage[slot].storage == "f8E4M3FN":
+                import ml_dtypes
+                outputs[i] = outputs[i].view(ml_dtypes.float8_e4m3fn)
         return tuple(outputs)
 
     def close(self):

@@ -10,19 +10,25 @@ scope: ROCm backend implementation and exact-device proof
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
 Sync: ROCM-K16-QUANT-SCHEDULE-20261017.
 
+Native Target/device evidence: benchmarks/baselines/rocm_native_k16_quant_20261017/README.md.
+The two outputs retain E4M3/FP32 storage and independent lifetimes. Public
+JIT, resident chaining and full MLP/model-quality closure remain required.
+
 Shared typed buffer views now admit real E4M3FN storage for the quantizer
 output. This does not admit sibling execution: native schema 4 requires
 gfx1201. Follow-up required for any sibling E4M3 view consumer and its
 architecture-specific ABI and numerical proof.
 
-Artifact-only work in progress. Native admission preserves the thirteen
+Native quantizer integration in progress. Native admission preserves the thirteen
 original reshape/widen/absolute/max/constant/divide/maximum/broadcast/cast
 operations and their two typed outputs. Source-sealed Schedule schema 4
 checks exact K16 FP32 constants, SSA roles, axis, target, effects and shapes.
 Typed Tile scalarization now carries the actual source SSA into three
 non-owning BF16/E4M3/FP32 views and two K16 loops. Compiler verification
 and the focused native/dtype/diagnostic/metadata/audit gates pass 500 cases after a clean matching rebuild; physical body reuse
-preserves distinct source-specific shape envelopes. Native image, mixed-width ABI, public capture/replay,
+preserves distinct source-specific shape envelopes. Target/HSACO and mixed-width diagnostic C++ execution now pass three
+exact gfx1201 envelopes with zero code/scale mismatches and separate
+device/host timing. Canonical packaging, public capture/replay,
 resident chaining and timing remain required. Eight new Schedule cases and adjacent metadata/diagnostic/audit gates pass
 332 combined cases; twelve existing RTX5070 producer controls pass separately.
 This creates no executable quantizer or gfx1151 support claim. Existing row schemas retain their meanings.

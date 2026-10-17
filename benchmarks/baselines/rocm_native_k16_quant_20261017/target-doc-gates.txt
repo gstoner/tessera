@@ -1,0 +1,16 @@
+F....................................................................... [ 81%]
+................                                                         [100%]
+=================================== FAILURES ===================================
+____________________ test_every_recorder_is_named_or_frozen ____________________
+
+    def test_every_recorder_is_named_or_frozen():
+        unnamed = _unnamed(_recorders())
+        new = sorted(unnamed - KNOWN_UNNAMED)
+>       assert not new, f"new recorder(s) nothing names — add a README row, a packet manifest or a test: {new}"
+E       AssertionError: new recorder(s) nothing names — add a README row, a packet manifest or a test: ['benchmarks/baselines/rocm_native_k16_quant_20261017/build_images.py', 'benchmarks/baselines/rocm_native_k16_quant_20261017/check_quantizer.py']
+E       assert not ['benchmarks/baselines/rocm_native_k16_quant_20261017/build_images.py', 'benchmarks/baselines/rocm_native_k16_quant_20261017/check_quantizer.py']
+
+tests/unit/test_benchmark_recorders_are_named.py:72: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_benchmark_recorders_are_named.py::test_every_recorder_is_named_or_frozen
+1 failed, 87 passed in 331.64s (0:05:31)

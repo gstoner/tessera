@@ -11,6 +11,14 @@ last_updated: 2026-10-17
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / FRONTEND-IR-MEDIUM-1.
 Sync: ROCM-K16-QUANT-SCHEDULE-20261017.
 
+Shared memory lowering now bitcasts E4M3FN values to physical byte stores,
+and checked native readback can return logical FP8 with no numerical
+conversion. Follow-up required before a sibling uses this memory path; the
+new Target wrapper and device packet are gfx1201-specific. Twelve fresh
+exact RTX5070 producer/ragged/ReLU controls pass with matching tools after
+this shared memory change. Existing sibling
+profiles do not select schema 4, and no physical parity is inferred.
+
 Shared typed buffer views now admit real E4M3FN storage for the quantizer
 output. This does not admit sibling execution: native schema 4 requires
 gfx1201. Follow-up required for any sibling E4M3 view consumer and its

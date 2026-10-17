@@ -43,7 +43,22 @@ def assert_compiled_chain(package,roots,actual,lib):
     with package.gate.prepare(roots[:4],runtime_library=lib) as owner:
         generation,_=owner.invoke();activation=owner.read(generation)[0]
     expected_activation=gate_oracle(roots[:4])
-    np.testing.assert_allclose(activation.astype(np.float32),expected_activation.astype(np.float32),rtol=.015625,atol=.00002)
+    # Validate at the explicit parent store: a single BF16 midpoint crossing
+    # can be amplified by SiLU even when its implementation is exact.
+    x,packed,weight_scales,globals_=roots[:4];m,k=x.shape;h=activation.shape[1]
+    blocks=x.astype(np.float32).reshape(m,k//16,16)
+    sa=np.maximum(np.max(np.abs(blocks),axis=-1)/np.float32(448),np.finfo(np.float32).tiny)
+    q=(blocks/sa[...,None]).astype(ml_dtypes.float8_e4m3fn).reshape(m,k)
+    b,sb=reference_nvfp4_expand(packed,weight_scales,globals_,row_offsets=[0,h,2*h],numeric_policy=nvfp4_expansion_policy())
+    parent_reference=np.einsum('mgj,ngj,mg,gn->mn',q.astype(np.float64).reshape(m,k//16,16),
+        b.astype(np.float64).reshape(2*h,k//16,16),sa.astype(np.float64),sb.astype(np.float64))
+    from tests.device.rocm.test_fp8_blockscale_w8a8 import _launch
+    parent=_launch(package.gate.product,q,b.T,sa,sb,package.gate.product_recipe.shape).astype(np.float32)
+    parent_stored=parent_reference.astype(np.float32).astype(ml_dtypes.bfloat16).astype(np.float32)
+    np.testing.assert_allclose(parent,parent_stored,rtol=.015625,atol=.00002)
+    gate,up=parent[:,:h],parent[:,h:]
+    activation_at_parent=(gate/(np.float32(1)+np.exp(-gate))*up).astype(ml_dtypes.bfloat16)
+    np.testing.assert_allclose(activation.astype(np.float32),activation_at_parent.astype(np.float32),rtol=.015625,atol=.00002)
     with package.down.prepare([activation,*roots[4:]],runtime_library=lib) as owner:
         generation,_=owner.invoke();staged=owner.read(generation)[0]
     np.testing.assert_array_equal(actual,staged)

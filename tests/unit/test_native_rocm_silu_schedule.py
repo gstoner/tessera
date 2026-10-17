@@ -211,3 +211,65 @@ def test_matching_half_silu_does_not_reinterpret_existing_widening_abi(storage):
         "tessera.rocm.math.a_b_o_n." + storage + "_" + storage + ".v1"
     )
     assert native.math_abi(native._info(wide.tile_ir)) == ("tessera.rocm.math.a_b_o_n." + storage + "_f32.v1")
+
+
+@pytest.mark.parametrize("storage", ["f32", "f16", "bf16"])
+@pytest.mark.parametrize("evaluate", [False, True])
+def test_silu_catalog_trace_does_not_require_eager_arithmetic(storage, evaluate, monkeypatch):
+    import numpy as np
+    import tessera as ts
+    from tessera.compiler.trace import trace
+
+    dtype = {"f32": np.float32, "f16": np.float16, "bf16": pytest.importorskip("ml_dtypes").bfloat16}[storage]
+
+    def call(a, b):
+        return ts.ops.silu_mul(a, b)
+
+    a, b = np.ones((3, 17), dtype), np.full((3, 17), 0.75, dtype)
+    if not evaluate:
+
+        def forbidden(*args, **kwargs):
+            pytest.fail("shape-only SiLU evaluated input arithmetic")
+
+        monkeypatch.setattr(np, "exp", forbidden)
+    graph = trace(call, a, b, evaluate_catalog_outputs=evaluate)
+    assert [op.op_name for op in graph.body] == ["tessera.silu_mul"]
+    assert graph.output_specs == (((3, 17), storage),)
+    if evaluate:
+        assert len(graph.output_values) == 1 and graph.output_values[0] is not None
+        assert graph.output_values[0].shape == (3, 17)
+    else:
+        assert all(value is None for value in graph.output_values)
+
+
+@pytest.mark.parametrize(
+    "storage,matching",
+    [
+        ("f32", False),
+        ("f16", False),
+        ("bf16", False),
+        ("f16", True),
+        ("bf16", True),
+    ],
+)
+def test_silu_native_image_projection_preserves_store_and_reuses_shapes(storage, matching):
+    from tessera.compiler import rocm_math_native as native
+    from tessera.compiler.rocm_native import _shape_free_target_ir
+
+    projected = []
+    for shape in ((3, 17), (7, 259)):
+        if matching:
+            graph = matching_half_module(storage, shape)
+        else:
+            graph = module("div", storage, shape=shape, reverse=True)
+            graph.functions[0].body[-1].op_name = "tessera.silu_mul"
+            if storage == "f32":
+                graph.functions[0].body = graph.functions[0].body[-1:]
+                graph.functions[0].body[0].operands = ["%b", "%a"]
+        recipe = native.lower_math_graph(graph, "rocm_gfx1201")
+        target = run_tessera_opt(find_tessera_opt(), recipe.tile_ir, "--lower-tile-to-rocm=arch=gfx1201")
+        physical = _shape_free_target_ir(target, family="scalar_binary", directive="tessera_rocm.binary")
+        assert 'kind = "silu_mul"' in physical
+        assert 'output_dtype = "' + (storage if matching else "f32") + '"' in physical
+        projected.append(physical)
+    assert projected[0] == projected[1]

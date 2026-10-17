@@ -15451,3 +15451,5 @@ Completed experiment, no promotion: an unmerged native row CUDA graph candidate 
 Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
 
 Not applicable to CUDA physical scheduling: no NVIDIA generator or launch ABI changes. The shared Tile storage exception is restricted to owning ROCm SiLU contracts; existing NVIDIA paths retain their storage rules. Sibling refusal and registry gates require validation; no RTX 5070 numerical or timing claim is made.
+
+Shared frontend follow-through: same-shape/same-storage SiLU shape-only capture uses its existing catalog result contract instead of evaluating eager input arithmetic. Explicit numerical tracing remains available. This is frontend metadata parity only; owning physical proof is unchanged.

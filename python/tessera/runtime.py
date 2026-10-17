@@ -4959,7 +4959,7 @@ def _submit_rocm_gfx1151_native(
 ) -> Any:
     """Submit compiler-owned gfx1151 typed softmax/reduction/movement HSACOs."""
     from .compiler.rocm_parent_view_native import PARENT_VIEW_ABI, submit_parent_view
-    if descriptor.abi_id == PARENT_VIEW_ABI:
+    if getattr(descriptor, "abi_id", None) == PARENT_VIEW_ABI:
         return submit_parent_view(image, descriptor, buffers, scalars, stream)
     provenance = getattr(descriptor, "provenance", {})
     if "native_scaled_primal_program" in provenance:

@@ -5,4 +5,4 @@ tests/device/rocm/test_native_parent_view_jit.py::test_public_parent_view_jit_an
     warn_if_generator_is_stale(tool)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-13 passed, 1 warning in 5.37s
+13 passed, 1 warning in 5.82s

@@ -1,7 +1,8 @@
 {
-  "scope": "public gfx1201 static f32 parent-view, literal/captured-literal frontend proof; canonical producer binding; historical timing boundaries and full five-slice follow-ups remain explicit",
+  "scope": "public gfx1201 static f32 literal/captured-literal parent-view, final guard ordering, complete initial failure accounting and final-source replays; original five-slice/model obligations remain open",
   "sha256": {
-    "README.md": "eb5e18835a039e954a1c8882848f140cb0490e931b45cdc2dc55fbba98ed614c",
+    "README.md": "1063875005a836dfbf6d78913b3f7616bd6be5a14218ec873c68b9749abe352c",
+    "all-failure-replays.txt": "5e3fe40d548622e1183b298125dcfb14b404cee2cccef36b4e7d6a9d456bd548",
     "binding-review-mypy.txt": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
     "binding-review-tests.txt": "b1a577fae9076d4688890523041df23d386ba4ac494ed70c586db89b05826835",
     "capture-cache-tests.txt": "a242da09164d40a53a10bf4a02838823b74bde542001c5c6ce7d2bceab33ed05",
@@ -13,15 +14,20 @@
     "focused-gates.txt": "dc612b9241d2675dbc6e56110eac4c1f972394723bcd7f13e8ae5947ceca161e",
     "generated-docs-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
     "generated-docs.txt": "9d8b85d764f7e4ee9cddcad4256bc591602b3561b272a9d99fe967c4d938cd18",
+    "guard-order-mypy.txt": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "guard-order-tests.txt": "d281db233eb8863028c47276a182f0d5813bdf70301cc4b1c436a6b136507c0d",
+    "initial-full-unit-summary.txt": "350e68cf8109cb69125283a8bbcae915f3893e21a4f6fe82b8f3c6e29609dfa7",
     "mapped-failure-gates.txt": "77fee83ea678eaaffbffaeb4019caee98abbc93fd5655cb9e6b680de0e613fbd",
     "mypy.txt": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "nvidia-device-receipt.json": "cac3332cda5d88c5fcb1147b03c5a96fc1d7b7ce3c257c2a93ba79353fc1fa40",
+    "nvidia-regression.txt": "0817df87c1c9e4d2676e0488331fbd4c22ef219ae14e20862dacf4eb7991eabf",
     "pipeline-gates.txt": "e47e463a3ad93167dbc5a6bbb2c14c04e24473a897e471ee7513090111e12697",
     "post-capture-image-identity.json": "abf5bdd47d7b4a1113ed3c0172f43e1b2117fe217ba414e2e29af67a5e212f2f",
     "public-parent-view-captured-timings.json": "f422709341a9fe48c0bf52d12594495e1850e42ca52e8c2295aabcc4efb0d57d",
-    "public-parent-view-device-final.txt": "381e187983cc52d7066d592b6a3b99cc72891690db3192a45162a3d3737bb9ac",
+    "public-parent-view-device-final.txt": "c82c2b542fedf718783484a1bb36c4bfb32e16ff4309a6494645bf2ed7d7ef1c",
     "public-parent-view-timings.json": "ee3085078da21fe8dd6b7741011dd9c27a517b5ecb1c36e35cd9cea2494c76ad",
-    "public-source-parity.json": "7b6c565ed7825368961c9ee1875bb17a2f9cfad01fd362055815a28713462e5e",
+    "public-source-parity.json": "74dd3156d9299081c53f17d78ab2945c61ddc1a4b6b81736be04fda0a0093cb0",
     "record_native_parent_view_initial.py": "2a36e13d9911092ebe908130c6ae79ce965cf5db426fdf3f921664d3ba791ccc",
-    "source-identity.json": "6fd8380ef1b6d329c8fe13f54031be4c98d9bac8c3a50ae868c6ee96344ff299"
+    "source-identity.json": "7a8b125b42deba757184920de793647d22b5cc7d8bb48d0374e00b10165f2314"
   }
 }

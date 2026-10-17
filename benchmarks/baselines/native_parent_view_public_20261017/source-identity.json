@@ -14,7 +14,7 @@
     "python/tessera/compiler/pipeline_registry.py": "3e81099e3a4a8b66b7b6e050d1308237584e7b3995409d93c923f008fe4cee12",
     "python/tessera/compiler/rocm_parent_view_native.py": "716c2ef5f7149515a7b7fc5391b7c07cffdc9442860d2f3e1e1e3133d5d1c138",
     "python/tessera/compiler/rocm_pipeline.py": "0692c8c8f7222860b0b7131588ee71bdd990ee807f48b4b9cae8f78b1ac8cff4",
-    "python/tessera/runtime.py": "5e3a170d8152514a3e1822c4255e2bd6f159b43912d0aeca5ad8143bf4fb2a71",
+    "python/tessera/runtime.py": "46ea0f69fc80f57943a56f015fab092afd2e102ab63ca5617dbb234df0e12c31",
     "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "a7700e7edddf9c7d5d7390ea58a4da352562739ba1a86d9bf019e5c6365206fe",
     "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeGateUpMaterializer.h": "32645f89ab1de242b90c3a9aa3411199ae93c419eced0b4d27d666f6336a6641",
     "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ParentViewProgramExport.h": "56d3b7f949b7bf206d4f801463315a93a66a92ff33eef887938000623df5c62b",

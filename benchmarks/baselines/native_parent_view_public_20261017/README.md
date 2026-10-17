@@ -16,13 +16,23 @@ gates pass **409 tests** in host WSL. Generated documentation is regenerated;
 Ruff and whitespace checks pass. The subsequent current-source manifest,
 frontend/cache, native-package and pipeline selection passes **249 tests**.
 The exact recorder/plan/foreign-host governance selection passes **1064 tests**;
-these selections overlap earlier gates and are not summed. Broader unit/compiler
-validation remains pending.
+these selections overlap earlier gates and are not summed. The exploratory full
+host-unit run finished with 27547 passed, 7678 skipped and seven failures while
+fixes landed during the running process. All seven failure nodes and surrounding
+contracts pass together in a fresh current-source selection: **1152 passed**.
+This is not an exact-head full-suite pass certificate; required CI must pass on
+the published head before merge. See initial-full-unit-summary.txt and
+all-failure-replays.txt. A fresh RTX5070/schema-1 source-active JVP regression
+passes **12 cases**; nvidia-device-receipt.json records its exact device/scope.
 
 Final binding review passes 55 focused tests and a thirteen-case gfx1201 rerun.
 CPU calls avoid parent-view packager discovery. Construction and portable replay
 reject relabeling the native image producer away from tessera-rocm-executable;
 invalid producer requests fail before compiler discovery. See binding-review-tests.txt.
+The shared submitter also retains the existing scaled-program identity guard
+for minimal descriptors: 34 runtime/image/package regressions pass after the
+guard-order correction, with another thirteen-case gfx1201 device rerun.
+See guard-order-tests.txt.
 
 The canonical driver preserves caller Graph ownership and the native ABI frame
 across Target and binary stages. Host negative tests reject altered stage bytes,

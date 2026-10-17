@@ -75,3 +75,13 @@ reverse breadth and performance closure remain open. Explicit bounded resident
 capture is the proved envelope. The original five-slice goal is not complete.
 All four backend plans assess shared native buffer representation; ROCm keeps
 its prior FP32 callers and Apple/x86 do not adopt this CUDA capture contract.
+
+## Publication routing repair
+
+Initial published head f0493b96c failed unit and audit for the same stale
+E2E-REAL-6 Latest link: the new entry anchor had been assigned to the ROCm
+task instead. The repair updates both owner-specific labels/anchors, keeps
+the routing checker unchanged, and passes 19 routing/audit tests. Raw CI
+identities and failure-log hashes are in ci-routing-repair.json. Exact-head
+CI and full review remain required before merge. Native evidence retains
+its original source scope.

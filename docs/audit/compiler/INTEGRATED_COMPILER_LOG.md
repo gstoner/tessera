@@ -13273,7 +13273,7 @@ Evidence: benchmarks/baselines/rocm_checkpoint_mlp_20261017/README.md.
 ### 2026-10-17 — typed bounded resident attention generations
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
-PRs: pending. Sync: SM120-TYPED-RESIDENT-CAPTURE-20261017.
+PRs: #975. Sync: SM120-TYPED-RESIDENT-CAPTURE-20261017.
 
 Outcome: existing native half checkpoint products now execute resident
 forward/reverse captures with actual storage widths, FP32 row/bias roles,
@@ -13287,6 +13287,9 @@ checks an independent oracle before and after profiling exact compiled
 functions. Six packets separate captured dispatch and completed host scopes.
 Largest backward dispatch is about 10.44 ms; forward capture is 5.7–9.0 ms.
 All four backend plans assess shared helper adoption without physical transfer.
+Initial published head f0493b96c failed unit/audit on a stale E2E Latest link.
+Owner-specific E2E/ROCm pointers are repaired; 19 routing/audit tests pass,
+and the checker remains unchanged. Exact-head publication CI remains required.
 
 Remaining: half JVP, composed AD, wider masks, ordinary dynamic reverse
 breadth, performance optimization and original five-slice closure.

@@ -96,6 +96,20 @@ LogicalResult TileOp::verify() {
 }
 
 LogicalResult MatmulOp::verify() {
+  const bool scalarFma = getPhysicalContract() == "nvidia_sm120_scalar_fma_v1";
+  auto scalarStorage = [](StringRef name) {
+    return name == "f32" || name == "f16" || name == "bf16";
+  };
+  if (scalarFma && (getArch() != "sm_120" || !scalarStorage(getStorage()) ||
+      !scalarStorage(getStorageB()) || !scalarStorage(getOutput()) ||
+      (getStorage() != "f32" && getStorageB() != "f32") ||
+      getAccum() != "f32" || getTileM() != 16 || getTileN() != 8 || getTileK() != 1 ||
+      getMacroTileM() != 16 || getMacroTileN() != 8 || getWarps() != 1 ||
+      getPipelineDepth() != 1 || getStaging() != "global" || getBlockK() != 0 ||
+      getScaleK() != 0 || getScaleN() != 0 || !getScaleFormat().empty() ||
+      getSplitK() != 1 || getBias() || getResidual() || getActivation() != "none" ||
+      getALayout() != "row_major" || getBLayout() != "row_major"))
+    return emitOpError("SM120 scalar FP32 FMA storage/geometry contract is inconsistent");
   // Operand orientation is semantic even before a target lowering runs.
   for (StringRef name : {StringRef("transposeA"), StringRef("transposeB")}) {
     if (Attribute attr = getOperation()->getAttr(name)) {
@@ -110,7 +124,7 @@ LogicalResult MatmulOp::verify() {
            physical.getValue() == "rocm_fp8_w8a8_blockscale_nk_v1" ||
            physical.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_v1" ||
            physical.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_nk_v1");
-      if (orientation.getValue() && !typedScaledA &&
+      if (orientation.getValue() && !typedScaledA && !scalarFma &&
           (!physical || physical.getValue() != "nvidia_sm120_nvfp4_blockscale_v1"))
         return emitOpError("operand orientation requires its named native storage contract");
     }
@@ -207,7 +221,7 @@ LogicalResult MatmulOp::verify() {
       getPhysicalContract() == "rocm_fp8_w8a8_blockscale_v1" ||
       getPhysicalContract() == "rocm_fp8_w8a8_blockscale_nk_v1";
   if (!getPhysicalContract().empty() && !packedMxfp4 && !foldedFamily &&
-      !fp8W8A8 && !nvidiaNvfp4)
+      !fp8W8A8 && !nvidiaNvfp4 && !scalarFma)
     return emitOpError("unknown physical_contract");
   if (getScaleN() < 0 || (getScaleN() > 0) != fp8W8A8)
     return emitOpError("scale_n is stated exactly for the gfx1201 W8A8 "
@@ -275,14 +289,14 @@ LogicalResult MatmulOp::verify() {
   // bf16 output (GFX1201-PERF-2026-09-27); its own check above is exact.
   const bool fp8W8A8Bf16 = fp8W8A8 && getOutput() == "bf16";
   if (getOutput() != "f32" && getOutput() != "f16" && !packedMxfp4 && !foldedFamily && !f64 && !u8s8 && !rocmInt &&
-      !fp8W8A8Bf16 &&
+      !fp8W8A8Bf16 && !scalarFma &&
       !(getOutput() == "i32" && getStorage() == "int4" && getAccum() == "int32"))
     return emitOpError("requires f32/f16 output, x86 f64 storage/accum/output, int4 with i32 accumulation/output, or ROCm int8/int4 with i32 accumulation/output");
   const bool rowMajorSm120B = getBLayout() == "row_major" &&
       getArch() == "sm_120" && (getStorage() == "f16" || getStorage() == "bf16") &&
       getTileM() == 16 && getTileN() == 8 && getTileK() == 16 &&
       (getOutput() == "f32" || getOutput() == "f16");
-  if (getALayout() != "row_major" || (getBLayout() != "col_major" && !rowMajorSm120B))
+  if (getALayout() != "row_major" || (getBLayout() != "col_major" && !rowMajorSm120B && !scalarFma))
     return emitOpError("matmul physical layouts require row/col, or the SM120 half row-major RHS contract");
   // The shared block-rasterization contract (ROCM-RASTER-1): a permutation of
   // block ids onto the tile grid. The selection stays row-major until device

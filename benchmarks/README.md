@@ -380,3 +380,13 @@ The named contract and scope are in
   is the frozen `record_native_parent_view_initial` recorder for the initial
   launch-loop-only packet in that directory. It preserves exact historical
   recorder bytes; use `record_native_parent_view` for current reproduction.
+
+
+### Native source pullback recorder
+
+`nvidia/benchmark_source_reverse.py` records the static FP16/BF16
+RMSNorm/ReLU/matmul requested-source VJP through native paired AD, Schedule/Tile,
+NVVM and the checked C++ owner. The packet is
+[sm120_source_reverse_20261018](baselines/sm120_source_reverse_20261018/README.md);
+public/native timing domains, frozen controls and original image/ABI witnesses
+remain separate from generic reverse support.

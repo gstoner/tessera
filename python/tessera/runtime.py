@@ -165,6 +165,11 @@ def _execute_rocm_quantized_product_artifact(artifact: Any, args: Any) -> Native
     return execute_artifact(artifact,args)
 
 
+def _execute_nvidia_source_reverse_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
+    from .compiler.nvidia_source_reverse_runtime import execute
+    return execute(artifact, args)
+
+
 def _execute_nvidia_tensor_jvp_program_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
     from .compiler.nvidia_tensor_jvp_runtime import execute
     return execute(artifact, args)
@@ -3116,6 +3121,10 @@ def _submit_nvidia_sm120_native(
     stream: Any,
 ) -> Any:
     """Submit a compiler-owned SM120 PTX image through the shipped bridge."""
+    from tessera.compiler.nvidia_native import SM120_SCALAR_FMA_ABI
+    if descriptor.abi_id == SM120_SCALAR_FMA_ABI:
+        from tessera.compiler.prepared_nvidia_scalar_matmul import submit
+        return submit(image, descriptor, buffers, scalars, stream)
     dynamic_local_memory_bytes = (
         descriptor.resolve_dynamic_local_memory_bytes(scalars)
     )
@@ -6859,6 +6868,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_ROW_B_BF16_ABI,
         SM120_EPILOGUE_ABIS,
         SM120_REDUCED_OUTPUT_ABIS,
+        SM120_SCALAR_FMA_ABI,
         SM120_F16_ABI,
         SM120_ROW_B_F16_ABI,
         SM120_STRIDED_F16_ABI,
@@ -6936,6 +6946,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI,
                 SM120_BF16_ABI,
                 SM120_ROW_B_BF16_ABI,
+                SM120_SCALAR_FMA_ABI,
                 SM120_F16_ABI,
                 SM120_ROW_B_F16_ABI,
                 SM120_STRIDED_F16_ABI,
@@ -35619,6 +35630,7 @@ def _executor_table():
         "rocm_rope_compiled": _execute_rocm_compiled_rope,
         "nvidia_tensor_rhs_jvp_program": _execute_nvidia_tensor_jvp_program_artifact,
         "nvidia_active_source_jvp_program": _execute_nvidia_tensor_jvp_program_artifact,
+        "nvidia_source_reverse_program": _execute_nvidia_source_reverse_artifact,
         "nvidia_lhs_program": _execute_nvidia_lhs_program_artifact,
     "nvidia_rhs_program": _execute_nvidia_rhs_program_artifact,
         "rocm_nvfp4_program": _execute_rocm_nvfp4_program_artifact,

@@ -69,7 +69,13 @@ def test_native_sparse_graph_refuses_policy_loss(mutation):
     source = graph()
     source.module_attrs.update({'tessera.target':'"rocm"','tessera.arch':'"gfx1201"',
                                'tessera.sparse_policy':'"checked_2to4"'})
-    if mutation == 'transpose': source.functions[0].body[0].kwargs['transposeA'] = True
+    if mutation == 'transpose':
+        # Keep the logical matmul shape valid so this still exercises the
+        # native sparse orientation gate, not the earlier Graph shape gate.
+        source.functions[0].body[0].kwargs['transposeA'] = True
+        physical = tensor_ir_type((32,16),'fp16')
+        source.functions[0].args[0].ir_type = physical
+        source.functions[0].body[0].operand_types[0] = str(physical)
     ir = source.to_mlir(target='rocm',canonical=True)
     if mutation == 'transpose': assert 'transposeA = true' in ir
     if mutation == 'module_policy': ir = ir.replace('tessera.sparse_policy', 'unknown_policy = "strict", tessera.sparse_policy',1)

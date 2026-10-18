@@ -1153,6 +1153,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_nvfp4_program": "Checked native checkpoint conversion/storage/packed matmul on one owned HIP stream",
     "rocm_quantized_product_program": "Native BF16 K16 quantization and exact scaled matmul on one checked HIP owner",
     "nvidia_active_source_jvp_program": "Compiler-owned static source-active RMSNorm/ReLU JVP and transactional two-result native CUDA owner",
+    "nvidia_source_reverse_program": "Compiler-derived static RMSNorm/ReLU source pullback with mixed contraction and checked native CUDA ownership",
     "nvidia_tensor_rhs_jvp_program": "Compiler-owned static paired producer/RHS-JVP SSA, native Schedule/Tile members and transactional two-output CUDA owner",
     "nvidia_lhs_program": "Checked native LHS normalization/softmax/ReLU producer members and complete matmul epilogue on one owned CUDA stream",
     "nvidia_rhs_program": "Checked native RMSNorm/LayerNorm RHS and typed matmul packages on one owned CUDA stream",
@@ -3837,6 +3838,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "and checked five-input frontend ABI; broader AD/layout/quality remain open.",
         numerical_fixture="tests/device/rocm/test_nvfp4_resident_jit.py",
         evidence_target="rocm_gfx1201",proof_build=".build-gfx1201-current",
+        device_proof="device_verified_jit"),
+    ("nvidia_sm120", "nvidia_sm120_source_reverse_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_sm120_source_reverse_compiled",
+        execution_kind="native_gpu", executable=True, executor_id="nvidia_source_reverse_program",
+        runtime_status="success", execution_mode="cuda_driver", owns_stream=True,
+        direction="backward", op_family="source_normalization_matmul", residual_policy="recompute_all",
+        reason="Named static FP16/BF16 RMSNorm/ReLU/plain FP32-output matmul requested-source "
+               "pullback: actual paired AD, mixed FP32-cotangent contraction and schema-6 row "
+               "Schedule/Tile/NVVM members under one C++ owner. No generic reverse/batching claim.",
+        numerical_fixture="tests/device/nvidia/test_public_source_reverse.py",
+        evidence_target="nvidia_sm120", proof_build="LLVM/MLIR23.1.1+CUDA13.3+RTX5070",
         device_proof="device_verified_jit"),
     ("nvidia_sm120", "nvidia_sm120_active_source_jvp_compiled"): ExecutionRow(
         target="nvidia_sm120",compiler_path="nvidia_sm120_active_source_jvp_compiled",

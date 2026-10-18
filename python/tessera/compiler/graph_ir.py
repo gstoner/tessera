@@ -1723,6 +1723,7 @@ class GraphIRVerifier:
             operand_contracts,
             target=target,
             result=_tensor_contract_for(result_type),
+            attrs=op.kwargs if op.op_name in {"tessera.matmul", "tessera.gemm"} else None,
         )
         for diag in legality.diagnostics:
             if diag.code in {
@@ -2898,7 +2899,12 @@ def _shape_matmul_2d(operand_types: List[IRType], attrs: Optional[Dict[str, Any]
     if len(operand_types) < 2:
         return operand_types[0]
     lhs, rhs = operand_types[0], operand_types[1]
-    dtype = lhs.dtype or rhs.dtype
+    from ..dtype import _promote_two
+    dtype = _promote_two(lhs.dtype, rhs.dtype) if lhs.dtype and rhs.dtype else lhs.dtype or rhs.dtype
+    attributes = attrs or {}
+    ta, tb = attributes.get("transposeA", False), attributes.get("transposeB", False)
+    if type(ta) is not bool or type(tb) is not bool:
+        raise ValueError("matmul transpose flags must be boolean")
     # Low-precision storage (fp8 / fp6 / fp4 / nvfp4) is storage-only
     # (Decision #15a): a product over it accumulates in fp32 and that is the
     # result the program sees. The weight-only pairs (f16 x fp8) follow the
@@ -2912,7 +2918,8 @@ def _shape_matmul_2d(operand_types: List[IRType], attrs: Optional[Dict[str, Any]
             raise ValueError("matmul output_dtype must be fp16 or fp32")
         dtype = output_dtype
     if lhs.rank == 2 and rhs.rank == 2:
-        return tensor_ir_type((lhs.shape[0], rhs.shape[1]), dtype, layout=lhs.layout)
+        return tensor_ir_type((lhs.shape[1 if ta else 0], rhs.shape[0 if tb else 1]),
+                              dtype, layout=lhs.layout)
     return tensor_ir_type(("*",), dtype, layout=lhs.layout)
 
 

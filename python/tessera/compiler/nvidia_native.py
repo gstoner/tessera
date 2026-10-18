@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from .scheduled_matmul import ScheduledMatmulArtifact
 
 
+SM120_SCALAR_FMA_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.scalar_f32.v1"
 SM120_F16_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.v1"
 SM120_BF16_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.bf16.v1"
 SM120_ROW_B_F16_ABI = "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1"
@@ -1089,6 +1090,8 @@ def native_package_kind(module: GraphIRModule) -> str | None:
         return "int4_matmul"
     if supports_mx_matmul(module):
         return "mx_matmul"
+    if supports_scalar_matmul(module):
+        return "scalar_matmul"
     if supports_matmul(module):
         return "matmul"
     return None
@@ -1140,6 +1143,11 @@ def package_native(
         return package_int4_matmul(module, pipeline_name=pipeline_name)
     if kind == "mx_matmul":
         return package_mx_matmul(module, pipeline_name=pipeline_name)
+    if kind == "scalar_matmul":
+        from .scheduled_matmul import lower_scheduled_matmul
+        return package_scheduled_matmul(
+            lower_scheduled_matmul(module, target="nvidia_sm120"),
+            pipeline_name=pipeline_name)
     return package_matmul(
         module,
         pipeline_name=pipeline_name,
@@ -2556,6 +2564,15 @@ def supports_matmul(module: GraphIRModule, *, storage: str | None = None) -> boo
     return selected is not None and (storage is None or selected == storage)
 
 
+def supports_scalar_matmul(module: GraphIRModule) -> bool:
+    from .scheduled_matmul import _graph_contract
+    try:
+        contract = _graph_contract(module, "nvidia_sm120")
+    except ValueError:
+        return False
+    return "fp32" in contract[9:11]
+
+
 def supports_f16_matmul(module: GraphIRModule) -> bool:
     return supports_matmul(module, storage="fp16")
 
@@ -3181,6 +3198,10 @@ def package_scheduled_matmul(
     """Compile the scheduled Tile artifact once and bind its launch contract."""
     if artifact.storage == "int4":
         return package_scheduled_int4_matmul(artifact, pipeline_name=pipeline_name)
+    if (artifact.target == "nvidia_sm120" and
+            "fp32" in {artifact.a_dtype, artifact.b_dtype}):
+        from .prepared_nvidia_scalar_matmul import package
+        return package(artifact, pipeline_name=pipeline_name)
     artifact.validate()
     from .scheduled_matmul import verify_matmul_projection
     verify_matmul_projection(artifact)

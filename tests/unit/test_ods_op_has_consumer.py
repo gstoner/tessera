@@ -250,6 +250,7 @@ def test_scan_parses_every_ods_form() -> None:
         "tile.load_element",
         "tile.store_element",
         "tile.row_region_kernel",
+        "tile.scalar_matmul_kernel",
         "tessera_attn.checkpoint_row_correction",
         "tessera_attn.checkpoint_backward_rows",
         "schedule.attention_row_correction",
@@ -297,7 +298,7 @@ def test_scan_parses_every_ods_form() -> None:
 # Four typed scalar Tile operations and the NVIDIA row-region consumer.
 # Six native attention row products: Graph, Schedule and Tile producer/consumer.
 # Two existing public slice spellings now have registered Graph ODS records.
-_DECLARED_OP_RECORDS = 693
+_DECLARED_OP_RECORDS = 694
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:

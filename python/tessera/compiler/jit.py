@@ -581,6 +581,9 @@ class JitFn:
         self._native_prepared_attention_calls: Dict[tuple, Any] = {}
         self._native_public_jvp_owners: Dict[tuple, Any] = {}
         self._native_prepared_jvp_calls: Dict[tuple, Any] = {}
+        self._native_prepared_vjp_calls: Dict[tuple, Any] = {}
+        self._native_prepared_vjp_lock = threading.RLock()
+        self._native_prepared_vjp_pid: int | None = None
         self._native_prepared_jvp_lock = threading.RLock()
         self._native_prepared_jvp_pid: int | None = None
         self._native_descriptor_last_receipt: Any = None
@@ -944,6 +947,13 @@ class JitFn:
         prepared_pid = getattr(self, "_native_prepared_jvp_pid", None)
         if prepared_pid is not None and prepared_pid != os.getpid():
             raise RuntimeError("retained native JVP cannot cross fork")
+        vjp_pid = getattr(self, "_native_prepared_vjp_pid", None)
+        if vjp_pid is not None and vjp_pid != os.getpid():
+            raise RuntimeError("retained native VJP cannot cross fork")
+        with self._native_prepared_vjp_lock:
+            for call in self._native_prepared_vjp_calls.values():
+                call.close()
+            self._native_prepared_vjp_calls.clear()
         with self._native_prepared_jvp_lock:
             for call in self._native_prepared_jvp_calls.values():
                 call.close()
@@ -1877,7 +1887,7 @@ class JitFn:
         rocm_matmul = target in {"rocm_gfx1151", "rocm_gfx1201"} and rocm_product
         if target not in {"rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
             return _JIT_FALLBACK
-        from .nvidia_native import supports_f16_matmul, supports_bf16_matmul
+        from .nvidia_native import supports_f16_matmul, supports_bf16_matmul, supports_scalar_matmul
         from .nvidia_native import requests_nvfp4_matmul, supports_nvfp4_matmul
         from .nvfp4_tensor import NVFP4Tensor
         nvfp4 = target == "nvidia_sm120" and requests_nvfp4_matmul(self.graph_ir)
@@ -1888,8 +1898,11 @@ class JitFn:
         attention_saved_lse = False
         attention = (target == "nvidia_sm120" and self.differentiation_request is None
                      and requests_attention(self.graph_ir))
+        scalar_matmul = (target == "nvidia_sm120" and self.differentiation_request is None
+                         and supports_scalar_matmul(self.graph_ir))
         matmul = (target == "nvidia_sm120" and self.differentiation_request is None
-                  and (supports_f16_matmul(self.graph_ir) or supports_bf16_matmul(self.graph_ir)))
+                  and (supports_f16_matmul(self.graph_ir) or supports_bf16_matmul(self.graph_ir)
+                       or scalar_matmul))
         from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest, NVFP4_INGEST_ABI
         from .rocm_nvfp4_expand_native import supports_nvfp4_expansion, NVFP4_EXPAND_ABI
         from .rocm_mxfp4_storage_native import supports_mxfp4_storage, MXFP4_STORAGE_ABI
@@ -1998,7 +2011,7 @@ class JitFn:
             if resident_attention:
                 raise ValueError("resident attention result storage requires a matching native output ABI")
             return _JIT_FALLBACK
-        if matmul:
+        if matmul and not scalar_matmul:
             # Frontend storage facts, not a Python schedule/algorithm decision.
             # Never mutate the cached caller-owned semantic trace.
             import copy
@@ -2139,7 +2152,8 @@ class JitFn:
         elif matmul or rocm_matmul:
             shape = descriptor.provenance.get("shape")
             declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
-            if (descriptor.provenance.get("route") != "canonical_scheduled_tile_consumer"
+            if (descriptor.provenance.get("route") != (
+                    "canonical_scheduled_scalar_fma" if scalar_matmul else "canonical_scheduled_tile_consumer")
                     or not isinstance(shape, list) or len(shape) != 3
                     or any(type(d) is not int or d <= 0 for d in shape)
                     or tuple(item.name for item in declared) != ("M", "N", "K")
@@ -2279,7 +2293,12 @@ class JitFn:
             self._native_descriptor_artifacts[key] = artifact
         if prepared_matmul and descriptor.geometry.policy == "sm120_scheduled_typed_16x8_mn":
             from .prepared_nvidia_matmul import PreparedMatmulCall
-            call = PreparedMatmulCall(compiled, artifact, module, self.graph_ir)
+            if scalar_matmul:
+                from .prepared_nvidia_scalar_matmul import PreparedScalarMatmulFrontendCall
+                call = PreparedScalarMatmulFrontendCall.from_compiled(
+                    compiled, artifact, module, self.graph_ir)
+            else:
+                call = PreparedMatmulCall(compiled, artifact, module, self.graph_ir)
             try:
                 array, receipt = call(ordered)
             except Exception:
@@ -3321,6 +3340,13 @@ class JitFn:
         graph_ops = [
             op for function in source_module.functions for op in function.body
         ]
+        from .native_vjp_composites import execute_native_vjp_composite
+        composite = execute_native_vjp_composite(
+            self, source_module, args, kwargs, out_cotangents=out_cotangents)
+        if composite is not None:
+            self.last_backward_execution = dict(composite.execution)
+            self._native_backward_artifact = composite.runtime_artifact
+            return composite.gradients
         frontend_certificate = None
         composed_scale = False
         if len(graph_ops) > 1 and target_family == "rocm":

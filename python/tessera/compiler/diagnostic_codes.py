@@ -105,6 +105,14 @@ class DiagnosticCode:
 
 REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     DiagnosticCode(
+        code="LEGALITY_MATMUL_TRANSPOSE_TYPE",
+        pass_origin="tessera.compiler.legality", severity="error",
+        summary="A Graph matmul transpose flag is not a boolean.",
+        fix_hint="Use explicit boolean transposeA and transposeB attributes.",
+        spec="docs/spec/ir/sm120_scalar_contraction_contract.md#required-semantics",
+        sprint="W1.1", language="python", status="implemented",
+    ),
+    DiagnosticCode(
         code="FIELD_COORDINATE_CONTRACT", pass_origin="tessera.ga.coordinates",
         severity="error", summary="A sampled field has a missing or inconsistent coordinate contract.",
         fix_hint="Declare a uniform orthogonal chart with nonsingular scale factors matching the field grid.",

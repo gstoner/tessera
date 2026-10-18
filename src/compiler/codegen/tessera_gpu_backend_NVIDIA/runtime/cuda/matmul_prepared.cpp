@@ -1,4 +1,5 @@
 #include "tessera_nvidia_active_source_program.h"
+#include "tessera_nvidia_source_reverse_program.h"
 // Native ownership of checked static/bounded Schedule/Tile/LLVM SM120 matmul images.
 // No source/kernel reconstruction; synchronous host storage is copied into a
 // context-owned scratch. Each handle pins one module and physical ABI;
@@ -99,6 +100,7 @@ struct Owner {
   CUdeviceptr producerScratch = 0, rhsEdge = 0, rhsScratch = 0, ownedLhsEdge = 0, ownedResult = 0;
   bool cooperativeProducer = false, flatProducer = false, invoked = false, rowSymbol = false;
   int dynamicAxes = 0, storage = 0;
+  bool scalarFma = false;
   bool macro = false;
   bool bias = false, residual = false, rowB = false, halfOutput = false;
   CUstream stream = nullptr;
@@ -330,7 +332,7 @@ extern "C" int tessera_nvidia_matmul_set_dynamic_axes(uint64_t handle, int axes)
   if (found == owners.end() || axes <= 0 || axes > 7)
     return bad("invalid dynamic matmul axes");
   Owner &owner = *found->second;
-  if (owner.invoked || owner.producer || !owner.rhsProducers.empty() || owner.dynamicAxes)
+  if (owner.scalarFma || owner.invoked || owner.producer || !owner.rhsProducers.empty() || owner.dynamicAxes)
     return bad("dynamic axes require an unused owner");
   if (owner.macro) return bad("dynamic axes require a strided typed consumer");
   if (owner.rowB != owner.rowSymbol)
@@ -378,6 +380,7 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
   }
   if (size_t(bool(owner.producer)) + owner.followingProducers.size() + owner.rhsProducers.size() >= 63)
     return bad("prepared tensor producer chain exceeds its bound");
+  if (owner.scalarFma) return bad("scalar FMA owner cannot attach an untyped producer");
   if (owner.invoked) return bad("tensor producer must attach before first invocation");
   const bool f16 = owner.expected[0].dtype == 2;
   const std::string type = f16 ? "f16" : "bf16";
@@ -636,11 +639,12 @@ static int profileFrame(uint64_t handle, int repeats,
   if (!owner.hostGeneration || owner.hostGeneration != owner.arena->generation ||
       owner.hostBase != owner.arena->base)
     return bad("prepared profiling shared arena lease is stale");
-  const size_t width = owner.halfOutput ? 2 : 4;
+  const int outputDtype = owner.expected[owner.count - 1].dtype;
+  const size_t width = outputDtype == 1 ? 4 : 2;
   const auto m = owner.activeDims[0], n = owner.activeDims[1];
   const size_t bytes = size_t(m)*size_t(n)*width;
   if (!output->data || reinterpret_cast<uintptr_t>(output->data) % width ||
-      output->dtype != (owner.halfOutput ? 2 : 1) || output->rank != 2 ||
+      output->dtype != outputDtype || output->rank != 2 ||
       output->shape[0] != m || output->shape[1] != n || output->bytes != bytes ||
       (m > 1 && output->strides[0] != int64_t(n*width)) ||
       (n > 1 && output->strides[1] != int64_t(width)))
@@ -738,6 +742,113 @@ struct ProducerEvents {
     return true;
   }
 };
+// Additive scalar-contraction ABI: independent per-role storage and original
+// physical shapes. The legacy half-MMA preparation contract is unchanged.
+extern "C" int tessera_nvidia_scalar_matmul_prepare_v1(
+    const void *image, size_t imageBytes, const char *entry, const int64_t *dims,
+    const int32_t *types, int transposeA, int transposeB, uint64_t *handle) {
+  error.clear(); if (handle) *handle = 0;
+  if (getpid() != process) return bad("scalar matmul cannot cross fork");
+  std::lock_guard<std::mutex> lock(mutex);
+  if (!image || !imageBytes || !entry || !dims || !types || !handle ||
+      std::strncmp(entry, "nvidia_sm120_scheduled_matmul_", 29) ||
+      (transposeA != 0 && transposeA != 1) ||
+      (transposeB != 0 && transposeB != 1))
+    return bad("scalar matmul image or orientation ABI mismatch");
+  const std::string name(entry), suffix("_scalar_fma_kernel");
+  if (name.size() <= suffix.size() ||
+      name.compare(name.size()-suffix.size(),suffix.size(),suffix) != 0)
+    return bad("scalar matmul requires its native scalar entry");
+  for (size_t i=0; i<3; ++i)
+    if (types[i]<1 || types[i]>3 || dims[i]<=0 || dims[i]>INT32_MAX)
+      return bad("scalar matmul type/extent ABI mismatch");
+  if ((types[0]!=1 && types[1]!=1) || dims[0]>65535LL*16)
+    return bad("scalar matmul requires a wide operand and bounded grid");
+  try {
+    auto owner=std::make_unique<Owner>();
+    if (!current(owner->context) ||
+        !ok(cuCtxGetId(owner->context,&owner->identity),"scalar context identity"))
+      return bad("scalar matmul requires live SM120 context");
+    owner->dims={dims[0],dims[1],dims[2]};
+    owner->scalarFma=true; owner->storage=types[0]; owner->rowB=true;
+    const auto m=dims[0],n=dims[1],k=dims[2];
+    if (!view(*owner,types[0],2,transposeA?k:m,transposeA?m:k,false) ||
+        !view(*owner,types[1],2,transposeB?n:k,transposeB?k:n,false) ||
+        !view(*owner,types[2],2,m,n,false))
+      return bad("scalar matmul allocation capacity overflow");
+    std::string ptx(static_cast<const char *>(image),imageBytes);
+    if (!ok(cuModuleLoadData(&owner->module,ptx.c_str()),"load scalar PTX") ||
+        !ok(cuModuleGetFunction(&owner->function,owner->module,entry),"resolve scalar entry"))
+      return 1;
+    for (size_t i=0;i<6;++i) {
+      size_t offset=0,bytes=0;
+      if (!ok(cuFuncGetParamInfo(owner->function,i,&offset,&bytes),"scalar parameter ABI") ||
+          offset!=i*8 || bytes!=8)
+        return bad("scalar matmul requires six eight-byte parameters");
+    }
+    size_t offset=0,bytes=0;
+    if (cuFuncGetParamInfo(owner->function,6,&offset,&bytes)!=CUDA_ERROR_INVALID_VALUE)
+      return bad("scalar matmul parameter count mismatch");
+    if (!ok(cuStreamCreate(&owner->stream,CU_STREAM_NON_BLOCKING),"create scalar stream"))
+      return 1;
+    owner->arena=scratch[owner->identity].lock();
+    if (!owner->arena) {
+      owner->arena=std::make_shared<Scratch>();
+      owner->arena->context=owner->context; owner->arena->identity=owner->identity;
+      scratch[owner->identity]=owner->arena;
+    }
+    const uint64_t id=nextHandle++;
+    owners.emplace(id,std::move(owner)); *handle=id; return 0;
+  } catch (...) { return bad("scalar matmul native preparation failed"); }
+}
+
+extern "C" int tessera_nvidia_scalar_matmul_invoke_resident_v1(
+    uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count,
+    const uint64_t *producerStreams, size_t producerCount) {
+  error.clear();
+  if (getpid()!=process) return bad("scalar matmul cannot cross fork");
+  std::lock_guard<std::mutex> lock(mutex);
+  auto found=owners.find(handle);
+  if (found==owners.end() || !found->second->scalarFma ||
+      !views || count!=3 || !producerStreams || producerCount!=3)
+    return bad("scalar resident owner/frame mismatch");
+  Owner &owner=*found->second;
+  CUcontext context=nullptr; unsigned long long identity=0;
+  if (!ok(cuCtxGetCurrent(&context),"scalar resident context") ||
+      context!=owner.context ||
+      !ok(cuCtxGetId(context,&identity),"scalar resident identity") ||
+      identity!=owner.identity)
+    return bad("scalar resident context changed");
+  std::array<CUdeviceptr,5> pointers{};
+  for (size_t i=0;i<3;++i) {
+    const auto &v=views[i], &expected=owner.expected[i];
+    const size_t width=expected.dtype==1?4:2;
+    if (!v.data || reinterpret_cast<uintptr_t>(v.data)%width ||
+        v.bytes!=expected.bytes || v.dtype!=expected.dtype || v.rank!=2 ||
+        v.shape[0]!=expected.shape[0] || v.shape[1]!=expected.shape[1] ||
+        (v.shape[0]>1 && v.strides[0]!=expected.strides[0]) ||
+        (v.shape[1]>1 && v.strides[1]!=expected.strides[1]))
+      return bad("scalar resident shape/stride/storage mismatch");
+    pointers[i]=reinterpret_cast<CUdeviceptr>(v.data);
+    if (!residentAllocation(pointers[i],v.bytes,context))
+      return bad("scalar resident allocation context/capacity mismatch");
+  }
+  for (size_t i=0;i<2;++i)
+    if (pointers[i]<pointers[2]+views[2].bytes &&
+        pointers[2]<pointers[i]+views[i].bytes)
+      return bad("scalar resident output aliases an input");
+  owner.hostGeneration=0;
+  ProducerEvents ordering;
+  bool submitted=ordering.wait(context,owner.stream,producerStreams,producerCount) &&
+      submit(owner,pointers,pointers[0],owner.dims,owner.stream);
+  const std::string saved=error;
+  bool completed=ok(cuStreamSynchronize(owner.stream),"complete scalar resident contraction");
+  if (!submitted) { error=saved; return 1; }
+  if (!completed) return 1;
+  owner.invoked=true;
+  return 0;
+}
+
 static int invokeResident(
     uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count,
     void *launchStream, bool ownedEdge,
@@ -1002,7 +1113,7 @@ struct TensorProgramStage {
   CUmodule module = nullptr;
   CUfunction function = nullptr;
   int64_t inputs[2]{}, output = 0, secondOutput = -1;
-  bool matmul = false;
+  bool matmul = false, rowPullback = false;
   unsigned gridX = 0, gridY = 1;
   std::array<int64_t,3> dims{};
 };
@@ -1070,13 +1181,16 @@ bool submitTensorProgram(TensorProgramOwner &owner, int repeats=1,
   for (size_t i=0;i<owner.stages.size();++i) {
     auto &stage=owner.stages[i];
     CUdeviceptr input=address(stage.inputs[0]);
-    CUdeviceptr other=(stage.matmul || stage.secondOutput>=0) ? address(stage.inputs[1]) : 0;
+    CUdeviceptr other=(stage.matmul || stage.rowPullback || stage.secondOutput>=0) ? address(stage.inputs[1]) : 0;
     CUdeviceptr output=address(stage.output);
     CUdeviceptr second=stage.secondOutput>=0 ? address(stage.secondOutput) : 0;
     void *args[6]={};
     if (stage.secondOutput>=0) {
       args[0]=&input;args[1]=&other;args[2]=&output;args[3]=&second;
       args[4]=&stage.dims[0];args[5]=&stage.dims[1];
+    } else if (stage.rowPullback) {
+      args[0]=&input;args[1]=&other;args[2]=&output;
+      args[3]=&stage.dims[0];args[4]=&stage.dims[1];
     } else if (stage.matmul) {
       args[0]=&input; args[1]=&other; args[2]=&output;
       for (int j=0;j<3;++j) args[3+j]=&stage.dims[j];
@@ -1256,3 +1370,5 @@ extern "C" int tessera_nvidia_tensor_program_close(uint64_t handle) {
 #include "active_source_owner.inc"
 
 #include "resident_tensor_result.inc"
+
+#include "source_reverse_owner.h"

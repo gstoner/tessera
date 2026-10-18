@@ -6,6 +6,68 @@ target: apple_gpu
 last_updated: 2026-10-18
 ---
 
+## W11-MIXED-ADJOINT-CONTRACTION-20261018 — native mixed contractions and source VJP
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Synchronization key: W11-MIXED-ADJOINT-CONTRACTION-20261018.
+
+The current source-active RMSNorm/ReLU/matmul reverse Graph contains FP32
+cotangent x FP16/BF16 adjoint products and physical transpose indexing.
+The baseline Python and native Schedule admission rejected this combination.
+The registered scalar Tile contraction and checked native package now preserve
+those input values, use ordered FP32 FMA and narrow only the final output store.
+The scalar contraction alone does not establish composed-program execution.
+
+The additive SM120 row schema 6 now carries two readonly half-storage inputs
+and one half-storage result through native Graph/Schedule/Tile/Target lowering.
+Schema 1 retains its original two-result JVP ABI; mismatched schema/arity is
+rejected. Eight compiler tests and two RTX5070 numerical/store-canary tests pass,
+including the actual row SSA extracted from paired reverse differentiation.
+The existing active-source JVP runtime plus reverse member regression lane passes
+95 tests. The named requested-source reverse exporter now derives a mixed
+cotangent matmul and a schema-6 row pullback from native paired AD, with
+readonly roots, one private edge and one returned gradient. A dedicated C++
+completed-call owner executes both images, validates capacities/contexts,
+orders all resident producer streams and retains intermediate storage.
+Twenty RTX5070 tests pass for FP16/BF16, argument permutations, changed-input
+replay, FP32-cotangent cancellation witnesses, pending streams and refusal
+without output commit. Public native_backward now selects this declared composite
+family after frontend certification. Seventeen RTX5070 public/portable cases
+and twenty-two offline metadata cases pass, including immutable FP32 primal/JVP
+cotangents after producer-owner closure without source downloads. Warm calls
+reuse the native owner without tracing or compilation; standalone serialized
+replay restores the same two-member contract without compiler access.
+The composite has its own execution-matrix family and does not broaden
+single-op RMSNorm admission. Wider requested gradients, batching/dynamic
+shapes and broader publication gates remain open.
+The measured public metadata loop removes repeated Graph copying and caches
+owned validation snapshots behind a full-payload hash. Thirty-nine public/offline
+cases pass. Twelve same-owner/image A/B profiles show 1.75-2.01 control/candidate
+completed public latency ratios, with native event windows kept separate.
+No sibling hardware or kernel-speedup claim is transferred.
+Evidence: benchmarks/baselines/sm120_source_reverse_20261018/README.md.
+
+Current matching-build validation passes 1,754 compiler-route tests with zero
+skips and the CI executed-proof certificate. The owning RTX5070 suite passes
+274 tests with zero skips. These receipts cover this NVIDIA candidate; they
+are not sibling exact-device evidence. All 33 documentation generators and
+Ruff pass. The full WSL CPU lane passes 26,588 tests with 5,719 skips and
+zero failures. A quiet twelve-profile timing repeat passes with stable source,
+compiler and provider hashes; publication remains active.
+
+
+This changes no sibling target's physical admission or exact-device status.
+
+
+Shared semantic changes: Graph matmul inference and legality now preserve
+boolean operand orientations and promote mixed FP32/half results consistently.
+The transpose-type diagnostic is registered. Physical sibling selectors and
+execution envelopes are unchanged; shared shape proof is not device parity.
+
+Follow-up required for an Apple lowering of the new typed scalar Tile
+contract and exact-device proof. No Metal/Apple CPU runtime ABI or physical
+selector changes. NVIDIA NVVM code generation establishes no Apple execution.
+
 ## SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017 — generation-owned outputs
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
@@ -21,7 +83,7 @@ fix and pass after it; the expanded owning/shared lane passes 722 (7 skipped).
 The review CPU repeat passes 26,351 (5,905 skipped) with unchanged code
 hashes, and mypy remains at zero. A quiet post-review public repeat passes
 all twelve numerical/window gates with CUDA/host ratios 0.95-1.06 and unchanged
-native provider/member images. Updated-head CI remains pending. The physical
+native provider/member images. PR982 merged as 767168819 after current-head CI and the complete review audit passed. The physical
 changes are NVIDIA-only; sibling result ownership still requires its own proof.
 
 

@@ -70,6 +70,7 @@
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "NativeStorageJVP.h"
 #include "NativeScaledMatmulProgram.h"
+#include "NativeSM120ReverseProgram.h"
 #include "NativeAttentionProjection.h"
 #include "../../compiler/ir/AttentionADContract.h"
 
@@ -1808,6 +1809,15 @@ public:
 
   void runOnOperation() override {
     auto module = getOperation();
+    bool exportSM120Reverse = module->hasAttr("tessera.native.sm120_reverse_request");
+    std::string sm120OriginalSource;
+    if (exportSM120Reverse) {
+      if (!mlir::isa<mlir::UnitAttr>(module->getAttr("tessera.native.sm120_reverse_request"))) {
+        module.emitError("SM120 reverse request requires a unit marker"); return signalPassFailure();
+      }
+      llvm::raw_string_ostream stream(sm120OriginalSource); module.print(stream); stream.flush();
+      module->removeAttr("tessera.native.sm120_reverse_request");
+    }
     // A bounded symbol-body control_scan already has a proven lowering to one
     // scf.for whose body is inlined and whose stacked stream uses exact tensor
     // slice transposes. Run that normalization as part of paired reverse mode
@@ -1855,7 +1865,7 @@ public:
     // CI cannot see either outcome: its unit lane has no tessera-opt, so the test
     // that covers this skips there.
     const bool wantsProduct =
-        emitStorageChild || exportScaledTranspose || !exportProduct.empty() || !checkpointProduct.empty();
+        emitStorageChild || exportScaledTranspose || exportSM120Reverse || !exportProduct.empty() || !checkpointProduct.empty();
     if (wantsProduct) {
       for (auto fn : targets)
         if (module.lookupSymbol<mlir::func::FuncOp>((fn.getName() + "__bwd").str())) {
@@ -1914,6 +1924,12 @@ public:
     for (auto fn : targets)
       if (failed(buildBackward(fn)))
         return signalPassFailure();
+    if (exportSM120Reverse) {
+      if (emitStorageChild || exportScaledTranspose || !exportProduct.empty() ||
+          !checkpointProduct.empty() || targets.size()!=1 || selectScaledTransposeMember!=-1 ||
+          failed(emitNativeSM120ReverseProgram(module,sm120OriginalSource)))
+        return signalPassFailure();
+    }
     if (!exportProduct.empty() && failed(exportTypedProduct(module,exportProduct)))
       return signalPassFailure();
     if (exportScaledTranspose) {

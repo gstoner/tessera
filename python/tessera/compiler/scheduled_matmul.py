@@ -254,11 +254,14 @@ class ScheduledMatmulArtifact:
         macro_cta_kernels = self.tile_ir.count("tessera_nvidia.macro_cta_matmul")
         typed_mmas = len(re.findall(r"(?m)^\s*%[^=]+ = tile\.mma\b", self.tile_ir))
         if self.target == "nvidia_sm120":
-            producers = int(bool(matmul_kernels)) + int(bool(typed_mmas)) + int(bool(macro_cta_kernels))
-            if producers != 1 or matmul_kernels > 1 or typed_mmas > 1 or macro_cta_kernels > 1:
+            scalar_kernels = self.tile_ir.count("tile.scalar_matmul_kernel")
+            producers = (int(bool(matmul_kernels)) + int(bool(typed_mmas)) +
+                         int(bool(macro_cta_kernels)) + int(bool(scalar_kernels)))
+            if (producers != 1 or matmul_kernels > 1 or typed_mmas > 1 or
+                    macro_cta_kernels > 1 or scalar_kernels > 1):
                 raise ValueError(
                     "SM120 scheduled artifact requires exactly one typed MMA, "
-                    "macro-CTA, or deferred Tile matmul producer"
+                    "macro-CTA, scalar-FMA, or deferred Tile matmul producer"
                 )
         elif matmul_kernels != 1:
             raise ValueError("scheduled matmul artifact requires exactly one Tile launch op")
@@ -652,12 +655,15 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     transpose_a, transpose_b = (op.kwargs.get(name, False) for name in ("transposeA", "transposeB"))
     if type(transpose_a) is not bool or type(transpose_b) is not bool:
         raise ValueError("scheduled matmul transpose flags must be boolean")
-    if (transpose_a or transpose_b) and not nvfp4_scaled:
-        raise ValueError("scheduled matmul does not support transpose")
     args = {arg.name: arg for arg in function.args}
     a_name, b_name = (value.removeprefix("%") for value in op.operands[:2])
     if a_name not in args or b_name not in args:
         raise ValueError("scheduled matmul operands must be function arguments")
+    pair = (args[a_name].ir_type.dtype, args[b_name].ir_type.dtype)
+    scalar_fma = (target == "nvidia_sm120" and op.op_name == "tessera.matmul"
+                  and pair.count("fp32") == 1 and set(pair) <= {"fp32", "fp16", "bf16"})
+    if (transpose_a or transpose_b) and not nvfp4_scaled and not scalar_fma:
+        raise ValueError("scheduled matmul does not support transpose")
 
     def extent(value: object) -> int | None:
         if isinstance(value, (int, str)):
@@ -829,7 +835,25 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             raise ValueError("scheduled matmul requires one named Graph result")
         output_name = function.return_values[0].removeprefix("%")
     function_name = function.name
-    if target == "x86" and (a_dtype, b_dtype, output_dtype) in (("fp32", "fp32", "fp32"), ("bf16", "bf16", "fp32"), ("fp64", "fp64", "fp64")):
+    if scalar_fma:
+        assert a_dtype is not None
+        policy = op.kwargs.get("numeric_policy", {})
+        declared_accum = policy.get("accum", "fp32") if isinstance(policy, dict) else None
+        if (not isinstance(policy, dict) or set(policy) - {"accum"} or
+                not isinstance(declared_accum, str) or declared_accum not in {"fp32", "f32"}):
+            raise ValueError("scalar FMA requires its explicit FP32 accumulation policy")
+        if op.kwargs.get("rhs_storage_order", "row_major") != "row_major":
+            raise ValueError("scalar FMA requires compact physical row-major operands")
+        if (output_dtype not in {"fp32", "fp16", "bf16"} or
+                dynamic_m or dynamic_n or dynamic_k or bias_name or residual_name or
+                activation != "none" or len(op.operands) != 2 or m > 65535 * 16 or
+                n > 2**31 - 1 or k > 2**31 - 1):
+            raise ValueError("scalar FMA requires its static plain mixed-storage contract")
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
+            "nvidia_sm120", "sm_120",
+            {"fp32": "f32", "fp16": "f16", "bf16": "bf16"}[a_dtype],
+            "f32", 16, 8)
+    elif target == "x86" and (a_dtype, b_dtype, output_dtype) in (("fp32", "fp32", "fp32"), ("bf16", "bf16", "fp32"), ("fp64", "fp64", "fp64")):
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "x86",
             "zen5-avx512",
@@ -1126,6 +1150,16 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
             raise ValueError("matmul native frontend role binding disagrees")
         inputs = [by_name[name] for name in roles]
     a, b = inputs[:2]
+    if 'physical_contract = "nvidia_sm120_scalar_fma_v1"' in attrs:
+        def scalar_orientation(name):
+            values = re.findall(r'(?:^|, )' + name + r' = (true|false)(?:,|$)', attrs)
+            if len(values) > 1:
+                raise ValueError("scalar matmul orientation is ambiguous")
+            return values == ["true"]
+        if scalar_orientation("transposeA"):
+            a = (a[0][::-1], a[1])
+        if scalar_orientation("transposeB"):
+            b = (b[0][::-1], b[1])
     if len(a[0]) != 2 or len(b[0]) != 2:
         raise ValueError("matmul native input arity/rank disagrees")
     for actual, bound in zip((*a[0], *b[0], *out_shape), (m, k, k, n, m, n)):

@@ -51,6 +51,7 @@ _BACKEND_MODULES: tuple[tuple[str, str], ...] = (
 #: silently marking a family covered.
 _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
     "matmul": ("scheduled_matmul", "supports_scheduled_matmul"),
+    "scalar_matmul": ("scheduled_matmul", "supports_scheduled_matmul"),
     "attention": ("scheduled_attention", "supports_scheduled_attention"),
     "attention_backward": (
         "scheduled_attention_backward",

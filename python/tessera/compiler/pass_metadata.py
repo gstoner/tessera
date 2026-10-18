@@ -577,12 +577,12 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "one generated forward/backward checkpoint with canonical physical argument order and a native-verified frontend argument permutation hashed into its Schedule contract, "
             "retaining requested Q/K/V and exact-shaped f32 score-bias cotangent selection/order in paired lineage while "
             "the native package exports the complete physical gradient product. "
-            "Optional row_correction checkpoint export retains a static half tensor residual without rounded O, original argument properties, frontend/activity mappings and paired lineage. A distinct backward_rows product consumes that explicit FP32 residual without rounded O or a duplicate dLSE seed; compact physical gradients retain native requested activity. Export alone is not public prepared execution proof."
+            "Optional row_correction checkpoint export retains a static half tensor residual without rounded O, original argument properties, frontend/activity mappings and paired lineage. A distinct backward_rows product consumes that explicit FP32 residual without rounded O or a duplicate dLSE seed; compact physical gradients retain native requested activity. Export alone is not public prepared execution proof. A unit SM120 reverse request outlines the actual static RMSNorm/ReLU source pullback into a mixed contraction and one-result row member, with native SSA lifetimes; outline evidence alone is not composed execution."
         ),
         input_dialects=("tessera", "func", "arith", "scf", "tensor"),
         output_dialects=("cf", "tessera", "tessera_attn", "func", "arith", "scf", "tensor", "gpu", "llvm", "memref", "tile", "math"),
         required_attrs=("tessera.autodiff",),
-        preserved_attrs=("tessera.native.scaled_carrier", "tessera.autodiff.scaled_program", "tessera.autodiff.scaled_program_json",
+        preserved_attrs=("tessera.native.sm120_reverse_program_json", "tessera.native.sm120_row_producer", "tessera.native.scaled_carrier", "tessera.autodiff.scaled_program", "tessera.autodiff.scaled_program_json",
             "tessera.autodiff.cotangent_capture", "tessera.autodiff.scale_adjoint",
             "tessera.autodiff.scaled_member", "tessera.autodiff.scaled_program_witness",
             "tessera.autodiff.product_abi", "tessera.autodiff.product_pair",

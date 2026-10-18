@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-17
+last_updated: 2026-10-18
 audit_role: reference
 ---
 
@@ -20,7 +20,46 @@ remain open. Evidence:
 benchmarks/baselines/gfx1201_kn_quad_transpose_20261017/README.md.
 
 
+## Native paired result delivery — 2026-10-18
+
+PR982 merged as 767168819918fa83e02a4cdf7fa67160869c85ec after all required
+checks on abaf91b72a and a fresh exhaustive review audit. Wrapper pinning and
+read-only output fixes passed 722 affected cases, 26,351 CPU cases and a
+quiet twelve-row numerical/timing repeat. Original member images are unchanged.
+The earlier candidate entries retain their revision-bound evidence below.
+The current named source-VJP increment adds a native mixed contraction and
+row pullback; all five aggregate closures remain open.
+
 # Five compiler slices after PR 892: completion evidence
+
+## Native mixed source pullback candidate — 2026-10-18
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync W11-MIXED-ADJOINT-CONTRACTION-20261018.
+The original static FP16/BF16 RMSNorm/ReLU/plain FP32-output matmul now
+differentiates to a native mixed FP32-cotangent contraction and one-output row
+member through Graph AD/Schedule/Tile/NVIDIA/NVVM, then one native C++ owner.
+Public host/resident VJP and compiler-free portable replay preserve requested
+source roles, FP32 seed values, checked intermediate ownership and producer
+ordering. Seventeen public/device plus twenty-two offline cases pass; earlier
+combined native/package/JVP gates retain their own source-bound receipts.
+
+Twelve counterbalanced same-owner/image profiles reduce completed public
+metadata cost by 1.75-2.01 control/candidate ratios, with separate CUDA stage
+and program windows. The generic reverse envelope, other requested gradients,
+batching/dynamic shapes and final publication gates remain open. No aggregate
+slice closes from this named program.
+Evidence: benchmarks/baselines/sm120_source_reverse_20261018/README.md.
+
+Current matching-build validation passes 1,754 compiler-route tests with zero
+skips and the CI executed-proof certificate. The owning RTX5070 suite passes
+274 tests with zero skips. These receipts cover this NVIDIA candidate; they
+are not sibling exact-device evidence. All 33 documentation generators and
+Ruff pass. The full WSL CPU lane passes 26,588 tests with 5,719 skips and
+zero failures. A quiet twelve-profile timing repeat passes with stable source,
+compiler and provider hashes; publication remains active.
+
+
 
 
 ## Native paired tensor result ownership candidate — 2026-10-17
@@ -28,7 +67,7 @@ benchmarks/baselines/gfx1201_kn_quad_transpose_20261017/README.md.
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
 Synchronization key: SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017.
 
-Current uncommitted SM120 candidate retains native Graph AD/Schedule/Tile/Target
+The initial SM120 candidate checkpoint retained native Graph AD/Schedule/Tile/Target
 images and adds independent FP32 result generations for source/RHS paired JVP.
 Current-source numerical/lifetime cases include compiled FP32 RMSNorm consumers,
 cache eviction, fresh-process replay, context and fork guards, registered

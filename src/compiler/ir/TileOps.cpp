@@ -1372,6 +1372,30 @@ LogicalResult StoreOp::verify() {
   return success();
 }
 
+LogicalResult ScalarMatmulKernelOp::verify() {
+  if (getInputs().size() != 6)
+    return emitOpError("requires A, B, D, M, N, K");
+  for (Value pointer : getInputs().take_front(3))
+    if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
+      return emitOpError("A, B and D must be LLVM pointers");
+  for (Value dimension : getInputs().drop_front(3))
+    if (!dimension.getType().isInteger(64))
+      return emitOpError("M, N and K must be i64");
+  for (StringRef key : {"a_element_type", "b_element_type", "output_element_type"}) {
+    auto type = getOperation()->getAttrOfType<TypeAttr>(key);
+    if (!type || (!type.getValue().isF32() && !type.getValue().isF16() &&
+                  !type.getValue().isBF16()))
+      return emitOpError("requires explicit f32/f16/bf16 operand and output types");
+  }
+  auto accum = getOperation()->getAttrOfType<TypeAttr>("accumulator_type");
+  if (!accum || !accum.getValue().isF32())
+    return emitOpError("ordered scalar contraction requires f32 accumulation");
+  for (StringRef key : {"transpose_a", "transpose_b"})
+    if (!getOperation()->getAttrOfType<BoolAttr>(key))
+      return emitOpError("requires explicit boolean transpose_a and transpose_b");
+  return success();
+}
+
 LogicalResult MatmulKernelOp::verify() {
   // Operand orientation is semantic even before a target lowering runs.
   for (StringRef name : {StringRef("transposeA"), StringRef("transposeB")}) {

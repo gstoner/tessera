@@ -169,8 +169,8 @@ public:
   explicit RowScalarizer(func::FuncOp fn)
       : graph(fn), b(fn.getContext()), loc(fn.getLoc()) {}
   LogicalResult validate() {
-    auto reject = [&]() { return graph.emitError("native row scalarization requires a verified static two-root/two-result explicit-fp32 row graph"); };
-    if (graph.getNumArguments() != 2 || graph.getNumResults() != 2 ||
+    auto reject = [&]() { return graph.emitError("native row scalarization requires a verified static two-root, one-or-two-result explicit-fp32 row graph"); };
+    if (graph.getNumArguments() != 2 || (graph.getNumResults() != 1 && graph.getNumResults() != 2) ||
         !graph.getBody().hasOneBlock()) return reject();
     tensor = dyn_cast<RankedTensorType>(graph.getArgumentTypes()[0]);
     if (!tensor || tensor.getRank() != 2 || !tensor.hasStaticShape() || tensor.getEncoding() ||
@@ -178,7 +178,7 @@ public:
         tensor.getDimSize(0) > INT32_MAX || tensor.getDimSize(1) > INT32_MAX ||
         (!tensor.getElementType().isF16() && !tensor.getElementType().isBF16()) ||
         graph.getArgumentTypes()[1] != tensor || graph.getResultTypes()[0] != tensor ||
-        graph.getResultTypes()[1] != tensor) return reject();
+        llvm::any_of(graph.getResultTypes(), [&](Type result) { return result != tensor; })) return reject();
     for (Operation &op : graph.getBody().front().without_terminator()) {
       StringRef name = op.getName().getStringRef();
       if (op.getNumRegions()) return reject();
@@ -261,16 +261,18 @@ public:
     if (failed(validate())) return failure();
     b.setInsertionPointToEnd(module.getBody());
     auto ptr = LLVM::LLVMPointerType::get(b.getContext());
-    auto fn = func::FuncOp::create(b, loc, "native_row", b.getFunctionType(
-        {ptr, ptr, ptr, ptr, b.getI64Type()}, {}));
+    unsigned buffers = 2 + graph.getNumResults();
+    SmallVector<Type> arguments(buffers, ptr);
+    arguments.push_back(b.getI64Type());
+    auto fn = func::FuncOp::create(b, loc, "native_row", b.getFunctionType(arguments, {}));
     Block *body = fn.addEntryBlock();
     b.setInsertionPointToStart(body);
-    pointers.assign(body->getArguments().begin(), body->getArguments().begin() + 4);
-    row = body->getArgument(4);
+    pointers.assign(body->getArguments().begin(), body->getArguments().begin() + buffers);
+    row = body->getArgument(buffers);
     width = arith::ConstantIntOp::create(b, loc, tensor.getDimSize(1), 64);
     Value rows = arith::ConstantIntOp::create(b, loc, tensor.getDimSize(0), 64);
     // Unsigned test also excludes negative rows before any buffer access.
-    for (unsigned i=0;i<4;++i) {
+    for (unsigned i=0;i<buffers;++i) {
       auto viewType = tile::BufferViewType::get(b.getContext(),tensor.getElementType(),i<2?"read":"write","row_major");
       views.push_back(tile::BufferViewOp::create(b,loc,viewType,pointers[i],rows,width,width));
     }

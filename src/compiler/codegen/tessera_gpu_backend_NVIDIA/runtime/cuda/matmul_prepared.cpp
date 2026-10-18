@@ -1061,7 +1061,9 @@ bool tensorProgramOutputs(TensorProgramOwner &owner,
   return true;
 }
 bool submitTensorProgram(TensorProgramOwner &owner, int repeats=1,
-    float *times=nullptr, bool captured=false, const CUdeviceptr *bindings=nullptr) {
+    float *times=nullptr, bool captured=false, const CUdeviceptr *bindings=nullptr,
+    CUstream resultStream=nullptr) {
+  CUstream stream=resultStream ? resultStream : owner.stream;
   auto address=[&](int64_t buffer) {
     return bindings ? bindings[buffer] : owner.arena->base+owner.offsets[buffer];
   };
@@ -1083,9 +1085,9 @@ bool submitTensorProgram(TensorProgramOwner &owner, int repeats=1,
     }
     auto launch=[&]() {
       return ok(cuLaunchKernel(stage.function,stage.gridX,stage.gridY,1,
-          stage.matmul ? 32 : 128,1,1,0,owner.stream,args,nullptr),"launch tensor program member");
+          stage.matmul ? 32 : 128,1,1,0,stream,args,nullptr),"launch tensor program member");
     };
-    if (times ? !measureLaunches(owner.stream,repeats,captured,launch,&times[i]) : !launch()) return false;
+    if (times ? !measureLaunches(stream,repeats,captured,launch,&times[i]) : !launch()) return false;
   }
   return true;
 }
@@ -1252,3 +1254,5 @@ extern "C" int tessera_nvidia_tensor_program_close(uint64_t handle) {
 }
 
 #include "active_source_owner.inc"
+
+#include "resident_tensor_result.inc"

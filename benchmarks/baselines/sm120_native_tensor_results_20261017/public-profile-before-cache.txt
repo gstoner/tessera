@@ -1,0 +1,48 @@
+host
+         441001 function calls (385001 primitive calls) in 0.230 seconds
+
+   Ordered by: cumulative time
+   List reduced from 200 to 16 due to restriction <16>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      100    0.000    0.000    0.233    0.002 <stdin>:14(invoke)
+      100    0.001    0.000    0.233    0.002 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/jit.py:2918(native_jvp)
+      100    0.005    0.000    0.229    0.002 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/jit.py:2929(_native_jvp_impl)
+      200    0.001    0.000    0.098    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/graph_ir.py:1388(to_mlir)
+      200    0.002    0.000    0.071    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/graph_ir.py:1467(to_mlir)
+      600    0.005    0.000    0.067    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/graph_ir.py:1049(to_mlir)
+      100    0.001    0.000    0.065    0.001 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/frontend_authority.py:286(certify_resident_frontends)
+      600    0.001    0.000    0.055    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/graph_ir.py:766(_loc_suffix)
+      600    0.002    0.000    0.054    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/graph_ir.py:784(_loc_path)
+43900/100    0.019    0.000    0.053    0.001 /usr/lib/python3.14/copy.py:110(deepcopy)
+ 2600/100    0.005    0.000    0.052    0.001 /usr/lib/python3.14/copy.py:228(_reconstruct)
+ 2800/100    0.008    0.000    0.051    0.001 /usr/lib/python3.14/copy.py:198(_deepcopy_dict)
+ 1900/500    0.001    0.000    0.049    0.000 /usr/lib/python3.14/copy.py:172(_deepcopy_list)
+      100    0.016    0.000    0.038    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/prepared_nvidia_active_source.py:222(__call__)
+      600    0.002    0.000    0.027    0.000 /usr/lib/python3.14/pathlib/__init__.py:475(relative_to)
+      200    0.000    0.000    0.025    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/graph_ir.py:1385(verify)
+
+
+cuda
+         466401 function calls (410401 primitive calls) in 0.288 seconds
+
+   Ordered by: cumulative time
+   List reduced from 236 to 16 due to restriction <16>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+      100    0.001    0.000    0.291    0.003 <stdin>:14(invoke)
+      100    0.001    0.000    0.288    0.003 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/jit.py:2918(native_jvp)
+      100    0.006    0.000    0.285    0.003 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/jit.py:2929(_native_jvp_impl)
+      200    0.001    0.000    0.098    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/graph_ir.py:1388(to_mlir)
+      200    0.002    0.000    0.071    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/graph_ir.py:1467(to_mlir)
+      600    0.005    0.000    0.067    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/graph_ir.py:1049(to_mlir)
+      100    0.001    0.000    0.065    0.001 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/frontend_authority.py:286(certify_resident_frontends)
+      600    0.001    0.000    0.055    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/graph_ir.py:766(_loc_suffix)
+      600    0.002    0.000    0.054    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/graph_ir.py:784(_loc_path)
+43900/100    0.019    0.000    0.052    0.001 /usr/lib/python3.14/copy.py:110(deepcopy)
+ 2600/100    0.005    0.000    0.051    0.001 /usr/lib/python3.14/copy.py:228(_reconstruct)
+ 2800/100    0.008    0.000    0.050    0.001 /usr/lib/python3.14/copy.py:198(_deepcopy_dict)
+ 1900/500    0.001    0.000    0.048    0.000 /usr/lib/python3.14/copy.py:172(_deepcopy_list)
+      100    0.012    0.000    0.048    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/compiler/native_tensor_result.py:150(execute)
+      100    0.000    0.000    0.044    0.000 /usr/lib/python3.14/functools.py:1110(__get__)
+      100    0.000    0.000    0.044    0.000 /home/angstorms/scratch/rocm-bf16-parent-view-20261017/python/tessera/runtime.py:258(artifact_hash)

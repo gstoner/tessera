@@ -3,8 +3,53 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-10-17
+last_updated: 2026-10-18
 ---
+
+## SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017 — generation-owned outputs
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017.
+Evidence: benchmarks/baselines/sm120_native_tensor_results_20261017/README.md.
+Contract: docs/spec/ir/sm120_native_tensor_result_contract.md.
+
+Review follow-up on PR982: accepted Mapping/sequence subclasses and
+NativeBufferValue wrappers now participate in native-result pinning. The
+SM120 descriptor launcher also honors CUDA read-only storage for output/inout
+bindings. Twelve regressions reproduce missed pinning/overwrites before the
+fix and pass after it; the expanded owning/shared lane passes 722 (7 skipped).
+The review CPU repeat passes 26,351 (5,905 skipped) with unchanged code
+hashes, and mypy remains at zero. A quiet post-review public repeat passes
+all twelve numerical/window gates with CUDA/host ratios 0.95-1.06 and unchanged
+native provider/member images. Updated-head CI remains pending. The physical
+changes are NVIDIA-only; sibling result ownership still requires its own proof.
+
+
+The current candidate adds optional native CUDA FP32 result generations to
+the existing static FP16/BF16 source-active and RHS-linear paired JVP programs.
+Original native Graph AD/Schedule/Tile/Target/LLVM-PTX images are retained;
+results survive prepared-owner closure/cache eviction and portable replay.
+Current-source RTX5070 focused validation passes 642 tests (7 skips), including
+compiled FP32 RMSNorm consumers, fresh-process replay, context/fork guards,
+pending producers, registered consumer completion and injected event failures.
+Low malformed stream handles now refuse in the native ABI before driver access;
+the packet retains the isolated crash reproductions and fixed regressions.
+
+Repeated parent-artifact serialization/hash work initially made public CUDA
+result calls 15-49 percent slower than host outputs. Immutable placement
+artifact reuse removes that repeated work. Final guarded-provider CUDA/host
+ratios are 0.97-1.10 across six named profiles in both first-arm orders; small
+cases remain slightly slower. No kernel speedup or default promotion is claimed.
+The initial broad CPU run had two integration failures; both focused repairs
+pass 20 tests. The final CPU repeat passes 26,345 (5,905 skipped), compiler-route
+passes 1,629 with zero skips and an execution certificate, and adjacent attention
+passes 48 owning cases. Public CI/review, publication and all five aggregate
+slice closures remain pending.
+
+Shared contracts: hashed result-placement metadata, generation/stream lifetime,
+native result ABI and matching SM120 FP32 norm-member policy consumption.
+Sibling outcomes: Apple GPU/CPU, x86 and ROCm require their own result ownership
+and device proof. No physical schedule or numerical/performance evidence transfers.
 
 ## GFX1201-KN-QUAD-TRANSPOSE-20261017 — native packed LDS candidate
 

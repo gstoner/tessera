@@ -1,0 +1,18 @@
+{
+  "compiler_build_exit": 0,
+  "native_provider_build_exit": 0,
+  "compiler_sha256": "6b47d1ce56f3738d171f6d768998ba0b6cff7864652d9071601cbe6943905d3f",
+  "provider_sha256": "471696d0e90144b045c58fc404059a15ea3d46c200b9beb68c75c2245ac0f31e",
+  "provider_command": "g++ -std=c++17 -O3 -fPIC -shared -pthread -I$CUDA_HOME/include -Isrc/runtime/include src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp -L/usr/lib/wsl/lib -Wl,-rpath,/usr/lib/wsl/lib -lcuda -ldl -o libtessera_nvidia_ptx_guarded.so",
+  "sources_sha256": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "abcb8b5158187a1278513d53d9db16bcf1db77ca716aaa82f713b9af53ea4fc0",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "0e7c9d5b5691d7b1c6969343e1592b28a3d938dec13b8b209479de804ecf44ed",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "653117c39ed91239c9bdf47b88c3fd62b63a761cbc473bf8c1a7f34dce401f1b",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/resident_tensor_result.inc": "295025b1d1fe7801b5ac1c384efc6ec551dac9afae4f32b38fbc4463084b3bb9",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_active_source_program.h": "a170833b3ba65776dea8b521d612c21e377d46b2edd36d4d2a142ac87ede9ae3"
+  },
+  "raw_core_build_log": "compiler-build.txt.raw.gz",
+  "native_build_log": "compiler emitted no output; successful exit recorded by host command",
+  "working_directory": "repository root",
+  "initial_provider_sha256": "6373bdf84bf345e0fba14b448e033f7a046dcc421d093f17e5dada6508ea3a20"
+}

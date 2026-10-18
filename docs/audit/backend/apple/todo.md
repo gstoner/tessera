@@ -3,8 +3,34 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-10-17
+last_updated: 2026-10-18
 ---
+
+## SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017 — generation-owned outputs
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017.
+Evidence: benchmarks/baselines/sm120_native_tensor_results_20261017/README.md.
+Contract: docs/spec/ir/sm120_native_tensor_result_contract.md.
+
+Review follow-up on PR982: accepted Mapping/sequence subclasses and
+NativeBufferValue wrappers now participate in native-result pinning. The
+SM120 descriptor launcher also honors CUDA read-only storage for output/inout
+bindings. Twelve regressions reproduce missed pinning/overwrites before the
+fix and pass after it; the expanded owning/shared lane passes 722 (7 skipped).
+The review CPU repeat passes 26,351 (5,905 skipped) with unchanged code
+hashes, and mypy remains at zero. A quiet post-review public repeat passes
+all twelve numerical/window gates with CUDA/host ratios 0.95-1.06 and unchanged
+native provider/member images. Updated-head CI remains pending. The physical
+changes are NVIDIA-only; sibling result ownership still requires its own proof.
+
+
+Follow-up required for an Apple-owned result lease and Metal completion
+tracking before exposing this execution placement. The shared launch wrapper
+delegates Apple targets to their existing executor; CUDA result placement is
+admitted only for static SM120 tensor JVP. No Apple ABI, numerical lowering or
+physical selector changes. SM120 norm-policy admission is target-gated.
+The RTX5070 packet validates no Apple execution or performance.
 
 ## GFX1201-KN-QUAD-TRANSPOSE-20261017 — native packed LDS candidate
 

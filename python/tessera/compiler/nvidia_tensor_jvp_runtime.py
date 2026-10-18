@@ -83,6 +83,9 @@ def execute(artifact, args):
     metadata = artifact.metadata or {}
     if metadata.get("target") != "nvidia_sm120":
         raise ValueError("paired tensor artifact requires exact nvidia_sm120")
+    placement = metadata.get("result_placement", "host")
+    if type(placement) is not str or placement not in {"host", "cuda"}:
+        raise ValueError("paired tensor result placement differs")
     data = metadata.get("native_program")
     if not isinstance(data, dict):
         raise ValueError("paired tensor artifact requires a program manifest")
@@ -113,7 +116,13 @@ def execute(artifact, args):
             owned = False
         assert owner is not None
         try:
-            outputs = owner(values)
+            if placement == "cuda":
+                from .native_tensor_result import execute as resident_result
+                outputs = resident_result(owner, values)
+            else:
+                outputs = owner(values)
+                owner.receipt["result_placement"] = "host"
+                owner.receipt.pop("result_ownership", None)
             if active:
                 receipts = tuple({
                     "ok": True, "execution_kind": "native_gpu", "compiler_path": path,
@@ -121,6 +130,7 @@ def execute(artifact, args):
                     "native_call_binding": "prepared_cpp_active_source_program",
                     "input_binding": owner.receipt["input_binding"],
                     "root_uploads": owner.receipt["root_uploads"],
+                    "result_placement": placement,
                     "member": step["member"], "image_digest": record["image_digest"],
                     "descriptor_digest": record["member_digest"], "abi": copy.deepcopy(record["abi"]),
                 } for step, record in zip(plan["steps"], data["members"], strict=True))
@@ -131,6 +141,7 @@ def execute(artifact, args):
                     "compiler_path": "nvidia_sm120_tensor_jvp_compiled",
                     "evidence_target": "nvidia_sm120",
                     "native_call_binding": "prepared_cpp_tensor_program",
+                    "result_placement": placement,
                     "member": step["member"],
                     "image_digest": package.image.image_digest,
                     "descriptor_digest": package.descriptor.descriptor_digest,

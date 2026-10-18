@@ -6,21 +6,6 @@ audit_role: reference
 # Integrated compiler engineering log
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -13500,3 +13485,40 @@ MXFP4 M256 attribution/model quality and all five aggregate slices stay open.
 
 Evidence: benchmarks/baselines/gfx1201_kn_quad_transpose_20261017/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-17 — native paired tensor result generations
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: current native-result delivery; sync SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017.
+
+Outcome: The static FP16/BF16 source-active and RHS-linear native paired
+programs return independent CUDA FP32 generations through public JVP and
+serialized replay. Original Graph AD/Schedule/Tile/Target/PTX member images
+are retained. Current-source RTX5070 focused proof passes 642 cases with
+7 optional skips, including compiled FP32 RMSNorm consumers, cache eviction,
+fresh-process replay, context/fork guards and delayed external consumers.
+Native event failure draining and pre-reserved producer waits have fault and
+negative controls. A malformed low stream token crash is fixed in the native
+ABI and retained as an isolated reproduction plus refusal/recovery regression.
+Immutable placement-artifact reuse removes repeated public hash work.
+Final guarded-provider CUDA/host public ratios are 0.97-1.10 across six
+profiles and both first-arm orders; native event timings stay separate.
+
+Remaining: The delivery packet records 26,345 CPU passes, 1,629 compiler-route
+passes with zero skips/certificate, and 48 adjacent owning attention controls.
+This local receipt does not assert public CI/review completion.
+General producer/accumulator reconstruction, mixed/pitched/dynamic roots,
+reverse/composed AD, sibling result ownership and all five aggregate slices
+remain open. No default route or kernel speedup is promoted.
+
+Evidence: benchmarks/baselines/sm120_native_tensor_results_20261017/README.md.
+<!-- entry-fields:end -->
+
+Review follow-up (2026-10-18): accepted NativeBufferValue wrappers, arbitrary
+mappings and sequence subclasses now pin result generations with cycle guards.
+The SM120 descriptor launcher refuses read-only output/inout storage. Twelve
+regressions reproduce the old missing pins/overwrites and pass after the fix.
+The expanded lane passes 722 (7 skipped); CPU passes 26,351 (5,905 skipped) with
+unchanged changed-code hashes and zero-error mypy. Quiet post-review public
+ratios are 0.95-1.06 with unchanged provider and member images. Current-head
+public CI/review is the final delivery gate; this closes no aggregate program.

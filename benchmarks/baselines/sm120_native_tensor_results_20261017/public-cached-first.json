@@ -1,0 +1,962 @@
+{
+  "schema": "sm120.public_native_tensor_results.v1",
+  "scope": "static source-active FP16/BF16 roots; completed public calls; unpooled output generations",
+  "provider_sha256": "6373bdf84bf345e0fba14b448e033f7a046dcc421d093f17e5dada6508ea3a20",
+  "compiler_sha256": "6b47d1ce56f3738d171f6d768998ba0b6cff7864652d9071601cbe6943905d3f",
+  "source_sha256": {
+    "python/tessera/compiler/native_tensor_result.py": "a03b3ac1b8418e41ce2807e090e0c15f8296801b6ee334f7140a737a5b5787c8",
+    "python/tessera/compiler/jit.py": "62a0eabcd2234499a24c9ca506fd298c863f96905d6bd29fd7ad36b02437d1ce",
+    "python/tessera/runtime.py": "c9a0e9dea7078f1a6ad61503df2198ee8d5a4723fb0e13cc210bd373672185e8",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "64287611426290f4af8e00d7c2cf3b80e305687ca605da6630d4e488fa65b0b0",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "653117c39ed91239c9bdf47b88c3fd62b63a761cbc473bf8c1a7f34dce401f1b",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/resident_tensor_result.inc": "b257f427655f8656e1ab67166a744f1998c552ef8481db56c2d921c3a23e5c12"
+  },
+  "rows": [
+    {
+      "storage": "f16",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "first": "host",
+      "inputs": "three resident roots; zero root uploads in both arms",
+      "outputs": {
+        "host": "two completed host arrays",
+        "cuda": "two completed device generations; prior generation release included"
+      },
+      "member_images": [
+        "e54cf4f282cdbc973c96c48dfbedcfb9a12ff233f4d49657067a7f5abc62f4f1",
+        "8ec83d2c5afc14fbf54afac06765688b2fddc86931a283abd5bb5ee1abade26b",
+        "8ec83d2c5afc14fbf54afac06765688b2fddc86931a283abd5bb5ee1abade26b"
+      ],
+      "independent_numerics": "passed outside timing windows",
+      "device_events_control_ms": {
+        "stage_ms": [
+          0.019492000341415405,
+          0.017136000096797943,
+          0.012652000412344933
+        ],
+        "program_ms": 0.04586400091648102
+      },
+      "device_events_comparison": "one unchanged program; no placement kernel-speedup claim",
+      "public_timing": {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": false,
+        "validation_included": false,
+        "calls_per_window": 45,
+        "window_orders": [
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "host",
+            "cuda"
+          ]
+        ],
+        "arms": {
+          "host": {
+            "window_ns": [
+              51254256,
+              50746788,
+              50901884,
+              50235870
+            ],
+            "median_ms_per_call": 1.1294296888888888,
+            "minimum_window_ms": 50.23587,
+            "admissible": true
+          },
+          "cuda": {
+            "window_ns": [
+              53486134,
+              53336559,
+              52400095,
+              52309363
+            ],
+            "median_ms_per_call": 1.1748517111111112,
+            "minimum_window_ms": 52.309363,
+            "admissible": true
+          }
+        }
+      },
+      "cuda_over_host": 1.0402167772541093
+    },
+    {
+      "storage": "f16",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "first": "cuda",
+      "inputs": "three resident roots; zero root uploads in both arms",
+      "outputs": {
+        "host": "two completed host arrays",
+        "cuda": "two completed device generations; prior generation release included"
+      },
+      "member_images": [
+        "e54cf4f282cdbc973c96c48dfbedcfb9a12ff233f4d49657067a7f5abc62f4f1",
+        "8ec83d2c5afc14fbf54afac06765688b2fddc86931a283abd5bb5ee1abade26b",
+        "8ec83d2c5afc14fbf54afac06765688b2fddc86931a283abd5bb5ee1abade26b"
+      ],
+      "independent_numerics": "passed outside timing windows",
+      "device_events_control_ms": {
+        "stage_ms": [
+          0.019492000341415405,
+          0.017136000096797943,
+          0.012652000412344933
+        ],
+        "program_ms": 0.04586400091648102
+      },
+      "device_events_comparison": "one unchanged program; no placement kernel-speedup claim",
+      "public_timing": {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": false,
+        "validation_included": false,
+        "calls_per_window": 45,
+        "window_orders": [
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "cuda",
+            "host"
+          ]
+        ],
+        "arms": {
+          "cuda": {
+            "window_ns": [
+              52806520,
+              52905623,
+              52783189,
+              52920924
+            ],
+            "median_ms_per_call": 1.1745793666666666,
+            "minimum_window_ms": 52.783189,
+            "admissible": true
+          },
+          "host": {
+            "window_ns": [
+              51375199,
+              53122042,
+              51252306,
+              54056193
+            ],
+            "median_ms_per_call": 1.1610804555555556,
+            "minimum_window_ms": 51.252306,
+            "admissible": true
+          }
+        }
+      },
+      "cuda_over_host": 1.0116261634122952
+    },
+    {
+      "storage": "f16",
+      "shape_mnk": [
+        128,
+        128,
+        256
+      ],
+      "first": "host",
+      "inputs": "three resident roots; zero root uploads in both arms",
+      "outputs": {
+        "host": "two completed host arrays",
+        "cuda": "two completed device generations; prior generation release included"
+      },
+      "member_images": [
+        "3d4d5c999384cd95ef56e4ba72a7e56e115d8e2aad7534fa3ad03a0341a6b74c",
+        "f6e4c739bf004e46256cf6b9515820851dd180ea7abc5f9eb67204d8503027f5",
+        "f6e4c739bf004e46256cf6b9515820851dd180ea7abc5f9eb67204d8503027f5"
+      ],
+      "independent_numerics": "passed outside timing windows",
+      "device_events_control_ms": {
+        "stage_ms": [
+          0.12906399369239807,
+          0.008592000231146812,
+          0.012695999816060066
+        ],
+        "program_ms": 0.13762399554252625
+      },
+      "device_events_comparison": "one unchanged program; no placement kernel-speedup claim",
+      "public_timing": {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": false,
+        "validation_included": false,
+        "calls_per_window": 40,
+        "window_orders": [
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "host",
+            "cuda"
+          ]
+        ],
+        "arms": {
+          "host": {
+            "window_ns": [
+              51433080,
+              51479574,
+              51033888,
+              51038007
+            ],
+            "median_ms_per_call": 1.2808885875,
+            "minimum_window_ms": 51.033888,
+            "admissible": true
+          },
+          "cuda": {
+            "window_ns": [
+              52794400,
+              54067543,
+              53388289,
+              52433277
+            ],
+            "median_ms_per_call": 1.3272836125,
+            "minimum_window_ms": 52.433277,
+            "admissible": true
+          }
+        }
+      },
+      "cuda_over_host": 1.036220968359592
+    },
+    {
+      "storage": "f16",
+      "shape_mnk": [
+        128,
+        128,
+        256
+      ],
+      "first": "cuda",
+      "inputs": "three resident roots; zero root uploads in both arms",
+      "outputs": {
+        "host": "two completed host arrays",
+        "cuda": "two completed device generations; prior generation release included"
+      },
+      "member_images": [
+        "3d4d5c999384cd95ef56e4ba72a7e56e115d8e2aad7534fa3ad03a0341a6b74c",
+        "f6e4c739bf004e46256cf6b9515820851dd180ea7abc5f9eb67204d8503027f5",
+        "f6e4c739bf004e46256cf6b9515820851dd180ea7abc5f9eb67204d8503027f5"
+      ],
+      "independent_numerics": "passed outside timing windows",
+      "device_events_control_ms": {
+        "stage_ms": [
+          0.12906399369239807,
+          0.008592000231146812,
+          0.012695999816060066
+        ],
+        "program_ms": 0.13762399554252625
+      },
+      "device_events_comparison": "one unchanged program; no placement kernel-speedup claim",
+      "public_timing": {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": false,
+        "validation_included": false,
+        "calls_per_window": 40,
+        "window_orders": [
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "cuda",
+            "host"
+          ]
+        ],
+        "arms": {
+          "cuda": {
+            "window_ns": [
+              52498347,
+              52870792,
+              52117446,
+              52320991
+            ],
+            "median_ms_per_call": 1.310241725,
+            "minimum_window_ms": 52.117446,
+            "admissible": true
+          },
+          "host": {
+            "window_ns": [
+              50989187,
+              50653633,
+              50336791,
+              54319234
+            ],
+            "median_ms_per_call": 1.27053525,
+            "minimum_window_ms": 50.336791,
+            "admissible": true
+          }
+        }
+      },
+      "cuda_over_host": 1.031251769677386
+    },
+    {
+      "storage": "f16",
+      "shape_mnk": [
+        128,
+        1024,
+        1024
+      ],
+      "first": "host",
+      "inputs": "three resident roots; zero root uploads in both arms",
+      "outputs": {
+        "host": "two completed host arrays",
+        "cuda": "two completed device generations; prior generation release included"
+      },
+      "member_images": [
+        "1b2984dbfee359c07b3b336b393cded44b5e244adba33a0e62021515d0e1b209",
+        "269017d53a78e6d78c2206dcec186a58bda7341ef3dca6552215ddb076e07eaa",
+        "269017d53a78e6d78c2206dcec186a58bda7341ef3dca6552215ddb076e07eaa"
+      ],
+      "independent_numerics": "passed outside timing windows",
+      "device_events_control_ms": {
+        "stage_ms": [
+          0.5378440022468567,
+          0.04413999989628792,
+          0.04473999887704849
+        ],
+        "program_ms": 0.6136040091514587
+      },
+      "device_events_comparison": "one unchanged program; no placement kernel-speedup claim",
+      "public_timing": {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": false,
+        "validation_included": false,
+        "calls_per_window": 26,
+        "window_orders": [
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "host",
+            "cuda"
+          ]
+        ],
+        "arms": {
+          "host": {
+            "window_ns": [
+              50430547,
+              49632387,
+              49897648,
+              50165126
+            ],
+            "median_ms_per_call": 1.9242841153846155,
+            "minimum_window_ms": 49.632387,
+            "admissible": true
+          },
+          "cuda": {
+            "window_ns": [
+              48673854,
+              49547716,
+              48170576,
+              48973805
+            ],
+            "median_ms_per_call": 1.8778395961538463,
+            "minimum_window_ms": 48.170576,
+            "admissible": true
+          }
+        }
+      },
+      "cuda_over_host": 0.9758640011319295
+    },
+    {
+      "storage": "f16",
+      "shape_mnk": [
+        128,
+        1024,
+        1024
+      ],
+      "first": "cuda",
+      "inputs": "three resident roots; zero root uploads in both arms",
+      "outputs": {
+        "host": "two completed host arrays",
+        "cuda": "two completed device generations; prior generation release included"
+      },
+      "member_images": [
+        "1b2984dbfee359c07b3b336b393cded44b5e244adba33a0e62021515d0e1b209",
+        "269017d53a78e6d78c2206dcec186a58bda7341ef3dca6552215ddb076e07eaa",
+        "269017d53a78e6d78c2206dcec186a58bda7341ef3dca6552215ddb076e07eaa"
+      ],
+      "independent_numerics": "passed outside timing windows",
+      "device_events_control_ms": {
+        "stage_ms": [
+          0.5378440022468567,
+          0.04413999989628792,
+          0.04473999887704849
+        ],
+        "program_ms": 0.6136040091514587
+      },
+      "device_events_comparison": "one unchanged program; no placement kernel-speedup claim",
+      "public_timing": {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": false,
+        "validation_included": false,
+        "calls_per_window": 27,
+        "window_orders": [
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "cuda",
+            "host"
+          ]
+        ],
+        "arms": {
+          "cuda": {
+            "window_ns": [
+              50035044,
+              50803128,
+              51359678,
+              50534441
+            ],
+            "median_ms_per_call": 1.8766216481481481,
+            "minimum_window_ms": 50.035044,
+            "admissible": true
+          },
+          "host": {
+            "window_ns": [
+              52086563,
+              51339829,
+              52115826,
+              52889232
+            ],
+            "median_ms_per_call": 1.9296738703703704,
+            "minimum_window_ms": 51.339829,
+            "admissible": true
+          }
+        }
+      },
+      "cuda_over_host": 0.9725071562418784
+    },
+    {
+      "storage": "bf16",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "first": "host",
+      "inputs": "three resident roots; zero root uploads in both arms",
+      "outputs": {
+        "host": "two completed host arrays",
+        "cuda": "two completed device generations; prior generation release included"
+      },
+      "member_images": [
+        "a405ff89efebbf9a06a9dbc63f39d7e985bcb2741860391ec86aebc50ca29745",
+        "8024a7deec129a6e77ed0dd338085589f6ae8507d96a69a90ebdbfbbd96c1460",
+        "8024a7deec129a6e77ed0dd338085589f6ae8507d96a69a90ebdbfbbd96c1460"
+      ],
+      "independent_numerics": "passed outside timing windows",
+      "device_events_control_ms": {
+        "stage_ms": [
+          0.009184000082314014,
+          0.008204000070691109,
+          0.010160000063478947
+        ],
+        "program_ms": 0.034779999405145645
+      },
+      "device_events_comparison": "one unchanged program; no placement kernel-speedup claim",
+      "public_timing": {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": false,
+        "validation_included": false,
+        "calls_per_window": 43,
+        "window_orders": [
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "host",
+            "cuda"
+          ]
+        ],
+        "arms": {
+          "host": {
+            "window_ns": [
+              48733396,
+              48465137,
+              48372034,
+              52132836
+            ],
+            "median_ms_per_call": 1.1302155,
+            "minimum_window_ms": 48.372034,
+            "admissible": true
+          },
+          "cuda": {
+            "window_ns": [
+              51074649,
+              51548405,
+              51725731,
+              52103304
+            ],
+            "median_ms_per_call": 1.200862046511628,
+            "minimum_window_ms": 51.074649,
+            "admissible": true
+          }
+        }
+      },
+      "cuda_over_host": 1.062507147098609
+    },
+    {
+      "storage": "bf16",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "first": "cuda",
+      "inputs": "three resident roots; zero root uploads in both arms",
+      "outputs": {
+        "host": "two completed host arrays",
+        "cuda": "two completed device generations; prior generation release included"
+      },
+      "member_images": [
+        "a405ff89efebbf9a06a9dbc63f39d7e985bcb2741860391ec86aebc50ca29745",
+        "8024a7deec129a6e77ed0dd338085589f6ae8507d96a69a90ebdbfbbd96c1460",
+        "8024a7deec129a6e77ed0dd338085589f6ae8507d96a69a90ebdbfbbd96c1460"
+      ],
+      "independent_numerics": "passed outside timing windows",
+      "device_events_control_ms": {
+        "stage_ms": [
+          0.009184000082314014,
+          0.008204000070691109,
+          0.010160000063478947
+        ],
+        "program_ms": 0.034779999405145645
+      },
+      "device_events_comparison": "one unchanged program; no placement kernel-speedup claim",
+      "public_timing": {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": false,
+        "validation_included": false,
+        "calls_per_window": 45,
+        "window_orders": [
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "cuda",
+            "host"
+          ]
+        ],
+        "arms": {
+          "cuda": {
+            "window_ns": [
+              52678626,
+              53050237,
+              55890929,
+              54241279
+            ],
+            "median_ms_per_call": 1.1921279555555557,
+            "minimum_window_ms": 52.678626,
+            "admissible": true
+          },
+          "host": {
+            "window_ns": [
+              50873951,
+              50511600,
+              55650900,
+              51395721
+            ],
+            "median_ms_per_call": 1.1363296888888887,
+            "minimum_window_ms": 50.5116,
+            "admissible": true
+          }
+        }
+      },
+      "cuda_over_host": 1.049103941586906
+    },
+    {
+      "storage": "bf16",
+      "shape_mnk": [
+        128,
+        128,
+        256
+      ],
+      "first": "host",
+      "inputs": "three resident roots; zero root uploads in both arms",
+      "outputs": {
+        "host": "two completed host arrays",
+        "cuda": "two completed device generations; prior generation release included"
+      },
+      "member_images": [
+        "008d4dcfc6710eb1fc954e260e4c225da61ae57157e35f7317ab838c8a6ec9cd",
+        "59c600d56b4e9fff8f2f686834ce95daceb7cf4d6ac09e2609878515a4cdb21a",
+        "59c600d56b4e9fff8f2f686834ce95daceb7cf4d6ac09e2609878515a4cdb21a"
+      ],
+      "independent_numerics": "passed outside timing windows",
+      "device_events_control_ms": {
+        "stage_ms": [
+          0.12837600708007812,
+          0.007387999910861254,
+          0.016680000349879265
+        ],
+        "program_ms": 0.13740800321102142
+      },
+      "device_events_comparison": "one unchanged program; no placement kernel-speedup claim",
+      "public_timing": {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": false,
+        "validation_included": false,
+        "calls_per_window": 40,
+        "window_orders": [
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "host",
+            "cuda"
+          ]
+        ],
+        "arms": {
+          "host": {
+            "window_ns": [
+              51409042,
+              52955806,
+              52123846,
+              53260716
+            ],
+            "median_ms_per_call": 1.31349565,
+            "minimum_window_ms": 51.409042,
+            "admissible": true
+          },
+          "cuda": {
+            "window_ns": [
+              64375316,
+              54153906,
+              54443407,
+              59626859
+            ],
+            "median_ms_per_call": 1.425878325,
+            "minimum_window_ms": 54.153906,
+            "admissible": true
+          }
+        }
+      },
+      "cuda_over_host": 1.085559990244353
+    },
+    {
+      "storage": "bf16",
+      "shape_mnk": [
+        128,
+        128,
+        256
+      ],
+      "first": "cuda",
+      "inputs": "three resident roots; zero root uploads in both arms",
+      "outputs": {
+        "host": "two completed host arrays",
+        "cuda": "two completed device generations; prior generation release included"
+      },
+      "member_images": [
+        "008d4dcfc6710eb1fc954e260e4c225da61ae57157e35f7317ab838c8a6ec9cd",
+        "59c600d56b4e9fff8f2f686834ce95daceb7cf4d6ac09e2609878515a4cdb21a",
+        "59c600d56b4e9fff8f2f686834ce95daceb7cf4d6ac09e2609878515a4cdb21a"
+      ],
+      "independent_numerics": "passed outside timing windows",
+      "device_events_control_ms": {
+        "stage_ms": [
+          0.12837600708007812,
+          0.007387999910861254,
+          0.016680000349879265
+        ],
+        "program_ms": 0.13740800321102142
+      },
+      "device_events_comparison": "one unchanged program; no placement kernel-speedup claim",
+      "public_timing": {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": false,
+        "validation_included": false,
+        "calls_per_window": 39,
+        "window_orders": [
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "cuda",
+            "host"
+          ]
+        ],
+        "arms": {
+          "cuda": {
+            "window_ns": [
+              52846860,
+              53222324,
+              53376900,
+              52511258
+            ],
+            "median_ms_per_call": 1.3598613333333334,
+            "minimum_window_ms": 52.511258,
+            "admissible": true
+          },
+          "host": {
+            "window_ns": [
+              50817209,
+              51028298,
+              50920223,
+              51455491
+            ],
+            "median_ms_per_call": 1.3070323205128205,
+            "minimum_window_ms": 50.817209,
+            "admissible": true
+          }
+        }
+      },
+      "cuda_over_host": 1.0404190562019042
+    },
+    {
+      "storage": "bf16",
+      "shape_mnk": [
+        128,
+        1024,
+        1024
+      ],
+      "first": "host",
+      "inputs": "three resident roots; zero root uploads in both arms",
+      "outputs": {
+        "host": "two completed host arrays",
+        "cuda": "two completed device generations; prior generation release included"
+      },
+      "member_images": [
+        "c059e0f760897fc1492f263d105a3488d30e7cbe4cfca8f90681733311305723",
+        "e89c2e5da3da5076e9a073233f9015a58a67d69f5cf79ba2f53aca582c8ba678",
+        "e89c2e5da3da5076e9a073233f9015a58a67d69f5cf79ba2f53aca582c8ba678"
+      ],
+      "independent_numerics": "passed outside timing windows",
+      "device_events_control_ms": {
+        "stage_ms": [
+          0.5257599949836731,
+          0.0529399998486042,
+          0.04809999838471413
+        ],
+        "program_ms": 0.6388199925422668
+      },
+      "device_events_comparison": "one unchanged program; no placement kernel-speedup claim",
+      "public_timing": {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": false,
+        "validation_included": false,
+        "calls_per_window": 25,
+        "window_orders": [
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "host",
+            "cuda"
+          ]
+        ],
+        "arms": {
+          "host": {
+            "window_ns": [
+              48674864,
+              47429618,
+              47196140,
+              47267064
+            ],
+            "median_ms_per_call": 1.89393364,
+            "minimum_window_ms": 47.19614,
+            "admissible": true
+          },
+          "cuda": {
+            "window_ns": [
+              48012538,
+              45798952,
+              46137485,
+              45841022
+            ],
+            "median_ms_per_call": 1.83957014,
+            "minimum_window_ms": 45.798952,
+            "admissible": true
+          }
+        }
+      },
+      "cuda_over_host": 0.9712959847949055
+    },
+    {
+      "storage": "bf16",
+      "shape_mnk": [
+        128,
+        1024,
+        1024
+      ],
+      "first": "cuda",
+      "inputs": "three resident roots; zero root uploads in both arms",
+      "outputs": {
+        "host": "two completed host arrays",
+        "cuda": "two completed device generations; prior generation release included"
+      },
+      "member_images": [
+        "c059e0f760897fc1492f263d105a3488d30e7cbe4cfca8f90681733311305723",
+        "e89c2e5da3da5076e9a073233f9015a58a67d69f5cf79ba2f53aca582c8ba678",
+        "e89c2e5da3da5076e9a073233f9015a58a67d69f5cf79ba2f53aca582c8ba678"
+      ],
+      "independent_numerics": "passed outside timing windows",
+      "device_events_control_ms": {
+        "stage_ms": [
+          0.5257599949836731,
+          0.0529399998486042,
+          0.04809999838471413
+        ],
+        "program_ms": 0.6388199925422668
+      },
+      "device_events_comparison": "one unchanged program; no placement kernel-speedup claim",
+      "public_timing": {
+        "domain": "completed public runtime calls including staging, transfers and completion",
+        "compile_included": false,
+        "validation_included": false,
+        "calls_per_window": 27,
+        "window_orders": [
+          [
+            "cuda",
+            "host"
+          ],
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "host",
+            "cuda"
+          ],
+          [
+            "cuda",
+            "host"
+          ]
+        ],
+        "arms": {
+          "cuda": {
+            "window_ns": [
+              48819199,
+              49716691,
+              49293945,
+              48671073
+            ],
+            "median_ms_per_call": 1.8169100740740742,
+            "minimum_window_ms": 48.671073,
+            "admissible": true
+          },
+          "host": {
+            "window_ns": [
+              50584200,
+              50007829,
+              50661752,
+              50386803
+            ],
+            "median_ms_per_call": 1.869833388888889,
+            "minimum_window_ms": 50.007829,
+            "admissible": true
+          }
+        }
+      },
+      "cuda_over_host": 0.9716962403552633
+    }
+  ],
+  "rejected_windows": [],
+  "device": {
+    "name": "NVIDIA GeForce RTX 5070",
+    "uuid_bytes": "cba12639821a7a104cd3f918f9c0a545",
+    "ordinal": 0,
+    "compute_capability": [
+      12,
+      0
+    ]
+  }
+}

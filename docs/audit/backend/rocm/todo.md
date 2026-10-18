@@ -1,9 +1,35 @@
 ---
-last_updated: 2026-10-17
+last_updated: 2026-10-18
 audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+
+## SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017 — generation-owned outputs
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017.
+Evidence: benchmarks/baselines/sm120_native_tensor_results_20261017/README.md.
+Contract: docs/spec/ir/sm120_native_tensor_result_contract.md.
+
+Review follow-up on PR982: accepted Mapping/sequence subclasses and
+NativeBufferValue wrappers now participate in native-result pinning. The
+SM120 descriptor launcher also honors CUDA read-only storage for output/inout
+bindings. Twelve regressions reproduce missed pinning/overwrites before the
+fix and pass after it; the expanded owning/shared lane passes 722 (7 skipped).
+The review CPU repeat passes 26,351 (5,905 skipped) with unchanged code
+hashes, and mypy remains at zero. A quiet post-review public repeat passes
+all twelve numerical/window gates with CUDA/host ratios 0.95-1.06 and unchanged
+native provider/member images. Updated-head CI remains pending. The physical
+changes are NVIDIA-only; sibling result ownership still requires its own proof.
+
+
+Follow-up required for HIP result generations on each owning architecture.
+The shared launch wrapper delegates ROCm targets to their existing executor;
+CUDA result placement is admitted only for static SM120 tensor JVP. AMD norm
+policy, WMMA/FP8/NVFP4 schedules and runtime ABIs receive no new admission.
+In particular gfx1151 has no FP8 WMMA; no gfx1201 or SM120 evidence transfers
+to it. Existing ROCm numerical/performance obligations remain open.
 
 ## GFX1201-KN-QUAD-TRANSPOSE-20261017 — native packed LDS candidate
 

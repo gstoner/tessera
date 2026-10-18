@@ -1,0 +1,17 @@
+{
+  "benchmarks/nvidia/benchmark_native_tensor_results.py": "9f38521df6f659f7b62e7e2d4b7a244946bb069b85449abfa9deaf170a7bc179",
+  "python/tessera/compiler/jit.py": "b91a194b240b979240dd3abcd3c940ddacad42caa7aef8d164020f780102780b",
+  "python/tessera/compiler/native_tensor_result.py": "a03b3ac1b8418e41ce2807e090e0c15f8296801b6ee334f7140a737a5b5787c8",
+  "python/tessera/compiler/nvidia_tensor_jvp_runtime.py": "69e08d6f5e2931cdd2fd0f46e587f4369923b56eda9a14abb5e0a32195e265af",
+  "python/tessera/runtime.py": "87ac27a003068275fc7d1f5044660a43719759696e967097347dd691c990b856",
+  "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "653117c39ed91239c9bdf47b88c3fd62b63a761cbc473bf8c1a7f34dce401f1b",
+  "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/resident_tensor_result.inc": "295025b1d1fe7801b5ac1c384efc6ec551dac9afae4f32b38fbc4463084b3bb9",
+  "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_active_source_program.h": "a170833b3ba65776dea8b521d612c21e377d46b2edd36d4d2a142ac87ede9ae3",
+  "src/compiler/programming_model/lib/PMPasses.cpp": "64287611426290f4af8e00d7c2cf3b80e305687ca605da6630d4e488fa65b0b0",
+  "tests/device/nvidia/test_native_tensor_result.py": "87b1264f2237fb263e834c5603c230dc1fedbc550a5400a38167ea3561c23f66",
+  "tests/device/nvidia/test_native_tensor_result_faults.py": "e037c0b68ec38570e8b2eecba5a9fb9c216886f0aa158308a398e5e29b074683",
+  "tests/device/nvidia/test_native_tensor_result_ordering.py": "d99e2eafd91a8beb0a1a012c9c3a91617d71a1265a1c7efec5fb03dbea36f424",
+  "tests/unit/test_nvidia_norm_attention_schedule.py": "444423ed13e3cd8bbeae9ef50c870d8a51d83726f7328e2b03348864877c3371",
+  "tests/unit/test_resident_active_source_frontend.py": "ab69bc1822fd624c5d93d58b27d1519776cac8872c26d83f1e9a8a6df8d0d606",
+  "tests/unit/test_runtime_execution_matrix.py": "c3c82bbdde8bdd9876af7242f890f2f800d6a94decffbe3e929ef429b5abb892"
+}

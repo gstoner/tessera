@@ -2916,7 +2916,19 @@ class JitFn:
                 tuple(outputs[count + i] for i in request.wrt_indices))
 
     def native_jvp(
-        self, *args: Any, tangents: Any, sequence_bounds: Any = None, **kwargs: Any
+        self, *args: Any, tangents: Any, sequence_bounds: Any = None,
+        result_placement: str = "host", **kwargs: Any,
+    ) -> tuple[Any, Any]:
+        """Execute native JVP; cuda placement returns independently owned device results."""
+        from .native_tensor_result import input_scope
+        with input_scope((args, kwargs, tangents)):
+            return self._native_jvp_impl(
+                *args, tangents=tangents, sequence_bounds=sequence_bounds,
+                result_placement=result_placement, **kwargs)
+
+    def _native_jvp_impl(
+        self, *args: Any, tangents: Any, sequence_bounds: Any = None,
+        result_placement: str = "host", **kwargs: Any,
     ) -> tuple[Any, Any]:
         """Execute a compiler-owned native primal/JVP product package.
 
@@ -2933,6 +2945,11 @@ class JitFn:
 
         self.last_jvp_execution = None
         self._native_jvp_artifact = None
+        if type(result_placement) is not str or result_placement not in {"host", "cuda"}:
+            raise TesseraJitError("native JVP result placement must be host or cuda")
+        if result_placement == "cuda" and (
+                normalize_target_kind(self.target) != "nvidia_sm120" or sequence_bounds is not None):
+            raise TesseraJitError("CUDA result placement requires a static SM120 paired tensor program")
         prepared_pid = getattr(self, "_native_prepared_jvp_pid", None)
         if prepared_pid is not None and prepared_pid != os.getpid():
             raise RuntimeError("retained native JVP cannot cross fork")
@@ -3001,8 +3018,13 @@ class JitFn:
             resident_source_active=active_source_candidate(traced_module,request.wrt_indices)
             resident_attention=(len(graph_ops)==1 and graph_ops[0].op_name in {
                 "tessera.flash_attn","tessera.attention"})
-            if not resident_source_active and not resident_attention:
-                raise TesseraJitError("resident JVP requires native attention or an admitted source-active Graph")
+            if result_placement == "cuda" and resident_attention:
+                raise TesseraJitError("CUDA result placement requires a paired tensor producer program")
+            from .prepared_nvidia_tensor_jvp import candidate as rhs_tensor_candidate
+            resident_rhs = (result_placement == "cuda" and
+                            rhs_tensor_candidate(traced_module, request.wrt_indices))
+            if not resident_source_active and not resident_attention and not resident_rhs:
+                raise TesseraJitError("resident JVP requires native attention or an admitted paired tensor Graph")
             if resident_attention and any(
                     dtype.name not in ("float16","bfloat16","float32")
                     for _,dtype in (*resident_specs,*tangent_specs)):
@@ -3046,7 +3068,7 @@ class JitFn:
         # The scaled program's checked native owner materializes primal and
         # tangent bytes. Keep alias views at this binding layer; other family
         # ABIs retain their existing compact host-frame contract.
-        if resident_source_active:
+        if resident_source_active or (resident_frame and not resident_attention):
             primal_inputs=list(ordered)
             tangent_inputs=dict(zip(request.wrt_indices,tangent_values,strict=True))
         elif resident_attention:
@@ -3065,9 +3087,9 @@ class JitFn:
                 for index, value in zip(request.wrt_indices, tangent_values)
             }
         for ordinal,(index,tangent) in enumerate(tangent_inputs.items()):
-            primal_shape=(resident_specs[index][0] if resident_source_active
+            primal_shape=(resident_specs[index][0] if resident_frame and not resident_attention
                           else primal_inputs[index].shape) if index < len(primal_inputs) else None
-            tangent_shape=tangent_specs[ordinal][0] if resident_source_active else tangent.shape
+            tangent_shape=tangent_specs[ordinal][0] if resident_frame and not resident_attention else tangent.shape
             if primal_shape is None or primal_shape != tangent_shape:
                 raise TesseraJitError("native JVP primal and tangent shapes must match")
         if len(graph_ops)>1 and normalize_target_kind(self.target)=="nvidia_sm120" and not resident_attention:
@@ -3090,14 +3112,32 @@ class JitFn:
                                 retired=next(iter(self._native_prepared_jvp_calls))
                                 self._native_prepared_jvp_calls.pop(retired).close()
                             self._native_prepared_jvp_calls[key]=owner
-                        outputs=owner((*primal_inputs,*(tangent_inputs[i] for i in request.wrt_indices)))
+                        values=(*primal_inputs,*(tangent_inputs[i] for i in request.wrt_indices))
+                        if result_placement == "cuda":
+                            from .native_tensor_result import execute as resident_result
+                            outputs=resident_result(owner, values)
+                        else:
+                            outputs=owner(values)
+                            owner.receipt["result_placement"]="host"
+                            owner.receipt.pop("result_ownership", None)
                         from .nvidia_tensor_jvp_runtime import runtime_artifact
                         artifact = getattr(owner, "_public_runtime_artifact", None)
-                        self._native_jvp_artifact = artifact if artifact is not None else runtime_artifact(owner)
-                        self.last_jvp_execution={**owner.receipt,"frontend_authority":"tracer"}
+                        artifact = artifact if artifact is not None else runtime_artifact(owner)
+                        if result_placement == "cuda":
+                            placed = getattr(owner, "_public_cuda_runtime_artifact", None)
+                            if placed is None:
+                                placed = replace(artifact, metadata={
+                                    **(artifact.metadata or {}), "result_placement": "cuda"})
+                                setattr(owner, "_public_cuda_runtime_artifact", placed)
+                            artifact = placed
+                        self._native_jvp_artifact = artifact
+                        self.last_jvp_execution={**owner.receipt,"artifact_hash":artifact.artifact_hash,
+                                                 "frontend_authority":"tracer"}
                         return outputs
                 except (ValueError,RuntimeError) as exc:
                     raise TesseraJitError(str(exc)) from exc
+        if result_placement == "cuda":
+            raise TesseraJitError("CUDA result placement requires an admitted paired tensor Graph")
         if len(graph_ops) != 1:
             from .rocm_typed_scaled_native import supports_composed_scale_jvp
             if (normalize_target_kind(self.target) not in {"rocm", "rocm_gfx1201"}

@@ -51,3 +51,25 @@ extern "C" int tessera_nvidia_active_source_program_profile_resident_inputs(
     uint64_t handle,const TesseraNvidiaMatmulHostView *views,size_t view_count,
     const uint64_t *producer_streams,size_t producer_count,
     int repeats,int captured,float *stage_ms,size_t stage_count,float *program_ms);
+
+// Additive generation-owned result transport for validated source/RHS programs.
+// Reserve allocates private outputs and a stream before submission. Query/read
+// admit completed generations only. Submission accepts either three host views
+// (null producer_streams, zero count) or three resident CUDA views with explicit
+// producer streams. Completed generations are immutable and independently owned.
+extern "C" int tessera_nvidia_tensor_program_reserve_result(
+    uint64_t program, uint64_t *result);
+extern "C" int tessera_nvidia_tensor_program_submit_result(
+    uint64_t program, uint64_t result, const TesseraNvidiaMatmulHostView *views,
+    size_t view_count, const uint64_t *producer_streams, size_t producer_count);
+extern "C" int tessera_nvidia_tensor_result_query(
+    uint64_t result, size_t ordinal, TesseraNvidiaMatmulHostView *view,
+    uint64_t *stream, uint64_t *context_identity);
+extern "C" int tessera_nvidia_tensor_result_read(
+    uint64_t result, size_t ordinal, const TesseraNvidiaMatmulHostView *host_output);
+// Record after enqueueing an external consumer's final read. Close waits these
+// events, restores the recorded CUDA context for cleanup, and preserves the
+// calling thread's context. No device pointers are serialized in artifacts.
+extern "C" int tessera_nvidia_tensor_result_record_consumer(
+    uint64_t result, uint64_t consumer_stream);
+extern "C" int tessera_nvidia_tensor_result_close(uint64_t result);

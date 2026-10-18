@@ -3364,6 +3364,10 @@ def _submit_nvidia_sm120_native(
         if (not all(isinstance(interface, Mapping) for interface in cuda_interfaces)
                 or stream is None):
             raise RuntimeError("resident SM120 packages require all CUDA buffers and an explicit stream")
+        for binding, interface in zip(ordered_buffers, cuda_interfaces, strict=True):
+            if (binding.direction in {"output", "inout"} and
+                    bool(cast(Mapping[str, Any], interface)["data"][1])):
+                raise RuntimeError("resident SM120 output requires writable CUDA storage")
         is_rmsnorm = entry.startswith("tessera_tile_norm_")
         is_resident_activation = descriptor.abi_id in activation_storage_abis.values()
         is_resident_softmax = descriptor.abi_id in softmax_storage_abis.values()
@@ -36039,6 +36043,28 @@ def _physical_execution_attestation(
 
 
 def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, Any]:
+    """Launch a checked artifact while pinning owned native input generations."""
+    artifact = load_artifact(kernel)
+    target = artifact.native_image.target if artifact.native_image is not None else (artifact.metadata or {}).get("target")
+    if target != "nvidia_sm120":
+        return _launch_with_owned_inputs(artifact, args, stream)
+    from .compiler.native_tensor_result import input_scope
+    receipt = None
+    try:
+        with input_scope(args, stream):
+            receipt = _launch_with_owned_inputs(artifact, args, stream)
+        return receipt
+    except (ValueError, RuntimeError) as exc:
+        executed = receipt is not None and receipt.get("ok")
+        return {"ok": False, "runtime_status": "device_error" if executed else "invalid_artifact",
+                "compiler_path": "canonical_native_descriptor",
+                "execution_kind": "native_gpu" if executed else "artifact_only",
+                "artifact_hash": artifact.artifact_hash,
+                "diagnostic_code": "E_LAUNCH_BINDING_MISMATCH",
+                "reason": str(exc)}
+
+
+def _launch_with_owned_inputs(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, Any]:
     """Launch executable CPU artifacts or return a structured non-success result."""
     global _last_profile
     start_ns = time.perf_counter_ns()

@@ -22,36 +22,36 @@ added. No gfx1151/gfx1200 or sibling device proof transfers.
 
 Eligibility: gfx1201 KN, N-vector count a power of two <=8, Kstage divisible
 by four, thread count divisible by four times N-vector count, and aligned LDS
-stride. For old byte destination d and local quad coordinate q=(Krow mod4),
+stride. For old byte destination d and local quad coordinate q=(Krow mod 4),
 new destination is d+q*(4*stride-1); four columns remain spaced by stride.
 
 ## Numerical and instruction evidence
 
 Normal CMake core/ROCm targets rebuild successfully. The 42 owning tests
 comprise 40 numerical cases and two retained 64 KiB capacity refusals:
-K16/32/64/128 stages, N-vector groups1/2/4/8, non-power-of-two and over-wide
+K16/32/64/128 stages, N-vector groups 1/2/4/8, non-power-of-two and over-wide
 scalar fallback, tiny/ragged columns, FP32/BF16 outputs, phases/padding,
-prefetch0/1/2 and static/projected image reuse. The initial new test omitted
+prefetch 0/1/2 and static/projected image reuse. The initial new test omitted
 capacity expectations for two oversized configurations; its red log is
 retained, and the existing compiler capacity gate was not changed.
 
 A production 200x8192x1024, 128x64/eight-wave profile changes 24 static
 ds_store_b8 sites to four ds_store_2addr_b32 sites, with eight DPP exchanges
-and16 V_PERM sites. Its32 WMMA sites,16 paired LDS fragment reads, two barrier
-signals/two waits,191 registers, zero scratch,27648 LDS bytes and live occupancy
-of two blocks at256 threads are unchanged. These are static instruction sites
+and 16 V_PERM sites. Its 32 WMMA sites, 16 paired LDS fragment reads, two barrier
+signals/two waits, 191 registers, zero scratch, 27,648 LDS bytes and live occupancy
+of two blocks at 256 threads are unchanged. These are static instruction sites
 and live HIP resource queries, not dynamic counter attribution.
 Two unsupported geometry pairs have identical complete image hashes.
 
-The earlier isolated mechanism diagnostics cover128000 host-model vectors,
-155648 active/90112 inactive wave words, and768 masked multi-wave LDS
-configurations/25067520 bytes. They support mechanism attribution, not a
+The earlier isolated mechanism diagnostics cover 128,000 host-model vectors,
+155,648 active/90,112 inactive wave words, and 768 masked multi-wave LDS
+configurations/25,067,520 bytes. They support mechanism attribution, not a
 standalone production performance claim.
 
 ## Paired timings
 
 Source e0cae0944 is clean and unchanged across the measured runs. Both arm and
-shape order are reversed between trials. Each arm has10 admitted >=10ms
+shape order are reversed between trials. Each arm has10 admitted >=10 ms
 device-clock windows, cross-checked by HIP events. Separate completed-public
 windows include staging/transfers/completion with equal calls per paired
 window; numerical checks are outside those windows.
@@ -64,15 +64,15 @@ window; numerical checks are outside those windows.
 | 200,2048,2048 | 0.891-0.891 |
 | 256,4096,4096 | 0.814-0.814 |
 
-The four K1024-4096 profiles improve9-19percent in this forced matched
-physical schedule. The forced K128 LDS profile regresses3-4percent; it is
+The four K=1024-4096 profiles improve 9-19 percent in this forced matched
+physical schedule. The forced K128 LDS profile regresses 3-4 percent; it is
 outside the existing production KN LDS Schedule envelope. Schedule defaults
 remain unchanged. Completed-public costs have no consistent gain, so no
 end-to-end speedup is claimed.
 
 A separate matched BF16 AITER packet records candidate/AITER ratios
 1.108,1.218,1.112 for the three M200 rows; control/AITER is1.342,1.378,1.293.
-The remaining KN gap is11-22percent. AITER consumes its native transposed
+The remaining KN gap is 11-22 percent. AITER consumes its native transposed
 weight layout; Tessera KN consumes compact [K,N]. The separate NK FP32 arm
 is retained in raw data and is not a matched BF16 denominator.
 
@@ -83,7 +83,7 @@ unchanged controls, not an MXFP4 improvement or model-quality acceptance.
 
 ## Reproduction and remaining gates
 
-Use matching assertions-enabled LLVM/MLIR23.1.1 core/ROCm tools on exact
+Use matching assertions-enabled LLVM/MLIR 23.1.1 core/ROCm tools on exact
 gfx1201. Keep the merged-main control compiler and current compiler distinct.
 The raw packets record complete benchmark arguments through schedule fields,
 compiler/source hashes, input/ABI lineage, numerical checks and windows.
@@ -93,7 +93,7 @@ lds:128x64:8:1:128:16:0:kn+bf16 arms, selecting the control with @control and
 record_gfx1201_interleaved_compiler_formats --include-mxfp4 for format controls.
 inspect-native.py.xz and inspect-production.py.xz preserve exact resource probes.
 The initial six-geometry matrix uses separately linked, source-identical
-scratch tools; the matching normal CMake build revalidates all42 tests and
+scratch tools; the matching normal CMake build revalidates all 42 tests and
 supplies the production-profile resource query.
 
 Large raw files are losslessly compressed. raw-packet-archives.json records
@@ -101,7 +101,13 @@ raw and compressed SHA256 values. source-identity.json binds native source
 and both compiler tools. No tool binaries or duplicate transport bundles are
 checked in.
 
-Broad frozen CPU, production compiler-route, generated-doc/lint and public
-CI/review gates remain pending. General KN/W8A8 closure, tiny-LDS strategy,
+Frozen revision `02f3890fd` passes 26,349 CPU tests (5,897 skips, 11 warnings)
+on Tajasaurus WSL and 1614 production compiler-route tests with zero skips
+on Super-Bear WSL. Both heads and tracked trees remain unchanged before/after.
+The execution certificate confirms every selected compiler proof ran. All33
+generated documents are in sync; Ruff, zero-error mypy, both claim linters
+and 23 final ownership/routing tests pass. Super-Bear's CUDA/device preflight
+is toolchain evidence, not new NVIDIA physical execution proof. Public
+CI/review and guarded publication remain pending. General KN/W8A8 closure, tiny-LDS strategy,
 MXFP4 M256 cost attribution, model quality and all five aggregate compiler
 slices remain open.

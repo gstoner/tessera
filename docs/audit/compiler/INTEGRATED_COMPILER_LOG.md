@@ -13477,21 +13477,25 @@ PRs: pending; sync GFX1201-KN-QUAD-TRANSPOSE-20261017.
 
 Outcome: C++ MLIR generation exchanges packed KN bytes within wave32 and
 retains the existing LDS view, scale order, buffer phases, fragment contract
-and checked HIP ABI. Matching CMake core/ROCm builds and42 owning tests pass:
+and checked HIP ABI. Matching CMake core/ROCm builds and 42 owning tests pass:
 40 numerical cases plus two unchanged LDS-capacity refusals. Diagnostic/pass
-registries pass300 cases and initial audit lifecycle passes11.
+registries pass 300 cases and initial audit lifecycle passes 11.
 
-Two reversed paired trials record9-19percent lower kernel time in four
-K1024-4096 profiles; forced K128 LDS is3-4percent slower. Completed public-call
-cost has no consistent gain. Production geometry retains191 registers, zero
-scratch,27648 LDS bytes and two barrier pairs while24 byte-store sites become
-four paired word-store sites. Three BF16 KN/AITER gaps remain11-22percent.
+Two reversed paired trials record 9-19 percent lower kernel time in four
+K=1024-4096 profiles; forced K128 LDS is 3-4 percent slower. Completed public-call
+cost has no consistent gain. Production geometry retains 191 registers, zero
+scratch,27648 LDS bytes and two barrier pairs while 24 byte-store sites become
+four paired word-store sites. Three BF16 KN/AITER gaps remain 11-22 percent.
 Twelve FP8/MXFP8/folded-MXFP4 control image pairs remain identical and pass
 numerics. All four backend plans assess the private gfx1201 physical change;
 no sibling schedule or device evidence transfers.
 
-Remaining: frozen broad CPU/compiler-route, final documentation/lint and
-public CI/review gates. General W8A8/KN performance, forced tiny-LDS strategy,
+Frozen revision `02f3890fd` passes 26,349 CPU tests (5,897 skipped),1614
+compiler-route tests with zero skips and 33 generated-document checks.
+Ruff/mypy, both claim linters and 23 final routing tests pass.
+
+Remaining: public CI/review and guarded publication gates.
+General W8A8/KN performance, forced tiny-LDS strategy,
 MXFP4 M256 attribution/model quality and all five aggregate slices stay open.
 
 Evidence: benchmarks/baselines/gfx1201_kn_quad_transpose_20261017/README.md.

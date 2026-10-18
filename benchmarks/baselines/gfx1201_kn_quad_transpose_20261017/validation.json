@@ -1,5 +1,5 @@
 {
-  "phase": "focused_device_and_timing_complete_broad_gates_pending",
+  "phase": "local_gates_passed_publication_pending",
   "measured_source": "e0cae0944b4573a33ed50132a0b9c0d595562aa7",
   "matching_normal_build": {
     "exit": 0,
@@ -17,11 +17,34 @@
     "rows": 12,
     "identical_image_pairs": 12
   },
-  "broader_cpu": "pending",
-  "compiler_route": "pending",
+  "broader_cpu": {
+    "passed": 26349,
+    "skipped": 5897,
+    "warnings": 11,
+    "seconds": 475.71,
+    "host": "Tajasaurus WSL",
+    "clean_before_after": true
+  },
+  "compiler_route": {
+    "passed": 1614,
+    "skipped": 0,
+    "seconds": 100.37,
+    "host": "Super-Bear WSL",
+    "clean_before_after": true,
+    "execution_certificate": "every selected proof executed"
+  },
   "public_ci_review": "not published",
   "initial_document_registry_tests": 94,
   "final_owner_routing_tests": 23,
   "claim_lints": "both passed",
-  "packet_archives_verified": 27
+  "packet_archives_verified": 51,
+  "frozen_validation_commit": "02f3890fddbdccefb9d1eba96059779b9553c770",
+  "generated_docs": 33,
+  "ruff": "passed",
+  "mypy": {
+    "errors": 0,
+    "baseline": 0,
+    "exit": 0
+  },
+  "final_derived_checks": 2
 }

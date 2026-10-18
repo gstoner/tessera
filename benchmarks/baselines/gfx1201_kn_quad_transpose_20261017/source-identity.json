@@ -18,5 +18,6 @@
   "initial_scratch_candidate_core_sha256": "451648329cf45a75fff9c657e9f15b1a2eddad5c5b12081f0502b993cdc29b75",
   "kernel_release": "6.18.33.2-microsoft-standard-WSL2",
   "llvm_mlir_version": "23.1.1 assertions",
-  "runtime_contract": "existing checked HIP package ABI; no allocation or synchronization ABI change"
+  "runtime_contract": "existing checked HIP package ABI; no allocation or synchronization ABI change",
+  "frozen_validation_commit": "02f3890fddbdccefb9d1eba96059779b9553c770"
 }

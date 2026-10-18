@@ -6,6 +6,43 @@ target: apple_gpu
 last_updated: 2026-10-18
 ---
 
+## NATIVE-SOURCE-ATTENTION-ROWS-20261018 — native source row correction
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-SOURCE-ATTENTION-ROWS-20261018.
+Base: PR988 merged as 65b8fb663 after all required CI and clean exact-head review.
+
+An explicit UnitAttr source rows request projects the actual generated
+checkpoint adjoint through a shared native semantic projector. Native plan v2
+contains five typed calls and thirteen buffers: normalization, saved forward,
+FP32 row correction, compact backward and the source normalization pullback.
+The row buffer remains private until its consumer completes; rounded saved O
+is not a row-correction input. The four-member v1/default meanings are retained.
+
+All members pass Graph/Schedule/Tile/Target/NVVM/PTX. The retained C++ owner
+uses normalized Q in both row correction and attention, orders producer streams,
+and reports five stage windows plus the full device window through additive
+versioned exports. Offline v2 replay checks exact calls, lifetimes, policies,
+parameter widths and launch geometry before provider acquisition.
+
+The matching LLVM/MLIR23.1.1 six-backend compiler passes 84 native/portable
+cases, included in a 388-case diagnostic/pass/contract gate. Type checking has
+zero errors. Owning RTX5070 passes 89 distinct cases across v1/v2 source
+gradients/stream and recovery (40), v2 fresh-process plus existing public
+reverse and source-forward controls (49). Compiler-disabled child replay
+forbids all external subprocess calls. These counts do not add overlapping
+reruns. Both composed timing orders preserve identical program/image identities.
+Prepared end-to-end ratios are 1.93–2.02x tall, 4.78–4.86x D257,
+5.30–5.64x medium and 12.60–14.36x long. Small profiles are flat to fifteen
+percent slower, so no universal selector promotion follows.
+
+Remaining: native selection policy and ordinary public integration for that
+policy, public matched A/B, complete documentation/testing gates and
+one focused PR. Dynamic/bias/dropout/layout and wider AD/quantized envelopes
+and all five aggregate programs remain open.
+
+Not applicable to Metal physical execution: this is an SM120 attention policy/ABI. No Apple lowering or native ABI changes; an Apple source-attention consumer still requires its own physical proof.
+
 ## NATIVE-ATTENTION-SOURCE-REVERSE-20261018 — public source VJP
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

@@ -432,3 +432,10 @@ Captured member, native program-event, prepared host, completed portable and
 ordinary public native_backward call timings are separate. Both exact AMD targets
 execute the named host-root public route; wider envelopes remain follow-ups. The shared finite-regime oracle is
 math/source_reverse_reference.py.
+
+### Native source attention row correction
+
+- nvidia/benchmark_source_attention_rows.py records matched four/five-member
+  original-source AD programs on RTX5070, with independent numerical checks,
+  raw alternating samples and separate stage/program/native host/end-to-end
+  timing. It includes small, tall and wider half-storage profiles.

@@ -13731,3 +13731,29 @@ obligations remain open.
 Evidence: benchmarks/baselines/native_public_source_attention_reverse_20261018/README.md,
 public-ab.json, source/fixture hashes and compressed host/device gate receipts.
 <!-- entry-fields:end -->
+
+### 2026-10-18 — native source-attention row correction
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync NATIVE-SOURCE-ATTENTION-ROWS-20261018.
+
+Outcome: The actual paired source adjoint now admits a five-member v2 row
+producer/compact consumer program while retaining the four-member v1 default.
+Native compiler and offline mutation/registry guards pass 388 tests, including
+84 native/portable cases. The zero-error type baseline is preserved. Exact
+RTX5070 v1/v2 numerical, pending-stream, extent/context recovery and separate
+fresh-process/public/primal controls pass 89 distinct cases. All three source
+gradients preserve independent half outputs; the row residual is private FP32.
+Both numerical policy and the source Q-to-normalized-Q edge are checked.
+
+Both composed timing orders retain identical program/image identities and
+passed source-gradient checks. Larger prepared profiles improve; the smallest
+profiles are flat to about fifteen percent slower. Raw measurements and
+separate timing domains remain in the packet.
+
+Remaining: native policy/public integration, public matched A/B,
+full documentation/testing gates and one focused PR. All five
+aggregate programs stay open. No sibling or encoded attention proof transfers.
+
+Evidence: benchmarks/baselines/native_source_attention_rows_20261018/README.md.
+<!-- entry-fields:end -->

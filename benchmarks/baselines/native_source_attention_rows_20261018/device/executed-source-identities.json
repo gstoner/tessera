@@ -1,0 +1,21 @@
+{
+  "scope": "actual driver/provider sources used by explicit v2 device suites and both composed benchmark orders",
+  "source_sha256": {
+    "python/tessera/compiler/native_source_attention_reverse.py": "935ca9918cb511882a488710bc88d45bed7e58078c8141a386c9d0aa01fc3d96",
+    "python/tessera/compiler/portable_source_attention_reverse.py": "eb0d441433788367e0fa2f26ef30214e8636887ad0a80924e46101958b72cf7b",
+    "python/tessera/compiler/prepared_source_attention_reverse.py": "4d67b5c89e347fb50f11f671cf90ef8468102523839c35407ce212ed2b614eff",
+    "python/tessera/compiler/source_attention_reverse_frontend.py": "f459609a9b3805e878174a56b7270882bbf54a02599adc1ac4a364b3d8d7b3f6",
+    "python/tessera/compiler/source_attention_reverse_runtime.py": "6fe45ce5f09dc0f30f71df4fe9da07d73669ce98b98f6249fd526317e9c1e888",
+    "python/tessera/compiler/execution_matrix.py": "554e333d5cfbd3bbe7540521b0163ec52130dc98890eae5a3ede4f224f89e99b",
+    "python/tessera/compiler/jit.py": "ce101cd9994a15646f4844844037c28fadcdd25fa31633ca2df1a716fb41ea21",
+    "python/tessera/runtime.py": "7d2b362d5f86062119699f90129d5257d817fe140d378a59f598635eec52bf54",
+    "tests/device/nvidia/test_source_attention_reverse.py": "6df53a0094ecf87e2e2a9a97683cf9e7349286a9712563ff054cf3887c6315f3",
+    "tests/device/nvidia/test_portable_source_attention_reverse_rows.py": "a8840b817a9e25f739eb0d2d228180f1c65b669898fceb96290a8a0e23edec41",
+    "tests/device/nvidia/test_public_source_attention_reverse.py": "bb0e86f01283fb77dd2b5c6fb5a3566f59b320a79acb601f68f5adc1c15a089b",
+    "benchmarks/nvidia/benchmark_source_attention_rows.py": "d21b97bf6a96b85139db86980be29b1e7db249dc5aee587b4199f76eea6405c5",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "15bac326c154487fe6b0260a7a0df25c468a499a84fc0c7d4b9fa3621b269f93",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "94c01d106933df3915f93dd2e3f790470bd1e976adf6cc14be17395c160d96f1",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "abcb8b5158187a1278513d53d9db16bcf1db77ca716aaa82f713b9af53ea4fc0",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "3126fe9e1271908e7fa390f50b3dee91bb7adfaae489b81c234fdf7e01a2b9c2"
+  }
+}

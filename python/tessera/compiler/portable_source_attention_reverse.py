@@ -15,6 +15,12 @@ import struct
 from .portable_source_attention import digest, sha
 
 SCHEMA = "tessera.nvidia.source_attention_reverse_program.v1"
+_ROWS_SCHEMA = "tessera.nvidia.source_attention_reverse_program.v2"
+
+
+def _rows(plan):
+    return plan.get("schema") == "tessera.native.source_attention_reverse.v2"
+
 COMPILER_PATH = "nvidia_sm120_source_attention_reverse_compiled"
 _FIELDS = ("graph_ir", "schedule_ir", "tile_ir", "target_ir", "native_ir")
 _SYMBOL = r"[A-Za-z_][A-Za-z0-9_.$]*"
@@ -124,24 +130,61 @@ def _checkpoint(plan, index, record, dims):
     return scale_value, fields["causal"] == "true"
 
 
+def _row_checkpoint(plan, index, record, dims):
+    from .native_attention_rows import contract, _entry
+    raw, fields = contract(record["tile_ir"])
+    consumer = index == 3
+    storage = plan["buffers"][5]["storage"]
+    count = 3 if consumer else 1
+    expected = dict(accum="f32", arch="sm_120", arguments=["input_" + str(i) for i in range(6)],
+                    results=["output_" + str(i) for i in range(count)], bias=False,
+                    block_threads=128 if consumer else 32, causal=fields.get("causal"),
+                    family="attention_backward_rows" if consumer else "attention_row_correction",
+                    gradient_activity=[1, 1, 1], lse_cotangent=True,
+                    mask_alignment="end_aligned_v1", output_storage=storage,
+                    row_bytes=math.prod(plan["buffers"][7]["shape"]) * 4,
+                    row_correction="probability_dot_v_f32_v1", row_storage="f32",
+                    scale=fields.get("scale"), shape=list(dims), storage=storage,
+                    target="nvidia_sm120")
+    if consumer:
+        expected.update(bias_gradient=False, gradient_output="compact_v1",
+                        gradient_launch="packed_v1", row_correction_usage="external_input_v1")
+    scale = fields.get("scale")
+    if (digest(fields) != digest(expected) or type(fields.get("causal")) is not bool
+            or type(scale) is not float or not math.isfinite(scale) or scale <= 0
+            or record["entry"] != _entry(fields, sha(raw), consumer)):
+        raise ValueError("source attention reverse row physical policy differs")
+    operation = "tile.attention_backward_rows_kernel" if consumer else "tile.attention_row_correction_kernel"
+    if record["tile_ir"].count(operation) != 1:
+        raise ValueError("source attention reverse row Tile consumer differs")
+    return scale, fields["causal"]
+
+
 def validate_plan(plan):
     keys = {"schema", "kind", "execution_state", "target", "architecture", "root", "source_root",
             "source_graph_ir", "source_graph_sha256", "paired_graph_ir", "paired_graph_sha256",
             "program_graph_ir", "program_graph_sha256", "role_indices", "cotangent_indices",
             "requested_gradients", "buffers", "steps", "outputs", "member_graphs"}
     if (not isinstance(plan, dict) or set(plan) != keys
-            or plan["schema"] != "tessera.native.source_attention_reverse.v1"
-            or plan["kind"] != "norm_attention_saved_reverse" or plan["execution_state"] != "artifact_only"
+            or plan["schema"] not in ("tessera.native.source_attention_reverse.v1",
+                                     "tessera.native.source_attention_reverse.v2")
+            or plan["kind"] != ("norm_attention_saved_reverse_rows" if _rows(plan)
+                                 else "norm_attention_saved_reverse") or plan["execution_state"] != "artifact_only"
             or plan["target"] != "nvidia_sm120" or plan["architecture"] != "sm_120"):
         raise ValueError("source attention reverse plan schema/target differs")
     for stage in ("source", "paired", "program"):
         text = plan[stage + "_graph_ir"]
         if not isinstance(text, str) or not text or sha(text) != plan[stage + "_graph_sha256"]:
             raise ValueError("source attention reverse Graph digest differs")
+    rows = _rows(plan)
     original = plan["source_graph_ir"]
     if (not re.search(r'(?<=[{,] )tessera.native.source_attention_reverse_request(?=[,}])', original)
             or "tessera.attention_shape_bounds" in original or "tessera.attention_sequence_bounds" in original):
         raise ValueError("source attention reverse original export/shape policy differs")
+    marker = "tessera.native.source_attention_reverse_rows_request"
+    present = bool(re.search(r'(?<=[{,] )' + re.escape(marker) + r'(?=[,}])', original))
+    if (rows and not present) or (not rows and marker in original):
+        raise ValueError("source attention reverse row request/schema differs")
     for field, allowed in (("role_indices", [0, 1, 2]), ("cotangent_indices", [3, 4])):
         value = plan[field]
         if (not isinstance(value, list) or len(value) != len(allowed)
@@ -156,14 +199,22 @@ def validate_plan(plan):
             or plan["root"] != plan["source_root"] + "__source_reverse"):
         raise ValueError("source attention reverse original root/gradient order differs")
     roles, seeds = plan["role_indices"], plan["cotangent_indices"]
-    gradients = {roles[0]: 11, roles[1]: 9, roles[2]: 10}
+    gradients = {roles[0]: 12 if rows else 11, roles[1]: 10 if rows else 9, roles[2]: 11 if rows else 10}
     outputs = [gradients[i] for i in requested]
     if (plan["outputs"] != outputs or any(type(v) is not int for v in plan["outputs"])):
         raise ValueError("source attention reverse returned gradient roles differ")
-    edges = (([roles[0]], [5], "tessera.rmsnorm"),
+    edges: tuple[tuple[list[int], list[int], str], ...] = (([roles[0]], [5], "tessera.rmsnorm"),
              ([5, roles[1], roles[2]], [6, 7], "tessera_attn.checkpoint_forward"),
              ([seeds[0], 5, roles[1], roles[2], 6, 7, seeds[1]], [8, 9, 10], "tessera_attn.checkpoint_backward"),
              ([roles[0], 8], [11], "native_row_region"))
+    if rows:
+        edges = (([roles[0]], [5], "tessera.rmsnorm"),
+                 ([5, roles[1], roles[2]], [6, 7], "tessera_attn.checkpoint_forward"),
+                 ([seeds[0], 5, roles[1], roles[2], 7, seeds[1]], [8],
+                  "tessera_attn.checkpoint_row_correction"),
+                 ([seeds[0], 5, roles[1], roles[2], 7, 8], [9, 10, 11],
+                  "tessera_attn.checkpoint_backward_rows"),
+                 ([roles[0], 9], [12], "native_row_region"))
     expected = [dict(step=i, member=plan["root"] + "__member_" + str(i),
                      inputs=ins, outputs=outs, operation=op)
                 for i, (ins, outs, op) in enumerate(edges)]
@@ -171,16 +222,16 @@ def validate_plan(plan):
             type(v) is not int for v in (*s["inputs"], *s["outputs"])) for s in plan["steps"])):
         raise ValueError("source attention reverse native SSA edges differ")
     buffers = plan["buffers"]
-    if not isinstance(buffers, list) or len(buffers) != 12:
+    if not isinstance(buffers, list) or len(buffers) != (13 if rows else 12):
         raise ValueError("source attention reverse allocation count differs")
-    writes, reads = [-1] * 12, [-1] * 12
+    writes, reads = [-1] * len(buffers), [-1] * len(buffers)
     for i, (ins, outs, _) in enumerate(edges):
         for index in ins:
             reads[index] = i
         for index in outs:
             writes[index] = reads[index] = i
     for index in outputs:
-        reads[index] = 4
+        reads[index] = len(edges)
     for i, b in enumerate(buffers):
         if (not isinstance(b, dict) or set(b) != {
                 "id", "shape", "storage", "bytes", "ownership", "first_write", "last_read"}
@@ -204,7 +255,7 @@ def validate_plan(plan):
     bv, hv, sv, dv = v["shape"]
     if b != bk or b != bv or hq % hkv or hv != hkv or sk != sv or d != dk or b * hq * sq >= 2**31:
         raise ValueError("source attention reverse physical dimensions differ")
-    expected_shapes: list[list[int] | None] = [None] * 12
+    expected_shapes: list[list[int] | None] = [None] * len(buffers)
     for index, shape in zip(roles, (q["shape"], k["shape"], v["shape"]), strict=True):
         expected_shapes[index] = shape
     for index in (seeds[0], 6):
@@ -214,8 +265,12 @@ def validate_plan(plan):
     for index in (5, 8, 11):
         expected_shapes[index] = q["shape"]
     expected_shapes[9], expected_shapes[10] = k["shape"], v["shape"]
+    if rows:
+        expected_shapes[8] = [b, hq, sq]
+        expected_shapes[9] = q["shape"]
+        expected_shapes[10], expected_shapes[11], expected_shapes[12] = k["shape"], v["shape"], q["shape"]
     if any(item["shape"] != expected_shapes[i] or item["storage"] != (
-            "f32" if i in (seeds[1], 7) else q["storage"]) for i, item in enumerate(buffers)):
+            "f32" if i in (seeds[1], 7) or (rows and i == 8) else q["storage"]) for i, item in enumerate(buffers)):
         raise ValueError("source attention reverse private storage roles differ")
     _verify_calls(plan)
     return (b, hq, hkv, sq, sk, d, dv)
@@ -271,29 +326,30 @@ def _verify_calls(plan):
                                                else [attention[1], attention[0]])
             or len(original[5].strip().splitlines()) != 3):
         raise ValueError("source attention reverse original SSA roles differ")
+    count = 5 if _rows(plan) else 4
     functions = _functions(plan["program_graph_ir"])
     graphs = plan["member_graphs"]
-    if (len(functions) != 5 or functions[0][1] or functions[0][2] != plan["root"]
-            or not isinstance(graphs, list) or len(graphs) != 4):
+    if (len(functions) != count + 1 or functions[0][1] or functions[0][2] != plan["root"]
+            or not isinstance(graphs, list) or len(graphs) != count):
         raise ValueError("source attention reverse typed call program differs")
     root = functions[0]
     _signature(root, range(5), plan["outputs"], buffers)
     lines = root[5].strip().splitlines()
-    if len(lines) != 5:
-        raise ValueError("source attention reverse root must contain four calls and return")
+    if len(lines) != count + 1:
+        raise ValueError("source attention reverse root call count differs")
     values = [f"%arg{i}" for i in range(5)]
-    for i, (step, line) in enumerate(zip(plan["steps"], lines[:4], strict=True)):
+    for i, (step, line) in enumerate(zip(plan["steps"], lines[:-1], strict=True)):
         call = re.fullmatch(r'\s*(%\w+)(?::([0-9]+))? = call @(' + _SYMBOL + r')\(([^)]*)\) : (.*)', line)
         args = ", ".join(values[index] for index in step["inputs"])
         ins = "(" + ", ".join(_type(buffers[index]) for index in step["inputs"]) + ")"
         outs = ", ".join(_type(buffers[index]) for index in step["outputs"])
-        count = len(step["outputs"])
-        if count > 1:
+        result_count = len(step["outputs"])
+        if result_count > 1:
             outs = "(" + outs + ")"
         if (call is None or call[3] != step["member"] or call[4] != args
-                or int(call[2] or 1) != count or call[5] != ins + " -> " + outs):
+                or int(call[2] or 1) != result_count or call[5] != ins + " -> " + outs):
             raise ValueError("source attention reverse root call binding differs")
-        values.extend([call[1]] if count == 1 else [call[1] + "#" + str(j) for j in range(count)])
+        values.extend([call[1]] if result_count == 1 else [call[1] + "#" + str(j) for j in range(result_count)])
         member = _functions(graphs[i])
         if (len(member) != 1 or member[0][1] or member[0][2] != step["member"]
                 or not functions[i + 1][1] or functions[i + 1][0] != member[0][0].replace(
@@ -314,7 +370,7 @@ def _verify_calls(plan):
                 raise ValueError("source attention reverse local member binding differs")
     returned = "return " + ", ".join(values[index] for index in plan["outputs"]) + " : "
     returned += ", ".join(_type(buffers[index]) for index in plan["outputs"])
-    if lines[4].strip() != returned:
+    if lines[-1].strip() != returned:
         raise ValueError("source attention reverse root return differs")
     for text, fns in [(plan["program_graph_ir"], functions)] + [
             (graph, _functions(graph)) for graph in graphs]:
@@ -327,16 +383,23 @@ def _verify_calls(plan):
 def _abi(plan, index, dims, entry):
     rows, columns = math.prod(plan["buffers"][5]["shape"][:-1]), dims[5]
     cooperative = "_cooperative_128_" in entry
-    sizes = (rows if cooperative else (rows + 127) // 128,
+    sizes: tuple[int, ...] = (rows if cooperative else (rows + 127) // 128,
              (math.prod(plan["buffers"][6]["shape"]) + 127) // 128,
              (sum(math.prod(plan["buffers"][i]["shape"]) for i in (8, 9, 10)) + 127) // 128,
              (rows + 127) // 128)
-    parameters = (["ptr", "ptr", "i64", "i64"], ["ptr"] * 5 + ["i64"] * 7,
+    parameters: tuple[list[str], ...] = (["ptr", "ptr", "i64", "i64"], ["ptr"] * 5 + ["i64"] * 7,
                   ["ptr"] * 10 + ["i64"] * 7, ["ptr"] * 3 + ["i64"] * 2)
+    if _rows(plan):
+        sizes = (sizes[0], sizes[1], (math.prod(plan["buffers"][7]["shape"]) + 31) // 32,
+                 (sum(math.prod(plan["buffers"][i]["shape"]) for i in (9, 10, 11)) + 127) // 128,
+                 (rows + 127) // 128)
+        parameters = (parameters[0], parameters[1], ["ptr"] * 7 + ["i64"] * 7,
+                      ["ptr"] * 9 + ["i64"] * 7, parameters[3])
     step = plan["steps"][index]
-    return dict(schema="tessera.nvidia.source_attention_reverse_step.v1", index=index,
-                entry=entry, block=[128, 1, 1], grid=[sizes[index], 1, 1],
-                dimensions=list(dims) if index in (1, 2) else [rows, columns],
+    return dict(schema=("tessera.nvidia.source_attention_reverse_step.v2" if _rows(plan)
+                        else "tessera.nvidia.source_attention_reverse_step.v1"), index=index,
+                entry=entry, block=[32 if _rows(plan) and index == 2 else 128, 1, 1], grid=[sizes[index], 1, 1],
+                dimensions=list(dims) if index in ((1, 2, 3) if _rows(plan) else (1, 2)) else [rows, columns],
                 inputs=step["inputs"], outputs=step["outputs"],
                 parameters=parameters[index], storage=plan["buffers"][5]["storage"])
 
@@ -351,7 +414,7 @@ def seal(plan, members):
         record["provenance"] = {field + "_sha256": sha(record[field]) for field in _FIELDS}
         record["member_digest"] = digest(record)
         records.append(record)
-    data = dict(schema=SCHEMA, plan=copy.deepcopy(plan), members=records)
+    data = dict(schema=_ROWS_SCHEMA if _rows(plan) else SCHEMA, plan=copy.deepcopy(plan), members=records)
     data["contract_digest"] = digest(data)
     restore(data)
     return data
@@ -360,13 +423,15 @@ def seal(plan, members):
 def restore(data):
     from .prepared_source_attention_reverse import ReverseMember
     if (not isinstance(data, dict) or set(data) != {"schema", "plan", "members", "contract_digest"}
-            or data["schema"] != SCHEMA
+            or data["schema"] not in (SCHEMA, _ROWS_SCHEMA)
             or data["contract_digest"] != digest({k: v for k, v in data.items() if k != "contract_digest"})):
         raise ValueError("source attention reverse portable integrity differs")
     data = copy.deepcopy(data)
     plan, records = data["plan"], data["members"]
     dims = validate_plan(plan)
-    if not isinstance(records, list) or len(records) != 4:
+    if data["schema"] != (_ROWS_SCHEMA if _rows(plan) else SCHEMA):
+        raise ValueError("source attention reverse portable/native schema differs")
+    if not isinstance(records, list) or len(records) != (5 if _rows(plan) else 4):
         raise ValueError("source attention reverse image count differs")
     members = []
     checkpoints = []
@@ -394,7 +459,9 @@ def restore(data):
         if len(re.findall(r'\.param\s+\.(?:u|s|b)64\s+', params)) != len(expected):
             raise ValueError("source attention reverse PTX parameter widths differ")
         storage = plan["buffers"][5]["storage"]
-        if i in (1, 2):
+        if _rows(plan) and i in (2, 3):
+            checkpoints.append(_row_checkpoint(plan, i, record, dims))
+        elif i in (1, 2):
             checkpoints.append(_checkpoint(plan, i, record, dims))
         elif i == 0:
             from .nvidia_native import _mlir_f32_bits
@@ -435,7 +502,7 @@ def restore(data):
                                      tile_ir=record["tile_ir"], target_ir=record["target_ir"],
                                      native_ir=record["native_ir"], entry=entry,
                                      image=record["ptx"].encode("ascii"), image_digest=record["image_digest"]))
-    if checkpoints[0] != checkpoints[1]:
+    if any(value != checkpoints[0] for value in checkpoints[1:]):
         raise ValueError("source attention reverse saved forward/backward policy differs")
     from .nvidia_native import _mlir_f32_bits
     original = _functions(plan["source_graph_ir"])[0][5]

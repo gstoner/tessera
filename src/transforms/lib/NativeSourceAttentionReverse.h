@@ -1,6 +1,7 @@
 // Native source-attention reverse outlining. Clone paired AD SSA; never
 // manufacture derivative expressions or physical kernels at this boundary.
 #pragma once
+#include "NativeAttentionRowProjection.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Verifier.h"
@@ -51,6 +52,8 @@ inline LogicalResult preflight(ModuleOp module) {
       module->hasAttr("tessera.native.source_attention_reverse_program_json") ||
       module->hasAttr("tessera.attention_shape_bounds") ||
       module->hasAttr("tessera.attention_sequence_bounds")) return reject();
+  if (auto rows=module->getAttr("tessera.native.source_attention_reverse_rows_request");
+      rows && !isa<UnitAttr>(rows)) return reject();
   auto fn=functions.front();
   auto mode=fn->getAttrOfType<StringAttr>("tessera.autodiff");
   if (!mode || mode.getValue()!="reverse" || !fn.getBody().hasOneBlock() ||
@@ -209,25 +212,42 @@ inline LogicalResult emit(ModuleOp module,llvm::StringRef originalSource) {
   OpBuilder builder(module.getContext());
   std::string rootName=(forward.getSymName()+"__source_reverse").str();
   if (module.lookupSymbol(rootName)) return reject();
+  bool rows=module->hasAttr("tessera.native.source_attention_reverse_rows_request");
+  unsigned memberCount=rows?5:4, pullbackIndex=memberCount-1;
   SmallVector<func::FuncOp> members; llvm::json::Array graphs;
-  for (unsigned index=0;index<4;++index) {
+  for (unsigned index=0;index<memberCount;++index) {
     Operation *op=index==0?norm:index==1?attention:product;
-    SmallVector<Type> inputs=index==3?SmallVector<Type>{sourceRoot.getType(),queryGradient.getType()}:
+    SmallVector<Type> inputs=index==pullbackIndex?SmallVector<Type>{sourceRoot.getType(),queryGradient.getType()}:
         SmallVector<Type>(op->getOperandTypes());
-    SmallVector<Type> results=index==3?SmallVector<Type>{sourceGradient.getType()}:
+    SmallVector<Type> results=index==pullbackIndex?SmallVector<Type>{sourceGradient.getType()}:
         SmallVector<Type>(op->getResultTypes());
+    if (rows && (index==2 || index==3)) {
+      bool consumer=index==3;
+      inputs.clear();
+      for (auto [operandIndex, operand]:llvm::enumerate(product->getOperands())) {
+        if (operandIndex==4 || (consumer && operandIndex==6)) continue;
+        inputs.push_back(operand.getType());
+      }
+      Type rowType=product->getOperand(5).getType();
+      if (consumer) inputs.push_back(rowType);
+      else results={rowType};
+    }
     builder.setInsertionPointToEnd(module.getBody());
     std::string symbol=rootName+"__member_"+std::to_string(index);
     if (module.lookupSymbol(symbol)) return reject();
     auto member=func::FuncOp::create(builder,module.getLoc(),symbol,builder.getFunctionType(inputs,results));
     member.setPrivate(); auto block=member.addEntryBlock(); OpBuilder body(block,block->begin()); IRMapping map;
-    if (index==3) {
+    if (index==pullbackIndex) {
       map.map(sourceRoot,block->getArgument(0)); map.map(queryGradient,block->getArgument(1));
       for (auto &original:backward.getBody().front().without_terminator())
         if (live.contains(&original)) {
           auto clone=body.clone(original,map);clone->removeAttr("tessera.autodiff.activity");
         }
       func::ReturnOp::create(body,module.getLoc(),map.lookup(sourceGradient));
+    } else if (rows && (index==2 || index==3)) {
+      auto clone=tessera::attention_rows::createProjection(
+          body,product,block->getArguments(),results,index==3);
+      func::ReturnOp::create(body,module.getLoc(),clone->getResults());
     } else {
       for (auto [operand,argument]:llvm::zip(op->getOperands(),block->getArguments())) map.map(operand,argument);
       auto clone=body.clone(*op,map);clone->removeAttr("tessera.autodiff.activity");
@@ -238,7 +258,16 @@ inline LogicalResult emit(ModuleOp module,llvm::StringRef originalSource) {
     for (unsigned i=0;i<results.size();++i) outputs.push_back(builder.getStringAttr("output_"+std::to_string(i)));
     member->setAttr("tessera.argument_bindings",builder.getArrayAttr(arguments));
     member->setAttr("tessera.result_bindings",builder.getArrayAttr(outputs));
-    if (index==3) {
+    if (rows && (index==2 || index==3)) {
+      member->setAttr(index==3?"tessera.checkpoint_gradient_activity":
+          "tessera.row_correction_gradient_activity",builder.getDenseI64ArrayAttr({1,1,1}));
+      if (index==3) {
+        member->setAttr("tessera.checkpoint_gradient_output",builder.getStringAttr("compact_v1"));
+        member->setAttr("tessera.checkpoint_gradient_launch",builder.getStringAttr("packed_v1"));
+        member->setAttr("tessera.checkpoint_gradient_threads",builder.getI64IntegerAttr(128));
+      }
+    }
+    if (index==pullbackIndex) {
       auto type=cast<RankedTensorType>(sourceRoot.getType()); int64_t rows=1;
       for (int64_t extent:type.getShape().drop_back()) rows*=extent;
       member->setAttr("tessera.native.sm120_row_producer",builder.getDictionaryAttr({
@@ -261,7 +290,8 @@ inline LogicalResult emit(ModuleOp module,llvm::StringRef originalSource) {
     for (auto index:indices) requested.push_back(cast<IntegerAttr>(index).getInt());
   else requested={0,1,2};
   SmallVector<int64_t> gradientIds(3);
-  gradientIds[roles[0]]=11;gradientIds[roles[1]]=9;gradientIds[roles[2]]=10;
+  gradientIds[roles[0]]=rows?12:11;gradientIds[roles[1]]=rows?10:9;
+  gradientIds[roles[2]]=rows?11:10;
   SmallVector<int64_t> selected;SmallVector<Type> rootResults;
   for (int64_t index:requested) {selected.push_back(gradientIds[index]);rootResults.push_back(forward.getArgument(index).getType());}
   SmallVector<Type> rootInputs(forward.getArgumentTypes());
@@ -273,9 +303,15 @@ inline LogicalResult emit(ModuleOp module,llvm::StringRef originalSource) {
   SmallVector<SmallVector<int64_t>> inputs{{roles[0]},{5,roles[1],roles[2]},
       {outputSeed,5,roles[1],roles[2],6,7,lseSeed},{roles[0],8}};
   SmallVector<SmallVector<int64_t>> outputs{{5},{6,7},{8,9,10},{11}};
+  if (rows) {
+    inputs={{roles[0]},{5,roles[1],roles[2]},
+        {outputSeed,5,roles[1],roles[2],7,lseSeed},
+        {outputSeed,5,roles[1],roles[2],7,8},{roles[0],9}};
+    outputs={{5},{6,7},{8},{9,10,11},{12}};
+  }
   llvm::json::Array steps;
-  SmallVector<int64_t> firstWrite(12,-1),lastRead(12,-1);
-  for (unsigned index=0;index<4;++index) {
+  SmallVector<int64_t> firstWrite(rows?13:12,-1),lastRead(rows?13:12,-1);
+  for (unsigned index=0;index<memberCount;++index) {
     SmallVector<Value> operands;llvm::json::Array inputIds,outputIds;
     for (int64_t id:inputs[index]) {operands.push_back(values[id]);inputIds.push_back(id);lastRead[id]=index;}
     auto call=func::CallOp::create(body,module.getLoc(),members[index],operands);
@@ -285,11 +321,13 @@ inline LogicalResult emit(ModuleOp module,llvm::StringRef originalSource) {
     }
     steps.push_back(llvm::json::Object{{"step",int64_t(index)},{"member",members[index].getSymName().str()},
       {"operation",index==0?"tessera.rmsnorm":index==1?"tessera_attn.checkpoint_forward":
-                   index==2?"tessera_attn.checkpoint_backward":"native_row_region"},
+                   rows && index==2?"tessera_attn.checkpoint_row_correction":
+                   rows && index==3?"tessera_attn.checkpoint_backward_rows":
+                   !rows && index==2?"tessera_attn.checkpoint_backward":"native_row_region"},
       {"inputs",std::move(inputIds)},{"outputs",std::move(outputIds)}});
   }
   SmallVector<Value> returned;llvm::json::Array selectedJson,requestedJson,roleJson,seedJson,buffers;
-  for (int64_t id:selected) {returned.push_back(values[id]);selectedJson.push_back(id);lastRead[id]=4;}
+  for (int64_t id:selected) {returned.push_back(values[id]);selectedJson.push_back(id);lastRead[id]=memberCount;}
   for (int64_t id:requested) requestedJson.push_back(id);
   for (int64_t id:roles) roleJson.push_back(id);
   seedJson.push_back(outputSeed);seedJson.push_back(lseSeed);
@@ -310,8 +348,9 @@ inline LogicalResult emit(ModuleOp module,llvm::StringRef originalSource) {
   for (auto member:members) program.getBody()->push_back(member->clone());
   if (failed(verify(program))) {program.erase();return failure();}
   std::string programText=print(program);program.erase();
-  llvm::json::Object plan{{"schema","tessera.native.source_attention_reverse.v1"},
-    {"kind","norm_attention_saved_reverse"},{"execution_state","artifact_only"},
+  llvm::json::Object plan{{"schema",rows?"tessera.native.source_attention_reverse.v2":
+                                             "tessera.native.source_attention_reverse.v1"},
+    {"kind",rows?"norm_attention_saved_reverse_rows":"norm_attention_saved_reverse"},{"execution_state","artifact_only"},
     {"target",target.getValue().str()},{"architecture",arch.getValue().str()},
     {"root",rootName},{"source_root",forward.getSymName().str()},
     {"source_graph_ir",originalSource.str()},{"source_graph_sha256",hash(originalSource)},

@@ -34,7 +34,7 @@ def _retire(lib, handle, pid):
 
 
 class PreparedSourceAttentionReverse:
-    """Compile actual AD members once; execute all four in one C++ owner."""
+    """Compile actual AD members once; execute its typed members in one C++ owner."""
 
     def __init__(self, program):
         from .nvidia_native import _compile_tile_ir
@@ -43,13 +43,17 @@ class PreparedSourceAttentionReverse:
         plan = program.manifest
         stages = program.lower_members()
         forward = _decode_checkpoint(*stages[1][:3], backward=False)
-        backward = _decode_checkpoint(*stages[2][:3], backward=True)
-        if (forward.dims != backward.dims or forward.scale != backward.scale
-                or forward.causal != backward.causal or forward.storage != backward.storage
-                or forward.output_storage != forward.storage
-                or backward.output_storage != forward.storage or forward.bias or backward.bias
-                or not backward.lse_cotangent or forward.shape_bounds or backward.shape_bounds):
-            raise ValueError("source attention reverse member contracts disagree")
+        if plan["schema"] == "tessera.native.source_attention_reverse.v2":
+            if forward.output_storage != forward.storage or forward.bias or forward.shape_bounds:
+                raise ValueError("source attention reverse member contracts disagree")
+        else:
+            backward = _decode_checkpoint(*stages[2][:3], backward=True)
+            if (forward.dims != backward.dims or forward.scale != backward.scale
+                    or forward.causal != backward.causal or forward.storage != backward.storage
+                    or forward.output_storage != forward.storage
+                    or backward.output_storage != forward.storage or forward.bias or backward.bias
+                    or not backward.lse_cotangent or forward.shape_bounds or backward.shape_bounds):
+                raise ValueError("source attention reverse member contracts disagree")
         members = []
         for graph, schedule, tile, target, native in stages:
             entries = re.findall(r'\bllvm.func @(\w+)\(', tile)
@@ -73,6 +77,10 @@ class PreparedSourceAttentionReverse:
 
     def _initialize(self, data, plan, members, dims):
         self._members = members
+        self._rows = plan["schema"] == "tessera.native.source_attention_reverse.v2"
+        self._stage_count = len(members)
+        self._api = ("tessera_nvidia_source_attention_reverse_rows_" if self._rows
+                     else "tessera_nvidia_source_attention_reverse_")
         self._portable_text = json.dumps(data, sort_keys=True, allow_nan=False)
         self._contract_digest = data["contract_digest"]
         self._source_graph_digest = plan["source_graph_sha256"]
@@ -121,23 +129,27 @@ class PreparedSourceAttentionReverse:
     def _prepare(self):
         from tessera.runtime import _load_nvidia_ptx_launch
         lib = _load_nvidia_ptx_launch()
-        if lib is None or not hasattr(lib, "tessera_nvidia_source_attention_reverse_prepare"):
+        if lib is None or any(not hasattr(lib, self._api + role)
+                              for role in ("prepare", "invoke", "last_times")):
             raise RuntimeError("source attention reverse requires the matching native provider")
         self._lib = lib
+        prepare = getattr(lib, self._api + "prepare")
+        invoke = getattr(lib, self._api + "invoke")
+        last_times = getattr(lib, self._api + "last_times")
         P, S, I, L, U = ct.c_void_p, ct.c_size_t, ct.c_int, ct.c_int64, ct.c_uint64
         lib.tessera_nvidia_attention_vjp_last_error.argtypes = []
         lib.tessera_nvidia_attention_vjp_last_error.restype = ct.c_char_p
         signature: list[Any] = (
-            [P, S, ct.c_char_p, I] + [P, S, ct.c_char_p] * 3
+            [P, S, ct.c_char_p, I] + [P, S, ct.c_char_p] * (len(self._members) - 1)
             + [ct.POINTER(L), ct.POINTER(I), ct.POINTER(I), ct.POINTER(I), S, I, ct.POINTER(U)])
-        lib.tessera_nvidia_source_attention_reverse_prepare.argtypes = signature
-        lib.tessera_nvidia_source_attention_reverse_prepare.restype = I
-        lib.tessera_nvidia_source_attention_reverse_invoke.argtypes = [
+        prepare.argtypes = signature
+        prepare.restype = I
+        invoke.argtypes = [
             U, ct.POINTER(P), ct.POINTER(S), S, ct.POINTER(U), S,
             ct.POINTER(P), ct.POINTER(S), S]
-        lib.tessera_nvidia_source_attention_reverse_invoke.restype = I
-        lib.tessera_nvidia_source_attention_reverse_last_times.argtypes = [U, ct.POINTER(ct.c_float), S]
-        lib.tessera_nvidia_source_attention_reverse_last_times.restype = I
+        invoke.restype = I
+        last_times.argtypes = [U, ct.POINTER(ct.c_float), S]
+        last_times.restype = I
         lib.tessera_nvidia_source_attention_reverse_close.argtypes = [U]
         lib.tessera_nvidia_source_attention_reverse_close.restype = I
         images = tuple(ct.create_string_buffer(m.image) for m in self._members)
@@ -147,7 +159,7 @@ class PreparedSourceAttentionReverse:
             if i == 0:
                 args.append(int(self._cooperative))
         handle = U()
-        self._check(lib.tessera_nvidia_source_attention_reverse_prepare(
+        self._check(prepare(
             *args, (L * 7)(*self._dims), (I * 3)(*self._roles), (I * 2)(*self._seeds),
             (I * len(self._selected))(*self._selected), len(self._selected),
             self._storage, ct.byref(handle)))
@@ -203,7 +215,7 @@ class PreparedSourceAttentionReverse:
                 prepare_ms = (time.perf_counter() - prepare_start) * 1000
             start = time.perf_counter()
             lib = self._library()
-            self._check(lib.tessera_nvidia_source_attention_reverse_invoke(
+            self._check(getattr(lib, self._api + "invoke")(
                 self._handle, (ct.c_void_p * 5)(*addresses),
                 (ct.c_size_t * 5)(*(s[2] for s in self._input_specs)), 5,
                 (ct.c_uint64 * 5)(*streams) if streams is not None else None,
@@ -211,12 +223,13 @@ class PreparedSourceAttentionReverse:
                 (ct.c_void_p * len(outputs))(*(v.ctypes.data for v in outputs)),
                 (ct.c_size_t * len(outputs))(*(v.nbytes for v in outputs)), len(outputs)))
             host_ms = (time.perf_counter() - start) * 1000
-            times = (ct.c_float * 5)()
-            self._check(lib.tessera_nvidia_source_attention_reverse_last_times(self._handle, times, 5))
+            times = (ct.c_float * (self._stage_count + 1))()
+            self._check(getattr(lib, self._api + "last_times")(self._handle, times, len(times)))
             self.receipt = dict(execution_kind="native_gpu", evidence_target="nvidia_sm120",
-                                native_call_binding="prepared_cpp_source_attention_reverse",
+                                native_call_binding=("prepared_cpp_source_attention_reverse_rows" if self._rows
+                                                     else "prepared_cpp_source_attention_reverse"),
                                 image_digests=tuple(m.image_digest for m in self._members),
-                                stage_device_ms=tuple(times)[:4], program_device_ms=times[4],
+                                stage_device_ms=tuple(times)[:self._stage_count], program_device_ms=times[-1],
                                 completed_host_ms=host_ms, native_prepare_ms=prepare_ms,
                                 input_binding="cuda_resident_roots" if streams else "host_roots")
             # roots retains the host snapshots through synchronous native completion.

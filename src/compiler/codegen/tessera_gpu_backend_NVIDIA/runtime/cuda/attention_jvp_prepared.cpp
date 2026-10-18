@@ -811,13 +811,14 @@ extern "C" int tessera_nvidia_attention_vjp_rows_prepare(
   return prepareAttentionVjp(fimage,fbytes,fentry,bimage,bbytes,bentry,dims,biasShape,
       mapping,roles,activeCount,storage,outputStorage,lseCotangent,handle,true,rimage,rbytes,rentry);
 }
-extern "C" int tessera_nvidia_source_attention_reverse_prepare(
+static int prepareSourceAttentionReverse(
   const void *normImage,size_t normBytes,const char *normEntry,int cooperative,
   const void *fimage,size_t fbytes,const char *fentry,
   const void *bimage,size_t bbytes,const char *bentry,
   const void *pullbackImage,size_t pullbackBytes,const char *pullbackEntry,
   const int64_t *dims,const int *mapping,const int *seedOrder,
-  const int *selectedRoles,size_t selectedCount,int storage,uint64_t *handle){
+  const int *selectedRoles,size_t selectedCount,int storage,uint64_t *handle,
+  bool sourceRows=false,const void *rimage=nullptr,size_t rbytes=0,const char *rentry=nullptr){
   ownerError.clear();if(handle)*handle=0;
   if(!handle || !normImage || !normBytes || !normEntry || !pullbackImage ||
      !pullbackBytes || !pullbackEntry || !seedOrder || !selectedRoles ||
@@ -844,7 +845,7 @@ extern "C" int tessera_nvidia_source_attention_reverse_prepare(
       return bad("source attention pullback digest disagrees");
   const int active[3]={0,1,2};uint64_t id=0;
   int status=prepareAttentionVjp(fimage,fbytes,fentry,bimage,bbytes,bentry,dims,
-      nullptr,mapping,active,3,storage,storage,1,&id,false,nullptr,0,nullptr,true);
+      nullptr,mapping,active,3,storage,storage,1,&id,sourceRows,rimage,rbytes,rentry,true);
   if(status)return status;
   std::lock_guard<std::mutex> lock(ownerMutex);
   auto found=owners.find(id);
@@ -858,7 +859,8 @@ extern "C" int tessera_nvidia_source_attention_reverse_prepare(
   if(s.prefixRows<=0 || s.prefixRows>INT_MAX)return fail(bad("source attention row geometry overflows"));
   s.prefixGrid=unsigned(cooperative?s.prefixRows:(s.prefixRows+127)/128);
   s.sourcePullbackGrid=unsigned((s.prefixRows+127)/128);
-  if(!attentionKernelParameters(s.forward,12) || !attentionKernelParameters(s.tangent,17) ||
+  if(!attentionKernelParameters(s.forward,12) || !attentionKernelParameters(s.tangent,sourceRows?16:17) ||
+     (sourceRows && (!s.reverseRowStage || !attentionKernelParameters(s.rowFunction,14))) ||
      !ok(cuModuleLoadData(&s.prefixModule,normImage),"load source normalization") ||
      !ok(cuModuleGetFunction(&s.prefixFunction,s.prefixModule,normEntry),"resolve source normalization") ||
      !attentionKernelParameters(s.prefixFunction,4) ||
@@ -870,6 +872,30 @@ extern "C" int tessera_nvidia_source_attention_reverse_prepare(
   for(auto &event:s.sourceEvents)
     if(!ok(cuEventCreate(&event,CU_EVENT_DEFAULT),"create source reverse stage event"))return fail(3);
   *handle=id;return 0;
+}
+
+extern "C" int tessera_nvidia_source_attention_reverse_prepare(
+  const void *normImage,size_t normBytes,const char *normEntry,int cooperative,
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *bimage,size_t bbytes,const char *bentry,
+  const void *pullbackImage,size_t pullbackBytes,const char *pullbackEntry,
+  const int64_t *dims,const int *mapping,const int *seedOrder,
+  const int *selectedRoles,size_t selectedCount,int storage,uint64_t *handle){
+  return prepareSourceAttentionReverse(normImage,normBytes,normEntry,cooperative,
+      fimage,fbytes,fentry,bimage,bbytes,bentry,pullbackImage,pullbackBytes,pullbackEntry,
+      dims,mapping,seedOrder,selectedRoles,selectedCount,storage,handle);
+}
+extern "C" int tessera_nvidia_source_attention_reverse_rows_prepare(
+  const void *normImage,size_t normBytes,const char *normEntry,int cooperative,
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *rimage,size_t rbytes,const char *rentry,
+  const void *bimage,size_t bbytes,const char *bentry,
+  const void *pullbackImage,size_t pullbackBytes,const char *pullbackEntry,
+  const int64_t *dims,const int *mapping,const int *seedOrder,
+  const int *selectedRoles,size_t selectedCount,int storage,uint64_t *handle){
+  return prepareSourceAttentionReverse(normImage,normBytes,normEntry,cooperative,
+      fimage,fbytes,fentry,bimage,bbytes,bentry,pullbackImage,pullbackBytes,pullbackEntry,
+      dims,mapping,seedOrder,selectedRoles,selectedCount,storage,handle,true,rimage,rbytes,rentry);
 }
 
 static int invokeAttentionVjp(
@@ -987,7 +1013,7 @@ static int invokeAttentionVjp(
      !ok(cuEventRecord(s.events[1],s.stream),"end saved forward"))return 3;
   if(s.reverseRowStage){
     void *ra[16]{};size_t ri=0;
-    for(auto slot:baseSlots)ra[ri++]=&s.buffers[slot];
+    for(auto slot:baseSlots)ra[ri++]=slot==0?&attentionQ:&s.buffers[slot];
     if(s.bias)ra[ri++]=&s.buffers[6];
     ra[ri++]=&s.buffers[4];
     if(s.reverseLseSeed)ra[ri++]=&s.buffers[11];
@@ -1032,23 +1058,44 @@ extern "C" int tessera_nvidia_source_attention_reverse_invoke(
   return invokeAttentionVjp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
                             outputCount,nullptr,producerStreams,producerCount,false,0,true);
 }
-extern "C" int tessera_nvidia_source_attention_reverse_last_times(
-  uint64_t handle,float *milliseconds,size_t count){
+extern "C" int tessera_nvidia_source_attention_reverse_rows_invoke(
+  uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
+  const uint64_t *producerStreams,size_t producerCount,
+  void *const *outputs,const size_t *outputBytes,size_t outputCount){
+  return invokeAttentionVjp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
+                            outputCount,nullptr,producerStreams,producerCount,true,0,true);
+}
+static int sourceAttentionReverseLastTimes(
+  uint64_t handle,float *milliseconds,size_t count,bool rowsABI){
   ownerError.clear();
   if(getpid()!=ownerProcess)return bad("source attention reverse cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
   auto found=owners.find(handle);
-  if(found==owners.end() || !found->second->sourceReverse || !found->second->reverseCompleted ||
-     !milliseconds || count!=5)return bad("source attention reverse timing requires a completed program and five floats");
+  if(found==owners.end() || !found->second->sourceReverse ||
+     found->second->reverseRows!=rowsABI || !found->second->reverseCompleted ||
+     !milliseconds || count!=(rowsABI?6u:5u))
+    return bad("source attention reverse timing requires a completed matching program and exact stage count");
   auto &s=*found->second;CUcontext context=nullptr;unsigned long long identity=0;
   if(!ok(cuCtxGetCurrent(&context),"source reverse timing context") ||
      !ok(cuCtxGetId(s.context,&identity),"source reverse timing context generation"))return 3;
   if(context!=s.context || identity!=s.contextIdentity)return bad("source reverse timing context disagrees");
-  const CUevent begin[5]={s.sourceEvents[0],s.events[0],s.events[2],s.sourceEvents[2],s.sourceEvents[0]};
-  const CUevent end[5]={s.sourceEvents[1],s.events[1],s.events[3],s.sourceEvents[3],s.sourceEvents[3]};
-  for(size_t i=0;i<5;++i)
+  const CUevent begin[6]={s.sourceEvents[0],s.events[0],
+      rowsABI?s.rowEvents[0]:s.events[2],rowsABI?s.events[2]:s.sourceEvents[2],
+      rowsABI?s.sourceEvents[2]:s.sourceEvents[0],s.sourceEvents[0]};
+  const CUevent end[6]={s.sourceEvents[1],s.events[1],
+      rowsABI?s.rowEvents[1]:s.events[3],rowsABI?s.events[3]:s.sourceEvents[3],
+      s.sourceEvents[3],s.sourceEvents[3]};
+  for(size_t i=0;i<count;++i)
     if(!ok(cuEventElapsedTime(&milliseconds[i],begin[i],end[i]),"source reverse stage elapsed"))return 3;
   return 0;
+}
+extern "C" int tessera_nvidia_source_attention_reverse_last_times(
+  uint64_t handle,float *milliseconds,size_t count){
+  return sourceAttentionReverseLastTimes(handle,milliseconds,count,false);
+}
+extern "C" int tessera_nvidia_source_attention_reverse_rows_last_times(
+  uint64_t handle,float *milliseconds,size_t count){
+  return sourceAttentionReverseLastTimes(handle,milliseconds,count,true);
 }
 extern "C" int tessera_nvidia_source_attention_reverse_close(uint64_t handle){
   return tessera_nvidia_attention_vjp_close(handle);

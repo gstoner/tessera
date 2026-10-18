@@ -125,3 +125,30 @@ def test_norm_policy_overrides_are_not_silently_dropped():
     module.functions[0].body[0].kwargs["numeric_policy"] = "custom"
     assert not scheduled_kernel.supports_scheduled_kernel(module, target="nvidia_sm120")
     assert not nvidia_native.supports_norm(module)
+
+
+@pytest.mark.compiler_route
+@pytest.mark.skipif(find_tessera_opt() is None, reason="requires native scheduling compiler")
+@pytest.mark.parametrize("dtype", ["fp16", "bf16", "fp32"])
+@pytest.mark.parametrize("policy,accepted", [
+    ('{accum = "fp32"}', True),
+    ('{accum = "f32"}', True),
+    ('{accum = "fp16"}', False),
+    ('{accum = "fp32", reassociate = true}', False),
+    ('"custom"', False),
+])
+def test_native_norm_member_explicit_accumulator(dtype, policy, accepted):
+    artifact = scheduled_kernel.lower_scheduled_kernel(
+        norm_module(dtype), target="nvidia_sm120")
+    source = artifact.graph_ir
+    assert "eps = " in source
+    source = source.replace("eps = ", "numeric_policy = " + policy + ", eps = ", 1)
+    if not accepted:
+        marker = "Tessera numeric policy dictionary" if policy == '"custom"' else "semantic-kernel contract"
+        with pytest.raises(RuntimeError, match=marker):
+            run_tessera_opt(find_tessera_opt(), source, "--tessera-graph-to-schedule")
+        return
+    scheduled = run_tessera_opt(find_tessera_opt(), source, "--tessera-graph-to-schedule")
+    assert "schedule.norm" in scheduled
+    tile = run_tessera_opt(find_tessera_opt(), scheduled, "--tessera-schedule-to-tile")
+    assert "llvm.func" in tile

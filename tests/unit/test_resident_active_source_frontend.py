@@ -40,7 +40,8 @@ def test_source_active_resident_frontend_uses_typed_trace_without_host_reads(
     class Owner:
         def __init__(self, source):
             observed.append(source)
-            self._public_runtime_artifact = object()
+            self._public_runtime_artifact = rt.RuntimeArtifact(
+                graph_ir=source, metadata={"target": "nvidia_sm120"})
             self.receipt = {"native_call_binding": "prepared_cpp_active_source_program"}
 
         def __call__(self, values):
@@ -62,6 +63,7 @@ def test_source_active_resident_frontend_uses_typed_trace_without_host_reads(
                                      tangents=(seed,)) if keywords
                        else fn.native_jvp(*roots, tangents=(seed,)))
             assert all(output.shape == (17, 19) for output in outputs)
+            assert fn.last_jvp_execution["artifact_hash"] == fn.native_jvp_runtime_artifact().artifact_hash
         assert len(observed) == 1
         assert 'tessera.rmsnorm' in observed[0]
         assert 'tessera.relu' in observed[0] and 'tessera.matmul' in observed[0]

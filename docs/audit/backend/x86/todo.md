@@ -7,6 +7,20 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017 — generation-owned outputs
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017.
+Evidence: benchmarks/baselines/sm120_native_tensor_results_20261017/README.md.
+Contract: docs/spec/ir/sm120_native_tensor_result_contract.md.
+
+Not applicable to x86 physical execution: the shared launch wrapper delegates
+x86 targets to their existing executor and CUDA result placement is SM120-only.
+Follow-up required for any future independently owned native CPU result API.
+No x86 ABI, SIMD lowering or result-storage selector changes. Matching norm
+policy admission is NVIDIA-target-gated. CUDA generations/events and RTX5070
+timings establish no AVX-512 numerical or performance claim.
+
 ## GFX1201-KN-QUAD-TRANSPOSE-20261017 — native packed LDS candidate
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / LAYOUT-ALG-1 / E2E-REAL-6.

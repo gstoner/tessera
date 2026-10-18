@@ -5,6 +5,20 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017 — generation-owned outputs
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017.
+Evidence: benchmarks/baselines/sm120_native_tensor_results_20261017/README.md.
+Contract: docs/spec/ir/sm120_native_tensor_result_contract.md.
+
+Follow-up required for HIP result generations on each owning architecture.
+The shared launch wrapper delegates ROCm targets to their existing executor;
+CUDA result placement is admitted only for static SM120 tensor JVP. AMD norm
+policy, WMMA/FP8/NVFP4 schedules and runtime ABIs receive no new admission.
+In particular gfx1151 has no FP8 WMMA; no gfx1201 or SM120 evidence transfers
+to it. Existing ROCm numerical/performance obligations remain open.
+
 ## GFX1201-KN-QUAD-TRANSPOSE-20261017 — native packed LDS candidate
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / LAYOUT-ALG-1 / E2E-REAL-6.

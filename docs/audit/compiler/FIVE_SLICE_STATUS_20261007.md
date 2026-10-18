@@ -14,13 +14,38 @@ K=1024-4096 profiles, with a3-4percent forced K128 LDS regression. Completed
 public-call time has no consistent gain. All12 FP8/MXFP8/MXFP4 control image
 pairs remain identical; three KN BF16/AITER gaps remain 11-22 percent.
 Frozen WSL CPU passes 26,349 (5,897 skipped), compiler-route passes 1,614
-with zero skips, and 33 generated documents plus Ruff/mypy pass. Public
-CI/review and guarded publication remain pending. All five aggregate slices
+with zero skips, and 33 generated documents plus Ruff/mypy pass. PR981 merged as a59131573 after all required CI and complete review audit.
+All five aggregate slices
 remain open. Evidence:
 benchmarks/baselines/gfx1201_kn_quad_transpose_20261017/README.md.
 
 
 # Five compiler slices after PR 892: completion evidence
+
+
+## Native paired tensor result ownership candidate — 2026-10-17
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Synchronization key: SM120-NATIVE-JVP-RESIDENT-RESULTS-20261017.
+
+Current uncommitted SM120 candidate retains native Graph AD/Schedule/Tile/Target
+images and adds independent FP32 result generations for source/RHS paired JVP.
+Current-source numerical/lifetime cases include compiled FP32 RMSNorm consumers,
+cache eviction, fresh-process replay, context and fork guards, registered
+asynchronous consumers and event-retention fault injection. A pre-reserved
+pending-producer negative control detects removal of native stream waits.
+A native Schedule mismatch for explicit FP32 norm policy is corrected without
+discarding unsupported policy fields.
+
+Counterbalanced completed public output-placement measurements exposed repeated
+artifact hashing. Placement-artifact reuse reduces CUDA/host ratios from
+1.15-1.49 to 0.97-1.10 across six named FP16/BF16 profiles, with validation
+outside timing. Kernel images are unchanged. Small-case overhead remains;
+there is no kernel-speedup or default-route claim. The final focused lane passes 642 (7 skipped), CPU passes 26,345 (5,905
+skipped), compiler-route passes 1,629 with zero skips/certificate, and 48
+adjacent RTX5070 attention cases pass. Public CI/review and publication remain
+pending. All five aggregate slices remain open.
+Specification: docs/spec/ir/sm120_native_tensor_result_contract.md.
 
 
 ## Bounded prepared host attention JVP — 2026-10-17

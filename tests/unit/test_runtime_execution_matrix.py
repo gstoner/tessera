@@ -130,10 +130,22 @@ def test_runtime_launch_imports_the_matrix():
         "docs/audit/compiler/COMPILER_AUDIT.md")
 
 
-def test_runtime_launch_unimplemented_branch_cites_the_matrix():
-    """The non-CPU unimplemented fallthrough should point readers to the matrix
-    dashboard in its reason, so the runtime + docs are linked."""
-    import inspect
+@pytest.mark.parametrize("target", ["rocm", "nvidia_sm120", "apple_gpu"])
+def test_runtime_launch_unimplemented_branch_cites_the_matrix(target, monkeypatch):
+    """The public fallback result must link the matrix, even through wrappers."""
+    from types import SimpleNamespace
     from tessera import runtime as R
-    src = inspect.getsource(R.launch)
-    assert "runtime_execution_matrix.md" in src
+    # Model an unavailable host without probing any GPU. This artifact has no
+    # executable image or failed compiler gate, so it reaches the matrix's
+    # documented non-executable fallthrough through the real public API.
+    monkeypatch.setattr(R, "backend_capabilities",
+                        lambda target: SimpleNamespace(available=False))
+    artifact = R.RuntimeArtifact(metadata={
+        "target": target, "compiler_path": "artifact_only",
+        "canonical_first_failing_gate": None,
+    })
+    result = R.launch(artifact, ())
+    assert result["ok"] is False
+    assert result["runtime_status"] == "missing_backend"
+    assert result["first_failing_gate"] is None
+    assert "docs/audit/generated/runtime_execution_matrix.md" in result["reason"]

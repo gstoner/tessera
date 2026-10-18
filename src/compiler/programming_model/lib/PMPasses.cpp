@@ -1759,8 +1759,18 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     if ((!nvidia && !x86 && !gfx1201Norm) || (x86 && schedule.storage != "f32") ||
         schedule.storage.empty() || input.getShape() != output.getShape() ||
         input.getElementType() != output.getElementType() ||
-        (axis && axis.getInt() != -1 && axis.getInt() != input.getRank() - 1) ||
-        op->hasAttr("numeric_policy")) return failure();
+        (axis && axis.getInt() != -1 && axis.getInt() != input.getRank() - 1))
+      return failure();
+    // The native SM120 row kernel computes in f32. An explicit matching
+    // declaration is the same computation; other policy fields need their
+    // own consumers rather than being discarded by member projection.
+    if (Attribute request = op->getAttr("numeric_policy")) {
+      auto policy = dyn_cast<DictionaryAttr>(request);
+      auto accum = policy ? policy.getAs<StringAttr>("accum") : StringAttr{};
+      if (!nvidia || !policy || policy.size() != 1 || !accum ||
+          (accum.getValue() != "fp32" && accum.getValue() != "f32"))
+        return failure();
+    }
     schedule.epsilon = static_cast<float>(eps ? eps.getValueAsDouble() :
         opName == "tessera.rmsnorm_safe" ? 1e-6 : 1e-5);
     if (!std::isfinite(schedule.epsilon) || schedule.epsilon <= 0.0) return failure();

@@ -13572,3 +13572,29 @@ promotion. Existing schema namespaces retain their meanings.
 
 Evidence: benchmarks/baselines/rocm_mixed_scalar_20261018/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-18 — native public ROCm source pullback
+
+Owner: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1)
+PRs: pending; sync ROCM-SOURCE-PULLBACK-20261018.
+
+Outcome: The original static FP16/BF16 RMSNorm/ReLU/plain FP32-output matmul
+source pullback follows paired native AD, native SSA outlining, Schedule/Tile,
+architecture-owned schema-7 row Target lowering, LLVM/HSACO and a checked
+retained C++ HIP owner. Public native_backward and common-runtime portable
+replay preserve roots, private lifetimes, returned generations and exact-device
+certification. Compiler frames own physical scalars and launch geometry.
+
+Each owning AMD host passes 106 device cases (39 composed/public and 67 scalar).
+RTX5070 passes 167 sibling cases; forty NVIDIA member-stage digests remain
+byte-identical. CPU passes 30,706 (3,724 skipped); compiler-route passes 1,983
+without skips. Ruff, zero-error mypy and all five surface/claim gates pass.
+Warm public, prepared, portable and native event scopes remain separate.
+All four backend plans are assessed. Public CI/review remain.
+
+Remaining: Broader AD/numerical regimes, dynamic/resident/arbitrary layouts,
+full-model quality, W8A8/MXFP4 performance and all five aggregate slices.
+No new datatype, sibling physical schedule or general performance promotion.
+
+Evidence: benchmarks/baselines/rocm_source_pullback_20261018/README.md.
+<!-- entry-fields:end -->

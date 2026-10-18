@@ -60,6 +60,7 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/MathExtras.h"
 #include "llvm/Support/JSON.h"
+#include "llvm/Support/Base64.h"
 #include "llvm/Support/SHA256.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -4853,6 +4854,41 @@ struct ScheduleToTilePass
           scalar.addAttribute("tessera.macro_tile_m", kernelBuilder.getI64IntegerAttr(selected->macroTileM));
           scalar.addAttribute("tessera.macro_tile_n", kernelBuilder.getI64IntegerAttr(selected->macroTileN));
           kernelBuilder.create(scalar);
+        if (selected->target != "nvidia_sm120") {
+          llvm::json::Array buffers;
+          SmallVector<RankedTensorType> types{lhsType,rhsType,resultType};
+          for (auto [ordinal,type] : llvm::enumerate(types)) {
+            int64_t bytes=type.getElementTypeBitWidth()/8;
+            if (type.getNumElements()>INT64_MAX/bytes) {
+              scheduled.emitError("native scalar frame byte span exceeds its signed ABI limit");
+              return signalPassFailure();
+            }
+            llvm::json::Array shape;
+            for (auto extent:type.getShape()) shape.push_back(extent);
+            std::string storage;llvm::raw_string_ostream stream(storage);
+            type.getElementType().print(stream);stream.flush();
+            buffers.push_back(llvm::json::Object{
+              {"ordinal",int64_t(ordinal)},{"shape",std::move(shape)},{"storage",storage},
+              {"elements",type.getNumElements()},{"bytes",bytes*type.getNumElements()},
+              {"direction",ordinal<2?"input":"output"}});
+          }
+          llvm::json::Object frame{
+            {"schema","tessera.native.rocm_scalar_matmul_frame.v1"},
+            {"architecture",selected->arch},
+            {"tile_entry",kernelName},{"abi","flattened_rank1_memrefs_then_i64"},
+            {"buffers",std::move(buffers)},
+            {"scalars",llvm::json::Array{selected->m,selected->n,selected->k}},
+            {"geometry",llvm::json::Array{
+              (selected->n+selected->macroTileN-1)/selected->macroTileN,
+              (selected->m+selected->macroTileM-1)/selected->macroTileM,
+              int64_t(1),int64_t(32),int64_t(1),int64_t(1)}},
+            {"transposeA",selected->scalarTransposeA},{"transposeB",selected->scalarTransposeB},
+            {"schedule_hash",scheduled.getArtifactHash().str()}};
+          std::string text;llvm::raw_string_ostream stream(text);
+          stream<<llvm::json::Value(std::move(frame));stream.flush();
+          mod->setAttr("tessera.native.scalar_matmul_frame_json",
+              builder.getStringAttr(llvm::encodeBase64(text)));
+        }
 
         LLVM::ReturnOp::create(kernelBuilder, loc, ValueRange{});
         scheduled.getScheduled().replaceAllUsesWith(graph->getResult(0));

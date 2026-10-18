@@ -1,3 +1,4 @@
+#include "NativeSourceRowProgramExport.h"
 #include "ParentViewProgramExport.h"
 #include "NativeBlockQuantMaterializer.h"
 #include "Tessera/IR/RowRegionContract.h"
@@ -2806,10 +2807,12 @@ struct LowerTileToROCMPass
     SmallVector<tessera::tile::RowRegionKernelOp> viewKernels;
     for (auto kernel : getOperation().getOps<tessera::tile::RowRegionKernelOp>()) viewKernels.push_back(kernel);
     if (!viewKernels.empty()) {
-      if (arch != "gfx1201" || viewKernels.size() != 1 || getOperation().getBody()->getOperations().size() != 1 ||
-          viewKernels.front().getArch() != "gfx1201" ||
-          (viewKernels.front().getSchema() != 2 && viewKernels.front().getSchema() != 3 && viewKernels.front().getSchema() != 4)) {
-        getOperation().emitError("ROCm native row lowering requires its isolated gfx1201 schema-2/3/4 profile");
+      if (viewKernels.size() != 1 || getOperation().getBody()->getOperations().size() != 1 ||
+          viewKernels.front().getArch() != arch ||
+          !((arch == "gfx1201" &&
+             (viewKernels.front().getSchema() == 2 || viewKernels.front().getSchema() == 3 || viewKernels.front().getSchema() == 4)) ||
+            ((arch == "gfx1151" || arch == "gfx1201") && viewKernels.front().getSchema() == 7))) {
+        getOperation().emitError("ROCm native row lowering requires an isolated gfx1201 schema-2/3/4 or owning gfx1151/gfx1201 schema-7 profile");
         return signalPassFailure();
       }
       auto kernel = viewKernels.front();
@@ -2825,6 +2828,8 @@ struct LowerTileToROCMPass
       if (failed(tessera::row_region::verifyKernel(target))) return signalPassFailure();
       if (target->getAttrOfType<IntegerAttr>("schema").getInt()==4) {
         if (failed(exportBlockQuantProgram(getOperation(),target))) return signalPassFailure();
+      } else if (target->getAttrOfType<IntegerAttr>("schema").getInt()==7) {
+        if (failed(exportNativeSourceRowMember(getOperation(),target))) return signalPassFailure();
       } else if (failed(exportParentViewProgram(getOperation(),target))) return signalPassFailure();
       return;
     }

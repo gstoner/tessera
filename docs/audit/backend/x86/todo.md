@@ -7,6 +7,17 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## ROCM-SOURCE-PULLBACK-20261018 — native public source VJP
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Synchronization key: ROCM-SOURCE-PULLBACK-20261018. Base: merged PR985.
+
+Owning implementation and proof boundary: [native ROCm source pullback](../../../spec/ROCM_SOURCE_PULLBACK.md).
+
+Not applicable to x86 physical execution: the new row profile and HIP ABI are AMD-only. Shared AD/IR and registry gates apply; AVX512 execution retains separate evidence.
+
+All five original aggregate slices remain open.
+
 ## ROCM-MIXED-SCALAR-CONTRACTION-20261018 — native mixed adjoint consumer
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

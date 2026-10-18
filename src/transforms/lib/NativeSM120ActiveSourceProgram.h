@@ -9,7 +9,8 @@ static std::string nativeSM120RowBodyHash(mlir::func::FuncOp function,
     auto key = attr.getName().getValue();
     if ((normalizeParentAD && key.starts_with("tessera.autodiff")) ||
         key == "tessera.native.sm120_tensor_member" ||
-        key == "tessera.native.sm120_row_producer")
+        key == "tessera.native.sm120_row_producer" ||
+        key == "tessera.native.rocm_row_producer")
       remove.push_back(attr.getName());
   }
   for (auto key : remove) copy->removeAttr(key);

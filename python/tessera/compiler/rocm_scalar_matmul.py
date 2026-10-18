@@ -107,7 +107,6 @@ def checked_plan(image, descriptor):
 
 
 def package_scheduled_scalar(artifact, *, pipeline_name):
-    from .rocm_native import ROCMNativePackage, _compile_shape_free_tile_ir, _directive_symbol
     from .scheduled_matmul import verify_matmul_projection
 
     artifact.validate()
@@ -119,30 +118,72 @@ def package_scheduled_scalar(artifact, *, pipeline_name):
             artifact.activation != "none" or
             artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k or artifact.split_k != 1):
         raise ValueError("ROCm scalar packaging requires its static native Schedule contract")
+    return package_native_scalar_ir(
+        artifact.graph_ir, artifact.schedule_ir, artifact.tile_ir,
+        architecture=artifact.architecture, pipeline_name=pipeline_name,
+        bindings=(artifact.a_name, artifact.b_name, artifact.output_name))
+
+
+def package_native_scalar_ir(graph_ir, schedule_ir, tile_ir, *, architecture,
+                             pipeline_name="tessera-rocm-executable",
+                             bindings=("a", "b", "out")):
+    """Bind the compiler-exported frame; never reconstruct Graph operations."""
+    from .native_scaled_program import _manifest
+    from .rocm_native import ROCMNativePackage, _compile_shape_free_tile_ir, _directive_symbol
+    from .rocm_pass_cache import run
+    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+
+    tool = find_tessera_opt()
+    if tool is None or architecture not in {"gfx1151", "gfx1201"} or pipeline_name != "tessera-rocm-executable":
+        raise ValueError("native scalar member requires its owning compiler/architecture")
+    if (run(tool, graph_ir, "--tessera-graph-to-schedule", execute=run_tessera_opt) != schedule_ir or
+            run(tool, schedule_ir, "--tessera-schedule-to-tile", execute=run_tessera_opt) != tile_ir):
+        raise ValueError("native scalar member differs from its Graph/Schedule replay")
+    frame = _manifest(tile_ir, "tessera.native.scalar_matmul_frame_json",
+                      expected_schema="tessera.native.rocm_scalar_matmul_frame.v1")
+    fields = {"schema", "architecture", "tile_entry", "abi", "buffers", "scalars",
+              "geometry", "transposeA", "transposeB", "schedule_hash"}
+    if (set(frame) != fields or frame["schema"] != "tessera.native.rocm_scalar_matmul_frame.v1" or
+            frame["architecture"] != architecture or frame["abi"] != "flattened_rank1_memrefs_then_i64" or
+            not isinstance(frame["buffers"], list) or len(frame["buffers"]) != 3 or
+            not isinstance(frame["scalars"], list) or len(frame["scalars"]) != 3 or
+            any(type(v) is not int or v <= 0 for v in frame["scalars"]) or
+            not isinstance(frame["geometry"], list) or len(frame["geometry"]) != 6 or
+            any(type(v) is not int or v <= 0 for v in frame["geometry"]) or
+            type(frame["transposeA"]) is not bool or type(frame["transposeB"]) is not bool or
+            not isinstance(bindings, (tuple, list)) or len(bindings) != 3 or
+            any(type(name) is not str or not name for name in bindings) or len(set(bindings)) != 3):
+        raise ValueError("native scalar member frame differs")
+    entries = re.findall(r"llvm.func @(\w+)\(", tile_ir)
+    if entries != [frame["tile_entry"]]:
+        raise ValueError("native scalar frame entry differs from its Tile body")
+    names = tuple(bindings)
+    reverse_storage = {v: k for k, v in _STORAGE.items()}
+    types, shapes = [], []
+    for index, row in enumerate(frame["buffers"]):
+        if (not isinstance(row, dict) or set(row) != {"ordinal", "shape", "storage", "elements", "bytes", "direction"} or
+                type(row["ordinal"]) is not int or row["ordinal"] != index or
+                type(row["storage"]) is not str or row["storage"] not in reverse_storage or row["direction"] != ("input" if index < 2 else "output") or
+                not isinstance(row["shape"], list) or len(row["shape"]) != 2 or
+                any(type(v) is not int or v <= 0 for v in row["shape"])):
+            raise ValueError("native scalar per-role frame differs")
+        elements = math.prod(row["shape"])
+        width = 4 if row["storage"] == "f32" else 2
+        if (type(row["elements"]) is not int or row["elements"] != elements or
+                type(row["bytes"]) is not int or row["bytes"] != elements * width):
+            raise ValueError("native scalar frame byte span differs")
+        types.append(reverse_storage[row["storage"]])
+        shapes.append(tuple(row["shape"]))
     target, backend, payload, compiler, toolchain, libraries, state = _compile_shape_free_tile_ir(
-        artifact.tile_ir, family="scalar_matmul", architecture=artifact.architecture)
+        tile_ir, family="scalar_matmul", architecture=architecture)
     entry = _directive_symbol(target, "tessera_rocm.scalar_matmul")
     image = NativeImageArtifact(
-        target="rocm_" + artifact.architecture, architecture=artifact.architecture,
+        target="rocm_" + architecture, architecture=architecture,
         pipeline_name=pipeline_name, compiler_fingerprint=compiler, toolchain_fingerprint=toolchain,
         target_ir_digest=hashlib.sha256(target.encode()).hexdigest(),
         binary_format="hsaco", payload=payload,
         entry_points=(NativeEntryPoint(entry, SCALAR_MATMUL_ABI),),
         compile_state=state, device_libraries=libraries)
-    types = (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype)
-    # The native Schedule states orientation; no Python physical decision.
-    records = re.findall(r' = schedule.matmul %\w+ \{([^{}]*)\}', artifact.schedule_ir)
-    if len(records) != 1:
-        raise ValueError("ROCm scalar Schedule orientation requires one native decision")
-    flags = []
-    for name in ("transposeA", "transposeB"):
-        values = re.findall(r'(?:^|, )' + name + r' = (true|false)(?:,|$)', records[0])
-        if len(values) > 1:
-            raise ValueError("ROCm scalar Schedule orientation is ambiguous")
-        flags.append(values == ["true"])
-    m, n, k = artifact.m, artifact.n, artifact.k
-    shapes = ((k, m) if flags[0] else (m, k), (n, k) if flags[1] else (k, n), (m, n))
-    names = (artifact.a_name, artifact.b_name, artifact.output_name)
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=entry, abi_id=SCALAR_MATMUL_ABI,
         buffers=tuple(BufferBinding(i, name, "input" if i < 2 else "output", dtype, 2,
@@ -152,16 +193,18 @@ def package_scheduled_scalar(artifact, *, pipeline_name):
         shape_guards=tuple(ShapeGuard(name, axis, "eq", size)
                           for name, shape in zip(names, shapes, strict=True)
                           for axis, size in enumerate(shape)),
-        geometry=LaunchGeometry(grid=((n + 7)//8, (m + 15)//16, 1), workgroup=(32, 1, 1)),
+        geometry=LaunchGeometry(grid=tuple(frame["geometry"][:3]), workgroup=tuple(frame["geometry"][3:])),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
         provenance={"route": "canonical_scheduled_scalar_fma", "physical_route": "ordered_fp32_scalar_fma",
-                    "shape": [m, n, k], "scalar_types": list(types),
-                    "transposeA": flags[0], "transposeB": flags[1],
-                    "native_target_ir": target, "native_schedule_ir": artifact.schedule_ir,
-                    "graph_digest": artifact.graph_digest, "schedule_digest": artifact.schedule_digest,
-                    "schedule_ir_digest": artifact.schedule_ir_digest, "tile_ir_digest": artifact.tile_digest})
+                    "shape": frame["scalars"], "scalar_types": types,
+                    "transposeA": frame["transposeA"], "transposeB": frame["transposeB"],
+                    "native_target_ir": target, "native_schedule_ir": schedule_ir,
+                    "graph_digest": hashlib.sha256(graph_ir.encode()).hexdigest(),
+                    "schedule_digest": frame["schedule_hash"],
+                    "schedule_ir_digest": hashlib.sha256(schedule_ir.encode()).hexdigest(),
+                    "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest()})
     checked_plan(image, descriptor)
-    return ROCMNativePackage(artifact.tile_ir, target, backend, image, descriptor)
+    return ROCMNativePackage(tile_ir, target, backend, image, descriptor)
 
 
 def validate_runtime_artifact(artifact):

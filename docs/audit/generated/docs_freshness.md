@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-18**.
 
 ## Headline
 
-- **180** docs catalogued across the canonical doc tree.
-- **179** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **45** updated within the last 30 days.
+- **181** docs catalogued across the canonical doc tree.
+- **180** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **46** updated within the last 30 days.
 - **70** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -47,6 +47,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `PYTHON_API_SPEC.md` | Normative | 2026-10-15 | 3 | ✓ |
 | `ROCM_FOLDED_INPUT_VIEWS.md` | - | 2026-10-16 | 2 | ✓ |
 | `ROCM_MIXED_SCALAR_CONTRACTION.md` | - | 2026-10-18 | 0 | ✓ |
+| `ROCM_SOURCE_PULLBACK.md` | - | 2026-10-18 | 0 | ✓ |
 | `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 92 | ✓ |
 | `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 149 | ✓ |
 | `SM120_ATTENTION_ROW_OWNER_CONTRACT.md` | - | 2026-10-17 | 1 | ✓ |

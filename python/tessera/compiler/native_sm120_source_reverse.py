@@ -11,13 +11,22 @@ from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 SCHEMA = "tessera.native.sm120_source_reverse_outline.v1"
 
 
-def validate_plan(text):
+def validate_plan(text, *, target_family="nvidia_sm120"):
+    if target_family not in {"nvidia_sm120", "rocm"}:
+        raise ValueError("source reverse target family differs")
+    rocm = target_family == "rocm"
     plan = json.loads(text)
     keys = {"schema", "kind", "execution_state", "source_graph_ir", "paired_graph_ir",
             "root", "role_indices", "buffers", "steps", "outputs", "member_graphs"}
-    if (not isinstance(plan, dict) or set(plan) != keys or plan["schema"] != SCHEMA
+    if rocm:
+        keys |= {"target", "architecture"}
+    expected_schema = "tessera.native.rocm_source_reverse_outline.v1" if rocm else SCHEMA
+    if (not isinstance(plan, dict) or set(plan) != keys or plan["schema"] != expected_schema
             or plan["kind"] != "paired_source_reverse" or plan["execution_state"] != "artifact_only"):
         raise ValueError("source reverse outline schema differs")
+    if rocm and (type(plan["architecture"]) is not str or plan["architecture"] not in {"gfx1151", "gfx1201"}
+                 or plan["target"] != "rocm_" + plan["architecture"]):
+        raise ValueError("source reverse owning architecture differs")
     roles = plan["role_indices"]
     if (not isinstance(roles, list) or len(roles) != 3
             or any(type(v) is not int for v in roles)
@@ -85,10 +94,11 @@ class NativeSourceReverseProgram:
     plan_json: str
     tool: Path
     compiler_identity: str
+    target_family: str = "nvidia_sm120"
 
     @property
     def manifest(self):
-        return validate_plan(self.plan_json)
+        return validate_plan(self.plan_json, target_family=self.target_family)
 
     def lower_members(self):
         """Consume exact native-outlined Graphs; no Python Tile construction."""
@@ -99,15 +109,22 @@ class NativeSourceReverseProgram:
         for graph in plan["member_graphs"]:
             schedule = run_tessera_opt(self.tool, graph, "--tessera-graph-to-schedule")
             tile = run_tessera_opt(self.tool, schedule, "--tessera-schedule-to-tile")
-            target = run_tessera_opt(self.tool, tile, "--lower-tile-to-nvidia=sm=120")
-            native = run_tessera_opt(self.tool, target, "--lower-tessera-nvidia-to-nvvm")
+            if self.target_family == "rocm":
+                target = run_tessera_opt(self.tool, tile, "--lower-tile-to-rocm=arch=" + plan["architecture"])
+                gpu = run_tessera_opt(self.tool, target, "--generate-rocm-gemm-f32-kernel")
+                native = run_tessera_opt(self.tool, gpu, "--lower-tessera-target-to-rocdl")
+            else:
+                target = run_tessera_opt(self.tool, tile, "--lower-tile-to-nvidia=sm=120")
+                native = run_tessera_opt(self.tool, target, "--lower-tessera-nvidia-to-nvvm")
             result.append((graph, schedule, tile, target, native))
         if _tool_digest(self.tool) != self.compiler_identity:
             raise RuntimeError("source reverse compiler changed during lowering")
         return tuple(result)
 
 
-def export_native_source_reverse(source, *, tool=None):
+def export_native_source_reverse(source, *, tool=None, target_family="nvidia_sm120"):
+    if target_family not in {"nvidia_sm120", "rocm"}:
+        raise ValueError("source reverse target family differs")
     if not isinstance(source, str):
         raise TypeError("source reverse export consumes frontend Graph MLIR")
     tool = find_tessera_opt() if tool is None else Path(tool)
@@ -116,13 +133,14 @@ def export_native_source_reverse(source, *, tool=None):
     identity = _tool_digest(tool)
     canonical_source = run_tessera_opt(tool, source, "--verify-each")
     outlined = run_tessera_opt(tool, source, "--tessera-autodiff-paired")
-    records = re.findall(r'tessera.native.sm120_reverse_program_json = "([^"]+)"', outlined)
+    attribute = "tessera.native.rocm_reverse_program_json" if target_family == "rocm" else "tessera.native.sm120_reverse_program_json"
+    records = re.findall(re.escape(attribute) + r' = "([^"]+)"', outlined)
     if len(records) != 1:
         raise ValueError("source reverse export requires one native program record")
     text = base64.b64decode(records[0], validate=True).decode()
-    plan = validate_plan(text)
+    plan = validate_plan(text, target_family=target_family)
     if plan["source_graph_ir"].strip() != canonical_source.strip():
         raise ValueError("source reverse outline does not bind this exact canonical input")
     if _tool_digest(tool) != identity:
         raise RuntimeError("source reverse compiler changed during export")
-    return NativeSourceReverseProgram(plan["source_graph_ir"], outlined, text, tool, identity)
+    return NativeSourceReverseProgram(plan["source_graph_ir"], outlined, text, tool, identity, target_family)

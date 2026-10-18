@@ -28,7 +28,7 @@ class ROCMOutputLevel(str, Enum):
 
 #: The gfx1201 promotions, by name. Every other RDNA4/CDNA arch has none.
 _GFX1201_PROMOTED_FAMILIES = frozenset({
-    "parent_view", "block_quant",
+    "parent_view", "block_quant", "source_reverse_row",
     "softmax", "reduction", "matmul", "attention", "attention_backward",
     # Two scalar per-thread families with no WMMA fragment in them, promoted
     # 2026-09-17 on exact-device evidence from Tajasarus (RX 9070 XT):
@@ -102,7 +102,7 @@ _GFX1201_PROMOTED_FAMILIES = frozenset({
 RDNA4_ONLY_FAMILIES = frozenset({"sparse_matmul_2to4"})
 
 # Named physical profiles; hardware ISA availability alone is insufficient.
-ARCHITECTURE_OWNED_FAMILIES = frozenset({"parent_view", "block_quant"})
+ARCHITECTURE_OWNED_FAMILIES = frozenset({"parent_view", "block_quant", "source_reverse_row"})
 
 
 def generic_lane_families() -> frozenset[str]:
@@ -125,7 +125,7 @@ def promoted_families(arch: str) -> frozenset[str]:
     does not exist here" as "this proof is broken".
     """
     if arch == "gfx1151":
-        return frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES - ARCHITECTURE_OWNED_FAMILIES
+        return (frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES - ARCHITECTURE_OWNED_FAMILIES) | {"source_reverse_row"}
     if arch == "gfx1201":
         return _GFX1201_PROMOTED_FAMILIES
     return frozenset()
@@ -146,6 +146,7 @@ FAMILY_PLUGINS: dict[str, ROCMFamilyPlugin] = {
         backend_codegen="rocdl_hsaco",
     )
     for family in (
+        "source_reverse_row",  # owning gfx1151/gfx1201 sealed source-AD row
         "block_quant",  # gfx1201 schema-4 source-derived K16 quantizer
         "parent_view",  # gfx1201 schema-2 source-preserving native region
         "sparse_matmul_2to4",  # RDNA4-only (SWMMAC); see RDNA4_ONLY_FAMILIES
@@ -286,6 +287,8 @@ class ROCMExecutablePipeline:
             raise ValueError(
                 "family 'control_state_machine' has no Target-IR boundary; "
                 "only output=binary is supported")
+        if self.family == "source_reverse_row" and self.input_level is not ROCMInputLevel.TILE:
+            raise ValueError("ROCm source_reverse_row enters from native Graph -> Schedule -> Tile")
         if self.family == "block_quant" and self.input_level is not ROCMInputLevel.TILE:
             raise ValueError("ROCm block_quant enters from native Graph -> Schedule -> Tile")
         if self.family == "parent_view" and self.input_level is ROCMInputLevel.GRAPH:

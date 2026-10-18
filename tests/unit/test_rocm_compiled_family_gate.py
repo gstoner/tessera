@@ -18,10 +18,10 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
     # gfx1151 has every family with a gfx11 form; the RDNA4-only SWMMAC family
     # (public 2:4 admission, 2026-09-18) never joins it.
     assert RDNA4_ONLY_FAMILIES == {"sparse_matmul_2to4"}
-    assert promoted_families("gfx1151") == frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES - ARCHITECTURE_OWNED_FAMILIES
-    assert generic_lane_families() == promoted_families("gfx1151")
+    assert promoted_families("gfx1151") == (frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES - ARCHITECTURE_OWNED_FAMILIES) | {"source_reverse_row"}
+    assert generic_lane_families() == promoted_families("gfx1151") - {"source_reverse_row"}
     assert promoted_families("gfx1201") == {
-        "parent_view", "block_quant",
+        "parent_view", "block_quant", "source_reverse_row",
         "softmax", "reduction", "matmul", "attention", "attention_backward",
         "control_state_machine", "ebm_affine_langevin",
         # GFX1201-PARITY slice 2 (2026-09-17): the scalar and row-program
@@ -84,6 +84,8 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
     ("gfx1151", "scalar_unary", True),
     ("gfx1151", "parent_view", False),
     ("gfx1151", "block_quant", False),
+    ("gfx1151", "source_reverse_row", True),
+    ("gfx1201", "source_reverse_row", True),
     ("gfx1201", "block_quant", True),
     ("gfx1201", "parent_view", True),
     ("gfx1201", "softmax", True),

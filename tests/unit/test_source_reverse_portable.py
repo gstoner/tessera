@@ -102,7 +102,7 @@ def test_composite_vjp_declaration_is_exact_target_and_real_graph_ops():
     assert "source_normalization_matmul" in declarations
     declaration = declarations["source_normalization_matmul"]
     declaration.validate()
-    assert set(declaration.target_consumers) == {"nvidia_sm120"}
+    assert set(declaration.target_consumers) == {"nvidia_sm120", "rocm_gfx1151", "rocm_gfx1201"}
     assert declaration.graph_consumers == ("tessera.rmsnorm", "tessera.relu", "tessera.matmul")
     for name in declaration.graph_consumers:
         assert name.removeprefix("tessera.") in OP_SPECS

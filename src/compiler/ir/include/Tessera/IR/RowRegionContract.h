@@ -18,6 +18,7 @@ inline std::string sourceDigest(mlir::func::FuncOp fn) {
   auto copy = mlir::cast<mlir::func::FuncOp>(fn->clone());
   copy->removeAttr("tessera.native.sm120_tensor_member");
   copy->removeAttr("tessera.native.sm120_row_producer");
+  copy->removeAttr("tessera.native.rocm_row_producer");
   copy.setSymName("__native_row_body"); copy.setPrivate();
   auto value = digest(copy); copy->destroy(); return value;
 }
@@ -191,9 +192,14 @@ inline mlir::LogicalResult verifyKernel(mlir::Operation *op) {
   if (schemaProfile && (schemaProfile.getInt() == 2 || schemaProfile.getInt() == 3))
     return verifyGateUpKernel(op);
   using namespace mlir;
-  bool singleOutput = schemaProfile && schemaProfile.getInt() == 6;
+  bool rocmProfile = schemaProfile && schemaProfile.getInt() == 7;
+  bool singleOutput = schemaProfile && (schemaProfile.getInt() == 6 || rocmProfile);
   unsigned buffers = singleOutput ? 3 : 4;
-  bool targetBody = op->getName().getStringRef() == "tessera_nvidia.row_region_kernel";
+  bool nvidiaTargetBody = op->getName().getStringRef() == "tessera_nvidia.row_region_kernel";
+  bool rocmTargetBody = op->getName().getStringRef() == "tessera_rocm.row_region_kernel";
+  bool targetBody = nvidiaTargetBody || rocmTargetBody;
+  if ((nvidiaTargetBody && rocmProfile) || (rocmTargetBody && !rocmProfile))
+    return op->emitOpError("native row Target ownership differs from its schema");
   if (!targetBody && op->getName().getStringRef() != "tile.row_region_kernel")
     return op->emitOpError("schema-1 row profile requires Tile or NVIDIA Target ownership");
   auto name = op->getAttrOfType<StringAttr>("name");
@@ -210,15 +216,16 @@ inline mlir::LogicalResult verifyKernel(mlir::Operation *op) {
   auto hex = [](StringAttr value) {
     return value && value.getValue().size() == 64 && llvm::all_of(value.getValue(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
   };
-  if (!name || name.getValue().empty() || !arch || arch.getValue() != "sm_120" ||
-      !schema || (schema.getInt() != 1 && schema.getInt() != 6) || !rows || rows.getInt() <= 0 || rows.getInt() > INT32_MAX ||
+  if (!name || name.getValue().empty() || !arch ||
+      (rocmProfile ? (arch.getValue() != "gfx1151" && arch.getValue() != "gfx1201") : arch.getValue() != "sm_120") ||
+      !schema || (schema.getInt() != 1 && schema.getInt() != 6 && schema.getInt() != 7) || !rows || rows.getInt() <= 0 || rows.getInt() > INT32_MAX ||
       !columns || columns.getInt() <= 0 || columns.getInt() > INT32_MAX ||
       !storage || (!storage.getValue().isF16() && !storage.getValue().isBF16()) ||
       !threads || threads.getInt() != 128 || !hex(bodyHash) || !hex(artifact) || !hex(source) ||
       (targetBody && !hex(tileBody)) ||
       op->getNumRegions() != 1 || !op->getRegion(0).hasOneBlock() ||
       op->getRegion(0).front().getNumArguments() != 0 || op->getRegion(0).front().getOperations().size() != 1)
-    return op->emitOpError("requires a sealed static SM120 schema-1 pair or schema-6 single-output row body");
+    return op->emitOpError("requires a sealed native SM120 schema-1/6 or ROCm schema-7 row body");
   auto fn = dyn_cast<LLVM::LLVMFuncOp>(op->getRegion(0).front().front());
   if (!fn || fn.getName() != name.getValue() || fn.getBody().empty() ||
       fn.getNumArguments() != buffers + 2 || !isa<LLVM::LLVMVoidType>(fn.getFunctionType().getReturnType()) ||

@@ -147,7 +147,59 @@ copies and includes possible dispatch gaps. Compile, native preparation,
 completed native-host and Python end-to-end timing remain distinct.
 
 The prepared candidate has independent-oracle SM120 numerical evidence.
-Ordinary JIT native_backward admission, public execution certificates, sealed
-portable restoration and compiler-free RuntimeArtifact replay remain required
-before claiming public original-source reverse integration. No sibling backend
+The public integration below adds ordinary native_backward, public execution
+certificates, sealed restoration and compiler-free RuntimeArtifact replay
+for this named static original-source profile. No sibling backend
 inherits SM120 physical proof, and none of the five aggregate slices is closed.
+
+
+## Public source reverse and portable execution
+
+The source_normalization_attention composite declaration owns only the named
+SM120 source profile. The existing primitive zero-dropout effect policy is
+checked before concrete frontend certification; unsupported stateful requests
+cannot reexecute source through that parity gate. Ordinary native_backward
+certifies the original frontend
+Graph, projects only module intent/target attributes, and invokes native paired
+AD outlining. It never reconstructs derivative or Tile expressions in Python.
+The prepared cache holds at most eight static source products. Warm calls use
+the already-validated native owner directly; no compiler or manifest rehash
+occurs on that dispatch path. Execution certificates follow actual completion.
+
+native_backward_runtime_artifact materializes an independent portable wrapper
+on request. Its compiled-program schema is
+tessera.nvidia.source_attention_reverse_program.v1. Each member carries Graph,
+Schedule, Tile, Target, native LLVM and PTX witnesses, content hashes and a
+tessera.nvidia.source_attention_reverse_step.v1 launch ABI. The sealed plan
+records all twelve logical buffers and their exact read/write/return lifetimes.
+Typed root calls must agree with standalone member signatures and local names.
+Normalization epsilon, original attention scale/causal/zero-dropout policy,
+storage, saved O/LSE and both seed roles must agree across source and members.
+Static launch dimensions, parameter widths, entry symbols and image target are
+checked before provider acquisition. Restoration uses no production decoder
+that replays compiler passes. Content digests establish integrity, not native
+code authenticity; these checks do not prove arbitrary supplied PTX mathematics.
+
+The common runtime path nvidia_sm120_source_attention_reverse_compiled uses
+the same retained C++ owner after offline validation. The five input bindings
+are primal_0, primal_1, primal_2, cotangent_0, cotangent_1, preserving original
+argument/result order. Fresh-process replay needs no compiler and returns the
+requested original-root gradient order. Invalid calls clear public receipts
+and pending artifact factories. A previously exported mutable wrapper cannot
+alter the immutable prepared owner or a subsequent independent export.
+
+The ordinary execution certificate binds the sealed compiled-program digest.
+A RuntimeArtifact wrapper has its own content identity, attested separately
+when launched through the common runtime. Device event windows and completed
+host/public timing stay separate. The measured public dispatch improvement
+uses identical images and operands; it is not a physical kernel improvement.
+
+Native program executors validate their own actual device/provider. Generic
+C-runtime backend discovery is deferred to the fallback branch that consumes
+it, allowing cold compiler-free replay without external library discovery.
+Shared mock dispatch tests cover Apple, x86 and both AMD targets; those tests
+are not exact-device numerical proof for sibling architectures.
+
+The public SM120 evidence is a named increment. Full dynamic/layout/AD and
+remaining attention/ROCm/NVFP4/performance programs, broad validation and
+publication are still open. None of the five aggregate slices is closed here.

@@ -10,6 +10,7 @@ import re
 import threading
 import time
 from types import SimpleNamespace
+from typing import Any
 import weakref
 
 import numpy as np
@@ -59,9 +60,24 @@ class PreparedSourceAttentionReverse:
             members.append(ReverseMember(graph, schedule, tile, target, lowered, entries[0],
                                          image, hashlib.sha256(image).hexdigest()))
         program.validate()
-        self._members = tuple(members)
+        from .portable_source_attention_reverse import restore, seal
+        self._initialize(*restore(seal(plan, tuple(members))))
+
+    @classmethod
+    def from_manifest(cls, data):
+        from .portable_source_attention_reverse import restore
+        validated = restore(data)
+        owner = cls.__new__(cls)
+        owner._initialize(*validated)
+        return owner
+
+    def _initialize(self, data, plan, members, dims):
+        self._members = members
+        self._portable_text = json.dumps(data, sort_keys=True, allow_nan=False)
+        self._contract_digest = data["contract_digest"]
+        self._source_graph_digest = plan["source_graph_sha256"]
         self._plan_text = json.dumps(plan, sort_keys=True, allow_nan=False)
-        self._dims = forward.dims
+        self._dims = dims
         self._roles = tuple(plan["role_indices"])
         self._seeds = tuple(plan["cotangent_indices"])
         self._selected = tuple(self._roles.index(i) for i in plan["requested_gradients"])
@@ -70,15 +86,21 @@ class PreparedSourceAttentionReverse:
         self._output_specs = tuple((tuple(plan["buffers"][i]["shape"]),
                                     plan["buffers"][i]["storage"])
                                    for i in plan["outputs"])
-        self._storage = {"f16": 2, "bf16": 3}[forward.storage]
+        self._storage = {"f16": 2, "bf16": 3}[plan["buffers"][5]["storage"]]
         self._cooperative = "_cooperative_128_" in self._members[0].entry
         self._pid, self._closed, self._handle = os.getpid(), False, 0
-        self._lib = self._finalizer = None
+        self._lib: ct.CDLL | None = None
+        self._finalizer: weakref.finalize | None = None
         self._lock = threading.RLock()
         self.receipt = None
 
     def manifest(self):
-        return json.loads(self._plan_text)
+        self._guard()
+        return json.loads(self._portable_text)
+
+    def runtime_artifact(self):
+        from .source_attention_reverse_runtime import runtime_artifact
+        return runtime_artifact(self)
 
     def _guard(self):
         if self._pid != os.getpid():
@@ -88,8 +110,13 @@ class PreparedSourceAttentionReverse:
 
     def _check(self, status):
         if status:
-            message = self._lib.tessera_nvidia_attention_vjp_last_error()
+            message = self._library().tessera_nvidia_attention_vjp_last_error()
             raise RuntimeError(message.decode() if message else "source attention reverse failed")
+
+    def _library(self) -> ct.CDLL:
+        if self._lib is None:
+            raise RuntimeError("source attention reverse provider is uninitialized")
+        return self._lib
 
     def _prepare(self):
         from tessera.runtime import _load_nvidia_ptx_launch
@@ -100,9 +127,10 @@ class PreparedSourceAttentionReverse:
         P, S, I, L, U = ct.c_void_p, ct.c_size_t, ct.c_int, ct.c_int64, ct.c_uint64
         lib.tessera_nvidia_attention_vjp_last_error.argtypes = []
         lib.tessera_nvidia_attention_vjp_last_error.restype = ct.c_char_p
-        lib.tessera_nvidia_source_attention_reverse_prepare.argtypes = (
+        signature: list[Any] = (
             [P, S, ct.c_char_p, I] + [P, S, ct.c_char_p] * 3
             + [ct.POINTER(L), ct.POINTER(I), ct.POINTER(I), ct.POINTER(I), S, I, ct.POINTER(U)])
+        lib.tessera_nvidia_source_attention_reverse_prepare.argtypes = signature
         lib.tessera_nvidia_source_attention_reverse_prepare.restype = I
         lib.tessera_nvidia_source_attention_reverse_invoke.argtypes = [
             U, ct.POINTER(P), ct.POINTER(S), S, ct.POINTER(U), S,
@@ -113,7 +141,7 @@ class PreparedSourceAttentionReverse:
         lib.tessera_nvidia_source_attention_reverse_close.argtypes = [U]
         lib.tessera_nvidia_source_attention_reverse_close.restype = I
         images = tuple(ct.create_string_buffer(m.image) for m in self._members)
-        args = []
+        args: list[Any] = []
         for i, member in enumerate(self._members):
             args.extend((images[i], len(member.image), member.entry.encode()))
             if i == 0:
@@ -174,7 +202,8 @@ class PreparedSourceAttentionReverse:
                 self._prepare()
                 prepare_ms = (time.perf_counter() - prepare_start) * 1000
             start = time.perf_counter()
-            self._check(self._lib.tessera_nvidia_source_attention_reverse_invoke(
+            lib = self._library()
+            self._check(lib.tessera_nvidia_source_attention_reverse_invoke(
                 self._handle, (ct.c_void_p * 5)(*addresses),
                 (ct.c_size_t * 5)(*(s[2] for s in self._input_specs)), 5,
                 (ct.c_uint64 * 5)(*streams) if streams is not None else None,
@@ -183,7 +212,7 @@ class PreparedSourceAttentionReverse:
                 (ct.c_size_t * len(outputs))(*(v.nbytes for v in outputs)), len(outputs)))
             host_ms = (time.perf_counter() - start) * 1000
             times = (ct.c_float * 5)()
-            self._check(self._lib.tessera_nvidia_source_attention_reverse_last_times(self._handle, times, 5))
+            self._check(lib.tessera_nvidia_source_attention_reverse_last_times(self._handle, times, 5))
             self.receipt = dict(execution_kind="native_gpu", evidence_target="nvidia_sm120",
                                 native_call_binding="prepared_cpp_source_attention_reverse",
                                 image_digests=tuple(m.image_digest for m in self._members),
@@ -201,7 +230,7 @@ class PreparedSourceAttentionReverse:
             if self._closed:
                 return
             if self._handle:
-                self._check(self._lib.tessera_nvidia_source_attention_reverse_close(self._handle))
+                self._check(self._library().tessera_nvidia_source_attention_reverse_close(self._handle))
             if self._finalizer is not None:
                 self._finalizer.detach()
             self._handle, self._closed = 0, True

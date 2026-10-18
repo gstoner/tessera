@@ -3,6 +3,41 @@ last_updated: 2026-10-18
 audit_role: reference
 ---
 
+## Native public source attention reverse — 2026-10-18
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-ATTENTION-SOURCE-REVERSE-20261018.
+Base: merged PR987 (9e63d8c71); private prepared checkpoint a9d5295ab.
+
+Ordinary native_backward now consumes original homogeneous-half
+RMSNorm(Q) -> saved-LSE attention through native paired AD, four typed
+members, Schedule/Tile/Target/NVVM/PTX and one retained C++ owner. Both O/LSE
+cotangents, original root/result permutations and requested gradient order
+are preserved. Host and ordered resident roots return independent outputs.
+The sealed portable contract validates typed call edges, physical buffer
+lifetimes, source policies, member stages, launch parameters and image hashes
+without compiler/provider access. Fresh-process native replay forbids tools.
+Hashes detect corruption; they do not authenticate arbitrary supplied code.
+
+The combined owning RTX5070 suite passes 67 cases: 12 public/portable/cache,
+20 prepared reverse and 35 existing source-primal cases. Focused shared
+registry, diagnostic, pass, offline and mock-provider gates pass 410 cases.
+Four same-input/image A/B profiles use 21 alternating samples of eight calls.
+Avoiding repeated manifest serialization improves warm public host time by
+3.46–4.10x on small profiles and 1.36–1.37x at D257. D257 device windows
+remain stable; tiny-case event windows include dispatch noise. This is host
+dispatch improvement, not kernel speedup.
+Public artifact export is lazy and independent of warm execution. Invalid
+calls clear prior receipt/export state; static shape revisits reuse images.
+
+Remaining: broad unit/compiler-route/audit validation, exact-head review/CI
+and one consolidated PR. Dynamic shapes, bias/dropout, broader derivatives,
+batching, wider envelopes and all five aggregate programs remain open.
+The logical-prefix and prepared-member packets retain their original scopes.
+
+[Evidence](../../../benchmarks/baselines/native_public_source_attention_reverse_20261018/README.md).
+
+
 ## Native source attention reverse candidate — 2026-10-18
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

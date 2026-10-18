@@ -6,37 +6,46 @@ target: nvidia_sm120
 last_updated: 2026-10-18
 ---
 
-## NATIVE-ATTENTION-SOURCE-REVERSE-20261018 — prepared source VJP
+## NATIVE-ATTENTION-SOURCE-REVERSE-20261018 — public source VJP
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
-Base: PR987 merged as 9e63d8c71. Synchronization key:
-NATIVE-ATTENTION-SOURCE-REVERSE-20261018.
+Sync: NATIVE-ATTENTION-SOURCE-REVERSE-20261018.
+Base: merged PR987 (9e63d8c71); private prepared checkpoint a9d5295ab.
 
-The native paired-AD exporter now outlines actual RMSNorm(Q) -> saved-LSE
-attention reverse SSA into four typed members and a four-call program root:
-normalization, checkpoint forward, checkpoint backward with O/LSE cotangents,
-and the actual normalization pullback. Python transports these members through
-Graph/Schedule/Tile/Target/NVVM/PTX without reconstructing derivatives.
-The artifact-only plan is replay-bound to the original Graph and compiler.
-A retained C++ CUDA owner keeps normalized Q, saved O/LSE and gradients private,
-orders resident producer streams, and returns selected original-root gradients.
+Ordinary native_backward now consumes original homogeneous-half
+RMSNorm(Q) -> saved-LSE attention through native paired AD, four typed
+members, Schedule/Tile/Target/NVVM/PTX and one retained C++ owner. Both O/LSE
+cotangents, original root/result permutations and requested gradient order
+are preserved. Host and ordered resident roots return independent outputs.
+The sealed portable contract validates typed call edges, physical buffer
+lifetimes, source policies, member stages, launch parameters and image hashes
+without compiler/provider access. Fresh-process native replay forbids tools.
+Hashes detect corruption; they do not authenticate arbitrary supplied code.
 
-Fourteen exact RTX5070 numerical cases pass for FP16/BF16, argument/result
-permutations, requested gradient subsets/order, zero/tiny inputs, D257 and
-136 logical rows. Warm calls forbid compiler subprocesses. Four correctness-
-gated timing profiles retain separate compile/prepare, four stage device event
-windows, program windows, native completed host and end-to-end domains.
-These are prepared-owner candidate results, not ordinary JIT or portable
-RuntimeArtifact reverse proof. Expanded device regression passes 55 cases: 20 new reverse and 35 existing
-primal cases; 326 compiler/registry gates pass. Documentation gates and
-public integration are still being completed. The original logical-prefix
-prerequisite retains its 91 compiler/27 device cases and 20 unchanged rank-two
-stages. All five aggregate programs remain open.
+The combined owning RTX5070 suite passes 67 cases: 12 public/portable/cache,
+20 prepared reverse and 35 existing source-primal cases. Focused shared
+registry, diagnostic, pass, offline and mock-provider gates pass 410 cases.
+Four same-input/image A/B profiles use 21 alternating samples of eight calls.
+Avoiding repeated manifest serialization improves warm public host time by
+3.46–4.10x on small profiles and 1.36–1.37x at D257. D257 device windows
+remain stable; tiny-case event windows include dispatch noise. This is host
+dispatch improvement, not kernel speedup.
+Public artifact export is lazy and independent of warm execution. Invalid
+calls clear prior receipt/export state; static shape revisits reuse images.
 
-Parity validated for the named prepared source reverse profile on owning RTX5070. Follow-up required: ordinary native_backward admission, sealed compiler-free portable replay, public execution certificates and complete delivery gates.
+Remaining: broad unit/compiler-route/audit validation, exact-head review/CI
+and one consolidated PR. Dynamic shapes, bias/dropout, broader derivatives,
+batching, wider envelopes and all five aggregate programs remain open.
+The logical-prefix and prepared-member packets retain their original scopes.
 
-Packet: benchmarks/baselines/native_source_attention_reverse_20261018/README.md.
+Parity validated on owning RTX5070 for the named public source reverse and compiler-free portable profile. Broader attention and producer/performance closure remains open.
+
+Packet: benchmarks/baselines/native_public_source_attention_reverse_20261018/README.md.
 Contract: docs/spec/NATIVE_SOURCE_ATTENTION_PROGRAM.md.
+
+Review follow-through: offline restoration rejects rehashed normalization accumulation and malformed numeric attributes; returned component ABI receipts are independent of the cached sealed manifest. The recorder and frozen control are registered in benchmarks/README.md.
+
+Source effect admission reuses the primitive zero-dropout policy before concrete frontend certification; host regressions reject nonzero/NaN dropout without evaluating source.
 
 ## NATIVE-COMPOSED-ATTENTION-PREFIX-20261018 — source SSA outlining
 

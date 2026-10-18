@@ -13695,3 +13695,35 @@ All five aggregate programs remain open. No sibling physical proof transfers.
 Evidence: benchmarks/baselines/native_source_attention_reverse_20261018/README.md,
 sm120.json, manifest.json and compressed compiler/device gate receipts.
 <!-- entry-fields:end -->
+
+
+### 2026-10-18 — native public source-attention reverse
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync NATIVE-ATTENTION-SOURCE-REVERSE-20261018.
+
+Outcome: Original source RMSNorm(Q)/saved-LSE attention now reaches ordinary
+native_backward and compiler-free portable replay through actual paired AD,
+four Schedule/Tile/Target/PTX members and one private C++ owner. The owning
+RTX5070 suite passes 67 composed/public/portable/adjacent cases. The focused
+shared gate passes 410. Source roles, both seeds, gradient order, lifetimes,
+shape-cache revisit, independent outputs and fresh-process no-tool replay pass.
+The same-image/input alternating A/B improves public host time 3.46–4.10x for
+small profiles and 1.36–1.37x at D257. Long device windows remain stable;
+tiny-case event windows include dispatch noise and are not kernel timing.
+Warm dispatch retains validated native state; artifact serialization is lazy.
+Common runtime native dispatch defers unused generic C-library discovery;
+mock success/refusal tests assess all four backend queues without transferring
+SM120 physical proof.
+
+Review follow-through: portable source normalization policy and numeric attribute
+types are checked before provider acquisition; returned ABI metadata no longer
+aliases the cached manifest. The benchmark naming floor remains zero.
+
+Remaining: Broad unit/compiler-route/audit gates, exact-head review/CI and one
+consolidated PR. All five aggregate programs and wider AD/layout/performance
+obligations remain open.
+
+Evidence: benchmarks/baselines/native_public_source_attention_reverse_20261018/README.md,
+public-ab.json, source/fixture hashes and compressed host/device gate receipts.
+<!-- entry-fields:end -->

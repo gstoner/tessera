@@ -132,6 +132,7 @@ def test_source_reverse_waits_pending_writes_and_recovers_after_rejection(storag
             stream = 1 if mode == "legacy" else 2 if mode == "per_thread" else session.stream
             callbacks.append(queue_delayed_upload(session, buffer, value, stream, completed))
             borrowed.append(Borrowed(buffer, stream))
+        assert len(completed) < 5, "stream proof requires pending producer writes at invocation"
         actual = owner(*borrowed)
         assert len(completed) == 5 and len(callbacks) == 5
         for a, b in zip(actual, expected, strict=True):

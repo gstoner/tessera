@@ -19,23 +19,27 @@ def validate_bounds(target, bounds):
     return tuple(bounds)
 
 
+def _primal_specs(fn, ordered):
+    if any(hasattr(value, "__cuda_array_interface__") for value in ordered):
+        if not all(hasattr(value, "__cuda_array_interface__") for value in ordered):
+            raise ValueError("attention JVP requires all resident roots or all host roots")
+        return fn._resident_frontend_specs(ordered)
+    import numpy as np
+    arrays = tuple(np.asarray(value) for value in ordered)
+    return tuple((tuple(value.shape), value.dtype) for value in arrays)
+
+
 class BoundedAttentionJVPCall:
-    def __init__(self, fn, args, kwargs, bounds):
+    def __init__(self, fn, args, kwargs, bounds, *, specs=None):
         from .native_attention_jvp_runtime import PreparedAttentionJVP
         from .scheduled_matmul import find_tessera_opt
         from .frontend_authority import certify_resident_frontends
         from dataclasses import replace
-        import numpy as np
-        ordered = fn._ordered_inputs(args, kwargs)
-        if ordered is None:
-            raise ValueError("bounded attention JVP input binding disagrees")
-        if any(hasattr(value, "__cuda_array_interface__") for value in ordered):
-            if not all(hasattr(value, "__cuda_array_interface__") for value in ordered):
-                raise ValueError("attention JVP requires all resident roots or all host roots")
-            specs = fn._resident_frontend_specs(ordered)
-        else:
-            arrays = tuple(np.asarray(value) for value in ordered)
-            specs = tuple((tuple(value.shape), value.dtype) for value in arrays)
+        if specs is None:
+            ordered = fn._ordered_inputs(args, kwargs)
+            if ordered is None:
+                raise ValueError("bounded attention JVP input binding disagrees")
+            specs = _primal_specs(fn, ordered)
         traced = fn._specialized_autodiff_module(args, kwargs)
         traced = replace(traced, module_attrs={**traced.module_attrs,
             "tessera.target": '"nvidia_sm120"', "tessera.arch": '"sm_120"'})
@@ -59,6 +63,14 @@ class BoundedAttentionJVPCall:
                              program_digest=program.program_digest, arg_names=names)
         self.owner = PreparedAttentionJVP(self.metadata)
         self.program = self.owner.program
+        from .attention_shape_contract import attention_buffer_shapes
+        physical = attention_buffer_shapes(self.owner.symbolic_dims,
+            bias=self.owner.biased, bias_shape=self.owner.symbolic_bias_shape)
+        frontend = {index: tuple(physical[role])
+                    for role, index in enumerate(self.program.input_indices)}
+        self.fixed_primal_signature = tuple(
+            (str(dtype), frontend[index]) for index, dtype in enumerate(
+                self.owner.dtypes[:self.owner.count]))
         policy = self.program.pair.forward.descriptor.provenance
         self._receipt_base = dict(
             compiler_path="nvidia_sm120_jvp_compiled",
@@ -72,6 +84,30 @@ class BoundedAttentionJVPCall:
             tangent_binding_digest=self.program.tangent.binding_digest,
         )
         self.receipt: dict[str, Any] = {}
+
+    def matches_primal_signature(self, specs):
+        from .attention_shape_contract import DYNAMIC_DIM, attention_buffer_shapes
+        if len(specs) != len(self.fixed_primal_signature):
+            return False
+        for (shape, dtype), (fixed_dtype, symbolic) in zip(
+                specs, self.fixed_primal_signature, strict=True):
+            if str(dtype) != fixed_dtype or len(shape) != len(symbolic):
+                return False
+            if any(fixed != DYNAMIC_DIM and actual != fixed
+                   for actual, fixed in zip(shape, symbolic, strict=True)):
+                return False
+        q, k, v = (specs[index][0] for index in self.program.input_indices[:3])
+        dims = (q[0], q[1], k[1], q[2], k[2], q[3], v[3])
+        # Match physical bias policy and Q/K/V relationships without applying
+        # capacity guards here. The selected owner must reject an out-of-bounds
+        # sequence before compilation, rather than creating another owner.
+        try:
+            physical = attention_buffer_shapes(dims, bias=self.owner.biased,
+                bias_shape=self.owner.symbolic_bias_shape)
+        except ValueError:
+            return False
+        return all(tuple(specs[index][0]) == physical[role]
+                   for role, index in enumerate(self.program.input_indices))
 
     def invoke(self, values):
         outputs = self.owner.invoke(self.metadata, values)
@@ -90,20 +126,31 @@ def execute(fn, args, kwargs, ordered, tangents, bounds):
     # Include immutable source semantics and a real Thread object. Integer thread
     # IDs can be reused; a new lifetime must not inherit another CUDA owner.
     graph = fn._ensure_legacy_graph_ir().to_mlir(target="nvidia_sm120", canonical=True)
-    key = ("native_bounded_attention_jvp", bounds,
+    base_key = ("native_bounded_attention_jvp", bounds,
            tuple(fn.differentiation_request.wrt_indices),
            hashlib.sha256(graph.encode()).hexdigest(), threading.current_thread())
     if fn._native_prepared_jvp_pid is None:
         fn._native_prepared_jvp_pid = os.getpid()
     try:
+        specs = _primal_specs(fn, ordered)
         with fn._native_prepared_jvp_lock:
-            call = fn._native_prepared_jvp_calls.get(key)
+            call = None
+            for candidate_key in reversed(fn._native_prepared_jvp_calls):
+                if candidate_key[:-1] != base_key:
+                    continue
+                candidate = fn._native_prepared_jvp_calls[candidate_key]
+                if candidate.matches_primal_signature(specs):
+                    key, call = candidate_key, candidate
+                    break
             if call is None:
-                call = BoundedAttentionJVPCall(fn, args, kwargs, bounds)
+                call = BoundedAttentionJVPCall(fn, args, kwargs, bounds, specs=specs)
+                key = (*base_key, call.fixed_primal_signature)
                 if len(fn._native_prepared_jvp_calls) >= 8:
                     retired = next(iter(fn._native_prepared_jvp_calls))
                     fn._native_prepared_jvp_calls.pop(retired).close()
-                fn._native_prepared_jvp_calls[key] = call
+            else:
+                fn._native_prepared_jvp_calls.pop(key)
+            fn._native_prepared_jvp_calls[key] = call
             outputs = call.invoke((*ordered, *tangents))
             fn.last_jvp_execution = dict(call.receipt)
             return outputs

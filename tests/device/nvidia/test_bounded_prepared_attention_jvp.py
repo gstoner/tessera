@@ -322,3 +322,138 @@ def test_public_bounded_jvp_orders_pending_producer_stream(storage, saved, monke
             assert fn.last_jvp_execution["host_preparation"] == "native_ordered_resident_snapshot"
     finally:
         fn.close_native_storage()
+
+@pytest.mark.parametrize("resident", [False, True])
+@pytest.mark.parametrize("bias", [False, True])
+@pytest.mark.parametrize("variation", ["storage", "fixed_dimensions"])
+def test_public_bounded_jvp_specializes_fixed_inputs(resident, bias, variation, monkeypatch):
+    if rt._nvidia_device_name() != "sm_120":
+        pytest.skip("owning RTX5070/SM120 required")
+    from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
+    layouts = ([("float16", 1, 2, 1, 16, 16),
+                ("bfloat16", 1, 2, 1, 16, 16),
+                ("float32", 1, 2, 1, 16, 16)] if variation == "storage" else
+               [("float16", 1, 2, 1, 16, 16),
+                ("float16", 2, 4, 2, 8, 12),
+                ("float16", 1, 2, 1, 16, 8)])
+    active = ("q", "k", "v", "bias") if bias else ("q", "k", "v")
+    fn = ts.jit(target="nvidia_sm120", autodiff="forward", wrt=active)(
+        function(True, bias, True))
+    compile_original = fn.compile_native_attention_jvp
+    compilations = []
+    def compile_once(*args, **kwargs):
+        compilations.append(1)
+        return compile_original(*args, **kwargs)
+    monkeypatch.setattr(fn, "compile_native_attention_jvp", compile_once)
+    rng = np.random.default_rng(20261019)
+    handles = {}
+    session = NvidiaDeviceSession() if resident else None
+    def forbidden(*args, **kwargs):
+        pytest.fail("compatible bounded specialization reached frontend/compiler")
+    try:
+        for warm in (False, True):
+            for index, (storage, b, hq, hkv, d, dv) in enumerate(layouts):
+                sq, sk = ((1, 1) if not warm else (3 + index * 2, 9 - index))
+                dtype = np.dtype(ml_dtypes.bfloat16 if storage == "bfloat16" else storage)
+                roots = {n: rng.normal(0, .25, shape).astype(dtype) for n, shape in {
+                    "q": (b, hq, sq, d), "k": (b, hkv, sk, d),
+                    "v": (b, hkv, sk, dv)}.items()}
+                if bias:
+                    roots["bias"] = rng.normal(0, .1, (1, hq, 1, 1)).astype(np.float32)
+                seeds = {n: rng.normal(0, .1, x.shape).astype(x.dtype) for n, x in roots.items()}
+                expected = reference(*(roots[n] for n in ("q", "k", "v")),
+                    *(seeds[n] for n in ("q", "k", "v")), bias=roots.get("bias"),
+                    dbias=seeds.get("bias"), causal=True)
+                bound = {n: session.upload(x) for n, x in roots.items()} if session else roots
+                tangents = tuple(session.upload(seeds[n]) if session else seeds[n] for n in active)
+                if warm:
+                    with monkeypatch.context() as guard:
+                        guard.setattr(fn, "compile_native_attention_jvp", forbidden)
+                        guard.setattr(fn, "_trace_frontend_capture", forbidden)
+                        guard.setattr(fn, "_fn", forbidden)
+                        guard.setattr("subprocess.run", forbidden)
+                        result = fn.native_jvp(**bound, tangents=tangents, sequence_bounds=(7, 9))
+                else:
+                    result = fn.native_jvp(**bound, tangents=tangents, sequence_bounds=(7, 9))
+                for actuals, targets in zip(result, expected, strict=True):
+                    for actual, target in zip(actuals, targets, strict=True):
+                        compare(actual, target)
+                digest = fn.last_jvp_execution["program_digest"]
+                owner = next(call.owner for call in fn._native_prepared_jvp_calls.values()
+                             if call.program.program_digest == digest)
+                if warm:
+                    assert owner.handle == handles[index]
+                else:
+                    handles[index] = owner.handle
+        assert len(compilations) == len(layouts)
+        assert len(set(handles.values())) == len(layouts)
+        assert len(fn._native_prepared_jvp_calls) == len(layouts)
+    finally:
+        fn.close_native_storage()
+        if session:
+            session.close()
+
+def test_public_bounded_jvp_preserves_bias_specializations_and_capacity_guards(monkeypatch):
+    if rt._nvidia_device_name() != "sm_120":
+        pytest.skip("owning RTX5070/SM120 required")
+    active = ("q", "k", "v", "bias")
+    fn = ts.jit(target="nvidia_sm120", autodiff="forward", wrt=active)(
+        function(True, True, True))
+    rng = np.random.default_rng(20261020)
+    def inputs(sq, sk, logical):
+        roots = {n: rng.normal(0, .25, shape).astype(np.float16) for n, shape in {
+            "q": (1, 2, sq, 16), "k": (1, 1, sk, 16),
+            "v": (1, 1, sk, 16)}.items()}
+        roots["bias"] = rng.normal(0, .1, (1, 2, sq if logical else 1,
+                                                   sk if logical else 1)).astype(np.float32)
+        seeds = {n: rng.normal(0, .1, x.shape).astype(x.dtype) for n, x in roots.items()}
+        return roots, seeds
+    def forbidden(*args, **kwargs):
+        pytest.fail("warm physical bias/capacity selection attempted compilation")
+    handles = {}
+    try:
+        for logical, sq, sk, cold in ((False, 1, 1, True), (False, 3, 4, False),
+                                      (True, 3, 4, True), (True, 1, 9, False),
+                                      (True, 7, 1, False), (True, 1, 1, False),
+                                      (False, 3, 4, False)):
+            roots, seeds = inputs(sq, sk, logical)
+            expected = reference(*(roots[n] for n in ("q", "k", "v")),
+                *(seeds[n] for n in ("q", "k", "v")), bias=roots["bias"],
+                dbias=seeds["bias"], causal=True)
+            with monkeypatch.context() as guard:
+                if not cold:
+                    guard.setattr(fn, "compile_native_attention_jvp", forbidden)
+                    guard.setattr(fn, "_trace_frontend_capture", forbidden)
+                    guard.setattr("subprocess.run", forbidden)
+                result = fn.native_jvp(**roots, tangents=tuple(seeds[n] for n in active),
+                                       sequence_bounds=(7, 9))
+            digest = fn.last_jvp_execution["program_digest"]
+            owner = next(call.owner for call in fn._native_prepared_jvp_calls.values()
+                         if call.program.program_digest == digest)
+            if cold:
+                handles[logical] = owner.handle
+            else:
+                assert owner.handle == handles[logical]
+            for actuals, targets in zip(result, expected, strict=True):
+                for actual, target in zip(actuals, targets, strict=True):
+                    compare(actual, target)
+        assert len(fn._native_prepared_jvp_calls) == 2
+        assert handles[False] != handles[True]
+        roots, seeds = inputs(8, 4, True)
+        with monkeypatch.context() as guard:
+            guard.setattr(fn, "compile_native_attention_jvp", forbidden)
+            guard.setattr("subprocess.run", forbidden)
+            with pytest.raises(ts.TesseraJitError, match="compiled envelope"):
+                fn.native_jvp(**roots, tangents=tuple(seeds[n] for n in active),
+                              sequence_bounds=(7, 9))
+        roots, seeds = inputs(3, 4, True)
+        result = fn.native_jvp(**roots, tangents=tuple(seeds[n] for n in active),
+                               sequence_bounds=(7, 9))
+        expected = reference(*(roots[n] for n in ("q", "k", "v")),
+            *(seeds[n] for n in ("q", "k", "v")), bias=roots["bias"],
+            dbias=seeds["bias"], causal=True)
+        for actuals, targets in zip(result, expected, strict=True):
+            for actual, target in zip(actuals, targets, strict=True):
+                compare(actual, target)
+    finally:
+        fn.close_native_storage()

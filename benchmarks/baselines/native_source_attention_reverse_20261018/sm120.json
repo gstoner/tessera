@@ -1,0 +1,2103 @@
+{
+  "schema": "tessera.source_attention_reverse_timing.v1",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "architecture": "sm_120",
+  "samples": 21,
+  "repeats": 8,
+  "compiler_sha256": "3af1217248f400acafe51e68c6ae5d3398315ec68f3bf69a11232ddd1f7902a7",
+  "provider_sha256": "587c1a16a15436ff2adbe331e04a56f98d41a6348a0cc9c345da83bb6eb11d39",
+  "scope": "prepared_native_owner; public_jit_and_portable_route_not_yet_integrated",
+  "stage_order": [
+    "rmsnorm",
+    "saved_lse_forward",
+    "attention_backward",
+    "source_pullback"
+  ],
+  "device_timing": "CUDA event launch windows; includes possible dispatch gaps; excludes copies",
+  "rows": [
+    {
+      "storage": "f16",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "source_graph_sha256": "236fa93482270f74aada94745c5f7582a62a17f6d84ab2e45cb19a0b3cfeb8dd",
+      "program_graph_sha256": "5c96ce8f7453323b1ed9205581fc484f426089c1cdbd692234b9ae4c4a667769",
+      "export_ms": 369.36856794636697,
+      "member_compile_ms": 2459.618925000541,
+      "entries": [
+        "tessera_tile_norm_rmsnorm_f16_89afe114f6",
+        "tessera_tile_attention_lse_f16_out_f16_562cd39a07",
+        "tessera_tile_attention_backward_lse_output_cotangent_f16_out_f16_a0f3684868",
+        "tessera_native_row_515eb2f08bce8a4f"
+      ],
+      "images": [
+        "875e17ead7c4eb6557abb80d7334d1dac05cc7551c0fb5433b0fb0ccf61ad85a",
+        "6c96470f5aa5d62397c7a25d66180efa176071b354925f200223c38d936a60dd",
+        "5e98e81e67d89f4d7ae39114f522781928f25eb7de7b9176a283aef84abd5882",
+        "3cddf0c3ed54aac35278f94172fe3a5c02c612a6ac1f2ce25d4ffcfd8da6070c"
+      ],
+      "schedule_sha256": [
+        "3334e40f58cd642c9dbe1abb4b1aa15201556d87ad7f32c5f91638ba72350530",
+        "755118d12949e151204118da5941fb3e3e39108323ed798fcfaa8f16c5b7741c",
+        "989336f683814434bd0a429a8917618d4a66b52fd9244575e5881d3e9a5fb670",
+        "d50ee498624bf13363a514eeaa2409fddce1479c95545f02d0b6f6658fb003b9"
+      ],
+      "max_abs_error": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "native_prepare_ms": 320.7408770103939,
+      "correctness": "independent_float64_oracle_with_explicit_storage_edges",
+      "timings": {
+        "host": [
+          {
+            "end_to_end_ms": 0.31301024864660576,
+            "native_completed_host_ms": 0.24676803150214255,
+            "program_device_window_ms": 0.09657600149512291,
+            "stage_device_window_ms": [
+              0.049984000623226166,
+              0.006351999938488007,
+              0.022512000054121017,
+              0.0043039999436587095
+            ]
+          },
+          {
+            "end_to_end_ms": 0.3324691278976388,
+            "native_completed_host_ms": 0.267503026407212,
+            "program_device_window_ms": 0.11468800157308578,
+            "stage_device_window_ms": [
+              0.04217600077390671,
+              0.029264000244438648,
+              0.023376000113785267,
+              0.00558399991132319
+            ]
+          },
+          {
+            "end_to_end_ms": 0.33717787300702184,
+            "native_completed_host_ms": 0.25029300013557076,
+            "program_device_window_ms": 0.08988800272345543,
+            "stage_device_window_ms": [
+              0.043328000232577324,
+              0.007887999759986997,
+              0.021968000568449497,
+              0.006175999995321035
+            ]
+          },
+          {
+            "end_to_end_ms": 0.3387355027371086,
+            "native_completed_host_ms": 0.2825185074470937,
+            "program_device_window_ms": 0.11576000228524208,
+            "stage_device_window_ms": [
+              0.05315199866890907,
+              0.00470399996265769,
+              0.021695999428629875,
+              0.0038560001412406564
+            ]
+          },
+          {
+            "end_to_end_ms": 0.3501030005281791,
+            "native_completed_host_ms": 0.29000351787544787,
+            "program_device_window_ms": 0.14444799721240997,
+            "stage_device_window_ms": [
+              0.05607999861240387,
+              0.005007999949157238,
+              0.026847999542951584,
+              0.004991999827325344
+            ]
+          },
+          {
+            "end_to_end_ms": 0.35127699811710045,
+            "native_completed_host_ms": 0.2730530104599893,
+            "program_device_window_ms": 0.12230400368571281,
+            "stage_device_window_ms": [
+              0.04438399896025658,
+              0.005664000054821372,
+              0.021743999794125557,
+              0.004128000000491738
+            ]
+          },
+          {
+            "end_to_end_ms": 0.36841450491920114,
+            "native_completed_host_ms": 0.28601347003132105,
+            "program_device_window_ms": 0.12811199948191643,
+            "stage_device_window_ms": [
+              0.05937599949538708,
+              0.005247999913990498,
+              0.03046399913728237,
+              0.004335999954491854
+            ]
+          },
+          {
+            "end_to_end_ms": 0.336584125761874,
+            "native_completed_host_ms": 0.27194901485927403,
+            "program_device_window_ms": 0.09537599980831146,
+            "stage_device_window_ms": [
+              0.052319999784231186,
+              0.005760000087320805,
+              0.02427199948579073,
+              0.004175999900326133
+            ]
+          },
+          {
+            "end_to_end_ms": 0.330636503349524,
+            "native_completed_host_ms": 0.24655851302668452,
+            "program_device_window_ms": 0.094480000436306,
+            "stage_device_window_ms": [
+              0.04279999993741512,
+              0.004592000041157007,
+              0.023616000078618526,
+              0.005632000043988228
+            ]
+          },
+          {
+            "end_to_end_ms": 0.32053775066742674,
+            "native_completed_host_ms": 0.2607130154501647,
+            "program_device_window_ms": 0.09663999825716019,
+            "stage_device_window_ms": [
+              0.042368000373244286,
+              0.009967999998480082,
+              0.023823999799787998,
+              0.00399999984074384
+            ]
+          },
+          {
+            "end_to_end_ms": 0.3381930000614375,
+            "native_completed_host_ms": 0.27600902831181884,
+            "program_device_window_ms": 0.11958399787545204,
+            "stage_device_window_ms": [
+              0.03814399987459183,
+              0.010048000141978264,
+              0.02392000053077936,
+              0.007727999938651919
+            ]
+          },
+          {
+            "end_to_end_ms": 0.33515649556647986,
+            "native_completed_host_ms": 0.2721640048548579,
+            "program_device_window_ms": 0.1021759994328022,
+            "stage_device_window_ms": [
+              0.03723200038075447,
+              0.00937600014731288,
+              0.021551999263465405,
+              0.013472000136971474
+            ]
+          },
+          {
+            "end_to_end_ms": 0.3246028791181743,
+            "native_completed_host_ms": 0.25997799821197987,
+            "program_device_window_ms": 0.091839998960495,
+            "stage_device_window_ms": [
+              0.04255999997258186,
+              0.011487999930977821,
+              0.022799999453127384,
+              0.004095999989658594
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4407061205711216,
+            "native_completed_host_ms": 0.24521301384083927,
+            "program_device_window_ms": 0.07862400263547897,
+            "stage_device_window_ms": [
+              0.02807999961078167,
+              0.011679999995976686,
+              0.021935999393463135,
+              0.00406399997882545
+            ]
+          },
+          {
+            "end_to_end_ms": 0.3336160007165745,
+            "native_completed_host_ms": 0.24733800091780722,
+            "program_device_window_ms": 0.08796799927949905,
+            "stage_device_window_ms": [
+              0.029536000452935696,
+              0.00835200003348291,
+              0.02372800000011921,
+              0.00814399984665215
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4614770004991442,
+            "native_completed_host_ms": 0.3958549932576716,
+            "program_device_window_ms": 0.17452800273895264,
+            "stage_device_window_ms": [
+              0.03828800097107887,
+              0.010320000350475311,
+              0.02473600022494793,
+              0.0038400001358240843
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4652121206163429,
+            "native_completed_host_ms": 0.41571553447283804,
+            "program_device_window_ms": 0.20945599675178528,
+            "stage_device_window_ms": [
+              0.06487999856472015,
+              0.011840000282973051,
+              0.02179200015962124,
+              0.0624960009008646
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4307515046093613,
+            "native_completed_host_ms": 0.36921497667208314,
+            "program_device_window_ms": 0.19943999499082565,
+            "stage_device_window_ms": [
+              0.06691199913620949,
+              0.018063999712467194,
+              0.03169600013643503,
+              0.006704000057652593
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4506667537498288,
+            "native_completed_host_ms": 0.3652344748843461,
+            "program_device_window_ms": 0.18969599902629852,
+            "stage_device_window_ms": [
+              0.03537600114941597,
+              0.04324800055474043,
+              0.0230880007147789,
+              0.029712000396102667
+            ]
+          },
+          {
+            "end_to_end_ms": 0.40157137118512765,
+            "native_completed_host_ms": 0.3402550355531275,
+            "program_device_window_ms": 0.1555039957165718,
+            "stage_device_window_ms": [
+              0.03742399998009205,
+              0.012368000112473965,
+              0.02286399994045496,
+              0.00854399986565113
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4445366212166846,
+            "native_completed_host_ms": 0.3877299895975739,
+            "program_device_window_ms": 0.1897760033607483,
+            "stage_device_window_ms": [
+              0.04049599915742874,
+              0.011872000060975552,
+              0.046944000758230686,
+              0.005663999821990728
+            ]
+          }
+        ],
+        "resident": [
+          {
+            "end_to_end_ms": 0.3686258787638508,
+            "native_completed_host_ms": 0.27498850249685347,
+            "program_device_window_ms": 0.10131200030446053,
+            "stage_device_window_ms": [
+              0.02793600084260106,
+              0.012463999912142754,
+              0.024720000103116035,
+              0.0041279998840764165
+            ]
+          },
+          {
+            "end_to_end_ms": 0.38221599970711395,
+            "native_completed_host_ms": 0.2697979798540473,
+            "program_device_window_ms": 0.09702400118112564,
+            "stage_device_window_ms": [
+              0.01017600018531084,
+              0.012463999912142754,
+              0.024224000051617622,
+              0.004335999954491854
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4070012510055676,
+            "native_completed_host_ms": 0.29881400405429304,
+            "program_device_window_ms": 0.11604800075292587,
+            "stage_device_window_ms": [
+              0.011663999874144793,
+              0.02123199962079525,
+              0.022640000097453594,
+              0.01670400006696582
+            ]
+          },
+          {
+            "end_to_end_ms": 0.47557712241541594,
+            "native_completed_host_ms": 0.2842084795702249,
+            "program_device_window_ms": 0.11180799826979637,
+            "stage_device_window_ms": [
+              0.028624000027775764,
+              0.011376000009477139,
+              0.023264000192284584,
+              0.004032000200822949
+            ]
+          },
+          {
+            "end_to_end_ms": 0.38430212589446455,
+            "native_completed_host_ms": 0.2823735121637583,
+            "program_device_window_ms": 0.1074879989027977,
+            "stage_device_window_ms": [
+              0.011504000052809715,
+              0.01484800036996603,
+              0.02534399926662445,
+              0.004416000097990036
+            ]
+          },
+          {
+            "end_to_end_ms": 0.39449612086173147,
+            "native_completed_host_ms": 0.2992234658449888,
+            "program_device_window_ms": 0.09414400160312653,
+            "stage_device_window_ms": [
+              0.012095999903976917,
+              0.027696000412106514,
+              0.02257599961012602,
+              0.005712000071071088
+            ]
+          },
+          {
+            "end_to_end_ms": 0.40493500273441896,
+            "native_completed_host_ms": 0.29250350780785084,
+            "program_device_window_ms": 0.10436800122261047,
+            "stage_device_window_ms": [
+              0.019119999837130308,
+              0.011360000353306532,
+              0.023904000408947468,
+              0.006000000052154064
+            ]
+          },
+          {
+            "end_to_end_ms": 0.3925199998775497,
+            "native_completed_host_ms": 0.29248397913761437,
+            "program_device_window_ms": 0.09772799909114838,
+            "stage_device_window_ms": [
+              0.009391999803483486,
+              0.0313759995624423,
+              0.02342400047928095,
+              0.006511999876238406
+            ]
+          },
+          {
+            "end_to_end_ms": 0.38903862150618806,
+            "native_completed_host_ms": 0.2741740026976913,
+            "program_device_window_ms": 0.10486400127410889,
+            "stage_device_window_ms": [
+              0.011775999795645475,
+              0.016399999614804983,
+              0.024272000417113304,
+              0.003824000130407512
+            ]
+          },
+          {
+            "end_to_end_ms": 0.38264475006144494,
+            "native_completed_host_ms": 0.2768884878605604,
+            "program_device_window_ms": 0.1101280003786087,
+            "stage_device_window_ms": [
+              0.033536000177264214,
+              0.011872000060975552,
+              0.02431999985128641,
+              0.009824000298976898
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4590556272887625,
+            "native_completed_host_ms": 0.331543997162953,
+            "program_device_window_ms": 0.12355199828743935,
+            "stage_device_window_ms": [
+              0.010960000101476908,
+              0.019311999436467886,
+              0.05313600040972233,
+              0.006752000190317631
+            ]
+          },
+          {
+            "end_to_end_ms": 0.39773600292392075,
+            "native_completed_host_ms": 0.2872339973691851,
+            "program_device_window_ms": 0.1157119981944561,
+            "stage_device_window_ms": [
+              0.017344000283628702,
+              0.011903999838978052,
+              0.026176000013947487,
+              0.003919999930076301
+            ]
+          },
+          {
+            "end_to_end_ms": 1.1828472488559783,
+            "native_completed_host_ms": 0.291043019387871,
+            "program_device_window_ms": 0.11083200201392174,
+            "stage_device_window_ms": [
+              0.02801600005477667,
+              0.011264000087976456,
+              0.022351999767124653,
+              0.003824000130407512
+            ]
+          },
+          {
+            "end_to_end_ms": 0.3795783777604811,
+            "native_completed_host_ms": 0.2688530075829476,
+            "program_device_window_ms": 0.1058880016207695,
+            "stage_device_window_ms": [
+              0.03388799913227558,
+              0.012895999941974878,
+              0.024128000251948833,
+              0.009311999659985304
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5339566268958151,
+            "native_completed_host_ms": 0.4098450008314103,
+            "program_device_window_ms": 0.1444000005722046,
+            "stage_device_window_ms": [
+              0.012031999882310629,
+              0.010976000223308802,
+              0.051952000707387924,
+              0.00902399979531765
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5403564937296323,
+            "native_completed_host_ms": 0.3809295012615621,
+            "program_device_window_ms": 0.17659199982881546,
+            "stage_device_window_ms": [
+              0.014463999774307013,
+              0.04134400002658367,
+              0.023056000471115112,
+              0.010255999863147736
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5559118799283169,
+            "native_completed_host_ms": 0.4180504765827209,
+            "program_device_window_ms": 0.13411199674010277,
+            "stage_device_window_ms": [
+              0.01166400033980608,
+              0.012480000033974648,
+              0.02332800067961216,
+              0.014303999952971935
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5092201245133765,
+            "native_completed_host_ms": 0.3956104919780046,
+            "program_device_window_ms": 0.14632000029087067,
+            "stage_device_window_ms": [
+              0.012031999882310629,
+              0.01878400007262826,
+              0.024927999824285507,
+              0.008575999876484275
+            ]
+          },
+          {
+            "end_to_end_ms": 0.6121401238488033,
+            "native_completed_host_ms": 0.4118549986742437,
+            "program_device_window_ms": 0.16494400054216385,
+            "stage_device_window_ms": [
+              0.01071999967098236,
+              0.04275199957191944,
+              0.02300800010561943,
+              0.010623999871313572
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5144250026205555,
+            "native_completed_host_ms": 0.43569051194936037,
+            "program_device_window_ms": 0.15963199734687805,
+            "stage_device_window_ms": [
+              0.010464000049978495,
+              0.017935999669134617,
+              0.022255999967455864,
+              0.007023999933153391
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5362516239983961,
+            "native_completed_host_ms": 0.43150049168616533,
+            "program_device_window_ms": 0.17865600436925888,
+            "stage_device_window_ms": [
+              0.008799999952316284,
+              0.03932799864560366,
+              0.04523199889808893,
+              0.004832000122405589
+            ]
+          }
+        ]
+      },
+      "medians": {
+        "host": {
+          "end_to_end_ms": 0.3387355027371086,
+          "native_completed_host_ms": 0.2730530104599893,
+          "program_device_window_ms": 0.11576000228524208
+        },
+        "resident": {
+          "end_to_end_ms": 0.4070012510055676,
+          "native_completed_host_ms": 0.29250350780785084,
+          "program_device_window_ms": 0.11180799826979637
+        }
+      }
+    },
+    {
+      "storage": "f16",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        17,
+        19,
+        257,
+        13
+      ],
+      "source_graph_sha256": "69734ab36edd8462a7f3e2d62b47b022cf765cc5f5b5831a04ba1ba5a1a7874b",
+      "program_graph_sha256": "4b6acc7bb3d1ce6ec55b86f3512afffe0e9e5d7070309cb1f7dc8230271b3b62",
+      "export_ms": 140.51359798759222,
+      "member_compile_ms": 2519.8030000319704,
+      "entries": [
+        "tessera_tile_norm_rmsnorm_f16_cooperative_128_3e7bb7d0f5",
+        "tessera_tile_attention_lse_f16_out_f16_c973d24c76",
+        "tessera_tile_attention_backward_lse_output_cotangent_f16_out_f16_a6de4b693c",
+        "tessera_native_row_b908193d15e1d581"
+      ],
+      "images": [
+        "bebc63969c64998f9f42e791ff86d67161e1f5ea0d4b1af826f55cc5d0494a0a",
+        "fcc3bf889b02a9dee9b1a101e448d23be2311cd47bbfa24a32e011390a15d58e",
+        "cb01b1e544892bcd8942be0044922cf0a606df338fa0b365f71ed04bbbc50be7",
+        "ef033df7094f80c903290370569993bcd32713952336df2daa2b829f7371bc9a"
+      ],
+      "schedule_sha256": [
+        "0cbee135ddf2e39d8a3c2e71ae3d5e310b81de011796e46d8120fd0635b1ad4b",
+        "93cf73d10dd117617d7d37318e5f225323f52282b84e54b4d40afd55648af5c4",
+        "32e27d0850010c0758e8fb101746ff753b142ae08968dde8e181d0b73c329da5",
+        "63ac1094dd3a72e65c0252d44b20a9bf91a85ac7058c5670eaebda98dec81dbf"
+      ],
+      "max_abs_error": [
+        1.52587890625e-05,
+        7.62939453125e-06,
+        1.52587890625e-05
+      ],
+      "native_prepare_ms": 4.43738600006327,
+      "correctness": "independent_float64_oracle_with_explicit_storage_edges",
+      "timings": {
+        "host": [
+          {
+            "end_to_end_ms": 5.160685126611497,
+            "native_completed_host_ms": 4.980631492799148,
+            "program_device_window_ms": 4.791440010070801,
+            "stage_device_window_ms": [
+              0.043295999988913536,
+              0.1910559982061386,
+              4.524895906448364,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.374860244046431,
+            "native_completed_host_ms": 5.379276524763554,
+            "program_device_window_ms": 4.7882080078125,
+            "stage_device_window_ms": [
+              0.045584000647068024,
+              0.1860639974474907,
+              4.5285279750823975,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.20550187502522,
+            "native_completed_host_ms": 4.963276471244171,
+            "program_device_window_ms": 4.786639928817749,
+            "stage_device_window_ms": [
+              0.03577600046992302,
+              0.18823999911546707,
+              4.5269598960876465,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.205579371249769,
+            "native_completed_host_ms": 4.981960490113124,
+            "program_device_window_ms": 4.785439968109131,
+            "stage_device_window_ms": [
+              0.04177599959075451,
+              0.18747200071811676,
+              4.528015851974487,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.109450619784184,
+            "native_completed_host_ms": 4.9808225012384355,
+            "program_device_window_ms": 4.7917280197143555,
+            "stage_device_window_ms": [
+              0.04655999876558781,
+              0.18985600024461746,
+              4.527552127838135,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.138951128174085,
+            "native_completed_host_ms": 4.982411483069882,
+            "program_device_window_ms": 4.78438401222229,
+            "stage_device_window_ms": [
+              0.036079999059438705,
+              0.18963199853897095,
+              4.526991844177246,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.172285375010688,
+            "native_completed_host_ms": 5.034858506405726,
+            "program_device_window_ms": 4.809327840805054,
+            "stage_device_window_ms": [
+              0.0463040005415678,
+              0.18854399770498276,
+              4.528624057769775,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.28610912442673,
+            "native_completed_host_ms": 5.013582500396296,
+            "program_device_window_ms": 4.793168067932129,
+            "stage_device_window_ms": [
+              0.04987199977040291,
+              0.1876640021800995,
+              4.525631904602051,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.3123881298233755,
+            "native_completed_host_ms": 5.212649528402835,
+            "program_device_window_ms": 4.782415866851807,
+            "stage_device_window_ms": [
+              0.04854399897158146,
+              0.18646399676799774,
+              4.52507209777832,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.305406870320439,
+            "native_completed_host_ms": 5.129309021867812,
+            "program_device_window_ms": 4.777967929840088,
+            "stage_device_window_ms": [
+              0.030880000442266464,
+              0.18879999965429306,
+              4.526000022888184,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.240674749074969,
+            "native_completed_host_ms": 5.034877511207014,
+            "program_device_window_ms": 4.773391962051392,
+            "stage_device_window_ms": [
+              0.018912000581622124,
+              0.1876319944858551,
+              4.526335954666138,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.195389370783232,
+            "native_completed_host_ms": 4.997101495973766,
+            "program_device_window_ms": 4.789919853210449,
+            "stage_device_window_ms": [
+              0.03592000063508749,
+              0.1876000016927719,
+              4.527711868286133,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 6.4146406220970675,
+            "native_completed_host_ms": 5.483977496623993,
+            "program_device_window_ms": 4.784768104553223,
+            "stage_device_window_ms": [
+              0.034752000123262405,
+              0.18620799481868744,
+              4.526111841201782,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.291652872983832,
+            "native_completed_host_ms": 4.96856146492064,
+            "program_device_window_ms": 4.7826080322265625,
+            "stage_device_window_ms": [
+              0.034992000088095665,
+              0.18649600446224213,
+              4.524399995803833,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.122030874190386,
+            "native_completed_host_ms": 4.95200150180608,
+            "program_device_window_ms": 4.782256126403809,
+            "stage_device_window_ms": [
+              0.03516799956560135,
+              0.19035200029611588,
+              4.528608083724976,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.068721373390872,
+            "native_completed_host_ms": 4.94236100348644,
+            "program_device_window_ms": 4.786671876907349,
+            "stage_device_window_ms": [
+              0.03665599972009659,
+              0.18619199842214584,
+              4.528160095214844,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.313650755851995,
+            "native_completed_host_ms": 5.19235449610278,
+            "program_device_window_ms": 4.7903358936309814,
+            "stage_device_window_ms": [
+              0.043456001207232475,
+              0.18644800037145615,
+              4.525967836380005,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.094694250146858,
+            "native_completed_host_ms": 4.992075992049649,
+            "program_device_window_ms": 4.7895519733428955,
+            "stage_device_window_ms": [
+              0.04559999890625477,
+              0.18747200071811676,
+              4.527696132659912,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.334143505024258,
+            "native_completed_host_ms": 5.383406998589635,
+            "program_device_window_ms": 4.793215990066528,
+            "stage_device_window_ms": [
+              0.05164800025522709,
+              0.18651200085878372,
+              4.527343988418579,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.270569999993313,
+            "native_completed_host_ms": 5.175493482965976,
+            "program_device_window_ms": 4.78108811378479,
+            "stage_device_window_ms": [
+              0.03728000074625015,
+              0.18936000019311905,
+              4.528687953948975,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.159842505236156,
+            "native_completed_host_ms": 5.036657472373918,
+            "program_device_window_ms": 4.791136026382446,
+            "stage_device_window_ms": [
+              0.0390079990029335,
+              0.1884640008211136,
+              4.525552034378052,
+              0.02412799932062626
+            ]
+          }
+        ],
+        "resident": [
+          {
+            "end_to_end_ms": 5.169096250028815,
+            "native_completed_host_ms": 4.9696115020196885,
+            "program_device_window_ms": 4.769087791442871,
+            "stage_device_window_ms": [
+              0.008095999713987112,
+              0.19036799669265747,
+              4.526544094085693,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.175131496798713,
+            "native_completed_host_ms": 4.9781365087255836,
+            "program_device_window_ms": 4.764800071716309,
+            "stage_device_window_ms": [
+              0.009471999946981668,
+              0.19153599441051483,
+              4.524399995803833,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.220802006078884,
+            "native_completed_host_ms": 4.985437466530129,
+            "program_device_window_ms": 4.759984016418457,
+            "stage_device_window_ms": [
+              0.009120000060647726,
+              0.19172800332307816,
+              4.525487899780273,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.258297496766318,
+            "native_completed_host_ms": 5.0242219876963645,
+            "program_device_window_ms": 4.750992059707642,
+            "stage_device_window_ms": [
+              0.007408000063151121,
+              0.1897600069642067,
+              4.525536060333252,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.372209001507144,
+            "native_completed_host_ms": 5.237750010564923,
+            "program_device_window_ms": 4.790192127227783,
+            "stage_device_window_ms": [
+              0.009920000098645687,
+              0.20788799971342087,
+              4.525183916091919,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.167946248548105,
+            "native_completed_host_ms": 5.013426503865048,
+            "program_device_window_ms": 4.77289605140686,
+            "stage_device_window_ms": [
+              0.017632000148296356,
+              0.19075199961662292,
+              4.526560068130493,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.4672976257279515,
+            "native_completed_host_ms": 5.420881498139352,
+            "program_device_window_ms": 4.776416063308716,
+            "stage_device_window_ms": [
+              0.017263999674469233,
+              0.19844800233840942,
+              4.52620792388916,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.433377249573823,
+            "native_completed_host_ms": 5.28206501621753,
+            "program_device_window_ms": 4.775696039199829,
+            "stage_device_window_ms": [
+              0.02931199874728918,
+              0.19009599834680557,
+              4.529343843460083,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.0839803807321005,
+            "native_completed_host_ms": 4.960691498126835,
+            "program_device_window_ms": 4.773583889007568,
+            "stage_device_window_ms": [
+              0.00976000027731061,
+              0.19182400405406952,
+              4.524496078491211,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.246809872915037,
+            "native_completed_host_ms": 5.04122202983126,
+            "program_device_window_ms": 4.759983777999878,
+            "stage_device_window_ms": [
+              0.009984000120311975,
+              0.19102399796247482,
+              4.528064012527466,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.27096887526568,
+            "native_completed_host_ms": 5.009611020796001,
+            "program_device_window_ms": 4.75710391998291,
+            "stage_device_window_ms": [
+              0.009952000342309475,
+              0.19113599509000778,
+              4.526304006576538,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.418128246674314,
+            "native_completed_host_ms": 5.369621998397633,
+            "program_device_window_ms": 4.75596809387207,
+            "stage_device_window_ms": [
+              0.009408000390976667,
+              0.19116800278425217,
+              4.523967981338501,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.374301370466128,
+            "native_completed_host_ms": 5.3170355095062405,
+            "program_device_window_ms": 4.759631872177124,
+            "stage_device_window_ms": [
+              0.007824000203981996,
+              0.1908320039510727,
+              4.526560068130493,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.137243504577782,
+            "native_completed_host_ms": 4.949701513396576,
+            "program_device_window_ms": 4.757760047912598,
+            "stage_device_window_ms": [
+              0.009903999976813793,
+              0.1929280012845993,
+              4.522799968719482,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.148862495843787,
+            "native_completed_host_ms": 4.951456998242065,
+            "program_device_window_ms": 4.757200002670288,
+            "stage_device_window_ms": [
+              0.011679999995976686,
+              0.19222399592399597,
+              4.526927947998047,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.3046879984322,
+            "native_completed_host_ms": 5.106907512526959,
+            "program_device_window_ms": 4.760303974151611,
+            "stage_device_window_ms": [
+              0.009872000198811293,
+              0.1910719946026802,
+              4.5305280685424805,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.160002503544092,
+            "native_completed_host_ms": 4.991491499822587,
+            "program_device_window_ms": 4.76531195640564,
+            "stage_device_window_ms": [
+              0.01235199999064207,
+              0.19247999787330627,
+              4.530927896499634,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.272278875054326,
+            "native_completed_host_ms": 5.053367494838312,
+            "program_device_window_ms": 4.754800081253052,
+            "stage_device_window_ms": [
+              0.010207999963313341,
+              0.191103994846344,
+              4.523504018783569,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.407623255450744,
+            "native_completed_host_ms": 5.371081526391208,
+            "program_device_window_ms": 4.756608009338379,
+            "stage_device_window_ms": [
+              0.008943999651819468,
+              0.1908160001039505,
+              4.528608083724976,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.375656372052617,
+            "native_completed_host_ms": 5.260135512799025,
+            "program_device_window_ms": 4.75598406791687,
+            "stage_device_window_ms": [
+              0.009920000098645687,
+              0.18982400000095367,
+              4.527343988418579,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.191146752622444,
+            "native_completed_host_ms": 5.053662520367652,
+            "program_device_window_ms": 4.81000018119812,
+            "stage_device_window_ms": [
+              0.03227199986577034,
+              0.20417600125074387,
+              4.5268800258636475,
+              0.02412799932062626
+            ]
+          }
+        ]
+      },
+      "medians": {
+        "host": {
+          "end_to_end_ms": 5.205579371249769,
+          "native_completed_host_ms": 5.013582500396296,
+          "program_device_window_ms": 4.786671876907349
+        },
+        "resident": {
+          "end_to_end_ms": 5.258297496766318,
+          "native_completed_host_ms": 5.04122202983126,
+          "program_device_window_ms": 4.759984016418457
+        }
+      }
+    },
+    {
+      "storage": "bf16",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "source_graph_sha256": "ed2e686188f405ddea4a3ef80265dcded722e0172ef44ddc45caf1a061fe2f6a",
+      "program_graph_sha256": "b90b75e0bcd26be764b6b938eda87c525bff9360d8c7df8c6301bebfc9a79119",
+      "export_ms": 142.25971698760986,
+      "member_compile_ms": 2446.612341038417,
+      "entries": [
+        "tessera_tile_norm_rmsnorm_bf16_8863f053d1",
+        "tessera_tile_attention_lse_bf16_out_bf16_3864643dd6",
+        "tessera_tile_attention_backward_lse_output_cotangent_bf16_out_bf16_e7f93a40d4",
+        "tessera_native_row_127600b864cf5a6f"
+      ],
+      "images": [
+        "343ae977c7ee4b11accde98478c4f022932bfee484e90cfd6988d313e6e9f6c0",
+        "f14479e6a9066767645b78d7ac2b7aba9cd2e887cd8d706e608363394ae6f448",
+        "e7df0efaf781b54ab8b7b609c413b9606920a5d748a5f802c8b7e15fd09e073f",
+        "cb2c5ad157dc503fb75eb6078e14ef1615387452ca73ca334911f2dce91549f1"
+      ],
+      "schedule_sha256": [
+        "c7db03b0e6bba47fca1e3f56fa7034dfd3a2ab8ee017b02786ea8fd631cb9d91",
+        "07960a9b7c45a540c26b0e485a7fd1d4f9a50541e1f6212b659d07579f2dfc34",
+        "7d72c95f5d645a3b4477b3bb9ae6f3b51ddf6bdce505fcf0a837d3b447f3aecb",
+        "b341935892610d17d15ffb819aaeacbc25ec7536c4b0631a60c9ffdd087dacbc"
+      ],
+      "max_abs_error": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "native_prepare_ms": 4.320634005125612,
+      "correctness": "independent_float64_oracle_with_explicit_storage_edges",
+      "timings": {
+        "host": [
+          {
+            "end_to_end_ms": 0.4514855027082376,
+            "native_completed_host_ms": 0.384439539629966,
+            "program_device_window_ms": 0.19324799627065659,
+            "stage_device_window_ms": [
+              0.08331200107932091,
+              0.012271999847143888,
+              0.021967999637126923,
+              0.0072480000089854
+            ]
+          },
+          {
+            "end_to_end_ms": 0.45434425555868074,
+            "native_completed_host_ms": 0.4066399997100234,
+            "program_device_window_ms": 0.19699200242757797,
+            "stage_device_window_ms": [
+              0.041888000443577766,
+              0.01143999956548214,
+              0.02636800054460764,
+              0.010127999819815159
+            ]
+          },
+          {
+            "end_to_end_ms": 0.45839949598303065,
+            "native_completed_host_ms": 0.38177447277121246,
+            "program_device_window_ms": 0.17640000581741333,
+            "stage_device_window_ms": [
+              0.037936000153422356,
+              0.011152000166475773,
+              0.022831999696791172,
+              0.00875200005248189
+            ]
+          },
+          {
+            "end_to_end_ms": 0.48166099441004917,
+            "native_completed_host_ms": 0.39605499478057027,
+            "program_device_window_ms": 0.10814400017261505,
+            "stage_device_window_ms": [
+              0.05540800094604492,
+              0.006144000217318535,
+              0.022784000262618065,
+              0.007040000054985285
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4233327563269995,
+            "native_completed_host_ms": 0.3547395172063261,
+            "program_device_window_ms": 0.18612800538539886,
+            "stage_device_window_ms": [
+              0.07481600344181061,
+              0.009039999917149544,
+              0.022432000376284122,
+              0.006671999813988805
+            ]
+          },
+          {
+            "end_to_end_ms": 0.484742246044334,
+            "native_completed_host_ms": 0.4593009944073856,
+            "program_device_window_ms": 0.22766399383544922,
+            "stage_device_window_ms": [
+              0.05350399948656559,
+              0.012048000004142523,
+              0.020304000005126,
+              0.008048000279814005
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4675507516367361,
+            "native_completed_host_ms": 0.4018294857814908,
+            "program_device_window_ms": 0.15345599502325058,
+            "stage_device_window_ms": [
+              0.055776000022888184,
+              0.010608000215142965,
+              0.02151999995112419,
+              0.004928000038489699
+            ]
+          },
+          {
+            "end_to_end_ms": 0.46110187395242974,
+            "native_completed_host_ms": 0.4218399990350008,
+            "program_device_window_ms": 0.19705599546432495,
+            "stage_device_window_ms": [
+              0.0859839990735054,
+              0.009440000168979168,
+              0.05259200092405081,
+              0.004159999778494239
+            ]
+          },
+          {
+            "end_to_end_ms": 0.459153248812072,
+            "native_completed_host_ms": 0.3995650040451437,
+            "program_device_window_ms": 0.20947199314832687,
+            "stage_device_window_ms": [
+              0.060575999319553375,
+              0.010639999993145466,
+              0.021712000481784344,
+              0.005696000065654516
+            ]
+          },
+          {
+            "end_to_end_ms": 1.2330001263762824,
+            "native_completed_host_ms": 0.3959895111620426,
+            "program_device_window_ms": 0.18147199600934982,
+            "stage_device_window_ms": [
+              0.038736000657081604,
+              0.009455999825149775,
+              0.025391999632120132,
+              0.003904000041075051
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5256091244518757,
+            "native_completed_host_ms": 0.4958359932061285,
+            "program_device_window_ms": 0.243648000061512,
+            "stage_device_window_ms": [
+              0.050623999908566475,
+              0.013888000044971704,
+              0.03659200016409159,
+              0.009775999933481216
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5041012482251972,
+            "native_completed_host_ms": 0.4231749917380512,
+            "program_device_window_ms": 0.24035199731588364,
+            "stage_device_window_ms": [
+              0.05318399891257286,
+              0.010768000036478043,
+              0.024304000660777092,
+              0.017536000348627567
+            ]
+          },
+          {
+            "end_to_end_ms": 0.47399337199749425,
+            "native_completed_host_ms": 0.4877205064985901,
+            "program_device_window_ms": 0.13926400244235992,
+            "stage_device_window_ms": [
+              0.057072000578045845,
+              0.00686399987898767,
+              0.0225600004196167,
+              0.00399999984074384
+            ]
+          },
+          {
+            "end_to_end_ms": 0.40379374695476145,
+            "native_completed_host_ms": 0.3436339902691543,
+            "program_device_window_ms": 0.17740800231695175,
+            "stage_device_window_ms": [
+              0.04243199899792671,
+              0.010960000101476908,
+              0.021871999837458134,
+              0.005904000019654632
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4168476225459017,
+            "native_completed_host_ms": 0.33872900530695915,
+            "program_device_window_ms": 0.16073599830269814,
+            "stage_device_window_ms": [
+              0.03167999908328056,
+              0.01145600015297532,
+              0.023376000113785267,
+              0.007519999984651804
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4735844995593652,
+            "native_completed_host_ms": 0.36790501326322556,
+            "program_device_window_ms": 0.18433600664138794,
+            "stage_device_window_ms": [
+              0.10052800178527832,
+              0.009215999860316515,
+              0.025295999832451344,
+              0.0037440001033246517
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4274503735359758,
+            "native_completed_host_ms": 0.3825295134447515,
+            "program_device_window_ms": 0.18860799819231033,
+            "stage_device_window_ms": [
+              0.0526720006018877,
+              0.01071999967098236,
+              0.02247999981045723,
+              0.0221599992364645
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4887973700533621,
+            "native_completed_host_ms": 0.43096550507470965,
+            "program_device_window_ms": 0.2625119984149933,
+            "stage_device_window_ms": [
+              0.06956800073385239,
+              0.011024000123143196,
+              0.023055999539792538,
+              0.009263999992981553
+            ]
+          },
+          {
+            "end_to_end_ms": 0.46918824955355376,
+            "native_completed_host_ms": 0.38587499875575304,
+            "program_device_window_ms": 0.20531199872493744,
+            "stage_device_window_ms": [
+              0.06691199913620949,
+              0.009967999998480082,
+              0.02425600029528141,
+              0.006240000016987324
+            ]
+          },
+          {
+            "end_to_end_ms": 0.4701595025835559,
+            "native_completed_host_ms": 0.39405946154147387,
+            "program_device_window_ms": 0.14235199987888336,
+            "stage_device_window_ms": [
+              0.054047999903559685,
+              0.008704000152647495,
+              0.022207999601960182,
+              0.0038399999029934406
+            ]
+          },
+          {
+            "end_to_end_ms": 0.47520212683593854,
+            "native_completed_host_ms": 0.4011999990325421,
+            "program_device_window_ms": 0.22065600007772446,
+            "stage_device_window_ms": [
+              0.0798880010843277,
+              0.011631999630481005,
+              0.07337599992752075,
+              0.004111999878659844
+            ]
+          }
+        ],
+        "resident": [
+          {
+            "end_to_end_ms": 0.5200064988457598,
+            "native_completed_host_ms": 0.41816552402451634,
+            "program_device_window_ms": 0.14892800152301788,
+            "stage_device_window_ms": [
+              0.01384000014513731,
+              0.014384000096470118,
+              0.02131200022995472,
+              0.012575999833643436
+            ]
+          },
+          {
+            "end_to_end_ms": 0.6227802514331415,
+            "native_completed_host_ms": 0.4932864976581186,
+            "program_device_window_ms": 0.17585600167512894,
+            "stage_device_window_ms": [
+              0.008544000331312418,
+              0.015232000034302473,
+              0.025200000032782555,
+              0.004928000038489699
+            ]
+          },
+          {
+            "end_to_end_ms": 0.527869000507053,
+            "native_completed_host_ms": 0.44517999049276114,
+            "program_device_window_ms": 0.16572800278663635,
+            "stage_device_window_ms": [
+              0.0457760002464056,
+              0.011568000074476004,
+              0.02423999924212694,
+              0.009120000060647726
+            ]
+          },
+          {
+            "end_to_end_ms": 0.587642120081,
+            "native_completed_host_ms": 0.5130264908075333,
+            "program_device_window_ms": 0.1812800019979477,
+            "stage_device_window_ms": [
+              0.011247999966144562,
+              0.015471999999135733,
+              0.02233599964529276,
+              0.029936000239104033
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5089812475489452,
+            "native_completed_host_ms": 0.4037150356452912,
+            "program_device_window_ms": 0.16868800669908524,
+            "stage_device_window_ms": [
+              0.010607999749481678,
+              0.060912000015378,
+              0.0226879995316267,
+              0.012735999654978514
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5220215025474317,
+            "native_completed_host_ms": 0.4573400074150413,
+            "program_device_window_ms": 0.16868799924850464,
+            "stage_device_window_ms": [
+              0.010415999684482813,
+              0.040640000719577074,
+              0.02006400004029274,
+              0.010288000106811523
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5305516242515296,
+            "native_completed_host_ms": 0.4204500000923872,
+            "program_device_window_ms": 0.17179200053215027,
+            "stage_device_window_ms": [
+              0.015103999525308609,
+              0.023904000874608755,
+              0.022880000062286854,
+              0.0231520002707839
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5831234957440756,
+            "native_completed_host_ms": 0.45059050898998976,
+            "program_device_window_ms": 0.15812800079584122,
+            "stage_device_window_ms": [
+              0.009039999917149544,
+              0.05604800023138523,
+              0.03820799943059683,
+              0.010400000028312206
+            ]
+          },
+          {
+            "end_to_end_ms": 0.6241551236598752,
+            "native_completed_host_ms": 0.5324670055415481,
+            "program_device_window_ms": 0.2665119990706444,
+            "stage_device_window_ms": [
+              0.01336000021547079,
+              0.013040000107139349,
+              0.047168001532554626,
+              0.014783999882638454
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5437593717942946,
+            "native_completed_host_ms": 0.40244500269182026,
+            "program_device_window_ms": 0.15254399925470352,
+            "stage_device_window_ms": [
+              0.008927999762818217,
+              0.015392000321298838,
+              0.061104001477360725,
+              0.007408000063151121
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5049423780292273,
+            "native_completed_host_ms": 0.3925149794667959,
+            "program_device_window_ms": 0.15833599865436554,
+            "stage_device_window_ms": [
+              0.008591999765485525,
+              0.07243200019001961,
+              0.021776000037789345,
+              0.011151999700814486
+            ]
+          },
+          {
+            "end_to_end_ms": 0.49113987188320607,
+            "native_completed_host_ms": 0.39863502024672925,
+            "program_device_window_ms": 0.14126399904489517,
+            "stage_device_window_ms": [
+              0.010256000328809023,
+              0.03433599974960089,
+              0.022160000167787075,
+              0.00889600021764636
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5201276217121631,
+            "native_completed_host_ms": 0.42748000123538077,
+            "program_device_window_ms": 0.17662400007247925,
+            "stage_device_window_ms": [
+              0.009999999776482582,
+              0.038271998055279255,
+              0.022495999932289124,
+              0.006880000000819564
+            ]
+          },
+          {
+            "end_to_end_ms": 0.552278128452599,
+            "native_completed_host_ms": 0.4400355101097375,
+            "program_device_window_ms": 0.1541600003838539,
+            "stage_device_window_ms": [
+              0.007215999998152256,
+              0.01089600007981062,
+              0.022048000246286392,
+              0.010015999898314476
+            ]
+          },
+          {
+            "end_to_end_ms": 0.49446875345893204,
+            "native_completed_host_ms": 0.3885449841618538,
+            "program_device_window_ms": 0.14803200215101242,
+            "stage_device_window_ms": [
+              0.01145600015297532,
+              0.02497600018978119,
+              0.020992000587284565,
+              0.009359999559819698
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5499991239048541,
+            "native_completed_host_ms": 0.4368160152807832,
+            "program_device_window_ms": 0.1907999962568283,
+            "stage_device_window_ms": [
+              0.01398400031030178,
+              0.013663999736309052,
+              0.025247999466955662,
+              0.011119999922811985
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5521942512132227,
+            "native_completed_host_ms": 0.4071400035172701,
+            "program_device_window_ms": 0.17270399630069733,
+            "stage_device_window_ms": [
+              0.009855999611318111,
+              0.011567999608814716,
+              0.02239999920129776,
+              0.00902399979531765
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5612107488559559,
+            "native_completed_host_ms": 0.4619060200639069,
+            "program_device_window_ms": 0.18011200428009033,
+            "stage_device_window_ms": [
+              0.00961600011214614,
+              0.010351999662816525,
+              0.02396799996495247,
+              0.008048000046983361
+            ]
+          },
+          {
+            "end_to_end_ms": 0.47590837493771687,
+            "native_completed_host_ms": 0.3829800116363913,
+            "program_device_window_ms": 0.1318719983100891,
+            "stage_device_window_ms": [
+              0.008384000044316053,
+              0.010240000206977129,
+              0.02433600090444088,
+              0.0043039999436587095
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5617207498289645,
+            "native_completed_host_ms": 0.47234600060619414,
+            "program_device_window_ms": 0.17790400236845016,
+            "stage_device_window_ms": [
+              0.013120000250637531,
+              0.04769599996507168,
+              0.06643200106918812,
+              0.009456000057980418
+            ]
+          },
+          {
+            "end_to_end_ms": 0.5352439984562807,
+            "native_completed_host_ms": 0.4015150188934058,
+            "program_device_window_ms": 0.18582399934530258,
+            "stage_device_window_ms": [
+              0.016096000093966722,
+              0.011519999708980322,
+              0.07635200023651123,
+              0.0060159999411553144
+            ]
+          }
+        ]
+      },
+      "medians": {
+        "host": {
+          "end_to_end_ms": 0.46918824955355376,
+          "native_completed_host_ms": 0.39605499478057027,
+          "program_device_window_ms": 0.18860799819231033
+        },
+        "resident": {
+          "end_to_end_ms": 0.5352439984562807,
+          "native_completed_host_ms": 0.42748000123538077,
+          "program_device_window_ms": 0.16868800669908524
+        }
+      }
+    },
+    {
+      "storage": "bf16",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        17,
+        19,
+        257,
+        13
+      ],
+      "source_graph_sha256": "0a9eba2e5d50ce198c32ef09cfb7a907da0f1586a71dab56a3570d00328941fe",
+      "program_graph_sha256": "9377e2aa41de3920b451c99f7891e9c0bcf2c1623f085a08d5cfee6e3dbb2d87",
+      "export_ms": 157.19116700347513,
+      "member_compile_ms": 2539.219286001753,
+      "entries": [
+        "tessera_tile_norm_rmsnorm_bf16_cooperative_128_62579144c9",
+        "tessera_tile_attention_lse_bf16_out_bf16_5f085f982b",
+        "tessera_tile_attention_backward_lse_output_cotangent_bf16_out_bf16_d73d416884",
+        "tessera_native_row_d6700692223e32dd"
+      ],
+      "images": [
+        "e7e7810d7c30f91a4db76b2ce2a914f1670b511d6f84d911bc81f1240398acf8",
+        "5c52bcd10c19f8b8173b94de9f8a00faa10c44a694bce1ba358ecf7d58540d95",
+        "9ad54d8fca5e291b20c166eb5e6a2a9e7a3bd6911f657cd0436a66c962075d70",
+        "6d1362395b20ac895f949dc829509cb820e4c664c72a0fa094692635ab53a825"
+      ],
+      "schedule_sha256": [
+        "16f56b1deb30f95f631e8c5097c74449629501aa25a478f5815b3abbc941d67d",
+        "4cb1154abac6002e6ed29b87363a35621aa28cdb39d8875b8be1be46f2ae1205",
+        "0a7b1839a90504c5b63caf285fd592a76d1f956589ed4c752525df45c1948d1a",
+        "0b05868bac5bfe79f73712147087c4009d330de7d13263e2b9ec54e452d3f070"
+      ],
+      "max_abs_error": [
+        0.0001220703125,
+        1.1920928955078125e-07,
+        0.0
+      ],
+      "native_prepare_ms": 4.314297984819859,
+      "correctness": "independent_float64_oracle_with_explicit_storage_edges",
+      "timings": {
+        "host": [
+          {
+            "end_to_end_ms": 5.25018362532137,
+            "native_completed_host_ms": 5.051652988186106,
+            "program_device_window_ms": 4.7765278816223145,
+            "stage_device_window_ms": [
+              0.053567999973893166,
+              0.1865600049495697,
+              4.5018720626831055,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.313278124958742,
+            "native_completed_host_ms": 5.3498210036195815,
+            "program_device_window_ms": 4.759088039398193,
+            "stage_device_window_ms": [
+              0.04559999890625477,
+              0.18584000319242477,
+              4.501391887664795,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.969374869891908,
+            "native_completed_host_ms": 5.4067364835646,
+            "program_device_window_ms": 4.768048048019409,
+            "stage_device_window_ms": [
+              0.05355199985206127,
+              0.1855200007557869,
+              4.501231908798218,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.5535096253152005,
+            "native_completed_host_ms": 5.408716504462063,
+            "program_device_window_ms": 4.766752004623413,
+            "stage_device_window_ms": [
+              0.05212800018489361,
+              0.18643200397491455,
+              4.503216028213501,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.457796127302572,
+            "native_completed_host_ms": 5.425471987109631,
+            "program_device_window_ms": 4.767536163330078,
+            "stage_device_window_ms": [
+              0.052799999713897705,
+              0.18568000197410583,
+              4.500352144241333,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.1731363782892,
+            "native_completed_host_ms": 5.012346984585747,
+            "program_device_window_ms": 4.7834718227386475,
+            "stage_device_window_ms": [
+              0.05278399959206581,
+              0.18723199516534805,
+              4.505104064941406,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.259736244624946,
+            "native_completed_host_ms": 5.010722030419856,
+            "program_device_window_ms": 4.776144027709961,
+            "stage_device_window_ms": [
+              0.058528000488877296,
+              0.1879040002822876,
+              4.502464056015015,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.208783128182404,
+            "native_completed_host_ms": 5.080348521005362,
+            "program_device_window_ms": 4.7774879932403564,
+            "stage_device_window_ms": [
+              0.056463999673724174,
+              0.18820799887180328,
+              4.501919984817505,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.067262500233483,
+            "native_completed_host_ms": 4.9906309868674725,
+            "program_device_window_ms": 4.803711891174316,
+            "stage_device_window_ms": [
+              0.0732480026781559,
+              0.18940799683332443,
+              4.5021281242370605,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.049795996455941,
+            "native_completed_host_ms": 4.98055198113434,
+            "program_device_window_ms": 4.783440113067627,
+            "stage_device_window_ms": [
+              0.055264001712203026,
+              0.18800000101327896,
+              4.502063989639282,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.364412623748649,
+            "native_completed_host_ms": 5.414046987425536,
+            "program_device_window_ms": 4.7745280265808105,
+            "stage_device_window_ms": [
+              0.04979200102388859,
+              0.185808002948761,
+              4.503119945526123,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.325940874172375,
+            "native_completed_host_ms": 5.33218149212189,
+            "program_device_window_ms": 4.765503883361816,
+            "stage_device_window_ms": [
+              0.047760000452399254,
+              0.18569600582122803,
+              4.504496097564697,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.251409871561918,
+            "native_completed_host_ms": 5.15895351418294,
+            "program_device_window_ms": 4.769903898239136,
+            "stage_device_window_ms": [
+              0.05355199985206127,
+              0.18926399946212769,
+              4.501376152038574,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.285185376123991,
+            "native_completed_host_ms": 5.205358465900645,
+            "program_device_window_ms": 4.778463840484619,
+            "stage_device_window_ms": [
+              0.042368000373244286,
+              0.18671999871730804,
+              4.499392032623291,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.231017006735783,
+            "native_completed_host_ms": 5.161458509974182,
+            "program_device_window_ms": 4.7688000202178955,
+            "stage_device_window_ms": [
+              0.04966400004923344,
+              0.18587200343608856,
+              4.50108790397644,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.210794370213989,
+            "native_completed_host_ms": 5.10953352204524,
+            "program_device_window_ms": 4.747904062271118,
+            "stage_device_window_ms": [
+              0.028880000114440918,
+              0.18699199706315994,
+              4.5025599002838135,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.115629377542064,
+            "native_completed_host_ms": 4.942455474520102,
+            "program_device_window_ms": 4.7645440101623535,
+            "stage_device_window_ms": [
+              0.04161600023508072,
+              0.1860480010509491,
+              4.512784004211426,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.074425251223147,
+            "native_completed_host_ms": 4.944207001244649,
+            "program_device_window_ms": 4.77889609336853,
+            "stage_device_window_ms": [
+              0.042047999799251556,
+              0.18665600568056107,
+              4.518176078796387,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.133315877174027,
+            "native_completed_host_ms": 4.957105993526056,
+            "program_device_window_ms": 4.7603840827941895,
+            "stage_device_window_ms": [
+              0.02599999960511923,
+              0.18927999585866928,
+              4.5174880027771,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.405402873293497,
+            "native_completed_host_ms": 5.397836503107101,
+            "program_device_window_ms": 4.780207872390747,
+            "stage_device_window_ms": [
+              0.0494879987090826,
+              0.18592000007629395,
+              4.5166239738464355,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.5068006258807145,
+            "native_completed_host_ms": 5.452807527035475,
+            "program_device_window_ms": 4.783631801605225,
+            "stage_device_window_ms": [
+              0.05379199981689453,
+              0.18615999817848206,
+              4.519312143325806,
+              0.024159999564290047
+            ]
+          }
+        ],
+        "resident": [
+          {
+            "end_to_end_ms": 5.65335475403117,
+            "native_completed_host_ms": 5.0567875150591135,
+            "program_device_window_ms": 4.789407968521118,
+            "stage_device_window_ms": [
+              0.00854399986565113,
+              0.1921439990401268,
+              4.501840114593506,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.443002250103746,
+            "native_completed_host_ms": 5.405191506724805,
+            "program_device_window_ms": 4.726720094680786,
+            "stage_device_window_ms": [
+              0.008063999703153968,
+              0.18888000398874283,
+              4.502015829086304,
+              0.02412799932062626
+            ]
+          },
+          {
+            "end_to_end_ms": 5.259112374915276,
+            "native_completed_host_ms": 5.0373369886074215,
+            "program_device_window_ms": 4.791536092758179,
+            "stage_device_window_ms": [
+              0.008527999743819237,
+              0.19070399552583694,
+              4.502351999282837,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.147726245922968,
+            "native_completed_host_ms": 4.969605535734445,
+            "program_device_window_ms": 4.732255935668945,
+            "stage_device_window_ms": [
+              0.007519999984651804,
+              0.1902879998087883,
+              4.501744031906128,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.16214499657508,
+            "native_completed_host_ms": 4.976621479727328,
+            "program_device_window_ms": 4.730527877807617,
+            "stage_device_window_ms": [
+              0.00916799996048212,
+              0.19089600443840027,
+              4.500959873199463,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.185861627978738,
+            "native_completed_host_ms": 4.989116016076878,
+            "program_device_window_ms": 4.731951951980591,
+            "stage_device_window_ms": [
+              0.008848000317811966,
+              0.18907199800014496,
+              4.5029919147491455,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.173967620066833,
+            "native_completed_host_ms": 5.034556525060907,
+            "program_device_window_ms": 4.734783887863159,
+            "stage_device_window_ms": [
+              0.01054399972781539,
+              0.19222400337457657,
+              4.501983880996704,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.150951124960557,
+            "native_completed_host_ms": 5.013432499254122,
+            "program_device_window_ms": 4.789008140563965,
+            "stage_device_window_ms": [
+              0.06360000185668468,
+              0.19060800224542618,
+              4.5009918212890625,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.400447873398662,
+            "native_completed_host_ms": 5.349486513296142,
+            "program_device_window_ms": 4.730751991271973,
+            "stage_device_window_ms": [
+              0.009391999803483486,
+              0.19022399932146072,
+              4.504544019699097,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.148087373527233,
+            "native_completed_host_ms": 5.010088003473356,
+            "program_device_window_ms": 4.788624048233032,
+            "stage_device_window_ms": [
+              0.0121760000474751,
+              0.19249600172042847,
+              4.503535985946655,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.116630622069351,
+            "native_completed_host_ms": 5.013571499148384,
+            "program_device_window_ms": 4.767600059509277,
+            "stage_device_window_ms": [
+              0.013135999906808138,
+              0.19150400161743164,
+              4.502288103103638,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.734488244343083,
+            "native_completed_host_ms": 5.341070500435308,
+            "program_device_window_ms": 4.726304054260254,
+            "stage_device_window_ms": [
+              0.009279999881982803,
+              0.1903040036559105,
+              4.498960018157959,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.353676126105711,
+            "native_completed_host_ms": 5.311099957907572,
+            "program_device_window_ms": 4.732720136642456,
+            "stage_device_window_ms": [
+              0.008464000187814236,
+              0.19012800604104996,
+              4.502511978149414,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.362497497117147,
+            "native_completed_host_ms": 5.396851513069123,
+            "program_device_window_ms": 4.733328104019165,
+            "stage_device_window_ms": [
+              0.00916799996048212,
+              0.1897919997572899,
+              4.502975940704346,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.224027001531795,
+            "native_completed_host_ms": 4.99092650716193,
+            "program_device_window_ms": 4.73688006401062,
+            "stage_device_window_ms": [
+              0.010960000101476908,
+              0.19006399810314178,
+              4.504015922546387,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.254772499029059,
+            "native_completed_host_ms": 5.019367003114894,
+            "program_device_window_ms": 4.731791973114014,
+            "stage_device_window_ms": [
+              0.010607999749481678,
+              0.18998399376869202,
+              4.501935958862305,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.09032049740199,
+            "native_completed_host_ms": 4.918516497127712,
+            "program_device_window_ms": 4.749056100845337,
+            "stage_device_window_ms": [
+              0.010127999819815159,
+              0.19180800020694733,
+              4.519392013549805,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.529020621906966,
+            "native_completed_host_ms": 5.389611527789384,
+            "program_device_window_ms": 4.741408109664917,
+            "stage_device_window_ms": [
+              0.007679999805986881,
+              0.19040000438690186,
+              4.516272068023682,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.3215531224850565,
+            "native_completed_host_ms": 5.297650001011789,
+            "program_device_window_ms": 4.743071794509888,
+            "stage_device_window_ms": [
+              0.007696000160649419,
+              0.1891999989748001,
+              4.5151519775390625,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.133368496899493,
+            "native_completed_host_ms": 4.963751969626173,
+            "program_device_window_ms": 4.7476959228515625,
+            "stage_device_window_ms": [
+              0.01062400033697486,
+              0.1905440017580986,
+              4.51689600944519,
+              0.024159999564290047
+            ]
+          },
+          {
+            "end_to_end_ms": 5.238207122602034,
+            "native_completed_host_ms": 5.004192527849227,
+            "program_device_window_ms": 4.751440048217773,
+            "stage_device_window_ms": [
+              0.010639999993145466,
+              0.1913120001554489,
+              4.519360065460205,
+              0.024159999564290047
+            ]
+          }
+        ]
+      },
+      "medians": {
+        "host": {
+          "end_to_end_ms": 5.251409871561918,
+          "native_completed_host_ms": 5.15895351418294,
+          "program_device_window_ms": 4.7745280265808105
+        },
+        "resident": {
+          "end_to_end_ms": 5.238207122602034,
+          "native_completed_host_ms": 5.019367003114894,
+          "program_device_window_ms": 4.73688006401062
+        }
+      }
+    }
+  ]
+}

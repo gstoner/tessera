@@ -71,6 +71,7 @@
 #include "NativeStorageJVP.h"
 #include "NativeScaledMatmulProgram.h"
 #include "NativeSM120ReverseProgram.h"
+#include "NativeSourceAttentionReverse.h"
 #include "NativeAttentionProjection.h"
 #include "../../compiler/ir/AttentionADContract.h"
 
@@ -1811,18 +1812,21 @@ public:
     auto module = getOperation();
     bool exportSM120Reverse = module->hasAttr("tessera.native.sm120_reverse_request");
     bool exportSourceReverse = module->hasAttr("tessera.native.source_reverse_request");
+    bool exportAttentionReverse = module->hasAttr("tessera.native.source_attention_reverse_request");
     std::string nativeReverseOriginalSource;
-    if (exportSM120Reverse && exportSourceReverse) {
+    if (unsigned(exportSM120Reverse) + unsigned(exportSourceReverse) + unsigned(exportAttentionReverse) > 1) {
       module.emitError("native reverse export requests are mutually exclusive");
       return signalPassFailure();
     }
-    if (exportSM120Reverse || exportSourceReverse) {
-      StringRef marker = exportSM120Reverse ? "tessera.native.sm120_reverse_request" :
-                                             "tessera.native.source_reverse_request";
+    if (exportSM120Reverse || exportSourceReverse || exportAttentionReverse) {
+      StringRef marker = exportAttentionReverse ? "tessera.native.source_attention_reverse_request" :
+          exportSM120Reverse ? "tessera.native.sm120_reverse_request" : "tessera.native.source_reverse_request";
       if (!mlir::isa<mlir::UnitAttr>(module->getAttr(marker))) {
         module.emitError("native reverse request requires a unit marker"); return signalPassFailure();
       }
+      if (exportAttentionReverse && failed(source_attention_reverse::preflight(module))) return signalPassFailure();
       llvm::raw_string_ostream stream(nativeReverseOriginalSource); module.print(stream); stream.flush();
+      if (exportAttentionReverse) nativeReverseOriginalSource += "\n";
       module->removeAttr(marker);
     }
     // A bounded symbol-body control_scan already has a proven lowering to one
@@ -1935,6 +1939,12 @@ public:
       if (emitStorageChild || exportScaledTranspose || !exportProduct.empty() ||
           !checkpointProduct.empty() || targets.size()!=1 || selectScaledTransposeMember!=-1 ||
           failed(emitNativeSourceReverseProgram(module,nativeReverseOriginalSource,exportSourceReverse)))
+        return signalPassFailure();
+    }
+    if (exportAttentionReverse) {
+      if (emitStorageChild || exportScaledTranspose || !exportProduct.empty() ||
+          !checkpointProduct.empty() || targets.size()!=1 || selectScaledTransposeMember!=-1 ||
+          failed(source_attention_reverse::emit(module,nativeReverseOriginalSource)))
         return signalPassFailure();
     }
     if (!exportProduct.empty() && failed(exportTypedProduct(module,exportProduct)))

@@ -38,6 +38,15 @@ struct Owner {
   int64_t prefixRows=0,prefixColumns=0;
   unsigned prefixGrid=0;
   bool forwardCompleted=false;
+  bool sourceReverse=false;
+  CUmodule sourcePullbackModule=nullptr;
+  CUfunction sourcePullbackFunction=nullptr;
+  CUdeviceptr sourceGradient=0;
+  unsigned sourcePullbackGrid=0;
+  size_t sourceCount=0;
+  std::array<int,3> sourceRoles{};
+  std::array<int,2> sourceSeeds{};
+  std::array<CUevent,4> sourceEvents{};
   CUdeviceptr arena=0;
   size_t arenaBytes=0;
   void *hostArena=nullptr;
@@ -74,6 +83,9 @@ struct Owner {
     if(stream)cuStreamSynchronize(stream);
     for(auto event:events)if(event)cuEventDestroy(event);
     for(auto event:rowEvents)if(event)cuEventDestroy(event);
+    for(auto event:sourceEvents)if(event)cuEventDestroy(event);
+    if(sourceGradient)cuMemFree(sourceGradient);
+    if(sourcePullbackModule)cuModuleUnload(sourcePullbackModule);
     if(prefixOutput)cuMemFree(prefixOutput);
     if(prefixModule)cuModuleUnload(prefixModule);
     if(arena)cuMemFree(arena);
@@ -97,9 +109,9 @@ bool stageUpload(Owner &owner,size_t slot,const void *input){
   std::memcpy(host,input,owner.bytes[slot]);
   return ok(cuMemcpyHtoDAsync(owner.buffers[slot],host,owner.bytes[slot],owner.stream),"upload staged attention");
 }
-bool stageDownload(Owner &owner,size_t slot){
+bool stageDownload(Owner &owner,size_t slot,CUdeviceptr source=0){
   auto *host=static_cast<unsigned char *>(owner.hostArena)+owner.hostOffsets[slot];
-  return ok(cuMemcpyDtoHAsync(host,owner.buffers[slot],owner.bytes[slot],owner.stream),"download staged attention");
+  return ok(cuMemcpyDtoHAsync(host,source?source:owner.buffers[slot],owner.bytes[slot],owner.stream),"download staged attention");
 }
 void copyOutput(Owner &owner,size_t slot,void *output){
   std::memcpy(output,static_cast<unsigned char *>(owner.hostArena)+owner.hostOffsets[slot],owner.bytes[slot]);
@@ -602,7 +614,8 @@ static int prepareAttentionVjp(
   const void *bimage,size_t bbytes,const char *bentry,
   const int64_t *dims,const int64_t *biasShape,const int *mapping,
   const int *roles,size_t activeCount,int storage,int outputStorage,int lseCotangent,uint64_t *handle,
-  bool externalRows=false,const void *rimage=nullptr,size_t rbytes=0,const char *rentry=nullptr){
+  bool externalRows=false,const void *rimage=nullptr,size_t rbytes=0,const char *rentry=nullptr,
+  bool sourceProgram=false){
   ownerError.clear();if(handle)*handle=0;
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
@@ -612,7 +625,11 @@ static int prepareAttentionVjp(
      (outputStorage!=1 && outputStorage!=storage) || (lseCotangent!=0 && lseCotangent!=1))
     return bad("invalid reverse images or ABI");
   unsigned mask=0,bias=0,biasGradient=0,logical=0,threads=0;
-  const char *prefix=externalRows?"tessera_tile_attention_backward_rows_compact_m":"tessera_tile_attention_backward_lse_output_compact_m";
+  const char *fullPrefix="tessera_tile_attention_backward_lse_output_cotangent_";
+  bool fullSource=sourceProgram && !externalRows && lseCotangent==1 &&
+      !std::strncmp(bentry,fullPrefix,std::strlen(fullPrefix));
+  const char *prefix=fullSource?fullPrefix:externalRows?
+      "tessera_tile_attention_backward_rows_compact_m":"tessera_tile_attention_backward_lse_output_compact_m";
   if(std::strncmp(bentry,prefix,std::strlen(prefix)))return bad("unsupported reverse entry contract");
   const char *cursor=bentry+std::strlen(prefix);
   auto number=[&](unsigned &value,unsigned bound){
@@ -630,12 +647,13 @@ static int prepareAttentionVjp(
     if(std::strncmp(cursor,tag,2))return false;
     cursor+=2;return number(value,bound);
   };
-  if(!number(mask,15) || !field("_b",bias,1) || !field("_g",biasGradient,1) ||
-     !field("_l",logical,1) || !field("_t",threads,128) || *cursor++!='_' ||
-     !mask || mask>(biasGradient?15u:7u) ||
-     (biasGradient && !bias) || (threads!=64 && threads!=128) ||
-     std::strncmp(fentry,"tessera_tile_attention_lse_",std::strlen("tessera_tile_attention_lse_")))
-    return bad("unsupported reverse entry contract");
+  if(fullSource){mask=7;logical=1;threads=128;}
+  else if(!number(mask,15) || !field("_b",bias,1) || !field("_g",biasGradient,1) ||
+          !field("_l",logical,1) || !field("_t",threads,128) || *cursor++!='_' ||
+          !mask || mask>(biasGradient?15u:7u) || (biasGradient && !bias) ||
+          (threads!=64 && threads!=128))return bad("unsupported reverse entry contract");
+  if(std::strncmp(fentry,"tessera_tile_attention_lse_",std::strlen("tessera_tile_attention_lse_")))
+    return bad("unsupported reverse forward entry contract");
   const char *dataName=storage==2?"f16":storage==3?"bf16":"f32";
   const char *outputName=outputStorage==2?"f16":outputStorage==3?"bf16":"f32";
   if(storage!=1){
@@ -648,7 +666,7 @@ static int prepareAttentionVjp(
       if(!text[i] || (!(text[i]>='0' && text[i]<='9') && !(text[i]>='a' && text[i]<='f')))return false;
     return true;
   };
-  const char *seedSuffix=lseCotangent?"_cotangent_":"";
+  const char *seedSuffix=lseCotangent && !fullSource?"_cotangent_":"";
   if(std::strlen(cursor)!=10+std::strlen(seedSuffix) || !hashSuffix(cursor) ||
      std::strcmp(cursor+10,seedSuffix))return bad("invalid reverse digest/seed suffix");
   std::string forwardPrefix="tessera_tile_attention_lse_";
@@ -793,17 +811,94 @@ extern "C" int tessera_nvidia_attention_vjp_rows_prepare(
   return prepareAttentionVjp(fimage,fbytes,fentry,bimage,bbytes,bentry,dims,biasShape,
       mapping,roles,activeCount,storage,outputStorage,lseCotangent,handle,true,rimage,rbytes,rentry);
 }
+extern "C" int tessera_nvidia_source_attention_reverse_prepare(
+  const void *normImage,size_t normBytes,const char *normEntry,int cooperative,
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *bimage,size_t bbytes,const char *bentry,
+  const void *pullbackImage,size_t pullbackBytes,const char *pullbackEntry,
+  const int64_t *dims,const int *mapping,const int *seedOrder,
+  const int *selectedRoles,size_t selectedCount,int storage,uint64_t *handle){
+  ownerError.clear();if(handle)*handle=0;
+  if(!handle || !normImage || !normBytes || !normEntry || !pullbackImage ||
+     !pullbackBytes || !pullbackEntry || !seedOrder || !selectedRoles ||
+     selectedCount<1 || selectedCount>3 || (storage!=2 && storage!=3) ||
+     (cooperative!=0 && cooperative!=1) || seedOrder[0]<3 || seedOrder[0]>4 ||
+     seedOrder[1]<3 || seedOrder[1]>4 || seedOrder[0]==seedOrder[1])
+    return bad("source attention reverse registration disagrees");
+  bool seen[3]{};
+  for(size_t i=0;i<selectedCount;++i){
+    if(selectedRoles[i]<0 || selectedRoles[i]>2 || seen[selectedRoles[i]])
+      return bad("source attention gradient selection disagrees");
+    seen[selectedRoles[i]]=true;
+  }
+  const char *normPrefix=storage==2?"tessera_tile_norm_rmsnorm_f16_":
+                                    "tessera_tile_norm_rmsnorm_bf16_";
+  const char *rowPrefix="tessera_native_row_";
+  if(std::strncmp(normEntry,normPrefix,std::strlen(normPrefix)) ||
+     (std::strstr(normEntry,"_cooperative_128_")!=nullptr)!=bool(cooperative) ||
+     std::strncmp(pullbackEntry,rowPrefix,std::strlen(rowPrefix)) ||
+     std::strlen(pullbackEntry+std::strlen(rowPrefix))!=16)
+    return bad("source attention member entry or schedule disagrees");
+  for(const char *p=pullbackEntry+std::strlen(rowPrefix);*p;++p)
+    if(!(*p>='0' && *p<='9') && !(*p>='a' && *p<='f'))
+      return bad("source attention pullback digest disagrees");
+  const int active[3]={0,1,2};uint64_t id=0;
+  int status=prepareAttentionVjp(fimage,fbytes,fentry,bimage,bbytes,bentry,dims,
+      nullptr,mapping,active,3,storage,storage,1,&id,false,nullptr,0,nullptr,true);
+  if(status)return status;
+  std::lock_guard<std::mutex> lock(ownerMutex);
+  auto found=owners.find(id);
+  if(found==owners.end())return bad("source attention owner registration lost");
+  auto &s=*found->second;
+  auto fail=[&](int code){owners.erase(found);return code;};
+  s.sourceReverse=true;s.sourceCount=selectedCount;
+  for(size_t i=0;i<selectedCount;++i)s.sourceRoles[i]=selectedRoles[i];
+  s.sourceSeeds={seedOrder[0],seedOrder[1]};
+  s.prefixColumns=s.dims[5];s.prefixRows=int64_t(s.bytes[0]/2)/s.prefixColumns;
+  if(s.prefixRows<=0 || s.prefixRows>INT_MAX)return fail(bad("source attention row geometry overflows"));
+  s.prefixGrid=unsigned(cooperative?s.prefixRows:(s.prefixRows+127)/128);
+  s.sourcePullbackGrid=unsigned((s.prefixRows+127)/128);
+  if(!attentionKernelParameters(s.forward,12) || !attentionKernelParameters(s.tangent,17) ||
+     !ok(cuModuleLoadData(&s.prefixModule,normImage),"load source normalization") ||
+     !ok(cuModuleGetFunction(&s.prefixFunction,s.prefixModule,normEntry),"resolve source normalization") ||
+     !attentionKernelParameters(s.prefixFunction,4) ||
+     !ok(cuModuleLoadData(&s.sourcePullbackModule,pullbackImage),"load source normalization pullback") ||
+     !ok(cuModuleGetFunction(&s.sourcePullbackFunction,s.sourcePullbackModule,pullbackEntry),"resolve source normalization pullback") ||
+     !attentionKernelParameters(s.sourcePullbackFunction,5) ||
+     !ok(cuMemAlloc(&s.prefixOutput,s.bytes[0]),"allocate retained normalized Q") ||
+     !ok(cuMemAlloc(&s.sourceGradient,s.bytes[7]),"allocate private source gradient"))return fail(3);
+  for(auto &event:s.sourceEvents)
+    if(!ok(cuEventCreate(&event,CU_EVENT_DEFAULT),"create source reverse stage event"))return fail(3);
+  *handle=id;return 0;
+}
+
 static int invokeAttentionVjp(
   uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
   void *const *outputs,const size_t *outputBytes,size_t outputCount,float *deviceMilliseconds,
   const uint64_t *producerStreams=nullptr,size_t producerCount=0,
-  bool rowsABI=false,size_t timingCount=2){
+  bool rowsABI=false,size_t timingCount=2,bool sourceABI=false){
   ownerError.clear();
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
   auto found=owners.find(handle);
   if(found==owners.end() || !found->second->reverse || found->second->forwardOnly)return bad("prepared reverse is closed or wrong product");
   auto &s=*found->second;CUcontext context=nullptr;unsigned long long identity=0;
+  if(sourceABI!=s.sourceReverse)return bad("source reverse ABI version disagrees");
+  std::array<const void *,5> sourceInputs{};
+  std::array<size_t,5> sourceBytes{};
+  std::array<uint64_t,5> sourceStreams{};
+  if(s.sourceReverse){
+    if(!inputs || !inputBytes || inputCount!=5 || (producerStreams && producerCount!=5))
+      return bad("source reverse input/producer count disagrees");
+    for(size_t i=0;i<5;++i){
+      size_t from=i<3?i:size_t(s.sourceSeeds[i-3]);
+      sourceInputs[i]=inputs[from];sourceBytes[i]=inputBytes[from];
+      if(producerStreams)sourceStreams[i]=producerStreams[from];
+    }
+    inputs=sourceInputs.data();inputBytes=sourceBytes.data();
+    if(producerStreams)producerStreams=sourceStreams.data();
+  }
+  auto outputRole=[&](size_t index){return s.sourceReverse?s.sourceRoles[index]:s.roles[index];};
   if(rowsABI!=s.reverseRows)return bad("prepared reverse ABI version disagrees");
   if(rowsABI && ((deviceMilliseconds && timingCount!=4) || (!deviceMilliseconds && timingCount!=0)))
     return bad("row reverse timing output requires exactly four floats or no output");
@@ -812,7 +907,7 @@ static int invokeAttentionVjp(
   if(context!=s.context || identity!=s.contextIdentity)return bad("prepared reverse context generation disagrees");
   const size_t primals=3+unsigned(s.bias);
   if(!inputs || !inputBytes || inputCount!=primals+1+unsigned(s.reverseLseSeed) || !outputs || !outputBytes ||
-     outputCount!=s.activeCount)return bad("reverse host ABI disagrees");
+     outputCount!=(s.sourceReverse?s.sourceCount:s.activeCount))return bad("reverse host ABI disagrees");
   auto validSpan=[](const void *p,size_t n){return p && n && reinterpret_cast<uintptr_t>(p)<=UINTPTR_MAX-n;};
   auto overlap=[](const void *a,size_t an,const void *b,size_t bn){
     auto x=reinterpret_cast<uintptr_t>(a),y=reinterpret_cast<uintptr_t>(b);
@@ -826,7 +921,7 @@ static int invokeAttentionVjp(
   if(s.reverseLseSeed && (!validSpan(inputs[primals+1],inputBytes[primals+1]) || inputBytes[primals+1]!=s.bytes[11]))
     return bad("reverse LSE cotangent extent disagrees");
   for(size_t i=0;i<outputCount;++i){
-    if(!validSpan(outputs[i],outputBytes[i]) || outputBytes[i]!=s.bytes[7+s.roles[i]])
+    if(!validSpan(outputs[i],outputBytes[i]) || outputBytes[i]!=s.bytes[7+outputRole(i)])
       return bad("reverse gradient extent disagrees");
     for(size_t j=0;j<i;++j)if(overlap(outputs[i],outputBytes[i],outputs[j],outputBytes[j]))
       return bad("reverse outputs overlap");
@@ -864,14 +959,15 @@ static int invokeAttentionVjp(
     broadcast=false;for(size_t i=0;i<4;++i)broadcast|=score[i]!=s.biasShape[i];
   }
   const size_t scalarCount=s.reverseRows?(s.forwardBiasScalars?11:7):(broadcast?11:7);
+  CUdeviceptr attentionQ=s.sourceReverse?s.prefixOutput:s.buffers[0];
   void *fa[17]{};size_t arg=0;
-  for(size_t i=0;i<3;++i)fa[arg++]=&s.buffers[i];
+  for(size_t i=0;i<3;++i)fa[arg++]=i==0?&attentionQ:&s.buffers[i];
   if(s.bias)fa[arg++]=&s.buffers[6];
   fa[arg++]=&s.buffers[3];fa[arg++]=&s.buffers[4];
   for(size_t i=0;i<scalarCount;++i)fa[arg++]=&scalars[i];
   void *ba[24]{};arg=0;
   const unsigned baseSlots[4]={5,0,1,2};
-  for(auto i:baseSlots)ba[arg++]=&s.buffers[i];
+  for(auto i:baseSlots)ba[arg++]=i==0?&attentionQ:&s.buffers[i];
   if(!s.reverseRows)ba[arg++]=&s.buffers[3];
   if(s.bias)ba[arg++]=&s.buffers[6];
   ba[arg++]=&s.buffers[4];
@@ -879,7 +975,13 @@ static int invokeAttentionVjp(
   else if(s.reverseLseSeed)ba[arg++]=&s.buffers[11];
   for(size_t role=0;role<4;++role)if(s.bytes[7+role])ba[arg++]=&s.buffers[7+role];
   for(size_t i=0;i<(s.reverseRows?7:scalarCount);++i)ba[arg++]=&scalars[i];
-  // Pinned uploads and both consumers share the owner stream.
+  if(s.sourceReverse){
+    void *na[]={&s.buffers[0],&s.prefixOutput,&s.prefixRows,&s.prefixColumns};
+    if(!ok(cuEventRecord(s.sourceEvents[0],s.stream),"start source normalization") ||
+       !ok(cuLaunchKernel(s.prefixFunction,s.prefixGrid,1,1,128,1,1,0,s.stream,na,nullptr),"launch source normalization") ||
+       !ok(cuEventRecord(s.sourceEvents[1],s.stream),"end source normalization"))return 3;
+  }
+  // Pinned uploads and all consumers share the owner stream.
   if(!ok(cuEventRecord(s.events[0],s.stream),"start saved forward") ||
      !ok(cuLaunchKernel(s.forward,s.forwardGrid,1,1,128,1,1,0,s.stream,fa,nullptr),"launch saved forward") ||
      !ok(cuEventRecord(s.events[1],s.stream),"end saved forward"))return 3;
@@ -898,11 +1000,19 @@ static int invokeAttentionVjp(
   if(!ok(cuEventRecord(s.events[2],s.stream),"start backward") ||
      !ok(cuLaunchKernel(s.tangent,s.reverseGrid,1,1,s.reverseThreads,1,1,0,s.stream,ba,nullptr),"launch backward") ||
      !ok(cuEventRecord(s.events[3],s.stream),"end backward"))return 3;
-  for(size_t i=0;i<outputCount;++i)
-    if(!stageDownload(s,7+s.roles[i]))return 3;
+  if(s.sourceReverse){
+    void *ra[]={&s.buffers[0],&s.buffers[7],&s.sourceGradient,&s.prefixRows,&s.prefixColumns};
+    if(!ok(cuEventRecord(s.sourceEvents[2],s.stream),"start source normalization pullback") ||
+       !ok(cuLaunchKernel(s.sourcePullbackFunction,s.sourcePullbackGrid,1,1,128,1,1,0,s.stream,ra,nullptr),"launch source normalization pullback") ||
+       !ok(cuEventRecord(s.sourceEvents[3],s.stream),"end source normalization pullback"))return 3;
+  }
+  for(size_t i=0;i<outputCount;++i){
+    int role=outputRole(i);
+    if(!stageDownload(s,7+role,s.sourceReverse && role==0?s.sourceGradient:0))return 3;
+  }
   if(!ok(cuStreamSynchronize(s.stream),"complete reverse product"))return 3;
   drain.armed=false;
-  for(size_t i=0;i<outputCount;++i)copyOutput(s,7+s.roles[i],outputs[i]);
+  for(size_t i=0;i<outputCount;++i)copyOutput(s,7+outputRole(i),outputs[i]);
   if(deviceMilliseconds){
     if(!ok(cuEventElapsedTime(&deviceMilliseconds[0],s.events[0],s.events[1]),"saved forward elapsed"))return 3;
     if(s.reverseRows){
@@ -915,6 +1025,35 @@ static int invokeAttentionVjp(
   s.reverseCompleted=true;
   return 0;
 }
+extern "C" int tessera_nvidia_source_attention_reverse_invoke(
+  uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
+  const uint64_t *producerStreams,size_t producerCount,
+  void *const *outputs,const size_t *outputBytes,size_t outputCount){
+  return invokeAttentionVjp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
+                            outputCount,nullptr,producerStreams,producerCount,false,0,true);
+}
+extern "C" int tessera_nvidia_source_attention_reverse_last_times(
+  uint64_t handle,float *milliseconds,size_t count){
+  ownerError.clear();
+  if(getpid()!=ownerProcess)return bad("source attention reverse cannot cross fork");
+  std::lock_guard<std::mutex> lock(ownerMutex);
+  auto found=owners.find(handle);
+  if(found==owners.end() || !found->second->sourceReverse || !found->second->reverseCompleted ||
+     !milliseconds || count!=5)return bad("source attention reverse timing requires a completed program and five floats");
+  auto &s=*found->second;CUcontext context=nullptr;unsigned long long identity=0;
+  if(!ok(cuCtxGetCurrent(&context),"source reverse timing context") ||
+     !ok(cuCtxGetId(s.context,&identity),"source reverse timing context generation"))return 3;
+  if(context!=s.context || identity!=s.contextIdentity)return bad("source reverse timing context disagrees");
+  const CUevent begin[5]={s.sourceEvents[0],s.events[0],s.events[2],s.sourceEvents[2],s.sourceEvents[0]};
+  const CUevent end[5]={s.sourceEvents[1],s.events[1],s.events[3],s.sourceEvents[3],s.sourceEvents[3]};
+  for(size_t i=0;i<5;++i)
+    if(!ok(cuEventElapsedTime(&milliseconds[i],begin[i],end[i]),"source reverse stage elapsed"))return 3;
+  return 0;
+}
+extern "C" int tessera_nvidia_source_attention_reverse_close(uint64_t handle){
+  return tessera_nvidia_attention_vjp_close(handle);
+}
+
 extern "C" int tessera_nvidia_attention_vjp_invoke(
   uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
   void *const *outputs,const size_t *outputBytes,size_t outputCount,float *deviceMilliseconds){

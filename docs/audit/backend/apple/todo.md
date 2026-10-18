@@ -6,34 +6,37 @@ target: apple_gpu
 last_updated: 2026-10-18
 ---
 
-## NATIVE-ATTENTION-SOURCE-REVERSE-20261018 — logical row prefixes
+## NATIVE-ATTENTION-SOURCE-REVERSE-20261018 — prepared source VJP
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
-Base: PR987 merged as 9e63d8c71 after all required CI and exact-head review.
-The original half RMSNorm(Q) -> saved-LSE attention source passes native paired
-AD for O-only and O+LSE results in both half formats. Schedule still requires
-isolated checkpoint members. The normalization pullback also retains rank-four
-Graph tensors, while the existing physical row consumer assumes rank two.
+Base: PR987 merged as 9e63d8c71. Synchronization key:
+NATIVE-ATTENTION-SOURCE-REVERSE-20261018.
 
-Six valid rank-three/four compiler fixtures reproduce that limitation against
-the unchanged compiler. The candidate preserves logical Graph prefix shapes,
-rank-reduced statistics and prefix broadcast axes, while forming checked
-compact [product(prefix), last_axis] Tile views. Existing schema-1/6 pointer
-ABIs remain unchanged; original rank-two stage identity requires verification.
-The separate LLVM/MLIR 23.1.1 assertions build passes 91 unique compiler cases;
-27 unique RTX5070 member/adjacent cases pass, including two workgroups. Twenty
-rank-two stage identities are unchanged. Eight correctness-gated paired timing
-profiles retain their explicit raw-member dispatch scope. Original-source
-attention reverse outlining/ownership/public integration remain pending.
-This is a prerequisite for original-source reverse integration, not a claim
-that composed reverse or any aggregate slice is complete.
+The native paired-AD exporter now outlines actual RMSNorm(Q) -> saved-LSE
+attention reverse SSA into four typed members and a four-call program root:
+normalization, checkpoint forward, checkpoint backward with O/LSE cotangents,
+and the actual normalization pullback. Python transports these members through
+Graph/Schedule/Tile/Target/NVVM/PTX without reconstructing derivatives.
+The artifact-only plan is replay-bound to the original Graph and compiler.
+A retained C++ CUDA owner keeps normalized Q, saved O/LSE and gradients private,
+orders resident producer streams, and returns selected original-root gradients.
 
-Not applicable to the native SM120 row ownership ABI. Shared typed Graph semantics remain unchanged; no Apple execution or physical schedule is added.
+Fourteen exact RTX5070 numerical cases pass for FP16/BF16, argument/result
+permutations, requested gradient subsets/order, zero/tiny inputs, D257 and
+136 logical rows. Warm calls forbid compiler subprocesses. Four correctness-
+gated timing profiles retain separate compile/prepare, four stage device event
+windows, program windows, native completed host and end-to-end domains.
+These are prepared-owner candidate results, not ordinary JIT or portable
+RuntimeArtifact reverse proof. Expanded device regression passes 55 cases: 20 new reverse and 35 existing
+primal cases; 326 compiler/registry gates pass. Documentation gates and
+public integration are still being completed. The original logical-prefix
+prerequisite retains its 91 compiler/27 device cases and 20 unchanged rank-two
+stages. All five aggregate programs remain open.
 
+Not applicable to the SM120 C++ ownership ABI. Follow-up required for an independent Apple source-attention reverse consumer; shared typed AD witnesses add no Metal execution evidence.
 
-
-Packet: benchmarks/baselines/native_row_logical_prefix_20261018/README.md.
-Contract: docs/spec/NATIVE_ROW_LOGICAL_PREFIX.md.
+Packet: benchmarks/baselines/native_source_attention_reverse_20261018/README.md.
+Contract: docs/spec/NATIVE_SOURCE_ATTENTION_PROGRAM.md.
 
 ## NATIVE-COMPOSED-ATTENTION-PREFIX-20261018 — source SSA outlining
 

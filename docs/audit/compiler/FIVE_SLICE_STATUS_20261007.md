@@ -3,6 +3,36 @@ last_updated: 2026-10-18
 audit_role: reference
 ---
 
+## Native source attention reverse candidate — 2026-10-18
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Base: PR987 merged as 9e63d8c71. Synchronization key:
+NATIVE-ATTENTION-SOURCE-REVERSE-20261018.
+
+The native paired-AD exporter now outlines actual RMSNorm(Q) -> saved-LSE
+attention reverse SSA into four typed members and a four-call program root:
+normalization, checkpoint forward, checkpoint backward with O/LSE cotangents,
+and the actual normalization pullback. Python transports these members through
+Graph/Schedule/Tile/Target/NVVM/PTX without reconstructing derivatives.
+The artifact-only plan is replay-bound to the original Graph and compiler.
+A retained C++ CUDA owner keeps normalized Q, saved O/LSE and gradients private,
+orders resident producer streams, and returns selected original-root gradients.
+
+Fourteen exact RTX5070 numerical cases pass for FP16/BF16, argument/result
+permutations, requested gradient subsets/order, zero/tiny inputs, D257 and
+136 logical rows. Warm calls forbid compiler subprocesses. Four correctness-
+gated timing profiles retain separate compile/prepare, four stage device event
+windows, program windows, native completed host and end-to-end domains.
+These are prepared-owner candidate results, not ordinary JIT or portable
+RuntimeArtifact reverse proof. Expanded device regression passes 55 cases: 20 new reverse and 35 existing
+primal cases; 326 compiler/registry gates pass. Documentation gates and
+public integration are still being completed. The original logical-prefix
+prerequisite retains its 91 compiler/27 device cases and 20 unchanged rank-two
+stages. All five aggregate programs remain open.
+
+[Evidence](../../../benchmarks/baselines/native_source_attention_reverse_20261018/README.md).
+
+
 
 ## Native logical-prefix row prerequisite — 2026-10-18
 

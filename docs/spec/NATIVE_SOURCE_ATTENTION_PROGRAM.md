@@ -104,3 +104,50 @@ output policy. Existing isolated attention backward proof is separate. Apple,
 x86 and ROCm require their own physical consumers and exact-device evidence;
 no SM120 schedule transfers to those targets. Final broad validation and
 publication gates are still pending. All five aggregate slices remain open.
+
+## Original-source reverse candidate: prepared owner
+
+Synchronization key: NATIVE-ATTENTION-SOURCE-REVERSE-20261018.
+
+The unit marker tessera.native.source_attention_reverse_request requests an
+original-source export inside tessera-autodiff-paired. Its schema
+tessera.native.source_attention_reverse.v1 contains original, paired and
+outlined program witnesses, local member Graphs, root and cotangent roles,
+requested gradient order and checked logical allocation lifetimes. The export
+remains artifact_only; it is not itself an execution receipt.
+
+The native transform clones the actual pure normalization pullback from paired
+AD, cutting at the checkpoint dQ SSA value. The root has four typed func.call
+members. Static homogeneous f16/bf16 roots, FP32 accumulation and two saved
+O/LSE outputs are admitted; either result order and original argument
+permutations are preserved. Dynamic shapes, bias, dropout, encoded layouts and
+other source programs are outside this named profile.
+
+PreparedSourceAttentionReverse validates native replay, lowers each original
+member through Schedule/Tile/NVIDIA/NVVM and compiles four images. It performs
+no tensor mathematics. The additive source_attention_reverse_prepare/invoke/
+last_times/close C APIs own private normalized Q, O, FP32 LSE, checkpoint dQ/K/V
+and source dQ. All selected outputs are independent completed host arrays.
+The current implementation materializes all three checkpoint gradients even
+for a requested subset; subset return order does not imply pruned computation.
+
+Inputs are the original three arguments followed by cotangents in original
+result order. O seeds retain the half storage; LSE seeds are FP32. Host inputs
+require exact native-endian storage/shape. Resident roots require one complete
+CUDA placement, compact version-three metadata and explicit producer streams.
+The binding snapshots metadata once, and native event waits establish all
+producer dependencies before private snapshots and member launches. The owner
+checks static byte extents, context identity/generation, process lifetime and
+kernel parameter counts. It drains its stream before releasing buffers/modules.
+
+An execution receipt is published only after native completion and timing
+collection. Four event windows describe normalization, saved forward, backward
+and source pullback. The program window spans these launches, excludes root
+copies and includes possible dispatch gaps. Compile, native preparation,
+completed native-host and Python end-to-end timing remain distinct.
+
+The prepared candidate has independent-oracle SM120 numerical evidence.
+Ordinary JIT native_backward admission, public execution certificates, sealed
+portable restoration and compiler-free RuntimeArtifact replay remain required
+before claiming public original-source reverse integration. No sibling backend
+inherits SM120 physical proof, and none of the five aggregate slices is closed.

@@ -229,6 +229,23 @@ int tessera_nvidia_attention_forward_prepare(
 // Static homogeneous half RMSNorm(Q) -> saved-LSE attention. The producer
 // output is private, reused across calls and never exposed as a caller buffer.
 // cooperative: 0=serial norm rows, 1=cooperative_128. Results: half O, f32 LSE.
+// Original-source RMSNorm -> saved-LSE attention reverse. The native owner
+// retains normalized Q, O/LSE and the normalization pullback on one stream.
+int tessera_nvidia_source_attention_reverse_prepare(
+    const void* norm_image, size_t norm_bytes, const char* norm_entry, int cooperative,
+    const void* forward_image, size_t forward_bytes, const char* forward_entry,
+    const void* backward_image, size_t backward_bytes, const char* backward_entry,
+    const void* pullback_image, size_t pullback_bytes, const char* pullback_entry,
+    const int64_t* dims, const int* frontend_mapping, const int* cotangent_indices,
+    const int* selected_roles, size_t selected_count, int storage, uint64_t* handle);
+int tessera_nvidia_source_attention_reverse_invoke(
+    uint64_t handle, const void* const* inputs, const size_t* input_bytes, size_t input_count,
+    const uint64_t* producer_streams, size_t producer_count,
+    void* const* outputs, const size_t* output_bytes, size_t output_count);
+int tessera_nvidia_source_attention_reverse_last_times(
+    uint64_t handle, float* milliseconds, size_t count);
+int tessera_nvidia_source_attention_reverse_close(uint64_t handle);
+
 int tessera_nvidia_norm_attention_prepare(
     const void* norm_image, size_t norm_bytes, const char* norm_entry, int cooperative,
     const void* image, size_t image_bytes, const char* entry, const int64_t* dims,

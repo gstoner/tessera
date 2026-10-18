@@ -5,6 +5,10 @@ audit_role: reference
 
 # Integrated compiler engineering log
 
+
+
+
+
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -13665,4 +13669,29 @@ All five aggregate slices stay open; this is a row-member prerequisite.
 
 Evidence: benchmarks/baselines/native_row_logical_prefix_20261018/README.md;
 docs/spec/NATIVE_ROW_LOGICAL_PREFIX.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-18 — native source-attention reverse prepared owner
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync NATIVE-ATTENTION-SOURCE-REVERSE-20261018.
+
+Outcome: Native paired AD now exports the actual four-member normalization,
+saved forward, attention backward and source-pullback program. Each member
+passes Graph/Schedule/Tile/Target/NVVM/PTX and executes under one native C++
+private-buffer owner. FP16/BF16 source gradients match an independent oracle.
+Twenty new reverse and thirty-five existing primal cases pass on RTX5070;
+326 compiler/registry gates pass. Four correctness-gated timing profiles
+separate compilation, preparation, four stage event windows, program windows,
+completed native host and end-to-end times. Deterministic pending producer
+streams, byte-extent refusal, context recovery and independent outputs pass.
+All four backend queues retain architecture-specific parity/follow-up states.
+
+Remaining: Ordinary JIT native_backward, sealed portable RuntimeArtifact
+replay, public execution certificates, broader validation and delivery.
+All five aggregate programs remain open. No sibling physical proof transfers.
+
+Evidence: benchmarks/baselines/native_source_attention_reverse_20261018/README.md,
+sm120.json, manifest.json and compressed compiler/device gate receipts.
 <!-- entry-fields:end -->

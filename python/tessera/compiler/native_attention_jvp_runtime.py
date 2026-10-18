@@ -148,7 +148,7 @@ class PreparedAttentionJVP:
             P,S,ct.c_char_p,P,S,ct.c_char_p,ct.c_char_p,ct.c_char_p,
             ct.POINTER(ct.c_int64)] + ([ct.POINTER(ct.c_int64)] if bounded else []) + (
                 [ct.POINTER(ct.c_int64)] if self.biased or self.saved_lse or typed or bounded else []) + [
-            ct.POINTER(I),ct.POINTER(I),S] + ([I,I,I] if typed or bounded else []) + [ct.POINTER(U)]
+            ct.POINTER(I),ct.POINTER(I),S] + ([I,I,I] if typed or bounded else []) + ([I] if bounded else []) + [ct.POINTER(U)]
         prepare.argtypes=signature
         prepare.restype=I
         lib.tessera_nvidia_attention_jvp_invoke.argtypes=[
@@ -171,6 +171,12 @@ class PreparedAttentionJVP:
             self.symbolic_dims[0],self.symbolic_dims[1],self.symbolic_dims[3],self.symbolic_dims[4])) if bounded else self.bias_shape
         bias=(((ct.c_int64*4)(*bias_shape) if self.biased else None),) if self.biased or self.saved_lse or typed or bounded else ()
         capacities=((ct.c_int64*7)(*self.shape_bounds),) if bounded else ()
+        flags: tuple[int,...]=({"f32":1,"f16":2,"bf16":3}[self.storage],
+               {"f32":1,"f16":2,"bf16":3}[self.output_storage],
+               int(self.saved_lse)) if typed or bounded else ()
+        if bounded:
+            from .attention_shape_contract import DYNAMIC_DIM
+            flags+=(int(any(x==DYNAMIC_DIM for x in self.symbolic_bias_shape)),)
         with tempfile.TemporaryDirectory(prefix="tessera-prepared-attention-sizer-") as directory:
             path=Path(directory)/"sizer.so";path.write_bytes(program.tangent.host_library)
             self._check(prepare(
@@ -178,8 +184,7 @@ class PreparedAttentionJVP:
                 program.pair.forward.descriptor.entry_symbol.encode(),
                 tangent,len(program.tangent.image),program.tangent.entry.encode(),
                 str(path).encode(),program.tangent.sizer.encode(),dims,*capacities,*bias,mapping,roles,
-                len(program.active),*(({"f32":1,"f16":2,"bf16":3}[self.storage],
-                    {"f32":1,"f16":2,"bf16":3}[self.output_storage],int(self.saved_lse)) if typed or bounded else ()),
+                len(program.active),*flags,
                 ct.byref(handle)))
         self.handle=handle.value
 

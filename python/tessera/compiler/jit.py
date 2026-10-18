@@ -2916,12 +2916,14 @@ class JitFn:
                 tuple(outputs[count + i] for i in request.wrt_indices))
 
     def native_jvp(
-        self, *args: Any, tangents: Any, **kwargs: Any
+        self, *args: Any, tangents: Any, sequence_bounds: Any = None, **kwargs: Any
     ) -> tuple[Any, Any]:
         """Execute a compiler-owned native primal/JVP product package.
 
         The initial product envelope covers single-input linear reductions and
-        FFT-family transforms plus non-affine normalization.  Unsupported
+        FFT-family transforms plus non-affine normalization. Explicit
+        sequence_bounds=(Sq, Sk) selects one native attention capacity owner
+        across runtime sequence shapes. Unsupported
         graphs and architectures fail closed; in particular a generic ROCm
         target may not silently run the gfx1151 package on gfx1200/gfx1250.
         """
@@ -2939,6 +2941,9 @@ class JitFn:
             raise TesseraJitError(
                 "native_jvp requires @jit(autodiff='forward' or 'jvp')"
             )
+        if sequence_bounds is not None:
+            from .native_bounded_attention_jvp import validate_bounds
+            sequence_bounds = validate_bounds(self.target, sequence_bounds)
         self._enforce_call_time_constraints(args, kwargs)
         ordered = self._ordered_inputs(args, kwargs)
         if ordered is None:
@@ -2946,6 +2951,10 @@ class JitFn:
         tangent_values = tangents if isinstance(tangents, (tuple, list)) else (tangents,)
         if len(tangent_values) != len(request.wrt_indices):
             raise TesseraJitError("native_jvp requires one tangent per active input")
+        if sequence_bounds is not None:
+            from .native_bounded_attention_jvp import execute as execute_bounded_attention
+            return execute_bounded_attention(
+                self, args, kwargs, ordered, tangent_values, sequence_bounds)
         resident_frame=any(hasattr(value,"__cuda_array_interface__") for value in (*ordered,*tangent_values))
         resident_attention=False
         resident_source_active=False

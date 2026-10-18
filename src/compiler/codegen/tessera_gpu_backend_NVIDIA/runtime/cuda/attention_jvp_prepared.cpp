@@ -245,7 +245,7 @@ static int prepareAttentionJvp(
   const void *timage,size_t tbytes,const char *tentry,
   const char *sizerPath,const char *sizerEntry,const int64_t *dims,
   const int64_t *biasShape,const int *mapping,const int *roles,size_t activeCount,uint64_t *handle,
-  bool savedLse=false,int storage=1,int outputStorage=1,const int64_t *bounds=nullptr){
+  bool savedLse=false,int storage=1,int outputStorage=1,const int64_t *bounds=nullptr,int boundedBiasArguments=0){
   ownerError.clear();if(handle)*handle=0;
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
@@ -310,10 +310,22 @@ static int prepareAttentionJvp(
       if(value!=1 && value!=scores[i])return bad("invalid prepared bias shape");
       state->biasShape[i]=value;
     }
-    // Native forward lowering folds static physical bias extents into IR.
-    // Bounded entries carry four extra scalar parameters only for dynamic bias.
-    if(bounds)state->forwardBiasScalars=state->bias &&
-      (state->biasSymbols[2]==dynamic || state->biasSymbols[3]==dynamic);
+    // Native forward lowering uses no extra scalars for static physical bias
+    // or implicit logical bias. Only explicitly shaped dynamic bias has four.
+    if(bounds){
+      const bool dynamicBias=state->bias &&
+        (state->biasSymbols[2]==dynamic || state->biasSymbols[3]==dynamic);
+      if(boundedBiasArguments && !dynamicBias)
+        return bad("bounded JVP bias parameter policy disagrees");
+      if(dynamicBias && !boundedBiasArguments){
+        const int64_t logical[4]={state->shapeSymbols[0],state->shapeSymbols[1],
+                                  state->shapeSymbols[3],state->shapeSymbols[4]};
+        for(size_t i=0;i<4;++i)
+          if(state->biasSymbols[i]!=logical[i])
+            return bad("bounded JVP implicit bias shape disagrees");
+      }
+      state->forwardBiasScalars=bool(boundedBiasArguments);
+    }
     if(int status=jvpExtents(*state))return status;
     state->capacityBytes=state->bytes;
     size_t total=0;std::array<size_t,12> offsets{};
@@ -408,14 +420,15 @@ extern "C" int tessera_nvidia_attention_jvp_prepare_bounded(
   const void *timage,size_t tbytes,const char *tentry,
   const char *sizerPath,const char *sizerEntry,const int64_t *dims,
   const int64_t *bounds,const int64_t *biasShape,const int *mapping,const int *roles,
-  size_t activeCount,int storage,int outputStorage,int savedLse,uint64_t *handle){
-  if(!bounds || (savedLse!=0 && savedLse!=1)){
+  size_t activeCount,int storage,int outputStorage,int savedLse,int biasShapeArguments,uint64_t *handle){
+  if(!bounds || (savedLse!=0 && savedLse!=1) ||
+     (biasShapeArguments!=0 && biasShapeArguments!=1)){
     if(handle)*handle=0;
     return bad("bounded JVP bounds or saved-LSE flag disagrees");
   }
   return prepareAttentionJvp(fimage,fbytes,fentry,timage,tbytes,tentry,
     sizerPath,sizerEntry,dims,biasShape,mapping,roles,activeCount,handle,
-    bool(savedLse),storage,outputStorage,bounds);
+    bool(savedLse),storage,outputStorage,bounds,biasShapeArguments);
 }
 static int invokeAttentionJvp(
   uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,

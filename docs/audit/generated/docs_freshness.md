@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-18**.
 
 ## Headline
 
-- **179** docs catalogued across the canonical doc tree.
-- **178** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **44** updated within the last 30 days.
+- **180** docs catalogued across the canonical doc tree.
+- **179** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **45** updated within the last 30 days.
 - **70** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -46,6 +46,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `PRODUCTION_COMPILER_PLAN.md` | Ratified | 2026-06-05 | 135 | ✓ |
 | `PYTHON_API_SPEC.md` | Normative | 2026-10-15 | 3 | ✓ |
 | `ROCM_FOLDED_INPUT_VIEWS.md` | - | 2026-10-16 | 2 | ✓ |
+| `ROCM_MIXED_SCALAR_CONTRACTION.md` | - | 2026-10-18 | 0 | ✓ |
 | `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 92 | ✓ |
 | `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 149 | ✓ |
 | `SM120_ATTENTION_ROW_OWNER_CONTRACT.md` | - | 2026-10-17 | 1 | ✓ |
@@ -201,8 +202,8 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md` | - | 2026-09-06 | 42 | ✓ |
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-09-07 | 41 | ✓ |
 | `compiler/HEAP_BARRIER_ARCHITECTURE_REVIEW.md` | - | 2026-09-11 | 37 | ✓ |
-| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-10-17 | 1 | ✓ |
-| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-10-17 | 1 | ✓ |
+| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-10-18 | 0 | ✓ |
+| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-10-18 | 0 | ✓ |
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-09-23 | 25 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 77 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 83 | ✓ |

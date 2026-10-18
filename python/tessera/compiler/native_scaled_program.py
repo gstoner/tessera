@@ -518,6 +518,7 @@ class _StorageSpec:
 def _storage_numpy_dtype(storage):
     if storage == "f8E4M3FN": return np.dtype("uint8")
     if storage == "f32": return np.dtype("float32")
+    if storage == "f16": return np.dtype("float16")
     if storage == "bf16":
         import ml_dtypes
         return np.dtype(ml_dtypes.bfloat16)
@@ -603,14 +604,13 @@ def pack_host_view(lib, array):
 class _PreparedProgramPackage(Protocol):
     @property
     def program_json(self) -> str: ...
-    @property
-    def graph_ir(self) -> str: ...
     def validate(self) -> None: ...
 
 
 class PreparedScaledProgram:
     """One native owner; all member execution and private storage are in C++."""
     _prepare_symbol = "tessera_rocm_program_prepare"
+    _architecture = b"gfx1201"
     _step_type: type[c.Structure] = _Step
 
     def _bind_abi(self, package):
@@ -652,7 +652,7 @@ class PreparedScaledProgram:
         arrays, addresses, sizes = self._inputs(inputs)
         _, tail_values = self._prepare_tail()
         code = prepare(
-            b"gfx1201",self._binding.argument_count,len(rows),buffers,len(steps),
+            self._architecture,self._binding.argument_count,len(rows),buffers,len(steps),
             steps,addresses,sizes,*tail_values,c.byref(self.handle))
         if code:
             if self.handle.value:
@@ -735,8 +735,8 @@ class PreparedScaledProgram:
         outputs = []
         for slot in self._binding.outputs:
             contract = self._binding.storage[slot]
-            if contract.storage not in {"f32", "bf16", "f8E4M3FN"}:
-                raise ValueError("native program outputs require checked f32, bf16 or E4M3FN storage")
+            if contract.storage not in {"f32", "f16", "bf16", "f8E4M3FN"}:
+                raise ValueError("native program outputs require checked f32, f16, bf16 or E4M3FN storage")
             output = np.empty(contract.shape, dtype=contract.numpy_dtype)
             if output.nbytes != contract.bytes:
                 raise ValueError("native output storage byte span differs from its compiler frame")

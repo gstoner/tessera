@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "TesseraROCM/Passes.h"
+#include "Tessera/IR/ScalarContraction.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
@@ -135,14 +136,15 @@ struct GenerateROCMGemmF32KernelPass
   }
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, arith::ArithDialect,
-                    memref::MemRefDialect>();
+                    memref::MemRefDialect, math::MathDialect, LLVM::LLVMDialect>();
   }
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
     SmallVector<Operation *> directives;
     module.walk([&](Operation *op) {
-      if (op->getName().getStringRef() == "tessera_rocm.gemm_f32")
+      if (op->getName().getStringRef() == "tessera_rocm.gemm_f32" ||
+          op->getName().getStringRef() == "tessera_rocm.scalar_matmul")
         directives.push_back(op);
     });
     for (Operation *op : directives) {
@@ -155,6 +157,38 @@ struct GenerateROCMGemmF32KernelPass
       b.setInsertionPointToEnd(module.getBody());
       Location loc = op->getLoc();
       std::string kname = nameAttr.getValue().str();
+      if (op->getName().getStringRef() == "tessera_rocm.scalar_matmul") {
+        auto aType = op->getAttrOfType<TypeAttr>("a_element_type").getValue();
+        auto bType = op->getAttrOfType<TypeAttr>("b_element_type").getValue();
+        auto outType = op->getAttrOfType<TypeAttr>("output_element_type").getValue();
+        auto flat = [](Type t) {
+          return MemRefType::get({ShapedType::kDynamic}, t);
+        };
+        auto index = b.getIndexType();
+        auto fnType = b.getFunctionType(
+            {flat(aType), flat(bType), flat(outType), index, index, index}, {});
+        auto gpuMod = gpu::GPUModuleOp::create(b, loc, kname + "_mod");
+        b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
+        auto gpuFunc = gpu::GPUFuncOp::create(b, loc, kname, fnType);
+        gpuFunc.setKernelAttr(b.getUnitAttr());
+        OpBuilder body(gpuFunc.getContext());
+        body.setInsertionPointToStart(&gpuFunc.getBody().front());
+        auto ids = [&]() {
+          return std::array<Value, 3>{
+              gpu::BlockIdOp::create(body, loc, gpu::Dimension::x),
+              gpu::BlockIdOp::create(body, loc, gpu::Dimension::y),
+              gpu::ThreadIdOp::create(body, loc, gpu::Dimension::x)};
+        };
+        if (failed(tessera::scalar_contraction::emitBody(body, loc,
+              gpuFunc.getBody().front().getArguments(), aType, bType, outType,
+              op->getAttrOfType<BoolAttr>("transpose_a").getValue(),
+              op->getAttrOfType<BoolAttr>("transpose_b").getValue(), ids)))
+          return signalPassFailure();
+        body.setInsertionPointToEnd(&gpuFunc.getBody().front());
+        gpu::ReturnOp::create(body, loc);
+        op->erase();
+        continue;
+      }
       int64_t tm = 4, tn = 4;
       if (auto attr = op->getAttrOfType<IntegerAttr>("tm"))
         tm = attr.getInt();

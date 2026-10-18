@@ -54,6 +54,7 @@ struct ProjectROCMKernelIdentityPass
       .Case("moe_dispatch", "tessera_rocm.moe_dispatch")
       .Case("attention", "tessera_rocm.flash_attn")
       .Case("matmul", "tessera_rocm.wmma_gemm")
+      .Case("scalar_matmul", "tessera_rocm.scalar_matmul")
       .Case("scaled_matmul", "tessera_rocm.scaled_wmma_gemm")
       .Case("scaled_matmul_lds", "tessera_rocm.scaled_wmma_gemm")
       .Case("folded_matmul", "tessera_rocm.scaled_wmma_gemm").Default("");
@@ -125,6 +126,23 @@ struct ProjectROCMKernelIdentityPass
             return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
           })) {
         kernel->emitError("matmul kernel identity requires a verified Schedule hash");
+        return signalPassFailure();
+      }
+    }
+    if (family == "scalar_matmul") {
+      auto hash = kernel->getAttrOfType<StringAttr>("schedule_hash");
+      bool valid = hash && hash.getValue().size() == 64 &&
+          llvm::all_of(hash.getValue(), [](char c) {
+            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+          });
+      for (NamedAttribute attr : kernel->getAttrs())
+        if (attr.getName() != "name" && attr.getName() != "arch" &&
+            attr.getName() != "a_element_type" && attr.getName() != "b_element_type" &&
+            attr.getName() != "output_element_type" &&
+            attr.getName() != "transpose_a" && attr.getName() != "transpose_b" &&
+            attr.getName() != "schedule_hash") valid = false;
+      if (!valid) {
+        kernel->emitError("scalar matmul image identity requires its sealed native Target recipe");
         return signalPassFailure();
       }
     }
@@ -329,6 +347,7 @@ struct ProjectROCMKernelIdentityPass
       copy->removeAttr("schedule_hash");
     }
 
+    if (family == "scalar_matmul") copy->removeAttr("schedule_hash");
     copy->setAttr("name", StringAttr::get(&getContext(), ""));
     if (family == "matmul" || family == "scaled_matmul" || family == "scaled_matmul_lds" || family == "folded_matmul")
       copy->removeAttr("tessera.schedule_hash");

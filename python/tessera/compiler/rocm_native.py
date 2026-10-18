@@ -1484,6 +1484,7 @@ _SHAPE_FREE_DIRECTIVES: dict[str, str] = {
     # The bounded gfx1151 register route uses runtime M/N/K. The WMMA
     # directive describes the fixed instruction tile and physical panel.
     "matmul": "tessera_rocm.wmma_gemm",
+    "scalar_matmul": "tessera_rocm.scalar_matmul",
     "scaled_matmul": "tessera_rocm.scaled_wmma_gemm",
     "scaled_matmul_lds": "tessera_rocm.scaled_wmma_gemm",
     "folded_matmul": "tessera_rocm.scaled_wmma_gemm",
@@ -1952,6 +1953,11 @@ def package_scheduled_matmul(
     workgroup, each owning the Schedule's macro tile, so the block tile is
     ``(WM * macro_m, WN * macro_n)`` and the launch geometry follows; it is a
     measured variant, selected nowhere until the gap recorder says so."""
+    if "tile.scalar_matmul_kernel" in artifact.tile_ir:
+        if staging != "register" or k_unroll not in (None, 1) or lds_waves != (2, 2):
+            raise ValueError("ROCm scalar contraction has no WMMA/LDS tuning overrides")
+        from .rocm_scalar_matmul import package_scheduled_scalar
+        return package_scheduled_scalar(artifact, pipeline_name=pipeline_name)
     if staging not in ("register", "lds"):
         raise ValueError("ROCm scheduled matmul staging must be register or lds")
 

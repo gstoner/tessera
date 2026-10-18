@@ -49,6 +49,7 @@ def test_gfx1151_has_every_family_and_unknown_archs_have_none():
         "es_low_rank_correction",
         "matmul_batched_f32",
         "matmul_f32",
+        "scalar_matmul",
         "moe_dispatch",
         "ordering_sort",
         "paged_kv",

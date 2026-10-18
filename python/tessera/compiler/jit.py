@@ -1885,6 +1885,7 @@ class JitFn:
             if chip in {"gfx1151", "gfx1201"}:
                 target = "rocm_" + chip
         rocm_matmul = target in {"rocm_gfx1151", "rocm_gfx1201"} and rocm_product
+        rocm_scalar_matmul = False
         if target not in {"rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
             return _JIT_FALLBACK
         from .nvidia_native import supports_f16_matmul, supports_bf16_matmul, supports_scalar_matmul
@@ -1960,9 +1961,12 @@ class JitFn:
                 return _JIT_FALLBACK
             storage_pair = tuple(_np_dtype_to_elem(value.dtype) for value in arrays)
             fp8_pair = all(storage in {"fp8_e4m3", "fp8_e5m2"} for storage in storage_pair)
+            rocm_scalar_matmul = (storage_pair.count("f32") == 1 and
+                                  set(storage_pair) <= {"f32", "f16", "bf16"})
             if storage_pair not in {("f16", "f16"), ("bf16", "bf16")} and not (
-                    target == "rocm_gfx1201" and fp8_pair):
+                    target == "rocm_gfx1201" and fp8_pair) and not rocm_scalar_matmul:
                 return _JIT_FALLBACK
+        scalar_matmul = scalar_matmul or rocm_scalar_matmul
         prepared_attention = False
         if attention:
             attention_library = rt._load_nvidia_ptx_launch()
@@ -2002,6 +2006,8 @@ class JitFn:
         if rocm_matmul:
             from .scheduled_matmul import supports_scheduled_matmul
             if not supports_scheduled_matmul(module, target=target):
+                if rocm_scalar_matmul:
+                    raise ValueError("native ROCm scalar matmul requires its static plain precision contract")
                 return _JIT_FALLBACK
         if parent_view and not supports_parent_view(module):
             raise ValueError("native parent-view requires static rank-2 f32 parent and output")
@@ -2264,11 +2270,11 @@ class JitFn:
             if set(dimensions) != set(range(output.rank)):
                 raise ValueError("host tensor call requires fully static output guards")
             dtype = {"uint8": np.uint8, "fp64": np.float64, "fp32": np.float32,
-                     **({"fp16": np.float16} if matmul or nvidia_softmax or native_math else {})}.get(output.dtype)
+                     **({"fp16": np.float16} if matmul or rocm_scalar_matmul or nvidia_softmax or native_math else {})}.get(output.dtype)
             if dtype is None and (descriptor.abi_id == NVFP4_EXPAND_ABI or block_quant) and output.dtype == "fp8_e4m3":
                 import ml_dtypes
                 dtype = ml_dtypes.float8_e4m3fn
-            if dtype is None and (nvidia_softmax or native_math or parent_view) and output.dtype == "bf16":
+            if dtype is None and (nvidia_softmax or native_math or parent_view or rocm_scalar_matmul) and output.dtype == "bf16":
                 import ml_dtypes
                 dtype = ml_dtypes.bfloat16
             if dtype is None or output.layout != "row_major":

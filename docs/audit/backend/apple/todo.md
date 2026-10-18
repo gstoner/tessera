@@ -6,6 +6,43 @@ target: apple_gpu
 last_updated: 2026-10-18
 ---
 
+## ROCM-MIXED-SCALAR-CONTRACTION-20261018 — native mixed adjoint consumer
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Synchronization key: ROCM-MIXED-SCALAR-CONTRACTION-20261018.
+
+Native Graph/Schedule admission preserves FP32/FP16/BF16 operand types and
+physical transpose flags through the scalar Tile contraction, a distinct
+ROCm Target directive and native ROCDL/LLVM/HSACO materialization. Increasing-K
+FP32 FMA shares its arithmetic emitter with NVIDIA; only the output store
+narrows. Public JIT and serialized descriptor replay use the existing checked
+C++ image/storage owner. The new completed host ABI seals physical types,
+orientations, shape guards, exact architecture and all retained IR stages.
+
+The native physical-image pass projects shape-bound ancestry out of kernel
+identity. New shapes/frontend names reuse one image; dtype, orientation,
+architecture, compiler and physical recipe remain identity keys. The named
+17x19x35 and 7x11x13 packages are measured; dynamic, resident-edge and general
+composed AD contracts remain follow-up required.
+
+Owning gfx1201 and gfx1151 suites each pass 67 cases, including public argument
+permutations, compiler-free changed-root replay, output snapshots/canaries,
+FP32 cancellation, subnormal/nonfinite classification and image reuse.
+The compiler-route gate passes 1,960 with no skips. Twenty-four offline ABI
+guards reject malformed and coordinated descriptor edits. The adjacent
+gfx1201 quantized/owner lane passes 110. The full CPU gate passes 30,702
+with 3,724 skips; all 33 generated documents, Ruff and the mypy ratchet pass.
+Current-head public CI/review gates remain.
+Each architecture has 48 source-bound numerical/event/host timing rows.
+Ordinary scalar descriptor receipts report no kernel time.
+Evidence: benchmarks/baselines/rocm_mixed_scalar_20261018/README.md.
+Contract: docs/spec/ROCM_MIXED_SCALAR_CONTRACTION.md.
+The original five aggregate slices remain open.
+
+### Sibling assessment
+
+Not applicable to physical Apple CPU/Metal execution: neither emitter consumes the ROCm directive or selects the shared NVIDIA/ROCm scalar materializer. Shared Schedule/ODS/ABI drift gates apply; no Apple dtype, runtime ABI or execution admission is added.
+
 ## ROCM-PUBLIC-OWNER-OVERHEAD-20261018 — native host admission and ownership
 
 Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6.

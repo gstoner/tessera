@@ -5,7 +5,6 @@ audit_role: reference
 
 # Integrated compiler engineering log
 
-
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -13548,4 +13547,28 @@ sibling performance promotion.
 Evidence: benchmarks/baselines/rocm_public_owner_20261018/README.md,
 validation_summary.json, final_control_1.json, final_owner_1.json,
 final_owner_2.json, final_control_2.json, gfx1151-staging-proof.json.
+<!-- entry-fields:end -->
+
+### 2026-10-18 — native ROCm mixed scalar consumer
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync ROCM-MIXED-SCALAR-CONTRACTION-20261018.
+
+Outcome: Native Graph/Schedule/Tile/ROCm Target/LLVM packages preserve mixed
+FP32/FP16/BF16 contractions and final-store policy. C++ image identity reuses
+shapes and frontend names while preserving physical recipe keys. The checked
+host ABI validates retained native recipes and uses the existing C++ program
+owner; public and serialized replay are compiled routes.
+Both owning AMD hosts pass 67 cases and record 48 numerical/timing rows each.
+The shared NVIDIA emitter retains 48 byte-identical Target controls and passes
+370 current compiler/device/public/source-reverse regressions. Compiler-route
+passes 1,960 without skips; 24 sealed ABI and 110 quantized/owner cases pass.
+All four backend queues are assessed. Full CPU passes 30,702 with 3,724 skips;
+33 generated documents, Ruff and the mypy ratchet pass. Public CI/review remain.
+
+Remaining: Native composed ROCm source-AD integration, wider/dynamic/resident
+envelopes and original five-slice closure. No new WMMA datatype or performance
+promotion. Existing schema namespaces retain their meanings.
+
+Evidence: benchmarks/baselines/rocm_mixed_scalar_20261018/README.md.
 <!-- entry-fields:end -->

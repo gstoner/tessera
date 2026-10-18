@@ -1,0 +1,55 @@
+{
+  "scope": "native mixed scalar consumer; aggregate five-slice goal remains open",
+  "compiler_route": {
+    "passed": 1960,
+    "skipped": 0
+  },
+  "gfx1201_device": {
+    "passed": 67,
+    "skipped": 0
+  },
+  "gfx1151_device": {
+    "passed": 67,
+    "skipped": 0
+  },
+  "nvidia_device_and_compiler": {
+    "passed": 370,
+    "skipped": 0,
+    "target_ir_byte_identity_cases": 48
+  },
+  "sealed_recipe_unit": {
+    "passed": 24
+  },
+  "quantized_owner_adjacent": {
+    "passed": 110
+  },
+  "cpu": {
+    "passed": 30702,
+    "skipped": 3724,
+    "failed": 0,
+    "seconds": 449.04
+  },
+  "public_ci": "pending",
+  "review": "pending",
+  "focused": {
+    "passed": 1599
+  },
+  "registry_and_audit_drift": {
+    "passed": 485,
+    "failed": 0
+  },
+  "audit_routing_repair": {
+    "passed": 19,
+    "failed": 0
+  },
+  "ruff": {
+    "state": "passed"
+  },
+  "mypy_ratchet": {
+    "errors": 0,
+    "baseline": 0
+  },
+  "generated_documents": {
+    "in_sync": 33
+  }
+}

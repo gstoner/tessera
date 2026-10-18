@@ -278,6 +278,7 @@ def test_scan_parses_every_ods_form() -> None:
         "tile.nvfp4_expand_kernel",
         "tessera_rocm.nvfp4_expand",
         "tessera_rocm.swmmac",
+        "tessera_rocm.scalar_matmul",
         "tile.tmem.store",                 # dotted mnemonic
         "tessera.neighbors.halo.region",   # dotted dialect name
     ):
@@ -298,7 +299,7 @@ def test_scan_parses_every_ods_form() -> None:
 # Four typed scalar Tile operations and the NVIDIA row-region consumer.
 # Six native attention row products: Graph, Schedule and Tile producer/consumer.
 # Two existing public slice spellings now have registered Graph ODS records.
-_DECLARED_OP_RECORDS = 694
+_DECLARED_OP_RECORDS = 695
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:

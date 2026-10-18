@@ -669,6 +669,7 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             ("matmul", ("generate-wmma-gemm-kernel",)),
             ("matmul_batched_f32", ("generate-rocm-batched-gemm-f32-kernel",)),
             ("matmul_f32", ("generate-rocm-gemm-f32-kernel",)),
+            ("scalar_matmul", ("generate-rocm-gemm-f32-kernel",)),
             ("moe_dispatch", ("generate-rocm-moe-kernel",)),
             ("normalization", ("generate-rocm-norm-kernel",)),
             ("optimizer", ("generate-rocm-optimizer-kernel",)),

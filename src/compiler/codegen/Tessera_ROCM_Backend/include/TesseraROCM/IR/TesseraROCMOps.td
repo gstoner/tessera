@@ -859,6 +859,22 @@ def ROCM_GroupedGemmKernelOp : TesseraROCM_Op<"grouped_gemm"> {
   let assemblyFormat = "attr-dict";
 }
 
+def ROCM_ScalarMatmulKernelOp : TesseraROCM_Op<"scalar_matmul"> {
+  let summary = "Ordered FP32 contraction with independent physical input and output types";
+  let description = [{
+    A distinct VALU contract on gfx1151/gfx1201: increasing-K FP32 FMA,
+    optional physical input transposes, final-store narrowing only. Runtime
+    M/N/K and flat typed buffers do not change the native image identity.
+    This does not select WMMA or alter the legacy gemm_f32 numerical policy.
+  }];
+  let arguments = (ins StrAttr:$name, StrAttr:$arch,
+      TypeAttr:$a_element_type, TypeAttr:$b_element_type,
+      TypeAttr:$output_element_type, BoolAttr:$transpose_a,
+      BoolAttr:$transpose_b, OptionalAttr<StrAttr>:$schedule_hash);
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
 def ROCM_GemmF32KernelOp : TesseraROCM_Op<"gemm_f32"> {
   let summary = "Plain single-precision GEMM gpu kernel";
   let description = [{

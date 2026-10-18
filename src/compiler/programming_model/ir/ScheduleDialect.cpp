@@ -96,11 +96,15 @@ LogicalResult TileOp::verify() {
 }
 
 LogicalResult MatmulOp::verify() {
-  const bool scalarFma = getPhysicalContract() == "nvidia_sm120_scalar_fma_v1";
+  const bool nvidiaScalar = getPhysicalContract() == "nvidia_sm120_scalar_fma_v1";
+  const bool rocmScalar =
+      (getArch() == "gfx1151" && getPhysicalContract() == "rocm_gfx1151_scalar_fma_v1") ||
+      (getArch() == "gfx1201" && getPhysicalContract() == "rocm_gfx1201_scalar_fma_v1");
+  const bool scalarFma = nvidiaScalar || rocmScalar;
   auto scalarStorage = [](StringRef name) {
     return name == "f32" || name == "f16" || name == "bf16";
   };
-  if (scalarFma && (getArch() != "sm_120" || !scalarStorage(getStorage()) ||
+  if (scalarFma && ((nvidiaScalar && getArch() != "sm_120") || !scalarStorage(getStorage()) ||
       !scalarStorage(getStorageB()) || !scalarStorage(getOutput()) ||
       (getStorage() != "f32" && getStorageB() != "f32") ||
       getAccum() != "f32" || getTileM() != 16 || getTileN() != 8 || getTileK() != 1 ||
@@ -109,7 +113,7 @@ LogicalResult MatmulOp::verify() {
       getScaleK() != 0 || getScaleN() != 0 || !getScaleFormat().empty() ||
       getSplitK() != 1 || getBias() || getResidual() || getActivation() != "none" ||
       getALayout() != "row_major" || getBLayout() != "row_major"))
-    return emitOpError("SM120 scalar FP32 FMA storage/geometry contract is inconsistent");
+    return emitOpError("native scalar FP32 FMA storage/geometry contract is inconsistent");
   // Operand orientation is semantic even before a target lowering runs.
   for (StringRef name : {StringRef("transposeA"), StringRef("transposeB")}) {
     if (Attribute attr = getOperation()->getAttr(name)) {

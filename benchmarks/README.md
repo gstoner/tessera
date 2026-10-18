@@ -1,5 +1,15 @@
 # Tessera Benchmarks
 
+## Native mixed scalar contraction recorder
+
+Recorded by benchmarks/rocm/record_mixed_scalar_contraction.py.
+The owning gfx1151/gfx1201 packets cover the named static mixed FP32/half
+native Schedule/Tile consumer, checked package replay and separate native
+event/completed-call timing regions. Contract:
+docs/spec/ROCM_MIXED_SCALAR_CONTRACTION.md.
+Current evidence packet: benchmarks/baselines/rocm_mixed_scalar_20261018/README.md.
+
+
 This folder contains benchmark families at different maturity levels. The active
 portable path is CPU-first and uses the current Python compiler surface where it
 is available.

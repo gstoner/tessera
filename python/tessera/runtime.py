@@ -4978,6 +4978,9 @@ def _submit_rocm_gfx1151_native(
     stream: Any,
 ) -> Any:
     """Submit compiler-owned gfx1151 typed softmax/reduction/movement HSACOs."""
+    from .compiler.rocm_scalar_matmul import SCALAR_MATMUL_ABI, submit as submit_scalar_matmul
+    if getattr(descriptor, "abi_id", None) == SCALAR_MATMUL_ABI:
+        return submit_scalar_matmul(image, descriptor, buffers, scalars, stream)
     from .compiler.rocm_block_quant_native import BLOCK_QUANT_ABI, submit_block_quant
     if getattr(descriptor, "abi_id", None) == BLOCK_QUANT_ABI:
         return submit_block_quant(image, descriptor, buffers, scalars, stream)
@@ -6640,6 +6643,13 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             binary_formats=("shared_object",),
             submit=_submit_apple_gpu_native,
         )
+        return
+
+    from tessera.compiler.rocm_scalar_matmul import SCALAR_MATMUL_ABI
+    if target in {"rocm_gfx1151", "rocm_gfx1201"} and abi_id == SCALAR_MATMUL_ABI:
+        if target not in _native_launchers:
+            register_native_launcher(target, binary_formats=("hsaco",),
+                                     submit=_submit_rocm_gfx1151_native)
         return
 
     from tessera.compiler.rocm_math_native import MATH_ABIS
@@ -35919,6 +35929,13 @@ def _launch_native_descriptor(
             except (ValueError,TypeError,KeyError,AttributeError) as exc:
                 raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
                     f"native block quantization artifact lineage differs: {exc}") from exc
+        from tessera.compiler.rocm_scalar_matmul import SCALAR_MATMUL_ABI, validate_runtime_artifact as validate_scalar_matmul_artifact
+        if descriptor.abi_id == SCALAR_MATMUL_ABI:
+            try:
+                validate_scalar_matmul_artifact(artifact)
+            except (ValueError, TypeError, KeyError, AttributeError) as exc:
+                raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
+                    f"native scalar matmul artifact lineage differs: {exc}") from exc
         from tessera.compiler.rocm_parent_view_native import PARENT_VIEW_ABIS, validate_parent_view_runtime_artifact
         if descriptor.abi_id in PARENT_VIEW_ABIS:
             try:
@@ -35979,9 +35996,13 @@ def _launch_native_descriptor(
         }
     elapsed_ms = (time.perf_counter_ns() - start_ns) / 1_000_000.0
     native_cpu_target = image.target in {"cpu", "x86", "x86_amx", "x86_avx512"}
+    from tessera.compiler.rocm_scalar_matmul import SCALAR_MATMUL_ABI
+    # This native owner uses a completed host call here; only its explicit
+    # timed invoke/profile APIs collect a device event region.
+    kernel_ms = None if native_cpu_target or descriptor.abi_id == SCALAR_MATMUL_ABI else elapsed_ms
     _last_profile = RuntimeProfile(
         launch_overhead_ms=elapsed_ms,
-        kernel_elapsed_ms=None if native_cpu_target else elapsed_ms,
+        kernel_elapsed_ms=kernel_ms,
         cpu_wall_ms=elapsed_ms if native_cpu_target else None,
     )
     return {
@@ -35996,7 +36017,7 @@ def _launch_native_descriptor(
         "output": output,
         "profile": {
             "launch_overhead_ms": elapsed_ms,
-            "kernel_elapsed_ms": None if native_cpu_target else elapsed_ms,
+            "kernel_elapsed_ms": kernel_ms,
             "cpu_wall_ms": elapsed_ms if native_cpu_target else None,
         },
     }

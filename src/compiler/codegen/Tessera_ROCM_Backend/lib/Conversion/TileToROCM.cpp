@@ -2754,6 +2754,55 @@ struct LowerTileToROCMPass
 
   void runOnOperation() override {
     StringRef arch = archOpt;
+    SmallVector<LLVM::LLVMFuncOp> scalarFunctions;
+    getOperation().walk([&](LLVM::LLVMFuncOp fn) {
+      if (fn->hasAttr("tessera.rocm.scalar_contract")) scalarFunctions.push_back(fn);
+    });
+    for (auto fn : scalarFunctions) {
+      auto contract = fn->getAttrOfType<StringAttr>("tessera.rocm.scalar_contract");
+      auto declaredArch = fn->getAttrOfType<StringAttr>("tessera.rocm.arch");
+      if ((arch != "gfx1151" && arch != "gfx1201") || !contract ||
+          contract.getValue() != (Twine("rocm_") + arch + "_scalar_fma_v1").str() ||
+          !declaredArch || declaredArch.getValue() != arch ||
+          fn.getBody().getBlocks().size() != 1 ||
+          fn.getBody().front().getOperations().size() != 2) {
+        fn.emitError("ROCm scalar contraction requires its exact architecture and isolated Tile body");
+        return signalPassFailure();
+      }
+      auto scalar = dyn_cast<tessera::tile::ScalarMatmulKernelOp>(
+          fn.getBody().front().front());
+      if (!scalar || !isa<LLVM::ReturnOp>(fn.getBody().front().back()) ||
+          scalar.getInputs() != fn.getBody().front().getArguments()) {
+        fn.emitError("ROCm scalar contraction requires direct six-argument Tile binding");
+        return signalPassFailure();
+      }
+      auto scheduleHash = scalar->getAttrOfType<StringAttr>("tessera.schedule_hash");
+      if (!scheduleHash || scheduleHash.getValue().size() != 64 ||
+          !llvm::all_of(scheduleHash.getValue(), [](char c) {
+            return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+          })) {
+        scalar.emitError("ROCm scalar contraction requires its native Schedule digest");
+        return signalPassFailure();
+      }
+      for (auto [name, extent] :
+           {std::pair<StringRef, int64_t>{"tessera.macro_tile_m", 16},
+            std::pair<StringRef, int64_t>{"tessera.macro_tile_n", 8}}) {
+        auto value = scalar->getAttrOfType<IntegerAttr>(name);
+        if (!value || value.getInt() != extent) {
+          scalar.emitError("ROCm scalar contraction requires its 16x8 physical tile");
+          return signalPassFailure();
+        }
+      }
+      OpBuilder b(fn); OperationState state(fn.getLoc(), "tessera_rocm.scalar_matmul");
+      state.addAttribute("name", b.getStringAttr(fn.getSymName()));
+      state.addAttribute("arch", b.getStringAttr(arch));
+      for (StringRef name : {"a_element_type", "b_element_type", "output_element_type",
+                            "transpose_a", "transpose_b"})
+        state.addAttribute(name, scalar->getAttr(name));
+      state.addAttribute("schedule_hash", scalar->getAttr("tessera.schedule_hash"));
+      b.create(state);
+      fn.erase();
+    }
     SmallVector<tessera::tile::RowRegionKernelOp> viewKernels;
     for (auto kernel : getOperation().getOps<tessera::tile::RowRegionKernelOp>()) viewKernels.push_back(kernel);
     if (!viewKernels.empty()) {

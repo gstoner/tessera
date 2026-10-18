@@ -879,8 +879,13 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     return failure();
   // Preserve FP32 cotangents in mixed adjoint products. This is a native
   // scalar FMA strategy, not a conversion to a convenient MMA input format.
-  const bool scalarTarget = moduleString(module, "tessera.target", "target") == "nvidia_sm120" &&
-      moduleString(module, "tessera.arch", "arch") == "sm_120";
+  const StringRef scalarTargetName = moduleString(module, "tessera.target", "target");
+  const StringRef scalarArch = moduleString(module, "tessera.arch", "arch");
+  const bool scalarTarget =
+      (scalarTargetName == "nvidia_sm120" && scalarArch == "sm_120") ||
+      ((scalarArch == "gfx1151" || scalarArch == "gfx1201") &&
+       (scalarTargetName == "rocm" ||
+        scalarTargetName == (Twine("rocm_") + scalarArch).str()));
   auto scalarElement = [](Type type) {
     return type.isF32() || type.isF16() || type.isBF16();
   };
@@ -925,16 +930,43 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
           .Case("fp32", "f32").Case("fp16", "f16").Default(dtype.getValue());
       if (requested != spelling(out.getElementType())) return failure();
     }
+    // This primitive package owns two original roots. A producer graph
+    // requires an outlined native SSA program; erasing its Graph wrapper
+    // here would otherwise silently discard the producer or result users.
+    auto function = op->getParentOfType<func::FuncOp>();
+    if (!function || !llvm::hasSingleElement(function.getBody()) ||
+        function.getNumArguments() != 2 || function.getNumResults() != 1)
+      return failure();
+    auto aRoot = dyn_cast<BlockArgument>(op->getOperand(0));
+    auto bRoot = dyn_cast<BlockArgument>(op->getOperand(1));
+    if (!aRoot || !bRoot || aRoot == bRoot ||
+        aRoot.getOwner() != &function.getBody().front() ||
+        bRoot.getOwner() != &function.getBody().front())
+      return failure();
+    for (Operation &bodyOp : function.getBody().front())
+      if (&bodyOp != op && !isa<func::ReturnOp, schedule::MatmulOp,
+                                   schedule::ArtifactOp>(bodyOp))
+        return failure();
+    auto terminator = dyn_cast<func::ReturnOp>(function.getBody().front().getTerminator());
+    if (!terminator || terminator.getNumOperands() != 1) return failure();
+    Value returned = terminator.getOperand(0);
+    if (returned != op->getResult(0)) {
+      auto scheduledReturn = returned.getDefiningOp<schedule::MatmulOp>();
+      if (!scheduledReturn || scheduledReturn.getSubject() != op->getResult(0))
+        return failure();
+    }
     MatmulSchedule result;
     result.scalarFma = true;
     result.scalarTransposeA = flag("transposeA");
     result.scalarTransposeB = flag("transposeB");
-    result.target = "nvidia_sm120"; result.arch = "sm_120";
+    result.target = scalarTargetName; result.arch = scalarArch;
     result.storage = spelling(lhs.getElementType());
     result.storageB = spelling(rhs.getElementType());
     result.output = spelling(out.getElementType());
     result.accum = "f32"; result.bLayout = "row_major";
-    result.physicalContract = "nvidia_sm120_scalar_fma_v1";
+    result.physicalContract = scalarArch == "gfx1151" ? "rocm_gfx1151_scalar_fma_v1" :
+        scalarArch == "gfx1201" ? "rocm_gfx1201_scalar_fma_v1" :
+        "nvidia_sm120_scalar_fma_v1";
     result.m = lhs.getDimSize(result.scalarTransposeA ? 1 : 0);
     result.k = lhs.getDimSize(result.scalarTransposeA ? 0 : 1);
     result.n = rhs.getDimSize(result.scalarTransposeB ? 0 : 1);
@@ -4688,7 +4720,7 @@ struct ScheduleToTilePass
     // A/B/D/M/N/K ABI, then removes the now-consumed tensor wrapper once all
     // schedule records have been checked.  Other backends retain their
     // existing in-function carriers.
-    SmallVector<func::FuncOp> consumedNvidiaGraphFunctions;
+    SmallVector<func::FuncOp> consumedKernelGraphFunctions;
     for (schedule::MatmulOp scheduled : scheduledMatmuls) {
       Operation *graph = scheduled.getSubject().getDefiningOp();
       if (!graph ||
@@ -4776,6 +4808,60 @@ struct ScheduleToTilePass
       }
 
       Location loc = scheduled.getLoc();
+
+      if (selected->scalarFma) {
+        auto graphFunction = scheduled->getParentOfType<func::FuncOp>();
+        if (!graphFunction) {
+          scheduled.emitError("scalar scheduled matmul requires a Graph func wrapper");
+          return signalPassFailure();
+        }
+        std::string kernelName = (graphFunction.getName() + "_scalar_fma_kernel").str();
+        if (SymbolTable::lookupSymbolIn(mod, kernelName)) {
+          scheduled.emitError("scalar scheduled matmul kernel symbol already exists");
+          return signalPassFailure();
+        }
+        auto pointerType = LLVM::LLVMPointerType::get(&getContext());
+        auto i64 = builder.getI64Type();
+        auto kernelType = LLVM::LLVMFunctionType::get(
+            LLVM::LLVMVoidType::get(&getContext()),
+            {pointerType, pointerType, pointerType, i64, i64, i64}, false);
+        OpBuilder moduleBuilder(mod.getBody(), mod.getBody()->end());
+        auto kernelFunction =
+            LLVM::LLVMFuncOp::create(moduleBuilder, loc, kernelName, kernelType);
+        if (selected->target == "nvidia_sm120")
+          kernelFunction->setAttr("nvvm.kernel", UnitAttr::get(&getContext()));
+        else {
+          kernelFunction->setAttr("tessera.rocm.scalar_contract",
+              builder.getStringAttr(selected->physicalContract));
+          kernelFunction->setAttr("tessera.rocm.arch",
+              builder.getStringAttr(selected->arch));
+        }
+        Block *entry = kernelFunction.addEntryBlock(moduleBuilder);
+        OpBuilder kernelBuilder(entry, entry->begin());
+          OperationState scalar(loc, "tile.scalar_matmul_kernel");
+          scalar.addOperands(entry->getArguments());
+          auto lhsType = cast<RankedTensorType>(graph->getOperand(0).getType());
+          auto rhsType = cast<RankedTensorType>(graph->getOperand(1).getType());
+          auto resultType = cast<RankedTensorType>(graph->getResult(0).getType());
+          scalar.addAttribute("a_element_type", TypeAttr::get(lhsType.getElementType()));
+          scalar.addAttribute("b_element_type", TypeAttr::get(rhsType.getElementType()));
+          scalar.addAttribute("output_element_type", TypeAttr::get(resultType.getElementType()));
+          scalar.addAttribute("accumulator_type", TypeAttr::get(kernelBuilder.getF32Type()));
+          scalar.addAttribute("transpose_a", kernelBuilder.getBoolAttr(selected->scalarTransposeA));
+          scalar.addAttribute("transpose_b", kernelBuilder.getBoolAttr(selected->scalarTransposeB));
+          scalar.addAttribute("tessera.schedule_hash", kernelBuilder.getStringAttr(scheduled.getArtifactHash()));
+          scalar.addAttribute("tessera.macro_tile_m", kernelBuilder.getI64IntegerAttr(selected->macroTileM));
+          scalar.addAttribute("tessera.macro_tile_n", kernelBuilder.getI64IntegerAttr(selected->macroTileN));
+          kernelBuilder.create(scalar);
+
+        LLVM::ReturnOp::create(kernelBuilder, loc, ValueRange{});
+        scheduled.getScheduled().replaceAllUsesWith(graph->getResult(0));
+        scheduled.erase();
+        for (schedule::ArtifactOp artifact : matchingArtifacts) artifact.erase();
+        if (!llvm::is_contained(consumedKernelGraphFunctions, graphFunction))
+          consumedKernelGraphFunctions.push_back(graphFunction);
+        continue;
+      }
 
       if (selected->target == "nvidia_sm120") {
         // Dynamic non-int4 schedules emit a registered Target IR boundary.
@@ -4892,23 +4978,7 @@ struct ScheduleToTilePass
             !dynamicSm120 && (selected->m % 16 != 0 || selected->n % 8 != 0);
         const bool boundedStaticInputs =
             boundedStaticOutput || (!dynamicSm120 && selected->k % 16 != 0);
-        if (selected->scalarFma) {
-          OperationState scalar(loc, "tile.scalar_matmul_kernel");
-          scalar.addOperands(entry->getArguments());
-          auto lhsType = cast<RankedTensorType>(graph->getOperand(0).getType());
-          auto rhsType = cast<RankedTensorType>(graph->getOperand(1).getType());
-          auto resultType = cast<RankedTensorType>(graph->getResult(0).getType());
-          scalar.addAttribute("a_element_type", TypeAttr::get(lhsType.getElementType()));
-          scalar.addAttribute("b_element_type", TypeAttr::get(rhsType.getElementType()));
-          scalar.addAttribute("output_element_type", TypeAttr::get(resultType.getElementType()));
-          scalar.addAttribute("accumulator_type", TypeAttr::get(kernelBuilder.getF32Type()));
-          scalar.addAttribute("transpose_a", kernelBuilder.getBoolAttr(selected->scalarTransposeA));
-          scalar.addAttribute("transpose_b", kernelBuilder.getBoolAttr(selected->scalarTransposeB));
-          scalar.addAttribute("tessera.schedule_hash", kernelBuilder.getStringAttr(scheduled.getArtifactHash()));
-          scalar.addAttribute("tessera.macro_tile_m", kernelBuilder.getI64IntegerAttr(selected->macroTileM));
-          scalar.addAttribute("tessera.macro_tile_n", kernelBuilder.getI64IntegerAttr(selected->macroTileN));
-          kernelBuilder.create(scalar);
-        } else if (useMacroSm120Producer) {
+        if (useMacroSm120Producer) {
           // NVIDIA owns this physical reuse boundary. One 128-thread CTA
           // computes a 32x32 output tile: four warps own 2x2 16x16 quadrants,
           // and each warp emits two adjacent m16n8 MMA tiles. A[32,16] and
@@ -5268,8 +5338,8 @@ struct ScheduleToTilePass
         scheduled.erase();
         for (schedule::ArtifactOp artifact : matchingArtifacts)
           artifact.erase();
-        if (!llvm::is_contained(consumedNvidiaGraphFunctions, graphFunction))
-          consumedNvidiaGraphFunctions.push_back(graphFunction);
+        if (!llvm::is_contained(consumedKernelGraphFunctions, graphFunction))
+          consumedKernelGraphFunctions.push_back(graphFunction);
         continue;
       }
 
@@ -5546,7 +5616,7 @@ struct ScheduleToTilePass
       for (schedule::ArtifactOp artifact : matchingArtifacts)
         artifact.erase();
     }
-    if (!consumedNvidiaGraphFunctions.empty()) {
+    if (!consumedKernelGraphFunctions.empty()) {
       // Graph layout metadata is consumed when ScheduleToTile replaces the
       // Graph function with a kernel whose physical layout is carried by
       // tile.layout on its views, fragments, and stores. Record that
@@ -5571,7 +5641,7 @@ struct ScheduleToTilePass
       mod->setAttr("tessera.lowering.dropped",
                    builder.getDictionaryAttr(dropped));
     }
-    for (func::FuncOp graphFunction : consumedNvidiaGraphFunctions)
+    for (func::FuncOp graphFunction : consumedKernelGraphFunctions)
       graphFunction.erase();
 
     SmallVector<Operation *> scheduledKernels;

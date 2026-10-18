@@ -1,16 +1,14 @@
 """Compiler-free v2 source-AD replay guards; PTX stubs are never executed."""
 from copy import deepcopy
 import json
-import re
 import subprocess
 
 import pytest
 
 from tessera.compiler.native_source_attention_reverse import export_native_source_attention_reverse
-from tessera.compiler.portable_source_attention_reverse import restore, seal, sha
-from tessera.compiler.prepared_source_attention_reverse import ReverseMember
+from tessera.compiler.portable_source_attention_reverse import restore
 from tests.unit.test_native_source_attention_reverse_rows import rows_source
-from tests.unit.test_portable_source_attention_reverse import reseal
+from tests.unit.test_portable_source_attention_reverse import portable_program, reseal
 
 pytestmark = pytest.mark.compiler_route
 
@@ -19,14 +17,7 @@ pytestmark = pytest.mark.compiler_route
 def portable_rows(compiler_toolchain, request):
     tool = compiler_toolchain.require_tessera_opt("--tessera-autodiff-paired")
     program = export_native_source_attention_reverse(rows_source(request.param), tool=tool)
-    members = []
-    for i, (graph, schedule, tile, target, native) in enumerate(program.lower_members()):
-        entry = re.findall(r"\bllvm.func @(\w+)\(", tile)[0]
-        params = ",\n".join(".param .u64 p" + str(j) for j in range((4, 12, 14, 16, 5)[i]))
-        image = (".version 9.0\n.target sm_120a\n.address_size 64\n.visible .entry "
-                 + entry + "(\n" + params + "\n) { ret; }\n").encode()
-        members.append(ReverseMember(graph, schedule, tile, target, native, entry, image, sha(image.decode())))
-    return seal(program.manifest, members)
+    return portable_program(program)
 
 
 def test_rows_restore_is_compiler_and_provider_free(portable_rows, monkeypatch):

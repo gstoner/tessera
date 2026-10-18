@@ -1,0 +1,17 @@
+{
+  "compiler_sha256": "d475845a3ea58ff3623bbc56193b19612553db7cf4ba3367091280ae9ebfd71e",
+  "provider_sha256": "4c09c4de2208e9cb458365a7808125a8d5e439406c8e3d7e0bae7aeb9ababc5f",
+  "source_sha256": {
+    "python/tessera/compiler/portable_source_attention_reverse.py": "7a3138e19be2ae607bce261eeef436f6ecb225fc7d5a7edede899a3d2c16458e",
+    "python/tessera/compiler/source_attention_reverse_frontend.py": "0d6dec7b1f0a125ce290e2275b41aa37ac9a07d5a2e83754253f2630179d6617",
+    "python/tessera/compiler/execution_matrix.py": "f6f60b85467a7eb1c52a116347c05bef5fc6fc84baad476acbcb6432af407625",
+    "tests/device/nvidia/test_public_source_attention_reverse.py": "c5481cc3454dfa16df8b272d139a471df67091faead043cae1f65910e949de19",
+    "tests/unit/test_native_source_attention_reverse_auto.py": "e1e61df152718e01e07680881259925e4c1b2393980f042cc0ae22dd5e9e4a3f",
+    "tests/unit/test_portable_source_attention_reverse_auto.py": "4eee26fb067c792905dd8b31c74b951ef9d8a553fad464cae86739f2fd309c57",
+    "tests/unit/test_portable_source_attention_reverse.py": "feb7ae847244d41c263dd6bd9cf6076f58af5a4ee25441ada8be2cee03b0fbcd",
+    "tests/unit/test_portable_source_attention_reverse_rows.py": "848326a1bef399b5fdab5176b400c10ebdb50811cad0482f5ca7bda071632c45",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "f23a16e507a8831c72a9be74ba71d2e91dab2f0afd30e98353a8db55630e750b",
+    "src/transforms/lib/NativeSourceAttentionReverse.h": "1fe44e101e1154f52344eee4dfeba0874d26ee5493702b97c9c7bdd18fb6b0e5",
+    "src/transforms/lib/NativeAttentionRowProjection.h": "b96eb0809234878f07333ef59418e2a8c33c6280177eb96b0fe35657cdf8d972"
+  }
+}

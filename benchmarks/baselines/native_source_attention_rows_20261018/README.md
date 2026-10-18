@@ -29,7 +29,7 @@ transport; restore half root storage according to the sealed buffer contract.
 
 ## Composed source A/B
 
-measurements/order0.json and order1.json retain twenty-one alternating samples
+measurements/order0.json.gz and order1.json.gz retain twenty-one alternating samples
 of eight calls per arm for each of five profiles and two storage formats.
 The initial arm order reverses between runs. Every sample is checked against
 an independent float64 attention/RMSNorm source-gradient oracle with explicit
@@ -77,3 +77,7 @@ The three modified native driver modules match the measured files byte for byte.
 The six-backend compiler was built on Tajasaurus from the native projection
 sources in this snapshot and transferred by its recorded binary SHA. Runtime
 provider sources and the measured CUDA library retain their separate identities.
+
+## Historical checkpoint
+
+This explicit-v2 packet belongs to private checkpoint e63eb93f5c97cd9989898541c8a7b80d1bf8473c and compiler B29. Its pending-policy wording describes that checkpoint. Subsequent native-auto policy, public benchmarks and compiler proofs are recorded separately in ../native_source_attention_auto_20261018/. Old measured source identities are retained. Raw order JSON is losslessly gzip-compressed with decompressed SHA256 in the measurement manifest.

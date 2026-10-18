@@ -52,8 +52,9 @@ inline LogicalResult preflight(ModuleOp module) {
       module->hasAttr("tessera.native.source_attention_reverse_program_json") ||
       module->hasAttr("tessera.attention_shape_bounds") ||
       module->hasAttr("tessera.attention_sequence_bounds")) return reject();
-  if (auto rows=module->getAttr("tessera.native.source_attention_reverse_rows_request");
-      rows && !isa<UnitAttr>(rows)) return reject();
+  for (StringRef request:{"tessera.native.source_attention_reverse_rows_request",
+                          "tessera.native.source_attention_reverse_auto_request"})
+    if (auto marker=module->getAttr(request); marker && !isa<UnitAttr>(marker)) return reject();
   auto fn=functions.front();
   auto mode=fn->getAttrOfType<StringAttr>("tessera.autodiff");
   if (!mode || mode.getValue()!="reverse" || !fn.getBody().hasOneBlock() ||
@@ -213,6 +214,17 @@ inline LogicalResult emit(ModuleOp module,llvm::StringRef originalSource) {
   std::string rootName=(forward.getSymName()+"__source_reverse").str();
   if (module.lookupSymbol(rootName)) return reject();
   bool rows=module->hasAttr("tessera.native.source_attention_reverse_rows_request");
+  if (!rows && module->hasAttr("tessera.native.source_attention_reverse_auto_request")) {
+    // Named SM120 static-half source policy, measured against the inline route.
+    // Use the actual normalization input, not a frontend argument position.
+    auto queryType=cast<RankedTensorType>(q.getType());
+    auto keyType=cast<RankedTensorType>(k.getType());
+    auto valueType=cast<RankedTensorType>(v.getType());
+    int64_t logicalRows=1;
+    for (int64_t extent:queryType.getShape().drop_back()) logicalRows*=extent;
+    rows=logicalRows>=32 && queryType.getDimSize(3)>=32 &&
+         keyType.getDimSize(2)>=4 && valueType.getDimSize(3)>=4;
+  }
   unsigned memberCount=rows?5:4, pullbackIndex=memberCount-1;
   SmallVector<func::FuncOp> members; llvm::json::Array graphs;
   for (unsigned index=0;index<memberCount;++index) {

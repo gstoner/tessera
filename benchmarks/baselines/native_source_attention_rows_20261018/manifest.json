@@ -1,5 +1,5 @@
 {
-  "state": "explicit_v2_proved_native_policy_public_delivery_pending",
+  "state": "historical_explicit_v2_checkpoint",
   "base": "65b8fb663b6d16eaa9066ceaa1423f6c63f1f656",
   "compiler_sha256": "b29f0f8d1d6502faf8563b2a89e242a2e99b4b771bf484a8e43196dee219bbe5",
   "source_sha256": {
@@ -19,7 +19,7 @@
     "tests/unit/test_portable_source_attention_reverse_rows.py": "b5941be481610192548c2653d659b1ce2176314808fa2d95db33086227af637e"
   },
   "evidence_sha256": {
-    "README.md": "7208cf41d0ac38aa469f27a1660e037b4a92e1d6810b0f0a88f1b75ae2c2644b",
+    "README.md": "de8089e5c3242fe8f5f33b1916fd435fb73347f76f60bdad0b83d077f28681ca",
     "device/device-identities.txt": "32483e06c8b3c0cf70e75eb8d355679c3b54ca2a9b06472bcab299c57c068dbe",
     "device/device.txt": "77d7356f865420f3422d86a90e12ca166cb86e2fc9bcafb2762f50298bfd9ac7",
     "device/executed-source-identities.json": "d9b5a2b3a97fd8c78c2ec8a6ec1cc26621c719e452400236cfce974deddc04b6",
@@ -57,13 +57,14 @@
     "measurements/f16-tall-rows.json.gz": "1f985af32d06ab1d190e331d97bec45457a1edce5eabf689b47f4148ba8044ca",
     "measurements/f16-wide-inline.json.gz": "c46160d94c2bca4572d3e452f6cf8651e2d7ebc00448dbbe01f8c5d4205a579e",
     "measurements/f16-wide-rows.json.gz": "4cc29e2b3d4996b4e981ad88a6881221feb0dd75c547103340caa8223e0d1497",
-    "measurements/manifest.json": "d7a65639c60d8764a49dc3a0383bfbd829fdbbe4b8a168ccec30d5cd89e16d6b",
-    "measurements/order0.json": "fc4cc71d96073cd9b7537159fa87caefc0078ef72f0aaa98917f770246013ee7",
-    "measurements/order1.json": "e7114af46ff85ce0175afe81aab38f962669f924b86d1cef20292e93ff6bc18b",
+    "measurements/manifest.json": "e0c0d4004e702edca8562622fee11f7f1aeb4ef0fec63c20f1b55441bc6a775e",
+    "measurements/order0.json.gz": "b90fcb1a7d9b0e1b3c327ca7799c9f37841b41e1292c47fffd9537f633662832",
+    "measurements/order1.json.gz": "6d21331273a3d49318da8235c61645e4bef8f1ca0044af3da5415ad86eaaef30",
     "native-portable.txt.gz": "48c7c727001eedcfbd548722ce45694d1affee7a8815394196c9ec024c484d69",
     "native-portable.xml.gz": "e6da7d6981df3140396c0c6808123549dd5aabf0314325bedb847e11e09de73b",
     "registry-native.txt.gz": "6d29a28c5479314fff5d05b1ae07267092affe48254d1a2abf30e255696f7843",
     "registry-native.xml.gz": "6df2fcc270c42936019dbe439fa9745a588a798752b3a010903a9d09b3a58508"
   },
-  "source_identity_scope": "candidate compiler/runtime implementation; actual measured driver/provider files separately bound"
+  "source_identity_scope": "candidate compiler/runtime implementation; actual measured driver/provider files separately bound",
+  "source_checkpoint": "e63eb93f5c97cd9989898541c8a7b80d1bf8473c"
 }

@@ -1,0 +1,18 @@
+{
+  "scope": "actual Super-Bear auto compiler public source reverse execution",
+  "compiler_sha256": "d475845a3ea58ff3623bbc56193b19612553db7cf4ba3367091280ae9ebfd71e",
+  "provider_sha256": "4c09c4de2208e9cb458365a7808125a8d5e439406c8e3d7e0bae7aeb9ababc5f",
+  "source_sha256": {
+    "src/transforms/lib/NativeSourceAttentionReverse.h": "1fe44e101e1154f52344eee4dfeba0874d26ee5493702b97c9c7bdd18fb6b0e5",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "f23a16e507a8831c72a9be74ba71d2e91dab2f0afd30e98353a8db55630e750b",
+    "src/transforms/lib/NativeAttentionRowProjection.h": "b96eb0809234878f07333ef59418e2a8c33c6280177eb96b0fe35657cdf8d972",
+    "python/tessera/compiler/native_source_attention_reverse.py": "935ca9918cb511882a488710bc88d45bed7e58078c8141a386c9d0aa01fc3d96",
+    "python/tessera/compiler/portable_source_attention_reverse.py": "7a3138e19be2ae607bce261eeef436f6ecb225fc7d5a7edede899a3d2c16458e",
+    "python/tessera/compiler/prepared_source_attention_reverse.py": "4d67b5c89e347fb50f11f671cf90ef8468102523839c35407ce212ed2b614eff",
+    "python/tessera/compiler/source_attention_reverse_frontend.py": "0d6dec7b1f0a125ce290e2275b41aa37ac9a07d5a2e83754253f2630179d6617",
+    "python/tessera/compiler/execution_matrix.py": "f6f60b85467a7eb1c52a116347c05bef5fc6fc84baad476acbcb6432af407625",
+    "benchmarks/nvidia/benchmark_public_source_attention_reverse.py": "2b39d383ce3f0cafb5c525eb4200b782e8de2cb76fbc73257ef8c72d5a224fd7",
+    "tests/device/nvidia/test_public_source_attention_reverse.py": "ead7175cd5fcdaa38eea7fd9519132dc468f539aaef26ab8646c0271ae687cd8",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "15bac326c154487fe6b0260a7a0df25c468a499a84fc0c7d4b9fa3621b269f93"
+  }
+}

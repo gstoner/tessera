@@ -3870,7 +3870,7 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         runtime_status="success", execution_mode="cuda_driver", owns_stream=True,
         direction="backward", op_family="source_normalization_attention", residual_policy="recompute_all",
         reason="Named static FP16/BF16 original RMSNorm(Q) -> saved-LSE attention VJP: "
-               "native paired SSA, four-member default or explicit five-member row-correction "
+               "native paired SSA, native-selected four/five-member row-correction "
                "Schedule/Tile/Target/PTX program and one retained C++ owner. "
                "Both O/LSE seeds, original argument/result order and selected gradients; "
                "host or ordered resident roots. No dynamic, bias, dropout or general reverse claim.",

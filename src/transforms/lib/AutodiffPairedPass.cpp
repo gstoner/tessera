@@ -1813,8 +1813,9 @@ public:
     bool exportSM120Reverse = module->hasAttr("tessera.native.sm120_reverse_request");
     bool exportSourceReverse = module->hasAttr("tessera.native.source_reverse_request");
     bool exportAttentionReverse = module->hasAttr("tessera.native.source_attention_reverse_request");
-    if (module->hasAttr("tessera.native.source_attention_reverse_rows_request") && !exportAttentionReverse) {
-      module.emitError("source attention rows request requires the original source reverse request");
+    if ((module->hasAttr("tessera.native.source_attention_reverse_rows_request") ||
+         module->hasAttr("tessera.native.source_attention_reverse_auto_request")) && !exportAttentionReverse) {
+      module.emitError("source attention policy request requires the original source reverse request");
       return signalPassFailure();
     }
 

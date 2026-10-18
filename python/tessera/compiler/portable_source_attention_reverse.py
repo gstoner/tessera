@@ -181,10 +181,26 @@ def validate_plan(plan):
     if (not re.search(r'(?<=[{,] )tessera.native.source_attention_reverse_request(?=[,}])', original)
             or "tessera.attention_shape_bounds" in original or "tessera.attention_sequence_bounds" in original):
         raise ValueError("source attention reverse original export/shape policy differs")
-    marker = "tessera.native.source_attention_reverse_rows_request"
-    present = bool(re.search(r'(?<=[{,] )' + re.escape(marker) + r'(?=[,}])', original))
-    if (rows and not present) or (not rows and marker in original):
+    from .native_attention_rows import _parts
+    header = _one(r'^module(?: @(?:"(?:[^"\\]|\\.)*"|' + _SYMBOL
+                  + r'))? attributes \{(.*)\} \{$', original.splitlines()[0],
+                  "source attention reverse canonical module attributes differ")
+    fields = _parts(header)
+    requests = {}
+    for mode in ("reverse", "rows", "auto"):
+        marker = ("tessera.native.source_attention_reverse_request" if mode == "reverse"
+                  else "tessera.native.source_attention_reverse_" + mode + "_request")
+        matches = [field for field in fields if field.partition(" = ")[0] == marker]
+        if len(matches) > 1 or any(field != marker for field in matches):
+            raise ValueError("source attention reverse policy request is not a unique unit marker")
+        requests[mode] = bool(matches)
+    if not requests.pop("reverse"):
+        raise ValueError("source attention reverse original module request is missing")
+    if (rows and not any(requests.values())) or (not rows and requests["rows"]):
         raise ValueError("source attention reverse row request/schema differs")
+    # Auto selects a physical strategy in the compiler. Both sealed program
+    # variants preserve the same mathematical source; replay checks the chosen
+    # variant without reimplementing scheduling policy or invoking a compiler.
     for field, allowed in (("role_indices", [0, 1, 2]), ("cotangent_indices", [3, 4])):
         value = plan[field]
         if (not isinstance(value, list) or len(value) != len(allowed)

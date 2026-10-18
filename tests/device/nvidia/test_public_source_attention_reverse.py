@@ -48,9 +48,13 @@ def test_public_source_attention_reverse_and_portable_replay(storage, variant, m
     execution = fn.last_backward_execution
     assert execution["compiler_path"] == "nvidia_sm120_source_attention_reverse_compiled"
     assert execution["family"] == "source_normalization_attention"
+    expected_stages = 5 if variant == "wide" else 4
+    assert len(execution["stage_device_ms"]) == expected_stages
     assert execution["execution_certificate"]["evidence_scope"] == "exact_device"
     assert execution["physical_attestation"]["device_arch"] == "sm_120"
     artifact = rt.RuntimeArtifact.from_json(fn.native_backward_runtime_artifact().to_json())
+    assert len(artifact.metadata["native_program"]["members"]) == expected_stages
+    assert artifact.metadata["native_program"]["schema"].endswith(".v2" if variant == "wide" else ".v1")
     def forbidden(*args, **kwargs):
         pytest.fail("warm or portable source attention reverse invoked compiler/eager source")
     with monkeypatch.context() as guard:
@@ -110,11 +114,14 @@ def test_public_source_reverse_revisits_static_shape_and_clears_failed_export(st
 
 
 @pytest.mark.parametrize("storage", ["f16", "bf16"])
-def test_source_reverse_fresh_process_without_compiler(storage, tmp_path):
+@pytest.mark.parametrize("wide", [False, True])
+def test_source_reverse_fresh_process_without_compiler(storage, wide, tmp_path):
     assert rt._nvidia_device_name() == "sm_120"
     dtype = np.float16 if storage == "f16" else ml_dtypes.bfloat16
     rng = np.random.default_rng(11)
-    shapes = ((1, 2, 3, 4), (1, 1, 5, 4), (1, 1, 5, 3), (1, 2, 3, 3), (1, 2, 3))
+    sq, sk, d, dv = (17, 19, 257, 13) if wide else (3, 5, 4, 3)
+    count = 5 if wide else 4
+    shapes = ((1, 2, sq, d), (1, 1, sk, d), (1, 1, sk, dv), (1, 2, sq, dv), (1, 2, sq))
     values = tuple(rng.normal(0, .3, s).astype(np.float32 if i == 4 else dtype) for i, s in enumerate(shapes))
     fn = ts.jit(target="nvidia_sm120", autodiff="reverse")(prefix_attention)
     expected = fn.native_backward(*values[:3], out_cotangents=values[3:])
@@ -138,14 +145,14 @@ values = tuple(loaded[str(i)].astype(types[buffers[i]["storage"]]) for i in rang
 result = rt.launch(artifact, values)
 assert result["ok"], result
 assert result["physical_attestation"]["device_arch"] == "sm_120"
-assert len(result["component_receipts"]) == 4
+assert len(result["component_receipts"]) == int(sys.argv[4])
 np.savez(sys.argv[3], **{str(i): x.astype(np.float32) for i, x in enumerate(result["output"])})
-print(json.dumps({"ok": True, "execution_kind": result["execution_kind"], "components": 4}))
+print(json.dumps({"ok": True, "execution_kind": result["execution_kind"], "components": len(result["component_receipts"])}))
 '''
-    child = subprocess.run([sys.executable, "-c", script, str(artifact), str(roots), str(outputs)],
+    child = subprocess.run([sys.executable, "-c", script, str(artifact), str(roots), str(outputs), str(count)],
                            text=True, capture_output=True, timeout=90, env=dict(os.environ))
     assert child.returncode == 0, child.stdout + child.stderr
-    assert json.loads(child.stdout.strip().splitlines()[-1])["components"] == 4
+    assert json.loads(child.stdout.strip().splitlines()[-1])["components"] == count
     restored = np.load(outputs)
     for i, prior in enumerate(expected):
         np.testing.assert_array_equal(restored[str(i)], prior.astype(np.float32))

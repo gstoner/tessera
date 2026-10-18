@@ -68,7 +68,17 @@
     "f16-tall-rows.json.gz": "1f985af32d06ab1d190e331d97bec45457a1edce5eabf689b47f4148ba8044ca",
     "f16-wide-inline.json.gz": "c46160d94c2bca4572d3e452f6cf8651e2d7ebc00448dbbe01f8c5d4205a579e",
     "f16-wide-rows.json.gz": "4cc29e2b3d4996b4e981ad88a6881221feb0dd75c547103340caa8223e0d1497",
-    "order0.json": "fc4cc71d96073cd9b7537159fa87caefc0078ef72f0aaa98917f770246013ee7",
-    "order1.json": "e7114af46ff85ce0175afe81aab38f962669f924b86d1cef20292e93ff6bc18b"
+    "order0.json.gz": "b90fcb1a7d9b0e1b3c327ca7799c9f37841b41e1292c47fffd9537f633662832",
+    "order1.json.gz": "6d21331273a3d49318da8235c61645e4bef8f1ca0044af3da5415ad86eaaef30"
+  },
+  "lossless_raw_archives": {
+    "order0.json": {
+      "archive": "order0.json.gz",
+      "raw_sha256": "fc4cc71d96073cd9b7537159fa87caefc0078ef72f0aaa98917f770246013ee7"
+    },
+    "order1.json": {
+      "archive": "order1.json.gz",
+      "raw_sha256": "e7114af46ff85ce0175afe81aab38f962669f924b86d1cef20292e93ff6bc18b"
+    }
   }
 }

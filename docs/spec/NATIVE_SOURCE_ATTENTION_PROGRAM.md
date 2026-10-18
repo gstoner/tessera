@@ -243,6 +243,25 @@ may include enqueue gaps and are separate from completed host/end-to-end cost.
 The existing source close export releases either source owner.
 
 The current prepared/portable execution scope remains static homogeneous
-FP16/BF16, unbiased zero-dropout attention. Public automatic selection and
-broader derivatives/layouts remain separate acceptance gates. No FP8/MXFP8/
+FP16/BF16, unbiased zero-dropout attention. The subsequent native automatic
+policy is specified below; broader derivatives/layouts remain separate gates. No FP8/MXFP8/
 MXFP4 attention storage or sibling physical route is promoted by this change.
+
+## Native automatic source strategy
+
+The public source-VJP frontend adds the UnitAttr module field
+tessera.native.source_attention_reverse_auto_request alongside the original
+source reverse request. Native projection selects from actual typed Q/K/V:
+product(Q prefix)>=32, D>=32, Sk>=4 and Dv>=4 selects v2; otherwise v1.
+Explicit rows overrides auto. A policy request without the original reverse
+request, or with a non-UnitAttr value, is invalid. No-auto v1 meanings and
+exported ABI remain unchanged.
+
+Portable restore checks the canonical module attribute dictionary. Text in
+strings or function attributes cannot authorize v2. It accepts either sealed
+native-selected variant with valid auto intent, without rerunning scheduling,
+compilation or provider acquisition. This architecture-specific measured
+strategy does not promise improvement for every shape. Native boundary and
+role/permutation tests cover both formats. Public correctness, timing and
+four-/five-member fresh-process proof are recorded in
+benchmarks/baselines/native_source_attention_auto_20261018/README.md.

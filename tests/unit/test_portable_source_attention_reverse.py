@@ -13,19 +13,26 @@ from tests.unit.test_native_source_attention_reverse_outline import source
 pytestmark = pytest.mark.compiler_route
 
 
-@pytest.fixture(scope="module")
-def portable(compiler_toolchain):
-    tool = compiler_toolchain.require_tessera_opt("--tessera-autodiff-paired")
-    program = export_native_source_attention_reverse(source(), tool=tool)
+def portable_program(program):
+    """Construct signature-only PTX stubs; they are never device evidence."""
+    import re
     members = []
-    for i, (graph, schedule, tile, target, native) in enumerate(program.lower_members()):
-        import re
+    for graph, schedule, tile, target, native in program.lower_members():
         entry = re.findall(r'\bllvm.func @(\w+)\(', tile)[0]
-        params = ",\n".join(".param .u64 p" + str(j) for j in range((4, 12, 17, 5)[i]))
+        signature = re.search(r'llvm.func @' + re.escape(entry) + r'\(([^)]*)\)', tile)
+        assert signature is not None
+        count = len(signature[1].split(",")) if signature[1].strip() else 0
+        params = ",\n".join(".param .u64 p" + str(j) for j in range(count))
         image = (".version 9.0\n.target sm_120a\n.address_size 64\n.visible .entry "
                  + entry + "(\n" + params + "\n) { ret; }\n").encode()
         members.append(ReverseMember(graph, schedule, tile, target, native, entry, image, sha(image.decode())))
     return seal(program.manifest, members)
+
+
+@pytest.fixture(scope="module")
+def portable(compiler_toolchain):
+    tool = compiler_toolchain.require_tessera_opt("--tessera-autodiff-paired")
+    return portable_program(export_native_source_attention_reverse(source(), tool=tool))
 
 
 def reseal(data):

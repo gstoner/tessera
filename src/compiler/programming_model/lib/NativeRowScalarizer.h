@@ -18,6 +18,27 @@
 namespace tessera::row_region {
 using namespace mlir;
 
+// Logical leading axes remain typed Graph dimensions. Only the compact
+// physical view combines them into rows; the last axis is the reduction.
+struct RowGeometry {
+  int64_t rows;
+  int64_t columns;
+};
+inline FailureOr<RowGeometry> rowGeometry(Type type) {
+  auto tensor = dyn_cast_or_null<RankedTensorType>(type);
+  if (!tensor || tensor.getRank() < 2 || !tensor.hasStaticShape() || tensor.getEncoding())
+    return failure();
+  int64_t rows = 1;
+  for (int64_t extent : tensor.getShape().drop_back()) {
+    if (extent <= 0 || extent > INT32_MAX || rows > INT32_MAX / extent)
+      return failure();
+    rows *= extent;
+  }
+  int64_t columns = tensor.getShape().back();
+  if (columns <= 0 || columns > INT32_MAX) return failure();
+  return RowGeometry{rows, columns};
+}
+
 // Keep numerical validation independent of the row ownership ABI. This scalar
 // function is subsequently embedded in a checked Schedule/Tile kernel region.
 class RowScalarizer {
@@ -25,6 +46,7 @@ class RowScalarizer {
   OpBuilder b;
   Location loc;
   RankedTensorType tensor;
+  int64_t numRows = 0, numColumns = 0;
   Value row, width;
   SmallVector<Value> pointers;
   SmallVector<Value> views;
@@ -64,7 +86,7 @@ class RowScalarizer {
       scf::YieldOp::create(b, loc, sum);
     }
     return arith::DivFOp::create(b, loc, loop.getResult(0),
-                                constant(b.getF32Type(), tensor.getDimSize(1)));
+                                constant(b.getF32Type(), numColumns));
   }
   Value epsilon(Operation *op) {
     auto eps = op->getAttrOfType<FloatAttr>("eps");
@@ -173,9 +195,11 @@ public:
     if (graph.getNumArguments() != 2 || (graph.getNumResults() != 1 && graph.getNumResults() != 2) ||
         !graph.getBody().hasOneBlock()) return reject();
     tensor = dyn_cast<RankedTensorType>(graph.getArgumentTypes()[0]);
-    if (!tensor || tensor.getRank() != 2 || !tensor.hasStaticShape() || tensor.getEncoding() ||
-        tensor.getDimSize(0) <= 0 || tensor.getDimSize(1) <= 0 ||
-        tensor.getDimSize(0) > INT32_MAX || tensor.getDimSize(1) > INT32_MAX ||
+    auto geometry = rowGeometry(tensor);
+    if (failed(geometry)) return reject();
+    numRows = geometry->rows;
+    numColumns = geometry->columns;
+    if (
         (!tensor.getElementType().isF16() && !tensor.getElementType().isBF16()) ||
         graph.getArgumentTypes()[1] != tensor || graph.getResultTypes()[0] != tensor ||
         llvm::any_of(graph.getResultTypes(), [&](Type result) { return result != tensor; })) return reject();
@@ -191,7 +215,7 @@ public:
         if (scalarConstant) {
           if (t.getRank() != 0 || !t.getElementType().isF32()) return reject();
         } else if (stats || reduce) {
-          if (t.getShape() != ArrayRef<int64_t>{tensor.getDimSize(0)} || !t.getElementType().isF32()) return reject();
+          if (t.getShape() != tensor.getShape().drop_back() || !t.getElementType().isF32()) return reject();
         } else if (t.getShape() != tensor.getShape() ||
                    (t.getElementType() != tensor.getElementType() && !t.getElementType().isF32() && !t.getElementType().isInteger(1))) return reject();
       }
@@ -229,12 +253,17 @@ public:
         if (auto keep = op.getAttrOfType<BoolAttr>("keepdims"); keep && keep.getValue()) return reject();
       } else if (name == "tessera.broadcast_in_dim") {
         auto dims = op.getAttrOfType<ArrayAttr>("broadcast_dimensions");
-        auto axis = dims && dims.size() == 1 ? dyn_cast<IntegerAttr>(dims[0]) : IntegerAttr{};
         if (!only({"broadcast_dimensions"}) || op.getNumOperands() != 2 || !dims)
           return reject();
         auto sourceType = dyn_cast<RankedTensorType>(op.getOperand(0).getType());
         bool scalar = sourceType && sourceType.getRank() == 0 && dims.empty();
-        bool rowStat = sourceType && sourceType.getRank() == 1 && axis && axis.getInt() == 0;
+        bool rowStat = sourceType && sourceType.getShape() == tensor.getShape().drop_back() &&
+                       dims.size() == static_cast<size_t>(tensor.getRank() - 1);
+        if (rowStat)
+          for (auto [index, raw] : llvm::enumerate(dims)) {
+            auto axis = dyn_cast<IntegerAttr>(raw);
+            if (!axis || axis.getInt() != static_cast<int64_t>(index)) rowStat = false;
+          }
         if (!scalar && !rowStat) return reject();
       } else if (name == "tessera.cast") {
         if (!only({}) || op.getNumOperands() != 1) return reject();
@@ -252,7 +281,7 @@ public:
       } else if (name == "tessera.mul" || name == "tessera.sub" || name == "tessera.add") {
         if (!only({}) || op.getNumOperands() != 2) return reject();
       } else return reject();
-      if (auto axis = op.getAttrOfType<IntegerAttr>("axis"); axis && axis.getInt() != 1 && axis.getInt() != -1) return reject();
+      if (auto axis = op.getAttrOfType<IntegerAttr>("axis"); axis && axis.getInt() != tensor.getRank() - 1 && axis.getInt() != -1) return reject();
       if (auto eps = op.getAttrOfType<FloatAttr>("eps"); eps && (!std::isfinite(float(eps.getValueAsDouble())) || float(eps.getValueAsDouble()) <= 0)) return reject();
     }
     return success();
@@ -269,8 +298,8 @@ public:
     b.setInsertionPointToStart(body);
     pointers.assign(body->getArguments().begin(), body->getArguments().begin() + buffers);
     row = body->getArgument(buffers);
-    width = arith::ConstantIntOp::create(b, loc, tensor.getDimSize(1), 64);
-    Value rows = arith::ConstantIntOp::create(b, loc, tensor.getDimSize(0), 64);
+    width = arith::ConstantIntOp::create(b, loc, numColumns, 64);
+    Value rows = arith::ConstantIntOp::create(b, loc, numRows, 64);
     // Unsigned test also excludes negative rows before any buffer access.
     for (unsigned i=0;i<buffers;++i) {
       auto viewType = tile::BufferViewType::get(b.getContext(),tensor.getElementType(),i<2?"read":"write","row_major");

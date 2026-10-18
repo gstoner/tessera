@@ -1,0 +1,27 @@
+{
+  "state": "candidate_prepared_owner_not_public_jit_or_portable",
+  "base": "9e63d8c71a9fbcd45989cf0327b61c1ae4e6191a",
+  "sync": "NATIVE-ATTENTION-SOURCE-REVERSE-20261018",
+  "source_sha256": {
+    "src/transforms/lib/NativeSourceAttentionReverse.h": "f37c8e59b07cb00249eda85d9cb032f5dfd66ef403b147303eaa22bc16652e21",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "ce0a458c6d8779b2dfeffdaf2d29a56f85f8aee9c8719edcd5b290c9192c051d",
+    "src/compiler/programming_model/lib/NativeRowScalarizer.h": "a78159a05fd93851577f1ce24e666d885e9ff0e1e7d9a1b21538168a7a30fce9",
+    "src/compiler/programming_model/lib/NativeRowSchedule.h": "3982d2de5221b161586f2fc6b4f6a2865d08c93992fc65db04113b9b77b04103",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "27b5f4e9df23054b4d6587500dad7df228d030c30d608b8d98becd77097e9b45",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "191e37136746ed80c54028d763927d39c086130446095c391ea8ebbce5e94494",
+    "python/tessera/compiler/native_source_attention_reverse.py": "9eef799f74273b6c0d983fbaf46351c1f1a4f5131c084d60eca57695622db144",
+    "python/tessera/compiler/prepared_source_attention_reverse.py": "5443034f96e7d88a62252dba05b1b1fe3726ba257741a91b238bdca854cff3a4",
+    "tests/unit/test_native_source_attention_reverse_outline.py": "3182af5a9b38c2d6d3f0d4d8c909ad0b4487196186a9b3f8c1091e2f85c0ed2e",
+    "tests/unit/test_native_source_attention_reverse_transport.py": "13258278f38c16e877ad81ad6b3a45aa4c0efdb6f2b8390676a3a2cb11757b25",
+    "tests/device/nvidia/test_source_attention_reverse.py": "c8db4e7ab61ad84cc385606648c25b230b28c3aec86edaeb1b2cda8b5865d434",
+    "benchmarks/nvidia/benchmark_source_attention_reverse.py": "8e4cc21fdcc7d0c2f28d0a820cee4c7989081cad179ef9233968f3983dc2810e"
+  },
+  "evidence_sha256": {
+    "source-owner-regressions.txt.gz": "bf7f6ec2dc3757b9217be3eeadc03fe03a9b5319e6cd08db2eb7877c62dcf2b2",
+    "source-owner-regressions.xml.gz": "a78baa6051fcef164dd0a0b3a329777a4fecf771c92ce65284cee473d6efdcf0",
+    "sm120.json": "2e55e326a3c2d0af3bd224716b30ec56f9e48a3f2e7bcb4ddfa62c046e403760",
+    "source-reverse-host-gates.txt.gz": "8e3f881c6c5ba84f20349f8d18bab8f024e60459cb89dd18829d1fa591dbe489",
+    "README.md": "cbf6186566e62a7bccea74c4741914e5f9e7976e8566e458431a18548f14c0fd",
+    "source-reverse-host-gates.xml.gz": "c0e717b9c9fbc99de0821f87cab71969d5ff5a01b27e912a2f6287c00ee35917"
+  }
+}

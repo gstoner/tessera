@@ -123,6 +123,20 @@ _COMPOSITES = {"source_normalization_matmul": CompositeVJP(
     _SOURCE_DECLARATION, _matches_source, _execute_source)}
 
 
+from .source_attention_reverse_frontend import matches as _matches_attention_source
+from .source_attention_reverse_frontend import execute as _execute_attention_source
+
+_ATTENTION_SOURCE_DECLARATION = NativeVJPPluginDeclaration(
+    family="source_normalization_attention",
+    graph_consumers=("tessera.rmsnorm", "tessera.flash_attn"),
+    schedule_consumer="schedule.artifact", tile_consumer="tile.row_region_kernel",
+    target_consumers={"nvidia_sm120": "nvidia.sm120_source_attention_reverse_program"},
+    differential_policy="zero_dropout_attention")
+_ATTENTION_SOURCE_DECLARATION.validate()
+_COMPOSITES["source_normalization_attention"] = CompositeVJP(
+    _ATTENTION_SOURCE_DECLARATION, _matches_attention_source, _execute_attention_source)
+
+
 def native_vjp_composite_declarations():
     return {name: entry.declaration for name, entry in _COMPOSITES.items()}
 

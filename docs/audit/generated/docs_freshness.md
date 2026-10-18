@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-18**.
 
 ## Headline
 
-- **182** docs catalogued across the canonical doc tree.
-- **181** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **47** updated within the last 30 days.
+- **183** docs catalogued across the canonical doc tree.
+- **182** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **48** updated within the last 30 days.
 - **70** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -43,6 +43,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md` | - | 2026-10-16 | 2 | ✓ |
 | `NATIVE_PARENT_VIEW_CONTRACT.md` | - | 2026-10-17 | 1 | ✓ |
 | `NATIVE_ROCM_SILU_MATH_CONTRACT.md` | - | 2026-10-16 | 2 | ✓ |
+| `NATIVE_ROW_LOGICAL_PREFIX.md` | - | 2026-10-18 | 0 | ✓ |
 | `NATIVE_SOURCE_ATTENTION_PROGRAM.md` | - | 2026-10-18 | 0 | ✓ |
 | `PRODUCTION_COMPILER_PLAN.md` | Ratified | 2026-06-05 | 135 | ✓ |
 | `PYTHON_API_SPEC.md` | Normative | 2026-10-15 | 3 | ✓ |

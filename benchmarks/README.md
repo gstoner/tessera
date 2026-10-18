@@ -1,5 +1,19 @@
 # Tessera Benchmarks
 
+
+## Native source-attention reverse recorders
+
+Recorded by benchmarks/nvidia/benchmark_source_attention_reverse.py and
+benchmarks/nvidia/benchmark_public_source_attention_reverse.py.
+The prepared-owner packet keeps four stage/program/host timing domains
+separate; the public recorder compares identical inputs/images through two
+dispatch paths. The frozen control is
+benchmarks/baselines/native_public_source_attention_reverse_20261018/serialized_control.py.
+It is retained for reproducible dispatch attribution, not physical route selection.
+Evidence: benchmarks/baselines/native_source_attention_reverse_20261018/README.md
+and benchmarks/baselines/native_public_source_attention_reverse_20261018/README.md.
+
+
 ## Native mixed scalar contraction recorder
 
 Recorded by benchmarks/rocm/record_mixed_scalar_contraction.py.

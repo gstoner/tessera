@@ -3386,6 +3386,9 @@ class JitFn:
         """Return the persisted native-family reverse product after execution."""
         artifact = getattr(self, "_native_backward_artifact", None)
         if artifact is None:
+            factory = getattr(self, "_native_backward_artifact_factory", None)
+            if factory is not None:
+                return factory()
             raise TesseraJitError("no persisted native backward product from the last call")
         return artifact
 
@@ -3398,6 +3401,7 @@ class JitFn:
         failure raises. Successful execution records the exact compiler path
         and invocation delta in ``last_backward_execution``.
         """
+        self._native_backward_artifact_factory = None
         self._native_backward_artifact = None
         self.last_backward_execution = None
         if self.differentiation_request is None:

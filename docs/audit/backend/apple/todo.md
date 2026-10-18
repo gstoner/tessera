@@ -6,6 +6,51 @@ target: apple_gpu
 last_updated: 2026-10-18
 ---
 
+## NATIVE-ATTENTION-SOURCE-REVERSE-20261018 — public source VJP
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-ATTENTION-SOURCE-REVERSE-20261018.
+Base: merged PR987 (9e63d8c71); private prepared checkpoint a9d5295ab.
+
+Ordinary native_backward now consumes original homogeneous-half
+RMSNorm(Q) -> saved-LSE attention through native paired AD, four typed
+members, Schedule/Tile/Target/NVVM/PTX and one retained C++ owner. Both O/LSE
+cotangents, original root/result permutations and requested gradient order
+are preserved. Host and ordered resident roots return independent outputs.
+The sealed portable contract validates typed call edges, physical buffer
+lifetimes, source policies, member stages, launch parameters and image hashes
+without compiler/provider access. Fresh-process native replay forbids tools.
+Hashes detect corruption; they do not authenticate arbitrary supplied code.
+
+The combined owning RTX5070 suite passes 67 cases: 12 public/portable/cache,
+20 prepared reverse and 35 existing source-primal cases. Focused shared
+registry, diagnostic, pass, offline and mock-provider gates pass 410 cases.
+Four same-input/image A/B profiles use 21 alternating samples of eight calls.
+Avoiding repeated manifest serialization improves warm public host time by
+3.46–4.10x on small profiles and 1.36–1.37x at D257. D257 device windows
+remain stable; tiny-case event windows include dispatch noise. This is host
+dispatch improvement, not kernel speedup.
+Public artifact export is lazy and independent of warm execution. Invalid
+calls clear prior receipt/export state; static shape revisits reuse images.
+
+Final WSL CPU validation passes 30,752 tests with 3,721 declared skips.
+The production compiler-route lane passes 2,079 tests with every selected
+proof executed. All 33 generated documents, claim lint, five surface audits,
+type checking and plan ownership gates pass. These receipts bind code
+checkpoint e8aafdc65ccbb90778b50aea9f10c9c7fdc34548; subsequent changes only record evidence.
+
+Remaining: exact-head review/CI and one consolidated PR. Dynamic shapes, bias/dropout, broader derivatives,
+batching, wider envelopes and all five aggregate programs remain open.
+The logical-prefix and prepared-member packets retain their original scopes.
+
+Follow-up required for an independent Metal source-attention reverse consumer. Common dispatch defers an unused generic C-runtime probe; mock owner success/refusal passes for apple_gpu. No Apple execution or CUDA schedule transfer is claimed.
+
+Packet: benchmarks/baselines/native_public_source_attention_reverse_20261018/README.md.
+Contract: docs/spec/NATIVE_SOURCE_ATTENTION_PROGRAM.md.
+
+Review follow-through: offline restoration rejects rehashed normalization accumulation and malformed numeric attributes; returned component ABI receipts are independent of the cached sealed manifest. The recorder and frozen control are registered in benchmarks/README.md.
+
+Source effect admission reuses the primitive zero-dropout policy before concrete frontend certification; host regressions reject nonzero/NaN dropout without evaluating source.
 
 ## NATIVE-COMPOSED-ATTENTION-PREFIX-20261018 — source SSA outlining
 
@@ -36,7 +81,7 @@ regressions. Focused shared gates pass 1,571 tests; the typing ratchet has zero
 errors. A four-row correctness-gated benchmark separates member/composed
 dispatch windows, prepared host calls and complete public calls; no speedup or
 pure-kernel claim is made. Original-source reverse integration, broader
-envelopes and current-head CI/review remain follow-up.
+envelopes remain follow-up. PR987 delivery is resolved by merged 9e63d8c71.
 The earlier ordinary standalone prefix probe had no native descriptor witness.
 All five aggregate programs remain open.
 Recorder: benchmarks/nvidia/benchmark_source_attention_prefix.py.

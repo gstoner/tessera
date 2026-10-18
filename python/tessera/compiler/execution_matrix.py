@@ -1154,6 +1154,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_quantized_product_program": "Native BF16 K16 quantization and exact scaled matmul on one checked HIP owner",
     "nvidia_active_source_jvp_program": "Compiler-owned static source-active RMSNorm/ReLU JVP and transactional two-result native CUDA owner",
     "rocm_source_reverse_program": "Native static RMSNorm/ReLU source pullback under checked HIP ownership",
+    "nvidia_source_attention_reverse_program": "Native four-member original-source RMSNorm/attention VJP with private CUDA residuals",
     "nvidia_source_attention_program": "Native static half RMSNorm to saved-LSE attention under one checked CUDA owner",
     "nvidia_source_reverse_program": "Compiler-derived static RMSNorm/ReLU source pullback with mixed contraction and checked native CUDA ownership",
     "nvidia_tensor_rhs_jvp_program": "Compiler-owned static paired producer/RHS-JVP SSA, native Schedule/Tile members and transactional two-output CUDA owner",
@@ -3862,6 +3863,18 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "Schedule/Tile/ROCDL/HSACO members under one C++ HIP owner. Host roots only.",
         numerical_fixture="tests/device/rocm/test_public_source_reverse.py",
         evidence_target="rocm_gfx1201", proof_build="LLVM/MLIR23.1.1",
+        device_proof="device_verified_jit"),
+    ("nvidia_sm120", "nvidia_sm120_source_attention_reverse_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_sm120_source_attention_reverse_compiled",
+        execution_kind="native_gpu", executable=True, executor_id="nvidia_source_attention_reverse_program",
+        runtime_status="success", execution_mode="cuda_driver", owns_stream=True,
+        direction="backward", op_family="source_normalization_attention", residual_policy="recompute_all",
+        reason="Named static FP16/BF16 original RMSNorm(Q) -> saved-LSE attention VJP: "
+               "native paired SSA, four Schedule/Tile/Target/PTX members and one retained C++ owner. "
+               "Both O/LSE seeds, original argument/result order and selected gradients; "
+               "host or ordered resident roots. No dynamic, bias, dropout or general reverse claim.",
+        numerical_fixture="tests/device/nvidia/test_public_source_attention_reverse.py",
+        evidence_target="nvidia_sm120", proof_build="LLVM/MLIR23.1.1+CUDA13.3+RTX5070",
         device_proof="device_verified_jit"),
     ("nvidia_sm120", "nvidia_sm120_source_attention_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_sm120_source_attention_compiled",

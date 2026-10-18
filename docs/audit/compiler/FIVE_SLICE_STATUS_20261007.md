@@ -3,6 +3,90 @@ last_updated: 2026-10-18
 audit_role: reference
 ---
 
+## Native public source attention reverse — 2026-10-18
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-ATTENTION-SOURCE-REVERSE-20261018.
+Base: merged PR987 (9e63d8c71); private prepared checkpoint a9d5295ab.
+
+Ordinary native_backward now consumes original homogeneous-half
+RMSNorm(Q) -> saved-LSE attention through native paired AD, four typed
+members, Schedule/Tile/Target/NVVM/PTX and one retained C++ owner. Both O/LSE
+cotangents, original root/result permutations and requested gradient order
+are preserved. Host and ordered resident roots return independent outputs.
+The sealed portable contract validates typed call edges, physical buffer
+lifetimes, source policies, member stages, launch parameters and image hashes
+without compiler/provider access. Fresh-process native replay forbids tools.
+Hashes detect corruption; they do not authenticate arbitrary supplied code.
+
+The combined owning RTX5070 suite passes 67 cases: 12 public/portable/cache,
+20 prepared reverse and 35 existing source-primal cases. Focused shared
+registry, diagnostic, pass, offline and mock-provider gates pass 410 cases.
+Four same-input/image A/B profiles use 21 alternating samples of eight calls.
+Avoiding repeated manifest serialization improves warm public host time by
+3.46–4.10x on small profiles and 1.36–1.37x at D257. D257 device windows
+remain stable; tiny-case event windows include dispatch noise. This is host
+dispatch improvement, not kernel speedup.
+Public artifact export is lazy and independent of warm execution. Invalid
+calls clear prior receipt/export state; static shape revisits reuse images.
+
+Final WSL CPU validation passes 30,752 tests with 3,721 declared skips.
+The production compiler-route lane passes 2,079 tests with every selected
+proof executed. All 33 generated documents, claim lint, five surface audits,
+type checking and plan ownership gates pass. These receipts bind code
+checkpoint e8aafdc65ccbb90778b50aea9f10c9c7fdc34548; subsequent changes only record evidence.
+
+Remaining: exact-head review/CI and one consolidated PR. Dynamic shapes, bias/dropout, broader derivatives,
+batching, wider envelopes and all five aggregate programs remain open.
+The logical-prefix and prepared-member packets retain their original scopes.
+
+[Evidence](../../../benchmarks/baselines/native_public_source_attention_reverse_20261018/README.md).
+
+
+## Native source attention reverse candidate — 2026-10-18
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Base: PR987 merged as 9e63d8c71. Synchronization key:
+NATIVE-ATTENTION-SOURCE-REVERSE-20261018.
+
+The native paired-AD exporter now outlines actual RMSNorm(Q) -> saved-LSE
+attention reverse SSA into four typed members and a four-call program root:
+normalization, checkpoint forward, checkpoint backward with O/LSE cotangents,
+and the actual normalization pullback. Python transports these members through
+Graph/Schedule/Tile/Target/NVVM/PTX without reconstructing derivatives.
+The artifact-only plan is replay-bound to the original Graph and compiler.
+A retained C++ CUDA owner keeps normalized Q, saved O/LSE and gradients private,
+orders resident producer streams, and returns selected original-root gradients.
+
+Fourteen exact RTX5070 numerical cases pass for FP16/BF16, argument/result
+permutations, requested gradient subsets/order, zero/tiny inputs, D257 and
+136 logical rows. Warm calls forbid compiler subprocesses. Four correctness-
+gated timing profiles retain separate compile/prepare, four stage device event
+windows, program windows, native completed host and end-to-end domains.
+These are prepared-owner candidate results, not ordinary JIT or portable
+RuntimeArtifact reverse proof. Expanded device regression passes 55 cases: 20 new reverse and 35 existing
+primal cases; 326 compiler/registry gates pass. Documentation gates and
+public integration are still being completed. The original logical-prefix
+prerequisite retains its 91 compiler/27 device cases and 20 unchanged rank-two
+stages. All five aggregate programs remain open.
+
+[Evidence](../../../benchmarks/baselines/native_source_attention_reverse_20261018/README.md).
+
+
+
+## Native logical-prefix row prerequisite — 2026-10-18
+
+PR987 merged as 9e63d8c71 after green required CI and exact-head review.
+Its earlier candidate receipts retain their source-bound scope; delivery is
+resolved. The next original-source attention reverse prerequisite preserves
+rank-three/four Graph rows through checked compact physical Tile views.
+Matching LLVM/MLIR 23.1.1 assertions proof passes 91 unique compiler cases and
+27 unique RTX5070 member/adjacent cases. Twenty rank-two member stages remain
+identical. Eight correctness-gated paired timing profiles retain raw-member
+scope. Native paired-source outlining, full residual ownership, public/portable
+attention gradients and all five aggregate closures remain open.
+[Evidence](../../../benchmarks/baselines/native_row_logical_prefix_20261018/README.md).
+Contract: docs/spec/NATIVE_ROW_LOGICAL_PREFIX.md.
 
 ## Native source normalization-attention forward — 2026-10-18
 
@@ -17,7 +101,7 @@ RTX5070; thirty-four isolated JVP/VJP owner cases pass separately. Shared
 focused gates pass 1,571 tests. CI-equivalent unit passes 30,734 with 3,725
 declared skips; compiler-route passes 2,016 without skips/certificate failures.
 Six calling-convention regressions and six ordinary cold native calls pass.
-Current-head GitHub CI/review and final delivery remain.
+PR987 current-head CI/review and delivery are resolved by merged 9e63d8c71.
 The source primal export cannot drop pending AD intent. All five aggregate
 slices remain open, including original-source composed attention reverse.
 [Evidence](../../../benchmarks/baselines/native_attention_prefix_20261018/README.md).

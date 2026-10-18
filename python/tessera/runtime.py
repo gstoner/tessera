@@ -170,6 +170,12 @@ def _execute_rocm_source_reverse_artifact(artifact: Any, args: Any) -> NativePro
     return execute(artifact, args)
 
 
+
+def _execute_nvidia_source_attention_reverse_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
+    from .compiler.source_attention_reverse_runtime import execute
+    return execute(artifact, args)
+
+
 def _execute_nvidia_source_attention_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
     from .compiler.source_attention_runtime import execute
     return execute(artifact, args)
@@ -35652,6 +35658,7 @@ def _executor_table():
         "nvidia_active_source_jvp_program": _execute_nvidia_tensor_jvp_program_artifact,
         "nvidia_source_reverse_program": _execute_nvidia_source_reverse_artifact,
         "nvidia_source_attention_program": _execute_nvidia_source_attention_artifact,
+        "nvidia_source_attention_reverse_program": _execute_nvidia_source_attention_reverse_artifact,
         "rocm_source_reverse_program": _execute_rocm_source_reverse_artifact,
         "nvidia_lhs_program": _execute_nvidia_lhs_program_artifact,
     "nvidia_rhs_program": _execute_nvidia_rhs_program_artifact,
@@ -36118,7 +36125,6 @@ def _launch_with_owned_inputs(kernel: RuntimeArtifact, args: Any, stream: Any = 
     target = artifact.native_image.target if artifact.native_image is not None else str(metadata.get("target", "cpu"))
     if artifact.launch_descriptor is not None:
         return _launch_native_descriptor(artifact, args, stream, start_ns)
-    cap = backend_capabilities(target)
     # G6 + G6.1 — matrix-driven dispatch for **every** executable row (Apple
     # CPU/GPU + the CPU native_cpu/jit_cpu_numpy rows). The matrix lookup
     # returns an ExecutionRow naming the executor_id; _executor_table() resolves
@@ -36210,6 +36216,9 @@ def _launch_with_owned_inputs(kernel: RuntimeArtifact, args: Any, stream: Any = 
             "telemetry": telemetry,
             "profile": {"cpu_wall_ms": elapsed_ms, "launch_overhead_ms": elapsed_ms},
         }
+    # Native program owners validate their actual provider/device. The
+    # generic C-runtime capability probe is needed only for fallback.
+    cap = backend_capabilities(target)
     if target != "cpu":
         # G4 — consult the single-source execution matrix instead of hard-coding
         # the "non-CPU = unimplemented" rule. Today the matrix has no executor

@@ -13731,3 +13731,74 @@ obligations remain open.
 Evidence: benchmarks/baselines/native_public_source_attention_reverse_20261018/README.md,
 public-ab.json, source/fixture hashes and compressed host/device gate receipts.
 <!-- entry-fields:end -->
+
+### 2026-10-18 — native source-attention row correction
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync NATIVE-SOURCE-ATTENTION-ROWS-20261018.
+
+Outcome: The actual paired source adjoint now admits a five-member v2 row
+producer/compact consumer program while retaining the four-member v1 default.
+Native compiler and offline mutation/registry guards pass 388 tests, including
+84 native/portable cases. The zero-error type baseline is preserved. Exact
+RTX5070 v1/v2 numerical, pending-stream, extent/context recovery and separate
+fresh-process/public/primal controls pass 89 distinct cases. All three source
+gradients preserve independent half outputs; the row residual is private FP32.
+Both numerical policy and the source Q-to-normalized-Q edge are checked.
+
+Both composed timing orders retain identical program/image identities and
+passed source-gradient checks. Larger prepared profiles improve; the smallest
+profiles are flat to about fifteen percent slower. Raw measurements and
+separate timing domains remain in the packet.
+
+Remaining: native policy/public integration, public matched A/B,
+full documentation/testing gates and one focused PR. All five
+aggregate programs stay open. No sibling or encoded attention proof transfers.
+
+Evidence: benchmarks/baselines/native_source_attention_rows_20261018/README.md.
+<!-- entry-fields:end -->
+
+### 2026-10-18 — native automatic source-attention strategy
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync NATIVE-SOURCE-ATTENTION-ROWS-20261018.
+
+Outcome: Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-SOURCE-ATTENTION-ROWS-20261018.
+
+Ordinary source VJP now requests automatic policy from native MLIR. The native
+projector uses actual Q/K/V roles and selects five-member row correction when
+logical normalization rows>=32, D>=32, Sk>=4 and Dv>=4; otherwise it retains
+the four-member inline program. Python does not select physical strategy.
+Explicit rows remains authoritative; no-auto v1 meanings remain unchanged.
+Portable replay validates scoped module UnitAttr intent and the sealed selected
+ABI without invoking a compiler or duplicating native scheduling policy.
+
+The six-backend LLVM/MLIR23.1.1 compiler passes 120 native/portable cases and
+the 81-case offline suite; overlapping reruns are not summed. Twenty saved
+programs / ninety members retain byte-identical Graph, Schedule, Tile, Target
+and native stages. The full production compiler-route lane passes 2,176 tests
+with none skipped. Owning RTX5070 proof covers 91 unique source/public/primal/
+stream/recovery cases, including four small/wide fresh-process replays with
+compiler and subprocess access disabled.
+
+Two public A/B orders compare against merged PR988's direct retained-owner
+frontend with identical inputs and unchanged normalization/forward images.
+Each order has ten format/profile rows, twenty-one samples, eight calls/arm.
+Completed public control/candidate ratios across FP16/BF16 and both orders:
+small 0.952-1.008x, tall 1.562-1.715x, D257 3.528-3.818x, medium 3.998-4.070x,
+long 11.079-11.577x. Small images are identical; mixed host variation stays in
+the raw packet. These are completed public calls, not isolated kernel speedups.
+Stage/device windows may include enqueue gaps. Boundary/corner measurements
+retain their earlier explicit compiler identity.
+
+Evidence: benchmarks/baselines/native_source_attention_auto_20261018/README.md.
+The explicit prepared packet remains a historical e63eb93f/B29 checkpoint.
+Final local gates pass: 30,752 CPU tests with 3,721 declared skips and no
+failures; 33 generated documents, all five surface audits, zero-error mypy,
+scoped Ruff and all forty archived-program offline restores pass.
+Remaining: public CI/review gates. Wider dynamic,
+bias/dropout/layout/AD/encoded envelopes and all five aggregate programs remain
+open. No quantized attention or sibling physical admission is implied.
+
+<!-- entry-fields:end -->

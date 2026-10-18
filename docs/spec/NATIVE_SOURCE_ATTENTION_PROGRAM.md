@@ -205,3 +205,63 @@ remaining attention/ROCm/NVFP4/performance programs and publication are still
 open. Final WSL CPU and production compiler-route validation pass 30,752
 (with 3,721 declared skips) and 2,079 tests respectively; every selected
 compiler proof executes. None of the five aggregate slices is closed here.
+
+## Explicit source row-correction program, version 2
+
+A UnitAttr module field tessera.native.source_attention_reverse_rows_request,
+together with the original reverse request, selects the explicit v2 native
+program. Malformed or unattached rows requests refuse. The native plan schema
+is tessera.native.source_attention_reverse.v2; its kind is
+norm_attention_saved_reverse_rows. Existing v1/default behavior is unchanged.
+
+| Member | Inputs by buffer ID | Outputs |
+| --- | --- | --- |
+| Normalization | Original Q | 5: normalized Q |
+| Saved forward | 5, original K/V | 6: O; 7: FP32 LSE |
+| Row correction | dO, 5, original K/V, 7, dLSE | 8: private FP32 row |
+| Compact backward | dO, 5, original K/V, 7, 8 | 9: dQn; 10: dK; 11: dV |
+| Source pullback | Original Q, 9 | 12: source dQ |
+
+The shared native projector derives row/consumer operations from the actual
+generated checkpoint adjoint. Rounded saved O is not consumed by the correction.
+Original argument/result permutations, both seeds and requested gradient order
+keep their meaning. The native plan stays artifact_only until compiled and
+executed; it is not itself device proof.
+
+Portable schema tessera.nvidia.source_attention_reverse_program.v2 binds the
+thirteen buffers and five typed calls. Its step ABI version is v2. Parameter
+counts are 4/12/14/16/5; blocks are 128/128/32/128/128. Row storage is FP32.
+The row grid is ceil(B*Hq*Sq/32); compact backward uses a packed grid over the
+three gradient element counts. All remaining physical/semantic checks from v1
+still apply. Offline restore acquires neither compiler nor CUDA provider.
+
+The additive source_attention_reverse_rows prepare/invoke/last_times native
+exports retain one owner and stream for all five members. Old and new timing
+ABIs cannot be interchanged. Six timing floats describe normalization, forward,
+row correction, backward, source pullback and full device window; these windows
+may include enqueue gaps and are separate from completed host/end-to-end cost.
+The existing source close export releases either source owner.
+
+The current prepared/portable execution scope remains static homogeneous
+FP16/BF16, unbiased zero-dropout attention. The subsequent native automatic
+policy is specified below; broader derivatives/layouts remain separate gates. No FP8/MXFP8/
+MXFP4 attention storage or sibling physical route is promoted by this change.
+
+## Native automatic source strategy
+
+The public source-VJP frontend adds the UnitAttr module field
+tessera.native.source_attention_reverse_auto_request alongside the original
+source reverse request. Native projection selects from actual typed Q/K/V:
+product(Q prefix)>=32, D>=32, Sk>=4 and Dv>=4 selects v2; otherwise v1.
+Explicit rows overrides auto. A policy request without the original reverse
+request, or with a non-UnitAttr value, is invalid. No-auto v1 meanings and
+exported ABI remain unchanged.
+
+Portable restore checks the canonical module attribute dictionary. Text in
+strings or function attributes cannot authorize v2. It accepts either sealed
+native-selected variant with valid auto intent, without rerunning scheduling,
+compilation or provider acquisition. This architecture-specific measured
+strategy does not promise improvement for every shape. Native boundary and
+role/permutation tests cover both formats. Public correctness, timing and
+four-/five-member fresh-process proof are recorded in
+benchmarks/baselines/native_source_attention_auto_20261018/README.md.

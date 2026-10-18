@@ -13,6 +13,10 @@ from .rocm_native import _tool_digest
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
 SCHEMA = "tessera.native.source_attention_reverse.v1"
+_SCHEMA_KINDS = {
+    SCHEMA: "norm_attention_saved_reverse",
+    "tessera.native.source_attention_reverse.v2": "norm_attention_saved_reverse_rows",
+}
 _ATTRIBUTE = "tessera.native.source_attention_reverse_program_json"
 
 
@@ -29,8 +33,9 @@ class NativeSourceAttentionReverse:
         if len(records) != 1:
             raise ValueError("native source-attention reverse requires one native plan")
         plan = json.loads(base64.b64decode(records[0], validate=True))
-        if (not isinstance(plan, dict) or plan.get("schema") != SCHEMA
-                or plan.get("kind") != "norm_attention_saved_reverse"
+        if (not isinstance(plan, dict) or not isinstance(plan.get("schema"), str)
+                or plan["schema"] not in _SCHEMA_KINDS
+                or plan.get("kind") != _SCHEMA_KINDS[plan["schema"]]
                 or plan.get("execution_state") != "artifact_only"
                 or plan.get("target") != "nvidia_sm120" or plan.get("architecture") != "sm_120"):
             raise ValueError("native source-attention reverse plan contract differs")

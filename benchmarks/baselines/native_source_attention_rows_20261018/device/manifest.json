@@ -1,0 +1,23 @@
+{
+  "scope": "actual RTX5070 v1/v2 execution, 40 source numerical/stream/recovery plus 49 portable/public/primal controls",
+  "unique_cases": 89,
+  "fresh_v2_formats": [
+    "bf16",
+    "f16"
+  ],
+  "files_sha256": {
+    "device-identities.txt": "32483e06c8b3c0cf70e75eb8d355679c3b54ca2a9b06472bcab299c57c068dbe",
+    "device.txt": "77d7356f865420f3422d86a90e12ca166cb86e2fc9bcafb2762f50298bfd9ac7",
+    "portable-bf16-artifact.json.gz": "1223c49132a222a25e3e327cc0530268b2d24fb8d1d134ea6e3b95463cc774f6",
+    "portable-bf16-outputs.npz": "c3de2605669130f186b6ca51b200e3dcae414722c92efe37bd276b300ffa5cf1",
+    "portable-bf16-roots.npz": "8cc45eac8d0a7d55c84b963a36ed01b0cb1a4ae8cb72aaae3f050149033ffb37",
+    "portable-f16-artifact.json.gz": "ae8db088958d43950a59dd69bc63be4ee2c4159bfc3d66c889f582bfc06ef3c3",
+    "portable-f16-outputs.npz": "8f48392e0a5d7e8d39154e08ff04832ff06ddfd4d82c8d7c4197cb2a33615287",
+    "portable-f16-roots.npz": "92c2ae84d5790fb9853325497cc3cec5f6c85dcfb755b13ccbb9774c94b033d7",
+    "provider-build.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "sm120-portable-adjacent.txt.gz": "745665917a3c1733eed8cb4e0ac70083b0a9b1b3642b5b12646b8b8aa37c98df",
+    "sm120-portable-adjacent.xml.gz": "b55b8d1b72471a5b267e3ccf24f41fedcbd3b62fcb89230463a875571e3ae129",
+    "sm120-source-rows.txt.gz": "2b3c7a3f538d1bccaf7fd330c5d9e7622edfca2c9e6c1e725b0dd46579c9bae4",
+    "sm120-source-rows.xml.gz": "d82a1e819ce9de3f9611ba40da06b5f4569b466ce0599ebaf6aab60a70bf93b4"
+  }
+}

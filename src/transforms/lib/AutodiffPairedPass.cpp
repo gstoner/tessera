@@ -1813,6 +1813,12 @@ public:
     bool exportSM120Reverse = module->hasAttr("tessera.native.sm120_reverse_request");
     bool exportSourceReverse = module->hasAttr("tessera.native.source_reverse_request");
     bool exportAttentionReverse = module->hasAttr("tessera.native.source_attention_reverse_request");
+    if ((module->hasAttr("tessera.native.source_attention_reverse_rows_request") ||
+         module->hasAttr("tessera.native.source_attention_reverse_auto_request")) && !exportAttentionReverse) {
+      module.emitError("source attention policy request requires the original source reverse request");
+      return signalPassFailure();
+    }
+
     std::string nativeReverseOriginalSource;
     if (unsigned(exportSM120Reverse) + unsigned(exportSourceReverse) + unsigned(exportAttentionReverse) > 1) {
       module.emitError("native reverse export requests are mutually exclusive");
@@ -2127,14 +2133,8 @@ private:
         builder.getFunctionType(argumentTypes, resultTypes));
     auto *block = fn.addEntryBlock();
     builder.setInsertionPointToStart(block);
-    mlir::OperationState state(backward->getLoc(), consumer ? "tessera_attn.checkpoint_backward_rows" : "tessera_attn.checkpoint_row_correction");
-    state.addOperands(block->getArguments());
-    state.addTypes(resultTypes);
-    state.addAttribute("scale", backward->getAttr("scale"));
-    state.addAttribute("causal", backward->getAttr("causal"));
-    state.addAttribute("bias", builder.getBoolAttr(bias));
-    state.addAttribute("lse_cotangent", builder.getBoolAttr(seeded));
-    auto *product = builder.create(state);
+    auto *product = tessera::attention_rows::createProjection(
+        builder, backward, block->getArguments(), resultTypes, consumer);
     mlir::func::ReturnOp::create(builder, backward->getLoc(), product->getResults());
     llvm::SmallVector<mlir::Attribute> args;
     llvm::SmallVector<llvm::StringRef> names{"dO", "q", "k", "v"};

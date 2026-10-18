@@ -5,6 +5,85 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NATIVE-SOURCE-ATTENTION-AUTO-20261018 — public native strategy
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-SOURCE-ATTENTION-ROWS-20261018.
+
+Ordinary source VJP now requests automatic policy from native MLIR. The native
+projector uses actual Q/K/V roles and selects five-member row correction when
+logical normalization rows>=32, D>=32, Sk>=4 and Dv>=4; otherwise it retains
+the four-member inline program. Python does not select physical strategy.
+Explicit rows remains authoritative; no-auto v1 meanings remain unchanged.
+Portable replay validates scoped module UnitAttr intent and the sealed selected
+ABI without invoking a compiler or duplicating native scheduling policy.
+
+The six-backend LLVM/MLIR23.1.1 compiler passes 120 native/portable cases and
+the 81-case offline suite; overlapping reruns are not summed. Twenty saved
+programs / ninety members retain byte-identical Graph, Schedule, Tile, Target
+and native stages. The full production compiler-route lane passes 2,176 tests
+with none skipped. Owning RTX5070 proof covers 91 unique source/public/primal/
+stream/recovery cases, including four small/wide fresh-process replays with
+compiler and subprocess access disabled.
+
+Two public A/B orders compare against merged PR988's direct retained-owner
+frontend with identical inputs and unchanged normalization/forward images.
+Each order has ten format/profile rows, twenty-one samples, eight calls/arm.
+Completed public control/candidate ratios across FP16/BF16 and both orders:
+small 0.952-1.008x, tall 1.562-1.715x, D257 3.528-3.818x, medium 3.998-4.070x,
+long 11.079-11.577x. Small images are identical; mixed host variation stays in
+the raw packet. These are completed public calls, not isolated kernel speedups.
+Stage/device windows may include enqueue gaps. Boundary/corner measurements
+retain their earlier explicit compiler identity.
+
+Evidence: benchmarks/baselines/native_source_attention_auto_20261018/README.md.
+The explicit prepared packet remains a historical e63eb93f/B29 checkpoint.
+Final local gates pass: 30,752 CPU tests with 3,721 declared skips and no
+failures; 33 generated documents, all five surface audits, zero-error mypy,
+scoped Ruff and all forty archived-program offline restores pass.
+Remaining: public CI/review gates. Wider dynamic,
+bias/dropout/layout/AD/encoded envelopes and all five aggregate programs remain
+open. No quantized attention or sibling physical admission is implied.
+
+Not applicable to gfx1151/gfx1201 physical execution: no HIP/WMMA schedule, dtype, numeric policy or runtime ABI changes. Shared native projection compatibility is validated; ROCm route/performance obligations remain separate.
+
+## NATIVE-SOURCE-ATTENTION-ROWS-20261018 — explicit checkpoint history
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-SOURCE-ATTENTION-ROWS-20261018.
+Base: PR988 merged as 65b8fb663 after all required CI and clean exact-head review.
+
+An explicit UnitAttr source rows request projects the actual generated
+checkpoint adjoint through a shared native semantic projector. Native plan v2
+contains five typed calls and thirteen buffers: normalization, saved forward,
+FP32 row correction, compact backward and the source normalization pullback.
+The row buffer remains private until its consumer completes; rounded saved O
+is not a row-correction input. The four-member v1/default meanings are retained.
+
+All members pass Graph/Schedule/Tile/Target/NVVM/PTX. The retained C++ owner
+uses normalized Q in both row correction and attention, orders producer streams,
+and reports five stage windows plus the full device window through additive
+versioned exports. Offline v2 replay checks exact calls, lifetimes, policies,
+parameter widths and launch geometry before provider acquisition.
+
+The matching LLVM/MLIR23.1.1 six-backend compiler passes 84 native/portable
+cases, included in a 388-case diagnostic/pass/contract gate. Type checking has
+zero errors. Owning RTX5070 passes 89 distinct cases across v1/v2 source
+gradients/stream and recovery (40), v2 fresh-process plus existing public
+reverse and source-forward controls (49). Compiler-disabled child replay
+forbids all external subprocess calls. These counts do not add overlapping
+reruns. Both composed timing orders preserve identical program/image identities.
+Prepared end-to-end ratios are 1.93–2.02x tall, 4.78–4.86x D257,
+5.30–5.64x medium and 12.60–14.36x long. Small profiles are flat to fifteen
+percent slower, so no universal selector promotion follows.
+
+Remaining: native selection policy and ordinary public integration for that
+policy, public matched A/B, complete documentation/testing gates and
+one focused PR. Dynamic/bias/dropout/layout and wider AD/quantized envelopes
+and all five aggregate programs remain open.
+
+Not applicable to gfx1151/gfx1201 physical execution: this is a CUDA attention policy/ABI. Shared native projection compatibility is assessed; no HIP or WMMA schedule, dtype or numerical admission changes. ROCm follow-ups and exact-device gates remain separate.
+
 ## NATIVE-ATTENTION-SOURCE-REVERSE-20261018 — public source VJP
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

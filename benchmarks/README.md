@@ -432,3 +432,19 @@ Captured member, native program-event, prepared host, completed portable and
 ordinary public native_backward call timings are separate. Both exact AMD targets
 execute the named host-root public route; wider envelopes remain follow-ups. The shared finite-regime oracle is
 math/source_reverse_reference.py.
+
+### Native source attention row correction
+
+- nvidia/benchmark_source_attention_rows.py records matched four/five-member
+  original-source AD programs on RTX5070, with independent numerical checks,
+  raw alternating samples and separate stage/program/native host/end-to-end
+  timing. It includes small, tall and wider half-storage profiles.
+
+### Native source-attention automatic-policy controls (2026-10-18)
+
+The packet at benchmarks/baselines/native_source_attention_auto_20261018/
+preserves measure_policy_boundaries and measure_policy_corner for the native
+threshold experiments, and public_inline_control for the merged PR988 direct
+retained-owner control. benchmark_public_source_attention_reverse produces
+the two-order public timing packets. These controls belong to
+NATIVE-SOURCE-ATTENTION-ROWS-20261018 and do not close the aggregate programs.

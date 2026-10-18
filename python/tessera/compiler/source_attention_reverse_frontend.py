@@ -59,7 +59,8 @@ def execute(jit, module, args, kwargs, cotangents, declaration):
         raise TesseraJitError("certified source attention reverse differs from its declared profile")
     projected = replace(module, module_attrs={**module.module_attrs,
         "tessera.target": '"nvidia_sm120"', "tessera.arch": '"sm_120"',
-        "tessera.native.source_attention_reverse_request": "unit"})
+        "tessera.native.source_attention_reverse_request": "unit",
+        "tessera.native.source_attention_reverse_auto_request": "unit"})
     source = projected.to_mlir(target="nvidia_sm120", canonical=True)
     key = (declaration.family, source)
     if jit._native_prepared_vjp_pid is not None and jit._native_prepared_vjp_pid != os.getpid():

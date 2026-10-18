@@ -482,7 +482,7 @@ Current increment: checked rank-four broadcast saved-LSE packages and private ta
   independent parity, allocation ownership, zero spills, and separate
   producer/consumer event times. Generic legacy tensor-valued Tile producers
   remain open.
-- Latest: [2026-10-18 — native public source-attention reverse](INTEGRATED_COMPILER_LOG.md#2026-10-18--native-public-source-attention-reverse)
+- Latest: [2026-10-18 — native automatic source-attention strategy](INTEGRATED_COMPILER_LOG.md#2026-10-18--native-automatic-source-attention-strategy)
 - Integration follow-through: zero-error Python type gate restored; bounded frontend lifetime, strict metadata and native stage lineage guards have 125 focused WSL regressions. General producer composition and wider dtype/layout/AD envelopes remain open.
 - Current RHS increment: static fp16/BF16 RMSNorm KxN output feeds typed matmul B through checked row-major packages. Exact RTX 5070 complete/ragged cases validate private resident lifetime and separate producer/consumer dispatch windows. FP8, MXFP8 and MXFP4 remain mandatory before strategy/default selection.
 - Census recheck (2026-10-02): both historical tensor/async-copy constructors

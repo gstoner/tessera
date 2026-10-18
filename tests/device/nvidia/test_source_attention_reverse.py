@@ -19,12 +19,15 @@ from tests.unit.test_native_attention_prefix_program import (
 pytestmark = pytest.mark.hardware_nvidia
 
 
-def source(roots, variant, requested):
+def source(roots, variant, requested, *, rows=False):
     function = {"normal": prefix_attention, "permuted": prefix_attention_permuted,
                 "swapped": prefix_attention_swapped_outputs}[variant]
     text = trace(function, roots)
     text = text.replace("module attributes {",
                         "module attributes {tessera.native.source_attention_reverse_request = unit, ", 1)
+    if rows:
+        text = text.replace("module attributes {",
+                            "module attributes {tessera.native.source_attention_reverse_rows_request = unit, ", 1)
     index = text.index("attributes {", text.index("func.func @")) + len("attributes {")
     return text[:index] + ('tessera.autodiff = "reverse", tessera.autodiff.wrt_indices = '
                           + str(list(requested)) + ", ") + text[index:]
@@ -44,13 +47,14 @@ def oracle(q, k, v, do, dlse):
     return (dq.astype(q.dtype), gradients[1].astype(k.dtype), gradients[2].astype(v.dtype))
 
 
+@pytest.mark.parametrize("rows", [False, True])
 @pytest.mark.parametrize("storage", ["f16", "bf16"])
 @pytest.mark.parametrize("variant,requested,profile", [
     ("normal", (0, 1, 2), "random"), ("permuted", (2, 0), "random"),
     ("swapped", (2, 0, 1), "random"), ("normal", (0, 1, 2), "zero"),
     ("normal", (0,), "tiny"), ("normal", (0, 1, 2), "wide"),
     ("normal", (0, 1, 2), "rows136")])
-def test_source_reverse_original_roots_and_both_cotangents(storage, variant, requested, profile, monkeypatch):
+def test_source_reverse_original_roots_and_both_cotangents(storage, variant, requested, profile, rows, monkeypatch):
     assert rt._nvidia_device_name() == "sm_120", "owning SM120 device required"
     dtype = np.float16 if storage == "f16" else ml_dtypes.bfloat16
     sq, sk, d, dv = (17, 19, 257, 13) if profile == "wide" else (
@@ -72,10 +76,10 @@ def test_source_reverse_original_roots_and_both_cotangents(storage, variant, req
     expected = oracle(q, k, v, do, dlse)
     expected = (expected[2], expected[0], expected[1]) if variant == "permuted" else expected
     expected = tuple(expected[i] for i in requested)
-    with PreparedSourceAttentionReverse(export_native_source_attention_reverse(source(roots, variant, requested))) as owner:
+    with PreparedSourceAttentionReverse(export_native_source_attention_reverse(source(roots, variant, requested, rows=rows))) as owner:
         first = owner(*values)
         assert owner.receipt["execution_kind"] == "native_gpu"
-        assert len(owner.receipt["stage_device_ms"]) == 4
+        assert len(owner.receipt["stage_device_ms"]) == (5 if rows else 4)
         for actual, ref in zip(first, expected, strict=True):
             np.testing.assert_allclose(actual.astype(np.float32), ref.astype(np.float32),
                                        rtol=.03 if storage == "bf16" else .006,
@@ -110,9 +114,10 @@ def test_source_reverse_original_roots_and_both_cotangents(storage, variant, req
         owner(*values)
 
 
+@pytest.mark.parametrize("rows", [False, True])
 @pytest.mark.parametrize("storage", ["f16", "bf16"])
 @pytest.mark.parametrize("mode", ["different", "legacy", "per_thread"])
-def test_source_reverse_waits_pending_writes_and_recovers_after_rejection(storage, mode):
+def test_source_reverse_waits_pending_writes_and_recovers_after_rejection(storage, mode, rows):
     from tests.device.nvidia.test_ordered_resident_tensor_dag import Borrowed, queue_delayed_upload
     assert rt._nvidia_device_name() == "sm_120"
     dtype = np.float16 if storage == "f16" else ml_dtypes.bfloat16
@@ -121,7 +126,7 @@ def test_source_reverse_waits_pending_writes_and_recovers_after_rejection(storag
     values = tuple(rng.normal(0, .2, shape).astype(np.float32 if i == 4 else dtype)
                    for i, shape in enumerate(shapes))
     with PreparedSourceAttentionReverse(export_native_source_attention_reverse(
-            source(values[:3], "normal", (0, 1, 2)))) as owner, ExitStack() as stack:
+            source(values[:3], "normal", (0, 1, 2), rows=rows))) as owner, ExitStack() as stack:
         expected = owner(*values)
         sessions = tuple(stack.enter_context(NvidiaDeviceSession()) for _ in values)
         resident = tuple(s.upload(np.zeros_like(v)) for s, v in zip(sessions, values, strict=True))
@@ -140,7 +145,7 @@ def test_source_reverse_waits_pending_writes_and_recovers_after_rejection(storag
         wrong = (ct.c_size_t * 5)(*(v.nbytes for v in values))
         wrong[0] -= 2
         guarded = tuple(np.full_like(v, 23) for v in expected)
-        status = owner._lib.tessera_nvidia_source_attention_reverse_invoke(
+        status = getattr(owner._lib, owner._api + "invoke")(
             owner._handle, (ct.c_void_p * 5)(*(v.ctypes.data for v in values)), wrong, 5, None, 0,
             (ct.c_void_p * 3)(*(v.ctypes.data for v in guarded)),
             (ct.c_size_t * 3)(*(v.nbytes for v in guarded)), 3)

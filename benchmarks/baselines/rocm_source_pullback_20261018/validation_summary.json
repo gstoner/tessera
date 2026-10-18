@@ -1,0 +1,146 @@
+{
+  "schema": "tessera.rocm.source_pullback_evidence.v1",
+  "base_revision": "7f0bbc69df809e11fa9ebe67b323d53af933fd1e",
+  "synchronization_key": "ROCM-SOURCE-PULLBACK-20261018",
+  "source_binding": "source_sha256.json",
+  "compiler_binary_sha256": "a1245c1d4210f26ef5f99c4ca930e53a0ac1ece8241b6ec582827eb209ade27d",
+  "code_and_compiler_unchanged_through_cpu_lane": true,
+  "gates": {
+    "cpu": {
+      "passed": 30706,
+      "skipped": 3724,
+      "failed": 0,
+      "junit_sha256": "cb02b11097bc44ea4183b7f7753bd0d4c5c5d6fe74a391778b3d0b1a32b72277"
+    },
+    "compiler_route": {
+      "passed": 1983,
+      "skipped": 0,
+      "failed": 0,
+      "junit_sha256": "b894054ad6cdd337ebdf678293473903ebc154123c7e058a9f7b6061a7d2a34a"
+    },
+    "gfx1201_device": {
+      "passed": 106,
+      "skipped": 0,
+      "failed": 0,
+      "junit_sha256": "9f233c309abdd21a75d61fb75a9d12161b5fd73784683be76394c8075f2e6b1d"
+    },
+    "gfx1151_device": {
+      "passed": 106,
+      "skipped": 0,
+      "failed": 0,
+      "junit_sha256": "eb045d956553847b658b7a77da76340bc659a7aed135a480cacd52c5b9762d87"
+    },
+    "sm120_sibling": {
+      "passed": 167,
+      "skipped": 0,
+      "failed": 0,
+      "junit_sha256": "e363fa5a62b98d4c97e0759f520f2808ff0cd9be08aadaa847720fa069aa3b94"
+    }
+  },
+  "focused_compiler_registry_passed": 566,
+  "affected_failure_regression_passed": 1145,
+  "public_doc_registry_passed": 64,
+  "mypy_errors": 0,
+  "ruff": "passed",
+  "surface_audits": {
+    "examples": 0,
+    "benchmarks": 0,
+    "research": 0,
+    "tools": 0,
+    "tests": 0,
+    "claims": 0
+  },
+  "nvidia_identical_member_stages": 40,
+  "timing_domains": {
+    "public_warm_completed": "ordinary certified native_backward with retained native owner; first call follows image priming",
+    "captured_member": "device graph member dispatch; capture/instantiate outside region",
+    "native_program_event": "native stream launch-loop event window, already divided by repeats; may include enqueue gaps",
+    "prepared_update_invoke_read": "completed host root refresh plus native invoke/read",
+    "completed_portable_call": "completed deserialize/validate/prepare/invoke/read/close host call"
+  },
+  "portable_programs": [
+    {
+      "file": "programs/gfx1201_bf16_original.json.xz",
+      "compressed_sha256": "e188e5059d6abf219446bf2ef7ea8c17367e55fec3b7178b9e22edf632042472",
+      "json_sha256": "5b9cb7865b61cce43781c953238ea35fd3270600bf5d64804445f79b199c1e9b",
+      "architecture": "gfx1201",
+      "payload_sha256": [
+        "219e436000af5aa3d9dfdcbd96ad8c75eaea0d3d6c3c515ab776966027d7af9d",
+        "cb65cf707c2b1656671d52c927001a8051b2c9c2e798f9efbd560d2c931916bd"
+      ]
+    },
+    {
+      "file": "programs/gfx1201_bf16_permuted.json.xz",
+      "compressed_sha256": "4bc856cd8fdc0d8b6ce3f16cbcebb8bdce70fe683bb87bfa26cff9c188ec3f5c",
+      "json_sha256": "7df551cf6b455877dbc9931ec2c2c6896f7e3521e7b667ba493f5b311619a1d0",
+      "architecture": "gfx1201",
+      "payload_sha256": [
+        "219e436000af5aa3d9dfdcbd96ad8c75eaea0d3d6c3c515ab776966027d7af9d",
+        "cb65cf707c2b1656671d52c927001a8051b2c9c2e798f9efbd560d2c931916bd"
+      ]
+    },
+    {
+      "file": "programs/gfx1201_f16_original.json.xz",
+      "compressed_sha256": "983b3b3e7224d93aa9767f7698a43c5c31f357121fc2cccf2f4d9e66961e0792",
+      "json_sha256": "0ba2b06d8875c30fd03920ce6b45e442dc050b8b31fa3b814e7497e3455dfda2",
+      "architecture": "gfx1201",
+      "payload_sha256": [
+        "1ee45ab5ca7cfab6da37679d22a0bd70e424c22e5322966952577e2af0c7efad",
+        "efe732ed4a7e447af411f8651c4a4f978db75a0537f3297756d7aa00d403c712"
+      ]
+    },
+    {
+      "file": "programs/gfx1201_f16_permuted.json.xz",
+      "compressed_sha256": "8fa98868aa8f75c89e007a5c47f4da68c601d4657ea5385021dc0b355d779e36",
+      "json_sha256": "30d8c072d1597335a7c9d5265532fdabd58e4371afd265c07d002779a22ba228",
+      "architecture": "gfx1201",
+      "payload_sha256": [
+        "1ee45ab5ca7cfab6da37679d22a0bd70e424c22e5322966952577e2af0c7efad",
+        "efe732ed4a7e447af411f8651c4a4f978db75a0537f3297756d7aa00d403c712"
+      ]
+    },
+    {
+      "file": "programs/gfx1151_bf16_original.json.xz",
+      "compressed_sha256": "944be194c041bedbae8159b8a4ac1b3d74dcd80eb9a8b33b88c4af7ed42783ba",
+      "json_sha256": "11857bff5b0f5d14947babf4f04f3d809ba5f2b50b3bc306343232397754f3f3",
+      "architecture": "gfx1151",
+      "payload_sha256": [
+        "4750cdfe594fb11f2205a947dcbd34aac60d93a81bb0ab09ea6ea2c6da586b2e",
+        "df6ba48913c293811562dfa11869095f0e7163754bcd57abad6b7947f48aa596"
+      ]
+    },
+    {
+      "file": "programs/gfx1151_bf16_permuted.json.xz",
+      "compressed_sha256": "a1b19c565826765881265d574ded4f42f6c0bb8f9926ccbcbfcb66130e76d796",
+      "json_sha256": "860e9f219174ffc2f9eac725cae739c1c822a60a384b931874f480f8754e5127",
+      "architecture": "gfx1151",
+      "payload_sha256": [
+        "4750cdfe594fb11f2205a947dcbd34aac60d93a81bb0ab09ea6ea2c6da586b2e",
+        "df6ba48913c293811562dfa11869095f0e7163754bcd57abad6b7947f48aa596"
+      ]
+    },
+    {
+      "file": "programs/gfx1151_f16_original.json.xz",
+      "compressed_sha256": "f648021432b295d203861eaec14ecaafaabdb0254c4a8a011189f4f2e6aee373",
+      "json_sha256": "0412b84947263c8f9a0415476f17187b2a11e52b90fd7e37ea6b9b2170bb857f",
+      "architecture": "gfx1151",
+      "payload_sha256": [
+        "83f45c4f449c27eeb20023b379eb343c37e9736ce281501cc0dce97370e982df",
+        "63ce54af27e2886694b79543e94efecc601b45b21c018a7f7a83a26367f069e6"
+      ]
+    },
+    {
+      "file": "programs/gfx1151_f16_permuted.json.xz",
+      "compressed_sha256": "84f6d5f8a8e7ed1d2dcfbd217c9d6d106db2a95c09ffd7ac185099444def1339",
+      "json_sha256": "6f09572018e961a91138e2f81ff561a07e40252e0a01c37561068a3d85bae194",
+      "architecture": "gfx1151",
+      "payload_sha256": [
+        "83f45c4f449c27eeb20023b379eb343c37e9736ce281501cc0dce97370e982df",
+        "63ce54af27e2886694b79543e94efecc601b45b21c018a7f7a83a26367f069e6"
+      ]
+    }
+  ],
+  "aggregate_five_slice_state": "open",
+  "measurement_source_binding": "measured_source_sha256.json",
+  "post_validation_format_edit": "source_format_reconciliation.json"
+}

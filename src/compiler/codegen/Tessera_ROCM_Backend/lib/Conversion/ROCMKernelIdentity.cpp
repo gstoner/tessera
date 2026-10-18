@@ -336,6 +336,8 @@ struct ProjectROCMKernelIdentityPass
       // Frontend selection intent must not duplicate that image cache key.
       projected->getOperation()->removeAttr("tessera.rocm.mxfp8_schedule");
     if (mathRecipe) projected->getOperation()->removeAttr("tessera.launch_bindings");
+    if (family == "scalar_matmul")
+      projected->getOperation()->removeAttr("tessera.native.scalar_matmul_frame_json");
     auto sourceBatching = kernel->getAttrOfType<StringAttr>("batching");
     if (arbitraryM && sourceBatching && sourceBatching.getValue() == "broadcast") {
       kernel->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: arbitrary-M projection requires an unbatched matrix");
@@ -408,6 +410,8 @@ struct ProjectROCMKernelIdentityPass
     if (family == "scaled_matmul" || family == "scaled_matmul_lds")
       module->removeAttr("tessera.rocm.mxfp8_schedule");
     if (mathRecipe) module->removeAttr("tessera.launch_bindings");
+    if (family == "scalar_matmul")
+      module->removeAttr("tessera.native.scalar_matmul_frame_json");
     module.getBody()->clear();
     module.getBody()->push_back(copy->clone());
   }

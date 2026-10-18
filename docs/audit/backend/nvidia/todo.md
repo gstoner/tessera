@@ -6,6 +6,17 @@ target: nvidia_sm120
 last_updated: 2026-10-18
 ---
 
+## ROCM-SOURCE-PULLBACK-20261018 — native public source VJP
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Synchronization key: ROCM-SOURCE-PULLBACK-20261018. Base: merged PR985.
+
+Owning implementation and proof boundary: [native ROCm source pullback](../../../spec/ROCM_SOURCE_PULLBACK.md).
+
+Shared composite certification dispatch now selects architecture-owned native owners. NVIDIA numerical behavior and row schemas 1/6 are unchanged; all forty final native member-stage identities remain byte-identical. The final matching RTX5070 gate passes 167 compiler/device/portable cases. No NVIDIA physical schedule or datatype promotion.
+
+All five original aggregate slices remain open.
+
 ## ROCM-MIXED-SCALAR-CONTRACTION-20261018 — native mixed adjoint consumer
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

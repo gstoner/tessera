@@ -190,6 +190,7 @@ def validate_native_vjp_execution_certificate(
         "x86": "x86_avx512",
         "rocm": "gfx1151",
         "rocm_gfx1201": "gfx1201",
+        "rocm_gfx1151": "gfx1151",
         "nvidia_sm120": "sm_120",
         "apple_gpu": "apple7",
     }.get(str(body.get("target", "")))
@@ -239,6 +240,7 @@ def _record_execution_certificate(
         "x86": "x86_avx512",
         "rocm": "gfx1151",
         "rocm_gfx1201": "gfx1201",
+        "rocm_gfx1151": "gfx1151",
         "nvidia_sm120": "sm_120",
         "apple_gpu": "apple7",
     }.get(target)

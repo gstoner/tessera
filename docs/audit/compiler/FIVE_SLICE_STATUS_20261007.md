@@ -3,6 +3,22 @@ last_updated: 2026-10-18
 audit_role: reference
 ---
 
+## Native public ROCm source pullback — 2026-10-18
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync ROCM-SOURCE-PULLBACK-20261018.
+Original static FP16/BF16 RMSNorm/ReLU/plain FP32-output matmul source VJP
+now executes through ordinary native_backward on exact gfx1151/gfx1201.
+Native paired AD, SSA members, schema-7 row Schedule/Tile/Target and compiled
+member frames feed a retained C++ HIP owner; Python does not rebuild derivatives.
+Both owning hosts pass 106 device cases, including 39 composed/public cases.
+The CPU lane passes 30,706 with 3,724 declared skips; compiler-route passes
+1,983 without skips. RTX5070 sibling regression passes 167, and forty native
+member-stage digests remain byte-identical. Ruff, zero-error mypy and surface
+audits pass. Public CI/review remain; all original aggregate slices stay open.
+[Evidence](../../../benchmarks/baselines/rocm_source_pullback_20261018/README.md).
+Contract: docs/spec/ROCM_SOURCE_PULLBACK.md.
+
 ## Native ROCm mixed contraction consumer — 2026-10-18
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

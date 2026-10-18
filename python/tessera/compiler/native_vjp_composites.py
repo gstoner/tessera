@@ -19,7 +19,7 @@ class CompositeVJP:
 
 
 def _matches_source(module, target, request):
-    if target != "nvidia_sm120":
+    if target not in {"nvidia_sm120", "rocm_gfx1151", "rocm_gfx1201"}:
         return False
     from .prepared_nvidia_active_source import candidate
     return candidate(module, request.wrt_indices)
@@ -28,8 +28,14 @@ def _matches_source(module, target, request):
 def _execute_source(jit, module, args, kwargs, cotangents, declaration):
     from tessera import runtime as rt
     from .effects import infer_graph_effects
-    from .nvidia_source_reverse_runtime import runtime_artifact
-    from .prepared_nvidia_source_reverse import PreparedSourceReverse
+    from .matmul_pipeline import normalize_target_kind
+    target = normalize_target_kind(jit.target)
+    rocm = target in {"rocm_gfx1151", "rocm_gfx1201"}
+    if rocm:
+        from .rocm_source_reverse_runtime import runtime_artifact, PreparedRocmSourceReverse
+    else:
+        from .nvidia_source_reverse_runtime import runtime_artifact
+        from .prepared_nvidia_source_reverse import PreparedSourceReverse
     ordered = jit._ordered_inputs(args, kwargs)
     if ordered is None:
         raise TesseraJitError("source reverse requires every primal root")
@@ -44,6 +50,8 @@ def _execute_source(jit, module, args, kwargs, cotangents, declaration):
     def traced_module(signature):
         cached = jit._traced_frontend_specializations.get(signature)
         return cached if cached is not None else jit._traced_autodiff_module(args, kwargs)
+    if rocm and any(resident):
+        raise TesseraJitError("ROCm source reverse currently requires host roots")
     if any(resident):
         if not all(resident):
             raise TesseraJitError("source reverse requires all CUDA roots or all host roots")
@@ -58,14 +66,15 @@ def _execute_source(jit, module, args, kwargs, cotangents, declaration):
     else:
         certificate = jit.frontend_differential(*args, **kwargs)
         module = traced_module(tuple((str(value.dtype), tuple(value.shape)) for value in ordered))
-    if not _matches_source(module, "nvidia_sm120", jit.differentiation_request):
+    if not _matches_source(module, target, jit.differentiation_request):
         raise TesseraJitError("certified source reverse Graph differs from its declared profile")
     # Only module attributes change. Share the verified function SSA without
     # mutating it; copying every Graph object on each call serves no contract.
     projected = replace(module, module_attrs={**module.module_attrs,
-        "tessera.target": '"nvidia_sm120"', "tessera.arch": '"sm_120"',
-        "tessera.native.sm120_reverse_request": "unit"})
-    source = projected.to_mlir(target="nvidia_sm120", canonical=True)
+        "tessera.target": '"' + target + '"',
+        "tessera.arch": '"' + (target.removeprefix("rocm_") if rocm else "sm_120") + '"',
+        ("tessera.native.source_reverse_request" if rocm else "tessera.native.sm120_reverse_request"): "unit"})
+    source = projected.to_mlir(target=target, canonical=True)
     key = (declaration.family, source)
     if jit._native_prepared_vjp_pid is not None and jit._native_prepared_vjp_pid != os.getpid():
         raise RuntimeError("retained native VJP cannot cross fork")
@@ -74,7 +83,7 @@ def _execute_source(jit, module, args, kwargs, cotangents, declaration):
             jit._native_prepared_vjp_pid = os.getpid()
         owner = jit._native_prepared_vjp_calls.get(key)
         if owner is None:
-            owner = PreparedSourceReverse(source)
+            owner = PreparedRocmSourceReverse(source, values) if rocm else PreparedSourceReverse(source)
             if len(jit._native_prepared_vjp_calls) >= 8:
                 retired = next(iter(jit._native_prepared_vjp_calls))
                 jit._native_prepared_vjp_calls.pop(retired).close()
@@ -92,10 +101,10 @@ def _execute_source(jit, module, args, kwargs, cotangents, declaration):
                          residual_policy="recompute_all", graph_consumer="tessera.rmsnorm",
                          schedule_consumer=declaration.schedule_consumer,
                          tile_consumer=declaration.tile_consumer,
-                         target_consumer=declaration.target_consumers["nvidia_sm120"],
+                         target_consumer=declaration.target_consumers[target],
                          frontend_certificate_digest=certificate.digest)
         return _record_execution_certificate(
-            declaration=declaration, source=module.functions[0].body[0], target="nvidia_sm120",
+            declaration=declaration, source=module.functions[0].body[0], target=target,
             ordered_inputs=ordered, out_cotangents=cotangents,
             result=NativeVJPResult(tuple(gradients), execution, artifact),
             frontend_certificate=certificate)
@@ -105,7 +114,10 @@ _SOURCE_DECLARATION = NativeVJPPluginDeclaration(
     family="source_normalization_matmul",
     graph_consumers=("tessera.rmsnorm", "tessera.relu", "tessera.matmul"),
     schedule_consumer="schedule.artifact", tile_consumer="tile.row_region_kernel",
-    target_consumers={"nvidia_sm120": "nvidia.sm120_source_reverse_program"})
+    target_consumers={
+        "nvidia_sm120": "nvidia.sm120_source_reverse_program",
+        "rocm_gfx1151": "rocm.gfx1151_source_reverse_program",
+        "rocm_gfx1201": "rocm.gfx1201_source_reverse_program"})
 _SOURCE_DECLARATION.validate()
 _COMPOSITES = {"source_normalization_matmul": CompositeVJP(
     _SOURCE_DECLARATION, _matches_source, _execute_source)}

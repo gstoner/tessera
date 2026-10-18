@@ -18,12 +18,12 @@ import subprocess
 import numpy as np
 from typing import Any, Protocol
 
-def _manifest(text: str, name: str) -> dict:
+def _manifest(text: str, name: str, *, expected_schema: int | str = 1) -> dict:
     values = re.findall(r'\b' + re.escape(name) + r'\s*=\s*"([A-Za-z0-9+/=]+)"', text)
     if len(values) != 1:
         raise ValueError(f"expected exactly one native {name} manifest")
     value = json.loads(base64.b64decode(values[0], validate=True))
-    if not isinstance(value, dict) or value.get("schema") != 1:
+    if not isinstance(value, dict) or value.get("schema") != expected_schema:
         raise ValueError("unsupported native scaled program manifest")
     return value
 

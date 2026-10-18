@@ -1,0 +1,9 @@
+{
+  "schema": "tessera.source_post_validation_format_edit.v1",
+  "path": "benchmarks/math/source_reverse_reference.py",
+  "before_sha256": "d06e0c462d05b6a5237b8197e331004ccda95df47983ad7dd4542e6b1e54f30b",
+  "after_sha256": "4cf7767abbe4e8f4b403ef7251a578cc7d3ae7fbb11429cf6a82d9c0a93e1314",
+  "edit": "remove one trailing blank line",
+  "identical_python_ast": true,
+  "reconstruct_measured_bytes": "current file bytes plus one newline byte"
+}

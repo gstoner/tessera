@@ -1,0 +1,88 @@
+{
+  "same": true,
+  "members": 8,
+  "stages_per_member": 5,
+  "compiler_binary_sha256": "a1245c1d4210f26ef5f99c4ca930e53a0ac1ece8241b6ec582827eb209ade27d",
+  "rows": [
+    {
+      "storage": "f16",
+      "permuted": false,
+      "stages": [
+        [
+          "c0a9384685a39cd76740e8fccbc7f8571ae2e8a0f396dbb8a31bb2df2d32ecff",
+          "5c76fe6df66dc273774a21176a460db1a52dc6f5a7957637735352befe4bbee3",
+          "272ba7a803d7ffdfb58a03a495698c505c044cc2bc07ea05793b1da5bf7b3784",
+          "d63d69c0265b6a2d14bf4f803fa1407db014ada44afd6cd96909728ac9c57841",
+          "d63d69c0265b6a2d14bf4f803fa1407db014ada44afd6cd96909728ac9c57841"
+        ],
+        [
+          "bec344a370a31bbf799b23af6ad3733d0e252f43ebf901b55c1cc0ad9a9e38d8",
+          "c86b53bcae605f6f3466933940d26e0720525f45139c9a1014875e6533d8ec76",
+          "5f993ab8e184ca147622767f3cd1605a0228ba192f5c7df3fd6814860d29e245",
+          "f5236059eb497b3549209ee7d90994bb7692b439d6859e22508ee48b82f77ea6",
+          "32a692daef990acd3ba70ba790be267c7f0cea0fb4c4a1070292ba7cd0c495c8"
+        ]
+      ]
+    },
+    {
+      "storage": "f16",
+      "permuted": true,
+      "stages": [
+        [
+          "8d9c7f7108fc895adf35dbcfb2ce8e8573625a354660681a5bbf6e8b3d76de99",
+          "1f37e5132980023e77baf0fcac8ff538f2d010c1253159f576e862b6a494bb3a",
+          "e9cfde2be7c361ea564cd69c6ba238005b10e3bde55f4aedf1ab4f951c823801",
+          "f5a48be221fe8434d43e915ddd6b8bb1be046e4243a02c8e1e115c62fcb2b28b",
+          "f5a48be221fe8434d43e915ddd6b8bb1be046e4243a02c8e1e115c62fcb2b28b"
+        ],
+        [
+          "c3a9aa5581bd1b82c10b8eaf02de96de0926dd47dbc08e38a9c13204fc759bbd",
+          "b5f03dbb7990a0183e2dacbb381a5c79630885ca96dbac834aa8a7c2e1885668",
+          "5f993ab8e184ca147622767f3cd1605a0228ba192f5c7df3fd6814860d29e245",
+          "f5236059eb497b3549209ee7d90994bb7692b439d6859e22508ee48b82f77ea6",
+          "32a692daef990acd3ba70ba790be267c7f0cea0fb4c4a1070292ba7cd0c495c8"
+        ]
+      ]
+    },
+    {
+      "storage": "bf16",
+      "permuted": false,
+      "stages": [
+        [
+          "8d0b66b23bbcc3f3a36e0001702c769701669510df7f133e36fe88b78945bae1",
+          "533b07ab65bdaf7017f0c49da40a4e35bf130da071c9ac52a57a0dbb407c5694",
+          "e009b906a3eb2685125346e54c1080d3fb7e3c3d3afdf67c2b2259ba3b2ab932",
+          "190e8cd9e2dec082b3e501a1a9161e163d1314cbb46ff005665fb63a0d56d991",
+          "190e8cd9e2dec082b3e501a1a9161e163d1314cbb46ff005665fb63a0d56d991"
+        ],
+        [
+          "3c590aca5e4318eee37c74653f58f3ed297be0aa11232c0734796c453eaf567c",
+          "82f4a3c5413dd1df89690215409a95ec0ae011c0011a5440f2a6305b5254812f",
+          "41d9109ede82a61c2a627355fdffe2e418191e3f669605b41baf93685dcb94d9",
+          "f7b69bc31995dee45a8d779db419bf549ddbfb095815438a0ed8949d52c948af",
+          "83127b0a2abebaf28844e38fa759208ec26fde508fa0010dc5013e5570c0bb03"
+        ]
+      ]
+    },
+    {
+      "storage": "bf16",
+      "permuted": true,
+      "stages": [
+        [
+          "c283bef5030ba571c12ec2a0560f9f2670bb13e7d65b3bf3c868bbb913ad9c15",
+          "6ab70f0975f492fe2e0612e1c1cd998feed1cdc6902f08017840cff078f57b4f",
+          "b8ddf8d766ec483da01f550d62b1955dd732297c4051692c5aac25fc5e0ed68c",
+          "5dec3fb8de7bfc1e44740329103f37434721e7a08b255f3c0fe7e1801b1890a1",
+          "5dec3fb8de7bfc1e44740329103f37434721e7a08b255f3c0fe7e1801b1890a1"
+        ],
+        [
+          "f325068c104abf3f4d788777bee264b821721293734fc0af664fb3eb6ccd645b",
+          "688f9e8d5228c02acc64a1b61a76460d161059b027abf7281adebde1232a8b8f",
+          "41d9109ede82a61c2a627355fdffe2e418191e3f669605b41baf93685dcb94d9",
+          "f7b69bc31995dee45a8d779db419bf549ddbfb095815438a0ed8949d52c948af",
+          "83127b0a2abebaf28844e38fa759208ec26fde508fa0010dc5013e5570c0bb03"
+        ]
+      ]
+    }
+  ]
+}

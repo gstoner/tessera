@@ -1,4 +1,4 @@
-// Native SSA outlining of the RMSNorm/ReLU source pullback.
+// Shared native SSA outlining of the RMSNorm/ReLU source pullback.
 // No derivative formula or executable kernel is reconstructed here.
 #pragma once
 #include "mlir/Interfaces/SideEffectInterfaces.h"
@@ -6,11 +6,11 @@
 #include <functional>
 
 namespace tessera {
-static mlir::LogicalResult emitNativeSM120ReverseProgram(
-    mlir::ModuleOp module, llvm::StringRef originalSource) {
+static mlir::LogicalResult emitNativeSourceReverseProgram(
+    mlir::ModuleOp module, llvm::StringRef originalSource, bool rocm = false) {
   using namespace mlir;
   auto reject = [&]() { return module.emitError(
-      "SM120 reverse outline requires the static explicit-fp32 RMSNorm/ReLU source pullback"); };
+      "native source reverse outline requires its owning static explicit-fp32 RMSNorm/ReLU pullback"); };
   auto target = module->getAttrOfType<StringAttr>("tessera.target");
   auto arch = module->getAttrOfType<StringAttr>("tessera.arch");
   SmallVector<func::FuncOp> functions;
@@ -20,8 +20,11 @@ static mlir::LogicalResult emitNativeSM120ReverseProgram(
     auto role = fn->getAttrOfType<StringAttr>("tessera.autodiff.role");
     if (role && role.getValue() == "backward") backward = fn;
   }
-  if (!target || target.getValue() != "nvidia_sm120" || !arch ||
-      arch.getValue() != "sm_120" || functions.size() != 2 || !backward ||
+  bool owningTarget = target && arch && (rocm
+      ? ((arch.getValue() == "gfx1151" || arch.getValue() == "gfx1201") &&
+         target.getValue() == (llvm::Twine("rocm_") + arch.getValue()).str())
+      : (target.getValue() == "nvidia_sm120" && arch.getValue() == "sm_120"));
+  if (!owningTarget || functions.size() != 2 || !backward ||
       !backward.getBody().hasOneBlock() || originalSource.empty()) return reject();
   auto parentRef = backward->getAttrOfType<FlatSymbolRefAttr>("tessera.autodiff.forward");
   auto parent = parentRef ? module.lookupSymbol<func::FuncOp>(parentRef.getValue()) : func::FuncOp{};
@@ -154,8 +157,8 @@ static mlir::LogicalResult emitNativeSM120ReverseProgram(
           auto cloned=body.clone(op,map); cloned->removeAttr("tessera.autodiff.activity");
         }
       func::ReturnOp::create(body,member.getLoc(),map.lookup(gradient));
-      member->setAttr("tessera.native.sm120_row_producer",builder.getDictionaryAttr({
-        builder.getNamedAttr("schema",builder.getI64IntegerAttr(6)),
+      member->setAttr(rocm ? "tessera.native.rocm_row_producer" : "tessera.native.sm120_row_producer",builder.getDictionaryAttr({
+        builder.getNamedAttr("schema",builder.getI64IntegerAttr(rocm ? 7 : 6)),
         builder.getNamedAttr("rows",builder.getI64IntegerAttr(m)),
         builder.getNamedAttr("columns",builder.getI64IntegerAttr(k)),
         builder.getNamedAttr("storage",builder.getStringAttr(source.getElementType().isF16()?"f16":"bf16")),
@@ -188,15 +191,16 @@ static mlir::LogicalResult emitNativeSM120ReverseProgram(
         {"ownership",i<3?"readonly_input":i==3?"private_scratch":"returned_output"},
         {"first_write",write},{"last_read",read}});
   }
-  llvm::json::Object plan{{"schema","tessera.native.sm120_source_reverse_outline.v1"},
+  llvm::json::Object plan{{"schema",rocm ? "tessera.native.rocm_source_reverse_outline.v1" : "tessera.native.sm120_source_reverse_outline.v1"},
     {"execution_state","artifact_only"},{"kind","paired_source_reverse"},
     {"source_graph_ir",originalSource.str()},{"paired_graph_ir",paired},
     {"root",backward.getSymName().str()},
     {"role_indices",llvm::json::Array{int64_t(x.getArgNumber()),int64_t(b.getArgNumber()),int64_t(2)}},
     {"buffers",std::move(buffers)},{"steps",std::move(steps)},
     {"outputs",llvm::json::Array{int64_t(4)}},{"member_graphs",std::move(graphs)}};
+  if (rocm) { plan["target"] = target.getValue().str(); plan["architecture"] = arch.getValue().str(); }
   std::string json;llvm::raw_string_ostream stream(json);stream<<llvm::json::Value(std::move(plan));stream.flush();
-  module->setAttr("tessera.native.sm120_reverse_program_json",
+  module->setAttr(rocm ? "tessera.native.rocm_reverse_program_json" : "tessera.native.sm120_reverse_program_json",
       builder.getStringAttr(llvm::encodeBase64(json)));
   return success();
 }

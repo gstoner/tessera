@@ -15,48 +15,7 @@ from tests.device.nvidia.test_ordered_resident_tensor_dag import queue_delayed_u
 pytestmark = pytest.mark.hardware_nvidia
 
 
-def inputs(storage, permuted, seed=87, witness=False):
-    import ml_dtypes
-    dtype = np.float16 if storage == "f16" else ml_dtypes.bfloat16
-    rng = np.random.default_rng(seed)
-    x = rng.normal(0, .75, (17, 35)).astype(dtype)
-    b = rng.normal(0, .2, (35, 19)).astype(dtype)
-    dy = rng.normal(0, .2, (17, 19)).astype(np.float32)
-    if witness:
-        b.fill(0)
-        b[:, :2] = 1
-        dy.fill(0)
-        dy[:, 0], dy[:, 1] = 1 + 2.0**(-12 if storage == "f16" else -9), -1
-    return (b, x, dy) if permuted else (x, b, dy)
-
-
-def oracle(roots, permuted):
-    x, b, dy = (roots[1], roots[0], roots[2]) if permuted else roots
-    xx, bb, seed = (v.astype(np.float64) for v in (x, b, dy))
-    wide = seed @ bb.T
-    # The native AD Graph stores the matmul adjoint to the primal half dtype.
-    edge = wide.astype(x.dtype).astype(np.float64)
-    g = np.where(xx > 0, edge, 0)
-    r = 1 / np.sqrt(np.mean(xx * xx, axis=1, keepdims=True) + 1e-5)
-    reference = g * r - xx * r**3 * np.mean(g * xx, axis=1, keepdims=True)
-    rounded = reference.astype(x.dtype)
-    ulp = np.abs(np.nextafter(rounded, x.dtype.type(np.inf)).astype(np.float64) -
-                 rounded.astype(np.float64))
-    gamma = 19 * np.finfo(np.float32).eps / (1 - 19 * np.finfo(np.float32).eps)
-    edge_ulp = np.abs(np.nextafter(wide.astype(x.dtype), x.dtype.type(np.inf)).astype(np.float64) -
-                      wide.astype(x.dtype).astype(np.float64))
-    edge_budget = gamma * (np.abs(seed) @ np.abs(bb.T)) + edge_ulp
-    propagated = r * edge_budget + np.abs(xx) * r**3 * np.mean(
-        np.abs(xx) * edge_budget, axis=1, keepdims=True)
-    budget = propagated + 35 * 32 * np.finfo(np.float32).eps * (np.abs(reference) + .01) + ulp
-    return reference, budget
-
-
-def check(actual, roots, permuted):
-    reference, budget = oracle(roots, permuted)
-    assert len(actual) == 1 and actual[0].dtype == roots[int(permuted)].dtype
-    assert np.isfinite(actual[0]).all()
-    assert np.all(np.abs(actual[0].astype(np.float64) - reference) <= budget)
+from benchmarks.math.source_reverse_reference import inputs, oracle, check
 
 
 @pytest.fixture(scope="module", params=[("f16", False), ("f16", True), ("bf16", False), ("bf16", True)])

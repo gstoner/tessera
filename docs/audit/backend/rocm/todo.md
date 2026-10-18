@@ -5,6 +5,36 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-SOURCE-PULLBACK-20261018 — native public source VJP
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Synchronization key: ROCM-SOURCE-PULLBACK-20261018. Base: merged PR985.
+
+The original static FP16/BF16 RMSNorm → ReLU → plain FP32-output matmul
+source pullback now runs through ordinary native_backward on exact gfx1151
+and gfx1201 targets. Native paired AD outlines a mixed FP32/half contraction
+and schema-7 row body; native Schedule/Tile/Target frames feed one C++ HIP
+owner with readonly original roots, private scratch and returned generations.
+Python binds compiler records without rebuilding derivative arithmetic.
+
+Both owning hosts pass 106 device cases: 39 composed/public and 67 scalar
+regressions, including both argument orders, changed inputs, independent
+outputs, malformed parents, compiler-free fresh-process replay, one-column
+reductions, row-block crossings and longer ragged contractions. CPU passes
+30,706 (3,724 skipped); production compiler-route passes 1,983 with zero skips.
+The final RTX5070 gate passes 167 and retains forty identical NVIDIA native
+member-stage controls. Ruff, zero-error mypy, surface and claim gates pass.
+
+The source-bound [packet](../../../../benchmarks/baselines/rocm_source_pullback_20261018/README.md)
+retains eight portable programs and independent numerical receipts. It separates
+captured member, native event, prepared host, portable and public-call scopes.
+Warm public calls measure 1.20–1.58 ms; prepared calls 0.38–0.46 ms. This is
+characterization, without isolated-kernel or speedup promotion.
+
+Public CI/review remain. Generic ROCm alias, resident roots, dynamic shapes
+and arbitrary layouts are outside this composite route. Broader AD/numerical,
+model-quality and performance obligations and all five aggregate slices remain open.
+
 ## ROCM-MIXED-SCALAR-CONTRACTION-20261018 — native mixed adjoint consumer
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

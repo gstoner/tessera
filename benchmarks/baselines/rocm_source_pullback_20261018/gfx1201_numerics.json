@@ -1,0 +1,165 @@
+{
+  "architecture": "gfx1201",
+  "rows": [
+    {
+      "storage": "f16",
+      "permuted_roots": false,
+      "portable_file": "gfx1201_f16_original.json.xz",
+      "portable_json_sha256": "0ba2b06d8875c30fd03920ce6b45e442dc050b8b31fa3b814e7497e3455dfda2",
+      "payload_sha256": [
+        "1ee45ab5ca7cfab6da37679d22a0bd70e424c22e5322966952577e2af0c7efad",
+        "efe732ed4a7e447af411f8651c4a4f978db75a0537f3297756d7aa00d403c712"
+      ],
+      "cases": [
+        {
+          "seed": 87,
+          "fp32_seed_cancellation": false,
+          "max_abs_error": 0.00022854860826704293,
+          "max_allowed_abs_error": 0.00141963498163399,
+          "violations": 0
+        },
+        {
+          "seed": 193,
+          "fp32_seed_cancellation": false,
+          "max_abs_error": 0.0002147346293841501,
+          "max_allowed_abs_error": 0.0014137377042399272,
+          "violations": 0
+        },
+        {
+          "seed": 427,
+          "fp32_seed_cancellation": false,
+          "max_abs_error": 0.0002339546689730243,
+          "max_allowed_abs_error": 0.0014017219834797166,
+          "violations": 0
+        },
+        {
+          "seed": 87,
+          "fp32_seed_cancellation": true,
+          "max_abs_error": 1.1911805720960086e-07,
+          "max_allowed_abs_error": 2.5670767030067963e-05,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "storage": "f16",
+      "permuted_roots": true,
+      "portable_file": "gfx1201_f16_permuted.json.xz",
+      "portable_json_sha256": "30d8c072d1597335a7c9d5265532fdabd58e4371afd265c07d002779a22ba228",
+      "payload_sha256": [
+        "1ee45ab5ca7cfab6da37679d22a0bd70e424c22e5322966952577e2af0c7efad",
+        "efe732ed4a7e447af411f8651c4a4f978db75a0537f3297756d7aa00d403c712"
+      ],
+      "cases": [
+        {
+          "seed": 87,
+          "fp32_seed_cancellation": false,
+          "max_abs_error": 0.00022854860826704293,
+          "max_allowed_abs_error": 0.00141963498163399,
+          "violations": 0
+        },
+        {
+          "seed": 193,
+          "fp32_seed_cancellation": false,
+          "max_abs_error": 0.0002147346293841501,
+          "max_allowed_abs_error": 0.0014137377042399272,
+          "violations": 0
+        },
+        {
+          "seed": 427,
+          "fp32_seed_cancellation": false,
+          "max_abs_error": 0.0002339546689730243,
+          "max_allowed_abs_error": 0.0014017219834797166,
+          "violations": 0
+        },
+        {
+          "seed": 87,
+          "fp32_seed_cancellation": true,
+          "max_abs_error": 1.1911805720960086e-07,
+          "max_allowed_abs_error": 2.5670767030067963e-05,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "storage": "bf16",
+      "permuted_roots": false,
+      "portable_file": "gfx1201_bf16_original.json.xz",
+      "portable_json_sha256": "5b9cb7865b61cce43781c953238ea35fd3270600bf5d64804445f79b199c1e9b",
+      "payload_sha256": [
+        "219e436000af5aa3d9dfdcbd96ad8c75eaea0d3d6c3c515ab776966027d7af9d",
+        "cb65cf707c2b1656671d52c927001a8051b2c9c2e798f9efbd560d2c931916bd"
+      ],
+      "cases": [
+        {
+          "seed": 87,
+          "fp32_seed_cancellation": false,
+          "max_abs_error": 0.001949481689075827,
+          "max_allowed_abs_error": 0.010458168267574515,
+          "violations": 0
+        },
+        {
+          "seed": 193,
+          "fp32_seed_cancellation": false,
+          "max_abs_error": 0.00187015082476516,
+          "max_allowed_abs_error": 0.010495784036918487,
+          "violations": 0
+        },
+        {
+          "seed": 427,
+          "fp32_seed_cancellation": false,
+          "max_abs_error": 0.0019016872392075834,
+          "max_allowed_abs_error": 0.01052954566929137,
+          "violations": 0
+        },
+        {
+          "seed": 87,
+          "fp32_seed_cancellation": true,
+          "max_abs_error": 7.5382555356747274e-06,
+          "max_allowed_abs_error": 0.00010473424929601531,
+          "violations": 0
+        }
+      ]
+    },
+    {
+      "storage": "bf16",
+      "permuted_roots": true,
+      "portable_file": "gfx1201_bf16_permuted.json.xz",
+      "portable_json_sha256": "7df551cf6b455877dbc9931ec2c2c6896f7e3521e7b667ba493f5b311619a1d0",
+      "payload_sha256": [
+        "219e436000af5aa3d9dfdcbd96ad8c75eaea0d3d6c3c515ab776966027d7af9d",
+        "cb65cf707c2b1656671d52c927001a8051b2c9c2e798f9efbd560d2c931916bd"
+      ],
+      "cases": [
+        {
+          "seed": 87,
+          "fp32_seed_cancellation": false,
+          "max_abs_error": 0.001949481689075827,
+          "max_allowed_abs_error": 0.010458168267574515,
+          "violations": 0
+        },
+        {
+          "seed": 193,
+          "fp32_seed_cancellation": false,
+          "max_abs_error": 0.00187015082476516,
+          "max_allowed_abs_error": 0.010495784036918487,
+          "violations": 0
+        },
+        {
+          "seed": 427,
+          "fp32_seed_cancellation": false,
+          "max_abs_error": 0.0019016872392075834,
+          "max_allowed_abs_error": 0.01052954566929137,
+          "violations": 0
+        },
+        {
+          "seed": 87,
+          "fp32_seed_cancellation": true,
+          "max_abs_error": 7.5382555356747274e-06,
+          "max_allowed_abs_error": 0.00010473424929601531,
+          "violations": 0
+        }
+      ]
+    }
+  ]
+}

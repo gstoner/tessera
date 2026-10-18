@@ -6,6 +6,17 @@ target: apple_gpu
 last_updated: 2026-10-18
 ---
 
+## ROCM-SOURCE-PULLBACK-20261018 — native public source VJP
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Synchronization key: ROCM-SOURCE-PULLBACK-20261018. Base: merged PR985.
+
+Owning implementation and proof boundary: [native ROCm source pullback](../../../spec/ROCM_SOURCE_PULLBACK.md).
+
+Not applicable to physical Apple execution: row schema 7 selects only gfx1151/gfx1201. Shared AD/IR and registry gates apply; no Metal or Apple CPU execution promotion.
+
+All five original aggregate slices remain open.
+
 ## ROCM-MIXED-SCALAR-CONTRACTION-20261018 — native mixed adjoint consumer
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

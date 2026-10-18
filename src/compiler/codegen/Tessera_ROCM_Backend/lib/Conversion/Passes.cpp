@@ -169,7 +169,7 @@ struct DeclareROCMPipelineContractPass
 
   void runOnOperation() override {
     static constexpr StringLiteral families[] = {
-        "parent_view", "block_quant",
+        "parent_view", "block_quant", "source_reverse_row",
         "algebra_clifford", "attention_mla_decode", "control_state_machine",
         "draft_dspark",
         "ebm_affine_langevin", "ebm_decode_init", "ebm_ebt_tiny",
@@ -218,6 +218,20 @@ struct DeclareROCMPipelineContractPass
         return signalPassFailure();
       }
     }
+    if (family == "source_reverse_row") {
+      unsigned count=0; bool valid=true;
+      for (Operation &op:getOperation().getBody()->getOperations()) {
+        auto schema=op.getAttrOfType<IntegerAttr>("schema");
+        auto owner=op.getAttrOfType<StringAttr>("arch");
+        if (op.getName().getStringRef()!="tile.row_region_kernel" || !schema ||
+            schema.getInt()!=7 || !owner || owner.getValue()!=arch) valid=false;
+        ++count;
+      }
+      if ((arch!="gfx1151" && arch!="gfx1201") || input!="tile" || count!=1 || !valid) {
+        getOperation().emitError("source_reverse_row requires its owning native schema-7 Schedule/Tile body");
+        return signalPassFailure();
+      }
+    }
     if (family == "parent_view" && (input == "graph" || arch != "gfx1201")) {
       getOperation().emitError("parent_view requires owning gfx1201 native Graph -> Schedule -> Tile entry");
       return signalPassFailure();
@@ -249,7 +263,7 @@ struct DeclareROCMPipelineContractPass
     // full-sweep measurement on Tajasarus; keep this list identical to the
     // Python one.
     static constexpr llvm::StringRef kGfx1201PromotedFamilies[] = {
-        "parent_view", "block_quant",
+        "parent_view", "block_quant", "source_reverse_row",
         "softmax", "reduction", "matmul", "attention", "attention_backward",
         "control_state_machine", "ebm_affine_langevin",
         "scalar_unary", "scalar_binary", "scalar_compare", "scalar_logical",
@@ -393,7 +407,7 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
   if (blockscalePrefetch >= 0)
     scaleGroupPanelsOption +=
         " blockscale-prefetch=" + std::to_string(blockscalePrefetch);
-  if (family == "parent_view" || family == "block_quant") {
+  if (family == "parent_view" || family == "block_quant" || family == "source_reverse_row") {
     // The sealed Target region already carries numerical/addressing SSA.
     // lower-tessera-target-to-rocdl owns the native frame/wrapper projection.
     return;
@@ -625,7 +639,7 @@ static void buildROCMExecutablePipeline(
   // nothing past the contract pass, whose run refuses it. Building the rest
   // would leave the refusal as the only thing standing between a caller and
   // a Graph->Tile GEMM lowering that skips Schedule IR.
-  if ((family == "matmul" || family == "parent_view" || family == "block_quant") && input == "graph")
+  if ((family == "matmul" || family == "parent_view" || family == "block_quant" || family == "source_reverse_row") && input == "graph")
     return;
 
   if (input == "graph") {

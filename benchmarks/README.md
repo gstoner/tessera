@@ -408,3 +408,13 @@ remain separate from generic reverse support.
 | --- | --- |
 | [record_native_program_owner.py](rocm/record_native_program_owner.py) | [gfx1201 host admission/ownership packet](baselines/rocm_public_owner_20261018/README.md); independent correctness, same-image controls and separate host/HIP timing domains. |
 | [gfx1151_check_staging.py](baselines/rocm_public_owner_20261018/gfx1151_check_staging.py) | Named gfx1151 native program staging/reuse proof in the same packet; a compiler-generated FP32 add image, not quantized-format or performance parity. |
+
+### Native ROCm source pullback
+
+rocm/record_native_source_reverse.py records the static FP16/BF16
+RMSNorm/ReLU source VJP through compiler-derived native SSA members and the
+checked HIP owner. It validates independent FP64 bounds before/during timing.
+Captured member, native program-event, prepared host, completed portable and
+ordinary public native_backward call timings are separate. Both exact AMD targets
+execute the named host-root public route; wider envelopes remain follow-ups. The shared finite-regime oracle is
+math/source_reverse_reference.py.

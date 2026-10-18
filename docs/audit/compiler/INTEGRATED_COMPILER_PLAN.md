@@ -318,6 +318,15 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 ### E2E-REAL-6
 
+- Current increment (2026-10-18, sync ROCM-SOURCE-PULLBACK-20261018):
+  original FP16/BF16 RMSNorm/ReLU/matmul source VJP follows native paired AD,
+  scalar/schema-7 row Schedule/Tile/ROCm/LLVM members and one retained HIP owner.
+  Device gates pass 106 per AMD host and 167 on RTX5070; forty NVIDIA member
+  stages retain byte identity. CPU passes 30,706 (3,724 skips); compiler-route
+  passes 1,983 without skips. Public CI/review remain. Broader AD/layout/dynamic/
+  resident/model-quality/performance and aggregate closure remain open.
+  [Contract](../../spec/ROCM_SOURCE_PULLBACK.md).
+
 - Current increment (2026-10-18, sync ROCM-MIXED-SCALAR-CONTRACTION-20261018):
   native Graph/Schedule/Tile/ROCm/LLVM mixed FP32/half contractions execute
   through checked host packages and public JIT on gfx1151/gfx1201. Each owning
@@ -568,6 +577,15 @@ Current increment: checked rank-four broadcast saved-LSE packages and private ta
 
 ### AD-RESIDUAL-EVAL-1
 
+- Current increment (2026-10-18, sync ROCM-SOURCE-PULLBACK-20261018):
+  original FP16/BF16 RMSNorm/ReLU/matmul source VJP follows native paired AD,
+  scalar/schema-7 row Schedule/Tile/ROCm/LLVM members and one retained HIP owner.
+  Device gates pass 106 per AMD host and 167 on RTX5070; forty NVIDIA member
+  stages retain byte identity. CPU passes 30,706 (3,724 skips); compiler-route
+  passes 1,983 without skips. Public CI/review remain. Broader AD/layout/dynamic/
+  resident/model-quality/performance and aggregate closure remain open.
+  [Contract](../../spec/ROCM_SOURCE_PULLBACK.md).
+
 - Current increment (2026-10-18, sync ROCM-MIXED-SCALAR-CONTRACTION-20261018):
   native Graph/Schedule/Tile/ROCm/LLVM mixed FP32/half contractions execute
   through checked host packages and public JIT on gfx1151/gfx1201. Each owning
@@ -595,7 +613,7 @@ Current increment: checked rank-four broadcast saved-LSE packages and private ta
 - Current increment (2026-10-06, sync NVIDIA-COMPACT-GRADIENTS-2026-10-06): native paired AD/Schedule/Tile now preserves complete logical results while exporting only requested physical gradient buffers. Checked static SM120 host/resident packages, private capture and repeated gradients are proved on RTX 5070. Preserved logical ranges with explicit 64/128-thread geometry address the measured packed-range loss; no universal policy/default promotion follows. Matching gfx1201 shared compiler/norm regressions pass, without HIP compact-gradient execution claims. General composed/dynamic/higher AD and sibling physical consumers remain open. [Evidence](../../../benchmarks/baselines/nvidia_compact_gradients_20261005/README.md).
 - Current increment (2026-10-06, sync NVIDIA-JVP-ARGUMENT-ORDER-2026-10-06): native forward export now verifies distinct frontend Q/K/V permutations; automatic private capture and tangent requests follow verified physical roles and activity. All six orders have owning RTX 5070 finite-difference/mutation/repeated-direction proof, with unchanged native images within each semantic envelope. Shared gfx1201 compiler/norm regressions pass without HIP tangent claims. General composed/dynamic/bias/higher AD remains open. [Evidence](../../../benchmarks/baselines/nvidia_jvp_argument_order_20261006/README.md).
 - Current increment (2026-10-06, sync NVIDIA-JVP-PORTABLE-2026-10-06): pinned canonical program JSON retains native images, sizing library, roles and manifests; capture validates them before CUDA allocation. Seventy-two restored-program RTX 5070 cases and three compiler-forbidden fresh-process replays pass. Public native-JVP family/runtime integration, unused reverse-image retirement, general AD and sibling physical consumers remain open. [Evidence](../../../benchmarks/baselines/nvidia_jvp_portable_20261006/README.md).
-- Latest: [2026-10-18 — native ROCm mixed scalar consumer](INTEGRATED_COMPILER_LOG.md#2026-10-18--native-rocm-mixed-scalar-consumer)
+- Latest: [Native public ROCm source pullback](INTEGRATED_COMPILER_LOG.md#2026-10-18--native-public-rocm-source-pullback)
 
 ### W2.4a
 

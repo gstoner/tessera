@@ -1153,6 +1153,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_nvfp4_program": "Checked native checkpoint conversion/storage/packed matmul on one owned HIP stream",
     "rocm_quantized_product_program": "Native BF16 K16 quantization and exact scaled matmul on one checked HIP owner",
     "nvidia_active_source_jvp_program": "Compiler-owned static source-active RMSNorm/ReLU JVP and transactional two-result native CUDA owner",
+    "rocm_source_reverse_program": "Native static RMSNorm/ReLU source pullback under checked HIP ownership",
     "nvidia_source_reverse_program": "Compiler-derived static RMSNorm/ReLU source pullback with mixed contraction and checked native CUDA ownership",
     "nvidia_tensor_rhs_jvp_program": "Compiler-owned static paired producer/RHS-JVP SSA, native Schedule/Tile members and transactional two-output CUDA owner",
     "nvidia_lhs_program": "Checked native LHS normalization/softmax/ReLU producer members and complete matmul epilogue on one owned CUDA stream",
@@ -3838,6 +3839,28 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "and checked five-input frontend ABI; broader AD/layout/quality remain open.",
         numerical_fixture="tests/device/rocm/test_nvfp4_resident_jit.py",
         evidence_target="rocm_gfx1201",proof_build=".build-gfx1201-current",
+        device_proof="device_verified_jit"),
+    ("rocm_gfx1151", "rocm_source_reverse_compiled"): ExecutionRow(
+        target="rocm_gfx1151", compiler_path="rocm_source_reverse_compiled",
+        execution_kind="native_gpu", executable=True, executor_id="rocm_source_reverse_program",
+        runtime_status="success", execution_mode="hip_runtime", owns_stream=True,
+        direction="backward", op_family="source_normalization_matmul", residual_policy="recompute_all",
+        reason="Named static FP16/BF16 original RMSNorm/ReLU/plain FP32-output matmul source "
+               "pullback through paired AD, native scalar contraction and schema-7 row "
+               "Schedule/Tile/ROCDL/HSACO members under one C++ HIP owner. Host roots only.",
+        numerical_fixture="tests/device/rocm/test_public_source_reverse.py",
+        evidence_target="rocm_gfx1151", proof_build="LLVM/MLIR23.1.1",
+        device_proof="device_verified_jit"),
+    ("rocm_gfx1201", "rocm_source_reverse_compiled"): ExecutionRow(
+        target="rocm_gfx1201", compiler_path="rocm_source_reverse_compiled",
+        execution_kind="native_gpu", executable=True, executor_id="rocm_source_reverse_program",
+        runtime_status="success", execution_mode="hip_runtime", owns_stream=True,
+        direction="backward", op_family="source_normalization_matmul", residual_policy="recompute_all",
+        reason="Named static FP16/BF16 original RMSNorm/ReLU/plain FP32-output matmul source "
+               "pullback through paired AD, native scalar contraction and schema-7 row "
+               "Schedule/Tile/ROCDL/HSACO members under one C++ HIP owner. Host roots only.",
+        numerical_fixture="tests/device/rocm/test_public_source_reverse.py",
+        evidence_target="rocm_gfx1201", proof_build="LLVM/MLIR23.1.1",
         device_proof="device_verified_jit"),
     ("nvidia_sm120", "nvidia_sm120_source_reverse_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_sm120_source_reverse_compiled",

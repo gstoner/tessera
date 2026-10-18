@@ -1,0 +1,46 @@
+{
+  "selections_overlap_do_not_sum": true,
+  "widened_native_host": {
+    "passed": 71,
+    "seconds": 45.16
+  },
+  "public_static_stream_direct": {
+    "passed": 73,
+    "deselected": 109,
+    "seconds": 103.85
+  },
+  "native_abi_preflight": {
+    "passed": 24,
+    "deselected": 48,
+    "seconds": 5.89
+  },
+  "source_policy_guards": {
+    "passed": 11,
+    "seconds": 1.22
+  },
+  "timing_sampler": {
+    "passed": 11,
+    "seconds": 0.85
+  },
+  "standalone_replay_cases": 32,
+  "fp64_finite_difference_cases": 16,
+  "paired_timing_rows": 32,
+  "program_archives": 20,
+  "mypy": "errors=0 baseline=0",
+  "publication": "full CPU/compiler-route, final generated-document check and public CI/review pending",
+  "final_combined": {
+    "passed": 89,
+    "seconds": 53.01
+  },
+  "focused_drift": {
+    "passed": 331,
+    "skipped": 1,
+    "seconds": 6.97,
+    "skip_scope": "Darwin Metal C-ABI execution unavailable on WSL"
+  },
+  "curated_standalone_replay": {
+    "passed": 32,
+    "finite_differences": 16,
+    "unique_programs": 20
+  }
+}

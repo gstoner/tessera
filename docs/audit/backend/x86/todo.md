@@ -7,6 +7,24 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## SM120-BOUNDED-HOST-JVP-20261017 — bounded prepared host attention JVP
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-BOUNDED-HOST-JVP-20261017.
+
+Shared assessment: explicit public sequence bounds, structural frontend
+certification, additive native preparation/invocation ABI, capacity/span
+ownership and paired benchmark fields.
+
+Not applicable to x86 physical execution: LLVM/AVX images and CPU ownership use no CUDA parameter layout.
+The public bounds admission is gated to exact nvidia_sm120; sibling-target
+refusals are host-validated. No dtype, operation or shader arithmetic is added.
+Follow-up required for an architecture-specific bounded attention JVP owner
+and exact-device numerical/performance proof; RTX5070 results do not transfer.
+
+Contract: docs/spec/SM120_TYPED_ATTENTION_JVP_CONTRACT.md.
+Evidence: benchmarks/baselines/sm120_bounded_host_jvp_20261017/README.md.
+
 ## GFX1201-KN-LDS-20261017 — native KN W8A8 staging
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.

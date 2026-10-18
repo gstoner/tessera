@@ -1,0 +1,167 @@
+{
+  "source_revision": "e8c629a42ed01e7d8ccd7e552f449f233fcea392",
+  "timing_rows": 32,
+  "all_windows_admissible": true,
+  "public_static_over_bounded_range": [
+    2.9947294565687312,
+    3.835831614434385
+  ],
+  "public_ms_ranges": {
+    "bounded": [
+      0.4429014297784306,
+      0.6333697488116741
+    ],
+    "static": [
+      1.5877468053986377,
+      2.0417583946255036
+    ]
+  },
+  "bidirectional_image_identity": [
+    {
+      "profile": [
+        "float16",
+        false,
+        1,
+        1
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "float16",
+        false,
+        7,
+        9
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "float16",
+        false,
+        31,
+        65
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "float16",
+        false,
+        127,
+        131
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "float16",
+        true,
+        1,
+        1
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "float16",
+        true,
+        7,
+        9
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "float16",
+        true,
+        31,
+        65
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "float16",
+        true,
+        127,
+        131
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "bfloat16",
+        false,
+        1,
+        1
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "bfloat16",
+        false,
+        7,
+        9
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "bfloat16",
+        false,
+        31,
+        65
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "bfloat16",
+        false,
+        127,
+        131
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "bfloat16",
+        true,
+        1,
+        1
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "bfloat16",
+        true,
+        7,
+        9
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "bfloat16",
+        true,
+        31,
+        65
+      ],
+      "images_equal": true
+    },
+    {
+      "profile": [
+        "bfloat16",
+        true,
+        127,
+        131
+      ],
+      "images_equal": true
+    }
+  ],
+  "standalone_replays": 32,
+  "fd_cases": 16
+}

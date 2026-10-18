@@ -49,8 +49,9 @@ storage; bias and all row quantities retain four bytes. The complete canonical f
 output storage; a common prefix is insufficient. Grid calculations use
 element counts before byte-width projection. Producer stream dependencies,
 allocation capacities, snapshots, retained outputs and context ownership
-remain checked. Typed forward bias extents are passed explicitly, including
-degenerate physical broadcasts.
+remain checked. Forward bias extents follow the sealed physical policy:
+static extents are baked into the image; explicitly dynamic physical extents
+are passed as indices. Implicit logical bias follows the runtime score shape.
 
 Source-backed ResidentAttentionTape.prepare_jvp retains validated native data
 and output storage from its captured forward generation and supplies them to
@@ -71,7 +72,47 @@ characterize tiny and longer static sequences with common quantized-value f32
 controls, keeping CUDA event windows separate from completed public calls.
 Bounded typed sequence replay, trace-at-one shrink/grow/capacity checks,
 fresh-process compiler-absent static/bounded replay and authored FP32 output
-now have separate public proofs. The ordinary native prepared host owner is
-static; bounded programs use portable resident generations. Wider layouts,
+now have separate public proofs. The ordinary native prepared host owner
+also admits the bounded sequence contract described below. Wider layouts,
 lifetime composition and derivatives remain open before broader closure.
 No numerical or performance proof transfers to ROCm, Apple or x86.
+
+## Bounded prepared host ownership
+
+Synchronization key: SM120-BOUNDED-HOST-JVP-20261017.
+
+An explicit fn.native_jvp(..., sequence_bounds=(Sq_capacity, Sk_capacity))
+uses the existing native Graph AD, Schedule, Tile, NVIDIA Target and LLVM/PTX
+compiler route. Both bounds are positive integers and this physical admission
+requires nvidia_sm120. An AST/tracer structural certificate checks topology and
+numerical policy without executing the concrete frontend. A Python policy
+that changes with the traced sequence length cannot define this envelope.
+
+The prepared C++ owner retains the modules, a capacity-sized device arena and
+pinned staging. Runtime sequence lengths must be positive and within bounds;
+fixed batch, head, feature and storage dimensions must match. Each invocation
+projects current byte spans, grids, shared-memory size and sizing indices
+(scratch, query_size, key_size). Warm shape changes reuse the same program and
+owner. Producer events order resident-input snapshots. Returned results are
+independent completed host arrays. Thread ownership, context/fork guards,
+close and draining retain their existing lifetime contracts.
+
+The additive prepare_bounded ABI carries storage/output IDs, saved-LSE policy
+and bias_shape_arguments. That flag is zero for static physical or implicit
+logical bias, and one for explicitly dynamic physical bias. The forward image
+takes 12 parameters without bias, 13 with static/implicit bias, or 17 with
+explicitly dynamic bias. The native owner checks the actual CUDA parameter
+count, offsets and eight-byte widths before exposing a handle. Tangent launches
+carry their pointer roles plus three sizing indices. Legacy static preparation
+and invocation exports preserve their contracts and cannot launch a bounded
+handle through the static ABI.
+
+Owning RTX5070 evidence includes FP16/BF16/F32, authored FP32 outputs,
+query/key/logical bias, trace-at-one grow/shrink/reuse, malformed ABI refusal
+with healthy recovery, and pending producer writes. Paired timing covers
+FP16/BF16 saved-LSE causal profiles at Sq/Sk 1/1, 7/9, 31/65 and 127/131,
+with absent or scalar physical bias. Completed public calls and CUDA event
+dispatch windows are reported separately. Wider masks, mixed/quantized
+storage, composed AD and resident-result ownership remain open.
+
+Evidence: benchmarks/baselines/sm120_bounded_host_jvp_20261017/README.md.

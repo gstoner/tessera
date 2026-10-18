@@ -1,0 +1,31 @@
+{
+  "source_revision": "e8c629a42ed01e7d8ccd7e552f449f233fcea392",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_typed_attention_jvp.py": "e2ef49c96c0244e8cdabcb6f4fed4feb62e6bdcfb423b6f88c07ac1474fb4a88",
+    "python/tessera/compiler/native_bounded_attention_jvp.py": "cee261f2baa78608b035918d692855cbb62fa2302d838de1f214791f76bcf40e",
+    "python/tessera/compiler/native_attention_jvp_runtime.py": "df1ebe0ff8ec120bc9fc00a7e0ead22da4ea90cc3411b338a3308166563d67be",
+    "python/tessera/compiler/native_attention_program.py": "6fe3c42508b25fd266e8793c3031a0d3d3e2d08f51ad420dc007934a0c2ec98c",
+    "python/tessera/compiler/native_attention_jvp_artifact.py": "fb76db885bc7a463a21d52f9ac638c4efaf7b5facebb81c90acdad4e28773ef3",
+    "python/tessera/compiler/native_attention_jvp.py": "f33db12af0ff082d068bd2cbf4df280e86a0c0fb76a1354af9e57a440e06708a",
+    "python/tessera/compiler/frontend_authority.py": "b39d57e900b31967977f39ce61b5ac2baba094334518365c60f1dc03fbc42b15",
+    "python/tessera/compiler/jit.py": "341c2fe4ea118256e56c91e3d6e491efee3a500f5dce99c6cf30d6c00ae38e19",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "0e7c9d5b5691d7b1c6969343e1592b28a3d938dec13b8b209479de804ecf44ed",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "d60d076cc3cba6c4afadc0ae0a2e06aecd866a61c2beb0d0dd9cb9c3a7e95b54",
+    "tests/device/nvidia/test_public_typed_attention_jvp.py": "58d681bb193c054d5f4a4737052f6a9eb7468c466539ee7ef7db25e34221f8fc",
+    "tests/device/nvidia/test_public_typed_attention_vjp.py": "cc7fb32286d6d3c1ee7a6979cfdc39ae84c4ed6801b5707468b7c99489171988",
+    "tests/device/nvidia/test_saved_lse_half_backward_kernel.py": "6c2dab687ad5317c3d0f5fa7b26bb76f3c8cfd99e82aebe9651345dd771507e9"
+  },
+  "runtime_sha256": "b3ec726cd6d90ebc06a2e313c981f66278f9114ea5aff3b3b31af186d9a64021",
+  "compiler_sha256": "2d139208f8132405432c5de9d54ad4c2b07bea8e8aee6f9430ff08a1a131831e",
+  "target_compiler_sha256": "5b77dbcabbff00eeb4ae348a371bc4f4f9d485783f70d7ed731e96afa92d3af6",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "implementation_checkpoint": "82d279acf777a2e7c5d0e624952cd830bc71f6de",
+  "base_main": "220c433a8f2ab9c45077a279c57cda6e20ae30f1",
+  "source_clean_at_measurement": true,
+  "runtime_build": "g++ -std=c++17 -O3 -fPIC -shared -pthread; exact CMake target sources tessera_nvidia_ptx_launch.cpp attention_jvp_prepared.cpp matmul_prepared.cpp; CUDA13.3 includes; CUDA driver and dl; compiler-only CMake tree has CUDA runtime targets disabled",
+  "host_compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "cuda_compiler": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Tue_Jun_09_02:43:40_PM_PDT_2026\nCuda compilation tools, release 13.3, V13.3.73\nBuild cuda_13.3.r13.3/compiler.38244171_0\n",
+  "llvm": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+  "early_controls": "Initial 29/45-case engineering receipts retain pre-refresh tool scope. Final widened/source/compatibility and timing gates use the matching main979 compiler. Raw source/tool hashes retain each phase boundary.",
+  "parameter_controls": "Overlay initial-parameter-mismatch.patch on c09e8476 to reproduce the first static-bias arity refusal. The later implicit-logical-bias refusal is the c09e8476 native owner/bridge; final additive bias argument flag resolves the physical layout without removing the parameter check."
+}

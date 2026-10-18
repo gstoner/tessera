@@ -201,5 +201,7 @@ Shared mock dispatch tests cover Apple, x86 and both AMD targets; those tests
 are not exact-device numerical proof for sibling architectures.
 
 The public SM120 evidence is a named increment. Full dynamic/layout/AD and
-remaining attention/ROCm/NVFP4/performance programs, broad validation and
-publication are still open. None of the five aggregate slices is closed here.
+remaining attention/ROCm/NVFP4/performance programs and publication are still
+open. Final WSL CPU and production compiler-route validation pass 30,752
+(with 3,721 declared skips) and 2,079 tests respectively; every selected
+compiler proof executes. None of the five aggregate slices is closed here.

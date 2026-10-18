@@ -34,8 +34,13 @@ dispatch improvement, not kernel speedup.
 Public artifact export is lazy and independent of warm execution. Invalid
 calls clear prior receipt/export state; static shape revisits reuse images.
 
-Remaining: broad unit/compiler-route/audit validation, exact-head review/CI
-and one consolidated PR. Dynamic shapes, bias/dropout, broader derivatives,
+Final WSL CPU validation passes 30,752 tests with 3,721 declared skips.
+The production compiler-route lane passes 2,079 tests with every selected
+proof executed. All 33 generated documents, claim lint, five surface audits,
+type checking and plan ownership gates pass. These receipts bind code
+checkpoint e8aafdc65ccbb90778b50aea9f10c9c7fdc34548; subsequent changes only record evidence.
+
+Remaining: exact-head review/CI and one consolidated PR. Dynamic shapes, bias/dropout, broader derivatives,
 batching, wider envelopes and all five aggregate programs remain open.
 The logical-prefix and prepared-member packets retain their original scopes.
 

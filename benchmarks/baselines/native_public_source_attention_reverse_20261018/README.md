@@ -65,6 +65,11 @@ python benchmarks/nvidia/benchmark_public_source_attention_reverse.py --control 
 
 The native plan remains artifact_only until compiled and executed. Offline
 content hashes detect corruption, not authenticity of arbitrary supplied PTX.
-Broader unit/compiler-route/audit validation, exact-head review/CI and public
-delivery remain open. Dynamic/bias/dropout/layout and higher-AD envelopes and
+Final WSL CPU validation passes 30,752 tests with 3,721 declared skips.
+The production compiler-route lane passes 2,079 tests with every selected
+proof executed. All 33 generated documents, claim lint, five surface audits,
+type checking and plan ownership gates pass. These receipts bind code
+checkpoint e8aafdc65ccbb90778b50aea9f10c9c7fdc34548; subsequent changes only record evidence.
+
+Exact-head review/CI and public delivery remain open. Dynamic/bias/dropout/layout and higher-AD envelopes and
 all five aggregate programs remain open; no sibling physical proof transfers.

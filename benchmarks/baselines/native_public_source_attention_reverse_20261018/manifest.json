@@ -1,5 +1,5 @@
 {
-  "state": "public_candidate_broad_validation_delivery_open",
+  "state": "local_gates_passed_public_review_delivery_open",
   "sync": "NATIVE-ATTENTION-SOURCE-REVERSE-20261018",
   "base": "9e63d8c71a9fbcd45989cf0327b61c1ae4e6191a",
   "prepared_checkpoint": "a9d5295abb275e9faaf65dbf647c4b15e8a04ed0",
@@ -20,22 +20,37 @@
     "benchmarks/nvidia/benchmark_public_source_attention_reverse.py": "49e87ece76b50a9f6978998d0056a52dae871d4cbd70339f165314d17cf1b88f"
   },
   "evidence_sha256": {
-    "public-source-reviewed.xml.gz": "23a995547c9c1bd447e9912d43247b57b6cfe33e6917f7f279c432443b2ee4d2",
-    "portable_f16_outputs.npz": "84b7a25f4485a41e88fc6424679f15d451fa4e4abf0dda19431cd45bc1337c9f",
-    "serialized_control.py": "349e5a667464b342179a771081d846c2e789dfb4368926ab8ef879348e29db35",
-    "portable_f16_program.json.gz": "fb6b34faffa3b2508044c2f2818e30421454e8f84d132cf00bf7582884beeb32",
-    "portable_bf16_program.json.gz": "3fac55d1b1029be4345815d6b84b09196674bc888502cd47cff75dc5ed3aac95",
-    "public-source-reviewed.txt.gz": "9030e2da8e2d15027eebfef89ff1150aa73b202102a0775c4c700a58bdb30390",
-    "source-stream-reviewed.xml.gz": "44b281c16574c7006785484cf35e8cfa0ef8acc48a0b329c610fcee4b6ae6bb4",
-    "public-source-final.xml.gz": "6de32ef5390dd4607ed70049850f694f49aba4460af084c591371921cc2491a7",
+    "README.md": "7b338b295f858d06afc47eb76a765731250948792e3110b7190bee2e77a02efd",
     "portable_bf16_outputs.npz": "f811d509d8da02d251045959551c7aabcc65bb12a01a87ec796ac1410642dfd3",
-    "README.md": "e03d8598e986921527a7542e03740930e426e9f09c022730d4dcd6bbe7e18164",
+    "portable_bf16_program.json.gz": "3fac55d1b1029be4345815d6b84b09196674bc888502cd47cff75dc5ed3aac95",
+    "portable_bf16_roots.npz": "c8fcf38ab8ae9f014a6d4a6ebca7639ebe87ccd3d848ec48580b710bcee6b187",
+    "portable_f16_outputs.npz": "84b7a25f4485a41e88fc6424679f15d451fa4e4abf0dda19431cd45bc1337c9f",
+    "portable_f16_program.json.gz": "fb6b34faffa3b2508044c2f2818e30421454e8f84d132cf00bf7582884beeb32",
     "portable_f16_roots.npz": "ae716e221b7879197352c02d2a86b6c3cf27ee76bfdaea7f2b41b885bd2cc92c",
-    "public-source-final.txt.gz": "c223b7ad947bfef2e6c63f33402252a9e2b2da17da3a6544f37eff683edb9258",
     "public-ab.json": "32feb812e201e45459d176fe62d56122c1d88b1c24745a6ac921465d77847e8b",
-    "public-source-review-focused.xml.gz": "12d61cfacfe83033124befd8ceb9aac201862c983ee7fd52fddfdcfb022aa846",
-    "source-stream-reviewed.txt.gz": "aeee497b8212dd1a66c346b4cb51c9d5a8df124cc6542090e49fc03b6c727aa9",
+    "public-source-compiler-final.txt.gz": "f0fb81cda15aec07353d53f8994188715e150c18c77c48a0424b0e169360c7d9",
+    "public-source-compiler-final.xml.gz": "7c0ef38da75b687c4537bcb82cdb4b899a094974faeb9a5e9eef50be097f2b19",
+    "public-source-final.txt.gz": "c223b7ad947bfef2e6c63f33402252a9e2b2da17da3a6544f37eff683edb9258",
+    "public-source-final.xml.gz": "6de32ef5390dd4607ed70049850f694f49aba4460af084c591371921cc2491a7",
     "public-source-review-focused.txt.gz": "045c064532cfb3ac2252d4d7e7f6a2aa72e35639411c6967af98059a370e05e9",
-    "portable_bf16_roots.npz": "c8fcf38ab8ae9f014a6d4a6ebca7639ebe87ccd3d848ec48580b710bcee6b187"
+    "public-source-review-focused.xml.gz": "12d61cfacfe83033124befd8ceb9aac201862c983ee7fd52fddfdcfb022aa846",
+    "public-source-reviewed.txt.gz": "9030e2da8e2d15027eebfef89ff1150aa73b202102a0775c4c700a58bdb30390",
+    "public-source-reviewed.xml.gz": "23a995547c9c1bd447e9912d43247b57b6cfe33e6917f7f279c432443b2ee4d2",
+    "public-source-unit-final.txt.gz": "4d0df003261711cde4a72ef9029a3b566e6762ed1baccc6e93f20a1bd1de38ee",
+    "public-source-unit-final.xml.gz": "149a317cdb008583df7aa710542a761c11ce987c6fda027f6a4c1913ec42d1b9",
+    "serialized_control.py": "349e5a667464b342179a771081d846c2e789dfb4368926ab8ef879348e29db35",
+    "source-stream-reviewed.txt.gz": "aeee497b8212dd1a66c346b4cb51c9d5a8df124cc6542090e49fc03b6c727aa9",
+    "source-stream-reviewed.xml.gz": "44b281c16574c7006785484cf35e8cfa0ef8acc48a0b329c610fcee4b6ae6bb4"
+  },
+  "broad_validation_code_checkpoint": "e8aafdc65ccbb90778b50aea9f10c9c7fdc34548",
+  "validation": {
+    "cpu_passed": 30752,
+    "cpu_skipped": 3721,
+    "compiler_route_passed": 2079,
+    "compiler_route_skipped": 0,
+    "generated_docs": 33,
+    "surface_audits": 5,
+    "claim_lint": "passed",
+    "plan_ownership": "passed"
   }
 }

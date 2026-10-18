@@ -13720,8 +13720,12 @@ Review follow-through: portable source normalization policy and numeric attribut
 types are checked before provider acquisition; returned ABI metadata no longer
 aliases the cached manifest. The benchmark naming floor remains zero.
 
-Remaining: Broad unit/compiler-route/audit gates, exact-head review/CI and one
-consolidated PR. All five aggregate programs and wider AD/layout/performance
+Final local gates: WSL CPU passes 30,752 tests with 3,721 declared skips;
+production compiler-route passes 2,079 with every selected proof executed.
+All 33 generated documents, five surface audits, claim lint, plan ownership,
+Ruff and zero-error type baseline pass. Receipts bind code e8aafdc65.
+
+Remaining: Exact-head review/CI and one consolidated PR. All five aggregate programs and wider AD/layout/performance
 obligations remain open.
 
 Evidence: benchmarks/baselines/native_public_source_attention_reverse_20261018/README.md,

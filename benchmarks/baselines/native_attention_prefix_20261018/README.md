@@ -28,8 +28,8 @@ dispatch windows, prepared host calls and completed public JIT calls.
 ## Validation
 
 - CI-equivalent unit selection: 30,734 passed, 3,725 declared skips.
-- Production compiler-route: 2,010 passed, zero skips; executed-proof certificate.
-- RTX5070: 29 source/public/portable cases plus 70 adjacent forward cases.
+- Production compiler-route: 2,016 passed, zero skips; executed-proof certificate.
+- RTX5070: 35 source/public/portable cases plus 70 adjacent forward cases.
 - Separate isolated JVP/VJP ownership regression: 34 passed, zero skips.
 - Focused compiler/registry/ABI/documentation gates: 1,571 passed.
 - Affected spectral regression: 79 passed, five host-capability skips. The four
@@ -41,6 +41,17 @@ manifest.json binds source/tool hashes and the validation scopes. Compressed
 logs retain their complete selections. The initial broad run's documentation
 and missing-provider failures were repaired without changing test states.
 
+## Calling-convention review fix
+
+Six genuine red regressions cover mixed keyword-only, all-keyword-only and
+positional-only plus keyword-only parameters in FP16/BF16. The corrected
+frontend binds tracer proxies to the original Python signature; the source
+route retains the caller args/kwargs. The native/portable gate passes 57 tests.
+The owning forward suite passes 105 tests; six additional ordinary cold calls
+run without manual tracing and reuse their frames with compiler/eager calls
+forbidden. The refreshed timing record binds the corrected source hashes.
+The earlier 1,571 focused shared results retain their initial-increment scope.
+
 ## Timing
 
 sm120.json records four correctness-gated profiles, each with 21 samples.
@@ -48,10 +59,10 @@ The shape tuple is B,Hq,Hkv,Sq,Sk,D,Dv. Values below are milliseconds.
 
 | Storage | Shape | Native composed dispatch | Prepared completed host | Public completed host |
 |---|---|---:|---:|---:|
-| FP16 | 1,2,1,3,5,4,3 | 0.037952 | 0.187564 | 0.320667 |
-| FP16 | 1,2,1,17,19,257,13 | 0.240800 | 0.420969 | 0.465580 |
-| BF16 | 1,2,1,3,5,4,3 | 0.062336 | 0.220715 | 0.245195 |
-| BF16 | 1,2,1,17,19,257,13 | 0.227136 | 0.382519 | 0.460500 |
+| FP16 | 1,2,1,3,5,4,3 | 0.102240 | 0.272554 | 0.347925 |
+| FP16 | 1,2,1,17,19,257,13 | 0.234336 | 0.430127 | 0.491278 |
+| BF16 | 1,2,1,3,5,4,3 | 0.066304 | 0.224023 | 0.372616 |
+| BF16 | 1,2,1,17,19,257,13 | 0.268704 | 0.439137 | 0.468707 |
 
 Separate normalization and attention dispatch windows, sample arrays, numerical
 errors, owner initialization and compiler costs remain in the JSON. Event

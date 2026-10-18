@@ -11,11 +11,12 @@ Sync NATIVE-COMPOSED-ATTENTION-PREFIX-20261018.
 Original static FP16/BF16 RMSNorm(Q) feeds saved-LSE attention through native
 SSA members, Schedule/Tile/NVIDIA/NVVM/PTX and one checked C++ private-buffer
 frame. Ordinary JIT, ordered resident roots, shape-cache replay and portable
-fresh-process execution preserve half O and independent FP32 LSE. Twenty-nine
+fresh-process execution preserve half O and independent FP32 LSE. Thirty-five
 composed/public/portable cases and seventy adjacent forward cases pass on
 RTX5070; thirty-four isolated JVP/VJP owner cases pass separately. Shared
 focused gates pass 1,571 tests. CI-equivalent unit passes 30,734 with 3,725
-declared skips; compiler-route passes 2,010 without skips/certificate failures.
+declared skips; compiler-route passes 2,016 without skips/certificate failures.
+Six calling-convention regressions and six ordinary cold native calls pass.
 Current-head GitHub CI/review and final delivery remain.
 The source primal export cannot drop pending AD intent. All five aggregate
 slices remain open, including original-source composed attention reverse.

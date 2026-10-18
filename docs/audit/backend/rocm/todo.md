@@ -30,17 +30,21 @@ producer writes (separate, legacy and per-thread streams). Ordinary public
 JIT now uses these original SSA members for the named two-result saved-LSE
 profile. Portable replay validates source/member/image/ABI seals without a
 compiler; both half formats pass fresh-process replay with unavailable compiler
-paths. The expanded owning suite passes 29 cases, plus 70 adjacent attention
+paths. The expanded owning suite passes 35 cases, plus 70 adjacent attention
 regressions. Focused shared gates pass 1,571 tests; the typing ratchet has zero
 errors. A four-row correctness-gated benchmark separates member/composed
 dispatch windows, prepared host calls and complete public calls; no speedup or
 pure-kernel claim is made. Original-source reverse integration, broader
-envelopes and final broad validation remain follow-up.
+envelopes and current-head CI/review remain follow-up.
 The earlier ordinary standalone prefix probe had no native descriptor witness.
 All five aggregate programs remain open.
 Recorder: benchmarks/nvidia/benchmark_source_attention_prefix.py.
 Packet: benchmarks/baselines/native_attention_prefix_20261018/README.md.
 Contract: docs/spec/NATIVE_SOURCE_ATTENTION_PROGRAM.md.
+Calling-convention review fix: six red/green capture cases, 57 native/portable
+checks, 105 owning forward cases and six ordinary cold calls pass. Shared
+frontend binding now preserves keyword-only and positional-only parameters;
+this adds no sibling physical execution promotion.
 
 Shared Graph/FUNC/pass registry and non-owning-target refusal parity validated. Follow-up required for gfx1151/gfx1201 physical source-attention consumers; no HIP ABI or physical schedule is promoted from SM120 evidence.
 

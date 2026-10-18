@@ -11,7 +11,7 @@
   "source_hashes": {
     "benchmarks/nvidia/benchmark_source_attention_prefix.py": "e3eb771a5ef51e47e84d544144b344a92c638f0539162f4f228d95f34fafaf94",
     "python/tessera/compiler/execution_matrix.py": "8bf83aa09efb057b2f4fd538c2740d53ad1fd21a091dd768c007f49cfc5b1b94",
-    "python/tessera/compiler/jit.py": "cf8672c47408df8aece8ef103ea26a32dd126ff3ba57e2761747c7784119c0e0",
+    "python/tessera/compiler/jit.py": "0a072735a3785d5fded67d3b31c67c2037d83ac186837d67908a6b914bb50a4e",
     "python/tessera/compiler/native_source_program.py": "f2065e3dbbaf9414f7bbcd095221723af86d7b0db5e193f5a4fc44f2fd64f526",
     "python/tessera/compiler/pass_metadata.py": "d0da71f7e454f217e6c1a1bfe2c4192174dadb1774b42e93ee6ac32e67ecb551",
     "python/tessera/compiler/pipeline_registry.py": "502814b7b3848347bb23bb3999f2472559348be441ee591d581f8d9102a727b4",
@@ -24,8 +24,8 @@
     "src/compiler/programming_model/include/tessera/ProgrammingModel/PMPasses.h": "16f19585169393d50ba878ce70e5a629b8fc45478cc0787b0444da8b5ccac0cc",
     "src/compiler/programming_model/lib/NativeSourceProgramOutline.h": "0606b38f512fd9637285a8d424591536ce89c7aa8c7c0bde5e0c75ce4fbc0061",
     "src/compiler/programming_model/lib/PMPasses.cpp": "d01b2e2b03e7c85a61f22c7950c99da3f93f38cb44f76c90b3ca8132474b06b3",
-    "tests/device/nvidia/test_source_attention_prefix.py": "d4bf60367724d6374b4c286b6792802e133a78f48c5a1d5130e29e465fa67bd2",
-    "tests/unit/test_native_attention_prefix_program.py": "263c4f94b45eac9649f28527e48aaa476960526bfa546ded43f328d3afa08632",
+    "tests/device/nvidia/test_source_attention_prefix.py": "fe329adee27a8b6aa16fd9938ac3fde099ec9bc7667752f20910bc67c6b030e7",
+    "tests/unit/test_native_attention_prefix_program.py": "ce62fa1fdfdf87ade0ebaebc9fede5c2288beea0fba484ddedb9bb36e3dfda2d",
     "tests/unit/test_portable_source_attention.py": "9ab91122ea51f91f8b74d72979a09207b903f110bafce7838a76c6d9e1709f61"
   },
   "validation": {
@@ -35,12 +35,12 @@
       "skipped": 3725
     },
     "compiler_route": {
-      "passed": 2010,
+      "passed": 2016,
       "failed": 0,
       "skipped": 0
     },
     "sm120_source_and_forward": {
-      "passed": 99,
+      "passed": 105,
       "failed": 0,
       "skipped": 0
     },
@@ -55,6 +55,12 @@
       "skipped": 5
     },
     "focused_shared_passed": 1571,
+    "focused_shared_scope": "initial native source increment; post-binding native/portable gate separately passes 57",
+    "parameter_kind_regression": {
+      "red": 6,
+      "green_native_portable": 57,
+      "cold_native_calls": 6
+    },
     "mypy_errors": 0,
     "ci_ruff": "passed"
   },

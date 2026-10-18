@@ -13602,7 +13602,7 @@ Evidence: benchmarks/baselines/rocm_source_pullback_20261018/README.md.
 ### 2026-10-18 — native source normalization attention forward
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
-PRs: pending; sync NATIVE-COMPOSED-ATTENTION-PREFIX-20261018.
+PRs: [#987](https://github.com/gstoner/tessera/pull/987); sync NATIVE-COMPOSED-ATTENTION-PREFIX-20261018.
 
 Outcome: Original static FP16/BF16 RMSNorm(Q) -> two-result saved-LSE attention
 uses native SSA func.call members and existing Schedule/Tile/NVIDIA/NVVM/PTX
@@ -13612,7 +13612,7 @@ independent half O and FP32 LSE. Cached shape replay restores the matching
 source Graph; leaving the half profile clears its native witness/artifact.
 The primal outliner rejects pending forward/reverse intent instead of dropping it.
 
-The owning RTX5070 suite passes 29 composed/public/portable cases and 70 adjacent
+The owning RTX5070 suite passes 35 composed/public/portable cases and 70 adjacent
 forward cases; 34 isolated JVP/VJP owner cases pass separately. Shared focused
 compiler/registry/ABI/documentation gates pass 1,571 tests, and the typing ratchet
 has zero errors. Four correctness-gated profiles separate native dispatch,
@@ -13620,7 +13620,7 @@ prepared host and complete public-call timings. All twenty retained member
 stages and four PTX payloads are unchanged by the AD-intent guard; checked image
 identities correctly change with the compiler fingerprint. All four backend
 queues are assessed, with no sibling physical promotion. CI-equivalent unit
-passes 30,734 cases (3,725 declared skips); compiler-route passes 2,010 without
+passes 30,734 cases (3,725 declared skips); compiler-route passes 2,016 without
 skips and its executed-proof certificate. All five surface audits and their
 README claim gate pass.
 
@@ -13631,4 +13631,6 @@ not establish this composed reverse route.
 
 Evidence: benchmarks/baselines/native_attention_prefix_20261018/README.md;
 docs/spec/NATIVE_SOURCE_ATTENTION_PROGRAM.md.
+Calling-convention review fix: six red/green capture cases, 57 native/portable checks, 105 owning forward cases and six ordinary cold calls pass. The shared frontend rebinds tracer proxies to the source signature; all four backend queues record the assessment.
+
 <!-- entry-fields:end -->

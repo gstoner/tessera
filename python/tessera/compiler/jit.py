@@ -1441,14 +1441,26 @@ class JitFn:
         if cached is not None and not require_outputs:
             return cached, None
         try:
+            trace_callable = self._fn
+            call_signature = self._nvidia_rhs_call_signature
+            if call_signature is not None and any(
+                    parameter.kind == inspect.Parameter.KEYWORD_ONLY
+                    for parameter in call_signature.parameters.values()):
+                # Tracer inputs follow the stable ABI order. Rebind their proxy
+                # values to the original Python signature before invoking it.
+                def bound_trace(*values: Any) -> Any:
+                    rebound = inspect.BoundArguments(
+                        call_signature, dict(zip(self.arg_names, values, strict=True)))
+                    return self._fn(*rebound.args, **rebound.kwargs)
+                trace_callable = bound_trace
             batch_axes = getattr(self, "_frontend_batch_axes", None)
             if batch_axes is not None:
                 from .native_vmap import batch_specs, mixed_batch_policies
-                traced = trace(self._fn, *batch_specs(ordered, batch_axes, depth=self._frontend_batch_depth, broadcast_prefix=mixed_batch_policies(self)))
+                traced = trace(trace_callable, *batch_specs(ordered, batch_axes, depth=self._frontend_batch_depth, broadcast_prefix=mixed_batch_policies(self)))
             else:
                 trace_inputs = (tuple((shape, _np_dtype_to_elem(dtype)) for shape, dtype in resident_specs)
                                 if resident_specs is not None else ordered)
-                traced = trace(self._fn, *trace_inputs, evaluate_catalog_outputs=require_outputs)
+                traced = trace(trace_callable, *trace_inputs, evaluate_catalog_outputs=require_outputs)
             # The AST module is a naming convenience here, not an input to the
             # trace: a zero-function one (apple_gpu trace-defer, auto_batch
             # skip) must not fail a capture that never needed it. Both fields
@@ -1873,7 +1885,7 @@ class JitFn:
             raise ValueError("source attention requires homogeneous half roots")
         call = self._native_source_attention_calls.get(signature)
         if call is None:
-            module, _ = self._trace_frontend_capture(ordered, {})
+            module, _ = self._trace_frontend_capture(args, kwargs)
             from copy import deepcopy
             module = deepcopy(module)
             module.module_attrs.update({"tessera.target": '"nvidia_sm120"',

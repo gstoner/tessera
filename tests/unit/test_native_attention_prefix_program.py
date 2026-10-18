@@ -217,3 +217,38 @@ def test_primal_outline_does_not_drop_pending_autodiff_request(compiler_toolchai
                             input=text, text=True, capture_output=True, timeout=60)
     assert result.returncode != 0, "primal outline silently dropped a pending AD request"
     assert "native source program requires its owning" in result.stderr
+
+
+def prefix_attention_keyword_only(q, *, k, v):
+    normalized = ts.ops.rmsnorm(q, eps=1e-5, numeric_policy={"accum": "fp32"})
+    return ts.ops.flash_attn(normalized, k, v, causal=False, lse_checkpoint="saved")
+
+
+def prefix_attention_all_keyword_only(*, q, k, v):
+    normalized = ts.ops.rmsnorm(q, eps=1e-5, numeric_policy={"accum": "fp32"})
+    return ts.ops.flash_attn(normalized, k, v, causal=False, lse_checkpoint="saved")
+
+
+def prefix_attention_positional_only(q, /, *, k, v):
+    normalized = ts.ops.rmsnorm(q, eps=1e-5, numeric_policy={"accum": "fp32"})
+    return ts.ops.flash_attn(normalized, k, v, causal=False, lse_checkpoint="saved")
+
+
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.parametrize("convention", ["keyword_only", "all_keyword_only", "positional_only"])
+def test_source_attention_capture_preserves_python_parameter_kinds(storage, convention):
+    dtype = np.float16 if storage == "f16" else ml_dtypes.bfloat16
+    q, k, v = (np.zeros(shape, dtype) for shape in
+               ((1, 2, 3, 4), (1, 1, 5, 4), (1, 1, 5, 3)))
+    function = {"keyword_only": prefix_attention_keyword_only,
+                "all_keyword_only": prefix_attention_all_keyword_only,
+                "positional_only": prefix_attention_positional_only}[convention]
+    args = () if convention == "all_keyword_only" else (q,)
+    kwargs = {"q": q, "k": k, "v": v} if not args else {"k": k, "v": v}
+    fn = ts.jit(target="nvidia_sm120")(function)
+    graph = fn._trace_frontend_capture(args, kwargs)[0]
+    assert [op.op_name for op in graph.functions[0].body] == [
+        "tessera.rmsnorm", "tessera.flash_attn"]
+    assert [tuple(map(int, arg.ir_type.shape)) for arg in graph.functions[0].args] == [
+        q.shape, k.shape, v.shape]
+    assert len(graph.functions[0].result_types) == 2

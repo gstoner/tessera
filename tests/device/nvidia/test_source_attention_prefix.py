@@ -9,7 +9,9 @@ import tessera as ts
 from tests._support.nvidia import nvidia_cuda_host_ready
 from tessera.compiler.native_source_program import outline_source_program
 from tests.unit.test_native_attention_prefix_program import (
-    prefix_attention, prefix_attention_permuted, prefix_attention_swapped_outputs)
+    prefix_attention, prefix_attention_permuted, prefix_attention_swapped_outputs,
+    prefix_attention_keyword_only, prefix_attention_all_keyword_only,
+    prefix_attention_positional_only)
 
 pytestmark = pytest.mark.hardware_nvidia
 
@@ -143,7 +145,8 @@ def test_composed_native_frame_orders_pending_resident_roots(storage, mode, monk
 
 
 @pytest.mark.parametrize("storage", ["f16", "bf16"])
-@pytest.mark.parametrize("variant", ["normal", "permuted", "swapped"])
+@pytest.mark.parametrize("variant", ["normal", "permuted", "swapped", "keyword_only",
+                                     "all_keyword_only", "positional_only"])
 def test_public_jit_source_attention_uses_native_members(storage, variant, monkeypatch):
     from tessera import runtime as rt
 
@@ -152,10 +155,18 @@ def test_public_jit_source_attention_uses_native_members(storage, variant, monke
     q, k, v = tuple(rng.normal(size=shape).astype(dtype) for shape in
                     ((1, 2, 3, 4), (1, 1, 5, 4), (1, 1, 5, 3)))
     function = {"normal": prefix_attention, "permuted": prefix_attention_permuted,
-                "swapped": prefix_attention_swapped_outputs}[variant]
+                "swapped": prefix_attention_swapped_outputs,
+                "keyword_only": prefix_attention_keyword_only,
+                "all_keyword_only": prefix_attention_all_keyword_only,
+                "positional_only": prefix_attention_positional_only}[variant]
     roots = (v, q, k) if variant == "permuted" else (q, k, v)
+    call_args, call_kwargs = roots, {}
+    if variant in {"keyword_only", "positional_only"}:
+        call_args, call_kwargs = (q,), {"k": k, "v": v}
+    elif variant == "all_keyword_only":
+        call_args, call_kwargs = (), {"q": q, "k": k, "v": v}
     fn = ts.jit(target="nvidia_sm120")(function)
-    fn._trace_frontend_capture(roots, {})
+    fn._trace_frontend_capture(call_args, call_kwargs)
 
     def forbidden(*args, **kwargs):
         pytest.fail("public compiled source attention used eager math or a warm compiler")
@@ -163,9 +174,9 @@ def test_public_jit_source_attention_uses_native_members(storage, variant, monke
     with monkeypatch.context() as guarded:
         guarded.setattr(ts.ops, "rmsnorm", forbidden)
         guarded.setattr(ts.ops, "flash_attn", forbidden)
-        first = fn(*roots)
+        first = fn(*call_args, **call_kwargs)
         guarded.setattr(subprocess, "run", forbidden)
-        second = fn(*roots)
+        second = fn(*call_args, **call_kwargs)
     assert fn.execution_kind == "native_gpu"
     artifact = rt.RuntimeArtifact.from_json(fn.runtime_artifact().to_json())
     assert artifact.metadata["compiler_path"] == "nvidia_sm120_source_attention_compiled"

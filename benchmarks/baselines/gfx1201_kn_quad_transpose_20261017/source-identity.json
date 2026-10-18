@@ -1,0 +1,23 @@
+{
+  "measured_source_commit": "e0cae0944b4573a33ed50132a0b9c0d595562aa7",
+  "base_merge_commit": "d6c5cab9627064269b4b1f2b0b1bf37e17579cfb",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "c6ad26ef425de4dae424f2ae27960f313b108726fcd40c9adae85a45500e6b52",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "f8210ccb080edc0f5b6ac2259646e48bf3893bd13cbe1c6665cb3edcca49da48",
+    "python/tessera/compiler/rocm_fp8_blockscale.py": "7bb3f3912cbe409814d7cb3db2bf8ac6acae3fa20abf99e8cb9cf08f454cd1d1",
+    "python/tessera/runtime.py": "c4aa7f6db382422fe5cf8ec42d0535fec9f891912d6a62fec2607d5e4aabce48",
+    "tests/device/rocm/test_fp8_blockscale_w8a8.py": "5533c8844886a7b9f04d50dab74489ea3bded868a2b91bd1d25aad703c02c2bb"
+  },
+  "tool_sha256": {
+    "control_core": "2e0a766e076f7b8768aa68c0a6bc1dcd53b30112683128389792be3c15814adb",
+    "candidate_core": "451648329cf45a75fff9c657e9f15b1a2eddad5c5b12081f0502b993cdc29b75",
+    "candidate_rocm": "21d440c30e7ef805489edde5d78701ef80d4a7d3fa9f896aaa2e3a197d3d053f"
+  },
+  "initial_scratch_candidate_core_sha256": "451648329cf45a75fff9c657e9f15b1a2eddad5c5b12081f0502b993cdc29b75",
+  "kernel_release": "6.18.33.2-microsoft-standard-WSL2",
+  "llvm_mlir_version": "23.1.1 assertions",
+  "runtime_contract": "existing checked HIP package ABI; no allocation or synchronization ABI change",
+  "frozen_validation_commit": "02f3890fddbdccefb9d1eba96059779b9553c770"
+}

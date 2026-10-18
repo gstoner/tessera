@@ -7,6 +7,18 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## GFX1201-KN-QUAD-TRANSPOSE-20261017 — native packed LDS candidate
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: GFX1201-KN-QUAD-TRANSPOSE-20261017.
+
+Not applicable to x86 physical execution: this candidate changes the native
+gfx1201 KN W8A8 byte-copy implementation only. No shared Graph operation,
+dtype, numerical policy, runtime ABI, allocation or barrier contract changes.
+The generator explicitly gates the physical exchange to gfx1201; owning
+RX9070XT numerical evidence transfers no sibling scheduling or device proof.
+
+
 ## SM120-BOUNDED-HOST-JVP-20261017 — bounded prepared host attention JVP
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

@@ -5,6 +5,36 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## GFX1201-KN-QUAD-TRANSPOSE-20261017 — native packed LDS candidate
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: GFX1201-KN-QUAD-TRANSPOSE-20261017.
+
+Implementation in progress after PR980 merge. The native gfx1201 KN FP32-scale
+W8A8 loader exchanges four K rows inside wave32, permutes their bytes and
+writes aligned words into the existing [Ntile,Kstage] LDS allocation. Masked
+loads rejoin before exchange; scale order, buffer phases, views, WMMA and
+barriers retain their contracts. Unsupported N-vector geometry keeps scalar
+stores; gfx1151/gfx1200 receive no physical schedule change.
+
+Owning RX9070XT initial proof: 42 device tests pass, comprising 40 numerical
+cases and two unchanged 64 KiB LDS capacity refusals. The matrix includes
+N-vector groups 1/2/4/8 and scalar fallback geometry, stages K16/32/64/128,
+ragged/tiny columns, padding, prefetch modes and static/projected image reuse.
+Matching normal CMake core/ROCm builds pass. Two reversed-order paired
+trials show 9-19 percent lower kernel time on four K=1024-4096 profiles; forced
+K128 LDS is 3-4 percent slower. Completed-public cost has no consistent gain.
+Production geometry retains 191 registers, zero scratch, 27,648 LDS bytes and
+two barrier pairs while removing24 static byte-store sites. Twelve
+FP8/MXFP8/folded-MXFP4 controls retain identical images and pass numerics.
+Three matched BF16 KN/AITER ratios remain 1.108/1.218/1.112, so broader
+performance closure is open. No Schedule admission is widened. Frozen WSL
+CPU passes 26,349 (5,897 skipped), production compiler-route passes 1,614 with
+zero skips, and 33 generated documents plus Ruff/mypy pass. Public CI/review
+and guarded publication remain pending. Evidence:
+benchmarks/baselines/gfx1201_kn_quad_transpose_20261017/README.md.
+
+
 ## SM120-BOUNDED-HOST-JVP-20261017 — bounded prepared host attention JVP
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

@@ -1,0 +1,145 @@
+{
+  "scope": "five forced matched LDS profiles, two arm/shape run orders; separate device and completed public-call domains",
+  "rows": [
+    {
+      "order": "forward",
+      "shape": [
+        128,
+        4096,
+        128
+      ],
+      "candidate_us": 7.0166796875,
+      "control_us": 6.808455389375967,
+      "candidate_over_control": 1.0305831919599486,
+      "candidate_public_ms": 2.870752409090909,
+      "control_public_ms": 2.8844749545454547,
+      "candidate_over_control_public": 0.9952426193082657
+    },
+    {
+      "order": "forward",
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "candidate_us": 47.6007299270073,
+      "control_us": 56.43635555555555,
+      "candidate_over_control": 0.8434408894484599,
+      "candidate_public_ms": 5.2730983,
+      "control_public_ms": 5.2429268,
+      "candidate_over_control_public": 1.0057547055587348
+    },
+    {
+      "order": "forward",
+      "shape": [
+        200,
+        2048,
+        1536
+      ],
+      "candidate_us": 21.65501647446458,
+      "control_us": 24.017832422586523,
+      "candidate_over_control": 0.901622431760331,
+      "candidate_public_ms": 4.430813166666667,
+      "control_public_ms": 4.4586345,
+      "candidate_over_control_public": 0.9937601224470558
+    },
+    {
+      "order": "forward",
+      "shape": [
+        200,
+        2048,
+        2048
+      ],
+      "candidate_us": 27.54234243697479,
+      "control_us": 30.913825581395347,
+      "candidate_over_control": 0.8909393101302352,
+      "candidate_public_ms": 4.301131916666667,
+      "control_public_ms": 4.3310615,
+      "candidate_over_control_public": 0.9930895501406912
+    },
+    {
+      "order": "forward",
+      "shape": [
+        256,
+        4096,
+        4096
+      ],
+      "candidate_us": 85.92915032679738,
+      "control_us": 105.55867768595041,
+      "candidate_over_control": 0.8140415568907258,
+      "candidate_public_ms": 5.369346599999999,
+      "control_public_ms": 5.349285900000001,
+      "candidate_over_control_public": 1.0037501641106896
+    },
+    {
+      "order": "reverse",
+      "shape": [
+        256,
+        4096,
+        4096
+      ],
+      "candidate_us": 86.71181818181817,
+      "control_us": 106.57290322580646,
+      "candidate_over_control": 0.813638509951196,
+      "candidate_public_ms": 5.8182257,
+      "control_public_ms": 5.8557923,
+      "candidate_over_control_public": 0.9935847109877856
+    },
+    {
+      "order": "reverse",
+      "shape": [
+        200,
+        2048,
+        2048
+      ],
+      "candidate_us": 27.535498938428876,
+      "control_us": 30.91666273584906,
+      "candidate_over_control": 0.8906361974994282,
+      "candidate_public_ms": 4.331007166666667,
+      "control_public_ms": 4.310547416666667,
+      "candidate_over_control_public": 1.0047464389142067
+    },
+    {
+      "order": "reverse",
+      "shape": [
+        200,
+        2048,
+        1536
+      ],
+      "candidate_us": 22.636640488656194,
+      "control_us": 24.96795145631068,
+      "candidate_over_control": 0.9066278636541788,
+      "candidate_public_ms": 4.366302642857143,
+      "control_public_ms": 4.341704785714286,
+      "candidate_over_control_public": 1.005665483573133
+    },
+    {
+      "order": "reverse",
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "candidate_us": 48.03471014492754,
+      "control_us": 57.00086956521739,
+      "candidate_over_control": 0.8427013572129589,
+      "candidate_public_ms": 5.0617079,
+      "control_public_ms": 5.1405666,
+      "candidate_over_control_public": 0.9846595314998935
+    },
+    {
+      "order": "reverse",
+      "shape": [
+        128,
+        4096,
+        128
+      ],
+      "candidate_us": 7.039611111111111,
+      "control_us": 6.775178841309824,
+      "candidate_over_control": 1.0390295630558093,
+      "candidate_public_ms": 2.61642175,
+      "control_public_ms": 2.77717505,
+      "candidate_over_control_public": 0.9421162522686499
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+#include "NativeSourceProgramOutline.h"
 #include "NativeGateUpSchedule.h"
 #include "NativeBlockQuantSchedule.h"
 #include "NativeFP8StoreFusion.h"
@@ -3398,6 +3399,22 @@ attentionBackwardScheduleDigest(const AttentionBackwardSchedule &schedule) {
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
 }
+
+struct OutlineSourceProgramPass
+    : public PassWrapper<OutlineSourceProgramPass, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(OutlineSourceProgramPass)
+  StringRef getArgument() const override { return "tessera-outline-source-program"; }
+  StringRef getDescription() const override {
+    return "Outline original static source SSA into typed member calls and "
+           "artifact-only native program bindings";
+  }
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<func::FuncDialect>();
+  }
+  void runOnOperation() override {
+    if (failed(source_program::outline(getOperation()))) signalPassFailure();
+  }
+};
 
 struct GraphToSchedulePass
     : public PassWrapper<GraphToSchedulePass, OperationPass<ModuleOp>> {
@@ -7897,6 +7914,10 @@ LogicalResult normalizeSM120MatmulEntryNames(ModuleOp mod) {
   return success();
 }
 
+std::unique_ptr<mlir::Pass> createOutlineSourceProgramPass() {
+  return std::make_unique<OutlineSourceProgramPass>();
+}
+
 std::unique_ptr<mlir::Pass> createGraphToSchedulePass() {
   return std::make_unique<GraphToSchedulePass>();
 }
@@ -7925,10 +7946,15 @@ void buildPMV11LegalizePipeline(OpPassManager &pm) {
 // Register all passes so tessera-opt --help shows them.
 void registerPMV11Passes() {
   PassRegistration<PMV11VerifierPass>();
+  PassRegistration<OutlineSourceProgramPass>();
   PassRegistration<GraphToSchedulePass>();
   PassRegistration<ScheduleToTilePass>();
 
   // Pipelines
+  PassPipelineRegistration<>(
+      "tessera-source-program-outline",
+      "Artifact-only native source SSA outlining; member lowering is separate",
+      [](OpPassManager &pm) { pm.addPass(createOutlineSourceProgramPass()); });
   PassPipelineRegistration<>(
       "tessera-pm-verify-pipeline",
       "Verify all Programming Model v1.1 ops",

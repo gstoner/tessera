@@ -963,6 +963,17 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="NVWGMMA-ACCUMULATOR-GUARD-2026-08-03",
     ),
     PassMetadata(
+        name="tessera-outline-source-program",
+        cpp_class="OutlineSourceProgramPass",
+        summary="Outlines original static SM120 half normalization-to-saved-LSE attention SSA into typed func.call members and source-sealed buffer/lifetime records. Artifact-only: this pass creates no Schedule, Tile, image or runtime execution admission.",
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera", "func"),
+        required_attrs=("tessera.target", "tessera.arch"),
+        preserved_attrs=("numeric_policy", "lse_checkpoint"),
+        pass_kind="transform",
+        sprint="NATIVE-COMPOSED-ATTENTION-PREFIX-20261018",
+    ),
+    PassMetadata(
         name="tessera-philox-langevin-to-apple_gpu",
         cpp_class="LowerPhiloxLangevinToAppleGPUPass",
         summary=(

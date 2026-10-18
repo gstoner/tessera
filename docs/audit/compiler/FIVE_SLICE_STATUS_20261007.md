@@ -3,6 +3,25 @@ last_updated: 2026-10-18
 audit_role: reference
 ---
 
+
+## Native source normalization-attention forward — 2026-10-18
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync NATIVE-COMPOSED-ATTENTION-PREFIX-20261018.
+Original static FP16/BF16 RMSNorm(Q) feeds saved-LSE attention through native
+SSA members, Schedule/Tile/NVIDIA/NVVM/PTX and one checked C++ private-buffer
+frame. Ordinary JIT, ordered resident roots, shape-cache replay and portable
+fresh-process execution preserve half O and independent FP32 LSE. Twenty-nine
+composed/public/portable cases and seventy adjacent forward cases pass on
+RTX5070; thirty-four isolated JVP/VJP owner cases pass separately. Shared
+focused gates pass 1,571 tests. CI-equivalent unit passes 30,734 with 3,725
+declared skips; compiler-route passes 2,010 without skips/certificate failures.
+Current-head GitHub CI/review and final delivery remain.
+The source primal export cannot drop pending AD intent. All five aggregate
+slices remain open, including original-source composed attention reverse.
+[Evidence](../../../benchmarks/baselines/native_attention_prefix_20261018/README.md).
+Contract: docs/spec/NATIVE_SOURCE_ATTENTION_PROGRAM.md.
+
 ## Native public ROCm source pullback — 2026-10-18
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

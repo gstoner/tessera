@@ -579,6 +579,9 @@ class JitFn:
         self._native_prepared_movement_calls: Dict[tuple, Any] = {}
         self._native_prepared_matmul_calls: Dict[tuple, Any] = {}
         self._native_prepared_attention_calls: Dict[tuple, Any] = {}
+        self._native_source_attention_calls: Dict[tuple, Any] = {}
+        self._native_source_attention_last_owner: Any = None
+        self._native_source_attention_last_receipt: dict[str, Any] | None = None
         self._native_public_jvp_owners: Dict[tuple, Any] = {}
         self._native_prepared_jvp_calls: Dict[tuple, Any] = {}
         self._native_prepared_vjp_calls: Dict[tuple, Any] = {}
@@ -959,7 +962,8 @@ class JitFn:
                 call.close()
             self._native_prepared_jvp_calls.clear()
         for name in ("_native_prepared_movement_calls", "_native_prepared_matmul_calls",
-                     "_nvidia_lhs_prepared_calls", "_native_prepared_attention_calls"):
+                     "_nvidia_lhs_prepared_calls", "_native_prepared_attention_calls",
+                     "_native_source_attention_calls"):
             calls = getattr(self, name, {})
             for call in calls.values():
                 call.close()
@@ -999,8 +1003,11 @@ class JitFn:
         the active sink (no-op when no sink is active).
         """
         if (self._nvidia_rhs_last_program is not None
-                or self._rocm_quantized_product_last_program is not None):
+                or self._rocm_quantized_product_last_program is not None
+                or getattr(self, "_native_source_attention_last_owner", None) is not None):
             self._cached_artifact = None
+        self._native_source_attention_last_owner = None
+        self._native_source_attention_last_receipt = None
         self._native_descriptor_last_receipt = None
         self._nvidia_lhs_last_program = None
         self._nvidia_lhs_last_receipts = ()
@@ -1039,6 +1046,9 @@ class JitFn:
                     raise ValueError("no oracle-verified native storage candidate")
                 return winner.run(region, *inputs)[0]
             return native_storage(*args, **kwargs)
+        source_attention = self._try_source_attention_call(args, kwargs)
+        if source_attention is not _JIT_FALLBACK:
+            return source_attention
         prepared_attention = self._try_prepared_attention_call(args, kwargs)
         if prepared_attention is not _JIT_FALLBACK:
             return prepared_attention
@@ -1308,7 +1318,14 @@ class JitFn:
     def _resident_frontend_specs(self,ordered):
         from .resident_nvidia_tensor import cuda_frontend_specs
         from .nvidia_native import requests_attention
-        ranks=(1,2,3,4) if requests_attention(self._ensure_legacy_graph_ir()) else (1,2)
+        module = self._ensure_legacy_graph_ir()
+        source_attention = (len(module.functions) == 1 and
+                            len(module.functions[0].args) == 3 and
+                            len(module.functions[0].result_types) == 2 and
+                            [op.op_name for op in module.functions[0].body] ==
+                            ["tessera.rmsnorm", "tessera.flash_attn"] and
+                            module.functions[0].body[1].kwargs.get("lse_checkpoint") == "saved")
+        ranks = (4,) if source_attention else (1,2,3,4) if requests_attention(module) else (1,2)
         return cuda_frontend_specs(ordered,ranks=ranks)
 
     def _specialized_autodiff_module(
@@ -1831,6 +1848,58 @@ class JitFn:
         self._cached_artifact = call.artifact
         self.last_fallback_reason = None
         return array
+
+    def _try_source_attention_call(self, args, kwargs):
+        """Consume original normalization/attention SSA through a native program."""
+        if (normalize_target_kind(self.target) != "nvidia_sm120"
+                or self.differentiation_request is not None
+                or len(self.graph_ir.functions) != 1
+                or len(self.graph_ir.functions[0].args) != 3
+                or len(self.graph_ir.functions[0].result_types) != 2
+                or [op.op_name for op in self.graph_ir.functions[0].body]
+                   != ["tessera.rmsnorm", "tessera.flash_attn"]
+                or self.graph_ir.functions[0].body[1].kwargs.get("lse_checkpoint") != "saved"):
+            return _JIT_FALLBACK
+        from .prepared_attention_forward import input_signature
+        from .native_source_program import outline_source_program
+        bound = self._native_frontend_signature().bind(*args, **kwargs)
+        bound.apply_defaults()
+        ordered = tuple(bound.arguments[name] for name in self.arg_names)
+        signature = input_signature(ordered)
+        if (len(signature) != 3 or any(dtype not in {"float16", "bfloat16"}
+                                      for dtype, _ in signature)):
+            return _JIT_FALLBACK
+        if len({dtype for dtype, _ in signature}) != 1:
+            raise ValueError("source attention requires homogeneous half roots")
+        call = self._native_source_attention_calls.get(signature)
+        if call is None:
+            module, _ = self._trace_frontend_capture(ordered, {})
+            from copy import deepcopy
+            module = deepcopy(module)
+            module.module_attrs.update({"tessera.target": '"nvidia_sm120"',
+                                        "tessera.arch": '"sm_120"'})
+            program = outline_source_program(module.to_mlir(target="nvidia_sm120", canonical=True))
+            call = program.prepare(argument_names=tuple(self.arg_names))
+            call._frontend_module = module
+            try:
+                result, receipt = call(*ordered)
+            except BaseException:
+                call.close()
+                raise
+            if len(self._native_source_attention_calls) >= 24:
+                retired = next(iter(self._native_source_attention_calls))
+                self._native_source_attention_calls.pop(retired).close()
+            self._native_source_attention_calls[signature] = call
+            self.graph_ir = module
+        else:
+            result, receipt = call(*ordered)
+        self.graph_ir = call._frontend_module
+        self._native_source_attention_last_owner = call
+        self._native_source_attention_last_receipt = receipt
+        self._native_descriptor_last_receipt = receipt
+        self._cached_artifact = None
+        self.last_fallback_reason = None
+        return result
 
     def _try_prepared_attention_call(self, args, kwargs):
         """Bind a previously verified attention package from tensor metadata."""
@@ -4002,6 +4071,9 @@ class JitFn:
 
     @property
     def execution_kind(self) -> str:
+        source_attention = getattr(self, "_native_source_attention_last_receipt", None)
+        if source_attention and source_attention.get("ok") and source_attention.get("execution_kind") == "native_gpu":
+            return "native_gpu"
         if self._has_native_quantized_product_receipts():
             return "native_gpu"
         if (self._nvidia_lhs_last_program is not None
@@ -4094,6 +4166,9 @@ class JitFn:
 
         from tessera.runtime import RuntimeArtifact
 
+        source_attention = getattr(self, "_native_source_attention_last_owner", None)
+        if source_attention is not None:
+            return source_attention.runtime_artifact()
         quantized_program = getattr(self,"_rocm_quantized_product_last_program",None)
         if quantized_program is not None:
             from .rocm_quantized_product_frontend import runtime_artifact

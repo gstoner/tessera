@@ -51,6 +51,9 @@ std::unique_ptr<mlir::Pass> createPMV11VerifierPass();
 /// Normalize explicit SM120 matmul entry symbols before Schedule hashing.
 mlir::LogicalResult normalizeSM120MatmulEntryNames(mlir::ModuleOp module);
 
+/// Outline original source SSA into typed calls and artifact-only member records.
+std::unique_ptr<mlir::Pass> createOutlineSourceProgramPass();
+
 /// Build registered content-addressed Graph-to-Schedule SSA contracts.
 std::unique_ptr<mlir::Pass> createGraphToSchedulePass();
 

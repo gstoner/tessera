@@ -3,6 +3,21 @@ last_updated: 2026-10-17
 audit_role: reference
 ---
 
+## Native KN packed LDS copy candidate — 2026-10-17
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Native gfx1201 wave exchange and byte permutation retain the existing LDS
+view, scale order, phases, barriers and checked ABI. Matching core/ROCm CMake
+builds and42 owning tests pass:40 numerical and two capacity refusals.
+Two reversed-order trials show9-19percent lower kernel time in four forced
+K1024-4096 profiles, with a3-4percent forced K128 LDS regression. Completed
+public-call time has no consistent gain. All12 FP8/MXFP8/MXFP4 control image
+pairs remain identical; three KN BF16/AITER gaps remain11-22percent.
+Broader frozen tests, documentation and publication gates remain pending.
+All five aggregate slices remain open. Evidence:
+benchmarks/baselines/gfx1201_kn_quad_transpose_20261017/README.md.
+
+
 # Five compiler slices after PR 892: completion evidence
 
 
@@ -13,13 +28,13 @@ changing Sq/Sk through Graph AD/Schedule/Tile/Target/LLVM-PTX. Compiler-disabled
 replay passes 32 numerical cases and 16 independent finite differences. Two
 paired orders record 2.76-3.56x static/bounded completed public-call latency ratios for the
 named FP16/BF16 saved-LSE profiles; native event windows remain separate.
-Frozen fixed-source WSL CPU passes 26,343 tests (5,905 skipped); production compiler-route passes 1,614 with zero skips. Public CI/review remain pending.
+Frozen fixed-source WSL CPU passes 26,343 tests (5,905 skipped); production compiler-route passes 1,614 with zero skips. PR980 merged after all required CI passed and the complete review audit resolved every thread.
 Mixed/quantized formats, wider masks/composed AD and every aggregate row
 remain open. Evidence:
 benchmarks/baselines/sm120_bounded_host_jvp_20261017/README.md.
 
 PR980 review adds native fixed-signature owner specialization; 98 focused
-cases and refreshed matched timings pass. Public CI/review remain.
+cases and refreshed matched timings pass. The fixed head merged as d6c5cab962 after guarded merge.
 
 ## Typed attention JVP integration — 2026-10-17
 
@@ -33,8 +48,7 @@ identical. Eight correctness-gated profiles separate native event and completed
 public timing scopes. The complete production compiler-route gate passes
 1,587 cases with zero skips; all 33 generated documents pass drift checks.
 The clean-head CI CPU lane passes 26,314 cases (5,904 skipped), with zero
-failures. Twelve existing resident producer JVP regressions pass. Public CI
-and complete review-thread audit remain pending.
+failures. Twelve existing resident producer JVP regressions pass. PR979 is merged.
 Evidence: benchmarks/baselines/sm120_typed_attention_jvp_20261017/README.md.
 Ordinary bounded host preparation, mixed formats, wider composition and all
 five aggregate requirements remain open.

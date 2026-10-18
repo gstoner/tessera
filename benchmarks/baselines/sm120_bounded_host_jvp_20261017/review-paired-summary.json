@@ -1,0 +1,21 @@
+{
+  "source_revision": "f72a9b707a03354766d8fd5c3cfc38714c7d5663",
+  "rows": 32,
+  "accepted_paired_windows": 320,
+  "matching_profile_images_and_sizers_before_after_review": 16,
+  "static_over_bounded_range": [
+    2.7560923472791994,
+    3.564230020242112
+  ],
+  "completed_public_host_median_ms_range": {
+    "bounded": [
+      0.46734882016608026,
+      0.7087417207003455
+    ],
+    "static": [
+      1.5853874292588443,
+      2.0562497220453224
+    ]
+  },
+  "scope": "paired explicit-route host latency characterization; native CUDA event dispatch windows retained separately; no kernel-speedup claim"
+}

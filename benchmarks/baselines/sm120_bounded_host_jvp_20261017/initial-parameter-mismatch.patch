@@ -1,0 +1,33 @@
+--- a/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp
++++ b/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp
+@@ -310,10 +310,6 @@
+       if(value!=1 && value!=scores[i])return bad("invalid prepared bias shape");
+       state->biasShape[i]=value;
+     }
+-    // Native forward lowering folds static physical bias extents into IR.
+-    // Bounded entries carry four extra scalar parameters only for dynamic bias.
+-    if(bounds)state->forwardBiasScalars=state->bias &&
+-      (state->biasSymbols[2]==dynamic || state->biasSymbols[3]==dynamic);
+     if(int status=jvpExtents(*state))return status;
+     state->capacityBytes=state->bytes;
+     size_t total=0;std::array<size_t,12> offsets{};
+@@ -338,7 +334,7 @@
+        !ok(cuModuleLoadData(&state->tangentModule,timage),"load tangent") ||
+        !ok(cuModuleGetFunction(&state->tangent,state->tangentModule,tentry),"resolve tangent"))return 3;
+     if(state->boundedJvp &&
+-       (!attentionKernelParameters(state->forward,5+unsigned(state->bias)+7+4*unsigned(state->forwardBiasScalars)) ||
++       (!attentionKernelParameters(state->forward,5+unsigned(state->bias)+7+4*unsigned(state->bias)) ||
+         !attentionKernelParameters(state->tangent,slots+3)))return 1;
+     CUdevice device;int limit=0,staticBytes=0;
+     if(!ok(cuCtxGetDevice(&device),"get device") ||
+@@ -497,9 +493,7 @@
+   if(s.bias){
+     const int64_t scores[4]={s.dims[0],s.dims[1],s.dims[3],s.dims[4]};
+     bool broadcast=false;for(size_t i=0;i<4;++i)broadcast|=s.biasShape[i]!=scores[i];
+-    const bool shapeArguments=s.boundedJvp?s.forwardBiasScalars:
+-      (broadcast || s.forwardBiasScalars);
+-    if(shapeArguments)for(size_t i=0;i<4;++i)fa[arg++]=&s.biasShape[i];
++    if(broadcast || s.forwardBiasScalars)for(size_t i=0;i<4;++i)fa[arg++]=&s.biasShape[i];
+   }
+   void *ta[15];for(size_t i=0;i<slots;++i)ta[i]=&s.buffers[i];
+   int64_t scratch=128;ta[slots]=&scratch;

@@ -14,6 +14,7 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include <utility>
 namespace {
 std::mutex ownerMutex;
 thread_local std::string ownerError;
@@ -37,7 +38,12 @@ struct Owner {
   std::array<size_t,13> hostOffsets{};
   std::array<CUdeviceptr,13> buffers{};
   std::array<size_t,13> bytes{};
-  std::array<int64_t,7> dims{};
+  std::array<int64_t,7> dims{},shapeSymbols{},capacityDims{};
+  std::array<int64_t,4> biasSymbols{};
+  std::array<size_t,13> capacityBytes{};
+  bool boundedJvp=false;
+  unsigned capacityShared=0;
+  void *sizerSymbol=nullptr;
   std::array<int,4> mapping{},roles{};
   size_t activeCount=0;
   bool reverse=false,bias=false,forwardOnly=false,savedLse=false,forwardBiasScalars=false;
@@ -164,12 +170,82 @@ bool currentContext(CUcontext &context){
 }
 }
 extern "C" const char *tessera_nvidia_attention_jvp_last_error(){return ownerError.c_str();}
+static bool attentionKernelParameters(CUfunction function,size_t count);
+
+static int jvpExtents(Owner &s){
+  auto [b,hq,hkv,sq,sk,d,dv]=s.dims;
+  s.bytes={};
+  if(hq%hkv || !extent({b,hq,sq,d},s.bytes[0]) ||
+     !extent({b,hkv,sk,d},s.bytes[1]) || !extent({b,hkv,sk,dv},s.bytes[2]) ||
+     !extent({b,hq,sq,dv},s.bytes[3]) || !extent({b,hq,sq},s.bytes[4]))
+    return bad("invalid prepared extent");
+  s.bytes[5]=s.bytes[0];s.bytes[6]=s.bytes[1];
+  s.bytes[7]=s.bytes[2];s.bytes[8]=s.bytes[3];
+  if(s.bias){
+    if(!extent({s.biasShape[0],s.biasShape[1],s.biasShape[2],s.biasShape[3]},s.bytes[8]))
+      return bad("invalid prepared bias extent");
+    s.bytes[9]=s.bytes[8];s.bytes[10]=s.bytes[3];
+  }
+  const size_t slots=(s.bias?11:9)+unsigned(s.savedLse);
+  if(s.savedLse)s.bytes[slots-1]=s.bytes[4];
+  uint64_t rows=uint64_t(b)*hq*sq,outputs=s.bytes[3]/4;
+  if(rows>INT_MAX || (outputs+127)/128>UINT_MAX)return bad("grid exceeds bounds");
+  s.tangentGrid=unsigned(rows);s.forwardGrid=unsigned((outputs+127)/128);
+  if(s.storage!=1)for(unsigned slot:{0u,1u,2u,5u,6u,7u})s.bytes[slot]/=2;
+  if(s.outputStorage!=1){s.bytes[3]/=2;s.bytes[s.bias?10:8]/=2;}
+  return 0;
+}
+
+template<size_t> using SizerPointer=void*;
+template<size_t... I>
+static int64_t callJvpSizer(const Owner &s,std::index_sequence<I...>){
+  if(s.boundedJvp){
+    using Sizer=int64_t(*)(SizerPointer<I>...,int64_t,int64_t,int64_t);
+    return reinterpret_cast<Sizer>(s.sizerSymbol)(
+        (static_cast<void>(I),nullptr)...,128,s.dims[3],s.dims[4]);
+  }
+  using Sizer=int64_t(*)(SizerPointer<I>...,int64_t);
+  return reinterpret_cast<Sizer>(s.sizerSymbol)((static_cast<void>(I),nullptr)...,128);
+}
+static int64_t jvpShared(const Owner &s){
+  switch((s.bias?11:9)+unsigned(s.savedLse)){
+    case 9:return callJvpSizer(s,std::make_index_sequence<9>{});
+    case 10:return callJvpSizer(s,std::make_index_sequence<10>{});
+    case 11:return callJvpSizer(s,std::make_index_sequence<11>{});
+    case 12:return callJvpSizer(s,std::make_index_sequence<12>{});
+  }
+  return -1;
+}
+static int bindBoundedJvp(Owner &s,const int64_t *dims,const int64_t *bias){
+  if(!dims || bool(bias)!=s.bias)return bad("bounded JVP runtime shape ABI disagrees");
+  constexpr int64_t dynamic=std::numeric_limits<int64_t>::min();
+  for(size_t i=0;i<7;++i)
+    if(dims[i]<=0 || dims[i]>s.capacityDims[i] ||
+       (s.shapeSymbols[i]!=dynamic && dims[i]!=s.shapeSymbols[i]))
+      return bad("bounded JVP runtime dimensions exceed capacity");
+  const int64_t scores[4]={dims[0],dims[1],dims[3],dims[4]};
+  if(s.bias)
+    for(size_t i=0;i<4;++i){
+      int64_t wanted=s.biasSymbols[i]==dynamic?scores[i]:s.biasSymbols[i];
+      if(bias[i]!=wanted)return bad("bounded JVP physical bias extent disagrees");
+    }
+  for(size_t i=0;i<7;++i)s.dims[i]=dims[i];
+  if(s.bias)for(size_t i=0;i<4;++i)s.biasShape[i]=bias[i];
+  if(int status=jvpExtents(s))return status;
+  for(size_t i=0;i<s.bytes.size();++i)
+    if(s.bytes[i]>s.capacityBytes[i])return bad("bounded JVP byte capacity exceeded");
+  int64_t shared=jvpShared(s);
+  if(shared<0 || uint64_t(shared)>s.capacityShared)
+    return bad("bounded JVP shared capacity exceeded");
+  s.shared=unsigned(shared);
+  return 0;
+}
 static int prepareAttentionJvp(
   const void *fimage,size_t fbytes,const char *fentry,
   const void *timage,size_t tbytes,const char *tentry,
   const char *sizerPath,const char *sizerEntry,const int64_t *dims,
   const int64_t *biasShape,const int *mapping,const int *roles,size_t activeCount,uint64_t *handle,
-  bool savedLse=false,int storage=1,int outputStorage=1){
+  bool savedLse=false,int storage=1,int outputStorage=1,const int64_t *bounds=nullptr,int boundedBiasArguments=0){
   ownerError.clear();if(handle)*handle=0;
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
@@ -182,9 +258,10 @@ static int prepareAttentionJvp(
   try{
     auto state=std::make_unique<Owner>();
     state->bias=biasShape!=nullptr;
+    state->boundedJvp=bounds!=nullptr;
     state->savedLse=savedLse;
     state->storage=storage;state->outputStorage=outputStorage;
-    state->forwardBiasScalars=storage!=1;
+    state->forwardBiasScalars=storage!=1 || bounds!=nullptr;
     if(storage!=1){
       std::string prefix="tessera_tile_attention_lse_";
       prefix+=storage==2?"f16_":"bf16_";
@@ -210,35 +287,47 @@ static int prepareAttentionJvp(
       active[roles[i]]=true;state->roles[i]=roles[i];
     }
     state->activeCount=activeCount;
+    constexpr int64_t dynamic=std::numeric_limits<int64_t>::min();
+    bool hasDynamic=false;
     for(size_t i=0;i<7;++i){
-      if(dims[i]<=0 || dims[i]>65536)return bad("invalid prepared shape");state->dims[i]=dims[i];
-    }
-    auto [b,hq,hkv,sq,sk,d,dv]=state->dims;
-    if(hq%hkv || !extent({b,hq,sq,d},state->bytes[0]) ||
-       !extent({b,hkv,sk,d},state->bytes[1]) || !extent({b,hkv,sk,dv},state->bytes[2]) ||
-       !extent({b,hq,sq,dv},state->bytes[3]) || !extent({b,hq,sq},state->bytes[4]))
-      return bad("invalid prepared extent");
-    state->bytes[5]=state->bytes[0];state->bytes[6]=state->bytes[1];
-    state->bytes[7]=state->bytes[2];state->bytes[8]=state->bytes[3];
-    if(state->bias){
-      const int64_t scores[4]={b,hq,sq,sk};
-      for(size_t i=0;i<4;++i){
-        if(biasShape[i]!=1 && biasShape[i]!=scores[i])return bad("invalid prepared bias shape");
-        state->biasShape[i]=biasShape[i];
+      state->shapeSymbols[i]=dims[i];
+      int64_t value=bounds?bounds[i]:dims[i];
+      if(value<=0 || value>65536)return bad("invalid prepared shape");
+      if(bounds){
+        if(dims[i]==dynamic){
+          if(i!=3 && i!=4)return bad("only JVP sequence dimensions may be dynamic");
+          hasDynamic=true;
+        }else if(dims[i]!=value)return bad("bounded JVP fixed dimension disagrees");
       }
-      if(!extent({biasShape[0],biasShape[1],biasShape[2],biasShape[3]},state->bytes[8]))
-        return bad("invalid prepared bias extent");
-      state->bytes[9]=state->bytes[8];state->bytes[10]=state->bytes[3];
+      state->dims[i]=value;state->capacityDims[i]=value;
     }
-    if (savedLse) state->bytes[slots-1]=state->bytes[4];
-    uint64_t rows=uint64_t(b)*hq*sq,outputs=state->bytes[3]/4;
-    if(rows>INT_MAX || (outputs+127)/128>UINT_MAX)return bad("grid exceeds bounds");
-    state->tangentGrid=unsigned(rows);state->forwardGrid=unsigned((outputs+127)/128);
-    if(storage!=1)
-      for(unsigned slot: {0u,1u,2u,5u,6u,7u})state->bytes[slot]/=2;
-    if(outputStorage!=1){
-      state->bytes[3]/=2;state->bytes[state->bias?10:8]/=2;
+    if(bounds && !hasDynamic)return bad("bounded JVP requires symbolic sequences");
+    const int64_t scores[4]={state->dims[0],state->dims[1],state->dims[3],state->dims[4]};
+    if(state->bias)for(size_t i=0;i<4;++i){
+      state->biasSymbols[i]=biasShape[i];
+      int64_t value=biasShape[i];
+      if(bounds && value==dynamic && i>=2)value=scores[i];
+      if(value!=1 && value!=scores[i])return bad("invalid prepared bias shape");
+      state->biasShape[i]=value;
     }
+    // Native forward lowering uses no extra scalars for static physical bias
+    // or implicit logical bias. Only explicitly shaped dynamic bias has four.
+    if(bounds){
+      const bool dynamicBias=state->bias &&
+        (state->biasSymbols[2]==dynamic || state->biasSymbols[3]==dynamic);
+      if(boundedBiasArguments && !dynamicBias)
+        return bad("bounded JVP bias parameter policy disagrees");
+      if(dynamicBias && !boundedBiasArguments){
+        const int64_t logical[4]={state->shapeSymbols[0],state->shapeSymbols[1],
+                                  state->shapeSymbols[3],state->shapeSymbols[4]};
+        for(size_t i=0;i<4;++i)
+          if(state->biasSymbols[i]!=logical[i])
+            return bad("bounded JVP implicit bias shape disagrees");
+      }
+      state->forwardBiasScalars=bool(boundedBiasArguments);
+    }
+    if(int status=jvpExtents(*state))return status;
+    state->capacityBytes=state->bytes;
     size_t total=0;std::array<size_t,12> offsets{};
     for(size_t i=0;i<slots;++i){
       if(total>std::numeric_limits<size_t>::max()-255)return bad("alignment overflow");
@@ -252,30 +341,23 @@ static int prepareAttentionJvp(
     if(!state->sizerLibrary)return bad("native sizing library unavailable");
     auto symbol=dlsym(state->sizerLibrary,sizerEntry);
     if(!symbol)return bad("native sizing entry unavailable");
-    // Compiler-produced sizing is pure scalar shape arithmetic. The two
-    // signatures preserve the old ABI and the explicit biased pointer arity.
-    using Sizer=int64_t(*)(void*,void*,void*,void*,void*,void*,void*,void*,void*,int64_t);
-    using BiasSizer=int64_t(*)(void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,int64_t);
-    using LseSizer=int64_t(*)(void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,int64_t);
-    using BiasLseSizer=int64_t(*)(void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,int64_t);
-    int64_t shared = savedLse
-      ? (state->bias
-        ? reinterpret_cast<BiasLseSizer>(symbol)(nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,128)
-        : reinterpret_cast<LseSizer>(symbol)(nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,128))
-      : (state->bias
-        ? reinterpret_cast<BiasSizer>(symbol)(nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,128)
-        : reinterpret_cast<Sizer>(symbol)(nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,128));
+    // Call the compiler-owned sizer with the complete static/bounded index ABI.
+    state->sizerSymbol=symbol;
+    int64_t shared=jvpShared(*state);
     if(shared<0 || shared>INT_MAX)return bad("invalid native shared extent");
     if(!ok(cuModuleLoadData(&state->forwardModule,fimage),"load forward") ||
        !ok(cuModuleGetFunction(&state->forward,state->forwardModule,fentry),"resolve forward") ||
        !ok(cuModuleLoadData(&state->tangentModule,timage),"load tangent") ||
        !ok(cuModuleGetFunction(&state->tangent,state->tangentModule,tentry),"resolve tangent"))return 3;
+    if(state->boundedJvp &&
+       (!attentionKernelParameters(state->forward,5+unsigned(state->bias)+7+4*unsigned(state->forwardBiasScalars)) ||
+        !attentionKernelParameters(state->tangent,slots+3)))return 1;
     CUdevice device;int limit=0,staticBytes=0;
     if(!ok(cuCtxGetDevice(&device),"get device") ||
        !ok(cuDeviceGetAttribute(&limit,CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN,device),"shared limit") ||
        !ok(cuFuncGetAttribute(&staticBytes,CU_FUNC_ATTRIBUTE_SHARED_SIZE_BYTES,state->tangent),"static shared"))return 3;
     if(shared>limit-staticBytes)return bad("native shared exceeds device");
-    state->shared=unsigned(shared);
+    state->shared=unsigned(shared);state->capacityShared=unsigned(shared);
     if(shared && !ok(cuFuncSetAttribute(state->tangent,CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES,int(shared)),"dynamic shared"))return 3;
     state->arenaBytes=total;
     if(!ok(cuStreamCreate(&state->stream,CU_STREAM_NON_BLOCKING),"create product stream") ||
@@ -333,10 +415,26 @@ extern "C" int tessera_nvidia_attention_jvp_prepare_typed(
     sizerPath,sizerEntry,dims,biasShape,mapping,roles,activeCount,handle,
     bool(savedLse),storage,outputStorage);
 }
+extern "C" int tessera_nvidia_attention_jvp_prepare_bounded(
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *timage,size_t tbytes,const char *tentry,
+  const char *sizerPath,const char *sizerEntry,const int64_t *dims,
+  const int64_t *bounds,const int64_t *biasShape,const int *mapping,const int *roles,
+  size_t activeCount,int storage,int outputStorage,int savedLse,int biasShapeArguments,uint64_t *handle){
+  if(!bounds || (savedLse!=0 && savedLse!=1) ||
+     (biasShapeArguments!=0 && biasShapeArguments!=1)){
+    if(handle)*handle=0;
+    return bad("bounded JVP bounds or saved-LSE flag disagrees");
+  }
+  return prepareAttentionJvp(fimage,fbytes,fentry,timage,tbytes,tentry,
+    sizerPath,sizerEntry,dims,biasShape,mapping,roles,activeCount,handle,
+    bool(savedLse),storage,outputStorage,bounds,biasShapeArguments);
+}
 static int invokeAttentionJvp(
   uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
   void *const *outputs,const size_t *outputBytes,float *deviceMilliseconds,
-  const uint64_t *producerStreams=nullptr,size_t producerCount=0,size_t outputCount=2){
+  const uint64_t *producerStreams=nullptr,size_t producerCount=0,size_t outputCount=2,
+  const int64_t *runtimeDims=nullptr,const int64_t *runtimeBias=nullptr){
   ownerError.clear();
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
@@ -347,6 +445,8 @@ static int invokeAttentionJvp(
   unsigned long long identity=0;
   if(!ok(cuCtxGetId(context,&identity),"context identity"))return 3;
   if(identity!=s.contextIdentity)return bad("prepared attention context generation disagrees");
+  if(s.boundedJvp!=bool(runtimeDims))return bad("prepared JVP shape policy disagrees");
+  if(s.boundedJvp){if(int status=bindBoundedJvp(s,runtimeDims,runtimeBias))return status;}
   const size_t primals=3+unsigned(s.bias),resultSlot=s.bias?10:8,
       slots=(s.bias?11:9)+unsigned(s.savedLse),results=s.savedLse?4:2;
   const std::array<size_t,4> outputSlots = s.savedLse
@@ -410,10 +510,13 @@ static int invokeAttentionJvp(
   if(s.bias){
     const int64_t scores[4]={s.dims[0],s.dims[1],s.dims[3],s.dims[4]};
     bool broadcast=false;for(size_t i=0;i<4;++i)broadcast|=s.biasShape[i]!=scores[i];
-    if(broadcast || s.forwardBiasScalars)for(size_t i=0;i<4;++i)fa[arg++]=&s.biasShape[i];
+    const bool shapeArguments=s.boundedJvp?s.forwardBiasScalars:
+      (broadcast || s.forwardBiasScalars);
+    if(shapeArguments)for(size_t i=0;i<4;++i)fa[arg++]=&s.biasShape[i];
   }
-  void *ta[13];for(size_t i=0;i<slots;++i)ta[i]=&s.buffers[i];
+  void *ta[15];for(size_t i=0;i<slots;++i)ta[i]=&s.buffers[i];
   int64_t scratch=128;ta[slots]=&scratch;
+  if(s.boundedJvp){ta[slots+1]=&s.dims[3];ta[slots+2]=&s.dims[4];}
   if(!ok(cuEventRecord(s.events[0],s.stream),"start forward") ||
      !ok(cuLaunchKernel(s.forward,s.forwardGrid,1,1,128,1,1,0,s.stream,fa,nullptr),"launch forward") ||
      !ok(cuEventRecord(s.events[1],s.stream),"end forward") ||
@@ -428,6 +531,14 @@ static int invokeAttentionJvp(
      (!ok(cuEventElapsedTime(&deviceMilliseconds[0],s.events[0],s.events[1]),"forward elapsed") ||
       !ok(cuEventElapsedTime(&deviceMilliseconds[1],s.events[2],s.events[3]),"tangent elapsed")))return 3;
   return 0;
+}
+extern "C" int tessera_nvidia_attention_jvp_invoke_bounded(
+  uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
+  const int64_t *dims,const int64_t *bias,const uint64_t *producerStreams,size_t producerCount,
+  void *const *outputs,const size_t *outputBytes,size_t outputCount,float *deviceMilliseconds){
+  if(!dims)return bad("bounded JVP runtime dimensions are missing");
+  return invokeAttentionJvp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
+    deviceMilliseconds,producerStreams,producerCount,outputCount,dims,bias);
 }
 extern "C" int tessera_nvidia_attention_jvp_invoke(
   uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,

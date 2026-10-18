@@ -312,6 +312,14 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 ### E2E-REAL-6
 
+- Current increment (2026-10-17, sync SM120-BOUNDED-HOST-JVP-20261017):
+  explicit bounded host JVP uses one checked native capacity owner with
+  compiler-owned AD/Schedule/Tile/Target images. Owning numerical replay and
+  paired completed-call timing and full local validation pass; public CI/review
+  remain.
+  Wider attention/producer/ROCm obligations stay open.
+  [Packet](../../../benchmarks/baselines/sm120_bounded_host_jvp_20261017/README.md).
+
 - Current increment (2026-10-05, sync ROCM-MOVEMENT-SPINE-2026-10-05):
   canonical static paged reads on gfx1151/gfx1201 and explicit MoE token gather
   on gfx1151 retain adjacent native Graph/Schedule/Tile/Target/backend ancestry.
@@ -431,7 +439,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 
 - Current slice (2026-09-30, sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30): The Graph-to-package contract composes bounded dynamic M/N/K on gfx1201 and sm_120. Exact-device fp16/bf16 parity, padded host ingress, allocation residency, and image reuse pass. Separate fp16 and bf16 event packets support stage attribution only; gfx1201 variation is high. Apple and x86 need independent resident consumers; wider physical layouts and remaining W1.1 producers stay open. [Evidence](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 
-- Latest: [2026-10-17 — KN publication gate and sparse worker completion](INTEGRATED_COMPILER_LOG.md#2026-10-17--kn-publication-gate-and-sparse-worker-completion)
+- Latest: [bounded native host attention JVP](INTEGRATED_COMPILER_LOG.md#2026-10-17--bounded-native-host-attention-jvp)
 
 Current increment: checked rank-four broadcast saved-LSE packages and private tape execute on SM120; physical bias extents, deterministic reduction and saved-state pairing are bound through native Graph/Schedule/Tile and checked CUDA descriptors. [Evidence](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md). Broader W1.1, frontend/AD and sibling routes remain open.
 

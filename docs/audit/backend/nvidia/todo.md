@@ -6,6 +6,41 @@ target: nvidia_sm120
 last_updated: 2026-10-17
 ---
 
+## SM120-BOUNDED-HOST-JVP-20261017 — bounded prepared host attention JVP
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync: SM120-BOUNDED-HOST-JVP-20261017.
+
+Shared assessment: explicit public sequence bounds, structural frontend
+certification, additive native preparation/invocation ABI, capacity/span
+ownership and paired benchmark fields.
+
+Parity validated on RTX5070/sm_120 for explicit bounded prepared host
+attention JVP. One capacity owner handles changing Sq/Sk through compiler-owned
+Graph AD/Schedule/Tile/Target/LLVM-PTX images. Typed numerical checks cover
+FP16/BF16/F32, FP32 outputs, physical broadcasts, native ABI recovery and
+producer-stream ordering. Compiler-disabled replay passes 32 arm/profile cases
+and 16 independent finite differences. Two paired run orders give 2.76-3.56x
+static/bounded completed public-call latency ratios in the recorded profiles; CUDA event
+dispatch measurements remain separate. No general kernel-speedup promotion.
+Follow-up required for mixed/quantized storage, wider masks/layouts, composed
+AD, resident results and all five aggregate requirements.
+
+PR980 review: cache identity now includes the sealed native fixed primal
+shape/dtype signature. Nine added owning-device cases cover interleaved
+host/resident specializations and physical bias switching with capacity
+recovery; the full focused selection passes 98. All 16 measured image/sizer
+profiles remain identical before/after the fix. Frozen fixed-source WSL CPU passes 26,343 tests (5,905 skipped); production compiler-route passes 1,614 with zero skips.
+
+CI follow-up: the host-free compiler-route lane now binds its selected
+LLVM directory, builds the NVIDIA target tool and installs a SHA256-pinned
+CUDA assembler/libdevice components. This enables the 14 bounded preflight
+cases to execute their real package construction; it adds no device proof
+or sibling target admission.
+
+Contract: docs/spec/SM120_TYPED_ATTENTION_JVP_CONTRACT.md.
+Evidence: benchmarks/baselines/sm120_bounded_host_jvp_20261017/README.md.
+
 ## GFX1201-KN-LDS-20261017 — native KN W8A8 staging
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.

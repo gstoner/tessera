@@ -1,0 +1,18 @@
+{
+  "rows": 16,
+  "public_static_over_bounded_range": [
+    3.022166280951678,
+    3.816534989275595
+  ],
+  "all_paired_windows_admissible": true,
+  "native_event_ratio_ranges": {
+    "native_forward_event_median_ms": [
+      0.9615004888753843,
+      1.676623477841288
+    ],
+    "native_jvp_event_median_ms": [
+      0.9069766707312759,
+      1.6570312673372432
+    ]
+  }
+}

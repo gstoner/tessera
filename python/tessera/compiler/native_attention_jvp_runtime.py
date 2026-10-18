@@ -12,8 +12,9 @@ def execute_unprepared(metadata,args):
     if len(args)!=len(owner.names):
         raise ValueError("attention JVP launch arity disagrees")
     values=tuple(np.asarray(x) for x in args)
+    wanted=owner._runtime_shapes(tuple((x.shape,x.dtype) for x in values))
     if any(x.dtype!=dtype or x.shape!=shape
-           for x,shape,dtype in zip(values,owner.shapes,owner.dtypes,strict=True)):
+           for x,shape,dtype in zip(values,wanted,owner.dtypes,strict=True)):
         raise ValueError("attention JVP host storage disagrees with native contract")
     # Native session owns uploads. Capture owns its private O/LSE generation;
     # downloads complete before either owner releases its allocations.
@@ -58,8 +59,14 @@ class PreparedAttentionJVP:
         self.saved_lse=program.saved_lse
         self.names=tuple(f"primal_{i}" for i in range(self.count))+tuple(
             f"tangent_{program.input_indices[i]}" for i in program.active)
-        b,hq,hkv,sq,sk,d,dv=program.pair.forward.descriptor.provenance["shape"]
-        self.bias_shape=tuple(program.pair.forward.descriptor.provenance.get("bias_shape",())) or (b,hq,sq,sk)
+        from .attention_shape_contract import attention_dimensions, physical_attention_bias_shape
+        policy=program.pair.forward.descriptor.provenance
+        self.symbolic_dims=tuple(policy["shape"])
+        self.shape_bounds=tuple(policy.get("shape_bounds",()))
+        self.runtime_dims=attention_dimensions(self.symbolic_dims,self.shape_bounds)
+        b,hq,hkv,sq,sk,d,dv=self.runtime_dims
+        self.symbolic_bias_shape=tuple(policy.get("bias_shape",()))
+        self.bias_shape=physical_attention_bias_shape(self.runtime_dims,self.symbolic_bias_shape)
         physical=((b,hq,sq,d),(b,hkv,sk,d),(b,hkv,sk,dv)) + (
             (self.bias_shape,) if self.biased else ())
         frontend=[None]*self.count
@@ -88,6 +95,31 @@ class PreparedAttentionJVP:
         self.lib: ct.CDLL | None = None
         self.last_device_ms=None
 
+    def _runtime_shapes(self,specs):
+        """Bind checked runtime extents; native ownership retains capacities."""
+        if not self.shape_bounds:
+            return self.shapes
+        from .attention_shape_contract import (
+            attention_dimensions, attention_buffer_shapes, physical_attention_bias_shape,
+        )
+        if len(specs)!=len(self.dtypes):
+            raise ValueError("attention JVP launch arity disagrees")
+        q,k,v=(specs[index][0] for index in self.program.input_indices[:3])
+        if any(len(shape)!=4 for shape in (q,k,v)):
+            raise ValueError("attention runtime sequence tensors require rank four")
+        dims=attention_dimensions(self.symbolic_dims,self.shape_bounds,
+            (q[0],q[1],k[1],q[2],k[2],q[3],v[3]))
+        physical=attention_buffer_shapes(dims,bias=self.biased,
+            bias_shape=self.symbolic_bias_shape)
+        frontend=[None]*self.count
+        for role,index in enumerate(self.program.input_indices):
+            frontend[index]=physical[role]
+        wanted=tuple(frontend)+tuple(physical[role] for role in self.program.active)
+        self.runtime_dims=dims
+        self.bias_shape=physical_attention_bias_shape(dims,self.symbolic_bias_shape)
+        self.output_shape,self.lse_shape=physical[-2:]
+        return wanted
+
     def _library(self) -> ct.CDLL:
         lib = self.lib
         if lib is None:
@@ -106,15 +138,17 @@ class PreparedAttentionJVP:
         self.lib=lib
         P,S,I,U=ct.c_void_p,ct.c_size_t,ct.c_int,ct.c_uint64
         typed=self.storage!="f32"
-        prepare=(lib.tessera_nvidia_attention_jvp_prepare_typed if typed else
+        bounded=bool(self.shape_bounds)
+        prepare=(lib.tessera_nvidia_attention_jvp_prepare_bounded if bounded else
+                 lib.tessera_nvidia_attention_jvp_prepare_typed if typed else
                  lib.tessera_nvidia_attention_jvp_prepare_lse if self.saved_lse else
                  lib.tessera_nvidia_attention_jvp_prepare_bias if self.biased
                  else lib.tessera_nvidia_attention_jvp_prepare)
         signature: list[Any] = [
             P,S,ct.c_char_p,P,S,ct.c_char_p,ct.c_char_p,ct.c_char_p,
-            ct.POINTER(ct.c_int64)] + (
-                [ct.POINTER(ct.c_int64)] if self.biased or self.saved_lse or typed else []) + [
-            ct.POINTER(I),ct.POINTER(I),S] + ([I,I,I] if typed else []) + [ct.POINTER(U)]
+            ct.POINTER(ct.c_int64)] + ([ct.POINTER(ct.c_int64)] if bounded else []) + (
+                [ct.POINTER(ct.c_int64)] if self.biased or self.saved_lse or typed or bounded else []) + [
+            ct.POINTER(I),ct.POINTER(I),S] + ([I,I,I] if typed or bounded else []) + ([I] if bounded else []) + [ct.POINTER(U)]
         prepare.argtypes=signature
         prepare.restype=I
         lib.tessera_nvidia_attention_jvp_invoke.argtypes=[
@@ -133,16 +167,24 @@ class PreparedAttentionJVP:
         mapping=(I*self.count)(*program.input_indices)
         roles=(I*len(program.active))(*program.active)
         handle=U()
-        bias=(((ct.c_int64*4)(*self.bias_shape) if self.biased else None),) if self.biased or self.saved_lse or typed else ()
+        bias_shape=(self.symbolic_bias_shape or (
+            self.symbolic_dims[0],self.symbolic_dims[1],self.symbolic_dims[3],self.symbolic_dims[4])) if bounded else self.bias_shape
+        bias=(((ct.c_int64*4)(*bias_shape) if self.biased else None),) if self.biased or self.saved_lse or typed or bounded else ()
+        capacities=((ct.c_int64*7)(*self.shape_bounds),) if bounded else ()
+        flags: tuple[int,...]=({"f32":1,"f16":2,"bf16":3}[self.storage],
+               {"f32":1,"f16":2,"bf16":3}[self.output_storage],
+               int(self.saved_lse)) if typed or bounded else ()
+        if bounded:
+            from .attention_shape_contract import DYNAMIC_DIM
+            flags+=(int(any(x==DYNAMIC_DIM for x in self.symbolic_bias_shape)),)
         with tempfile.TemporaryDirectory(prefix="tessera-prepared-attention-sizer-") as directory:
             path=Path(directory)/"sizer.so";path.write_bytes(program.tangent.host_library)
             self._check(prepare(
                 forward,len(program.pair.forward.image.payload),
                 program.pair.forward.descriptor.entry_symbol.encode(),
                 tangent,len(program.tangent.image),program.tangent.entry.encode(),
-                str(path).encode(),program.tangent.sizer.encode(),dims,*bias,mapping,roles,
-                len(program.active),*(({"f32":1,"f16":2,"bf16":3}[self.storage],
-                    {"f32":1,"f16":2,"bf16":3}[self.output_storage],int(self.saved_lse)) if typed else ()),
+                str(path).encode(),program.tangent.sizer.encode(),dims,*capacities,*bias,mapping,roles,
+                len(program.active),*flags,
                 ct.byref(handle)))
         self.handle=handle.value
 
@@ -163,14 +205,16 @@ class PreparedAttentionJVP:
                 if not all(hasattr(value,"__cuda_array_interface__") for value in args):
                     raise ValueError("attention JVP requires all resident roots or all host roots")
                 specs=cuda_frontend_specs(args,ranks=(4,))
+                shapes=self._runtime_shapes(specs)
                 if any(dtype!=wanted or shape!=expected
-                       for (shape,dtype),expected,wanted in zip(specs,self.shapes,self.dtypes,strict=True)):
+                       for (shape,dtype),expected,wanted in zip(specs,shapes,self.dtypes,strict=True)):
                     raise ValueError("attention JVP resident storage disagrees with native contract")
                 values=tuple(args)
             else:
                 values=tuple(np.asarray(x) for x in args)
+                shapes=self._runtime_shapes(tuple((x.shape,x.dtype) for x in values))
                 if any(x.dtype!=dtype or x.shape!=shape
-                       for x,shape,dtype in zip(values,self.shapes,self.dtypes,strict=True)):
+                       for x,shape,dtype in zip(values,shapes,self.dtypes,strict=True)):
                     raise ValueError("attention JVP host storage disagrees with native contract")
                 values=tuple(np.ascontiguousarray(x) for x in values)
             if not self.handle:self._prepare()
@@ -189,7 +233,20 @@ class PreparedAttentionJVP:
             destinations=(ct.c_void_p*len(outputs))(*(x.ctypes.data for x in outputs))
             sizes=(ct.c_size_t*len(outputs))(*(x.nbytes for x in outputs))
             times=(ct.c_float*2)()
-            if resident:
+            if self.shape_bounds:
+                invoke=self._library().tessera_nvidia_attention_jvp_invoke_bounded
+                invoke.argtypes=[
+                    ct.c_uint64,ct.POINTER(ct.c_void_p),ct.POINTER(ct.c_size_t),ct.c_size_t,
+                    ct.POINTER(ct.c_int64),ct.POINTER(ct.c_int64),
+                    ct.POINTER(ct.c_uint64),ct.c_size_t,ct.POINTER(ct.c_void_p),
+                    ct.POINTER(ct.c_size_t),ct.c_size_t,ct.POINTER(ct.c_float)]
+                invoke.restype=ct.c_int
+                dims=(ct.c_int64*7)(*self.runtime_dims)
+                bias=(ct.c_int64*4)(*self.bias_shape) if self.biased else None
+                self._check(invoke(self.handle,pointers,lengths,len(values),dims,bias,
+                    streams if resident else None,len(values) if resident else 0,
+                    destinations,sizes,len(outputs),times))
+            elif resident:
                 lib=self._library()
                 try:
                     invoke=(lib.tessera_nvidia_attention_jvp_invoke_lse_resident_ordered if self.saved_lse else

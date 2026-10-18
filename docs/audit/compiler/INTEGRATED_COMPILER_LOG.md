@@ -19,6 +19,8 @@ audit_role: reference
 
 
 
+
+
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -13439,4 +13441,27 @@ Remaining: public CI/review, wider ROCm performance envelopes and all five
 aggregate requirements.
 
 Evidence: benchmarks/baselines/gfx1201_kn_lds_20261017/README.md.
+<!-- entry-fields:end -->
+
+### 2026-10-17 — bounded native host attention JVP
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: [#980](https://github.com/gstoner/tessera/pull/980); sync SM120-BOUNDED-HOST-JVP-20261017.
+
+Outcome: Explicit public bounds use native Graph AD/Schedule/Tile/Target/
+LLVM-PTX and a capacity-sized C++ prepared owner. Runtime dimensions, byte
+spans, physical bias parameters and producer events are checked. Compiler-free
+replay passes 32 numerical cases plus 16 independent finite differences.
+Paired completed-call latency improves 2.76-3.56x in the named profiles;
+device dispatch samples remain separate. All four backend plans assessed.
+Frozen fixed-source WSL CPU passes 26,343 tests (5,905 skipped); production compiler-route passes 1,614 with zero skips.
+
+PR980 review: native fixed shape/dtype cache specializations preserve
+sequence reuse and physical bias policy; 98 focused cases and both refreshed
+timing orders pass with unchanged images/sizers.
+
+Remaining: Public CI/review gates, mixed/quantized attention, wider masks/layouts, composed AD/resident results
+and the original five-slice obligations.
+
+Evidence: benchmarks/baselines/sm120_bounded_host_jvp_20261017/README.md.
 <!-- entry-fields:end -->

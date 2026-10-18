@@ -6,6 +6,34 @@ target: apple_gpu
 last_updated: 2026-10-18
 ---
 
+## NATIVE-ATTENTION-SOURCE-REVERSE-20261018 — logical row prefixes
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Base: PR987 merged as 9e63d8c71 after all required CI and exact-head review.
+The original half RMSNorm(Q) -> saved-LSE attention source passes native paired
+AD for O-only and O+LSE results in both half formats. Schedule still requires
+isolated checkpoint members. The normalization pullback also retains rank-four
+Graph tensors, while the existing physical row consumer assumes rank two.
+
+Six valid rank-three/four compiler fixtures reproduce that limitation against
+the unchanged compiler. The candidate preserves logical Graph prefix shapes,
+rank-reduced statistics and prefix broadcast axes, while forming checked
+compact [product(prefix), last_axis] Tile views. Existing schema-1/6 pointer
+ABIs remain unchanged; original rank-two stage identity requires verification.
+The separate LLVM/MLIR 23.1.1 assertions build passes 91 unique compiler cases;
+27 unique RTX5070 member/adjacent cases pass, including two workgroups. Twenty
+rank-two stage identities are unchanged. Eight correctness-gated paired timing
+profiles retain their explicit raw-member dispatch scope. Original-source
+attention reverse outlining/ownership/public integration remain pending.
+This is a prerequisite for original-source reverse integration, not a claim
+that composed reverse or any aggregate slice is complete.
+
+Not applicable to the native SM120 row ownership ABI. Shared typed Graph semantics remain unchanged; no Apple execution or physical schedule is added.
+
+
+
+Packet: benchmarks/baselines/native_row_logical_prefix_20261018/README.md.
+Contract: docs/spec/NATIVE_ROW_LOGICAL_PREFIX.md.
 
 ## NATIVE-COMPOSED-ATTENTION-PREFIX-20261018 — source SSA outlining
 
@@ -36,7 +64,7 @@ regressions. Focused shared gates pass 1,571 tests; the typing ratchet has zero
 errors. A four-row correctness-gated benchmark separates member/composed
 dispatch windows, prepared host calls and complete public calls; no speedup or
 pure-kernel claim is made. Original-source reverse integration, broader
-envelopes and current-head CI/review remain follow-up.
+envelopes remain follow-up. PR987 delivery is resolved by merged 9e63d8c71.
 The earlier ordinary standalone prefix probe had no native descriptor witness.
 All five aggregate programs remain open.
 Recorder: benchmarks/nvidia/benchmark_source_attention_prefix.py.

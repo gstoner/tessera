@@ -4,6 +4,20 @@ audit_role: reference
 ---
 
 
+## Native logical-prefix row prerequisite — 2026-10-18
+
+PR987 merged as 9e63d8c71 after green required CI and exact-head review.
+Its earlier candidate receipts retain their source-bound scope; delivery is
+resolved. The next original-source attention reverse prerequisite preserves
+rank-three/four Graph rows through checked compact physical Tile views.
+Matching LLVM/MLIR 23.1.1 assertions proof passes 91 unique compiler cases and
+27 unique RTX5070 member/adjacent cases. Twenty rank-two member stages remain
+identical. Eight correctness-gated paired timing profiles retain raw-member
+scope. Native paired-source outlining, full residual ownership, public/portable
+attention gradients and all five aggregate closures remain open.
+[Evidence](../../../benchmarks/baselines/native_row_logical_prefix_20261018/README.md).
+Contract: docs/spec/NATIVE_ROW_LOGICAL_PREFIX.md.
+
 ## Native source normalization-attention forward — 2026-10-18
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
@@ -17,7 +31,7 @@ RTX5070; thirty-four isolated JVP/VJP owner cases pass separately. Shared
 focused gates pass 1,571 tests. CI-equivalent unit passes 30,734 with 3,725
 declared skips; compiler-route passes 2,016 without skips/certificate failures.
 Six calling-convention regressions and six ordinary cold native calls pass.
-Current-head GitHub CI/review and final delivery remain.
+PR987 current-head CI/review and delivery are resolved by merged 9e63d8c71.
 The source primal export cannot drop pending AD intent. All five aggregate
 slices remain open, including original-source composed attention reverse.
 [Evidence](../../../benchmarks/baselines/native_attention_prefix_20261018/README.md).

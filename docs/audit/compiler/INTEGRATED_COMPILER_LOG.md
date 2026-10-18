@@ -13634,3 +13634,35 @@ docs/spec/NATIVE_SOURCE_ATTENTION_PROGRAM.md.
 Calling-convention review fix: six red/green capture cases, 57 native/portable checks, 105 owning forward cases and six ordinary cold calls pass. The shared frontend rebinds tracer proxies to the source signature; all four backend queues record the assessment.
 
 <!-- entry-fields:end -->
+
+
+### 2026-10-18 — native logical-prefix row pullbacks
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync NATIVE-ATTENTION-SOURCE-REVERSE-20261018.
+Base: PR987 merged as 9e63d8c71 after all required CI and exact-head review.
+
+Outcome: Native row scalarization retains rank-three/four logical tensor,
+statistics and broadcast shapes. Only compact physical Tile views combine the
+leading axes into rows. Checked prefix multiplication and last-axis validation
+preserve the existing schema-1/6 pointer ABI. ROCm source admission remains rank
+two pending its separate consumer. No Python derivative formula is generated.
+
+The matching LLVM/MLIR 23.1.1 assertions build passes 91 unique compiler cases
+across the initial and expanded gates. RTX5070 passes 27 unique raw-member and
+adjacent source-VJP cases, including two workgroups, tiny/zero rows, independent
+float64 checks, wrong geometry and tail sentinels. Twenty retained rank-two
+Graph/Schedule/Tile/Target/native stages remain byte-identical. Eight paired
+ranked/rank-two profiles use identical operands, alternating arm order and
+before/after oracles; native dispatch event windows may include enqueue gaps.
+No public-call, pure-kernel, speedup or selector promotion is claimed.
+All four backend queues assess the shared change.
+
+Remaining: Native original-source attention reverse outlining, retained
+normalized-Q/O/LSE ownership, public/portable source gradients and complete
+stage/program timings. Broader validation/publication remains pending.
+All five aggregate slices stay open; this is a row-member prerequisite.
+
+Evidence: benchmarks/baselines/native_row_logical_prefix_20261018/README.md;
+docs/spec/NATIVE_ROW_LOGICAL_PREFIX.md.
+<!-- entry-fields:end -->

@@ -1,0 +1,931 @@
+{
+  "schema": "tessera.native_ranked_row_diagnostic.v1",
+  "device": "NVIDIA GeForce RTX 5070, 12.0, 610.88, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "route": "native paired-AD row fixture -> Schedule/Tile -> NVIDIA/NVVM/PTX -> raw CUDA member",
+  "scope": "resident member event dispatch windows; enqueue gaps possible; not public/composed reverse",
+  "order": "alternating ranked/control, identical inputs, 128-thread blocks",
+  "compiler_sha256": "94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+  "session_runtime_sha256": "5e21e47fd7b9dfa22ce777f3c82b3274901beccc4c180d1fd4fb078caa2dcc0f",
+  "source_hashes": {
+    "src/compiler/programming_model/lib/NativeRowScalarizer.h": "a78159a05fd93851577f1ce24e666d885e9ff0e1e7d9a1b21538168a7a30fce9",
+    "src/compiler/programming_model/lib/NativeRowSchedule.h": "3982d2de5221b161586f2fc6b4f6a2865d08c93992fc65db04113b9b77b04103",
+    "tests/unit/test_sm120_ranked_reverse_rows.py": "02fd4d2177a1c6c7c01b0e8f13851eb52350fab0690423857c100161b9d9dcec",
+    "tests/device/nvidia/test_ranked_reverse_row_member.py": "87467b909dc9c8a0b8617659bbaec637ce7d0ed6b43f9f83cc5692df1be4aeb1",
+    "tests/fixtures/native_sm120/reverse_row_ssa.mlir": "4f22993c8b556fa8bcdf6db6e7dcfaeabd7eddc3322f03bfa21519008557df12",
+    "benchmarks/nvidia/benchmark_ranked_reverse_row.py": "27c5ec093baf6b1521f23bd0efcc21d10d8a93ffe88a3a9fa60371185e74fb6a",
+    "python/tessera/compiler/nvidia_native.py": "78b5fafeeb20aad86d0dcbc7b48b09ee490a225c06e04d9520fe8d2d84c5b51e",
+    "python/tessera/compiler/emit/nvidia_cuda.py": "b73d46b4b6f36f4e8144eba76d232f35160f7a4989efb61fe15e8ea4492d2e50"
+  },
+  "samples": 21,
+  "reps": 32,
+  "rows": [
+    {
+      "storage": "f16",
+      "logical_shape": [
+        2,
+        3,
+        35
+      ],
+      "rows": 6,
+      "columns": 35,
+      "block_threads": 128,
+      "arms": {
+        "ranked": {
+          "stage_sha256": {
+            "graph": "fb50bb0b3469194a38578863a9066dfeaa62bb9b84e76baa2aafa7836098990b",
+            "schedule": "b64a46edd4b6eb9af32069887b879259702754a93817186e42ad5ec2d4e2bb67",
+            "tile": "542daa97530feb75f1aa9d8bd4df7b5bd79427b42983816961e48a753779e0ba",
+            "native": "52234995878975e7fa1b783d2519c95613cb350cfeba272866aca72d5c94937e",
+            "ptx": "fd7c421a8209eba8bd66482384fd68593f3f57176165aeae3fd1e684198a517b"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 969.0055300015956,
+          "logical_shape": [
+            2,
+            3,
+            35
+          ],
+          "entry": "tessera_native_row_5bd35c0ff7471de3",
+          "samples_ms": [
+            0.017704999074339867,
+            0.01825699955224991,
+            0.014998000115156174,
+            0.020354999229311943,
+            0.0142639996483922,
+            0.013280999846756458,
+            0.018428999930620193,
+            0.017851000651717186,
+            0.01388499978929758,
+            0.21980799734592438,
+            0.01604199968278408,
+            0.013484999537467957,
+            0.013987000100314617,
+            0.01724500022828579,
+            0.014739000238478184,
+            0.01579499989748001,
+            0.01254700031131506,
+            0.015217999927699566,
+            0.021297000348567963,
+            0.019899999722838402,
+            0.016042999923229218
+          ],
+          "max_abs_error": 0.00020688756957476517,
+          "median_ms": 0.01604199968278408,
+          "correctness": "passed_before_and_after_timing"
+        },
+        "rank2_control": {
+          "stage_sha256": {
+            "graph": "e0992651e1092ab303df64f8fe4f63839836250666eb91d62740ff094a1ea438",
+            "schedule": "29791f8665504f52fd6239beba64f3899e33b37a79d166a557de1b2c45c8cd7d",
+            "tile": "99a6c4fc517a8fe8e53031cefb51d23905a1a9fed43fa61da8bebb034a18487d",
+            "native": "3c3ac8d8d8ddb86c64c87e085484bf054f266d5468528b58d155bcd72e0ad30e",
+            "ptx": "753cb72c0c5b79832f7c815a50bd08a10a0187a0c91f666e7f94ab41588bd4dc"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 647.7160560316406,
+          "logical_shape": [
+            6,
+            35
+          ],
+          "entry": "tessera_native_row_89bafcd4cbccbe01",
+          "samples_ms": [
+            0.010298999957740307,
+            0.01759199984371662,
+            0.010486000217497349,
+            0.010087000206112862,
+            0.015015999786555767,
+            0.01281100045889616,
+            0.01520800031721592,
+            0.011411000043153763,
+            0.019360000267624855,
+            0.016196999698877335,
+            0.012667999602854252,
+            0.014674999751150608,
+            0.013388999737799168,
+            0.014072000049054623,
+            0.013175999745726585,
+            0.01381599996238947,
+            0.01343700010329485,
+            0.015456999652087688,
+            0.022305000573396683,
+            0.01715400069952011,
+            0.014795999974012375
+          ],
+          "max_abs_error": 0.00020688756957476517,
+          "median_ms": 0.014072000049054623,
+          "correctness": "passed_before_and_after_timing"
+        }
+      }
+    },
+    {
+      "storage": "f16",
+      "logical_shape": [
+        2,
+        3,
+        5,
+        35
+      ],
+      "rows": 30,
+      "columns": 35,
+      "block_threads": 128,
+      "arms": {
+        "ranked": {
+          "stage_sha256": {
+            "graph": "dedb0325e4c8dac60a2b3ffe0d91bb8ecb1893d7aaeca19c0d774b695a488bf0",
+            "schedule": "2ed3326910464dad74e1a08c2d7d115d73aa087365fe2b3af933191ccd75faa7",
+            "tile": "0ab45004117949688c869819b2585013ff03a8ea54696f20f0cad65e35756e14",
+            "native": "5d4786781fac46b2886b40b75a4ba6f263d3ac2e3cd7194a3fba4507b2c12a5a",
+            "ptx": "59ebf8d117079506577b926ddce19954c89b88fee654f88e3255d269ad5fbea3"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 672.2396409604698,
+          "logical_shape": [
+            2,
+            3,
+            5,
+            35
+          ],
+          "entry": "tessera_native_row_b75593aa1ea737ca",
+          "samples_ms": [
+            0.014108000323176384,
+            0.01335499994456768,
+            0.014530999585986137,
+            0.01348700001835823,
+            0.01405400037765503,
+            0.014314999803900719,
+            0.014310000464320183,
+            0.016645999625325203,
+            0.015115000307559967,
+            0.013887999579310417,
+            0.014023000374436378,
+            0.016706999391317368,
+            0.018240999430418015,
+            0.013969000428915024,
+            0.01656699925661087,
+            0.016083000227808952,
+            0.01551000028848648,
+            0.015699999406933784,
+            0.015706000849604607,
+            0.018112000077962875,
+            0.015344000421464443
+          ],
+          "max_abs_error": 0.0004470820002293596,
+          "median_ms": 0.015115000307559967,
+          "correctness": "passed_before_and_after_timing"
+        },
+        "rank2_control": {
+          "stage_sha256": {
+            "graph": "77d337bf423fff29279c6f0a1f5b1adb43695097ff38bd75ea74f15b7de216a3",
+            "schedule": "62ad16e126b0bd498c89767f8c9fc086cffb59b9e224ff6b27a0aa464244dc84",
+            "tile": "e84d67eb321d9a5a64530124631e8d314b1bcecefd9efa32d67b9f05d4626f09",
+            "native": "b2c54fb584a06d393d611eebb951db5fbcc63c59aefc1b0a33a60a3025ed4084",
+            "ptx": "d21e48838e09c694bd24ce1185ee262fe4621d3236e7b8a7a099c0d7d9062a18"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 528.3620440168306,
+          "logical_shape": [
+            30,
+            35
+          ],
+          "entry": "tessera_native_row_904534a98f41b3d4",
+          "samples_ms": [
+            0.01387799996882677,
+            0.011629999615252018,
+            0.015305000357329845,
+            0.015190999954938889,
+            0.013256999664008617,
+            0.015038000419735909,
+            0.014281000010669231,
+            0.01447299961000681,
+            0.014022000133991241,
+            0.015199000015854836,
+            0.015964999794960022,
+            0.014324000105261803,
+            0.015034000389277935,
+            0.014051999896764755,
+            0.018729999661445618,
+            0.01655299961566925,
+            0.0156870000064373,
+            0.01537100039422512,
+            0.015430999919772148,
+            0.014910000376403332,
+            0.016168000176548958
+          ],
+          "max_abs_error": 0.0004470820002293596,
+          "median_ms": 0.015038000419735909,
+          "correctness": "passed_before_and_after_timing"
+        }
+      }
+    },
+    {
+      "storage": "f16",
+      "logical_shape": [
+        2,
+        1,
+        3,
+        257
+      ],
+      "rows": 6,
+      "columns": 257,
+      "block_threads": 128,
+      "arms": {
+        "ranked": {
+          "stage_sha256": {
+            "graph": "5c44a3c0239230290b95e64ad6f4fa59832a8d46112eb6ea695e3bf946c8a884",
+            "schedule": "f0585abfcdb5a241b4aef5994a6a98fb1ea308cdc2688f46276e9f15a139d110",
+            "tile": "093d43a4bbd61e3c480d33780de5518c6e186f2fa380cc10d7c97a0b05a836cf",
+            "native": "4c6c9980833942d89859a1477715925a46ae84d392361f140208c45ddfc58588",
+            "ptx": "5d38cbf37a776f38704e9bd9d3ae557e06fb6ae771179e589cb92f1645d5862f"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 573.9746289909817,
+          "logical_shape": [
+            2,
+            1,
+            3,
+            257
+          ],
+          "entry": "tessera_native_row_f85912ec3b1265ae",
+          "samples_ms": [
+            0.03893699869513512,
+            0.03893100097775459,
+            0.03893100097775459,
+            0.03893499821424484,
+            0.03891099989414215,
+            0.03892999887466431,
+            0.03891700133681297,
+            0.03893100097775459,
+            0.03892900049686432,
+            0.03892900049686432,
+            0.03893100097775459,
+            0.03893199935555458,
+            0.03893199935555458,
+            0.03892400115728378,
+            0.03892999887466431,
+            0.03893199935555458,
+            0.03893199935555458,
+            0.03915800154209137,
+            0.03892499953508377,
+            0.03893499821424484,
+            0.038933999836444855
+          ],
+          "max_abs_error": 0.00024275810321472413,
+          "median_ms": 0.03893100097775459,
+          "correctness": "passed_before_and_after_timing"
+        },
+        "rank2_control": {
+          "stage_sha256": {
+            "graph": "728d0e23fe479127720dace5a46563a92b46b3b74c38d87dcd3c5bc75c8d6e8f",
+            "schedule": "efa97db99ae920b5d890396d35fd70d0d0a61a595cc0efd87ecc7c4393fcddd5",
+            "tile": "153fc278f9e0788cb454ad8b30dba5132f3f762a40302c32639a17fe84131dbd",
+            "native": "fb409f694bcb18df177783e2a9b7ed66a23f47ff1108002a8b02c0bc114cfc0e",
+            "ptx": "1faa0eedb52c583eb31bbd074387df6ca6385b13ec08c0d20a5b3f7bf39d5394"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 661.1054679960944,
+          "logical_shape": [
+            6,
+            257
+          ],
+          "entry": "tessera_native_row_f31c5e036c3d2abe",
+          "samples_ms": [
+            0.03893499821424484,
+            0.03892999887466431,
+            0.03892999887466431,
+            0.03893899917602539,
+            0.03893100097775459,
+            0.03893499821424484,
+            0.03893199935555458,
+            0.03893199935555458,
+            0.038927000015974045,
+            0.03893499821424484,
+            0.038996998220682144,
+            0.03893499821424484,
+            0.03893300145864487,
+            0.038933999836444855,
+            0.03892999887466431,
+            0.03893100097775459,
+            0.03893199935555458,
+            0.03893499821424484,
+            0.03893199935555458,
+            0.03893199935555458,
+            0.03892999887466431
+          ],
+          "max_abs_error": 0.00024275810321472413,
+          "median_ms": 0.03893199935555458,
+          "correctness": "passed_before_and_after_timing"
+        }
+      }
+    },
+    {
+      "storage": "f16",
+      "logical_shape": [
+        2,
+        4,
+        17,
+        257
+      ],
+      "rows": 136,
+      "columns": 257,
+      "block_threads": 128,
+      "arms": {
+        "ranked": {
+          "stage_sha256": {
+            "graph": "e98abbc4f391e9da4514804acc077632e271867634372dbe2c630643d4d8ace2",
+            "schedule": "28827df31261675de8f686994a96eaf7bcaeffcf1d4847a748147fee00506f77",
+            "tile": "782da24a52b5fcf5bb0e33c3dabae0b6d69fdb3398e6e7886de8b13cd529b2f3",
+            "native": "446cb9958dac124d6ef30e632a464c7ceac8b703e838beebf0d57c83608f9253",
+            "ptx": "82732adeb03cdc09031ceb4d189d6c0ea1ad4eb5bb34a3a5fcba43eaddb94a7a"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 607.6287679607049,
+          "logical_shape": [
+            2,
+            4,
+            17,
+            257
+          ],
+          "entry": "tessera_native_row_1fe18fc94819240f",
+          "samples_ms": [
+            0.09438599646091461,
+            0.09470599889755249,
+            0.09439100325107574,
+            0.09471099823713303,
+            0.09445600211620331,
+            0.09445399791002274,
+            0.09445499628782272,
+            0.09439100325107574,
+            0.09444999694824219,
+            0.09445100277662277,
+            0.09445499628782272,
+            0.09458299726247787,
+            0.09431000053882599,
+            0.09464400261640549,
+            0.09464599937200546,
+            0.09451799839735031,
+            0.09458400309085846,
+            0.09457699954509735,
+            0.09451500326395035,
+            0.0947749987244606,
+            0.09477200359106064
+          ],
+          "max_abs_error": 0.0004884131020965743,
+          "median_ms": 0.09451500326395035,
+          "correctness": "passed_before_and_after_timing"
+        },
+        "rank2_control": {
+          "stage_sha256": {
+            "graph": "a3176d129cc42189920fee4d6897dbb85f7298ae8d18bf1174c5634d8ab246ac",
+            "schedule": "bc7618e76322eeffad347e1d8ac947a84076d1ca5ad909d706ab8567902e18a5",
+            "tile": "ffd63babd8e1e064113fe0ac6f845e80fb9b588209f9fc6934bf27406896bb17",
+            "native": "57472d6388a528d90cb7544d06cbbe7cfe0f259c7f1c3362e3b03bbc3e10b111",
+            "ptx": "8328f172be37a97b6689450da3c9cde3d0a78e1d1d32b73a9ac89484f9786aac"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 563.3847460267134,
+          "logical_shape": [
+            136,
+            257
+          ],
+          "entry": "tessera_native_row_d3ffb9486111b215",
+          "samples_ms": [
+            0.09432400017976761,
+            0.09439100325107574,
+            0.09426599740982056,
+            0.09425999969244003,
+            0.09432099759578705,
+            0.09432700276374817,
+            0.09432899951934814,
+            0.09432400017976761,
+            0.09432700276374817,
+            0.09426400065422058,
+            0.09426099807024002,
+            0.09432400017976761,
+            0.09425999969244003,
+            0.09439399838447571,
+            0.09438800066709518,
+            0.0942630022764206,
+            0.09432800114154816,
+            0.09426199644804001,
+            0.09426099807024002,
+            0.09431800246238708,
+            0.09438800066709518
+          ],
+          "max_abs_error": 0.0004884131020965743,
+          "median_ms": 0.09432400017976761,
+          "correctness": "passed_before_and_after_timing"
+        }
+      }
+    },
+    {
+      "storage": "bf16",
+      "logical_shape": [
+        2,
+        3,
+        35
+      ],
+      "rows": 6,
+      "columns": 35,
+      "block_threads": 128,
+      "arms": {
+        "ranked": {
+          "stage_sha256": {
+            "graph": "d5748510c022bc61fb1409b58363d910fa74550e2a1e80b30b46a5d7bda85167",
+            "schedule": "0a7f640d9f4850778cf24c4834ec1cbb55876bb10b064cb7f8dc3a8e9d494b82",
+            "tile": "2f32c1230b0557d1c8738fcb520025313e2fc647f0b29aa76d5ffbebb7595291",
+            "native": "51bb418fc8c7eb7de14f6c2658e2e011eae7d2bf0ef8b2ecc265a73e14299ae8",
+            "ptx": "46599e4de2f569b595f39783319aed68e10ab8d4c69e27a388cb5d59b2865c64"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 520.8273869939148,
+          "logical_shape": [
+            2,
+            3,
+            35
+          ],
+          "entry": "tessera_native_row_ea0e090a00189836",
+          "samples_ms": [
+            0.015033000148832798,
+            0.017513999715447426,
+            0.015769999474287033,
+            0.021500999107956886,
+            0.01512799970805645,
+            0.014808000065386295,
+            0.026738999411463737,
+            0.01155600044876337,
+            0.010608999989926815,
+            0.011397000402212143,
+            0.013867000117897987,
+            0.01681400090456009,
+            0.01777300052344799,
+            0.015035999938845634,
+            0.0160910002887249,
+            0.01460499968379736,
+            0.013364999555051327,
+            0.013757999986410141,
+            0.012392000295221806,
+            0.012520000338554382,
+            0.014224999584257603
+          ],
+          "max_abs_error": 0.001815307910295827,
+          "median_ms": 0.014808000065386295,
+          "correctness": "passed_before_and_after_timing"
+        },
+        "rank2_control": {
+          "stage_sha256": {
+            "graph": "ddb52dd711dbba52b7f666fb24f6164eff33d70d9aeb69adf2608c04509362a1",
+            "schedule": "f50c3dea58aa1a15042423d815fa14834a01c4fe766d61aa2d6fe28e023ccf76",
+            "tile": "b10f4df6f288b9ddb48b536f672489590068cb9dbf662c4b9cf0cf0fff0e41ca",
+            "native": "230c3581ca2c712444dcdbeb7f5b6dbee1844dc52834ab91ea34e962bf0621f9",
+            "ptx": "9508a40c80e6f03fb308e05294d91fe6bf13868a8aeb7f840cd2dc464f225307"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 520.9979499923065,
+          "logical_shape": [
+            6,
+            35
+          ],
+          "entry": "tessera_native_row_596d00c048b7e2ef",
+          "samples_ms": [
+            0.01724799908697605,
+            0.015394000336527824,
+            0.015327000059187412,
+            0.014917000196874142,
+            0.01549299992620945,
+            0.016888000071048737,
+            0.013117000460624695,
+            0.01082799956202507,
+            0.013445000164210796,
+            0.00966699980199337,
+            0.013528999872505665,
+            0.016579000279307365,
+            0.011900000274181366,
+            0.014399000443518162,
+            0.020369000732898712,
+            0.01796800084412098,
+            0.012864000163972378,
+            0.016256000846624374,
+            0.01363999955356121,
+            0.015159999951720238,
+            0.013605000451207161
+          ],
+          "max_abs_error": 0.001815307910295827,
+          "median_ms": 0.014917000196874142,
+          "correctness": "passed_before_and_after_timing"
+        }
+      }
+    },
+    {
+      "storage": "bf16",
+      "logical_shape": [
+        2,
+        3,
+        5,
+        35
+      ],
+      "rows": 30,
+      "columns": 35,
+      "block_threads": 128,
+      "arms": {
+        "ranked": {
+          "stage_sha256": {
+            "graph": "c1fe4f665d5f1eab48e0a2522d939b7c84ac291e725a41f5f1cd6f467ace4401",
+            "schedule": "8a21015e0cd6871b42b79dbc66acac0510e7ecc3549fa26f3917d38b13378979",
+            "tile": "06c52999c84c6400318cd3850e01550d37e36b074bf6f76c32133e54390d422a",
+            "native": "b28ae13e37c84c077254761659b4d45a0ab7d7a9bacfb68ede3d858ac6e75bc2",
+            "ptx": "096acd0d9d18bfb8ed6d898b1538afa0d0ed5ffbd02e05c067472924be33d048"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 575.1883399789222,
+          "logical_shape": [
+            2,
+            3,
+            5,
+            35
+          ],
+          "entry": "tessera_native_row_08c2ef2bf17d5329",
+          "samples_ms": [
+            0.012019000016152859,
+            0.010653000324964523,
+            0.01039899978786707,
+            0.0114120002835989,
+            0.010851000435650349,
+            0.018330000340938568,
+            0.012555999681353569,
+            0.020656000822782516,
+            0.014096000231802464,
+            0.011633999645709991,
+            0.011818000115454197,
+            0.01913899928331375,
+            0.016249999403953552,
+            0.016558999195694923,
+            0.016150999814271927,
+            0.012695999816060066,
+            0.012659000232815742,
+            0.01700500026345253,
+            0.014747999608516693,
+            0.011126999743282795,
+            0.014422999694943428
+          ],
+          "max_abs_error": 0.0024051310028130324,
+          "median_ms": 0.012695999816060066,
+          "correctness": "passed_before_and_after_timing"
+        },
+        "rank2_control": {
+          "stage_sha256": {
+            "graph": "f9d0e07cd02bff533df77003855c2e71ef5ea4320ae2fd00aff499f4a63586e8",
+            "schedule": "65efa5894ef92d76fc1b776d87574c535ccd0a30b46c8e9932bc1b5e273a28ff",
+            "tile": "3615705812344fa2593d9be6ac79c3a36592dc71d8554a9dd0ed244206605ab3",
+            "native": "51848923ca76d4ad59c473283c8ab63285e87f0fda4cb090dffce4d64e3a61a1",
+            "ptx": "b8a448886281c4b59b8e0d1adb9559c44b3d01f067b6991b66d1892a111b6850"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 525.242475036066,
+          "logical_shape": [
+            30,
+            35
+          ],
+          "entry": "tessera_native_row_f7c587ffb45a392b",
+          "samples_ms": [
+            0.011412999592721462,
+            0.01215600036084652,
+            0.01144499983638525,
+            0.01193699985742569,
+            0.010228999890387058,
+            0.011739999987185001,
+            0.01368900015950203,
+            0.015293000265955925,
+            0.016526000574231148,
+            0.016303999349474907,
+            0.017376000061631203,
+            0.019311999902129173,
+            0.011130000464618206,
+            0.011346999555826187,
+            0.015929000452160835,
+            0.013536999933421612,
+            0.014268999919295311,
+            0.01669899933040142,
+            0.014399000443518162,
+            0.014282000251114368,
+            0.018271999433636665
+          ],
+          "max_abs_error": 0.0024051310028130324,
+          "median_ms": 0.014268999919295311,
+          "correctness": "passed_before_and_after_timing"
+        }
+      }
+    },
+    {
+      "storage": "bf16",
+      "logical_shape": [
+        2,
+        1,
+        3,
+        257
+      ],
+      "rows": 6,
+      "columns": 257,
+      "block_threads": 128,
+      "arms": {
+        "ranked": {
+          "stage_sha256": {
+            "graph": "05d5223ba58c98ac19aaff31e3dbe7da9d87525fa29e29296de26e25f4c4cc2f",
+            "schedule": "f291ee4b742772130db2868787c53042416a58b64435bebe8a396e263fa8bdf5",
+            "tile": "cd0257e5877746ff868b38bf4fe424d30f1a637daf28c45e14a2934a9c4dc64e",
+            "native": "b7c0ee555dd16f67b7ac175bad35c61175947c4a571a53f0ce206f6cbee0a41b",
+            "ptx": "2e533edeccd869c349c4c4f5fcbb0501665998f8701f76f45e86fadfdf6c3d22"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 565.8075929968618,
+          "logical_shape": [
+            2,
+            1,
+            3,
+            257
+          ],
+          "entry": "tessera_native_row_8e165e8318c4233a",
+          "samples_ms": [
+            0.04117399826645851,
+            0.039344001561403275,
+            0.04108300060033798,
+            0.03893300145864487,
+            0.040863998234272,
+            0.04018000140786171,
+            0.04213099926710129,
+            0.03893100097775459,
+            0.040373001247644424,
+            0.03891700133681297,
+            0.04033700004220009,
+            0.04174400120973587,
+            0.04171000048518181,
+            0.038993000984191895,
+            0.04181100055575371,
+            0.04065899923443794,
+            0.044335998594760895,
+            0.03893199935555458,
+            0.04040300101041794,
+            0.04155600070953369,
+            0.04424399882555008
+          ],
+          "max_abs_error": 0.002549506640738164,
+          "median_ms": 0.04065899923443794,
+          "correctness": "passed_before_and_after_timing"
+        },
+        "rank2_control": {
+          "stage_sha256": {
+            "graph": "8babceb8d76fbda777b67073fd9e8b0bb8e9451b37a9160bb49700ca6fd22cd5",
+            "schedule": "9813390881743ff4aff12e3de13f5fd68fe8becb421aa2fb82ad3cb00d4aa608",
+            "tile": "e79cea47b0c08a41e9a30f680e5f1c642ea306f454a12c501e6232f2a2685f4e",
+            "native": "f936cbc00bcc8ec51462db05dcc7ccc89be7c5b79f1978a985f1a0b9fffcc611",
+            "ptx": "f1fa249d5e201ecb5826086bedb12d6413ee14a6e7c8bd5e393d5d45aebe66fa"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 567.8099489887245,
+          "logical_shape": [
+            6,
+            257
+          ],
+          "entry": "tessera_native_row_91eba9211938d760",
+          "samples_ms": [
+            0.041760001331567764,
+            0.04158800095319748,
+            0.04181300103664398,
+            0.04091300070285797,
+            0.03893300145864487,
+            0.03892999887466431,
+            0.044468000531196594,
+            0.041425999253988266,
+            0.04040500149130821,
+            0.038933999836444855,
+            0.041460998356342316,
+            0.04120200127363205,
+            0.038933999836444855,
+            0.03892999887466431,
+            0.04145900160074234,
+            0.042580001056194305,
+            0.03892900049686432,
+            0.03893199935555458,
+            0.04177900031208992,
+            0.04287000000476837,
+            0.03892900049686432
+          ],
+          "max_abs_error": 0.002549506640738164,
+          "median_ms": 0.04120200127363205,
+          "correctness": "passed_before_and_after_timing"
+        }
+      }
+    },
+    {
+      "storage": "bf16",
+      "logical_shape": [
+        2,
+        4,
+        17,
+        257
+      ],
+      "rows": 136,
+      "columns": 257,
+      "block_threads": 128,
+      "arms": {
+        "ranked": {
+          "stage_sha256": {
+            "graph": "a8c9ea59483a65cadf4609a6e2fc24778f3b213cbba3cd024ef9e7f427d6fb3e",
+            "schedule": "32986e6e52ba72a509ad5e93616967daab5f3f6dd5ba466eb9396c1a35501544",
+            "tile": "fb144187b5a951a61e7ca548d9fe3e2277297f840c9304cbc62305167bc1fa64",
+            "native": "52b15d1a0ecace7a302bd1ea114daa7738707ee3be51a1d92228a0e0bafda467",
+            "ptx": "003487907e4e22a8ba807e48f20bfcdbb97ec00745f3ae5500e0bf49197cd286"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 569.2525560152717,
+          "logical_shape": [
+            2,
+            4,
+            17,
+            257
+          ],
+          "entry": "tessera_native_row_c00aa4b70dfb8d33",
+          "samples_ms": [
+            0.09451799839735031,
+            0.0945189967751503,
+            0.09438899904489517,
+            0.09451700001955032,
+            0.09437599778175354,
+            0.09439200162887573,
+            0.09432599693536758,
+            0.09445600211620331,
+            0.09445600211620331,
+            0.09439100325107574,
+            0.0942630022764206,
+            0.09464800357818604,
+            0.09445100277662277,
+            0.09439200162887573,
+            0.09445499628782272,
+            0.09432700276374817,
+            0.09432700276374817,
+            0.09452000260353088,
+            0.09464699774980545,
+            0.09438099712133408,
+            0.09439200162887573
+          ],
+          "max_abs_error": 0.0037056754718816087,
+          "median_ms": 0.09439200162887573,
+          "correctness": "passed_before_and_after_timing"
+        },
+        "rank2_control": {
+          "stage_sha256": {
+            "graph": "9883f8d9c19a5dcc6f6c139c947e595c7f619b9b05bc2b57895709297b285d1d",
+            "schedule": "7d6d652443a2e265c8df134a430668e82b0818846b53de3b9bbd06d44483ead5",
+            "tile": "9a3b13faeb5b37a4756607fa3ccc9d56ee4379ee925dc76a381da68e555acea7",
+            "native": "0f96599ab747ebf16d28c0a973851efc868fa4516d5f351b3f609c1fd3b11459",
+            "ptx": "685cda67bab62382eab56fd145355eff6d4862770b5bc30bae56d477eea9c684"
+          },
+          "compiler": "lower-tile-to-nvidia:94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+          "toolchain": "mlir-opt=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;mlir-translate=2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000;llc=d5d318dd36878bdde0e0ac3a658877fae2cf8034db82994cdc4d4fe9f52d9816;llvm-link=1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f;ptxas=9a31c67ee663e31e10c151c90ce02b53461666c826b97452e91721e38721ae9f;cuda.libdevice=d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9",
+          "packager_resources": {
+            "registers_per_thread": 39,
+            "static_shared_memory_bytes": 0,
+            "spill_store_bytes": 0,
+            "spill_load_bytes": 0
+          },
+          "compile_host_ms": 565.8588840160519,
+          "logical_shape": [
+            136,
+            257
+          ],
+          "entry": "tessera_native_row_2e7df1207427a4e3",
+          "samples_ms": [
+            0.09425999969244003,
+            0.09425999969244003,
+            0.09432700276374817,
+            0.0942630022764206,
+            0.09426700323820114,
+            0.09426199644804001,
+            0.09432700276374817,
+            0.09432700276374817,
+            0.09426400065422058,
+            0.09425800293684006,
+            0.09439100325107574,
+            0.09421700239181519,
+            0.09430400282144547,
+            0.09439100325107574,
+            0.09438599646091461,
+            0.0942630022764206,
+            0.09438999742269516,
+            0.0942630022764206,
+            0.0942630022764206,
+            0.09432700276374817,
+            0.09432700276374817
+          ],
+          "max_abs_error": 0.0037056754718816087,
+          "median_ms": 0.09426700323820114,
+          "correctness": "passed_before_and_after_timing"
+        }
+      }
+    }
+  ]
+}

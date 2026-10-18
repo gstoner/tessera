@@ -22,6 +22,7 @@ inline mlir::FailureOr<mlir::func::FuncOp> graphRoot(mlir::ModuleOp module) {
   if (rocm && (fn->hasAttr("tessera.native.sm120_row_producer") || fn.getNumResults() != 1)) return reject();
   auto c = fn->getAttrOfType<DictionaryAttr>(rocm ? "tessera.native.rocm_row_producer" : "tessera.native.sm120_row_producer");
   auto type = dyn_cast<RankedTensorType>(fn.getArgumentTypes().front());
+  auto geometry = rowGeometry(type);
   auto rows = c ? c.getAs<IntegerAttr>("rows") : IntegerAttr{};
   auto columns = c ? c.getAs<IntegerAttr>("columns") : IntegerAttr{};
   auto schema = c ? c.getAs<IntegerAttr>("schema") : IntegerAttr{};
@@ -33,8 +34,8 @@ inline mlir::FailureOr<mlir::func::FuncOp> graphRoot(mlir::ModuleOp module) {
          target.getValue() == (llvm::Twine("rocm_") + arch.getValue()).str())
       : (target.getValue() == "nvidia_sm120" && arch.getValue() == "sm_120"));
   if (!owningTarget ||
-      !c || c.size() != 6 || !type || type.getRank() != 2 ||
-      !rows || rows.getInt() != type.getDimSize(0) || !columns || columns.getInt() != type.getDimSize(1) ||
+      !c || c.size() != 6 || !type || failed(geometry) || (rocm && type.getRank() != 2) ||
+      !rows || rows.getInt() != geometry->rows || !columns || columns.getInt() != geometry->columns ||
       !schema || schema.getInt() != (rocm ? 7 : fn.getNumResults() == 1 ? 6 : 1) || !storage || storage.getValue() != (type.getElementType().isF16() ? "f16" : "bf16") ||
       !accum || accum.getValue() != "f32" || !hash || hash.getValue() != sourceDigest(fn)) return reject();
   RowScalarizer scalarizer(fn);
@@ -59,8 +60,10 @@ inline mlir::DictionaryAttr artifactAttributes(mlir::func::FuncOp fn) {
   using namespace mlir;
   Builder b(fn.getContext());
   auto type = cast<RankedTensorType>(fn.getArgumentTypes()[0]);
-  std::string shape = "family=native_row_ssa;rows=" + std::to_string(type.getDimSize(0)) +
-      ";columns=" + std::to_string(type.getDimSize(1)) + ";storage=" +
+  auto geometry = rowGeometry(type);
+  assert(succeeded(geometry) && "row geometry was verified before physical lowering");
+  std::string shape = "family=native_row_ssa;rows=" + std::to_string(geometry->rows) +
+      ";columns=" + std::to_string(geometry->columns) + ";storage=" +
       (type.getElementType().isF16() ? "f16" : "bf16") + ";inputs=2;outputs=" + std::to_string(fn.getNumResults());
   return b.getDictionaryAttr({
     b.getNamedAttr("hash", b.getStringAttr(artifactDigest(fn))),
@@ -97,6 +100,8 @@ inline mlir::FailureOr<mlir::LLVM::LLVMFuncOp> buildKernel(mlir::ModuleOp module
   auto lowered = scalarizer.lower(module);
   if (failed(lowered)) return failure();
   auto type = cast<RankedTensorType>(graph.getArgumentTypes()[0]);
+  auto geometry = rowGeometry(type);
+  assert(succeeded(geometry) && "row geometry was verified before physical lowering");
   OpBuilder b(module.getContext()); Location loc = graph.getLoc();
   b.setInsertionPointToEnd(module.getBody());
   auto ptr = LLVM::LLVMPointerType::get(b.getContext());
@@ -112,8 +117,8 @@ inline mlir::FailureOr<mlir::LLVM::LLVMFuncOp> buildKernel(mlir::ModuleOp module
   Value bid = coordinate(gpu::BlockIdOp::create(b,loc,gpu::Dimension::x));
   Value threads = coordinate(gpu::BlockDimOp::create(b,loc,gpu::Dimension::x));
   Value row = arith::AddIOp::create(b,loc,arith::MulIOp::create(b,loc,bid,threads),tid);
-  Value expectedRows = arith::ConstantIntOp::create(b,loc,type.getDimSize(0),64);
-  Value expectedColumns = arith::ConstantIntOp::create(b,loc,type.getDimSize(1),64);
+  Value expectedRows = arith::ConstantIntOp::create(b,loc,geometry->rows,64);
+  Value expectedColumns = arith::ConstantIntOp::create(b,loc,geometry->columns,64);
   Value rm = arith::CmpIOp::create(b,loc,arith::CmpIPredicate::eq,body->getArgument(buffers),expectedRows);
   Value cm = arith::CmpIOp::create(b,loc,arith::CmpIPredicate::eq,body->getArgument(buffers+1),expectedColumns);
   auto guarded = scf::IfOp::create(b,loc,arith::AndIOp::create(b,loc,rm,cm),false);
@@ -146,12 +151,14 @@ inline mlir::LogicalResult lower(mlir::ModuleOp module, bool &selected) {
   auto kernel = buildKernel(*temporary,*root);
   if (failed(kernel)) return failure();
   auto type = cast<RankedTensorType>(root->getArgumentTypes()[0]);
+  auto geometry = rowGeometry(type);
+  assert(succeeded(geometry) && "row geometry was verified before physical lowering");
   OpBuilder b(artifact);
   OperationState state(module.getLoc(),"tile.row_region_kernel");
   state.addAttribute("name",b.getStringAttr(kernel->getName()));
   state.addAttribute("arch",b.getStringAttr(rowArch(*root)));
-  state.addAttribute("rows",b.getI64IntegerAttr(type.getDimSize(0)));
-  state.addAttribute("columns",b.getI64IntegerAttr(type.getDimSize(1)));
+  state.addAttribute("rows",b.getI64IntegerAttr(geometry->rows));
+  state.addAttribute("columns",b.getI64IntegerAttr(geometry->columns));
   state.addAttribute("storage",TypeAttr::get(type.getElementType()));
   state.addAttribute("workgroup_size",b.getI64IntegerAttr(128));
   state.addAttribute("schema",b.getI64IntegerAttr(rowSchema(*root)));

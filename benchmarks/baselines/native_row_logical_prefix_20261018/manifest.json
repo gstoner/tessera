@@ -1,0 +1,36 @@
+{
+  "schema": "tessera.native_row_logical_prefix_evidence.v1",
+  "base_commit": "9e63d8c71a9fbcd45989cf0327b61c1ae4e6191a",
+  "sync": "NATIVE-ATTENTION-SOURCE-REVERSE-20261018",
+  "scope": "row-member prerequisite; not composed source attention reverse",
+  "source_hashes": {
+    "src/compiler/programming_model/lib/NativeRowScalarizer.h": "a78159a05fd93851577f1ce24e666d885e9ff0e1e7d9a1b21538168a7a30fce9",
+    "src/compiler/programming_model/lib/NativeRowSchedule.h": "3982d2de5221b161586f2fc6b4f6a2865d08c93992fc65db04113b9b77b04103",
+    "tests/unit/test_sm120_ranked_reverse_rows.py": "02fd4d2177a1c6c7c01b0e8f13851eb52350fab0690423857c100161b9d9dcec",
+    "tests/device/nvidia/test_ranked_reverse_row_member.py": "87467b909dc9c8a0b8617659bbaec637ce7d0ed6b43f9f83cc5692df1be4aeb1",
+    "tests/fixtures/native_sm120/reverse_row_ssa.mlir": "4f22993c8b556fa8bcdf6db6e7dcfaeabd7eddc3322f03bfa21519008557df12",
+    "benchmarks/nvidia/benchmark_ranked_reverse_row.py": "27c5ec093baf6b1521f23bd0efcc21d10d8a93ffe88a3a9fa60371185e74fb6a",
+    "python/tessera/compiler/nvidia_native.py": "78b5fafeeb20aad86d0dcbc7b48b09ee490a225c06e04d9520fe8d2d84c5b51e",
+    "python/tessera/compiler/emit/nvidia_cuda.py": "b73d46b4b6f36f4e8144eba76d232f35160f7a4989efb61fe15e8ea4492d2e50"
+  },
+  "compiler_sha256": "94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+  "session_runtime_sha256": "5e21e47fd7b9dfa22ce777f3c82b3274901beccc4c180d1fd4fb078caa2dcc0f",
+  "owning_device": "NVIDIA GeForce RTX 5070, 12.0, 610.88, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "validation": {
+    "compiler_unique": 91,
+    "sm120_unique": 27,
+    "compiler_initial": 89,
+    "compiler_expanded": 12,
+    "sm120_initial": 25,
+    "sm120_expanded": 8,
+    "rank_two_unchanged_stages": 20,
+    "skipped": 0
+  },
+  "remaining": [
+    "native paired-source attention member outlining",
+    "retained original-source reverse owner",
+    "public and portable original-source reverse",
+    "separate composed stage/program timing",
+    "all five aggregate requirements"
+  ]
+}

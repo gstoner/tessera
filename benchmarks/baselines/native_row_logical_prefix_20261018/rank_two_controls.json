@@ -1,0 +1,51 @@
+{
+  "scope": "twenty retained rank-two stage identities; not full checked image fingerprint identity",
+  "old_compiler_sha256": "6711af1ee054c37c2b77f2361b9b0cf54839f4bac2233d0dbaa6b9146f025ac7",
+  "new_compiler_sha256": "94a7543da84868b21488489ba40b0be63bce0c027e798b7f64afa32433962bd3",
+  "rows": [
+    {
+      "storage": "f16",
+      "outputs": 1,
+      "unchanged_stages": {
+        "graph": "89aa48eadfd4a1bc62fc01a828ff6700f0dc362252a52f2a182a5a749c666aaa",
+        "schedule": "d40fa253a50156674090f77e3b992c88bc6f297126190bacdb9f50be4edfb86a",
+        "tile": "61ba4eb4988a116930c62a16c66994b558ec429aafe73a889c72e88232d8cbf7",
+        "target": "f2434f50a7607a9ff3b676eec72db7723f158fe6066a9a84a151388a0daf5174",
+        "native": "d421cba541aeb4e1f6ff66550c71921af4277012e981ae13d7e5ad19398bbd80"
+      }
+    },
+    {
+      "storage": "f16",
+      "outputs": 2,
+      "unchanged_stages": {
+        "graph": "609c5e8fec504c2b8cef8714b505596321be6f2f4a63d987f32884675e469bd5",
+        "schedule": "c47f8cf921086293bdd6e8506f14c0093bb38e7a6cf1459bd0963de181cc8806",
+        "tile": "40c657cb52eeec9bb699c0c50fc40ccecbce371b262c0f118ec24c435544eb4b",
+        "target": "6f1a24d2d3dd145915471d7cbcf6b880465495ee97ecfed2701533944e10949d",
+        "native": "341043477403549e0eb3d1564ec51fe0109d140e76df87d345911b9c272395cb"
+      }
+    },
+    {
+      "storage": "bf16",
+      "outputs": 1,
+      "unchanged_stages": {
+        "graph": "f8703bd0e147a70245138761a7bd5e54ab286dce09103bd28a5e576f3426abad",
+        "schedule": "5d76d8fc5da303740dbaa91132e140a8d77829fc394a2aecc10bea9370fa1158",
+        "tile": "4ba4a2922a496450f5a2bfb41a56dae5144d9053765141ada2837081e1cdde52",
+        "target": "d67d58d570435cbd4da2f7f682f0a40a821303d2c7b973ae389d49bc2a0ed6fb",
+        "native": "f1e94e6c6c4135060357de8ca8511594f6c7c2eb258ccd958551cecc241e819a"
+      }
+    },
+    {
+      "storage": "bf16",
+      "outputs": 2,
+      "unchanged_stages": {
+        "graph": "2fb3f5689e8d6fd9f5b95b23271226504a5bd7f297590e3c090bbf2b54c0cac6",
+        "schedule": "411858054bfef9de691f8a384484ec62af7487e92780d72e8fd993b2ab90135c",
+        "tile": "ddf3ca22834135200a21bec4f7f01c6e621cc4cd12c92f604251850481720696",
+        "target": "cadb8fc5a3fbf92802631809f46cd57e90dd393bef14641d720b9b8caebd5a3b",
+        "native": "4ad2ad3b84ca084bd5bced7898e454c400eb8844fc507b761d706227890ff2bc"
+      }
+    }
+  ]
+}

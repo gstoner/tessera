@@ -1,0 +1,207 @@
+{
+  "image": {
+    "schema_version": "tessera.native_image.v1",
+    "target": "rocm_gfx1151",
+    "architecture": "gfx1151",
+    "pipeline_name": "tessera-lower-to-rocm",
+    "compiler_fingerprint": "2f8d6efb605eff7d0decc91189bf1657cc7e94ad1bee5895106fe0953814f000",
+    "toolchain_fingerprint": "e33c53a3ade02bba97a6169a911d72fa4f5683a71b8d502f86b22ff537e7ab2d",
+    "target_ir_digest": "bdff2df4b7e609d2bdfdd58e3089a59b7a64afd6f2613fdeb0d93c2a03d7c9a1",
+    "binary_format": "hsaco",
+    "payload_digest": "f61a5c47175893f250df553cad80b13bc81c1b962d724247d728c9c1ce959ee9",
+    "entry_points": [
+      {
+        "symbol": "tessera_rocm_scalar_binary_5729b4eac592674c",
+        "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1"
+      }
+    ],
+    "device_libraries": [
+      {
+        "logical_name": "rocm.ocml",
+        "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+        "link_mode": "compiler_driver"
+      },
+      {
+        "logical_name": "rocm.ockl",
+        "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+        "link_mode": "compiler_driver"
+      },
+      {
+        "logical_name": "rocm.oclc_unsafe_math_off",
+        "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+        "link_mode": "compiler_driver"
+      },
+      {
+        "logical_name": "rocm.oclc_finite_only_off",
+        "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+        "link_mode": "compiler_driver"
+      },
+      {
+        "logical_name": "rocm.oclc_wavefrontsize64_off",
+        "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+        "link_mode": "compiler_driver"
+      },
+      {
+        "logical_name": "rocm.oclc_isa_version_1151",
+        "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+        "link_mode": "compiler_driver"
+      },
+      {
+        "logical_name": "rocm.oclc_abi_version_600",
+        "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+        "link_mode": "compiler_driver"
+      }
+    ],
+    "payload_b64": "f0VMRgIBAUAEAAAAAAAAAAMA4AABAAAAAAAAAAAAAABAAAAAAAAAAGgOAAAAAAAASgAAAEAAOAAIAEAADwANAAYAAAAEAAAAQAAAAAAAAABAAAAAAAAAAEAAAAAAAAAAwAEAAAAAAADAAQAAAAAAAAgAAAAAAAAAAQAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABACAAAAAAAAEAIAAAAAAAAABAAAAAAAAABAAAABQAAAAAJAAAAAAAAABkAAAAAAAAAGQAAAAAAAIACAAAAAAAAgAIAAAAAAAAAEAAAAAAAAAEAAAAGAAAAgAsAAAAAAACAKwAAAAAAAIArAAAAAAAAcAAAAAAAAACABAAAAAAAAAAQAAAAAAAAAgAAAAYAAACACwAAAAAAAIArAAAAAAAAgCsAAAAAAABwAAAAAAAAAHAAAAAAAAAACAAAAAAAAABS5XRkBAAAAIALAAAAAAAAgCsAAAAAAACAKwAAAAAAAHAAAAAAAAAAgAQAAAAAAAABAAAAAAAAAFHldGQGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAQAAAAAAgAAAAAAAAACAAAAAAAAAAIAAAAAAAAIBQAAAAAAAAgFAAAAAAAABAAAAAAAAAAHAAAA8gQAACAAAABBTURHUFUAAIOuYW1kaHNhLmtlcm5lbHOR3gAQpS5hcmdz3AAQhK4uYWRkcmVzc19zcGFjZadnZW5lcmljpy5vZmZzZXQApS5zaXplCKsudmFsdWVfa2luZK1nbG9iYWxfYnVmZmVyhK4uYWRkcmVzc19zcGFjZadnZW5lcmljpy5vZmZzZXQIpS5zaXplCKsudmFsdWVfa2luZK1nbG9iYWxfYnVmZmVyg6cub2Zmc2V0EKUuc2l6ZQirLnZhbHVlX2tpbmSoYnlfdmFsdWWDpy5vZmZzZXQYpS5zaXplCKsudmFsdWVfa2luZKhieV92YWx1ZYOnLm9mZnNldCClLnNpemUIqy52YWx1ZV9raW5kqGJ5X3ZhbHVlhK4uYWRkcmVzc19zcGFjZadnZW5lcmljpy5vZmZzZXQopS5zaXplCKsudmFsdWVfa2luZK1nbG9iYWxfYnVmZmVyhK4uYWRkcmVzc19zcGFjZadnZW5lcmljpy5vZmZzZXQwpS5zaXplCKsudmFsdWVfa2luZK1nbG9iYWxfYnVmZmVyg6cub2Zmc2V0OKUuc2l6ZQirLnZhbHVlX2tpbmSoYnlfdmFsdWWDpy5vZmZzZXRApS5zaXplCKsudmFsdWVfa2luZKhieV92YWx1ZYOnLm9mZnNldEilLnNpemUIqy52YWx1ZV9raW5kqGJ5X3ZhbHVlhK4uYWRkcmVzc19zcGFjZadnZW5lcmljpy5vZmZzZXRQpS5zaXplCKsudmFsdWVfa2luZK1nbG9iYWxfYnVmZmVyhK4uYWRkcmVzc19zcGFjZadnZW5lcmljpy5vZmZzZXRYpS5zaXplCKsudmFsdWVfa2luZK1nbG9iYWxfYnVmZmVyg6cub2Zmc2V0YKUuc2l6ZQirLnZhbHVlX2tpbmSoYnlfdmFsdWWDpy5vZmZzZXRopS5zaXplCKsudmFsdWVfa2luZKhieV92YWx1ZYOnLm9mZnNldHClLnNpemUIqy52YWx1ZV9raW5kqGJ5X3ZhbHVlg6cub2Zmc2V0eKUuc2l6ZQirLnZhbHVlX2tpbmSoYnlfdmFsdWW5Lmdyb3VwX3NlZ21lbnRfZml4ZWRfc2l6ZQC2Lmtlcm5hcmdfc2VnbWVudF9hbGlnbgi1Lmtlcm5hcmdfc2VnbWVudF9zaXplzIC4Lm1heF9mbGF0X3dvcmtncm91cF9zaXplzQEApS5uYW1l2St0ZXNzZXJhX3JvY21fc2NhbGFyX2JpbmFyeV81NzI5YjRlYWM1OTI2NzRjuy5wcml2YXRlX3NlZ21lbnRfZml4ZWRfc2l6ZQCrLnNncHJfY291bnQIsS5zZ3ByX3NwaWxsX2NvdW50AKcuc3ltYm9s2S50ZXNzZXJhX3JvY21fc2NhbGFyX2JpbmFyeV81NzI5YjRlYWM1OTI2NzRjLmtkuC51bmlmb3JtX3dvcmtfZ3JvdXBfc2l6ZQGzLnVzZXNfZHluYW1pY19zdGFja8KrLnZncHJfY291bnQGsS52Z3ByX3NwaWxsX2NvdW50AK8ud2F2ZWZyb250X3NpemUguS53b3JrZ3JvdXBfcHJvY2Vzc29yX21vZGUBrWFtZGhzYS50YXJnZXTZIWFtZGdjbi1hbWQtYW1kaHNhLXVua25vd24tZ2Z4MTE1Ma5hbWRoc2EudmVyc2lvbpIBAgAA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",
+    "image_digest": "10abc4a3a121774951ad3990e29a0c57e69a4940d22adc11602c97fcf1d5c46c",
+    "compile_state": "cold",
+    "cache_key": "4fe4c864fef149852f41d9eb35718f7b4244e729a4848861258710b2ba7ef761",
+    "resource_record": null
+  },
+  "descriptor": {
+    "schema_version": "tessera.launch_descriptor.v1",
+    "image_digest": "10abc4a3a121774951ad3990e29a0c57e69a4940d22adc11602c97fcf1d5c46c",
+    "entry_symbol": "tessera_rocm_scalar_binary_5729b4eac592674c",
+    "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+    "buffers": [
+      {
+        "ordinal": 0,
+        "name": "a",
+        "direction": "input",
+        "dtype": "fp32",
+        "rank": 2,
+        "layout": "row_major",
+        "alignment": 4
+      },
+      {
+        "ordinal": 1,
+        "name": "b",
+        "direction": "input",
+        "dtype": "fp32",
+        "rank": 2,
+        "layout": "row_major",
+        "alignment": 4
+      },
+      {
+        "ordinal": 2,
+        "name": "out",
+        "direction": "output",
+        "dtype": "fp32",
+        "rank": 2,
+        "layout": "row_major",
+        "alignment": 4
+      }
+    ],
+    "scalars": [
+      {
+        "ordinal": 3,
+        "name": "N",
+        "dtype": "int64"
+      }
+    ],
+    "shape_guards": [
+      {
+        "binding": "a",
+        "dimension": 0,
+        "predicate": "eq",
+        "value": 3
+      },
+      {
+        "binding": "a",
+        "dimension": 1,
+        "predicate": "eq",
+        "value": 17
+      },
+      {
+        "binding": "b",
+        "dimension": 0,
+        "predicate": "eq",
+        "value": 3
+      },
+      {
+        "binding": "b",
+        "dimension": 1,
+        "predicate": "eq",
+        "value": 17
+      },
+      {
+        "binding": "out",
+        "dimension": 0,
+        "predicate": "eq",
+        "value": 3
+      },
+      {
+        "binding": "out",
+        "dimension": 1,
+        "predicate": "eq",
+        "value": 17
+      }
+    ],
+    "geometry": {
+      "grid": [
+        1,
+        1,
+        1
+      ],
+      "workgroup": [
+        256,
+        1,
+        1
+      ],
+      "policy": null
+    },
+    "dynamic_local_memory_bytes": 0,
+    "workspace": {
+      "bytes": 0,
+      "alignment": 1,
+      "lifetime": "launch",
+      "initialization": "undefined"
+    },
+    "ordering": {
+      "ordered_submission": true,
+      "residency": "none",
+      "synchronization": [
+        "completion"
+      ]
+    },
+    "provenance": {
+      "graph_digest": "d711572399b7af9c6ba609a24b651f25ac3c62f5ba4fb7bf8bccd7d9d3c0ef4e",
+      "native_math": {
+        "architecture": "gfx1151",
+        "bindings": [
+          "a",
+          "b",
+          "out"
+        ],
+        "columns": 17,
+        "elements": 51,
+        "family": "binary",
+        "kind": "add",
+        "numeric_policy": "f32_compute",
+        "output_storage": "f32",
+        "roles": [
+          0,
+          1
+        ],
+        "rows": 3,
+        "schedule_digest": "a42e461a10e61539da669e944eff7a90fee038f88b58fb0576bc482ffa74f916",
+        "shape": [
+          3,
+          17
+        ],
+        "storage": "f32"
+      },
+      "route": "canonical_native_math_schedule",
+      "schedule_ir_digest": "78c24ef3dab0438c1b8efcf0271881b248e413ac617a4112410747a2cba5a6b2",
+      "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+      "tile_ir_digest": "0fa6bf5353f5bf700ff600f5b812116353843362779e26e5a073b46dd2570792",
+      "work_item": "E2E-REAL-6"
+    },
+    "descriptor_digest": "9c4649ab8c5abdbe7c95d4003daeca83443084fe0ef161d21442c260c9fd1094",
+    "cache_fingerprint": "3e85d74c272c71bbedf81d248cd4e5004131c7ef9b69ee06eb42c8a03371ca53"
+  },
+  "graph_ir": "module attributes {tessera.ir.version = \"1.0\", tessera.target = \"rocm\", tessera.arch = \"gfx1151\", tessera.launch_bindings = [\"a\", \"b\", \"out\"]} {\n  func.func @math(%a: tensor<3x17xf32>, %b: tensor<3x17xf32>) -> (tensor<3x17xf32>) {\n    %out = tessera.add %a, %b {tessera.effect_kind = \"pure\"} : (tensor<3x17xf32>, tensor<3x17xf32>) -> tensor<3x17xf32>\n    return %out : tensor<3x17xf32>\n  }\n}",
+  "schedule_ir": "module attributes {tessera.arch = \"gfx1151\", tessera.ir.version = \"1.0\", tessera.launch_bindings = [\"a\", \"b\", \"out\"], tessera.target = \"rocm\"} {\n  func.func @math(%arg0: tensor<3x17xf32>, %arg1: tensor<3x17xf32>) -> tensor<3x17xf32> {\n    %0 = tessera.add %arg0, %arg1 {schedule.artifact_hash = \"a42e461a10e61539da669e944eff7a90fee038f88b58fb0576bc482ffa74f916\", tessera.effect_kind = \"pure\"} : (tensor<3x17xf32>, tensor<3x17xf32>) -> tensor<3x17xf32>\n    schedule.artifact {arch = \"gfx1151\", contract = {architecture = \"gfx1151\", bindings = [\"a\", \"b\", \"out\"], columns = 17 : i64, elements = 51 : i64, family = \"binary\", kind = \"add\", numeric_policy = \"f32_compute\", output_storage = \"f32\", roles = [0, 1], rows = 3 : i64, shape = array<i64: 3, 17>, storage = \"f32\"}, hash = \"a42e461a10e61539da669e944eff7a90fee038f88b58fb0576bc482ffa74f916\", shape_key = \"family=rocm_math\"}\n    return %0 : tensor<3x17xf32>\n  }\n}\n\n",
+  "tile_ir": "module attributes {tessera.arch = \"gfx1151\", tessera.ir.version = \"1.0\", tessera.launch_bindings = [\"a\", \"b\", \"out\"], tessera.target = \"rocm\"} {\n  llvm.func @tessera_tile_rocm_math_add_a42e461a10e6(%arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr, %arg3: i64) attributes {tessera.rocm_math_contract = {architecture = \"gfx1151\", bindings = [\"a\", \"b\", \"out\"], columns = 17 : i64, elements = 51 : i64, family = \"binary\", kind = \"add\", numeric_policy = \"f32_compute\", output_storage = \"f32\", roles = [0, 1], rows = 3 : i64, shape = array<i64: 3, 17>, storage = \"f32\"}, tessera.schedule_hash = \"a42e461a10e61539da669e944eff7a90fee038f88b58fb0576bc482ffa74f916\"} {\n    tile.elementwise_kernel %arg0, %arg1, %arg2, %arg3 {family = \"binary\", kind = \"add\", output_storage = \"f32\", storage = \"f32\", tessera.schedule_hash = \"a42e461a10e61539da669e944eff7a90fee038f88b58fb0576bc482ffa74f916\"} : !llvm.ptr, !llvm.ptr, !llvm.ptr, i64\n    llvm.return\n  }\n}\n\n",
+  "target_ir": "module attributes {tessera.arch = \"gfx1151\", tessera.ir.version = \"1.0\", tessera.pipeline.arch = \"gfx1151\", tessera.pipeline.backend_codegen = \"rocdl_hsaco\", tessera.pipeline.family = \"scalar_binary\", tessera.pipeline.output = \"target\", tessera.pipeline.schema = \"tessera.executable_pipeline.v1\", tessera.pipeline.target_ir_consumer = \"tessera_rocm\", tessera.pipeline.tile_producer = \"content_addressed_tile\", tessera.target = \"rocm\"} {\n  tessera_rocm.binary {kind = \"add\", name = \"tessera_rocm_scalar_binary_5729b4eac592674c\", output_dtype = \"f32\"}\n}\n\n"
+}

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-17
+last_updated: 2026-10-18
 audit_role: plan
 plan_state: open
 ---
@@ -134,7 +134,13 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Gate: An NVFP4 checkpoint (e2m1 elements, **e4m3 scale per 16**, fp32 scale per tensor) reaches `v_wmma_f32_16x16x16_fp8_fp8` through MXFP4 (e2m1, **e8m0 scale per 32**), and the chain has exactly one lossy step: the scale requantization. Measured relRMS against the bf16 original — NVFP4 as shipped 0.113 (19 dB), bf16→MXFP4 **direct** 0.112, NVFP4→MXFP4 requantized 0.158 (16 dB) — so **the ~3 dB is double rounding, not the format**, and where a bf16 original exists, quantizing once to MXFP4 beats ingesting NVFP4. That is a `numeric_policy` preference (Decision #15a) and the requantization is a declared information-loss point (Decision #32) with a measured cost, not an implicit load-time transform. Notably this is **not** a workaround for a weaker part: AMD's MI355 path dequantizes NVFP4 to BF16 because CDNA4 has no native NVFP4 execution either, so the gfx1201 route lands on the fp8 ceiling (383 TFLOP/s) rather than bf16's 191. Gate: `nvfp4` and `mxfp4` distinguishable below Graph IR (they are already distinct *names* — `dtype.py` says "do not alias" — but nothing below Graph IR can tell them apart until block-scale metadata exists), the requantization expressed as a policy-gated conversion carrying its SQNR, and two traps covered: block-exponent selection by squared error between the no-clip rule and one binade finer (not truncation), and merged linears (`gate_up_proj`) honouring **both** global scales rather than collapsing them, which fails silently. Depends on the scale contract from [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1) and the fold from [ROCM-MXFP4-W4A8-1](#rocm-mxfp4-w4a8-1).
 - Depends on: [ROCM-MXFP4-W4A8-1](#rocm-mxfp4-w4a8-1)
 - Start: device
-- Current increment: Tajasaurus gfx1201 passed the 17x19x64 and ragged
+- Current increment (2026-10-18): checked native scale admission and bounded
+  native ownership/staging pass owning gfx1201/gfx1151 validation. Same-image
+  warm public calls fall from 71.4–75.2 ms to 36.6–37.0 ms; native events remain
+  a separate 2.44–2.47 ms domain. Full CPU/compiler/document gates pass;
+  current-head public CI/review and all aggregate quality/integration gates remain.
+  [Packet](../../../benchmarks/baselines/rocm_public_owner_20261018/README.md).
+- Earlier increment: Tajasaurus gfx1201 passed the 17x19x64 and ragged
   200x2048x1536 synthetic gate/up packages after vectorized ingest; CPU ingest
   fell from 6.70 s to 487.31 ms on the larger case, with unchanged codes,
   exponents, Target/Tile digests, and HSACO. The latest 12 host-side ingest
@@ -193,7 +199,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Named v3 gate/up: native MLIR composes four members through an explicit BF16 parent store and SiLU activation. Eleven new owning device cases plus eleven legacy controls pass; three packets separate device and public timings. Full down projection, model quality and wider integration remain open.
 - Named v4 public MLP: original quantizer/gate-up/activation/down Graph executes through seven native members and checked resident buffers. Eight owning cases and separated timing packets pass; checkpoint/model quality, host dispatch cost and wider integration remain open.
 - Quantized host binding reuse: content-certified validation and ABI memoization pass thirty owning v1-v4 cases and image-identical final-source public timing improves 2.43-2.97x. Runtime input/readiness checks remain per call; broader/model-quality closure remains open.
-- Latest: [2026-10-17 — full pinned checkpoint MLP characterization](INTEGRATED_COMPILER_LOG.md#2026-10-17--full-pinned-checkpoint-mlp-characterization)
+- Latest: [2026-10-18 — Native ROCm admission and owner retention](INTEGRATED_COMPILER_LOG.md#2026-10-18--native-rocm-admission-and-owner-retention)
 
 ### ROCM-SPLIT-K-1
 

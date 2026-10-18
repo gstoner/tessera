@@ -1,0 +1,1083 @@
+{
+  "schema": "tessera.rocm.public_owner_attribution.v1",
+  "shape_mhkn": [
+    128,
+    12288,
+    4096,
+    4096
+  ],
+  "identity": {
+    "candidate_files": {
+      "benchmarks/README.md": "7d4b8eb3cc92cde47edfad670747cc7e16d31773ac7c253b0f8e22651cfea4ee",
+      "benchmarks/baselines/rocm_public_owner_20261018/README.md": "e0b459de89d4392df83cbfa69946ace921e8f25f980588afb5d7533ff1731546",
+      "benchmarks/baselines/rocm_public_owner_20261018/final-toolchain-context.json": "cf9a1f05d0f2e05c069a087952ccb52c6f3bcb00aa0380303fb5e51db2e9bf71",
+      "benchmarks/baselines/rocm_public_owner_20261018/gfx1151-staging-proof.json": "af987e24b429cb96dee2cee934d28a30e8e34fc6f66f834273d9070bc635a889",
+      "benchmarks/baselines/rocm_public_owner_20261018/gfx1151-staging-proof.txt": "d1a9a4ae274458b08656633eb76f1f56b0db98d9cec686761d008f5c6c872166",
+      "benchmarks/baselines/rocm_public_owner_20261018/gfx1151_check_staging.py": "18514f4df1da3fe0b32826d3c0ffb80989b3e11203bf5cb53facd2ebec00f60e",
+      "benchmarks/baselines/rocm_public_owner_20261018/gfx1151_package.json": "d6d71d2bae204d7caa6b0ec8ecc7fc1bf4c1111854a3b344484cb39830721b27",
+      "benchmarks/baselines/rocm_public_owner_20261018/model-native-bounds-control-v2-reverse.json": "876dc66958b731e3b8b4a041cc88394de889cdce0b9c2085365b80f9044ba9be",
+      "benchmarks/baselines/rocm_public_owner_20261018/model-native-bounds-control-v2.json": "bec3e8f6a8872baf7bea927c2d3b320c6e0ddc2019d56c371ecc72a94dd8cb2e",
+      "benchmarks/baselines/rocm_public_owner_20261018/model-native-owner-v3-reverse.json": "49b0608abe4252d3dd4585378f3463e918ef1135ef4ddbd4654dcdae7277a5da",
+      "benchmarks/baselines/rocm_public_owner_20261018/model-native-owner-v3.json": "c01457f112b78ba31cdb832de28bc7c3a24d75b83a7d36a4f01b9be77beca4cb",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-adjacent.txt": "ebc7757359b28d2a1ed17ffbf9bf610c9752aaee1715170dfd0ba06a7299e50d",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-compiler-complete-junit.xml": "70886bb45a09115cc04cab5fe4ff19b96cb773401589d9a176fcd9d6d8c12426",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-compiler-complete.txt": "a50bba8203a70a963692b912356751bd6df7344ca7362f9c6b1d7d4d6fde9074",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-cpu-final-junit.xml": "4baedec4bba056ae3b1f41b2ee0a1f2b94fcdf18f238f31378d68cad4fd913db",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-cpu-final.txt": "f9f2c1d06c51a01c3154890552ead9a15bfaaa79acccc923aadb3cd1a361116f",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-cpu-regressions.txt": "f98271217c29b67119f9555b261cca2814059dbee068a532685cb13fed92b7f5",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-device-full.txt": "c9ec05043bba10690ff28338d9ee6fe3849fd48864ee574812ae10c7b4621c27",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-faults-retry.txt": "e9df62462c1760a1bd6df5d59970dc7192fcccefdd8f8e5f671ae907f27c1363",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-focused-final.txt": "5de9fdc5644c10ae0cae1048fbce7bb0b6ddc680cf9bd01550b8d1cbc9f91077",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-focused-gates.txt": "6f3d3dff0e65d289f26e09c82c95db6a7302e3580236b74d8690851b0b7f019a",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-generated-check.txt": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-mypy.txt": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-offline-regression.txt": "933dc0a7ded8b65a4d4ff538f5c47ac4f3f9a87b6c1cde28bda7df81ac035aa6",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-policy-unit.txt": "f87cdccd7f7588c1761fd83a57e22781f9618c1c8bd95336df2923ee3035e64d",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-ruff.txt": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-v4-bounded.txt": "6f9d91f36efc96f4d60b5cba9cfad18e7a7eb2efdf758b2a75fcdeeec61f71f1",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-v4-device.txt": "77bf44451c4e4760836e3bfa5f0518023786e808d82c957c846184b0ee710ba8",
+      "benchmarks/baselines/rocm_public_owner_20261018/native-owner-v4-faults-expanded.txt": "2c96033d074ea7871be5269e0c23ca43d496641bed1674bf97f71aa329de8c83",
+      "benchmarks/baselines/rocm_public_owner_20261018/owner_v3.patch": "227d4a9db1d9d8643cce7ed91912b8ba7994a2e496c7c0073602029bd7590d38",
+      "benchmarks/baselines/rocm_public_owner_20261018/owner_v4.patch": "3e775773a2a0dc641de61faa6ebcc394760545fe42418ebaf39787da4c7dacb2",
+      "benchmarks/baselines/rocm_public_owner_20261018/provider_variants.json": "831eec711530b1a12f3e409f52c9790d1fae4e2aee88810b86f0f3344c150ff2",
+      "benchmarks/baselines/rocm_public_owner_20261018/scale-validation-ab-v2.json": "228c09f424ebf33bed4749217a8f7cfe229cdf3d8fdf004ad9f9340f3576ac43",
+      "benchmarks/baselines/rocm_public_owner_20261018/scale-validation-three-arm.json": "f2631e6e43308e3969d802a321cf2446ebeacdeb6fad8c40cbb437d2598911e4",
+      "benchmarks/rocm/record_native_program_owner.py": "2d36260d43b906403a8c4635d2323e8befcf9286f1061207ed58bb84e43478cc",
+      "docs/audit/backend/apple/todo.md": "e49857dabb26e8a99c81faa1b30353fa285835a0e7adef636ebf97de1cacb71d",
+      "docs/audit/backend/nvidia/todo.md": "a0b450d913591b486cab9acc8fb14d0ca2e68c4a487bfe67ac3f769de0de3ba8",
+      "docs/audit/backend/rocm/todo.md": "7769d8c564ea44e8a9e9575683984b20c10d5ba7bb3c32ce25411e7d4e8b30b5",
+      "docs/audit/backend/x86/todo.md": "2fa16b0698a73bf587490139926187d1c6831f4819ae3218560ee39f5ac2524f",
+      "docs/audit/compiler/FIVE_SLICE_STATUS_20261007.md": "7f4b1fae29ba4f52b8a1d6487230735f7da139245f0aa7798c1a765c7a521ef2",
+      "docs/audit/generated/compiler_progress.csv": "6ad486c784515d03640d0f188d77134b49647ef1a1e82ae5cfbc6e4a2109bd73",
+      "docs/audit/generated/compiler_progress.md": "8072d55a7763b1080a8e31b354f55a5611192445bbc25be299ca1fae48b8d8ae",
+      "docs/audit/generated/runtime_abi.csv": "f19095dc131f74a1163d60b4d62197657d8ba5554a02cf3c572ad464e8adc1bb",
+      "docs/audit/generated/runtime_abi.md": "b070e546cb03ba628de260d82ab49db727505d34c301a31662e62dd63931f5c4",
+      "docs/spec/ir/rocm_nvfp4_source_preserving_program.md": "3f900c66253393378f1b78f4d9c226d23b7331d7f965a79992b1323e8a0daaa4",
+      "python/tessera/compiler/native_scaled_program.py": "000be56e87ec6cb5a1e97afa4d56b902788f67de67f115fd898a42a41dbe447e",
+      "python/tessera/compiler/nvfp4_expansion.py": "8edb67a0ff5fafe8ed34ff25f3192c9761976a79a1d4e7ab5de24c2eadc86c42",
+      "python/tessera/compiler/nvfp4_scale_admission.py": "929bb5599c1f29948552344da575573d51d9798e84002977050a2a3974275f20",
+      "python/tessera/compiler/rocm_nvfp4_expansion_program.py": "17cac2695caa7f4b9675ae642dbe4dd9edc0165283f91a20c17f54fc42303703",
+      "python/tessera/compiler/rocm_quantized_mlp_program.py": "1b8d2f8a60431dc45099f4ab1f8a3cfd091e1b719e1fb48545de74aef79ead4e",
+      "python/tessera/compiler/rocm_quantized_product_program.py": "a8084b6649eff8c8220e5e30732c5a17417354208d2226e8d21e373f2628e554",
+      "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/CMakeLists.txt": "35970499a95198ff5e295b35bbef42af3b6b0f4f4cf06b6272ca23afb54bad40",
+      "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/NVFP4ScaleBounds.h": "40beb4b1b1a1fea1686826994f46a9ab13f788922e6763a476097dd61faaec1e",
+      "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/ProgramCachePolicy.h": "d112767ee174b7367b103104f61dc15b90c63420d2a5950e0081f013da45f087",
+      "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "dbfc498844b79eb27d56f6f1d705a7e8a5b2d187cbfed0eecd9e6db65188c737",
+      "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "c6528e7f287f6cdb3fdc73c922a26d759ecef1dafb9f249e8e4877587b410a09",
+      "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/nvfp4_scale_bounds.cpp": "cb9f11d755026114f8b74eb7bea2f2c005ca91fdd4d54a58e300c31f895592fa",
+      "tests/device/rocm/test_native_program_failure_recovery.py": "b2635ce6a9863634c4378b68aaffc422ed39d37ffebf4a067d8dee9901173182",
+      "tests/device/rocm/test_prepared_nvfp4_expansion_program.py": "48e0072eef39bdb7c7d1d8249da3978f01a80babbe09fa34c5f853a5b20eb87d",
+      "tests/unit/test_nvfp4_scale_admission_extrema.py": "d2428e765d276aed2efac37020740c3354146bcd3b02512bb04024df3a95b350",
+      "tests/unit/test_rocm_program_cache_policy.py": "5399476f4b5365aa6d6d048310ad960117f4dacf0d912f0f0fd07a6d43c7828a"
+    },
+    "recorder_sha256": "2d36260d43b906403a8c4635d2323e8befcf9286f1061207ed58bb84e43478cc",
+    "source_revision": "01906b028c1882b2141576c77180b49737996549",
+    "gpu_uuid": "GPU-28d9e7efbf2ef716",
+    "gpu_name": "AMD Radeon RX 9070 XT",
+    "compiler_sha256": {
+      "TESSERA_OPT": "5c763dd611ede09f3c34125f89907531a540e7c5c855b5df21ebfac950975c50",
+      "TESSERA_ROCM_OPT": "361c3ebd2d86ad7c0940a133a49782d0e7dc7c2ed127fe32e597d750ed9204c9"
+    },
+    "provider_sha256": "2821855e4eaa726f0af107f5cfc0b1b149523f91db10f794ed68cd01581d0c71",
+    "provider_path": "/home/angstorms/scratch/rocm-public-owner-attribution-20261018/provider-owner-v4/libtessera_rocm_native_movement.so"
+  },
+  "correctness": "independent_stage_and_propagation_before_timing_and_bitwise_after_each_arm",
+  "numerical_certificate": {
+    "resident_staged_bitwise_equal": true,
+    "parent_store_max_abs_error": 0.03125,
+    "activation_at_parent_max_abs_error": 6.103515625e-05,
+    "down_at_activation_max_abs_error": 0.25,
+    "full_independent_max_abs_error": 0.25,
+    "full_independent_outside_flat_gate": 971,
+    "propagated_bound_passed": true,
+    "propagation_max_abs_bound": 0.07477906005936308,
+    "per_stage_rtol": 0.015625,
+    "per_stage_atol": 2e-05
+  },
+  "host_metadata": {
+    "approximate_unique_python_package_bytes": 480066,
+    "program_json_bytes": 47396,
+    "source_graph_bytes": 7262,
+    "validation_cache": {
+      "hits": 12,
+      "misses": 1,
+      "size": 1,
+      "maxsize": 16,
+      "entry_byte_limit": 4194304
+    },
+    "abi_cache": {
+      "hits": 9,
+      "misses": 1,
+      "size": 1,
+      "maxsize": 16,
+      "entry_byte_limit": 4194304
+    },
+    "scope": "Python reachable package footprint;excludes native GPU allocations"
+  },
+  "cache_before": {
+    "hits": 0,
+    "misses": 0,
+    "idle_entries": 0,
+    "idle_bytes": 0
+  },
+  "cache_after": {
+    "hits": 7,
+    "misses": 5,
+    "idle_entries": 1,
+    "idle_bytes": 374926568
+  },
+  "prepare_ms": 27.226566977333277,
+  "public_completed_ms": [
+    66.80637097451836,
+    37.027081998530775,
+    36.98476596036926,
+    37.445920053869486,
+    35.411891993135214,
+    37.22313995240256,
+    32.307790010236204
+  ],
+  "update_ms": [
+    27.70404302282259,
+    24.54490604577586,
+    26.20652801124379,
+    25.014996994286776,
+    26.345579011831433,
+    24.446634051855654,
+    26.235262979753315
+  ],
+  "invoke_read_ms": [
+    4.03442099923268,
+    4.055620986036956,
+    4.060440987814218,
+    4.027938994113356,
+    3.996533981990069,
+    4.024221969302744,
+    3.948808996938169
+  ],
+  "updated_retained_call_ms": [
+    31.73846402205527,
+    28.600527031812817,
+    30.266968999058008,
+    29.04293598840013,
+    30.3421129938215,
+    28.470856021158397,
+    30.184071976691484
+  ],
+  "native_program_event_ms": [
+    2.665210485458374,
+    2.443307399749756,
+    2.4621975421905518
+  ],
+  "profile": [
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/jit.py",
+      "line": 988,
+      "function": "__call__",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 4.8342000000000006e-05,
+      "cumulative_s": 0.090880446
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/jit.py",
+      "line": 2392,
+      "function": "_try_rocm_quantized_product_call",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 4.8621e-05,
+      "cumulative_s": 0.09053459700000001
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_quantized_product_frontend.py",
+      "line": 59,
+      "function": "execute",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 8.934700000000001e-05,
+      "cumulative_s": 0.08667211300000001
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_quantized_mlp_program.py",
+      "line": 142,
+      "function": "prepare",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 5.822e-06,
+      "cumulative_s": 0.071018681
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_quantized_mlp_program.py",
+      "line": 165,
+      "function": "__init__",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 1.2413000000000001e-05,
+      "cumulative_s": 0.071012859
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/native_scaled_program.py",
+      "line": 622,
+      "function": "__init__",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 0.060158808,
+      "cumulative_s": 0.070988593
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_quantized_mlp_program.py",
+      "line": 194,
+      "function": "_inputs",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 3.19e-05,
+      "cumulative_s": 0.008233646
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/nvfp4_expansion.py",
+      "line": 22,
+      "function": "checked_expansion_inputs",
+      "primitive_calls": 2,
+      "calls": 2,
+      "self_s": 0.00011281500000000001,
+      "cumulative_s": 0.0076333320000000005
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/nvfp4_scale_admission.py",
+      "line": 15,
+      "function": "bounds",
+      "primitive_calls": 2,
+      "calls": 2,
+      "self_s": 0.007426157,
+      "cumulative_s": 0.0074344630000000005
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/native_scaled_program.py",
+      "line": 770,
+      "function": "__exit__",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 1.793e-06,
+      "cumulative_s": 0.005907481
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/native_scaled_program.py",
+      "line": 764,
+      "function": "close",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 0.005905367000000001,
+      "cumulative_s": 0.005905688
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/quantized_binding_cache.py",
+      "line": 67,
+      "function": "wrapped",
+      "primitive_calls": 2,
+      "calls": 2,
+      "self_s": 0.000211646,
+      "cumulative_s": 0.0052414620000000006
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/quantized_binding_cache.py",
+      "line": 22,
+      "function": "_snapshot",
+      "primitive_calls": 2,
+      "calls": 2,
+      "self_s": 4.3580000000000005e-06,
+      "cumulative_s": 0.004985875000000001
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/quantized_binding_cache.py",
+      "line": 25,
+      "function": "freeze",
+      "primitive_calls": 2,
+      "calls": 4808,
+      "self_s": 0.0023081900000000003,
+      "cumulative_s": 0.004981517
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/quantized_binding_cache.py",
+      "line": 47,
+      "function": "<genexpr>",
+      "primitive_calls": 12,
+      "calls": 2310,
+      "self_s": 0.000769067,
+      "cumulative_s": 0.004958463000000001
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/native_scaled_program.py",
+      "line": 703,
+      "function": "invoke",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 0.004876639,
+      "cumulative_s": 0.004878513
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1388,
+      "function": "to_mlir",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 1.5018000000000001e-05,
+      "cumulative_s": 0.0036503380000000004
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_quantized_product_frontend.py",
+      "line": 46,
+      "function": "validate",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 4.9465e-05,
+      "cumulative_s": 0.0031836190000000004
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1467,
+      "function": "to_mlir",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 3.2821e-05,
+      "cumulative_s": 0.0028273400000000002
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/quantized_binding_cache.py",
+      "line": 48,
+      "function": "<genexpr>",
+      "primitive_calls": 542,
+      "calls": 542,
+      "self_s": 0.000104925,
+      "cumulative_s": 0.002777208
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1049,
+      "function": "to_mlir",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 0.00016841500000000002,
+      "cumulative_s": 0.002773878
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 766,
+      "function": "_loc_suffix",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 3.4628e-05,
+      "cumulative_s": 0.0022481330000000002
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 784,
+      "function": "_loc_path",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 5.8330000000000006e-05,
+      "cumulative_s": 0.002180196
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/native_scaled_program.py",
+      "line": 734,
+      "function": "read",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 0.0011336,
+      "cumulative_s": 0.001149401
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 475,
+      "function": "relative_to",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 7.623800000000001e-05,
+      "cumulative_s": 0.001070554
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 933,
+      "function": "resolve",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 2.311e-05,
+      "cumulative_s": 0.0009752290000000001
+    },
+    {
+      "file": "<frozen posixpath>",
+      "line": 388,
+      "function": "realpath",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 0.00020178900000000002,
+      "cumulative_s": 0.000889667
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1385,
+      "function": "verify",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 4.018e-06,
+      "cumulative_s": 0.0007960580000000001
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1502,
+      "function": "verify_module",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 1.3234e-05,
+      "cumulative_s": 0.00079204
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1540,
+      "function": "verify_function",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 0.00010567100000000001,
+      "cumulative_s": 0.000776751
+    },
+    {
+      "file": "<frozen _collections_abc>",
+      "line": 1021,
+      "function": "__contains__",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 4.719e-05,
+      "cumulative_s": 0.0006285360000000001
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1707,
+      "function": "_verify_op_types",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 3.8669000000000005e-05,
+      "cumulative_s": 0.000611159
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_quantized_mlp_program.py",
+      "line": 36,
+      "function": "_frame",
+      "primitive_calls": 2,
+      "calls": 2,
+      "self_s": 0.00010591000000000001,
+      "cumulative_s": 0.00057706
+    },
+    {
+      "file": "/usr/lib/python3.14/dataclasses.py",
+      "line": 1445,
+      "function": "fields",
+      "primitive_calls": 402,
+      "calls": 402,
+      "self_s": 0.000347326,
+      "cumulative_s": 0.000571428
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/legality.py",
+      "line": 74,
+      "function": "check_op_legality",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 5.7454e-05,
+      "cumulative_s": 0.00049835
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/quantized_binding_cache.py",
+      "line": 50,
+      "function": "<genexpr>",
+      "primitive_calls": 248,
+      "calls": 314,
+      "self_s": 0.000114196,
+      "cumulative_s": 0.00048003600000000004
+    },
+    {
+      "file": "<frozen _collections_abc>",
+      "line": 1011,
+      "function": "__iter__",
+      "primitive_calls": 152,
+      "calls": 152,
+      "self_s": 3.4193e-05,
+      "cumulative_s": 0.00046118000000000005
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method posix.lstat>",
+      "primitive_calls": 266,
+      "calls": 266,
+      "self_s": 0.000460355,
+      "cumulative_s": 0.000460355
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_quantized_product_program.py",
+      "line": 50,
+      "function": "_frame_shape",
+      "primitive_calls": 3,
+      "calls": 5,
+      "self_s": 0.000165467,
+      "cumulative_s": 0.00043539
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 62,
+      "function": "__getitem__",
+      "primitive_calls": 114,
+      "calls": 114,
+      "self_s": 7.1643e-05,
+      "cumulative_s": 0.00042698700000000004
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 268,
+      "function": "_from_parsed_parts",
+      "primitive_calls": 152,
+      "calls": 152,
+      "self_s": 6.0920000000000006e-05,
+      "cumulative_s": 0.00039417300000000005
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_quantized_product_frontend.py",
+      "line": 78,
+      "function": "<genexpr>",
+      "primitive_calls": 8,
+      "calls": 8,
+      "self_s": 9.721e-06,
+      "cumulative_s": 0.000353685
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/native_artifact.py",
+      "line": 879,
+      "function": "descriptor_digest",
+      "primitive_calls": 7,
+      "calls": 7,
+      "self_s": 1.6389000000000002e-05,
+      "cumulative_s": 0.00034396400000000004
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/legality.py",
+      "line": 170,
+      "function": "_check_capability",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 4.1009e-05,
+      "cumulative_s": 0.00029669
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method builtins.len>",
+      "primitive_calls": 4353,
+      "calls": 4581,
+      "self_s": 0.000267005,
+      "cumulative_s": 0.000295695
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 156,
+      "function": "with_segments",
+      "primitive_calls": 190,
+      "calls": 190,
+      "self_s": 8.2089e-05,
+      "cumulative_s": 0.00029458
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 216,
+      "function": "__eq__",
+      "primitive_calls": 152,
+      "calls": 152,
+      "self_s": 5.8045000000000004e-05,
+      "cumulative_s": 0.000287216
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 250,
+      "function": "__str__",
+      "primitive_calls": 228,
+      "calls": 228,
+      "self_s": 8.119300000000001e-05,
+      "cumulative_s": 0.000272731
+    },
+    {
+      "file": "/usr/lib/python3.14/json/__init__.py",
+      "line": 185,
+      "function": "dumps",
+      "primitive_calls": 78,
+      "calls": 78,
+      "self_s": 3.3286e-05,
+      "cumulative_s": 0.000266873
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 275,
+      "function": "_from_parsed_string",
+      "primitive_calls": 152,
+      "calls": 152,
+      "self_s": 2.9829000000000002e-05,
+      "cumulative_s": 0.000261957
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method builtins.getattr>",
+      "primitive_calls": 2802,
+      "calls": 2802,
+      "self_s": 0.000244368,
+      "cumulative_s": 0.00026056800000000003
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/native_artifact.py",
+      "line": 86,
+      "function": "_sha256_json",
+      "primitive_calls": 7,
+      "calls": 7,
+      "self_s": 6.574e-06,
+      "cumulative_s": 0.000259354
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/jit.py",
+      "line": 1499,
+      "function": "_establish_tracer_authority",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 2.8063000000000002e-05,
+      "cumulative_s": 0.000257571
+    },
+    {
+      "file": "/usr/lib/python3.14/dataclasses.py",
+      "line": 1468,
+      "function": "is_dataclass",
+      "primitive_calls": 554,
+      "calls": 554,
+      "self_s": 0.000155415,
+      "cumulative_s": 0.000248816
+    },
+    {
+      "file": "/usr/lib/python3.14/json/__init__.py",
+      "line": 304,
+      "function": "loads",
+      "primitive_calls": 10,
+      "calls": 10,
+      "self_s": 1.4259e-05,
+      "cumulative_s": 0.00023920700000000002
+    },
+    {
+      "file": "/usr/lib/python3.14/json/encoder.py",
+      "line": 185,
+      "function": "encode",
+      "primitive_calls": 78,
+      "calls": 78,
+      "self_s": 3.1132e-05,
+      "cumulative_s": 0.00023125
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 197,
+      "function": "_str_normcase",
+      "primitive_calls": 304,
+      "calls": 304,
+      "self_s": 9.1499e-05,
+      "cumulative_s": 0.000218886
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/native_artifact.py",
+      "line": 82,
+      "function": "_canonical_json",
+      "primitive_calls": 7,
+      "calls": 7,
+      "self_s": 5.882000000000001e-06,
+      "cumulative_s": 0.000214138
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/effects.py",
+      "line": 177,
+      "function": "infer_graph_effects",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 3.1717e-05,
+      "cumulative_s": 0.000212365
+    },
+    {
+      "file": "/usr/lib/python3.14/json/decoder.py",
+      "line": 340,
+      "function": "decode",
+      "primitive_calls": 10,
+      "calls": 10,
+      "self_s": 1.5396e-05,
+      "cumulative_s": 0.000211492
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'extend' of 'list' objects>",
+      "primitive_calls": 42,
+      "calls": 42,
+      "self_s": 1.8594000000000002e-05,
+      "cumulative_s": 0.000206832
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'isascii' of 'str' objects>",
+      "primitive_calls": 3538,
+      "calls": 3538,
+      "self_s": 0.000206337,
+      "cumulative_s": 0.000206337
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method builtins.isinstance>",
+      "primitive_calls": 2668,
+      "calls": 2668,
+      "self_s": 0.00019255500000000002,
+      "cumulative_s": 0.00020624
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/capabilities.py",
+      "line": 117,
+      "function": "supports_op",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 4.2711000000000005e-05,
+      "cumulative_s": 0.000205462
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'join' of 'str' objects>",
+      "primitive_calls": 417,
+      "calls": 419,
+      "self_s": 9.2224e-05,
+      "cumulative_s": 0.00019978700000000002
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1088,
+      "function": "<genexpr>",
+      "primitive_calls": 75,
+      "calls": 75,
+      "self_s": 2.1364e-05,
+      "cumulative_s": 0.00018823800000000002
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method posix.fspath>",
+      "primitive_calls": 305,
+      "calls": 305,
+      "self_s": 3.0025e-05,
+      "cumulative_s": 0.00018525
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 134,
+      "function": "__init__",
+      "primitive_calls": 228,
+      "calls": 228,
+      "self_s": 0.00012091,
+      "cumulative_s": 0.00018494600000000001
+    },
+    {
+      "file": "/usr/lib/python3.14/json/decoder.py",
+      "line": 351,
+      "function": "raw_decode",
+      "primitive_calls": 10,
+      "calls": 10,
+      "self_s": 0.000183501,
+      "cumulative_s": 0.000183501
+    },
+    {
+      "file": "/usr/lib/python3.14/json/encoder.py",
+      "line": 207,
+      "function": "iterencode",
+      "primitive_calls": 7,
+      "calls": 7,
+      "self_s": 0.00017690500000000001,
+      "cumulative_s": 0.00017690500000000001
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1190,
+      "function": "_format_named_attr",
+      "primitive_calls": 37,
+      "calls": 37,
+      "self_s": 1.3676000000000001e-05,
+      "cumulative_s": 0.00016687400000000002
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_quantized_mlp_program.py",
+      "line": 20,
+      "function": "_components",
+      "primitive_calls": 2,
+      "calls": 2,
+      "self_s": 1.3314000000000002e-05,
+      "cumulative_s": 0.000163852
+    },
+    {
+      "file": "/usr/lib/python3.14/dataclasses.py",
+      "line": 1460,
+      "function": "<genexpr>",
+      "primitive_calls": 2310,
+      "calls": 2310,
+      "self_s": 0.00016296100000000001,
+      "cumulative_s": 0.00016296100000000001
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 340,
+      "function": "drive",
+      "primitive_calls": 152,
+      "calls": 152,
+      "self_s": 5.8385000000000004e-05,
+      "cumulative_s": 0.00015791200000000002
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 189,
+      "function": "__fspath__",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 1.2184e-05,
+      "cumulative_s": 0.00015522500000000002
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_quantized_mlp_program.py",
+      "line": 27,
+      "function": "<genexpr>",
+      "primitive_calls": 6,
+      "calls": 6,
+      "self_s": 6.1400000000000005e-06,
+      "cumulative_s": 0.000147751
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/native_scaled_program.py",
+      "line": 677,
+      "function": "_inputs",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 2.4850000000000003e-06,
+      "cumulative_s": 0.000127784
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/native_scaled_program.py",
+      "line": 680,
+      "function": "_inputs_for_storage",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 2.7003000000000002e-05,
+      "cumulative_s": 0.00012529900000000002
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1199,
+      "function": "_format_attr_value",
+      "primitive_calls": 55,
+      "calls": 88,
+      "self_s": 5.1557e-05,
+      "cumulative_s": 0.00011905900000000001
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/op_catalog.py",
+      "line": 683,
+      "function": "get_op_spec",
+      "primitive_calls": 84,
+      "calls": 84,
+      "self_s": 3.1922000000000004e-05,
+      "cumulative_s": 0.00011643100000000001
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/capabilities.py",
+      "line": 58,
+      "function": "op",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 3.0272e-05,
+      "cumulative_s": 0.00011428600000000001
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/capabilities.py",
+      "line": 78,
+      "function": "canonical_op",
+      "primitive_calls": 76,
+      "calls": 76,
+      "self_s": 4.3348000000000006e-05,
+      "cumulative_s": 0.00010993000000000001
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 260,
+      "function": "_format_parsed_parts",
+      "primitive_calls": 228,
+      "calls": 228,
+      "self_s": 5.9262e-05,
+      "cumulative_s": 0.000101458
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_nvfp4_expand_native.py",
+      "line": 30,
+      "function": "_contract",
+      "primitive_calls": 2,
+      "calls": 2,
+      "self_s": 2.1079000000000003e-05,
+      "cumulative_s": 9.5303e-05
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'get' of 'dict' objects>",
+      "primitive_calls": 1030,
+      "calls": 1030,
+      "self_s": 9.2088e-05,
+      "cumulative_s": 9.2088e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/jit.py",
+      "line": 1382,
+      "function": "_trace_frontend_capture",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 1.2831000000000001e-05,
+      "cumulative_s": 8.8559e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/effects.py",
+      "line": 157,
+      "function": "registered_op_effect",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 2.5618e-05,
+      "cumulative_s": 8.437000000000001e-05
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 633,
+      "function": "__new__",
+      "primitive_calls": 228,
+      "calls": 228,
+      "self_s": 6.0539000000000004e-05,
+      "cumulative_s": 8.222000000000001e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/native_scaled_program.py",
+      "line": 580,
+      "function": "pack_host_view",
+      "primitive_calls": 7,
+      "calls": 7,
+      "self_s": 1.3246000000000002e-05,
+      "cumulative_s": 8.2088e-05
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 280,
+      "function": "_parse_path",
+      "primitive_calls": 76,
+      "calls": 76,
+      "self_s": 4.6826e-05,
+      "cumulative_s": 7.7941e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/capabilities.py",
+      "line": 91,
+      "function": "normalize_target",
+      "primitive_calls": 79,
+      "calls": 79,
+      "self_s": 4.572e-05,
+      "cumulative_s": 7.3269e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1224,
+      "function": "_format_dictionary_attr",
+      "primitive_calls": 6,
+      "calls": 6,
+      "self_s": 1.3044e-05,
+      "cumulative_s": 7.228800000000001e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/native_artifact.py",
+      "line": 858,
+      "function": "_content_dict",
+      "primitive_calls": 7,
+      "calls": 7,
+      "self_s": 4.122e-05,
+      "cumulative_s": 6.822100000000001e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1743,
+      "function": "_tensor_contract_for",
+      "primitive_calls": 85,
+      "calls": 85,
+      "self_s": 3.8288000000000003e-05,
+      "cumulative_s": 6.697800000000001e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/jit.py",
+      "line": 1418,
+      "function": "<genexpr>",
+      "primitive_calls": 8,
+      "calls": 8,
+      "self_s": 1.9678e-05,
+      "cumulative_s": 6.678700000000001e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/paged_host_span.py",
+      "line": 18,
+      "function": "checked_host_span",
+      "primitive_calls": 7,
+      "calls": 7,
+      "self_s": 4.279e-05,
+      "cumulative_s": 6.602600000000001e-05
+    },
+    {
+      "file": "/usr/lib/python3.14/pathlib/__init__.py",
+      "line": 390,
+      "function": "parents",
+      "primitive_calls": 76,
+      "calls": 76,
+      "self_s": 2.1698e-05,
+      "cumulative_s": 6.379e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/effects.py",
+      "line": 105,
+      "function": "join",
+      "primitive_calls": 38,
+      "calls": 38,
+      "self_s": 2.7458e-05,
+      "cumulative_s": 6.1376e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/runtime.py",
+      "line": 8658,
+      "function": "_rocm_live_arch",
+      "primitive_calls": 2,
+      "calls": 2,
+      "self_s": 5.431300000000001e-05,
+      "cumulative_s": 6.1297e-05
+    },
+    {
+      "file": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/graph_ir.py",
+      "line": 1037,
+      "function": "result_names",
+      "primitive_calls": 76,
+      "calls": 76,
+      "self_s": 3.9158e-05,
+      "cumulative_s": 6.0718000000000004e-05
+    }
+  ],
+  "member_image_digests": [
+    "adb7bb82fbbc2938561e53a0ef099398bcbe3625ea26a393c249fe15963f14cb",
+    "9a723bcabbb97bf64562612b5657ba43f028b201816a58a4c92786fd9d0b2d64",
+    "03c2306d65fdab8b2735cdabb08387b18587078ff0799ee311fe4886a813d626",
+    "3253b8b243df58f450de1f301b20e47ec2df9adbe3d3fe1d9b816ccf4130d6b4",
+    "27c1057658b732612b00e20701b77c79cd64a662ff40125cc9d12b1711612db7",
+    "181f24ad61fe3ad9b87627f124566e6caccfba81f6c3064a809418a420e4542d",
+    "f35911b73c2a82e1392a91e751df8b32160eecad050c223f410d77661f8635de"
+  ],
+  "scope": "diagnostic public ownership versus explicit existing prepared update/invoke/read API;synthetic roots;not a shipping optimization ratio or model quality acceptance"
+}

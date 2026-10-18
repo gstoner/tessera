@@ -670,6 +670,10 @@ class PreparedScaledProgram:
             self._program = json.loads(self.package.program_json)
         return self._program
 
+    def _nvfp4_scale_bounds(self):
+        from .nvfp4_scale_admission import native_scale_bounds
+        return native_scale_bounds(getattr(self, "lib", None))
+
     def _inputs(self, inputs):
         return self._inputs_for_storage(inputs, self._binding.storage)
 

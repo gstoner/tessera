@@ -6,6 +6,26 @@ target: apple_gpu
 last_updated: 2026-10-18
 ---
 
+## ROCM-PUBLIC-OWNER-OVERHEAD-20261018 — native host admission and ownership
+
+Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6.
+Synchronization key: ROCM-PUBLIC-OWNER-OVERHEAD-20261018.
+
+The candidate adds checked encoded-scale admission and extends the existing
+native owner pool with reusable pageable staging and a bounded gfx1201 quota.
+Every acquire/update validates and uploads all current roots. Native numerical
+images and schedules are unchanged. Host policy/admission tests pass 2,090
+cases; gfx1201 prepared execution passes 28 cases, including same-pointer root
+mutations, private readiness, large-frame retention and immutable outputs.
+Final ABBA timing validates the named gfx1201 host-cost improvement; kernel images remain identical.
+Evidence: benchmarks/baselines/rocm_public_owner_20261018/README.md.
+
+### Sibling assessment
+
+Not applicable to Apple CPU/Metal lowering or ownership: no Apple provider selects the HIP admission utility or native pool. No Apple execution or performance claim is made.
+
+
+
 ## W11-MIXED-ADJOINT-CONTRACTION-20261018 — native mixed contractions and source VJP
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

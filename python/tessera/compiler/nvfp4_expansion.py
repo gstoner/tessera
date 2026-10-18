@@ -19,7 +19,7 @@ def nvfp4_expansion_policy():
     }
 
 
-def checked_expansion_inputs(codes, scales, projection_globals, *, row_offsets, numeric_policy):
+def checked_expansion_inputs(codes, scales, projection_globals, *, row_offsets, numeric_policy, _scale_bounds=None):
     import ml_dtypes
 
     if numeric_policy != nvfp4_expansion_policy():
@@ -40,18 +40,37 @@ def checked_expansion_inputs(codes, scales, projection_globals, *, row_offsets, 
         raise ValueError("NVFP4 expansion requires E4M3 [N,K/16] scales")
     if globals_.dtype != np.float64 or globals_.shape != (len(offsets) - 1,):
         raise ValueError("NVFP4 expansion requires f64 projection globals")
-    decoded = scales.astype(np.float64)
-    if not np.all(np.isfinite(decoded)) or np.any(decoded < 0):
+    # Prepared native programs provide an encoded-byte admission scanner.
+    # Legacy providers and eager/oracle callers retain the elementwise check.
+    bounds = _scale_bounds(scales, offsets) if _scale_bounds is not None else None
+    if bounds is not None and (
+            not isinstance(bounds, tuple) or len(bounds) != len(offsets) - 1
+            or any(not isinstance(pair, tuple) or len(pair) != 2
+                   or any(type(v) is not int for v in pair) for pair in bounds)):
+        raise ValueError("NVFP4 native scale bounds differ")
+    decoded = None if bounds is not None else scales.astype(np.float64)
+    if decoded is not None and (not np.all(np.isfinite(decoded)) or np.any(decoded < 0)):
         raise ValueError("NVFP4 expansion scales must be finite and nonnegative")
     if not np.all(np.isfinite(globals_)) or np.any(globals_ <= 0):
         raise ValueError("NVFP4 expansion globals must be finite and positive")
-    # Validate each projection independently; no copied per-row global plane.
+    # Positive multiplication and both rounding steps are monotone. A native
+    # smallest-positive/largest-positive pair proves the original all-element
+    # range predicate, retaining signed-zero and f64-product -> f32 behavior.
     for p, (start, stop) in enumerate(zip(offsets, offsets[1:])):
+        if bounds is None:
+            assert decoded is not None
+            values = decoded[start:stop]
+        else:
+            low, high = bounds[p]
+            if low == 127 and high == 0:
+                continue
+            if not 0 < low <= high < 127:
+                raise ValueError("NVFP4 native scale bounds differ")
+            values = np.array([low, high], np.uint8).view(ml_dtypes.float8_e4m3fn).astype(np.float64)
         with np.errstate(over="ignore", under="ignore", invalid="ignore"):
-            product = decoded[start:stop] * globals_[p]
-            rounded = product.astype(np.float32)
+            rounded = (values * globals_[p]).astype(np.float32)
         if (not np.all(np.isfinite(rounded))
-                or np.any((decoded[start:stop] > 0) & (rounded == 0))):
+                or np.any((values > 0) & (rounded == 0))):
             raise ValueError("NVFP4 expansion scale product overflows or underflows f32")
     return codes, scales, globals_, offsets
 

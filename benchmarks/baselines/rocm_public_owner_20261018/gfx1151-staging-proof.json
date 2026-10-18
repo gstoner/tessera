@@ -1,0 +1,60 @@
+{
+  "architecture": "gfx1151",
+  "device": "AMD Radeon(TM) 8060S Graphics",
+  "uuid": "GPU-ffffffffffffffff",
+  "recorder_sha256": "18514f4df1da3fe0b32826d3c0ffb80989b3e11203bf5cb53facd2ebec00f60e",
+  "provider_sha256": "963a2c8aad3f4947adaf04557fb4d6df4e85e8394d3e014a66485d0787b7eb63",
+  "image_sha256": "f61a5c47175893f250df553cad80b13bc81c1b962d724247d728c9c1ce959ee9",
+  "rows": [
+    {
+      "lease": 0,
+      "cache": [
+        0,
+        1,
+        1,
+        6128
+      ],
+      "correctness": "exact_integer_addition"
+    },
+    {
+      "lease": 1,
+      "cache": [
+        1,
+        1,
+        1,
+        6128
+      ],
+      "correctness": "exact_integer_addition"
+    },
+    {
+      "lease": 2,
+      "cache": [
+        2,
+        1,
+        1,
+        6128
+      ],
+      "correctness": "exact_integer_addition"
+    }
+  ],
+  "source_files": {
+    "hip/ProgramHostTransportPolicy.h": "990cfba9ea7bec25e3683c0235487c22b5e1dd955e90452db51ab8647863086b",
+    "hip/nvfp4_scale_bounds.cpp": "cb9f11d755026114f8b74eb7bea2f2c005ca91fdd4d54a58e300c31f895592fa",
+    "hip/ProgramCachePolicy.h": "d112767ee174b7367b103104f61dc15b90c63420d2a5950e0081f013da45f087",
+    "hip/launcher.cpp": "729a780bb90b6c8f01080c964336750473a983d630075fc733538544f2066f3a",
+    "hip/tessera_rocm_flash_attn.cpp": "860ea8e8bf4cd638edb60cad9f47cafb6a773f18658de74d6952cacde1ada851",
+    "hip/native_image_cache.cpp": "80be398eddb21197cded4a88093d86b3c3fc67034e8368c09be51d9a419f0860",
+    "hip/MovementPhysicalSpan.h": "6516084ee88c87f5d3280ece25e0abd2b2f3b8d29f01945fef982d0186120080",
+    "hip/native_program_runtime.h": "c6528e7f287f6cdb3fdc73c922a26d759ecef1dafb9f249e8e4877587b410a09",
+    "hip/native_movement_runtime.cpp": "15317a35ab3763216c5c9c337a3504a018e3f05c35f05275d60a1993d373ed2c",
+    "hip/native_program_runtime.cpp": "dbfc498844b79eb27d56f6f1d705a7e8a5b2d187cbfed0eecd9e6db65188c737",
+    "hip/tessera_rocm_gemm.cpp": "b0c488f74a8939807519ccef5bccd84a0aeb9875d7377a0c8721bce94e0cb2b9",
+    "hip/NVFP4ScaleBounds.h": "40beb4b1b1a1fea1686826994f46a9ab13f788922e6763a476097dd61faaec1e",
+    "hip/loader.h": "e7ba322fc02f97da2444f2505c25ba5db5480198e373d61b5ae40d4c09a9cf0c",
+    "hip/loader.cpp": "27403e632c7d3d12ad0b166953f1275ac77add52db2e721fb1b0488adb199485",
+    "hip/CMakeLists.txt": "35970499a95198ff5e295b35bbef42af3b6b0f4f4cf06b6272ca23afb54bad40",
+    "hip/native_nvfp4_runtime.cpp": "bd3a1e4f85312c62d975ff06466e42fe540c28a24407ea423642129534d09843",
+    "hip/examples/launch_vec_add.cpp": "55f7772b7912bb0c33f288e7f6f4ab4bf2b6cfea95732e3432a03e4080b096fa"
+  },
+  "scope": "native owner staging/reuse/generation correctness with compiler-generated Graph/Schedule/Tile add;not gfx1201 format proof or performance"
+}

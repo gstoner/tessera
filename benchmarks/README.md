@@ -390,3 +390,11 @@ NVVM and the checked C++ owner. The packet is
 [sm120_source_reverse_20261018](baselines/sm120_source_reverse_20261018/README.md);
 public/native timing domains, frozen controls and original image/ABI witnesses
 remain separate from generic reverse support.
+
+
+### Native ROCm program ownership attribution
+
+| Recorder | Output and scope |
+| --- | --- |
+| [record_native_program_owner.py](rocm/record_native_program_owner.py) | [gfx1201 host admission/ownership packet](baselines/rocm_public_owner_20261018/README.md); independent correctness, same-image controls and separate host/HIP timing domains. |
+| [gfx1151_check_staging.py](baselines/rocm_public_owner_20261018/gfx1151_check_staging.py) | Named gfx1151 native program staging/reuse proof in the same packet; a compiler-generated FP32 add image, not quantized-format or performance parity. |

@@ -2187,3 +2187,30 @@ The repaired clean-head CPU gate passes 26,327 cases with 5,897 skips.
 The 21 sparse-byte and shutdown regression cases execute without skips or
 failures; parent confirmed-death and checked HIP cleanup remain required.
 Public CI/review and all five aggregate obligations remain open.
+
+
+## Native gfx1201 public owner overhead — 2026-10-18
+
+ROCM-PUBLIC-OWNER-OVERHEAD-20261018 validates encoded scale admission without
+full-plane FP64 temporaries, while preserving the original positive finite
+global and rounded FP32 range policy. The existing HIP owner pool now retains
+a device-bounded gfx1201 frame and reuses owned pageable staging; every lease
+still uploads every current root. No numerical image or schedule changes.
+
+Host policy/admission gates pass 2,090 cases; owning prepared-program gates
+pass 28 cases and adjacent primal/JVP/allocation gates pass 90 cases. These
+lanes are distinct, not a claim of a fresh full-suite result. Two order-reversed
+same-source/seven-image pairs record 71.530/73.365 ms control public calls
+versus 35.702/35.806 ms candidate. Separate HIP-event medians are
+2.46063–2.57804 ms; this is host-overhead attribution, not kernel promotion.
+Evidence: benchmarks/baselines/rocm_public_owner_20261018/README.md.
+
+Ten real HIP prepare/full/partial-update fault-recovery cases pass. The matching-source gfx1151 native
+staging contract passes three cache leases and explicit updates/readiness/
+cleanup on Radeon 8060S. The 1,754-case compiler proof executes without skips; the 2,425-case focused
+registry/document/ABI gate passes. The full CPU gate passes 28,700 (5,697 skipped). Final integrated ABBA public
+medians are 71.4–75.2 ms control and 36.6–37.0 ms selected, with identical
+seven images and separate 2.44–2.47 ms native events. Current-head public
+CI/review remains. All five aggregate rows,
+model-quality acceptance, general frontend/AD and wider performance obligations
+remain open.

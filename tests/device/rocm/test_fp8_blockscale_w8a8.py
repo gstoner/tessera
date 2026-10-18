@@ -778,3 +778,32 @@ def test_w8a8_kn_lds_static_projected_and_reuse_on_gfx1201(scale_k, scale_n, dep
         packages.append(projected)
     assert len({p.image.image_digest for p in packages}) == 1
     assert len({p.descriptor.entry_symbol for p in packages}) == 1
+
+
+@pytest.mark.parametrize("macro_n", [16, 32, 64, 128, 192, 256])
+@pytest.mark.parametrize("stage_k,prefetch,pad", [
+    (16, 0, 0), (32, 1, 16), (64, 2, 0), (128, 2, 16),
+])
+def test_w8a8_kn_quad_copy_geometry_on_gfx1201(macro_n, stage_k, prefetch, pad):
+    """Complete K quads exchange within waves; unsupported geometry stays scalar."""
+    assert rt._rocm_live_arch() == "gfx1201"
+    # 192 columns is not a power-of-two N-vector group; 256 cannot keep
+    # four K rows inside wave32. Both must retain the original scalar copy.
+    shape = BlockScaleShape(33, 17, 256, 128, 128, "kn")
+    a, b, sa, sb = _inputs(shape, exact=True, seed=macro_n + stage_k)
+    program = _with_schedule(
+        lower_blockscale(shape), staging="lds", warps=2,
+        macro=(64, macro_n), depth=2 if prefetch == 2 else 1)
+    def package_geometry():
+        return package_blockscale(
+            program, blockscale_stage_k=stage_k,
+            blockscale_prefetch=prefetch, blockscale_lds_pad_bytes=pad)
+
+    lds_bytes = (64 + macro_n) * (stage_k + pad) * (2 if prefetch == 2 else 1)
+    if lds_bytes > 65536:
+        with pytest.raises(RuntimeError, match="LDS bytes exceed the 64 KiB"):
+            package_geometry()
+        return
+    package = package_geometry()
+    want = blockscale_reference(a, b, sa, sb, scale_k=128, scale_n=128)
+    np.testing.assert_array_equal(_launch(package, a, b, sa, sb, shape), want)

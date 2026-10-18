@@ -5,6 +5,27 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## GFX1201-KN-QUAD-TRANSPOSE-20261017 — native packed LDS candidate
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / LAYOUT-ALG-1 / E2E-REAL-6.
+Sync: GFX1201-KN-QUAD-TRANSPOSE-20261017.
+
+Implementation in progress after PR980 merge. The native gfx1201 KN FP32-scale
+W8A8 loader exchanges four K rows inside wave32, permutes their bytes and
+writes aligned words into the existing [Ntile,Kstage] LDS allocation. Masked
+loads rejoin before exchange; scale order, buffer phases, views, WMMA and
+barriers retain their contracts. Unsupported N-vector geometry keeps scalar
+stores; gfx1151/gfx1200 receive no physical schedule change.
+
+Owning RX9070XT initial proof: 42 device tests pass, comprising 40 numerical
+cases and two unchanged 64 KiB LDS capacity refusals. The matrix includes
+N-vector groups 1/2/4/8 and scalar fallback geometry, stages K16/32/64/128,
+ragged/tiny columns, padding, prefetch modes and static/projected image reuse.
+Native compiler integration, actual ISA/resource attribution, paired kernel
+and completed-public timings, FP8/MXFP8/MXFP4 controls and publication gates
+remain required before promotion. No speedup or aggregate closure is claimed.
+
+
 ## SM120-BOUNDED-HOST-JVP-20261017 — bounded prepared host attention JVP
 
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

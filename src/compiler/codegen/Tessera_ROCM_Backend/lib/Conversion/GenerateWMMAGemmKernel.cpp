@@ -55,6 +55,7 @@
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/ROCDLDialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -2015,7 +2016,7 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
                                 StringRef scaleFormat = "fp32", bool foldedPacked = false,
                                 bool foldedFragmentGroups = false,
                                 bool foldedRowPitched = false,
-                                bool rhsNK = true) {
+                                bool rhsNK = true, bool knQuadTranspose = false) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
@@ -2261,6 +2262,13 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
       ? planCopy(B, ldsB, wgN, baseCol, N, wholeN, bRowStride)
       : planKN();
   planB.packed = foldedPacked;
+  // Four K rows must be a closed subset of one wave, including the final
+  // active copy round. Restrict this physical candidate to its owning chip.
+  const int64_t knNVectors = wgN / vecW;
+  const bool packedKN = knQuadTranspose && !rhsNK && !foldedPacked &&
+      vecW == 16 && knNVectors > 0 && knNVectors <= 8 &&
+      (knNVectors & (knNVectors - 1)) == 0 && stageK % 4 == 0 &&
+      nthreads % (4 * knNVectors) == 0 && ldsStride % 4 == 0;
   const llvm::MaybeAlign align16(16);
 
   auto issue = [&](OpBuilder &kb, Location l, const CopyPlan &plan, Value k0) {
@@ -2431,8 +2439,73 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
       if (buf)
         dst = kb.create<arith::AddIOp>(
             l, dst, kb.create<arith::MulIOp>(l, buf, ci(plan.bufElems)));
+      SmallVector<Value, 4> transposed;
+      if (plan.transposeKN && packedKN) {
+        // issue() rejoins masked global loads before any exchange. Keep all
+        // shuffles outside the store predicate; inactive complete K quads
+        // exchange zero values and never write LDS.
+        auto c32 = [&](int64_t x) -> Value {
+          return kb.create<arith::ConstantIntOp>(l, x, 32);
+        };
+        auto wordsType = VectorType::get({4}, kb.getI32Type());
+        Value vector = kb.create<vector::BitCastOp>(l, wordsType, vals[i]);
+        SmallVector<Value, 4> words;
+        for (int64_t j = 0; j < 4; ++j)
+          words.push_back(kb.create<vector::ExtractOp>(
+              l, vector, ArrayRef<int64_t>{j}));
+        Value localK = kb.create<arith::DivUIOp>(l, tx, ci(knNVectors));
+        for (int64_t bit : {1, 2}) {
+          Value highK = kb.create<arith::CmpIOp>(
+              l, arith::CmpIPredicate::ne,
+              kb.create<arith::AndIOp>(l, localK, ci(bit)), ci(0));
+          auto old = words;
+          for (int64_t low = 0; low < 4; ++low) {
+            if (low & bit)
+              continue;
+            int64_t high = low | bit;
+            Value send = kb.create<arith::SelectOp>(
+                l, highK, old[low], old[high]);
+            Value exchanged = kb.create<gpu::ShuffleOp>(
+                l, send, c32(knNVectors * bit), c32(32),
+                gpu::ShuffleMode::XOR).getShuffleResult();
+            words[low] = kb.create<arith::SelectOp>(
+                l, highK, exchanged, old[low]);
+            words[high] = kb.create<arith::SelectOp>(
+                l, highK, old[high], exchanged);
+          }
+        }
+        // V_PERM_B32 takes the high source first and low source second.
+        auto perm = [&](Value high, Value low, int64_t selector) -> Value {
+          return kb.create<LLVM::CallIntrinsicOp>(
+              l, kb.getI32Type(), kb.getStringAttr("llvm.amdgcn.perm"),
+              ValueRange{high, low, c32(selector)}).getResult(0);
+        };
+        Value a = perm(words[1], words[0], 0x05010400);
+        Value b = perm(words[1], words[0], 0x07030602);
+        Value c = perm(words[3], words[2], 0x05010400);
+        Value d = perm(words[3], words[2], 0x07030602);
+        transposed = {perm(c, a, 0x05040100), perm(c, a, 0x07060302),
+                      perm(d, b, 0x05040100), perm(d, b, 0x07060302)};
+        Value quadK = kb.create<arith::RemUIOp>(l, localK, ci(4));
+        dst = kb.create<arith::AddIOp>(
+            l, dst, kb.create<arith::MulIOp>(
+                l, quadK, ci(4 * ldsStride - 1)));
+      }
       auto store = [&]() {
-        if (plan.transposeKN) {
+        if (plan.transposeKN && packedKN) {
+          auto scalarVector = VectorType::get({1}, kb.getI32Type());
+          auto bytesVector = VectorType::get({4}, T.store);
+          for (int64_t j = 0; j < 4; ++j) {
+            Value word = kb.create<vector::BroadcastOp>(
+                l, scalarVector, transposed[j]);
+            Value bytes = kb.create<vector::BitCastOp>(l, bytesVector, word);
+            Value address = kb.create<arith::AddIOp>(
+                l, dst, ci(j * ldsStride));
+            kb.create<vector::StoreOp>(
+                l, bytes, plan.dst, ValueRange{address},
+                /*nontemporal=*/false, llvm::MaybeAlign(4));
+          }
+        } else if (plan.transposeKN) {
           // The consumer retains its [Ntile,Kstage] LDS view. Each physical
           // N byte belongs to a different row; no barrier moves into a mask.
           for (int64_t j = 0; j < vecW; ++j) {
@@ -3036,7 +3109,7 @@ struct GenerateWMMAGemmKernelPass
                     // ROCDL because the panel emits rocdl.sched.group.barrier
                     // directly. An undeclared dependent dialect is silent on
                     // an NDEBUG driver and a hard error under assertions.
-                    ROCDL::ROCDLDialect,
+                    ROCDL::ROCDLDialect, LLVM::LLVMDialect,
                     mlir::tessera_rocm::TesseraROCMDialect>();
   }
 
@@ -4446,7 +4519,7 @@ struct GenerateWMMAGemmKernelPass
             request.runtimeK, request.foldedFullK, request.foldedWaveGuard,
             request.foldedVectorScales, request.scaleFormat, request.foldedPacked,
             request.foldedFragmentGroups, request.foldedRowPitched,
-            request.bTransposed);
+            request.bTransposed, requestArch == "gfx1201");
       } else if (scaled) {
         gpuFunc->setAttr("tessera.rocm.block_scale_contract",
                          b.getStringAttr(

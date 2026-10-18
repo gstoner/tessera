@@ -27,7 +27,7 @@
   "paired_timing_rows": 32,
   "program_archives": 20,
   "mypy": "errors=0 baseline=0",
-  "publication": "full CPU/compiler-route, final generated-document check and public CI/review pending",
+  "publication": "full local gates passed; public CI and complete review-thread audit pending",
   "final_combined": {
     "passed": 89,
     "seconds": 53.01
@@ -42,5 +42,17 @@
     "passed": 32,
     "finite_differences": 16,
     "unique_programs": 20
+  },
+  "frozen_full_validation": {
+    "cpu": {
+      "tested_commit": "e1d9fbac40bbfa7ee1ca039269818a8cfad20673",
+      "passed": 26343,
+      "skipped": 5905
+    },
+    "compiler-route": {
+      "tested_commit": "e1d9fbac40bbfa7ee1ca039269818a8cfad20673",
+      "passed": 1614,
+      "skipped": 0
+    }
   }
 }

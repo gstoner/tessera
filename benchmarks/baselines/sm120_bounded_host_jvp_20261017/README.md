@@ -87,7 +87,6 @@ referenced artifacts once.
 
 ## Remaining gates and scope
 
-Full CPU/production compiler-route and final documentation/public CI/review
-are pending. Mixed/quantized attention, wider masks/layouts, general composed
+Frozen WSL CPU validation passes 26,343 tests (5,905 skipped); production compiler-route passes 1,614 with zero skips. All 33 generated documents pass drift checks. Public CI/review remain pending. Mixed/quantized attention, wider masks/layouts, general composed
 AD/resident results, the other architectures and all five aggregate goal
 requirements remain open. The resident-input snapshot path returns completed host results.

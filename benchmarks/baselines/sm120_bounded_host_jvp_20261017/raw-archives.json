@@ -163,5 +163,35 @@
     "archive": "curated-packet-replay-final.txt.xz",
     "raw_sha256": "08fa8f54941b2cac837ed481dcd3389c55b8fb456c1fe752310a05bb5d49ab86",
     "archive_sha256": "08e902f70fcbec66f7c19bdac224b427cd90a5877e443b5bdd182c2962436c68"
+  },
+  "frozen-cpu.txt": {
+    "archive": "frozen-cpu.txt.xz",
+    "raw_sha256": "325e4e85178e10833e3e21658dd9ef3ec0f34443065ebe56dcf00af4606ca9a7",
+    "archive_sha256": "2bbd7fc633fd1c4cb57dd28f3e99ad566c87e055f3d9953a3453138664b4db46"
+  },
+  "frozen-cpu.xml": {
+    "archive": "frozen-cpu.xml.xz",
+    "raw_sha256": "f2aa0ac92a9aa5dd291251cf654cb94c04d543e64b3e9c6a9627c5582b6fba70",
+    "archive_sha256": "f2afe630259f5dd34dcd278708a021e4f1f0ea0e5cb74eee27ef1ab39f200dd9"
+  },
+  "frozen-compiler-route.txt": {
+    "archive": "frozen-compiler-route.txt.xz",
+    "raw_sha256": "f858ae626a9068929ff2c10db583ab603502434198011007356b2c10a46b41ff",
+    "archive_sha256": "f750daa8c9acfb4df4316220682c14ed26a7bb3d1ae982d5f456109abb1232fe"
+  },
+  "frozen-compiler-route.xml": {
+    "archive": "frozen-compiler-route.xml.xz",
+    "raw_sha256": "71fb24c0d14f42e3b2efb21f590127b15259f81faae63323233bb12d2b992b67",
+    "archive_sha256": "5083c5d0236c4d47886fbfa159244a299b4779f5b31fb8bc3679130535a463a2"
+  },
+  "generated-docs-check.txt": {
+    "archive": "generated-docs-check.txt.xz",
+    "raw_sha256": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "archive_sha256": "5361b5467bde9567e0f25624808dbbd2d15e59b59d390c512d117ecfd61b4f57"
+  },
+  "audit-publication.txt": {
+    "archive": "audit-publication.txt.xz",
+    "raw_sha256": "0c44c4e76a94860a7aac1450a64f48cfbc8aca7646bcc3b7795463c9a201784e",
+    "archive_sha256": "ad7be3acb91b85f9da0161f43a6ea4591aed47a8733c5758f1685a352dbbd433"
   }
 }

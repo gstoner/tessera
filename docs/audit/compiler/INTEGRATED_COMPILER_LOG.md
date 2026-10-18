@@ -13454,9 +13454,9 @@ spans, physical bias parameters and producer events are checked. Compiler-free
 replay passes 32 numerical cases plus 16 independent finite differences.
 Paired completed-call latency improves 2.99-3.84x in the named profiles;
 device dispatch samples remain separate. All four backend plans assessed.
+Frozen WSL CPU validation passes 26,343 tests (5,905 skipped); production compiler-route passes 1,614 with zero skips. All 33 generated documents pass drift checks.
 
-Remaining: Full CPU/compiler-route and documentation/publication gates,
-mixed/quantized attention, wider masks/layouts, composed AD/resident results
+Remaining: Public CI/review gates, mixed/quantized attention, wider masks/layouts, composed AD/resident results
 and the original five-slice obligations.
 
 Evidence: benchmarks/baselines/sm120_bounded_host_jvp_20261017/README.md.

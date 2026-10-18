@@ -315,7 +315,8 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 - Current increment (2026-10-17, sync SM120-BOUNDED-HOST-JVP-20261017):
   explicit bounded host JVP uses one checked native capacity owner with
   compiler-owned AD/Schedule/Tile/Target images. Owning numerical replay and
-  paired completed-call timing pass; full validation/publication gates remain.
+  paired completed-call timing and full local validation pass; public CI/review
+  remain.
   Wider attention/producer/ROCm obligations stay open.
   [Packet](../../../benchmarks/baselines/sm120_bounded_host_jvp_20261017/README.md).
 

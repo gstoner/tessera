@@ -158,6 +158,12 @@ class TestWorkflowStructure:
         )
         assert "tessera-opt" in script
         assert "compiler_route" in script
+        assert "ci_install_pinned_cuda.sh" in script
+        assert "--target tessera-opt tessera-nvidia-opt" in script
+        proof = next(step for step in lane["steps"]
+                     if step.get("name") == "Run compiler-route proof")
+        assert 'export TESSERA_LLVM_BIN="$TESSERA_CI_LLVM_PREFIX/bin"' in proof["run"]
+        assert "TESSERA_NVIDIA_OPT" in proof["env"]
         assert "TESSERA_OPT" in "\n".join(
             str(step.get("env", "")) for step in lane.get("steps", [])
         )

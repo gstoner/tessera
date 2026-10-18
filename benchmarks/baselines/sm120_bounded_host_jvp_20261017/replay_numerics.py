@@ -9,11 +9,12 @@ from unittest.mock import patch
 import argparse
 parser=argparse.ArgumentParser(description="Compiler-disabled replay and FP64 checks for this packet")
 parser.add_argument("--output",type=Path,required=True)
+parser.add_argument("--timing-packet",choices=("paired-public-forward.json.xz","review-paired-forward.json.xz"),default="review-paired-forward.json.xz")
 options=parser.parse_args()
 if options.output.exists():
     raise ValueError("choose a fresh replay output")
 w=Path(__file__).resolve().parent
-packet=json.loads(lzma.decompress((w/'paired-public-forward.json.xz').read_bytes()))
+packet=json.loads(lzma.decompress((w/options.timing_packet).read_bytes()))
 device=subprocess.check_output(['/usr/lib/wsl/lib/nvidia-smi',
     '--query-gpu=name,uuid,compute_cap,driver_version','--format=csv,noheader'],text=True).strip()
 assert device==packet['device']

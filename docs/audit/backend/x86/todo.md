@@ -22,6 +22,17 @@ refusals are host-validated. No dtype, operation or shader arithmetic is added.
 Follow-up required for an architecture-specific bounded attention JVP owner
 and exact-device numerical/performance proof; RTX5070 results do not transfer.
 
+PR980 review changes only SM120 owner-cache selection by native fixed
+input signature. Not applicable to x86 physical execution; its images,
+runtime ABI and dtype admission are unchanged. The shared target guards retain
+their own host proof; no RTX5070 result transfers.
+
+CI follow-up: the host-free compiler-route lane now binds its selected
+LLVM directory, builds the NVIDIA target tool and installs a SHA256-pinned
+CUDA assembler/libdevice components. This enables the 14 bounded preflight
+cases to execute their real package construction; it adds no device proof
+or sibling target admission.
+
 Contract: docs/spec/SM120_TYPED_ATTENTION_JVP_CONTRACT.md.
 Evidence: benchmarks/baselines/sm120_bounded_host_jvp_20261017/README.md.
 

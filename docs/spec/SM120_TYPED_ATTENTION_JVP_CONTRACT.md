@@ -93,7 +93,13 @@ pinned staging. Runtime sequence lengths must be positive and within bounds;
 fixed batch, head, feature and storage dimensions must match. Each invocation
 projects current byte spans, grids, shared-memory size and sizing indices
 (scratch, query_size, key_size). Warm shape changes reuse the same program and
-owner. Producer events order resident-input snapshots. Returned results are
+owner. The bounded cache also keys the sealed native symbolic primal shapes
+and dtypes, alongside bounds, activity, source identity and the actual Thread
+object. Each fixed batch/head/feature/storage signature has its own owner.
+Physical bias contracts participate in matching, including degenerate
+broadcasts. Runtime capacity refusal stays with the selected owner and does
+not trigger a new compilation. Recent compatible owners are retained.
+Producer events order resident-input snapshots. Returned results are
 independent completed host arrays. Thread ownership, context/fork guards,
 close and draining retain their existing lifetime contracts.
 

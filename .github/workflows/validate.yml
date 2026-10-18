@@ -162,6 +162,9 @@ jobs:
       - name: Install pinned ROCm image SDK (host-free)
         run: bash scripts/ci_install_pinned_rocm.sh
 
+      - name: Install pinned CUDA image SDK (host-free)
+        run: bash scripts/ci_install_pinned_cuda.sh
+
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
@@ -188,14 +191,17 @@ jobs:
             -DMLIR_DIR="$MLIR_DIR" \
             -DLLVM_DIR="$LLVM_DIR"
           cp build-compiler-route/tessera_llvm_pin.txt ci-toolchain/compiler-route-configure.txt
-          cmake --build build-compiler-route --target tessera-opt
+          cmake --build build-compiler-route --target tessera-opt tessera-nvidia-opt
 
       - name: Run compiler-route proof
         env:
           PYTHONPATH: python
           TESSERA_OPT: "${{ github.workspace }}/build-compiler-route/tools/tessera-opt/tessera-opt"
+          TESSERA_NVIDIA_OPT: "${{ github.workspace }}/build-compiler-route/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt"
         run: |
           export PATH="$TESSERA_CI_LLVM_PREFIX/bin:$GITHUB_WORKSPACE/build-compiler-route/tools/tessera-opt:/usr/lib/llvm-23/bin:$PATH"
+          export TESSERA_LLVM_BIN="$TESSERA_CI_LLVM_PREFIX/bin"
+          export TESSERA_NATIVE_STORAGE_LLVM_BIN="$TESSERA_LLVM_BIN"
           python -m pytest tests/unit -q \
             -m "compiler_route and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm and not hardware_amx and not hardware_avx512" \
             -n auto --timeout=180 --junitxml=ci-toolchain/compiler-route-junit.xml

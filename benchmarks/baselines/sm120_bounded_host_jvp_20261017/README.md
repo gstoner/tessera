@@ -3,6 +3,42 @@
 Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
 Sync: SM120-BOUNDED-HOST-JVP-20261017.
 
+
+## PR980 review revision
+
+Source f72a9b707a fixes owner selection for a JIT function used with several
+storage dtypes or fixed dimensions. Each cache key includes the sealed native
+symbolic primal shapes and dtypes. Matching uses the native Q/K/V and physical
+bias contracts. Compatible runtime Sq/Sk changes reuse that specialization;
+other fixed signatures create separate owners. Out-of-capacity sequences
+still reject in the selected owner before compiler access. Recent compatible
+owners are preferred when physical bias contracts overlap at an extent of one.
+
+Eight new exact-device cases reproduce the original failure. The expanded
+98-case selection passes, including interleaved FP16/BF16/F32 host/resident
+roots, batch/head/feature dimensions, scalar/logical bias policy switching,
+trace-at-one reuse and invalid-capacity recovery. The mypy ratchet is zero.
+
+Refreshed forward/reverse measurements cover 32 rows and 320 accepted paired
+windows. The static/bounded completed public-call latency ratio is
+2.76-3.56x: bounded medians 0.467-0.709 ms, static 1.585-2.056 ms.
+All 16 profiles retain identical forward/tangent images and host sizers
+across both orders and before/after the repair. CUDA event dispatch windows
+remain separate; this is a public-call comparison, with no kernel-speed claim.
+
+The first public compiler-route lane passed 1,600 tests and failed setup
+for 14 new cases because TESSERA_LLVM_BIN was unset. The repaired lane exports
+its selected LLVM prefix, builds tessera-nvidia-opt, and installs pinned NVCC
+and libNVVM components for PTX assembly and device bitcode. Their isolated SDK
+passes all 14 preflight cases with zero skips. The 77-case workflow/audit
+selection passes. cuda-image-sdk.json.xz records the exact component/file
+digests; these are host-free compilation results.
+
+Fresh compiler-disabled replay passes 32 cases plus 16 independent FP64
+finite differences over 20 immutable programs. review-paired-summary.json,
+review-* archives and source-identity.json's review_revision bind this phase.
+The earlier measurements below retain their original source identity.
+
 ## Compiler and runtime boundary
 
 The public call fn.native_jvp(..., sequence_bounds=(Sq, Sk)) captures typed
@@ -25,7 +61,7 @@ checked against shape policy and actual CUDA parameter widths/counts before
 exposing a handle. Tangent sizing/launch uses scratch/query_size/key_size.
 Legacy static prepare exports retain their own ABI.
 
-## Evidence
+## Initial evidence
 
 Source-identity binds the clean measured revision, selected core/target
 compilers, CUDA driver/runtime and oracle sources. Selections overlap:
@@ -42,12 +78,12 @@ compilers, CUDA driver/runtime and oracle sources. Selections overlap:
   forbidden after the live device probe. Sixteen separate FP64 finite
   differences validate the unrounded model oracle. Native typed errors are
   retained separately in standalone-numerics.json.xz.
-- The final combined selection passes 89 tests in 53.01 seconds.
+- The initial combined selection passes 89 tests in 53.01 seconds.
 - Focused registry/ABI/audit gates pass 331 tests; one Darwin Metal execution
   case skips on WSL. This is no Apple numerical proof.
 - The type gate reports zero errors, baseline zero.
 
-Paired forward/reverse runs cover 32 rows on RTX5070/sm_120, using identical
+Initial paired forward/reverse runs cover 32 rows on RTX5070/sm_120, using identical
 stored operands for bounded and static arms. All windows pass the 20 ms summed
 completed-call floor. Public-call latency is 0.443-0.633 ms for the bounded route
 and 1.588-2.042 ms for static, a 2.99-3.84x ratio across these observations.
@@ -72,7 +108,10 @@ timing scope.
 ## Reproduce
 
 Run from the Tessera root on the owning WSL host with matching LLVM/MLIR 23.1.1
-tools and the new native runtime. Keep unrelated timing workloads stopped.
+tools and the new native runtime. Select the core/target tools with
+TESSERA_OPT / TESSERA_NVIDIA_OPT, the LLVM directory with TESSERA_LLVM_BIN,
+and the built bridge with TESSERA_NVIDIA_PTX_LAUNCH_LIB. Keep unrelated timing
+workloads stopped.
 
     python -m benchmarks.nvidia.benchmark_typed_attention_jvp --bounded --windows 10 --min-window-ms 20 --output /absolute/scratch/forward.json
     python -m benchmarks.nvidia.benchmark_typed_attention_jvp --bounded --reverse --windows 10 --min-window-ms 20 --output /absolute/scratch/reverse.json
@@ -87,6 +126,6 @@ referenced artifacts once.
 
 ## Remaining gates and scope
 
-Frozen WSL CPU validation passes 26,343 tests (5,905 skipped); production compiler-route passes 1,614 with zero skips. All 33 generated documents pass drift checks. Public CI/review remain pending. Mixed/quantized attention, wider masks/layouts, general composed
+Frozen fixed-source WSL CPU passes 26,343 tests (5,905 skipped); production compiler-route passes 1,614 with zero skips. All 33 generated documents are in sync. Public CI/review remain pending. Mixed/quantized attention, wider masks/layouts, general composed
 AD/resident results, the other architectures and all five aggregate goal
 requirements remain open. The resident-input snapshot path returns completed host results.

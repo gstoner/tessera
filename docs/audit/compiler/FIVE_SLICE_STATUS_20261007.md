@@ -11,12 +11,15 @@ audit_role: reference
 Explicit public sequence bounds now reuse one native capacity owner across
 changing Sq/Sk through Graph AD/Schedule/Tile/Target/LLVM-PTX. Compiler-disabled
 replay passes 32 numerical cases and 16 independent finite differences. Two
-paired orders record 2.99-3.84x lower completed public-call latency for the
+paired orders record 2.76-3.56x static/bounded completed public-call latency ratios for the
 named FP16/BF16 saved-LSE profiles; native event windows remain separate.
-Frozen WSL CPU validation passes 26,343 tests (5,905 skipped); production compiler-route passes 1,614 with zero skips. All 33 generated documents pass drift checks. Public CI/review remain pending.
+Frozen fixed-source WSL CPU passes 26,343 tests (5,905 skipped); production compiler-route passes 1,614 with zero skips. Public CI/review remain pending.
 Mixed/quantized formats, wider masks/composed AD and every aggregate row
 remain open. Evidence:
 benchmarks/baselines/sm120_bounded_host_jvp_20261017/README.md.
+
+PR980 review adds native fixed-signature owner specialization; 98 focused
+cases and refreshed matched timings pass. Public CI/review remain.
 
 ## Typed attention JVP integration — 2026-10-17
 

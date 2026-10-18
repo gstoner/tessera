@@ -147,3 +147,23 @@ mlir::LogicalResult NVFP4ExpandOp::verify() {
 mlir::LogicalResult RowRegionKernelOp::verify() {
   return tessera::row_region::verifyKernel(getOperation());
 }
+
+mlir::LogicalResult ScalarMatmulKernelOp::verify() {
+  auto supported = [](mlir::Type t) {
+    return t.isF32() || t.isF16() || t.isBF16();
+  };
+  auto hash = getOperation()->getAttrOfType<mlir::StringAttr>("schedule_hash");
+  bool validHash = !hash || (hash.getValue().size() == 64 &&
+      llvm::all_of(hash.getValue(), [](char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+      }));
+  if ((getArch() != "gfx1151" && getArch() != "gfx1201") ||
+      !supported(getAElementType()) || !supported(getBElementType()) ||
+      !supported(getOutputElementType()) ||
+      (!getAElementType().isF32() && !getBElementType().isF32()) ||
+      getName().empty() || !validHash)
+    return emitOpError("requires a named gfx1151/gfx1201 FP32 scalar contraction and valid optional Schedule digest");
+  // The native physical-identity projection removes launch-owned ancestry.
+  // Its pass requires the verified Schedule hash before producing this form.
+  return mlir::success();
+}

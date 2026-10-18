@@ -948,7 +948,12 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
             **{
                 canonical_op(proof.op_name): OpCapability(
                     canonical_op(proof.op_name), "ready",
-                    dtypes=proof.dtypes, reason=proof.reason,
+                    dtypes=proof.dtypes,
+                    graph_only_dtypes=("fp32",) if canonical_op(proof.op_name) == "tessera.matmul" else (),
+                    reason=proof.reason + (
+                        " FP32 Graph operands are admitted for the named native scalar "
+                        "contraction; this adds no FP32 WMMA instruction or general execution promise."
+                        if canonical_op(proof.op_name) == "tessera.matmul" else ""),
                 )
                 for proof in GFX1201_PUBLIC_PROOFS
             },

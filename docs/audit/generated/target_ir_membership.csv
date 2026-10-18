@@ -65,6 +65,7 @@ rocm,qr,optional-only,,dst_space src_space
 rocm,svd,optional-only,,dst_space src_space
 rocm,moe,optional-only,,dst_space src_space
 rocm,grouped_gemm,optional-only,,dst_space src_space
+rocm,scalar_matmul,requires,arch,dst_space schedule_hash src_space
 rocm,gemm_f32,optional-only,,dst_space src_space
 rocm,recurrent_cell,optional-only,,dst_space src_space
 rocm,batched_gemm_f32,optional-only,,dst_space src_space

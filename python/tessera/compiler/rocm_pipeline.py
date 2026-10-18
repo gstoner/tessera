@@ -66,6 +66,7 @@ _GFX1201_PROMOTED_FAMILIES = frozenset({
     "es_low_rank_correction",
     "matmul_batched_f32",
     "matmul_f32",
+    "scalar_matmul",
     "moe_dispatch",
     "ordering_sort",
     # paged_kv (2026-09-18): the last family. Its generator is a scalar
@@ -169,6 +170,7 @@ FAMILY_PLUGINS: dict[str, ROCMFamilyPlugin] = {
         "loss_policy",
         "matmul_batched_f32",
         "matmul_f32",
+    "scalar_matmul",
         "normalization",
         "optimizer",
         "ordering_sort",
@@ -288,7 +290,7 @@ class ROCMExecutablePipeline:
             raise ValueError("ROCm block_quant enters from native Graph -> Schedule -> Tile")
         if self.family == "parent_view" and self.input_level is ROCMInputLevel.GRAPH:
             raise ValueError("ROCm parent_view enters from native Graph -> Schedule -> Tile")
-        if self.family == "matmul" and self.input_level is ROCMInputLevel.GRAPH:
+        if self.family in {"matmul", "scalar_matmul"} and self.input_level is ROCMInputLevel.GRAPH:
             # Lane B, retired 2026-09-26 (owner decision): a Graph->Tile
             # shortcut beside the scheduled route was a second lowering
             # authority for GEMM (Decision #31) whose schedule never entered

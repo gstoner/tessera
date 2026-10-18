@@ -263,6 +263,12 @@ class ScheduledMatmulArtifact:
                     "SM120 scheduled artifact requires exactly one typed MMA, "
                     "macro-CTA, scalar-FMA, or deferred Tile matmul producer"
                 )
+        elif self.target == "rocm" and "tile.scalar_matmul_kernel" in self.tile_ir:
+            if (self.architecture not in {"gfx1151", "gfx1201"} or
+                    self.tile_ir.count("tile.scalar_matmul_kernel") != 1 or
+                    matmul_kernels or macro_cta_kernels or typed_mmas or
+                    f'physical_contract = "rocm_{self.architecture}_scalar_fma_v1"' not in self.schedule_ir):
+                raise ValueError("ROCm scalar artifact requires its unique native Tile contract")
         elif matmul_kernels != 1:
             raise ValueError("scheduled matmul artifact requires exactly one Tile launch op")
         if "tessera.matmul" in self.tile_ir or "schedule." in self.tile_ir:
@@ -579,7 +585,7 @@ def lower_scheduled_matmul(
         dynamic_n,
         dynamic_k,
     ) = contract
-    if compiler_target == "nvidia_sm120":
+    if compiler_target == "nvidia_sm120" or "tile.scalar_matmul_kernel" in tile_ir:
         # Schedule-to-Tile owns the physical producer and its launch symbol.
         # Project that native product instead of duplicating the macro/typed
         # dispatch in Python (which drifts when a new tail route is admitted).
@@ -660,8 +666,9 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     if a_name not in args or b_name not in args:
         raise ValueError("scheduled matmul operands must be function arguments")
     pair = (args[a_name].ir_type.dtype, args[b_name].ir_type.dtype)
-    scalar_fma = (target == "nvidia_sm120" and op.op_name == "tessera.matmul"
-                  and pair.count("fp32") == 1 and set(pair) <= {"fp32", "fp16", "bf16"})
+    scalar_fma = (target in {"nvidia_sm120", "rocm_gfx1151", "rocm_gfx1201"}
+                  and op.op_name == "tessera.matmul" and pair.count("fp32") == 1
+                  and set(pair) <= {"fp32", "fp16", "bf16"})
     if (transpose_a or transpose_b) and not nvfp4_scaled and not scalar_fma:
         raise ValueError("scheduled matmul does not support transpose")
 
@@ -850,7 +857,8 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
                 n > 2**31 - 1 or k > 2**31 - 1):
             raise ValueError("scalar FMA requires its static plain mixed-storage contract")
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
-            "nvidia_sm120", "sm_120",
+            "nvidia_sm120" if target == "nvidia_sm120" else "rocm",
+            "sm_120" if target == "nvidia_sm120" else target.removeprefix("rocm_"),
             {"fp32": "f32", "fp16": "f16", "bf16": "bf16"}[a_dtype],
             "f32", 16, 8)
     elif target == "x86" and (a_dtype, b_dtype, output_dtype) in (("fp32", "fp32", "fp32"), ("bf16", "bf16", "fp32"), ("fp64", "fp64", "fp64")):
@@ -1126,6 +1134,10 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
         if match is None:
             raise ValueError('matmul native tensor contract is unsupported')
         return tuple(None if d == '?' else int(d) for d in match[1].split('x')[:-1]), match[2]
+    native_scalar = any(
+        'physical_contract = "' + contract + '"' in attrs
+        for contract in ("nvidia_sm120_scalar_fma_v1", "rocm_gfx1151_scalar_fma_v1",
+                         "rocm_gfx1201_scalar_fma_v1"))
     inputs = [tensor(t) for t in re.findall(r'tensor<[^>]+>', args)]
     out_shape, out_storage = tensor(output)
     bias, residual = boolean('bias'), boolean('residual')
@@ -1133,7 +1145,7 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
         raise ValueError('matmul native input arity/rank disagrees')
     m, n, k = map(int, keys[0][:3])
     storage = keys[0][3]
-    if artifact.target == "nvidia_sm120":
+    if artifact.target == "nvidia_sm120" or native_scalar:
         # MLIR replay above verifies the retained Graph and its canonical Tile
         # ABI. Project types by semantic operand role, not frontend arg order.
         # This reads the contract; it does not reconstruct/lower a Graph.
@@ -1150,7 +1162,7 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
             raise ValueError("matmul native frontend role binding disagrees")
         inputs = [by_name[name] for name in roles]
     a, b = inputs[:2]
-    if 'physical_contract = "nvidia_sm120_scalar_fma_v1"' in attrs:
+    if native_scalar:
         def scalar_orientation(name):
             values = re.findall(r'(?:^|, )' + name + r' = (true|false)(?:,|$)', attrs)
             if len(values) > 1:
@@ -1165,7 +1177,7 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
     for actual, bound in zip((*a[0], *b[0], *out_shape), (m, k, k, n, m, n)):
         if actual is not None and actual != bound:
             raise ValueError('matmul native shape bound disagrees with its signature')
-    if artifact.target == "nvidia_sm120":
+    if artifact.target == "nvidia_sm120" or native_scalar:
         entries = re.findall(r'llvm.func @(\w+)\(', artifact.tile_ir)
         if len(entries) != 1:
             raise ValueError("matmul native Tile entry is ambiguous")
@@ -1181,7 +1193,7 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
     expected['b_layout'] = string('b_layout')
     if (string('storage') != storage or string('output') != out_storage or string('a_layout') != 'row_major'
             or expected['b_layout'] not in {'row_major', 'col_major'}
-            or (expected['b_layout'] == 'row_major' and artifact.target != 'nvidia_sm120')):
+            or (expected['b_layout'] == 'row_major' and artifact.target != 'nvidia_sm120' and not native_scalar)):
         raise ValueError('matmul native storage/layout disagrees')
     for key in ('macro_tile_m', 'macro_tile_n'):
         matches = re.findall(r'(?:^|, )'+key+r' = (\d+) : i64(?:,|$)', attrs)
@@ -1200,7 +1212,7 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
     # ...and the Python predicate is its declared oracle: recompute the
     # decision from the projected shape/tile and refuse a disagreement, so the
     # two deciders cannot drift apart silently (Decision #31).
-    if artifact.target == 'rocm':
+    if artifact.target == 'rocm' and not native_scalar:
         oracle = rocm_split_k(
             m, n, k, target=f'rocm_{artifact.architecture}', storage=storage,
             macro_tile=(expected['macro_tile_m'], expected['macro_tile_n']),

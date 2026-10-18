@@ -318,6 +318,14 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 ### E2E-REAL-6
 
+- Current increment (2026-10-18, sync ROCM-MIXED-SCALAR-CONTRACTION-20261018):
+  native Graph/Schedule/Tile/ROCm/LLVM mixed FP32/half contractions execute
+  through checked host packages and public JIT on gfx1151/gfx1201. Each owning
+  suite passes 67 cases; native image keys reuse two static shapes and preserve
+  dtype/orientation. The shared NVIDIA emitter retains 48 Target identities
+  and passes 370 regressions. Composed source-AD integration and aggregate
+  closure remain open. [Evidence](../../../benchmarks/baselines/rocm_mixed_scalar_20261018/README.md).
+
 - Current increment (2026-10-17, sync SM120-BOUNDED-HOST-JVP-20261017):
   explicit bounded host JVP uses one checked native capacity owner with
   compiler-owned AD/Schedule/Tile/Target images. Owning numerical replay and
@@ -445,7 +453,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 
 - Current slice (2026-09-30, sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30): The Graph-to-package contract composes bounded dynamic M/N/K on gfx1201 and sm_120. Exact-device fp16/bf16 parity, padded host ingress, allocation residency, and image reuse pass. Separate fp16 and bf16 event packets support stage attribution only; gfx1201 variation is high. Apple and x86 need independent resident consumers; wider physical layouts and remaining W1.1 producers stay open. [Evidence](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 
-- Latest: [bounded native host attention JVP](INTEGRATED_COMPILER_LOG.md#2026-10-17--bounded-native-host-attention-jvp)
+- Latest: [2026-10-18 — native ROCm mixed scalar consumer](INTEGRATED_COMPILER_LOG.md#2026-10-18--native-rocm-mixed-scalar-consumer)
 
 Current increment: checked rank-four broadcast saved-LSE packages and private tape execute on SM120; physical bias extents, deterministic reduction and saved-state pairing are bound through native Graph/Schedule/Tile and checked CUDA descriptors. [Evidence](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md). Broader W1.1, frontend/AD and sibling routes remain open.
 
@@ -560,6 +568,14 @@ Current increment: checked rank-four broadcast saved-LSE packages and private ta
 
 ### AD-RESIDUAL-EVAL-1
 
+- Current increment (2026-10-18, sync ROCM-MIXED-SCALAR-CONTRACTION-20261018):
+  native Graph/Schedule/Tile/ROCm/LLVM mixed FP32/half contractions execute
+  through checked host packages and public JIT on gfx1151/gfx1201. Each owning
+  suite passes 67 cases; native image keys reuse two static shapes and preserve
+  dtype/orientation. The shared NVIDIA emitter retains 48 Target identities
+  and passes 370 regressions. Composed source-AD integration and aggregate
+  closure remain open. [Evidence](../../../benchmarks/baselines/rocm_mixed_scalar_20261018/README.md).
+
 - Current slice (2026-09-29, sync `COMPILER-EVIDENCE-FRAGMENT-RESIDUAL-2026-09-29`): the coupled public residual has a nonzero primal, saved-input mutation isolation and repeated analytic VJP proof on gfx1151 and sm_120. Dynamic layouts, aliases and asynchronous ownership remain open. [Evidence](../../../benchmarks/baselines/compiler_evidence_fragment_residual_20260929/README.md).
 
 **Logical-shape ABI and persistent checkpoint execution**
@@ -579,7 +595,7 @@ Current increment: checked rank-four broadcast saved-LSE packages and private ta
 - Current increment (2026-10-06, sync NVIDIA-COMPACT-GRADIENTS-2026-10-06): native paired AD/Schedule/Tile now preserves complete logical results while exporting only requested physical gradient buffers. Checked static SM120 host/resident packages, private capture and repeated gradients are proved on RTX 5070. Preserved logical ranges with explicit 64/128-thread geometry address the measured packed-range loss; no universal policy/default promotion follows. Matching gfx1201 shared compiler/norm regressions pass, without HIP compact-gradient execution claims. General composed/dynamic/higher AD and sibling physical consumers remain open. [Evidence](../../../benchmarks/baselines/nvidia_compact_gradients_20261005/README.md).
 - Current increment (2026-10-06, sync NVIDIA-JVP-ARGUMENT-ORDER-2026-10-06): native forward export now verifies distinct frontend Q/K/V permutations; automatic private capture and tangent requests follow verified physical roles and activity. All six orders have owning RTX 5070 finite-difference/mutation/repeated-direction proof, with unchanged native images within each semantic envelope. Shared gfx1201 compiler/norm regressions pass without HIP tangent claims. General composed/dynamic/bias/higher AD remains open. [Evidence](../../../benchmarks/baselines/nvidia_jvp_argument_order_20261006/README.md).
 - Current increment (2026-10-06, sync NVIDIA-JVP-PORTABLE-2026-10-06): pinned canonical program JSON retains native images, sizing library, roles and manifests; capture validates them before CUDA allocation. Seventy-two restored-program RTX 5070 cases and three compiler-forbidden fresh-process replays pass. Public native-JVP family/runtime integration, unused reverse-image retirement, general AD and sibling physical consumers remain open. [Evidence](../../../benchmarks/baselines/nvidia_jvp_portable_20261006/README.md).
-- Latest: [Typed SM120 saved-LSE public reverse ownership](INTEGRATED_COMPILER_LOG.md#2026-10-16--typed-sm120-saved-lse-public-reverse-ownership)
+- Latest: [2026-10-18 — native ROCm mixed scalar consumer](INTEGRATED_COMPILER_LOG.md#2026-10-18--native-rocm-mixed-scalar-consumer)
 
 ### W2.4a
 

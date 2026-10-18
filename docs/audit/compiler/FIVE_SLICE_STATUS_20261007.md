@@ -3,6 +3,22 @@ last_updated: 2026-10-18
 audit_role: reference
 ---
 
+## Native ROCm mixed contraction consumer — 2026-10-18
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync ROCM-MIXED-SCALAR-CONTRACTION-20261018.
+The native Graph/Schedule/Tile mixed consumer now has a distinct ROCm Target,
+a checked completed host ABI and public JIT admission. The shared ordered FP32
+emitter preserves cotangents and narrows only the output. Native physical-image
+projection separates shape-bound launch ancestry from kernel identity.
+Owning package/public/identity/subnormal/cache suites pass 67 cases on each AMD
+host, with 48 source-bound timing rows each. The compiler gate passes 1,960
+without skips; 24 offline sealed-ABI and 110 adjacent quantized/owner cases pass.
+The full CPU gate passes 30,702 with 3,724 skips; 33 generated documents,
+Ruff and the mypy ratchet pass. Public CI/review remain active. No aggregate slice is
+closed; native composed ROCm source-AD integration remains the next obligation.
+Contract: docs/spec/ROCM_MIXED_SCALAR_CONTRACTION.md.
+
 ## Native KN packed LDS copy candidate — 2026-10-17
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / LAYOUT-ALG-1 / E2E-REAL-6.

@@ -176,7 +176,7 @@ struct DeclareROCMPipelineContractPass
         "ebm_energy_quadratic", "ebm_langevin", "ebm_partition",
         "fused_silu_mul", "indexing_gather", "indexing_scatter",
         "loss_binary", "loss_pointwise", "loss_policy", "matmul_batched_f32",
-        "matmul_f32", "normalization", "optimizer", "ordering_sort",
+        "matmul_f32", "scalar_matmul", "normalization", "optimizer", "ordering_sort",
         "position_alibi", "position_rope", "quant_dequant_gemm", "quant_fp",
         "quant_int4_pack", "reduction_arg", "rng_philox", "scan",
         "spectral_dft", "spectral_backward", "matmul", "softmax",
@@ -222,7 +222,7 @@ struct DeclareROCMPipelineContractPass
       getOperation().emitError("parent_view requires owning gfx1201 native Graph -> Schedule -> Tile entry");
       return signalPassFailure();
     }
-    if (family == "matmul" && input == "graph") {
+    if ((family == "matmul" || family == "scalar_matmul") && input == "graph") {
       getOperation().emitError(
           "ROCm matmul has no Graph-level pipeline entry: it enters at Tile "
           "level from the scheduled route (Graph -> Schedule -> Tile); the "
@@ -265,7 +265,7 @@ struct DeclareROCMPipelineContractPass
         "algebra_clifford", "attention_mla_decode", "depth_attention",
         "draft_dspark", "ebm_decode_init", "ebm_ebt_tiny",
         "ebm_energy_quadratic", "ebm_langevin", "ebm_partition",
-        "es_low_rank_correction", "matmul_batched_f32", "matmul_f32",
+        "es_low_rank_correction", "matmul_batched_f32", "matmul_f32", "scalar_matmul",
         "moe_dispatch", "ordering_sort", "paged_kv", "sequence_deltanet",
         "sequence_linear_attention", "sequence_recurrent_cell",
         "sequence_selective_ssm", "sequence_selective_ssm_backward",
@@ -431,7 +431,7 @@ static void addFamilyGenerator(OpPassManager &pm, StringRef family,
     pm.addPass(createGenerateROCMPolicyLossKernelPass());
   } else if (family == "matmul_batched_f32") {
     pm.addPass(createGenerateROCMBatchedGemmF32KernelPass());
-  } else if (family == "matmul_f32") {
+  } else if (family == "matmul_f32" || family == "scalar_matmul") {
     pm.addPass(createGenerateROCMGemmF32KernelPass());
   } else if (family == "normalization") {
     pm.addPass(createGenerateROCMNormKernelPass());

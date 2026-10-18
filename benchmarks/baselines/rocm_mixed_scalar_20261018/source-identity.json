@@ -1,0 +1,37 @@
+{
+  "base": "64b031228376daa03a4413b664fd1f4f7d81a568",
+  "compiler_sha256": "59d5a63bdcb8a2c10b4ee7a7e2bdd715b8da94396a5c4a7f0e1448b40f82ce56",
+  "python_sources": {
+    "python/tessera/compiler/rocm_scalar_matmul.py": "f6b9e4c12a927299932e3e4584bb0421af26c47cdb6f93fe7319f55a63ad4491",
+    "python/tessera/compiler/native_scaled_program.py": "110bb3163b5d8877960a0a962308654d087f76cbb844ddff0bbb5f23775d155e",
+    "python/tessera/compiler/scheduled_matmul.py": "f6cb29562b64eb42bde27b1cb76a90fafbdaf4d52afbf1724b2e5facc945564e",
+    "python/tessera/runtime.py": "ebb789973292a30d0c144b952ee722830c40ed509cae81262382eb8cfe4fc431",
+    "python/tessera/compiler/jit.py": "ecbf75ea59fa3732351cd17fa05d0f82067d586de6227672853854fb0ed640e7",
+    "python/tessera/compiler/rocm_pipeline.py": "a062bd9aa7d43a8327bc5174cfbe67a317945f5a2b10536c712ffd4206cc36ed",
+    "python/tessera/compiler/capabilities.py": "523e7517930b9e51771c077cda45708616ecff16d4a4f5df5a5deb935f1ad244",
+    "python/tessera/compiler/pipeline_registry.py": "882fc90e6d9d19ce29829158d4546110e180cb035383e340f97eeed31c07fce0",
+    "python/tessera/compiler/rocm_native.py": "31f3f660d9eabfdd07e28b3368a8e9282f8ecc43410cd21c5859382965d81981",
+    "tests/unit/test_scheduled_matmul_consumers.py": "81e958c9a6e2480b89125acd01620350b1bb4c1dff87f29924d7a0aa1cf659cc",
+    "benchmarks/rocm/record_mixed_scalar_contraction.py": "27c7b0d73609b98c92103ef985537407d1ea7c68c7cad01698ea6a6e9b8d59ee",
+    "tests/device/rocm/test_scalar_matmul_package.py": "6403dc194214000511a6526e9897d04cef0e49e406fef059b0b260ed34356180",
+    "tests/unit/test_rocm_scalar_package.py": "63273c633d1b8c98a3b8638daa4a64f5781de737e5156ab524026d42d3590e45"
+  },
+  "native_sources": {
+    "src/compiler/ir/include/Tessera/IR/ScalarContraction.h": "103034c5b0c43a9af040addf1fa5359c8e6cd1a5ee729ffb5892fbce8c0020d5",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "a76c5846d7e29435e4fcb605575834671f09e3875aff714dc506774abdebe366",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "651b0372734d6b551359e632ebcd0ad9ddf1f0ce05e749ac9833046b8a751d49",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "316c89545295a82e6f6437497f7e53058963e5577ac2dcaa3e02aaccbb7997ac",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "7762e9946229a52016c542e18045cdb0f3b2d6a5d584c746fe8926b3ac0b096f",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/TesseraROCMOps.cpp": "6539b45c226e5b11de472b4b07a498b84fd8f055c9afc07834dbd9839ae72682",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "25e674714c5e1b1a713c80fcc05346fa5886907aee14a041bb504ae432520553",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMGemmF32Kernel.cpp": "173a477eab3f537b5677c2ac9e5c9e7a89a6acac2c3e9fdf7eb0e51b155a19ff",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "f0ae4aae0a34382d26555a7e57aa5569a469329f410120216450ac6122ef3904",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp": "5a01bac5504a5ac6ab4ac2a35171458a24d1fdc0715bbf9ab5fe860cf4aee8aa"
+  },
+  "shared_amd_source_and_compiler": true,
+  "provider_sha256": {
+    "gfx1201": "2821855e4eaa726f0af107f5cfc0b1b149523f91db10f794ed68cd01581d0c71",
+    "gfx1151": "963a2c8aad3f4947adaf04557fb4d6df4e85e8394d3e014a66485d0787b7eb63"
+  },
+  "scope": "source-bound working candidate; final commit and CI are publication gates"
+}

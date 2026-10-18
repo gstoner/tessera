@@ -1,3 +1,4 @@
+#include "Tessera/IR/ScalarContraction.h"
 #include "Tessera/IR/TileBufferViewContract.h"
 #include "Tessera/IR/RowRegionContract.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
@@ -1242,74 +1243,23 @@ static LogicalResult materializeSm120ScalarMatmulKernel(
     tessera::tile::ScalarMatmulKernelOp kernel, OpBuilder &builder) {
   Operation *op = kernel.getOperation();
   Location loc = op->getLoc();
-  ValueRange inputs = kernel.getInputs();
-  Type aType = op->getAttrOfType<TypeAttr>("a_element_type").getValue();
-  Type bType = op->getAttrOfType<TypeAttr>("b_element_type").getValue();
-  Type outputType = op->getAttrOfType<TypeAttr>("output_element_type").getValue();
-  bool transposeA = op->getAttrOfType<BoolAttr>("transpose_a").getValue();
-  bool transposeB = op->getAttrOfType<BoolAttr>("transpose_b").getValue();
-  Value m = inputs[3], n = inputs[4], k = inputs[5];
-  auto f32 = builder.getF32Type();
-  Value zero = i64Constant(builder, loc, 0);
-  Value one = i64Constant(builder, loc, 1);
-  auto widenIndex = [&](Value value) -> Value {
-    return arith::ExtUIOp::create(builder, loc, builder.getI64Type(), value);
+  auto buildIds = [&]() -> std::array<Value, 3> {
+    auto widen = [&](Value value) -> Value {
+      return arith::ExtUIOp::create(builder, loc, builder.getI64Type(), value);
+    };
+    return {
+        widen(NVVM::BlockIdXOp::create(builder, loc, builder.getI32Type())),
+        widen(NVVM::BlockIdYOp::create(builder, loc, builder.getI32Type())),
+        widen(NVVM::ThreadIdXOp::create(builder, loc, builder.getI32Type()))};
   };
-  Value blockX = widenIndex(NVVM::BlockIdXOp::create(builder, loc, builder.getI32Type()));
-  Value blockY = widenIndex(NVVM::BlockIdYOp::create(builder, loc, builder.getI32Type()));
-  Value tid = widenIndex(NVVM::ThreadIdXOp::create(builder, loc, builder.getI32Type()));
-  Value inWarp = lessI64(builder, loc, tid, i64Constant(builder, loc, 32));
-  Value positive = arith::AndIOp::create(
-      builder, loc, arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::sgt, m, zero),
-      arith::AndIOp::create(
-          builder, loc, arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::sgt, n, zero),
-          arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::sgt, k, zero)));
-  for (int64_t item = 0; item < 4; ++item) {
-    Value linear = addI64(builder, loc, tid, i64Constant(builder, loc, item * 32));
-    Value row = addI64(builder, loc, mulI64(builder, loc, blockY, i64Constant(builder, loc, 16)),
-        arith::DivUIOp::create(builder, loc, linear, i64Constant(builder, loc, 8)));
-    Value col = addI64(builder, loc, mulI64(builder, loc, blockX, i64Constant(builder, loc, 8)),
-        arith::RemUIOp::create(builder, loc, linear, i64Constant(builder, loc, 8)));
-    Value valid = arith::AndIOp::create(
-        builder, loc, arith::AndIOp::create(builder, loc, inWarp, positive),
-        arith::AndIOp::create(builder, loc, lessI64(builder, loc, row, m), lessI64(builder, loc, col, n)));
-    auto guarded = scf::IfOp::create(builder, loc, valid, false);
-    {
-      OpBuilder::InsertionGuard guard(builder);
-      builder.setInsertionPointToStart(&guarded.getThenRegion().front());
-      Value initial = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f));
-      auto loop = scf::ForOp::create(builder, loc, zero, k, one, ValueRange{initial});
-      {
-        OpBuilder::InsertionGuard loopGuard(builder);
-        builder.setInsertionPointToStart(loop.getBody());
-        Value index = loop.getInductionVar();
-        Value aIndex = transposeA ? addI64(builder, loc, mulI64(builder, loc, index, m), row)
-                                 : addI64(builder, loc, mulI64(builder, loc, row, k), index);
-        Value bIndex = transposeB ? addI64(builder, loc, mulI64(builder, loc, col, k), index)
-                                 : addI64(builder, loc, mulI64(builder, loc, index, n), col);
-        auto load = [&](Value base, Value offset, Type type) -> Value {
-          Value value = LLVM::LoadOp::create(
-              builder, loc, type,
-              LLVM::GEPOp::create(builder, loc, base.getType(), type, base, ValueRange{offset}),
-              type.isF32() ? 4 : 2);
-          return type.isF32() ? value : Value(arith::ExtFOp::create(builder, loc, f32, value));
-        };
-        Value result = math::FmaOp::create(builder, loc,
-            load(inputs[0], aIndex, aType), load(inputs[1], bIndex, bType),
-            loop.getRegionIterArgs().front());
-        scf::YieldOp::create(builder, loc, result);
-      }
-      builder.setInsertionPointAfter(loop);
-      Value result = loop.getResult(0);
-      if (!outputType.isF32())
-        result = arith::TruncFOp::create(builder, loc, outputType, result);
-      Value outputIndex = addI64(builder, loc, mulI64(builder, loc, row, n), col);
-      LLVM::StoreOp::create(builder, loc, result,
-          LLVM::GEPOp::create(builder, loc, inputs[2].getType(), outputType, inputs[2],
-              ValueRange{outputIndex}), outputType.isF32() ? 4 : 2);
-    }
-    builder.setInsertionPointAfter(guarded);
-  }
+  if (failed(tessera::scalar_contraction::emitBody(
+          builder, loc, kernel.getInputs(),
+          op->getAttrOfType<TypeAttr>("a_element_type").getValue(),
+          op->getAttrOfType<TypeAttr>("b_element_type").getValue(),
+          op->getAttrOfType<TypeAttr>("output_element_type").getValue(),
+          op->getAttrOfType<BoolAttr>("transpose_a").getValue(),
+          op->getAttrOfType<BoolAttr>("transpose_b").getValue(), buildIds)))
+    return failure();
   op->erase();
   return success();
 }

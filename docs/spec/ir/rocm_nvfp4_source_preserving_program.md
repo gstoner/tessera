@@ -41,7 +41,7 @@ intermediates cannot be read as returned outputs. Existing ordered submission,
 generation-checked transactional readback and teardown rules remain.
 
 The owning-device fixture executes compiler-derived plans through the native
-ABI directly. Ordinary composed public JIT and serialized replay remain separate work.
+ABI directly. The named ordinary composed public JIT and serialized replay contract is described below.
 The prepared ownership extension is described below.
 
 ## Prepared execution and persistent expansion
@@ -110,3 +110,24 @@ captured model inputs. PR960 adds bounded v4 public/prepared/compiler-free
 replay, allocation retention and original gate/up projection evidence; see the
 bounded contract above. Full MLP/model-quality acceptance and wider composition
 remain open.
+
+
+## Encoded-scale admission and retained native owners
+
+The named ROCm prepared programs may use the additive host-only
+tessera_rocm_program_nvfp4_scale_bounds ABI to validate encoded E4M3FN scale
+planes without full-plane FP64 temporaries. It returns per-projection positive
+extrema after validating every byte; both signed zeros are admissible.
+Positive finite globals and the original FP64-product-to-FP32 overflow/
+positive-underflow policy remain checked. Legacy providers retain the
+elementwise admission path. The function commits no bounds on invalid input;
+statuses are 0 success, 1 invalid frame, 2 invalid encoding and 12 exception.
+
+The native pool may retain completed owners and capacity-sized owned staging.
+Every lease uploads all current roots; pointer identity never makes weights
+constant. Private readiness resets on close; acquired handles are fresh,
+generation checks remain required, and returned host arrays remain independent.
+The gfx1201 idle byte quota is the larger of 128 MiB and device capacity/32,
+capped at 512 MiB. Other/unknown architectures retain the 128 MiB quota.
+Existing context, process, LRU, completion-before-reuse and quarantine rules
+continue to apply. Pool retention changes host cost, not numerical kernels.

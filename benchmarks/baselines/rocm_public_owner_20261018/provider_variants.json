@@ -1,0 +1,7 @@
+{
+  "base_revision": "01906b028c1882b2141576c77180b49737996549",
+  "control_runtime_cpp_sha256": "780c2db5de9b1af827c61d8be2406e3593f8c91550dd2725f54318774ac9503f",
+  "owner_v4_runtime_cpp_sha256": "dbfc498844b79eb27d56f6f1d705a7e8a5b2d187cbfed0eecd9e6db65188c737",
+  "common_scale_scanner_sha256": "40beb4b1b1a1fea1686826994f46a9ab13f788922e6763a476097dd61faaec1e",
+  "scope": "control uses base runtime plus common checked native scale scanner;selected v4 includes retained full/partial staging and bounded readback;the four final ABBA runs verify identical numerical images"
+}

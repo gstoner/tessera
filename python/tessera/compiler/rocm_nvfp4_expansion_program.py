@@ -372,7 +372,7 @@ class PreparedNVFP4ExpansionProgram(PreparedScaledProgram):
             raise ValueError("native expansion program requires five roots")
         codes, scales, globals_ = (inputs[i] for i in self._roles[:3])
         checked_expansion_inputs(codes, scales, globals_, row_offsets=self._offsets,
-                                 numeric_policy=nvfp4_expansion_policy())
+                                 numeric_policy=nvfp4_expansion_policy(), _scale_bounds=self._nvfp4_scale_bounds())
         return self._inputs_for_storage(inputs, self._storage(active_m))
 
     def _inputs(self, inputs):

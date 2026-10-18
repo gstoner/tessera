@@ -1,0 +1,36 @@
+{
+  "tools": {
+    "TESSERA_OPT": {
+      "path": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/tools/tessera-opt/tessera-opt",
+      "sha256": "5c763dd611ede09f3c34125f89907531a540e7c5c855b5df21ebfac950975c50"
+    },
+    "TESSERA_ROCM_OPT": {
+      "path": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt",
+      "sha256": "361c3ebd2d86ad7c0940a133a49782d0e7dc7c2ed127fe32e597d750ed9204c9"
+    },
+    "llc": {
+      "path": "/home/angstorms/toolchains/llvm-tools-build/bin/llc",
+      "sha256": "b906a632cb5f4e29e60004822ea9b7a4943c14cc60ebc54feebf6bccbd7874d2"
+    },
+    "ptxas": {
+      "path": "/home/angstorms/scratch/rocm-public-owner-attribution-20261018/compiler-tools/ptxas",
+      "sha256": "afd8d1e1fa6e310f7faee44f6621e4c1315fb7fd6da7d4d87414358e12a651dc"
+    },
+    "tessera-nvidia-opt": {
+      "path": "/home/angstorms/scratch/jvp-schema-reconcile-20261011/.build-schema-make/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+      "sha256": "e14c369880f1ef22c24b1ae36c0d5b6fe04d941200889217d1b5044cb4484081"
+    },
+    "fatbinary": {
+      "path": "/home/angstorms/scratch/rocm-public-owner-attribution-20261018/cuda-sdk/bin/fatbinary",
+      "sha256": "b2e91ecc1cc6b64ab51a2315e98a8997ab40a0aab922e579bc9093858ec4f96d"
+    },
+    "libdevice": {
+      "path": "/home/angstorms/scratch/rocm-public-owner-attribution-20261018/cuda-sdk/nvvm/libdevice/libdevice.10.bc",
+      "sha256": "d9ac788435fd8c34da4aa070971cfa4d54bfc027fa93f639a447f79947d06ea9"
+    }
+  },
+  "llc_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n  Default target: x86_64-unknown-linux-gnu\n  Host CPU: znver5\n\n  Registered Targets:\n    amdgcn  - legacy name for amdgpu\n    amdgpu  - AMDGPU gfx6+\n    nvptx   - NVIDIA PTX 32-bit\n    nvptx64 - NVIDIA PTX 64-bit\n    r600    - AMD GPUs HD2XXX-HD6XXX\n    x86     - 32-bit X86: Pentium-Pro and above\n    x86-64  - 64-bit X86: EM64T and AMD64\n",
+  "ptxas_version": "ptxas: NVIDIA (R) Ptx optimizing assembler\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Tue_Jun_09_02:43:40_PM_PDT_2026\nCuda compilation tools, release 13.3, V13.3.73\nBuild cuda_13.3.r13.3/compiler.38244171_0\n",
+  "compiler_route_proof": "1754passed;zero skips;ci_require_executed terminal0",
+  "scope": "matching host-free portable compiler/tool packaging proof;not NVIDIA device execution"
+}

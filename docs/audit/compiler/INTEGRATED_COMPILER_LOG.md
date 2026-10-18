@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-17
+last_updated: 2026-10-18
 audit_role: reference
 ---
 
@@ -13522,3 +13522,30 @@ The expanded lane passes 722 (7 skipped); CPU passes 26,351 (5,905 skipped) with
 unchanged changed-code hashes and zero-error mypy. Quiet post-review public
 ratios are 0.95-1.06 with unchanged provider and member images. Current-head
 public CI/review is the final delivery gate; this closes no aggregate program.
+
+
+### 2026-10-18 — Native ROCm admission and owner retention
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: current native host-overhead delivery; sync ROCM-PUBLIC-OWNER-OVERHEAD-20261018.
+
+Outcome: Native encoded E4M3 scale admission preserves the original rounded
+range predicate, and the HIP owner pool reuses capacity-sized input/readback
+staging with a bounded gfx1201 quota. Every lease uploads current roots.
+RX9070XT warm public medians are 71.4–75.2 ms control and 36.6–37.0 ms selected;
+all seven images and candidate source snapshots match. Separate native events
+are 2.44–2.47 ms. Radeon8060S independently proves matching-source full/partial
+uploads, reuse, generations and cleanup. CPU passes 28,700 (5,697 skips);
+compiler passes 1,754 without skips; focused gates pass 2,425. Owning prepared/
+bounded/fault selections pass 28/27/10; adjacent primal/JVP/VJP passes 162.
+Selections overlap. All four backend queues are assessed.
+
+Remaining: Current-head public CI/review, representative-model quality,
+general composition/layout/AD, W8A8/MXFP4 performance closure and all five
+aggregate obligations. Host-cost attribution does not establish kernel or
+sibling performance promotion.
+
+Evidence: benchmarks/baselines/rocm_public_owner_20261018/README.md,
+validation_summary.json, final_control_1.json, final_owner_1.json,
+final_owner_2.json, final_control_2.json, gfx1151-staging-proof.json.
+<!-- entry-fields:end -->

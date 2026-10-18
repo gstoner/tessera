@@ -208,3 +208,84 @@ def test_prepared_checks_descriptor_geometry_against_native_target():
     modified = replace(modified, binding_digest=modified._identity())
     with pytest.raises(ValueError, match="geometry/ABI"):
         modified.validate()
+
+
+@pytest.mark.parametrize("changed_root", range(5))
+def test_cached_owner_uploads_every_current_root(monkeypatch, changed_root):
+    """Closing and reacquiring never treats caller pointers as constants."""
+    monkeypatch.setenv("TESSERA_ROCM_PROGRAM_CACHE", "1")
+    package = package_native_nvfp4_expansion_program(source_graph())
+    roots, expected = inputs_and_oracle(19, 7, 48, (0, 1, 2, 3, 4), "f32")
+    provider = os.environ["TESSERA_ROCM_MULTI_OUTPUT_LIB"]
+    with package.prepare(roots, runtime_library=provider) as first:
+        generation, _ = first.invoke()
+        retained, = first.read(generation)
+        np.testing.assert_array_equal(retained, expected)
+        old_handle = first.handle.value
+        stats = first.lib.tessera_rocm_program_cache_stats
+        stats.argtypes = [C.POINTER(C.c_uint64)] * 4
+        counts = [C.c_uint64() for _ in range(4)]
+        assert stats(*[C.byref(x) for x in counts]) == 0
+        hits = counts[0].value
+    # Mutate each root in place: the pointer and package identity stay the same.
+    if changed_root == 0:
+        roots[0].fill(0)
+        changed_expected = np.zeros_like(expected)
+    elif changed_root == 3:
+        roots[3][...] = -roots[3]
+        changed_expected = -expected
+    else:
+        roots[changed_root][...] = roots[changed_root] * 2
+        changed_expected = expected * 2
+    with package.prepare(roots, runtime_library=provider) as second:
+        assert second.handle.value != old_handle
+        assert stats(*[C.byref(x) for x in counts]) == 0
+        assert counts[0].value == hits + 1
+        with pytest.raises(RuntimeError, match="status 10"):
+            second.invoke_consumer()
+        generation, _ = second.invoke()
+        np.testing.assert_array_equal(second.read(generation)[0], changed_expected)
+        np.testing.assert_array_equal(retained, expected)
+
+@pytest.mark.slow
+def test_model_sized_frame_is_retained_with_fresh_roots(monkeypatch):
+    """A >128 MiB frame fits the gfx1201 quota and never retains input values."""
+    monkeypatch.setenv("TESSERA_ROCM_PROGRAM_CACHE", "1")
+    m, n, k = 1, 16384, 4096
+    package = package_native_nvfp4_expansion_program(source_graph(m, n, k))
+    roots = [
+        np.zeros((n, k // 2), np.uint8),
+        np.ones((n, k // 16), dtype=ml_dtypes.float8_e4m3fn),
+        np.ones(2, np.float64),
+        np.ones((m, k), dtype=ml_dtypes.float8_e4m3fn),
+        np.ones((m, k // 16), np.float32),
+    ]
+    provider = os.environ["TESSERA_ROCM_MULTI_OUTPUT_LIB"]
+    with package.prepare(roots, runtime_library=provider) as first:
+        clear = first.lib.tessera_rocm_program_cache_clear
+        assert clear() == 0
+        stats = first.lib.tessera_rocm_program_cache_stats
+        stats.argtypes = [C.POINTER(C.c_uint64)] * 4
+        counts = [C.c_uint64() for _ in range(4)]
+        generation, _ = first.invoke()
+        retained, = first.read(generation)
+        np.testing.assert_array_equal(retained, np.zeros((m, n), np.float32))
+        assert stats(*[C.byref(x) for x in counts]) == 0
+        hits = counts[0].value
+    assert stats(*[C.byref(x) for x in counts]) == 0
+    assert counts[2].value == 1
+    assert (128 << 20) < counts[3].value <= (512 << 20)
+    roots[0].fill(0x22)  # Both E2M1 nibbles decode to exactly one.
+    with package.prepare(roots, runtime_library=provider) as second:
+        assert stats(*[C.byref(x) for x in counts]) == 0
+        assert counts[0].value == hits + 1
+        with pytest.raises(RuntimeError, match="status 10"):
+            second.invoke_consumer()
+        generation, _ = second.invoke()
+        # Independent closed-form result: K products of exactly one.
+        np.testing.assert_array_equal(
+            second.read(generation)[0], np.full((m, n), k, np.float32))
+        np.testing.assert_array_equal(retained, np.zeros((m, n), np.float32))
+    assert clear() == 0
+    assert stats(*[C.byref(x) for x in counts]) == 0
+    assert counts[2].value == counts[3].value == 0

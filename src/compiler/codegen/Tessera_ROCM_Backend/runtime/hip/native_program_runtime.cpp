@@ -1,6 +1,7 @@
 // Program execution owns bytes and lifetime, never numerical kernel bodies.
 #include "native_program_runtime.h"
 #include "ProgramHostTransportPolicy.h"
+#include "ProgramCachePolicy.h"
 #include <hip/hip_runtime.h>
 #include <algorithm>
 #include <array>
@@ -31,6 +32,7 @@ struct Stage {
 struct Program {
   std::string cacheKey;
   uint64_t allocationBytes = 0;
+  uint64_t idleLimit = uint64_t(128) << 20;
   int device = 0;
   hipCtx_t context{};
   hipStream_t stream{};
@@ -241,24 +243,20 @@ bool inputContract(const Program &p, const void *const *inputs,
 }
 int upload(Program &p, const void *const *inputs, const uint64_t *bytes) {
   if (!inputContract(p, inputs, bytes)) return 1;
-  std::vector<std::vector<unsigned char>> next;
-  if (!p.pinned) {
-    next.resize(p.arguments);
-    for (uint32_t i = 0; i < p.arguments; ++i) {
-      auto *begin = static_cast<const unsigned char *>(inputs[i]);
-      next[i].assign(begin, begin + bytes[i]);
-    }
-  }
-  // Reused pinned staging may still be referenced by prior work; completion
-  // precedes overwriting it, and failed completion retains the allocation.
+  // Completion precedes overwriting either pinned or pageable owned staging.
+  // Capacity-sized pageable snapshots are reused across updates and leases.
   if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
-  p.ready = false; p.output = false;
-  if (p.pinned) {
+  if (!p.pinned) {
+    p.snapshots.resize(p.arguments);
     for (uint32_t i = 0; i < p.arguments; ++i)
-      std::memcpy(static_cast<unsigned char *>(p.pinnedInputs) + p.inputOffsets[i],
-                  inputs[i], bytes[i]);
-  } else {
-    p.snapshots = std::move(next);
+      p.snapshots[i].resize(size_t(p.contract[i].bytes));
+  }
+  p.ready = false; p.output = false;
+  for (uint32_t i = 0; i < p.arguments; ++i) {
+    void *staging = p.pinned
+        ? static_cast<unsigned char *>(p.pinnedInputs) + p.inputOffsets[i]
+        : p.snapshots[i].data();
+    std::memcpy(staging, inputs[i], size_t(bytes[i]));
   }
   for (uint32_t i = 0; i < p.arguments; ++i) {
     const void *source = p.pinned
@@ -361,6 +359,8 @@ static int prepareProgram(
   std::string liveArch(properties.gcnArchName);
   liveArch = liveArch.substr(0, liveArch.find(':'));
   if (liveArch != arch) return 2;
+  p->idleLimit = tessera::rocm::programIdleByteBudget(
+      arch, uint64_t(properties.totalGlobalMem));
   auto &pool = state();
   std::lock_guard<std::mutex> guard(pool.mutex);
   if (!pool.next) return 12;
@@ -600,12 +600,6 @@ static int updateSlots(
         initialized[slot] = 0;
       }
   }
-  std::vector<std::vector<unsigned char>> next(count);
-  if (!p.pinned)
-    for (uint32_t i = 0; i < count; ++i) {
-      auto *begin = static_cast<const unsigned char *>(inputs[i]);
-      next[i].assign(begin, begin + bytes[i]);
-    }
   if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
   p.poisoned = true; p.ready = false; p.output = false;
   if (nextRows != p.activeRows) {
@@ -626,7 +620,11 @@ static int updateSlots(
       auto *destination = static_cast<unsigned char *>(p.pinnedInputs) + p.inputOffsets[slot];
       std::memcpy(destination, inputs[i], bytes[i]); source = destination;
     } else {
-      p.snapshots[slot] = std::move(next[i]); source = p.snapshots[slot].data();
+      // Full preparation allocated this slot's capacity-sized owned snapshot.
+      // Partial updates preserve that capacity and never replace its storage.
+      auto *destination = p.snapshots[slot].data();
+      std::memcpy(destination, inputs[i], size_t(bytes[i]));
+      source = destination;
     }
     if (hipMemcpyAsync(p.buffers[slot], source, bytes[i],
                       hipMemcpyHostToDevice, p.stream) != hipSuccess) return 5;
@@ -850,7 +848,12 @@ extern "C" int tessera_rocm_program_read_many(
     offsets[i] = total;
     total += bytes[i];
   }
-  if (!p.pinned) p.readback.resize(total);
+  if (!p.pinned) {
+    // Reserve the declared maximum once, avoiding geometric capacity growth
+    // beyond the output bytes already charged to the idle-pool budget.
+    p.readback.reserve(p.pinnedReadbackBytes);
+    p.readback.resize(total);
+  }
   void *staging = p.pinned ? p.pinnedReadback : p.readback.data();
   for (uint32_t i = 0; i < count; ++i)
     if (hipMemcpyAsync(static_cast<unsigned char *>(staging) + offsets[i],
@@ -872,7 +875,7 @@ extern "C" int tessera_rocm_program_close(uint64_t handle) try {
   if (!identity(p)) return 2;
   // Completion and identity precede reuse. A closed handle is always removed;
   // a later acquire gets a fresh handle and retains its generation counter.
-  const uint64_t idleLimit = uint64_t(128) << 20;
+  const uint64_t idleLimit = p.idleLimit;
   if (!p.poisoned && cacheEnabled() && p.events.empty() && p.graphs.empty() &&
       p.graphExecutables.empty() &&
       p.allocationBytes <= idleLimit) {
@@ -881,7 +884,7 @@ extern "C" int tessera_rocm_program_close(uint64_t handle) try {
     // recently used. Only completed owners in this device/context may be
     // evicted; failed cleanup remains quarantined and budgeted.
     while (pool.idle.size() >= 4 ||
-           p.allocationBytes > idleLimit - pool.idleBytes) {
+           !tessera::rocm::programFrameFitsIdleBudget(pool.idleBytes, p.allocationBytes, idleLimit)) {
       auto victim = pool.idle.begin();
       for (; victim != pool.idle.end(); ++victim)
         if (!(*victim)->poisoned && identity(**victim)) break;
@@ -894,14 +897,17 @@ extern "C" int tessera_rocm_program_close(uint64_t handle) try {
       pool.idle.erase(victim);
     }
     if (pool.idle.size() >= 4 ||
-        p.allocationBytes > idleLimit - pool.idleBytes) {
+        !tessera::rocm::programFrameFitsIdleBudget(pool.idleBytes, p.allocationBytes, idleLimit)) {
       p.poisoned = true;
       int rc = clean(p);
       if (!rc) pool.programs.erase(it);
       return rc;
     }
     p.ready = false; p.output = false;
-    p.snapshots.clear(); p.readback.clear();
+    // Owned host staging is included in allocationBytes; retain its capacity.
+    // Private values are not ready until the next complete fresh-root upload.
+    p.initialized.assign(p.contract.size(), 0);
+    p.readback.clear();
     pool.idleBytes += p.allocationBytes;
     pool.idle.push_back(std::move(it->second));
     pool.programs.erase(it);

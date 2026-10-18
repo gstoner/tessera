@@ -1,0 +1,118 @@
+{
+  "schema": "tessera.nvfp4.scale_validation_ab.v1",
+  "source_sha256": {
+    "candidate": "8edb67a0ff5fafe8ed34ff25f3192c9761976a79a1d4e7ab5de24c2eadc86c42",
+    "control": "09f4ebef6129f86f90b661b7fe2a1945a8cb7f058cd70f185b2ee05d614973e2",
+    "recorder": "bb8826a2ba1bd977aa38421231bd8c39022302c206d667884ffb60a798f3e9e5",
+    "native_source": "cb9f11d755026114f8b74eb7bea2f2c005ca91fdd4d54a58e300c31f895592fa",
+    "native_header": "40beb4b1b1a1fea1686826994f46a9ab13f788922e6763a476097dd61faaec1e",
+    "provider": "9c67853c524c2f635d4b104e154d5ca676a779edb72633f155467a52ef656841"
+  },
+  "rows": [
+    {
+      "shape_mhkn": [
+        3,
+        32,
+        48,
+        19
+      ],
+      "scale_elements": 230,
+      "samples_ms": {
+        "control": [
+          0.03325700527057052,
+          0.029065665633728106,
+          0.027442331581066053,
+          0.028070334034661453,
+          0.028060341719537973,
+          0.027956984316309292,
+          0.027262334090967972,
+          0.04661599329362313,
+          0.028795329853892326,
+          0.029092324742426474,
+          0.027242000214755535,
+          0.027612666599452496,
+          0.02697500167414546,
+          0.027642992790788412
+        ],
+        "candidate": [
+          0.03757500477756063,
+          0.031977659091353416,
+          0.030909335085501272,
+          0.029396343355377514,
+          0.032117997761815786,
+          0.029519665986299515,
+          0.030731995745251577,
+          0.02954333710173766,
+          0.039625990514953933,
+          0.03187765832990408,
+          0.03403865654642383,
+          0.02868500693390767,
+          0.02938266455506285,
+          0.028932001441717148
+        ]
+      },
+      "median_ms": {
+        "control": 0.02800866301792363,
+        "candidate": 0.030820665415376425
+      },
+      "tracemalloc_peak_bytes": {
+        "control": 4784,
+        "candidate": 1992
+      },
+      "correctness": "both accept identical inputs without replacing source arrays;legacy/native boundary contract in2070unitcases"
+    },
+    {
+      "shape_mhkn": [
+        128,
+        12288,
+        4096,
+        4096
+      ],
+      "scale_elements": 9437184,
+      "samples_ms": {
+        "control": [
+          33.325249348611884,
+          33.03269999256978,
+          33.45078633477291,
+          33.10115066900229,
+          32.90364933976283,
+          32.90811800009882,
+          32.95814366235087,
+          32.943452339774616,
+          32.91122068185359,
+          33.02640099233637,
+          38.06981498685976,
+          32.99456766884153,
+          32.7037803363055,
+          32.62490299918378
+        ],
+        "candidate": [
+          7.512735338726391,
+          7.429542990090947,
+          7.491561661784847,
+          7.441262016072869,
+          7.492089333633582,
+          7.443422994886835,
+          7.492720673326403,
+          7.443680001112322,
+          7.506530324462801,
+          7.426577329169959,
+          7.496627998383095,
+          7.454918678073834,
+          7.511229331915577,
+          7.439582337004443
+        ]
+      },
+      "median_ms": {
+        "control": 32.9763556655962,
+        "candidate": 7.4732401699293405
+      },
+      "tracemalloc_peak_bytes": {
+        "control": 113247536,
+        "candidate": 1928
+      },
+      "correctness": "both accept identical inputs without replacing source arrays;legacy/native boundary contract in2070unitcases"
+    }
+  ],
+  "scope": "host scale admission only;14counterbalanced samples perarm,3calls/sample;tracemallocPython/NumPyallocationtracking,outside timing;no native kernel or model quality claim"
+}

@@ -5,6 +5,26 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-PUBLIC-OWNER-OVERHEAD-20261018 — native host admission and ownership
+
+Owner: ROCM-NVFP4-INGEST-1 / E2E-REAL-6.
+Synchronization key: ROCM-PUBLIC-OWNER-OVERHEAD-20261018.
+
+The candidate adds checked encoded-scale admission and extends the existing
+native owner pool with reusable pageable staging and a bounded gfx1201 quota.
+Every acquire/update validates and uploads all current roots. Native numerical
+images and schedules are unchanged. Host policy/admission tests pass 2,090
+cases; gfx1201 prepared execution passes 28 cases, including same-pointer root
+mutations, private readiness, large-frame retention and immutable outputs.
+Final source/image-matched ABBA medians are 71.4–75.2 ms control versus 36.6–37.0 ms selected; separate HIP events are 2.44–2.47 ms. The full CPU gate passes 28,700 and the compiler gate passes 1,754 without skips. Current-head public CI/review remains.
+Evidence: benchmarks/baselines/rocm_public_owner_20261018/README.md.
+
+### Sibling assessment
+
+gfx1201 named prepared parity validated on RX 9070 XT. The adjacent lane passes 90 cases, real HIP prepare/full/partial-update fault recovery passes ten cases, and the named shared native staging contract passes independently on gfx1151 with matching runtime source hashes. gfx1151 retains its 128 MiB policy. Local compiler/document gates pass; current-head public CI/review remains. Wider route/performance/model-quality obligations remain open.
+
+
+
 ## W11-MIXED-ADJOINT-CONTRACTION-20261018 — native mixed contractions and source VJP
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

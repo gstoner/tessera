@@ -201,7 +201,7 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
             if component.expansion is None:
                 raise ValueError('native quantized MLP requires both expansions')
             _,_,_,offsets,_,_=_contract(component.expansion.native.tile_ir,component.expansion.native.target_ir)
-            checked_expansion_inputs(*(inputs[i] for i in slots),row_offsets=offsets,numeric_policy=nvfp4_expansion_policy())
+            checked_expansion_inputs(*(inputs[i] for i in slots),row_offsets=offsets,numeric_policy=nvfp4_expansion_policy(),_scale_bounds=self._nvfp4_scale_bounds())
         return super()._inputs(inputs)
 
     def invoke_range(self,first,count,repeats=1,*,timed=True):

@@ -1,0 +1,97 @@
+{
+  "cpu": {
+    "passed": 28700,
+    "skipped": 5697,
+    "failed": 0,
+    "junit_uncompressed_sha256": "4baedec4bba056ae3b1f41b2ee0a1f2b94fcdf18f238f31378d68cad4fd913db",
+    "archive": "native-owner-cpu-final-junit.xml.gz"
+  },
+  "compiler": {
+    "passed": 1754,
+    "skipped": 0,
+    "executed_certificate": true,
+    "junit_uncompressed_sha256": "70886bb45a09115cc04cab5fe4ff19b96cb773401589d9a176fcd9d6d8c12426",
+    "archive": "native-owner-compiler-complete-junit.xml.gz"
+  },
+  "focused": {
+    "passed": 2425,
+    "overlaps_cpu": true
+  },
+  "gfx1201": {
+    "prepared": 28,
+    "bounded": 27,
+    "faults": 10,
+    "adjacent": 162,
+    "counts_overlap": true,
+    "combined_prepared_and_faults": 38
+  },
+  "gfx1151": {
+    "leases": 3,
+    "cache_hits": 2,
+    "full_and_partial_updates": true,
+    "all17_runtime_source_hashes_matched": true
+  },
+  "benchmarks": {
+    "order": [
+      "control_1",
+      "owner_1",
+      "owner_2",
+      "control_2"
+    ],
+    "all_candidate_source_snapshots_equal": true,
+    "all7_image_digests_equal": true,
+    "rows": [
+      {
+        "arm": "control_1",
+        "public_median_ms": 75.23477298673242,
+        "native_event_median_ms": 2.4718899726867676,
+        "cache_after": {
+          "hits": 0,
+          "misses": 12,
+          "idle_entries": 1,
+          "idle_bytes": 129918711
+        }
+      },
+      {
+        "arm": "owner_1",
+        "public_median_ms": 37.027081998530775,
+        "native_event_median_ms": 2.4621975421905518,
+        "cache_after": {
+          "hits": 7,
+          "misses": 5,
+          "idle_entries": 1,
+          "idle_bytes": 374926568
+        }
+      },
+      {
+        "arm": "owner_2",
+        "public_median_ms": 36.55522700864822,
+        "native_event_median_ms": 2.443779706954956,
+        "cache_after": {
+          "hits": 7,
+          "misses": 5,
+          "idle_entries": 1,
+          "idle_bytes": 374926568
+        }
+      },
+      {
+        "arm": "control_2",
+        "public_median_ms": 71.39251800253987,
+        "native_event_median_ms": 2.461709499359131,
+        "cache_after": {
+          "hits": 0,
+          "misses": 12,
+          "idle_entries": 1,
+          "idle_bytes": 129918711
+        }
+      }
+    ],
+    "scope": "warm synthetic gfx1201 host ownership/staging attribution;native event domain separate;no model quality or kernel promotion"
+  },
+  "other_gates": {
+    "mypy_errors": 0,
+    "generated_documents_in_sync": 33,
+    "ruff": "passed",
+    "graphify": "refreshed"
+  }
+}

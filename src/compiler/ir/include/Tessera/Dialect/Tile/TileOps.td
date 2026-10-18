@@ -904,6 +904,19 @@ def Tile_StoreOp : Tile_Op<"store"> {
 // form names the pointer ABI and runtime M/N/K dimensions needed to materialize
 // a grid of cooperative-matrix tiles. Inputs are A, B, [bias], D, M, N, K; the
 // optional bias operand is controlled by #tile.epilogue.
+// Ordered scalar contraction for operand pairs that cannot share a hardware
+// MMA input format. The FP32 accumulator never narrows either input. Physical
+// launch ownership is supplied by the target; transpose flags describe the
+// original compact row-major allocations, not a pre-transposed host copy.
+def Tile_ScalarMatmulKernelOp : Tile_Op<"scalar_matmul_kernel",
+    [MemoryEffects<[MemRead, MemWrite]>]> {
+  let summary = "Launch-level mixed-storage contraction with ordered FP32 FMA";
+  let arguments = (ins Variadic<AnyType>:$inputs);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
 def Tile_MatmulKernelOp : Tile_Op<"matmul_kernel"> {
   let summary = "Launch-level tiled matmul with a portable epilogue contract";
   let arguments = (ins Variadic<AnyType>:$inputs);

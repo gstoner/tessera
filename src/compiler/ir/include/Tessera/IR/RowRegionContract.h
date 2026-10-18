@@ -101,6 +101,8 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
     return op->emitOpError("parent-view body requires two parent reads and one distinct output store");
   return success();
 }
+// Schema 6 is the SM120 two-input/one-output reverse row profile; schema 1
+// retains its original two-input/two-output JVP ABI. Schema 5 is not reused.
 // Schema 4 is a distinct mixed-width K16 quantizer, never a gate/up recipe.
 inline mlir::LogicalResult verifyBlockQuantKernel(mlir::Operation *op) {
   using namespace mlir;
@@ -189,6 +191,8 @@ inline mlir::LogicalResult verifyKernel(mlir::Operation *op) {
   if (schemaProfile && (schemaProfile.getInt() == 2 || schemaProfile.getInt() == 3))
     return verifyGateUpKernel(op);
   using namespace mlir;
+  bool singleOutput = schemaProfile && schemaProfile.getInt() == 6;
+  unsigned buffers = singleOutput ? 3 : 4;
   bool targetBody = op->getName().getStringRef() == "tessera_nvidia.row_region_kernel";
   if (!targetBody && op->getName().getStringRef() != "tile.row_region_kernel")
     return op->emitOpError("schema-1 row profile requires Tile or NVIDIA Target ownership");
@@ -207,21 +211,21 @@ inline mlir::LogicalResult verifyKernel(mlir::Operation *op) {
     return value && value.getValue().size() == 64 && llvm::all_of(value.getValue(), [](char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
   };
   if (!name || name.getValue().empty() || !arch || arch.getValue() != "sm_120" ||
-      !schema || schema.getInt() != 1 || !rows || rows.getInt() <= 0 || rows.getInt() > INT32_MAX ||
+      !schema || (schema.getInt() != 1 && schema.getInt() != 6) || !rows || rows.getInt() <= 0 || rows.getInt() > INT32_MAX ||
       !columns || columns.getInt() <= 0 || columns.getInt() > INT32_MAX ||
       !storage || (!storage.getValue().isF16() && !storage.getValue().isBF16()) ||
       !threads || threads.getInt() != 128 || !hex(bodyHash) || !hex(artifact) || !hex(source) ||
       (targetBody && !hex(tileBody)) ||
       op->getNumRegions() != 1 || !op->getRegion(0).hasOneBlock() ||
       op->getRegion(0).front().getNumArguments() != 0 || op->getRegion(0).front().getOperations().size() != 1)
-    return op->emitOpError("requires a sealed static two-input/two-output SM120 row body");
+    return op->emitOpError("requires a sealed static SM120 schema-1 pair or schema-6 single-output row body");
   auto fn = dyn_cast<LLVM::LLVMFuncOp>(op->getRegion(0).front().front());
   if (!fn || fn.getName() != name.getValue() || fn.getBody().empty() ||
-      fn.getNumArguments() != 6 || !isa<LLVM::LLVMVoidType>(fn.getFunctionType().getReturnType()) ||
-      !fn.getArgument(4).getType().isInteger(64) || !fn.getArgument(5).getType().isInteger(64) ||
+      fn.getNumArguments() != buffers + 2 || !isa<LLVM::LLVMVoidType>(fn.getFunctionType().getReturnType()) ||
+      !fn.getArgument(buffers).getType().isInteger(64) || !fn.getArgument(buffers+1).getType().isInteger(64) ||
       fn->hasAttr("nvvm.kernel") || digest(fn) != bodyHash.getValue())
-    return op->emitOpError("native row body differs from its sealed six-argument ABI");
-  for (unsigned i = 0; i < 4; ++i)
+    return op->emitOpError("native row body differs from its sealed profile-specific pointer/dimension ABI");
+  for (unsigned i = 0; i < buffers; ++i)
     if (fn.getArgument(i).getType() != LLVM::LLVMPointerType::get(op->getContext()))
       return op->emitOpError("row buffers require explicit generic raw pointer arguments");
   bool valid = true;
@@ -239,7 +243,7 @@ inline mlir::LogicalResult verifyKernel(mlir::Operation *op) {
       else { auto gep = cast<LLVM::GEPOp>(nested); address = gep.getBase(); element = gep.getElemType(); }
       while (auto gep = address.getDefiningOp<LLVM::GEPOp>()) address = gep.getBase();
       auto arg = dyn_cast<BlockArgument>(address);
-      if (!arg || arg.getOwner() != &fn.getBody().front() || arg.getArgNumber() >= 4 || element != storage.getValue()) valid = false;
+      if (!arg || arg.getOwner() != &fn.getBody().front() || arg.getArgNumber() >= buffers || element != storage.getValue()) valid = false;
       else if (isa<LLVM::LoadOp>(nested)) {
         if (arg.getArgNumber() >= 2) valid = false;
         else readRoots |= 1u << arg.getArgNumber();
@@ -251,7 +255,7 @@ inline mlir::LogicalResult verifyKernel(mlir::Operation *op) {
       auto view = cast<tile::BufferViewOp>(nested);
       auto arg = dyn_cast<BlockArgument>(view.getBase());
       auto type = cast<tile::BufferViewType>(view.getResult().getType());
-      if (!arg || arg.getOwner() != &fn.getBody().front() || arg.getArgNumber() >= 4 ||
+      if (!arg || arg.getOwner() != &fn.getBody().front() || arg.getArgNumber() >= buffers ||
           type.getElementType() != storage.getValue() || type.getOrder() != "row_major" ||
           type.getAccess() != (arg.getArgNumber() < 2 ? "read" : "write")) valid = false;
       else roots.insert(arg.getAsOpaquePointer());
@@ -261,8 +265,8 @@ inline mlir::LogicalResult verifyKernel(mlir::Operation *op) {
                !n.starts_with("arith.") && !n.starts_with("math.") && !n.starts_with("scf.") &&
                n != "gpu.thread_id" && n != "gpu.block_id" && n != "gpu.block_dim") valid = false;
   });
-  if (!valid || (targetBody ? (readRoots != 3 || writeRoots != 12) : (views.size() != 4 || roots.size() != 4)))
-    return op->emitOpError("row body must retain four distinct typed views and scalar/reduction SSA only");
+  if (!valid || (targetBody ? (readRoots != 3 || writeRoots != (singleOutput ? 4u : 12u)) : (views.size() != buffers || roots.size() != buffers)))
+    return op->emitOpError("row body must retain profile-specific distinct typed views and scalar/reduction SSA only");
   return success();
 }
 } // namespace tessera::row_region

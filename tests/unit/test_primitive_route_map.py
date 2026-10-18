@@ -228,3 +228,16 @@ def test_primitive_route_cannot_inherit_missing_target_consumer(monkeypatch):
     routes = prm.primitive_routes()
     assert routes
     assert all(prm.ROUTE_COMPILED not in per.values() for per in routes.values())
+
+
+def test_mixed_scalar_classifier_joins_the_sm120_compiled_matmul_route():
+    from tessera.compiler import nvidia_native, bootstrap_prune_audit
+    from tests.unit.test_scheduled_matmul_consumers import _module
+    module = _module(target="nvidia_sm120", dtype="fp32", b_dtype="fp16",
+                     output_dtype="fp32", shape=(17, 35, 19))
+    assert nvidia_native.native_package_kind(module) == "scalar_matmul"
+    assert bootstrap_prune_audit._target_family_route("nvidia_sm120", "scalar_matmul") == (
+        "scheduled_matmul", "supports_scheduled_matmul")
+    assert prm.members_for("scalar_matmul", "nvidia_sm120") == ("matmul",)
+    assert prm.COMPILED_ROUTE_TARGETS["scalar_matmul"] == ("nvidia_sm120",)
+    prm.verify_family_membership()

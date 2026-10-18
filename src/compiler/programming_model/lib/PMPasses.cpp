@@ -299,6 +299,8 @@ static FailureOr<std::pair<Value, int64_t>> foldedInputStorage(Value value) {
 }
 
 struct MatmulSchedule {
+  bool scalarFma = false;
+  bool scalarTransposeA = false, scalarTransposeB = false;
   StringRef bLayout = "col_major";
   bool nvfp4TransposeA = false;
   bool nvfp4TransposeB = false;
@@ -875,6 +877,77 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   if (!lhs || !rhs || !out || lhs.getRank() != 2 || rhs.getRank() != 2 ||
       out.getRank() != 2)
     return failure();
+  // Preserve FP32 cotangents in mixed adjoint products. This is a native
+  // scalar FMA strategy, not a conversion to a convenient MMA input format.
+  const bool scalarTarget = moduleString(module, "tessera.target", "target") == "nvidia_sm120" &&
+      moduleString(module, "tessera.arch", "arch") == "sm_120";
+  auto scalarElement = [](Type type) {
+    return type.isF32() || type.isF16() || type.isBF16();
+  };
+  if (scalarTarget && !scaledMatmul &&
+      (lhs.getElementType().isF32() || rhs.getElementType().isF32()) &&
+      scalarElement(lhs.getElementType()) && scalarElement(rhs.getElementType()) &&
+      scalarElement(out.getElementType())) {
+    if (op->getNumOperands() != 2 || !lhs.hasStaticShape() ||
+        !rhs.hasStaticShape() || !out.hasStaticShape() ||
+        lhs.getEncoding() || rhs.getEncoding() || out.getEncoding())
+      return failure();
+    for (NamedAttribute field : op->getAttrs()) {
+      StringRef key = field.getName().getValue();
+      if (key != "transposeA" && key != "transposeB" && key != "output_dtype" &&
+          key != "activation" && key != "rhs_storage_order" &&
+          key != "numeric_policy" && key != "tessera.effect_kind" &&
+          key != "tessera.autodiff.activity" && key != "schedule.artifact_hash" &&
+          key != "schedule.artifact_binding")
+        return failure();
+    }
+    if (op->hasAttr("activation")) {
+      auto activation = op->getAttrOfType<StringAttr>("activation");
+      if (!activation || activation.getValue() != "none") return failure();
+    }
+    for (StringRef key : {"transposeA", "transposeB"})
+      if (op->hasAttr(key) && !op->getAttrOfType<BoolAttr>(key))
+        return failure();
+    if (op->hasAttr("numeric_policy")) {
+      auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+      if (!policy) return failure();
+      for (NamedAttribute field : policy)
+        if (field.getName().getValue() != "accum" || !isa<StringAttr>(field.getValue()))
+          return failure();
+    }
+    auto spelling = [](Type type) -> StringRef {
+      return type.isF32() ? "f32" : type.isF16() ? "f16" : "bf16";
+    };
+    if (op->hasAttr("output_dtype")) {
+      auto dtype = op->getAttrOfType<StringAttr>("output_dtype");
+      if (!dtype) return failure();
+      StringRef requested = llvm::StringSwitch<StringRef>(dtype.getValue())
+          .Case("fp32", "f32").Case("fp16", "f16").Default(dtype.getValue());
+      if (requested != spelling(out.getElementType())) return failure();
+    }
+    MatmulSchedule result;
+    result.scalarFma = true;
+    result.scalarTransposeA = flag("transposeA");
+    result.scalarTransposeB = flag("transposeB");
+    result.target = "nvidia_sm120"; result.arch = "sm_120";
+    result.storage = spelling(lhs.getElementType());
+    result.storageB = spelling(rhs.getElementType());
+    result.output = spelling(out.getElementType());
+    result.accum = "f32"; result.bLayout = "row_major";
+    result.physicalContract = "nvidia_sm120_scalar_fma_v1";
+    result.m = lhs.getDimSize(result.scalarTransposeA ? 1 : 0);
+    result.k = lhs.getDimSize(result.scalarTransposeA ? 0 : 1);
+    result.n = rhs.getDimSize(result.scalarTransposeB ? 0 : 1);
+    if (result.m <= 0 || result.m > 65535LL * 16 || result.n <= 0 ||
+        result.n > INT32_MAX || result.k <= 0 || result.k > INT32_MAX ||
+        rhs.getDimSize(result.scalarTransposeB ? 1 : 0) != result.k ||
+        out.getShape() != ArrayRef<int64_t>({result.m, result.n}))
+      return failure();
+    result.tileM = result.macroTileM = 16;
+    result.tileN = result.macroTileN = 8;
+    result.tileK = 1;
+    return result;
+  }
   if (auto transpose = op->getAttrOfType<BoolAttr>("transposeA");
       transpose && transpose.getValue() && !nvfp4TransposeA && !broadcast)
     return failure();
@@ -1557,7 +1630,12 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
     return schedule;
   if (Attribute request = op->getAttr("rhs_storage_order")) {
     auto order = dyn_cast<StringAttr>(request);
-    if (!order || (order.getValue() != "row_major" && order.getValue() != "col_major") ||
+    if (schedule->scalarFma) {
+      if (!order || order.getValue() != "row_major") {
+        op->emitError("scalar FMA requires compact row-major RHS storage");
+        return failure();
+      }
+    } else if (!order || (order.getValue() != "row_major" && order.getValue() != "col_major") ||
         schedule->target != "nvidia_sm120" || schedule->arch != "sm_120" ||
         (schedule->storage != "f16" && schedule->storage != "bf16") ||
         (schedule->output != "f32" && schedule->output != "f16") ||
@@ -1629,6 +1707,11 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
        Twine(schedule.dynamicM) + Twine(schedule.dynamicN) +
        Twine(schedule.dynamicK))
           .str();
+  if (schedule.scalarFma) {
+    contract += ";scalar_order=increasing_k_fma";
+    contract += schedule.scalarTransposeA ? ";scalar_transpose_a=1" : ";scalar_transpose_a=0";
+    contract += schedule.scalarTransposeB ? ";scalar_transpose_b=1" : ";scalar_transpose_b=0";
+  }
   if (schedule.typedTransposeA) contract += ";typed_transpose_a=1";
   if (schedule.nvfp4TransposeA) contract += ";nvfp4_transpose_a=1";
   if (schedule.nvfp4TransposeB) contract += ";nvfp4_transpose_b=1";
@@ -3570,8 +3653,8 @@ struct GraphToSchedulePass
                          builder.getStringAttr(selected->activation));
       state.addAttribute("residual", builder.getBoolAttr(selected->residual));
       state.addAttribute("output", builder.getStringAttr(selected->output));
-      if (selected->nvfp4TransposeA || selected->typedTransposeA) state.addAttribute("transposeA", builder.getBoolAttr(true));
-      if (selected->nvfp4TransposeB) state.addAttribute("transposeB", builder.getBoolAttr(true));
+      if (selected->nvfp4TransposeA || selected->typedTransposeA || selected->scalarTransposeA) state.addAttribute("transposeA", builder.getBoolAttr(true));
+      if (selected->nvfp4TransposeB || selected->scalarTransposeB) state.addAttribute("transposeB", builder.getBoolAttr(true));
       state.addAttribute("a_layout", builder.getStringAttr("row_major"));
       state.addAttribute("b_layout", builder.getStringAttr(selected->bLayout));
       state.addAttribute("raster_order",
@@ -4658,8 +4741,8 @@ struct ScheduleToTilePass
           scheduled.getResidual() != selected->residual ||
           scheduled.getOutput() != selected->output ||
           scheduled.getArch() != selected->arch ||
-          !orientationMatches("transposeA", selected->nvfp4TransposeA || selected->typedTransposeA) ||
-          !orientationMatches("transposeB", selected->nvfp4TransposeB) ||
+          !orientationMatches("transposeA", selected->nvfp4TransposeA || selected->typedTransposeA || selected->scalarTransposeA) ||
+          !orientationMatches("transposeB", selected->nvfp4TransposeB || selected->scalarTransposeB) ||
           scheduled.getALayout() != "row_major" ||
           scheduled.getBLayout() != selected->bLayout ||
           scheduled.getRasterOrder() != selected->rasterOrder ||
@@ -4720,7 +4803,7 @@ struct ScheduleToTilePass
         const bool dynamicSm120 = selected->dynamicM || selected->dynamicN ||
                                   selected->dynamicK;
         const bool macroSm120Producer =
-            selected->bLayout == "col_major" &&
+            !selected->scalarFma && selected->bLayout == "col_major" &&
             selected->m >= 32 && selected->n >= 32 &&
             selected->k >= 16 &&
             (selected->storage == "f16" || selected->storage == "bf16") &&
@@ -4729,7 +4812,7 @@ struct ScheduleToTilePass
         const bool fusedEpilogue = selected->bias || selected->residual ||
                                    selected->activation != "none";
         const bool typedSm120Producer =
-            selected->m > 0 && selected->n > 0 && selected->k > 0 &&
+            !selected->scalarFma && selected->m > 0 && selected->n > 0 && selected->k > 0 &&
             selected->tileM == 16 && selected->tileN == 8 &&
             selected->tileK == 16 &&
             (selected->storage == "f16" || selected->storage == "bf16") &&
@@ -4755,6 +4838,8 @@ struct ScheduleToTilePass
              (dynamicSm120 && selected->bLayout == "row_major" ? "_row_rhs" : "") +
              (macroKernelGeometry ? "_macro_kernel" : "_kernel"))
                 .str();
+        if (selected->scalarFma)
+          kernelName = (graphFunction.getName() + "_scalar_fma_kernel").str();
         if (selected->storage == "int4") kernelName = "tessera_tile_matmul_int4";
         if (selected->storage == "nvfp4") kernelName = "tessera_tile_matmul_nvfp4";
         if (selected->independentBatchCount > 0) kernelName = "tessera_tile_matmul_nvfp4_batched";
@@ -4807,7 +4892,23 @@ struct ScheduleToTilePass
             !dynamicSm120 && (selected->m % 16 != 0 || selected->n % 8 != 0);
         const bool boundedStaticInputs =
             boundedStaticOutput || (!dynamicSm120 && selected->k % 16 != 0);
-        if (useMacroSm120Producer) {
+        if (selected->scalarFma) {
+          OperationState scalar(loc, "tile.scalar_matmul_kernel");
+          scalar.addOperands(entry->getArguments());
+          auto lhsType = cast<RankedTensorType>(graph->getOperand(0).getType());
+          auto rhsType = cast<RankedTensorType>(graph->getOperand(1).getType());
+          auto resultType = cast<RankedTensorType>(graph->getResult(0).getType());
+          scalar.addAttribute("a_element_type", TypeAttr::get(lhsType.getElementType()));
+          scalar.addAttribute("b_element_type", TypeAttr::get(rhsType.getElementType()));
+          scalar.addAttribute("output_element_type", TypeAttr::get(resultType.getElementType()));
+          scalar.addAttribute("accumulator_type", TypeAttr::get(kernelBuilder.getF32Type()));
+          scalar.addAttribute("transpose_a", kernelBuilder.getBoolAttr(selected->scalarTransposeA));
+          scalar.addAttribute("transpose_b", kernelBuilder.getBoolAttr(selected->scalarTransposeB));
+          scalar.addAttribute("tessera.schedule_hash", kernelBuilder.getStringAttr(scheduled.getArtifactHash()));
+          scalar.addAttribute("tessera.macro_tile_m", kernelBuilder.getI64IntegerAttr(selected->macroTileM));
+          scalar.addAttribute("tessera.macro_tile_n", kernelBuilder.getI64IntegerAttr(selected->macroTileN));
+          kernelBuilder.create(scalar);
+        } else if (useMacroSm120Producer) {
           // NVIDIA owns this physical reuse boundary. One 128-thread CTA
           // computes a 32x32 output tile: four warps own 2x2 16x16 quadrants,
           // and each warp emits two adjacent m16n8 MMA tiles. A[32,16] and

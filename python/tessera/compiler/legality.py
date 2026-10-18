@@ -88,7 +88,7 @@ def check_op_legality(
     _check_tensor_contracts(op, operands, result, diagnostics)
     _check_capability(op, _capability_target(target_name), operands, result, diagnostics)
     if op in {"tessera.matmul", "tessera.gemm"}:
-        _check_matmul(op, operands, diagnostics)
+        _check_matmul(op, operands, diagnostics, attrs)
     elif op in {"tessera.softmax", "tessera.softmax_safe"}:
         _check_min_rank(op, operands, 1, "LEGALITY_SOFTMAX_RANK", "softmax_rank", diagnostics)
     elif op == "tessera.gelu":
@@ -211,17 +211,24 @@ def _check_matmul(
     op: str,
     operands: Sequence[TensorContract],
     diagnostics: list[LegalityDiagnostic],
+    attrs: Mapping[str, object],
 ) -> None:
     if len(operands) < 2:
         diagnostics.append(LegalityDiagnostic("LEGALITY_OPERAND_ARITY", f"{op} requires two operands", "operand_arity"))
         return
     lhs, rhs = operands[0], operands[1]
+    ta, tb = attrs.get("transposeA", False), attrs.get("transposeB", False)
+    if type(ta) is not bool or type(tb) is not bool:
+        diagnostics.append(LegalityDiagnostic(
+            "LEGALITY_MATMUL_TRANSPOSE_TYPE", "matmul transpose flags must be boolean",
+            "matmul_shape"))
+        return
     if lhs.rank is not None and lhs.rank != 2:
         diagnostics.append(LegalityDiagnostic("LEGALITY_MATMUL_RANK", "matmul lhs must be rank-2", "matmul_rank"))
     if rhs.rank is not None and rhs.rank != 2:
         diagnostics.append(LegalityDiagnostic("LEGALITY_MATMUL_RANK", "matmul rhs must be rank-2", "matmul_rank"))
     if lhs.rank == 2 and rhs.rank == 2:
-        lhs_k, rhs_k = lhs.shape[1], rhs.shape[0]
+        lhs_k, rhs_k = lhs.shape[0 if ta else 1], rhs.shape[1 if tb else 0]
         if _static_dim(lhs_k) and _static_dim(rhs_k) and str(lhs_k) != str(rhs_k):
             diagnostics.append(LegalityDiagnostic(
                 "LEGALITY_MATMUL_K_MISMATCH",

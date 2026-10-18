@@ -101,6 +101,7 @@ UNCLASSIFIABLE_TARGETS: Mapping[str, str] = {
 #: target-aware, so it made the claim strictly stronger (review on #677).
 COMPILED_ROUTE_TARGETS: Mapping[str, tuple[str, ...]] = {
     "depth_attention": ("rocm_gfx1151",),
+    "scalar_matmul": ("nvidia_sm120",),
 }
 
 #: family -> target -> the coverage primitives that target's contract accepts.
@@ -142,6 +143,9 @@ FAMILY_MEMBERS: Mapping[str, Mapping[str, tuple[str, ...]]] = {
         "x86": ("sum", "mean", "max", "amax"),
     },
     "matmul": {"*": ("matmul",)},
+    # Mixed FP32/half adjoints use the verified scalar-FMA Schedule/Tile
+    # contract on SM120. This is the same semantic primitive, not a new op.
+    "scalar_matmul": {"nvidia_sm120": ("matmul",)},
     "int4_matmul": {"*": ("matmul",)},
     "nvfp4_matmul": {"*": ("matmul",)},
     "mx_matmul": {"*": ("matmul",)},

@@ -16,7 +16,7 @@ inline mlir::FailureOr<mlir::func::FuncOp> graphRoot(mlir::ModuleOp module) {
   auto target = module->getAttrOfType<StringAttr>("tessera.target");
   auto arch = module->getAttrOfType<StringAttr>("tessera.arch");
   auto fn = found.front();
-  if (fn.getNumArguments() != 2 || fn.getNumResults() != 2 || !fn.getBody().hasOneBlock()) return reject();
+  if (fn.getNumArguments() != 2 || (fn.getNumResults() != 1 && fn.getNumResults() != 2) || !fn.getBody().hasOneBlock()) return reject();
   auto c = fn->getAttrOfType<DictionaryAttr>("tessera.native.sm120_row_producer");
   auto type = dyn_cast<RankedTensorType>(fn.getArgumentTypes().front());
   auto rows = c ? c.getAs<IntegerAttr>("rows") : IntegerAttr{};
@@ -28,14 +28,16 @@ inline mlir::FailureOr<mlir::func::FuncOp> graphRoot(mlir::ModuleOp module) {
   if (!target || target.getValue() != "nvidia_sm120" || !arch || arch.getValue() != "sm_120" ||
       !c || c.size() != 6 || !type || type.getRank() != 2 ||
       !rows || rows.getInt() != type.getDimSize(0) || !columns || columns.getInt() != type.getDimSize(1) ||
-      !schema || schema.getInt() != 1 || !storage || storage.getValue() != (type.getElementType().isF16() ? "f16" : "bf16") ||
+      !schema || schema.getInt() != (fn.getNumResults() == 1 ? 6 : 1) || !storage || storage.getValue() != (type.getElementType().isF16() ? "f16" : "bf16") ||
       !accum || accum.getValue() != "f32" || !hash || hash.getValue() != sourceDigest(fn)) return reject();
   RowScalarizer scalarizer(fn);
   if (failed(scalarizer.validate())) return failure();
   return fn;
 }
 inline std::string artifactDigest(mlir::func::FuncOp fn) {
-  std::string text = sourceDigest(fn) + ";row_ssa_schema=1;serial_row;threads=128;typed_views=4;outputs=2";
+  std::string text = sourceDigest(fn) + (fn.getNumResults() == 1
+      ? ";row_ssa_schema=6;serial_row;threads=128;typed_views=3;outputs=1"
+      : ";row_ssa_schema=1;serial_row;threads=128;typed_views=4;outputs=2");
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(text)), true);
 }
 inline mlir::DictionaryAttr artifactAttributes(mlir::func::FuncOp fn) {
@@ -44,7 +46,7 @@ inline mlir::DictionaryAttr artifactAttributes(mlir::func::FuncOp fn) {
   auto type = cast<RankedTensorType>(fn.getArgumentTypes()[0]);
   std::string shape = "family=native_row_ssa;rows=" + std::to_string(type.getDimSize(0)) +
       ";columns=" + std::to_string(type.getDimSize(1)) + ";storage=" +
-      (type.getElementType().isF16() ? "f16" : "bf16") + ";inputs=2;outputs=2";
+      (type.getElementType().isF16() ? "f16" : "bf16") + ";inputs=2;outputs=" + std::to_string(fn.getNumResults());
   return b.getDictionaryAttr({
     b.getNamedAttr("hash", b.getStringAttr(artifactDigest(fn))),
     b.getNamedAttr("arch", b.getStringAttr("sm_120")),
@@ -54,7 +56,7 @@ inline mlir::DictionaryAttr artifactAttributes(mlir::func::FuncOp fn) {
       b.getNamedAttr("source_hash", b.getStringAttr(sourceDigest(fn))),
       b.getNamedAttr("algorithm", b.getStringAttr("serial_row_ssa")),
       b.getNamedAttr("workgroup_size", b.getI64IntegerAttr(128)),
-      b.getNamedAttr("schema", b.getI64IntegerAttr(1))}))});
+      b.getNamedAttr("schema", b.getI64IntegerAttr(fn.getNumResults() == 1 ? 6 : 1))}))});
 }
 inline mlir::LogicalResult schedule(mlir::ModuleOp module, bool &selected) {
   using namespace mlir;
@@ -78,9 +80,12 @@ inline mlir::FailureOr<mlir::LLVM::LLVMFuncOp> buildKernel(mlir::ModuleOp module
   OpBuilder b(module.getContext()); Location loc = graph.getLoc();
   b.setInsertionPointToEnd(module.getBody());
   auto ptr = LLVM::LLVMPointerType::get(b.getContext());
+  unsigned buffers = 2 + graph.getNumResults();
+  SmallVector<Type> arguments(buffers, ptr);
+  arguments.append({b.getI64Type(), b.getI64Type()});
   auto kernel = LLVM::LLVMFuncOp::create(b, loc, "tessera_native_row_" + sourceDigest(graph).substr(0,16),
       LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(b.getContext()),
-          {ptr,ptr,ptr,ptr,b.getI64Type(),b.getI64Type()},false));
+          arguments,false));
   auto *body = kernel.addEntryBlock(b); b.setInsertionPointToStart(body);
   auto coordinate = [&](Value value) -> Value { return arith::IndexCastOp::create(b,loc,b.getI64Type(),value); };
   Value tid = coordinate(gpu::ThreadIdOp::create(b,loc,gpu::Dimension::x));
@@ -89,14 +94,14 @@ inline mlir::FailureOr<mlir::LLVM::LLVMFuncOp> buildKernel(mlir::ModuleOp module
   Value row = arith::AddIOp::create(b,loc,arith::MulIOp::create(b,loc,bid,threads),tid);
   Value expectedRows = arith::ConstantIntOp::create(b,loc,type.getDimSize(0),64);
   Value expectedColumns = arith::ConstantIntOp::create(b,loc,type.getDimSize(1),64);
-  Value rm = arith::CmpIOp::create(b,loc,arith::CmpIPredicate::eq,body->getArgument(4),expectedRows);
-  Value cm = arith::CmpIOp::create(b,loc,arith::CmpIPredicate::eq,body->getArgument(5),expectedColumns);
+  Value rm = arith::CmpIOp::create(b,loc,arith::CmpIPredicate::eq,body->getArgument(buffers),expectedRows);
+  Value cm = arith::CmpIOp::create(b,loc,arith::CmpIPredicate::eq,body->getArgument(buffers+1),expectedColumns);
   auto guarded = scf::IfOp::create(b,loc,arith::AndIOp::create(b,loc,rm,cm),false);
   {
     OpBuilder::InsertionGuard guard(b); b.setInsertionPointToStart(&guarded.getThenRegion().front());
     IRMapping mapping;
-    for (unsigned i=0;i<4;++i) mapping.map(lowered->getArgument(i),body->getArgument(i));
-    mapping.map(lowered->getArgument(4),row);
+    for (unsigned i=0;i<buffers;++i) mapping.map(lowered->getArgument(i),body->getArgument(i));
+    mapping.map(lowered->getArgument(buffers),row);
     for (Operation &op : lowered->getBody().front().without_terminator()) b.clone(op,mapping);
   }
   b.setInsertionPointToEnd(body); LLVM::ReturnOp::create(b,loc,ValueRange{});
@@ -129,7 +134,7 @@ inline mlir::LogicalResult lower(mlir::ModuleOp module, bool &selected) {
   state.addAttribute("columns",b.getI64IntegerAttr(type.getDimSize(1)));
   state.addAttribute("storage",TypeAttr::get(type.getElementType()));
   state.addAttribute("workgroup_size",b.getI64IntegerAttr(128));
-  state.addAttribute("schema",b.getI64IntegerAttr(1));
+  state.addAttribute("schema",b.getI64IntegerAttr(root->getNumResults() == 1 ? 6 : 1));
   state.addAttribute("artifact_hash",b.getStringAttr(artifactDigest(*root)));
   state.addAttribute("source_hash",b.getStringAttr(sourceDigest(*root)));
   state.addAttribute("body_hash",b.getStringAttr(digest(*kernel)));

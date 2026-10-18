@@ -25,8 +25,8 @@ met that bar, not an axis carrying no information.
 | Primitives reached by any route | 31 |
 | — served by a **compiled** route on some target | 3 |
 | — **bootstrap only** (deleting the packager strands them) | 28 |
-| Families a backend classifies | 16 |
-| Families with a compiled route | 4 |
+| Families a backend classifies | 17 |
+| Families with a compiled route | 5 |
 
 **`❔ unclassified` is not `—`.** A dash means measured and nothing
 serves it; `unclassified` means this map cannot see that target's
@@ -100,4 +100,5 @@ raises rather than degrading quietly.
 | `nvfp4_matmul` | — | nvidia_sm120 | `matmul` |
 | `paged_kv` | — | nvidia_sm120, rocm_gfx1151 | `flash_attn` |
 | `reduction` | — | nvidia_sm120, rocm_gfx1151, x86 | **nvidia_sm120**: `sum`, `mean`, `max`, `min`, `amax`, `amin`; **rocm_gfx1151**: `sum`, `mean`, `max`, `amax`; **x86**: `sum`, `mean`, `max`, `amax` |
+| `scalar_matmul` | ✅ nvidia_sm120 | nvidia_sm120 | **nvidia_sm120**: `matmul` |
 | `softmax` | — | nvidia_sm120, rocm_gfx1151, x86 | `softmax` |

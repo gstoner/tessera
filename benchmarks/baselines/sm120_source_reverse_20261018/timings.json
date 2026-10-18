@@ -1,0 +1,3037 @@
+{
+  "device": {
+    "compute_capability": "12.0",
+    "cuda_ordinal": 0,
+    "driver_version": "610.88",
+    "name": "NVIDIA GeForce RTX 5070",
+    "pci_bus_id": "00000000:01:00.0",
+    "uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545"
+  },
+  "method": {
+    "first_call": "includes certification/packaging; no cold compiler-cache claim",
+    "host_order": "counterbalanced public/direct native owner",
+    "native_repetitions": 32,
+    "repetitions": 20,
+    "samples": 7,
+    "scope": "static source-only pullback; no speedup or general reverse claim",
+    "timing_domains": "completed host wall, CUDA stage/program enqueue/capture kept separate"
+  },
+  "rows": [
+    {
+      "artifact": {
+        "compressed_bytes": 10372,
+        "compressed_sha256": "21613f888377e91f2ea6ee86dfacf2bb99478f98e8992425762555238e4e3fb1",
+        "file": "program_17x19x35_f16_ab.json.gz",
+        "raw_bytes": 74540,
+        "raw_sha256": "7c5d03be2882e9925004f359940911e7aa8c226dec2ef2106b0571182408e692"
+      },
+      "completed_host_median_ms": {
+        "direct_prepared_owner": 0.2736661001108587,
+        "public_native_backward": 1.0618831525789574
+      },
+      "completed_host_samples_ms": {
+        "direct_prepared_owner": [
+          0.20771230047103018,
+          0.22551240108441561,
+          0.3004710015375167,
+          0.2736661001108587,
+          0.2540143992519006,
+          0.30261455103755,
+          0.29614744998980314
+        ],
+        "public_native_backward": [
+          1.0098074009874836,
+          1.1373462999472395,
+          1.0543524491367862,
+          1.305916250566952,
+          1.0618831525789574,
+          1.0360062500694767,
+          1.3282129511935636
+        ]
+      },
+      "correctness": "passed_before_and_after_timing",
+      "execution_certificate": {
+        "algorithm": "not_applicable",
+        "artifact_identities": {
+          "artifact_hash": "fa5c12e93d9bb0ae5b12dbb28c02c8829f3b8315d1d88ceeb68520d662e8b1f5",
+          "frontend_certificate_digest": "47a48e2e0b4e07b9d37520a7441dc734b8cc001d36a7da455e8851738e0c315a",
+          "source_graph_ir_digest": "a3ae49980884387c1c6ad570731be74fd9b53761b9dc3436ddf7167058f17936"
+        },
+        "digest": "1cee4963e63bc9aec59264e3c5ab96f9ed619e0d828788e708d7b43ca16cd4dd",
+        "evidence_scope": "exact_device",
+        "evidence_target": "nvidia_sm120",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_driver",
+        "family": "source_normalization_matmul",
+        "frontend_certificate_digest": "47a48e2e0b4e07b9d37520a7441dc734b8cc001d36a7da455e8851738e0c315a",
+        "gradient_signature": [
+          {
+            "dtype": "float16",
+            "shape": [
+              17,
+              35
+            ]
+          }
+        ],
+        "graph_consumer": "tessera.rmsnorm",
+        "input_signature": [
+          {
+            "dtype": "float16",
+            "shape": [
+              17,
+              35
+            ]
+          },
+          {
+            "dtype": "float16",
+            "shape": [
+              35,
+              19
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              17,
+              19
+            ]
+          }
+        ],
+        "physical_attestation": {
+          "artifact_hash": "fa5c12e93d9bb0ae5b12dbb28c02c8829f3b8315d1d88ceeb68520d662e8b1f5",
+          "device_arch": "sm_120",
+          "digest": "6518d4ecb249782223db1c0cb3dfea23523fe12b235b858d00d89777d6393d05",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_driver",
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120"
+        },
+        "proof_mode": "",
+        "schedule_consumer": "schedule.artifact",
+        "schema": "tessera.native_vjp_execution.v1",
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "target": "nvidia_sm120",
+        "target_consumer": "nvidia.sm120_source_reverse_program",
+        "tile_consumer": "tile.row_region_kernel",
+        "topology": "not_applicable"
+      },
+      "first_call_ms": 1267.294840014074,
+      "image_digests": [
+        "8211c50da430b11eee536dd0b2646fc4b143911fb72f8bb772fdd59bb38073a8",
+        "ac2d75eb1e46b0844619ed5b72a58d1560aea6637502da640a3c7c958a670f75"
+      ],
+      "max_abs_error": 0.00024070736116477143,
+      "native_captured": [
+        {
+          "captured": true,
+          "program_ms": 0.011137000285089016,
+          "repeats": 32,
+          "stage_ms": [
+            0.003135999897494912,
+            0.006767000071704388
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009903999976813793,
+          "repeats": 32,
+          "stage_ms": [
+            0.003082999959588051,
+            0.006769000086933374
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009637000039219856,
+          "repeats": 32,
+          "stage_ms": [
+            0.003037000074982643,
+            0.0068339998833835125
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009852999821305275,
+          "repeats": 32,
+          "stage_ms": [
+            0.004093999974429607,
+            0.006916999816894531
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009651999920606613,
+          "repeats": 32,
+          "stage_ms": [
+            0.0029949999880045652,
+            0.006823000032454729
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009689999744296074,
+          "repeats": 32,
+          "stage_ms": [
+            0.0029899999499320984,
+            0.006963999941945076
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009568000212311745,
+          "repeats": 32,
+          "stage_ms": [
+            0.003014999907463789,
+            0.006754999980330467
+          ]
+        }
+      ],
+      "native_enqueue": [
+        {
+          "captured": false,
+          "program_ms": 0.021199999377131462,
+          "repeats": 32,
+          "stage_ms": [
+            0.014182000420987606,
+            0.19294500350952148
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.03197700157761574,
+          "repeats": 32,
+          "stage_ms": [
+            0.015465999953448772,
+            0.01641399972140789
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.031261999160051346,
+          "repeats": 32,
+          "stage_ms": [
+            0.022532999515533447,
+            0.015678999945521355
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04281200096011162,
+          "repeats": 32,
+          "stage_ms": [
+            0.020207000896334648,
+            0.026892999187111855
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.03448399901390076,
+          "repeats": 32,
+          "stage_ms": [
+            0.009709999896585941,
+            0.016543999314308167
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.036786001175642014,
+          "repeats": 32,
+          "stage_ms": [
+            0.022979000583291054,
+            0.016215000301599503
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.03536999970674515,
+          "repeats": 32,
+          "stage_ms": [
+            0.013248000293970108,
+            0.020237000659108162
+          ]
+        }
+      ],
+      "permuted": false,
+      "plan_digest": "b233bf4b95682d3f9f03fcaf692d8b455ab77bdf0e668026670b2a99f60f88ee",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "storage": "f16"
+    },
+    {
+      "artifact": {
+        "compressed_bytes": 10397,
+        "compressed_sha256": "2629f691210def632f8458c2776209eeea433699f639c4f4dea5f646ba956d84",
+        "file": "program_17x19x35_f16_ba.json.gz",
+        "raw_bytes": 74864,
+        "raw_sha256": "9671ec72638ca28626ee5967fc1116b2e550345a2aedd2ed1e5bf899fc408b37"
+      },
+      "completed_host_median_ms": {
+        "direct_prepared_owner": 0.28884364874102175,
+        "public_native_backward": 1.0608796495944262
+      },
+      "completed_host_samples_ms": {
+        "direct_prepared_owner": [
+          0.26517124788369983,
+          0.28884364874102175,
+          0.29024714895058423,
+          0.3073663014220074,
+          0.28900914767291397,
+          0.26304124912712723,
+          0.26799989864230156
+        ],
+        "public_native_backward": [
+          1.0660993488272652,
+          1.0724699997808784,
+          1.0608796495944262,
+          1.0410014016088098,
+          1.046145148575306,
+          1.0392324009444565,
+          1.0654094512574375
+        ]
+      },
+      "correctness": "passed_before_and_after_timing",
+      "execution_certificate": {
+        "algorithm": "not_applicable",
+        "artifact_identities": {
+          "artifact_hash": "46a6387191275ec2ebc0dbea7cd76505a825f12768286e4a9f7e9ade0fde79d0",
+          "frontend_certificate_digest": "b5fce71dceae9923550bedeb59b2623994dc197ce7f314849c9e8e6063e604a0",
+          "source_graph_ir_digest": "074ff81a677c13bb4d840d1826b4059f25f18fa20624eb9f624f0686077e45f8"
+        },
+        "digest": "e8c1d096ab02b94371b7612daf32bede694bd509706c43b9d98b1a66a08f30a1",
+        "evidence_scope": "exact_device",
+        "evidence_target": "nvidia_sm120",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_driver",
+        "family": "source_normalization_matmul",
+        "frontend_certificate_digest": "b5fce71dceae9923550bedeb59b2623994dc197ce7f314849c9e8e6063e604a0",
+        "gradient_signature": [
+          {
+            "dtype": "float16",
+            "shape": [
+              17,
+              35
+            ]
+          }
+        ],
+        "graph_consumer": "tessera.rmsnorm",
+        "input_signature": [
+          {
+            "dtype": "float16",
+            "shape": [
+              35,
+              19
+            ]
+          },
+          {
+            "dtype": "float16",
+            "shape": [
+              17,
+              35
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              17,
+              19
+            ]
+          }
+        ],
+        "physical_attestation": {
+          "artifact_hash": "46a6387191275ec2ebc0dbea7cd76505a825f12768286e4a9f7e9ade0fde79d0",
+          "device_arch": "sm_120",
+          "digest": "30ba97389096df4cd1d68f88f9761dfb7db38eda95f1b6156a24d229e0365c1a",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_driver",
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120"
+        },
+        "proof_mode": "",
+        "schedule_consumer": "schedule.artifact",
+        "schema": "tessera.native_vjp_execution.v1",
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "target": "nvidia_sm120",
+        "target_consumer": "nvidia.sm120_source_reverse_program",
+        "tile_consumer": "tile.row_region_kernel",
+        "topology": "not_applicable"
+      },
+      "first_call_ms": 546.4624930173159,
+      "image_digests": [
+        "ec3d9a0ca119ee7d8ac4cddf3b273d4478db75e2e8ac9d4b32c09863187179a5",
+        "ac2d75eb1e46b0844619ed5b72a58d1560aea6637502da640a3c7c958a670f75"
+      ],
+      "max_abs_error": 0.00024070736116477143,
+      "native_captured": [
+        {
+          "captured": true,
+          "program_ms": 0.009897000156342983,
+          "repeats": 32,
+          "stage_ms": [
+            0.002950000111013651,
+            0.0067369998432695866
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009699000045657158,
+          "repeats": 32,
+          "stage_ms": [
+            0.0029869999270886183,
+            0.006713999900966883
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009703000076115131,
+          "repeats": 32,
+          "stage_ms": [
+            0.0029909999575465918,
+            0.00673400005325675
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009611999616026878,
+          "repeats": 32,
+          "stage_ms": [
+            0.0030239999759942293,
+            0.00672199996188283
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.00980599969625473,
+          "repeats": 32,
+          "stage_ms": [
+            0.0031220000237226486,
+            0.006773000117391348
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.00979700032621622,
+          "repeats": 32,
+          "stage_ms": [
+            0.0030350000597536564,
+            0.007156999781727791
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009770999662578106,
+          "repeats": 32,
+          "stage_ms": [
+            0.002968000015243888,
+            0.0068660001270473
+          ]
+        }
+      ],
+      "native_enqueue": [
+        {
+          "captured": false,
+          "program_ms": 0.0360880009829998,
+          "repeats": 32,
+          "stage_ms": [
+            0.018725000321865082,
+            0.018370000645518303
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.03254900127649307,
+          "repeats": 32,
+          "stage_ms": [
+            0.014806999824941158,
+            0.0157880000770092
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.034699998795986176,
+          "repeats": 32,
+          "stage_ms": [
+            0.020003000274300575,
+            0.01357599999755621
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.035371001809835434,
+          "repeats": 32,
+          "stage_ms": [
+            0.016222000122070312,
+            0.013849999755620956
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.03488999977707863,
+          "repeats": 32,
+          "stage_ms": [
+            0.0187120009213686,
+            0.015231000259518623
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.038033001124858856,
+          "repeats": 32,
+          "stage_ms": [
+            0.019368000328540802,
+            0.018709000200033188
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.032099999487400055,
+          "repeats": 32,
+          "stage_ms": [
+            0.017342999577522278,
+            0.0169489998370409
+          ]
+        }
+      ],
+      "permuted": true,
+      "plan_digest": "ffe50f56c362736faaaf9e3a95d150b7f1491f63f6bbcdc6d25cb80d2c973307",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "storage": "f16"
+    },
+    {
+      "artifact": {
+        "compressed_bytes": 10377,
+        "compressed_sha256": "e5f8556f7081a941d333d592de5062927775411baa627739ced29db920406a27",
+        "file": "program_17x19x35_bf16_ab.json.gz",
+        "raw_bytes": 74824,
+        "raw_sha256": "4f2c695912bc68af45c4843f89ec6e275ac3d60202e46e226153656a9742ec0b"
+      },
+      "completed_host_median_ms": {
+        "direct_prepared_owner": 0.2812708989949897,
+        "public_native_backward": 1.0226393496850505
+      },
+      "completed_host_samples_ms": {
+        "direct_prepared_owner": [
+          0.5268528999295086,
+          0.2812708989949897,
+          0.2734770503593609,
+          0.29967854788992554,
+          0.2582465502200648,
+          0.2850204997230321,
+          0.23046709829941392
+        ],
+        "public_native_backward": [
+          1.0222738521406427,
+          1.0387782996986061,
+          1.0226393496850505,
+          1.0324155999114737,
+          1.0164446517592296,
+          1.2971118499990553,
+          0.9749366494361311
+        ]
+      },
+      "correctness": "passed_before_and_after_timing",
+      "execution_certificate": {
+        "algorithm": "not_applicable",
+        "artifact_identities": {
+          "artifact_hash": "36ef649e049ed03cf4051d10d079a9546395f2b04f93ad19d4fee48241e5a9ea",
+          "frontend_certificate_digest": "47a48e2e0b4e07b9d37520a7441dc734b8cc001d36a7da455e8851738e0c315a",
+          "source_graph_ir_digest": "f899b7fe43bac07297b655ec596802717d61f43b3d0e1c7ebbf143ecf22fdcca"
+        },
+        "digest": "81fdfefa1e91ec990458b718c58e771a3bc62da5445944a10ea63a9fb9be99ee",
+        "evidence_scope": "exact_device",
+        "evidence_target": "nvidia_sm120",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_driver",
+        "family": "source_normalization_matmul",
+        "frontend_certificate_digest": "47a48e2e0b4e07b9d37520a7441dc734b8cc001d36a7da455e8851738e0c315a",
+        "gradient_signature": [
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              17,
+              35
+            ]
+          }
+        ],
+        "graph_consumer": "tessera.rmsnorm",
+        "input_signature": [
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              17,
+              35
+            ]
+          },
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              35,
+              19
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              17,
+              19
+            ]
+          }
+        ],
+        "physical_attestation": {
+          "artifact_hash": "36ef649e049ed03cf4051d10d079a9546395f2b04f93ad19d4fee48241e5a9ea",
+          "device_arch": "sm_120",
+          "digest": "1538d5c493d8ca2a34ada0a97c9f1c60409306c7b3b42199d155f1a2064c45c4",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_driver",
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120"
+        },
+        "proof_mode": "",
+        "schedule_consumer": "schedule.artifact",
+        "schema": "tessera.native_vjp_execution.v1",
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "target": "nvidia_sm120",
+        "target_consumer": "nvidia.sm120_source_reverse_program",
+        "tile_consumer": "tile.row_region_kernel",
+        "topology": "not_applicable"
+      },
+      "first_call_ms": 658.7035239790566,
+      "image_digests": [
+        "2610fea5f511aa5ca4a30d84c4e2549dc8f3db3a7c2d88bb7208bec492b6673d",
+        "9a598578915b4c4b639ea72aa65e52770b023f81b83251cc1eba924f2edc55cf"
+      ],
+      "max_abs_error": 0.001915849246938106,
+      "native_captured": [
+        {
+          "captured": true,
+          "program_ms": 0.00954699981957674,
+          "repeats": 32,
+          "stage_ms": [
+            0.003011999884620309,
+            0.0067529999651014805
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009557000361382961,
+          "repeats": 32,
+          "stage_ms": [
+            0.004255000036209822,
+            0.006730999797582626
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009727999567985535,
+          "repeats": 32,
+          "stage_ms": [
+            0.0030410001054406166,
+            0.006792999804019928
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009731999598443508,
+          "repeats": 32,
+          "stage_ms": [
+            0.004093999974429607,
+            0.006713999900966883
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009589999914169312,
+          "repeats": 32,
+          "stage_ms": [
+            0.0030960000585764647,
+            0.006707000080496073
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.00976100005209446,
+          "repeats": 32,
+          "stage_ms": [
+            0.0031250000465661287,
+            0.006802000105381012
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.00957299955189228,
+          "repeats": 32,
+          "stage_ms": [
+            0.002997000003233552,
+            0.00672100018709898
+          ]
+        }
+      ],
+      "native_enqueue": [
+        {
+          "captured": false,
+          "program_ms": 0.03797600045800209,
+          "repeats": 32,
+          "stage_ms": [
+            0.017852000892162323,
+            0.015080999583005905
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.03477500006556511,
+          "repeats": 32,
+          "stage_ms": [
+            0.015356999821960926,
+            0.022119000554084778
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.03051299974322319,
+          "repeats": 32,
+          "stage_ms": [
+            0.014041000045835972,
+            0.016092000529170036
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.03215400129556656,
+          "repeats": 32,
+          "stage_ms": [
+            0.010153000243008137,
+            0.018851999193429947
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.036010999232530594,
+          "repeats": 32,
+          "stage_ms": [
+            0.017549000680446625,
+            0.014769000001251698
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.02177100069820881,
+          "repeats": 32,
+          "stage_ms": [
+            0.008495000191032887,
+            0.010564999654889107
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.025519000366330147,
+          "repeats": 32,
+          "stage_ms": [
+            0.013535999692976475,
+            0.01651100069284439
+          ]
+        }
+      ],
+      "permuted": false,
+      "plan_digest": "75f0d7ec10c253ee67fb7fb29bceb89c0d2192c557d46e18d9558b7589633ce0",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "storage": "bf16"
+    },
+    {
+      "artifact": {
+        "compressed_bytes": 10411,
+        "compressed_sha256": "cbce4e562a3110f93c890d33a218b73e29ff849789b21348e8b1d75488687b22",
+        "file": "program_17x19x35_bf16_ba.json.gz",
+        "raw_bytes": 75148,
+        "raw_sha256": "3e80cc0816e9411c2b6e328a2a8df31e421b79961c9c38a2b68be315a94c1ff1"
+      },
+      "completed_host_median_ms": {
+        "direct_prepared_owner": 0.22204330016393214,
+        "public_native_backward": 0.9549114009132609
+      },
+      "completed_host_samples_ms": {
+        "direct_prepared_owner": [
+          0.2165846002753824,
+          0.2231013000709936,
+          0.5396969005232677,
+          0.2261643996462226,
+          0.19682089914567769,
+          0.22204330016393214,
+          0.19552584853954613
+        ],
+        "public_native_backward": [
+          0.9626272018067539,
+          0.9669003513408825,
+          0.9526088484562933,
+          0.9691618994111195,
+          0.9524159017018974,
+          0.9492287499597296,
+          0.9549114009132609
+        ]
+      },
+      "correctness": "passed_before_and_after_timing",
+      "execution_certificate": {
+        "algorithm": "not_applicable",
+        "artifact_identities": {
+          "artifact_hash": "b15d2b680e153216d43ebff8bbe59ff194b1422f95ef3595348b656fbf218554",
+          "frontend_certificate_digest": "b5fce71dceae9923550bedeb59b2623994dc197ce7f314849c9e8e6063e604a0",
+          "source_graph_ir_digest": "46bd6be0255c40ca975cb299cc62022b90df55f64546ea46b92474f85aa5c477"
+        },
+        "digest": "1705a75be6a1c93422f78d1453d3e6c5112ccf0ccb689a111fd66c46966352e6",
+        "evidence_scope": "exact_device",
+        "evidence_target": "nvidia_sm120",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_driver",
+        "family": "source_normalization_matmul",
+        "frontend_certificate_digest": "b5fce71dceae9923550bedeb59b2623994dc197ce7f314849c9e8e6063e604a0",
+        "gradient_signature": [
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              17,
+              35
+            ]
+          }
+        ],
+        "graph_consumer": "tessera.rmsnorm",
+        "input_signature": [
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              35,
+              19
+            ]
+          },
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              17,
+              35
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              17,
+              19
+            ]
+          }
+        ],
+        "physical_attestation": {
+          "artifact_hash": "b15d2b680e153216d43ebff8bbe59ff194b1422f95ef3595348b656fbf218554",
+          "device_arch": "sm_120",
+          "digest": "b6f35efe62d1689cc406eae0cf37c37bd0cc17901e7c2d92009da6351a6deaa7",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_driver",
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120"
+        },
+        "proof_mode": "",
+        "schedule_consumer": "schedule.artifact",
+        "schema": "tessera.native_vjp_execution.v1",
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "target": "nvidia_sm120",
+        "target_consumer": "nvidia.sm120_source_reverse_program",
+        "tile_consumer": "tile.row_region_kernel",
+        "topology": "not_applicable"
+      },
+      "first_call_ms": 553.6752520129085,
+      "image_digests": [
+        "43e0f2678b809e3d3741d5a73146320636fe6cd1af9cd6fbf4bd28e286291d51",
+        "9a598578915b4c4b639ea72aa65e52770b023f81b83251cc1eba924f2edc55cf"
+      ],
+      "max_abs_error": 0.001915849246938106,
+      "native_captured": [
+        {
+          "captured": true,
+          "program_ms": 0.009588999673724174,
+          "repeats": 32,
+          "stage_ms": [
+            0.0030040000565350056,
+            0.006742000114172697
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009754999540746212,
+          "repeats": 32,
+          "stage_ms": [
+            0.0029460000805556774,
+            0.006796000059694052
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009739000350236893,
+          "repeats": 32,
+          "stage_ms": [
+            0.0031649998854845762,
+            0.007664999924600124
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009689999744296074,
+          "repeats": 32,
+          "stage_ms": [
+            0.0031250000465661287,
+            0.006765000056475401
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009808000177145004,
+          "repeats": 32,
+          "stage_ms": [
+            0.003938999958336353,
+            0.007794000208377838
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.009595000185072422,
+          "repeats": 32,
+          "stage_ms": [
+            0.0029929999727755785,
+            0.006771000102162361
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.010862999595701694,
+          "repeats": 32,
+          "stage_ms": [
+            0.003003000048920512,
+            0.007666999939829111
+          ]
+        }
+      ],
+      "native_enqueue": [
+        {
+          "captured": false,
+          "program_ms": 0.026277000084519386,
+          "repeats": 32,
+          "stage_ms": [
+            0.015515999868512154,
+            0.014720999635756016
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.022779999300837517,
+          "repeats": 32,
+          "stage_ms": [
+            0.019186999648809433,
+            0.012284000404179096
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.027853000909090042,
+          "repeats": 32,
+          "stage_ms": [
+            0.015670999884605408,
+            0.012651000171899796
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.021369000896811485,
+          "repeats": 32,
+          "stage_ms": [
+            0.006674999836832285,
+            0.009841999970376492
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.018327999860048294,
+          "repeats": 32,
+          "stage_ms": [
+            0.009337999857962132,
+            0.00954199954867363
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.027425000444054604,
+          "repeats": 32,
+          "stage_ms": [
+            0.015716999769210815,
+            0.011603999882936478
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.021362999454140663,
+          "repeats": 32,
+          "stage_ms": [
+            0.013278000056743622,
+            0.017247000709176064
+          ]
+        }
+      ],
+      "permuted": true,
+      "plan_digest": "412cde1789311b662ddf6816f7d41f4dac83833dbc7771025aa715cae8208ba8",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "storage": "bf16"
+    },
+    {
+      "artifact": {
+        "compressed_bytes": 10347,
+        "compressed_sha256": "5ee90dd62da3dc3deaa53970f498c0bab6a089fd04d46eae3ea050cd4c32491d",
+        "file": "program_64x64x128_f16_ab.json.gz",
+        "raw_bytes": 74913,
+        "raw_sha256": "b44419e24ce1fa0cd306e0e9dc974369b28bf2fe2a0213ec613447697465164c"
+      },
+      "completed_host_median_ms": {
+        "direct_prepared_owner": 0.3197362500941381,
+        "public_native_backward": 1.083563402062282
+      },
+      "completed_host_samples_ms": {
+        "direct_prepared_owner": [
+          0.299264449859038,
+          0.3080252499785274,
+          0.3197362500941381,
+          0.34938324824906886,
+          0.32552395132370293,
+          0.5945773009443656,
+          0.2951569011202082
+        ],
+        "public_native_backward": [
+          1.1098963994299993,
+          1.0974774486385286,
+          1.0792177985422313,
+          1.083563402062282,
+          1.0792018001666293,
+          1.0955078498227522,
+          1.0830493993125856
+        ]
+      },
+      "correctness": "passed_before_and_after_timing",
+      "execution_certificate": {
+        "algorithm": "not_applicable",
+        "artifact_identities": {
+          "artifact_hash": "8a809c33b14c85564929e19c9e2c1b27085a16f9daf241a17ad7a53afd76558b",
+          "frontend_certificate_digest": "47a48e2e0b4e07b9d37520a7441dc734b8cc001d36a7da455e8851738e0c315a",
+          "source_graph_ir_digest": "8dcf976aa9e3cdcd13ab4f0d73d5d81498742f1017b2fe4caae5568bf0f64484"
+        },
+        "digest": "fdf4caf9b85682fc8a2615c6dac8be2c906011425d423a6a7ebdc48feff9cbc5",
+        "evidence_scope": "exact_device",
+        "evidence_target": "nvidia_sm120",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_driver",
+        "family": "source_normalization_matmul",
+        "frontend_certificate_digest": "47a48e2e0b4e07b9d37520a7441dc734b8cc001d36a7da455e8851738e0c315a",
+        "gradient_signature": [
+          {
+            "dtype": "float16",
+            "shape": [
+              64,
+              128
+            ]
+          }
+        ],
+        "graph_consumer": "tessera.rmsnorm",
+        "input_signature": [
+          {
+            "dtype": "float16",
+            "shape": [
+              64,
+              128
+            ]
+          },
+          {
+            "dtype": "float16",
+            "shape": [
+              128,
+              64
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              64,
+              64
+            ]
+          }
+        ],
+        "physical_attestation": {
+          "artifact_hash": "8a809c33b14c85564929e19c9e2c1b27085a16f9daf241a17ad7a53afd76558b",
+          "device_arch": "sm_120",
+          "digest": "ab52a0cca584bf144ba56d97f51b1e3572129ad80dc1a9bbcfe535f991917ac5",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_driver",
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120"
+        },
+        "proof_mode": "",
+        "schedule_consumer": "schedule.artifact",
+        "schema": "tessera.native_vjp_execution.v1",
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "target": "nvidia_sm120",
+        "target_consumer": "nvidia.sm120_source_reverse_program",
+        "tile_consumer": "tile.row_region_kernel",
+        "topology": "not_applicable"
+      },
+      "first_call_ms": 704.8731160466559,
+      "image_digests": [
+        "8211c50da430b11eee536dd0b2646fc4b143911fb72f8bb772fdd59bb38073a8",
+        "e1aa131abab95d26bdb1d66ec3d6a1c9ca7e76e9ca5387b9449ceca6eefca478"
+      ],
+      "max_abs_error": 0.00048352310712185265,
+      "native_captured": [
+        {
+          "captured": true,
+          "program_ms": 0.04081999883055687,
+          "repeats": 32,
+          "stage_ms": [
+            0.007340999785810709,
+            0.033514998853206635
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04079800099134445,
+          "repeats": 32,
+          "stage_ms": [
+            0.007261999882757664,
+            0.034577999264001846
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04058999940752983,
+          "repeats": 32,
+          "stage_ms": [
+            0.007255000062286854,
+            0.033410001546144485
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04069099947810173,
+          "repeats": 32,
+          "stage_ms": [
+            0.007220999803394079,
+            0.03341300040483475
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04070499911904335,
+          "repeats": 32,
+          "stage_ms": [
+            0.007530999835580587,
+            0.03342200070619583
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04072200134396553,
+          "repeats": 32,
+          "stage_ms": [
+            0.007215000223368406,
+            0.033440001308918
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04064000025391579,
+          "repeats": 32,
+          "stage_ms": [
+            0.007232999894768,
+            0.0334319993853569
+          ]
+        }
+      ],
+      "native_enqueue": [
+        {
+          "captured": false,
+          "program_ms": 0.05170600116252899,
+          "repeats": 32,
+          "stage_ms": [
+            0.021573999896645546,
+            0.036267999559640884
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.05113700032234192,
+          "repeats": 32,
+          "stage_ms": [
+            0.016844000667333603,
+            0.03521300107240677
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04705899953842163,
+          "repeats": 32,
+          "stage_ms": [
+            0.022765999659895897,
+            0.041152000427246094
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.049768999218940735,
+          "repeats": 32,
+          "stage_ms": [
+            0.10868799686431885,
+            0.0371289998292923
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04641000181436539,
+          "repeats": 32,
+          "stage_ms": [
+            0.013628000393509865,
+            0.0363599993288517
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.05149500072002411,
+          "repeats": 32,
+          "stage_ms": [
+            0.019905999302864075,
+            0.035927001386880875
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.05358999967575073,
+          "repeats": 32,
+          "stage_ms": [
+            0.017573999240994453,
+            0.03521699830889702
+          ]
+        }
+      ],
+      "permuted": false,
+      "plan_digest": "3d337812956e5acd23f4716ba4137f34fd52e41412cea746f7a7d619ad8a38b5",
+      "shape_mnk": [
+        64,
+        64,
+        128
+      ],
+      "storage": "f16"
+    },
+    {
+      "artifact": {
+        "compressed_bytes": 10380,
+        "compressed_sha256": "5ea6eeca2aeb49ee2a19c833b9b465a02a30b8c55c130d5c5628399120237046",
+        "file": "program_64x64x128_f16_ba.json.gz",
+        "raw_bytes": 75237,
+        "raw_sha256": "2081f0cc4a7513db1f56d0a7e9b3ec00ce60741ac046a01aae1879a7c8bdf65c"
+      },
+      "completed_host_median_ms": {
+        "direct_prepared_owner": 0.268559850519523,
+        "public_native_backward": 1.0263515025144443
+      },
+      "completed_host_samples_ms": {
+        "direct_prepared_owner": [
+          0.268559850519523,
+          0.2717459516134113,
+          0.2704025013372302,
+          0.2668463479494676,
+          0.2577820501755923,
+          0.2666218497324735,
+          0.5449860502267256
+        ],
+        "public_native_backward": [
+          1.0317961510736495,
+          1.0263515025144443,
+          1.0505117505090311,
+          1.042596998740919,
+          1.0023791517596692,
+          1.0222082491964102,
+          1.0022706002928317
+        ]
+      },
+      "correctness": "passed_before_and_after_timing",
+      "execution_certificate": {
+        "algorithm": "not_applicable",
+        "artifact_identities": {
+          "artifact_hash": "6ffb4d18d9081e18f556ccbcd8cd4fbfe194de1670a372b0d77e7040c19c6d80",
+          "frontend_certificate_digest": "b5fce71dceae9923550bedeb59b2623994dc197ce7f314849c9e8e6063e604a0",
+          "source_graph_ir_digest": "4880db0a074789e3efec5aaef058a74c1e853ea8191d99ec0292d010636f0c62"
+        },
+        "digest": "0facbc629192a43fd14d936278089ca912d9bd1b44ea7e72ecf1f9172f9a0890",
+        "evidence_scope": "exact_device",
+        "evidence_target": "nvidia_sm120",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_driver",
+        "family": "source_normalization_matmul",
+        "frontend_certificate_digest": "b5fce71dceae9923550bedeb59b2623994dc197ce7f314849c9e8e6063e604a0",
+        "gradient_signature": [
+          {
+            "dtype": "float16",
+            "shape": [
+              64,
+              128
+            ]
+          }
+        ],
+        "graph_consumer": "tessera.rmsnorm",
+        "input_signature": [
+          {
+            "dtype": "float16",
+            "shape": [
+              128,
+              64
+            ]
+          },
+          {
+            "dtype": "float16",
+            "shape": [
+              64,
+              128
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              64,
+              64
+            ]
+          }
+        ],
+        "physical_attestation": {
+          "artifact_hash": "6ffb4d18d9081e18f556ccbcd8cd4fbfe194de1670a372b0d77e7040c19c6d80",
+          "device_arch": "sm_120",
+          "digest": "850cc738fdc46428508c69ce01010500b3468d0e1282d5fd3a1059563a2eb2a8",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_driver",
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120"
+        },
+        "proof_mode": "",
+        "schedule_consumer": "schedule.artifact",
+        "schema": "tessera.native_vjp_execution.v1",
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "target": "nvidia_sm120",
+        "target_consumer": "nvidia.sm120_source_reverse_program",
+        "tile_consumer": "tile.row_region_kernel",
+        "topology": "not_applicable"
+      },
+      "first_call_ms": 553.027938993182,
+      "image_digests": [
+        "ec3d9a0ca119ee7d8ac4cddf3b273d4478db75e2e8ac9d4b32c09863187179a5",
+        "e1aa131abab95d26bdb1d66ec3d6a1c9ca7e76e9ca5387b9449ceca6eefca478"
+      ],
+      "max_abs_error": 0.00048352310712185265,
+      "native_captured": [
+        {
+          "captured": true,
+          "program_ms": 0.040483999997377396,
+          "repeats": 32,
+          "stage_ms": [
+            0.007253999821841717,
+            0.033403001725673676
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04047900065779686,
+          "repeats": 32,
+          "stage_ms": [
+            0.0078119998797774315,
+            0.03405199944972992
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04130199924111366,
+          "repeats": 32,
+          "stage_ms": [
+            0.007222000043839216,
+            0.03338899835944176
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04135100170969963,
+          "repeats": 32,
+          "stage_ms": [
+            0.007598999887704849,
+            0.03342700004577637
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04057899862527847,
+          "repeats": 32,
+          "stage_ms": [
+            0.007331999950110912,
+            0.03355000168085098
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.040474001318216324,
+          "repeats": 32,
+          "stage_ms": [
+            0.007368999999016523,
+            0.033440001308918
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04051300138235092,
+          "repeats": 32,
+          "stage_ms": [
+            0.007348000071942806,
+            0.03341900184750557
+          ]
+        }
+      ],
+      "native_enqueue": [
+        {
+          "captured": false,
+          "program_ms": 0.04439200088381767,
+          "repeats": 32,
+          "stage_ms": [
+            0.010600999929010868,
+            0.0350629985332489
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04475099965929985,
+          "repeats": 32,
+          "stage_ms": [
+            0.012520000338554382,
+            0.03588299825787544
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04560299962759018,
+          "repeats": 32,
+          "stage_ms": [
+            0.012993000447750092,
+            0.036159999668598175
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04586099833250046,
+          "repeats": 32,
+          "stage_ms": [
+            0.010774999856948853,
+            0.03661699965596199
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.044748999178409576,
+          "repeats": 32,
+          "stage_ms": [
+            0.010706000030040741,
+            0.035068001598119736
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04468100145459175,
+          "repeats": 32,
+          "stage_ms": [
+            0.010893999598920345,
+            0.03518100082874298
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.044833000749349594,
+          "repeats": 32,
+          "stage_ms": [
+            0.011300000362098217,
+            0.03510800004005432
+          ]
+        }
+      ],
+      "permuted": true,
+      "plan_digest": "770c0461909d3c3881cb98445c4f93b8e8ffb64ad115b249da1974d07c023f38",
+      "shape_mnk": [
+        64,
+        64,
+        128
+      ],
+      "storage": "f16"
+    },
+    {
+      "artifact": {
+        "compressed_bytes": 10365,
+        "compressed_sha256": "08ee28c032a97383ae192da0ade208cc3f235c403ffaae224cbd75d5e50441a5",
+        "file": "program_64x64x128_bf16_ab.json.gz",
+        "raw_bytes": 75197,
+        "raw_sha256": "366f86a5ef096ec89b83060414317f9147d3135754bcc2ea3e2b606ade137644"
+      },
+      "completed_host_median_ms": {
+        "direct_prepared_owner": 0.309488398488611,
+        "public_native_backward": 1.0716610006056726
+      },
+      "completed_host_samples_ms": {
+        "direct_prepared_owner": [
+          0.2978073986014351,
+          0.31347549811471254,
+          0.31556059839203954,
+          0.309488398488611,
+          0.30348665022756904,
+          0.3241433994844556,
+          0.3076332504861057
+        ],
+        "public_native_backward": [
+          1.0771261993795633,
+          1.3744121009949595,
+          1.079682252020575,
+          1.0716610006056726,
+          1.0566749493591487,
+          1.0497976996703073,
+          1.0647982504451647
+        ]
+      },
+      "correctness": "passed_before_and_after_timing",
+      "execution_certificate": {
+        "algorithm": "not_applicable",
+        "artifact_identities": {
+          "artifact_hash": "39bf06ba90a32db9b72abf32a7518ecd2696dbe6a9e7e0fda66e44aa4373f95e",
+          "frontend_certificate_digest": "47a48e2e0b4e07b9d37520a7441dc734b8cc001d36a7da455e8851738e0c315a",
+          "source_graph_ir_digest": "6cf2bec4e47712b45115ea76407e24bc670b53d0de79843c0f14fce07ef6e674"
+        },
+        "digest": "eba9817337c8641a8445abad89fb5e75043144968116fc65b5a82d225f7d3fd3",
+        "evidence_scope": "exact_device",
+        "evidence_target": "nvidia_sm120",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_driver",
+        "family": "source_normalization_matmul",
+        "frontend_certificate_digest": "47a48e2e0b4e07b9d37520a7441dc734b8cc001d36a7da455e8851738e0c315a",
+        "gradient_signature": [
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              64,
+              128
+            ]
+          }
+        ],
+        "graph_consumer": "tessera.rmsnorm",
+        "input_signature": [
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              64,
+              128
+            ]
+          },
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              128,
+              64
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              64,
+              64
+            ]
+          }
+        ],
+        "physical_attestation": {
+          "artifact_hash": "39bf06ba90a32db9b72abf32a7518ecd2696dbe6a9e7e0fda66e44aa4373f95e",
+          "device_arch": "sm_120",
+          "digest": "3502e1e00f4413c92dd31dc1e00a00e82661ae6c92a53c534713eae6156b4e4e",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_driver",
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120"
+        },
+        "proof_mode": "",
+        "schedule_consumer": "schedule.artifact",
+        "schema": "tessera.native_vjp_execution.v1",
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "target": "nvidia_sm120",
+        "target_consumer": "nvidia.sm120_source_reverse_program",
+        "tile_consumer": "tile.row_region_kernel",
+        "topology": "not_applicable"
+      },
+      "first_call_ms": 688.5094530298375,
+      "image_digests": [
+        "2610fea5f511aa5ca4a30d84c4e2549dc8f3db3a7c2d88bb7208bec492b6673d",
+        "eda0efa6e003729665a345548585a4029aee602b21b0f457d579deb7f8d7d0c5"
+      ],
+      "max_abs_error": 0.003822570945155368,
+      "native_captured": [
+        {
+          "captured": true,
+          "program_ms": 0.0410429984331131,
+          "repeats": 32,
+          "stage_ms": [
+            0.007286000065505505,
+            0.033424001187086105
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04161800071597099,
+          "repeats": 32,
+          "stage_ms": [
+            0.0072929998859763145,
+            0.033369001001119614
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04068100079894066,
+          "repeats": 32,
+          "stage_ms": [
+            0.008410000242292881,
+            0.03341300040483475
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.041526999324560165,
+          "repeats": 32,
+          "stage_ms": [
+            0.007236999925225973,
+            0.0334010012447834
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04071100056171417,
+          "repeats": 32,
+          "stage_ms": [
+            0.00836700014770031,
+            0.03342200070619583
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.040713001042604446,
+          "repeats": 32,
+          "stage_ms": [
+            0.008240999653935432,
+            0.03341300040483475
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.040786001831293106,
+          "repeats": 32,
+          "stage_ms": [
+            0.00724400021135807,
+            0.03348600119352341
+          ]
+        }
+      ],
+      "native_enqueue": [
+        {
+          "captured": false,
+          "program_ms": 0.054444000124931335,
+          "repeats": 32,
+          "stage_ms": [
+            0.017136000096797943,
+            0.03506699949502945
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04931199923157692,
+          "repeats": 32,
+          "stage_ms": [
+            0.012943999841809273,
+            0.03735499829053879
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04677699878811836,
+          "repeats": 32,
+          "stage_ms": [
+            0.015327000059187412,
+            0.03760699927806854
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.047954998910427094,
+          "repeats": 32,
+          "stage_ms": [
+            0.017906999215483665,
+            0.03629299998283386
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04696499928832054,
+          "repeats": 32,
+          "stage_ms": [
+            0.014564000070095062,
+            0.03710399940609932
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.048958998173475266,
+          "repeats": 32,
+          "stage_ms": [
+            0.015324000269174576,
+            0.03653300181031227
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.047901999205350876,
+          "repeats": 32,
+          "stage_ms": [
+            0.017457999289035797,
+            0.03799799829721451
+          ]
+        }
+      ],
+      "permuted": false,
+      "plan_digest": "bd71ce3968d66a20b2c2aa98ba1222ed22437035677e1ba271519f1ed641391d",
+      "shape_mnk": [
+        64,
+        64,
+        128
+      ],
+      "storage": "bf16"
+    },
+    {
+      "artifact": {
+        "compressed_bytes": 10389,
+        "compressed_sha256": "f598cb810bcacf21dd01543c3403a167d0c10bc0dc820cc2fbfa4bbab03f0e36",
+        "file": "program_64x64x128_bf16_ba.json.gz",
+        "raw_bytes": 75521,
+        "raw_sha256": "a2f8c441c9dc820d87da58276580b8fac38c85725a620a49fcd337d9612a792b"
+      },
+      "completed_host_median_ms": {
+        "direct_prepared_owner": 0.2671494003152475,
+        "public_native_backward": 1.0281510010827333
+      },
+      "completed_host_samples_ms": {
+        "direct_prepared_owner": [
+          0.2542548521887511,
+          0.2686689520487562,
+          0.2671494003152475,
+          0.2737736009294167,
+          0.27125799970235676,
+          0.2634132484672591,
+          0.2502387505955994
+        ],
+        "public_native_backward": [
+          1.0281510010827333,
+          1.0158235498238355,
+          1.0150835005333647,
+          1.0672823496861383,
+          1.3301541010150686,
+          1.0337456507841125,
+          1.0116038989508525
+        ]
+      },
+      "correctness": "passed_before_and_after_timing",
+      "execution_certificate": {
+        "algorithm": "not_applicable",
+        "artifact_identities": {
+          "artifact_hash": "d310931796bccf6b72ea732b476c01aa2a9d6102a439fe85fb62d9a149d7a966",
+          "frontend_certificate_digest": "b5fce71dceae9923550bedeb59b2623994dc197ce7f314849c9e8e6063e604a0",
+          "source_graph_ir_digest": "acf9da334df376d273115e2e5533cc194a97cc9815a503d77def66d44b182823"
+        },
+        "digest": "b557107bae083775f1565bcdd71f3d5aa6e9bae8d3c855e6bffd1effe5312bdc",
+        "evidence_scope": "exact_device",
+        "evidence_target": "nvidia_sm120",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_driver",
+        "family": "source_normalization_matmul",
+        "frontend_certificate_digest": "b5fce71dceae9923550bedeb59b2623994dc197ce7f314849c9e8e6063e604a0",
+        "gradient_signature": [
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              64,
+              128
+            ]
+          }
+        ],
+        "graph_consumer": "tessera.rmsnorm",
+        "input_signature": [
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              128,
+              64
+            ]
+          },
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              64,
+              128
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              64,
+              64
+            ]
+          }
+        ],
+        "physical_attestation": {
+          "artifact_hash": "d310931796bccf6b72ea732b476c01aa2a9d6102a439fe85fb62d9a149d7a966",
+          "device_arch": "sm_120",
+          "digest": "493caf338a5a605042377d894aa287a7f18848604818fdf6881c4211fc84e119",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_driver",
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120"
+        },
+        "proof_mode": "",
+        "schedule_consumer": "schedule.artifact",
+        "schema": "tessera.native_vjp_execution.v1",
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "target": "nvidia_sm120",
+        "target_consumer": "nvidia.sm120_source_reverse_program",
+        "tile_consumer": "tile.row_region_kernel",
+        "topology": "not_applicable"
+      },
+      "first_call_ms": 546.2387630250305,
+      "image_digests": [
+        "43e0f2678b809e3d3741d5a73146320636fe6cd1af9cd6fbf4bd28e286291d51",
+        "eda0efa6e003729665a345548585a4029aee602b21b0f457d579deb7f8d7d0c5"
+      ],
+      "max_abs_error": 0.003822570945155368,
+      "native_captured": [
+        {
+          "captured": true,
+          "program_ms": 0.04044799879193306,
+          "repeats": 32,
+          "stage_ms": [
+            0.007230999879539013,
+            0.03454200178384781
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.040438998490571976,
+          "repeats": 32,
+          "stage_ms": [
+            0.00737100001424551,
+            0.03451799973845482
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04046100005507469,
+          "repeats": 32,
+          "stage_ms": [
+            0.007304999977350235,
+            0.03346899896860123
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.041425999253988266,
+          "repeats": 32,
+          "stage_ms": [
+            0.007528999820351601,
+            0.033427998423576355
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.040456000715494156,
+          "repeats": 32,
+          "stage_ms": [
+            0.007311000023037195,
+            0.03351899981498718
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.041508998721838,
+          "repeats": 32,
+          "stage_ms": [
+            0.007247000001370907,
+            0.03343699872493744
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.04156399890780449,
+          "repeats": 32,
+          "stage_ms": [
+            0.007224999833852053,
+            0.033681999891996384
+          ]
+        }
+      ],
+      "native_enqueue": [
+        {
+          "captured": false,
+          "program_ms": 0.04481999948620796,
+          "repeats": 32,
+          "stage_ms": [
+            0.010638999752700329,
+            0.035225000232458115
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04502600058913231,
+          "repeats": 32,
+          "stage_ms": [
+            0.01053600013256073,
+            0.03509100154042244
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04592299833893776,
+          "repeats": 32,
+          "stage_ms": [
+            0.011497000232338905,
+            0.035193998366594315
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04582799971103668,
+          "repeats": 32,
+          "stage_ms": [
+            0.013524999842047691,
+            0.036093998700380325
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04629699885845184,
+          "repeats": 32,
+          "stage_ms": [
+            0.010598000138998032,
+            0.03506699949502945
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.04468299821019173,
+          "repeats": 32,
+          "stage_ms": [
+            0.015869000926613808,
+            0.03522200137376785
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.044881999492645264,
+          "repeats": 32,
+          "stage_ms": [
+            0.009902000427246094,
+            0.035172998905181885
+          ]
+        }
+      ],
+      "permuted": true,
+      "plan_digest": "d3b0a17abfb3083799a94c512b44a94c5b2d1bdddc5ed7babd42cdb22aa3b036",
+      "shape_mnk": [
+        64,
+        64,
+        128
+      ],
+      "storage": "bf16"
+    },
+    {
+      "artifact": {
+        "compressed_bytes": 10382,
+        "compressed_sha256": "a0ce26a0f97e9389a4515923a5ab6689b546c46957c6b7212ea128c514710dac",
+        "file": "program_128x128x512_f16_ab.json.gz",
+        "raw_bytes": 75331,
+        "raw_sha256": "fad6422f8e27bbdf3cb41ac1e4f8b3e47e9db5b69b4fdeaa0ea0a5df61f6389e"
+      },
+      "completed_host_median_ms": {
+        "direct_prepared_owner": 0.5180552019737661,
+        "public_native_backward": 1.318992199958302
+      },
+      "completed_host_samples_ms": {
+        "direct_prepared_owner": [
+          0.5195591511437669,
+          0.5273784481687471,
+          0.5137569998623803,
+          0.5276339506963268,
+          0.5151399993337691,
+          0.512835499830544,
+          0.5180552019737661
+        ],
+        "public_native_backward": [
+          1.2966363981831819,
+          1.318992199958302,
+          1.4261218981118873,
+          1.2869230995420367,
+          1.32372435182333,
+          1.32426580239553,
+          1.2971403979463503
+        ]
+      },
+      "correctness": "passed_before_and_after_timing",
+      "execution_certificate": {
+        "algorithm": "not_applicable",
+        "artifact_identities": {
+          "artifact_hash": "cbba0231d42d5e512b2dd34635339bd610651b249ea9c216aced59a929fb077e",
+          "frontend_certificate_digest": "47a48e2e0b4e07b9d37520a7441dc734b8cc001d36a7da455e8851738e0c315a",
+          "source_graph_ir_digest": "dd93cfee7ae0767a041047f080bf6e7531bffe665bee704a4d81ee0b9c4a25c9"
+        },
+        "digest": "7c7a742e8ef67e59b56a44e4a279d72203d899ebf6147ca139ae52b394d21cea",
+        "evidence_scope": "exact_device",
+        "evidence_target": "nvidia_sm120",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_driver",
+        "family": "source_normalization_matmul",
+        "frontend_certificate_digest": "47a48e2e0b4e07b9d37520a7441dc734b8cc001d36a7da455e8851738e0c315a",
+        "gradient_signature": [
+          {
+            "dtype": "float16",
+            "shape": [
+              128,
+              512
+            ]
+          }
+        ],
+        "graph_consumer": "tessera.rmsnorm",
+        "input_signature": [
+          {
+            "dtype": "float16",
+            "shape": [
+              128,
+              512
+            ]
+          },
+          {
+            "dtype": "float16",
+            "shape": [
+              512,
+              128
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              128,
+              128
+            ]
+          }
+        ],
+        "physical_attestation": {
+          "artifact_hash": "cbba0231d42d5e512b2dd34635339bd610651b249ea9c216aced59a929fb077e",
+          "device_arch": "sm_120",
+          "digest": "6fe48a4492a0c503069b8fa503c9c34ae39b58f2c439a9adbbeb246fda76553a",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_driver",
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120"
+        },
+        "proof_mode": "",
+        "schedule_consumer": "schedule.artifact",
+        "schema": "tessera.native_vjp_execution.v1",
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "target": "nvidia_sm120",
+        "target_consumer": "nvidia.sm120_source_reverse_program",
+        "tile_consumer": "tile.row_region_kernel",
+        "topology": "not_applicable"
+      },
+      "first_call_ms": 694.3257799721323,
+      "image_digests": [
+        "8211c50da430b11eee536dd0b2646fc4b143911fb72f8bb772fdd59bb38073a8",
+        "ec1309682bf8622cab6e29d44d0895dde13b5ebe3dfb848a316240e185f9daff"
+      ],
+      "max_abs_error": 0.0010175362034769986,
+      "native_captured": [
+        {
+          "captured": true,
+          "program_ms": 0.24332499504089355,
+          "repeats": 32,
+          "stage_ms": [
+            0.025875000283122063,
+            0.2162189930677414
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24229300022125244,
+          "repeats": 32,
+          "stage_ms": [
+            0.025830000638961792,
+            0.21624399721622467
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24214200675487518,
+          "repeats": 32,
+          "stage_ms": [
+            0.02582000009715557,
+            0.21630600094795227
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24203099310398102,
+          "repeats": 32,
+          "stage_ms": [
+            0.025738999247550964,
+            0.21606199443340302
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24208499491214752,
+          "repeats": 32,
+          "stage_ms": [
+            0.026784999296069145,
+            0.21719500422477722
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24197900295257568,
+          "repeats": 32,
+          "stage_ms": [
+            0.025939999148249626,
+            0.216171994805336
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24251200258731842,
+          "repeats": 32,
+          "stage_ms": [
+            0.025823000818490982,
+            0.2161639928817749
+          ]
+        }
+      ],
+      "native_enqueue": [
+        {
+          "captured": false,
+          "program_ms": 0.24650000035762787,
+          "repeats": 32,
+          "stage_ms": [
+            0.027739999815821648,
+            0.2181680053472519
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24694399535655975,
+          "repeats": 32,
+          "stage_ms": [
+            0.027760999277234077,
+            0.3095160126686096
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24653300642967224,
+          "repeats": 32,
+          "stage_ms": [
+            0.02737800031900406,
+            0.2186329960823059
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24681200087070465,
+          "repeats": 32,
+          "stage_ms": [
+            0.02785700000822544,
+            0.21838100254535675
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24685899913311005,
+          "repeats": 32,
+          "stage_ms": [
+            0.027577999979257584,
+            0.21811600029468536
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.2460629940032959,
+          "repeats": 32,
+          "stage_ms": [
+            0.027351999655365944,
+            0.21969200670719147
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24687400460243225,
+          "repeats": 32,
+          "stage_ms": [
+            0.027563000097870827,
+            0.21806800365447998
+          ]
+        }
+      ],
+      "permuted": false,
+      "plan_digest": "7d3acff4d111c2e947f59a99c60aca563f0ac140b4ec37aad0025c508e4b614e",
+      "shape_mnk": [
+        128,
+        128,
+        512
+      ],
+      "storage": "f16"
+    },
+    {
+      "artifact": {
+        "compressed_bytes": 10407,
+        "compressed_sha256": "26194093d69eba9c62252a9f6565b02df8e053225b3be181000ec7772788d999",
+        "file": "program_128x128x512_f16_ba.json.gz",
+        "raw_bytes": 75655,
+        "raw_sha256": "cf5def6c9998896e7c796a95512dcaa359748671fa104959ea1d4dcb22f6cb62"
+      },
+      "completed_host_median_ms": {
+        "direct_prepared_owner": 0.5117774475365877,
+        "public_native_backward": 1.2871726008597761
+      },
+      "completed_host_samples_ms": {
+        "direct_prepared_owner": [
+          0.5092052975669503,
+          0.8166147978045046,
+          0.5117774475365877,
+          0.526636399445124,
+          0.49155620217788965,
+          0.5246043991064653,
+          0.509063751087524
+        ],
+        "public_native_backward": [
+          1.2625896983081475,
+          1.2868469988461584,
+          1.290314199286513,
+          1.3021831022342667,
+          1.2939748005010188,
+          1.2871726008597761,
+          1.2752551498124376
+        ]
+      },
+      "correctness": "passed_before_and_after_timing",
+      "execution_certificate": {
+        "algorithm": "not_applicable",
+        "artifact_identities": {
+          "artifact_hash": "0a6dd085e1b0eba22f9da45e124bddab8fadad70a8174be9359cd7c5aa016665",
+          "frontend_certificate_digest": "b5fce71dceae9923550bedeb59b2623994dc197ce7f314849c9e8e6063e604a0",
+          "source_graph_ir_digest": "e7f670c3fb83b3c0cf5f928f12fedc9856c2f66f9b8599408d36c8a052812a3f"
+        },
+        "digest": "51cbd17c49036f99c797ca45365cf43856f9f8f26a2cf781bcf08b632e75276a",
+        "evidence_scope": "exact_device",
+        "evidence_target": "nvidia_sm120",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_driver",
+        "family": "source_normalization_matmul",
+        "frontend_certificate_digest": "b5fce71dceae9923550bedeb59b2623994dc197ce7f314849c9e8e6063e604a0",
+        "gradient_signature": [
+          {
+            "dtype": "float16",
+            "shape": [
+              128,
+              512
+            ]
+          }
+        ],
+        "graph_consumer": "tessera.rmsnorm",
+        "input_signature": [
+          {
+            "dtype": "float16",
+            "shape": [
+              512,
+              128
+            ]
+          },
+          {
+            "dtype": "float16",
+            "shape": [
+              128,
+              512
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              128,
+              128
+            ]
+          }
+        ],
+        "physical_attestation": {
+          "artifact_hash": "0a6dd085e1b0eba22f9da45e124bddab8fadad70a8174be9359cd7c5aa016665",
+          "device_arch": "sm_120",
+          "digest": "2a74d202b403d9401446f60509bc21c455c7343669d14073a606b3c21bfa5955",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_driver",
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120"
+        },
+        "proof_mode": "",
+        "schedule_consumer": "schedule.artifact",
+        "schema": "tessera.native_vjp_execution.v1",
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "target": "nvidia_sm120",
+        "target_consumer": "nvidia.sm120_source_reverse_program",
+        "tile_consumer": "tile.row_region_kernel",
+        "topology": "not_applicable"
+      },
+      "first_call_ms": 590.6661180197261,
+      "image_digests": [
+        "ec3d9a0ca119ee7d8ac4cddf3b273d4478db75e2e8ac9d4b32c09863187179a5",
+        "ec1309682bf8622cab6e29d44d0895dde13b5ebe3dfb848a316240e185f9daff"
+      ],
+      "max_abs_error": 0.0010175362034769986,
+      "native_captured": [
+        {
+          "captured": true,
+          "program_ms": 0.24154600501060486,
+          "repeats": 32,
+          "stage_ms": [
+            0.025698000565171242,
+            0.21610599756240845
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24162699282169342,
+          "repeats": 32,
+          "stage_ms": [
+            0.025704000145196915,
+            0.217290997505188
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24151299893856049,
+          "repeats": 32,
+          "stage_ms": [
+            0.02569900080561638,
+            0.21709899604320526
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24232299625873566,
+          "repeats": 32,
+          "stage_ms": [
+            0.02574799954891205,
+            0.21598200500011444
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24250400066375732,
+          "repeats": 32,
+          "stage_ms": [
+            0.025724999606609344,
+            0.21623000502586365
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24747900664806366,
+          "repeats": 32,
+          "stage_ms": [
+            0.025669999420642853,
+            0.21735399961471558
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.2415820062160492,
+          "repeats": 32,
+          "stage_ms": [
+            0.025654999539256096,
+            0.2161960005760193
+          ]
+        }
+      ],
+      "native_enqueue": [
+        {
+          "captured": false,
+          "program_ms": 0.24593499302864075,
+          "repeats": 32,
+          "stage_ms": [
+            0.02869199961423874,
+            0.2182289958000183
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24695199728012085,
+          "repeats": 32,
+          "stage_ms": [
+            0.028635000810027122,
+            0.2190690040588379
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24558299779891968,
+          "repeats": 32,
+          "stage_ms": [
+            0.027721000835299492,
+            0.2178719937801361
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24550099670886993,
+          "repeats": 32,
+          "stage_ms": [
+            0.02768399938941002,
+            0.21808700263500214
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.2460480034351349,
+          "repeats": 32,
+          "stage_ms": [
+            0.028514999896287918,
+            0.2189439982175827
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24682700634002686,
+          "repeats": 32,
+          "stage_ms": [
+            0.027355000376701355,
+            0.21801899373531342
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.245386004447937,
+          "repeats": 32,
+          "stage_ms": [
+            0.02807299979031086,
+            0.2182130068540573
+          ]
+        }
+      ],
+      "permuted": true,
+      "plan_digest": "eb6f2031eb9f9a7013c3df01f147f04f928d57d1ff667ec97447398f48f26187",
+      "shape_mnk": [
+        128,
+        128,
+        512
+      ],
+      "storage": "f16"
+    },
+    {
+      "artifact": {
+        "compressed_bytes": 10392,
+        "compressed_sha256": "8dd30b999c299690ee426fb410d6affd82a790bd497e5543c5aff6601c31a6fe",
+        "file": "program_128x128x512_bf16_ab.json.gz",
+        "raw_bytes": 75615,
+        "raw_sha256": "6e0300844ab8b0635ef52305dc1c1b5343501ad9e9e90dbe9655ef24f51ea1fd"
+      },
+      "completed_host_median_ms": {
+        "direct_prepared_owner": 0.510812399443239,
+        "public_native_backward": 1.2763581500621513
+      },
+      "completed_host_samples_ms": {
+        "direct_prepared_owner": [
+          0.50820879987441,
+          0.5048021499533206,
+          0.5025740480050445,
+          0.5310485488735139,
+          0.510812399443239,
+          0.526228899252601,
+          0.77057350135874
+        ],
+        "public_native_backward": [
+          1.2763581500621513,
+          1.2716880504740402,
+          1.2769926484907046,
+          1.2584480486111715,
+          1.259078099974431,
+          1.5617611992638558,
+          1.2901251495350152
+        ]
+      },
+      "correctness": "passed_before_and_after_timing",
+      "execution_certificate": {
+        "algorithm": "not_applicable",
+        "artifact_identities": {
+          "artifact_hash": "496ae622ebefa67c38121b831fc3646a250832d6d2688fab0ff6a0750bda607a",
+          "frontend_certificate_digest": "47a48e2e0b4e07b9d37520a7441dc734b8cc001d36a7da455e8851738e0c315a",
+          "source_graph_ir_digest": "508a8a66021bb7436f064a45c0490909ce96b22358c11e4f192a928ba5fb7134"
+        },
+        "digest": "cb11d26dde4db80b198863c3d83f2e5cbfb7436ea66342b10e5447d18ee18380",
+        "evidence_scope": "exact_device",
+        "evidence_target": "nvidia_sm120",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_driver",
+        "family": "source_normalization_matmul",
+        "frontend_certificate_digest": "47a48e2e0b4e07b9d37520a7441dc734b8cc001d36a7da455e8851738e0c315a",
+        "gradient_signature": [
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              128,
+              512
+            ]
+          }
+        ],
+        "graph_consumer": "tessera.rmsnorm",
+        "input_signature": [
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              128,
+              512
+            ]
+          },
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              512,
+              128
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              128,
+              128
+            ]
+          }
+        ],
+        "physical_attestation": {
+          "artifact_hash": "496ae622ebefa67c38121b831fc3646a250832d6d2688fab0ff6a0750bda607a",
+          "device_arch": "sm_120",
+          "digest": "393277d0df107a4db9ac2f2b434d0a03c88fe6741bd733ed9fbae8eec92370a5",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_driver",
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120"
+        },
+        "proof_mode": "",
+        "schedule_consumer": "schedule.artifact",
+        "schema": "tessera.native_vjp_execution.v1",
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "target": "nvidia_sm120",
+        "target_consumer": "nvidia.sm120_source_reverse_program",
+        "tile_consumer": "tile.row_region_kernel",
+        "topology": "not_applicable"
+      },
+      "first_call_ms": 691.5552029968239,
+      "image_digests": [
+        "2610fea5f511aa5ca4a30d84c4e2549dc8f3db3a7c2d88bb7208bec492b6673d",
+        "d38ea01f92579aa9ba2dd6949592f641a6ad2d292ba5dc0aa5548840272d83a7"
+      ],
+      "max_abs_error": 0.0076074893645321495,
+      "native_captured": [
+        {
+          "captured": true,
+          "program_ms": 0.24220600724220276,
+          "repeats": 32,
+          "stage_ms": [
+            0.026541000232100487,
+            0.2161950021982193
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.2423039972782135,
+          "repeats": 32,
+          "stage_ms": [
+            0.026704000309109688,
+            0.21633100509643555
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24282799661159515,
+          "repeats": 32,
+          "stage_ms": [
+            0.02566000074148178,
+            0.2172659933567047
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24227599799633026,
+          "repeats": 32,
+          "stage_ms": [
+            0.02559100091457367,
+            0.21621300280094147
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24201400578022003,
+          "repeats": 32,
+          "stage_ms": [
+            0.02672700025141239,
+            0.2173060029745102
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24308599531650543,
+          "repeats": 32,
+          "stage_ms": [
+            0.025591999292373657,
+            0.2170809954404831
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24214300513267517,
+          "repeats": 32,
+          "stage_ms": [
+            0.025801999494433403,
+            0.21615000069141388
+          ]
+        }
+      ],
+      "native_enqueue": [
+        {
+          "captured": false,
+          "program_ms": 0.24740800261497498,
+          "repeats": 32,
+          "stage_ms": [
+            0.028675999492406845,
+            0.2179969996213913
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.2468779981136322,
+          "repeats": 32,
+          "stage_ms": [
+            0.027695000171661377,
+            0.21820099651813507
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24685199558734894,
+          "repeats": 32,
+          "stage_ms": [
+            0.029032999649643898,
+            0.21913999319076538
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24744300544261932,
+          "repeats": 32,
+          "stage_ms": [
+            0.027584999799728394,
+            0.2180279940366745
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.2485090047121048,
+          "repeats": 32,
+          "stage_ms": [
+            0.027778999879956245,
+            0.21837399899959564
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.2467689961194992,
+          "repeats": 32,
+          "stage_ms": [
+            0.02861900068819523,
+            0.21949200332164764
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.2475380003452301,
+          "repeats": 32,
+          "stage_ms": [
+            0.028989000245928764,
+            0.21897900104522705
+          ]
+        }
+      ],
+      "permuted": false,
+      "plan_digest": "a14c2ac8f8a6d185beead0828c1726f48a6d191d9ba31b287afd079a947a4a9d",
+      "shape_mnk": [
+        128,
+        128,
+        512
+      ],
+      "storage": "bf16"
+    },
+    {
+      "artifact": {
+        "compressed_bytes": 10420,
+        "compressed_sha256": "8b9e4ca8bc9f1833496192f917b069a2c03de60ce2e3c83290eb44028121da1e",
+        "file": "program_128x128x512_bf16_ba.json.gz",
+        "raw_bytes": 75939,
+        "raw_sha256": "b84acfbbd7d6f9f8c83bd0d34a9442b51186396b7ac82695bf40e622923fba1e"
+      },
+      "completed_host_median_ms": {
+        "direct_prepared_owner": 0.5380118498578668,
+        "public_native_backward": 1.3013410498388112
+      },
+      "completed_host_samples_ms": {
+        "direct_prepared_owner": [
+          0.5278000491671264,
+          0.5380118498578668,
+          0.5132535006850958,
+          0.541755449376069,
+          0.5422919988632202,
+          0.5456926010083407,
+          0.5352177511667833
+        ],
+        "public_native_backward": [
+          1.283054900704883,
+          1.2883960996987298,
+          1.2839344999520108,
+          1.320025700260885,
+          1.3013410498388112,
+          1.3151300488971174,
+          1.3280554994707927
+        ]
+      },
+      "correctness": "passed_before_and_after_timing",
+      "execution_certificate": {
+        "algorithm": "not_applicable",
+        "artifact_identities": {
+          "artifact_hash": "5b311d2301bd2c8760c8c241b4cea1b11c876d199587c753315c8f4230a1dac7",
+          "frontend_certificate_digest": "b5fce71dceae9923550bedeb59b2623994dc197ce7f314849c9e8e6063e604a0",
+          "source_graph_ir_digest": "5e3983f58e6f72d491600ccd1c961fdc729fb78a2115403e2224c19362dda431"
+        },
+        "digest": "bd909f160be3d61c458b4a9650bd4e4faa8c53a4d61e3d55c6bd68f5cb07e821",
+        "evidence_scope": "exact_device",
+        "evidence_target": "nvidia_sm120",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_driver",
+        "family": "source_normalization_matmul",
+        "frontend_certificate_digest": "b5fce71dceae9923550bedeb59b2623994dc197ce7f314849c9e8e6063e604a0",
+        "gradient_signature": [
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              128,
+              512
+            ]
+          }
+        ],
+        "graph_consumer": "tessera.rmsnorm",
+        "input_signature": [
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              512,
+              128
+            ]
+          },
+          {
+            "dtype": "bfloat16",
+            "shape": [
+              128,
+              512
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              128,
+              128
+            ]
+          }
+        ],
+        "physical_attestation": {
+          "artifact_hash": "5b311d2301bd2c8760c8c241b4cea1b11c876d199587c753315c8f4230a1dac7",
+          "device_arch": "sm_120",
+          "digest": "27febb398fd627970c4c61ca4e51d542d69ffd669f9a7b5834c3d80660bd7734",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_driver",
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120"
+        },
+        "proof_mode": "",
+        "schedule_consumer": "schedule.artifact",
+        "schema": "tessera.native_vjp_execution.v1",
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "target": "nvidia_sm120",
+        "target_consumer": "nvidia.sm120_source_reverse_program",
+        "tile_consumer": "tile.row_region_kernel",
+        "topology": "not_applicable"
+      },
+      "first_call_ms": 574.0141790010966,
+      "image_digests": [
+        "43e0f2678b809e3d3741d5a73146320636fe6cd1af9cd6fbf4bd28e286291d51",
+        "d38ea01f92579aa9ba2dd6949592f641a6ad2d292ba5dc0aa5548840272d83a7"
+      ],
+      "max_abs_error": 0.0076074893645321495,
+      "native_captured": [
+        {
+          "captured": true,
+          "program_ms": 0.24162499606609344,
+          "repeats": 32,
+          "stage_ms": [
+            0.02688699960708618,
+            0.21725599467754364
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.2415120005607605,
+          "repeats": 32,
+          "stage_ms": [
+            0.025693999603390694,
+            0.21601399779319763
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24149900674819946,
+          "repeats": 32,
+          "stage_ms": [
+            0.02592400088906288,
+            0.21625299751758575
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.2410849928855896,
+          "repeats": 32,
+          "stage_ms": [
+            0.02574400044977665,
+            0.2170650064945221
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24160300195217133,
+          "repeats": 32,
+          "stage_ms": [
+            0.02566099911928177,
+            0.21606199443340302
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24166500568389893,
+          "repeats": 32,
+          "stage_ms": [
+            0.02572000026702881,
+            0.21608799695968628
+          ]
+        },
+        {
+          "captured": true,
+          "program_ms": 0.24149900674819946,
+          "repeats": 32,
+          "stage_ms": [
+            0.025654999539256096,
+            0.21654999256134033
+          ]
+        }
+      ],
+      "native_enqueue": [
+        {
+          "captured": false,
+          "program_ms": 0.24549099802970886,
+          "repeats": 32,
+          "stage_ms": [
+            0.027566000819206238,
+            0.2181210070848465
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24573500454425812,
+          "repeats": 32,
+          "stage_ms": [
+            0.027636999264359474,
+            0.21815800666809082
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.24594800174236298,
+          "repeats": 32,
+          "stage_ms": [
+            0.027775000780820847,
+            0.2180500030517578
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.2458910048007965,
+          "repeats": 32,
+          "stage_ms": [
+            0.02980099990963936,
+            0.21844400465488434
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.245947003364563,
+          "repeats": 32,
+          "stage_ms": [
+            0.027413999661803246,
+            0.2179889976978302
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.2457520067691803,
+          "repeats": 32,
+          "stage_ms": [
+            0.030081000179052353,
+            0.21819299459457397
+          ]
+        },
+        {
+          "captured": false,
+          "program_ms": 0.2458830028772354,
+          "repeats": 32,
+          "stage_ms": [
+            0.02986999973654747,
+            0.21904900670051575
+          ]
+        }
+      ],
+      "permuted": true,
+      "plan_digest": "48b69b860d09f0f4f95da68197026bb7d90105ada65011bb7f07642ced14fbc0",
+      "shape_mnk": [
+        128,
+        128,
+        512
+      ],
+      "storage": "bf16"
+    }
+  ],
+  "schema": "tessera.nvidia.source_reverse_benchmark.v1",
+  "source_after": {
+    "compiler_binary_sha256": {
+      "TESSERA_NVIDIA_OPT": "c23e26d7c63ccee681c0970e1fa36eb5ee4b1c27508a7c5ff475a76d93f9101e",
+      "TESSERA_OPT": "a103d5555624731b2a90028deb3929ba539ee8d325792f0eee14a301e15cd338"
+    },
+    "modified_source_sha256": {
+      "benchmarks/nvidia/benchmark_source_reverse.py": "497dbf205fb4f6cabe8a6b11214b1fab10807e6fadbf31b2eb85824d4a472d29",
+      "python/tessera/compiler/bootstrap_prune_audit.py": "b83e9f5d0b2b6e3d5b0cb4a4f704b5c42443e38ab653bf66f230dcee4578ac04",
+      "python/tessera/compiler/diagnostic_codes.py": "15f181c0dab04c5b48d2018a0680f458e8b975479389c8f677a6dea9e765d7ca",
+      "python/tessera/compiler/execution_matrix.py": "42e5bdc0eb0ed15f33c0cd44ff8dc36f6be2907c6c25ff16509b7349cfb6b515",
+      "python/tessera/compiler/graph_ir.py": "3121a192918c33d36d0fbedd58ec17bf96da64a9331fdfb8f9e20034c8b0e916",
+      "python/tessera/compiler/jit.py": "32087cfc007553f057adf4d5ea539369187ea03b1dc7ef065b818155d37ef663",
+      "python/tessera/compiler/legality.py": "b01cc28f50f89a983640315b85f9888294aa4e0f214256e49ee4b54163a94b51",
+      "python/tessera/compiler/native_sm120_source_reverse.py": "a3091db66f621f6bc848e9aef9c0c257785d60780635b4b2ff63737f461cb80a",
+      "python/tessera/compiler/native_vjp_composites.py": "ec4776266d211ed66216c355f66cbdc2c33ef3a3e763dd8d276969daaebd62a8",
+      "python/tessera/compiler/nvidia_native.py": "78b5fafeeb20aad86d0dcbc7b48b09ee490a225c06e04d9520fe8d2d84c5b51e",
+      "python/tessera/compiler/nvidia_source_reverse_runtime.py": "4c1650fe7847c2ef31fab85fe21519457e035454b7bdb6ebdd95abb7e7b71e4e",
+      "python/tessera/compiler/pass_metadata.py": "a9d5dd7af0b2d00e9f03a8da3ee557853332abcd620b33e88ba0b3425f304d92",
+      "python/tessera/compiler/portable_nvidia_source_reverse.py": "33818b1ff0988a634afab4d80ce6760ff7e1a7778386ff8da4a1f26f006a65d2",
+      "python/tessera/compiler/prepared_nvidia_scalar_matmul.py": "a8d3f33f690809b111b6bdcc20ea86a42fb1a73440f03eab51f6aab3fae3d2fa",
+      "python/tessera/compiler/prepared_nvidia_source_reverse.py": "26b6ac23e30c5e1d14f3ba6771eb8660e169cdc3de567986ee9081ae503c50c1",
+      "python/tessera/compiler/primitive_route_map.py": "d1d1d71a664adfae01dd9937d6a6b1fab644da7dca3a8f73b179beb1ef45b7c1",
+      "python/tessera/compiler/scheduled_matmul.py": "33e264c28cc8535668596e6071c71b1ca0088ddba22cf2e2f7a38e60d1e87715",
+      "python/tessera/runtime.py": "5c81105b73f26cdc7e4966ad03b7e33ed72bb3b9f58abd4d22e7d9c310b1e8fe",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "84345cc5714d64e1aca6fe8f651a57277fc0a8009da1f20df5f86bf4a9be1520",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "3126fe9e1271908e7fa390f50b3dee91bb7adfaae489b81c234fdf7e01a2b9c2",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/source_reverse_owner.h": "cb24a9ffd6a072c166829577ad33184ed750919211bc41aa1790479358691d6d",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "a3276db1d6aaf3785528a2eb9179d0430c262d12464ee53ff6439c1e561c4b87",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_source_reverse_program.h": "e88d4def02ee2f0e45f35869a456cab9eabf3e32b6052a05da806167af4f495a",
+      "src/compiler/ir/TileOps.cpp": "48317376159049d9bcd2d42802a96bf8d71e076294806fb9b2a9de98a3b64c98",
+      "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "d2b4049a47cc277c508362ff0c9057fa443aae933e6b1679626806dc3f366b50",
+      "src/compiler/ir/include/Tessera/IR/RowRegionContract.h": "738b597d33f1b9305739e9092aff93c1583c77b5c52656b04ccf4154e7dd5bfc",
+      "src/compiler/programming_model/ir/ScheduleDialect.cpp": "ff4c815c409a09f906d617601a8181af95159dc1e9c460bbf2ede2fe79a331c0",
+      "src/compiler/programming_model/lib/NativeRowScalarizer.h": "d3e96231612c50e983c475b4fa85d3945ee85b9f07a37ee49ffb40782e47579a",
+      "src/compiler/programming_model/lib/NativeRowSchedule.h": "ba9b8a8ec79b0f31fe6c34aa5c39c6640e808f464f1d4daa695309c893ecfbd0",
+      "src/compiler/programming_model/lib/PMPasses.cpp": "b512545496ba92f938bf757b06c993cce398ebd95775a2cc5d82226227af0697",
+      "src/transforms/lib/AutodiffPairedPass.cpp": "4d243f787d833ffa49b17148ae5fd042ab0d372c57143204959c230408619a04",
+      "src/transforms/lib/NativeSM120ReverseProgram.h": "29e7295408096f50d0d88868ecc0cafe2b4a59514090e0a16637cbfa5a816b5d"
+    },
+    "provider": "/home/angstorms/scratch/sm120-source-reverse-20261018/libtessera_nvidia_source_reverse_v3.so",
+    "provider_sha256": "3dea7af01a4645e3a9b1ebac1ab6c97cd84398f9609bd5ca2eb82ffbaa9999fd",
+    "revision": "767168819918fa83e02a4cdf7fa67160869c85ec"
+  },
+  "source_before": {
+    "compiler_binary_sha256": {
+      "TESSERA_NVIDIA_OPT": "c23e26d7c63ccee681c0970e1fa36eb5ee4b1c27508a7c5ff475a76d93f9101e",
+      "TESSERA_OPT": "a103d5555624731b2a90028deb3929ba539ee8d325792f0eee14a301e15cd338"
+    },
+    "modified_source_sha256": {
+      "benchmarks/nvidia/benchmark_source_reverse.py": "497dbf205fb4f6cabe8a6b11214b1fab10807e6fadbf31b2eb85824d4a472d29",
+      "python/tessera/compiler/bootstrap_prune_audit.py": "b83e9f5d0b2b6e3d5b0cb4a4f704b5c42443e38ab653bf66f230dcee4578ac04",
+      "python/tessera/compiler/diagnostic_codes.py": "15f181c0dab04c5b48d2018a0680f458e8b975479389c8f677a6dea9e765d7ca",
+      "python/tessera/compiler/execution_matrix.py": "42e5bdc0eb0ed15f33c0cd44ff8dc36f6be2907c6c25ff16509b7349cfb6b515",
+      "python/tessera/compiler/graph_ir.py": "3121a192918c33d36d0fbedd58ec17bf96da64a9331fdfb8f9e20034c8b0e916",
+      "python/tessera/compiler/jit.py": "32087cfc007553f057adf4d5ea539369187ea03b1dc7ef065b818155d37ef663",
+      "python/tessera/compiler/legality.py": "b01cc28f50f89a983640315b85f9888294aa4e0f214256e49ee4b54163a94b51",
+      "python/tessera/compiler/native_sm120_source_reverse.py": "a3091db66f621f6bc848e9aef9c0c257785d60780635b4b2ff63737f461cb80a",
+      "python/tessera/compiler/native_vjp_composites.py": "ec4776266d211ed66216c355f66cbdc2c33ef3a3e763dd8d276969daaebd62a8",
+      "python/tessera/compiler/nvidia_native.py": "78b5fafeeb20aad86d0dcbc7b48b09ee490a225c06e04d9520fe8d2d84c5b51e",
+      "python/tessera/compiler/nvidia_source_reverse_runtime.py": "4c1650fe7847c2ef31fab85fe21519457e035454b7bdb6ebdd95abb7e7b71e4e",
+      "python/tessera/compiler/pass_metadata.py": "a9d5dd7af0b2d00e9f03a8da3ee557853332abcd620b33e88ba0b3425f304d92",
+      "python/tessera/compiler/portable_nvidia_source_reverse.py": "33818b1ff0988a634afab4d80ce6760ff7e1a7778386ff8da4a1f26f006a65d2",
+      "python/tessera/compiler/prepared_nvidia_scalar_matmul.py": "a8d3f33f690809b111b6bdcc20ea86a42fb1a73440f03eab51f6aab3fae3d2fa",
+      "python/tessera/compiler/prepared_nvidia_source_reverse.py": "26b6ac23e30c5e1d14f3ba6771eb8660e169cdc3de567986ee9081ae503c50c1",
+      "python/tessera/compiler/primitive_route_map.py": "d1d1d71a664adfae01dd9937d6a6b1fab644da7dca3a8f73b179beb1ef45b7c1",
+      "python/tessera/compiler/scheduled_matmul.py": "33e264c28cc8535668596e6071c71b1ca0088ddba22cf2e2f7a38e60d1e87715",
+      "python/tessera/runtime.py": "5c81105b73f26cdc7e4966ad03b7e33ed72bb3b9f58abd4d22e7d9c310b1e8fe",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "84345cc5714d64e1aca6fe8f651a57277fc0a8009da1f20df5f86bf4a9be1520",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "3126fe9e1271908e7fa390f50b3dee91bb7adfaae489b81c234fdf7e01a2b9c2",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/source_reverse_owner.h": "cb24a9ffd6a072c166829577ad33184ed750919211bc41aa1790479358691d6d",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "a3276db1d6aaf3785528a2eb9179d0430c262d12464ee53ff6439c1e561c4b87",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_source_reverse_program.h": "e88d4def02ee2f0e45f35869a456cab9eabf3e32b6052a05da806167af4f495a",
+      "src/compiler/ir/TileOps.cpp": "48317376159049d9bcd2d42802a96bf8d71e076294806fb9b2a9de98a3b64c98",
+      "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "d2b4049a47cc277c508362ff0c9057fa443aae933e6b1679626806dc3f366b50",
+      "src/compiler/ir/include/Tessera/IR/RowRegionContract.h": "738b597d33f1b9305739e9092aff93c1583c77b5c52656b04ccf4154e7dd5bfc",
+      "src/compiler/programming_model/ir/ScheduleDialect.cpp": "ff4c815c409a09f906d617601a8181af95159dc1e9c460bbf2ede2fe79a331c0",
+      "src/compiler/programming_model/lib/NativeRowScalarizer.h": "d3e96231612c50e983c475b4fa85d3945ee85b9f07a37ee49ffb40782e47579a",
+      "src/compiler/programming_model/lib/NativeRowSchedule.h": "ba9b8a8ec79b0f31fe6c34aa5c39c6640e808f464f1d4daa695309c893ecfbd0",
+      "src/compiler/programming_model/lib/PMPasses.cpp": "b512545496ba92f938bf757b06c993cce398ebd95775a2cc5d82226227af0697",
+      "src/transforms/lib/AutodiffPairedPass.cpp": "4d243f787d833ffa49b17148ae5fd042ab0d372c57143204959c230408619a04",
+      "src/transforms/lib/NativeSM120ReverseProgram.h": "29e7295408096f50d0d88868ecc0cafe2b4a59514090e0a16637cbfa5a816b5d"
+    },
+    "provider": "/home/angstorms/scratch/sm120-source-reverse-20261018/libtessera_nvidia_source_reverse_v3.so",
+    "provider_sha256": "3dea7af01a4645e3a9b1ebac1ab6c97cd84398f9609bd5ca2eb82ffbaa9999fd",
+    "revision": "767168819918fa83e02a4cdf7fa67160869c85ec"
+  },
+  "work_item": "W11-MIXED-ADJOINT-CONTRACTION-20261018"
+}

@@ -10,6 +10,7 @@ nvidia_sm120,reduction,scheduled_kernel.supports_scheduled_kernel,generic_compil
 nvidia_sm120,nvfp4_matmul,—,gap
 nvidia_sm120,int4_matmul,—,gap
 nvidia_sm120,mx_matmul,—,gap
+nvidia_sm120,scalar_matmul,scheduled_matmul.supports_scheduled_matmul,compiled
 nvidia_sm120,matmul,scheduled_matmul.supports_scheduled_matmul,compiled
 rocm_gfx1151,softmax,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 rocm_gfx1151,reduction,scheduled_kernel.supports_scheduled_kernel,generic_compiled

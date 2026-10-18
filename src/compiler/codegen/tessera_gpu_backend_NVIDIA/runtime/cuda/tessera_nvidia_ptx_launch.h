@@ -354,4 +354,15 @@ int tessera_nvidia_attention_vjp_invoke_resident_ordered(
 int tessera_nvidia_attention_vjp_close(uint64_t handle);
 const char* tessera_nvidia_attention_vjp_last_error(void);
 
+// Additive checked ordered-FP32 scalar contraction. types uses existing host
+// view codes 1=f32, 2=f16, 3=bf16 independently for A/B/output. Host invocation,
+// profile and close use the existing retained matmul owner APIs.
+int tessera_nvidia_scalar_matmul_prepare_v1(
+    const void *image, size_t image_bytes, const char *entry,
+    const int64_t *dimensions, const int32_t *types,
+    int transpose_a, int transpose_b, uint64_t *handle);
+int tessera_nvidia_scalar_matmul_invoke_resident_v1(
+    uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t view_count,
+    const uint64_t *producer_streams, size_t producer_count);
+
 }  // extern "C"

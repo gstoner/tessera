@@ -1,0 +1,76 @@
+[
+  {
+    "storage": "f16",
+    "member_stage_identities": [
+      {
+        "graph_ir": true,
+        "schedule_ir": true,
+        "tile_ir": true,
+        "target_ir": true,
+        "backend_ir": true
+      },
+      {
+        "graph_ir": true,
+        "schedule_ir": true,
+        "tile_ir": true,
+        "target_ir": true,
+        "backend_ir": true
+      }
+    ],
+    "image_controls": [
+      {
+        "payload_identical": true,
+        "old_image_digest": "d29663e94b59fb50b20a41360eb6b4cc9feaaae22aa01ee66da3d352ecee14d5",
+        "new_image_digest": "c1d1cf7a4d83f68bfb1a84fa8976547f6e966dd9a4cd8b84bb9a51aef193698b",
+        "changed_identity_fields": [
+          "compiler_fingerprint"
+        ]
+      },
+      {
+        "payload_identical": true,
+        "old_image_digest": "e73c0568fca5297ee5f410f5dc8eceec83c3544abe697a6a2842a301ab5b7d8b",
+        "new_image_digest": "7897ade52a7262e6d1279b77457c135fcda30bd60b2d9416d2f4153d75281e21",
+        "changed_identity_fields": [
+          "compiler_fingerprint"
+        ]
+      }
+    ]
+  },
+  {
+    "storage": "bf16",
+    "member_stage_identities": [
+      {
+        "graph_ir": true,
+        "schedule_ir": true,
+        "tile_ir": true,
+        "target_ir": true,
+        "backend_ir": true
+      },
+      {
+        "graph_ir": true,
+        "schedule_ir": true,
+        "tile_ir": true,
+        "target_ir": true,
+        "backend_ir": true
+      }
+    ],
+    "image_controls": [
+      {
+        "payload_identical": true,
+        "old_image_digest": "391dc574fe72dd3350f8611f4812297898bd64447ac9eb366c5bef8a291094e1",
+        "new_image_digest": "d91f612e9f0bd18a7df0a71b49fc99b5c2dd2520d600f7f758fffc53d58f5927",
+        "changed_identity_fields": [
+          "compiler_fingerprint"
+        ]
+      },
+      {
+        "payload_identical": true,
+        "old_image_digest": "45c8af97f7eafda8a1efa0ec49f361fd838708726ff6c8e8ed5820d245bc0ac7",
+        "new_image_digest": "91a78dd49a5686e220f7fb18dad0e91c61955ca3b8af8927f4e76b36211fabfe",
+        "changed_identity_fields": [
+          "compiler_fingerprint"
+        ]
+      }
+    ]
+  }
+]

@@ -32,6 +32,12 @@ struct Owner {
   unsigned long long contextIdentity=0;
   CUmodule forwardModule=nullptr,tangentModule=nullptr,rowModule=nullptr;
   CUfunction forward=nullptr,tangent=nullptr,rowFunction=nullptr;
+  CUmodule prefixModule=nullptr;
+  CUfunction prefixFunction=nullptr;
+  CUdeviceptr prefixOutput=0;
+  int64_t prefixRows=0,prefixColumns=0;
+  unsigned prefixGrid=0;
+  bool forwardCompleted=false;
   CUdeviceptr arena=0;
   size_t arenaBytes=0;
   void *hostArena=nullptr;
@@ -68,6 +74,8 @@ struct Owner {
     if(stream)cuStreamSynchronize(stream);
     for(auto event:events)if(event)cuEventDestroy(event);
     for(auto event:rowEvents)if(event)cuEventDestroy(event);
+    if(prefixOutput)cuMemFree(prefixOutput);
+    if(prefixModule)cuModuleUnload(prefixModule);
     if(arena)cuMemFree(arena);
     if(hostArena)cuMemFreeHost(hostArena);
     if(stream)cuStreamDestroy(stream);
@@ -1045,6 +1053,59 @@ extern "C" int tessera_nvidia_attention_forward_prepare(
     uint64_t id=nextOwner++;owners.emplace(id,std::move(state));*handle=id;return 0;
   }catch(...){return bad("prepared forward allocation failed");}
 }
+// Additive composed profile: source Q remains in buffers[0]; only the norm
+// output pointer is substituted into attention. Both kernels share one stream.
+extern "C" int tessera_nvidia_norm_attention_prepare(
+  const void *normImage,size_t normBytes,const char *normEntry,int cooperative,
+  const void *image,size_t imageBytes,const char *entry,const int64_t *dims,
+  int storage,uint64_t *handle){
+  ownerError.clear();if(handle)*handle=0;
+  if(!handle || !normImage || !normBytes || !normEntry ||
+     (storage!=2 && storage!=3) || (cooperative!=0 && cooperative!=1))
+    return bad("norm attention registration disagrees");
+  const char *prefix=storage==2?"tessera_tile_norm_rmsnorm_f16_":
+                               "tessera_tile_norm_rmsnorm_bf16_";
+  if(std::strncmp(normEntry,prefix,std::strlen(prefix)) ||
+     (std::strstr(normEntry,"_cooperative_128_")!=nullptr)!=bool(cooperative))
+    return bad("norm attention producer storage or schedule disagrees");
+  uint64_t id=0;
+  int status=tessera_nvidia_attention_forward_prepare(
+      image,imageBytes,entry,dims,nullptr,storage,storage,1,0,&id);
+  if(status)return status;
+  std::lock_guard<std::mutex> lock(ownerMutex);
+  auto found=owners.find(id);
+  if(found==owners.end())return bad("norm attention owner registration lost");
+  auto &state=*found->second;
+  state.prefixColumns=state.dims[5];
+  state.prefixRows=int64_t(state.bytes[0]/2)/state.prefixColumns;
+  size_t grid=cooperative?size_t(state.prefixRows):(size_t(state.prefixRows)+127)/128;
+  if(grid>UINT_MAX){owners.erase(found);return bad("norm attention producer grid overflows");}
+  state.prefixGrid=unsigned(grid);
+  if(!ok(cuModuleLoadData(&state.prefixModule,normImage),"load retained norm") ||
+     !ok(cuModuleGetFunction(&state.prefixFunction,state.prefixModule,normEntry),"resolve retained norm") ||
+     !ok(cuMemAlloc(&state.prefixOutput,state.bytes[0]),"allocate private normalized Q") ||
+     !ok(cuEventCreate(&state.events[2],CU_EVENT_DEFAULT),"create norm stage event")){
+    owners.erase(found);return 3;
+  }
+  *handle=id;return 0;
+}
+extern "C" int tessera_nvidia_norm_attention_last_times(
+    uint64_t handle,float *normMilliseconds,float *attentionMilliseconds){
+  ownerError.clear();
+  if(getpid()!=ownerProcess)return bad("norm attention cannot cross fork");
+  std::lock_guard<std::mutex> lock(ownerMutex);
+  auto found=owners.find(handle);
+  if(found==owners.end() || !found->second->prefixFunction ||
+     !found->second->forwardCompleted || !normMilliseconds || !attentionMilliseconds)
+    return bad("norm attention has no completed stage times");
+  auto &s=*found->second;CUcontext context=nullptr;unsigned long long identity=0;
+  if(!ok(cuCtxGetCurrent(&context),"norm times current context") ||
+     !ok(cuCtxGetId(s.context,&identity),"norm times context identity"))return 3;
+  if(context!=s.context || identity!=s.contextIdentity)
+    return bad("norm times context generation disagrees");
+  return ok(cuEventElapsedTime(normMilliseconds,s.events[0],s.events[2]),"norm stage elapsed") &&
+         ok(cuEventElapsedTime(attentionMilliseconds,s.events[2],s.events[1]),"attention stage elapsed")?0:3;
+}
 extern "C" int tessera_nvidia_attention_forward_invoke(
   uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
   const uint64_t *producerStreams,size_t producerCount,
@@ -1076,6 +1137,7 @@ extern "C" int tessera_nvidia_attention_forward_invoke(
   int dependencies=prepareResidentDependencies(s,inputs,inputBytes,inputCount,
     producerStreams,producerCount,ordering,producers);
   if(dependencies)return dependencies;
+  s.forwardCompleted=false;
   StreamDrain drain{s.stream};
   for(size_t i=0;i<producers.size();++i)
     if(!ok(cuEventRecord(ordering.values[i],producers[i]),"record forward producer") ||
@@ -1087,15 +1149,23 @@ extern "C" int tessera_nvidia_attention_forward_invoke(
     }else if(!stageUpload(s,i,inputs[i]))return 3;
   }
   void *arguments[17]{};size_t count=0;
-  for(size_t i=0;i<primals+results;++i)arguments[count++]=&s.buffers[i];
+  CUdeviceptr attentionQ=s.prefixFunction?s.prefixOutput:s.buffers[0];
+  arguments[count++]=&attentionQ;
+  for(size_t i=1;i<primals+results;++i)arguments[count++]=&s.buffers[i];
   for(size_t i=0;i<7;++i)arguments[count++]=&s.dims[i];
   if(s.forwardBiasScalars)for(size_t i=0;i<4;++i)arguments[count++]=&s.biasShape[i];
-  if(!ok(cuEventRecord(s.events[0],s.stream),"start retained forward") ||
-     !ok(cuLaunchKernel(s.forward,s.forwardGrid,1,1,128,1,1,0,s.stream,arguments,nullptr),"launch retained forward") ||
+  if(!ok(cuEventRecord(s.events[0],s.stream),"start retained forward"))return 3;
+  if(s.prefixFunction){
+    void *normArguments[]={&s.buffers[0],&s.prefixOutput,&s.prefixRows,&s.prefixColumns};
+    if(!ok(cuLaunchKernel(s.prefixFunction,s.prefixGrid,1,1,128,1,1,0,s.stream,normArguments,nullptr),"launch retained norm") ||
+       !ok(cuEventRecord(s.events[2],s.stream),"end retained norm"))return 3;
+  }
+  if(!ok(cuLaunchKernel(s.forward,s.forwardGrid,1,1,128,1,1,0,s.stream,arguments,nullptr),"launch retained forward") ||
      !ok(cuEventRecord(s.events[1],s.stream),"end retained forward"))return 3;
   for(size_t i=0;i<results;++i)if(!stageDownload(s,primals+i))return 3;
   if(!ok(cuStreamSynchronize(s.stream),"complete retained forward"))return 3;
   drain.armed=false;
+  s.forwardCompleted=true;
   for(size_t i=0;i<results;++i)copyOutput(s,primals+i,outputs[i]);
   if(deviceMilliseconds && !ok(cuEventElapsedTime(deviceMilliseconds,s.events[0],s.events[1]),"retained forward elapsed"))return 3;
   return 0;

@@ -1154,6 +1154,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "rocm_quantized_product_program": "Native BF16 K16 quantization and exact scaled matmul on one checked HIP owner",
     "nvidia_active_source_jvp_program": "Compiler-owned static source-active RMSNorm/ReLU JVP and transactional two-result native CUDA owner",
     "rocm_source_reverse_program": "Native static RMSNorm/ReLU source pullback under checked HIP ownership",
+    "nvidia_source_attention_program": "Native static half RMSNorm to saved-LSE attention under one checked CUDA owner",
     "nvidia_source_reverse_program": "Compiler-derived static RMSNorm/ReLU source pullback with mixed contraction and checked native CUDA ownership",
     "nvidia_tensor_rhs_jvp_program": "Compiler-owned static paired producer/RHS-JVP SSA, native Schedule/Tile members and transactional two-output CUDA owner",
     "nvidia_lhs_program": "Checked native LHS normalization/softmax/ReLU producer members and complete matmul epilogue on one owned CUDA stream",
@@ -3861,6 +3862,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "Schedule/Tile/ROCDL/HSACO members under one C++ HIP owner. Host roots only.",
         numerical_fixture="tests/device/rocm/test_public_source_reverse.py",
         evidence_target="rocm_gfx1201", proof_build="LLVM/MLIR23.1.1",
+        device_proof="device_verified_jit"),
+    ("nvidia_sm120", "nvidia_sm120_source_attention_compiled"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="nvidia_sm120_source_attention_compiled",
+        execution_kind="native_gpu", executable=True, executor_id="nvidia_source_attention_program",
+        runtime_status="success", execution_mode="cuda_driver", owns_stream=True,
+        reason="Named static FP16/BF16 RMSNorm(Q) -> saved-LSE attention through original "
+               "native SSA members, Schedule/Tile/NVVM images and private normalized-Q ownership. "
+               "Host or ordered resident roots; independent completed host O and FP32 LSE. "
+               "No composed reverse or dynamic-shape admission.",
+        numerical_fixture="tests/device/nvidia/test_source_attention_prefix.py",
+        evidence_target="nvidia_sm120", proof_build="LLVM/MLIR23.1.1+CUDA13.3+RTX5070",
         device_proof="device_verified_jit"),
     ("nvidia_sm120", "nvidia_sm120_source_reverse_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_sm120_source_reverse_compiled",

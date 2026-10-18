@@ -170,6 +170,11 @@ def _execute_rocm_source_reverse_artifact(artifact: Any, args: Any) -> NativePro
     return execute(artifact, args)
 
 
+def _execute_nvidia_source_attention_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
+    from .compiler.source_attention_runtime import execute
+    return execute(artifact, args)
+
+
 def _execute_nvidia_source_reverse_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
     from .compiler.nvidia_source_reverse_runtime import execute
     return execute(artifact, args)
@@ -35646,6 +35651,7 @@ def _executor_table():
         "nvidia_tensor_rhs_jvp_program": _execute_nvidia_tensor_jvp_program_artifact,
         "nvidia_active_source_jvp_program": _execute_nvidia_tensor_jvp_program_artifact,
         "nvidia_source_reverse_program": _execute_nvidia_source_reverse_artifact,
+        "nvidia_source_attention_program": _execute_nvidia_source_attention_artifact,
         "rocm_source_reverse_program": _execute_rocm_source_reverse_artifact,
         "nvidia_lhs_program": _execute_nvidia_lhs_program_artifact,
     "nvidia_rhs_program": _execute_nvidia_rhs_program_artifact,

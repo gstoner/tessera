@@ -1,0 +1,14 @@
+[
+  {
+    "file": "f16.runtime.json.xz",
+    "sha256": "0a436291864bd3c22d7fb2ca93bbd300c10387d5d060fdac812f79ca6f5f72b3",
+    "artifact_sha256": "51086a0651ec03894805ec70f6d47b3bb319c5a12bd7d90b81c2e51921b7b5fb",
+    "bytes": 10684
+  },
+  {
+    "file": "bf16.runtime.json.xz",
+    "sha256": "2dca98ebc662eb3aa0e608c142379f078682a7475591e1b3450755abd4545ed3",
+    "artifact_sha256": "6be4a1b65d1a11c8443fcabe65fd83ceda820989ad8db5d09b86f0cf20fc4c82",
+    "bytes": 10696
+  }
+]

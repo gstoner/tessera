@@ -7,6 +7,49 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+
+## NATIVE-COMPOSED-ATTENTION-PREFIX-20261018 — source SSA outlining
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Base: PR986 merged as c4d66bb84 after green required CI and completed
+exact-head review. The previous source-bound candidate evidence retains its
+original scope; its publication wait is resolved.
+
+The next named source is static FP16/BF16 RMSNorm(Q) feeding saved-LSE
+attention. Native paired AD accepts the original source, while direct Schedule
+requires attention operands to be function arguments. Existing rank-four
+normalization already lowers through Schedule/Tile/NVIDIA/NVVM. The new native
+transform clones the original SSA into typed func.call members and exports
+root/result/lifetime records. It creates no numerical expressions or kernels.
+
+Native source outlining, retained-member transport and focused registry gates
+pass 376 tests. Replay rejects changed lifetimes, root roles, output order and
+numerical policy. The new prepared C++ owner retains a private half normalized-Q
+allocation and launches both compiled members on one ordered stream. Fourteen
+owning RTX5070 cases prove both half formats, serial/cooperative schedules,
+root/result permutations, retained independent outputs and pending resident
+producer writes (separate, legacy and per-thread streams). Ordinary public
+JIT now uses these original SSA members for the named two-result saved-LSE
+profile. Portable replay validates source/member/image/ABI seals without a
+compiler; both half formats pass fresh-process replay with unavailable compiler
+paths. The expanded owning suite passes 35 cases, plus 70 adjacent attention
+regressions. Focused shared gates pass 1,571 tests; the typing ratchet has zero
+errors. A four-row correctness-gated benchmark separates member/composed
+dispatch windows, prepared host calls and complete public calls; no speedup or
+pure-kernel claim is made. Original-source reverse integration, broader
+envelopes and current-head CI/review remain follow-up.
+The earlier ordinary standalone prefix probe had no native descriptor witness.
+All five aggregate programs remain open.
+Recorder: benchmarks/nvidia/benchmark_source_attention_prefix.py.
+Packet: benchmarks/baselines/native_attention_prefix_20261018/README.md.
+Contract: docs/spec/NATIVE_SOURCE_ATTENTION_PROGRAM.md.
+Calling-convention review fix: six red/green capture cases, 57 native/portable
+checks, 105 owning forward cases and six ordinary cold calls pass. Shared
+frontend binding now preserves keyword-only and positional-only parameters;
+this adds no sibling physical execution promotion.
+
+Shared Graph/FUNC/pass registry and non-owning-target refusal parity validated. Follow-up required for an x86 physical source-attention consumer; no AVX-512 ABI, schedule or execution promotion is claimed.
+
 ## ROCM-SOURCE-PULLBACK-20261018 — native public source VJP
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

@@ -732,6 +732,15 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
         sprint="ROCM-E2E-SPINE",
     ),
     PipelineSpec(
+        name="tessera-source-program-outline",
+        passes=("tessera-outline-source-program",),
+        required_dialects=("tessera", "func"),
+        targets=("nvidia_sm120",),
+        phase="lowering",
+        status="wired",
+        sprint="NATIVE-COMPOSED-ATTENTION-PREFIX-20261018",
+    ),
+    PipelineSpec(
         name="tessera-x86-executable",
         passes=(
             "declare-x86-pipeline-contract",

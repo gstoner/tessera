@@ -1,0 +1,82 @@
+{
+  "schema": "tessera.native_attention_prefix_evidence.v1",
+  "base_commit": "c4d66bb84fb2d96478f9fd5a8837a5b5eb5074d2",
+  "sync": "NATIVE-COMPOSED-ATTENTION-PREFIX-20261018",
+  "goal_state": "open",
+  "owning_device": "NVIDIA GeForce RTX 5070, 12.0, 610.88",
+  "tool_hashes": {
+    "TESSERA_OPT": "6711af1ee054c37c2b77f2361b9b0cf54839f4bac2233d0dbaa6b9146f025ac7",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "a087f8da52c6ca88c396598cca743c8ff51dc3ccc8cda544f520359814edd3b3"
+  },
+  "source_hashes": {
+    "benchmarks/nvidia/benchmark_source_attention_prefix.py": "e3eb771a5ef51e47e84d544144b344a92c638f0539162f4f228d95f34fafaf94",
+    "python/tessera/compiler/execution_matrix.py": "8bf83aa09efb057b2f4fd538c2740d53ad1fd21a091dd768c007f49cfc5b1b94",
+    "python/tessera/compiler/jit.py": "0a072735a3785d5fded67d3b31c67c2037d83ac186837d67908a6b914bb50a4e",
+    "python/tessera/compiler/native_source_program.py": "f2065e3dbbaf9414f7bbcd095221723af86d7b0db5e193f5a4fc44f2fd64f526",
+    "python/tessera/compiler/pass_metadata.py": "d0da71f7e454f217e6c1a1bfe2c4192174dadb1774b42e93ee6ac32e67ecb551",
+    "python/tessera/compiler/pipeline_registry.py": "502814b7b3848347bb23bb3999f2472559348be441ee591d581f8d9102a727b4",
+    "python/tessera/compiler/portable_source_attention.py": "e38e2a73d0e43e73acc2c3b4f9c457fac9c5cbc914d5435d408165ec239305c7",
+    "python/tessera/compiler/prepared_source_attention.py": "247b9306685bdd8409b603d858d2f658024556cccac740811dc5bd89e3ad069f",
+    "python/tessera/compiler/source_attention_runtime.py": "eb6718e31496c38d72a6aa5ee4e36f6e6d2ab058e3a25dd6341cf0a12e89f46e",
+    "python/tessera/runtime.py": "a39e2a16688c42e74c2a5e11caf4c0f394a97420d8e0fa088371c6523b578604",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "6536ff2df7233f1c558d0250e1728efa40e2a07bc94e59e7ab5913bf7011f677",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "713405a2b73c043b9a159bf6f13a5fa67e4873e258d16e7b9093caebca1cf5b5",
+    "src/compiler/programming_model/include/tessera/ProgrammingModel/PMPasses.h": "16f19585169393d50ba878ce70e5a629b8fc45478cc0787b0444da8b5ccac0cc",
+    "src/compiler/programming_model/lib/NativeSourceProgramOutline.h": "0606b38f512fd9637285a8d424591536ce89c7aa8c7c0bde5e0c75ce4fbc0061",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "d01b2e2b03e7c85a61f22c7950c99da3f93f38cb44f76c90b3ca8132474b06b3",
+    "tests/device/nvidia/test_source_attention_prefix.py": "fe329adee27a8b6aa16fd9938ac3fde099ec9bc7667752f20910bc67c6b030e7",
+    "tests/unit/test_native_attention_prefix_program.py": "ce62fa1fdfdf87ade0ebaebc9fede5c2288beea0fba484ddedb9bb36e3dfda2d",
+    "tests/unit/test_portable_source_attention.py": "9ab91122ea51f91f8b74d72979a09207b903f110bafce7838a76c6d9e1709f61"
+  },
+  "validation": {
+    "ci_unit": {
+      "passed": 30734,
+      "failed": 0,
+      "skipped": 3725
+    },
+    "compiler_route": {
+      "passed": 2016,
+      "failed": 0,
+      "skipped": 0
+    },
+    "sm120_source_and_forward": {
+      "passed": 105,
+      "failed": 0,
+      "skipped": 0
+    },
+    "sm120_isolated_ad_owners": {
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0
+    },
+    "affected_spectral_regression": {
+      "passed": 79,
+      "failed": 0,
+      "skipped": 5
+    },
+    "focused_shared_passed": 1571,
+    "focused_shared_scope": "initial native source increment; post-binding native/portable gate separately passes 57",
+    "parameter_kind_regression": {
+      "red": 6,
+      "green_native_portable": 57,
+      "cold_native_calls": 6
+    },
+    "mypy_errors": 0,
+    "ci_ruff": "passed"
+  },
+  "benchmark_scope": "native event dispatch windows; enqueue gaps possible; host staging excluded",
+  "remaining": [
+    "publication and current-head CI/review",
+    "original-source attention reverse",
+    "dynamic/general layouts and wider precision profiles",
+    "all five aggregate requirements"
+  ],
+  "spectral_dependency": {
+    "architecture": "gfx1201",
+    "library_sha256": "76be952a26ee12ef9d67f16420ddad55d847a82fdeb9d4e0271fec5ec4748c80",
+    "source_hashes": {
+      "src/solvers/spectral/lib/TargetHooks/AMD/StockhamRadix4.hip": "b39c2e4bfc0bc0ffcfb91d74af689e2a1d56062de487a15aaade5180fb5725d2",
+      "src/solvers/spectral/lib/TargetHooks/AMD/SpectralComposite.hip": "e9cf030f7230511350f904aacf6df8ba724f32435d946a16a75767ef88ea0cb4"
+    }
+  }
+}

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-17
+last_updated: 2026-10-18
 ---
 
 # Native SM120 paired tensor result ownership
@@ -60,10 +60,15 @@ Reads reject a foreign current context. A missing
 current context is restored to the recorded owner context. Finalization pushes
 the recorded context, frees its own storage and restores the caller context.
 
-Consumers launched through `runtime.launch` pin native result inputs through
+Consumers launched through `runtime.launch` traverse accepted `NativeBufferValue`
+wrappers, arbitrary `Mapping` implementations and tuple/list subclasses. Cycle
+guards and generation deduplication keep this metadata-only traversal bounded.
+They pin native result inputs through
 submission and register an explicit consumer stream before releasing those
 pins. The descriptor route retains its existing same-stream requirement;
-different streams need explicit producer ordering and truthful destination
+outputs/inout bindings require writable CUDA Array Interface storage, so raw
+or wrapped read-only generations cannot be overwritten. Different streams need
+explicit producer ordering and truthful destination
 metadata. External asynchronous consumers call `record_consumer(stream)`
 after enqueueing their last read. Host downloads must complete the actual
 writer stream, including when allocation and writer streams differ.

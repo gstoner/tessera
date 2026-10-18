@@ -13513,3 +13513,12 @@ remain open. No default route or kernel speedup is promoted.
 
 Evidence: benchmarks/baselines/sm120_native_tensor_results_20261017/README.md.
 <!-- entry-fields:end -->
+
+Review follow-up (2026-10-18): accepted NativeBufferValue wrappers, arbitrary
+mappings and sequence subclasses now pin result generations with cycle guards.
+The SM120 descriptor launcher refuses read-only output/inout storage. Twelve
+regressions reproduce the old missing pins/overwrites and pass after the fix.
+The expanded lane passes 722 (7 skipped); CPU passes 26,351 (5,905 skipped) with
+unchanged changed-code hashes and zero-error mypy. Quiet post-review public
+ratios are 0.95-1.06 with unchanged provider and member images. Current-head
+public CI/review is the final delivery gate; this closes no aggregate program.

@@ -136,3 +136,98 @@ for value in pair: value.close()
     result = subprocess.run([sys.executable, "-c", code], capture_output=True,
                             text=True, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+@pytest.mark.parametrize("form", ["wrapped", "user_dict", "proxy_groups", "dict_subclass"])
+def test_wrapped_descriptor_inputs_retain_consumer_completion(event_fault_shim, form):
+    env = dict(os.environ, LD_PRELOAD=str(event_fault_shim))
+    code = ("from tests.device.nvidia.test_native_tensor_result_faults import _exercise_wrapped_launch; "
+            f"_exercise_wrapped_launch({form!r})")
+    result = subprocess.run([sys.executable, "-c", code], env=env,
+                            capture_output=True, text=True, timeout=90)
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def _exercise_wrapped_launch(form):
+    from collections import UserDict
+    from types import MappingProxyType
+    from dataclasses import replace
+    import ctypes as ct
+    import time
+    import numpy as np
+    from tessera import runtime as rt
+    from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
+    from tests.device.nvidia.test_cooperative_norm import package
+    from tests.device.nvidia.test_native_tensor_result import _result_pair
+    fn, pair = _result_pair()
+    value = pair[0]
+    saved = value.to_host()
+    fn.close_native_storage()
+    _, native = package("rmsnorm", saved, "serial")
+    descriptor = native.descriptor
+    artifact = rt.RuntimeArtifact(metadata={"target": "nvidia_sm120"},
+        tile_ir=native.tile_ir, target_ir=native.target_ir,
+        native_image=native.image, launch_descriptor=descriptor)
+    stream = value.__cuda_array_interface__["stream"]
+    driver = ct.CDLL("libcuda.so.1")
+    driver.cuLaunchHostFunc.argtypes = [ct.c_void_p, ct.c_void_p, ct.c_void_p]
+    driver.cuLaunchHostFunc.restype = ct.c_int
+    driver.cuStreamSynchronize.argtypes = [ct.c_void_p]
+    driver.cuStreamSynchronize.restype = ct.c_int
+    completed = []
+    @ct.CFUNCTYPE(None, ct.c_void_p)
+    def delay(_):
+        time.sleep(.1)
+        completed.append(True)
+    with NvidiaDeviceSession() as session:
+        output = session.empty(saved.shape, np.float32)
+        class Destination:
+            @property
+            def __cuda_array_interface__(self):
+                interface = dict(output.__cuda_array_interface__)
+                interface["stream"] = stream
+                interface["data"] = (interface["data"][0], False)
+                return interface
+        destination = rt.NativeBufferValue(Destination(), rt._native_buffer_value(output)[1])
+        source = rt.NativeBufferValue(value, rt._native_buffer_value(value)[1])
+        scalars = {"Rows": saved.shape[0], "Columns": saved.shape[1]}
+        buffers = {descriptor.buffers[0].name: source, descriptor.buffers[1].name: destination}
+        flat = {**buffers, **scalars}
+        # Complete module/event/allocation warmup before the delayed consumer.
+        assert rt.launch(artifact, flat, stream=stream)["ok"]
+        assert driver.cuStreamSynchronize(ct.c_void_p(stream)) == 0
+        if form == "wrapped":
+            args = flat
+        elif form == "user_dict":
+            args = UserDict({**flat, descriptor.buffers[0].name: value})
+        elif form == "proxy_groups":
+            args = MappingProxyType({"buffers": MappingProxyType(buffers), "scalars": UserDict(scalars)})
+        else:
+            class Arguments(dict):
+                pass
+            args = Arguments({**flat, descriptor.buffers[0].name: value})
+        original = rt._native_launchers["nvidia_sm120"]
+        key = "TESSERA_TEST_RESULT_EVENT_RECORD"
+        def submit(*args, **kwargs):
+            result = original.submit(*args, **kwargs)
+            # Inject only after the real kernel has been submitted, so the
+            # missing-generation bug cannot be hidden by allocation fences.
+            os.environ[key] = "1"
+            return result
+        rt._native_launchers["nvidia_sm120"] = replace(original, submit=submit)
+        try:
+            assert driver.cuLaunchHostFunc(ct.c_void_p(stream), ct.cast(delay, ct.c_void_p), None) == 0
+            assert not completed
+            receipt = rt.launch(artifact, args, stream=stream)
+            assert not receipt["ok"] and receipt["runtime_status"] == "device_error", receipt
+            assert "record resident result consumer" in receipt["reason"]
+            assert completed, "consumer returned without retained completion"
+            x = saved.astype(np.float64)
+            expected = x / np.sqrt(np.mean(x*x, axis=-1, keepdims=True) + 1e-5)
+            np.testing.assert_allclose(output.numpy(), expected, rtol=3e-6, atol=3e-6)
+        finally:
+            os.environ.pop(key, None)
+            rt._native_launchers["nvidia_sm120"] = original
+            assert driver.cuStreamSynchronize(ct.c_void_p(stream)) == 0
+            for result in pair:
+                result.close()

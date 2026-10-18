@@ -376,3 +376,34 @@ for value in pair: value.close()
     with np.load(tmp_path / "result.npz") as loaded:
         for i, value in enumerate(expected):
             np.testing.assert_array_equal(loaded[str(i)], value)
+
+
+@pytest.mark.parametrize("wrapped", [False, True])
+def test_descriptor_cannot_overwrite_immutable_native_result(wrapped):
+    from tests.device.nvidia.test_cooperative_norm import package
+    fn, pair = _result_pair()
+    before = tuple(value.to_host() for value in pair)
+    fn.close_native_storage()
+    _, native = package("rmsnorm", before[1], "serial")
+    d = native.descriptor
+    artifact = rt.RuntimeArtifact(metadata={"target": "nvidia_sm120"},
+        tile_ir=native.tile_ir, target_ir=native.target_ir,
+        native_image=native.image, launch_descriptor=d)
+    source, destination = pair[1], pair[0]
+    if wrapped:
+        source = rt.NativeBufferValue(source, rt._native_buffer_value(source)[1])
+        destination = rt.NativeBufferValue(destination, rt._native_buffer_value(destination)[1])
+    try:
+        receipt = rt.launch(artifact, {
+            d.buffers[0].name: source, d.buffers[1].name: destination,
+            "Rows": before[0].shape[0], "Columns": before[0].shape[1],
+        }, stream=pair[0].__cuda_array_interface__["stream"])
+        after = tuple(value.to_host() for value in pair)
+        assert not receipt["ok"], (
+            f"readonly result accepted as output; data changed={not np.array_equal(after[0],before[0])}")
+        assert "writable CUDA storage" in receipt["reason"], receipt
+        for actual, expected in zip(after, before, strict=True):
+            np.testing.assert_array_equal(actual, expected)
+    finally:
+        for value in pair:
+            value.close()

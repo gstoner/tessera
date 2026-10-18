@@ -97,3 +97,25 @@ The baseline JSON records all admitted windows, calibration rejections,
 device UUID, exact member-image identities and timing endpoint definitions.
 Current public CI/review state belongs to the PR; these files certify local
 host/device gates and do not claim the five-slice objective is complete.
+
+## PR982 review follow-up
+
+The review identified missing pins through accepted NativeBufferValue wrappers
+and non-builtin mappings. Six host-only scope cases and four real descriptor
+event-failure cases fail on the first PR head and pass after traversal covers
+all accepted forms with cycle guards. A related two-case device regression
+shows the original descriptor overwriting read-only generations; the corrected
+launcher refuses writable output/inout roles for read-only CUDA storage.
+review-wrappers-red.txt.gz and review-readonly-red.txt.gz retain the failures;
+review-regressions.txt records all twelve positive regressions.
+The affected lane passes 722 tests (7 skips), including adjacent attention and
+the relevant unit/registry/ABI gates. review-mypy.txt remains at zero errors.
+The initial timing and full CPU records above retain their original source
+scope. review-cpu.txt.gz/xml.gz records the full review CPU repeat: 26,351
+passed, 5,905 skipped and 11 existing warnings. Changed code hashes remain
+unchanged through the gate (validation-review-source-freeze.json). The review
+ABI/audit documentation selection passes 31 tests. Updated-head public CI/review remain pending. review-public-timing.json/txt
+records the quiet post-review repeat: twelve ordered rows, all numerical and
+window gates passed, CUDA/host ratios 0.95-1.06. Native provider and member
+images match the pre-review guarded packet. Raw first-arm differences remain;
+this is no kernel-speedup/default-selection claim.

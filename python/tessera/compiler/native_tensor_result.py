@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from collections.abc import Mapping
 import ctypes as ct
 import os
 import threading
@@ -203,11 +204,17 @@ def execute(owner, values):
 def _results(value, seen=None):
     if isinstance(value, NativeTensorResult):
         return [value]
+    from tessera.runtime import NativeBufferValue
     if seen is None:
         seen = set()
-    if type(value) in (tuple, list, dict) and id(value) not in seen:
+    if id(value) in seen:
+        return []
+    if isinstance(value, NativeBufferValue):
         seen.add(id(value))
-        children = value.values() if isinstance(value, dict) else value
+        return _results(value.value, seen)
+    if isinstance(value, (tuple, list, Mapping)):
+        seen.add(id(value))
+        children = value.values() if isinstance(value, Mapping) else value
         return [result for child in children for result in _results(child, seen)]
     return []
 

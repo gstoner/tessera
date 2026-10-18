@@ -3364,6 +3364,10 @@ def _submit_nvidia_sm120_native(
         if (not all(isinstance(interface, Mapping) for interface in cuda_interfaces)
                 or stream is None):
             raise RuntimeError("resident SM120 packages require all CUDA buffers and an explicit stream")
+        for binding, interface in zip(ordered_buffers, cuda_interfaces, strict=True):
+            if (binding.direction in {"output", "inout"} and
+                    bool(cast(Mapping[str, Any], interface)["data"][1])):
+                raise RuntimeError("resident SM120 output requires writable CUDA storage")
         is_rmsnorm = entry.startswith("tessera_tile_norm_")
         is_resident_activation = descriptor.abi_id in activation_storage_abis.values()
         is_resident_softmax = descriptor.abi_id in softmax_storage_abis.values()

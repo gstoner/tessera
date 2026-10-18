@@ -159,9 +159,27 @@
     "final_drift_refreshed": 332,
     "recorder_naming_after_correction": 1,
     "mypy_errors": 0,
-    "scoped_ruff": "python tree plus changed tests and recorders passed; unrelated whole-tests lint attempt retained outside packet"
+    "scoped_ruff": "python tree plus changed tests and recorders passed; unrelated whole-tests lint attempt retained outside packet",
+    "full_cpu_clean": {
+      "passed": 30752,
+      "skipped": 3721,
+      "failed": 0,
+      "errors": 0,
+      "implementation_checkpoint": "16b6ae83476f69ef29c1004cda330e3490141a67",
+      "during_run_change": "canonical execution CSV refresh only; implementation unchanged"
+    },
+    "all_generated_documents": 33,
+    "surface_audits": {
+      "examples": 23,
+      "benchmarks": 25,
+      "research": 2,
+      "tools": 5,
+      "tests": 4
+    },
+    "all_packet_programs_compiler_provider_free": 40,
+    "final_mypy_errors": 0
   },
-  "remaining": "final CPU, docs, exact-head public CI/review; broader layouts/dynamic/AD/quantized and five aggregate programs open",
+  "remaining": "public exact-head CI/review; broader layouts/dynamic/AD/quantized and five aggregate programs remain open",
   "nonsemantic_candidate_differences": {
     "python/tessera/compiler/execution_matrix.py": "final executor/reason description",
     "benchmarks/nvidia/benchmark_public_source_attention_reverse.py": "removed one trailing blank line after measurement"
@@ -171,7 +189,7 @@
     "measure_policy_corner.py.gz": "measure-policy-corner.py"
   },
   "evidence_sha256": {
-    "README.md": "78b0c70c9a3b30937912479751027e1ee1db7eef2e8227d5abf98a964ab9a243",
+    "README.md": "947da8f9b848e5b17366c7d5d574dc9c7eaf499d42ef53be581e5243312bc583",
     "auto-delivery-manifest.json": "e429b871fd7ea82e4d36ae3ccfb59ea5d5bc21c3730bcf5de9edb7de007aefce",
     "auto-executed-source-identities.json": "101bb9a260b2d0979102cb06898b8673c7e00ccee78065fdcbffc75484b6fa91",
     "auto-explicit-compatibility.json.gz": "84b0ec3e2ea77a0b7367fae2464e18e8a7fd6ac20b0907d260b9d1af360b8383",
@@ -201,14 +219,27 @@
     "final-claims.txt.gz": "bfe30f49c357d9771d0eebad2b5e3a91c741fb51ff1094773f9ee3e743fd4359",
     "final-compiler-route.txt.gz": "da3d5a9359b965aa0143702f15ff09d9a30dc7e631477eeeac408185cc6c442b",
     "final-compiler-route.xml.gz": "04676066c7a4f01fa3d93bd8daad22c62b95746b5cf21bc8d6ed9a9bbb4882a2",
+    "final-cpu-clean.txt.gz": "f25227f3de94c820e323903ffd80506476dc28918e20d5069960fbe28fa26e94",
+    "final-cpu-clean.xml.gz": "8be2737243d505cc8f1addfe3f6c6d703f62d5c3967e79737f1d4ad357b1529f",
     "final-cpu.txt.gz": "13a296ecbc8463c13b0a9a72dc7c181f284291b18179021ac6a349a5fbdeed5c",
     "final-cpu.xml.gz": "4dd7d8386ded993a5d45dda19bd1c8fd5b1368f7fb2aeb018769d095d0b9bb96",
     "final-drift-refreshed.txt.gz": "079b025d5ff1976f4c418861e6a36ec1a1a822296be56d74071cacf9a30e2177",
     "final-drift-refreshed.xml.gz": "32d8e8b8c6fbb18e1a4463c993e54bcd70aafed22de1e25607f08dd0532c811f",
+    "final-generated-recheck.txt.gz": "31851960e2603d92c5251627b4a3ee2b8cc9b7c5fd958a580f81273f8a94ff1a",
+    "final-graphify.txt.gz": "ff2b2ed338a9ae58489c8c3cf086129c80006927a16f27d295974102849b0bc2",
+    "final-mypy.txt.gz": "acf9f1fa9e0b29bfc06c5cd63aa5c6a540c7a3e250a0e05d12bdfe5b5acd153e",
+    "final-packet-check.txt.gz": "d7a7ec70b422d1b76a3fe18ba461eee32db6f43c1eab21dc48c16313e319c747",
     "final-plan.txt.gz": "14dd18c5fb7ab875009f4762cad6506075e95034522eece1ce5287a153518c92",
     "final-recorder-naming.txt.gz": "1ca5f6d2c951a4fbb83354018a5999f8507fe330a6f8728c743cbc228790d54c",
     "final-recorder-naming.xml.gz": "1c5fbd47e698fdbfbd5ab9ed20e58b40dee7d7ff2d9c80905ecd2f27bd216dd9",
+    "final-runtime-docs.txt.gz": "ac1c90417f9d031aa5196640da77921ca31624ae577d762fb3e4d3c5910fc358",
     "final-scoped-ruff.txt.gz": "f3af4d142827f5aad2eb0c72d556d325488a57fb6219aac10afeb51085667d53",
+    "final-surface-benchmarks-clean.txt.gz": "4aca8858ec63d9eb7efdf145e719bce7b63c9ba8170aa2d35210d61af0820251",
+    "final-surface-claims.txt.gz": "88444fe652a861d269fedeb5219b192473b8bc3b9678e84c5c853cbf7dd58bf4",
+    "final-surface-examples.txt.gz": "d3ad05ae675aa55fcc62f20b58c7002cad97bb32e97938f94bde264e01bdcbfa",
+    "final-surface-research.txt.gz": "a8707bc9bb86ee7f72720621f4362cc3c825c64c655d850b75112c38949ad221",
+    "final-surface-tests.txt.gz": "0e680457f5ce2f5228d77f7999b82acddd7075888de1e4756e6f5c2bc7b15b8f",
+    "final-surface-tools.txt.gz": "2c6eea4a17351bf169672362d7ba74a48e953822fce4ad433df15d540a225178",
     "fresh/test_source_reverse_fresh_proc0/outputs.npz": "84b7a25f4485a41e88fc6424679f15d451fa4e4abf0dda19431cd45bc1337c9f",
     "fresh/test_source_reverse_fresh_proc0/program.json.gz": "b18bc9a6047e5d8f7b6fc4627e83cb41454b683e8b34e6a707607573f1ea939f",
     "fresh/test_source_reverse_fresh_proc0/roots.npz": "ae716e221b7879197352c02d2a86b6c3cf27ee76bfdaea7f2b41b885bd2cc92c",
@@ -255,5 +286,6 @@
     "sm120-auto-fresh.xml.gz": "dc7d71fc2c28220202524f39d47a11563f5f608194662d053c5ec3b34d1c2c1a",
     "sm120-auto.txt.gz": "6d9ccdcdb196388b77072aa3b2e6d4a2bdf9eb76edf2232f8250b6480174a743",
     "sm120-auto.xml.gz": "ef5993ffa1dfad8bfdb6cc7a62593640267ac84227bd1905f59b30ba3aefcbca"
-  }
+  },
+  "state": "local_gates_complete_public_ci_review_pending"
 }

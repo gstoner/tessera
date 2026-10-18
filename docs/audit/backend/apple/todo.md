@@ -39,7 +39,10 @@ retain their earlier explicit compiler identity.
 
 Evidence: benchmarks/baselines/native_source_attention_auto_20261018/README.md.
 The explicit prepared packet remains a historical e63eb93f/B29 checkpoint.
-Remaining: final CPU/documentation and public CI/review gates. Wider dynamic,
+Final local gates pass: 30,752 CPU tests with 3,721 declared skips and no
+failures; 33 generated documents, all five surface audits, zero-error mypy,
+scoped Ruff and all forty archived-program offline restores pass.
+Remaining: public CI/review gates. Wider dynamic,
 bias/dropout/layout/AD/encoded envelopes and all five aggregate programs remain
 open. No quantized attention or sibling physical admission is implied.
 

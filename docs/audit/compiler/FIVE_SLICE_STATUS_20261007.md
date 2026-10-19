@@ -3,6 +3,31 @@ last_updated: 2026-10-19
 audit_role: reference
 ---
 
+## Current requirement reconciliation — 2026-10-19
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+The Oct15 table below is historical. Later receipts establish the following
+increments without closing the original five aggregate programs.
+
+| Slice | Additional established scope | Remaining requirement |
+| --- | --- | --- |
+| GFX1201 NVFP4 ingest | Public seven-member quantized MLP and original layer-0 gate/up/down inputs; source-preserving bounded and native AD increments retain their own receipts. | Representative-corpus/full-model quality, broader composition/layout/encoded AD. Layer-0 projection and staged numerical bounds do not prove model quality. |
+| NVIDIA W1.1 | Named resident paired tensor results, original normalization/matmul source pullback and static normalization-attention forward/reverse are implemented in later receipts. | Generic producer/accumulator reconstruction and mixed/pitched/dynamic composition. |
+| NVIDIA saved-LSE forward | Standalone bounded half resident capture and static original RMSNorm(Q) source composition execute with independent O/LSE roles. | Bounded original-source composition, mixed/quantized storage, wider masks and nested AD. |
+| NVIDIA backward | Standalone bounded half row correction and static original-source public/portable VJP execute; native automatic row strategy is delivered by PR989. | Bounded original-source VJP, wider source/AD composition and independent performance closure. |
+| ROCm routes/performance | PR990 is delivered with exact gfx1201 folded common-gate correctness and paired timings; rejected staging/K64/CU variants remain historical evidence. | Wider image/layout families, W8A8 short/ragged coverage and MXFP4/Radiance gap. Mixed long-K outcomes prohibit universal promotion. |
+
+Next integration: native bounded original-source normalization-attention reverse.
+Matching compiler probes emit static f16/bf16 source plans but reject explicit
+sequence bounds. Schema-8 bounded logical rows now pass 410 focused cases, twelve RTX5070
+member tests, four additional compiler/device actual-attention adjoint cases,
+and 23 gfx1201 device regressions with 44 adjacent unit/compiler
+cases. Two twelve-profile timing orders remove the initial width257 regression;
+small-row measurements remain mixed. Composed normalization/AD/capacity-owner/
+public/portable and broad delivery gates remain pending. Evidence:
+benchmarks/baselines/native_bounded_query_rows_20261019/README.md.
+The original objective remains open.
+
 ## ROCm native folded common gate — 2026-10-19
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
@@ -18,8 +43,7 @@ outcomes retained. Scalar Target IR and twelve FP8/MXFP8 packages are unchanged.
 All five aggregate rows remain open. This numerical/control-flow increment
 does not close broader model quality, frontend/AD/layout or physical performance.
 The owning ROCm queue and benchmarks/baselines/rocm_folded_common_gate_20261019/
-README.md hold the detailed measurements and sibling assessments. Remaining
-delivery is tracked by [PR #990](https://github.com/gstoner/tessera/pull/990), governed by checks and review. Local CPU 30,611
+README.md hold the detailed measurements and sibling assessments. PR #990 merged as d0579fdb1546fda5278b700dbee8c77a251d339b after exact-head required CI and clean review. Local CPU 30,611
 passes / 3,864 skips, production compiler 2,178 passes / zero skips, all
 33 generated documents, five surfaces and zero-error mypy pass.
 

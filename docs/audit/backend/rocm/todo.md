@@ -5,6 +5,18 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NATIVE-BOUNDED-SOURCE-ATTENTION-20261019 — native row prerequisite
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Parity validated for the affected shared Tile materializer on owning
+gfx1201: 23 quantizer/parent-view/source-pullback device cases and 44
+adjacent unit/compiler cases pass. Static schema-7 gfx1151/gfx1201 native
+stages are identical artifacts; no new gfx1151 device evidence is claimed.
+Schema8 remains SM120-only. Existing AMD dtype/schedule admissions are
+unchanged. See the [owning NVIDIA record](../nvidia/todo.md#native-bounded-source-attention-20261019--native-row-prerequisite).
+
 ## ROCM-FOLDED-COMMON-GATE-20261019 — native scale recovery
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.

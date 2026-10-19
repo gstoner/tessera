@@ -6,6 +6,26 @@ target: nvidia_sm120
 last_updated: 2026-10-19
 ---
 
+## NATIVE-BOUNDED-SOURCE-ATTENTION-20261019 — native row prerequisite
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Private schema-8 bounded-query row lowering and a shared native conjunction
+proof pass 410 focused gates. RTX5070 passes four bounded profiles plus
+eight static regressions; four separate compiler and four RTX5070 cases
+execute the actual pure source-attention adjoint member. Sixteen SM120/ROCm
+static profiles retain four
+identical stages. Two twelve-profile timing orders remove the initial
+width257 penalty: bounded/static ratios0.965-1.004; width35 remains mixed.
+Event dispatch and completed raw host scopes remain separate.
+
+The packet benchmarks/baselines/native_bounded_query_rows_20261019/README.md
+retains negative experiments and source/compiler/PTX bindings. This proves
+a row prerequisite only. Bounded normalization, original paired-source
+outlining, composed capacity ownership, public/portable execution and
+broad delivery gates remain follow-up required.
+
 ## ROCM-FOLDED-COMMON-GATE-20261019 — sibling assessment
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.

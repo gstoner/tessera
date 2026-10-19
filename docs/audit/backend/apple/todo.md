@@ -6,6 +6,17 @@ target: apple_gpu
 last_updated: 2026-10-19
 ---
 
+## NATIVE-BOUNDED-SOURCE-ATTENTION-20261019 — native row prerequisite
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to Metal and Apple CPU physical execution: the shared scalar-view
+materializer is called by NVIDIA/ROCm consumers, not this pipeline.
+No sibling schedule, dtype or runtime ABI admission is transferred.
+Shared registry/audit gates pass; owning physical evidence is outside
+this prerequisite. See the [owning NVIDIA record](../nvidia/todo.md#native-bounded-source-attention-20261019--native-row-prerequisite).
+
 ## ROCM-FOLDED-COMMON-GATE-20261019 — sibling assessment
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.

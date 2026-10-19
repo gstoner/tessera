@@ -5720,8 +5720,8 @@ struct LowerTileToNVIDIAPass
         return signalPassFailure();
       }
       auto kernel = rowKernels.front();
-      if (kernel.getArch() != "sm_120" || (kernel.getSchema() != 1 && kernel.getSchema() != 6)) {
-        kernel.emitError("NVIDIA row lowering requires its SM120 schema-1 pair or schema-6 reverse profile");
+      if (kernel.getArch() != "sm_120" || (kernel.getSchema() != 1 && kernel.getSchema() != 6 && kernel.getSchema() != 8)) {
+        kernel.emitError("NVIDIA row lowering requires its SM120 schema-1 pair or schema-6/8 reverse profile");
         return signalPassFailure();
       }
       if (failed(tessera::row_region::verifyKernel(kernel))) return signalPassFailure();

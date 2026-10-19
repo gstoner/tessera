@@ -3,6 +3,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include <optional>
 
 namespace tessera::tile {
@@ -15,6 +16,27 @@ inline bool scalarViewSameBound(mlir::Value lhs, mlir::Value rhs) {
   if (lhs == rhs) return true;
   auto a = scalarViewConstant(lhs), b = scalarViewConstant(rhs);
   return a && b && *a == *b;
+}
+// A true scalar conjunction proves each operand. Do not traverse disjunction,
+// negation, selects or external metadata: none establishes the same bound.
+inline bool scalarViewConditionProvesBound(mlir::Value condition,
+                                          mlir::Value index, mlir::Value bound) {
+  using namespace mlir;
+  SmallVector<Value, 8> pending{condition};
+  llvm::SmallPtrSet<void *, 8> seen;
+  while (!pending.empty()) {
+    Value current = pending.pop_back_val();
+    if (!seen.insert(current.getAsOpaquePointer()).second) continue;
+    if (auto compare = current.getDefiningOp<arith::CmpIOp>()) {
+      if (compare.getPredicate() == arith::CmpIPredicate::ult &&
+          compare.getLhs() == index && scalarViewSameBound(compare.getRhs(),bound))
+        return true;
+    } else if (auto conjunction = current.getDefiningOp<arith::AndIOp>()) {
+      pending.push_back(conjunction.getLhs());
+      pending.push_back(conjunction.getRhs());
+    }
+  }
+  return false;
 }
 // A proof about the actual enclosing SSA regions, not a trusted metadata flag.
 inline bool scalarViewCoordinateInBounds(mlir::Operation *access,
@@ -34,9 +56,7 @@ inline bool scalarViewCoordinateInBounds(mlir::Operation *access,
        child = parent, parent = parent->getParentOp()) {
     auto guard = dyn_cast<scf::IfOp>(parent);
     if (!guard || child->getParentRegion() != &guard.getThenRegion()) continue;
-    auto compare = guard.getCondition().getDefiningOp<arith::CmpIOp>();
-    if (compare && compare.getPredicate() == arith::CmpIPredicate::ult &&
-        compare.getLhs() == index && scalarViewSameBound(compare.getRhs(),bound)) return true;
+    if (scalarViewConditionProvesBound(guard.getCondition(),index,bound)) return true;
   }
   return false;
 }

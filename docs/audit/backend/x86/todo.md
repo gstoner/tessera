@@ -7,6 +7,16 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## NATIVE-BOUNDED-SOURCE-PROJECTION-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to x86 native execution: this source-program capacity contract is exact SM120 and does not alter the static FP32 norm ABI. Shared metadata and explicit x86 target rejection are required; no x86 bounded source execution claim is made.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_ATTENTION_REVERSE.md.
+
+
 ## NATIVE-BOUNDED-QUERY-NORM-20261019 — integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

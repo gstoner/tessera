@@ -1,0 +1,14 @@
+{
+  "compiler_sha256": "0e8161de4555ae0626b19d2d79f509fc42fd6ef9f1b5f8178541dded7744e64c",
+  "private_parent": "a98032bfd9085476cb32b47e6daee7656d752945",
+  "source_sha256": {
+    "src/transforms/lib/NativeSourceAttentionReverse.h": "e51012786335e3421187992f1bd41435b064affe18015f3a9cbd6fbd464139bb",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "803210a98d39611639ccb2e5f6536b49408555369db4ba4340890f27a0b16012",
+    "python/tessera/compiler/native_source_attention_reverse.py": "ccf1d9d106d6caa89d2138596859483d2f811042f5410b77afd333a2ad798ac1",
+    "tests/device/nvidia/test_bounded_source_reverse_members.py": "bfd1ee37221fadc067167faf3f6b4540f52223f653feae777cbe179e1c7a94a3",
+    "tests/device/nvidia/test_source_attention_reverse.py": "6df53a0094ecf87e2e2a9a97683cf9e7349286a9712563ff054cf3887c6315f3",
+    "tests/device/nvidia/test_saved_lse_half_backward_kernel.py": "6c2dab687ad5317c3d0f5fa7b26bb76f3c8cfd99e82aebe9651345dd771507e9",
+    "tests/unit/test_native_bounded_source_attention_reverse.py": "5fc8b83f7a4d7c08f8d3ff1250b1ae793ba82fe6572cda55eeaefc335a861747",
+    "python/tessera/compiler/pass_metadata.py": "ec3c6138569b79241c6dc3b8f3cc7c1e3fb2d1b52f0bd46e8b1a4da13dac837a"
+  }
+}

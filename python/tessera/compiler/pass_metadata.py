@@ -516,6 +516,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-autodiff-forward",
         cpp_class="AutodiffForwardPass",
         summary=(
+            "A named SM120 source-attention reverse request retains the original static paired SSA witness and projects cloned RMSNorm, saved-LSE attention, optional row correction and source-pullback members into a separate bounded-sequence program. Additive source schemas v3/v4 retain logical/trace/capacity shapes, explicit input/seed/gradient roles and buffer lifetimes; artifact export is not public or portable execution proof. "
             "RMSNorm/LayerNorm derivatives preserve an explicitly wider accumulator in working Graph types, "
             "round only returned storage values and guard symbolic seed extents before reads. "
             "Direct rank-2 row normalization with fixed channel extent admits verified argument permutations; "
@@ -582,7 +583,8 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         input_dialects=("tessera", "func", "arith", "scf", "tensor"),
         output_dialects=("cf", "tessera", "tessera_attn", "func", "arith", "scf", "tensor", "gpu", "llvm", "memref", "tile", "math"),
         required_attrs=("tessera.autodiff",),
-        preserved_attrs=("tessera.native.sm120_reverse_program_json", "tessera.native.sm120_row_producer", "tessera.native.scaled_carrier", "tessera.autodiff.scaled_program", "tessera.autodiff.scaled_program_json",
+        preserved_attrs=("tessera.native.source_attention_reverse_program_json", "tessera.attention_sequence_bounds",
+            "tessera.native.sm120_reverse_program_json", "tessera.native.sm120_row_producer", "tessera.native.scaled_carrier", "tessera.autodiff.scaled_program", "tessera.autodiff.scaled_program_json",
             "tessera.autodiff.cotangent_capture", "tessera.autodiff.scale_adjoint",
             "tessera.autodiff.scaled_member", "tessera.autodiff.scaled_program_witness",
             "tessera.autodiff.product_abi", "tessera.autodiff.product_pair",

@@ -50,8 +50,12 @@ inline LogicalResult preflight(ModuleOp module) {
   if (!target || target.getValue()!="nvidia_sm120" || !arch || arch.getValue()!="sm_120" ||
       functions.size()!=1 || llvm::range_size(module.getBody()->getOperations())!=1 ||
       module->hasAttr("tessera.native.source_attention_reverse_program_json") ||
-      module->hasAttr("tessera.attention_shape_bounds") ||
-      module->hasAttr("tessera.attention_sequence_bounds")) return reject();
+      module->hasAttr("tessera.attention_shape_bounds")) return reject();
+  auto sequenceRaw=module->getAttr("tessera.attention_sequence_bounds");
+  auto sequence=dyn_cast_or_null<DenseI64ArrayAttr>(sequenceRaw);
+  if (sequenceRaw && (!sequence || sequence.size()!=2 || sequence[0]<=0 ||
+      sequence[1]<=0 || sequence[0]>INT32_MAX || sequence[1]>INT32_MAX))
+    return reject();
   for (StringRef request:{"tessera.native.source_attention_reverse_rows_request",
                           "tessera.native.source_attention_reverse_auto_request"})
     if (auto marker=module->getAttr(request); marker && !isa<UnitAttr>(marker)) return reject();
@@ -80,6 +84,22 @@ inline LogicalResult preflight(ModuleOp module) {
     auto type=dyn_cast<RankedTensorType>(fn.getArgumentTypes()[i]);
     if (!staticTensor(type) || type.getRank()!=4 || type.getElementType()!=qt.getElementType() ||
         (fn.getArgAttrDict(i) && !fn.getArgAttrDict(i).empty())) return reject();
+  }
+  if (sequence) {
+    auto kt=cast<RankedTensorType>(k.getType());
+    auto vt=cast<RankedTensorType>(v.getType());
+    if (qt.getDimSize(2)>sequence[0] || kt.getDimSize(2)>sequence[1] ||
+        qt.getDimSize(0)>INT32_MAX/qt.getDimSize(1) ||
+        qt.getDimSize(0)*qt.getDimSize(1)>INT32_MAX/sequence[0])
+      return reject();
+    auto capacities=DenseI64ArrayAttr::get(module.getContext(),
+        {qt.getDimSize(0),qt.getDimSize(1),kt.getDimSize(1),sequence[0],
+         sequence[1],qt.getDimSize(3),vt.getDimSize(3)});
+    SmallVector<int64_t> symbolic{qt.getDimSize(0),qt.getDimSize(1),
+        kt.getDimSize(1),ShapedType::kDynamic,ShapedType::kDynamic,
+        qt.getDimSize(3),vt.getDimSize(3)};
+    if (failed(resolveNativeAttentionShape(attention,symbolic,capacities)))
+      return failure();
   }
   int64_t rows=1;
   for (int64_t extent:qt.getShape().drop_back()) {
@@ -119,6 +139,55 @@ inline LogicalResult preflight(ModuleOp module) {
       if (!index || !index.getType().isInteger(64) || index.getInt()<0 || index.getInt()>2 ||
           !seen.insert(index.getInt()).second) return reject();
     }
+  }
+  return success();
+}
+// Every non-scalar tensor in this isolated source program has its sequence
+// role at axis 2. B/H/D remain fixed; Sq/Sk identity is explicit in call and
+// buffer roles, never inferred by equal trace extents.
+inline LogicalResult projectBoundedProgram(ModuleOp program, StringRef rootName,
+    DenseI64ArrayAttr bounds, bool rows, llvm::json::Array &graphs) {
+  OpBuilder builder(program.getContext());
+  program->setAttr("tessera.attention_shape_bounds",bounds);
+  auto project=[](Type raw) -> Type {
+    auto type=dyn_cast<RankedTensorType>(raw);
+    if (!type || type.getRank()<3) return raw;
+    SmallVector<int64_t> dims(type.getShape());
+    dims[2]=ShapedType::kDynamic;
+    return RankedTensorType::get(dims,type.getElementType(),type.getEncoding());
+  };
+  for (auto fn:program.getOps<func::FuncOp>()) {
+    for (auto argument:fn.getArguments()) argument.setType(project(argument.getType()));
+    fn.walk([&](Operation *op) {
+      for (auto result:op->getResults()) result.setType(project(result.getType()));
+    });
+    auto ret=cast<func::ReturnOp>(fn.getBody().front().getTerminator());
+    fn.setFunctionType(builder.getFunctionType(fn.getBody().front().getArgumentTypes(),ret.getOperandTypes()));
+    if (fn.getSymName()==rootName) continue;
+    if (fn.getSymName()==(rootName+"__member_0").str())
+      fn->setAttr("tessera.native.query_sequence_bound",builder.getI64IntegerAttr(bounds[3]));
+    if (fn->hasAttr("tessera.native.sm120_row_producer")) {
+      auto type=cast<RankedTensorType>(fn.getArgumentTypes()[0]);
+      fn->setAttr("tessera.native.sm120_row_producer",builder.getDictionaryAttr({
+        builder.getNamedAttr("schema",builder.getI64IntegerAttr(8)),
+        builder.getNamedAttr("rows",builder.getI64IntegerAttr(bounds[0]*bounds[1]*bounds[3])),
+        builder.getNamedAttr("columns",builder.getI64IntegerAttr(type.getDimSize(3))),
+        builder.getNamedAttr("sequence_bound",builder.getI64IntegerAttr(bounds[3])),
+        builder.getNamedAttr("storage",builder.getStringAttr(type.getElementType().isF16()?"f16":"bf16")),
+        builder.getNamedAttr("accum",builder.getStringAttr("f32")),
+        builder.getNamedAttr("body_hash",builder.getStringAttr(nativeSM120RowBodyHash(fn)))}));
+    }
+  }
+  if (failed(verify(program))) return failure();
+  graphs.clear();
+  for (unsigned i=0;i<(rows?5u:4u);++i) {
+    auto fn=program.lookupSymbol<func::FuncOp>((rootName+"__member_"+Twine(i)).str());
+    if (!fn) return program.emitError("bounded source member role was lost");
+    auto child=ModuleOp::create(program.getLoc());
+    child->setAttrs(program->getAttrs());
+    auto copy=cast<func::FuncOp>(fn->clone());copy.setPublic();child.getBody()->push_back(copy);
+    if (failed(verify(child))) {child.erase();return failure();}
+    graphs.push_back(print(child));child.erase();
   }
   return success();
 }
@@ -213,6 +282,14 @@ inline LogicalResult emit(ModuleOp module,llvm::StringRef originalSource) {
   OpBuilder builder(module.getContext());
   std::string rootName=(forward.getSymName()+"__source_reverse").str();
   if (module.lookupSymbol(rootName)) return reject();
+  auto sequence=module->getAttrOfType<DenseI64ArrayAttr>("tessera.attention_sequence_bounds");
+  DenseI64ArrayAttr bounds;
+  if (sequence) {
+    auto qt=cast<RankedTensorType>(q.getType()),kt=cast<RankedTensorType>(k.getType()),
+         vt=cast<RankedTensorType>(v.getType());
+    bounds=builder.getDenseI64ArrayAttr({qt.getDimSize(0),qt.getDimSize(1),
+        kt.getDimSize(1),sequence[0],sequence[1],qt.getDimSize(3),vt.getDimSize(3)});
+  }
   bool rows=module->hasAttr("tessera.native.source_attention_reverse_rows_request");
   if (!rows && module->hasAttr("tessera.native.source_attention_reverse_auto_request")) {
     // Named SM120 static-half source policy, measured against the inline route.
@@ -222,8 +299,9 @@ inline LogicalResult emit(ModuleOp module,llvm::StringRef originalSource) {
     auto valueType=cast<RankedTensorType>(v.getType());
     int64_t logicalRows=1;
     for (int64_t extent:queryType.getShape().drop_back()) logicalRows*=extent;
+    if (bounds) logicalRows=bounds[0]*bounds[1]*bounds[3];
     rows=logicalRows>=32 && queryType.getDimSize(3)>=32 &&
-         keyType.getDimSize(2)>=4 && valueType.getDimSize(3)>=4;
+         (bounds?bounds[4]:keyType.getDimSize(2))>=4 && valueType.getDimSize(3)>=4;
   }
   unsigned memberCount=rows?5:4, pullbackIndex=memberCount-1;
   SmallVector<func::FuncOp> members; llvm::json::Array graphs;
@@ -351,13 +429,34 @@ inline LogicalResult emit(ModuleOp module,llvm::StringRef originalSource) {
     for (int64_t extent:type.getShape()) {bytes*=extent;shape.push_back(extent);}
     std::string storage;llvm::raw_string_ostream stream(storage);type.getElementType().print(stream);stream.flush();
     bool publicOutput=llvm::is_contained(selected,int64_t(i));
-    buffers.push_back(llvm::json::Object{{"id",int64_t(i)},{"shape",std::move(shape)},{"storage",storage},
+    llvm::json::Object buffer{{"id",int64_t(i)},{"shape",std::move(shape)},{"storage",storage},
       {"bytes",bytes},{"ownership",i<5?"readonly_input":publicOutput?"returned_output":"private_scratch"},
-      {"first_write",firstWrite[i]},{"last_read",lastRead[i]}});
+      {"first_write",firstWrite[i]},{"last_read",lastRead[i]}};
+    if (bounds) {
+      // Root and gradient role IDs survive argument/result permutations.
+      bool keySequence=int64_t(i)==roles[1] || int64_t(i)==roles[2] ||
+          int64_t(i)==gradientIds[roles[1]] || int64_t(i)==gradientIds[roles[2]];
+      llvm::json::Array logical,capacity,trace;
+      int64_t capacityBytes=type.getElementTypeBitWidth()/8;
+      for (auto [axis,extent]:llvm::enumerate(type.getShape())) {
+        trace.push_back(extent);
+        int64_t bound=axis==2?bounds[keySequence?4:3]:extent;
+        logical.push_back(axis==2?ShapedType::kDynamic:extent);
+        capacity.push_back(bound);capacityBytes*=bound;
+      }
+      buffer["shape"]=std::move(logical);
+      buffer["trace_shape"]=std::move(trace);
+      buffer["capacity_shape"]=std::move(capacity);
+      buffer["bytes"]=capacityBytes;
+    }
+    buffers.push_back(std::move(buffer));
   }
   auto program=ModuleOp::create(module.getLoc());program->setAttr("tessera.target",target);program->setAttr("tessera.arch",arch);
   program.getBody()->push_back(root->clone());
   for (auto member:members) program.getBody()->push_back(member->clone());
+  if (bounds && failed(projectBoundedProgram(program,rootName,bounds,rows,graphs))) {
+    program.erase();return failure();
+  }
   if (failed(verify(program))) {program.erase();return failure();}
   std::string programText=print(program);program.erase();
   llvm::json::Object plan{{"schema",rows?"tessera.native.source_attention_reverse.v2":
@@ -371,6 +470,17 @@ inline LogicalResult emit(ModuleOp module,llvm::StringRef originalSource) {
     {"role_indices",std::move(roleJson)},{"cotangent_indices",std::move(seedJson)},
     {"requested_gradients",std::move(requestedJson)},{"buffers",std::move(buffers)},
     {"steps",std::move(steps)},{"outputs",std::move(selectedJson)},{"member_graphs",std::move(graphs)}};
+  if (bounds) {
+    plan["schema"]=rows?"tessera.native.source_attention_reverse.v4":
+                        "tessera.native.source_attention_reverse.v3";
+    plan["kind"]=rows?"norm_attention_saved_reverse_rows_bounded":
+                      "norm_attention_saved_reverse_bounded";
+    plan["shape_policy"]="bounded_sequences_v1";
+    plan["sequence_bounds"]=llvm::json::Array{sequence[0],sequence[1]};
+    llvm::json::Array capacities;
+    for (int64_t extent:bounds.asArrayRef()) capacities.push_back(extent);
+    plan["shape_bounds"]=std::move(capacities);
+  }
   std::string encoded;llvm::raw_string_ostream stream(encoded);stream<<llvm::json::Value(std::move(plan));stream.flush();
   module->setAttr("tessera.native.source_attention_reverse_program_json",builder.getStringAttr(llvm::encodeBase64(encoded)));
   return success();

@@ -1,0 +1,32 @@
+{
+  "shared_cohort": {
+    "passed": 359,
+    "includes_projection_cases": 44,
+    "includes_registry_and_audit": 315,
+    "exit": 0
+  },
+  "adjacent_static_transport_portable_and_norm": {
+    "passed": 171,
+    "exit": 0
+  },
+  "sm120_projected_member_cases": {
+    "passed": 24,
+    "exit": 0,
+    "per_case_replays": 5,
+    "allocation_addresses_unchanged": true
+  },
+  "static_full_outline_identity_profiles": 18,
+  "public_composed_owner_and_portable": "not_integrated",
+  "broader_cpu_production_gates": "not_run_for_this_increment",
+  "graphify": {
+    "exit": 0,
+    "nodes": 100845,
+    "edges": 245290,
+    "communities": 3610
+  },
+  "generated_docs_write": {
+    "exit": 0
+  },
+  "ruff": "passed",
+  "git_diff_check": "passed"
+}

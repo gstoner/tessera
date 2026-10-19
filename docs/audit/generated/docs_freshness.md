@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-19**.
 
 ## Headline
 
-- **184** docs catalogued across the canonical doc tree.
-- **183** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **49** updated within the last 30 days.
+- **185** docs catalogued across the canonical doc tree.
+- **184** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **50** updated within the last 30 days.
 - **70** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -39,6 +39,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `MEMORY_MODEL_SPEC.md` | Normative | 2026-05-22 | 150 | ✓ |
 | `NATIVE_ARTIFACT_SPEC.md` | Normative | 2026-07-19 | 92 | ✓ |
 | `NATIVE_BOUNDED_QUERY_NORM.md` | - | 2026-10-19 | 0 | ✓ |
+| `NATIVE_BOUNDED_SOURCE_ATTENTION_REVERSE.md` | - | 2026-10-19 | 0 | ✓ |
 | `NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md` | - | 2026-10-17 | 2 | ✓ |
 | `NATIVE_GRAPH_SLICE_CONTRACT.md` | - | 2026-10-16 | 3 | ✓ |
 | `NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md` | - | 2026-10-16 | 3 | ✓ |

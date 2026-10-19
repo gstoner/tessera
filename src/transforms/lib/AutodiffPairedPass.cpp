@@ -1933,7 +1933,7 @@ public:
       for (auto fn : targets) normalizeCountedTapeWhiles(fn);
     if (normalizeDataWhile)
       for (auto fn : targets) normalizeDataDependentTapeWhiles(fn);
-    if (module->hasAttr("tessera.attention_sequence_bounds")) {
+    if (!exportAttentionReverse && module->hasAttr("tessera.attention_sequence_bounds")) {
       if (targets.size()!=1 || checkpointProduct.empty() ||
           failed(projectBoundedAttentionEntry(module,targets.front())))
         return signalPassFailure();

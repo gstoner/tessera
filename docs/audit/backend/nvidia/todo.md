@@ -6,6 +6,16 @@ target: nvidia_sm120
 last_updated: 2026-10-19
 ---
 
+## NATIVE-BOUNDED-SOURCE-PROJECTION-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Native bounded source AD projection now preserves the original static paired witness and verifies a separate capacity-scoped typed call program. Both FP16/BF16, inline/row paths and trace-at-one compile through Schedule/Tile/NVIDIA/NVVM. Twenty-four owning RTX5070 projected-member cases pass five shrink/grow replays each with fixed allocations, independent primal/VJP oracles and guarded tails. The shared cohort passes 359 tests and 171 adjacent tests pass; 18 static full outlines remain identical. Evidence: benchmarks/baselines/native_bounded_source_projection_20261019/README.md. Composed CUDA capacity ownership and public/portable execution remain follow-up required.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_ATTENTION_REVERSE.md.
+
+
 ## NATIVE-BOUNDED-QUERY-NORM-20261019 — integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

@@ -13807,7 +13807,7 @@ open. No quantized attention or sibling physical admission is implied.
 ### 2026-10-19 — ROCm native folded common gate
 
 Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
-PRs: pending; sync ROCM-FOLDED-COMMON-GATE-20261019.
+PRs: #990; sync ROCM-FOLDED-COMMON-GATE-20261019.
 
 Outcome: The native ROCm vector folded-scale consumer adds a common regular
 gate with all original per-element FP32 rounding and FP64 recovery. Original
@@ -13821,7 +13821,9 @@ All four backend queues carry architecture-specific assessments.
 
 Local gates: 30,611 CPU passes / 3,864 skips / zero failures; 2,178 production compiler passes / zero skips with execution certificate; all 33 generated documents, five surfaces, claims and zero-error mypy pass.
 
-Remaining: Required checks and review on the published head. Wider model-quality, frontend/AD/layout and physical performance requirements and all five aggregate slices remain open.
+Delivery: [PR #990](https://github.com/gstoner/tessera/pull/990); merge is governed by required checks and review.
+
+Remaining: Wider model-quality, frontend/AD/layout and physical performance requirements and all five aggregate slices remain open.
 Evidence: benchmarks/baselines/rocm_folded_common_gate_20261019/README.md.
 
 <!-- entry-fields:end -->

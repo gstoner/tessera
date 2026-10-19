@@ -9,6 +9,7 @@ scope: ROCm backend implementation and exact-device proof
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
 Sync: ROCM-FOLDED-COMMON-GATE-20261019.
+Delivery: [PR #990](https://github.com/gstoner/tessera/pull/990).
 
 The native ROCm vector folded-scale consumer adds a common finite/nonzero
 fragment gate while retaining every original per-element FP32 rounding point

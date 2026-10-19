@@ -2,7 +2,7 @@
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
 Sync: ROCM-FOLDED-COMMON-GATE-20261019.
-Base: merged PR989 / a66ebd679. Local delivery gates pass; publication remains subject to required checks and review on the published head.
+Base: merged PR989 / a66ebd679. Local delivery gates pass. [PR #990](https://github.com/gstoner/tessera/pull/990) tracks delivery; merge is governed by required checks and review.
 
 ## Implementation and numerical contract
 

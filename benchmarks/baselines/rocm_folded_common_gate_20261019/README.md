@@ -88,6 +88,11 @@ LDS-wait and barrier counts. Total static branch instructions increase because
 the per-element fallback remains. Common-path control-flow reduction is not
 hardware-counter stall attribution.
 
+The initial CPU lane failed three ownership-log checks; the log fields,
+canonical owner link and Latest pointer were repaired. All affected routing/
+audit tests now pass. Initial failures remain under *-initial artifacts;
+the clean full-suite rerun is the remaining CPU publication gate.
+
 ## Rejected experiments and retained evidence
 
 - K64 read grouping: numerically valid, no useful gain; removed.

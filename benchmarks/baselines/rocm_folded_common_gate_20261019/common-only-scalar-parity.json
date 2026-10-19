@@ -1,0 +1,18 @@
+{
+  "rows": [
+    {
+      "architecture": "gfx1201",
+      "input": "e4m3",
+      "scalar_target_ir_byte_identical": true,
+      "target_ir_sha256": "11ebdde1bf850d51d2cce5792a5f56e0fe673ba1e48c3f8b80b85b2df489ea93",
+      "scope": "compiler artifact equality, not new owning-device execution"
+    },
+    {
+      "architecture": "gfx1151",
+      "input": "f16",
+      "scalar_target_ir_byte_identical": true,
+      "target_ir_sha256": "98cec518e4eb16c9d24217c1b356d05e17e0f926b0ae29bd40a78d8aac0b3ab7",
+      "scope": "compiler artifact equality, not new owning-device execution"
+    }
+  ]
+}

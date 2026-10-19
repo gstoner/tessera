@@ -1,0 +1,33 @@
+{
+  "source_commit": "31c2cbe4f",
+  "base": "a66ebd679d5f1f9de9df24ae9a8c9a11ce1cd062",
+  "compiler_sha256": "8e5c7f678529f1ab89fe1b0edc5101ecfd066d4d5068b4a7a3b16256ef225a29",
+  "source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "c6ad26ef425de4dae424f2ae27960f313b108726fcd40c9adae85a45500e6b52",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "689512be07ccd20671f595d76613a0b4354c27fa226794a3d04660cecb043a8d",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMFoldedW4A8Contract.h": "5cb43b2a8f55924086e36d42f5e17a961eda3c5dc3af93a9e2a4995c3006a896",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "9ea1a70333de09c10e0bb4d376c827b9c7d28b9db4f96068528011a5be593955",
+    "python/tessera/compiler/rocm_native.py": "31f3f660d9eabfdd07e28b3368a8e9282f8ecc43410cd21c5859382965d81981",
+    "python/tessera/compiler/rocm_mxfp4_folded_frontend.py": "c192627247793ccf6897fbe85d92acfe3b586c7534e0fe69a490a421a43cd157",
+    "python/tessera/compiler/rocm_mxfp4_folded_carrier.py": "fd130edb903a1e8334de8eb9636ae5f434cfbb7d9c4f02f07059321c2f75d588",
+    "python/tessera/compiler/rocm_mxfp4_folded.py": "cc0108ed602a04fbaef5bc07bf84a43f5935dfdeb77a485cc1b861957439d870",
+    "python/tessera/runtime.py": "7d2b362d5f86062119699f90129d5257d817fe140d378a59f598635eec52bf54",
+    "benchmarks/rocm/folded_launch_arguments.py": "904012f38632cebdb81a77e1f0451b5e5732588f6a552be486b0592ff929efcb",
+    "benchmarks/rocm/record_gfx1201_folded_native_package.py": "cf503c7a0eb2cd2430cf4eb69163a7de168b0a2e9eef33864958e43116b12439",
+    "benchmarks/rocm/benchmark_gfx1201_mxfp4_production.py": "241da430ed257bbf4c13b4178fc441f6e83f70a1eeff8d0d970d4f2be931155c",
+    "benchmarks/rocm/folded_graph_windows.py": "d4969e7bcc1cfb839f39457e89d8df92212e4b1de7d2d5a10121eca6f0d4afd5",
+    "benchmarks/rocm/folded_native_resident_frame.py": "58d8d0321b07384959790aad48c6237dff3ae42b0fbf6e819ca711668fdbbcd5",
+    "benchmarks/rocm/ablate_gfx1201_folded_load_schedule.py": "2483598ac90cbd8ad464d4cfe6962117f95c895d57d870adba35bf9b5d62bde3",
+    "benchmarks/rocm/record_gfx1201_mxfp4_folded_load_schedule.py": "8cb5beb38c97960b13333c96a66309abe1080b9eef42eea49dfa7782a5b97de6"
+  },
+  "scope": "Source content snapshot for clean-branch consolidation; compilation and test evidence remain bound to immutable compiler hash",
+  "clean_delivery_source_content_verified": true,
+  "delivery_branch": "codex/rocm-folded-scale-common-gate",
+  "delivery_regression_sha256": {
+    "tests/device/rocm/test_folded_scale_vector_masking.py": "6b318f2d7d659708a37bcc846dc6e58e1bf070f944fbac730454c1ebc0fd4847",
+    "tests/device/rocm/test_mxfp4_folded_native_package.py": "7be13bba83be1929429c78fa2fce2155dadcf3c70f41f5d176dc56cbbd46ea35",
+    "tests/device/rocm/test_packed_native_folded.py": "b5c9fe62661b6d00fa289096a1ddb4585b86f93d4299549e4e906830c69c4d6a",
+    "tests/unit/test_rocm_folded_scale_common_gate.py": "d835ac6a737b49ec7a8347f52ee0ec56678d72de17bb7538f606e67a0de2edf6"
+  },
+  "rounded_subnormal_supplement": "Original165-case suite plus refined40-case control/candidate proof; repeated cases are not summed"
+}

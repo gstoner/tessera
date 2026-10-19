@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-18
+last_updated: 2026-10-19
 audit_role: plan
 plan_state: open
 ---
@@ -261,7 +261,7 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 ### ROCM-MXFP4-W4A8-1
 
-**MXFP4 on gfx1201 is reachable through the fp8 WMMA, and we refuse it instead**
+**Native MXFP4 W4A8 integration and performance closure on gfx1201**
 
 - Owner: [COMPILER_REFACTOR_PLAN.md](COMPILER_REFACTOR_PLAN.md)
 - Gate: RDNA4 has no FP4 WMMA form, and `select_fragment_layout` therefore refuses `fp4_e2m1` outright. That is correct about the hardware and wrong about the opportunity: the ecosystem answer on this exact chip (vllm-radiance `radiance_mxfp4_fp8.hip`, canonical `StillDeadcode/libr4d` `r4d_gemm_mxfp4a8_nt_m64.hip`) reaches `v_wmma_f32_16x16x16_fp8_fp8` — **the instruction ROCM-MIXED-FP8-1 proved** — through W4A8. Two routes must not be conflated. **Exact per-block:** E2M1 converts exactly to E4M3, two 16-wide WMMAs form one 32-element MX group, and its E8M0 power-of-two scale is applied exactly to that FP32 partial before it joins the running accumulator. **Folded row reference:** choose the maximum E8M0 exponent per output row, shift each block's E2M1 values into E4M3, and restore the row factor once in the epilogue. That fast fold is exact only while every non-zero shifted magnitude remains representable: gfx12 E4M3 subnormals extend the guaranteed range through exponent delta 8; the reviewed checkpoint reaches delta 10, where the source reports rounding and a non-zero residual error rather than exactness. Therefore the folded route is an explicit approximate `numeric_policy`, never the proof oracle or an unconditional replacement for the exact route. W4A8 itself remains opt-in because its activation precision differs from the checkpoint's declared W4A4 calibration.
@@ -279,7 +279,8 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   **2026-09-28 diagnostic, sync `GFX1201-MXFP4-M256-SLOPE-2026-09-28`.** A fixed-K one-copy N scan at 8192/12288/17408 ablated selected schedule keys in two independent processes, with bitwise exact K32 agreement and device-clock/HIP-event windows. The selected marginal cost was 17.99-18.09 ns per added column against Radiance 13.43-13.60; removing the vector epilogue left 17.69-18.10, removing prefetch 18.62-18.82, and removing raster 17.83-17.93. These keys help absolute latency but do not explain the slope. The remaining mechanism is in the core loop or launch geometry; A restaging, LDS fragment traffic and issue remain unseparated without counters or a validated phase ablation. The source tree was dirty, so the packet is diagnostic and makes no promotion claim. [Packet](../../../benchmarks/baselines/gfx1201_mxfp4_m256_decomposition_20260928/README.md).
 - Depends on: [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1)
 - Start: device
-- Latest: [2026-10-16 — gfx1201 folded CU calibration and frozen regression](INTEGRATED_COMPILER_LOG.md#2026-10-16--gfx1201-folded-cu-calibration-and-frozen-regression)
+- Current increment (2026-10-19): native folded scale common gating preserves every original rounding/recovery path. 165 owning device and 574 separate composed/public AD cases pass; paired unpacked/packed timing retains the widest-long-K tradeoff. Full-model quality, broader physical performance and aggregate closure remain open.
+- Latest: [2026-10-19 — ROCm native folded common gate](INTEGRATED_COMPILER_LOG.md#2026-10-19--rocm-native-folded-common-gate)
 
 ### EVIDENCE-PACKET-1
 

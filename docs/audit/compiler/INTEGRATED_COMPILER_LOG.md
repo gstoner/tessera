@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-18
+last_updated: 2026-10-19
 audit_role: reference
 ---
 
@@ -13761,7 +13761,7 @@ Evidence: benchmarks/baselines/native_source_attention_rows_20261018/README.md.
 ### 2026-10-18 — native automatic source-attention strategy
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
-PRs: pending; sync NATIVE-SOURCE-ATTENTION-ROWS-20261018.
+PRs: #989; sync NATIVE-SOURCE-ATTENTION-ROWS-20261018.
 
 Outcome: Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
 Sync: NATIVE-SOURCE-ATTENTION-ROWS-20261018.
@@ -13797,8 +13797,33 @@ The explicit prepared packet remains a historical e63eb93f/B29 checkpoint.
 Final local gates pass: 30,752 CPU tests with 3,721 declared skips and no
 failures; 33 generated documents, all five surface audits, zero-error mypy,
 scoped Ruff and all forty archived-program offline restores pass.
-Remaining: public CI/review gates. Wider dynamic,
+PR989 merged as a66ebd679 after all required exact-head CI and clean review.
+Remaining: Wider dynamic,
 bias/dropout/layout/AD/encoded envelopes and all five aggregate programs remain
 open. No quantized attention or sibling physical admission is implied.
+
+<!-- entry-fields:end -->
+
+### 2026-10-19 — ROCm native folded common gate
+
+Owner: [ROCM-MXFP4-W4A8-1](INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1)
+PRs: #990; sync ROCM-FOLDED-COMMON-GATE-20261019.
+
+Outcome: The native ROCm vector folded-scale consumer adds a common regular
+gate with all original per-element FP32 rounding and FP64 recovery. Original
+scale/store order and scalar lowering remain unchanged. 411 native, 165
+owning package/layout and 574 separate composed/public AD cases pass. Forty
+refined control/candidate cases distinguish rounded-subnormal normal results
+from uniform FP64 widening. Two-order unpacked/packed measurements retain the
+long-K tradeoffs; no universal speedup or Radiance closure is claimed.
+Rejected K64/CU/staging/classification source is absent from production.
+All four backend queues carry architecture-specific assessments.
+
+Local gates: 30,611 CPU passes / 3,864 skips / zero failures; 2,178 production compiler passes / zero skips with execution certificate; all 33 generated documents, five surfaces, claims and zero-error mypy pass.
+
+Delivery: [PR #990](https://github.com/gstoner/tessera/pull/990); merge is governed by required checks and review.
+
+Remaining: Wider model-quality, frontend/AD/layout and physical performance requirements and all five aggregate slices remain open.
+Evidence: benchmarks/baselines/rocm_folded_common_gate_20261019/README.md.
 
 <!-- entry-fields:end -->

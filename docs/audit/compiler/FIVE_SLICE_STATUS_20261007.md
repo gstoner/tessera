@@ -1,7 +1,27 @@
 ---
-last_updated: 2026-10-18
+last_updated: 2026-10-19
 audit_role: reference
 ---
+
+## ROCm native folded common gate — 2026-10-19
+
+Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync: ROCM-FOLDED-COMMON-GATE-20261019.
+
+The retained C++ Tile lowering preserves original FP32 rounding, exceptional
+FP64 recovery and scale/store order. 411 native tests, 165 owning package/
+layout cases and 574 separate composed/public AD regressions pass. A 40-case
+refinement distinguishes mixed-fragment FP32 rounding from uniform widening.
+Two orders cover ten unpacked and four packed shapes, with mixed long-K
+outcomes retained. Scalar Target IR and twelve FP8/MXFP8 packages are unchanged.
+
+All five aggregate rows remain open. This numerical/control-flow increment
+does not close broader model quality, frontend/AD/layout or physical performance.
+The owning ROCm queue and benchmarks/baselines/rocm_folded_common_gate_20261019/
+README.md hold the detailed measurements and sibling assessments. Remaining
+delivery is tracked by [PR #990](https://github.com/gstoner/tessera/pull/990), governed by checks and review. Local CPU 30,611
+passes / 3,864 skips, production compiler 2,178 passes / zero skips, all
+33 generated documents, five surfaces and zero-error mypy pass.
 
 ## Native source attention automatic strategy — 2026-10-18
 
@@ -39,7 +59,8 @@ The explicit prepared packet remains a historical e63eb93f/B29 checkpoint.
 Final local gates pass: 30,752 CPU tests with 3,721 declared skips and no
 failures; 33 generated documents, all five surface audits, zero-error mypy,
 scoped Ruff and all forty archived-program offline restores pass.
-Remaining: public CI/review gates. Wider dynamic,
+PR989 merged as a66ebd679 after all required exact-head CI and clean review.
+Remaining: Wider dynamic,
 bias/dropout/layout/AD/encoded envelopes and all five aggregate programs remain
 open. No quantized attention or sibling physical admission is implied.
 

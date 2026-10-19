@@ -1,0 +1,4 @@
+mode=exact
+pin=23.1.1
+llvm=23.1.1
+mlir=23.1.1

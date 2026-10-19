@@ -19,7 +19,9 @@ All five aggregate rows remain open. This numerical/control-flow increment
 does not close broader model quality, frontend/AD/layout or physical performance.
 The owning ROCm queue and benchmarks/baselines/rocm_folded_common_gate_20261019/
 README.md hold the detailed measurements and sibling assessments. Remaining
-delivery gates: clean full CPU rerun, audit completion and public CI/review.
+delivery gate: checks and review on the published head. Local CPU 30,611
+passes / 3,864 skips, production compiler 2,178 passes / zero skips, all
+33 generated documents, five surfaces and zero-error mypy pass.
 
 ## Native source attention automatic strategy — 2026-10-18
 

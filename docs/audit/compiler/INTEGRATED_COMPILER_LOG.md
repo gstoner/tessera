@@ -13819,7 +13819,9 @@ long-K tradeoffs; no universal speedup or Radiance closure is claimed.
 Rejected K64/CU/staging/classification source is absent from production.
 All four backend queues carry architecture-specific assessments.
 
-Remaining: Clean full CPU rerun, audit completion and public CI/review. Wider model-quality, frontend/AD/layout and physical performance requirements and all five aggregate slices remain open.
+Local gates: 30,611 CPU passes / 3,864 skips / zero failures; 2,178 production compiler passes / zero skips with execution certificate; all 33 generated documents, five surfaces, claims and zero-error mypy pass.
+
+Remaining: Required checks and review on the published head. Wider model-quality, frontend/AD/layout and physical performance requirements and all five aggregate slices remain open.
 Evidence: benchmarks/baselines/rocm_folded_common_gate_20261019/README.md.
 
 <!-- entry-fields:end -->

@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "tested_source_revision": "38a7fad019e21ca8aca89a81c6fb634d2000e79b",
+  "compiler_sha256": "8e5c7f678529f1ab89fe1b0edc5101ecfd066d4d5068b4a7a3b16256ef225a29",
+  "compiler_rebuilt_and_byte_identical_to_timed_binary": true,
+  "cpu": {
+    "passed": 30611,
+    "skipped": 3864,
+    "failed": 0,
+    "workers": 8,
+    "scope": "required non-slow/non-performance/non-device/non-compiler-route lane"
+  },
+  "production_compiler": {
+    "passed": 2178,
+    "skipped": 0,
+    "failed": 0,
+    "execution_certificate": "passed"
+  },
+  "native_contract_metadata_cases": 411,
+  "owning_gfx1201_package_layout_cases": 165,
+  "separate_composed_public_ad_cases": 574,
+  "refined_mixed_rounding_cases": {
+    "control": 40,
+    "candidate": 40,
+    "counting": "repeated identities are not summed with original165"
+  },
+  "scalar_target_ir_parity": [
+    "gfx1151_f16",
+    "gfx1201_e4m3"
+  ],
+  "fp8_mxfp8_unchanged_native_packages": 12,
+  "generated_docs_in_sync": 33,
+  "mypy_errors": 0,
+  "ruff": "package and scoped files passed",
+  "claims": "public and all-surface checks passed",
+  "surface_audits": {
+    "examples": {
+      "passed": 23,
+      "failed": 0,
+      "skipped": 2
+    },
+    "benchmarks": {
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0
+    },
+    "research": {
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0
+    },
+    "tools": {
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0
+    },
+    "tests": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "coverage_evidence": "revision-bound manifest generated",
+  "initial_failures": "Three ownership-log unit failures repaired; inactive previous-worktree opbench cache preserved and clean benchmark audit passes. No tests weakened.",
+  "scope": "Named ROCm conversion increment; no sibling hardware execution or aggregate-program closure",
+  "aggregate_goal": "open"
+}

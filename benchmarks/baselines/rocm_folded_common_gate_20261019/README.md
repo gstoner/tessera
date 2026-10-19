@@ -2,7 +2,7 @@
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
 Sync: ROCM-FOLDED-COMMON-GATE-20261019.
-Base: merged PR989 / a66ebd679. Delivery remains pending a clean full CPU rerun, remaining audit gates and public CI/review.
+Base: merged PR989 / a66ebd679. Local delivery gates pass; publication remains subject to required checks and review on the published head.
 
 ## Implementation and numerical contract
 
@@ -27,6 +27,10 @@ Frozen control: d475845a3ea58ff3623bbc56193b19612553db7cf4ba3367091280ae9ebfd71e
 The source-content manifest binds the tested private prototype to the clean
 delivery source; private experiment history is not the PR implementation.
 
+- Clean required CPU lane: 30,611 passed / 3,864 skipped / zero failures.
+- Production compiler lane: 2,178 passed, zero skips, execution certificate passed.
+- All 33 generated documents, all five surface audits, public/surface claims,
+  package/scoped Ruff and the zero-error mypy ratchet pass.
 - 315 delivery audit/diagnostic/pass drift tests pass.
 - 411 native contract/diagnostic/pass tests pass.
 - 165 owning device tests pass across native packages, full/partial wide-scale
@@ -91,7 +95,10 @@ hardware-counter stall attribution.
 The initial CPU lane failed three ownership-log checks; the log fields,
 canonical owner link and Latest pointer were repaired. All affected routing/
 audit tests now pass. Initial failures remain under *-initial artifacts;
-the clean full-suite rerun is the remaining CPU publication gate.
+the clean full-suite rerun passes 30,611 cases with zero failures.
+The benchmark surface initially met a prior-checkout CMake cache; that inactive
+cache/output was preserved and the fresh audit passes 25/25. No source or
+support state was relaxed to obtain that result.
 
 ## Rejected experiments and retained evidence
 

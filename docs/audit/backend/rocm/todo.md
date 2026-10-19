@@ -35,7 +35,10 @@ speedup, profiler stall attribution or Radiance closure is claimed.
 Rejected K64/CU/staging/classification experiments are retained as evidence;
 their source knobs are not installed. The final net implementation changes
 only the ROCm folded-scale conversion. All five aggregate slices remain open.
-Local full/compiler/drift and public CI/review delivery gates remain pending.
+Local delivery gates pass: 30,611 CPU cases (3,864 declared skips), 2,178
+production compiler cases with zero skips, all 33 generated documents, all
+five surface audits and zero-error mypy. Publication requires checks and
+review on its published head.
 
 Evidence: benchmarks/baselines/rocm_folded_common_gate_20261019/README.md.
 

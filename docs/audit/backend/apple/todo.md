@@ -6,41 +6,16 @@ target: apple_gpu
 last_updated: 2026-10-19
 ---
 
-## ROCM-FOLDED-COMMON-GATE-20261019 — native scale recovery
+## ROCM-FOLDED-COMMON-GATE-20261019 — sibling assessment
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
 Sync: ROCM-FOLDED-COMMON-GATE-20261019.
 
-The native ROCm vector folded-scale consumer adds a common finite/nonzero
-fragment gate while retaining every original per-element FP32 rounding point
-and FP64 exceptional-product recovery. Original scale/store order and scalar
-lowering remain unchanged. No new dtype/op/pass/diagnostic, shared IR semantic,
-runtime ABI or schedule key is introduced; Python gains no backend body.
+Not applicable to Metal or Apple CPU execution: these pipelines do not invoke the ROCm fragment conversion. Shared IR, numerical policy and ABI are unchanged; no Apple hardware claim is made.
 
-Owning RX9070XT/gfx1201 proof passes 411 native/metadata cases, 165 package/
-layout/wide/masked/alignment/nonfinite cases and 574 separate composed/public
-primal/JVP/reverse regressions. Twelve FP8/MXFP8 KN/NK packages retain identical
-Tile/Target/image/entry/ABI. gfx1151 FP16 and gfx1201 FP8 scalar Target IR are
-byte-identical artifacts; this is not new gfx1151 execution proof.
-
-Two eleven-trial compiler/case orders cover ten unpacked shapes; the former
-N4096/K2048 regression is removed by rejecting cross-fragment scale staging.
-The common gate alone improves that row 1.5-1.8%, M200 rows 1.3-2.7% and
-N1024/K1024 about 3.8%. The widest long-K row is about 0.4% slower. Eight
-packed-native shape/order cases pass checked public launches and graph replay,
-with initial ratios 0.9469-1.0003. The shipped CLI repeats those cases at
-0.9658-1.0122 with mixed long-K results; repetitions are not summed. Public wall scopes remain
-separate from device graph dispatch plus captured kernels. No universal
-speedup, profiler stall attribution or Radiance closure is claimed.
-
-Rejected K64/CU/staging/classification experiments are retained as evidence;
-their source knobs are not installed. The final net implementation changes
-only the ROCm folded-scale conversion. All five aggregate slices remain open.
-Local full/compiler/drift and public CI/review delivery gates remain pending.
-
-Evidence: benchmarks/baselines/rocm_folded_common_gate_20261019/README.md.
-
-Apple assessment: not applicable to Metal/Apple CPU physical execution: these pipelines do not consume the ROCm fragment conversion. Shared IR, ABI and numeric policy are unchanged. No Apple device proof is transferred.
+The [owning ROCm record](../rocm/todo.md#rocm-folded-common-gate-20261019--native-scale-recovery) and its linked packet hold the
+numerical, timing and rejected-experiment evidence. All five aggregate slices
+remain open; this assessment adds no sibling execution admission.
 
 ## NATIVE-SOURCE-ATTENTION-AUTO-20261018 — public native strategy
 

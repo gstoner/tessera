@@ -6,6 +6,16 @@ target: nvidia_sm120
 last_updated: 2026-10-19
 ---
 
+## NATIVE-BOUNDED-QUERY-NORM-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Private bounded RMSNorm members pass eight RTX5070 serial/cooperative FP16/BF16 device cases and two counterbalanced 36-profile timing orders. Twelve legacy norm profiles retain four identical compiler stages. The mixed cohort passes 510 tests with 15 declared foreign/unavailable-hardware skips. Evidence: benchmarks/baselines/native_bounded_query_norm_20261019/README.md. Full bounded source AD/owner/public/portable integration and broad delivery gates remain follow-up required.
+
+Contract: docs/spec/NATIVE_BOUNDED_QUERY_NORM.md.
+
+
 ## NATIVE-BOUNDED-SOURCE-ATTENTION-20261019 — native row prerequisite
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

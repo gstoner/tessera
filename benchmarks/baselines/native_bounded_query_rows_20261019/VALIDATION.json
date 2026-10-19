@@ -40,5 +40,6 @@
     "Uuid:                    GPU-28d9e7efbf2ef716",
     "Marketing Name:          AMD Radeon RX 9070 XT",
     "Name:                    amdgcn-amd-amdhsa--gfx1201"
-  ]
+  ],
+  "source_checkpoint": "7a2aeea11a19020567c8f16dd6ccb7007028493d"
 }

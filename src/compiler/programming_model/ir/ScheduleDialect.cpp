@@ -1,6 +1,7 @@
 //===- ScheduleDialect.cpp — Schedule IR registration and verification ---===//
 
 #include "tessera/ProgrammingModel/ScheduleDialect.h"
+#include "Tessera/IR/BoundedQueryNormContract.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -365,6 +366,8 @@ LogicalResult ActivationOp::verify() {
 }
 
 LogicalResult NormOp::verify() {
+  if (failed(tessera::readBoundedQueryNormShape(getOperation(),getSubject().getType())))
+    return failure();
   if (failed(verifyContentAddressedKernel(*this, getSubject(), getScheduled(),
           getArtifactHash(), getArch(), getStorage(), getAccum(), getWorkgroupSize())))
     return failure();

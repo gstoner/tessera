@@ -822,7 +822,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-ir-contracts",
         cpp_class="IRContractLegality",
         summary=(
-            "SM120 bounded-query schema-8 row members retain a dynamic logical query axis, checked sequence capacity and runtime row guards; existing static row schemas are unchanged. "
+            "SM120 bounded-query schema-8 row members retain a dynamic logical query axis, checked sequence capacity and runtime row guards; existing static row schemas are unchanged. Native bounded-query RMSNorm members preserve fixed B/H/D, dynamic Sq, explicit capacity/prefix/column guards and immutable epsilon; static normalization recipes remain unchanged. "
             "IR contract legality — numeric_policy SCHEMA (legal key set, "
             "string-valued entries, known dtypes/modes, accumulator not "
             "narrower in significand bits than storage, math_mode actually "
@@ -1089,7 +1089,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-storage-legalize",
         cpp_class="StorageLegalize",
         summary=(
-            "SM120 bounded-query schema-8 row members retain a dynamic logical query axis, checked sequence capacity and runtime row guards; existing static row schemas are unchanged. "
+            "SM120 bounded-query schema-8 row members retain a dynamic logical query axis, checked sequence capacity and runtime row guards; existing static row schemas are unchanged. Native bounded-query RMSNorm members preserve fixed B/H/D, dynamic Sq, explicit capacity/prefix/column guards and immutable epsilon; static normalization recipes remain unchanged. "
             "C4 (TIRx): terminal packing — stamps `tessera.storage_packed` + "
             "`tessera.storage_container` on sub-byte / block-scaled storage "
             "(fp4 / nvfp4 / fp6 / int4). Named targets gate this on the actual "

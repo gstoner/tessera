@@ -7,6 +7,16 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## NATIVE-BOUNDED-QUERY-NORM-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Parity validated for the compiler ABI boundary: half-storage or bounded SM120 norm cannot bind the static FP32 x86 norm ABI. Negative retarget tests pass in the mixed cohort; existing FP32 admission is retained. No new x86 execution or bounded-query native admission is claimed.
+
+Contract: docs/spec/NATIVE_BOUNDED_QUERY_NORM.md.
+
+
 ## NATIVE-BOUNDED-SOURCE-ATTENTION-20261019 — native row prerequisite
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

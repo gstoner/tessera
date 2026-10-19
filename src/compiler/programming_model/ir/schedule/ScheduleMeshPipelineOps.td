@@ -146,7 +146,12 @@ def Schedule_NormOp : Op<ScheduleDialect, "norm", [Pure]> {
   let arguments = (ins AnyType:$subject, StrAttr:$artifact_hash,
                        StrAttr:$arch, StrAttr:$storage, StrAttr:$accum,
                        StrAttr:$kind, I64Attr:$axis, F32Attr:$epsilon,
-                       I64Attr:$workgroup_size, DefaultValuedAttr<StrAttr, "\"serial\"">:$schedule);
+                       I64Attr:$workgroup_size, DefaultValuedAttr<StrAttr, "\"serial\"">:$schedule,
+                       OptionalAttr<StrAttr>:$shape_policy,
+                       OptionalAttr<I64Attr>:$sequence_bound,
+                       OptionalAttr<I64Attr>:$row_capacity,
+                       OptionalAttr<I64Attr>:$fixed_columns,
+                       OptionalAttr<I64Attr>:$row_multiple);
   let results = (outs AnyType:$scheduled);
   let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
   let hasVerifier = 1;

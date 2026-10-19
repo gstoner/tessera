@@ -5,6 +5,16 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NATIVE-BOUNDED-QUERY-NORM-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Parity validated for the target boundary: ROCm rejects the SM120 norm capacity policy instead of erasing it. The mixed cohort includes twelve owning gfx1201 source-reverse device regressions; gfx1151 execution remains follow-up required. Existing static dtype/ABI admission is unchanged; no NVIDIA physical proof transfers.
+
+Contract: docs/spec/NATIVE_BOUNDED_QUERY_NORM.md.
+
+
 ## NATIVE-BOUNDED-SOURCE-ATTENTION-20261019 — native row prerequisite
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

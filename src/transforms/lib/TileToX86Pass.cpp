@@ -1041,6 +1041,14 @@ struct TileToX86PassImpl
         continue;
       }
       if (opName == "tile.norm_kernel") {
+        auto storage = op->getAttrOfType<StringAttr>("storage");
+        if (!storage || storage.getValue() != "f32" ||
+            op->hasAttr("shape_policy") || op->hasAttr("sequence_bound") ||
+            op->hasAttr("row_capacity") || op->hasAttr("fixed_columns") ||
+            op->hasAttr("row_multiple")) {
+          op->emitError("x86 norm ABI requires its static FP32 normalization contract");
+          return signalPassFailure();
+        }
         auto kind = op->getAttrOfType<StringAttr>("kind");
         StringRef symbol = kind.getValue() == "rmsnorm"
                                ? "tessera_x86_avx512_rmsnorm_f32"

@@ -3,6 +3,9 @@
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
 Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
 Base: merged PR990, d0579fdb1546fda5278b700dbee8c77a251d339b.
+Frozen row-prerequisite source: 7a2aeea11a19020567c8f16dd6ccb7007028493d.
+Later bounded-normalization changes have separate proof; these measurements
+remain bound to the frozen source and compiler, not to a moving checkout.
 
 ## Established scope
 

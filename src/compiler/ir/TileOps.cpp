@@ -1,4 +1,5 @@
 #include "Tessera/IR/AttentionShapeContract.h"
+#include "Tessera/IR/BoundedQueryNormContract.h"
 #include "Tessera/IR/TileBufferViewContract.h"
 #include "Tessera/IR/RowRegionContract.h"
 #include "Tessera/IR/StaticPermutationContract.h"
@@ -2176,6 +2177,7 @@ LogicalResult ActivationKernelOp::verify() {
 }
 
 LogicalResult NormKernelOp::verify() {
+  if (failed(tessera::readBoundedQueryNormShape(getOperation()))) return failure();
   if (getInputs().size() != 5)
     return emitOpError("expects source, destination, rows, columns, and epsilon");
   if (!isa<LLVM::LLVMPointerType>(getInputs()[0].getType()) ||

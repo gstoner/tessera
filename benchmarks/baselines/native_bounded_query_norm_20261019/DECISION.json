@@ -1,0 +1,175 @@
+{
+  "state": "native_normalization_member_prerequisite_validated_not_composed_source_program",
+  "compiler_sha256": "fb170c6e79b87c245c678133a03f3e9271f8ca8bb551764307fcc32cf4fdacf8",
+  "source_sha256": {
+    "src/compiler/ir/include/Tessera/IR/BoundedQueryNormContract.h": "3deb7d076d28f7d8a2784bbf10ea2b48eb73ae0df47f471c24ae54ca23e2bc7d",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "4e3507602f4eb8116187252c1be76e22683653c820325ee344f2b53e60f79ca4",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "3ebca8cbfc8957eed28d36da302d4b8ea321cccdc5b8c8374e90611a350b1a3b",
+    "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "2d1e610c47ab9304caac0b1ff861adf3c769b2a7ec669e3383ec799477aa9bed",
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "bdb61d13cd681f6ff714a9c3f8e0def4c1b6c23f6489508ae4c245087a06ccda",
+    "src/compiler/ir/TileOps.cpp": "00045ad7a77422e08b9ebb58a8a44fc1978db05468861edd4be3593caf04c5d3",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "029823bcc0a37f522d5b134f86783963b7942beee8daf7ca6a363ed00f701c6f",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "8a2ec2fdbd4ac5ab4ad3d821b0c38330ad5af49aecab041889e134a484a24119",
+    "src/transforms/lib/TileToX86Pass.cpp": "b0bc6a00d84d2ed072c0ee5558bed52e45cbc08dfdde8645b06e69e41f31a950",
+    "tests/unit/test_sm120_bounded_norm_schedule.py": "d2e980c0caba4f592129bc3f4d21adb778dcebe0cc15f81c5808396f5cc2a88b",
+    "tests/device/nvidia/test_bounded_norm_member.py": "5581ac6298050c1365d5712a80f071d8a6cc960f0889c39d8e32b42c970abbdc",
+    "benchmarks/nvidia/benchmark_bounded_query_norm.py": "f350ab47f30487b8d428e6391a2b5340c6dd380db628e0412e5876cd59e3e11a"
+  },
+  "timing_scope": "graph dispatch per captured kernel node; ordinary event dispatch and completed raw host retained separately; not isolated profiler kernel time",
+  "counterbalanced_profile_input_and_stage_hashes_equal": true,
+  "summary": [
+    {
+      "order": "forward",
+      "mode": "serial",
+      "profiles": 18,
+      "event_dispatch_median_ms": {
+        "bounded_over_static_min": 0.7530855603919169,
+        "bounded_over_static_max": 1.1149537572524046,
+        "median_ratio": 0.889113024439881
+      },
+      "graph_dispatch_per_node_median_ms": {
+        "bounded_over_static_min": 0.7233950008028689,
+        "bounded_over_static_max": 0.9342050140708128,
+        "median_ratio": 0.8075694366854647
+      },
+      "completed_raw_host_median_ms": {
+        "bounded_over_static_min": 0.7781382771131442,
+        "bounded_over_static_max": 1.0895724907992852,
+        "median_ratio": 0.8914542969406629
+      }
+    },
+    {
+      "order": "forward",
+      "mode": "cooperative_128",
+      "profiles": 18,
+      "event_dispatch_median_ms": {
+        "bounded_over_static_min": 0.892949279519139,
+        "bounded_over_static_max": 1.1541917920361529,
+        "median_ratio": 1.0030643772722252
+      },
+      "graph_dispatch_per_node_median_ms": {
+        "bounded_over_static_min": 0.9107312983004473,
+        "bounded_over_static_max": 1.0506932851697193,
+        "median_ratio": 0.9972214908160459
+      },
+      "completed_raw_host_median_ms": {
+        "bounded_over_static_min": 0.9189562024852779,
+        "bounded_over_static_max": 1.0988527718251762,
+        "median_ratio": 0.9830147869387827
+      }
+    },
+    {
+      "order": "reverse",
+      "mode": "serial",
+      "profiles": 18,
+      "event_dispatch_median_ms": {
+        "bounded_over_static_min": 0.7460791675950139,
+        "bounded_over_static_max": 1.1160947443984734,
+        "median_ratio": 0.9164145531502349
+      },
+      "graph_dispatch_per_node_median_ms": {
+        "bounded_over_static_min": 0.7233950008028689,
+        "bounded_over_static_max": 0.9317225306569177,
+        "median_ratio": 0.8067451183310228
+      },
+      "completed_raw_host_median_ms": {
+        "bounded_over_static_min": 0.7717504201817684,
+        "bounded_over_static_max": 1.0275004501334417,
+        "median_ratio": 0.866788373863182
+      }
+    },
+    {
+      "order": "reverse",
+      "mode": "cooperative_128",
+      "profiles": 18,
+      "event_dispatch_median_ms": {
+        "bounded_over_static_min": 0.8937156848082667,
+        "bounded_over_static_max": 1.0956672614648875,
+        "median_ratio": 1.0167591712241741
+      },
+      "graph_dispatch_per_node_median_ms": {
+        "bounded_over_static_min": 0.9030823696541423,
+        "bounded_over_static_max": 1.2199003532869694,
+        "median_ratio": 1.0044995483433135
+      },
+      "completed_raw_host_median_ms": {
+        "bounded_over_static_min": 0.9042961359694224,
+        "bounded_over_static_max": 1.067542725714414,
+        "median_ratio": 0.9982317096182318
+      }
+    }
+  ],
+  "remaining": [
+    "native bounded paired-source outlining and manifest",
+    "composed CUDA capacity/lifetime owner",
+    "ordinary public JIT and compiler-free portable replay",
+    "full delivery gates"
+  ],
+  "cooperative_outlier_followup": {
+    "initial": "reversed 32-node f16 cooperative capacity1x4x257x257 at Sq1 measured1.2199; raw distributions preserved",
+    "repeat": "same frozen images and input generator; 256-node graphs,31alternating trials,8graph replays per sample; both query/arm orders",
+    "rows": [
+      {
+        "order": "forward",
+        "runtime_shape": [
+          1,
+          4,
+          1,
+          257
+        ],
+        "bounded_over_static_graph_dispatch_per_node": 1.0
+      },
+      {
+        "order": "forward",
+        "runtime_shape": [
+          1,
+          4,
+          3,
+          257
+        ],
+        "bounded_over_static_graph_dispatch_per_node": 1.0
+      },
+      {
+        "order": "forward",
+        "runtime_shape": [
+          1,
+          4,
+          257,
+          257
+        ],
+        "bounded_over_static_graph_dispatch_per_node": 0.999061970720528
+      },
+      {
+        "order": "reverse",
+        "runtime_shape": [
+          1,
+          4,
+          257,
+          257
+        ],
+        "bounded_over_static_graph_dispatch_per_node": 0.9990570977129815
+      },
+      {
+        "order": "reverse",
+        "runtime_shape": [
+          1,
+          4,
+          3,
+          257
+        ],
+        "bounded_over_static_graph_dispatch_per_node": 1.0
+      },
+      {
+        "order": "reverse",
+        "runtime_shape": [
+          1,
+          4,
+          1,
+          257
+        ],
+        "bounded_over_static_graph_dispatch_per_node": 0.9998048077301593
+      }
+    ],
+    "conclusion": "short-window outlier not reproduced; no broad performance promotion or isolated kernel claim"
+  }
+}

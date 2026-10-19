@@ -1053,7 +1053,10 @@ def Tile_ActivationKernelOp : Tile_Op<"activation_kernel"> {
 // flattened row count, row width, and epsilon.
 def Tile_NormKernelOp : Tile_Op<"norm_kernel"> {
   let summary = "Launch-level typed RMSNorm or LayerNorm";
-  let arguments = (ins Variadic<AnyType>:$inputs);
+  let arguments = (ins Variadic<AnyType>:$inputs,
+      OptionalAttr<StrAttr>:$shape_policy, OptionalAttr<I64Attr>:$sequence_bound,
+      OptionalAttr<I64Attr>:$row_capacity, OptionalAttr<I64Attr>:$fixed_columns,
+      OptionalAttr<I64Attr>:$row_multiple);
   let results = (outs);
   let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
   let hasVerifier = 1;

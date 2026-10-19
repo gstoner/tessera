@@ -90,5 +90,6 @@
   "earlier_numeric_only_repeats": "bounded-proof-{forward,reverse}-numeric-initial.json.gz; same12profiles, not additional coverage",
   "actual_attention_pullback_compiler_passed": 4,
   "actual_attention_pullback_device_passed": 4,
-  "sm120_device_count_scope": "12 bounded/static ReLU-fixture regressions +4 distinct actual source-attention AD pullback cases, not repeated runs"
+  "sm120_device_count_scope": "12 bounded/static ReLU-fixture regressions +4 distinct actual source-attention AD pullback cases, not repeated runs",
+  "source_checkpoint": "7a2aeea11a19020567c8f16dd6ccb7007028493d"
 }

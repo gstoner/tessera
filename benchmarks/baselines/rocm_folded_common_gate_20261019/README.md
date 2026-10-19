@@ -92,9 +92,13 @@ hardware-counter stall attribution.
   byte-identical to the original predicate; redundant source removed.
 
 Compressed raw packets and decisions retain these negative results. The
-experiments/ patches reproduce only historical C++/ODS experiments against
+experiments/ compressed patches reproduce only historical C++/ODS experiments against
 a66ebd679; they are evidence, not active production configuration.
-No unused selector or experimental policy is installed.
+No unused selector or experimental policy is installed. Read a compressed
+packet with gzip -dc FILE.json.gz; reconstruct an experiment in an isolated
+base checkout with gzip -dc experiments/NAME.patch.gz | git apply.
+Normalized historical decisions are compressed to avoid repeating full
+receipts in the review diff; their decoded contents are unchanged.
 
 ## Reproduction
 

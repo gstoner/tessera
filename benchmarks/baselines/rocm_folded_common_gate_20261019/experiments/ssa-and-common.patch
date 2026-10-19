@@ -1,0 +1,158 @@
+diff --git a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+index ce0d7fec0..12efc5c30 100644
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2799,17 +2799,29 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
+   if (outputType.isBF16())
+     storeEpilogue =
+         tessera::tile::TileEpilogueAttr::get(ctx, false, "none", "bf16");
++  // The native matmul result has separate storage from its input tensors.
++  // Materialize scale SSA before writes so LLVM can share immutable scales.
++  // Keep the existing store order, numeric operations and guarded fallbacks.
++  const bool stageFoldedScales = foldedFullK && foldedVectorScales &&
++      wholeM && wholeN && !foldedPacked && !foldedRowPitched;
++  auto scaleFragment = [&](Value value, int64_t mi, int64_t ni) -> Value {
++    OperationState scale(loc, "tile.fragment_folded_scale");
++    scale.addOperands({value, lhsScale, rhsScale,
++                       rowOrigin[mi], colOrigin[ni], M, N});
++    scale.addTypes(accFragmentTy);
++    scale.addAttribute("vector_scales", b.getBoolAttr(foldedVectorScales));
++    return b.create(scale)->getResult(0);
++  };
++  SmallVector<Value> storedAccs(accs.begin(), accs.end());
++  if (stageFoldedScales)
++    for (int64_t ni = 0; ni < nt; ++ni)
++      for (int64_t mi = 0; mi < mt; ++mi)
++        storedAccs[mi * nt + ni] = scaleFragment(accs[mi * nt + ni], mi, ni);
+   for (int64_t ni = 0; ni < nt; ++ni)
+     for (int64_t mi = 0; mi < mt; ++mi) {
+-      Value stored = accs[mi * nt + ni];
+-      if (foldedFullK) {
+-        OperationState scale(loc, "tile.fragment_folded_scale");
+-        scale.addOperands({stored, lhsScale, rhsScale,
+-                           rowOrigin[mi], colOrigin[ni], M, N});
+-        scale.addTypes(accFragmentTy);
+-        scale.addAttribute("vector_scales", b.getBoolAttr(foldedVectorScales));
+-        stored = b.create(scale)->getResult(0);
+-      }
++      Value stored = storedAccs[mi * nt + ni];
++      if (foldedFullK && !stageFoldedScales)
++        stored = scaleFragment(stored, mi, ni);
+       OperationState unpack(loc, "tile.fragment_unpack");
+       unpack.addOperands(stored);
+       unpack.addTypes(tileValueTy);
+diff --git a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp
+index c8b572678..31413675e 100644
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp
+@@ -1680,7 +1680,39 @@ struct ConvertFragmentFoldedScale
+       }
+       activationVector = branch.getResult(0);
+     }
++    auto guardedScale = [&](Value partial, Value reference, Value activation,
++                            Value normal, Value regular) -> Value {
++      // The wide branch preserves exceptional scale-product recovery. A
++      // likelihood hint changes layout/scheduling, never its numeric gate.
++      Value likely = arith::ConstantIntOp::create(rewriter, loc, 1, 1);
++      regular = LLVM::ExpectOp::create(rewriter, loc,
++          TypeRange{rewriter.getI1Type()}, regular, likely).getResult();
++      auto branch = scf::IfOp::create(rewriter, loc,
++          TypeRange{rewriter.getF32Type()}, regular, true);
++      {
++        OpBuilder::InsertionGuard guard(rewriter);
++        rewriter.setInsertionPointToStart(branch.thenBlock());
++        scf::YieldOp::create(rewriter, loc, normal);
++        rewriter.setInsertionPointToStart(branch.elseBlock());
++        Value p64 = arith::ExtFOp::create(rewriter, loc, rewriter.getF64Type(), partial);
++        Value r64 = arith::ExtFOp::create(rewriter, loc, rewriter.getF64Type(), reference);
++        Value a64 = arith::ExtFOp::create(rewriter, loc, rewriter.getF64Type(), activation);
++        Value wide = arith::TruncFOp::create(rewriter, loc, rewriter.getF32Type(),
++            arith::MulFOp::create(rewriter, loc,
++                arith::MulFOp::create(rewriter, loc, p64, r64), a64));
++        Value pzero = arith::CmpFOp::create(rewriter, loc,
++            arith::CmpFPredicate::OEQ, partial, zero);
++        Value afinite = arith::CmpFOp::create(rewriter, loc,
++            arith::CmpFPredicate::OLT,
++            math::AbsFOp::create(rewriter, loc, activation), infinity);
++        Value scaled = arith::SelectOp::create(rewriter, loc,
++            arith::AndIOp::create(rewriter, loc, pzero, afinite), zero, wide);
++        scf::YieldOp::create(rewriter, loc, scaled);
++      }
++      return branch.getResult(0);
++    };
+     Value result = adaptor.getAcc();
++    SmallVector<Value> partials, references, activations, normals, regulars;
+     for (int64_t i = 0; i < physical->accumulatorElementsPerLane; ++i) {
+       auto [row, col] = accumulatorElementCoordinate(rewriter, loc, *physical,
+           i, coords.lane, coords.storeGroup, stride,
+@@ -1714,35 +1746,48 @@ struct ConvertFragmentFoldedScale
+       Value nonzero = arith::CmpFOp::create(rewriter, loc,
+           arith::CmpFPredicate::ONE, combined, zero);
+       Value regular = arith::AndIOp::create(rewriter, loc, finite, nonzero);
+-      // The wide branch preserves exceptional scale-product recovery. A
+-      // likelihood hint changes layout/scheduling, never its numeric gate.
++      if (!op.getVectorScales()) {
++        result = vector::InsertOp::create(rewriter, loc,
++            guardedScale(partial, reference, activation, normal, regular), result,
++            ArrayRef<int64_t>{i});
++        continue;
++      }
++      partials.push_back(partial);
++      references.push_back(reference);
++      activations.push_back(activation);
++      normals.push_back(normal);
++      regulars.push_back(regular);
++    }
++    if (op.getVectorScales()) {
++      // The common path has the SAME elementwise FP32 products. One branch
++      // per fragment avoids serial regular-case control flow. If any element
++      // needs recovery, retain the original per-element gates and FP64 math;
++      // a mixed fragment must not widen or zero its regular elements.
++      Value allRegular = regulars.front();
++      for (Value regular : llvm::drop_begin(regulars))
++        allRegular = arith::AndIOp::create(rewriter, loc, allRegular, regular);
+       Value likely = arith::ConstantIntOp::create(rewriter, loc, 1, 1);
+-      regular = LLVM::ExpectOp::create(rewriter, loc,
+-          TypeRange{rewriter.getI1Type()}, regular, likely).getResult();
++      allRegular = LLVM::ExpectOp::create(rewriter, loc,
++          TypeRange{rewriter.getI1Type()}, allRegular, likely).getResult();
+       auto branch = scf::IfOp::create(rewriter, loc,
+-          TypeRange{rewriter.getF32Type()}, regular, true);
++          TypeRange{vecTy}, allRegular, true);
+       {
+         OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(branch.thenBlock());
+-        scf::YieldOp::create(rewriter, loc, normal);
++        Value fast = adaptor.getAcc();
++        for (int64_t i = 0; i < physical->accumulatorElementsPerLane; ++i)
++          fast = vector::InsertOp::create(rewriter, loc, normals[i], fast,
++              ArrayRef<int64_t>{i});
++        scf::YieldOp::create(rewriter, loc, fast);
+         rewriter.setInsertionPointToStart(branch.elseBlock());
+-        Value p64 = arith::ExtFOp::create(rewriter, loc, rewriter.getF64Type(), partial);
+-        Value r64 = arith::ExtFOp::create(rewriter, loc, rewriter.getF64Type(), reference);
+-        Value a64 = arith::ExtFOp::create(rewriter, loc, rewriter.getF64Type(), activation);
+-        Value wide = arith::TruncFOp::create(rewriter, loc, rewriter.getF32Type(),
+-            arith::MulFOp::create(rewriter, loc,
+-                arith::MulFOp::create(rewriter, loc, p64, r64), a64));
+-        Value pzero = arith::CmpFOp::create(rewriter, loc,
+-            arith::CmpFPredicate::OEQ, partial, zero);
+-        Value afinite = arith::CmpFOp::create(rewriter, loc,
+-            arith::CmpFPredicate::OLT,
+-            math::AbsFOp::create(rewriter, loc, activation), infinity);
+-        Value scaled = arith::SelectOp::create(rewriter, loc,
+-            arith::AndIOp::create(rewriter, loc, pzero, afinite), zero, wide);
+-        scf::YieldOp::create(rewriter, loc, scaled);
++        Value fallback = adaptor.getAcc();
++        for (int64_t i = 0; i < physical->accumulatorElementsPerLane; ++i)
++          fallback = vector::InsertOp::create(rewriter, loc, guardedScale(partials[i], references[i], activations[i],
++                  normals[i], regulars[i]),
++              fallback, ArrayRef<int64_t>{i});
++        scf::YieldOp::create(rewriter, loc, fallback);
+       }
+-      result = vector::InsertOp::create(rewriter, loc, branch.getResult(0),
+-          result, ArrayRef<int64_t>{i});
++      result = branch.getResult(0);
+     }
+     rewriter.replaceOp(op, result);
+     return success();

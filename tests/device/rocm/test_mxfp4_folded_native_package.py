@@ -80,11 +80,12 @@ def test_native_folded_refuses_wrong_argument_layout_before_hip(layout,monkeypat
             "row_reference":folded.row_reference,"output":np.zeros((65,48),ml_dtypes.bfloat16)},
             {"M":65,"N":48,"K":64})
 
+@pytest.mark.parametrize("shape",[(65,48,64),(256,64,64)])
 @pytest.mark.parametrize("case",["overflow_scale","underflow_scale","zero_partial"])
 @pytest.mark.parametrize("runtime_k",[False,True])
-def test_native_folded_package_preserves_wide_scale_fallback(case,runtime_k):
+def test_native_folded_package_preserves_wide_scale_fallback(case,runtime_k,shape):
     assert rt._rocm_live_arch()=="gfx1201"
-    m,n,k=65,48,64
+    m,n,k=shape
     value=2.0**-9 if case=="overflow_scale" else 448.0 if case=="underflow_scale" else 0.0
     a=np.full((m,k),value,ml_dtypes.float8_e4m3fn).view(np.uint8)
     scales=np.full(m,2.0**-25 if case=="underflow_scale" else 2.0**20,np.float32)

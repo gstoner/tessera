@@ -42,7 +42,7 @@ def compile_case(m,n,k,*,runtime_mn=False):
     return program,a,sa,payload,expected
 
 
-@pytest.mark.parametrize("shape",[(83,32,64),(128,64,128),(256,80,192),(200,128,256)])
+@pytest.mark.parametrize("shape",[(83,32,64),(128,64,128),(256,80,192),(200,128,256),(256,1024,1024)])
 @pytest.mark.parametrize("runtime_mn",[False,True])
 def test_native_packed_matches_independent_folded_oracle(shape,monkeypatch,runtime_mn):
     def legacy(*args,**kwargs):

@@ -1,0 +1,43 @@
+diff --git a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+index ce0d7fec0..12efc5c30 100644
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2799,17 +2799,29 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
+   if (outputType.isBF16())
+     storeEpilogue =
+         tessera::tile::TileEpilogueAttr::get(ctx, false, "none", "bf16");
++  // The native matmul result has separate storage from its input tensors.
++  // Materialize scale SSA before writes so LLVM can share immutable scales.
++  // Keep the existing store order, numeric operations and guarded fallbacks.
++  const bool stageFoldedScales = foldedFullK && foldedVectorScales &&
++      wholeM && wholeN && !foldedPacked && !foldedRowPitched;
++  auto scaleFragment = [&](Value value, int64_t mi, int64_t ni) -> Value {
++    OperationState scale(loc, "tile.fragment_folded_scale");
++    scale.addOperands({value, lhsScale, rhsScale,
++                       rowOrigin[mi], colOrigin[ni], M, N});
++    scale.addTypes(accFragmentTy);
++    scale.addAttribute("vector_scales", b.getBoolAttr(foldedVectorScales));
++    return b.create(scale)->getResult(0);
++  };
++  SmallVector<Value> storedAccs(accs.begin(), accs.end());
++  if (stageFoldedScales)
++    for (int64_t ni = 0; ni < nt; ++ni)
++      for (int64_t mi = 0; mi < mt; ++mi)
++        storedAccs[mi * nt + ni] = scaleFragment(accs[mi * nt + ni], mi, ni);
+   for (int64_t ni = 0; ni < nt; ++ni)
+     for (int64_t mi = 0; mi < mt; ++mi) {
+-      Value stored = accs[mi * nt + ni];
+-      if (foldedFullK) {
+-        OperationState scale(loc, "tile.fragment_folded_scale");
+-        scale.addOperands({stored, lhsScale, rhsScale,
+-                           rowOrigin[mi], colOrigin[ni], M, N});
+-        scale.addTypes(accFragmentTy);
+-        scale.addAttribute("vector_scales", b.getBoolAttr(foldedVectorScales));
+-        stored = b.create(scale)->getResult(0);
+-      }
++      Value stored = storedAccs[mi * nt + ni];
++      if (foldedFullK && !stageFoldedScales)
++        stored = scaleFragment(stored, mi, ni);
+       OperationState unpack(loc, "tile.fragment_unpack");
+       unpack.addOperands(stored);
+       unpack.addTypes(tileValueTy);

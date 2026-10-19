@@ -72,8 +72,12 @@ environment rather than conflating it with the HIP control ratio.
 
 Eight packed-native shape/order cases also pass the public checked launcher,
 full bitwise and sampled independent oracle, and poisoned three-frame graph
-checks. Candidate/control graph ratios range from 0.9469 to 1.0002.
-These use the native packed expanded-memref ABI, not the old hand-emitted HIP
+checks. The initial paired packet has ratios 0.9469-1.0002; the shipped CLI
+reproduction has ratios 0.9658-1.0122. Its long-K row is mixed across
+orders (0.9946/1.0122), so there is no consistent packed long-K gain.
+Both packets repeat the same eight shape/order cases; they are not sixteen
+independent coverage cases. The shipped CLI records the actual queried GPU
+and a clean source tree. These use the native packed expanded-memref ABI, not the old hand-emitted HIP
 packed benchmark. Shared frame leases close before their allocations retire.
 
 Selected disassembly is bound to the exact timed HSACO and instruction-stream

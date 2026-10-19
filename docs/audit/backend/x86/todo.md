@@ -29,7 +29,8 @@ N4096/K2048 regression is removed by rejecting cross-fragment scale staging.
 The common gate alone improves that row 1.5-1.8%, M200 rows 1.3-2.7% and
 N1024/K1024 about 3.8%. The widest long-K row is about 0.4% slower. Eight
 packed-native shape/order cases pass checked public launches and graph replay,
-with candidate/control graph ratios 0.9469-1.0003. Public wall scopes remain
+with initial ratios 0.9469-1.0003. The shipped CLI repeats those cases at
+0.9658-1.0122 with mixed long-K results; repetitions are not summed. Public wall scopes remain
 separate from device graph dispatch plus captured kernels. No universal
 speedup, profiler stall attribution or Radiance closure is claimed.
 

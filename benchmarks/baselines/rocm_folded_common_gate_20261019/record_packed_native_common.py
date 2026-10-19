@@ -8,6 +8,7 @@ import hashlib
 import json
 import math
 import os
+import platform
 import statistics
 import subprocess
 import time
@@ -19,7 +20,7 @@ from benchmarks.rocm.ablate_gfx1201_folded_load_schedule import package_engine
 from benchmarks.rocm.folded_native_resident_frame import FoldedNativeFramePool
 from benchmarks.rocm.folded_graph_windows import FoldedGraphWindows
 from benchmarks.rocm.record_gfx1201_mxfp4_folded_load_schedule import DeviceClock
-from benchmarks.rocm.record_gfx1201_folded_native_package import independent_output_snapshots
+from benchmarks.rocm.record_gfx1201_folded_native_package import independent_output_snapshots, SOURCES, ROOT
 
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--candidate-opt",required=True,type=Path)
@@ -29,9 +30,12 @@ parser.add_argument("--output",required=True,type=Path)
 args=parser.parse_args()
 tools={"candidate":args.candidate_opt.resolve(),"control":args.control_opt.resolve()}
 args.output.parent.mkdir(parents=True,exist_ok=True)
-assert rt._rocm_live_arch()=="gfx1201"
+if rt._rocm_live_arch() != "gfx1201":
+ raise RuntimeError("owning gfx1201 device required")
 hip=rt._load_hip_for_launch()
-assert hip is not None and hip.hipInit(0)==0
+if hip is None or hip.hipInit(0) != 0:
+ raise RuntimeError("HIP initialization failed")
+device_name = base._selected_device_name(hip)
 result=[]
 shapes=[(256,1024,1024),(256,8192,1536),(256,8192,5120),(200,2048,2048)]
 for order in ["forward","reverse"]:
@@ -111,7 +115,11 @@ for order in ["forward","reverse"]:
        "images":{e.name:e.metadata for e in engines},"resident_pool":pool.report}
   assert pool.report["closed"] and pool.report["leases"]==0
   result.append(row)
-  record={"architecture":rt._rocm_live_arch(),"device":"AMD Radeon RX 9070 XT","source_commit":subprocess.check_output(["git","rev-parse","HEAD"],text=True).strip(),
+  record={"architecture":rt._rocm_live_arch(),"device":device_name,"kernel_release":platform.release(),
+      "source_commit":subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip(),
+      "dirty_worktree":bool(subprocess.check_output(["git","status","--porcelain"],cwd=ROOT,text=True).strip()),
+      "source_sha256":{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in SOURCES},
+      "recorder_sha256":hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
       "scope":"Graph/Schedule/Tile/native packed ABI; GPU graph dispatch plus kernels, not profiler isolated kernel; public complete calls separate",
       "compiler_sha256":{name:hashlib.sha256(tool.read_bytes()).hexdigest() for name,tool in tools.items()},"rows":result}
   args.output.write_text(json.dumps(record,indent=2)+"\n")

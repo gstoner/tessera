@@ -45,7 +45,8 @@ def test_vector_row_scale_preserves_unmasked_result_lanes(image, m, n, misaligne
     scales = (np.arange(m, dtype=np.float32) + 4) / 16
     refs = (120 + np.arange(n) % 13).astype(np.uint8)
     if probe != "ordinary":
-        values = [0.5, 0.0, -0.0, 2.0**20, 2.0**-30, -0.5, 2.0**-149, -2.0**-149]
+        values = [0.5, 0.0, -0.0, 2.0**20, 2.0**-30, -0.5, 2.0**-149, -2.0**-149,
+                  1.5 * 2.0**-23, 0.0, -1.5 * 2.0**-23, 0.5, 1.0, -1.0, 0.0, -0.0]
         if probe == "classification":
             values[3:6] = [np.nan, np.inf, -np.inf]
         scales = np.resize(np.array(values, np.float32), m)
@@ -83,6 +84,12 @@ def test_vector_row_scale_preserves_unmasked_result_lanes(image, m, n, misaligne
             fallback = np.where((partial == 0) & np.isfinite(activation),
                                 np.float32(0), wide)
             want = np.where(regular, normal, fallback).astype(ml_dtypes.bfloat16)
+        if probe == "mixed_underflow" and m == 16 and n >= 3:
+            # In the same eight-row fragment, a zero scale forces fallback
+            # while a nonzero rounded-subnormal product must retain FP32
+            # staging. Uniformly widening that fragment changes this output.
+            assert regular[8, 2] and not regular[9, 2]
+            assert float(want[8, 2]) != float(ml_dtypes.bfloat16(wide[8, 2]))
         nan = np.isnan(want)
         np.testing.assert_array_equal(np.isnan(got), nan)
         np.testing.assert_array_equal(got.view(np.uint16)[~nan], want.view(np.uint16)[~nan])

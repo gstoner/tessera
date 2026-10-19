@@ -2,7 +2,7 @@
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.
 Sync: ROCM-FOLDED-COMMON-GATE-20261019.
-Base: merged PR989 / a66ebd679. Delivery remains pending local full gates and public CI/review.
+Base: merged PR989 / a66ebd679. Delivery remains pending a clean full CPU rerun, remaining audit gates and public CI/review.
 
 ## Implementation and numerical contract
 
@@ -33,7 +33,9 @@ delivery source; private experiment history is not the PR implementation.
   recovery, masked-but-observable result lanes, aligned/misaligned activation
   scales, signed zeros/subnormals, NaN/Inf classification, packed vector-band
   and pitched layouts. NaN classification is checked; NaN payload bits are
-  not certified.
+  not certified. A forty-case refinement passes both control and candidate,
+  including rounded-subnormal mixed fragments whose result differs from
+  uniform FP64 widening; 363 combined numerical/ownership/drift cases pass.
 - 574 separate composed/public primal/JVP/reverse regressions pass.
 - Twelve FP8/MXFP8 KN/NK shape-format controls retain identical Tile, Target,
   image, entry and ABI. This is unchanged-format proof, not format promotion.
@@ -117,7 +119,9 @@ For the packed evidence:
 python benchmarks/baselines/rocm_folded_common_gate_20261019/record_packed_native_common.py \
   --candidate-opt CANDIDATE --control-opt CONTROL --llvm-bin LLVM_BIN --output OUTPUT
 ```
-The script reuses canonical ABI-aware package, clock, graph and frame owners;
+The script queries the actual selected GPU name/architecture and records
+source, recorder and compiler hashes. It reuses canonical ABI-aware package,
+clock, graph and frame owners;
 it changes no compiler policy or generated kernel body.
 
 ## Backend assessment and remaining scope

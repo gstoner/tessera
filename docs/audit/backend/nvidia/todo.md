@@ -77,7 +77,8 @@ The explicit prepared packet remains a historical e63eb93f/B29 checkpoint.
 Final local gates pass: 30,752 CPU tests with 3,721 declared skips and no
 failures; 33 generated documents, all five surface audits, zero-error mypy,
 scoped Ruff and all forty archived-program offline restores pass.
-PR989 merged as a66ebd679 after all required exact-head CI and clean review. Wider dynamic,
+PR989 merged as a66ebd679 after all required exact-head CI and clean review.
+Remaining: Wider dynamic,
 bias/dropout/layout/AD/encoded envelopes and all five aggregate programs remain
 open. No quantized attention or sibling physical admission is implied.
 

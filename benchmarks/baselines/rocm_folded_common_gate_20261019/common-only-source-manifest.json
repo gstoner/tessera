@@ -22,5 +22,12 @@
   },
   "scope": "Source content snapshot for clean-branch consolidation; compilation and test evidence remain bound to immutable compiler hash",
   "clean_delivery_source_content_verified": true,
-  "delivery_branch": "codex/rocm-folded-scale-common-gate"
+  "delivery_branch": "codex/rocm-folded-scale-common-gate",
+  "delivery_regression_sha256": {
+    "tests/device/rocm/test_folded_scale_vector_masking.py": "6b318f2d7d659708a37bcc846dc6e58e1bf070f944fbac730454c1ebc0fd4847",
+    "tests/device/rocm/test_mxfp4_folded_native_package.py": "7be13bba83be1929429c78fa2fce2155dadcf3c70f41f5d176dc56cbbd46ea35",
+    "tests/device/rocm/test_packed_native_folded.py": "b5c9fe62661b6d00fa289096a1ddb4585b86f93d4299549e4e906830c69c4d6a",
+    "tests/unit/test_rocm_folded_scale_common_gate.py": "d835ac6a737b49ec7a8347f52ee0ec56678d72de17bb7538f606e67a0de2edf6"
+  },
+  "rounded_subnormal_supplement": "Original165-case suite plus refined40-case control/candidate proof; repeated cases are not summed"
 }

@@ -135,3 +135,12 @@ Standalone native-image packages also pass fresh-process execution without
 compiler tools. This is a separate serialized descriptor contract; generic
 multi-member native source-program restoration retains its matching-compiler
 requirement. Evidence: benchmarks/baselines/native_tensor_mlp_20261020/review/README.md.
+
+
+Standalone activation dispatch checks the specialized traced Graph with its
+complete activation predicate before selecting native descriptor compilation.
+Rank-one/rank-three, FP64 and empty-extent inputs remain outside this bounded
+route; the operation-name request alone cannot claim their support.
+Host-free negative tests in tests/unit/test_sm120_activation_dispatch.py
+retain other JIT paths, while positive FP16/BF16/FP32 controls still select
+canonical native compilation. Once selected, compilation/launch errors propagate.

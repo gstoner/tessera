@@ -2032,7 +2032,7 @@ class JitFn:
         native_math = requests_public_math(self.graph_ir, target)
         block_quant = target == "rocm_gfx1201" and block_quant_request
         parent_view = target == "rocm_gfx1201" and parent_view_request
-        from .nvidia_native import requests_activation
+        from .nvidia_native import requests_activation, supports_activation
         activation = (target == "nvidia_sm120" and self.differentiation_request is None
                       and requests_activation(self.graph_ir))
         nvidia_softmax = target == "nvidia_sm120" and requests_softmax(self.graph_ir)
@@ -2098,6 +2098,8 @@ class JitFn:
             lib = rt._load_nvidia_ptx_launch()
             prepared_matmul = lib is not None and hasattr(lib, "tessera_nvidia_matmul_prepare")
         module, _ = self._trace_frontend_capture(ordered, {})
+        if activation and not supports_activation(module):
+            return _JIT_FALLBACK
         from .native_vmap import mixed_batch_policies, normalize_mixed_batch_inputs
         if mixed_batch_policies(self):
             ordered = tuple(normalize_mixed_batch_inputs(ordered, self._frontend_batch_policies))

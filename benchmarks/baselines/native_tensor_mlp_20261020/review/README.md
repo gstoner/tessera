@@ -118,3 +118,22 @@ Final focused census/adversarial tests pass 59 cases; all 33 generated
 documents and 23 ownership/audit/scoreboard cases pass, and Ruff plus the
 zero-error mypy ratchet pass. One initial new-test NameError was corrected;
 its raw failure is preserved. Full host CPU and updated-head CI remain active.
+
+
+## Specialized activation selection review
+
+Review https://github.com/gstoner/tessera/pull/994#discussion_r4324678453
+correctly found that the operation-name request selected unsupported ReLU
+contracts before checking the specialized trace. The JIT now validates that
+actual module with supports_activation before canonical native compilation.
+Unselected ranks, FP64 and empty extents leave the bounded descriptor path;
+errors after native admission still propagate.
+
+The new host-free controls reproduce six failures before the fix, with three
+supported-storage controls already passing. Afterward the focused lane passes
+86 cases with eight declared non-SM120 skips. The nine standalone RTX5070
+host/resident/replay cases pass on unchanged a2cc compiler and 03bd runtime.
+The source/binary/GPU identity is in pr994-dispatch-device-identity.json.
+Mypy remains zero; all 33 generated documents and the plan gate pass.
+The complete post-fix host CPU lane and updated-head CI remain active.
+This is bounded dispatch selection proof, not native FP64/rank-one support.

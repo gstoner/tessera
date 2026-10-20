@@ -1,0 +1,12 @@
+{
+  "scope": "PR994 specialized activation dispatch review; existing standalone positive-route proof",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0",
+  "source_and_binary_sha256": {
+    "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/python/tessera/compiler/jit.py": "bca63ec875845e9f50da43a58a077de0253e5f465ec1cddc81e87f11de582ce9",
+    "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/tests/device/nvidia/test_public_standalone_relu.py": "2cdbf903f2621c8e576d23c557c14e35e8fc8150e92a4084e750a94a86b8d7c8",
+    "/home/angstorms/scratch/w11-program-pipeline-20261019/mlp-tools-a2cc0401/tessera-opt": "a2cc0401d531bc1599bb7ce917c2f676be5eb1b54235b646079d5304b59d824a",
+    "/home/angstorms/scratch/w11-program-pipeline-20261019/public-relu-native/libtessera_public_relu.so": "03bd30ed513d3362d915eb5cca7f61cb7e850b2cd120b2e89f362a210a88ffde"
+  },
+  "passed": 9,
+  "skipped": 0
+}

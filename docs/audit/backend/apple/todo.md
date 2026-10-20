@@ -34,6 +34,10 @@ no-growth Python Graph-packager gate remains unchanged.
 Census evaluation now shares AST/inventory snapshots only within one call;
 new calls reread live source. The route output is unchanged across all
 targets. This reduces repeated audit work and adds no physical support.
+Standalone SM120 activation dispatch now validates the specialized traced
+Graph before selecting its descriptor route. Unsupported ranks, FP64 and
+empty extents leave that path before native compilation. Sibling dispatch
+contracts and physical support are unchanged.
 
 ## NATIVE-TENSOR-JIT-20261020 — ordinary frontend integration candidate
 

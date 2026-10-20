@@ -90,3 +90,31 @@ five-slice objective, general producer/layout/dynamic/AD and model-quality
 obligations remain open. Generic multi-member source-package restoration
 still requires the matching compiler; standalone native-image packages have
 their separate compiler-free replay proof.
+
+
+## Unit CI timeout and census evaluation repair
+
+The fd6f75dba unit job reached 95% but was cancelled at the workflow's
+20-minute limit. Lint, audit and the production compiler-route jobs passed.
+The raw cancellation log is preserved without changing the fan-in gate.
+
+A read-only route-map probe measured 416 AST parses and 11.269 seconds before
+scoped reuse, versus 6 parses and 4.504 seconds for the final scoped source on Tajasaurus.
+An intermediate run measured 2.787 seconds; both diagnostic samples are
+preserved and neither is a controlled throughput comparison.
+The complete derived route output is identical (SHA256
+6bac9fbd00f28c8a3a8d5932327087de7122a067e3817ca2d76d679acf893480).
+These are diagnostic host measurements under concurrent validation, not
+hardware benchmark ratios or guaranteed CI duration.
+
+A context-local snapshot shares parsed sources and derived inventories only
+within one evaluation. Each next evaluation rereads live sources. Controls
+cover same-size/same-timestamp edits, inventory edits and cleanup after
+exceptions; existing target-removal and body-forgery controls remain enforced.
+No permanent source cache or weaker route proof is introduced.
+The corrected full unit job and exact-head CI still must pass.
+
+Final focused census/adversarial tests pass 59 cases; all 33 generated
+documents and 23 ownership/audit/scoreboard cases pass, and Ruff plus the
+zero-error mypy ratchet pass. One initial new-test NameError was corrected;
+its raw failure is preserved. Full host CPU and updated-head CI remain active.

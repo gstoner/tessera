@@ -48,6 +48,8 @@ from pathlib import Path
 
 from typing import Mapping
 
+from .bootstrap_prune_audit import _source_snapshot
+
 #: Route kinds, most-preferred first. `compiled` is the mainline
 #: Graph -> Schedule -> Tile -> Target descent through `tessera-opt`;
 #: `bootstrap` is a Python `package_*` packager (the prune target);
@@ -234,6 +236,7 @@ def discovered_families() -> "dict[str, tuple[str, ...]]":
     return {family: tuple(targets) for family, targets in sorted(out.items())}
 
 
+@_source_snapshot()
 def compiled_route_families() -> frozenset[str]:
     """Families the mainline compiler already covers."""
     from .bootstrap_prune_audit import (
@@ -372,6 +375,7 @@ def all_targets() -> tuple[str, ...]:
     return tuple(sorted(derived | set(UNCLASSIFIABLE_TARGETS)))
 
 
+@_source_snapshot()
 def primitive_routes() -> "dict[str, dict[str, str]]":
     """primitive -> {target: route kind}.
 
@@ -459,6 +463,7 @@ __all__ = [
 ]
 
 
+@_source_snapshot()
 def render_markdown() -> str:
     """The join surface: which compiler serves each primitive, per target."""
     verify_family_membership()
@@ -555,6 +560,7 @@ def render_markdown() -> str:
     return "\n".join(lines) + "\n"
 
 
+@_source_snapshot()
 def render_csv() -> str:
     verify_family_membership()
     routes = primitive_routes()

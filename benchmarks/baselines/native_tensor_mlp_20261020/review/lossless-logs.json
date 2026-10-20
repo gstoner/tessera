@@ -108,5 +108,35 @@
     "gzip_file": "public-relu-text-frontend.txt.gz",
     "uncompressed_sha256": "35835c3df16466fec6dba75631b022d5c644d5c924a2a46b37ddd342a92a45c4",
     "gzip_sha256": "abde9a39b27b3cb30b6e3b556a46817d07ea3d06b0d05db697d36696930162e8"
+  },
+  "pr994-ci-unit-raw.txt": {
+    "gzip_file": "pr994-ci-unit-raw.txt.gz",
+    "uncompressed_sha256": "d8793893c3edda793e7dc6d8ac8748975c7fac55d36e3cbd7ae25a6a8c7c8cd1",
+    "gzip_sha256": "b6b0b89a9e0675fbfe3203eec4dadf25cf6df69adb8344487ea05a6a146aafa3"
+  },
+  "pr994-census-focused.txt": {
+    "gzip_file": "pr994-census-focused.txt.gz",
+    "uncompressed_sha256": "8c1dd80ceb43c139cac835ba135a8d62edcd4b9f8f433a2eaa4399bc7d7267e6",
+    "gzip_sha256": "5cbe14c7c50165679513213c71488dd74051f3612b6564ef7cb2a30d6471b681"
+  },
+  "pr994-census-focused-final.txt": {
+    "gzip_file": "pr994-census-focused-final.txt.gz",
+    "uncompressed_sha256": "2faf75f548de05d591d13c303d829f3ea63ca3dcde9a55bdf26ea1cc75128052",
+    "gzip_sha256": "812c48ecb8c1285aa8844237fcc0d6b4b09b691b594d177084bde0ad2b39a751"
+  },
+  "pr994-census-scoped-final.txt": {
+    "gzip_file": "pr994-census-scoped-final.txt.gz",
+    "uncompressed_sha256": "a072662ee157fa1aea8b2d067a8426abe8e2e851635891a8bfe568b8f9213d76",
+    "gzip_sha256": "a629fdbe579f1609fd6e05e7112d2666fa1236383cc5336e62baf6fdea558abb"
+  },
+  "pr994-census-mypy.txt": {
+    "gzip_file": "pr994-census-mypy.txt.gz",
+    "uncompressed_sha256": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "gzip_sha256": "acf9f1fa9e0b29bfc06c5cd63aa5c6a540c7a3e250a0e05d12bdfe5b5acd153e"
+  },
+  "pr994-census-docs.txt": {
+    "gzip_file": "pr994-census-docs.txt.gz",
+    "uncompressed_sha256": "f2c52145109920cd3769a131b645235594ac4501a7b432a6498e78ba543969e0",
+    "gzip_sha256": "e10cd2ef02934fe5ce439d56c75442102cb1c0bf5f2fc016c37a15b5840eee20"
   }
 }

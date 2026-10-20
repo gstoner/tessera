@@ -252,3 +252,77 @@ def test_generic_compiled_route_does_not_transfer_between_targets(monkeypatch):
         else original(target, family))
     # A compiled sibling must not recreate the removed NVIDIA consumer.
     assert prm.primitive_routes()["softmax"]["nvidia_sm120"] == prm.ROUTE_BOOTSTRAP
+
+
+def test_route_census_reuses_ast_only_within_one_evaluation(monkeypatch):
+    import ast
+    from tessera.compiler import bootstrap_prune_audit as audit
+
+    original = ast.parse
+    parsed = []
+    def count(*args, **kwargs):
+        parsed.append(args[0])
+        return original(*args, **kwargs)
+    monkeypatch.setattr(audit.ast, "parse", count)
+    first = prm.primitive_routes()
+    first_count = len(parsed)
+    # Before scoped reuse, the same source was parsed 416 times in one join.
+    assert 0 < first_count < 100
+    parsed.clear()
+    assert prm.primitive_routes() == first
+    assert len(parsed) == first_count
+
+
+def test_census_snapshot_does_not_hide_same_size_source_edits(tmp_path):
+    import ast
+    import os
+    from tessera.compiler import bootstrap_prune_audit as audit
+
+    source = tmp_path / "backend.py"
+    source.write_text("answer = 1")
+    stamp = source.stat()
+    with audit._source_snapshot():
+        first = audit._parse(source)
+        assert isinstance(first, ast.Module)
+        assert audit._parse(source) is first
+    source.write_text("answer = 2")
+    os.utime(source, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    with audit._source_snapshot():
+        changed = audit._parse(source)
+        assert isinstance(changed, ast.Module)
+        assert changed.body[0].value.value == 2
+        assert changed is not first
+
+
+def test_census_snapshot_releases_cached_source_after_exception(tmp_path):
+    import ast
+    import pytest
+    from tessera.compiler import bootstrap_prune_audit as audit
+
+    source = tmp_path / "backend.py"
+    source.write_text("answer = 1")
+    with pytest.raises(RuntimeError):
+        with audit._source_snapshot():
+            assert audit._parse(source) is not None
+            raise RuntimeError("abort census")
+    source.write_text("answer = 3")
+    tree = audit._parse(source)
+    assert isinstance(tree, ast.Module)
+    assert tree.body[0].value.value == 3
+
+
+def test_census_inventory_snapshot_reopens_live_source(monkeypatch, tmp_path):
+    from tessera.compiler import bootstrap_prune_audit as audit
+    source = tmp_path / "backend.py"
+    source.write_text('def native_package_kind(module):\n    return "softmax"\n')
+    monkeypatch.setattr(audit, "_COMPILER", tmp_path)
+    monkeypatch.setattr(audit, "_BACKEND_MODULES", (("nvidia_sm120", "backend.py"),))
+    with audit._source_snapshot():
+        first = audit.collect_inventories()
+        assert audit.collect_inventories() is first
+        assert first[0].families == ("softmax",)
+    source.write_text('def native_package_kind(module):\n    return "norm"\n')
+    with audit._source_snapshot():
+        changed = audit.collect_inventories()
+        assert changed[0].families == ("norm",)
+        assert changed is not first

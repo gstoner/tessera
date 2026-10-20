@@ -32,6 +32,9 @@ The shared route census now includes body-proven generic Schedule/Tile
 consumers on their actual targets. This corrects structural metadata only;
 it does not add sibling kernel, dtype, AD or exact-device evidence. The
 no-growth Python Graph-packager gate remains unchanged.
+Census evaluation now shares AST/inventory snapshots only within one call;
+new calls reread live source. The route output is unchanged across all
+targets. This reduces repeated audit work and adds no physical support.
 
 ## NATIVE-TENSOR-JIT-20261020 — ordinary frontend integration candidate
 

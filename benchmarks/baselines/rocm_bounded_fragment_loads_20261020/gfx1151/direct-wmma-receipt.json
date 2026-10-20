@@ -1,0 +1,321 @@
+{
+  "architecture": "gfx1151",
+  "implementation": "independent hipcc builtins; no Tessera compiler or runtime",
+  "cases": [
+    {
+      "dtype": "f16",
+      "shape": [
+        1,
+        1,
+        1
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 0.0,
+      "nonzero_reference_zero_error": 0,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        7,
+        9,
+        7
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 9.5367431640625e-07,
+      "nonzero_reference_zero_error": 2,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        8,
+        8,
+        8
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 1.0728836059570312e-06,
+      "nonzero_reference_zero_error": 0,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        9,
+        7,
+        9
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 9.5367431640625e-07,
+      "nonzero_reference_zero_error": 1,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        15,
+        15,
+        15
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 1.9073486328125e-06,
+      "nonzero_reference_zero_error": 8,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 1.9073486328125e-06,
+      "nonzero_reference_zero_error": 4,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        7,
+        16,
+        16
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 1.9073486328125e-06,
+      "nonzero_reference_zero_error": 1,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        16,
+        7,
+        16
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 1.9073486328125e-06,
+      "nonzero_reference_zero_error": 5,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        1,
+        16,
+        8
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 8.344650268554688e-07,
+      "nonzero_reference_zero_error": 0,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        16,
+        1,
+        8
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 9.5367431640625e-07,
+      "nonzero_reference_zero_error": 0,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        15,
+        16,
+        9
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 1.1920928955078125e-06,
+      "nonzero_reference_zero_error": 6,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "f16",
+      "shape": [
+        16,
+        15,
+        7
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 9.5367431640625e-07,
+      "nonzero_reference_zero_error": 11,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        1,
+        1,
+        1
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 0.0,
+      "nonzero_reference_zero_error": 0,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        7,
+        9,
+        7
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 9.5367431640625e-07,
+      "nonzero_reference_zero_error": 2,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        8,
+        8,
+        8
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 1.0728836059570312e-06,
+      "nonzero_reference_zero_error": 0,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        9,
+        7,
+        9
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 9.5367431640625e-07,
+      "nonzero_reference_zero_error": 1,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        15,
+        15,
+        15
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 1.9073486328125e-06,
+      "nonzero_reference_zero_error": 8,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 1.9073486328125e-06,
+      "nonzero_reference_zero_error": 4,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        7,
+        16,
+        16
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 1.9073486328125e-06,
+      "nonzero_reference_zero_error": 1,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        16,
+        7,
+        16
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 1.9073486328125e-06,
+      "nonzero_reference_zero_error": 5,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        1,
+        16,
+        8
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 8.344650268554688e-07,
+      "nonzero_reference_zero_error": 0,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        16,
+        1,
+        8
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 9.5367431640625e-07,
+      "nonzero_reference_zero_error": 0,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        15,
+        16,
+        9
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 1.1920928955078125e-06,
+      "nonzero_reference_zero_error": 6,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        16,
+        15,
+        7
+      ],
+      "bitwise_equal_to_tessera": true,
+      "max_abs_error": 9.5367431640625e-07,
+      "nonzero_reference_zero_error": 11,
+      "bound": "gamma16(fp32) * sum(abs(A*B))",
+      "violations": 0
+    }
+  ],
+  "all_bitwise_equal": true,
+  "source_sha256": "d840e67ca951472ef63115964a6a4fbdbe6738f20b2be2bf5454ccfb7f5f30d8",
+  "library_sha256": "00c5fd32f39d789afa93e1d18677c145466646c1cac129370d86e3a9fd44ae2f"
+}

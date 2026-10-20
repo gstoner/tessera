@@ -381,83 +381,130 @@ static FailureOr<Value> materializeFragmentPack(
                                                      globalBase,
                                                      ValueRange{addr});
   } else if (!kIsContiguous || haveBounds || packedMXFP4) {
-    // A bounded fragment is scalarized even when K is contiguous. The ROCm
-    // GPU-to-LLVM pipeline does not legalize vector.create_mask/maskedload;
-    // emitting them left an index cast and vector op at LLVM translation.
-    // Scalar guarded loads are the same address/value sequence used by the
-    // production generator's ragged path. For strided K, element j lives
-    // `j * leadingDim` away; for contiguous K the stride is one.
-    Value zeroScalar = arith::ConstantOp::create(
-        builder, loc, elementTy, builder.getZeroAttr(elementTy));
-    Value zeroIdx = arith::ConstantIndexOp::create(builder, loc, 0);
-    Value slowOk;
-    if (haveBounds)
-      slowOk = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::slt,
-                                     slowIndex, slowBound);
-    for (int64_t j = 0; j < physical.inputElementsPerLane; ++j) {
-      Value cj = arith::ConstantIndexOp::create(builder, loc, j);
-      Value stride = kIsContiguous
-                         ? Value(arith::ConstantIndexOp::create(builder, loc, 1))
-                         : leadingDim;
-      Value index = arith::AddIOp::create(
-          builder, loc, linear,
-          arith::MulIOp::create(builder, loc, cj, stride));
-      Value logicalK;
-      if (packedMXFP4) {
-        // Honor a supplied logical linear base, including its lane and
-        // partition offsets, before mapping the packed K axis to bytes.
-        logicalK = arith::DivUIOp::create(builder, loc, index, leadingDim);
-        Value logicalCol = arith::RemUIOp::create(builder, loc, index, leadingDim);
-        Value halfK = arith::DivUIOp::create(builder, loc, logicalK,
-            arith::ConstantIndexOp::create(builder, loc, 2));
-        index = arith::AddIOp::create(builder, loc,
-            arith::MulIOp::create(builder, loc, halfK, leadingDim), logicalCol);
-      }
-      auto loadElement = [&](Value address) -> Value {
-        Value loaded = memref::LoadOp::create(builder, loc, base, ValueRange{address});
-        if (!packedMXFP4) return loaded;
-        Value raw = arith::ExtUIOp::create(builder, loc, builder.getI32Type(), loaded);
-        auto ci = [&](int64_t value) -> Value {
-          return arith::ConstantIntOp::create(builder, loc, value, 32);
+    // Partial K, strided K and packed MXFP4 retain independently guarded
+    // scalar elements. Keep this fallback together so its zero-fill and
+    // address-clamping semantics are identical to the established path.
+    auto scalarFragment = [&]() -> Value {
+      Value result = zero;
+      Value zeroScalar = arith::ConstantOp::create(
+          builder, loc, elementTy, builder.getZeroAttr(elementTy));
+      Value zeroIdx = arith::ConstantIndexOp::create(builder, loc, 0);
+      Value slowOk;
+      if (haveBounds)
+        slowOk = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::slt,
+                                       slowIndex, slowBound);
+      for (int64_t j = 0; j < physical.inputElementsPerLane; ++j) {
+        Value cj = arith::ConstantIndexOp::create(builder, loc, j);
+        Value stride = kIsContiguous
+                           ? Value(arith::ConstantIndexOp::create(builder, loc, 1))
+                           : leadingDim;
+        Value index = arith::AddIOp::create(
+            builder, loc, linear,
+            arith::MulIOp::create(builder, loc, cj, stride));
+        Value logicalK;
+        if (packedMXFP4) {
+          // Honor a supplied logical linear base, including its lane and
+          // partition offsets, before mapping the packed K axis to bytes.
+          logicalK = arith::DivUIOp::create(builder, loc, index, leadingDim);
+          Value logicalCol = arith::RemUIOp::create(builder, loc, index, leadingDim);
+          Value halfK = arith::DivUIOp::create(builder, loc, logicalK,
+              arith::ConstantIndexOp::create(builder, loc, 2));
+          index = arith::AddIOp::create(builder, loc,
+              arith::MulIOp::create(builder, loc, halfK, leadingDim), logicalCol);
+        }
+        auto loadElement = [&](Value address) -> Value {
+          Value loaded = memref::LoadOp::create(builder, loc, base, ValueRange{address});
+          if (!packedMXFP4) return loaded;
+          Value raw = arith::ExtUIOp::create(builder, loc, builder.getI32Type(), loaded);
+          auto ci = [&](int64_t value) -> Value {
+            return arith::ConstantIntOp::create(builder, loc, value, 32);
+          };
+          Value parity = arith::RemUIOp::create(builder, loc, logicalK,
+              arith::ConstantIndexOp::create(builder, loc, 2));
+          Value shift = arith::MulIOp::create(builder, loc,
+              arith::IndexCastOp::create(builder, loc, builder.getI32Type(), parity), ci(4));
+          Value nibble = arith::AndIOp::create(builder, loc,
+              arith::ShRUIOp::create(builder, loc, raw, shift), ci(15));
+          Value magnitude = arith::AndIOp::create(builder, loc, nibble, ci(7));
+          Value bits = ci(0);
+          const int64_t e4m3[] = {0,0x30,0x38,0x3c,0x40,0x44,0x48,0x4c};
+          for (int64_t code = 1; code < 8; ++code)
+            bits = arith::SelectOp::create(builder, loc,
+                arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq,
+                                     magnitude, ci(code)), ci(e4m3[code]), bits);
+          bits = arith::OrIOp::create(builder, loc, bits,
+              arith::ShLIOp::create(builder, loc,
+                  arith::AndIOp::create(builder, loc, nibble, ci(8)), ci(4)));
+          return arith::BitcastOp::create(builder, loc, elementTy,
+              arith::TruncIOp::create(builder, loc, builder.getI8Type(), bits));
         };
-        Value parity = arith::RemUIOp::create(builder, loc, logicalK,
-            arith::ConstantIndexOp::create(builder, loc, 2));
-        Value shift = arith::MulIOp::create(builder, loc,
-            arith::IndexCastOp::create(builder, loc, builder.getI32Type(), parity), ci(4));
-        Value nibble = arith::AndIOp::create(builder, loc,
-            arith::ShRUIOp::create(builder, loc, raw, shift), ci(15));
-        Value magnitude = arith::AndIOp::create(builder, loc, nibble, ci(7));
-        Value bits = ci(0);
-        const int64_t e4m3[] = {0,0x30,0x38,0x3c,0x40,0x44,0x48,0x4c};
-        for (int64_t code = 1; code < 8; ++code)
-          bits = arith::SelectOp::create(builder, loc,
-              arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq,
-                                   magnitude, ci(code)), ci(e4m3[code]), bits);
-        bits = arith::OrIOp::create(builder, loc, bits,
-            arith::ShLIOp::create(builder, loc,
-                arith::AndIOp::create(builder, loc, nibble, ci(8)), ci(4)));
-        return arith::BitcastOp::create(builder, loc, elementTy,
-            arith::TruncIOp::create(builder, loc, builder.getI8Type(), bits));
-      };
-      Value element;
-      if (!haveBounds) {
-        element = loadElement(index);
-      } else {
-        Value fastOk = arith::CmpIOp::create(
-            builder, loc, arith::CmpIPredicate::slt,
-            arith::AddIOp::create(builder, loc, fastIndex, cj), fastBound);
-        Value inBounds = arith::AndIOp::create(builder, loc, fastOk, slowOk);
-        // Clamp the ADDRESS too: an out-of-bounds lane must not fault, and a
-        // select on the loaded value alone still performs the load.
-        Value safe =
-            arith::SelectOp::create(builder, loc, inBounds, index, zeroIdx);
-        element = loadElement(safe);
-        element = arith::SelectOp::create(builder, loc, inBounds, element,
-                                          zeroScalar);
+        Value element;
+        if (!haveBounds) {
+          element = loadElement(index);
+        } else {
+          Value fastOk = arith::CmpIOp::create(
+              builder, loc, arith::CmpIPredicate::slt,
+              arith::AddIOp::create(builder, loc, fastIndex, cj), fastBound);
+          Value inBounds = arith::AndIOp::create(builder, loc, fastOk, slowOk);
+          // Clamp the ADDRESS too: an out-of-bounds lane must not fault, and a
+          // select on the loaded value alone still performs the load.
+          Value safe =
+              arith::SelectOp::create(builder, loc, inBounds, index, zeroIdx);
+          element = loadElement(safe);
+          element = arith::SelectOp::create(builder, loc, inBounds, element,
+                                            zeroScalar);
+        }
+        result = vector::InsertOp::create(builder, loc, element, result,
+                                            ArrayRef<int64_t>{j});
       }
-      fragment = vector::InsertOp::create(builder, loc, element, fragment,
-                                          ArrayRef<int64_t>{j});
+      return result;
+    };
+    if (kIsContiguous && haveBounds && !packedMXFP4) {
+      // A ragged slow axis does not make a complete contiguous K fragment
+      // partial. A full-vector load plus whole-fragment zero selection
+      // preserves every element while avoiding per-byte loads in edge waves.
+      // Subtract the constant width only after also checking the bound has
+      // that many elements; no fastIndex+width overflow enters the guard.
+      Value c0 = arith::ConstantIndexOp::create(builder, loc, 0);
+      Value width = arith::ConstantIndexOp::create(
+          builder, loc, physical.inputElementsPerLane);
+      auto cmp = [&](arith::CmpIPredicate predicate, Value lhs, Value rhs) {
+        return Value(arith::CmpIOp::create(builder, loc, predicate, lhs, rhs));
+      };
+      Value fastNonnegative = cmp(arith::CmpIPredicate::sge, fastIndex, c0);
+      Value fastWideEnough = cmp(arith::CmpIPredicate::sge, fastBound, width);
+      Value lastStart = arith::SubIOp::create(builder, loc, fastBound, width);
+      Value fullFast = cmp(arith::CmpIPredicate::sle, fastIndex, lastStart);
+      Value slowPresent = cmp(arith::CmpIPredicate::sgt, slowBound, c0);
+      Value complete = arith::AndIOp::create(
+          builder, loc,
+          arith::AndIOp::create(builder, loc, fastNonnegative, fastWideEnough),
+          arith::AndIOp::create(builder, loc, fullFast, slowPresent));
+      auto branch = scf::IfOp::create(
+          builder, loc, TypeRange{vectorTy}, complete, true);
+      {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointToStart(branch.thenBlock());
+        Value slowValid = arith::AndIOp::create(
+            builder, loc, cmp(arith::CmpIPredicate::sge, slowIndex, c0),
+            cmp(arith::CmpIPredicate::slt, slowIndex, slowBound));
+        // Even an invalid slow-axis lane dereferences only a valid complete
+        // fragment. Select zero after the load, preserving generic pack
+        // semantics independently of any downstream store mask.
+        Value safe = arith::SelectOp::create(builder, loc, slowValid, linear, c0);
+        Value loaded = vector::LoadOp::create(
+            builder, loc, vectorTy, base, ValueRange{safe});
+        Value selected = arith::SelectOp::create(
+            builder, loc, slowValid, loaded, zero);
+        scf::YieldOp::create(builder, loc, ValueRange{selected});
+        builder.setInsertionPointToStart(branch.elseBlock());
+        scf::YieldOp::create(builder, loc, ValueRange{scalarFragment()});
+      }
+      fragment = branch.getResult(0);
+    } else {
+      fragment = scalarFragment();
     }
+
   } else {
     fragment = vector::LoadOp::create(builder, loc, vectorTy, base,
                                       ValueRange{linear});

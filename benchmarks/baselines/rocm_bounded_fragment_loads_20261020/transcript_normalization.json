@@ -1,0 +1,14 @@
+[
+  {
+    "file": "gfx1151/gfx1151-control.txt",
+    "original_sha256": "762d3fcbf2be9df9bea1ec2b4eb0e31cd1f5574248c5756832d82ee723753be0",
+    "normalized_sha256": "eb537a61550ba5706666e0fb82d5ddb631273c85cc920849585ec383d6da9a87",
+    "normalization": "remove transcript trailing whitespace only"
+  },
+  {
+    "file": "gfx1151/gfx1151-fragment.txt",
+    "original_sha256": "4d038c964372afa6fb1590c049afa172d8b5d99300437559ab91edd92a99fabf",
+    "normalized_sha256": "bec19e148cf0097fe18facf318645ef550ffd6cdaccea05e97b1f4e179ef37db",
+    "normalization": "remove transcript trailing whitespace only"
+  }
+]

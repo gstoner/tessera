@@ -6,6 +6,24 @@ target: apple_gpu
 last_updated: 2026-10-20
 ---
 
+## ROCM-BOUNDED-CONTIGUOUS-PACK-20261020 — guarded load candidate
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync: ROCM-BOUNDED-CONTIGUOUS-PACK-20261020.
+Evidence: benchmarks/baselines/rocm_bounded_fragment_loads_20261020/README.md.
+
+Native ROCm bounded contiguous K packs retain a guarded vector load; partial
+K, strided K and packed MXFP4 B retain scalar paths. Generic zero-fill is
+preserved without depending on masked stores. No shared IR, dtype, pass,
+numerical policy or runtime ABI changes. The additive exact-MXFP4 recorder
+uses existing checked native program ownership and shared duration admission;
+Python supplies inputs/oracles and measurement only.
+
+Not applicable to Metal physical execution: only ROCm target load
+materialization changes. The preserved Tile zero-fill contract is shared, but
+no Metal schedule, image or runtime ABI changes. Native-program timing and
+WMMA numerical evidence are AMD-specific; no new Apple proof is claimed.
+
 ## NATIVE-TENSOR-FP32-ROOTS-20261020 — original producer storage candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

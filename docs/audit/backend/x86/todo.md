@@ -7,6 +7,24 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## ROCM-BOUNDED-CONTIGUOUS-PACK-20261020 — guarded load candidate
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync: ROCM-BOUNDED-CONTIGUOUS-PACK-20261020.
+Evidence: benchmarks/baselines/rocm_bounded_fragment_loads_20261020/README.md.
+
+Native ROCm bounded contiguous K packs retain a guarded vector load; partial
+K, strided K and packed MXFP4 B retain scalar paths. Generic zero-fill is
+preserved without depending on masked stores. No shared IR, dtype, pass,
+numerical policy or runtime ABI changes. The additive exact-MXFP4 recorder
+uses existing checked native program ownership and shared duration admission;
+Python supplies inputs/oracles and measurement only.
+
+Not applicable to AVX-512 physical execution: this load choice belongs
+to the ROCm materializer. CPU vector lowering and runtime ABI are unchanged.
+The benchmark's host-free CLI/unit tests are shared test infrastructure; no
+x86 kernel performance or owning-device parity claim is added.
+
 ## NATIVE-TENSOR-FP32-ROOTS-20261020 — original producer storage candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

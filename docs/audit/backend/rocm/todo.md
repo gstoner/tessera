@@ -5,6 +5,42 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-BOUNDED-CONTIGUOUS-PACK-20261020 — guarded load candidate
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync: ROCM-BOUNDED-CONTIGUOUS-PACK-20261020.
+Evidence: benchmarks/baselines/rocm_bounded_fragment_loads_20261020/README.md.
+
+Native ROCm bounded contiguous K packs retain a guarded vector load; partial
+K, strided K and packed MXFP4 B retain scalar paths. Generic zero-fill is
+preserved without depending on masked stores. No shared IR, dtype, pass,
+numerical policy or runtime ABI changes. The additive exact-MXFP4 recorder
+uses existing checked native program ownership and shared duration admission;
+Python supplies inputs/oracles and measurement only.
+
+Owning parity: retained vector compiler passes 32 gfx1201 and 16 gfx1151
+cases, each with twelve shapes and tight-capacity/canary controls. Sixteen
+gfx1151 FP8 cases are declared ISA exclusions. A direct hipcc WMMA diagnostic
+reproduces gfx1151 float rounding; the test uses the FP32 forward bound without
+an absolute floor, while integer/zero-fill/input/canary checks remain exact.
+gfx942 remains compiler-only evidence.
+
+The counterbalanced 24-row evaluation repeats M200/N1024/K4096 gains:
+FP8 K128 205.6 -> 86.3 us; FP32-scaled K32 1655.5 -> 108.3 us.
+MXFP8/folded MXFP4 small differences are not promoted. Completed public-call
+windows are separate and show that staging/launch overhead remains material.
+The evaluated 32-thread compiler annotation is removed after K32 regressions
+of 3.79x (M208) and 1.66x (M200) against vector loads alone.
+
+Exact packed MXFP4 ordinary primal/JVP/reverse passes four M256 rows, including
+K4096/N1024,N2048. Captured member diagnostics put >99% of their summed time in
+matmul, not cast/gate work; this does not resolve the Radiance A-fetch/LDS gap.
+Paired native-program timing preserves the image and program identities and
+separates host dispatch gaps from public calls. Broader MXFP4 attribution,
+general five-slice closure remain open. Local delivery gates pass: 30,813 CPU
+cases (3,721 declared skips), 2,692 production compiler cases without skips,
+322 final drift cases, Ruff and the zero-error mypy ratchet.
+
 ## NATIVE-TENSOR-FP32-ROOTS-20261020 — original producer storage candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

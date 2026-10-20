@@ -1,0 +1,276 @@
+{
+  "owner": "ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6",
+  "sync_key": "ROCM-BOUNDED-CONTIGUOUS-PACK-20261020",
+  "base": "71564e7679bee9efeda5c0b18ac2a6430a9a7936",
+  "production_compiler": {
+    "selected": 2692,
+    "passed": 2692,
+    "skipped": 0,
+    "failed": 0,
+    "sha256": "a88ea31691f201bf09cbfd91c3ac562bd461c95186fa6c30b90d7406081985aa"
+  },
+  "cpu": {
+    "selected": 34534,
+    "passed": 30813,
+    "skipped": 3721,
+    "failed": 0,
+    "sha256": "23348c42e87ba8ce02375f5ce767021ad8445c7053002b9d435ea1d81b2e4c5a"
+  },
+  "gfx1201": {
+    "selected": 32,
+    "passed": 32,
+    "skipped": 0,
+    "failed": 0,
+    "sha256": "65633f1732cfba5b5f9daaf16c219e7609b6db8c5dd368e33eb1774adba28efc"
+  },
+  "gfx1151": {
+    "selected": 32,
+    "passed": 16,
+    "skipped": 16,
+    "failed": 0,
+    "sha256": "77841ce1b93bea4be7e99eac797dd56b6ee81ef27ea29f1906387eb5b8cc30eb"
+  },
+  "coverage": {
+    "gfx1201": {
+      "operand_pairs": [
+        [
+          "f16",
+          "f16"
+        ],
+        [
+          "bf16",
+          "bf16"
+        ],
+        [
+          "e4m3",
+          "e4m3"
+        ],
+        [
+          "e5m2",
+          "e5m2"
+        ],
+        [
+          "e4m3",
+          "e5m2"
+        ],
+        [
+          "e5m2",
+          "e4m3"
+        ],
+        [
+          "int8",
+          "int8"
+        ],
+        [
+          "int4",
+          "int4"
+        ]
+      ],
+      "memory_order_pairs": 4,
+      "shapes_mnk": [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          7,
+          9,
+          7
+        ],
+        [
+          8,
+          8,
+          8
+        ],
+        [
+          9,
+          7,
+          9
+        ],
+        [
+          15,
+          15,
+          15
+        ],
+        [
+          16,
+          16,
+          16
+        ],
+        [
+          7,
+          16,
+          16
+        ],
+        [
+          16,
+          7,
+          16
+        ],
+        [
+          1,
+          16,
+          8
+        ],
+        [
+          16,
+          1,
+          8
+        ],
+        [
+          15,
+          16,
+          9
+        ],
+        [
+          16,
+          15,
+          7
+        ]
+      ],
+      "executed_inner_shapes": 384
+    },
+    "gfx1151": {
+      "operand_pairs": [
+        [
+          "f16",
+          "f16"
+        ],
+        [
+          "bf16",
+          "bf16"
+        ],
+        [
+          "int8",
+          "int8"
+        ],
+        [
+          "int4",
+          "int4"
+        ]
+      ],
+      "memory_order_pairs": 4,
+      "shapes_mnk": [
+        [
+          1,
+          1,
+          1
+        ],
+        [
+          7,
+          9,
+          7
+        ],
+        [
+          8,
+          8,
+          8
+        ],
+        [
+          9,
+          7,
+          9
+        ],
+        [
+          15,
+          15,
+          15
+        ],
+        [
+          16,
+          16,
+          16
+        ],
+        [
+          7,
+          16,
+          16
+        ],
+        [
+          16,
+          7,
+          16
+        ],
+        [
+          1,
+          16,
+          8
+        ],
+        [
+          16,
+          1,
+          8
+        ],
+        [
+          15,
+          16,
+          9
+        ],
+        [
+          16,
+          15,
+          7
+        ]
+      ],
+      "executed_inner_shapes": 192,
+      "fp8_pytest_isa_skips": 16
+    },
+    "gfx942": "compiler-only; no owning execution proof",
+    "siblings": "no NVIDIA, Apple or x86 physical execution change"
+  },
+  "source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "4fb5ebe16d393543d77d61d0abef69ded7afce73ea6989b4cb0ced9a53f934b4",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "c6ad26ef425de4dae424f2ae27960f313b108726fcd40c9adae85a45500e6b52",
+    "tests/unit/test_rocm_bounded_fragment_pack.py": "4aac737269c925a3b5ddd8f44bec9ec6970304db7d3e81a48e7995c29796e270",
+    "tests/device/rocm/test_bounded_fragment_pack.py": "8ccb207d4d10942ecfccfd891500e2e52f554343d69931d8d35a9558b0dca0de",
+    "tests/unit/test_paired_exact_mxfp4_recorder.py": "1c2f815340d8d2671243a076ef6c74b7adc48d892af02a9ebd92255cb5ee2ff7",
+    "benchmarks/rocm/record_paired_exact_mxfp4.py": "7a2eae6d11c0c89999490af6824e1c5ea60bfca324aaf99a85c9aeef096badae",
+    "benchmarks/rocm/record_gfx1201_interleaved_compiler_formats.py": "4464ef607a531395c619609093ee0387591f4e5674c8628ead46cc605a6c101f"
+  },
+  "gates": {
+    "vector-final-mypy.txt": {
+      "status": "passed",
+      "sha256": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26"
+    },
+    "vector-final-ruff.txt": {
+      "status": "passed",
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    "vector-final-plan-base.txt": {
+      "status": "passed",
+      "sha256": "9df4521d0854912896467ec7e8be8ce948c067a0bbf838f0a282d9f6e41ea3e3"
+    },
+    "vector-final-naming-fix.txt": {
+      "status": "passed",
+      "sha256": "45ff9935e1e6b87b63363469d9e9ba40aaa8f4b053c0033a67fbde4d94fde1e6"
+    },
+    "vector-final-drift.txt": {
+      "status": "passed",
+      "sha256": "a345c1f32694066f259355beda8b018c8dca167f0cb1736e77c00ff314c346c1"
+    },
+    "vector-final-recorder-tests.txt": {
+      "status": "passed",
+      "sha256": "ecc2a660b74a49e719736d46f1699eabff406d01116eb929c314a72940165c48"
+    },
+    "generated_documents": {
+      "status": "passed",
+      "log_sha256": "9d8b85d764f7e4ee9cddcad4256bc591602b3561b272a9d99fe967c4d938cd18",
+      "generated_diff": "none"
+    },
+    "final_doc_naming": {
+      "status": "passed",
+      "cases": 19,
+      "log_sha256": "093265713cd4c288b15c2540fcb8841d3ebbb814a47aedd81c305eddd88cbc98"
+    }
+  },
+  "initial_cpu_failure": {
+    "passed": 30812,
+    "failed": 1,
+    "skipped": 3721,
+    "cause": "naming gate could not see untracked packet README references; stage documented recorder/evidence files, keep empty orphan allowlist and rerun complete suite",
+    "superseded_by": "cpu"
+  },
+  "compiler_mtime_warnings": "Frozen content hashes verified. GenerateWMMAGemmKernel.cpp equals merged base after geometry annotation removal; no stale source mismatch is claimed.",
+  "goal_status": "Original five aggregate slices remain open; this packet proves a bounded ROCm load increment, not overall completion."
+}

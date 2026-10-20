@@ -1,0 +1,39 @@
+{
+  "architecture": "gfx1151",
+  "device": "AMD Radeon(TM) 8060S Graphics",
+  "ordinal": 0,
+  "uuid_hex": "66666666666666666666666666666666",
+  "hip_runtime_version_raw": 71526333,
+  "host": "Princess-Luna",
+  "kernel": "6.18.33.1-microsoft-standard-WSL2",
+  "python": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+  "source_snapshot": "Merged base71564 with retained vector-load native source4fb5ebe; current final unit/device fixture hashes recorded below",
+  "source_sha256": {
+    "tests/device/rocm/test_bounded_fragment_pack.py": "8ccb207d4d10942ecfccfd891500e2e52f554343d69931d8d35a9558b0dca0de",
+    "tests/unit/test_rocm_bounded_fragment_pack.py": "4aac737269c925a3b5ddd8f44bec9ec6970304db7d3e81a48e7995c29796e270",
+    "compare_float_control.py": "c644fd0d78632b685c45edc1a35b71d1621818a43428c6e3eee3b0981a934f05",
+    "check_direct_wmma.py": "f1cb043d127aa57a88bc47688b01d10aa73ad61a851a53c469f964ec7048b0da",
+    "direct_wmma.hip": "d840e67ca951472ef63115964a6a4fbdbe6738f20b2be2bf5454ccfb7f5f30d8",
+    "direct_wmma.so": "00c5fd32f39d789afa93e1d18677c145466646c1cac129370d86e3a9fd44ae2f",
+    "gfx1151-floating-control-candidate.json": "7687bbf82d520ebf54c6784a5251e7238c2adc6610ee99a55c88ef95e358553e",
+    "gfx1151-floating-control-candidate.npz": "997960571098e38a687076a37c5fd1f3b942c3ca261f37f77cfb59cf94917246",
+    "direct-wmma-receipt.json": "2049a9163308968f1d7c75be6213b0909aa41308de12cc90e6608e1bcd6fd500",
+    "direct-wmma-outputs.npz": "23ffc11d99a906f13851486fc9a40d92ed445316d01863ad896dd957ae050893",
+    "gfx1151-final-fragment.xml": "ab7ee180b5b9755ea0a1c2869eee381c52e0167b3a38368543a1ca006543898e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "c6ad26ef425de4dae424f2ae27960f313b108726fcd40c9adae85a45500e6b52",
+    "original_bounded_fixture.py": "13dd4787702fb0939933a58d5665a69b89afbd61ee4fa7f0c4651dd73ac802d0"
+  },
+  "compiler_hashes": {
+    "tessera-opt": "6f2a995a7f6e0eadb4f1cf6262969eef8b082852c55b40d097074fdf87ad7280",
+    "tessera-opt-control": "db3a4e86bb42c937d4da70fb98a45266e8e758241c7c773115906d9a6ab871ec",
+    "tessera-opt-vector": "276e09dfe344a910b345a71de4d39eeaf430a3a18a290fc052b1489cc648adb2"
+  },
+  "native_fragment_lowering_sha256": "4fb5ebe16d393543d77d61d0abef69ded7afce73ea6989b4cb0ced9a53f934b4",
+  "final_vector_gate": {
+    "passed": 16,
+    "skipped": 16,
+    "inner_supported_shapes": 192,
+    "skip_reason": "gfx1151 has no FP8/BF8 WMMA instruction",
+    "junit_sha256": "77841ce1b93bea4be7e99eac797dd56b6ee81ef27ea29f1906387eb5b8cc30eb"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "format_runs": [
+    {
+      "file": "fp8_formats_first.json",
+      "rows": 24,
+      "min_device_window_ms": 10.07908,
+      "max_device_event_disagreement": 0.015903274929716132,
+      "byte_identical_repeat_inputs": true
+    },
+    {
+      "file": "fp8_formats_counterbalanced.json",
+      "rows": 24,
+      "min_device_window_ms": 10.39272,
+      "max_device_event_disagreement": 0.01596793798334639,
+      "byte_identical_repeat_inputs": true
+    }
+  ],
+  "exact_program_runs": [
+    {
+      "file": "exact_mxfp4_paired_program.json",
+      "rows": 2,
+      "ratios": [
+        0.7113960656619136,
+        1.0142552632859911
+      ]
+    },
+    {
+      "file": "exact_mxfp4_paired_program_repeat.json",
+      "rows": 2,
+      "ratios": [
+        1.0142902079172034,
+        1.006130096677865
+      ]
+    }
+  ],
+  "native_source_sha256": {
+    "TileToROCM.cpp": "4fb5ebe16d393543d77d61d0abef69ded7afce73ea6989b4cb0ced9a53f934b4",
+    "GenerateWMMAGemmKernel.cpp": "c6ad26ef425de4dae424f2ae27960f313b108726fcd40c9adae85a45500e6b52"
+  },
+  "status": "passed",
+  "claim": "Measurement/provenance consistency only; not aggregate compiler, model-quality, or performance closure"
+}

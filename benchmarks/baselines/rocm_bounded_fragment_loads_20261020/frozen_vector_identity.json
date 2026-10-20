@@ -1,0 +1,10 @@
+{
+  "compiler_sha256": "276e09dfe344a910b345a71de4d39eeaf430a3a18a290fc052b1489cc648adb2",
+  "source_commit": "0970206cd204499de8159f53642d78c753bcd8a9",
+  "candidate_source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "4fb5ebe16d393543d77d61d0abef69ded7afce73ea6989b4cb0ced9a53f934b4"
+  },
+  "patch_sha256": "3165923af7aeebf1e3a7ee6dbbdc250b48d3477916c2db1f1c2b04ed1e14f9b0",
+  "layout_library_sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+  "scope": "isolated bounded contiguous fragment load candidate; not published or promoted"
+}

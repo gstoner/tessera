@@ -191,6 +191,11 @@ def _execute_nvidia_tensor_jvp_program_artifact(artifact: Any, args: Any) -> Nat
     return execute(artifact, args)
 
 
+def _execute_native_tensor_program_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
+    from .compiler.native_tensor_program import execute_runtime_artifact
+    return execute_runtime_artifact(artifact, args)
+
+
 def _execute_nvidia_lhs_program_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
     from .compiler.prepared_nvidia_lhs import launch_portable_lhs
     prepared = launch_portable_lhs(artifact,args)
@@ -35660,6 +35665,7 @@ def _executor_table():
         "nvidia_source_attention_program": _execute_nvidia_source_attention_artifact,
         "nvidia_source_attention_reverse_program": _execute_nvidia_source_attention_reverse_artifact,
         "rocm_source_reverse_program": _execute_rocm_source_reverse_artifact,
+        "native_tensor_program": _execute_native_tensor_program_artifact,
         "nvidia_lhs_program": _execute_nvidia_lhs_program_artifact,
     "nvidia_rhs_program": _execute_nvidia_rhs_program_artifact,
         "rocm_nvfp4_program": _execute_rocm_nvfp4_program_artifact,

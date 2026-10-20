@@ -6,6 +6,17 @@ target: nvidia_sm120
 last_updated: 2026-10-20
 ---
 
+## NATIVE-TENSOR-JIT-20261020 — ordinary frontend integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-JIT-20261020.
+
+Contract: docs/spec/NATIVE_TENSOR_JIT.md.
+
+Private static compact FP16/BF16 ordinary-JIT candidate uses compiler admission, retains actual Graph/Schedule/Tile/Target stages and caches a checked native owner. Eight source/storage cases pass initial RTX5070 overlay replay with tracing and tools forbidden on warm calls and close/rebind. Full integration, matching final compiler, negative/lifetime/resident gates and paired benchmarks remain required. Runtime artifact restoration explicitly requires the configured matching compiler. No general W1.1, portable, dynamic/layout/AD or five-slice closure.
+
+
+
 ## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

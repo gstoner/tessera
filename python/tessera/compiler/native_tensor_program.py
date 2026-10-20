@@ -60,6 +60,8 @@ class NativeTensorProgram:
     There is no dictionary/portable loader that can bypass source replay.
     """
     source_ir: str
+    schedule_ir: str
+    tile_ir: str
     target_ir: str
     members: tuple[str, ...]
     images: tuple[bytes, ...]
@@ -77,7 +79,8 @@ class NativeTensorProgram:
         if (not isinstance(self.compiler, Path)
                 or _tool_digest(self.compiler) != self.compiler_identity):
             raise RuntimeError("native tensor compiler changed after packaging")
-        if (not isinstance(self.source_ir, str) or not isinstance(self.target_ir, str)
+        if (any(not isinstance(stage, str) or not stage.strip()
+                for stage in (self.source_ir, self.schedule_ir, self.tile_ir, self.target_ir))
                 or type(self.members) is not tuple or type(self.images) is not tuple
                 or any(not isinstance(value, str) for value in self.members)
                 or any(not isinstance(value, bytes) for value in self.images)):
@@ -85,6 +88,12 @@ class NativeTensorProgram:
         seals = re.findall(_SOURCE, self.target_ir)
         if seals != [hashlib.sha256(self.source_ir.strip().encode()).hexdigest()]:
             raise ValueError("native tensor Target binds a different original Graph")
+        schedule = run_tessera_opt(self.compiler, self.source_ir, "--tessera-graph-to-schedule")
+        if schedule != self.schedule_ir:
+            raise ValueError("native tensor Schedule differs from original source projection")
+        tile = run_tessera_opt(self.compiler, schedule, "--tessera-schedule-to-tile")
+        if tile != self.tile_ir:
+            raise ValueError("native tensor Tile differs from its verified Schedule")
         replay = run_tessera_opt(self.compiler, self.target_ir, _REPLAY)
         if replay != self.target_ir:
             raise ValueError("native tensor Target differs after original Graph replay")
@@ -135,4 +144,89 @@ def compile_native_tensor_program(source, *, tool=None):
         _, ptx, *_ = _compile_tile_ir(member, stage["entry"])
         members.append(member)
         images.append(ptx.encode())
-    return NativeTensorProgram(original, target, tuple(members), tuple(images), compiler, identity)
+    return NativeTensorProgram(source_ir=original, schedule_ir=scheduled, tile_ir=tile,
+                               target_ir=target, members=tuple(members), images=tuple(images),
+                               compiler=compiler, compiler_identity=identity)
+
+
+def runtime_artifact(program, *, argument_names=()):
+    """Expose actual native compiler stages; restoration requires the compiler."""
+    from tessera.runtime import RuntimeArtifact
+
+    if not isinstance(program, NativeTensorProgram):
+        raise TypeError("native tensor artifact requires a verified compiler product")
+    names = tuple(argument_names)
+    if names and (len(names) != len(program.frame["roots"])
+                  or any(not isinstance(name, str) or not name for name in names)
+                  or len(set(names)) != len(names)):
+        raise ValueError("native tensor argument names differ from source roots")
+    manifest = {
+        "schema": "tessera.native.tensor_program.v1",
+        "source_ir": program.source_ir, "schedule_ir": program.schedule_ir,
+        "tile_ir": program.tile_ir, "target_ir": program.target_ir,
+        "members": list(program.members),
+        "images": [base64.b64encode(image).decode() for image in program.images],
+        "compiler_identity": program.compiler_identity,
+    }
+    return RuntimeArtifact(
+        graph_ir=program.source_ir, schedule_ir=program.schedule_ir,
+        tile_ir=program.tile_ir, target_ir=program.target_ir,
+        metadata={"target": "nvidia_sm120", "compiler_path": "canonical_native_tensor_program",
+                  "execution_kind": "native_gpu", "runtime_status": "ready", "executable": True,
+                  "arg_names": list(names), "native_program": manifest,
+                  "restoration": "matching_compiler_required"},
+    )
+
+
+def restore_runtime_artifact(artifact):
+    """Recheck source ancestry with a trusted configured tool, never a payload path."""
+    metadata = artifact.metadata or {}
+    data = metadata.get("native_program")
+    keys = {"schema", "source_ir", "schedule_ir", "tile_ir", "target_ir",
+            "members", "images", "compiler_identity"}
+    if (metadata.get("target") != "nvidia_sm120"
+            or metadata.get("compiler_path") != "canonical_native_tensor_program"
+            or not isinstance(data, dict) or set(data) != keys
+            or data["schema"] != "tessera.native.tensor_program.v1"
+            or not isinstance(data["members"], list) or not isinstance(data["images"], list)
+            or any(not isinstance(value, str) for value in data["images"])
+            or any(getattr(artifact, field) != data[key] for field, key in (
+                ("graph_ir", "source_ir"), ("schedule_ir", "schedule_ir"),
+                ("tile_ir", "tile_ir"), ("target_ir", "target_ir")))):
+        raise ValueError("native tensor runtime artifact differs from its compiler product")
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("native tensor artifact restoration requires the matching compiler")
+    return NativeTensorProgram(
+        source_ir=data["source_ir"], schedule_ir=data["schedule_ir"],
+        tile_ir=data["tile_ir"], target_ir=data["target_ir"],
+        members=tuple(data["members"]),
+        images=tuple(base64.b64decode(value, validate=True) for value in data["images"]),
+        compiler=Path(tool).resolve(), compiler_identity=data["compiler_identity"],
+    )
+
+
+def execute_runtime_artifact(artifact, args):
+    """Restore a checked product and run its complete native frame synchronously."""
+    from collections.abc import Mapping
+    from tessera.runtime import NativeProgramExecution
+
+    program = restore_runtime_artifact(artifact)
+    names = (artifact.metadata or {}).get("arg_names")
+    if isinstance(args, Mapping):
+        if (not isinstance(names, list) or len(names) != len(program.frame["roots"])
+                or any(not isinstance(name, str) for name in names)
+                or len(set(names)) != len(names) or set(args) != set(names)):
+            raise ValueError("native tensor named arguments differ")
+        roots = tuple(args[name] for name in names)
+    elif isinstance(args, (tuple, list)):
+        roots = tuple(args)
+    else:
+        raise ValueError("native tensor execution requires a root sequence or mapping")
+    with program.prepare() as owner:
+        output = owner(roots)
+    return NativeProgramExecution(output, ({
+        "ok": True, "execution_kind": "native_gpu",
+        "compiler_path": "canonical_native_tensor_program",
+        "completed_native_stages": len(program.members),
+    },))

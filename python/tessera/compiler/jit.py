@@ -561,6 +561,13 @@ class JitFn:
             from .bounded_nvidia_lhs import BoundedLhsDispatcher,SourceCertificate,validate_bounds
             self._bounded_lhs = BoundedLhsDispatcher(self,validate_bounds(shape_bounds),
                 bounded_source_certificate or SourceCertificate(fn,source_text),bounded_rhs_storage_order)
+        self._native_tensor_program_cache: Dict[tuple, Any] = {}
+        self._native_tensor_calls: Dict[tuple, Any] = {}
+        self._native_tensor_lock = threading.RLock()
+        self._native_tensor_pid: int | None = None
+        self._native_tensor_last_program: Any = None
+        self._native_tensor_last_owner: Any = None
+        self._native_tensor_last_receipt: dict[str, Any] | None = None
         self._nvidia_lhs_program_cache: Dict[str, Any] = {}
         self._nvidia_lhs_prepared_calls: Dict[str, Any] = {}
         self._nvidia_lhs_last_program: Any = None
@@ -947,6 +954,8 @@ class JitFn:
 
     def close_native_storage(self) -> None:
         """Release the native module; keep the descriptor for lazy rebinding."""
+        if self._native_tensor_pid is not None and self._native_tensor_pid != os.getpid():
+            raise RuntimeError("native tensor JIT cannot cross fork")
         prepared_pid = getattr(self, "_native_prepared_jvp_pid", None)
         if prepared_pid is not None and prepared_pid != os.getpid():
             raise RuntimeError("retained native JVP cannot cross fork")
@@ -963,7 +972,7 @@ class JitFn:
             self._native_prepared_jvp_calls.clear()
         for name in ("_native_prepared_movement_calls", "_native_prepared_matmul_calls",
                      "_nvidia_lhs_prepared_calls", "_native_prepared_attention_calls",
-                     "_native_source_attention_calls"):
+                     "_native_source_attention_calls", "_native_tensor_calls"):
             calls = getattr(self, name, {})
             for call in calls.values():
                 call.close()
@@ -1006,6 +1015,11 @@ class JitFn:
                 or self._rocm_quantized_product_last_program is not None
                 or getattr(self, "_native_source_attention_last_owner", None) is not None):
             self._cached_artifact = None
+        if self._native_tensor_last_program is not None:
+            self._cached_artifact = None
+        self._native_tensor_last_program = None
+        self._native_tensor_last_owner = None
+        self._native_tensor_last_receipt = None
         self._native_source_attention_last_owner = None
         self._native_source_attention_last_receipt = None
         self._native_descriptor_last_receipt = None
@@ -1058,6 +1072,9 @@ class JitFn:
             if _cr.active_sink_is_capturing():
                 _cr.emit_compile_report(self.compile_report())
             return prepared_matmul
+        native_tensor = self._try_native_tensor_program_call(args, kwargs)
+        if native_tensor is not _JIT_FALLBACK:
+            return native_tensor
         # Explicit bounded compilation already captured and verified the
         # frontend Graph. Replay binds that immutable native program, as the
         # prepared matmul route above does, instead of re-running the tracer.
@@ -2597,6 +2614,76 @@ class JitFn:
         return (program.native.ingest.native,program.native.storage.native,program.native.consumer.package)
 
 
+    def _try_native_tensor_program_call(self, args, kwargs):
+        """Bind a compiler-admitted program; warm calls do not trace or compile."""
+        if (normalize_target_kind(self.target) != "nvidia_sm120"
+                or self.differentiation_request is not None):
+            return _JIT_FALLBACK
+        from .native_tensor_jit import input_signature
+        from .native_tensor_program import compile_native_tensor_program
+        from .scheduled_matmul import find_tessera_opt
+        from tessera import runtime as rt
+
+        bound = self._native_frontend_signature().bind(*args, **kwargs)
+        bound.apply_defaults()
+        ordered = tuple(bound.arguments[name] for name in self.arg_names)
+        signature = input_signature(ordered)
+        if signature is None:
+            return _JIT_FALLBACK
+        with self._native_tensor_lock:
+            if self._native_tensor_pid is not None and self._native_tensor_pid != os.getpid():
+                raise RuntimeError("native tensor JIT cannot cross fork")
+            if signature not in self._native_tensor_program_cache:
+                # Missing prerequisites leave old routes eligible only before
+                # admission. Cached programs never rediscover compiler tools.
+                tool = find_tessera_opt()
+                if tool is None:
+                    return _JIT_FALLBACK
+                provider = rt._load_nvidia_ptx_launch()
+                if provider is None or not hasattr(provider, "tessera_nvidia_native_frame_prepare_v1"):
+                    return _JIT_FALLBACK
+                module = self._traced_autodiff_module(ordered, {})
+                program = compile_native_tensor_program(module, tool=tool)
+                if len(self._native_tensor_program_cache) >= 24:
+                    retired = next(iter(self._native_tensor_program_cache))
+                    owner = self._native_tensor_calls.get(retired)
+                    if owner is not None:
+                        owner.close()
+                        del self._native_tensor_calls[retired]
+                    del self._native_tensor_program_cache[retired]
+                self._native_tensor_program_cache[signature] = (program, module)
+            program, module = self._native_tensor_program_cache[signature]
+            if program is None:
+                return _JIT_FALLBACK
+            self._native_tensor_pid = os.getpid()
+            owner = self._native_tensor_calls.get(signature)
+            created = owner is None or not owner.handle
+            if created:
+                owner = program.prepare()
+            try:
+                from .native_tensor_result import input_scope
+                with input_scope(ordered):
+                    result = owner(ordered)
+            except BaseException:
+                if created:
+                    owner.close()
+                raise
+            self._native_tensor_calls[signature] = owner
+            self.graph_ir = module
+            self.frontend_authority = "tracer"
+            self.frontend_authority_error = None
+            self._native_tensor_last_program = program
+            self._native_tensor_last_owner = owner
+            self._native_tensor_last_receipt = {
+                "ok": True, "execution_kind": "native_gpu",
+                "compiler_path": "canonical_native_tensor_program",
+                "completed_native_stages": len(program.members),
+            }
+            self._native_descriptor_last_receipt = self._native_tensor_last_receipt
+            self._cached_artifact = None
+            self.last_fallback_reason = None
+            return result
+
     def _try_nvidia_lhs_call(self, args, kwargs):
         """Execute the traced LHS producer on native SM120."""
         if normalize_target_kind(self.target) != "nvidia_sm120" or self.differentiation_request is not None:
@@ -3894,6 +3981,8 @@ class JitFn:
            new code should prefer ``.explain()`` for the unified
            view across all four IR layers.
         """
+        if self._native_tensor_last_program is not None:
+            return self._native_tensor_last_program.source_ir
         return self.graph_ir.to_mlir(target=self._legality_target())
 
     def _legality_target(self) -> str:
@@ -3946,6 +4035,15 @@ class JitFn:
                 f"{bool(self.compile_bundle and self.compile_bundle.executable)}"
             ),
         }
+        program = self._native_tensor_last_program
+        receipt = self._native_tensor_last_receipt
+        if program is not None and receipt is not None and receipt.get("ok"):
+            ir_hashes = {name: _cr.hash_ir_text(text) for name, text in (
+                ("graph_ir", program.source_ir), ("schedule_ir", program.schedule_ir),
+                ("tile_ir", program.tile_ir), ("target_ir", program.target_ir))}
+            plan_hash = self.runtime_artifact().artifact_hash
+            target_decision["nvidia_sm120"] = (
+                "canonical_native_tensor_program; completed compiler-owned native controller")
         quantized_program=getattr(self,"_rocm_quantized_product_last_program",None)
         if quantized_program is not None and self._has_native_quantized_product_receipts():
             import hashlib
@@ -4046,16 +4144,22 @@ class JitFn:
 
     @property
     def schedule_ir(self) -> Optional[str]:
+        if self._native_tensor_last_program is not None:
+            return self._native_tensor_last_program.schedule_ir
         artifact = self.compile_bundle.artifact("schedule") if self.compile_bundle is not None else None
         return artifact.text if artifact is not None else None
 
     @property
     def tile_ir(self) -> Optional[str]:
+        if self._native_tensor_last_program is not None:
+            return self._native_tensor_last_program.tile_ir
         artifact = self.compile_bundle.artifact("tile") if self.compile_bundle is not None else None
         return artifact.text if artifact is not None else None
 
     @property
     def target_ir(self) -> Optional[str]:
+        if self._native_tensor_last_program is not None:
+            return self._native_tensor_last_program.target_ir
         artifact = self.compile_bundle.artifact("target") if self.compile_bundle is not None else None
         return artifact.text if artifact is not None else None
 
@@ -4122,6 +4226,9 @@ class JitFn:
 
     @property
     def execution_kind(self) -> str:
+        receipt = self._native_tensor_last_receipt
+        if receipt is not None and receipt.get("ok") and receipt.get("execution_kind") == "native_gpu":
+            return "native_gpu"
         source_attention = getattr(self, "_native_source_attention_last_receipt", None)
         if source_attention and source_attention.get("ok") and source_attention.get("execution_kind") == "native_gpu":
             return "native_gpu"
@@ -4166,7 +4273,7 @@ class JitFn:
 
     @property
     def has_target_artifacts(self) -> bool:
-        return self.cpu_plan is not None
+        return self._native_tensor_last_program is not None or self.cpu_plan is not None
 
     def lowering_artifacts(self):
         """Return Graph/Schedule/Tile/Target artifacts for the compiled path.
@@ -4178,6 +4285,9 @@ class JitFn:
            verification); use ``.explain()`` for the human view.
         """
 
+        if self._native_tensor_last_program is not None:
+            from .native_tensor_jit import lowering_artifacts
+            return lowering_artifacts(self._native_tensor_last_program)
         if self.cpu_plan is None:
             return ()
         if self.compile_bundle is None:
@@ -4187,6 +4297,10 @@ class JitFn:
     def lowering_trace(self) -> tuple[dict[str, Any], ...]:
         """Return machine-readable compiler trace events for this JIT function."""
 
+        if self._native_tensor_last_program is not None:
+            return tuple({"producer": stage.producer, "input_digest": stage.input_digest,
+                          "output_digest": stage.output_digest, "level": stage.level}
+                         for stage in self.lowering_artifacts())
         if self.compile_bundle is None:
             return ()
         return tuple(event.to_dict() for event in self.compile_bundle.trace_events)
@@ -4217,6 +4331,10 @@ class JitFn:
 
         from tessera.runtime import RuntimeArtifact
 
+        if self._native_tensor_last_program is not None:
+            from .native_tensor_program import runtime_artifact
+            return runtime_artifact(self._native_tensor_last_program,
+                                    argument_names=tuple(self.arg_names))
         source_attention = getattr(self, "_native_source_attention_last_owner", None)
         if source_attention is not None:
             return source_attention.runtime_artifact()

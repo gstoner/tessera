@@ -1158,6 +1158,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "nvidia_source_attention_program": "Native static half RMSNorm to saved-LSE attention under one checked CUDA owner",
     "nvidia_source_reverse_program": "Compiler-derived static RMSNorm/ReLU source pullback with mixed contraction and checked native CUDA ownership",
     "nvidia_tensor_rhs_jvp_program": "Compiler-owned static paired producer/RHS-JVP SSA, native Schedule/Tile members and transactional two-output CUDA owner",
+    "native_tensor_program": "Compiler-owned static SM120 tensor controller and native members through one checked retained CUDA frame",
     "nvidia_lhs_program": "Checked native LHS normalization/softmax/ReLU producer members and complete matmul epilogue on one owned CUDA stream",
     "nvidia_rhs_program": "Checked native RMSNorm/LayerNorm RHS and typed matmul packages on one owned CUDA stream",
     "nvidia_mma":           "NVIDIA GPU (consumer Blackwell sm_120) warp-level "
@@ -3923,6 +3924,14 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         numerical_fixture="tests/unit/test_native_sm120_rhs_jvp_program.py",
         evidence_target="nvidia_sm120",proof_build="LLVM/MLIR23.1.1+CUDA13.3+RTX5070",
         device_proof="device_verified_jit"),
+    ("nvidia_sm120", "canonical_native_tensor_program"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="canonical_native_tensor_program",
+        execution_kind="native_gpu", executable=True, executor_id="native_tensor_program",
+        runtime_status="success", execution_mode="cuda_runtime", owns_stream=True,
+        reason="Compiler-admitted static compact homogeneous half-storage producer DAG and plain matmul "
+               "retain original Graph, Schedule, Tile and NVIDIA Target ancestry. A checked C++ frame "
+               "owns buffers, modules, streams and completion. Artifact restoration requires the matching "
+               "compiler; no compiler-free portability, general layout/dynamic/AD or quantized admission."),
     ("nvidia_sm120", "canonical_nvidia_lhs_program"): ExecutionRow(
         target="nvidia_sm120", compiler_path="canonical_nvidia_lhs_program",
         execution_kind="native_gpu", executable=True, executor_id="nvidia_lhs_program",

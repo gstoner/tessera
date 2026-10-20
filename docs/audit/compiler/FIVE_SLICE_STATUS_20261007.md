@@ -1,7 +1,24 @@
 ---
-last_updated: 2026-10-19
+last_updated: 2026-10-20
 audit_role: reference
 ---
+
+## Native tensor ordinary JIT candidate — 2026-10-20
+
+PR992 merged as fac21f5bc37deb99b4be8ef82b21f4d66296c1d1 after exact-head
+required CI passed and the CUDA launch-geometry finding was fixed and resolved.
+Its explicit source program foundation is delivered; the original five-slice
+scope remains open.
+
+A private ordinary-JIT follow-on now uses native admission, actual adjacent
+IR stages and a retained C++ owner. Initial RTX5070 overlay proof passes
+twelve cases, including runtime artifact round trips. Warm calls and
+close/rebind forbid tracing and compiler tools. Native owned inputs are pinned
+through consumption. Final capacity, matching compiler, resident/lifetime,
+benchmark and delivery gates remain open.
+Contract: docs/spec/NATIVE_TENSOR_JIT.md.
+
+
 
 ## Native tensor original-source packages — 2026-10-19
 

@@ -6,6 +6,17 @@ target: apple_gpu
 last_updated: 2026-10-20
 ---
 
+## NATIVE-TENSOR-JIT-20261020 — ordinary frontend integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-JIT-20261020.
+
+Contract: docs/spec/NATIVE_TENSOR_JIT.md.
+
+Not applicable to this backend's physical execution: the private native tensor executor is exact SM120/CUDA. Shared JIT/cache/inspection and execution-matrix changes require host regression gates; no sibling schedule, dtype or runtime promotion. Independent native-program integration remains follow-up required.
+
+
+
 ## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

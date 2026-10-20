@@ -18,6 +18,7 @@ Delivery review: the shared typed-program verifier now checks module schema and 
 
 Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PACKAGE.md.
 Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
+Review evidence: benchmarks/baselines/native_tensor_review_closure_20261020/README.md.
 
 
 ## NATIVE-TENSOR-TARGET-CONTROLLER-20261019 — verified controller candidate

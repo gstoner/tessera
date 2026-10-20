@@ -91,3 +91,5 @@ transform must consume it first.
 Evidence: benchmarks/baselines/native_tensor_target_controller_20261019/.
 The later NATIVE_TENSOR_PROGRAM_PACKAGE.md increment adds source replay and an
 explicit compile API; ordinary JIT/portable and general AD closure remain open.
+
+Review evidence: benchmarks/baselines/native_tensor_review_closure_20261020/README.md.

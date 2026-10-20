@@ -11,8 +11,8 @@ def input_signature(values):
         raise ValueError("native tensor JIT requires all resident or all host roots")
     if resident:
         from .resident_nvidia_tensor import _cuda_metadata_dtype, cuda_frontend_specs
-        # This profile owns compact half roots only. Decline other storage and
-        # layouts before the strict half-root parser so existing routes remain
+        # This profile owns compact FP16/BF16/FP32 roots. Decline other storage and
+        # layouts before the strict typed-root parser so existing routes remain
         # eligible; supported metadata still receives its complete validation.
         for value in values:
             interface = value.__cuda_array_interface__
@@ -25,7 +25,7 @@ def input_signature(values):
                 dtype = _cuda_metadata_dtype(value, interface)
             except (KeyError, TypeError, ValueError):
                 return None
-            if str(dtype) not in {"float16", "bfloat16"}:
+            if str(dtype) not in {"float16", "bfloat16", "float32"}:
                 return None
             strides = interface.get("strides")
             if (all(type(dim) is int and dim > 0 for dim in shape)
@@ -39,7 +39,7 @@ def input_signature(values):
         return None
     signature = []
     for value, (shape, dtype) in zip(values, specs, strict=True):
-        if len(shape) != 2 or str(dtype) not in {"float16", "bfloat16"}:
+        if len(shape) != 2 or str(dtype) not in {"float16", "bfloat16", "float32"}:
             return None
         width = dtype.itemsize
         compact = (shape[1] * width, width)

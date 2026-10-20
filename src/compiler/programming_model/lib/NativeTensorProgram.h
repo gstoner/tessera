@@ -72,7 +72,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
         return input.getDefiningOp() != nullptr;
       })) return success();
   auto reject = [&]() {
-    return root.emitError("Graph->Schedule native tensor program requires a static compact half "
+    return root.emitError("Graph->Schedule native tensor program requires a static compact typed "
                           "producer DAG ending in a plain matmul");
   };
   for (Operation *owner : {module.getOperation(), root.getOperation()})
@@ -103,7 +103,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
   for (auto [index, arg] : llvm::enumerate(root.getArguments())) {
     auto attrs = root.getArgAttrDict(index);
     auto type = bufferType(arg.getType());
-    if (!type || type.getElementType().isF32() || (attrs && !attrs.empty()))
+    if (!type || (attrs && !attrs.empty()))
       return reject();
   }
   llvm::DenseSet<Value> available(root.getArguments().begin(), root.getArguments().end());

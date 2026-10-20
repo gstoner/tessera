@@ -6,6 +6,21 @@ target: nvidia_sm120
 last_updated: 2026-10-20
 ---
 
+## NATIVE-TENSOR-FP32-ROOTS-20261020 — original producer storage candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-FP32-ROOTS-20261020.
+
+Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
+
+Candidate parity validated: matching compiler, 170 focused cases, 481 shared
+gates and 18 RTX5070 host/resident cases pass. Nine correctness-gated timing
+rows separate producer/consumer event windows and completed public calls.
+Full delivery and publication gates remain follow-up required.
+The existing scalar-FMA consumer preserves FP32 root precision; no MMA
+conversion or new frame ABI is introduced.
+
+
 ## NATIVE-TENSOR-MLP-20261020 — native multi-matmul integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

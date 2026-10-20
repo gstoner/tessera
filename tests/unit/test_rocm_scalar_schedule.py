@@ -90,5 +90,13 @@ def test_standalone_scalar_schedule_cannot_discard_unhandled_graph_work(compiler
     tool = compiler_toolchain.require_tessera_opt("--tessera-graph-to-schedule")
     result = subprocess.run([str(tool), "--tessera-graph-to-schedule", "-"],
                             input=source, capture_output=True, text=True, timeout=60)
-    assert result.returncode != 0
-    assert "Graph->Schedule" in result.stderr
+    if target == "nvidia_sm120" and position == "producer":
+        # The native program must retain the producer, not erase it into the
+        # standalone scalar leaf. ROCm and post-result graphs remain refused.
+        assert result.returncode == 0, result.stderr
+        assert result.stdout.count("tile.program_invoke ") == 2
+        assert "tessera.native.tensor_program" in result.stdout
+        assert "tessera.relu" in result.stdout
+    else:
+        assert result.returncode != 0
+        assert "Graph->Schedule" in result.stderr

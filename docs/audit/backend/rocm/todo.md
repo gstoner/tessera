@@ -5,6 +5,18 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NATIVE-TENSOR-FP32-ROOTS-20261020 — original producer storage candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-FP32-ROOTS-20261020.
+
+Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
+
+Not applicable to HIP physical execution: the SM120 program outliner and
+CUDA root signature helper change; RDNA schedules and HIP ABIs do not.
+Independent gfx1151/gfx1201 producer-program parity remains follow-up required.
+
+
 ## NATIVE-TENSOR-MLP-20261020 — native multi-matmul integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

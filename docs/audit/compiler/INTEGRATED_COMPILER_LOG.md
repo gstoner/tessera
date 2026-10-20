@@ -13916,3 +13916,25 @@ Separated public/resident benchmarks are recorded. Final full CPU passes
 All 33 generated documents and five surface audits pass; updated-commit CI
 and review remain required.
 <!-- entry-fields:end -->
+
+
+### 2026-10-20 — native original FP32 producer roots
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync NATIVE-TENSOR-FP32-ROOTS-20261020.
+
+Outcome: Original compact FP32 roots retain storage through native ReLU and
+existing scalar-FMA consumers with FP16/BF16/FP32 weights. The obsolete
+whole-program half-root restriction is removed; native leaf policy, checked
+frame capacity, initialization and lifetime validation remain enforced.
+170 focused and 481 shared gates pass; 18 RTX5070 host/resident cases prove
+numerics, owner reuse, replay and independent pending producer streams.
+Nine timing rows separate cold/public host costs and producer/consumer/program
+event windows. Independent numerical controls reject early half conversion.
+All four backend queues are assessed; no sibling device proof transfers.
+
+Remaining: Full CPU/compiler delivery, final derived-document and publication
+gates. General pitched/dynamic/AD/encoded producers and all five aggregate
+programs remain open.
+Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
+<!-- entry-fields:end -->

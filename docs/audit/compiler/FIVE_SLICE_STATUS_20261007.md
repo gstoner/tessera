@@ -2,6 +2,20 @@
 last_updated: 2026-10-20
 audit_role: reference
 ---
+## Native original FP32 producer roots candidate — 2026-10-20
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync NATIVE-TENSOR-FP32-ROOTS-20261020.
+The original FP32 root survives ReLU and the native scalar-FMA matmul consumer
+without half/TF32 conversion. The matching compiler passes 170 focused cases,
+481 shared registry/lifecycle gates and 18 RTX5070 host/resident cases,
+including independent pending producer streams. Nine correctness-gated rows
+separate stage/program event windows and completed public calls. Full delivery
+and publication gates remain active. Generic layout/dynamic/AD/encoded and all
+five aggregate programs remain open.
+Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
+
+
 ## Native multi-matmul MLP increment — 2026-10-20
 
 PR993 is delivered as 1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31 after

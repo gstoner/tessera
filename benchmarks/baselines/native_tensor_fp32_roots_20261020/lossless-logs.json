@@ -1,0 +1,67 @@
+{
+  "fp32-root-red.txt": {
+    "gzip_file": "fp32-root-red.txt.gz",
+    "uncompressed_sha256": "6a8c635ed49557a5a138d9d6aa12b5f1dcb5b26c7039fdc2e7135b3c694b6bac",
+    "gzip_sha256": "5e0c41d64eac3544f0dd7be37db34a14f9ba79df6b5a5c52073d32fe1523f66b"
+  },
+  "fp32-root-green.txt": {
+    "gzip_file": "fp32-root-green.txt.gz",
+    "uncompressed_sha256": "441b2a604e627c4cb378c7414e0da2298a175f8f623eb0dcd539e717f382a01b",
+    "gzip_sha256": "6bd9e13ea02887a66a46e558911b5a319efa86ab7bd1d4ce27248ed4b60b870b"
+  },
+  "fp32-root-focused.txt": {
+    "gzip_file": "fp32-root-focused.txt.gz",
+    "uncompressed_sha256": "2191f5f7ed5a485b5b68c19cdee199d62aa0181637442729ec29cd3ce1220cc5",
+    "gzip_sha256": "543ec9915e3874197303ec9fb9fd2c9bf4b624ef0d49a4ac677e9f2063c5dedc"
+  },
+  "fp32-root-focused-final.txt": {
+    "gzip_file": "fp32-root-focused-final.txt.gz",
+    "uncompressed_sha256": "223b67cbdb7ce8bd5d6d875609918efc4ff65edd98e00dbf1b2f280ed1142332",
+    "gzip_sha256": "03ee60132a7ab88b28f33081d3778f73e70c8928cf2c81637be531738d51382a"
+  },
+  "fp32-root-shared-gates.txt": {
+    "gzip_file": "fp32-root-shared-gates.txt.gz",
+    "uncompressed_sha256": "515fa827e2817820795c1bac855dfee781e6ab1a874a23e49cb347089dc06585",
+    "gzip_sha256": "49c6a30fc5ef75f8720bb7a75549b9956642f475cda0aa451fcd7a7cd929b4d8"
+  },
+  "fp32-root-build.txt": {
+    "gzip_file": "fp32-root-build.txt.gz",
+    "uncompressed_sha256": "aec8646af3f3b63f16f5749d7de4b281aa42d992518dc466b0c952aebfcbe58f",
+    "gzip_sha256": "d2485c06601698f9b3a8729292571ed8169acc7d5748110dc36bf3d26c9e202a"
+  },
+  "fp32-root-device.txt": {
+    "gzip_file": "fp32-root-device.txt.gz",
+    "uncompressed_sha256": "36d1ede701d0b487d22e8cd31d47db2a3ead131916a5ecc7a3b109cf96f7b1ca",
+    "gzip_sha256": "219220aa02d33fbd3ca22b4902a7d6a767eb8afae54f229ec72df9b3f05876ed"
+  },
+  "fp32-root-device-final.txt": {
+    "gzip_file": "fp32-root-device-final.txt.gz",
+    "uncompressed_sha256": "f8ac97413a732fb6111f47f1198f9df40d621a92d3011efaab464a62f78c4159",
+    "gzip_sha256": "9a3a2e8e89113e77385218b1be6e900ae9296841db191bf39327f7c7ed05debf"
+  },
+  "fp32-root-timing.txt": {
+    "gzip_file": "fp32-root-timing.txt.gz",
+    "uncompressed_sha256": "ab1a0fdbf78e54043bd659f25da7015f4a8e9c8edbb27ee2cf001738ce59d2ca",
+    "gzip_sha256": "28f13455e97fee35fc2ba162777b025fa6bfd87e3fc2ecf32f56bfa9dd6c90c1"
+  },
+  "fp32-root-cpu.txt": {
+    "gzip_file": "fp32-root-cpu.txt.gz",
+    "uncompressed_sha256": "2d4fa4848cee5a61d46888b4e5bfbbf55c17be71857d040ace352b1b2610b61d",
+    "gzip_sha256": "85b3bfe0b0544c96e9d7c11cf0075a3309ad32180cd08a048d2476d6794888d5"
+  },
+  "fp32-root-compiler.txt": {
+    "gzip_file": "fp32-root-compiler.txt.gz",
+    "uncompressed_sha256": "2089c61cf6040c56eb9d223c3a5e137b393a5b7e7db0b572008eab5ba8511578",
+    "gzip_sha256": "edae6af9ebc5310546f8cb8870d39654e80ef8f4535ab9a57479308a8bd03270"
+  },
+  "fp32-root-refusal-fix.txt": {
+    "gzip_file": "fp32-root-refusal-fix.txt.gz",
+    "uncompressed_sha256": "3da6c5248d1657b699d6e13ee53444e40d9816259f89210ebc600824a68e4e02",
+    "gzip_sha256": "00096f10bfa984ac781e6f0a0ca01638dcc2ad8a4982b8fcb3c0b4a8ce1e34f5"
+  },
+  "fp32-root-docs-final.txt": {
+    "gzip_file": "fp32-root-docs-final.txt.gz",
+    "uncompressed_sha256": "1c582cf39bc7e02ac606dd2d1c4a39c4cea7afbdf1a8cd7e853d32afe23ac8a4",
+    "gzip_sha256": "6df81d1885159a3a2388d4e959c2df1dff6a7c57f5fa48614419b641c0cc0d2e"
+  }
+}

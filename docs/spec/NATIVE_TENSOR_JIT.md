@@ -11,7 +11,7 @@ Status: PR #993 delivered as 1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31 after requ
 
 ## Compiler and runtime boundary
 
-Ordinary primal SM120 calls with compact half-storage roots query the
+Ordinary primal SM120 calls with compact FP16/BF16/FP32 roots query the
 native compiler. Python describes tensor metadata and binds arguments; native
 Graph/Schedule/Tile passes select operations, arithmetic, policies and kernels.
 An admitted product retains actual Graph, Schedule, Tile and NVIDIA Target IR.
@@ -89,7 +89,7 @@ Final reviewed-source evidence: benchmarks/baselines/native_tensor_jit_20261020/
 
 Sync: NATIVE-TENSOR-MLP-20261020.
 
-The private extension admits two or more compact half roots within the same
+The private extension admits two or more compact typed roots within the same
 64-stage/128-buffer capacity. Nonterminal plain matmuls are retained as actual
 members, and every matrix checks its own operand pair and numerical policy.
 The named three-root MLP explicitly selects FP16 or FP32 intermediate output.
@@ -144,3 +144,24 @@ route; the operation-name request alone cannot claim their support.
 Host-free negative tests in tests/unit/test_sm120_activation_dispatch.py
 retain other JIT paths, while positive FP16/BF16/FP32 controls still select
 canonical native compilation. Once selected, compilation/launch errors propagate.
+
+## FP32 original root integration candidate — 2026-10-20
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync NATIVE-TENSOR-FP32-ROOTS-20261020.
+
+Original compact rank-two FP32 roots now pass through native program admission
+and host/resident signature transport. Each outlined member still must pass
+its own native storage-pair and numerical-policy selection. FP32 matmul inputs
+retain the existing ordered FP32 scalar-FMA strategy; no half or TF32
+conversion is introduced. The existing frame ABI already represents four-byte
+FP32 roots and checks byte capacity, strides, initialized storage and retirement.
+
+The initial eight positive compiler/signature cases fail on the frozen
+pre-change source. The matching candidate passes 170 focused cases, 481 shared
+registry/lifecycle gates and 18 RTX5070 host/resident cases. Nine timing rows
+separate producer/consumer event windows from completed public calls. Full
+delivery and publication gates remain active. This candidate does not
+establish pitched/dynamic roots, arbitrary operators or general AD closure.
+
+Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.

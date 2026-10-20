@@ -58,7 +58,9 @@ baselines/native_tensor_mlp_20261020/attribute_mlp.py reads actual producer
 prefixes, and baselines/native_tensor_mlp_20261020/record_mlp.py is the initial
 scratch timing recorder. Use nvidia/record_native_tensor_mlp.py for new runs. Its --standalone-relu mode
 records typed FP32 activation public completion and separate serial/flat resident
-CUDA-event regions with bitwise checks.
+CUDA-event regions with bitwise checks. Its --fp32-roots mode records
+original FP32 producer inputs with native scalar-FMA consumers and separate
+stage/program/public timing domains; see baselines/native_tensor_fp32_roots_20261020/.
 
 - `nvidia/benchmark_active_source_jvp.py`: source-active JVP with optional resident roots, separate native device events and public completed-call timings. Evidence and standalone `capture_programs.py` recorder: `baselines/sm120_resident_source_jvp_20261016/README.md`.
 
@@ -133,7 +135,7 @@ named here. Paths are relative to `benchmarks/`; outputs are under
 
 | Recorder | Output |
 |---|---|
-| nvidia/record_native_tensor_mlp.py | baselines/native_tensor_mlp_20261020/ (three-root MLP, explicit FP16/FP32 intermediates, independent native event and public timing windows) |
+| nvidia/record_native_tensor_mlp.py | baselines/native_tensor_mlp_20261020/ and baselines/native_tensor_fp32_roots_20261020/ (MLP and original FP32 roots; independent native event and public timing windows) |
 | nvidia/record_native_tensor_jit.py | baselines/native_tensor_jit_20261020/ (correctness-gated ABBA public latency and separate CUDA windows) |
 | `rocm/benchmark_gfx1201_resident_norm_matmul.py` | `baselines/gfx1201_resident_frontend_20260930/` (exact-device Graph -> Schedule -> Tile resident RMSNorm/matmul packet) |
 | `nvidia/benchmark_scheduled_rmsnorm_matmul_edge.py` | `baselines/sm120_rmsnorm_matmul_edge_20260929/` and `baselines/sm120_rmsnorm_matmul_edge_20260930/` (resident RMSNorm-to-matmul CUDA-event packets; 2026-09-30 includes bounded dynamic M) |

@@ -7,6 +7,18 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## NATIVE-TENSOR-FP32-ROOTS-20261020 — original producer storage candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-FP32-ROOTS-20261020.
+
+Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
+
+Not applicable to AVX-512 physical execution: this profile uses the SM120
+program outliner and CUDA root signatures. Independent CPU producer-program
+storage and lifetime parity remain follow-up required.
+
+
 ## NATIVE-TENSOR-MLP-20261020 — native multi-matmul integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

@@ -82,7 +82,8 @@ def test_signature_preserves_other_storage_and_layout_routes():
     assert input_signature((half, half)) is not None
     assert input_signature((half[:, ::2], half)) is None
     assert input_signature((np.asfortranarray(half), half)) is None
-    assert input_signature((half.astype(np.float32), half)) is None
+    assert input_signature((half.astype(np.float32), half)) is not None
+    assert input_signature((half.astype(np.float64), half)) is None
     assert input_signature((half.reshape(2, 2, 8), half)) is None
 
 
@@ -148,7 +149,7 @@ def test_retained_jit_pins_owned_inputs_and_rebinds_without_compiler(monkeypatch
 
 
 @pytest.mark.parametrize("typestr,strides", [
-    ("|u1", None), ("|V1", None), ("<f4", None),
+    ("|u1", None), ("|V1", None), ("<f8", None),
     ("<f2", (2, 4)), ("<f2", (16, 2)),
 ])
 def test_resident_profile_declines_other_storage_and_layouts_before_strict_parser(
@@ -163,7 +164,7 @@ def test_resident_profile_declines_other_storage_and_layouts_before_strict_parse
         def __array__(self, *args, **kwargs):
             pytest.fail("metadata admission coerced resident data")
     def forbidden(*args, **kwargs):
-        pytest.fail("unsupported profile entered the strict compact-half parser")
+        pytest.fail("unsupported profile entered the strict compact typed parser")
     monkeypatch.setattr(resident, "cuda_frontend_specs", forbidden)
     assert input_signature((Root(), Root())) is None
 

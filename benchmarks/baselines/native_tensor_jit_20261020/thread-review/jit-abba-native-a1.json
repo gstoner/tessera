@@ -1,0 +1,724 @@
+{
+  "schema": "tessera.native_tensor_jit_measurement.v1",
+  "label": "jit-abba-native-a1",
+  "architecture": "sm_120",
+  "route": "native",
+  "identity": {
+    "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+    "compiler_sha256": "ff8bad652b1a2c0f75d58c5589e37433e4774e5032664e3d202fa112cd59e070",
+    "provider_sha256": "72aaf57b4819f6aaf7931e59bbeb4cb68b8bd794e68cb2bb9108924eb6547e45",
+    "compiler_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+    "compiler_source": {
+      "compiler_sha256": "ff8bad652b1a2c0f75d58c5589e37433e4774e5032664e3d202fa112cd59e070",
+      "base_commit": "b09663678ddee84381d3331cceadbe1cb213c973",
+      "uncommitted_compiler_changes": true,
+      "compiler_source_sha256": {
+        "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "b32bb8ff415ba103499ae6d8624c7e7aaa29e85cfddc36f62e88abafd61e174f",
+        "src/compiler/programming_model/lib/NativeTensorProgram.h": "593f7802cd7f9c178c9c91ef5466cd21b68f039284cf4dc223e7204b51405918",
+        "src/compiler/programming_model/lib/PMPasses.cpp": "18d6d54c9c094ebdb4550f162f057a5e0b00cc8a73db1ff042b8d484685f5545"
+      },
+      "configuration": "LLVM/MLIR23.1.1 optimized with assertions; existing six-backend Q/build",
+      "scope": "capacity and aligned-arena verification additions; no numerical kernel change"
+    },
+    "checkout_head": "d0579fdb1546fda5278b700dbee8c77a251d339b",
+    "source_sha256": {
+      "python/tessera/compiler/jit.py": "0aac913016ddcd70ac24ab7b1d641ad6de2c5da03aa1687525411da79d24573a",
+      "python/tessera/compiler/execution_matrix.py": "6e6b9edf49d437fca2f30b55c64ec3161935edd291bac31fb10932a73112183d",
+      "python/tessera/compiler/native_tensor_program.py": "34840d5af39c065b60c2f26e9933f7a4d723c4ef5c661013e5ef3d3b3885fe2f",
+      "python/tessera/compiler/native_tensor_jit.py": "adae140789027db75eca1e6fbc8f0b434d48474da1971038d63af677c0629bd5",
+      "python/tessera/compiler/prepared_native_tensor_frame.py": "9b8c440ac08f41d66cae5823832b629098e661080be67a9a450ca45adec8dd07",
+      "python/tessera/runtime.py": "92a09b5f2bc8b2cdfb52617712e06563c23044b67a67047c46fdda6d1860c431",
+      "tests/device/nvidia/test_native_tensor_program_package_execution.py": "e76b632edcd0299b7e4586a1497eeadfa3d935ca05c76c0630a68d7ff8113251"
+    },
+    "recorder_sha256": "3968ffe2e6ff96b59676f745066ca0527cc235d9d088f7020a6578d287f84ff1"
+  },
+  "rows": [
+    {
+      "kind": "relu",
+      "storage": "f16",
+      "status": "passed",
+      "route": "native",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 107.318742,
+      "cold_call_ms": 2538.209824,
+      "samples_completed_public_ms": [
+        0.2998051875,
+        0.3040301875,
+        0.283073625,
+        0.2805618125,
+        0.3028683125,
+        0.302280125,
+        0.3047365,
+        0.2948331875,
+        0.31152025,
+        0.3082265,
+        0.321801125,
+        0.3402468125,
+        0.2877175,
+        0.2814180625,
+        0.3378425,
+        0.754868375,
+        0.284289375,
+        0.316717875,
+        0.323522375,
+        0.29782075,
+        0.2999470625
+      ],
+      "median_completed_public_ms": 0.3028683125,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.032564498484134674,
+          "stage_windows_ms": [
+            0.007987500168383121,
+            0.009058499708771706
+          ],
+          "domain": "cuda_events"
+        },
+        "captured": {
+          "program_ms": 0.0034600000362843275,
+          "stage_windows_ms": [
+            0.002810999983921647,
+            0.002041500061750412
+          ],
+          "domain": "cuda_graph_events"
+        }
+      },
+      "artifact_hash": "d30568475227d949267b14508c133b4d7931316516daf7a2a1a6e1dc4b49eb06",
+      "ir_sha256": {
+        "graph_ir": "80c239d8f306d58b918a19a559feebde452d7d0b9a864fce559bbeab117a9fda",
+        "schedule_ir": "b1fa82bf39b0f01027d8a99e8633b0cff5212c9723822b5a5695a013381ebe57",
+        "tile_ir": "bbea959ee2d66389cd476c0d3ef518b22c0eba74ff78483363955ed1c88cda1e",
+        "target_ir": "ee30d879ad8fd0360a245b64921f7edcacbc7d020ee231ed4a02c15dd5474564"
+      },
+      "image_sha256": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "before": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 2,
+        "bytes": 4096
+      },
+      "after": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 338,
+        "bytes": 4096
+      }
+    },
+    {
+      "kind": "relu",
+      "storage": "bf16",
+      "status": "passed",
+      "route": "native",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 94.337218,
+      "cold_call_ms": 1983.642952,
+      "samples_completed_public_ms": [
+        0.2922831875,
+        0.2993345,
+        0.3158953125,
+        0.33335625,
+        0.308444625,
+        0.742327125,
+        0.286139875,
+        0.29009875,
+        0.287701875,
+        0.315744125,
+        0.3122065,
+        0.288081875,
+        0.297497,
+        0.3256291875,
+        0.317641625,
+        0.28609125,
+        0.3253166875,
+        0.317325375,
+        0.31456975,
+        0.27377975,
+        0.30946775
+      ],
+      "median_completed_public_ms": 0.30946775,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.028852000832557678,
+          "stage_windows_ms": [
+            0.014739999547600746,
+            0.015328999608755112
+          ],
+          "domain": "cuda_events"
+        },
+        "captured": {
+          "program_ms": 0.003611499909311533,
+          "stage_windows_ms": [
+            0.002056000055745244,
+            0.0019984999671578407
+          ],
+          "domain": "cuda_graph_events"
+        }
+      },
+      "artifact_hash": "b88c64fd74fbf52a7e9a00fad1e40b25b90598a171995926b28d05f01a585fc3",
+      "ir_sha256": {
+        "graph_ir": "09e3ecd59ffb5f79d487064dc8d0b35c63bc186406b0062658ccb7aa026bebc9",
+        "schedule_ir": "d270a59565e0cf9fe91079587ff56bda5de5769c72c2c1b3d3571948388a176e",
+        "tile_ir": "4d52104241f4436e1e97d2933e5d88b4bd5d2fb173a87f6d324fb3f5f18d7a8c",
+        "target_ir": "0e824d846df1e56fc40c9174e97683a8512c0a0abb2d41d820c37f1ff02e405e"
+      },
+      "image_sha256": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "before": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 2,
+        "bytes": 4096
+      },
+      "after": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 338,
+        "bytes": 4096
+      }
+    },
+    {
+      "kind": "norm",
+      "storage": "f16",
+      "status": "passed",
+      "route": "native",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 96.236847,
+      "cold_call_ms": 2069.650806,
+      "samples_completed_public_ms": [
+        0.2561295625,
+        0.2812611875,
+        0.27718675,
+        0.257598875,
+        0.24873575,
+        0.7076591875,
+        0.270271625,
+        0.24782825,
+        0.2755635625,
+        0.266490875,
+        0.2918550625,
+        0.2498083125,
+        0.2539264375,
+        0.2648814375,
+        0.28389625,
+        0.2842980625,
+        0.2446856875,
+        0.263974,
+        0.2810849375,
+        0.28615625,
+        0.2621464375
+      ],
+      "median_completed_public_ms": 0.266490875,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.01850700005888939,
+          "stage_windows_ms": [
+            0.009298499673604965,
+            0.008407999761402607
+          ],
+          "domain": "cuda_events"
+        },
+        "captured": {
+          "program_ms": 0.004234000109136105,
+          "stage_windows_ms": [
+            0.0031624999828636646,
+            0.001029500039294362
+          ],
+          "domain": "cuda_graph_events"
+        }
+      },
+      "artifact_hash": "715ba61bea4875d0578b928fad52dfa0c5907b5715396e9fe372735e3f4c3a74",
+      "ir_sha256": {
+        "graph_ir": "ee5bc2c3d406f491d67eb54280d00002d4ad064710b8bdc457a3db5e55b0fe5d",
+        "schedule_ir": "97bc8bf570bbacb44addb74026c5ebcb7ebfaf53007c97fafb71bd58327f74fa",
+        "tile_ir": "28b4f310322b58ec11f3e4a743b0efbc63a0319a34841bf207d142d7d7252e1c",
+        "target_ir": "25e80d69bfe1f8512302b191f5326723d71583d9125f32fea62407988c184af5"
+      },
+      "image_sha256": [
+        "531396bb5373e245fec2890d23402a7eb7477424b3455cb776046e14e9b9b9f0",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "before": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 2,
+        "bytes": 4096
+      },
+      "after": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 338,
+        "bytes": 4096
+      }
+    },
+    {
+      "kind": "norm",
+      "storage": "bf16",
+      "status": "passed",
+      "route": "native",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 109.793514,
+      "cold_call_ms": 1983.123423,
+      "samples_completed_public_ms": [
+        0.2628064375,
+        0.2794135625,
+        0.4353874375,
+        0.2223384375,
+        0.2483025625,
+        0.2756321875,
+        0.2851455,
+        0.2924149375,
+        0.2473125,
+        0.246135625,
+        0.265450875,
+        0.2462549375,
+        0.253202,
+        0.24895575,
+        0.69206875,
+        0.7089170625,
+        0.2429218125,
+        0.2721765625,
+        0.284442375,
+        0.2436380625,
+        0.2543475625
+      ],
+      "median_completed_public_ms": 0.2628064375,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.02083349972963333,
+          "stage_windows_ms": [
+            0.010815500281751156,
+            0.009202499873936176
+          ],
+          "domain": "cuda_events"
+        },
+        "captured": {
+          "program_ms": 0.004242999944835901,
+          "stage_windows_ms": [
+            0.003831000067293644,
+            0.0014149999478831887
+          ],
+          "domain": "cuda_graph_events"
+        }
+      },
+      "artifact_hash": "d5eb407d1c3013d2ee8b41ca5955f6344a7580ef857d8e5f513389b4b239d215",
+      "ir_sha256": {
+        "graph_ir": "d10734047ad8c37ff90eb2830bd4e51706eadeda82e362ab61a2806665a62a08",
+        "schedule_ir": "34d1c044b56d10ec41a9fb7c2e8fb637555fce397730848505048a3bfce24969",
+        "tile_ir": "fcbcee12ef1c5fc387a7ad993a90ec9cf74aab5291ba07f1154412f99280fbde",
+        "target_ir": "ab4bc58cd527dda834c6ae398466ebfbddefe03f96a26cb00cbc8f5e9b06064c"
+      },
+      "image_sha256": [
+        "090b018a9ab4c8e947e995cd4f76c0e3157a6bdf1b3d34e622bb6e07cfe124d2",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "before": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 2,
+        "bytes": 4096
+      },
+      "after": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 338,
+        "bytes": 4096
+      }
+    },
+    {
+      "kind": "two_sided",
+      "storage": "f16",
+      "status": "passed",
+      "route": "native",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 130.595134,
+      "cold_call_ms": 3031.765851,
+      "samples_completed_public_ms": [
+        0.3546029375,
+        0.314644625,
+        0.3703446875,
+        0.368729125,
+        0.3176615,
+        0.325385375,
+        0.32583475,
+        0.33585425,
+        0.3266535,
+        0.317165875,
+        0.3501713125,
+        0.367569625,
+        0.3055214375,
+        0.3565645625,
+        0.29831875,
+        0.2929274375,
+        0.3284866875,
+        0.2949511875,
+        0.2998513125,
+        0.316794625,
+        0.2921624375
+      ],
+      "median_completed_public_ms": 0.325385375,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.04860350117087364,
+          "stage_windows_ms": [
+            0.013691999949514866,
+            0.013508499599993229,
+            0.013341500423848629
+          ],
+          "domain": "cuda_events"
+        },
+        "captured": {
+          "program_ms": 0.005530000198632479,
+          "stage_windows_ms": [
+            0.003910500090569258,
+            0.0017664999468252063,
+            0.0010034999577328563
+          ],
+          "domain": "cuda_graph_events"
+        }
+      },
+      "artifact_hash": "ebaa457d9dde373f12a723dc8f62059dfd5d832f2ec561d76bcf5e1c416a0c89",
+      "ir_sha256": {
+        "graph_ir": "557b6d7a26c72c4a4f9393289f3084cec46bcbc5a18b0847b742071103ed94f5",
+        "schedule_ir": "8239b9d280f709586a9695241044cfcacc9d6b189adc326693b253d2dbe9dca9",
+        "tile_ir": "5f428ec143e185ee86a98b4659d9a98de4e9c0255eaee806a90f643215c73c2c",
+        "target_ir": "e80ae0e9fe78fe2a4f8da9e878bbb49c840da8d3c2487707ebd0b1d6afdc6446"
+      },
+      "image_sha256": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "af4e4a678f6a255cbc0f78fd1d7a0f9907df967b7278ea08db7b15c03b1dcce2",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "before": {
+        "capacity": 4864,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 4864
+      },
+      "after": {
+        "capacity": 4864,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 338,
+        "bytes": 4864
+      }
+    },
+    {
+      "kind": "two_sided",
+      "storage": "bf16",
+      "status": "passed",
+      "route": "native",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 129.595847,
+      "cold_call_ms": 2903.610382,
+      "samples_completed_public_ms": [
+        0.435749875,
+        0.4505638125,
+        0.3379555625,
+        0.358505125,
+        0.374144125,
+        0.8180121875,
+        0.3447645,
+        0.3732009375,
+        0.325646,
+        0.374590375,
+        0.37654225,
+        0.34784,
+        0.3217215625,
+        0.3988556875,
+        0.3707384375,
+        0.3504720625,
+        0.4138014375,
+        0.285314875,
+        0.30452325,
+        0.2919224375,
+        0.2842679375
+      ],
+      "median_completed_public_ms": 0.358505125,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.048232998698949814,
+          "stage_windows_ms": [
+            0.11246950179338455,
+            0.010572999715805054,
+            0.012531500309705734
+          ],
+          "domain": "cuda_events"
+        },
+        "captured": {
+          "program_ms": 0.005030000116676092,
+          "stage_windows_ms": [
+            0.0023674999829381704,
+            0.001739499974064529,
+            0.0010300000431016088
+          ],
+          "domain": "cuda_graph_events"
+        }
+      },
+      "artifact_hash": "798b9af1082b716f992f029ad2f246708d88efe971709097279a7860a235431a",
+      "ir_sha256": {
+        "graph_ir": "c5112ad8877606e12e989caff36d47f09079e31156c114a68d493ff636a8dd18",
+        "schedule_ir": "7fd072cc2878d980428655e957287bf3c5428e8b542f6def0472e6c18df549f8",
+        "tile_ir": "b6a045baded95ea9903ed60c2dd73f23ebb87f3d6583f2fc3a4a0f05f3462840",
+        "target_ir": "bbde93dc9f7f5a7f9a3abbead0916c2f82c1872ddaca48c6b153a905ed733357"
+      },
+      "image_sha256": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "2fa9b73308547179ecfe39a225139972dd76bb757bc58609f42d1d480f6b75e9",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "before": {
+        "capacity": 4864,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 4864
+      },
+      "after": {
+        "capacity": 4864,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 338,
+        "bytes": 4864
+      }
+    },
+    {
+      "kind": "reverse",
+      "storage": "f16",
+      "status": "passed",
+      "route": "native",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 92.903377,
+      "cold_call_ms": 2007.165158,
+      "samples_completed_public_ms": [
+        0.310822625,
+        0.3091738125,
+        0.3077075,
+        0.319139,
+        0.2555725,
+        0.281991625,
+        0.245306125,
+        0.2821648125,
+        0.29594425,
+        0.2538699375,
+        0.281822875,
+        0.2589025625,
+        0.2992343125,
+        0.2667551875,
+        0.253755,
+        0.7458785625,
+        0.24059925,
+        0.2391291875,
+        0.240666125,
+        0.2314835,
+        0.2521775
+      ],
+      "median_completed_public_ms": 0.2667551875,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.02051899954676628,
+          "stage_windows_ms": [
+            0.009781500324606895,
+            0.008780499920248985
+          ],
+          "domain": "cuda_events"
+        },
+        "captured": {
+          "program_ms": 0.0030125000048428774,
+          "stage_windows_ms": [
+            0.0020940001122653484,
+            0.0009945000056177378
+          ],
+          "domain": "cuda_graph_events"
+        }
+      },
+      "artifact_hash": "eae87c58d1f3651a5a08fc0764c973f010d96971fc400e685b2855c54607e4d6",
+      "ir_sha256": {
+        "graph_ir": "211cbb3292d3e1d2276ac2eab03fecea8d0a249d0e40684f49132d2db822f8db",
+        "schedule_ir": "fef2b3674f817117d6c782f3f3ecf54a65a25676d0e62662a75a6051576de022",
+        "tile_ir": "2ecad058b4be694e3360675a461647cad7f423c782487d3f514fc1833525b9bd",
+        "target_ir": "f123868857789623f16a636a648a67a17156c4a89d390e17d6d3611ea1e9b45c"
+      },
+      "image_sha256": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "before": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 2,
+        "bytes": 4096
+      },
+      "after": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 338,
+        "bytes": 4096
+      }
+    },
+    {
+      "kind": "reverse",
+      "storage": "bf16",
+      "status": "passed",
+      "route": "native",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 96.154258,
+      "cold_call_ms": 1967.244492,
+      "samples_completed_public_ms": [
+        0.299925,
+        0.24391675,
+        0.313361375,
+        0.335541,
+        0.336266625,
+        0.3111195,
+        0.3326171875,
+        0.337579875,
+        0.264633875,
+        0.31273575,
+        0.3229645625,
+        0.327241625,
+        0.2914891875,
+        0.3201583125,
+        0.32527525,
+        0.317840875,
+        0.245178,
+        0.5172715,
+        0.237919125,
+        0.21435575,
+        0.2627283125
+      ],
+      "median_completed_public_ms": 0.313361375,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.0293745007365942,
+          "stage_windows_ms": [
+            0.016551999375224113,
+            0.01492649968713522
+          ],
+          "domain": "cuda_events"
+        },
+        "captured": {
+          "program_ms": 0.0029094999190419912,
+          "stage_windows_ms": [
+            0.00215000007301569,
+            0.0020729999523609877
+          ],
+          "domain": "cuda_graph_events"
+        }
+      },
+      "artifact_hash": "fc849ff1e3840863b94ea37c5ce4b9c61d7209712752c01579ec716389175200",
+      "ir_sha256": {
+        "graph_ir": "aaf2888b9a3c164bcfca32a62ddc0f96a3cb41568805ea0d6b1a8bfadfa33c5e",
+        "schedule_ir": "890b4ecb9e0ce8b8d2af720e33c8123be4a43232a6c7c7e57dd441c5e731378b",
+        "tile_ir": "d107af54c4ae16c3d8a0a938a6e60397466b0a60fd9386d73bca100f253793f6",
+        "target_ir": "f66ddb9180549b46fa08c6bf78afad27ad3b6a2ded1e311bc0394432aebfe019"
+      },
+      "image_sha256": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "before": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 2,
+        "bytes": 4096
+      },
+      "after": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 338,
+        "bytes": 4096
+      }
+    }
+  ],
+  "scope": "M17/N11/K32 completed public latency; cold compile/bind separated; CUDA program/stage windows exclude host copies and are independent/nonadditive; no pure-kernel, throughput or physical schedule promotion"
+}

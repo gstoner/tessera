@@ -7,7 +7,7 @@ audit_role: reference
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Sync: NATIVE-TENSOR-JIT-20261020.
-Status: private integration candidate; final gates remain open.
+Status: PR #993 integration candidate; exact-head CI/review remain open.
 
 ## Compiler and runtime boundary
 
@@ -18,10 +18,21 @@ An admitted product retains actual Graph, Schedule, Tile and NVIDIA Target IR.
 Construction checks the original source projection at each intermediate stage,
 complete Target replay, projected native members and emitted image bytes.
 
-The JIT keeps at most 24 signature products and corresponding retained C++
-owners. Unsupported profiles may continue through their existing routes before
-admission. Once admitted, compiler and execution errors propagate. Warm calls
-and close/rebind reuse the verified product without tracing or compiler tools.
+The JIT shares at most 24 immutable compiler products. Each calling thread
+keeps at most 24 corresponding C++ owners, its completion receipt and native
+inspection artifact. No frame is borrowed from or closed by another thread.
+A thread rebinds if its owner belongs to a retired compiler product. Shared
+product eviction never closes another thread's live frame.
+
+close_native_storage() releases the calling thread's frames. Worker code must
+call it in a finally block before leaving that thread; cleanup from a different
+thread cannot substitute for this. Native process/thread/context guards and
+failed-close quarantine remain enforced. This provides independent ownership,
+not concurrent GPU execution: native dispatch remains serialized by the lock.
+
+Unsupported profiles may continue through existing routes before admission.
+Once admitted, compiler and execution errors propagate. Warm calls and
+close/rebind reuse a cached verified product without tracing or compiler tools.
 Native owned input generations remain pinned through synchronous completion.
 Process, thread, context, stream and allocation checks remain owned by the
 native frame ABI.
@@ -48,7 +59,7 @@ overflow of the 64-bit frame capacity. Python transport checks the same
 geometry and storage envelope. Boundary metadata tests allocate no described
 memory; a 64-stage source program also executes numerically on RTX5070.
 
-Matching RTX5070 compiler proof passes all 53 ordinary/artifact/boundary/
+Matching RTX5070 compiler proof passes all 57 ordinary/artifact/boundary/
 resident cases. The separate native-frame owner suite passes 45 cases, the
 legacy/adjacent suite passes 118, and eight explicit source-package tests pass.
 ABI-specific legacy fixtures explicitly select the predecessor; the new suite
@@ -62,13 +73,14 @@ naming failure resolved by indexing the recorder and a 319-test focused follow-u
 Counts from overlapping runs are not added. Evidence and exact identities:
 benchmarks/baselines/native_tensor_jit_20261020/README.md.
 
-Paired tiny-program completed-public measurements improve 1.8853-2.4551x
+Paired tiny-program completed-public measurements improve 1.7488-2.4490x
 over the merged-main legacy control, across six comparable cases and both
 orders. Native cold calls still cost 1.9-3.2 seconds plus separately measured
-decoration. Two-sided captured device windows are slower despite identical
-producer images and consumer instruction/directive streams after entry
-normalization. Runtime/capture/device attribution remains open; no physical
+decoration. Two-sided captured device windows are mixed across the reviewed-source rerun
+despite identical IR/images. The initial packet was uniformly slower. Runtime/capture/device attribution remains open; no physical
 schedule or pure-kernel promotion is claimed.
 
 Exact-head delivery CI and review remain required before merge. Wider producer/layout/dynamic/AD/encoded envelopes, compiler-free
 portable restoration and all five aggregate programs remain open.
+
+Final reviewed-source evidence: benchmarks/baselines/native_tensor_jit_20261020/thread-review/README.md. All175 device cases pass and focused host gates pass445; exact-head CI/review remains required.

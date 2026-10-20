@@ -1,0 +1,31 @@
+{
+  "base": "14615ba5c9ace0dac56d4b518f726b742529a943",
+  "uncommitted_review_fix": true,
+  "compiler_source_matches_tested_tool": true,
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "0aac913016ddcd70ac24ab7b1d641ad6de2c5da03aa1687525411da79d24573a",
+    "python/tessera/compiler/execution_matrix.py": "00081a6ec526f7026090ee46795769a49a8934cfaf8a6e4a39046e9229a05d6d",
+    "python/tessera/compiler/native_tensor_program.py": "34840d5af39c065b60c2f26e9933f7a4d723c4ef5c661013e5ef3d3b3885fe2f",
+    "python/tessera/compiler/native_tensor_jit.py": "adae140789027db75eca1e6fbc8f0b434d48474da1971038d63af677c0629bd5",
+    "python/tessera/compiler/prepared_native_tensor_frame.py": "9b8c440ac08f41d66cae5823832b629098e661080be67a9a450ca45adec8dd07",
+    "python/tessera/runtime.py": "92a09b5f2bc8b2cdfb52617712e06563c23044b67a67047c46fdda6d1860c431",
+    "tests/device/nvidia/test_native_tensor_program_jit.py": "698754a3fbe06f6d4316083e1b28a2a91f2ba231095fa3ea48a568cd5c7824e8",
+    "tests/unit/test_native_tensor_program_jit_contract.py": "7db8788aad09d558e678363d623c2df99120d6f5ef2573355b173741dd6258c2"
+  },
+  "tested_candidate_files": {
+    "python/tessera/compiler/jit.py": "0aac913016ddcd70ac24ab7b1d641ad6de2c5da03aa1687525411da79d24573a",
+    "python/tessera/compiler/execution_matrix.py": "6e6b9edf49d437fca2f30b55c64ec3161935edd291bac31fb10932a73112183d",
+    "python/tessera/compiler/native_tensor_program.py": "34840d5af39c065b60c2f26e9933f7a4d723c4ef5c661013e5ef3d3b3885fe2f",
+    "python/tessera/runtime.py": "92a09b5f2bc8b2cdfb52617712e06563c23044b67a67047c46fdda6d1860c431"
+  },
+  "execution_matrix_annotation_equivalence": "../execution-proof-annotations.json",
+  "native_ir_and_images_unchanged": true,
+  "post_validation_fixture_formatting": {
+    "files": [
+      "tests/device/nvidia/test_native_tensor_program_jit.py",
+      "tests/unit/test_native_tensor_program_jit_contract.py"
+    ],
+    "change": "Remove extra blank line at EOF only",
+    "module_ast_unchanged": true
+  }
+}

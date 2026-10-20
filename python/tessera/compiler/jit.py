@@ -393,6 +393,17 @@ def _op_payload(op: Any) -> Dict[str, Any]:
     return payload
 
 
+class _NativeTensorThreadState(threading.local):
+    """Mutable CUDA owners and inspection belong to the calling thread."""
+
+    def __init__(self):
+        self.calls: Dict[tuple, tuple[Any, Any]] = {}
+        self.last_program: Any = None
+        self.last_owner: Any = None
+        self.last_receipt: dict[str, Any] | None = None
+        self.artifact: Any = None
+
+
 class JitFn:
     """
     A @jit-decorated Tessera function.
@@ -562,12 +573,9 @@ class JitFn:
             self._bounded_lhs = BoundedLhsDispatcher(self,validate_bounds(shape_bounds),
                 bounded_source_certificate or SourceCertificate(fn,source_text),bounded_rhs_storage_order)
         self._native_tensor_program_cache: Dict[tuple, Any] = {}
-        self._native_tensor_calls: Dict[tuple, Any] = {}
+        self._native_tensor_thread_state = _NativeTensorThreadState()
         self._native_tensor_lock = threading.RLock()
         self._native_tensor_pid: int | None = None
-        self._native_tensor_last_program: Any = None
-        self._native_tensor_last_owner: Any = None
-        self._native_tensor_last_receipt: dict[str, Any] | None = None
         self._nvidia_lhs_program_cache: Dict[str, Any] = {}
         self._nvidia_lhs_prepared_calls: Dict[str, Any] = {}
         self._nvidia_lhs_last_program: Any = None
@@ -972,11 +980,19 @@ class JitFn:
             self._native_prepared_jvp_calls.clear()
         for name in ("_native_prepared_movement_calls", "_native_prepared_matmul_calls",
                      "_nvidia_lhs_prepared_calls", "_native_prepared_attention_calls",
-                     "_native_source_attention_calls", "_native_tensor_calls"):
+                     "_native_source_attention_calls"):
             calls = getattr(self, name, {})
             for call in calls.values():
                 call.close()
             calls.clear()
+
+        # Each thread releases only frames it created. Other threads retain
+        # their own live owners and must close them before leaving that thread.
+        with self._native_tensor_lock:
+            for _, call in self._native_tensor_calls.values():
+                call.close()
+            self._native_tensor_calls.clear()
+            self._native_tensor_last_owner = None
 
         for _, owner in self._native_public_jvp_owners.values():
             owner.close_native_storage()
@@ -2614,6 +2630,37 @@ class JitFn:
         return (program.native.ingest.native,program.native.storage.native,program.native.consumer.package)
 
 
+    @property
+    def _native_tensor_calls(self) -> Dict[tuple, tuple[Any, Any]]:
+        return self._native_tensor_thread_state.calls
+
+    @property
+    def _native_tensor_last_program(self):
+        return self._native_tensor_thread_state.last_program
+
+    @_native_tensor_last_program.setter
+    def _native_tensor_last_program(self, value):
+        state = self._native_tensor_thread_state
+        if state.last_program is not value:
+            state.artifact = None
+        state.last_program = value
+
+    @property
+    def _native_tensor_last_owner(self):
+        return self._native_tensor_thread_state.last_owner
+
+    @_native_tensor_last_owner.setter
+    def _native_tensor_last_owner(self, value):
+        self._native_tensor_thread_state.last_owner = value
+
+    @property
+    def _native_tensor_last_receipt(self):
+        return self._native_tensor_thread_state.last_receipt
+
+    @_native_tensor_last_receipt.setter
+    def _native_tensor_last_receipt(self, value):
+        self._native_tensor_thread_state.last_receipt = value
+
     def _try_native_tensor_program_call(self, args, kwargs):
         """Bind a compiler-admitted program; warm calls do not trace or compile."""
         if (normalize_target_kind(self.target) != "nvidia_sm120"
@@ -2646,9 +2693,9 @@ class JitFn:
                 program = compile_native_tensor_program(module, tool=tool)
                 if len(self._native_tensor_program_cache) >= 24:
                     retired = next(iter(self._native_tensor_program_cache))
-                    owner = self._native_tensor_calls.get(retired)
-                    if owner is not None:
-                        owner.close()
+                    binding = self._native_tensor_calls.get(retired)
+                    if binding is not None:
+                        binding[1].close()
                         del self._native_tensor_calls[retired]
                     del self._native_tensor_program_cache[retired]
                 self._native_tensor_program_cache[signature] = (program, module)
@@ -2656,9 +2703,21 @@ class JitFn:
             if program is None:
                 return _JIT_FALLBACK
             self._native_tensor_pid = os.getpid()
-            created = (signature not in self._native_tensor_calls
-                       or not self._native_tensor_calls[signature].handle)
-            owner = program.prepare() if created else self._native_tensor_calls[signature]
+            calls = self._native_tensor_calls
+            binding = calls.get(signature)
+            created = binding is None or binding[0] is not program or not binding[1].handle
+            if created:
+                if binding is not None:
+                    binding[1].close()
+                    del calls[signature]
+                if len(calls) >= 24:
+                    retired = next(iter(calls))
+                    calls[retired][1].close()
+                    del calls[retired]
+                owner = program.prepare()
+            else:
+                assert binding is not None
+                owner = binding[1]
             try:
                 from .native_tensor_result import input_scope
                 with input_scope(ordered):
@@ -2667,7 +2726,7 @@ class JitFn:
                 if created:
                     owner.close()
                 raise
-            self._native_tensor_calls[signature] = owner
+            calls[signature] = (program, owner)
             self.graph_ir = module
             self.frontend_authority = "tracer"
             self.frontend_authority_error = None
@@ -4320,6 +4379,11 @@ class JitFn:
            or for ``Apple CPU`` fast-path metadata.
         """
 
+        if self._native_tensor_last_program is not None:
+            state = self._native_tensor_thread_state
+            if state.artifact is None:
+                state.artifact = self._build_runtime_artifact()
+            return state.artifact
         if self._cached_artifact is not None:
             return self._cached_artifact
         self._cached_artifact = self._build_runtime_artifact()

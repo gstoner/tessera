@@ -215,3 +215,76 @@ def test_native_half_output_keeps_declared_store_storage(storage, kind, function
         np.testing.assert_allclose(output, expected, rtol=.004, atol=2e-5)
     finally:
         fn.close_native_storage()
+
+
+@pytest.mark.parametrize("kind", ["relu", "norm"])
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+def test_native_jit_retains_and_closes_owners_on_each_calling_thread(kind, storage, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+
+    assert rt._nvidia_device_name() == "sm_120"
+    fn = ts.jit(target="nvidia_sm120")(FUNCTIONS[kind])
+    a, b = values(storage, 810)
+    fn(*roots(kind, a, b))
+    primary = fn._native_tensor_last_owner
+    ready = threading.Barrier(3, timeout=60)
+    resume = threading.Event()
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("thread-local owner reuse or rebind retraced or compiled")
+
+    def worker(seed):
+        current = None
+        try:
+            for offset in range(2):
+                left, right = values(storage, seed + offset)
+                actual = fn(*roots(kind, left, right))
+                np.testing.assert_allclose(actual, oracle(kind, left, right), rtol=.004, atol=2e-5)
+                assert fn.execution_kind == "native_gpu"
+                if current is None:
+                    current = fn._native_tensor_last_owner
+                assert current is fn._native_tensor_last_owner
+                assert current.thread is threading.current_thread()
+                assert fn.runtime_artifact().graph_ir == fn._native_tensor_last_program.source_ir
+            ready.wait()
+            assert resume.wait(60)
+            assert current.handle and current.stats()["allocations"] == 1
+            fn.close_native_storage()
+            assert current.handle == 0
+            left, right = values(storage, seed + 2)
+            actual = fn(*roots(kind, left, right))
+            np.testing.assert_allclose(actual, oracle(kind, left, right), rtol=.004, atol=2e-5)
+            rebound = fn._native_tensor_last_owner
+            assert rebound is not current
+            return current, rebound
+        except BaseException:
+            ready.abort()
+            raise
+        finally:
+            fn.close_native_storage()
+
+    try:
+        with monkeypatch.context() as guarded:
+            guarded.setattr(subprocess, "run", forbidden)
+            guarded.setattr(subprocess, "Popen", forbidden)
+            guarded.setattr(fn, "_trace_frontend_capture", forbidden)
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [pool.submit(worker, seed) for seed in (811, 821)]
+                try:
+                    try:
+                        ready.wait()
+                    except threading.BrokenBarrierError:
+                        for future in futures:
+                            future.result(timeout=90)
+                        raise
+                    fn.close_native_storage()
+                    assert primary.handle == 0
+                finally:
+                    resume.set()
+                pairs = [future.result(timeout=90) for future in futures]
+                assert pairs[0][0] is not pairs[1][0]
+                assert all(not owner.handle for pair in pairs for owner in pair)
+    finally:
+        resume.set()
+        fn.close_native_storage()

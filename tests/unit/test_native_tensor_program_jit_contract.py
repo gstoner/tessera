@@ -176,3 +176,122 @@ def test_supported_resident_profile_still_checks_invalid_pointer():
         }
     with pytest.raises(ValueError, match="pointer metadata"):
         input_signature((Root(), Root()))
+
+
+@pytest.fixture
+def thread_owned_jit(monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+    import threading
+    import tessera as ts
+    from tessera import runtime as rt
+    import tessera.compiler.native_tensor_program as packages
+    import tessera.compiler.scheduled_matmul as tools
+
+    owners, compiled = [], []
+    class Owner:
+        def __init__(self):
+            self.thread = threading.current_thread()
+            self.handle = 1
+            owners.append(self)
+        def __call__(self, roots):
+            assert threading.current_thread() is self.thread, "foreign thread reused native owner"
+            assert self.handle
+            return self
+        def close(self):
+            assert threading.current_thread() is self.thread, "foreign thread closed native owner"
+            self.handle = 0
+    class Program:
+        members = ("producer", "consumer")
+        def prepare(self):
+            return Owner()
+    def compile_product(*args, **kwargs):
+        compiled.append(True)
+        return Program()
+    fn = ts.jit(target="nvidia_sm120")(norm_product)
+    monkeypatch.setattr(fn, "_traced_autodiff_module", lambda *args, **kwargs: object())
+    monkeypatch.setattr(packages, "compile_native_tensor_program", compile_product)
+    monkeypatch.setattr(tools, "find_tessera_opt", lambda: Path("/configured/compiler"))
+    monkeypatch.setattr(rt, "_load_nvidia_ptx_launch",
+                        lambda: SimpleNamespace(tessera_nvidia_native_frame_prepare_v1=True))
+    def roots(m=17):
+        return np.zeros((m, 32), np.float16), np.zeros((32, 11), np.float16)
+    return SimpleNamespace(fn=fn, roots=roots, owners=owners, compiled=compiled)
+
+
+def test_thread_local_owners_cleanup_and_inspection(thread_owned_jit):
+    from concurrent.futures import ThreadPoolExecutor
+    import threading
+    env = thread_owned_jit
+    fn, args = env.fn, env.roots()
+    primary = fn._try_native_tensor_program_call(args, {})
+    ready = threading.Barrier(3, timeout=10)
+    resume = threading.Event()
+    def worker():
+        first = None
+        try:
+            first = fn._try_native_tensor_program_call(args, {})
+            assert first is not primary
+            assert fn._try_native_tensor_program_call(args, {}) is first
+            assert fn._native_tensor_last_owner is first
+            marker = object()
+            fn._native_tensor_thread_state.artifact = marker
+            ready.wait()
+            assert resume.wait(10)
+            assert first.handle and fn.runtime_artifact() is marker
+            fn.close_native_storage()
+            assert not first.handle
+            rebound = fn._try_native_tensor_program_call(args, {})
+            assert rebound is not first
+            return first, rebound
+        except BaseException:
+            ready.abort()
+            raise
+        finally:
+            fn.close_native_storage()
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [pool.submit(worker) for _ in range(2)]
+            try:
+                try:
+                    ready.wait()
+                except threading.BrokenBarrierError:
+                    for future in futures:
+                        future.result(timeout=20)
+                    raise
+                assert fn._native_tensor_last_owner is primary
+                fn.close_native_storage()
+                assert not primary.handle
+            finally:
+                resume.set()
+            pairs = [future.result(timeout=20) for future in futures]
+            assert pairs[0][0] is not pairs[1][0]
+        assert len(env.compiled) == 1
+        assert all(not owner.handle for owner in env.owners)
+    finally:
+        resume.set()
+        fn.close_native_storage()
+
+
+def test_shared_product_eviction_never_closes_a_foreign_thread_owner(thread_owned_jit):
+    from concurrent.futures import ThreadPoolExecutor
+    env = thread_owned_jit
+    fn = env.fn
+    primary = fn._try_native_tensor_program_call(env.roots(), {})
+    def worker():
+        try:
+            for m in range(32, 58):
+                fn._try_native_tensor_program_call(env.roots(m), {})
+                assert len(fn._native_tensor_calls) <= 24
+            assert primary.handle
+        finally:
+            fn.close_native_storage()
+    try:
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(worker).result(timeout=20)
+        assert primary.handle
+        assert all(not owner.handle for owner in env.owners if owner is not primary)
+        assert len(fn._native_tensor_program_cache) <= 24
+    finally:
+        fn.close_native_storage()
+    assert not primary.handle

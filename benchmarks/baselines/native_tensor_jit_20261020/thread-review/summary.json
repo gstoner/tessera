@@ -1,0 +1,127 @@
+{
+  "public_ratio_range": [
+    1.7488405849149298,
+    2.448998999352522
+  ],
+  "cold_ms_range": [
+    1967.244492,
+    3031.765851
+  ],
+  "comparisons": [
+    {
+      "order": "native-a1",
+      "kind": "relu",
+      "storage": "f16",
+      "legacy_over_native": 1.8470197340304457
+    },
+    {
+      "order": "native-a1",
+      "kind": "relu",
+      "storage": "bf16",
+      "legacy_over_native": 1.939212365424184
+    },
+    {
+      "order": "native-a1",
+      "kind": "two_sided",
+      "storage": "f16",
+      "legacy_over_native": 2.1308225669331327
+    },
+    {
+      "order": "native-a1",
+      "kind": "two_sided",
+      "storage": "bf16",
+      "legacy_over_native": 1.7488405849149298
+    },
+    {
+      "order": "native-a1",
+      "kind": "reverse",
+      "storage": "f16",
+      "legacy_over_native": 2.1496681296966345
+    },
+    {
+      "order": "native-a1",
+      "kind": "reverse",
+      "storage": "bf16",
+      "legacy_over_native": 1.749101376964535
+    },
+    {
+      "order": "native-a2",
+      "kind": "relu",
+      "storage": "f16",
+      "legacy_over_native": 2.2868091139876596
+    },
+    {
+      "order": "native-a2",
+      "kind": "relu",
+      "storage": "bf16",
+      "legacy_over_native": 1.8426131364542737
+    },
+    {
+      "order": "native-a2",
+      "kind": "two_sided",
+      "storage": "f16",
+      "legacy_over_native": 2.448998999352522
+    },
+    {
+      "order": "native-a2",
+      "kind": "two_sided",
+      "storage": "bf16",
+      "legacy_over_native": 1.8336832484966972
+    },
+    {
+      "order": "native-a2",
+      "kind": "reverse",
+      "storage": "f16",
+      "legacy_over_native": 2.4028823073783396
+    },
+    {
+      "order": "native-a2",
+      "kind": "reverse",
+      "storage": "bf16",
+      "legacy_over_native": 1.9733642906195787
+    }
+  ],
+  "two_sided_captured_windows": [
+    {
+      "order": "native-a1",
+      "storage": "f16",
+      "native_ms": 0.005530000198632479,
+      "legacy_ms": 0.006018499843776226
+    },
+    {
+      "order": "native-a1",
+      "storage": "bf16",
+      "native_ms": 0.005030000116676092,
+      "legacy_ms": 0.004687999840825796
+    },
+    {
+      "order": "native-a2",
+      "storage": "f16",
+      "native_ms": 0.004717499949038029,
+      "legacy_ms": 0.004670499823987484
+    },
+    {
+      "order": "native-a2",
+      "storage": "bf16",
+      "native_ms": 0.004821499809622765,
+      "legacy_ms": 0.0046664997935295105
+    }
+  ],
+  "images_and_all_four_ir_stages_unchanged_from_initial_packet": true,
+  "candidate_source_restored": true,
+  "control_file_sha256": {
+    "python/tessera/compiler/jit.py": "e34aa87189816e2998b02f588a32bb737550c339fe305821d8fd3dab552b6a58",
+    "python/tessera/compiler/execution_matrix.py": "d5327865383656815d3dc6c4463aade97c7fbb4a0bf81b1d7f8a5e625eedb47b",
+    "python/tessera/compiler/native_tensor_program.py": "9ea49250ea221716e3f4c13a5ffae705b52dbe82f275f578c51f8d8588b6bf0b",
+    "python/tessera/runtime.py": "7d2b362d5f86062119699f90129d5257d817fe140d378a59f598635eec52bf54"
+  },
+  "candidate_file_sha256": {
+    "python/tessera/compiler/jit.py": "0aac913016ddcd70ac24ab7b1d641ad6de2c5da03aa1687525411da79d24573a",
+    "python/tessera/compiler/execution_matrix.py": "6e6b9edf49d437fca2f30b55c64ec3161935edd291bac31fb10932a73112183d",
+    "python/tessera/compiler/native_tensor_program.py": "34840d5af39c065b60c2f26e9933f7a4d723c4ef5c661013e5ef3d3b3885fe2f",
+    "python/tessera/runtime.py": "92a09b5f2bc8b2cdfb52617712e06563c23044b67a67047c46fdda6d1860c431"
+  },
+  "scope": "Matched source controls, same device/compiler/provider,21x16 completed public calls; tiny static cases only. Captured device windows remain independent/nonadditive.",
+  "control_matches_merged_main": true,
+  "same_gpu_compiler_provider_in_all_arms": true
+}

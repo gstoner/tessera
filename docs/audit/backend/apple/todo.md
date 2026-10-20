@@ -20,6 +20,8 @@ Native frame capacity checks run before outlining, during typed verification and
 Not applicable to this backend's physical execution: the private native tensor executor is exact SM120/CUDA. Shared JIT/cache/inspection and execution-matrix changes require host regression gates; no sibling schedule, dtype or runtime promotion. Independent native-program integration remains follow-up required.
 
 
+Review follow-up: SM120 compiler products remain shared, while retained owners, completion receipts and native inspection artifacts are thread-local and bounded. Cleanup releases only the calling thread's frames; worker code closes before thread exit. Not applicable to this backend physical execution: the owner state contains only the SM120/CUDA frame. Shared JIT construction/cleanup remains covered by host gates; independent backend ownership contracts are unchanged.
+
 
 ## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
 

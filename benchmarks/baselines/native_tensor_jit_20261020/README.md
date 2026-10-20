@@ -1,5 +1,11 @@
 # Ordinary SM120 JIT native tensor program evidence
 
+## Current review follow-up
+
+The thread-affinity fix, final175-case owning-device result and rerun ABBA
+measurements are in thread-review/README.md. They supersede the wrapper code
+and timing observations below; the initial raw packet is preserved unchanged.
+
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Sync: NATIVE-TENSOR-JIT-20261020.
 Contract: docs/spec/NATIVE_TENSOR_JIT.md.
@@ -102,7 +108,7 @@ execution-proof-annotations.json verifies all remaining module AST is unchanged;
 raw benchmark identities retain the actual measured source hashes.
 
 
-## Final source reconciliation
+## Initial source reconciliation (14615ba5c)
 
 final-source-identity.json binds the final Python/device-test/recorder files to
 the owning-device overlay and confirms native compiler-source hashes still

@@ -3,12 +3,55 @@ last_updated: 2026-10-19
 audit_role: reference
 ---
 
+## Native tensor original-source packages — 2026-10-19
+
+Native admission preserves the original frontend Graph; complete Target replay
+reconstructs and compares native arithmetic, policy, buffers, symbols and
+launch contracts. The explicit frontend compile API now packages verified
+source/members/images and binds the C++ owner without tools on retained calls.
+Eight RTX5070 source/storage cases pass. Ordinary JIT dispatch, compiler-free
+portable restoration and broader producer/layout/dynamic/AD integration remain
+open. This advances W1.1 and keeps the complete five-slice goal open.
+Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
+
+
+## Native tensor Target controller — 2026-10-19
+
+The private W1.1 candidate now preserves the complete host controller as
+registered NVIDIA Target commands with a shared typed lifetime/ABI verifier.
+44 compiler cases and 538 focused host gates pass. Six original-source programs
+retain identical device images; 45 runtime cases pass on RTX5070 with the new
+Target frames. Public JIT, original-source portable replay and broader
+producer/layout/AD integration remain open. This is progress on the five-slice
+goal, not closure of any aggregate program.
+Evidence: benchmarks/baselines/native_tensor_target_controller_20261019/README.md.
+
+
+## Generic tensor program / native owner milestone — 2026-10-19
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+A private source-preserving Graph/Schedule/Tile program carrier and generic
+retained C++ frame consumer now connect the named static FP16/BF16 producer
+cases. Owning RTX5070 gates pass 45 native-owner cases and 38 legacy regressions;
+extreme-shape rejection passes UBSan. Separate completed-call and device-event
+timings are recorded. Shared runtime/audit/diagnostic/pass gates pass 336.
+Evidence: benchmarks/baselines/native_tensor_frame_owner_20261019/README.md.
+
+Full-program Target lowering still retains Tile controller invocations.
+Source replay, complete Target/ABI controller lowering and public/portable
+integration remain the next gate. This is not general W1.1 or aggregate
+five-slice closure; representative models, wider layouts/AD, mixed/quantized
+attention and ROCm physical performance remain open.
+
+
 ## Bounded source public integration — 2026-10-19
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
 Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
 
-The private candidate connects original static paired source AD to a bounded
+The merged PR991 increment connects original static paired source AD to a bounded
 four/five-member native program, retained C++ capacity owner, public native_backward
 and offline portable replay. RTX5070 passes 24 prepared cases, 18 bounded public/
 fresh-process cases and 14 static public regressions. Frames reuse one owner/

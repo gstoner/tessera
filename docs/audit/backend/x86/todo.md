@@ -1,11 +1,66 @@
 ---
-last_updated: 2026-10-19
+last_updated: 2026-10-20
 audit_role: plan
 plan_state: open
 owner: x86 backend
 target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
+
+## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to CPU physical execution: the immutable package carries SM120 images and CUDA ownership. Shared frontend target projection copies caller-owned module attributes and changes no x86 Graph operations or policies. Independent CPU native-program/AD evidence remains follow-up required.
+
+Delivery review: the shared typed-program verifier now checks module schema and isolated owned member references before frame export; malformed references, missing later arities, unused invalid root types and external/empty hosts produce diagnostics before unsafe traversal/export. This remains an SM120-only program contract; no sibling physical execution or schedule promotion follows.
+
+
+Review follow-up: native admission and emission now share the actual SM120 kernel
+selection and geometry calculation. CUDA grid X/Y/Z, per-axis block limits and
+the 1024-thread block product are checked before frame export; matching call
+and kernel metadata alone is insufficient. Exact grid-Y boundary and
+out-of-range source/metadata regressions cover the native CUDA frame limits.
+This changes admission/verification only; no sibling physical execution claim.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PACKAGE.md.
+Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
+Review evidence: benchmarks/baselines/native_tensor_review_closure_20261020/README.md.
+
+
+## NATIVE-TENSOR-TARGET-CONTROLLER-20261019 — verified controller candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to CPU physical execution: this Target controller has CUDA kernel bindings and exact SM120 admission. Shared Tile verifier refactoring introduces no CPU operation/dtype/runtime admission. Independent CPU native-program and AD consumers remain follow-up required.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_target_controller_20261019/README.md.
+
+
+## NATIVE-TENSOR-FRAME-OWNER-20261019 — native consumer candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to x86 physical execution: this frame consumer requires exact SM120 context identity and CUDA images/streams. Shared runtime-ABI inventory changes add no x86 compiler or execution admission. CPU native program and AD consumers retain their independent validation obligations.
+
+Contract: docs/spec/NATIVE_TENSOR_FRAME_OWNER.md.
+Evidence: benchmarks/baselines/native_tensor_frame_owner_20261019/README.md.
+
+
+## NATIVE-TENSOR-PROGRAM-PIPELINE-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Host-free sibling assessment retains the ReLU source and Graph wrapper on the Zen5 f32 route. The new SM120 program carrier adds no x86 execution admission. Shared Tile verification requires regression checks; no x86 numerical or performance claim is made.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_program_pipeline_20261019/README.md.
+
 
 ## NATIVE-BOUNDED-SOURCE-PUBLIC-20261019 — public capacity replay
 

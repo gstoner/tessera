@@ -1,0 +1,35 @@
+{
+  "scope": "PR992 CUDA geometry admission and verification correction; unchanged executed device images",
+  "compiler_sha256": "23b7e066f653b6d42ef2c84584bfdb2340b3fb728f2cd93680e996fd2605a0f7",
+  "source_sha256": {
+    "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "81661adab2dad6230b1be4dba2bcad71fbcdbf10e5b888fbb2b0ffc43d7294b7",
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "3358e8ad52c58ce6e616aa29195eaa1e060a3f5486a2708f5ea608bcef3f59f9",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "18d6d54c9c094ebdb4550f162f057a5e0b00cc8a73db1ff042b8d484685f5545",
+    "tests/unit/test_native_tensor_program_pipeline.py": "55cfdf5fe62505e3ac425c593fbee366d992832d50c995b36dc828b17a9af6cb"
+  },
+  "red": {
+    "failed": 7,
+    "passed": 2
+  },
+  "focused_passed": 216,
+  "shared_passed": 315,
+  "valid_programs_byte_identical": 8,
+  "new_device_execution": false,
+  "limits": {
+    "grid": [
+      2147483647,
+      65535,
+      65535
+    ],
+    "block": [
+      1024,
+      1024,
+      64
+    ],
+    "block_product": 1024
+  },
+  "production_compiler_routes_passed": 2567,
+  "production_compiler_routes_skipped": 0,
+  "macro_typed_tail_fused_equivalent_cases": 6,
+  "generated_docs_write_exit": 0
+}

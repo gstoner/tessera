@@ -1,0 +1,4 @@
+<stdin>:6:5: error: 'tessera_nvidia.program_invoke' op requires checked input/output arity before program lifetime verification
+    tessera_nvidia.program_invoke %alloc, %arg1, %alloc_0 {arch = "sm_120", callee = @tensor_stage_1::@source_kernel, geometry = array<i64: 2, 2, 1, 32, 1, 1>, scalars = array<i64: 17, 11, 32>, source_attributes = {output_dtype = "fp32", tessera.effect_kind = "pure", transposeA = false, transposeB = false}} : memref<17x32xf16>, memref<32x11xf16>, memref<17x11xf32>
+    ^
+<stdin>:6:5: note: see current operation: "tessera_nvidia.program_invoke"(%0, %arg1, %1) <{arch = "sm_120", callee = @tensor_stage_1::@source_kernel, geometry = array<i64: 2, 2, 1, 32, 1, 1>, scalars = array<i64: 17, 11, 32>}> {source_attributes = {output_dtype = "fp32", tessera.effect_kind = "pure", transposeA = false, transposeB = false}} : (memref<17x32xf16>, memref<32x11xf16>, memref<17x11xf32>) -> ()

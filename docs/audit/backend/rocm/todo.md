@@ -1,9 +1,64 @@
 ---
-last_updated: 2026-10-19
+last_updated: 2026-10-20
 audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+
+## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to gfx1151/gfx1201 physical execution: the native source-package profile requires exact SM120/CUDA. Query/replay modes add no ROCm dtype, image, ABI or physical schedule admission. ROCm source-to-program and route/performance obligations retain independent exact-device gates.
+
+Delivery review: the shared typed-program verifier now checks module schema and isolated owned member references before frame export; malformed references, missing later arities, unused invalid root types and external/empty hosts produce diagnostics before unsafe traversal/export. This remains an SM120-only program contract; no sibling physical execution or schedule promotion follows.
+
+
+Review follow-up: native admission and emission now share the actual SM120 kernel
+selection and geometry calculation. CUDA grid X/Y/Z, per-axis block limits and
+the 1024-thread block product are checked before frame export; matching call
+and kernel metadata alone is insufficient. Exact grid-Y boundary and
+out-of-range source/metadata regressions cover the native CUDA frame limits.
+This changes admission/verification only; no sibling physical execution claim.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PACKAGE.md.
+Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
+Review evidence: benchmarks/baselines/native_tensor_review_closure_20261020/README.md.
+
+
+## NATIVE-TENSOR-TARGET-CONTROLLER-20261019 — verified controller candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to gfx1151/gfx1201 physical execution: this registered Target command requires SM120 and CUDA kernel bindings. Shared Tile verification is factored without transferring schedules or device evidence. ROCm route/performance obligations remain open.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_target_controller_20261019/README.md.
+
+
+## NATIVE-TENSOR-FRAME-OWNER-20261019 — native consumer candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to gfx1151/gfx1201 physical execution: the six native-frame symbols consume CUDA driver contexts, SM120a images and explicit CUDA producer streams. Shared runtime-ABI inventory changes are regenerated. No HIP ABI, source selection or physical schedule changes; ROCm route/performance obligations and independent exact-device parity remain open.
+
+Contract: docs/spec/NATIVE_TENSOR_FRAME_OWNER.md.
+Evidence: benchmarks/baselines/native_tensor_frame_owner_20261019/README.md.
+
+
+## NATIVE-TENSOR-PROGRAM-PIPELINE-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Host-free sibling assessment retains the ReLU source and Graph wrapper on gfx1151 and gfx1201; it does not demonstrate this NVIDIA wrapper-erasure bug on either AMD architecture. Shared Tile operation verification requires regression checks. No HIP execution or schedule promotion is inferred; existing route/performance obligations remain open.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_program_pipeline_20261019/README.md.
+
 
 ## NATIVE-BOUNDED-SOURCE-PUBLIC-20261019 — public capacity replay
 

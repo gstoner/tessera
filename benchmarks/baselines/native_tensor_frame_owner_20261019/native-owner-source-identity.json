@@ -1,0 +1,23 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, 12.0, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "gxx": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "cuda_nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Tue_Jun_09_02:43:40_PM_PDT_2026\nCuda compilation tools, release 13.3, V13.3.73\nBuild cuda_13.3.r13.3/compiler.38244171_0\n",
+  "provider_sha256": "72aaf57b4819f6aaf7931e59bbeb4cb68b8bd794e68cb2bb9108924eb6547e45",
+  "ubsan_provider_sha256": "7e358ae7306f3761da26ef201ee5ee4f0f40618c29bf743f943474bc58df02ce",
+  "files": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "24c3a6e4bdb2a4e15fd34750e846e57d528af6254828716daab7a1c25362382d",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "1e326554f276163675e84256fec22bbfc6230b078f2eca42f99a76da46f7ef4b",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_native_frame.h": "c27b322bc9759413c1eb477ab806547a70be74939c2e32435b7611eef491b6fa",
+    "python/tessera/compiler/prepared_native_tensor_frame.py": "5a8aec16701bcd7061966065cd59f4a99a02a8862913646d5ba23bf2c46f0c2a",
+    "tests/device/nvidia/test_native_tensor_frame_owner.py": "2da32262034acde7d4ebbd031cbf9d11aee065aa26173bcf298ae631673f9923",
+    "benchmarks/nvidia/record_native_tensor_frame_owner.py": "11a56b06eef1627d43f76ba780ffaa8f99faecad09ca381312d6d55e7fc1820d",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "abcb8b5158187a1278513d53d9db16bcf1db77ca716aaa82f713b9af53ea4fc0",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "4c876db7e491acd449e44d4a7ab840c31c7b642601b1e8244f8d2b80e259164e",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "bcac6691084a9e8d18ddae0302ddbdd1c997fbf805babc2c0bf2d91307840d2b",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_active_source_program.h": "a170833b3ba65776dea8b521d612c21e377d46b2edd36d4d2a142ac87ede9ae3",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_source_reverse_program.h": "e88d4def02ee2f0e45f35869a456cab9eabf3e32b6052a05da806167af4f495a"
+  },
+  "build": "g++ -std=c++17 -O2 -fPIC -shared -pthread; CUDA13.3 headers; baseline runtime includes; three production C++ sources; -L/usr/lib/wsl/lib -lcuda -ldl",
+  "ubsan_build": "same sources, -O1 -g -fsanitize=undefined -fno-sanitize-recover=undefined",
+  "observer_instrumentation": false
+}

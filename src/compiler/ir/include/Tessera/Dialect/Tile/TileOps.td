@@ -39,6 +39,17 @@ def Tessera_Tile_Dialect : Dialect {
 class Tile_Op<string mnemonic, list<Trait> traits = []> :
     Op<Tessera_Tile_Dialect, mnemonic, traits>;
 
+// Typed whole-program native invocation. Conservatively effectful:
+// reads input buffers and writes a distinct, fresh output allocation.
+def Tile_ProgramInvokeOp : Tile_Op<"program_invoke"> {
+  let summary = "Typed synchronous native program member invocation";
+  let arguments = (ins Variadic<AnyMemRef>:$buffers, SymbolRefAttr:$callee,
+                       I64Attr:$input_count);
+  let results = (outs);
+  let assemblyFormat = "$buffers attr-dict `:` type($buffers)";
+  let hasVerifier = 1;
+}
+
 class Tile_Type<string name, string typeMnemonic, list<Trait> traits = []>
     : TypeDef<Tessera_Tile_Dialect, name, traits> {
   let mnemonic = typeMnemonic;

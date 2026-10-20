@@ -1,0 +1,43 @@
+{
+  "scope": "raw macro, typed tail and fused matmul compiler control; no new device execution",
+  "control_compiler_sha256": "0e8161de4555ae0626b19d2d79f509fc42fd6ef9f1b5f8178541dded7744e64c",
+  "candidate_compiler_sha256": "23b7e066f653b6d42ef2c84584bfdb2340b3fb728f2cd93680e996fd2605a0f7",
+  "rows": [
+    {
+      "case": "macro",
+      "storage": "f16",
+      "tile_sha256": "20b37e2e853320035b71ab50a682e70b6e8563e36519228c4977c09971f27a49",
+      "identical": true
+    },
+    {
+      "case": "typed_tail",
+      "storage": "f16",
+      "tile_sha256": "2c35a7e70b748eddcedf29a6c2428487f45b6310f6aa0fa89617434ae8073a0b",
+      "identical": true
+    },
+    {
+      "case": "fused",
+      "storage": "f16",
+      "tile_sha256": "1e06480ad7633688ea2b26e7804a153d78f15505fb1c6e03013cccfbf5758435",
+      "identical": true
+    },
+    {
+      "case": "macro",
+      "storage": "bf16",
+      "tile_sha256": "1f7a2d2db15738aa279564b501942be96707a10d3dd3e2af7503d2d6e7955407",
+      "identical": true
+    },
+    {
+      "case": "typed_tail",
+      "storage": "bf16",
+      "tile_sha256": "c860cb09e687679b354b693a6d4689e419ec15a04efc3ed447172df1268a15b1",
+      "identical": true
+    },
+    {
+      "case": "fused",
+      "storage": "bf16",
+      "tile_sha256": "c80d93750bea1b0691e0a80cc262829757eb291fd34b7c47287e5fca1ae5bca0",
+      "identical": true
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+norm_matmul-bf16 2 Target stages compiled; identical device images
+norm_matmul-f16 2 Target stages compiled; identical device images
+relu_matmul-bf16 2 Target stages compiled; identical device images
+relu_matmul-f16 2 Target stages compiled; identical device images
+two_sided-bf16 3 Target stages compiled; identical device images
+two_sided-f16 3 Target stages compiled; identical device images

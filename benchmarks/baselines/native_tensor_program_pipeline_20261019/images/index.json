@@ -1,0 +1,35 @@
+{
+  "compiler_sha256": "b8bb9a26b2e1b8155b04201b051962a5531159ad9f64f7402a08e044c99e7d02",
+  "cases": [
+    {
+      "name": "norm_matmul-bf16",
+      "frame": "norm_matmul-bf16.frame.json",
+      "stages": 2
+    },
+    {
+      "name": "norm_matmul-f16",
+      "frame": "norm_matmul-f16.frame.json",
+      "stages": 2
+    },
+    {
+      "name": "relu_matmul-bf16",
+      "frame": "relu_matmul-bf16.frame.json",
+      "stages": 2
+    },
+    {
+      "name": "relu_matmul-f16",
+      "frame": "relu_matmul-f16.frame.json",
+      "stages": 2
+    },
+    {
+      "name": "two_sided-bf16",
+      "frame": "two_sided-bf16.frame.json",
+      "stages": 3
+    },
+    {
+      "name": "two_sided-f16",
+      "frame": "two_sided-f16.frame.json",
+      "stages": 3
+    }
+  ]
+}

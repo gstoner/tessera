@@ -1,0 +1,1000 @@
+{
+  "scope": "named static FP16/BF16 native frame owner; no public JIT/portable or performance promotion",
+  "device": "NVIDIA GeForce RTX 5070, 12.0, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "provider_sha256": "72aaf57b4819f6aaf7931e59bbeb4cb68b8bd794e68cb2bb9108924eb6547e45",
+  "rounds": 9,
+  "repetitions": 32,
+  "case_orders": [
+    [
+      "two_sided-f16",
+      "relu_matmul-f16",
+      "two_sided-bf16",
+      "relu_matmul-bf16",
+      "norm_matmul-f16",
+      "norm_matmul-bf16"
+    ],
+    [
+      "two_sided-f16",
+      "norm_matmul-f16",
+      "two_sided-bf16",
+      "norm_matmul-bf16",
+      "relu_matmul-bf16",
+      "relu_matmul-f16"
+    ],
+    [
+      "relu_matmul-f16",
+      "two_sided-f16",
+      "relu_matmul-bf16",
+      "norm_matmul-bf16",
+      "norm_matmul-f16",
+      "two_sided-bf16"
+    ],
+    [
+      "relu_matmul-bf16",
+      "norm_matmul-bf16",
+      "norm_matmul-f16",
+      "relu_matmul-f16",
+      "two_sided-f16",
+      "two_sided-bf16"
+    ],
+    [
+      "norm_matmul-bf16",
+      "norm_matmul-f16",
+      "relu_matmul-f16",
+      "relu_matmul-bf16",
+      "two_sided-bf16",
+      "two_sided-f16"
+    ],
+    [
+      "two_sided-bf16",
+      "relu_matmul-bf16",
+      "norm_matmul-f16",
+      "norm_matmul-bf16",
+      "two_sided-f16",
+      "relu_matmul-f16"
+    ],
+    [
+      "relu_matmul-f16",
+      "two_sided-f16",
+      "relu_matmul-bf16",
+      "two_sided-bf16",
+      "norm_matmul-bf16",
+      "norm_matmul-f16"
+    ],
+    [
+      "two_sided-bf16",
+      "norm_matmul-bf16",
+      "norm_matmul-f16",
+      "relu_matmul-f16",
+      "relu_matmul-bf16",
+      "two_sided-f16"
+    ],
+    [
+      "norm_matmul-f16",
+      "relu_matmul-f16",
+      "two_sided-bf16",
+      "relu_matmul-bf16",
+      "norm_matmul-bf16",
+      "two_sided-f16"
+    ]
+  ],
+  "timing_contract": {
+    "completed_host": "ABI marshaling, host result allocation, snapshot, H2D, all kernels, D2H and completion",
+    "raw_native_host": "same checked C++ invocation with prebound host views/output; includes snapshot, transfers, kernels and completion",
+    "captured_program": "CUDA graph device-event window, excludes capture/prime/retirement, uploads and readback",
+    "captured_stages": "independent grouped stage windows; do not sum to program time",
+    "cold_prepare": "Python ABI binding and C++ module JIT/stream/device+pinned arena on an existing context; excludes frontend/compiler time"
+  },
+  "cases": {
+    "relu_matmul-f16": {
+      "source_sha256": "a5b9254ee0cc212b405a52cef41aa2d90137bd343fb46758e5aed18aafcd7eda",
+      "program_sha256": "f59810b2cf2800026f37823d88fef87571e802ec444602c2296911fab769f149",
+      "member_ptx_sha256": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "cold_owner_prepare_ms": 26.418442,
+      "first_completed_host_call_ms": 2.600458,
+      "completed_host_samples_ms": [
+        0.1851691875,
+        0.2120344375,
+        0.18333915625,
+        0.41622190625,
+        0.21417825,
+        0.1840691875,
+        0.649939125,
+        0.23781315625,
+        0.23449440625
+      ],
+      "raw_native_host_samples_ms": [
+        0.1865916875,
+        0.1450396875,
+        0.17338403125,
+        0.16893275,
+        0.1817775625,
+        0.1693780625,
+        0.18374103125,
+        0.20470221875,
+        0.46696090625
+      ],
+      "captured_program_samples_ms": [
+        0.003046999918296933,
+        0.0035210000351071358,
+        0.004410000052303076,
+        0.003092000028118491,
+        0.0030509999487549067,
+        0.004354999866336584,
+        0.003515999997034669,
+        0.0030330000445246696,
+        0.003046999918296933
+      ],
+      "captured_stage_samples_ms": [
+        [
+          0.0021649999544024467,
+          0.0012639999622479081
+        ],
+        [
+          0.002114000031724572,
+          0.0011879999656230211
+        ],
+        [
+          0.0021510000806301832,
+          0.0010930000571534038
+        ],
+        [
+          0.0022219999227672815,
+          0.0010740000288933516
+        ],
+        [
+          0.002073999959975481,
+          0.001129999989643693
+        ],
+        [
+          0.002174000022932887,
+          0.0012229999992996454
+        ],
+        [
+          0.002199999988079071,
+          0.0018479999853298068
+        ],
+        [
+          0.0021120000164955854,
+          0.001120000029914081
+        ],
+        [
+          0.0021609999239444733,
+          0.00120900000911206
+        ]
+      ],
+      "native_stats_before": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 2,
+        "bytes": 4096
+      },
+      "max_abs_error": 5.774199962615967e-08,
+      "host_mode_orders": [
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ]
+      ],
+      "native_stats_after": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 578,
+        "bytes": 4096
+      },
+      "completed_host_median_ms": 0.21417825,
+      "raw_native_host_median_ms": 0.1817775625,
+      "captured_program_median_ms": 0.003092000028118491,
+      "captured_stage_median_ms": [
+        0.0021609999239444733,
+        0.0011879999656230211
+      ]
+    },
+    "relu_matmul-bf16": {
+      "source_sha256": "66eef698c0f6aff1d51f0e36c7181485a11311ca43b24a227550b7cfb6a7ce6e",
+      "program_sha256": "b74d669f18dc838628a5daf04c30bb5b3acd17390f8707ea176d0cfcefbdf8cd",
+      "member_ptx_sha256": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "cold_owner_prepare_ms": 0.654177,
+      "first_completed_host_call_ms": 0.229222,
+      "completed_host_samples_ms": [
+        0.182495375,
+        0.21761171875,
+        0.20085309375,
+        0.1739321875,
+        0.218163875,
+        0.20147559375,
+        0.2187451875,
+        0.2295805625,
+        0.4638315625
+      ],
+      "raw_native_host_samples_ms": [
+        0.1559013125,
+        0.17382909375,
+        0.16314453125,
+        0.17324309375,
+        0.18222196875,
+        0.14433340625,
+        0.2112181875,
+        0.215445125,
+        0.19063203125
+      ],
+      "captured_program_samples_ms": [
+        0.0029810001142323017,
+        0.0030690000858157873,
+        0.0032939999364316463,
+        0.003246000036597252,
+        0.0030590000096708536,
+        0.0038499999791383743,
+        0.0030980000738054514,
+        0.0029800001066178083,
+        0.003289999905973673
+      ],
+      "captured_stage_samples_ms": [
+        [
+          0.002131999935954809,
+          0.001218999968841672
+        ],
+        [
+          0.002188999904319644,
+          0.0011050000321120024
+        ],
+        [
+          0.0021089999936521053,
+          0.0010420000180602074
+        ],
+        [
+          0.0031059999018907547,
+          0.0018110000528395176
+        ],
+        [
+          0.002271000063046813,
+          0.0018560000462457538
+        ],
+        [
+          0.0022060000337660313,
+          0.0020890000741928816
+        ],
+        [
+          0.0021720000077039003,
+          0.0011419999646022916
+        ],
+        [
+          0.002171000000089407,
+          0.0011230000527575612
+        ],
+        [
+          0.002259999979287386,
+          0.0015839999541640282
+        ]
+      ],
+      "native_stats_before": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 2,
+        "bytes": 4096
+      },
+      "max_abs_error": 4.470348358154297e-08,
+      "host_mode_orders": [
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ]
+      ],
+      "native_stats_after": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 578,
+        "bytes": 4096
+      },
+      "completed_host_median_ms": 0.21761171875,
+      "raw_native_host_median_ms": 0.17382909375,
+      "captured_program_median_ms": 0.0030980000738054514,
+      "captured_stage_median_ms": [
+        0.002188999904319644,
+        0.001218999968841672
+      ]
+    },
+    "norm_matmul-f16": {
+      "source_sha256": "21c0c891eff61e3fc01f36534625516aacd7fef312320026807cbc4b3409cce7",
+      "program_sha256": "44c14c24aafe5652e3ea253687a5be67ce04684ad7abdef4884fac1003f690cb",
+      "member_ptx_sha256": [
+        "531396bb5373e245fec2890d23402a7eb7477424b3455cb776046e14e9b9b9f0",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "cold_owner_prepare_ms": 0.532296,
+      "first_completed_host_call_ms": 0.259633,
+      "completed_host_samples_ms": [
+        0.1731025,
+        0.19592178125,
+        0.180331,
+        0.20895471875,
+        0.209534125,
+        0.22156046875,
+        0.25918809375,
+        0.254278625,
+        0.23569225
+      ],
+      "raw_native_host_samples_ms": [
+        0.14994753125,
+        0.15538134375,
+        0.17910065625,
+        0.16941590625,
+        0.17958190625,
+        0.14389559375,
+        0.1826548125,
+        0.17639090625,
+        0.22076109375
+      ],
+      "captured_program_samples_ms": [
+        0.004178000148385763,
+        0.004385999869555235,
+        0.004164999816566706,
+        0.00445100013166666,
+        0.0052109998650848866,
+        0.004466999787837267,
+        0.004071999806910753,
+        0.004100000020116568,
+        0.0041680000722408295
+      ],
+      "captured_stage_samples_ms": [
+        [
+          0.0032470000442117453,
+          0.0010560000082477927
+        ],
+        [
+          0.0033760000951588154,
+          0.0021720000077039003
+        ],
+        [
+          0.0033650000113993883,
+          0.0010529999854043126
+        ],
+        [
+          0.003281000070273876,
+          0.0010460000485181808
+        ],
+        [
+          0.0033019999973475933,
+          0.0019379999721422791
+        ],
+        [
+          0.0032510000746697187,
+          0.0018100000452250242
+        ],
+        [
+          0.003364000003784895,
+          0.001057000015862286
+        ],
+        [
+          0.003346000099554658,
+          0.001129999989643693
+        ],
+        [
+          0.0032679999712854624,
+          0.0010969999711960554
+        ]
+      ],
+      "native_stats_before": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 2,
+        "bytes": 4096
+      },
+      "max_abs_error": 3.3155083656311035e-07,
+      "host_mode_orders": [
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ]
+      ],
+      "native_stats_after": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 578,
+        "bytes": 4096
+      },
+      "completed_host_median_ms": 0.209534125,
+      "raw_native_host_median_ms": 0.17639090625,
+      "captured_program_median_ms": 0.004178000148385763,
+      "captured_stage_median_ms": [
+        0.0033019999973475933,
+        0.0010969999711960554
+      ]
+    },
+    "norm_matmul-bf16": {
+      "source_sha256": "f623166059b3e8ac43bff483c57d9adc1474f5661835beae670422acd777715a",
+      "program_sha256": "cab1d81e6a48436d721c3b7759ca29d3b80228d0a65a76fe4f32870c5e5b8c3c",
+      "member_ptx_sha256": [
+        "090b018a9ab4c8e947e995cd4f76c0e3157a6bdf1b3d34e622bb6e07cfe124d2",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "cold_owner_prepare_ms": 0.496625,
+      "first_completed_host_call_ms": 0.268943,
+      "completed_host_samples_ms": [
+        0.203621875,
+        0.1950205,
+        0.21067509375,
+        0.176734375,
+        0.19713590625,
+        0.2126804375,
+        0.2535633125,
+        0.45873621875,
+        0.25807871875
+      ],
+      "raw_native_host_samples_ms": [
+        0.1621139375,
+        0.39903740625,
+        0.18093471875,
+        0.1668893125,
+        0.16374925,
+        0.1795090625,
+        0.20443903125,
+        0.19675928125,
+        0.22072859375
+      ],
+      "captured_program_samples_ms": [
+        0.0042860000394284725,
+        0.0041600000113248825,
+        0.004098000004887581,
+        0.004224000032991171,
+        0.004284000024199486,
+        0.00493700010702014,
+        0.004085000138729811,
+        0.0042489999905228615,
+        0.004279999993741512
+      ],
+      "captured_stage_samples_ms": [
+        [
+          0.0032470000442117453,
+          0.0018660000059753656
+        ],
+        [
+          0.0031870000530034304,
+          0.0010519999777898192
+        ],
+        [
+          0.003266999963670969,
+          0.0010229999898001552
+        ],
+        [
+          0.0032130000181496143,
+          0.0010730000212788582
+        ],
+        [
+          0.0032560001127421856,
+          0.0010450000409036875
+        ],
+        [
+          0.0032659999560564756,
+          0.0012440000427886844
+        ],
+        [
+          0.0032369999680668116,
+          0.0012110000243410468
+        ],
+        [
+          0.003312000073492527,
+          0.0011399999493733048
+        ],
+        [
+          0.0032599999103695154,
+          0.001196000026538968
+        ]
+      ],
+      "native_stats_before": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 2,
+        "bytes": 4096
+      },
+      "max_abs_error": 2.086162567138672e-07,
+      "host_mode_orders": [
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ]
+      ],
+      "native_stats_after": {
+        "capacity": 4096,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 578,
+        "bytes": 4096
+      },
+      "completed_host_median_ms": 0.21067509375,
+      "raw_native_host_median_ms": 0.18093471875,
+      "captured_program_median_ms": 0.0042489999905228615,
+      "captured_stage_median_ms": [
+        0.0032560001127421856,
+        0.0011399999493733048
+      ]
+    },
+    "two_sided-f16": {
+      "source_sha256": "bc6a7511692baecb09b513f506947fd27311fd2f1991c6f9cbfddc42ed481e02",
+      "program_sha256": "58fcc7e1330a2c04cd262572aa105ece7ed9df939c611984fb131d6d33e049aa",
+      "member_ptx_sha256": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "af4e4a678f6a255cbc0f78fd1d7a0f9907df967b7278ea08db7b15c03b1dcce2",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "cold_owner_prepare_ms": 0.774638,
+      "first_completed_host_call_ms": 0.249313,
+      "completed_host_samples_ms": [
+        0.2276461875,
+        0.1983665,
+        0.2159504375,
+        0.21021475,
+        0.1934695625,
+        0.2237120625,
+        0.1998499375,
+        0.2641378125,
+        0.24406696875
+      ],
+      "raw_native_host_samples_ms": [
+        0.1842479375,
+        0.40319771875,
+        0.394473,
+        0.15072471875,
+        0.39852553125,
+        0.15786828125,
+        0.24797203125,
+        0.23044465625,
+        0.192047375
+      ],
+      "captured_program_samples_ms": [
+        0.006543000228703022,
+        0.005797000136226416,
+        0.0047889999113976955,
+        0.005932000000029802,
+        0.004786999896168709,
+        0.00482900021597743,
+        0.005164000205695629,
+        0.004772999789565802,
+        0.007362999953329563
+      ],
+      "captured_stage_samples_ms": [
+        [
+          0.002369999885559082,
+          0.003020999953150749,
+          0.0017729999963194132
+        ],
+        [
+          0.002265000017359853,
+          0.0018530000234022737,
+          0.0011889999732375145
+        ],
+        [
+          0.002174000022932887,
+          0.0022539999336004257,
+          0.0010870000114664435
+        ],
+        [
+          0.0021689999848604202,
+          0.002966000000014901,
+          0.001108999946154654
+        ],
+        [
+          0.002142000012099743,
+          0.0018820000113919377,
+          0.0012000000569969416
+        ],
+        [
+          0.002263000002130866,
+          0.001908999984152615,
+          0.0010860000038519502
+        ],
+        [
+          0.0021470000501722097,
+          0.00381199992261827,
+          0.0012730000307783484
+        ],
+        [
+          0.002148000057786703,
+          0.0019069999689236283,
+          0.0010489999549463391
+        ],
+        [
+          0.003237999975681305,
+          0.0018850000342354178,
+          0.0011269999668002129
+        ]
+      ],
+      "native_stats_before": {
+        "capacity": 4864,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 4864
+      },
+      "max_abs_error": 3.632158041000366e-08,
+      "host_mode_orders": [
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "raw",
+          "adapter"
+        ]
+      ],
+      "native_stats_after": {
+        "capacity": 4864,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 578,
+        "bytes": 4864
+      },
+      "completed_host_median_ms": 0.2159504375,
+      "raw_native_host_median_ms": 0.23044465625,
+      "captured_program_median_ms": 0.005164000205695629,
+      "captured_stage_median_ms": [
+        0.002174000022932887,
+        0.001908999984152615,
+        0.0011269999668002129
+      ]
+    },
+    "two_sided-bf16": {
+      "source_sha256": "e29d15064844041481f870c77a7f0a3c9713f54c88b27898323535d1dcc7e754",
+      "program_sha256": "d693356c051f750ecd314ee37df242c6412f0bb7d4fe914b58b6e09147c7438a",
+      "member_ptx_sha256": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "2fa9b73308547179ecfe39a225139972dd76bb757bc58609f42d1d480f6b75e9",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "cold_owner_prepare_ms": 0.684097,
+      "first_completed_host_call_ms": 0.315954,
+      "completed_host_samples_ms": [
+        0.21672203125,
+        0.20239809375,
+        0.1898826875,
+        0.1990621875,
+        0.22761146875,
+        0.21950578125,
+        0.22976946875,
+        0.27907859375,
+        0.273831375
+      ],
+      "raw_native_host_samples_ms": [
+        0.17363340625,
+        0.18530671875,
+        0.14534653125,
+        0.1834406875,
+        0.1473375,
+        0.17182840625,
+        0.2239575625,
+        0.23302215625,
+        0.22442834375
+      ],
+      "captured_program_samples_ms": [
+        0.0048039997927844524,
+        0.005026999861001968,
+        0.004738999996334314,
+        0.004821000155061483,
+        0.004699999932199717,
+        0.004741000011563301,
+        0.006895999889820814,
+        0.007854999974370003,
+        0.006757999770343304
+      ],
+      "captured_stage_samples_ms": [
+        [
+          0.0030610000248998404,
+          0.0029959999956190586,
+          0.0011309999972581863
+        ],
+        [
+          0.0022609999869018793,
+          0.001967000076547265,
+          0.0011109999613836408
+        ],
+        [
+          0.002113000024110079,
+          0.0018070000223815441,
+          0.0010369999799877405
+        ],
+        [
+          0.002247000113129616,
+          0.002982999896630645,
+          0.0017160000279545784
+        ],
+        [
+          0.0021200000774115324,
+          0.0019759999122470617,
+          0.0010339999571442604
+        ],
+        [
+          0.0022009999956935644,
+          0.0018749999580904841,
+          0.003066000062972307
+        ],
+        [
+          0.002119000069797039,
+          0.0019379999721422791,
+          0.0011919999960809946
+        ],
+        [
+          0.002157999901100993,
+          0.0019399999873712659,
+          0.001259000040590763
+        ],
+        [
+          0.002131999935954809,
+          0.0021379999816417694,
+          0.0010679999832063913
+        ]
+      ],
+      "native_stats_before": {
+        "capacity": 4864,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 4864
+      },
+      "max_abs_error": 2.60770320892334e-08,
+      "host_mode_orders": [
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "raw",
+          "adapter"
+        ],
+        [
+          "adapter",
+          "raw"
+        ],
+        [
+          "adapter",
+          "raw"
+        ]
+      ],
+      "native_stats_after": {
+        "capacity": 4864,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 578,
+        "bytes": 4864
+      },
+      "completed_host_median_ms": 0.21950578125,
+      "raw_native_host_median_ms": 0.1834406875,
+      "captured_program_median_ms": 0.004821000155061483,
+      "captured_stage_median_ms": [
+        0.002157999901100993,
+        0.001967000076547265,
+        0.0011309999972581863
+      ]
+    }
+  }
+}

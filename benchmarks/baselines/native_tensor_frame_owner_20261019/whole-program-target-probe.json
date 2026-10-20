@@ -1,0 +1,9 @@
+{
+  "command": "tessera-opt candidate/relu_matmul-f16.program.mlir --tessera-lower-to-nvidia-sm120",
+  "compiler_sha256": "71bcb1c2dc71411b16b24b2b28549166a0ea427f8ba088953d4bef076a8a6b56",
+  "exit_code": 0,
+  "input_sha256": "eca72b6170e2c12ea69d7dbaae5460a47204a0ed8a2445b4df87bd026af9fcdc",
+  "output_sha256": "4003ddb628481c30155a046ea6230f76414c3b4822c9c0d75cc807b2d7f2b942",
+  "remaining_tile_program_invocations": 2,
+  "scope": "numerical members reach NVVM; host controller Target lowering remains open"
+}

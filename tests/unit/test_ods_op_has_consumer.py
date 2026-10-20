@@ -245,6 +245,8 @@ def test_scan_parses_every_ods_form() -> None:
     """
     names = {op.full_name for op in _OPS}
     for expected in (
+        "tile.program_invoke",
+        "tessera_nvidia.program_invoke",
         "tile.view",                       # def Tile_ViewOp : Tile_Op<"view", [Pure]>
         "tile.buffer_view",
         "tile.load_element",
@@ -299,7 +301,8 @@ def test_scan_parses_every_ods_form() -> None:
 # Four typed scalar Tile operations and the NVIDIA row-region consumer.
 # Six native attention row products: Graph, Schedule and Tile producer/consumer.
 # Two existing public slice spellings now have registered Graph ODS records.
-_DECLARED_OP_RECORDS = 695
+# 695 -> 697: typed Tile and NVIDIA native-program invocation records.
+_DECLARED_OP_RECORDS = 697
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:

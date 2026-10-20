@@ -1,0 +1,74 @@
+[
+  {
+    "target": "nvidia_sm120",
+    "arch": "sm_120",
+    "storage": "f16",
+    "returncode": 0,
+    "source_relu_retained": false,
+    "activation_carrier": false,
+    "graph_function_retained": false,
+    "native_kernel_count": 1,
+    "scope": "host-free artifact behavior only; not sibling numerical execution",
+    "error": ""
+  },
+  {
+    "target": "rocm_gfx1151",
+    "arch": "gfx1151",
+    "storage": "f16",
+    "returncode": 0,
+    "source_relu_retained": true,
+    "activation_carrier": false,
+    "graph_function_retained": true,
+    "native_kernel_count": 0,
+    "scope": "host-free artifact behavior only; not sibling numerical execution",
+    "error": ""
+  },
+  {
+    "target": "rocm_gfx1201",
+    "arch": "gfx1201",
+    "storage": "f16",
+    "returncode": 0,
+    "source_relu_retained": true,
+    "activation_carrier": false,
+    "graph_function_retained": true,
+    "native_kernel_count": 0,
+    "scope": "host-free artifact behavior only; not sibling numerical execution",
+    "error": ""
+  },
+  {
+    "target": "x86",
+    "arch": "zen5-avx512",
+    "storage": "f32",
+    "returncode": 0,
+    "source_relu_retained": true,
+    "activation_carrier": false,
+    "graph_function_retained": true,
+    "native_kernel_count": 0,
+    "scope": "host-free artifact behavior only; not sibling numerical execution",
+    "error": ""
+  },
+  {
+    "target": "apple_gpu",
+    "arch": "apple7",
+    "storage": "f32",
+    "returncode": 0,
+    "source_relu_retained": true,
+    "activation_carrier": false,
+    "graph_function_retained": true,
+    "native_kernel_count": 0,
+    "scope": "host-free artifact behavior only; not sibling numerical execution",
+    "error": ""
+  },
+  {
+    "target": "apple_gpu",
+    "arch": "apple7",
+    "storage": "f16",
+    "returncode": 0,
+    "source_relu_retained": true,
+    "activation_carrier": false,
+    "graph_function_retained": true,
+    "native_kernel_count": 0,
+    "scope": "host-free artifact behavior only; not sibling numerical execution",
+    "error": ""
+  }
+]

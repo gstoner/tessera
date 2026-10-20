@@ -1,0 +1,14 @@
+{
+  "base_main": "9f8c48bf97f9122ded5c857bd895866def74ba70",
+  "files": {
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "66945a907b6da30ef82c4e22a58295992a8e5aae52cb7c5b19678edc98415ae7",
+    "src/compiler/ir/TileOps.cpp": "b3de0354e5663614afd96c79b025a91a2114fcec8167f094d837143112957f69",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "93c1c92376d4946bad6a68a2277f88fc07f95bb35eefe256c20f913b1c5acd57",
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "e2b3daba319da4afaf03438f0eaec6e6cd139d2e5434f2de5922151d572fc266",
+    "python/tessera/compiler/pass_metadata.py": "78a45db57debc4ff20587ed3de66ac5036df26d1373280be28d7fd02fd08f8fa",
+    "tests/unit/test_native_tensor_program_pipeline.py": "7b0df10a419ac79dcb8613f40461f69b669ba7e46b39a2ade7c4e5043345cefb"
+  },
+  "executed_device_compiler_sha256": "b8bb9a26b2e1b8155b04201b051962a5531159ad9f64f7402a08e044c99e7d02",
+  "current_compiler_sha256": "71bcb1c2dc71411b16b24b2b28549166a0ea427f8ba088953d4bef076a8a6b56",
+  "image_equivalence": "image-equivalence.json"
+}

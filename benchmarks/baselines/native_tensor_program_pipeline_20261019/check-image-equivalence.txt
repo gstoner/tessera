@@ -1,0 +1,7 @@
+norm_matmul-bf16 2 native stages compiled
+norm_matmul-f16 2 native stages compiled
+relu_matmul-bf16 2 native stages compiled
+relu_matmul-f16 2 native stages compiled
+two_sided-bf16 3 native stages compiled
+two_sided-f16 3 native stages compiled
+all six frames and eight executed images unchanged

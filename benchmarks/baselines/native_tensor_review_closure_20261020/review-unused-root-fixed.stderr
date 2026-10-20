@@ -1,0 +1,4 @@
+<stdin>:4:5: error: 'tessera_nvidia.program_invoke' op program roots require checked static physical buffer types
+    tessera_nvidia.program_invoke %arg0, %alloc {arch = "sm_120", callee = @tensor_stage_0::@tessera_tile_activation_relu_f16_8f98fe60b2, geometry = array<i64: 1, 1, 1, 128, 1, 1>, input_count = 1 : i64, scalars = array<i64: 17, 32>, source_attributes = {tessera.effect_kind = "pure"}} : memref<17x32xf16>, memref<17x32xf16>
+    ^
+<stdin>:4:5: note: see current operation: "tessera_nvidia.program_invoke"(%arg0, %0) <{arch = "sm_120", callee = @tensor_stage_0::@tessera_tile_activation_relu_f16_8f98fe60b2, geometry = array<i64: 1, 1, 1, 128, 1, 1>, input_count = 1 : i64, scalars = array<i64: 17, 32>}> {source_attributes = {tessera.effect_kind = "pure"}} : (memref<17x32xf16>, memref<17x32xf16>) -> ()

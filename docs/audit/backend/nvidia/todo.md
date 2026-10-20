@@ -3,8 +3,63 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-10-19
+last_updated: 2026-10-20
 ---
+
+## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+The original Graph now drives native admission and complete Target replay. The explicit frontend compile_native_tensor_program API produces immutable compiler-verified members/images and binds the retained C++ owner without tools on warm calls. Eight RTX5070 source-package cases pass; ordinary JIT dispatch, portable restoration and general producer/layout/dynamic/AD closure remain follow-up required.
+
+Delivery review: the shared typed-program verifier now checks module schema and isolated owned member references before frame export; malformed references, missing later arities, unused invalid root types and external/empty hosts produce diagnostics before unsafe traversal/export. The eight proved SM120 source/Target/image programs reproduce byte-for-byte with the corrected compiler. No physical schedule or execution envelope changes.
+
+
+Review follow-up: native admission and emission now share the actual SM120 kernel
+selection and geometry calculation. CUDA grid X/Y/Z, per-axis block limits and
+the 1024-thread block product are checked before frame export; matching call
+and kernel metadata alone is insufficient. Exact grid-Y boundary and
+out-of-range source/metadata regressions cover the native CUDA frame limits.
+This changes admission/verification only; no sibling physical execution claim.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PACKAGE.md.
+Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
+Review evidence: benchmarks/baselines/native_tensor_review_closure_20261020/README.md.
+
+
+## NATIVE-TENSOR-TARGET-CONTROLLER-20261019 — verified controller candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Parity validated for the named complete static f16/bf16 producer controller: 44 compiler cases, 538 focused host gates and 45 repeated RTX5070 runtime cases pass. Target member images are byte-identical to prior controls. Public JIT, source replay, portable reconstruction and broader producer/layout/AD integration remain follow-up required; no performance promotion.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_target_controller_20261019/README.md.
+
+
+## NATIVE-TENSOR-FRAME-OWNER-20261019 — native consumer candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+The generic native C++ consumer now owns typed buffers and emitted member images, enforces initialization/parameter/layout/context/thread lifetimes, orders resident producer streams, and profiles program/stage windows. Initial owning-device gates and timings are recorded in the runtime packet. Public JIT/portable admission, full source-to-Target program replay and broader producer/layout/AD closure remain follow-up required. No physical schedule or performance promotion.
+
+Contract: docs/spec/NATIVE_TENSOR_FRAME_OWNER.md.
+Evidence: benchmarks/baselines/native_tensor_frame_owner_20261019/README.md.
+
+
+## NATIVE-TENSOR-PROGRAM-PIPELINE-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Six RTX5070 diagnostic cases prove that the previous general pipeline drops upstream ReLU/RMSNorm/softmax and executes bare matmul. A private native typed-buffer program candidate now outlines the actual source dependency closure and reuses existing Schedule/Tile leaf kernels. The frozen control fails all 16 positive compiler-route cases; the candidate passes 27 positive/projection/adversarial cases, with 342 focused shared gates. Twelve final RTX5070 generic-driver replays pass the original counterexamples and changed inputs with intact guards. Retained native owner/public packaging and separate timings remain pending. No closure or performance promotion is claimed.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_program_pipeline_20261019/README.md.
+
 
 ## NATIVE-BOUNDED-SOURCE-PUBLIC-20261019 — public capacity replay
 

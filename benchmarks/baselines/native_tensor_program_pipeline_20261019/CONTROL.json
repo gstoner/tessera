@@ -1,0 +1,8 @@
+{
+  "compiler": "/home/angstorms/scratch/rocm-closure-baseline-20261018/bounded-source-projection-opt",
+  "compiler_sha256": "0e8161de4555ae0626b19d2d79f509fc42fd6ef9f1b5f8178541dded7744e64c",
+  "layout_library": "/home/angstorms/scratch/w11-program-pipeline-20261019/control-lib/libtessera_layout_algebra.so",
+  "layout_library_sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+  "source_main": "9f8c48bf97f9122ded5c857bd895866def74ba70",
+  "reuse_existing_immutable_control_binary": true
+}

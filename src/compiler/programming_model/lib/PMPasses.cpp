@@ -1,3 +1,4 @@
+#include "Tessera/IR/NativeTensorProgramContract.h"
 #include "NativeSourceProgramOutline.h"
 #include "NativeGateUpSchedule.h"
 #include "NativeBlockQuantSchedule.h"
@@ -46,6 +47,7 @@
 #include "Tessera/IR/TransposeUtils.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Verifier.h"
+#include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/SetVector.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -3458,6 +3460,8 @@ struct OutlineSourceProgramPass
   }
 };
 
+#include "NativeTensorProgram.h"
+
 struct GraphToSchedulePass
     : public PassWrapper<GraphToSchedulePass, OperationPass<ModuleOp>> {
 
@@ -3471,6 +3475,12 @@ struct GraphToSchedulePass
   Option<bool> scaleTransposeAuto{*this, "scale-transpose-auto",
       llvm::cl::desc("Select a bounded gfx1201 FP8 scale-adjoint recipe from native reduction SSA"),
       llvm::cl::init(false)};
+  Option<bool> tensorProgramQuery{*this, "tensor-program-query",
+      llvm::cl::desc("Query native tensor program admission without changing Graph SSA"),
+      llvm::cl::init(false)};
+  Option<bool> tensorProgramReplay{*this, "tensor-program-replay",
+      llvm::cl::desc("Replay original Graph into the complete native tensor Target program"),
+      llvm::cl::init(false)};
   StringRef getArgument() const override { return "tessera-graph-to-schedule"; }
   StringRef getDescription() const override {
     return "Create a content-addressed mixed-level schedule.matmul SSA edge "
@@ -3479,12 +3489,83 @@ struct GraphToSchedulePass
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
+    tile::registerTileDialect(registry);
     registry.insert<attn::TesseraAttnDialect, schedule::ScheduleDialect, gpu::GPUDialect, arith::ArithDialect,
                     scf::SCFDialect, memref::MemRefDialect, vector::VectorDialect>();
   }
 
   void runOnOperation() override {
     ModuleOp mod = getOperation();
+    if (tensorProgramQuery && tensorProgramReplay) {
+      mod.emitError("native tensor admission query and source replay are distinct modes");
+      return signalPassFailure();
+    }
+    if (tensorProgramQuery) {
+      bool admitted = false;
+      OwningOpRef<ModuleOp> candidate(cast<ModuleOp>(mod->clone()));
+      // Admission queries report whether this native profile can own the
+      // source. They never erase or rewrite the caller's semantic Graph.
+      {
+        ScopedDiagnosticHandler quiet(&getContext(), [](Diagnostic &) { return success(); });
+        if (failed(tensor_program::outline(*candidate, admitted))) admitted = false;
+      }
+      mod->setAttr("tessera.native.tensor_program_admission",
+          BoolAttr::get(&getContext(), admitted));
+      return;
+    }
+    if (tensorProgramReplay) {
+      auto source = mod->getAttrOfType<StringAttr>("tessera.native.tensor_program_source");
+      if (!source || !mod->hasAttr("tessera.native.tensor_program_target")) {
+        mod.emitError("native tensor replay requires its original Graph and complete Target controller");
+        return signalPassFailure();
+      }
+      auto original = parseSourceString<ModuleOp>(source.getValue(), &getContext());
+      if (!original || (*original)->hasAttr("tessera.native.tensor_program") ||
+          (*original)->hasAttr("tessera.native.tensor_program_member")) {
+        mod.emitError("native tensor replay source must be an original semantic Graph");
+        return signalPassFailure();
+      }
+      OpPassManager pipeline(ModuleOp::getOperationName());
+      if (failed(parsePassPipeline(
+              "tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-lower-to-nvidia-sm120",
+              pipeline)))
+        return signalPassFailure();
+      // Dynamic pass execution requires a nested operation. Temporarily attach
+      // this isolated, separately owned source module; never mutate the caller's
+      // actual controller or its members while replaying the source.
+      mod.getBody()->push_back(original->getOperation());
+      LogicalResult replayed = runPipeline(pipeline, *original);
+      original->getOperation()->remove();
+      if (failed(replayed)) return signalPassFailure();
+      std::string expected, actual;
+      llvm::raw_string_ostream expectedStream(expected), actualStream(actual);
+      original->print(expectedStream); mod.print(actualStream);
+      expectedStream.flush(); actualStream.flush();
+      if (expected != actual) {
+        auto error = mod.emitError("native tensor Target program differs from original Graph replay");
+        size_t mismatch = 0;
+        while (mismatch < std::min(expected.size(), actual.size()) &&
+               expected[mismatch] == actual[mismatch]) ++mismatch;
+        error.attachNote() << "first difference at byte " << mismatch
+            << "; expected: " << StringRef(expected).substr(mismatch, 160)
+            << "; actual: " << StringRef(actual).substr(mismatch, 160);
+        return signalPassFailure();
+      }
+      return;
+    }
+    bool tensorProgram = false;
+    if (failed(tensor_program::outline(mod, tensorProgram)))
+      return signalPassFailure();
+    if (tensorProgram) {
+      for (auto child : mod.getOps<ModuleOp>()) {
+        OpPassManager pipeline(ModuleOp::getOperationName());
+        pipeline.addPass(createGraphToSchedulePass());
+        if (failed(runPipeline(pipeline, child))) return signalPassFailure();
+      }
+      return;
+    }
+    if (mod->hasAttr("tessera.native.tensor_program")) return;
+
     for (auto function : mod.getOps<func::FuncOp>()) {
       if (!function->hasAttr("tessera.native.query_sequence_bound")) continue;
       auto reject = [&]() {
@@ -4534,6 +4615,9 @@ struct ScheduleToTilePass
   ScheduleToTilePass() = default;
   ScheduleToTilePass(const ScheduleToTilePass &other) : PassWrapper(other) {}
   Option<std::string> ssdGPU{*this, "ssd-gpu", llvm::cl::desc("Cooperative SSD GPU backend (nvidia or rocm)"), llvm::cl::init("")};
+  Option<int> tensorMember{*this, "tensor-member",
+      llvm::cl::desc("Project one verified native tensor program member image"),
+      llvm::cl::init(-1)};
   StringRef getArgument() const override { return "tessera-schedule-to-tile"; }
   StringRef getDescription() const override {
     return "Revalidate registered content-addressed Schedule decisions against "
@@ -4557,6 +4641,61 @@ struct ScheduleToTilePass
 
   void runOnOperation() override {
     ModuleOp mod = getOperation();
+    if (mod->hasAttr("tessera.native.tensor_program")) {
+      if (!mod->hasAttr("tessera.native.tensor_program_target"))
+      for (auto child : mod.getOps<ModuleOp>()) {
+        OpPassManager pipeline(ModuleOp::getOperationName());
+        pipeline.addPass(createScheduleToTilePass());
+        if (failed(runPipeline(pipeline, child))) return signalPassFailure();
+      }
+      SmallVector<tile::ProgramInvokeOp> invokes;
+      mod.walk([&](tile::ProgramInvokeOp invoke) { invokes.push_back(invoke); });
+      for (auto invoke : invokes) {
+        auto child = dyn_cast_or_null<ModuleOp>(SymbolTable::lookupSymbolIn(
+            mod, invoke.getCalleeAttr().getRootReference()));
+        SmallVector<LLVM::LLVMFuncOp> kernels;
+        if (child) for (auto kernel : child.getOps<LLVM::LLVMFuncOp>())
+          if (kernel->hasAttr("nvvm.kernel")) kernels.push_back(kernel);
+        if (kernels.size() != 1) {
+          invoke.emitError("native program member must lower to exactly one kernel");
+          return signalPassFailure();
+        }
+        auto kernel = kernels.front();
+        auto geometry = kernel->getAttr("tessera.native.program_geometry");
+        auto scalars = kernel->getAttr("tessera.native.program_scalars");
+        if (!geometry || !scalars) {
+          invoke.emitError("native program kernel lost its selected launch contract");
+          return signalPassFailure();
+        }
+        invoke->setAttr("callee", SymbolRefAttr::get(&getContext(),
+            child.getSymName().value(),
+            {FlatSymbolRefAttr::get(&getContext(), kernel.getName())}));
+        invoke->setAttr("geometry", geometry);
+        invoke->setAttr("scalars", scalars);
+      }
+      if (failed(verify(mod))) return signalPassFailure();
+      if (failed(tensor_program::exportFrame(mod))) return signalPassFailure();
+      if (tensorMember >= 0) {
+        SmallVector<ModuleOp> members(mod.getOps<ModuleOp>());
+        if (unsigned(tensorMember) >= members.size()) {
+          mod.emitError("native tensor member index is outside the program");
+          return signalPassFailure();
+        }
+        auto frame = mod->getAttr("tessera.native.tensor_program_frame_json");
+        OwningOpRef<ModuleOp> selected(cast<ModuleOp>(members[tensorMember]->clone()));
+        mod.getBody()->clear();
+        mod->setAttrs((*selected)->getAttrs());
+        mod->removeAttr(SymbolTable::getSymbolAttrName());
+        mod->removeAttr("tessera.metadata_snapshot");
+        mod->setAttr("tessera.native.tensor_program_frame_json", frame);
+        mod->setAttr("tessera.native.tensor_program_member_index",
+            IntegerAttr::get(IntegerType::get(&getContext(),64),tensorMember));
+        mod.getBody()->getOperations().splice(mod.getBody()->end(),
+            selected->getBody()->getOperations());
+      }
+      return;
+    }
+
     if (!ssdGPU.empty()) {
       if (failed(lowerCooperativeSSD(mod, ssdGPU))) signalPassFailure();
       return;
@@ -5005,33 +5144,15 @@ struct ScheduleToTilePass
         // cases are low-variance wins. This is not a global selector promotion
         // (WSL cannot supply that authority); it prevents the canonical route
         // from choosing an unproven crossover.
-        const __int128 sm120Work = static_cast<__int128>(2) * selected->m *
-                                   selected->n * selected->k;
+        const auto selectedKernel = tensor_program::selectMatmulKernel(*selected);
         const bool dynamicSm120 = selected->dynamicM || selected->dynamicN ||
                                   selected->dynamicK;
-        const bool macroSm120Producer =
-            !selected->scalarFma && selected->bLayout == "col_major" &&
-            selected->m >= 32 && selected->n >= 32 &&
-            selected->k >= 16 &&
-            (selected->storage == "f16" || selected->storage == "bf16") &&
-            selected->accum == "f32" &&
-            sm120Work >= 67108864;
+        const bool macroSm120Producer = selectedKernel.macroProducer;
+        const bool typedSm120Producer = selectedKernel.typedProducer;
+        const bool useMacroSm120Producer = selectedKernel.useMacroProducer;
+        const bool macroKernelGeometry = selectedKernel.macroGeometry;
         const bool fusedEpilogue = selected->bias || selected->residual ||
                                    selected->activation != "none";
-        const bool typedSm120Producer =
-            !selected->scalarFma && selected->m > 0 && selected->n > 0 && selected->k > 0 &&
-            selected->tileM == 16 && selected->tileN == 8 &&
-            selected->tileK == 16 &&
-            (selected->storage == "f16" || selected->storage == "bf16") &&
-            selected->accum == "f32" &&
-            (selected->output == "f32" || selected->output == "f16");
-        const bool useMacroSm120Producer =
-            macroSm120Producer && selected->k % 8 == 0 && !fusedEpilogue &&
-            selected->output == "f32";
-        // The bridge derives CTA geometry from this symbol suffix. A typed
-        // tail uses 16x8 tiles even when its workload exceeds the macro cutoff.
-        const bool macroKernelGeometry =
-            macroSm120Producer && (useMacroSm120Producer || !typedSm120Producer);
         std::string epilogueSuffix;
         if (fusedEpilogue || selected->output == "f16")
           epilogueSuffix =
@@ -5074,6 +5195,15 @@ struct ScheduleToTilePass
         auto kernelFunction =
             LLVM::LLVMFuncOp::create(moduleBuilder, loc, kernelName, kernelType);
         kernelFunction->setAttr("nvvm.kernel", UnitAttr::get(&getContext()));
+        if (mod->hasAttr("tessera.native.tensor_program_member")) {
+          kernelFunction->setAttr("tessera.native.program_buffer_types",
+              tensor_program::bufferTypes(graph));
+          kernelFunction->setAttr("tessera.native.program_geometry",
+              builder.getDenseI64ArrayAttr(selectedKernel.geometry));
+          kernelFunction->setAttr("tessera.native.program_scalars",
+              builder.getDenseI64ArrayAttr({selected->m, selected->n, selected->k}));
+        }
+
         Block *entry = kernelFunction.addEntryBlock(moduleBuilder);
         OpBuilder kernelBuilder(entry, entry->begin());
         auto mma = tile::TileMmaDescAttr::get(
@@ -5886,6 +6016,15 @@ struct ScheduleToTilePass
         OpBuilder mb(mod.getBody(), mod.getBody()->end());
         auto kernel = LLVM::LLVMFuncOp::create(mb, loc, name, type);
         kernel->setAttr("nvvm.kernel", mb.getUnitAttr());
+        if (mod->hasAttr("tessera.native.tensor_program_member")) {
+          kernel->setAttr("tessera.native.program_buffer_types",
+              tensor_program::bufferTypes(graph));
+          kernel->setAttr("tessera.native.program_geometry",
+              mb.getDenseI64ArrayAttr(tensor_program::semanticGeometry(*selected)));
+          kernel->setAttr("tessera.native.program_scalars",
+              mb.getDenseI64ArrayAttr({selected->rows, selected->columns}));
+        }
+
         Block *entry = kernel.addEntryBlock(mb);
         OpBuilder kb(entry, entry->begin());
         OperationState state(loc, isActivation ? "tile.activation_kernel" : isNorm ? "tile.norm_kernel" : isSoftmax ? "tile.softmax_kernel" : "tile.reduce_kernel");

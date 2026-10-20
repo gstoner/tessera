@@ -1,0 +1,12 @@
+{
+  "compiler_sha256": "93025a87078ee7de1456ef21f05470e7b70cd3a966427860dc2d9e202ab7e228",
+  "source_sha256": {
+    "src/compiler/programming_model/lib/PMPasses.cpp": "686d2d951e5d41c03ece25f809dc582198b2aafe41884ed4fbeeef08e9c0045d",
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "2942e19b5209778a3ee83225668ef4fdda225fb997f53f4c9c7892a0eadc09f7",
+    "python/tessera/compiler/pass_metadata.py": "3b0965339abf9e251a653f6eea5deacb2b23a42296b238583095aa547370ef8f",
+    "tests/unit/test_native_tensor_program_pipeline.py": "adb86d45f2951864ff1f6eb4c4452667a6eee069cd2ab3c36d0c4f0df39f56bd",
+    "tests/unit/test_native_tensor_program_package.py": "8670d74f366f25de57c56896df6b2f518c26eee80adc5c79e77becb72dadb97a"
+  },
+  "native_provider_source_identity": "../native_tensor_frame_owner_20261019/native-owner-source-identity.json",
+  "runtime_images": "../native_tensor_program_pipeline_20261019/images/"
+}

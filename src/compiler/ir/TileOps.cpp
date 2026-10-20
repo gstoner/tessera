@@ -1,3 +1,4 @@
+#include "Tessera/IR/NativeTensorProgramContract.h"
 #include "Tessera/IR/AttentionShapeContract.h"
 #include "Tessera/IR/BoundedQueryNormContract.h"
 #include "Tessera/IR/TileBufferViewContract.h"
@@ -5,6 +6,8 @@
 #include "Tessera/IR/StaticPermutationContract.h"
 #include "Tessera/IR/NVFP4IngestContract.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/IR/SymbolTable.h"
 //===- TileOps.cpp - Tessera Tile IR op verifiers -------------*- C++ -*-===//
 //
 // Sprint 9: rank/shape verifiers for the contraction tile ops. These mirror the
@@ -38,6 +41,10 @@ using namespace mlir;
 
 namespace tessera {
 namespace tile {
+
+LogicalResult ProgramInvokeOp::verify() {
+  return native_tensor_program::verifyInvocation(getOperation());
+}
 
 namespace {
 

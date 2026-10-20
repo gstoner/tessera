@@ -3,8 +3,63 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-10-19
+last_updated: 2026-10-20
 ---
+
+## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to Metal/Apple CPU physical execution: the new package profile requires exact SM120, PTX images and the CUDA native-frame owner. Shared Graph-to-Schedule options do not select Apple profiles and no numerical policy is rewritten. Independent Apple native-program consumers remain follow-up required.
+
+Delivery review: the shared typed-program verifier now checks module schema and isolated owned member references before frame export; malformed references, missing later arities, unused invalid root types and external/empty hosts produce diagnostics before unsafe traversal/export. This remains an SM120-only program contract; no sibling physical execution or schedule promotion follows.
+
+
+Review follow-up: native admission and emission now share the actual SM120 kernel
+selection and geometry calculation. CUDA grid X/Y/Z, per-axis block limits and
+the 1024-thread block product are checked before frame export; matching call
+and kernel metadata alone is insufficient. Exact grid-Y boundary and
+out-of-range source/metadata regressions cover the native CUDA frame limits.
+This changes admission/verification only; no sibling physical execution claim.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PACKAGE.md.
+Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
+Review evidence: benchmarks/baselines/native_tensor_review_closure_20261020/README.md.
+
+
+## NATIVE-TENSOR-TARGET-CONTROLLER-20261019 — verified controller candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to Metal/Apple CPU physical execution: this registered Target command is SM120-specific. The shared Tile ownership verifier remains the same contract with explicit architecture admission. No Apple dtype, operation or runtime ABI admission; independent Apple native-program parity remains follow-up required.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_target_controller_20261019/README.md.
+
+
+## NATIVE-TENSOR-FRAME-OWNER-20261019 — native consumer candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to Metal/Apple CPU execution: these six versioned native-frame symbols require CUDA driver SM120 contexts and PTX images. The shared ABI inventory is regenerated. No Apple operation, dtype, runtime or numerical/performance promotion; Apple native program integration requires its own consumer and owning-host proof.
+
+Contract: docs/spec/NATIVE_TENSOR_FRAME_OWNER.md.
+Evidence: benchmarks/baselines/native_tensor_frame_owner_20261019/README.md.
+
+
+## NATIVE-TENSOR-PROGRAM-PIPELINE-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Host-free sibling assessment retains the ReLU source and Graph wrapper on Apple GPU f16/f32 routes. The new SM120 program carrier has no Metal/Apple CPU execution consumer. Shared Tile verification needs regression gates; no Apple numerical or performance claim is made.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_program_pipeline_20261019/README.md.
+
 
 ## NATIVE-BOUNDED-SOURCE-PUBLIC-20261019 — public capacity replay
 

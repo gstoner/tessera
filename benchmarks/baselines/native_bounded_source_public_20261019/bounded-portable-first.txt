@@ -1,0 +1,130 @@
+E
+==================================== ERRORS ====================================
+_ ERROR at setup of test_bounded_restore_needs_no_tools_or_provider[bounded_portable0] _
+
+compiler_toolchain = CompilerToolchain(tessera_opt=PosixPath('/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-op...'), nvidia_opt=PosixPath('/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt'))
+request = <SubRequest 'bounded_portable' for <Function test_bounded_restore_needs_no_tools_or_provider[bounded_portable0]>>
+
+    @pytest.fixture(scope="module", params=[("f16", False), ("bf16", False), ("f16", True), ("bf16", True)])
+    def bounded_portable(compiler_toolchain, request):
+        storage, rows = request.param
+        tool = compiler_toolchain.require_tessera_opt("--tessera-autodiff-paired")
+>       return portable_program(export_native_source_attention_reverse(
+            bounded_source(storage, rows=rows, trace_one=True), tool=tool))
+
+tests/unit/test_portable_bounded_source_attention_reverse.py:20: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_portable_source_attention_reverse.py:29: in portable_program
+    return seal(program.manifest, members)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/portable_source_attention_reverse.py:563: in seal
+    restore(data)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+data = {'schema': 'tessera.nvidia.source_attention_reverse_program.v3', 'plan': {'architecture': 'sm_120', 'buffers': [{'byte...turn\n    }\n  }\n}\n\n', ...}], 'contract_digest': 'e1fadb698b51b0e5ee9e902c61d875362b613a10e8b5340124452f6610855783'}
+
+    def restore(data):
+        from .prepared_source_attention_reverse import ReverseMember
+        if (not isinstance(data, dict) or set(data) != {"schema", "plan", "members", "contract_digest"}
+                or data["schema"] not in (SCHEMA, _ROWS_SCHEMA, _BOUNDED_SCHEMA, _BOUNDED_ROWS_SCHEMA)
+                or data["contract_digest"] != digest({k: v for k, v in data.items() if k != "contract_digest"})):
+            raise ValueError("source attention reverse portable integrity differs")
+        data = copy.deepcopy(data)
+        plan, records = data["plan"], data["members"]
+        dims = validate_plan(plan)
+        if data["schema"] != _portable_schema(plan):
+            raise ValueError("source attention reverse portable/native schema differs")
+        if not isinstance(records, list) or len(records) != (5 if _rows(plan) else 4):
+            raise ValueError("source attention reverse image count differs")
+        members = []
+        checkpoints = []
+        for i, record in enumerate(records):
+            if (not isinstance(record, dict) or set(record) != {
+                    *_FIELDS, "entry", "ptx", "image_digest", "abi", "provenance", "member_digest"}
+                    or any(not isinstance(record[f], str) or not record[f] for f in (*_FIELDS, "entry", "ptx"))
+                    or record["member_digest"] != digest({k: v for k, v in record.items() if k != "member_digest"})
+                    or record["provenance"] != {f + "_sha256": sha(record[f]) for f in _FIELDS}
+                    or record["graph_ir"] != plan["member_graphs"][i]
+                    or record["image_digest"] != sha(record["ptx"])
+                    or digest(record["abi"]) != digest(_abi(plan, i, dims, record["entry"]))):
+                raise ValueError("source attention reverse image provenance/ABI differs")
+            entry, tile, graph = record["entry"], record["tile_ir"], record["graph_ir"]
+            expected = record["abi"]["parameters"]
+            signature = _one(r'llvm.func @' + re.escape(entry) + r'\(([^)]*)\)', tile,
+                             "source attention reverse Tile entry differs")
+            if (re.findall(r': (!llvm.ptr|i64)', signature) != ["!llvm.ptr" if v == "ptr" else v for v in expected]
+                    or re.findall(r'\.visible\s+\.entry\s+([A-Za-z0-9_]+)', record["ptx"]) != [entry]
+                    or not re.search(r'\.target\s+sm_120a\b', record["ptx"])
+                    or re.findall(r'\bllvm.func @(\w+)\(', record["native_ir"]) != [entry]):
+                raise ValueError("source attention reverse native entry/parameter contract differs")
+            params = _one(r'\.visible\s+\.entry\s+' + re.escape(entry) + r'\s*\(([^)]*)\)', record["ptx"],
+                          "source attention reverse PTX entry differs")
+            if len(re.findall(r'\.param\s+\.(?:u|s|b)64\s+', params)) != len(expected):
+                raise ValueError("source attention reverse PTX parameter widths differ")
+            storage = plan["buffers"][5]["storage"]
+            if _rows(plan) and i in (2, 3):
+                checkpoints.append(_row_checkpoint(plan, i, record, dims))
+            elif i in (1, 2):
+                checkpoints.append(_checkpoint(plan, i, record, dims))
+            elif i == 0:
+                from .nvidia_native import _mlir_f32_bits
+                schedule_hash = _one(r'tessera.schedule_hash = "([0-9a-f]{64})"', tile,
+                                     "source attention reverse normalization Schedule seal differs")
+                mode = _one(r'\bschedule = "(serial|cooperative_128)"', tile,
+                            "source attention reverse normalization schedule differs")
+                suffix = "_cooperative_128_" if mode == "cooperative_128" else "_"
+                eps = _one(r'tessera.norm_epsilon = ([^ ]+) : f32', tile,
+                           "source attention reverse normalization epsilon differs")
+                source_eps = re.findall(r'\beps = ([^ ]+) : f(?:32|64)', graph)
+                value = source_eps[0] if source_eps else "1e-5"
+                numeric_eps = struct.unpack("f", _mlir_f32_bits(value))[0]
+                if (entry != "tessera_tile_norm_rmsnorm_" + storage + suffix + schedule_hash[:10]
+                        or not math.isfinite(numeric_eps) or numeric_eps <= 0
+                        or _mlir_f32_bits(eps) != _mlir_f32_bits(value)
+                        or tile.count("tile.norm_kernel") != 1 or 'kind = "rmsnorm"' not in tile
+                        or 'storage = "' + storage + '"' not in tile
+                        or 'accum = "f32"' not in tile or 'axis = -1 : i64' not in tile):
+                    raise ValueError("source attention reverse normalization physical policy differs")
+                if _bounded(plan):
+                    operation = _one(r"[^\n]*tile\.norm_kernel[^\n]*", tile,
+                                     "source attention reverse normalization capacity carrier differs")
+                    wanted = {"sequence_bound": dims[3], "row_capacity": dims[0] * dims[1] * dims[3],
+                              "fixed_columns": dims[5], "row_multiple": dims[0] * dims[1]}
+                    if (re.findall(r'\bshape_policy = "([^"]*)"', operation) != ["bounded_query_v1"] or any(
+                            re.findall(r"\b" + field + r" = ([0-9]+) : i64", operation) != [str(value)]
+                            for field, value in wanted.items())):
+                        raise ValueError("source attention reverse normalization capacity policy differs")
+            else:
+                body_hash = _one(r'\bbody_hash = "([0-9a-f]{64})"', graph,
+                                 "source attention reverse pullback Graph seal differs")
+                source_hash = _one(r'\bsource_hash = "([0-9a-f]{64})"', tile,
+                                   "source attention reverse pullback source seal differs")
+                tile_hash = _one(r'(?<![\w_])body_hash = "([0-9a-f]{64})"', tile,
+                                 "source attention reverse pullback Tile seal differs")
+                parent = _one(r'tile_body_hash = "([0-9a-f]{64})"', record["target_ir"],
+                              "source attention reverse pullback Target seal differs")
+                rows, cols = math.prod(_physical_shape(plan["buffers"][5])[:-1]), dims[5]
+                if (source_hash != body_hash or parent != tile_hash
+                        or entry != "tessera_native_row_" + body_hash[:16]
+                        or f"schema = {8 if _bounded(plan) else 6} : i64" not in tile or "tile.row_region_kernel" not in tile
+                        or "tessera_nvidia.row_region_kernel" not in record["target_ir"]
+                        or f"rows = {rows} : i64" not in tile or f"columns = {cols} : i64" not in tile):
+                    raise ValueError("source attention reverse pullback geometry/profile differs")
+                if _bounded(plan):
+                    from .native_attention_rows import _parts
+                    raw = _one(r"tessera.native.sm120_row_producer = \{([^{}]*)\}", graph,
+                               "source attention reverse bounded pullback producer differs")
+                    fields = dict(part.split(" = ", 1) for part in _parts(raw))
+                    expected_fields = dict(accum='"f32"', storage=json.dumps(storage),
+                        body_hash=json.dumps(body_hash), rows=f"{rows} : i64",
+                        columns=f"{cols} : i64", schema="8 : i64", sequence_bound=f"{dims[3]} : i64")
+                    if (fields != expected_fields or f"sequence_bound = {dims[3]} : i64" not in tile
+                            or f"row_multiple = {dims[0] * dims[1]} : i64" not in tile):
+>                       raise ValueError("source attention reverse pullback capacity seal differs")
+E                       ValueError: source attention reverse pullback capacity seal differs
+
+python/tessera/compiler/portable_source_attention_reverse.py:664: ValueError
+=========================== short test summary info ============================
+ERROR tests/unit/test_portable_bounded_source_attention_reverse.py::test_bounded_restore_needs_no_tools_or_provider[bounded_portable0]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 error in 0.56s

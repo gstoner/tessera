@@ -1,0 +1,50 @@
+..............F
+=================================== FAILURES ===================================
+______________ test_compiler_plan_routing_and_log_are_consistent _______________
+
+    def test_compiler_plan_routing_and_log_are_consistent():
+>       checker.check(ROOT)
+
+tests/unit/test_compiler_plan_routing.py:14: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+root = PosixPath('/home/angstorms/scratch/rocm-closure-baseline-20261018/worktree')
+
+    def check(root: Path = ROOT) -> None:
+        plan, log = (root/PLAN).read_text(), (root/LOG).read_text()
+        tasks, routing, history = records(plan), routes(plan), entries(log)
+        if 'audit_role: reference' not in log.split('---',2)[1]:
+            raise ValueError('engineering log must remain reference material')
+        expected = ''
+        for cut in ('F0','F2','F3','F4','F5'):
+            candidates = [i for i,v in tasks.items() if v['Cut']==cut and v.get('Start')=='host-free']
+            if candidates:
+                expected += f'- {cut}: [{candidates[0]}](#{slug(candidates[0])}).\n'
+        actual = plan.split('<!-- ready-view:start -->\n',1)[1].split('<!-- ready-view:end -->',1)[0]
+        if actual != expected:
+            raise ValueError('start view differs from the first host-free task in each cut')
+        positions = {anchor:i for i,anchor in enumerate(history)}
+        for ident, fields in tasks.items():
+            if set(fields) != {'Cut','Owner','Gate','Depends on','Start','Latest'}:
+                raise ValueError(f'incomplete task record {ident}')
+            if fields['Start'] not in ('host-free','device','prerequisite'):
+                raise ValueError(f'invalid Start value for {ident}')
+            if routing.get(ident) != ('#'+slug(ident),'owner'):
+                raise ValueError(f'active task {ident} needs its canonical routing row')
+            for dep,_ in LINK.findall(fields['Depends on']):
+                if dep not in routing or dep==ident:
+                    raise ValueError(f'unresolved/self dependency {ident} -> {dep}')
+            latest = LINK.fullmatch(fields['Latest'])
+            if not latest or latest[2].split('#',1)[-1] not in history:
+                raise ValueError(f'{ident} Latest does not resolve to a log entry')
+            linked = latest[2].split('#',1)[-1]
+            owned = [positions[a] for a,o in history.items() if o==ident]
+            if owned and positions[linked] < max(owned):
+>               raise ValueError(f'{ident} Latest predates its newest log entry')
+E               ValueError: W1.1 Latest predates its newest log entry
+
+scripts/check_compiler_plan.py:163: ValueError
+=========================== short test summary info ============================
+FAILED tests/unit/test_compiler_plan_routing.py::test_compiler_plan_routing_and_log_are_consistent
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 14 passed in 1.77s

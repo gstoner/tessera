@@ -7,6 +7,58 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## NATIVE-BOUNDED-SOURCE-PUBLIC-20261019 — public capacity replay
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to x86 physical execution: this public bounded source contract requires SM120 and its CUDA provider. Static CPU programs and ABI remain unchanged. Shared frontend/portable and broader CPU gates apply; no NVIDIA physical proof transfers.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_PUBLIC.md.
+Evidence: benchmarks/baselines/native_bounded_source_public_20261019/README.md.
+
+
+## NATIVE-BOUNDED-SOURCE-OWNER-20261019 — native capacity execution
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to x86 source-program execution: the new entrypoints belong to the exact-SM120 CUDA provider. Generic CPU artifact lifecycle tests now run against the matching built runtime archive and pass 3 cases; native bounded attention ownership is not an x86 admission.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_OWNER.md.
+
+
+## NATIVE-BOUNDED-SOURCE-PROJECTION-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to x86 native execution: this source-program capacity contract is exact SM120 and does not alter the static FP32 norm ABI. Shared metadata and explicit x86 target rejection are required; no x86 bounded source execution claim is made.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_ATTENTION_REVERSE.md.
+
+
+## NATIVE-BOUNDED-QUERY-NORM-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Parity validated for the compiler ABI boundary: half-storage or bounded SM120 norm cannot bind the static FP32 x86 norm ABI. Negative retarget tests pass in the mixed cohort; existing FP32 admission is retained. No new x86 execution or bounded-query native admission is claimed.
+
+Contract: docs/spec/NATIVE_BOUNDED_QUERY_NORM.md.
+
+
+## NATIVE-BOUNDED-SOURCE-ATTENTION-20261019 — native row prerequisite
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to x86 physical execution: the shared scalar-view
+materializer is called by NVIDIA/ROCm consumers, not this pipeline.
+No sibling schedule, dtype or runtime ABI admission is transferred.
+Shared registry/audit gates pass; owning physical evidence is outside
+this prerequisite. See the [owning NVIDIA record](../nvidia/todo.md#native-bounded-source-attention-20261019--native-row-prerequisite).
+
 ## ROCM-FOLDED-COMMON-GATE-20261019 — sibling assessment
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.

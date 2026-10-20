@@ -3693,6 +3693,13 @@ struct LowerTileToROCMPass
       }
 
       if (name == "tile.norm_kernel") {
+        if (op->hasAttr("shape_policy") || op->hasAttr("sequence_bound") ||
+            op->hasAttr("row_capacity") || op->hasAttr("fixed_columns") ||
+            op->hasAttr("row_multiple")) {
+          op->emitError("bounded-query norm requires its NVIDIA SM120 native consumer");
+          signalPassFailure();
+          return;
+        }
         auto storage = op->getAttrOfType<StringAttr>("storage");
         auto accum = op->getAttrOfType<StringAttr>("accum");
         auto kind = op->getAttrOfType<StringAttr>("kind");

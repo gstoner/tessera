@@ -1,0 +1,767 @@
+{
+  "scope": "retained native source C ABI; public/portable route remains open",
+  "compiler_sha256": "0e8161de4555ae0626b19d2d79f509fc42fd6ef9f1b5f8178541dded7744e64c",
+  "provider_sha256": "df4552fafd31f19fe03c858fba2c7da3e9310abed3076a50fd7c8bf8906d25ac",
+  "same_inputs_and_images_across_orders": true,
+  "same_norm_forward_pullback_images_between_arms": true,
+  "timing_scope": "stage/program CUDA-event windows and completed ctypes-host calls; not isolated profiler kernel time",
+  "policy": "No universal row promotion. Larger frames benefit from row correction, while tiny-frame extra launch cost is retained as negative evidence.",
+  "rows": [
+    {
+      "order": "forward",
+      "storage": "f16",
+      "capacity": [
+        7,
+        11,
+        4,
+        3
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        4,
+        3
+      ],
+      "rows_over_inline_program_event": 1.2503567307270256,
+      "rows_over_inline_completed_ctypes_host": 1.1762563084955617
+    },
+    {
+      "order": "forward",
+      "storage": "f16",
+      "capacity": [
+        7,
+        11,
+        4,
+        3
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "rows_over_inline_program_event": 1.473436964426936,
+      "rows_over_inline_completed_ctypes_host": 1.1442948458476325
+    },
+    {
+      "order": "forward",
+      "storage": "f16",
+      "capacity": [
+        7,
+        11,
+        4,
+        3
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        7,
+        11,
+        4,
+        3
+      ],
+      "rows_over_inline_program_event": 1.0846801016817138,
+      "rows_over_inline_completed_ctypes_host": 1.1412139406685065
+    },
+    {
+      "order": "forward",
+      "storage": "f16",
+      "capacity": [
+        17,
+        19,
+        35,
+        7
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        35,
+        7
+      ],
+      "rows_over_inline_program_event": 1.4732242593773213,
+      "rows_over_inline_completed_ctypes_host": 1.1431722217190265
+    },
+    {
+      "order": "forward",
+      "storage": "f16",
+      "capacity": [
+        17,
+        19,
+        35,
+        7
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        35,
+        7
+      ],
+      "rows_over_inline_program_event": 1.0858214244154085,
+      "rows_over_inline_completed_ctypes_host": 1.0994341770555711
+    },
+    {
+      "order": "forward",
+      "storage": "f16",
+      "capacity": [
+        17,
+        19,
+        35,
+        7
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        17,
+        19,
+        35,
+        7
+      ],
+      "rows_over_inline_program_event": 0.26828881397594095,
+      "rows_over_inline_completed_ctypes_host": 0.39894454881295016
+    },
+    {
+      "order": "forward",
+      "storage": "f16",
+      "capacity": [
+        17,
+        19,
+        257,
+        13
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        257,
+        13
+      ],
+      "rows_over_inline_program_event": 1.165804552126682,
+      "rows_over_inline_completed_ctypes_host": 1.0867993325847667
+    },
+    {
+      "order": "forward",
+      "storage": "f16",
+      "capacity": [
+        17,
+        19,
+        257,
+        13
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        257,
+        13
+      ],
+      "rows_over_inline_program_event": 0.658897057939823,
+      "rows_over_inline_completed_ctypes_host": 0.7666965571349609
+    },
+    {
+      "order": "forward",
+      "storage": "f16",
+      "capacity": [
+        17,
+        19,
+        257,
+        13
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        17,
+        19,
+        257,
+        13
+      ],
+      "rows_over_inline_program_event": 0.17678380992430823,
+      "rows_over_inline_completed_ctypes_host": 0.2063373172963222
+    },
+    {
+      "order": "forward",
+      "storage": "bf16",
+      "capacity": [
+        7,
+        11,
+        4,
+        3
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        4,
+        3
+      ],
+      "rows_over_inline_program_event": 1.4560261025786443,
+      "rows_over_inline_completed_ctypes_host": 1.1782835940594103
+    },
+    {
+      "order": "forward",
+      "storage": "bf16",
+      "capacity": [
+        7,
+        11,
+        4,
+        3
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "rows_over_inline_program_event": 1.4413805275433846,
+      "rows_over_inline_completed_ctypes_host": 1.162584396478655
+    },
+    {
+      "order": "forward",
+      "storage": "bf16",
+      "capacity": [
+        7,
+        11,
+        4,
+        3
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        7,
+        11,
+        4,
+        3
+      ],
+      "rows_over_inline_program_event": 1.023760567090032,
+      "rows_over_inline_completed_ctypes_host": 1.093776576105449
+    },
+    {
+      "order": "forward",
+      "storage": "bf16",
+      "capacity": [
+        17,
+        19,
+        35,
+        7
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        35,
+        7
+      ],
+      "rows_over_inline_program_event": 1.4077440725591215,
+      "rows_over_inline_completed_ctypes_host": 1.1873860713854647
+    },
+    {
+      "order": "forward",
+      "storage": "bf16",
+      "capacity": [
+        17,
+        19,
+        35,
+        7
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        35,
+        7
+      ],
+      "rows_over_inline_program_event": 1.0918092231713348,
+      "rows_over_inline_completed_ctypes_host": 1.0780428969197335
+    },
+    {
+      "order": "forward",
+      "storage": "bf16",
+      "capacity": [
+        17,
+        19,
+        35,
+        7
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        17,
+        19,
+        35,
+        7
+      ],
+      "rows_over_inline_program_event": 0.24706004564890957,
+      "rows_over_inline_completed_ctypes_host": 0.3695746785422159
+    },
+    {
+      "order": "forward",
+      "storage": "bf16",
+      "capacity": [
+        17,
+        19,
+        257,
+        13
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        257,
+        13
+      ],
+      "rows_over_inline_program_event": 1.2219391124634293,
+      "rows_over_inline_completed_ctypes_host": 1.1206094378842157
+    },
+    {
+      "order": "forward",
+      "storage": "bf16",
+      "capacity": [
+        17,
+        19,
+        257,
+        13
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        257,
+        13
+      ],
+      "rows_over_inline_program_event": 0.6449754830515511,
+      "rows_over_inline_completed_ctypes_host": 0.7427827623391537
+    },
+    {
+      "order": "forward",
+      "storage": "bf16",
+      "capacity": [
+        17,
+        19,
+        257,
+        13
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        17,
+        19,
+        257,
+        13
+      ],
+      "rows_over_inline_program_event": 0.17009819208583388,
+      "rows_over_inline_completed_ctypes_host": 0.19653787045364132
+    },
+    {
+      "order": "reverse",
+      "storage": "bf16",
+      "capacity": [
+        17,
+        19,
+        257,
+        13
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        17,
+        19,
+        257,
+        13
+      ],
+      "rows_over_inline_program_event": 0.17262562149031824,
+      "rows_over_inline_completed_ctypes_host": 0.2007931609213932
+    },
+    {
+      "order": "reverse",
+      "storage": "bf16",
+      "capacity": [
+        17,
+        19,
+        257,
+        13
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        257,
+        13
+      ],
+      "rows_over_inline_program_event": 0.6381422369636469,
+      "rows_over_inline_completed_ctypes_host": 0.7292847924135061
+    },
+    {
+      "order": "reverse",
+      "storage": "bf16",
+      "capacity": [
+        17,
+        19,
+        257,
+        13
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        257,
+        13
+      ],
+      "rows_over_inline_program_event": 1.2361434289170585,
+      "rows_over_inline_completed_ctypes_host": 1.1070575690370292
+    },
+    {
+      "order": "reverse",
+      "storage": "bf16",
+      "capacity": [
+        17,
+        19,
+        35,
+        7
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        17,
+        19,
+        35,
+        7
+      ],
+      "rows_over_inline_program_event": 0.22774684287693306,
+      "rows_over_inline_completed_ctypes_host": 0.35527419747875133
+    },
+    {
+      "order": "reverse",
+      "storage": "bf16",
+      "capacity": [
+        17,
+        19,
+        35,
+        7
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        35,
+        7
+      ],
+      "rows_over_inline_program_event": 1.1174510342495094,
+      "rows_over_inline_completed_ctypes_host": 1.0521939195828058
+    },
+    {
+      "order": "reverse",
+      "storage": "bf16",
+      "capacity": [
+        17,
+        19,
+        35,
+        7
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        35,
+        7
+      ],
+      "rows_over_inline_program_event": 1.2518806410474048,
+      "rows_over_inline_completed_ctypes_host": 1.1787765325260513
+    },
+    {
+      "order": "reverse",
+      "storage": "bf16",
+      "capacity": [
+        7,
+        11,
+        4,
+        3
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        7,
+        11,
+        4,
+        3
+      ],
+      "rows_over_inline_program_event": 0.9419585825775167,
+      "rows_over_inline_completed_ctypes_host": 1.0662416406184305
+    },
+    {
+      "order": "reverse",
+      "storage": "bf16",
+      "capacity": [
+        7,
+        11,
+        4,
+        3
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "rows_over_inline_program_event": 1.325983095519777,
+      "rows_over_inline_completed_ctypes_host": 1.1447245815300389
+    },
+    {
+      "order": "reverse",
+      "storage": "bf16",
+      "capacity": [
+        7,
+        11,
+        4,
+        3
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        4,
+        3
+      ],
+      "rows_over_inline_program_event": 1.6335378021263294,
+      "rows_over_inline_completed_ctypes_host": 1.1573419159151888
+    },
+    {
+      "order": "reverse",
+      "storage": "f16",
+      "capacity": [
+        17,
+        19,
+        257,
+        13
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        17,
+        19,
+        257,
+        13
+      ],
+      "rows_over_inline_program_event": 0.17688197053706897,
+      "rows_over_inline_completed_ctypes_host": 0.19208299020226724
+    },
+    {
+      "order": "reverse",
+      "storage": "f16",
+      "capacity": [
+        17,
+        19,
+        257,
+        13
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        257,
+        13
+      ],
+      "rows_over_inline_program_event": 0.6924814366540213,
+      "rows_over_inline_completed_ctypes_host": 0.7929183194437506
+    },
+    {
+      "order": "reverse",
+      "storage": "f16",
+      "capacity": [
+        17,
+        19,
+        257,
+        13
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        257,
+        13
+      ],
+      "rows_over_inline_program_event": 1.2252391962091485,
+      "rows_over_inline_completed_ctypes_host": 1.1189255432079352
+    },
+    {
+      "order": "reverse",
+      "storage": "f16",
+      "capacity": [
+        17,
+        19,
+        35,
+        7
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        17,
+        19,
+        35,
+        7
+      ],
+      "rows_over_inline_program_event": 0.24289906499635702,
+      "rows_over_inline_completed_ctypes_host": 0.36745935356938714
+    },
+    {
+      "order": "reverse",
+      "storage": "f16",
+      "capacity": [
+        17,
+        19,
+        35,
+        7
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        35,
+        7
+      ],
+      "rows_over_inline_program_event": 1.188631881265172,
+      "rows_over_inline_completed_ctypes_host": 1.1199057099768581
+    },
+    {
+      "order": "reverse",
+      "storage": "f16",
+      "capacity": [
+        17,
+        19,
+        35,
+        7
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        35,
+        7
+      ],
+      "rows_over_inline_program_event": 1.504784725545501,
+      "rows_over_inline_completed_ctypes_host": 1.143478201205462
+    },
+    {
+      "order": "reverse",
+      "storage": "f16",
+      "capacity": [
+        7,
+        11,
+        4,
+        3
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        7,
+        11,
+        4,
+        3
+      ],
+      "rows_over_inline_program_event": 1.094961799130475,
+      "rows_over_inline_completed_ctypes_host": 1.0969311562157165
+    },
+    {
+      "order": "reverse",
+      "storage": "f16",
+      "capacity": [
+        7,
+        11,
+        4,
+        3
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "rows_over_inline_program_event": 1.5441708440461692,
+      "rows_over_inline_completed_ctypes_host": 1.1935510712853103
+    },
+    {
+      "order": "reverse",
+      "storage": "f16",
+      "capacity": [
+        7,
+        11,
+        4,
+        3
+      ],
+      "runtime_dims": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        4,
+        3
+      ],
+      "rows_over_inline_program_event": 1.4890081930431638,
+      "rows_over_inline_completed_ctypes_host": 1.1504902339066778
+    }
+  ]
+}

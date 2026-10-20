@@ -1,0 +1,45 @@
+E
+==================================== ERRORS ====================================
+_ ERROR at setup of test_bounded_restore_needs_no_tools_or_provider[bounded_portable0] _
+
+compiler_toolchain = CompilerToolchain(tessera_opt=PosixPath('/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-op...'), nvidia_opt=PosixPath('/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt'))
+request = <SubRequest 'bounded_portable' for <Function test_bounded_restore_needs_no_tools_or_provider[bounded_portable0]>>
+
+    @pytest.fixture(scope="module", params=[("f16", False), ("bf16", False), ("f16", True), ("bf16", True)])
+    def bounded_portable(compiler_toolchain, request):
+        storage, rows = request.param
+        tool = compiler_toolchain.require_tessera_opt("--tessera-autodiff-paired")
+>       return portable_program(export_native_source_attention_reverse(
+            bounded_source(storage, rows=rows, trace_one=True), tool=tool))
+
+tests/unit/test_portable_bounded_source_attention_reverse.py:20: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_portable_source_attention_reverse.py:29: in portable_program
+    return seal(program.manifest, members)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/portable_source_attention_reverse.py:424: in seal
+    dims = validate_plan(plan)
+           ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+plan = {'architecture': 'sm_120', 'buffers': [{'bytes': 112, 'capacity_shape': [1, 2, 7, 4], 'first_write': -1, 'id': 0, ...}... 2, 7, 4], 'first_write': 0, 'id': 5, ...}, ...], 'cotangent_indices': [3, 4], 'execution_state': 'artifact_only', ...}
+
+    def validate_plan(plan):
+        keys = {"schema", "kind", "execution_state", "target", "architecture", "root", "source_root",
+                "source_graph_ir", "source_graph_sha256", "paired_graph_ir", "paired_graph_sha256",
+                "program_graph_ir", "program_graph_sha256", "role_indices", "cotangent_indices",
+                "requested_gradients", "buffers", "steps", "outputs", "member_graphs"}
+        if (not isinstance(plan, dict) or set(plan) != keys
+                or plan["schema"] not in ("tessera.native.source_attention_reverse.v1",
+                                         "tessera.native.source_attention_reverse.v2")
+                or plan["kind"] != ("norm_attention_saved_reverse_rows" if _rows(plan)
+                                     else "norm_attention_saved_reverse") or plan["execution_state"] != "artifact_only"
+                or plan["target"] != "nvidia_sm120" or plan["architecture"] != "sm_120"):
+>           raise ValueError("source attention reverse plan schema/target differs")
+E           ValueError: source attention reverse plan schema/target differs
+
+python/tessera/compiler/portable_source_attention_reverse.py:174: ValueError
+=========================== short test summary info ============================
+ERROR tests/unit/test_portable_bounded_source_attention_reverse.py::test_bounded_restore_needs_no_tools_or_provider[bounded_portable0]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 error in 0.72s

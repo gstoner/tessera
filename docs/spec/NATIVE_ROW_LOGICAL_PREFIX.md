@@ -35,3 +35,42 @@ member/adjacent cases, with twenty unchanged rank-two stage identities. Eight
 paired raw-member timing profiles pass before/after oracles. Portable
 composed ownership and complete stage/program timing remain pending. Composed source reverse and the
 five aggregate slices remain open.
+
+## Bounded query-row integration candidate — 2026-10-19
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+The additive SM120 schema-8 row profile is the native prerequisite for bounded
+original-source attention reverse. Its logical Graph has rank four with fixed
+B/H/D and a dynamic query axis. The sealed producer dictionary has an explicit
+positive i64 sequence_bound; its rows field equals B*H*sequence_bound with
+checked signed-32-bit multiplication. Columns remain D.
+
+Graph-to-Schedule and Schedule-to-Tile preserve the dynamic logical types.
+Physical views retain the checked allocation capacity. A separate active-row
+guard uses the runtime row scalar. The kernel checks positive rows,
+rows<=capacity, rows divisible by B*H, and the fixed column count before
+access. Per-thread row guards exclude inactive capacity rows. Source scalar
+arithmetic and storage rounding are cloned from actual row SSA.
+
+The three-pointer/two-i64 ABI retains two read-only inputs and one output.
+Tile/Target metadata records schema 8 and row_multiple=B*H. Static schemas
+1/6/7 keep their prior meanings, exact-row guards and artifact recipes. The
+bounded profile is not admitted to ROCm, Apple or x86 physical lowering.
+
+The private prerequisite passes 410 focused cases, twelve RTX5070 member
+cases and the owning gfx1201 shared-materializer regression. Two twelve-profile
+timing orders remove the initial consistent width257 regression while width35
+remains mixed. Full receipts and source bindings are in
+benchmarks/baselines/native_bounded_query_rows_20261019/README.md.
+Composed normalization/AD/capacity-owner/public/portable integration remains
+pending; no aggregate five-slice requirement is closed.
+
+The shared Tile scalar-view prover follows true scalar conjunctions in an
+actual enclosing then-region to find an unsigned coordinate bound. It does not
+trust metadata or traverse disjunction, negation or selects. Together with
+the existing constant-step SCF induction proof, the dominating physical row
+bound removes redundant per-element guards. Both kernel geometry and active
+query-row guards remain. The packet records owning numerical/negative-control and timing evidence
+for this proof; full composed integration remains separate.

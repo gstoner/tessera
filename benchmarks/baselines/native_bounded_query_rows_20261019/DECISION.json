@@ -1,0 +1,95 @@
+{
+  "base": "d0579fdb1546fda5278b700dbee8c77a251d339b",
+  "compiler_sha256": "27e3cd12649947cf33ccd0d44f6e6da293ef452d9b1a17dc5c2723ff6d1104e9",
+  "scope": "bounded raw row member prerequisite, not composed/public VJP",
+  "final_orders": 2,
+  "distinct_shape_storage_profiles": 12,
+  "selected_reruns_are_not_additional_coverage": true,
+  "focused_passed": 410,
+  "sm120_device_passed": 16,
+  "gfx1201_regression_passed": {
+    "device": 23,
+    "unit": 44
+  },
+  "static_profiles_with_four_identical_stages": 16,
+  "latency_ratios": {
+    "bounded-row-timing.json": {
+      "35": {
+        "min_bounded_over_static": 0.8847911980863836,
+        "max_bounded_over_static": 1.0465080445506767
+      },
+      "257": {
+        "min_bounded_over_static": 1.5444622491820774,
+        "max_bounded_over_static": 1.6686888644517892
+      }
+    },
+    "bounded-capacity-timing.json": {
+      "35": {
+        "min_bounded_over_static": 0.8746350834625746,
+        "max_bounded_over_static": 1.1210223541432638
+      },
+      "257": {
+        "min_bounded_over_static": 1.5199195974137094,
+        "max_bounded_over_static": 1.6667480408975324
+      }
+    },
+    "bounded-dominating-timing.json": {
+      "35": {
+        "min_bounded_over_static": 0.9695954865408857,
+        "max_bounded_over_static": 1.0506655980698796
+      },
+      "257": {
+        "min_bounded_over_static": 1.142214669698038,
+        "max_bounded_over_static": 1.3084503240045768
+      }
+    },
+    "bounded-proof-forward.json": {
+      "35": {
+        "min_bounded_over_static": 0.7991657255888596,
+        "max_bounded_over_static": 1.0303313619444985
+      },
+      "257": {
+        "min_bounded_over_static": 0.9647167276725075,
+        "max_bounded_over_static": 1.0019292984390753
+      }
+    },
+    "bounded-proof-reverse.json": {
+      "35": {
+        "min_bounded_over_static": 0.9294380590874101,
+        "max_bounded_over_static": 1.032965289182912
+      },
+      "257": {
+        "min_bounded_over_static": 0.9759580892510934,
+        "max_bounded_over_static": 1.003273445144367
+      }
+    },
+    "bounded-proof-forward-numeric-initial.json": {
+      "35": {
+        "min_bounded_over_static": 0.847851139723316,
+        "max_bounded_over_static": 1.0359510279592152
+      },
+      "257": {
+        "min_bounded_over_static": 0.9999825301930544,
+        "max_bounded_over_static": 1.002624684895081
+      }
+    },
+    "bounded-proof-reverse-numeric-initial.json": {
+      "35": {
+        "min_bounded_over_static": 0.9531872587173178,
+        "max_bounded_over_static": 1.0746700434442968
+      },
+      "257": {
+        "min_bounded_over_static": 0.9861043949343419,
+        "max_bounded_over_static": 1.0022812587130057
+      }
+    }
+  },
+  "interpretation": "Initial wide-row regression removed by native dominating capacity guard plus conjunction proof; width35 remains mixed; no universal promotion or pure-kernel profiler claim.",
+  "remaining": "Bounded normalization/paired source outlining, capacity owner, ordinary JIT, portable replay, broad gates and all five aggregate programs.",
+  "final_comparison": "raw uint8 storage bytes, including signed-zero encodings; mathematical oracle before/after timing",
+  "earlier_numeric_only_repeats": "bounded-proof-{forward,reverse}-numeric-initial.json.gz; same12profiles, not additional coverage",
+  "actual_attention_pullback_compiler_passed": 4,
+  "actual_attention_pullback_device_passed": 4,
+  "sm120_device_count_scope": "12 bounded/static ReLU-fixture regressions +4 distinct actual source-attention AD pullback cases, not repeated runs",
+  "source_checkpoint": "7a2aeea11a19020567c8f16dd6ccb7007028493d"
+}

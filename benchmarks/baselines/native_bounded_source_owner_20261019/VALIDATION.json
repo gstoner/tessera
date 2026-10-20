@@ -1,0 +1,53 @@
+{
+  "production_provider": {
+    "distinct_cases": 48,
+    "cohorts": [
+      36,
+      12
+    ],
+    "exit": 0,
+    "initial24_subset_not_additional": true,
+    "fixture_provenance": "frozen36-case source retained; added cooperative12 and current recorder use schedule-preserving helper"
+  },
+  "observer_provider": {
+    "passed": 12,
+    "exit": 0,
+    "scope": "actual allocation/offset/capacity identity and atomic rejected geometry; test-only observer symbols not shipped"
+  },
+  "static_source_provider": {
+    "passed": 40,
+    "exit": 0
+  },
+  "abi_gates": {
+    "distinct_passed": 28,
+    "cohorts": [
+      25,
+      3
+    ],
+    "remaining_skip": "Apple hardware bridge requires Darwin",
+    "initial_3_generic_artifact_skips_resolved_by_matching_core_build": true
+  },
+  "timings": {
+    "orders": 2,
+    "paired_profiles_per_order": 18,
+    "arms_per_profile": 2,
+    "alternating_trials": 21,
+    "calls_per_arm_per_trial": 8,
+    "source_compile_native_prepare_stage_program_completed_host_domains_separate": true
+  },
+  "public_portable_bounded_source": "not_integrated",
+  "broader_cpu_production_delivery_gates": "pending",
+  "shared_lifecycle_metadata_diagnostic_citation": {
+    "passed": 318,
+    "exit": 0
+  },
+  "graphify": {
+    "nodes": 100959,
+    "edges": 245500,
+    "communities": 3642,
+    "exit": 0
+  },
+  "generated_docs_write": {
+    "exit": 0
+  }
+}

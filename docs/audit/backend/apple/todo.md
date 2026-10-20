@@ -6,6 +6,58 @@ target: apple_gpu
 last_updated: 2026-10-19
 ---
 
+## NATIVE-BOUNDED-SOURCE-PUBLIC-20261019 — public capacity replay
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to Apple GPU/CPU physical execution: the bounded source contract requires exact SM120 and has no Metal/Apple runtime consumer. Shared frontend/portable changes add no Apple dtype/op/pass/ABI admission. Apple execution requires independent owning-host evidence.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_PUBLIC.md.
+Evidence: benchmarks/baselines/native_bounded_source_public_20261019/README.md.
+
+
+## NATIVE-BOUNDED-SOURCE-OWNER-20261019 — native capacity execution
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to Metal/Apple CPU execution: CUDA source capacities and producer events have no Apple consumer. Shared ABI/audit views are regenerated; the Apple hardware ABI bridge remains an explicitly unavailable Darwin check on WSL. No Apple execution or lifetime proof transfers.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_OWNER.md.
+
+
+## NATIVE-BOUNDED-SOURCE-PROJECTION-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to Metal/Apple CPU execution: this projection requires exact SM120 and introduces no Apple operation, schedule, dtype or ABI. Shared source/pass metadata gates and explicit Apple target rejection pass in the shared cohort of 359 tests; no Apple execution claim is made.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_ATTENTION_REVERSE.md.
+
+
+## NATIVE-BOUNDED-QUERY-NORM-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to Metal/Apple CPU physical admission: the SM120 norm launch carrier has no Apple consumer. Shared verifier/registry regression passes in the mixed cohort; thirteen Apple hardware cases remain skipped on WSL. No Apple dtype, schedule or runtime ABI is added.
+
+Contract: docs/spec/NATIVE_BOUNDED_QUERY_NORM.md.
+
+
+## NATIVE-BOUNDED-SOURCE-ATTENTION-20261019 — native row prerequisite
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to Metal and Apple CPU physical execution: the shared scalar-view
+materializer is called by NVIDIA/ROCm consumers, not this pipeline.
+No sibling schedule, dtype or runtime ABI admission is transferred.
+Shared registry/audit gates pass; owning physical evidence is outside
+this prerequisite. See the [owning NVIDIA record](../nvidia/todo.md#native-bounded-source-attention-20261019--native-row-prerequisite).
+
 ## ROCM-FOLDED-COMMON-GATE-20261019 — sibling assessment
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.

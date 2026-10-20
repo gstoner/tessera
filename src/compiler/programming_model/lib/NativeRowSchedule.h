@@ -22,7 +22,7 @@ inline mlir::FailureOr<mlir::func::FuncOp> graphRoot(mlir::ModuleOp module) {
   if (rocm && (fn->hasAttr("tessera.native.sm120_row_producer") || fn.getNumResults() != 1)) return reject();
   auto c = fn->getAttrOfType<DictionaryAttr>(rocm ? "tessera.native.rocm_row_producer" : "tessera.native.sm120_row_producer");
   auto type = dyn_cast<RankedTensorType>(fn.getArgumentTypes().front());
-  auto geometry = rowGeometry(type);
+  auto geometry = rowGeometry(fn);
   auto rows = c ? c.getAs<IntegerAttr>("rows") : IntegerAttr{};
   auto columns = c ? c.getAs<IntegerAttr>("columns") : IntegerAttr{};
   auto schema = c ? c.getAs<IntegerAttr>("schema") : IntegerAttr{};
@@ -34,16 +34,16 @@ inline mlir::FailureOr<mlir::func::FuncOp> graphRoot(mlir::ModuleOp module) {
          target.getValue() == (llvm::Twine("rocm_") + arch.getValue()).str())
       : (target.getValue() == "nvidia_sm120" && arch.getValue() == "sm_120"));
   if (!owningTarget ||
-      !c || c.size() != 6 || !type || failed(geometry) || (rocm && type.getRank() != 2) ||
+      !c || c.size() != (isBoundedRow(fn) ? 7u : 6u) || !type || failed(geometry) || (rocm && type.getRank() != 2) ||
       !rows || rows.getInt() != geometry->rows || !columns || columns.getInt() != geometry->columns ||
-      !schema || schema.getInt() != (rocm ? 7 : fn.getNumResults() == 1 ? 6 : 1) || !storage || storage.getValue() != (type.getElementType().isF16() ? "f16" : "bf16") ||
+      !schema || schema.getInt() != (rocm ? 7 : isBoundedRow(fn) && fn.getNumResults() == 1 ? 8 : fn.getNumResults() == 1 ? 6 : 1) || !storage || storage.getValue() != (type.getElementType().isF16() ? "f16" : "bf16") ||
       !accum || accum.getValue() != "f32" || !hash || hash.getValue() != sourceDigest(fn)) return reject();
   RowScalarizer scalarizer(fn);
   if (failed(scalarizer.validate())) return failure();
   return fn;
 }
 inline int64_t rowSchema(mlir::func::FuncOp fn) {
-  return fn->hasAttr("tessera.native.rocm_row_producer") ? 7 : fn.getNumResults() == 1 ? 6 : 1;
+  return fn->hasAttr("tessera.native.rocm_row_producer") ? 7 : isBoundedRow(fn) ? 8 : fn.getNumResults() == 1 ? 6 : 1;
 }
 inline llvm::StringRef rowArch(mlir::func::FuncOp fn) {
   return fn->getParentOfType<mlir::ModuleOp>()->getAttrOfType<mlir::StringAttr>("tessera.arch").getValue();
@@ -54,13 +54,18 @@ inline std::string artifactDigest(mlir::func::FuncOp fn) {
       : ";row_ssa_schema=1;serial_row;threads=128;typed_views=4;outputs=2");
   if (rowSchema(fn) == 7)
     text = sourceDigest(fn) + ";row_ssa_schema=7;serial_row;threads=128;typed_views=3;outputs=1;arch=" + rowArch(fn).str();
+  if (rowSchema(fn) == 8) {
+    auto c = fn->getAttrOfType<mlir::DictionaryAttr>("tessera.native.sm120_row_producer");
+    text = sourceDigest(fn) + ";row_ssa_schema=8;serial_row;threads=128;typed_views=3;outputs=1;sequence_bound=" +
+        std::to_string(c.getAs<mlir::IntegerAttr>("sequence_bound").getInt());
+  }
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(text)), true);
 }
 inline mlir::DictionaryAttr artifactAttributes(mlir::func::FuncOp fn) {
   using namespace mlir;
   Builder b(fn.getContext());
   auto type = cast<RankedTensorType>(fn.getArgumentTypes()[0]);
-  auto geometry = rowGeometry(type);
+  auto geometry = rowGeometry(fn);
   assert(succeeded(geometry) && "row geometry was verified before physical lowering");
   std::string shape = "family=native_row_ssa;rows=" + std::to_string(geometry->rows) +
       ";columns=" + std::to_string(geometry->columns) + ";storage=" +
@@ -100,7 +105,7 @@ inline mlir::FailureOr<mlir::LLVM::LLVMFuncOp> buildKernel(mlir::ModuleOp module
   auto lowered = scalarizer.lower(module);
   if (failed(lowered)) return failure();
   auto type = cast<RankedTensorType>(graph.getArgumentTypes()[0]);
-  auto geometry = rowGeometry(type);
+  auto geometry = rowGeometry(graph);
   assert(succeeded(geometry) && "row geometry was verified before physical lowering");
   OpBuilder b(module.getContext()); Location loc = graph.getLoc();
   b.setInsertionPointToEnd(module.getBody());
@@ -119,7 +124,19 @@ inline mlir::FailureOr<mlir::LLVM::LLVMFuncOp> buildKernel(mlir::ModuleOp module
   Value row = arith::AddIOp::create(b,loc,arith::MulIOp::create(b,loc,bid,threads),tid);
   Value expectedRows = arith::ConstantIntOp::create(b,loc,geometry->rows,64);
   Value expectedColumns = arith::ConstantIntOp::create(b,loc,geometry->columns,64);
-  Value rm = arith::CmpIOp::create(b,loc,arith::CmpIPredicate::eq,body->getArgument(buffers),expectedRows);
+  Value rm;
+  if (isBoundedRow(graph)) {
+    Value actualRows = body->getArgument(buffers);
+    Value zero = arith::ConstantIntOp::create(b,loc,0,64);
+    Value multiple = arith::ConstantIntOp::create(b,loc,rowMultiple(graph),64);
+    Value positive = arith::CmpIOp::create(b,loc,arith::CmpIPredicate::ugt,actualRows,zero);
+    Value within = arith::CmpIOp::create(b,loc,arith::CmpIPredicate::ule,actualRows,expectedRows);
+    Value remainder = arith::RemUIOp::create(b,loc,actualRows,multiple);
+    Value aligned = arith::CmpIOp::create(b,loc,arith::CmpIPredicate::eq,remainder,zero);
+    rm = arith::AndIOp::create(b,loc,arith::AndIOp::create(b,loc,positive,within),aligned);
+  } else {
+    rm = arith::CmpIOp::create(b,loc,arith::CmpIPredicate::eq,body->getArgument(buffers),expectedRows);
+  }
   Value cm = arith::CmpIOp::create(b,loc,arith::CmpIPredicate::eq,body->getArgument(buffers+1),expectedColumns);
   auto guarded = scf::IfOp::create(b,loc,arith::AndIOp::create(b,loc,rm,cm),false);
   {
@@ -127,6 +144,8 @@ inline mlir::FailureOr<mlir::LLVM::LLVMFuncOp> buildKernel(mlir::ModuleOp module
     IRMapping mapping;
     for (unsigned i=0;i<buffers;++i) mapping.map(lowered->getArgument(i),body->getArgument(i));
     mapping.map(lowered->getArgument(buffers),row);
+    if (isBoundedRow(graph))
+      mapping.map(lowered->getArgument(buffers+1),body->getArgument(buffers));
     for (Operation &op : lowered->getBody().front().without_terminator()) b.clone(op,mapping);
   }
   b.setInsertionPointToEnd(body); LLVM::ReturnOp::create(b,loc,ValueRange{});
@@ -151,7 +170,7 @@ inline mlir::LogicalResult lower(mlir::ModuleOp module, bool &selected) {
   auto kernel = buildKernel(*temporary,*root);
   if (failed(kernel)) return failure();
   auto type = cast<RankedTensorType>(root->getArgumentTypes()[0]);
-  auto geometry = rowGeometry(type);
+  auto geometry = rowGeometry(*root);
   assert(succeeded(geometry) && "row geometry was verified before physical lowering");
   OpBuilder b(artifact);
   OperationState state(module.getLoc(),"tile.row_region_kernel");
@@ -162,6 +181,8 @@ inline mlir::LogicalResult lower(mlir::ModuleOp module, bool &selected) {
   state.addAttribute("storage",TypeAttr::get(type.getElementType()));
   state.addAttribute("workgroup_size",b.getI64IntegerAttr(128));
   state.addAttribute("schema",b.getI64IntegerAttr(rowSchema(*root)));
+  if (isBoundedRow(*root))
+    state.addAttribute("row_multiple",b.getI64IntegerAttr(rowMultiple(*root)));
   state.addAttribute("artifact_hash",b.getStringAttr(artifactDigest(*root)));
   state.addAttribute("source_hash",b.getStringAttr(sourceDigest(*root)));
   state.addAttribute("body_hash",b.getStringAttr(digest(*kernel)));

@@ -5,6 +5,59 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NATIVE-BOUNDED-SOURCE-PUBLIC-20261019 — public capacity replay
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to gfx1151/gfx1201 physical execution: this route requires exact nvidia_sm120 and CUDA owner entrypoints. Existing static ROCm source programs, numerical policies and ABI are unchanged. Shared frontend/portable gates apply; no NVIDIA physical proof transfers. ROCm route/performance closure remains follow-up required.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_PUBLIC.md.
+Evidence: benchmarks/baselines/native_bounded_source_public_20261019/README.md.
+
+
+## NATIVE-BOUNDED-SOURCE-OWNER-20261019 — native capacity execution
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to HIP execution: these four new symbols are in the NVIDIA driver provider and require exact SM120 context/image contracts. No ROCm buffer, schedule, dtype or ownership ABI changes. Shared runtime-ABI views include the new exports; no NVIDIA physical proof transfers to gfx1151/gfx1201.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_OWNER.md.
+
+
+## NATIVE-BOUNDED-SOURCE-PROJECTION-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to physical ROCm admission: source projection requires nvidia_sm120/sm_120 before any transformation. Explicit gfx1151/gfx1201 bounded source target rejection is covered; existing static source/runtime contracts are unchanged. No NVIDIA execution or schedule evidence transfers.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_ATTENTION_REVERSE.md.
+
+
+## NATIVE-BOUNDED-QUERY-NORM-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Parity validated for the target boundary: ROCm rejects the SM120 norm capacity policy instead of erasing it. The mixed cohort includes twelve owning gfx1201 source-reverse device regressions; gfx1151 execution remains follow-up required. Existing static dtype/ABI admission is unchanged; no NVIDIA physical proof transfers.
+
+Contract: docs/spec/NATIVE_BOUNDED_QUERY_NORM.md.
+
+
+## NATIVE-BOUNDED-SOURCE-ATTENTION-20261019 — native row prerequisite
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Parity validated for the affected shared Tile materializer on owning
+gfx1201: 23 quantizer/parent-view/source-pullback device cases and 44
+adjacent unit/compiler cases pass. Static schema-7 gfx1151/gfx1201 native
+stages are identical artifacts; no new gfx1151 device evidence is claimed.
+Schema8 remains SM120-only. Existing AMD dtype/schedule admissions are
+unchanged. See the [owning NVIDIA record](../nvidia/todo.md#native-bounded-source-attention-20261019--native-row-prerequisite).
+
 ## ROCM-FOLDED-COMMON-GATE-20261019 — native scale recovery
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.

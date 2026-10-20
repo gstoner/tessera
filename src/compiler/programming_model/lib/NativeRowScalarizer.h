@@ -39,6 +39,35 @@ inline FailureOr<RowGeometry> rowGeometry(Type type) {
   return RowGeometry{rows, columns};
 }
 
+// Schema 8 binds one dynamic query axis to a checked static capacity. The
+// logical Graph remains dynamic; only the compact physical row view is bounded.
+inline bool isBoundedRow(func::FuncOp fn) {
+  auto c = fn->getAttrOfType<DictionaryAttr>("tessera.native.sm120_row_producer");
+  auto schema = c ? c.getAs<IntegerAttr>("schema") : IntegerAttr{};
+  return schema && schema.getInt() == 8;
+}
+inline FailureOr<RowGeometry> rowGeometry(func::FuncOp fn) {
+  if (!fn.getNumArguments()) return failure();
+  auto type = dyn_cast<RankedTensorType>(fn.getArgumentTypes()[0]);
+  if (!isBoundedRow(fn)) return rowGeometry(type);
+  auto c = fn->getAttrOfType<DictionaryAttr>("tessera.native.sm120_row_producer");
+  auto bound = c.getAs<IntegerAttr>("sequence_bound");
+  if (!type || type.getEncoding() || type.getRank() != 4 ||
+      !type.isDynamicDim(2) || type.isDynamicDim(0) || type.isDynamicDim(1) ||
+      type.isDynamicDim(3) || !bound || !bound.getType().isInteger(64) ||
+      bound.getInt() <= 0 || bound.getInt() > INT32_MAX)
+    return failure();
+  SmallVector<int64_t> capacity(type.getShape());
+  capacity[2] = bound.getInt();
+  return rowGeometry(RankedTensorType::get(capacity,type.getElementType()));
+}
+inline int64_t rowMultiple(func::FuncOp fn) {
+  if (!isBoundedRow(fn)) return 1;
+  auto type = cast<RankedTensorType>(fn.getArgumentTypes()[0]);
+  // rowGeometry(fn) proves this product and the complete capacity fit i32.
+  return type.getDimSize(0) * type.getDimSize(1);
+}
+
 // Keep numerical validation independent of the row ownership ABI. This scalar
 // function is subsequently embedded in a checked Schedule/Tile kernel region.
 class RowScalarizer {
@@ -191,11 +220,11 @@ public:
   explicit RowScalarizer(func::FuncOp fn)
       : graph(fn), b(fn.getContext()), loc(fn.getLoc()) {}
   LogicalResult validate() {
-    auto reject = [&]() { return graph.emitError("native row scalarization requires a verified static two-root, one-or-two-result explicit-fp32 row graph"); };
+    auto reject = [&]() { return graph.emitError("native row scalarization requires a verified static or bounded-query two-root, one-or-two-result explicit-fp32 row graph"); };
     if (graph.getNumArguments() != 2 || (graph.getNumResults() != 1 && graph.getNumResults() != 2) ||
         !graph.getBody().hasOneBlock()) return reject();
     tensor = dyn_cast<RankedTensorType>(graph.getArgumentTypes()[0]);
-    auto geometry = rowGeometry(tensor);
+    auto geometry = rowGeometry(graph);
     if (failed(geometry)) return reject();
     numRows = geometry->rows;
     numColumns = geometry->columns;
@@ -211,7 +240,7 @@ public:
       if (op.getNumResults() != (stats ? 2 : 1)) return reject();
       for (Value result : op.getResults()) {
         auto t = dyn_cast<RankedTensorType>(result.getType());
-        if (!t || t.getEncoding() || !t.hasStaticShape()) return reject();
+        if (!t || t.getEncoding() || (!isBoundedRow(graph) && !t.hasStaticShape())) return reject();
         if (scalarConstant) {
           if (t.getRank() != 0 || !t.getElementType().isF32()) return reject();
         } else if (stats || reduce) {
@@ -293,19 +322,31 @@ public:
     unsigned buffers = 2 + graph.getNumResults();
     SmallVector<Type> arguments(buffers, ptr);
     arguments.push_back(b.getI64Type());
+    if (isBoundedRow(graph)) arguments.push_back(b.getI64Type());
     auto fn = func::FuncOp::create(b, loc, "native_row", b.getFunctionType(arguments, {}));
     Block *body = fn.addEntryBlock();
     b.setInsertionPointToStart(body);
     pointers.assign(body->getArguments().begin(), body->getArguments().begin() + buffers);
     row = body->getArgument(buffers);
     width = arith::ConstantIntOp::create(b, loc, numColumns, 64);
-    Value rows = arith::ConstantIntOp::create(b, loc, numRows, 64);
+    // Physical views describe allocation capacity. The separate active-row
+    // guard controls the logical runtime extent before any element access;
+    // keeping capacity static avoids a dynamic bounds predicate per load.
+    Value capacityRows = arith::ConstantIntOp::create(b, loc, numRows, 64);
+    Value rows = isBoundedRow(graph) ? body->getArgument(buffers+1) : capacityRows;
     // Unsigned test also excludes negative rows before any buffer access.
     for (unsigned i=0;i<buffers;++i) {
       auto viewType = tile::BufferViewType::get(b.getContext(),tensor.getElementType(),i<2?"read":"write","row_major");
-      views.push_back(tile::BufferViewOp::create(b,loc,viewType,pointers[i],rows,width,width));
+      views.push_back(tile::BufferViewOp::create(b,loc,viewType,pointers[i],capacityRows,width,width));
     }
     Value active = arith::CmpIOp::create(b, loc, arith::CmpIPredicate::ult, row, rows);
+    if (isBoundedRow(graph)) {
+      // State the physical view bound at the dominating guard as well as the
+      // logical bound. LLVM need not infer row<runtime<=capacity across guards
+      // to remove an otherwise repeated capacity predicate from each load.
+      Value physical = arith::CmpIOp::create(b, loc, arith::CmpIPredicate::ult, row, capacityRows);
+      active = arith::AndIOp::create(b, loc, active, physical);
+    }
     auto guarded = scf::IfOp::create(b, loc, active, false);
     {
       OpBuilder::InsertionGuard guard(b);

@@ -5,6 +5,7 @@ import ctypes as ct
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 import os
 import re
 import threading
@@ -43,8 +44,11 @@ class PreparedSourceAttentionReverse:
         plan = program.manifest
         stages = program.lower_members()
         forward = _decode_checkpoint(*stages[1][:3], backward=False)
-        if plan["schema"] == "tessera.native.source_attention_reverse.v2":
-            if forward.output_storage != forward.storage or forward.bias or forward.shape_bounds:
+        from .portable_source_attention_reverse import _rows
+        expected_bounds = tuple(plan.get("shape_bounds", ()))
+        if _rows(plan):
+            if (forward.output_storage != forward.storage or forward.bias
+                    or tuple(forward.shape_bounds) != expected_bounds):
                 raise ValueError("source attention reverse member contracts disagree")
         else:
             backward = _decode_checkpoint(*stages[2][:3], backward=True)
@@ -52,7 +56,9 @@ class PreparedSourceAttentionReverse:
                     or forward.causal != backward.causal or forward.storage != backward.storage
                     or forward.output_storage != forward.storage
                     or backward.output_storage != forward.storage or forward.bias or backward.bias
-                    or not backward.lse_cotangent or forward.shape_bounds or backward.shape_bounds):
+                    or not backward.lse_cotangent
+                    or tuple(forward.shape_bounds) != expected_bounds
+                    or tuple(backward.shape_bounds) != expected_bounds):
                 raise ValueError("source attention reverse member contracts disagree")
         members = []
         for graph, schedule, tile, target, native in stages:
@@ -76,11 +82,15 @@ class PreparedSourceAttentionReverse:
         return owner
 
     def _initialize(self, data, plan, members, dims):
+        from .portable_source_attention_reverse import _rows, _bounded, _symbolic_dims
         self._members = members
-        self._rows = plan["schema"] == "tessera.native.source_attention_reverse.v2"
+        self._rows, self._bounded = _rows(plan), _bounded(plan)
         self._stage_count = len(members)
-        self._api = ("tessera_nvidia_source_attention_reverse_rows_" if self._rows
-                     else "tessera_nvidia_source_attention_reverse_")
+        self._times_api = ("tessera_nvidia_source_attention_reverse_rows_" if self._rows
+                           else "tessera_nvidia_source_attention_reverse_")
+        self._api = self._times_api + ("bounded_" if self._bounded else "")
+        self._symbolic_dims = tuple(_symbolic_dims(plan, dims))
+        self._requested = tuple(plan["requested_gradients"])
         self._portable_text = json.dumps(data, sort_keys=True, allow_nan=False)
         self._contract_digest = data["contract_digest"]
         self._source_graph_digest = plan["source_graph_sha256"]
@@ -129,13 +139,13 @@ class PreparedSourceAttentionReverse:
     def _prepare(self):
         from tessera.runtime import _load_nvidia_ptx_launch
         lib = _load_nvidia_ptx_launch()
-        if lib is None or any(not hasattr(lib, self._api + role)
-                              for role in ("prepare", "invoke", "last_times")):
+        if lib is None or any(not hasattr(lib, symbol) for symbol in (
+                self._api + "prepare", self._api + "invoke", self._times_api + "last_times")):
             raise RuntimeError("source attention reverse requires the matching native provider")
         self._lib = lib
         prepare = getattr(lib, self._api + "prepare")
         invoke = getattr(lib, self._api + "invoke")
-        last_times = getattr(lib, self._api + "last_times")
+        last_times = getattr(lib, self._times_api + "last_times")
         P, S, I, L, U = ct.c_void_p, ct.c_size_t, ct.c_int, ct.c_int64, ct.c_uint64
         lib.tessera_nvidia_attention_vjp_last_error.argtypes = []
         lib.tessera_nvidia_attention_vjp_last_error.restype = ct.c_char_p
@@ -147,6 +157,8 @@ class PreparedSourceAttentionReverse:
         invoke.argtypes = [
             U, ct.POINTER(P), ct.POINTER(S), S, ct.POINTER(U), S,
             ct.POINTER(P), ct.POINTER(S), S]
+        if self._bounded:
+            invoke.argtypes = [U, ct.POINTER(L), *invoke.argtypes[1:]]
         invoke.restype = I
         last_times.argtypes = [U, ct.POINTER(ct.c_float), S]
         last_times.restype = I
@@ -166,6 +178,32 @@ class PreparedSourceAttentionReverse:
         self._handle = handle.value
         self._finalizer = weakref.finalize(self, _retire, lib, self._handle, self._pid)
 
+    def _validate_specs(self, specs):
+        names = {"f16": "float16", "bf16": "bfloat16", "f32": "float32"}
+        for (shape, dtype), (expected, storage, _) in zip(specs, self._input_specs, strict=True):
+            if len(shape) != len(expected) or dtype.name != names[storage]:
+                raise ValueError("source attention reverse shape or storage differs")
+        dims = self._dims
+        if self._bounded:
+            from .attention_shape_contract import attention_dimensions, DYNAMIC_DIM
+            q, k, v = (specs[i][0] for i in self._roles)
+            dims = attention_dimensions(self._symbolic_dims, self._dims,
+                                       (q[0], q[1], k[1], q[2], k[2], q[3], v[3]))
+            key_roots = set(self._roles[1:])
+            for i, ((shape, _), (logical, _, _)) in enumerate(zip(specs, self._input_specs, strict=True)):
+                wanted = tuple((dims[4] if i in key_roots else dims[3]) if extent == DYNAMIC_DIM
+                               else extent for extent in logical)
+                if shape != wanted:
+                    raise ValueError("source attention reverse actual sequence/storage roles differ")
+        elif any(shape != expected[0] for (shape, _), expected in zip(specs, self._input_specs, strict=True)):
+            raise ValueError("source attention reverse shape or storage differs")
+        sizes = tuple(math.prod(shape) * dtype.itemsize for shape, dtype in specs)
+        if any(size > spec[2] for size, spec in zip(sizes, self._input_specs, strict=True)):
+            raise ValueError("source attention reverse frame exceeds byte capacity")
+        outputs = tuple((specs[index][0], storage) for index, (_, storage)
+                        in zip(self._requested, self._output_specs, strict=True))
+        return dims, sizes, outputs
+
     def _frame(self, values):
         if len(values) != 5:
             raise ValueError("source attention reverse needs three roots and two output cotangents")
@@ -173,7 +211,6 @@ class PreparedSourceAttentionReverse:
         resident = tuple(interface is not None for interface in interfaces)
         if any(resident) and not all(resident):
             raise ValueError("source attention reverse requires one input placement")
-        names = {"f16": "float16", "bf16": "bfloat16", "f32": "float32"}
         if all(resident):
             from .resident_nvidia_tensor import cuda_frontend_specs
             snapshots = []
@@ -188,15 +225,13 @@ class PreparedSourceAttentionReverse:
             projected = tuple(SimpleNamespace(__cuda_array_interface__=s, dtype=getattr(v, "dtype", None))
                               for s, v in zip(snapshots, values, strict=True))
             specs = cuda_frontend_specs(projected, ranks=(3, 4))
-            if any(shape != expected[0] or dtype.name != names[expected[1]]
-                   for (shape, dtype), expected in zip(specs, self._input_specs, strict=True)):
-                raise ValueError("source attention reverse CUDA shape or storage differs")
-            return values, tuple(s["data"][0] for s in snapshots), tuple(s["stream"] for s in snapshots)
-        if any(not isinstance(v, np.ndarray) or not v.dtype.isnative or tuple(v.shape) != spec[0]
-               or v.dtype.name != names[spec[1]] for v, spec in zip(values, self._input_specs, strict=True)):
+            frame = self._validate_specs(specs)
+            return (values, tuple(s["data"][0] for s in snapshots), tuple(s["stream"] for s in snapshots), *frame)
+        if any(not isinstance(v, np.ndarray) or not v.dtype.isnative for v in values):
             raise ValueError("source attention reverse host shape or storage differs")
+        frame = self._validate_specs(tuple((tuple(v.shape), v.dtype) for v in values))
         roots = tuple(np.ascontiguousarray(v) for v in values)
-        return roots, tuple(v.ctypes.data for v in roots), None
+        return roots, tuple(v.ctypes.data for v in roots), None, *frame
 
     def __call__(self, *values):
         from .native_tensor_result import input_scope
@@ -204,10 +239,10 @@ class PreparedSourceAttentionReverse:
         with self._lock, input_scope(values):
             self._guard()
             self.receipt = None
-            roots, addresses, streams = self._frame(values)
+            roots, addresses, streams, actual_dims, input_sizes, output_specs = self._frame(values)
             import ml_dtypes
             dtypes = {"f16": np.float16, "bf16": ml_dtypes.bfloat16, "f32": np.float32}
-            outputs = tuple(np.empty(shape, dtypes[storage]) for shape, storage in self._output_specs)
+            outputs = tuple(np.empty(shape, dtypes[storage]) for shape, storage in output_specs)
             prepare_ms = 0.0
             if not self._handle:
                 prepare_start = time.perf_counter()
@@ -215,16 +250,19 @@ class PreparedSourceAttentionReverse:
                 prepare_ms = (time.perf_counter() - prepare_start) * 1000
             start = time.perf_counter()
             lib = self._library()
-            self._check(getattr(lib, self._api + "invoke")(
-                self._handle, (ct.c_void_p * 5)(*addresses),
-                (ct.c_size_t * 5)(*(s[2] for s in self._input_specs)), 5,
+            frame_args: list[Any] = [self._handle]
+            if self._bounded:
+                frame_args.append((ct.c_int64 * 7)(*actual_dims))
+            frame_args.extend(((ct.c_void_p * 5)(*addresses),
+                (ct.c_size_t * 5)(*input_sizes), 5,
                 (ct.c_uint64 * 5)(*streams) if streams is not None else None,
                 5 if streams is not None else 0,
                 (ct.c_void_p * len(outputs))(*(v.ctypes.data for v in outputs)),
                 (ct.c_size_t * len(outputs))(*(v.nbytes for v in outputs)), len(outputs)))
+            self._check(getattr(lib, self._api + "invoke")(*frame_args))
             host_ms = (time.perf_counter() - start) * 1000
             times = (ct.c_float * (self._stage_count + 1))()
-            self._check(getattr(lib, self._api + "last_times")(self._handle, times, len(times)))
+            self._check(getattr(lib, self._times_api + "last_times")(self._handle, times, len(times)))
             self.receipt = dict(execution_kind="native_gpu", evidence_target="nvidia_sm120",
                                 native_call_binding=("prepared_cpp_source_attention_reverse_rows" if self._rows
                                                      else "prepared_cpp_source_attention_reverse"),
@@ -232,6 +270,10 @@ class PreparedSourceAttentionReverse:
                                 stage_device_ms=tuple(times)[:self._stage_count], program_device_ms=times[-1],
                                 completed_host_ms=host_ms, native_prepare_ms=prepare_ms,
                                 input_binding="cuda_resident_roots" if streams else "host_roots")
+            if self._bounded:
+                self.receipt.update(shape_policy="bounded_sequences_v1", shape_bounds=self._dims,
+                                    runtime_dims=actual_dims)
+                self.receipt["native_call_binding"] += "_bounded"
             # roots retains the host snapshots through synchronous native completion.
             _ = roots
             return outputs

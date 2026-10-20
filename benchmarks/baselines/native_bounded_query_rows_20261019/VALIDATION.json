@@ -1,0 +1,45 @@
+{
+  "base": "d0579fdb1546fda5278b700dbee8c77a251d339b",
+  "compiler_sha256": "27e3cd12649947cf33ccd0d44f6e6da293ef452d9b1a17dc5c2723ff6d1104e9",
+  "focused": {
+    "passed": 410,
+    "broad_cpu": false,
+    "compiler_route_certificate": false
+  },
+  "actual_source_attention_adjoints": {
+    "compiler_passed": 4,
+    "device_passed": 4,
+    "composed": false
+  },
+  "sm120_bounded_and_static": {
+    "passed": 12,
+    "new_bounded": 4,
+    "static": 8
+  },
+  "gfx1201": {
+    "device_passed": 23,
+    "unit_passed": 44
+  },
+  "static_artifact_profiles": 16,
+  "generated_documents_in_sync": 33,
+  "source_sha256": {
+    "src/compiler/ir/include/Tessera/IR/TileBufferViewContract.h": "42388014b69e20c7b3c6bc3f3c98738b07f45f83953d096a4e683929dbe49b63",
+    "src/compiler/programming_model/lib/NativeRowScalarizer.h": "4306994328a4161b0b5bcb3b138c616ddecc0d8f03d30fc8111bbb4276e339b4",
+    "src/compiler/programming_model/lib/NativeRowSchedule.h": "41cdfe9670250a31ce405c7bc7aab8b67f83b3a1ad07b4bc9da6772d9a0be096",
+    "src/compiler/ir/include/Tessera/IR/RowRegionContract.h": "e8cb9538a7c1d0bd0dfeaaba2cf5cae88571e4c2896f1ec391356fd7c4c83f47",
+    "src/transforms/lib/NativeSourceAttentionReverse.h": "1fe44e101e1154f52344eee4dfeba0874d26ee5493702b97c9c7bdd18fb6b0e5",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "f23a16e507a8831c72a9be74ba71d2e91dab2f0afd30e98353a8db55630e750b",
+    "tests/unit/test_sm120_bounded_attention_pullback.py": "35b4d743e01a4f7db78b9e7947e15277a80cb36884d945ca379a69325c01575e",
+    "tests/device/nvidia/test_bounded_attention_pullback_member.py": "c335ae5d3fd8ec51179acf6283634331c85c55331c1b921768da77cbfafc65dc",
+    "tests/unit/test_tile_buffer_view_guard_proof.py": "fd7adbcc8ef8e0b73c8f5c8db6bfc3d191950563e134a704ba691ac6b2d9ad6d"
+  },
+  "delivery": "private prerequisite; full composed program, broad validation and publication pending",
+  "gfx1201_live_probe": [
+    "Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor",
+    "Name:                    gfx1201",
+    "Uuid:                    GPU-28d9e7efbf2ef716",
+    "Marketing Name:          AMD Radeon RX 9070 XT",
+    "Name:                    amdgcn-amd-amdhsa--gfx1201"
+  ],
+  "source_checkpoint": "7a2aeea11a19020567c8f16dd6ccb7007028493d"
+}

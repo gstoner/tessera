@@ -13,13 +13,38 @@ import re
 import struct
 
 from .portable_source_attention import digest, sha
+from .attention_shape_contract import DYNAMIC_DIM, attention_dimensions
 
 SCHEMA = "tessera.nvidia.source_attention_reverse_program.v1"
 _ROWS_SCHEMA = "tessera.nvidia.source_attention_reverse_program.v2"
+_BOUNDED_SCHEMA = "tessera.nvidia.source_attention_reverse_program.v3"
+_BOUNDED_ROWS_SCHEMA = "tessera.nvidia.source_attention_reverse_program.v4"
 
 
 def _rows(plan):
-    return plan.get("schema") == "tessera.native.source_attention_reverse.v2"
+    return plan.get("schema") in ("tessera.native.source_attention_reverse.v2",
+                                  "tessera.native.source_attention_reverse.v4")
+
+
+def _bounded(plan):
+    return isinstance(plan, dict) and plan.get("schema") in (
+        "tessera.native.source_attention_reverse.v3", "tessera.native.source_attention_reverse.v4")
+
+
+def _portable_schema(plan):
+    return ((_BOUNDED_ROWS_SCHEMA if _rows(plan) else _BOUNDED_SCHEMA) if _bounded(plan)
+            else (_ROWS_SCHEMA if _rows(plan) else SCHEMA))
+
+
+def _physical_shape(buffer):
+    return buffer.get("capacity_shape", buffer["shape"])
+
+
+def _symbolic_dims(plan, dims):
+    result = list(dims)
+    if _bounded(plan):
+        result[3] = result[4] = DYNAMIC_DIM
+    return result
 
 COMPILER_PATH = "nvidia_sm120_source_attention_reverse_compiled"
 _FIELDS = ("graph_ir", "schedule_ir", "tile_ir", "target_ir", "native_ir")
@@ -37,13 +62,14 @@ def _functions(text):
     return matches
 
 
-def _type(buffer):
-    return "tensor<" + "x".join(map(str, buffer["shape"])) + "x" + buffer["storage"] + ">"
+def _type(buffer, shape_key="shape"):
+    dims = ("?" if x == DYNAMIC_DIM else str(x) for x in buffer[shape_key])
+    return "tensor<" + "x".join(dims) + "x" + buffer["storage"] + ">"
 
 
-def _signature(fn, inputs, outputs, buffers):
-    args = ", ".join(f"%arg{i}: {_type(buffers[index])}" for i, index in enumerate(inputs))
-    result = ", ".join(_type(buffers[index]) for index in outputs)
+def _signature(fn, inputs, outputs, buffers, shape_key="shape"):
+    args = ", ".join(f"%arg{i}: {_type(buffers[index], shape_key)}" for i, index in enumerate(inputs))
+    result = ", ".join(_type(buffers[index], shape_key) for index in outputs)
     if len(outputs) > 1:
         result = "(" + result + ")"
     if fn[3] != args or fn[4].split(" attributes {", 1)[0] != result:
@@ -116,6 +142,10 @@ def _checkpoint(plan, index, record, dims):
     if backward:
         expected.update(gradient_storage=json.dumps(storage), lse_cotangent="true",
                         row_correction='"probability_dot_v_f32_v1"')
+    if _bounded(plan):
+        expected.update(shape="array<i64: " + ", ".join(map(str, _symbolic_dims(plan, dims))) + ">",
+                        shape_bounds="array<i64: " + ", ".join(map(str, dims)) + ">",
+                        shape_policy='"bounded_sequences_v1"')
     schedule = _one(r'tessera.schedule_hash = "([0-9a-f]{64})"', tile,
                     "source attention reverse checkpoint Schedule seal differs")
     prefix = "tessera_tile_attention_backward_lse_output_cotangent_" if backward else "tessera_tile_attention_lse_"
@@ -142,10 +172,13 @@ def _row_checkpoint(plan, index, record, dims):
                     family="attention_backward_rows" if consumer else "attention_row_correction",
                     gradient_activity=[1, 1, 1], lse_cotangent=True,
                     mask_alignment="end_aligned_v1", output_storage=storage,
-                    row_bytes=math.prod(plan["buffers"][7]["shape"]) * 4,
+                    row_bytes=math.prod(_physical_shape(plan["buffers"][7])) * 4,
                     row_correction="probability_dot_v_f32_v1", row_storage="f32",
                     scale=fields.get("scale"), shape=list(dims), storage=storage,
                     target="nvidia_sm120")
+    if _bounded(plan):
+        expected.update(shape=_symbolic_dims(plan, dims), shape_bounds=list(dims),
+                        shape_policy="bounded_sequences_v1")
     if consumer:
         expected.update(bias_gradient=False, gradient_output="compact_v1",
                         gradient_launch="packed_v1", row_correction_usage="external_input_v1")
@@ -165,13 +198,26 @@ def validate_plan(plan):
             "source_graph_ir", "source_graph_sha256", "paired_graph_ir", "paired_graph_sha256",
             "program_graph_ir", "program_graph_sha256", "role_indices", "cotangent_indices",
             "requested_gradients", "buffers", "steps", "outputs", "member_graphs"}
+    bounded = _bounded(plan)
+    if bounded:
+        keys |= {"shape_policy", "shape_bounds", "sequence_bounds"}
     if (not isinstance(plan, dict) or set(plan) != keys
             or plan["schema"] not in ("tessera.native.source_attention_reverse.v1",
-                                     "tessera.native.source_attention_reverse.v2")
-            or plan["kind"] != ("norm_attention_saved_reverse_rows" if _rows(plan)
-                                 else "norm_attention_saved_reverse") or plan["execution_state"] != "artifact_only"
+                                     "tessera.native.source_attention_reverse.v2",
+                                     "tessera.native.source_attention_reverse.v3",
+                                     "tessera.native.source_attention_reverse.v4")
+            or plan["kind"] != (("norm_attention_saved_reverse_rows" if _rows(plan)
+                                 else "norm_attention_saved_reverse") + ("_bounded" if bounded else "")) or plan["execution_state"] != "artifact_only"
             or plan["target"] != "nvidia_sm120" or plan["architecture"] != "sm_120"):
         raise ValueError("source attention reverse plan schema/target differs")
+    if bounded:
+        for name, count in (("sequence_bounds", 2), ("shape_bounds", 7)):
+            values = plan[name]
+            if (not isinstance(values, list) or len(values) != count
+                    or any(type(x) is not int or not 0 < x < 2**31 for x in values)):
+                raise ValueError("source attention reverse capacity schema differs")
+        if plan["shape_policy"] != "bounded_sequences_v1":
+            raise ValueError("source attention reverse capacity policy differs")
     for stage in ("source", "paired", "program"):
         text = plan[stage + "_graph_ir"]
         if not isinstance(text, str) or not text or sha(text) != plan[stage + "_graph_sha256"]:
@@ -179,13 +225,20 @@ def validate_plan(plan):
     rows = _rows(plan)
     original = plan["source_graph_ir"]
     if (not re.search(r'(?<=[{,] )tessera.native.source_attention_reverse_request(?=[,}])', original)
-            or "tessera.attention_shape_bounds" in original or "tessera.attention_sequence_bounds" in original):
+            or "tessera.attention_shape_bounds" in original
+            or (not bounded and "tessera.attention_sequence_bounds" in original)):
         raise ValueError("source attention reverse original export/shape policy differs")
     from .native_attention_rows import _parts
     header = _one(r'^module(?: @(?:"(?:[^"\\]|\\.)*"|' + _SYMBOL
                   + r'))? attributes \{(.*)\} \{$', original.splitlines()[0],
                   "source attention reverse canonical module attributes differ")
     fields = _parts(header)
+    if bounded:
+        key = "tessera.attention_sequence_bounds"
+        request = [field for field in fields if field.partition(" = ")[0] == key]
+        expected = key + " = array<i64: " + ", ".join(map(str, plan["sequence_bounds"])) + ">"
+        if request != [expected]:
+            raise ValueError("source attention reverse original sequence capacities differ")
     requests = {}
     for mode in ("reverse", "rows", "auto"):
         marker = ("tessera.native.source_attention_reverse_request" if mode == "reverse"
@@ -231,10 +284,10 @@ def validate_plan(plan):
                  ([seeds[0], 5, roles[1], roles[2], 7, 8], [9, 10, 11],
                   "tessera_attn.checkpoint_backward_rows"),
                  ([roles[0], 9], [12], "native_row_region"))
-    expected = [dict(step=i, member=plan["root"] + "__member_" + str(i),
+    expected_steps = [dict(step=i, member=plan["root"] + "__member_" + str(i),
                      inputs=ins, outputs=outs, operation=op)
                 for i, (ins, outs, op) in enumerate(edges)]
-    if (plan["steps"] != expected or any(type(s["step"]) is not int or any(
+    if (plan["steps"] != expected_steps or any(type(s["step"]) is not int or any(
             type(v) is not int for v in (*s["inputs"], *s["outputs"])) for s in plan["steps"])):
         raise ValueError("source attention reverse native SSA edges differ")
     buffers = plan["buffers"]
@@ -249,14 +302,28 @@ def validate_plan(plan):
     for index in outputs:
         reads[index] = len(edges)
     for i, b in enumerate(buffers):
-        if (not isinstance(b, dict) or set(b) != {
-                "id", "shape", "storage", "bytes", "ownership", "first_write", "last_read"}
-                or type(b["id"]) is not int or b["id"] != i
+        fields = {"id", "shape", "storage", "bytes", "ownership", "first_write", "last_read"}
+        if bounded:
+            fields |= {"trace_shape", "capacity_shape"}
+        if (not isinstance(b, dict) or set(b) != fields or type(b["id"]) is not int or b["id"] != i
                 or not isinstance(b["shape"], list) or not 3 <= len(b["shape"]) <= 4
-                or any(type(d) is not int or not 0 < d < 2**31 for d in b["shape"])
                 or b["storage"] not in {"f16", "bf16", "f32"}):
             raise ValueError("source attention reverse buffer schema differs")
-        size = math.prod(b["shape"]) * (4 if b["storage"] == "f32" else 2)
+        if bounded:
+            for key in ("trace_shape", "capacity_shape"):
+                shape = b[key]
+                if (not isinstance(shape, list) or len(shape) != len(b["shape"])
+                        or any(type(x) is not int or not 0 < x < 2**31 for x in shape)):
+                    raise ValueError("source attention reverse trace/capacity shape differs")
+            for axis, (logical, trace, capacity) in enumerate(zip(
+                    b["shape"], b["trace_shape"], b["capacity_shape"], strict=True)):
+                if (type(logical) is not int or
+                        (axis == 2 and (logical != DYNAMIC_DIM or trace > capacity)) or
+                        (axis != 2 and (logical != trace or logical != capacity))):
+                    raise ValueError("source attention reverse logical/physical axes differ")
+        elif any(type(d) is not int or not 0 < d < 2**31 for d in b["shape"]):
+            raise ValueError("source attention reverse buffer schema differs")
+        size = math.prod(_physical_shape(b)) * (4 if b["storage"] == "f32" else 2)
         ownership = "readonly_input" if i < 5 else "returned_output" if i in outputs else "private_scratch"
         if (size >= 2**63 or type(b["bytes"]) is not int or b["bytes"] != size
                 or type(b["first_write"]) is not int or b["first_write"] != writes[i]
@@ -266,30 +333,65 @@ def validate_plan(plan):
     q, k, v = (buffers[i] for i in roles)
     if any(len(b["shape"]) != 4 for b in (q, k, v)) or q["storage"] not in {"f16", "bf16"}:
         raise ValueError("source attention reverse original storage/rank differs")
-    b, hq, sq, d = q["shape"]
-    bk, hkv, sk, dk = k["shape"]
-    bv, hv, sv, dv = v["shape"]
+    b, hq, sq, d = _physical_shape(q)
+    bk, hkv, sk, dk = _physical_shape(k)
+    bv, hv, sv, dv = _physical_shape(v)
     if b != bk or b != bv or hq % hkv or hv != hkv or sk != sv or d != dk or b * hq * sq >= 2**31:
         raise ValueError("source attention reverse physical dimensions differ")
     expected_shapes: list[list[int] | None] = [None] * len(buffers)
-    for index, shape in zip(roles, (q["shape"], k["shape"], v["shape"]), strict=True):
+    for index, shape in zip(roles, (_physical_shape(q), _physical_shape(k), _physical_shape(v)), strict=True):
         expected_shapes[index] = shape
     for index in (seeds[0], 6):
         expected_shapes[index] = [b, hq, sq, dv]
     for index in (seeds[1], 7):
         expected_shapes[index] = [b, hq, sq]
     for index in (5, 8, 11):
-        expected_shapes[index] = q["shape"]
-    expected_shapes[9], expected_shapes[10] = k["shape"], v["shape"]
+        expected_shapes[index] = _physical_shape(q)
+    expected_shapes[9], expected_shapes[10] = _physical_shape(k), _physical_shape(v)
     if rows:
         expected_shapes[8] = [b, hq, sq]
-        expected_shapes[9] = q["shape"]
-        expected_shapes[10], expected_shapes[11], expected_shapes[12] = k["shape"], v["shape"], q["shape"]
-    if any(item["shape"] != expected_shapes[i] or item["storage"] != (
+        expected_shapes[9] = _physical_shape(q)
+        expected_shapes[10], expected_shapes[11], expected_shapes[12] = _physical_shape(k), _physical_shape(v), _physical_shape(q)
+    if any(_physical_shape(item) != expected_shapes[i] or item["storage"] != (
             "f32" if i in (seeds[1], 7) or (rows and i == 8) else q["storage"]) for i, item in enumerate(buffers)):
         raise ValueError("source attention reverse private storage roles differ")
+    dims = (b, hq, hkv, sq, sk, d, dv)
+    if bounded:
+        if plan["shape_bounds"] != list(dims) or plan["sequence_bounds"] != [sq, sk]:
+            raise ValueError("source attention reverse root/capacity roles differ")
+        attention_dimensions(_symbolic_dims(plan, dims), list(dims))
+        key_ids = {roles[1], roles[2], gradients[roles[1]], gradients[roles[2]]}
+        for i, item in enumerate(buffers):
+            capacity_shape = expected_shapes[i]
+            if capacity_shape is None:
+                raise ValueError("source attention reverse capacity role is missing")
+            expected_trace = list(capacity_shape)
+            expected_trace[2] = k["trace_shape"][2] if i in key_ids else q["trace_shape"][2]
+            if item["trace_shape"] != expected_trace:
+                raise ValueError("source attention reverse trace sequence roles differ")
+        if (math.prod(_physical_shape(buffers[6])) >= 2**31 or
+                sum(math.prod(_physical_shape(buffers[gradients[i]])) for i in range(3)) > (2**31 - 1) * 128):
+            raise ValueError("source attention reverse capacity launch exceeds native ABI")
+        _verify_paired_trace(plan, gradients)
     _verify_calls(plan)
-    return (b, hq, hkv, sq, sk, d, dv)
+    return dims
+
+
+def _verify_paired_trace(plan, gradients):
+    paired = _functions(plan["paired_graph_ir"])
+    if (len(paired) != 2 or paired[0][2] != plan["source_root"]
+            or 'tessera.autodiff.role = "backward"' not in paired[1][4]
+            or "tessera.autodiff.forward = @" + paired[0][2] not in paired[1][4]
+            or "tessera.autodiff.paired = @" + paired[1][2] not in paired[0][4]
+            or re.search(r"tensor<[^>]*\?", plan["paired_graph_ir"])):
+        raise ValueError("source attention reverse original paired trace differs")
+    _signature(paired[0], range(3), [3, 4, 6, 7], plan["buffers"], "trace_shape")
+    _signature(paired[1], [0, 1, 2, 3, 4, 6, 7],
+               [gradients[i] for i in range(3)], plan["buffers"], "trace_shape")
+    expected = ", ".join(map(str, plan["sequence_bounds"]))
+    if re.findall(r"tessera.attention_sequence_bounds = array<i64: ([^>]+)>",
+                  plan["paired_graph_ir"]) != [expected]:
+        raise ValueError("source attention reverse paired sequence capacities differ")
 
 
 def _verify_calls(plan):
@@ -299,7 +401,7 @@ def _verify_calls(plan):
         raise ValueError("source attention reverse original function differs")
     original = original[0]
     seeds = plan["cotangent_indices"]
-    _signature(original, range(3), [3, 4], buffers)
+    _signature(original, range(3), [3, 4], buffers, "trace_shape" if _bounded(plan) else "shape")
     indices = re.findall(r'tessera.autodiff.wrt_indices = (\[[^\]]+\])', original[4])
     if (len(indices) > 1 or (json.loads(indices[0]) if indices else [0, 1, 2]) != plan["requested_gradients"]
             or 'tessera.autodiff = "reverse"' not in original[4]):
@@ -327,6 +429,12 @@ def _verify_calls(plan):
                 != str(buffers[plan["role_indices"][0]]["shape"][-1]) + " : i64"
             or fields.get("operandSegmentSizes", "array<i32: 1, 1, 1, 0>") != "array<i32: 1, 1, 1, 0>"):
         raise ValueError("source attention reverse original physical policy differs")
+    if _bounded(plan):
+        expected = "(" + ", ".join(_type(buffers[i], "trace_shape") for i in (
+            5, plan["role_indices"][1], plan["role_indices"][2])) + ") -> ("
+        expected += ", ".join(_type(buffers[i], "trace_shape") for i in (6, 7)) + ")"
+        if attention[5] != "{" + attrs + "} : " + expected:
+            raise ValueError("source attention reverse original attention types differ")
     from .nvidia_native import _mlir_f32_bits
     for field in ("dropout_p", "softcap"):
         if field in fields:
@@ -376,7 +484,17 @@ def _verify_calls(plan):
             member_norm = _one(r'^    %\w+ = tessera.rmsnorm %arg0 (.*)$', member[0][5],
                                "source attention reverse member normalization differs")
             clean = lambda text: re.sub(r',? tessera.autodiff.activity = "[^"]*"', '', text)
-            if clean(member_norm) != clean(norm[2]):
+            expected_norm = clean(norm[2])
+            if _bounded(plan):
+                attrs = expected_norm.split(" : (", 1)[0]
+                qid = plan["role_indices"][0]
+                trace = attrs + " : (" + _type(buffers[qid], "trace_shape") + ") -> " + _type(buffers[5], "trace_shape")
+                if expected_norm != trace:
+                    raise ValueError("source attention reverse original normalization types differ")
+                expected_norm = attrs + " : (" + _type(buffers[qid]) + ") -> " + _type(buffers[5])
+                if re.findall(r"tessera.native.query_sequence_bound = ([0-9]+) : i64", graphs[i]) != [str(plan["sequence_bounds"][0])]:
+                    raise ValueError("source attention reverse normalization query bound differs")
+            if clean(member_norm) != expected_norm:
                 raise ValueError("source attention reverse original/member normalization policy differs")
         for key, count in (("argument", len(step["inputs"])), ("result", len(step["outputs"]))):
             binding = _one(r'tessera\.' + key + r'_bindings = (\[[^\]]*\])', member[0][4],
@@ -392,32 +510,45 @@ def _verify_calls(plan):
             (graph, _functions(graph)) for graph in graphs]:
         for fn in reversed(fns):
             text = text[:fn.start()] + text[fn.end():]
-        if not re.fullmatch(r'module attributes \{tessera.arch = "sm_120", tessera.target = "nvidia_sm120"\} \{\s*\}\s*', text):
+        header = 'module attributes {tessera.arch = "sm_120", '
+        if _bounded(plan):
+            header += "tessera.attention_shape_bounds = array<i64: " + ", ".join(map(str, plan["shape_bounds"])) + ">, "
+        header += 'tessera.target = "nvidia_sm120"} {'
+        if not re.fullmatch(re.escape(header) + r"\s*\}\s*", text):
             raise ValueError("source attention reverse program contains unaccounted operations")
 
 
 def _abi(plan, index, dims, entry):
-    rows, columns = math.prod(plan["buffers"][5]["shape"][:-1]), dims[5]
+    rows, columns = math.prod(_physical_shape(plan["buffers"][5])[:-1]), dims[5]
     cooperative = "_cooperative_128_" in entry
     sizes: tuple[int, ...] = (rows if cooperative else (rows + 127) // 128,
-             (math.prod(plan["buffers"][6]["shape"]) + 127) // 128,
-             (sum(math.prod(plan["buffers"][i]["shape"]) for i in (8, 9, 10)) + 127) // 128,
+             (math.prod(_physical_shape(plan["buffers"][6])) + 127) // 128,
+             (sum(math.prod(_physical_shape(plan["buffers"][i])) for i in (8, 9, 10)) + 127) // 128,
              (rows + 127) // 128)
     parameters: tuple[list[str], ...] = (["ptr", "ptr", "i64", "i64"], ["ptr"] * 5 + ["i64"] * 7,
                   ["ptr"] * 10 + ["i64"] * 7, ["ptr"] * 3 + ["i64"] * 2)
     if _rows(plan):
-        sizes = (sizes[0], sizes[1], (math.prod(plan["buffers"][7]["shape"]) + 31) // 32,
-                 (sum(math.prod(plan["buffers"][i]["shape"]) for i in (9, 10, 11)) + 127) // 128,
+        sizes = (sizes[0], sizes[1], (math.prod(_physical_shape(plan["buffers"][7])) + 31) // 32,
+                 (sum(math.prod(_physical_shape(plan["buffers"][i])) for i in (9, 10, 11)) + 127) // 128,
                  (rows + 127) // 128)
         parameters = (parameters[0], parameters[1], ["ptr"] * 7 + ["i64"] * 7,
                       ["ptr"] * 9 + ["i64"] * 7, parameters[3])
     step = plan["steps"][index]
-    return dict(schema=("tessera.nvidia.source_attention_reverse_step.v2" if _rows(plan)
+    abi = dict(schema=("tessera.nvidia.source_attention_reverse_step.v2" if _rows(plan)
                         else "tessera.nvidia.source_attention_reverse_step.v1"), index=index,
                 entry=entry, block=[32 if _rows(plan) and index == 2 else 128, 1, 1], grid=[sizes[index], 1, 1],
                 dimensions=list(dims) if index in ((1, 2, 3) if _rows(plan) else (1, 2)) else [rows, columns],
                 inputs=step["inputs"], outputs=step["outputs"],
                 parameters=parameters[index], storage=plan["buffers"][5]["storage"])
+
+    if _bounded(plan):
+        abi.update(schema=("tessera.nvidia.source_attention_reverse_step.v4" if _rows(plan)
+                           else "tessera.nvidia.source_attention_reverse_step.v3"),
+                   shape_policy="bounded_sequences_v1", shape_bounds=list(dims),
+                   grid_policy="actual_frame_v1", grid_capacity=abi.pop("grid"))
+        abi["dimensions"] = (_symbolic_dims(plan, dims) if index in (
+            (1, 2, 3) if _rows(plan) else (1, 2)) else [DYNAMIC_DIM, columns])
+    return abi
 
 
 def seal(plan, members):
@@ -430,7 +561,7 @@ def seal(plan, members):
         record["provenance"] = {field + "_sha256": sha(record[field]) for field in _FIELDS}
         record["member_digest"] = digest(record)
         records.append(record)
-    data = dict(schema=_ROWS_SCHEMA if _rows(plan) else SCHEMA, plan=copy.deepcopy(plan), members=records)
+    data = dict(schema=_portable_schema(plan), plan=copy.deepcopy(plan), members=records)
     data["contract_digest"] = digest(data)
     restore(data)
     return data
@@ -439,13 +570,13 @@ def seal(plan, members):
 def restore(data):
     from .prepared_source_attention_reverse import ReverseMember
     if (not isinstance(data, dict) or set(data) != {"schema", "plan", "members", "contract_digest"}
-            or data["schema"] not in (SCHEMA, _ROWS_SCHEMA)
+            or data["schema"] not in (SCHEMA, _ROWS_SCHEMA, _BOUNDED_SCHEMA, _BOUNDED_ROWS_SCHEMA)
             or data["contract_digest"] != digest({k: v for k, v in data.items() if k != "contract_digest"})):
         raise ValueError("source attention reverse portable integrity differs")
     data = copy.deepcopy(data)
     plan, records = data["plan"], data["members"]
     dims = validate_plan(plan)
-    if data["schema"] != (_ROWS_SCHEMA if _rows(plan) else SCHEMA):
+    if data["schema"] != _portable_schema(plan):
         raise ValueError("source attention reverse portable/native schema differs")
     if not isinstance(records, list) or len(records) != (5 if _rows(plan) else 4):
         raise ValueError("source attention reverse image count differs")
@@ -462,6 +593,13 @@ def restore(data):
                 or digest(record["abi"]) != digest(_abi(plan, i, dims, record["entry"]))):
             raise ValueError("source attention reverse image provenance/ABI differs")
         entry, tile, graph = record["entry"], record["tile_ir"], record["graph_ir"]
+        if _bounded(plan):
+            capacities = ", ".join(map(str, dims))
+            for stage in _FIELDS:
+                values = re.findall(r"tessera.attention_shape_bounds = array<i64: ([^>]+)>", record[stage])
+                if ((stage in ("graph_ir", "schedule_ir", "tile_ir") and values != [capacities])
+                        or any(value != capacities for value in values)):
+                    raise ValueError("source attention reverse stage/module capacities differ")
         expected = record["abi"]["parameters"]
         signature = _one(r'llvm.func @' + re.escape(entry) + r'\(([^)]*)\)', tile,
                          "source attention reverse Tile entry differs")
@@ -498,6 +636,15 @@ def restore(data):
                     or 'storage = "' + storage + '"' not in tile
                     or 'accum = "f32"' not in tile or 'axis = -1 : i64' not in tile):
                 raise ValueError("source attention reverse normalization physical policy differs")
+            if _bounded(plan):
+                operation = _one(r"[^\n]*tile\.norm_kernel[^\n]*", tile,
+                                 "source attention reverse normalization capacity carrier differs")
+                wanted = {"sequence_bound": dims[3], "row_capacity": dims[0] * dims[1] * dims[3],
+                          "fixed_columns": dims[5], "row_multiple": dims[0] * dims[1]}
+                if (re.findall(r'\bshape_policy = "([^"]*)"', operation) != ["bounded_query_v1"] or any(
+                        re.findall(r"\b" + field + r" = ([0-9]+) : i64", operation) != [str(value)]
+                        for field, value in wanted.items())):
+                    raise ValueError("source attention reverse normalization capacity policy differs")
         else:
             body_hash = _one(r'\bbody_hash = "([0-9a-f]{64})"', graph,
                              "source attention reverse pullback Graph seal differs")
@@ -507,13 +654,35 @@ def restore(data):
                              "source attention reverse pullback Tile seal differs")
             parent = _one(r'tile_body_hash = "([0-9a-f]{64})"', record["target_ir"],
                           "source attention reverse pullback Target seal differs")
-            rows, cols = math.prod(plan["buffers"][5]["shape"][:-1]), dims[5]
+            rows, cols = math.prod(_physical_shape(plan["buffers"][5])[:-1]), dims[5]
             if (source_hash != body_hash or parent != tile_hash
                     or entry != "tessera_native_row_" + body_hash[:16]
-                    or "schema = 6 : i64" not in tile or "tile.row_region_kernel" not in tile
+                    or f"schema = {8 if _bounded(plan) else 6} : i64" not in tile or "tile.row_region_kernel" not in tile
                     or "tessera_nvidia.row_region_kernel" not in record["target_ir"]
                     or f"rows = {rows} : i64" not in tile or f"columns = {cols} : i64" not in tile):
                 raise ValueError("source attention reverse pullback geometry/profile differs")
+            if _bounded(plan):
+                from .native_attention_rows import _parts
+                raw = _one(r"tessera.native.sm120_row_producer = \{([^{}]*)\}", graph,
+                           "source attention reverse bounded pullback producer differs")
+                fields = {}
+                for part in _parts(raw):
+                    key, separator, value = part.partition(" = ")
+                    if not separator or key in fields:
+                        raise ValueError("source attention reverse pullback producer fields differ")
+                    fields[key] = value
+                expected_fields = dict(accum='"f32"', storage=json.dumps(storage),
+                    body_hash=json.dumps(body_hash), rows=f"{rows} : i64",
+                    columns=f"{cols} : i64", schema="8 : i64", sequence_bound=f"{dims[3]} : i64")
+                if (fields != expected_fields or tile.count("tile.row_region_kernel") != 1
+                        or f"row_multiple = {dims[0] * dims[1]} : i64" not in tile):
+                    raise ValueError("source attention reverse pullback capacity seal differs")
+                fn = _functions(graph)[0]
+                text = "\n".join(line[2:] for line in fn[0].splitlines()).rstrip()
+                text = text.replace("func.func @" + fn[2], "func.func private @__native_row_body", 1)
+                text = re.sub(r"tessera.native.sm120_row_producer = \{[^{}]*\},? ?", "", text)
+                if sha(text) != body_hash:
+                    raise ValueError("source attention reverse projected pullback body differs")
         members.append(ReverseMember(graph_ir=record["graph_ir"], schedule_ir=record["schedule_ir"],
                                      tile_ir=record["tile_ir"], target_ir=record["target_ir"],
                                      native_ir=record["native_ir"], entry=entry,

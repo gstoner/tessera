@@ -1,0 +1,37 @@
+{
+  "mixed": {
+    "passed": 510,
+    "skipped": 15,
+    "exit": 0,
+    "includes_owning_gfx1201": 12
+  },
+  "sm120_device": {
+    "passed": 8,
+    "exit": 0
+  },
+  "static_identity_profiles": 12,
+  "normalization_contract_cases": 23,
+  "benchmark_orders": 2,
+  "profiles_per_order": 36,
+  "source_hashes_verified_against_worktree": true,
+  "broader_cpu_and_production_gates": "not_run_for_this_increment",
+  "documentation_pass_diagnostic_gates": {
+    "passed": 315,
+    "exit": 0
+  },
+  "targeted_longgraph_repeat": {
+    "orders": 2,
+    "profiles_per_order": 3,
+    "trials": 31,
+    "nodes": 256
+  },
+  "graphify": {
+    "exit": 0,
+    "nodes": 100773,
+    "edges": 245160,
+    "communities": 3698
+  },
+  "generated_docs_write": {
+    "exit": 0
+  }
+}

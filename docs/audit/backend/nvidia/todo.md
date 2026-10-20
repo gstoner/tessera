@@ -6,6 +6,67 @@ target: nvidia_sm120
 last_updated: 2026-10-19
 ---
 
+## NATIVE-BOUNDED-SOURCE-PUBLIC-20261019 — public capacity replay
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+The named public/portable capacity route passes 24 prepared and 18 bounded public/fresh-process cases plus 14 static public regressions on RTX5070. One owner/images survives sequence shrink/grow; four fresh processes replay with external tools forbidden. Portable/frame checks pass 241; shared/plugin/registry gates pass 346. Paired public timings and broader delivery gates belong to the packet. General source/layout/AD and performance closure remain follow-up required.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_PUBLIC.md.
+Evidence: benchmarks/baselines/native_bounded_source_public_20261019/README.md.
+
+
+## NATIVE-BOUNDED-SOURCE-OWNER-20261019 — native capacity execution
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+The retained native C++ owner now allocates maximum source/attention capacities once, validates a pure actual frame before committing geometry, orders producer streams and protects all private source spans. Production-provider cases pass 36 initial plus 12 added cooperative profiles; 40 legacy source cases pass. Two paired timing orders show larger-row benefits and tiny-frame overhead, with no universal policy promotion. Twelve final observer cases prove fixed allocations/offsets/capacities, private-root protection and atomic rejection of a changed valid geometry with incompatible spans. Evidence: benchmarks/baselines/native_bounded_source_owner_20261019/README.md. Public JIT/portable bounded source integration remains follow-up required.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_OWNER.md.
+
+
+## NATIVE-BOUNDED-SOURCE-PROJECTION-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Native bounded source AD projection now preserves the original static paired witness and verifies a separate capacity-scoped typed call program. Both FP16/BF16, inline/row paths and trace-at-one compile through Schedule/Tile/NVIDIA/NVVM. Twenty-four owning RTX5070 projected-member cases pass five shrink/grow replays each with fixed allocations, independent primal/VJP oracles and guarded tails. The shared cohort passes 359 tests and 171 adjacent tests pass; 18 static full outlines remain identical. Evidence: benchmarks/baselines/native_bounded_source_projection_20261019/README.md. Composed CUDA capacity ownership and public/portable execution remain follow-up required.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_ATTENTION_REVERSE.md.
+
+
+## NATIVE-BOUNDED-QUERY-NORM-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Private bounded RMSNorm members pass eight RTX5070 serial/cooperative FP16/BF16 device cases and two counterbalanced 36-profile timing orders. Twelve legacy norm profiles retain four identical compiler stages. The mixed cohort passes 510 tests with 15 declared foreign/unavailable-hardware skips. Evidence: benchmarks/baselines/native_bounded_query_norm_20261019/README.md. Full bounded source AD/owner/public/portable integration and broad delivery gates remain follow-up required.
+
+Contract: docs/spec/NATIVE_BOUNDED_QUERY_NORM.md.
+
+
+## NATIVE-BOUNDED-SOURCE-ATTENTION-20261019 — native row prerequisite
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Private schema-8 bounded-query row lowering and a shared native conjunction
+proof pass 410 focused gates. RTX5070 passes four bounded profiles plus
+eight static regressions; four separate compiler and four RTX5070 cases
+execute the actual pure source-attention adjoint member. Sixteen SM120/ROCm
+static profiles retain four
+identical stages. Two twelve-profile timing orders remove the initial
+width257 penalty: bounded/static ratios0.965-1.004; width35 remains mixed.
+Event dispatch and completed raw host scopes remain separate.
+
+The packet benchmarks/baselines/native_bounded_query_rows_20261019/README.md
+retains negative experiments and source/compiler/PTX bindings. This proves
+a row prerequisite only. Bounded normalization, original paired-source
+outlining, composed capacity ownership, public/portable execution and
+broad delivery gates remain follow-up required.
+
 ## ROCM-FOLDED-COMMON-GATE-20261019 — sibling assessment
 
 Owner: ROCM-MXFP4-W4A8-1 / ROCM-FP8-BLOCKSCALE-1.

@@ -193,7 +193,8 @@ inline mlir::LogicalResult verifyKernel(mlir::Operation *op) {
     return verifyGateUpKernel(op);
   using namespace mlir;
   bool rocmProfile = schemaProfile && schemaProfile.getInt() == 7;
-  bool singleOutput = schemaProfile && (schemaProfile.getInt() == 6 || rocmProfile);
+  bool boundedProfile = schemaProfile && schemaProfile.getInt() == 8;
+  bool singleOutput = schemaProfile && (schemaProfile.getInt() == 6 || boundedProfile || rocmProfile);
   unsigned buffers = singleOutput ? 3 : 4;
   bool nvidiaTargetBody = op->getName().getStringRef() == "tessera_nvidia.row_region_kernel";
   bool rocmTargetBody = op->getName().getStringRef() == "tessera_rocm.row_region_kernel";
@@ -218,14 +219,20 @@ inline mlir::LogicalResult verifyKernel(mlir::Operation *op) {
   };
   if (!name || name.getValue().empty() || !arch ||
       (rocmProfile ? (arch.getValue() != "gfx1151" && arch.getValue() != "gfx1201") : arch.getValue() != "sm_120") ||
-      !schema || (schema.getInt() != 1 && schema.getInt() != 6 && schema.getInt() != 7) || !rows || rows.getInt() <= 0 || rows.getInt() > INT32_MAX ||
+      !schema || (schema.getInt() != 1 && schema.getInt() != 6 && schema.getInt() != 7 && schema.getInt() != 8) || !rows || rows.getInt() <= 0 || rows.getInt() > INT32_MAX ||
       !columns || columns.getInt() <= 0 || columns.getInt() > INT32_MAX ||
       !storage || (!storage.getValue().isF16() && !storage.getValue().isBF16()) ||
       !threads || threads.getInt() != 128 || !hex(bodyHash) || !hex(artifact) || !hex(source) ||
       (targetBody && !hex(tileBody)) ||
       op->getNumRegions() != 1 || !op->getRegion(0).hasOneBlock() ||
       op->getRegion(0).front().getNumArguments() != 0 || op->getRegion(0).front().getOperations().size() != 1)
-    return op->emitOpError("requires a sealed native SM120 schema-1/6 or ROCm schema-7 row body");
+    return op->emitOpError("requires a sealed native SM120 schema-1/6/8 or ROCm schema-7 row body");
+  auto multiple = op->getAttrOfType<IntegerAttr>("row_multiple");
+  if (boundedProfile ? (!multiple || !multiple.getType().isInteger(64) ||
+          multiple.getInt() <= 0 || multiple.getInt() > rows.getInt() ||
+          rows.getInt() % multiple.getInt() != 0)
+                     : op->hasAttr("row_multiple"))
+    return op->emitOpError("bounded-query rows require their positive capacity-dividing logical prefix");
   auto fn = dyn_cast<LLVM::LLVMFuncOp>(op->getRegion(0).front().front());
   if (!fn || fn.getName() != name.getValue() || fn.getBody().empty() ||
       fn.getNumArguments() != buffers + 2 || !isa<LLVM::LLVMVoidType>(fn.getFunctionType().getReturnType()) ||

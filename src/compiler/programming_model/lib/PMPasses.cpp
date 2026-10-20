@@ -3,6 +3,7 @@
 #include "NativeBlockQuantSchedule.h"
 #include "NativeFP8StoreFusion.h"
 #include "NativeRowSchedule.h"
+#include "Tessera/IR/BoundedQueryNormContract.h"
 //===- PMPasses.cpp — Programming Model v1.1 passes and pipelines ---------===//
 //
 // Library-owned pass bodies. Previously these lived in
@@ -1776,6 +1777,7 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
 }
 
 struct SemanticKernelSchedule {
+  tessera::BoundedQueryNormShape queryShape;
   StringRef family;
   StringRef kind;
   StringRef target;
@@ -1810,11 +1812,22 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     return failure();
   auto input = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
   auto output = dyn_cast<RankedTensorType>(op->getResult(0).getType());
-  if (!input || !output || input.getRank() < 1 || !input.hasStaticShape() ||
-      !output.hasStaticShape())
-    return failure();
+  auto function = op->getParentOfType<func::FuncOp>();
+  bool requested = function && function->hasAttr("tessera.native.query_sequence_bound");
+  auto queryBound = function ? function->getAttrOfType<IntegerAttr>("tessera.native.query_sequence_bound") : IntegerAttr{};
+  if (!input || !output || input.getRank() < 1) return failure();
+  if (requested) {
+    if (!queryBound || !queryBound.getType().isInteger(64) || queryBound.getInt() <= 0 ||
+        queryBound.getInt() > INT32_MAX || input != output || input.getEncoding() ||
+        input.getRank() != 4 || !input.isDynamicDim(2) ||
+        input.isDynamicDim(0) || input.isDynamicDim(1) || input.isDynamicDim(3) ||
+        op->getName().getStringRef() != "tessera.rmsnorm")
+      return failure();
+  } else if (!input.hasStaticShape() || !output.hasStaticShape()) return failure();
 
   SemanticKernelSchedule schedule;
+  schedule.queryShape.bounded = requested;
+  if (requested) schedule.queryShape.sequenceBound = queryBound.getInt();
   schedule.target = moduleString(module, "tessera.target", "target");
   schedule.arch = moduleString(module, "tessera.arch", "arch");
   schedule.storage = storageName(input.getElementType());
@@ -1830,6 +1843,8 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   // delegated MSL route owns its threadgroup), so workgroupSize stays 1.
   bool apple_gpu = schedule.target == "apple_gpu";
   bool nvidia = schedule.target == "nvidia_sm120" && schedule.arch == "sm_120";
+  if (requested && (!nvidia || (schedule.storage != "f16" && schedule.storage != "bf16")))
+    return failure();
   if (nvidia) schedule.expMode = "approx_exp2";
   if (!x86 && !rocm && !apple_gpu && !nvidia)
     return failure();
@@ -1891,11 +1906,34 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     schedule.epsilon = static_cast<float>(eps ? eps.getValueAsDouble() :
         opName == "tessera.rmsnorm_safe" ? 1e-6 : 1e-5);
     if (!std::isfinite(schedule.epsilon) || schedule.epsilon <= 0.0) return failure();
-    for (int64_t dim : input.getShape()) if (dim <= 0) return failure();
+    SmallVector<int64_t> capacity(input.getShape());
+    if (requested) {
+      if (!op->hasAttr("numeric_policy")) return failure();
+      capacity[2] = queryBound.getInt();
+      for (auto field : op->getAttrs()) {
+        auto key = field.getName().getValue();
+        if (key != "eps" && key != "axis" && key != "numeric_policy" &&
+            key != "tessera.effect_kind" && key != "schedule" &&
+            key != "schedule.artifact_hash") return failure();
+        if (key == "tessera.effect_kind" && field.getValue() != StringAttr::get(op->getContext(),"pure"))
+          return failure();
+      }
+    }
+    for (int64_t dim : capacity) if (dim <= 0) return failure();
     schedule.family = "norm";
     schedule.kind = opName == "tessera.layer_norm" ? "layernorm" : "rmsnorm";
-    schedule.columns = input.getShape().back();
-    for (int64_t dim : input.getShape().drop_back()) schedule.rows *= dim;
+    schedule.columns = capacity.back();
+    for (int64_t dim : ArrayRef<int64_t>(capacity).drop_back()) {
+      if (requested && (dim > INT32_MAX || schedule.rows > INT32_MAX / dim)) return failure();
+      schedule.rows *= dim;
+    }
+    if (requested) {
+      if (schedule.columns > INT32_MAX || schedule.rows > INT64_MAX / 2 / schedule.columns)
+        return failure();
+      schedule.queryShape.rowCapacity = schedule.rows;
+      schedule.queryShape.fixedColumns = schedule.columns;
+      schedule.queryShape.rowMultiple = capacity[0] * capacity[1];
+    }
     schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
     // The native Schedule owns this shape decision. Exact SM120 A/B evidence
     // covers the coalesced CTA row schedule; short feature rows retain serial.
@@ -2001,6 +2039,10 @@ static std::string semanticKernelDigest(const SemanticKernelSchedule &schedule) 
        Twine(schedule.workgroupSize) + ";exp=" + schedule.expMode +
        ";ftz=0;schedule=" + schedule.reductionSchedule + ";nan=propagate")
           .str();
+  if (schedule.queryShape.bounded)
+    contract += ";shape_policy=bounded_query_v1;sequence_bound=" +
+        std::to_string(schedule.queryShape.sequenceBound) + ";row_multiple=" +
+        std::to_string(schedule.queryShape.rowMultiple);
   if (schedule.family == "activation")
     contract += schedule.storage == "f16" ? ";zero_mode=positive" : ";zero_mode=preserve";
   if (schedule.family == "norm") {
@@ -3443,6 +3485,31 @@ struct GraphToSchedulePass
 
   void runOnOperation() override {
     ModuleOp mod = getOperation();
+    for (auto function : mod.getOps<func::FuncOp>()) {
+      if (!function->hasAttr("tessera.native.query_sequence_bound")) continue;
+      auto reject = [&]() {
+        function.emitError("native bounded-query norm requires one isolated compact SM120 RMSNorm entry");
+        signalPassFailure();
+      };
+      if (moduleString(mod,"tessera.target","target") != "nvidia_sm120" ||
+          moduleString(mod,"tessera.arch","arch") != "sm_120" ||
+          mod.getBody()->getOperations().size() != 1 ||
+          function.getNumArguments() != 1 || function.getNumResults() != 1 ||
+          !function.getBody().hasOneBlock() ||
+          function.getBody().front().getOperations().size() != 2 ||
+          (function.getArgAttrDict(0) && !function.getArgAttrDict(0).empty())) {
+        reject(); return;
+      }
+      auto &first = function.getBody().front().front();
+      auto returned = dyn_cast<func::ReturnOp>(function.getBody().front().back());
+      if (first.getName().getStringRef() != "tessera.rmsnorm" ||
+          first.getNumOperands() != 1 || first.getNumResults() != 1 ||
+          first.getOperand(0) != function.getArgument(0) ||
+          !returned || returned.getNumOperands() != 1 ||
+          returned.getOperand(0) != first.getResult(0)) {
+        reject(); return;
+      }
+    }
     bool blockQuantSelected = false;
     if (failed(block_quant::schedule(mod,blockQuantSelected))) return signalPassFailure();
     if (blockQuantSelected) return;
@@ -3807,6 +3874,7 @@ struct GraphToSchedulePass
         state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
         state.addAttribute("kind", builder.getStringAttr(selected->kind));
         state.addAttribute("epsilon", builder.getF32FloatAttr(selected->epsilon));
+        tessera::addBoundedQueryNormShape(state,builder,selected->queryShape);
       } else if (selected->family == "softmax") {
         if (selected->reductionSchedule != "serial")
           state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
@@ -5747,9 +5815,16 @@ struct ScheduleToTilePass
                   attrString("zero_mode") != (selected->storage == "f16" ? "positive" : "preserve");
       } else if (isNorm) {
         auto eps = scheduled->getAttrOfType<FloatAttr>("epsilon");
+        auto queryShape = tessera::readBoundedQueryNormShape(scheduled,scheduled->getOperand(0).getType());
+        if (failed(queryShape)) return signalPassFailure();
         altered = altered || attrString("kind") != selected->kind ||
                   attrString("schedule") != selected->reductionSchedule ||
-                  !eps || eps.getValueAsDouble() != selected->epsilon;
+                  !eps || eps.getValueAsDouble() != selected->epsilon ||
+                  queryShape->bounded != selected->queryShape.bounded ||
+                  queryShape->sequenceBound != selected->queryShape.sequenceBound ||
+                  queryShape->rowCapacity != selected->queryShape.rowCapacity ||
+                  queryShape->fixedColumns != selected->queryShape.fixedColumns ||
+                  queryShape->rowMultiple != selected->queryShape.rowMultiple;
       } else if (isSoftmax)
         altered = altered || attrString("exp_mode") != selected->expMode ||
                   attrBool("ftz") != false ||
@@ -5826,6 +5901,7 @@ struct ScheduleToTilePass
           state.addAttribute("kind", scheduled->getAttr("kind"));
           state.addAttribute("affine", kb.getBoolAttr(false));
           state.addAttribute("tessera.norm_epsilon", kb.getF32FloatAttr(selected->epsilon));
+          tessera::addBoundedQueryNormShape(state,kb,selected->queryShape);
         } else if (isSoftmax) {
           if (scheduled->hasAttr("schedule"))
             state.addAttribute("schedule", scheduled->getAttr("schedule"));

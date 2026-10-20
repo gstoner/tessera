@@ -16,6 +16,8 @@ SCHEMA = "tessera.native.source_attention_reverse.v1"
 _SCHEMA_KINDS = {
     SCHEMA: "norm_attention_saved_reverse",
     "tessera.native.source_attention_reverse.v2": "norm_attention_saved_reverse_rows",
+    "tessera.native.source_attention_reverse.v3": "norm_attention_saved_reverse_bounded",
+    "tessera.native.source_attention_reverse.v4": "norm_attention_saved_reverse_rows_bounded",
 }
 _ATTRIBUTE = "tessera.native.source_attention_reverse_program_json"
 

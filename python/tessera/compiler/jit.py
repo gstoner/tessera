@@ -3393,13 +3393,17 @@ class JitFn:
         return artifact
 
     def native_backward(
-        self, *args: Any, out_cotangents: Any, **kwargs: Any
+        self, *args: Any, out_cotangents: Any, sequence_bounds=None, **kwargs: Any
     ) -> tuple[Any, ...]:
         """Compile and launch the native reverse product for the selected target.
 
         There is no NumPy fallback: missing tools, unsupported lowering, or ABI
         failure raises. Successful execution records the exact compiler path
         and invocation delta in ``last_backward_execution``.
+
+        Explicit sequence_bounds=(Sq_capacity, Sk_capacity) retains one native
+        capacity program for the named SM120 RMSNorm/saved-LSE source family.
+        Other dimensions, storage, source semantics and gradient roles stay fixed.
         """
         self._native_backward_artifact_factory = None
         self._native_backward_artifact = None
@@ -3411,7 +3415,17 @@ class JitFn:
                 "native_backward requires @jit(autodiff='reverse'); "
                 "forward requests use compiled_jvp_ir"
             )
+        if sequence_bounds is not None:
+            from .native_bounded_attention_jvp import validate_bounds
+            sequence_bounds = validate_bounds(self.target, sequence_bounds)
         self._enforce_call_time_constraints(args, kwargs)
+        if sequence_bounds is not None:
+            from .native_vjp_composites import execute_bounded_native_vjp_composite
+            composite = execute_bounded_native_vjp_composite(
+                self, args, kwargs, out_cotangents=out_cotangents, bounds=sequence_bounds)
+            self.last_backward_execution = dict(composite.execution)
+            self._native_backward_artifact = composite.runtime_artifact
+            return composite.gradients
         source_module = self._specialized_autodiff_module(args, kwargs)
         target_kind = normalize_target_kind(self.target)
         # Lane selection below is per *family*; the capability registry, the

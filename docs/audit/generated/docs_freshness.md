@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-19**.
 
 ## Headline
 
-- **183** docs catalogued across the canonical doc tree.
-- **182** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **48** updated within the last 30 days.
+- **187** docs catalogued across the canonical doc tree.
+- **186** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **52** updated within the last 30 days.
 - **70** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -38,6 +38,10 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `LOWERING_PIPELINE_SPEC.md` | Normative | 2026-07-13 | 98 | ✓ |
 | `MEMORY_MODEL_SPEC.md` | Normative | 2026-05-22 | 150 | ✓ |
 | `NATIVE_ARTIFACT_SPEC.md` | Normative | 2026-07-19 | 92 | ✓ |
+| `NATIVE_BOUNDED_QUERY_NORM.md` | - | 2026-10-19 | 0 | ✓ |
+| `NATIVE_BOUNDED_SOURCE_ATTENTION_REVERSE.md` | - | 2026-10-19 | 0 | ✓ |
+| `NATIVE_BOUNDED_SOURCE_OWNER.md` | - | 2026-10-19 | 0 | ✓ |
+| `NATIVE_BOUNDED_SOURCE_PUBLIC.md` | - | 2026-10-19 | 0 | ✓ |
 | `NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md` | - | 2026-10-17 | 2 | ✓ |
 | `NATIVE_GRAPH_SLICE_CONTRACT.md` | - | 2026-10-16 | 3 | ✓ |
 | `NATIVE_NVFP4_BOUNDED_SOURCE_CONTRACT.md` | - | 2026-10-16 | 3 | ✓ |

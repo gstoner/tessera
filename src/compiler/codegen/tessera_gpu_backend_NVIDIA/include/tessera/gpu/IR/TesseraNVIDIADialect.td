@@ -393,9 +393,15 @@ def NVIDIA_ProfilerProbeOp : TesseraNVIDIA_Op<"profiler_probe"> {
 def NVIDIA_RowRegionKernelOp : Op<TesseraNVIDIADialect, "row_region_kernel",
     [SingleBlock, NoTerminator, SymbolTable, RecursiveMemoryEffects]> {
   let summary = "Sealed SM120 row body retaining typed scalar memory accesses";
+  let description = [{
+    Schema 8 is the SM120 bounded-query one-output row profile. Rows is the
+    allocation capacity and row_multiple is its fixed logical B*H prefix;
+    runtime rows are positive, capacity-bounded and divisible by that prefix.
+    Existing static row profiles retain their exact-row semantics.
+  }];
   let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$rows,
       I64Attr:$columns, TypeAttr:$storage, I64Attr:$workgroup_size,
-      I64Attr:$schema, StrAttr:$source_hash, StrAttr:$artifact_hash,
+      I64Attr:$schema, OptionalAttr<I64Attr>:$row_multiple, StrAttr:$source_hash, StrAttr:$artifact_hash,
       StrAttr:$tile_body_hash, StrAttr:$body_hash);
   let regions = (region AnyRegion:$body);
   let assemblyFormat = "attr-dict-with-keyword $body";

@@ -1053,7 +1053,10 @@ def Tile_ActivationKernelOp : Tile_Op<"activation_kernel"> {
 // flattened row count, row width, and epsilon.
 def Tile_NormKernelOp : Tile_Op<"norm_kernel"> {
   let summary = "Launch-level typed RMSNorm or LayerNorm";
-  let arguments = (ins Variadic<AnyType>:$inputs);
+  let arguments = (ins Variadic<AnyType>:$inputs,
+      OptionalAttr<StrAttr>:$shape_policy, OptionalAttr<I64Attr>:$sequence_bound,
+      OptionalAttr<I64Attr>:$row_capacity, OptionalAttr<I64Attr>:$fixed_columns,
+      OptionalAttr<I64Attr>:$row_multiple);
   let results = (outs);
   let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
   let hasVerifier = 1;
@@ -1665,9 +1668,15 @@ def Tile_StoreElementOp : Tile_Op<"store_element", [MemoryEffects<[MemWrite]>]> 
 def Tile_RowRegionKernelOp : Tile_Op<"row_region_kernel",
     [SingleBlock, NoTerminator, SymbolTable, RecursiveMemoryEffects]> {
   let summary = "Sealed native multi-result scalar/reduction row body";
+  let description = [{
+    Schema 8 is the SM120 bounded-query one-output row profile. Rows is the
+    allocation capacity and row_multiple is its fixed logical B*H prefix;
+    runtime rows are positive, capacity-bounded and divisible by that prefix.
+    Existing static row profiles retain their exact-row semantics.
+  }];
   let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$rows,
       I64Attr:$columns, TypeAttr:$storage, I64Attr:$workgroup_size,
-      I64Attr:$schema, StrAttr:$source_hash, StrAttr:$artifact_hash, StrAttr:$body_hash);
+      I64Attr:$schema, OptionalAttr<I64Attr>:$row_multiple, StrAttr:$source_hash, StrAttr:$artifact_hash, StrAttr:$body_hash);
   let regions = (region AnyRegion:$body);
   let assemblyFormat = "attr-dict-with-keyword $body";
   let hasVerifier = 1;

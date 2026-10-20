@@ -1,4 +1,5 @@
 #include "Tessera/IR/ScalarContraction.h"
+#include "Tessera/IR/BoundedQueryNormContract.h"
 #include "Tessera/IR/TileBufferViewContract.h"
 #include "Tessera/IR/RowRegionContract.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
@@ -2309,6 +2310,8 @@ static LogicalResult materializeSm120ActivationKernel(
 static LogicalResult materializeSm120NormKernel(
     tessera::tile::NormKernelOp kernel, OpBuilder &builder) {
   Operation *op = kernel.getOperation();
+  auto queryShape = tessera::readBoundedQueryNormShape(op);
+  if (failed(queryShape)) return failure();
   ValueRange inputs = kernel.getInputs();
   auto storage = op->getAttrOfType<StringAttr>("storage");
   auto accum = op->getAttrOfType<StringAttr>("accum");
@@ -2351,6 +2354,23 @@ static LogicalResult materializeSm120NormKernel(
       builder, loc, mulI64(builder, loc, block, i64Constant(builder, loc, 128)),
       thread);
   Value active = lessI64(builder, loc, row, rows);
+  if (queryShape->bounded) {
+    // Scalar launch guards are CTA-uniform in the cooperative row schedule.
+    // They dominate every memory access and every participating barrier.
+    Value zero = i64Constant(builder,loc,0);
+    Value capacity = i64Constant(builder,loc,queryShape->rowCapacity);
+    Value multiple = i64Constant(builder,loc,queryShape->rowMultiple);
+    Value positive = arith::CmpIOp::create(builder,loc,arith::CmpIPredicate::ugt,rows,zero);
+    Value within = arith::CmpIOp::create(builder,loc,arith::CmpIPredicate::ule,rows,capacity);
+    Value remainder = arith::RemUIOp::create(builder,loc,rows,multiple);
+    Value aligned = arith::CmpIOp::create(builder,loc,arith::CmpIPredicate::eq,remainder,zero);
+    Value fixed = arith::CmpIOp::create(builder,loc,arith::CmpIPredicate::eq,columns,
+        i64Constant(builder,loc,queryShape->fixedColumns));
+    Value valid = arith::AndIOp::create(builder,loc,
+        arith::AndIOp::create(builder,loc,positive,within),
+        arith::AndIOp::create(builder,loc,aligned,fixed));
+    active = arith::AndIOp::create(builder,loc,active,valid);
+  }
   auto loadF32 = [&](Value linear) -> Value {
     Value ptr = LLVM::GEPOp::create(
         builder, loc, xBase.getType(), storageType, xBase,
@@ -5720,8 +5740,8 @@ struct LowerTileToNVIDIAPass
         return signalPassFailure();
       }
       auto kernel = rowKernels.front();
-      if (kernel.getArch() != "sm_120" || (kernel.getSchema() != 1 && kernel.getSchema() != 6)) {
-        kernel.emitError("NVIDIA row lowering requires its SM120 schema-1 pair or schema-6 reverse profile");
+      if (kernel.getArch() != "sm_120" || (kernel.getSchema() != 1 && kernel.getSchema() != 6 && kernel.getSchema() != 8)) {
+        kernel.emitError("NVIDIA row lowering requires its SM120 schema-1 pair or schema-6/8 reverse profile");
         return signalPassFailure();
       }
       if (failed(tessera::row_region::verifyKernel(kernel))) return signalPassFailure();
@@ -6090,6 +6110,11 @@ struct LowerTileToNVIDIAPass
       }
 
       if (isTileOp(op, "tile.norm_kernel")) {
+        if (op->hasAttr("shape_policy") && smVersion != kConsumerBlackwellSM) {
+          op->emitError("bounded-query norm requires the exact SM120 consumer");
+          signalPassFailure();
+          return;
+        }
         if (smVersion < kConsumerBlackwellSM ||
             failed(materializeSm120NormKernel(
                 cast<tessera::tile::NormKernelOp>(op), builder))) {

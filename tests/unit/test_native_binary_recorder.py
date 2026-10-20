@@ -6,6 +6,7 @@ from benchmarks.nvidia.record_native_tensor_binary import options, event_windows
 @pytest.mark.parametrize("arguments", [
     ["--rounds", "0"], ["--rounds", "3"], ["--rounds", "1002"],
     ["--calls", "0"], ["--calls", "10001"],
+    ["--shape", "1", "16777216", "1"], ["--shape", "1", "16777217", "1"],
     ["--shape", "0", "1", "1"], ["--shape", "65536", "65536", "1"],
     ["--storage", "f16", "f16"], ["--case", "lhs", "lhs"],
 ])
@@ -46,3 +47,8 @@ def test_binary_recorder_default_shape_and_order():
     args = options(["--output", "unused.json"])
     assert args.shape == [(256, 4096, 256)] and args.rounds == 6
     assert args.storage == ["f16", "bf16"] and args.case == ["lhs", "rhs", "both"]
+
+
+def test_binary_recorder_accepts_the_last_valid_gamma_k_extent_without_allocating():
+    args = options(["--output", "unused.json", "--shape", "1", "16777215", "1"])
+    assert args.shape == [[1, 2**24 - 1, 1]]

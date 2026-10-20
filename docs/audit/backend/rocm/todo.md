@@ -19018,3 +19018,13 @@ Binary producer control follow-through (NATIVE-BINARY-PRODUCERS-20261020):
 exact composed MXFP4 numerical control passes on gfx1201; its images and FP8
 K128/K32, MXFP8 and approximate folded MXFP4 images remain byte-identical to
 merged compiler 01922c4a. This does not establish ROCm binary program admission.
+
+
+Review follow-through (NATIVE-BINARY-PRODUCERS-20261020): the existing native
+frame v1 i64 scalar fields now preserve positive signed-64-bit values. Shape
+axes, capacity and launch bounds remain independent. Production prepare and a
+test-only observer share one pure C++ metadata planner; the shipped provider's
+102 public exports and ABI layout remain unchanged. The observer TU lives in
+tests, with a pinned absence from the public ABI inventory. The recorder gates
+K <2^24 before hardware so its FP32 gamma-K oracle remains mathematically valid.
+Not applicable to HIP physical ABI: this frame schema is NVIDIA-owned. The five gfx1201 quantized image controls remain unchanged under the same compiler. No gfx1151/gfx1201 scalar range or binary program execution is inferred from NVIDIA transport proof.

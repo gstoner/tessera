@@ -184,16 +184,15 @@ int invokeNativeFrame(uint64_t handle,const TesseraNvidiaMatmulHostView *roots,s
 }
 } // namespace
 
-extern "C" int tessera_nvidia_native_frame_prepare_v1(
+namespace {
+// Pure metadata planning shared by production preparation and the optional
+// test observer. No CUDA calls, modules, streams or arena allocation occur here.
+int validateNativeFrameMetadata(
     const TesseraNvidiaMatmulHostView *buffers,const uint8_t *roles,size_t count,
-    const TesseraNvidiaNativeFrameStepV1 *steps,size_t stageCount,uint64_t *handle) {
-  error.clear();if (handle) *handle=0;
-  if (getpid()!=process) return bad("native frame cannot cross fork");
-  std::lock_guard<std::mutex> lock(mutex);
-  if (!buffers || !roles || !steps || !handle || count<2 || count>128 ||
+    const TesseraNvidiaNativeFrameStepV1 *steps,size_t stageCount,
+    NativeFrameOwner &owner) {
+  if (!buffers || !roles || !steps || count<2 || count>128 ||
       stageCount<1 || stageCount>64) return bad("invalid native frame metadata extent");
-  try {
-    auto owner=std::make_unique<NativeFrameOwner>();
     std::vector<bool> initialized(count,false),read(count,false);
     for (size_t i=0;i<count;++i) {
       const auto &buffer=buffers[i];
@@ -206,15 +205,15 @@ extern "C" int tessera_nvidia_native_frame_prepare_v1(
       if (bytes>INT64_MAX || bytes!=buffer.bytes ||
           buffer.strides[0]!=int64_t(buffer.shape[1]*width) ||
           buffer.strides[1]!=int64_t(width) ||
-          owner->bytes>SIZE_MAX-255 || buffer.bytes>SIZE_MAX-owner->bytes-255)
+          owner.bytes>SIZE_MAX-255 || buffer.bytes>SIZE_MAX-owner.bytes-255)
         return bad("native frame physical buffer capacity/layout differs");
-      owner->descriptors.push_back(buffer);
-      owner->offsets.push_back(owner->bytes);
-      owner->bytes=(owner->bytes+buffer.bytes+255)&~size_t(255);
-      if (roles[i]==0) {owner->roots.push_back(i);initialized[i]=true;}
-      if (roles[i]==2) owner->outputs.push_back(i);
+      owner.descriptors.push_back(buffer);
+      owner.offsets.push_back(owner.bytes);
+      owner.bytes=(owner.bytes+buffer.bytes+255)&~size_t(255);
+      if (roles[i]==0) {owner.roots.push_back(i);initialized[i]=true;}
+      if (roles[i]==2) owner.outputs.push_back(i);
     }
-    if (owner->roots.empty() || owner->outputs.empty()) return bad("native frame needs roots and outputs");
+    if (owner.roots.empty() || owner.outputs.empty()) return bad("native frame needs roots and outputs");
     for (size_t i=0;i<stageCount;++i) {
       const auto &source=steps[i];
       if (!source.image || !source.image_bytes || source.image_bytes>16*1024*1024 ||
@@ -241,15 +240,32 @@ extern "C" int tessera_nvidia_native_frame_prepare_v1(
       }
       if (threads>1024) return bad("native frame block exceeds thread capacity");
       for (size_t j=0;j<stage.scalarCount;++j) {
-        if (source.scalars[j]<=0 || source.scalars[j]>INT32_MAX)
-          return bad("native frame scalar exceeds its positive static extent ABI");
+        // The wire field and LLVM kernel parameter are int64_t/i64.
+        // Buffer axes and launch geometry are checked independently above.
+        if (source.scalars[j]<=0)
+          return bad("native frame scalar must be a positive i64 value");
         stage.scalars[j]=source.scalars[j];
       }
-      owner->stages.push_back(stage);
+      owner.stages.push_back(stage);
     }
     for (size_t i=0;i<count;++i)
       if (!initialized[i] || (roles[i]==1 && !read[i]))
         return bad("native frame has unwritten or unconsumed private storage");
+  return 0;
+}
+} // namespace
+
+extern "C" int tessera_nvidia_native_frame_prepare_v1(
+    const TesseraNvidiaMatmulHostView *buffers,const uint8_t *roles,size_t count,
+    const TesseraNvidiaNativeFrameStepV1 *steps,size_t stageCount,uint64_t *handle) {
+  error.clear();if (handle) *handle=0;
+  if (getpid()!=process) return bad("native frame cannot cross fork");
+  if (!handle) return bad("invalid native frame metadata extent");
+  std::lock_guard<std::mutex> lock(mutex);
+  try {
+    auto owner=std::make_unique<NativeFrameOwner>();
+    if (int status=validateNativeFrameMetadata(
+            buffers,roles,count,steps,stageCount,*owner)) return status;
     if (!current(owner->context) ||
         !ok(cuCtxGetId(owner->context,&owner->identity),"native frame context identity"))
       return bad("native frame requires an exact live SM120 context");

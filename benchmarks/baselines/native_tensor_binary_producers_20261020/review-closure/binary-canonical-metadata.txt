@@ -1,0 +1,14 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.4, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/angstorms/scratch/bounded-source-attention-20261019/worktree
+configfile: pyproject.toml
+plugins: platformdirs-4.12.2, hypothesis-6.168.3, cov-7.1.0, timeout-2.4.0, xdist-3.8.0
+timeout: 180.0s
+timeout method: signal
+timeout func_only: False
+collected 45 items / 42 deselected / 3 selected
+
+tests/device/nvidia/test_native_tensor_binary_producers.py ...           [100%]
+
+- generated xml file: /home/angstorms/scratch/w11-program-pipeline-20261019/next-producer-census/binary-canonical-metadata.xml -
+======================= 3 passed, 42 deselected in 3.16s =======================

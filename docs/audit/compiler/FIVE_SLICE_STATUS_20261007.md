@@ -2712,3 +2712,12 @@ close arbitrary producers, dynamic/layout/AD reconstruction or the five original
 aggregate programs.
 
 Binary producer evidence: benchmarks/baselines/native_tensor_binary_producers_20261020/README.md.
+
+Binary review follow-through: the existing v1 positive-i64 wire range is now
+honored by Python/native owners. Shared pure metadata planning and a test-only
+observer prove wide counts without claiming large numerical execution. The
+recorder guards its gamma-K domain before hardware. Current local full CPU
+passes 30,854 / 3,721 declared skips; full compiler executes
+2,755 cases; the fresh provider passes 143 cases and six timing rows retain
+all IR/frame/image identities. See native_tensor_binary_producers_20261020/review-closure.
+Exact-head CI/review and the original five-program completion gates remain open.

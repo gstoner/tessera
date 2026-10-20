@@ -1,0 +1,43 @@
+{
+  "checkout_head": "b56976250547f78c2715335d20f2dc76f275d4ea",
+  "provider_sha256": "5737462623d8e93612ec05b9b63697bb2af8e078a43ccfce0d839a799a8d41f7",
+  "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0\nCopyright (C) 2025 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n",
+  "command": [
+    "g++",
+    "-std=c++17",
+    "-O3",
+    "-DNDEBUG",
+    "-shared",
+    "-fPIC",
+    "-pthread",
+    "-I/usr/local/cuda-13.3/include",
+    "-I/home/angstorms/scratch/bounded-source-attention-20261019/worktree/src/runtime/include",
+    "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp",
+    "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp",
+    "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp",
+    "-L/usr/lib/wsl/lib",
+    "-Wl,-rpath,/usr/lib/wsl/lib",
+    "-lcuda",
+    "-ldl",
+    "-o",
+    "/home/angstorms/scratch/w11-program-pipeline-20261019/native-binary-i64-shared-native/.production.so.building"
+  ],
+  "runtime_source_sha256": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "b66ac01ed545180257e450237383f618241f2d8eb8220dd16504f5ae284c8553",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/active_source_owner.inc": "6a6c07097d1a93600a24e9c24394975101cab778564f68c27f2b66d4dc8252a9",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "4c876db7e491acd449e44d4a7ab840c31c7b642601b1e8244f8d2b80e259164e",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "24c3a6e4bdb2a4e15fd34750e846e57d528af6254828716daab7a1c25362382d",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/resident_tensor_result.inc": "295025b1d1fe7801b5ac1c384efc6ec551dac9afae4f32b38fbc4463084b3bb9",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/source_reverse_owner.h": "cb24a9ffd6a072c166829577ad33184ed750919211bc41aa1790479358691d6d",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_active_source_program.h": "a170833b3ba65776dea8b521d612c21e377d46b2edd36d4d2a142ac87ede9ae3",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_fft.h": "86def9804cc412b883d06b6faf6d46e979cbec53a5c1a55a6d7888bd502e10e3",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_gemm.cpp": "c5260d215618eef55564d97cdba50615efed759a3c40466244aadbd15ce07f08",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_native_frame.h": "c27b322bc9759413c1eb477ab806547a70be74939c2e32435b7611eef491b6fa",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "2a7084de05effc2cb65c058e44edec1595f3ee48defbd31a8230559b798e111a",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "bcac6691084a9e8d18ddae0302ddbdd1c997fbf805babc2c0bf2d91307840d2b",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_source_reverse_program.h": "e88d4def02ee2f0e45f35869a456cab9eabf3e32b6052a05da806167af4f495a"
+  },
+  "transport_sha256": "2cf9b12ecec4a66c4ed02dea7710337000f0012238b9cb0fca1b6d3a4c644a95",
+  "test_only_observer": false,
+  "test_observer_source_sha256": null
+}

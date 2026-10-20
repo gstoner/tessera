@@ -1,0 +1,8 @@
+{
+  "initial_wrong_assumption": "native prepare would not allocate its large arena",
+  "observed": "prepare eagerly allocates arena and pinned staging",
+  "intermediate_diagnostic": "three no-allocation assertions failed after the scalar-width fix accepted N=2^31; these were diagnostic-design failures",
+  "correction": "one pure metadata planner is used by production prepare and the test-only observer; the observer performs no CUDA arena allocation",
+  "old_provider_counterexample": "binary-wide-runtime-baseline.xml.gz proves the original INT32 scalar cap; this remains a real transport/runtime mismatch",
+  "final_proof": "three canonical metadata cases pass; normal-sized execution is proved separately by the 143-case cohort"
+}

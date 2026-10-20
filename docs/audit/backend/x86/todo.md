@@ -12231,3 +12231,13 @@ or FP64 accumulation requests cannot be silently normalized. See
 `docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md` for the admitted envelope.
 
 Not applicable to the new SM120 physical recipe: existing x86 elementwise storage and Target lowering retain their ownership. Shared internal Schedule registration does not admit an x86 package. Native x86 producer integration and exact-device proof remain follow-up required.
+
+
+Review follow-through (NATIVE-BINARY-PRODUCERS-20261020): the existing native
+frame v1 i64 scalar fields now preserve positive signed-64-bit values. Shape
+axes, capacity and launch bounds remain independent. Production prepare and a
+test-only observer share one pure C++ metadata planner; the shipped provider's
+102 public exports and ABI layout remain unchanged. The observer TU lives in
+tests, with a pinned absence from the public ABI inventory. The recorder gates
+K <2^24 before hardware so its FP32 gamma-K oracle remains mathematically valid.
+Not applicable to x86 physical ABI: the frame schema and native provider are NVIDIA-owned. LLVM CPU/AVX-512 ownership and ABI remain unchanged; the recorder oracle constraint adds no x86 support claim.

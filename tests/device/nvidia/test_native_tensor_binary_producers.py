@@ -45,6 +45,8 @@ def operands(case, values):
 
 
 def check(output, case, values):
+    if not 0 < values[0].shape[1] < 2**24:
+        raise ValueError("the FP32 gamma-K oracle requires 0 < K < 2**24")
     a, b = operands(case, values)
     left, right = a.astype(np.float64), b.astype(np.float64)
     expected = left @ right
@@ -218,3 +220,70 @@ def test_compiler_projected_add_member_rounding_and_canaries(storage):
             np.testing.assert_array_equal(value.view(bits), snapshot.view(bits))
     finally:
         fn.close_native_storage()
+
+
+@pytest.mark.parametrize("storage", ["f16", "bf16", "f32"])
+def test_wide_compiler_add_scalar_metadata_without_arena(storage):
+    """Compiler/PTX/native metadata proof only; no huge allocation or execution."""
+    import base64
+    import ctypes as ct
+    import os
+    import copy
+    import json
+    import re
+    from tessera.compiler.nvidia_native import _compile_tile_ir
+    from tessera.compiler.prepared_native_tensor_frame import NativeFrameStep, _descriptor
+    from tessera.compiler.prepared_nvidia_matmul import HostView
+    from tests.unit.test_native_tensor_binary_producers import binary_source
+    from tests.unit.test_native_tensor_program_pipeline import _run
+
+    assert runtime._nvidia_device_name() == "sm_120"
+    source = binary_source("lhs", storage)
+    source = source.replace(f"tensor<17x32x{storage}>", f"tensor<32768x65536x{storage}>")
+    source = source.replace(f"tensor<32x11x{storage}>", f"tensor<65536x1x{storage}>")
+    source = source.replace("tensor<17x11xf32>", "tensor<32768x1xf32>")
+    tiled = _run(source, "--tessera-graph-to-schedule", "--tessera-schedule-to-tile")
+    assert tiled.returncode == 0, tiled.stderr
+    frame = json.loads(base64.b64decode(re.search(
+        r'tessera.native.tensor_program_frame_json = "([^"]+)"', tiled.stdout)[1]))
+    leaf = _run(tiled.stdout, "--tessera-schedule-to-tile=tensor-member=0")
+    assert leaf.returncode == 0, leaf.stderr
+    stage = copy.deepcopy(frame["stages"][0])
+    assert stage["scalars"] == [2**31]
+    _, ptx, *_ = _compile_tile_ir(leaf.stdout, stage["entry"])
+    specs = copy.deepcopy([frame["buffers"][0], frame["buffers"][1],
+                           frame["buffers"][stage["output"]]])
+    for index, spec in enumerate(specs):
+        spec.update(id=index, role="output" if index == 2 else "input")
+    stage["output"] = 2
+    frame.update(buffers=specs, roots=[0, 1], output=2, stages=[stage])
+    signature = re.search(re.escape(stage["entry"])+r"\((.*?)\)", ptx, re.S)
+    assert signature and len(re.findall(r"\.param\s+\.u64\b", signature[1])) == 4
+    library = os.environ.get("TESSERA_NATIVE_FRAME_OBSERVER_LIB")
+    if not library:
+        pytest.fail("wide native metadata proof requires the matching test-only observer")
+    observer = ct.CDLL(library)
+    probe = observer.tessera_nvidia_native_frame_test_metadata_v1
+    probe.argtypes = [ct.POINTER(HostView), ct.POINTER(ct.c_uint8), ct.c_size_t,
+                      ct.POINTER(NativeFrameStep), ct.c_size_t,
+                      ct.POINTER(ct.c_int64), ct.POINTER(ct.c_uint64)]
+    probe.restype = ct.c_int
+    descriptors = (HostView * 3)(*(_descriptor(spec) for spec in specs))
+    roles = (ct.c_uint8 * 3)(0, 0, 2)
+    blob = ct.create_string_buffer(ptx.encode())
+    step = NativeFrameStep()
+    step.image, step.image_bytes = ct.addressof(blob), len(ptx.encode())
+    step.entry, step.input_count, step.scalar_count = stage["entry"].encode(), 2, 1
+    step.buffers[:3] = [0, 1, 2]
+    step.scalars[0] = 2**31
+    step.grid[:], step.block[:] = stage["geometry"][:3], stage["geometry"][3:]
+    scalar, arena = ct.c_int64(), ct.c_uint64()
+    assert probe(descriptors, roles, 3, ct.byref(step), 1,
+                 ct.byref(scalar), ct.byref(arena)) == 0
+    assert scalar.value == 2**31
+    assert arena.value == sum(spec["bytes"] for spec in specs)
+    for invalid in (0, -1, -(2**63)):
+        step.scalars[0] = invalid
+        assert probe(descriptors, roles, 3, ct.byref(step), 1,
+                     ct.byref(scalar), ct.byref(arena)) != 0
+        assert scalar.value == arena.value == 0

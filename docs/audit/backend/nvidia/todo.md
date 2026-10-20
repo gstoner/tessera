@@ -16428,3 +16428,13 @@ or FP64 accumulation requests cannot be silently normalized. See
 `docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md` for the admitted envelope.
 
 Parity validated on RTX5070/SM120: 60 focused compiler cases and 39 ordinary/resident device cases pass, plus three direct producer-bit diagnostics. FP16/BF16 consumers retain typed fragments; FP32 retains scalar FMA. Six K4096 timing profiles meet all 36 captured duration gates; eight neighboring programs retain 18 native images. Local full gates pass. Exact-head CI/review and generic producer/AD closure remain follow-up required. No universal performance claim.
+
+
+Review follow-through (NATIVE-BINARY-PRODUCERS-20261020): the existing native
+frame v1 i64 scalar fields now preserve positive signed-64-bit values. Shape
+axes, capacity and launch bounds remain independent. Production prepare and a
+test-only observer share one pure C++ metadata planner; the shipped provider's
+102 public exports and ABI layout remain unchanged. The observer TU lives in
+tests, with a pinned absence from the public ABI inventory. The recorder gates
+K <2^24 before hardware so its FP32 gamma-K oracle remains mathematically valid.
+Owning proof: three compiler/PTX/native metadata probes cover N=2^31 without CUDA arena allocation. A 143-case fresh-provider cohort passes ordinary/resident/rounding, transport and metadata checks. Canonical production rebuild is byte-identical; the relocated test-TU observer is independently checked. Fresh timing and exact-head delivery remain active. No large-buffer numerical execution is claimed.

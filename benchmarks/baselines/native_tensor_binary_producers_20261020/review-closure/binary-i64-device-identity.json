@@ -1,0 +1,16 @@
+{
+  "base": "b56976250547f78c2715335d20f2dc76f275d4ea",
+  "compiler_sha256": "68358e312c1cd8623ebf6ba3b07aec0d0bd4e4dfb16298888474b8d491788312",
+  "production_provider_sha256": "5737462623d8e93612ec05b9b63697bb2af8e078a43ccfce0d839a799a8d41f7",
+  "observer_sha256": "58b30d68a74a7d7caff278909b4ff776071201fb7897b9b4113c6996adf0d3cd",
+  "source_sha256": {
+    "python/tessera/compiler/prepared_native_tensor_frame.py": "2cf9b12ecec4a66c4ed02dea7710337000f0012238b9cb0fca1b6d3a4c644a95",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "f8cc05dcabce30f4dd769cebe842b70c098cccaae9cef749c60841a67a8ec377",
+    "tests/unit/test_native_tensor_frame_transport.py": "f65a14834ee55d1e60517148a0b82e7c4c014c68923877df3007554ac2ad9135",
+    "tests/unit/test_native_tensor_binary_producers.py": "66c505fdc07c6f7589767157a89f36c86b3f46df66cddf89a67ab3c3446bb443",
+    "tests/device/nvidia/test_native_tensor_binary_producers.py": "820bb01cb1380f11758ced31cbdfa156acdd6ffe653feb923daafe66eb59e361",
+    "benchmarks/nvidia/record_native_tensor_binary.py": "94344ef300f5dead02bb0c6b8a949eb0970d2e6d7adfcb55e267482b520d60c0",
+    "tests/unit/test_native_binary_recorder.py": "495934341105ca5ecbbbfe7fb2aa7b7f097f39b03b8a34a08eceb87c088dcc67"
+  },
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88"
+}

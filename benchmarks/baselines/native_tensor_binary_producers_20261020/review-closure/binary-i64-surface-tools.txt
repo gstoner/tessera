@@ -1,0 +1,9 @@
+[surface_audit:tools] 6 entries  {'runnable': 3, 'runnable_optional': 0, 'compile_only': 2, 'scaffold': 0, 'broken': 0, 'archived': 1}
+  PASS  tools/tessera-opt  (compile_only)
+  PASS  tools/tessera-translate  (runnable)
+  PASS  tools/profiler  (compile_only)
+  PASS  tools/profiler/scripts  (runnable)
+  PASS  tools/roofline_tools  (runnable)
+  NOT-RUN  tools/CLI/Tessera_CLI_Starter_v0_1  (archived)
+
+[surface_audit:tools] passed=5 failed=0 skipped=0

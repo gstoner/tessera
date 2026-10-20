@@ -1,0 +1,6 @@
+{
+  "production_byte_identical": true,
+  "sha256": "5737462623d8e93612ec05b9b63697bb2af8e078a43ccfce0d839a799a8d41f7",
+  "prior_device_receipt": "binary-i64-device.xml",
+  "scope": "143-case production-runtime proof transfers by exact binary identity; canonical test-TU observer separately revalidated"
+}

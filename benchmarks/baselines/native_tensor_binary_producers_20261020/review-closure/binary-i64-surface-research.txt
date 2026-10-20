@@ -1,0 +1,5 @@
+[surface_audit:research] 2 entries  {'runnable': 1, 'runnable_optional': 0, 'compile_only': 1, 'scaffold': 0, 'broken': 0, 'archived': 0}
+  PASS  research/pddl_instruct  (runnable)
+  PASS  research/sandbox_compilers  (compile_only)
+
+[surface_audit:research] passed=2 failed=0 skipped=0

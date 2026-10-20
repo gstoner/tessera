@@ -30,6 +30,8 @@ def options(argv=None):
         raise ValueError("calls must be between 1 and 10000")
     args.shape = args.shape or [(256, 4096, 256)]
     for m, k, n in args.shape:
+        if k >= 2**24:
+            raise ValueError("the FP32 gamma-K oracle requires K < 2**24")
         if (not all(0 < extent < 2**31 for extent in (m, k, n))
                 or max(m*k, k*n, m*n) >= 2**31):
             raise ValueError("shape exceeds the static compact native frame envelope")

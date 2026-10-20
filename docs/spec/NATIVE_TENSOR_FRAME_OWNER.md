@@ -87,3 +87,31 @@ Graph/Schedule/Tile/Target ancestry; do not replace the remaining integration
 with Python operation dispatch or reconstructed kernels. Then prove
 compiler-free warm public replay, portable reconstruction, broader source and
 layout envelopes, and separate exact-device benchmarking before delivery.
+
+
+## Positive i64 extent follow-through — 2026-10-20
+
+Sync: NATIVE-BINARY-PRODUCERS-20261020.
+The existing v1 step wire fields and LLVM parameters are signed i64. Python
+transport and native metadata planning now preserve positive values through
+INT64_MAX instead of imposing an unrelated INT32_MAX scalar cap. Buffer shape
+axes, byte products/capacities, selected kernel semantics and CUDA grid/block
+limits retain their independent checks. This does not widen an operation's
+semantic envelope or assert that large buffers fit a particular GPU.
+
+The same pure C++ metadata planner feeds production prepare and a test-only
+observer translation unit. The shipped provider still exports the same 102
+public entrypoints. The observer lives under tests/device/nvidia and is absent
+from the shipped ABI inventory; no generator exemption was added. Production
+prepare still creates its module/stream and allocates its arenas eagerly.
+
+Compiler-projected add members with element count 2^31 preserve the pointer/i64
+PTX signature and pass the shared native metadata probe for FP16/BF16/FP32.
+These probes allocate no CUDA arena and make no large numerical-execution
+claim. Normal-sized ordinary/resident/rounding tests separately prove execution.
+A test that initially assumed prepare was allocation-free was corrected; its
+assertion failures are not evidence of a numerical failure or lazy allocation.
+
+The timing recorder requires K <2^24 before any hardware probe because its
+FP32 gamma-K oracle requires K*u <1. The oracle checks that condition directly.
+This is a measurement-envelope constraint, not a backend matmul limit.

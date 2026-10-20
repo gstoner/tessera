@@ -61,3 +61,40 @@ def test_transport_checks_aggregate_aligned_arena_without_hardware(extra):
     else:
         with pytest.raises(ValueError, match="aligned arena exceeds its 64-bit capacity"):
             validate_frame(value)
+
+
+@pytest.mark.parametrize("scalar", [2**31 - 1, 2**31, 2**63 - 1])
+def test_transport_preserves_positive_i64_kernel_scalars(scalar):
+    value = frame()
+    value["stages"][0]["scalars"] = [scalar]
+    validate_frame(value)
+
+
+@pytest.mark.parametrize("scalar", [0, -1, 2**63, True, 1.5])
+def test_transport_rejects_nonpositive_overflow_or_untyped_scalars(scalar):
+    value = frame()
+    value["stages"][0]["scalars"] = [scalar]
+    with pytest.raises(ValueError):
+        validate_frame(value)
+
+
+@pytest.mark.compiler_route
+@pytest.mark.usefixtures("production_compiler")
+def test_compiler_wide_binary_count_matches_i64_frame_transport():
+    import base64
+    import json
+    import re
+    from tests.unit.test_native_tensor_binary_producers import binary_source
+    from tests.unit.test_native_tensor_program_pipeline import _run
+
+    source = binary_source("lhs", "f16")
+    source = source.replace("tensor<17x32xf16>", "tensor<32768x65536xf16>")
+    source = source.replace("tensor<32x11xf16>", "tensor<65536x1xf16>")
+    source = source.replace("tensor<17x11xf32>", "tensor<32768x1xf32>")
+    result = _run(source, "--tessera-graph-to-schedule", "--tessera-schedule-to-tile")
+    assert result.returncode == 0, result.stderr
+    encoded = re.search(r'tessera.native.tensor_program_frame_json = "([^"]+)"', result.stdout)
+    assert encoded
+    projected = json.loads(base64.b64decode(encoded[1]))
+    assert projected["stages"][0]["scalars"] == [2**31]
+    validate_frame(projected)

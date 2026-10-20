@@ -4,6 +4,10 @@ Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Sync: NATIVE-BINARY-PRODUCERS-20261020. Base: merged PR997,
 502f2322db3dc02573e63e605d5ecef82b2d0653.
 
+Current review follow-through: [scalar-width/oracle closure](review-closure/README.md).
+The initial receipts below remain historical; current runtime and oracle proof is
+recorded there.
+
 ## Compiler and exact-device proof
 
 Original Graph `add` on the left, right or both matmul operands, add/ReLU

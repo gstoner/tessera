@@ -15825,3 +15825,13 @@ or FP64 accumulation requests cannot be silently normalized. See
 `docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md` for the admitted envelope.
 
 Not applicable to the new SM120 physical recipe: the native tensor-program and Target ownership gates exclude Apple. The existing Apple Tile elementwise verifier and runtime ABI remain unchanged. Native Metal producer integration remains follow-up required; no Apple device evidence is added.
+
+
+Review follow-through (NATIVE-BINARY-PRODUCERS-20261020): the existing native
+frame v1 i64 scalar fields now preserve positive signed-64-bit values. Shape
+axes, capacity and launch bounds remain independent. Production prepare and a
+test-only observer share one pure C++ metadata planner; the shipped provider's
+102 public exports and ABI layout remain unchanged. The observer TU lives in
+tests, with a pinned absence from the public ABI inventory. The recorder gates
+K <2^24 before hardware so its FP32 gamma-K oracle remains mathematically valid.
+Not applicable to Apple physical ABI: the frame schema and runtime provider are NVIDIA-owned. Existing Metal/CPU ownership and public ABI are unchanged; no Apple execution or datatype promotion follows.

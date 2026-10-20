@@ -14014,7 +14014,7 @@ Evidence: benchmarks/baselines/rocm_mxfp4_fragment_decode_20261020/README.md.
 ### 2026-10-20 — native binary tensor producer integration
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
-PRs: pending; sync NATIVE-BINARY-PRODUCERS-20261020.
+PRs: #998 (open); sync NATIVE-BINARY-PRODUCERS-20261020.
 
 Outcome: native C++ Graph/Schedule/Tile/NVIDIA lowering preserves both add
 producer inputs, repeated SSA references and typed intermediate rounding.
@@ -14033,6 +14033,15 @@ Local delivery: 30,842 CPU passes / 3,721 declared skips;
 ODS exact inventory/consumer gate 783 passes; 33 generated docs, all five
 surfaces, claim lint, Ruff, zero-error mypy and Graphify pass. The initial ODS
 count mismatch is retained with its correction and full retry receipt.
+
+Review closure: positive i64 scalar fields retain their declared width;
+production prepare shares one pure metadata planner with a test-only TU.
+All 102 public exports are unchanged. K<2^24 is checked before hardware for the
+FP32 gamma-K recorder oracle. Canonical production bytes match the 143-case
+fresh-provider cohort; three canonical wide metadata probes pass without CUDA
+arena allocation. Six fresh timing rows retain identical IR/frame/images and
+all 36 captured duration gates. Current full CPU: 30,854 passed /
+3,721 declared skips; all 2,755 compiler cases execute without skips.
 
 Remaining: exact-head publication/CI/review;
 general producer/layout/dynamic/AD reconstruction and all five aggregate

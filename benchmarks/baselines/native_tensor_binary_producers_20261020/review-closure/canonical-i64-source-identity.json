@@ -1,0 +1,10 @@
+{
+  "benchmarks/nvidia/record_native_tensor_binary.py": "94344ef300f5dead02bb0c6b8a949eb0970d2e6d7adfcb55e267482b520d60c0",
+  "python/tessera/compiler/prepared_native_tensor_frame.py": "2cf9b12ecec4a66c4ed02dea7710337000f0012238b9cb0fca1b6d3a4c644a95",
+  "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "b66ac01ed545180257e450237383f618241f2d8eb8220dd16504f5ae284c8553",
+  "tests/device/nvidia/test_native_tensor_binary_producers.py": "820bb01cb1380f11758ced31cbdfa156acdd6ffe653feb923daafe66eb59e361",
+  "tests/unit/test_native_binary_recorder.py": "495934341105ca5ecbbbfe7fb2aa7b7f097f39b03b8a34a08eceb87c088dcc67",
+  "tests/unit/test_native_tensor_frame_transport.py": "f65a14834ee55d1e60517148a0b82e7c4c014c68923877df3007554ac2ad9135",
+  "tests/unit/test_runtime_abi_audit.py": "ac039c36b1cb377d124378ded5cb6398816272a7821aa2e6ab37500af8effdc4",
+  "tests/device/nvidia/native_tensor_frame_metadata_observer.cpp": "b3f8c3cac0b0cd3b0ee372ef3d32a566130b15eccc0f4f49a522c4670a3c4c43"
+}

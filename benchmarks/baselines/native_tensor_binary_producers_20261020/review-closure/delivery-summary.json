@@ -1,0 +1,26 @@
+{
+  "status": "passed",
+  "cpu_counts": {
+    "tests": 34575,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 3721,
+    "passed": 30854
+  },
+  "cpu_raw_junit_sha256": "4242ceb7e0ec822e81a80b187b78dd9ffa5e99a4b17c3c605ba47f8321953eca",
+  "compiler_passed": 2755,
+  "compiler_skipped": 0,
+  "device_cohort_passed": 143,
+  "canonical_metadata_cases": 3,
+  "scope": "143 cohort uses exact production binary SHA57374626; three canonical observer cases are repeated metadata checks, not extra numerical workloads; no large execution claim",
+  "final_gates": {
+    "surface_audits": "all five passed",
+    "claim_lint": "passed",
+    "generated_docs": 33,
+    "mypy_errors": 0,
+    "ruff": "passed",
+    "audit_docs": "passed",
+    "compiler_plan": "passed",
+    "graphify": "completed"
+  }
+}

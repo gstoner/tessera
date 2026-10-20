@@ -85,7 +85,9 @@ def validate_frame(frame):
                 or not stage["entry"] or "\0" in stage["entry"]):
             raise ValueError("native frame stage fields differ")
         inputs = _integers(stage["inputs"], limit=len(buffers))
-        scalars = _integers(stage["scalars"], limit=2**31)
+        # Kernel scalar parameters are signed i64 in the native frame ABI.
+        # Shape axes and CUDA grids retain their separate narrower bounds.
+        scalars = _integers(stage["scalars"], limit=2**63)
         geometry = _integers(stage["geometry"], limit=2**32, count=6)
         if (not 1 <= len(inputs) <= 8 or len(scalars) > 8 or not all(scalars)
                 or not all(geometry) or type(stage["output"]) is not int

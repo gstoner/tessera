@@ -63,5 +63,15 @@
     "gzip_file": "fp32-root-docs-final.txt.gz",
     "uncompressed_sha256": "1c582cf39bc7e02ac606dd2d1c4a39c4cea7afbdf1a8cd7e853d32afe23ac8a4",
     "gzip_sha256": "6df81d1885159a3a2388d4e959c2df1dff6a7c57f5fa48614419b641c0cc0d2e"
+  },
+  "fp32-root-compiler-final.txt": {
+    "gzip_file": "fp32-root-compiler-final.txt.gz",
+    "uncompressed_sha256": "cff7eab824ad04981626574ac265d8805d8fa2926edc64d4cb250ab6f4d6517a",
+    "gzip_sha256": "b9e96721f87c662e0b44ec0b6aeaa0412b360883f6d820a71e06e46ce09c3d38"
+  },
+  "fp32-root-compiler-final.xml": {
+    "gzip_file": "fp32-root-compiler-final.xml.gz",
+    "uncompressed_sha256": "3aed9773b5a0652c6d4cd6b6b4e363c19da43b50043cad41e5952533c77e1361",
+    "gzip_sha256": "c5ebb441293e3761dc833d727be2e2ea54edb5b85cedeea450a34128628909f2"
   }
 }

@@ -39,8 +39,8 @@ leaf still validates its storage pair and numerical policy independently.
   documents and the 11 audit lifecycle cases pass. The first production
   compiler sweep has 2,662 passes and one obsolete producer-refusal failure.
   That fixture now requires both retained native stages; its targeted lane
-  passes 129 cases. The final compiler rerun and publication gates remain
-  active; no aggregate compiler-lane pass is claimed yet.
+  passes 129 cases. The final compiler rerun passes all 2,663 cases with
+  zero skips (JUnit execution verified). Publication gates remain active.
 
 The first attempted focused command named a missing test path and ran no
 tests (fp32-root-green.txt.gz). The next lane found two stale refusal fixtures

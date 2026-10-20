@@ -10,19 +10,19 @@ last_updated: 2026-10-20
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
 Sync: ROCM-BOUNDED-CONTIGUOUS-PACK-20261020.
+Evidence: benchmarks/baselines/rocm_bounded_fragment_loads_20261020/README.md.
 
-Delivery context: PR995 merged as 71564e7679bee9efeda5c0b18ac2a6430a9a7936
-after exact-head CI and review. Earlier FP32-root candidate statements below
-retain their original evidence checkpoints.
+Native ROCm bounded contiguous K packs retain a guarded vector load; partial
+K, strided K and packed MXFP4 B retain scalar paths. Generic zero-fill is
+preserved without depending on masked stores. No shared IR, dtype, pass,
+numerical policy or runtime ABI changes. The additive exact-MXFP4 recorder
+uses existing checked native program ownership and shared duration admission;
+Python supplies inputs/oracles and measurement only.
 
-Contract: retain the existing bounded Tile fragment element/zero-fill
-semantics with a guarded contiguous-vector load. Partial K, strided K and
-packed MXFP4 retain scalar fallback. No shared IR spelling, dtype, numeric
-policy, pass registration or runtime ABI changes.
-
-Not applicable to Metal physical execution: the ROCm target materializer
-implements this load choice. Metal fragment access and native ownership are
-unchanged; no Apple GPU execution evidence or scheduling promotion is added.
+Not applicable to Metal physical execution: only ROCm target load
+materialization changes. The preserved Tile zero-fill contract is shared, but
+no Metal schedule, image or runtime ABI changes. Native-program timing and
+WMMA numerical evidence are AMD-specific; no new Apple proof is claimed.
 
 ## NATIVE-TENSOR-FP32-ROOTS-20261020 — original producer storage candidate
 

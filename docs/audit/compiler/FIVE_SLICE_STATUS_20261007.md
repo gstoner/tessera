@@ -7,30 +7,37 @@ audit_role: reference
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
 Sync: ROCM-BOUNDED-CONTIGUOUS-PACK-20261020.
+Evidence: benchmarks/baselines/rocm_bounded_fragment_loads_20261020/README.md.
 
-Delivery context: PR995 merged as 71564e7679bee9efeda5c0b18ac2a6430a9a7936
-after exact-head CI and review. Earlier FP32-root candidate statements below
-retain their original evidence checkpoints.
+Native ROCm bounded contiguous K packs retain a guarded vector load; partial
+K, strided K and packed MXFP4 B retain scalar paths. Generic zero-fill is
+preserved without depending on masked stores. No shared IR, dtype, pass,
+numerical policy or runtime ABI changes. The additive exact-MXFP4 recorder
+uses existing checked native program ownership and shared duration admission;
+Python supplies inputs/oracles and measurement only.
 
-Contract: retain the existing bounded Tile fragment element/zero-fill
-semantics with a guarded contiguous-vector load. Partial K, strided K and
-packed MXFP4 retain scalar fallback. No shared IR spelling, dtype, numeric
-policy, pass registration or runtime ABI changes.
+Owning parity: retained vector compiler passes 32 gfx1201 and 16 gfx1151
+cases, each with twelve shapes and tight-capacity/canary controls. Sixteen
+gfx1151 FP8 cases are declared ISA exclusions. A direct hipcc WMMA diagnostic
+reproduces gfx1151 float rounding; the test uses the FP32 forward bound without
+an absolute floor, while integer/zero-fill/input/canary checks remain exact.
+gfx942 remains compiler-only evidence.
 
-Candidate compiler builds and passes 200 FP8/MXFP8/exact-MXFP4 device-suite
-tests and 52 existing fragment/compiler tests. Direct gfx1201 control versus
-candidate proof passes 192 checks over eight operand pairs and twelve short-K,
-ragged-row/column envelopes; unmasked output exposes zero-fill errors.
-The maintained fixture adds memory-order and tight-capacity controls;
-29 structural cases pass, including gfx1151 and gfx942 compile-only evidence.
-Owning gfx1151 execution remains follow-up required.
+The counterbalanced 24-row evaluation repeats M200/N1024/K4096 gains:
+FP8 K128 205.6 -> 86.3 us; FP32-scaled K32 1655.5 -> 108.3 us.
+MXFP8/folded MXFP4 small differences are not promoted. Completed public-call
+windows are separate and show that staging/launch overhead remains material.
+The evaluated 32-thread compiler annotation is removed after K32 regressions
+of 3.79x (M208) and 1.66x (M200) against vector loads alone.
 
-The first 24-row resident Graph comparison includes FP8 K128, FP32-scaled K32,
-MXFP8 and explicitly approximate folded MXFP4. M200/N1024/K4096 FP8 K128 falls
-from 206 to 86 us; K32 FP32 scaling falls from 1654 to 108 us. Small differences
-and unchanged folded profiles require repeated paired measurement. Completed
-public calls, exact packed MXFP4 performance, wider shapes and full delivery
-gates remain open. No selector promotion or aggregate ROCm closure follows.
+Exact packed MXFP4 ordinary primal/JVP/reverse passes four M256 rows, including
+K4096/N1024,N2048. Captured member diagnostics put >99% of their summed time in
+matmul, not cast/gate work; this does not resolve the Radiance A-fetch/LDS gap.
+Paired native-program timing preserves the image and program identities and
+separates host dispatch gaps from public calls. Broader MXFP4 attribution,
+general five-slice closure remain open. Local delivery gates pass: 30,813 CPU
+cases (3,721 declared skips), 2,692 production compiler cases without skips,
+322 final drift cases, Ruff and the zero-error mypy ratchet.
 
 The original five aggregate slices remain open.
 

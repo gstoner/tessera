@@ -1,0 +1,671 @@
+{
+  "schema": "tessera.paired_exact_mxfp4_program.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "compiler_sha256": {
+    "candidate": "276e09dfe344a910b345a71de4d39eeaf430a3a18a290fc052b1489cc648adb2",
+    "reference": "db3a4e86bb42c937d4da70fb98a45266e8e758241c7c773115906d9a6ab871ec"
+  },
+  "source_sha256": {
+    "benchmarks/rocm/record_paired_exact_mxfp4.py": "7a2eae6d11c0c89999490af6824e1c5ea60bfca324aaf99a85c9aeef096badae",
+    "benchmarks/rocm/record_gfx1201_interleaved_compiler_formats.py": "4464ef607a531395c619609093ee0387591f4e5674c8628ead46cc605a6c101f",
+    "tests/device/rocm/test_mxfp4_residual_native_execution.py": "734331383301fd04d40898ffc1978d337aab56c92050b6ff959dfe9fea69d355",
+    "tests/unit/test_native_mxfp4_residual_gate.py": "34b692cc8f4b244d8743e92b710a8b0477d133dcce66102edf6796a3b3a80532",
+    "python/tessera/compiler/native_scaled_program.py": "2f8a84c318f5683eb36067ea91c3a5916b4a67e28d0381921b53898800dcfd6d",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "4fb5ebe16d393543d77d61d0abef69ded7afce73ea6989b4cb0ced9a53f934b4",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "c6ad26ef425de4dae424f2ae27960f313b108726fcd40c9adae85a45500e6b52"
+  },
+  "runtime_sha256": "2821855e4eaa726f0af107f5cfc0b1b149523f91db10f794ed68cd01581d0c71",
+  "timing_scope": "HIP event span around repeated native primal programs including host dispatch gaps; preparation, uploads, readback and compilation excluded; not kernel-only or public-call latency",
+  "memory_scope": "separate checked native owners with byte-identical inputs; allocations stay live across alternating windows",
+  "claim": "exact-device attribution only; no selector promotion, model-quality claim or Radiance comparison",
+  "rows": [
+    {
+      "shape_mkn": [
+        256,
+        4096,
+        2048
+      ],
+      "metadata": {
+        "candidate": {
+          "program_digest": "52bc49d5a1dbb994299f0a9a97ec88b8775caa29a979d1c2a3044306a44f9adf",
+          "image_sha256": [
+            "19ddf74bdeecbc51731b0cda983b6d96248e9e37221ad04cfa01f6416f9f10c8",
+            "7a43dd6c7d2f6ac43aebb4cfd74a97a81ead49eff4fa21a199e0745de5132e2e",
+            "afa7535a2b7f5ee83e7b81c033a620828d1c4481c125a4550f59662c772419ad"
+          ],
+          "member_operations": [
+            "tessera.scaled_matmul",
+            "tessera.cast",
+            "tessera.mul"
+          ]
+        },
+        "reference": {
+          "program_digest": "52bc49d5a1dbb994299f0a9a97ec88b8775caa29a979d1c2a3044306a44f9adf",
+          "image_sha256": [
+            "9d94f8914daa0c5e38649624b2736207f41a80c5b2a3ebd7dd6b96f9b3ea1f68",
+            "7a43dd6c7d2f6ac43aebb4cfd74a97a81ead49eff4fa21a199e0745de5132e2e",
+            "afa7535a2b7f5ee83e7b81c033a620828d1c4481c125a4550f59662c772419ad"
+          ],
+          "member_operations": [
+            "tessera.scaled_matmul",
+            "tessera.cast",
+            "tessera.mul"
+          ]
+        }
+      },
+      "input_sha256": [
+        "8cc80df4a17235657a6ab2f95a68f4fd628445f24d49ed8d0b760dcd7abeab4d",
+        "637d2b0ec507ce9eef8df552d121c1a4d05e45b9957fef1dad0e1545070a53aa",
+        "fca27bc3d5e390cf4cb2f173a859b756b2f65ecc21f04578b052e74e20f29bce",
+        "f3e4db73fa2e2642fb19efc4288f401b230bf324a4c13152affd9c3e826c512f",
+        "42b78da5f7072a5b8ccb0ace7198aca490f3c78e19cc587c4601a80edebd31e2"
+      ],
+      "correctness": "exact independent FP64 coefficient, required BF16 store, then FP32 gate; before and after every window",
+      "samples": {
+        "candidate": [
+          {
+            "device_window_ms": 48.30830001831055,
+            "host_window_ms": 48.603483,
+            "native_event_ms_per_invocation": 1.5096343755722046,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 50.3214111328125,
+            "host_window_ms": 50.50513,
+            "native_event_ms_per_invocation": 1.5725440979003906,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 49.52422332763672,
+            "host_window_ms": 49.883732,
+            "native_event_ms_per_invocation": 1.5476319789886475,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 48.90800476074219,
+            "host_window_ms": 49.106871,
+            "native_event_ms_per_invocation": 1.5283751487731934,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 49.06752014160156,
+            "host_window_ms": 49.391084,
+            "native_event_ms_per_invocation": 1.5333600044250488,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 49.43239974975586,
+            "host_window_ms": 49.625918,
+            "native_event_ms_per_invocation": 1.5447624921798706,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 50.29307174682617,
+            "host_window_ms": 50.64049,
+            "native_event_ms_per_invocation": 1.5716584920883179,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 47.37589645385742,
+            "host_window_ms": 47.57672,
+            "native_event_ms_per_invocation": 1.4804967641830444,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 48.47666931152344,
+            "host_window_ms": 48.800058,
+            "native_event_ms_per_invocation": 1.5148959159851074,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 50.76919174194336,
+            "host_window_ms": 50.933569,
+            "native_event_ms_per_invocation": 1.58653724193573,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 45.65921401977539,
+            "host_window_ms": 45.952611,
+            "native_event_ms_per_invocation": 1.426850438117981,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.520355224609375,
+            "host_window_ms": 41.712082,
+            "native_event_ms_per_invocation": 1.297511100769043,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 43.818180084228516,
+            "host_window_ms": 44.133772,
+            "native_event_ms_per_invocation": 1.3693181276321411,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.61497497558594,
+            "host_window_ms": 41.801082,
+            "native_event_ms_per_invocation": 1.3004679679870605,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 46.15798568725586,
+            "host_window_ms": 46.491502,
+            "native_event_ms_per_invocation": 1.4424370527267456,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 42.44029998779297,
+            "host_window_ms": 42.610038,
+            "native_event_ms_per_invocation": 1.3262593746185303,
+            "launches": 32
+          }
+        ],
+        "reference": [
+          {
+            "device_window_ms": 49.57533645629883,
+            "host_window_ms": 49.777118,
+            "native_event_ms_per_invocation": 1.5492292642593384,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 49.67321014404297,
+            "host_window_ms": 49.980577,
+            "native_event_ms_per_invocation": 1.5522878170013428,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 47.96806716918945,
+            "host_window_ms": 48.182137,
+            "native_event_ms_per_invocation": 1.4990020990371704,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 47.724693298339844,
+            "host_window_ms": 48.054482,
+            "native_event_ms_per_invocation": 1.4913966655731201,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 47.44588851928711,
+            "host_window_ms": 47.631794,
+            "native_event_ms_per_invocation": 1.4826840162277222,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 46.553497314453125,
+            "host_window_ms": 46.862453,
+            "native_event_ms_per_invocation": 1.4547967910766602,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 49.52391052246094,
+            "host_window_ms": 49.723369,
+            "native_event_ms_per_invocation": 1.5476222038269043,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 49.834720611572266,
+            "host_window_ms": 50.185999,
+            "native_event_ms_per_invocation": 1.5573350191116333,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 49.40370559692383,
+            "host_window_ms": 49.596119,
+            "native_event_ms_per_invocation": 1.5438657999038696,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 46.72005081176758,
+            "host_window_ms": 47.130514,
+            "native_event_ms_per_invocation": 1.4600015878677368,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.59912109375,
+            "host_window_ms": 41.787696,
+            "native_event_ms_per_invocation": 1.2999725341796875,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.17267990112305,
+            "host_window_ms": 41.496578,
+            "native_event_ms_per_invocation": 1.2866462469100952,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 44.84485626220703,
+            "host_window_ms": 45.029446,
+            "native_event_ms_per_invocation": 1.4014017581939697,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 40.46226501464844,
+            "host_window_ms": 40.785198,
+            "native_event_ms_per_invocation": 1.2644457817077637,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 47.97517776489258,
+            "host_window_ms": 48.155706,
+            "native_event_ms_per_invocation": 1.499224305152893,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 46.67264175415039,
+            "host_window_ms": 47.059518,
+            "native_event_ms_per_invocation": 1.4585200548171997,
+            "launches": 32
+          }
+        ]
+      },
+      "orders": [
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ]
+      ],
+      "admission": {
+        "minimum_device_window_ms": 10.0,
+        "observed_minimum_ms": 40.46226501464844,
+        "launches": 32,
+        "calibration_per_launch_ms": [
+          1.4662585258483887,
+          1.3580214977264404,
+          1.4905253648757935,
+          1.459464192390442,
+          1.520911693572998,
+          1.5353355407714844
+        ],
+        "rejected_series": [],
+        "status": "duration_admitted"
+      },
+      "median_paired_ratio": 1.0142902079172034
+    },
+    {
+      "shape_mkn": [
+        256,
+        4096,
+        1024
+      ],
+      "metadata": {
+        "candidate": {
+          "program_digest": "2237801db4154e285710c36d8bb420dad0030b6cf640a8eb4f8b26c2239e899c",
+          "image_sha256": [
+            "7e3a3a9c0fe1f81f607eddf4f6ee2e73ab115a3ddfcb43f987bdad07a1efff87",
+            "9abf993933b3391a5c3879deb98756bf35d526501507c2a8c105c6fab293f042",
+            "71de43baf0c7de239f785b0bf1b385a510f2cad63fbcd402d61229a1d09da1b3"
+          ],
+          "member_operations": [
+            "tessera.scaled_matmul",
+            "tessera.cast",
+            "tessera.mul"
+          ]
+        },
+        "reference": {
+          "program_digest": "2237801db4154e285710c36d8bb420dad0030b6cf640a8eb4f8b26c2239e899c",
+          "image_sha256": [
+            "0b32f500500aa9bde12f3bb2387927a52b495a00583f32016d6723f78edae05c",
+            "9abf993933b3391a5c3879deb98756bf35d526501507c2a8c105c6fab293f042",
+            "71de43baf0c7de239f785b0bf1b385a510f2cad63fbcd402d61229a1d09da1b3"
+          ],
+          "member_operations": [
+            "tessera.scaled_matmul",
+            "tessera.cast",
+            "tessera.mul"
+          ]
+        }
+      },
+      "input_sha256": [
+        "b7c317c54ddd569fe5c1393246d308dba062ff211b743e146665ae8c9bed152c",
+        "eb92d359f46dfe589e374fc12c481ab81113f2f8275a1060e2a92b0c288aada0",
+        "75750733080c6a391c74a46caecd1dfa23fdf12df6463d750ec69db488b3e2f0",
+        "76ec32e0e9c11dcd7997aa01875c50f790b80e12837c0ca17abebcfd4dbdd9dc",
+        "ab8565b32b36a1b27658c8ff81ca8691bb3ae995e8ca2edf22ba7675f014ff5f"
+      ],
+      "correctness": "exact independent FP64 coefficient, required BF16 store, then FP32 gate; before and after every window",
+      "samples": {
+        "candidate": [
+          {
+            "device_window_ms": 28.792827606201172,
+            "host_window_ms": 29.037648,
+            "native_event_ms_per_invocation": 0.8997758626937866,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 42.079368591308594,
+            "host_window_ms": 42.441747,
+            "native_event_ms_per_invocation": 1.3149802684783936,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 42.1413688659668,
+            "host_window_ms": 42.382132,
+            "native_event_ms_per_invocation": 1.3169177770614624,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 29.455448150634766,
+            "host_window_ms": 29.701099,
+            "native_event_ms_per_invocation": 0.9204827547073364,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.625999450683594,
+            "host_window_ms": 41.971657,
+            "native_event_ms_per_invocation": 1.3008124828338623,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 24.204191207885742,
+            "host_window_ms": 24.47361,
+            "native_event_ms_per_invocation": 0.7563809752464294,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 24.302711486816406,
+            "host_window_ms": 24.492627,
+            "native_event_ms_per_invocation": 0.7594597339630127,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 40.905189514160156,
+            "host_window_ms": 41.135578,
+            "native_event_ms_per_invocation": 1.2782871723175049,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.270999908447266,
+            "host_window_ms": 41.624357,
+            "native_event_ms_per_invocation": 1.289718747138977,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 26.099159240722656,
+            "host_window_ms": 26.433067,
+            "native_event_ms_per_invocation": 0.815598726272583,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 24.24532699584961,
+            "host_window_ms": 24.402764,
+            "native_event_ms_per_invocation": 0.7576664686203003,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 24.233844757080078,
+            "host_window_ms": 24.407282,
+            "native_event_ms_per_invocation": 0.7573076486587524,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 29.137537002563477,
+            "host_window_ms": 29.292828,
+            "native_event_ms_per_invocation": 0.9105480313301086,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.437744140625,
+            "host_window_ms": 41.794589,
+            "native_event_ms_per_invocation": 1.2949295043945312,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 26.675262451171875,
+            "host_window_ms": 26.895332,
+            "native_event_ms_per_invocation": 0.8336019515991211,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 27.08936882019043,
+            "host_window_ms": 27.23496,
+            "native_event_ms_per_invocation": 0.8465427756309509,
+            "launches": 32
+          }
+        ],
+        "reference": [
+          {
+            "device_window_ms": 27.95156478881836,
+            "host_window_ms": 28.308785,
+            "native_event_ms_per_invocation": 0.8734863996505737,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.04052734375,
+            "host_window_ms": 41.288841,
+            "native_event_ms_per_invocation": 1.2825164794921875,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 28.378536224365234,
+            "host_window_ms": 28.726112,
+            "native_event_ms_per_invocation": 0.8868292570114136,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 29.432567596435547,
+            "host_window_ms": 29.666633,
+            "native_event_ms_per_invocation": 0.9197677373886108,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 26.535646438598633,
+            "host_window_ms": 26.781233,
+            "native_event_ms_per_invocation": 0.8292389512062073,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 24.32154083251953,
+            "host_window_ms": 24.490391,
+            "native_event_ms_per_invocation": 0.7600481510162354,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 24.23467254638672,
+            "host_window_ms": 24.41609,
+            "native_event_ms_per_invocation": 0.757333517074585,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 27.027179718017578,
+            "host_window_ms": 27.311186,
+            "native_event_ms_per_invocation": 0.8445993661880493,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 27.93462371826172,
+            "host_window_ms": 28.167345,
+            "native_event_ms_per_invocation": 0.8729569911956787,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 26.442991256713867,
+            "host_window_ms": 26.650383,
+            "native_event_ms_per_invocation": 0.8263434767723083,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 24.01828956604004,
+            "host_window_ms": 24.198574,
+            "native_event_ms_per_invocation": 0.7505715489387512,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 24.233362197875977,
+            "host_window_ms": 24.532302,
+            "native_event_ms_per_invocation": 0.7572925686836243,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 28.111995697021484,
+            "host_window_ms": 28.44225,
+            "native_event_ms_per_invocation": 0.8784998655319214,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.580535888671875,
+            "host_window_ms": 41.788046,
+            "native_event_ms_per_invocation": 1.299391746520996,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 28.86545181274414,
+            "host_window_ms": 29.056504,
+            "native_event_ms_per_invocation": 0.9020453691482544,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.3408088684082,
+            "host_window_ms": 41.691953,
+            "native_event_ms_per_invocation": 1.2919002771377563,
+            "launches": 32
+          }
+        ]
+      },
+      "orders": [
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ]
+      ],
+      "admission": {
+        "minimum_device_window_ms": 10.0,
+        "observed_minimum_ms": 24.01828956604004,
+        "launches": 32,
+        "calibration_per_launch_ms": [
+          1.1330927610397339,
+          1.2991265058517456,
+          0.8911601305007935,
+          1.295060396194458,
+          0.8834772109985352,
+          0.8880027532577515
+        ],
+        "rejected_series": [],
+        "status": "duration_admitted"
+      },
+      "median_paired_ratio": 1.006130096677865
+    }
+  ]
+}

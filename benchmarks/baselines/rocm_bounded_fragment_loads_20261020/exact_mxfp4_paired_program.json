@@ -1,0 +1,415 @@
+{
+  "schema": "tessera.paired_exact_mxfp4_program.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "compiler_sha256": {
+    "candidate": "276e09dfe344a910b345a71de4d39eeaf430a3a18a290fc052b1489cc648adb2",
+    "reference": "db3a4e86bb42c937d4da70fb98a45266e8e758241c7c773115906d9a6ab871ec"
+  },
+  "source_sha256": {
+    "benchmarks/rocm/record_paired_exact_mxfp4.py": "7a2eae6d11c0c89999490af6824e1c5ea60bfca324aaf99a85c9aeef096badae",
+    "benchmarks/rocm/record_gfx1201_interleaved_compiler_formats.py": "4464ef607a531395c619609093ee0387591f4e5674c8628ead46cc605a6c101f",
+    "tests/device/rocm/test_mxfp4_residual_native_execution.py": "734331383301fd04d40898ffc1978d337aab56c92050b6ff959dfe9fea69d355",
+    "tests/unit/test_native_mxfp4_residual_gate.py": "34b692cc8f4b244d8743e92b710a8b0477d133dcce66102edf6796a3b3a80532",
+    "python/tessera/compiler/native_scaled_program.py": "2f8a84c318f5683eb36067ea91c3a5916b4a67e28d0381921b53898800dcfd6d",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "4fb5ebe16d393543d77d61d0abef69ded7afce73ea6989b4cb0ced9a53f934b4",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "c6ad26ef425de4dae424f2ae27960f313b108726fcd40c9adae85a45500e6b52"
+  },
+  "runtime_sha256": "2821855e4eaa726f0af107f5cfc0b1b149523f91db10f794ed68cd01581d0c71",
+  "timing_scope": "HIP event span around repeated native primal programs including host dispatch gaps; preparation, uploads, readback and compilation excluded; not kernel-only or public-call latency",
+  "memory_scope": "separate checked native owners with byte-identical inputs; allocations stay live across alternating windows",
+  "claim": "exact-device attribution only; no selector promotion, model-quality claim or Radiance comparison",
+  "rows": [
+    {
+      "shape_mkn": [
+        256,
+        4096,
+        1024
+      ],
+      "metadata": {
+        "candidate": {
+          "program_digest": "2237801db4154e285710c36d8bb420dad0030b6cf640a8eb4f8b26c2239e899c",
+          "image_sha256": [
+            "7e3a3a9c0fe1f81f607eddf4f6ee2e73ab115a3ddfcb43f987bdad07a1efff87",
+            "9abf993933b3391a5c3879deb98756bf35d526501507c2a8c105c6fab293f042",
+            "71de43baf0c7de239f785b0bf1b385a510f2cad63fbcd402d61229a1d09da1b3"
+          ],
+          "member_operations": [
+            "tessera.scaled_matmul",
+            "tessera.cast",
+            "tessera.mul"
+          ]
+        },
+        "reference": {
+          "program_digest": "2237801db4154e285710c36d8bb420dad0030b6cf640a8eb4f8b26c2239e899c",
+          "image_sha256": [
+            "0b32f500500aa9bde12f3bb2387927a52b495a00583f32016d6723f78edae05c",
+            "9abf993933b3391a5c3879deb98756bf35d526501507c2a8c105c6fab293f042",
+            "71de43baf0c7de239f785b0bf1b385a510f2cad63fbcd402d61229a1d09da1b3"
+          ],
+          "member_operations": [
+            "tessera.scaled_matmul",
+            "tessera.cast",
+            "tessera.mul"
+          ]
+        }
+      },
+      "input_sha256": [
+        "b7c317c54ddd569fe5c1393246d308dba062ff211b743e146665ae8c9bed152c",
+        "eb92d359f46dfe589e374fc12c481ab81113f2f8275a1060e2a92b0c288aada0",
+        "75750733080c6a391c74a46caecd1dfa23fdf12df6463d750ec69db488b3e2f0",
+        "76ec32e0e9c11dcd7997aa01875c50f790b80e12837c0ca17abebcfd4dbdd9dc",
+        "ab8565b32b36a1b27658c8ff81ca8691bb3ae995e8ca2edf22ba7675f014ff5f"
+      ],
+      "correctness": "exact independent FP64 coefficient, required BF16 store, then FP32 gate; before and after every window",
+      "samples": {
+        "candidate": [
+          {
+            "device_window_ms": 35.72352981567383,
+            "host_window_ms": 35.876789,
+            "native_event_ms_per_invocation": 1.1163603067398071,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 29.916284561157227,
+            "host_window_ms": 30.285104,
+            "native_event_ms_per_invocation": 0.9348838925361633,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 29.637767791748047,
+            "host_window_ms": 29.869119,
+            "native_event_ms_per_invocation": 0.9261802434921265,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 28.58277130126953,
+            "host_window_ms": 28.937887,
+            "native_event_ms_per_invocation": 0.8932116031646729,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 29.497154235839844,
+            "host_window_ms": 29.723049,
+            "native_event_ms_per_invocation": 0.9217860698699951,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 24.708951950073242,
+            "host_window_ms": 24.984806,
+            "native_event_ms_per_invocation": 0.7721547484397888,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 24.610231399536133,
+            "host_window_ms": 24.770176,
+            "native_event_ms_per_invocation": 0.7690697312355042,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 32.75299072265625,
+            "host_window_ms": 32.935573,
+            "native_event_ms_per_invocation": 1.0235309600830078,
+            "launches": 32
+          }
+        ],
+        "reference": [
+          {
+            "device_window_ms": 29.402915954589844,
+            "host_window_ms": 29.754739,
+            "native_event_ms_per_invocation": 0.9188411235809326,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.60144805908203,
+            "host_window_ms": 41.833491,
+            "native_event_ms_per_invocation": 1.3000452518463135,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 42.11850357055664,
+            "host_window_ms": 42.461613,
+            "native_event_ms_per_invocation": 1.316203236579895,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 42.368141174316406,
+            "host_window_ms": 42.571293,
+            "native_event_ms_per_invocation": 1.3240044116973877,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 42.34956741333008,
+            "host_window_ms": 42.729805,
+            "native_event_ms_per_invocation": 1.323423981666565,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 39.10259246826172,
+            "host_window_ms": 39.309804,
+            "native_event_ms_per_invocation": 1.2219560146331787,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 24.582073211669922,
+            "host_window_ms": 24.7673,
+            "native_event_ms_per_invocation": 0.7681897878646851,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 25.001773834228516,
+            "host_window_ms": 25.310078,
+            "native_event_ms_per_invocation": 0.7813054323196411,
+            "launches": 32
+          }
+        ]
+      },
+      "orders": [
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ]
+      ],
+      "admission": {
+        "minimum_device_window_ms": 10.0,
+        "observed_minimum_ms": 24.582073211669922,
+        "launches": 32,
+        "calibration_per_launch_ms": [
+          1.4738194942474365,
+          0.8587198853492737,
+          0.852810263633728,
+          0.9561035633087158,
+          1.2157219648361206,
+          1.1123764514923096
+        ],
+        "rejected_series": [],
+        "status": "duration_admitted"
+      },
+      "median_paired_ratio": 0.7113960656619136
+    },
+    {
+      "shape_mkn": [
+        256,
+        4096,
+        2048
+      ],
+      "metadata": {
+        "candidate": {
+          "program_digest": "52bc49d5a1dbb994299f0a9a97ec88b8775caa29a979d1c2a3044306a44f9adf",
+          "image_sha256": [
+            "19ddf74bdeecbc51731b0cda983b6d96248e9e37221ad04cfa01f6416f9f10c8",
+            "7a43dd6c7d2f6ac43aebb4cfd74a97a81ead49eff4fa21a199e0745de5132e2e",
+            "afa7535a2b7f5ee83e7b81c033a620828d1c4481c125a4550f59662c772419ad"
+          ],
+          "member_operations": [
+            "tessera.scaled_matmul",
+            "tessera.cast",
+            "tessera.mul"
+          ]
+        },
+        "reference": {
+          "program_digest": "52bc49d5a1dbb994299f0a9a97ec88b8775caa29a979d1c2a3044306a44f9adf",
+          "image_sha256": [
+            "9d94f8914daa0c5e38649624b2736207f41a80c5b2a3ebd7dd6b96f9b3ea1f68",
+            "7a43dd6c7d2f6ac43aebb4cfd74a97a81ead49eff4fa21a199e0745de5132e2e",
+            "afa7535a2b7f5ee83e7b81c033a620828d1c4481c125a4550f59662c772419ad"
+          ],
+          "member_operations": [
+            "tessera.scaled_matmul",
+            "tessera.cast",
+            "tessera.mul"
+          ]
+        }
+      },
+      "input_sha256": [
+        "8cc80df4a17235657a6ab2f95a68f4fd628445f24d49ed8d0b760dcd7abeab4d",
+        "637d2b0ec507ce9eef8df552d121c1a4d05e45b9957fef1dad0e1545070a53aa",
+        "fca27bc3d5e390cf4cb2f173a859b756b2f65ecc21f04578b052e74e20f29bce",
+        "f3e4db73fa2e2642fb19efc4288f401b230bf324a4c13152affd9c3e826c512f",
+        "42b78da5f7072a5b8ccb0ace7198aca490f3c78e19cc587c4601a80edebd31e2"
+      ],
+      "correctness": "exact independent FP64 coefficient, required BF16 store, then FP32 gate; before and after every window",
+      "samples": {
+        "candidate": [
+          {
+            "device_window_ms": 42.27155303955078,
+            "host_window_ms": 42.550442,
+            "native_event_ms_per_invocation": 1.320986032485962,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 42.013362884521484,
+            "host_window_ms": 42.200273,
+            "native_event_ms_per_invocation": 1.3129175901412964,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 42.61421203613281,
+            "host_window_ms": 42.863922,
+            "native_event_ms_per_invocation": 1.3316941261291504,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 42.10233688354492,
+            "host_window_ms": 42.285596,
+            "native_event_ms_per_invocation": 1.3156980276107788,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.73836898803711,
+            "host_window_ms": 41.986093,
+            "native_event_ms_per_invocation": 1.3043240308761597,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 42.3729248046875,
+            "host_window_ms": 42.561584,
+            "native_event_ms_per_invocation": 1.3241539001464844,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 49.6496467590332,
+            "host_window_ms": 49.863891,
+            "native_event_ms_per_invocation": 1.5515514612197876,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 47.92863082885742,
+            "host_window_ms": 48.125226,
+            "native_event_ms_per_invocation": 1.4977697134017944,
+            "launches": 32
+          }
+        ],
+        "reference": [
+          {
+            "device_window_ms": 41.77864074707031,
+            "host_window_ms": 41.968239,
+            "native_event_ms_per_invocation": 1.3055825233459473,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 45.32415008544922,
+            "host_window_ms": 45.58189,
+            "native_event_ms_per_invocation": 1.416379690170288,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.7352294921875,
+            "host_window_ms": 41.898476,
+            "native_event_ms_per_invocation": 1.3042259216308594,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.38918685913086,
+            "host_window_ms": 41.673074,
+            "native_event_ms_per_invocation": 1.2934120893478394,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.60108947753906,
+            "host_window_ms": 41.752266,
+            "native_event_ms_per_invocation": 1.3000340461730957,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 41.676414489746094,
+            "host_window_ms": 41.90072,
+            "native_event_ms_per_invocation": 1.3023879528045654,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 47.7579231262207,
+            "host_window_ms": 47.943567,
+            "native_event_ms_per_invocation": 1.492435097694397,
+            "launches": 32
+          },
+          {
+            "device_window_ms": 47.74675369262695,
+            "host_window_ms": 48.084066,
+            "native_event_ms_per_invocation": 1.4920860528945923,
+            "launches": 32
+          }
+        ]
+      },
+      "orders": [
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ],
+        [
+          "candidate",
+          "reference"
+        ],
+        [
+          "reference",
+          "candidate"
+        ]
+      ],
+      "admission": {
+        "minimum_device_window_ms": 10.0,
+        "observed_minimum_ms": 41.38918685913086,
+        "launches": 32,
+        "calibration_per_launch_ms": [
+          1.4071403741836548,
+          1.3133726119995117,
+          1.4569765329360962,
+          1.4869922399520874,
+          1.5128668546676636,
+          1.5302927494049072
+        ],
+        "rejected_series": [],
+        "status": "duration_admitted"
+      },
+      "median_paired_ratio": 1.0142552632859911
+    }
+  ]
+}

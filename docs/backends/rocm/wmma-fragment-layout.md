@@ -2583,3 +2583,22 @@ The tell was available before the fix: **Tessera was off by 2 ULP and the
 hand-rolled control by 93.** Two orders of magnitude apart is not two views of
 one defect. AMD's matrix instruction calculator settled the layout in one query,
 which is what it is on the box for.
+
+## Bounded contiguous fragment loads (2026-10-20)
+
+A complete contiguous K fragment may use a vector load only after proving
+that its start is nonnegative, the K bound is at least the vector width,
+start <= bound - width, and the slow dimension is nonempty. Invalid slow lanes
+use the safe base address and select a zero vector; the slow lane itself must
+be nonnegative and below its bound. Partial K and strided fragments retain
+scalar bounds checks. Packed MXFP4 B retains its encoding-specific path.
+These are generic fragment semantics, independent of downstream store masks.
+
+The owning tests use unmasked output, tight capacities, input checks and a
+canary on gfx1201 and gfx1151. Floating results use the FP32 gamma16 dot-product
+forward bound with no absolute floor; zero-contribution outputs, integer
+results and memory checks remain exact. Independent gfx1151 HIP WMMA builtins
+reproduce the observed float rounding bitwise. This does not change production
+numeric policies or promote gfx1151 FP8, which has no hardware WMMA form.
+
+Evidence: `benchmarks/baselines/rocm_bounded_fragment_loads_20261020/README.md`.

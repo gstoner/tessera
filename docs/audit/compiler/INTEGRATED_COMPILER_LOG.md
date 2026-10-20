@@ -15,6 +15,10 @@ audit_role: reference
 
 
 
+
+
+
+
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -13953,4 +13957,26 @@ identities are unchanged; 170 host and 27 RTX5070 post-sync checks pass.
 Remaining: Exact-head publication CI and review. General pitched/dynamic/
 AD/encoded producers and all five aggregate programs remain open.
 Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
+<!-- entry-fields:end -->
+
+### 2026-10-20 — guarded bounded ROCm WMMA packs
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync ROCM-BOUNDED-CONTIGUOUS-PACK-20261020.
+
+Outcome: native bounded contiguous K loads retain vectorization with generic
+zero-fill, preserving partial/strided/packed fallbacks. The retained compiler
+passes 32 gfx1201 and 16 gfx1151 device cases with twelve shapes each; sixteen
+gfx1151 FP8 cases are ISA exclusions. Independent hipcc WMMA reproduces the
+small pre-existing gfx1151 float discrepancy; exact memory/zero checks remain.
+Two counterbalanced 24-row format sweeps repeat M200 long-K FP8 gains while
+small MXFP8/folded differences stay unpromoted. A 32-thread compiler annotation
+is rejected after K32 regressions. Exact packed MXFP4 primal/JVP/reverse and
+separate native-program/member/public-call timing are recorded at M256.
+
+Remaining: broader layouts/shapes, public staging cost,
+exact MXFP4/Radiance attribution and original aggregate five-slice closure.
+All four backend queues are assessed; no sibling physical proof transfers.
+
+Evidence: benchmarks/baselines/rocm_bounded_fragment_loads_20261020/README.md.
 <!-- entry-fields:end -->

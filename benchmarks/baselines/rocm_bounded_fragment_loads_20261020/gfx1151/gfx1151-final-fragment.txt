@@ -1,0 +1,4 @@
+..ssss....ssss....ssss....ssss..                                         [100%]
+=========================== short test summary info ============================
+SKIPPED [16] tests/device/rocm/test_bounded_fragment_pack.py:26: RDNA3.5 has no FP8/BF8 WMMA instruction
+16 passed, 16 skipped in 2.66s

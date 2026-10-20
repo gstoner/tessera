@@ -10,20 +10,19 @@ last_updated: 2026-10-20
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
 Sync: ROCM-BOUNDED-CONTIGUOUS-PACK-20261020.
+Evidence: benchmarks/baselines/rocm_bounded_fragment_loads_20261020/README.md.
 
-Delivery context: PR995 merged as 71564e7679bee9efeda5c0b18ac2a6430a9a7936
-after exact-head CI and review. Earlier FP32-root candidate statements below
-retain their original evidence checkpoints.
+Native ROCm bounded contiguous K packs retain a guarded vector load; partial
+K, strided K and packed MXFP4 B retain scalar paths. Generic zero-fill is
+preserved without depending on masked stores. No shared IR, dtype, pass,
+numerical policy or runtime ABI changes. The additive exact-MXFP4 recorder
+uses existing checked native program ownership and shared duration admission;
+Python supplies inputs/oracles and measurement only.
 
-Contract: retain the existing bounded Tile fragment element/zero-fill
-semantics with a guarded contiguous-vector load. Partial K, strided K and
-packed MXFP4 retain scalar fallback. No shared IR spelling, dtype, numeric
-policy, pass registration or runtime ABI changes.
-
-Not applicable to SM120 physical execution: this change is inside the ROCm
-fragment materializer. NVIDIA fragment mapping, PTX and CUDA native ABIs are
-unchanged. The bounded Tile zero-fill contract is preserved. AMD compiler/
-hardware measurements do not add NVIDIA execution evidence.
+Not applicable to SM120 physical execution: NVIDIA fragment mapping,
+PTX and CUDA ownership remain unchanged. The Tile zero-fill contract is
+preserved. The new benchmark measures the existing exact ROCm owner; AMD
+compiler/hardware evidence does not close any NVIDIA producer/attention row.
 
 ## NATIVE-TENSOR-FP32-ROOTS-20261020 — original producer storage candidate
 

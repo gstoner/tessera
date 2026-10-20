@@ -62,7 +62,24 @@ def test_bounded_pack_zero_fill_and_canaries(
                             arguments, (1, 1, 1), (32, 1, 1))
             launch()
             actual = hip.download(pointers[2], initial)
-            np.testing.assert_array_equal(actual[:16], expected)
+            if a_type.startswith("int"):
+                np.testing.assert_array_equal(actual[:16], expected)
+            else:
+                # Compare native WMMA accumulation with the independent exact
+                # integer-valued oracle using the f32 dot-product forward bound.
+                # gfx1151 also differs at ~1e-6 with a direct hipcc WMMA builtin;
+                # the frozen old/new compiler outputs are bitwise identical.
+                # No absolute tolerance floor: all zero-contribution outputs
+                # (including invalid rows/columns) must still be exactly zero.
+                unit_roundoff = 2.0 ** -24
+                gamma16 = 16 * unit_roundoff / (1 - 16 * unit_roundoff)
+                bound = np.zeros((16, 16), dtype=np.float64)
+                bound[:m, :n] = gamma16 * (
+                    np.abs(logical_a[:m, :k].astype(np.float64))
+                    @ np.abs(logical_b[:k, :n].astype(np.float64)))
+                delta = np.abs(actual[:16].astype(np.float64) - expected)
+                assert np.all(delta <= bound), (arch, a_type, orders, (m, n, k),
+                                                float(np.max(delta - bound)))
             np.testing.assert_array_equal(actual[16:], initial[16:])
             for pointer, original in zip(pointers[:2], (physical_a, physical_b), strict=True):
                 np.testing.assert_array_equal(

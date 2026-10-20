@@ -1,0 +1,29 @@
+[
+  {
+    "file": "fp8_formats_first.json",
+    "original_sha256": "0a841b51563fae373dcdcfb89447a8884c2b456a3cc9f2b96cabda6d625e465a",
+    "formatted_sha256": "4e8ae55f84fdb5f913118b4242b534f98026befca5d48dd27d98442a98d830a5",
+    "canonical_json_sha256": "653321d36b2f928c5194d9b85cc3f1db7d4357a7ce23150999c9096d1f3a165c",
+    "original_lines": 13208,
+    "formatted_lines": 4010,
+    "data_equality_verified": true
+  },
+  {
+    "file": "fp8_formats_counterbalanced.json",
+    "original_sha256": "b664c78ddfd036c47f9e9c9cb58652f21027b489332369f9442648f4e942722e",
+    "formatted_sha256": "adba3efc46b5cd797908ff2e07103aeb30ea9e12ac57fb067cdad9e86f45b071",
+    "canonical_json_sha256": "c8c96dcaf5102f1ca4b4f826d47d0cf9bd4c8001decca37c7300392978bece28",
+    "original_lines": 13683,
+    "formatted_lines": 4099,
+    "data_equality_verified": true
+  },
+  {
+    "file": "rejected_geometry.json",
+    "original_sha256": "038f67dc4f4d7e1400f2c8961d5d1379ceb2cf7d33e4287b4dd208e2c27794b7",
+    "formatted_sha256": "cf7d9db7b4c706d1795078bd7eb5ff9d6d4c2ec8c10fa952164bae0c41a4457a",
+    "canonical_json_sha256": "555032416a4a28c554fb8879d781f269526f8ab5ab95fbb4a9ac390960bc41c4",
+    "original_lines": 12505,
+    "formatted_lines": 3880,
+    "data_equality_verified": true
+  }
+]

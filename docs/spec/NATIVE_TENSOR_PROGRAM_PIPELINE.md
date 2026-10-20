@@ -103,3 +103,63 @@ grid Y/Z <= 65535, block X/Y <= 1024, block Z <= 64, and total block threads
 even when the call and kernel metadata agree. An unsupported grid is rejected
 before packaging or device allocation. This does not flatten or otherwise
 change the arithmetic schedule for large matrices.
+
+## Native binary producer contract — 2026-10-20
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-BINARY-PRODUCERS-20261020.
+
+The SM120 native tensor-program owner admits same-shape, same-storage rank-two
+`add` producers on either matmul operand, both operands, and in supported
+producer chains. Storage is FP16, BF16 or FP32; all buffers are compact and
+row-major. This does not admit broadcasting, pitched views, dynamic extents,
+fused matmul epilogues or arbitrary AD reconstruction. The existing public
+Graph add catalog and native-frame v1 ABI are unchanged.
+
+Graph-to-Schedule retains both semantic operand positions, including repeated
+SSA references. Only isolated native tensor-program member modules collect the
+new `schedule.binary_kernel`; unrelated owners retain their existing lowering.
+The decision binds the semantic hash, target, storage, FP32 accumulation,
+propagating NaNs and a flat 128-thread schedule. Schedule-to-Tile emits
+`tile.elementwise_kernel` with `(A, B, output, element_count)` native arguments.
+NVIDIA lowering selects only kernels marked by the native elementwise contract.
+Both inputs load before the store. Half inputs widen to FP32, add once and round
+once to their declared output storage. FP32 inputs retain FP32 arithmetic.
+
+The Tile verifier checks the native function contract, actual argument order,
+positive element count, exact compact buffer extent, scalar bindings and
+128x1x1 launch block. The grid is ceil(element_count/128). Each lane checks its
+index against the exact element count before loading or storing. Existing typed
+program initialization, retirement and fresh-output invariants remain required.
+FP16/BF16 matmul consumers use typed fragment views; FP32 uses the existing
+FP32 scalar-FMA consumer. Conflicting layout or FP64 accumulation requests are
+preserved and declined, rather than rewritten to this physical contract.
+
+Final frozen compiler 68358e312c1cd8623ebf6ba3b07aec0d0bd4e4dfb16298888474b8d491788312
+passes 60 focused compiler checks, 701 adjacent/registry checks and the owning
+RTX5070 99-case compiler/device cohort (60 compiler plus 39 device, no skips).
+Three additional diagnostic projected-member cases expose producer bits before
+matmul: ties-to-even, signed zero, subnormals, cancellation, overflow, NaN/Inf
+classification, immutable inputs and output canaries pass across all storages.
+The shortened diagnostic frame is not a public standalone add package.
+
+Nine small timing profiles pass independent numerical checks; their captured
+producer regions do not reach the 10 ms duration gate at the native capture
+repeat limit. They remain diagnostics with no performance promotion. At M256/K4096/N256, six FP16/BF16 profiles pass all 36 captured
+window duration gates, independently checked before and after timing. Eight
+neighboring ReLU/RMSNorm/two-sided/reversed-root programs retain byte-identical
+source, frame, projected members and 18 PTX images versus merged compiler
+01922c4a. The gfx1201 exact MXFP4 and four neighboring quantized image controls pass;
+all images are unchanged. The public evidence packet and local delivery gates
+are complete; exact-head CI and review remain required before merge. Generic W1.1 and all five aggregate programs remain
+open.
+
+Final source-bound binary cohort: 117 RTX5070-host cases pass without skips
+(60 compiler, 42 device, 15 recorder). The packet binds their source hashes.
+Evidence: benchmarks/baselines/native_tensor_binary_producers_20261020/README.md.
+
+Local binary delivery: 30,842 CPU passes / 3,721 declared skips;
+2,754 production compiler cases execute without skips, 117 final source-bound
+RTX5070-host cases pass, and the ODS inventory/consumer gate passes 783 cases.
+All five surfaces, claim lint, 33 generated docs, zero-error typing, Ruff and
+Graphify pass. Publication/CI/review remain the delivery boundary.

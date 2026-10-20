@@ -225,3 +225,9 @@ def test_markdown_companion_exists_with_canonical_phrases() -> None:
         assert phrase in text, (
             f"Runtime ABI dashboard missing canonical phrase {phrase!r}"
         )
+
+
+def test_native_frame_metadata_observer_is_not_a_shipped_abi_symbol() -> None:
+    """The observer TU belongs to tests; production exports stay unchanged."""
+    names = {symbol.name for symbol in collect_runtime_abi()}
+    assert "tessera_nvidia_native_frame_test_metadata_v1" not in names

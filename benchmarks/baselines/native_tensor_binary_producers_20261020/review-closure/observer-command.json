@@ -1,0 +1,20 @@
+[
+  "g++",
+  "-std=c++17",
+  "-O3",
+  "-DNDEBUG",
+  "-shared",
+  "-fPIC",
+  "-pthread",
+  "-I/usr/local/cuda-13.3/include",
+  "-I/home/angstorms/scratch/bounded-source-attention-20261019/worktree/src/runtime/include",
+  "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp",
+  "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp",
+  "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/tests/device/nvidia/native_tensor_frame_metadata_observer.cpp",
+  "-L/usr/lib/wsl/lib",
+  "-Wl,-rpath,/usr/lib/wsl/lib",
+  "-lcuda",
+  "-ldl",
+  "-o",
+  "/home/angstorms/scratch/w11-program-pipeline-20261019/native-binary-i64-shared-native/.observer.so.building"
+]

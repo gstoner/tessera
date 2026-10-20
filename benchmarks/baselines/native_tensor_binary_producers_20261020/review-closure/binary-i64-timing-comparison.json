@@ -1,0 +1,92 @@
+{
+  "status": "complete",
+  "production_provider_sha256": "5737462623d8e93612ec05b9b63697bb2af8e078a43ccfce0d839a799a8d41f7",
+  "recorder_sha256": "94344ef300f5dead02bb0c6b8a949eb0970d2e6d7adfcb55e267482b520d60c0",
+  "scope": "runtime scalar metadata fix; all six program IR/frame/images unchanged; timings separate, no speedup claim",
+  "rows": [
+    {
+      "case": "lhs",
+      "storage": "f16",
+      "shape_mkn": [
+        256,
+        4096,
+        256
+      ],
+      "ir_frame_images_equal": true,
+      "captured_admitted": 6,
+      "captured_total": 6,
+      "minimum_captured_region_ms": 10.249600410461426,
+      "public_median_ms": 1.36161134375
+    },
+    {
+      "case": "rhs",
+      "storage": "f16",
+      "shape_mkn": [
+        256,
+        4096,
+        256
+      ],
+      "ir_frame_images_equal": true,
+      "captured_admitted": 6,
+      "captured_total": 6,
+      "minimum_captured_region_ms": 10.327424049377441,
+      "public_median_ms": 1.35596246875
+    },
+    {
+      "case": "both",
+      "storage": "f16",
+      "shape_mkn": [
+        256,
+        4096,
+        256
+      ],
+      "ir_frame_images_equal": true,
+      "captured_admitted": 6,
+      "captured_total": 6,
+      "minimum_captured_region_ms": 10.347359657287598,
+      "public_median_ms": 2.00583690625
+    },
+    {
+      "case": "lhs",
+      "storage": "bf16",
+      "shape_mkn": [
+        256,
+        4096,
+        256
+      ],
+      "ir_frame_images_equal": true,
+      "captured_admitted": 6,
+      "captured_total": 6,
+      "minimum_captured_region_ms": 10.336480140686035,
+      "public_median_ms": 1.2974584375
+    },
+    {
+      "case": "rhs",
+      "storage": "bf16",
+      "shape_mkn": [
+        256,
+        4096,
+        256
+      ],
+      "ir_frame_images_equal": true,
+      "captured_admitted": 6,
+      "captured_total": 6,
+      "minimum_captured_region_ms": 10.410783767700195,
+      "public_median_ms": 1.3013171875
+    },
+    {
+      "case": "both",
+      "storage": "bf16",
+      "shape_mkn": [
+        256,
+        4096,
+        256
+      ],
+      "ir_frame_images_equal": true,
+      "captured_admitted": 6,
+      "captured_total": 6,
+      "minimum_captured_region_ms": 10.440671920776367,
+      "public_median_ms": 2.01814153125
+    }
+  ]
+}

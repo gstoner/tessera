@@ -1,0 +1,10 @@
+{
+  "binary-wide-runtime-baseline.txt": {
+    "raw_sha256": "48f3a30a1f92a52be87f338cb71c4296068f1557f250500987e7fe96c7e85653",
+    "compressed_file": "binary-wide-runtime-baseline.txt.gz"
+  },
+  "binary-wide-runtime-baseline.xml": {
+    "raw_sha256": "5588325917d67dd24ee423eef78d54a841c651c262a126ea8bb653c6948798a8",
+    "compressed_file": "binary-wide-runtime-baseline.xml.gz"
+  }
+}

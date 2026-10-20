@@ -1,0 +1,16 @@
+{
+  "status": "passed",
+  "counts": {
+    "tests": 34563,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 3721,
+    "passed": 30842,
+    "seconds": 435.601
+  },
+  "raw_junit_sha256": "c3f1b824fb13e4ce59fee9b5a4cad40793480c9b6bb6a8e365346e11355bd3cf",
+  "raw_junit_host": "Tajasaurus WSL",
+  "raw_junit_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/next-producer-census/binary-full-unit.xml",
+  "text_receipt": "binary-full-unit.txt",
+  "inventory_fix": "schedule.binary_kernel is record 698 with explicit compiler-consumer pin"
+}

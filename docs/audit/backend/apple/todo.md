@@ -15809,3 +15809,29 @@ PR963 review follow-through: the AST emission and copied first-call
 specialization boundaries persist eager-int-coerced slice coordinates before
 serialization. Pure result inference and caller-owned Graph attributes remain
 unchanged. This is shared frontend correctness; physical admission is unchanged.
+
+
+## NATIVE-BINARY-PRODUCERS-20261020
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Synchronization key: NATIVE-BINARY-PRODUCERS-20261020.
+
+Shared contract: a typed content-addressed `schedule.binary_kernel` and an
+SM120-qualified stored-add Tile recipe preserve both producer operands,
+including duplicate SSA references. Static compact rank-two FP16/BF16/FP32
+buffers retain fresh allocation and checked lifetime. Native-frame v1 ABI and
+public Graph add registration are unchanged. Explicit conflicting matmul layout
+or FP64 accumulation requests cannot be silently normalized. See
+`docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md` for the admitted envelope.
+
+Not applicable to the new SM120 physical recipe: the native tensor-program and Target ownership gates exclude Apple. The existing Apple Tile elementwise verifier and runtime ABI remain unchanged. Native Metal producer integration remains follow-up required; no Apple device evidence is added.
+
+
+Review follow-through (NATIVE-BINARY-PRODUCERS-20261020): the existing native
+frame v1 i64 scalar fields now preserve positive signed-64-bit values. Shape
+axes, capacity and launch bounds remain independent. Production prepare and a
+test-only observer share one pure C++ metadata planner; the shipped provider's
+102 public exports and ABI layout remain unchanged. The observer TU lives in
+tests, with a pinned absence from the public ABI inventory. The recorder gates
+K <2^24 before hardware so its FP32 gamma-K oracle remains mathematically valid.
+Not applicable to Apple physical ABI: the frame schema and runtime provider are NVIDIA-owned. Existing Metal/CPU ownership and public ABI are unchanged; no Apple execution or datatype promotion follows.

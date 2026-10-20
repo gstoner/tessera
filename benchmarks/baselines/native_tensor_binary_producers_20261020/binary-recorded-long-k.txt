@@ -1,0 +1,6 @@
+f16 lhs (256, 4096, 256) passed and recorded
+f16 rhs (256, 4096, 256) passed and recorded
+f16 both (256, 4096, 256) passed and recorded
+bf16 lhs (256, 4096, 256) passed and recorded
+bf16 rhs (256, 4096, 256) passed and recorded
+bf16 both (256, 4096, 256) passed and recorded

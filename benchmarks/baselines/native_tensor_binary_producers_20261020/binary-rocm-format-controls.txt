@@ -1,0 +1,31 @@
+/home/angstorms/scratch/jvp-schema-reconcile-20261011/python/tessera/compiler/rocm_native.py:1620: RuntimeWarning: /home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-tools-01922c4a/tessera-opt is older than 2 generator source(s) -- newest src/compiler/programming_model/lib/PMPasses.cpp. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).
+  warn_if_generator_is_stale(tool)
+{
+  "resources": {
+    "control": {
+      "static_shared_bytes": 0,
+      "local_bytes_per_thread": 0,
+      "registers_per_thread": 89,
+      "block_threads": 32,
+      "dynamic_shared_bytes": 0,
+      "active_blocks_per_multiprocessor": 64,
+      "provenance": "live HIP module attributes and occupancy at actual block"
+    },
+    "candidate": {
+      "static_shared_bytes": 0,
+      "local_bytes_per_thread": 0,
+      "registers_per_thread": 89,
+      "block_threads": 32,
+      "dynamic_shared_bytes": 0,
+      "active_blocks_per_multiprocessor": 64,
+      "provenance": "live HIP module attributes and occupancy at actual block"
+    }
+  },
+  "neighbors_equal": {
+    "fp8_k128": true,
+    "fp8_k32": true,
+    "mxfp8": true,
+    "approximate_folded_mxfp4": true
+  }
+}
+All five ROCm format image controls unchanged; exact composed numerical control passed

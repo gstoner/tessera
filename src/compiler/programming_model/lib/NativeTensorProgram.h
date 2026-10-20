@@ -30,7 +30,9 @@ inline Sm120MatmulKernel selectMatmulKernel(const MatmulSchedule &s) {
 }
 inline mlir::SmallVector<int64_t> semanticGeometry(const SemanticKernelSchedule &s) {
   int64_t blocks = s.rows;
-  if (s.family == "activation")
+  if (s.family == "binary")
+    blocks = (s.rows * s.columns + 127) / 128;
+  else if (s.family == "activation")
     blocks = s.reductionSchedule == "flat_128"
         ? (s.rows * s.columns + 127) / 128 : (s.rows + 127) / 128;
   else if (s.reductionSchedule != "cooperative_128")
@@ -119,26 +121,37 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     bool terminal = op == product;
     bool matrix = name == "tessera.matmul";
     if (!matrix &&
-        (name != "tessera.relu" && name != "tessera.rmsnorm" &&
+        (name != "tessera.add" && name != "tessera.relu" && name != "tessera.rmsnorm" &&
          name != "tessera.layer_norm" && name != "tessera.softmax"))
       return reject();
     if (matrix) {
       auto order = op->getAttrOfType<StringAttr>("rhs_storage_order");
       auto activation = op->getAttrOfType<StringAttr>("activation");
       if (op->getNumOperands() != 2 ||
+          (op->hasAttr("rhs_storage_order") && !order) ||
+          (op->hasAttr("activation") && !activation) ||
           (order && order.getValue() != "row_major") ||
           (activation && activation.getValue() != "none") ||
           op->hasAttr("bias") || op->hasAttr("residual"))
         return reject();
+      for (StringRef key : {"layout", "tessera.layout"})
+        if (op->hasAttr(key)) {
+          auto layout = op->getAttrOfType<StringAttr>(key);
+          if (!layout || layout.getValue() != "row_major") return reject();
+        }
       for (StringRef key : {"transposeA", "transposeB"})
-        if (auto flag = op->getAttrOfType<BoolAttr>(key); flag && flag.getValue())
-          return reject();
+        if (op->hasAttr(key)) {
+          auto flag = op->getAttrOfType<BoolAttr>(key);
+          if (!flag || flag.getValue()) return reject();
+        }
     }
     if (op->getNumResults() != 1 || !bufferType(op->getResult(0).getType()) ||
         op->getNumRegions() || !isMemoryEffectFree(op) ||
         (!terminal && !live.contains(op)) ||
-        (!matrix && (op->getNumOperands() != 1 ||
-                     op->getOperand(0).getType() != op->getResult(0).getType())))
+        (!matrix && (op->getNumOperands() != (name == "tessera.add" ? 2u : 1u) ||
+                     !llvm::all_of(op->getOperandTypes(), [&](Type input) {
+                       return input == op->getResult(0).getType();
+                     }))))
       return reject();
     for (Value input : op->getOperands())
       if (!available.contains(input)) return reject();
@@ -168,10 +181,11 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     child.push_back(function);
     Block *block = function.addEntryBlock();
     OpBuilder leaf(block, block->begin());
-    IRMapping mapping;
-    for (auto [input, arg] : llvm::zip(op->getOperands(), block->getArguments()))
-      mapping.map(input, arg);
-    Operation *cloned = leaf.clone(*op, mapping);
+    // Preserve operand positions even when two inputs are the same SSA
+    // value. A Value->Value map would collapse both onto the last argument;
+    // the checked invocation already records their intended runtime alias.
+    Operation *cloned = leaf.clone(*op);
+    cloned->setOperands(block->getArguments());
     bool matrix = op->getName().getStringRef() == "tessera.matmul";
     if (matrix)
       cloned->setAttr("rhs_storage_order", builder.getStringAttr("row_major"));

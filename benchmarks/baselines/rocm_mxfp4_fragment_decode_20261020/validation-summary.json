@@ -1,0 +1,130 @@
+{
+  "base": "11a26a9c303a1d1e578ed3e1be35e5afa74072e0",
+  "execution_environment": "owning host WSL; gfx1201 RX 9070 XT for device proof",
+  "lanes": {
+    "full-cpu": {
+      "tests": 34539,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 3721,
+      "executed_passes": 30818,
+      "junit_sha256": "6504efe47f5ed309d96b25b3790d762207e54e44ef8e71daebeefba0579a192a",
+      "owning_receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/full-cpu.xml"
+    },
+    "full-compiler": {
+      "tests": 2694,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "executed_passes": 2694,
+      "junit_sha256": "3d0b245ebbaf16d89edd8c566d84d20197fc4316d7b537e68fef20a0b18d4b9d",
+      "owning_receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/full-compiler.xml"
+    },
+    "focused-drift": {
+      "tests": 329,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "executed_passes": 329,
+      "junit_sha256": "2e5c776700140ff179f9999b7a3e81bf6abe1cadf544eb7be30a69acf7678423",
+      "owning_receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/focused-drift.xml"
+    },
+    "candidate-focused": {
+      "tests": 55,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "executed_passes": 55,
+      "junit_sha256": "93e7737c134091dc1e725efd6203f004bda3fd5fe4ef024e2f40c32528e51d15",
+      "owning_receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/candidate-focused.xml"
+    },
+    "control-byte-oracle": {
+      "tests": 18,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "executed_passes": 18,
+      "junit_sha256": "ec418fd8d70f432e32f7666c7e9130e22a96b578dcb8927034ac71476cc4f296",
+      "owning_receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/control-byte-oracle.xml"
+    }
+  },
+  "generated-docs": {
+    "sha256": "9d8b85d764f7e4ee9cddcad4256bc591602b3561b272a9d99fe967c4d938cd18",
+    "receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/generated-docs.txt",
+    "tail": [
+      "wrote effect_lattice_audit: docs/audit/generated/effect_lattice_audit.csv, docs/audit/generated/effect_lattice_audit.md",
+      "wrote docs_freshness: docs/audit/generated/docs_freshness.md",
+      "wrote surface_status: docs/audit/generated/surface_status.csv, docs/audit/generated/surface_status.md"
+    ]
+  },
+  "mypy": {
+    "sha256": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/mypy.txt",
+    "tail": [
+      "[mypy ratchet] errors=0  baseline=0  (mypy rc=0)"
+    ]
+  },
+  "graphify-update": {
+    "sha256": "2fcec58a35c1a541ba1c02128346424037cd34a98b99d90d98e094910711a2d2",
+    "receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/graphify-update.txt",
+    "tail": [
+      "[graphify watch] graph.json, graph.html and GRAPH_REPORT.md updated in graphify-out",
+      "Code graph updated. For doc/paper/image changes run /graphify --update in your AI assistant.",
+      "Tip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction."
+    ]
+  },
+  "surface-examples": {
+    "sha256": "b82f060e7fe9e216a962f2671779dc2b968a34170ee176e245fa659610d08acf",
+    "receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/surface-examples.txt",
+    "tail": [
+      "  PASS  examples/optimization  (runnable)",
+      "",
+      "[surface_audit:examples] passed=23 failed=0 skipped=2"
+    ]
+  },
+  "surface-benchmarks": {
+    "sha256": "6975d16371ba79a30b7e5a4ac44d1c2b75f316c91fe4fad8e4180d941dc61b41",
+    "receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/surface-benchmarks.txt",
+    "tail": [
+      "  NOT-RUN  archive/benchmarks/matrix_multiplication  (archived)",
+      "",
+      "[surface_audit:benchmarks] passed=25 failed=0 skipped=0"
+    ]
+  },
+  "surface-research": {
+    "sha256": "8feea202db6fd8c23727cbfc57c72993ccf0a80bcba03985e9b6199494c47cd0",
+    "receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/surface-research.txt",
+    "tail": [
+      "  PASS  research/sandbox_compilers  (compile_only)",
+      "",
+      "[surface_audit:research] passed=2 failed=0 skipped=0"
+    ]
+  },
+  "surface-tools": {
+    "sha256": "2b49dec3c26f4c310d8b6c72c24bc6c875cc1c92cb387594128aeb4053e98cbd",
+    "receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/surface-tools.txt",
+    "tail": [
+      "  NOT-RUN  tools/CLI/Tessera_CLI_Starter_v0_1  (archived)",
+      "",
+      "[surface_audit:tools] passed=5 failed=0 skipped=0"
+    ]
+  },
+  "surface-tests": {
+    "sha256": "272cfd55d06c296b763548be89c8ebd92045287ce0e4c1add577ad0791c86776",
+    "receipt_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/mxfp4-decode-20261020/surface-tests.txt",
+    "tail": [
+      "  NOT-RUN  archive/tests  (archived)",
+      "",
+      "[surface_audit:tests] passed=4 failed=0 skipped=0"
+    ]
+  },
+  "surface_environment_correction": "A stale /tmp/tessera_opbench_audit_build CMake cache named the previous source checkout. Verified generated cache ownership, removed that /tmp build directory, reran benchmarks/research/tools/tests successfully; no source or audit expectation changed.",
+  "full_local_lanes_source_head": "6424442072cf58224211a76b20a9da950c2e7af0",
+  "review_followup": {
+    "scope": "CLI-only balanced-window validation and tests; native compiler source and recorded timing windows unchanged",
+    "focused_passes": 21,
+    "junit_sha256": "9310d48f95a7478970b726d8ccac320896a47e33b0fdcb0cb0e7118992feb4a8",
+    "receipt": "public-window-review.xml",
+    "final_head_ci": "required separately"
+  }
+}

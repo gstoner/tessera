@@ -2677,3 +2677,15 @@ remaining model-quality, generic producer/layout/AD, mixed attention and ROCm
 performance requirements remain open.
 
 Reviewed thread-local native JIT source and final175-case proof: benchmarks/baselines/native_tensor_jit_20261020/thread-review/README.md. Original five-slice closure remains open.
+
+## Exact packed MXFP4 native decoder — 2026-10-20
+
+Sync: ROCM-MXFP4-FRAGMENT-DECODE-20261020.
+The native Tile decoder preserves all E2M1 encodings, signed zero and bounded
+packing. 55 focused gfx1201 cases include primal/JVP/reverse. Six captured
+matmul gains repeat; completed public-call gains repeat at N1024/N2048,
+with small-case/N8192 outcomes retained separately. Four neighboring format
+images remain unchanged. This improves the exact packed physical consumer
+without closing approximate folded Radiance, model quality or aggregate scope.
+All five original programs remain open. Evidence:
+benchmarks/baselines/rocm_mxfp4_fragment_decode_20261020/README.md.

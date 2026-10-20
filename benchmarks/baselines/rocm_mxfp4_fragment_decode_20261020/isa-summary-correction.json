@@ -1,0 +1,5 @@
+{
+  "superseded_summary_sha256": "ea04a9c0044f398f4c0efc50455a0acee2341b628417a5ae6a8c8b9ad737485f",
+  "corrected_summary_sha256": "13c253eb6a4bf1f4e20994db33dae831d43c589dceb7cf1dfee48d252ef605f7",
+  "correction": "Removed cmp_eq_u32 and cndmask fields that incorrectly used exact unsuffixed mnemonic lookup and reported zero. Prefix totals include e32/e64/b16 spellings. Full opcode counters, instruction totals and timing data are unchanged."
+}

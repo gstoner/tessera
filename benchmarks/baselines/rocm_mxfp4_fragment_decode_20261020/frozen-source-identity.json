@@ -1,0 +1,9 @@
+{
+  "compiler_sha256": "01922c4ad30f86d754318d4c51ded63ee306c44af351a9763bb209554df1ba82",
+  "base": "11a26a9c303a1d1e578ed3e1be35e5afa74072e0",
+  "native_source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "018630854911bd4bde3a088a960bce0fc109bdc4566ac5ca679c3c03eac1f643"
+  },
+  "patch_sha256": "c1afddebbf612861db8edbf3f3d46c8805e3d291825145a0936644ab0e6a1b3e",
+  "scope": "private exact packed E2M1->E4M3 arithmetic decoder experiment; not promoted"
+}

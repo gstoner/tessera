@@ -1,4 +1,4 @@
-"""gfx1201 bounded fragment values are valid without an output store mask."""
+"""Owning RDNA bounded fragment values are valid without an output store mask."""
 import ctypes as ct
 import subprocess
 
@@ -20,11 +20,14 @@ pytestmark = pytest.mark.hardware_rocm
      ("row_major", "row_major"), ("col_major", "row_major")])
 def test_bounded_pack_zero_fill_and_canaries(
         compiler_toolchain, a_type, b_type, orders):
-    assert rt._rocm_live_arch() == "gfx1201"
+    arch = rt._rocm_live_arch()
+    assert arch in {"gfx1151", "gfx1201"}
+    if arch == "gfx1151" and a_type in {"e4m3", "e5m2"}:
+        pytest.skip("RDNA3.5 has no FP8/BF8 WMMA instruction")
     lowered = lower_fragment(compiler_toolchain,
-        fragment_source(a_type, b_type, orders=orders), "gfx1201", rocdl=True)
+        fragment_source(a_type, b_type, orders=orders), arch, rocdl=True)
     pipeline = ("builtin.module(gpu.module(convert-scf-to-cf,convert-gpu-to-rocdl,"
-                "reconcile-unrealized-casts),rocdl-attach-target{chip=gfx1201},"
+                f"reconcile-unrealized-casts),rocdl-attach-target{{chip={arch}}},"
                 "gpu-module-to-binary)")
     result = subprocess.run([str(compiler_toolchain.require_mlir_opt()),
         "--pass-pipeline=" + pipeline], input=lowered, text=True,

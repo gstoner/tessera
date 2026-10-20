@@ -141,6 +141,18 @@ def Schedule_ActivationOp : Op<ScheduleDialect, "activation", [Pure]> {
   let hasVerifier = 1;
 }
 
+def Schedule_BinaryKernelOp : Op<ScheduleDialect, "binary_kernel", [Pure]> {
+  let summary = "Scheduled storage-preserving native binary producer";
+  let arguments = (ins AnyType:$subject, StrAttr:$artifact_hash,
+                       StrAttr:$arch, StrAttr:$storage, StrAttr:$accum,
+                       StrAttr:$kind, StrAttr:$output_storage,
+                       I64Attr:$axis, I64Attr:$workgroup_size,
+                       StrAttr:$schedule, StrAttr:$nan_mode);
+  let results = (outs AnyType:$scheduled);
+  let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
+  let hasVerifier = 1;
+}
+
 def Schedule_NormOp : Op<ScheduleDialect, "norm", [Pure]> {
   let summary = "Scheduled unweighted row normalization with immutable epsilon";
   let arguments = (ins AnyType:$subject, StrAttr:$artifact_hash,

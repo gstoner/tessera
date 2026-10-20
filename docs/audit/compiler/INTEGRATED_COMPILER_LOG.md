@@ -13986,7 +13986,7 @@ Evidence: benchmarks/baselines/rocm_bounded_fragment_loads_20261020/README.md.
 ### 2026-10-20 — exact packed MXFP4 fragment decoder
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
-PRs: pending; sync ROCM-MXFP4-FRAGMENT-DECODE-20261020.
+PRs: #997 (merged); sync ROCM-MXFP4-FRAGMENT-DECODE-20261020.
 
 Outcome: native E2M1-to-E4M3 bit encoding preserves negative zero and bounded
 fragment semantics with fewer comparisons. 55 focused gfx1201 cases include
@@ -14003,8 +14003,40 @@ Review follow-up: both paired timing domains reject odd/one-window counts
 before the hardware gate; 21 focused boundary tests pass. Recorded windows
 are even and native source/images remain unchanged.
 
-Remaining: exact-head publication/review, wider layout/model/AD envelopes
-and approximate folded Radiance attribution. All five aggregate programs open.
+Delivery: PR997 merged after exact-head CI and review.
+Remaining: wider layout/model/AD envelopes and approximate folded Radiance
+attribution. All five aggregate programs open.
 
 Evidence: benchmarks/baselines/rocm_mxfp4_fragment_decode_20261020/README.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-20 — native binary tensor producer integration
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync NATIVE-BINARY-PRODUCERS-20261020.
+
+Outcome: native C++ Graph/Schedule/Tile/NVIDIA lowering preserves both add
+producer inputs, repeated SSA references and typed intermediate rounding.
+Only native tensor-program members select the binary recipe; other Graph/Tile
+owners retain their existing lowering. FP16/BF16 matmul uses typed fragments;
+FP32 retains scalar FMA. Explicit conflicting layouts/precision are preserved.
+The native-frame v1 ABI is unchanged; all four backend plans are assessed.
+60 focused compiler and 701 adjacent/registry cases pass. All 2,754 production
+compiler-route cases execute without skips. RTX5070 passes 39 ordinary/resident
+cases and three producer-bit diagnostics. Six reproducible long-K timing rows
+have 36 admitted captured windows, separating producer/consumer/program events
+and completed public calls. Eight neighboring programs retain 18 PTX images;
+five gfx1201 format controls remain unchanged and exact MXFP4 numerics pass.
+
+Local delivery: 30,842 CPU passes / 3,721 declared skips;
+ODS exact inventory/consumer gate 783 passes; 33 generated docs, all five
+surfaces, claim lint, Ruff, zero-error mypy and Graphify pass. The initial ODS
+count mismatch is retained with its correction and full retry receipt.
+
+Remaining: exact-head publication/CI/review;
+general producer/layout/dynamic/AD reconstruction and all five aggregate
+programs remain open. No general performance or sibling hardware claim follows.
+
+Evidence: benchmarks/baselines/native_tensor_binary_producers_20261020/README.md.
 <!-- entry-fields:end -->

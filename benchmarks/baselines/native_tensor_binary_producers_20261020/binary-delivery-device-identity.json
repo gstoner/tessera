@@ -1,0 +1,9 @@
+{
+  "compiler_sha256": "68358e312c1cd8623ebf6ba3b07aec0d0bd4e4dfb16298888474b8d491788312",
+  "sources": {
+    "tests/unit/test_native_tensor_binary_producers.py": "66c505fdc07c6f7589767157a89f36c86b3f46df66cddf89a67ab3c3446bb443",
+    "tests/device/nvidia/test_native_tensor_binary_producers.py": "d6c06de7e834222c669fc163108baa9e9c091af0dc62ea53feb0e1b9f76c4bb9",
+    "tests/unit/test_native_binary_recorder.py": "22e94b6cb28ab8c93a134384503ae799b0f19cb03d8e7e0af9c60ae49112883a",
+    "benchmarks/nvidia/record_native_tensor_binary.py": "9b6a26d654e74d3e13008cf32703a989d669d51cdfedb87c95a4deed2242e23c"
+  }
+}

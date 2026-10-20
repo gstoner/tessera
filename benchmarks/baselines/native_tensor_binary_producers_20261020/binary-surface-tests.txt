@@ -1,0 +1,13 @@
+[surface_audit:tests] 10 entries  {'runnable': 1, 'runnable_optional': 0, 'compile_only': 3, 'scaffold': 4, 'broken': 0, 'archived': 2}
+  PASS  tests/unit  (runnable)
+  PASS  tests/unit/_slow_subset  (compile_only)
+  PASS  tests/tessera-ir  (compile_only)
+  PASS  tests/performance  (compile_only)
+  NOT-RUN  tests/kernel_tests  (scaffold)
+  NOT-RUN  tests/tessera_tests/tessera_kernels_scaffold  (archived)
+  NOT-RUN  tests/tessera_numerical_validation  (scaffold)
+  NOT-RUN  tests/integration  (scaffold)
+  NOT-RUN  tests/regression  (scaffold)
+  NOT-RUN  archive/tests  (archived)
+
+[surface_audit:tests] passed=4 failed=0 skipped=0

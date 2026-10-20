@@ -1,0 +1,35 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.4, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/angstorms/scratch/jvp-schema-reconcile-20261011
+configfile: pyproject.toml
+plugins: hypothesis-6.169.2, xdist-3.8.0, cov-7.1.0, timeout-2.4.0
+timeout: 180.0s
+timeout method: signal
+timeout func_only: False
+collected 701 items
+
+tests/unit/test_sm120_scalar_schedule.py ............................... [  4%]
+....................                                                     [  7%]
+tests/unit/test_rocm_scalar_schedule.py ................................ [ 11%]
+........................................................................ [ 22%]
+....                                                                     [ 22%]
+tests/unit/test_native_attention_ad_products.py ........................ [ 26%]
+...........                                                              [ 27%]
+tests/unit/test_native_scaled_program_projection.py .................... [ 30%]
+.....                                                                    [ 31%]
+tests/unit/test_native_encoded_scaled_gate.py ............               [ 32%]
+tests/unit/test_diagnostic_code_registry.py ............................ [ 36%]
+..............                                                           [ 38%]
+tests/unit/test_pass_metadata.py ....................................... [ 44%]
+........................................................................ [ 54%]
+........................................................................ [ 65%]
+........................................................................ [ 75%]
+.......                                                                  [ 76%]
+tests/unit/test_canonical_dtype.py ..................................... [ 81%]
+........................................................................ [ 91%]
+...........................                                              [ 95%]
+tests/unit/test_tensor_attributes_dtype_audit.py .......                 [ 96%]
+tests/unit/test_operator_registry_foundation.py .......................  [100%]
+
+- generated xml file: /home/angstorms/scratch/w11-program-pipeline-20261019/next-producer-census/binary-final-adjacent.xml -
+============================= 701 passed in 13.50s =============================

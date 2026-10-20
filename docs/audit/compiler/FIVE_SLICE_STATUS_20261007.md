@@ -2689,3 +2689,26 @@ images remain unchanged. This improves the exact packed physical consumer
 without closing approximate folded Radiance, model quality or aggregate scope.
 All five original programs remain open. Evidence:
 benchmarks/baselines/rocm_mxfp4_fragment_decode_20261020/README.md.
+
+## NVIDIA binary producer integration — 2026-10-20
+
+Sync: NATIVE-BINARY-PRODUCERS-20261020.
+Static compact add producers now retain both operands through native Graph,
+Schedule, Tile and NVIDIA code generation. FP16/BF16 consumers use typed
+fragments and FP32 retains its scalar arithmetic contract. Final compiler
+checks pass 60 focused plus 701 adjacent/registry cases; owning RTX5070
+checks pass 39 device cases and three projected-producer numerical diagnostics.
+Repeated SSA operand positions, fresh allocation, stream ordering and output
+independence are covered. Nine small timing profiles remain diagnostic because
+captured regions miss duration admission. The final K4096 recorder sweep
+admits all 36 captured windows across six FP16/BF16 profiles. Eight neighboring
+programs preserve 18 PTX images; gfx1201 exact MXFP4 and four neighboring format
+images remain unchanged. Full production compiler proof executes 2,754 cases
+without skips. Local full CPU proof passes 30,842 cases with 3,721
+declared skips after the ODS inventory update; 783 ODS consumer cases pass.
+Local documentation/typing/Graphify gates pass. Exact-head publication/CI/review
+remain active. This does not
+close arbitrary producers, dynamic/layout/AD reconstruction or the five original
+aggregate programs.
+
+Binary producer evidence: benchmarks/baselines/native_tensor_binary_producers_20261020/README.md.

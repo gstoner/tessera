@@ -12215,3 +12215,19 @@ PR963 review follow-through: the AST emission and copied first-call
 specialization boundaries persist eager-int-coerced slice coordinates before
 serialization. Pure result inference and caller-owned Graph attributes remain
 unchanged. This is shared frontend correctness; physical admission is unchanged.
+
+
+## NATIVE-BINARY-PRODUCERS-20261020
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Synchronization key: NATIVE-BINARY-PRODUCERS-20261020.
+
+Shared contract: a typed content-addressed `schedule.binary_kernel` and an
+SM120-qualified stored-add Tile recipe preserve both producer operands,
+including duplicate SSA references. Static compact rank-two FP16/BF16/FP32
+buffers retain fresh allocation and checked lifetime. Native-frame v1 ABI and
+public Graph add registration are unchanged. Explicit conflicting matmul layout
+or FP64 accumulation requests cannot be silently normalized. See
+`docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md` for the admitted envelope.
+
+Not applicable to the new SM120 physical recipe: existing x86 elementwise storage and Target lowering retain their ownership. Shared internal Schedule registration does not admit an x86 package. Native x86 producer integration and exact-device proof remain follow-up required.

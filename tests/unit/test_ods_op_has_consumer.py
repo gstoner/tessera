@@ -274,6 +274,7 @@ def test_scan_parses_every_ods_form() -> None:
         "tile.structured_reduction_kernel",
         "tile.transpose_kernel",
         "schedule.activation",
+        "schedule.binary_kernel",
         "tile.activation_kernel",
         "tessera_rocm.structured_reduction",
         "tessera.nvfp4_expand",
@@ -302,11 +303,13 @@ def test_scan_parses_every_ods_form() -> None:
 # Six native attention row products: Graph, Schedule and Tile producer/consumer.
 # Two existing public slice spellings now have registered Graph ODS records.
 # 695 -> 697: typed Tile and NVIDIA native-program invocation records.
-_DECLARED_OP_RECORDS = 697
+# 697 -> 698: native storage-preserving schedule.binary_kernel.
+_DECLARED_OP_RECORDS = 698
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:
     assert _TIERS["tessera.matmul"] == "compiler"
+    assert _TIERS["schedule.binary_kernel"] == "compiler"
     for name in ("tessera.nvfp4_expand", "tile.nvfp4_expand_kernel",
                  "tessera_rocm.nvfp4_expand"):
         assert _TIERS[name] == "compiler"

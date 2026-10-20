@@ -1,0 +1,8 @@
+{
+  "status": "byte_identical",
+  "programs": 8,
+  "member_images": 18,
+  "control": "01922c4ad30f86d754318d4c51ded63ee306c44af351a9763bb209554df1ba82",
+  "candidate": "68358e312c1cd8623ebf6ba3b07aec0d0bd4e4dfb16298888474b8d491788312",
+  "scope": "FP16/BF16 ReLU, RMSNorm, two-sided ReLU/softmax and reversed-root programs; source, projected members, frame, PTX"
+}

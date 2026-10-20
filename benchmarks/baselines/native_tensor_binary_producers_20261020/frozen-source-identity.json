@@ -1,0 +1,16 @@
+{
+  "base": "502f2322db3dc02573e63e605d5ecef82b2d0653",
+  "compiler_sha256": "68358e312c1cd8623ebf6ba3b07aec0d0bd4e4dfb16298888474b8d491788312",
+  "layout_sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+  "patch_sha256": "a5aa0740b76f51eb01f209f7671acdca640524d64a0548407ea79f65fff4e076",
+  "source_sha256": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "236f5e8045383465e530abdbdd78cf5bbd317b5f5acb31c53239f913c46bcdf7",
+    "src/compiler/ir/TileOps.cpp": "bac5d724b4d2e839505891bc3e7e68ce94b28f2e28fab66422a5a8cec1072725",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "c0581d13f0dcea3b3868edae77cb794e498749356968f3dd374bb40561f199ee",
+    "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "eb7b853b63da3338957dc3105a5b5705d539c78ac30a870cca8d7ba74d3d4ec8",
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "e2d8fe309845047eb3f4c7385e7a3c0425af10bebabf39b1a04290c91c6d08f0",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "c1808ae6daffd5839e4c75b25ea4e68a3642e55523494e075899a1b16278bbc4",
+    "tests/unit/test_native_tensor_binary_producers.py": "66c505fdc07c6f7589767157a89f36c86b3f46df66cddf89a67ab3c3446bb443"
+  },
+  "scope": "60 compiler ownership/contract tests passed; final candidate device rerun pending"
+}

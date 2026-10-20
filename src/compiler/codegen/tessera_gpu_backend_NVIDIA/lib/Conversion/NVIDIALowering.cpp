@@ -2315,6 +2315,69 @@ static LogicalResult materializeSm120ActivationKernel(
   return success();
 }
 
+// Storage-preserving binary producer. Both inputs are widened for the
+// arithmetic and rounded exactly once into the declared intermediate storage
+// before a later tensor-program member consumes it.
+static LogicalResult materializeSm120ElementwiseKernel(
+    tessera::tile::ElementwiseKernelOp kernel, OpBuilder &builder) {
+  if (failed(kernel.verify())) return failure();
+  Operation *op = kernel.getOperation();
+  auto storage = op->getAttrOfType<StringAttr>("storage");
+  auto output = op->getAttrOfType<StringAttr>("output_storage");
+  auto family = op->getAttrOfType<StringAttr>("family");
+  auto kind = op->getAttrOfType<StringAttr>("kind");
+  auto accum = op->getAttrOfType<StringAttr>("accum");
+  auto inputs = kernel.getInputs();
+  auto function = op->getParentOfType<LLVM::LLVMFuncOp>();
+  if (!function || !function->hasAttr("tessera.native.elementwise_contract") ||
+      inputs.size() != 4 || !family || family.getValue() != "binary" ||
+      !kind || kind.getValue() != "add" || !storage || !output ||
+      output.getValue() != storage.getValue() || !accum ||
+      accum.getValue() != "f32" ||
+      (storage.getValue() != "f16" && storage.getValue() != "bf16" &&
+       storage.getValue() != "f32"))
+    return op->emitError("SM120 binary producer requires add, matching "
+                         "f16/bf16/f32 storage and f32 arithmetic");
+  Location loc = op->getLoc();
+  Type element = storage.getValue() == "f16" ? Type(builder.getF16Type()) :
+                 storage.getValue() == "bf16" ? Type(builder.getBF16Type()) :
+                                               Type(builder.getF32Type());
+  bool wideStorage = element.isF32();
+  unsigned alignment = wideStorage ? 4 : 2;
+  Type i32 = builder.getI32Type(), i64 = builder.getI64Type();
+  Value block = arith::ExtUIOp::create(builder, loc, i64,
+      NVVM::BlockIdXOp::create(builder, loc, i32));
+  Value thread = arith::ExtUIOp::create(builder, loc, i64,
+      NVVM::ThreadIdXOp::create(builder, loc, i32));
+  Value index = addI64(builder, loc,
+      mulI64(builder, loc, block, i64Constant(builder, loc, 128)), thread);
+  auto active = scf::IfOp::create(
+      builder, loc, lessI64(builder, loc, index, inputs[3]), false);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(active.thenBlock());
+    auto load = [&](Value pointer) -> Value {
+      Value address = LLVM::GEPOp::create(builder, loc, pointer.getType(),
+          element, pointer, ValueRange{index});
+      Value value = LLVM::LoadOp::create(
+          builder, loc, element, address, alignment);
+      if (!wideStorage)
+        value = LLVM::FPExtOp::create(builder, loc, builder.getF32Type(), value);
+      return value;
+    };
+    Value lhs = load(inputs[0]);
+    Value rhs = load(inputs[1]);
+    Value result = arith::AddFOp::create(builder, loc, lhs, rhs);
+    if (!wideStorage)
+      result = LLVM::FPTruncOp::create(builder, loc, element, result);
+    Value address = LLVM::GEPOp::create(builder, loc, inputs[2].getType(),
+        element, inputs[2], ValueRange{index});
+    LLVM::StoreOp::create(builder, loc, result, address, alignment);
+  }
+  op->erase();
+  return success();
+}
+
 static LogicalResult materializeSm120NormKernel(
     tessera::tile::NormKernelOp kernel, OpBuilder &builder) {
   Operation *op = kernel.getOperation();
@@ -5820,13 +5883,17 @@ struct LowerTileToNVIDIAPass
     SmallVector<Operation *> worklist;
     module.walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
+      bool ownedBinary = false;
+      if (name == "tile.elementwise_kernel")
+        if (auto function = op->getParentOfType<LLVM::LLVMFuncOp>())
+          ownedBinary = function->hasAttr("tessera.native.elementwise_contract");
       if (name == "tile.mma" || name == "tile.async_copy" ||
           name == "tessera_nvidia.block_coordinate" ||
           name == "tessera_nvidia.macro_cta_matmul" ||
           name == "tile.scalar_matmul_kernel" ||
           name == "tile.matmul_kernel" || name == "tile.softmax_kernel" ||
           name == "tile.materialize_composed_layout" ||
-          name == "tile.activation_kernel" ||
+          name == "tile.activation_kernel" || ownedBinary ||
           name == "tile.reduce_kernel" || name == "tile.norm_kernel" ||
           name == "tile.cuda_intrinsic_kernel" ||
           name == "tile.packed_store" ||
@@ -6124,6 +6191,18 @@ struct LowerTileToNVIDIAPass
                 cast<tessera::tile::ReduceKernelOp>(op), builder))) {
           if (smVersion < kConsumerBlackwellSM)
             op->emitError("tile.reduce_kernel currently requires sm_120");
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
+
+      if (isTileOp(op, "tile.elementwise_kernel")) {
+        if (smVersion != kConsumerBlackwellSM ||
+            failed(materializeSm120ElementwiseKernel(
+                cast<tessera::tile::ElementwiseKernelOp>(op), builder))) {
+          if (smVersion != kConsumerBlackwellSM)
+            op->emitError("binary elementwise producer requires exact sm_120");
           signalPassFailure();
           return;
         }

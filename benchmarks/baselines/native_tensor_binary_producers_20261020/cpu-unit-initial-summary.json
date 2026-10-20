@@ -1,0 +1,18 @@
+{
+  "passed": 30841,
+  "skipped": 3721,
+  "failed": 1,
+  "seconds": 478.46,
+  "failing_node": "tests/unit/test_ods_op_has_consumer.py::test_scan_parses_every_ods_form",
+  "cause": "expected 697 ODS records; newly declared schedule.binary_kernel makes actual count 698",
+  "correction": "exact inventory count updated to 698; new mnemonic parse and shipped compiler-consumer pins added; no waiver added",
+  "affected_gate_rerun": {
+    "passed": 783,
+    "skipped": 0,
+    "receipt": "binary-ods-consumers.xml"
+  },
+  "full_cpu_retry": {
+    "status": "passed",
+    "summary": "cpu-unit-final-summary.json"
+  }
+}

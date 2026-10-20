@@ -1823,6 +1823,91 @@ static bool isNativeROCMWideningMath(Operation *op, StringRef storage,
       (storage == "f16" || storage == "bf16");
 }
 
+// The new same-storage binary recipe is architecture-owned. Existing x86
+// f32 and ROCm widening contracts are unchanged.
+static FailureOr<bool> verifyNativeSM120StoredAdd(Operation *op,
+                                                 StringRef storage,
+                                                 StringRef outputStorage) {
+  auto fn = op->getParentOfType<LLVM::LLVMFuncOp>();
+  if (!fn || !fn->hasAttr("tessera.native.elementwise_contract")) return false;
+  auto contract = fn->getAttrOfType<DictionaryAttr>("tessera.native.elementwise_contract");
+  auto mod = op->getParentOfType<ModuleOp>();
+  auto target = mod ? mod->getAttrOfType<StringAttr>("tessera.target") : StringAttr{};
+  auto arch = mod ? mod->getAttrOfType<StringAttr>("tessera.arch") : StringAttr{};
+  auto string = [&](StringRef name) -> StringRef {
+    auto value = contract ? contract.getAs<StringAttr>(name) : StringAttr{};
+    return value ? value.getValue() : StringRef{};
+  };
+  auto elements = contract ? contract.getAs<IntegerAttr>("elements") : IntegerAttr{};
+  auto family = op->getAttrOfType<StringAttr>("family");
+  auto kind = op->getAttrOfType<StringAttr>("kind");
+  auto accum = op->getAttrOfType<StringAttr>("accum");
+  auto schedule = op->getAttrOfType<StringAttr>("schedule");
+  auto nan = op->getAttrOfType<StringAttr>("nan_mode");
+  auto workgroup = op->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
+  auto threads = fn->getAttrOfType<DenseI32ArrayAttr>("nvvm.reqntid");
+  if (!contract || contract.size() != 5 || !target ||
+      target.getValue() != "nvidia_sm120" || !arch ||
+      arch.getValue() != "sm_120" || !fn->hasAttr("nvvm.kernel") ||
+      !family || family.getValue() != "binary" || !kind || kind.getValue() != "add" ||
+      !accum || accum.getValue() != "f32" ||
+      !schedule || schedule.getValue() != "flat_128" ||
+      !nan || nan.getValue() != "propagate" ||
+      !workgroup || workgroup.getInt() != 128 ||
+      string("kind") != "add" || string("storage") != storage ||
+      string("output_storage") != outputStorage || string("accum") != "f32" ||
+      outputStorage != storage ||
+      (storage != "f16" && storage != "bf16" && storage != "f32") ||
+      !elements || !elements.getType().isInteger(64) || elements.getInt() <= 0 ||
+      elements.getInt() > static_cast<int64_t>(INT32_MAX) * 128 ||
+      !threads || threads.asArrayRef().size() != 3 ||
+      threads.asArrayRef()[0] != 128 || threads.asArrayRef()[1] != 1 ||
+      threads.asArrayRef()[2] != 1 || fn.getNumArguments() != 4 ||
+      op->getNumOperands() != 4) {
+    op->emitOpError("requires the exact SM120 same-storage add contract and 128-thread kernel");
+    return failure();
+  }
+  for (auto [index, input] : llvm::enumerate(op->getOperands()))
+    if (input != fn.getArgument(index)) {
+      op->emitOpError("binary kernel operands must preserve native parameter order");
+      return failure();
+    }
+  bool framed = fn->hasAttr("tessera.native.program_buffer_types") ||
+                fn->hasAttr("tessera.native.program_geometry") ||
+                fn->hasAttr("tessera.native.program_scalars");
+  if (framed) {
+    auto types = fn->getAttrOfType<ArrayAttr>("tessera.native.program_buffer_types");
+    auto geometry = fn->getAttrOfType<DenseI64ArrayAttr>("tessera.native.program_geometry");
+    auto scalars = fn->getAttrOfType<DenseI64ArrayAttr>("tessera.native.program_scalars");
+    int64_t n = elements.getInt();
+    int64_t expected[] = {(n + 127) / 128, 1, 1, 128, 1, 1};
+    if (!types || types.size() != 3 || !geometry ||
+        geometry.asArrayRef() != ArrayRef<int64_t>(expected) || !scalars ||
+        scalars.asArrayRef().size() != 1 || scalars.asArrayRef()[0] != n) {
+      op->emitOpError("binary frame geometry/scalars must match its checked element count");
+      return failure();
+    }
+    Type previous;
+    for (Attribute attr : types) {
+      auto named = dyn_cast<TypeAttr>(attr);
+      auto type = named ? dyn_cast<MemRefType>(named.getValue()) : MemRefType{};
+      if (!type || type.getRank() != 2 || !type.hasStaticShape() ||
+          !type.getLayout().isIdentity() ||
+          !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0 && d <= INT32_MAX; }) ||
+          type.getNumElements() != n ||
+          (storage == "f16" ? !type.getElementType().isF16() :
+           storage == "bf16" ? !type.getElementType().isBF16() :
+                              !type.getElementType().isF32()) ||
+          (previous && previous != type)) {
+        op->emitOpError("binary frame buffers must match its storage, shape and element count");
+        return failure();
+      }
+      previous = type;
+    }
+  }
+  return true;
+}
+
 LogicalResult ElementwiseKernelOp::verify() {
   auto family = getOperation()->getAttrOfType<StringAttr>("family");
   auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
@@ -1861,11 +1946,16 @@ LogicalResult ElementwiseKernelOp::verify() {
   StringRef requiredStorage = logical ? "i8" : bitwise ? "i32" : "f32";
   bool nativeSiluStorage = binaryMath && kind.getValue() == "silu_mul" &&
       isNativeROCMWideningMath(getOperation(), storage.getValue(), true);
+  auto nativeAddContract = verifyNativeSM120StoredAdd(
+      getOperation(), storage.getValue(), outputStorage.getValue());
+  if (failed(nativeAddContract)) return failure();
+  bool nativeAddStorage = *nativeAddContract;
   if (storage.getValue() != requiredStorage &&
       !(((unary || binary || transcendental ||
           (binaryMath && kind.getValue() == "silu_mul")) &&
          outputStorage.getValue() == "f32" &&
-         isNativeROCMWideningMath(getOperation(), storage.getValue())) || nativeSiluStorage))
+         isNativeROCMWideningMath(getOperation(), storage.getValue())) ||
+        nativeSiluStorage || nativeAddStorage))
     return emitOpError() << family.getValue() << " requires storage=\""
                          << requiredStorage << "\"";
   if (where) {
@@ -1922,8 +2012,8 @@ LogicalResult ElementwiseKernelOp::verify() {
         (kind.getValue() != "pow" && kind.getValue() != "silu_mul"))
       return emitOpError("binary_math requires kind=pow|silu_mul and output_storage=\"f32\"");
   } else {
-    if (outputStorage.getValue() != "f32")
-      return emitOpError("unary/binary requires output_storage=\"f32\"");
+    if (outputStorage.getValue() != "f32" && !nativeAddStorage)
+      return emitOpError("unary/binary requires output_storage=\"f32\" or the native same-storage add contract");
     if (unary && kind.getValue() != "sqrt" && kind.getValue() != "rsqrt" &&
         kind.getValue() != "reciprocal" && kind.getValue() != "abs" &&
         kind.getValue() != "sign" && kind.getValue() != "floor" &&

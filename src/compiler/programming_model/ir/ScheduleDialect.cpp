@@ -367,6 +367,28 @@ LogicalResult ActivationOp::verify() {
   return success();
 }
 
+LogicalResult BinaryKernelOp::verify() {
+  if (failed(verifyContentAddressedKernel(*this, getSubject(), getScheduled(),
+          getArtifactHash(), getArch(), getStorage(), getAccum(), getWorkgroupSize())))
+    return failure();
+  auto type = dyn_cast<RankedTensorType>(getSubject().getType());
+  if (!type || type.getRank() != 2 || !type.hasStaticShape() ||
+      type.getEncoding() ||
+      !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0 && d <= INT32_MAX; }) ||
+      type.getNumElements() > static_cast<int64_t>(INT32_MAX) * 128 ||
+      getArch() != "sm_120" || getWorkgroupSize() != 128 ||
+      (getStorage() != "f16" && getStorage() != "bf16" && getStorage() != "f32") ||
+      (getStorage() == "f16" ? !type.getElementType().isF16() :
+       getStorage() == "bf16" ? !type.getElementType().isBF16() :
+                              !type.getElementType().isF32()) ||
+      getOutputStorage() != getStorage() || getAccum() != "f32" ||
+      getKind() != "add" || getAxis() != -1 ||
+      getSchedule() != "flat_128" || getNanMode() != "propagate")
+    return emitOpError("requires a static compact SM120 same-storage add "
+                       "with f32 arithmetic and a valid flat_128 grid");
+  return success();
+}
+
 LogicalResult NormOp::verify() {
   if (failed(tessera::readBoundedQueryNormShape(getOperation(),getSubject().getType())))
     return failure();

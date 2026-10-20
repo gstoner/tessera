@@ -1,0 +1,59 @@
+{
+  "implementation_commit": "8954428a78b2841602905e9ff5b788195f24de2e",
+  "base_main": "d0579fdb1546fda5278b700dbee8c77a251d339b",
+  "validation": {
+    "prepared_device": 24,
+    "public_device_distinct": 30,
+    "bounded_public_subset": 16,
+    "final_source_bounded_rerun_subset": 16,
+    "portable_frame": 241,
+    "shared_plugin_registry": 346,
+    "production_route": 2459,
+    "production_skips": 0,
+    "require_executed": "passed",
+    "mypy_errors": 0,
+    "ruff": "passed",
+    "audit_lifecycle_ownership": 22,
+    "public_benchmark_orders": 2,
+    "profiles_per_order": 12,
+    "samples": 21,
+    "calls_per_sample": 8,
+    "bounded_static_warm_host_ratios": [
+      [
+        0.941699710806302,
+        1.0173665734138662
+      ],
+      [
+        0.9177807729360092,
+        1.0503843059777773
+      ]
+    ],
+    "graphify": {
+      "nodes": 101028,
+      "edges": 245721,
+      "communities": 3699
+    },
+    "generated_write": "passed",
+    "generated_drift": "33 in sync",
+    "full_cpu": {
+      "passed": 30770,
+      "skipped": 3710,
+      "failed_initial": 1,
+      "failure": "new recorder lacked tracked citation",
+      "fix": "recorded-by citation and reproduction commands",
+      "focused_unchanged_ratchet_passed": 1,
+      "full_final_head_rerun": "not yet performed"
+    },
+    "audit_initial_failure": "W1.1 Latest link; corrected and 22 focused tests pass",
+    "surfaces": "all five pass; 2 optional example dependencies skipped",
+    "claim_lint": "both views pass"
+  },
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "f6c5e4c1c0a9ee4c5034aceb3d4a8e3d8789810a9da8f8d5e36025ecb9a665c9",
+    "python/tessera/compiler/source_attention_reverse_frontend.py": "d53f2f41f337d1aa068bab7e4a37204e05020e8122bacbaf01817863f19547e3",
+    "python/tessera/compiler/native_vjp_composites.py": "a74e8c511f0ce51129cffba4256ae53fb825602b39fbbf118a246050a69249d2",
+    "python/tessera/compiler/portable_source_attention_reverse.py": "c164eef3755a1c1d65c4688ad2987749f97a6ffcb494f6e960f2b843a90b1618",
+    "python/tessera/compiler/prepared_source_attention_reverse.py": "fb8938abd1a301928388bcc2095253a011e837044bee431b31873690695c7907",
+    "benchmarks/nvidia/benchmark_bounded_public_source_reverse.py": "f0a076d8fddebc12234bd51debba9d8eb31fd23753f9b58c14f1099c7096103f"
+  }
+}

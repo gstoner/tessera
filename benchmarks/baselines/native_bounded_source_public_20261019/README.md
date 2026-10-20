@@ -39,6 +39,14 @@ only to the device cases above.
 
 ## Paired public measurements
 
+Recorded by benchmarks/nvidia/benchmark_bounded_public_source_reverse.py.
+
+Reproduce on the owning SM120 host with the matching compiler/provider selected:
+
+    python benchmarks/nvidia/benchmark_bounded_public_source_reverse.py --output public-order-a.json
+    python benchmarks/nvidia/benchmark_bounded_public_source_reverse.py --reverse --output public-order-b.json
+
+
 public-order-a.json and public-order-b.json each contain 12 profiles with
 21 alternating samples and eight completed calls per arm/sample. Profile,
 initial arm and post-trace frame ordering are counterbalanced. Both orders
@@ -73,7 +81,13 @@ module-capacity tamper. The validator now checks each module/member boundary.
 mypy-before-fix.txt retains four variable inference errors; the baseline remains
 zero and the fix renames locals and explicitly narrows optional capacity roles.
 
-Full CPU, production-route, generated-document and audit gate results are
-pending at this checkpoint and must finish before public PR delivery.
+Production-route proof passes 2,459 tests with no skips; require_executed passes.
+Mypy remains at zero errors; Ruff, 22 document lifecycle/ownership tests and all
+five surface audits plus claim lint pass. All 33 generated views regenerate.
+The first full CPU run passed 30,770 and skipped 3,710, with one recorder naming
+failure: this new recorder lacked an explicit tracked README citation. The
+Recorded by line and reproduction commands above fix that ownership omission;
+the empty-orphan ratchet is unchanged. Its focused rerun and final generated
+drift result are recorded separately before public delivery.
 This packet does not close generic source/layout/AD, mixed/quantized attention,
 representative model/corpus quality or ROCm physical performance obligations.

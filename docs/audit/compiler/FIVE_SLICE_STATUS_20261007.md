@@ -2,6 +2,38 @@
 last_updated: 2026-10-20
 audit_role: reference
 ---
+
+## ROCM-BOUNDED-CONTIGUOUS-PACK-20261020 — guarded load candidate
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync: ROCM-BOUNDED-CONTIGUOUS-PACK-20261020.
+
+Delivery context: PR995 merged as 71564e7679bee9efeda5c0b18ac2a6430a9a7936
+after exact-head CI and review. Earlier FP32-root candidate statements below
+retain their original evidence checkpoints.
+
+Contract: retain the existing bounded Tile fragment element/zero-fill
+semantics with a guarded contiguous-vector load. Partial K, strided K and
+packed MXFP4 retain scalar fallback. No shared IR spelling, dtype, numeric
+policy, pass registration or runtime ABI changes.
+
+Candidate compiler builds and passes 200 FP8/MXFP8/exact-MXFP4 device-suite
+tests and 52 existing fragment/compiler tests. Direct gfx1201 control versus
+candidate proof passes 192 checks over eight operand pairs and twelve short-K,
+ragged-row/column envelopes; unmasked output exposes zero-fill errors.
+The maintained fixture adds memory-order and tight-capacity controls;
+29 structural cases pass, including gfx1151 and gfx942 compile-only evidence.
+Owning gfx1151 execution remains follow-up required.
+
+The first 24-row resident Graph comparison includes FP8 K128, FP32-scaled K32,
+MXFP8 and explicitly approximate folded MXFP4. M200/N1024/K4096 FP8 K128 falls
+from 206 to 86 us; K32 FP32 scaling falls from 1654 to 108 us. Small differences
+and unchanged folded profiles require repeated paired measurement. Completed
+public calls, exact packed MXFP4 performance, wider shapes and full delivery
+gates remain open. No selector promotion or aggregate ROCm closure follows.
+
+The original five aggregate slices remain open.
+
 ## Native original FP32 producer roots candidate — 2026-10-20
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

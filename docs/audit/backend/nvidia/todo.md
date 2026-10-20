@@ -6,6 +6,25 @@ target: nvidia_sm120
 last_updated: 2026-10-20
 ---
 
+## ROCM-BOUNDED-CONTIGUOUS-PACK-20261020 — guarded load candidate
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync: ROCM-BOUNDED-CONTIGUOUS-PACK-20261020.
+
+Delivery context: PR995 merged as 71564e7679bee9efeda5c0b18ac2a6430a9a7936
+after exact-head CI and review. Earlier FP32-root candidate statements below
+retain their original evidence checkpoints.
+
+Contract: retain the existing bounded Tile fragment element/zero-fill
+semantics with a guarded contiguous-vector load. Partial K, strided K and
+packed MXFP4 retain scalar fallback. No shared IR spelling, dtype, numeric
+policy, pass registration or runtime ABI changes.
+
+Not applicable to SM120 physical execution: this change is inside the ROCm
+fragment materializer. NVIDIA fragment mapping, PTX and CUDA native ABIs are
+unchanged. The bounded Tile zero-fill contract is preserved. AMD compiler/
+hardware measurements do not add NVIDIA execution evidence.
+
 ## NATIVE-TENSOR-FP32-ROOTS-20261020 — original producer storage candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

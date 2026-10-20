@@ -7,6 +7,24 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## ROCM-BOUNDED-CONTIGUOUS-PACK-20261020 — guarded load candidate
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync: ROCM-BOUNDED-CONTIGUOUS-PACK-20261020.
+
+Delivery context: PR995 merged as 71564e7679bee9efeda5c0b18ac2a6430a9a7936
+after exact-head CI and review. Earlier FP32-root candidate statements below
+retain their original evidence checkpoints.
+
+Contract: retain the existing bounded Tile fragment element/zero-fill
+semantics with a guarded contiguous-vector load. Partial K, strided K and
+packed MXFP4 retain scalar fallback. No shared IR spelling, dtype, numeric
+policy, pass registration or runtime ABI changes.
+
+Not applicable to AVX-512 physical execution: the load choice belongs to
+the ROCm fragment materializer. CPU vector lowering and runtime ABI remain
+unchanged; no x86 throughput or owning-device parity claim is added.
+
 ## NATIVE-TENSOR-FP32-ROOTS-20261020 — original producer storage candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

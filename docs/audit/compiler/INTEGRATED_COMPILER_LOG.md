@@ -14014,7 +14014,7 @@ Evidence: benchmarks/baselines/rocm_mxfp4_fragment_decode_20261020/README.md.
 ### 2026-10-20 — native binary tensor producer integration
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
-PRs: #998 (open); sync NATIVE-BINARY-PRODUCERS-20261020.
+PRs: #998 (merged as 09ec0ddfaf44e42a7a58831d30c380cafb8fbd97); sync NATIVE-BINARY-PRODUCERS-20261020.
 
 Outcome: native C++ Graph/Schedule/Tile/NVIDIA lowering preserves both add
 producer inputs, repeated SSA references and typed intermediate rounding.
@@ -14043,9 +14043,60 @@ arena allocation. Six fresh timing rows retain identical IR/frame/images and
 all 36 captured duration gates. Current full CPU: 30,854 passed /
 3,721 declared skips; all 2,755 compiler cases execute without skips.
 
-Remaining: exact-head publication/CI/review;
-general producer/layout/dynamic/AD reconstruction and all five aggregate
+Delivery update: PR998 merged after all exact-head CI and review checks passed.
+Remaining: general producer/layout/dynamic/AD reconstruction and all five aggregate
 programs remain open. No general performance or sibling hardware claim follows.
 
 Evidence: benchmarks/baselines/native_tensor_binary_producers_20261020/README.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-20 — native bounded binary tensor programs
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync NATIVE-BOUNDED-BINARY-PRODUCERS-20261020.
+
+Outcome: native C++ projects original M-bound source policy, retains dynamic
+Graph/Schedule member types, verifies capacity/active memory bindings and
+exports frame v2 scalar/grid expressions. Native C++ plans active views before
+committing calls; public shape_bounds uses compiler-derived reusable keys.
+The additive prepare_v2 ABI retains v1 execution and the original 102 exports.
+Four initial missing-route failures become positive compiler cases; 95
+focused compiler/transport cases, 43 host-only transport cases, 462 adjacent/
+registry gates and 16 recorder argument cases pass. Eight RTX5070 bounded
+cases prove ordinary shrink/grow, independent stored-add/matmul oracles,
+changed-M replay, native atomic refusal and resident producer ordering.
+All 120 static NVIDIA owner/MLP/FP32 controls pass. Exact gfx1201 composed
+MXFP4 numerics pass and five format image controls remain byte-identical.
+The missing standard-library include build failure is retained and corrected
+before the fresh provider proof. All four backend queues are assessed.
+
+Remaining: exact-head publication CI/review and delivery. Generic producer/layout/dynamic/AD
+reconstruction and all original five aggregate programs remain open.
+
+Evidence: benchmarks/baselines/native_tensor_bounded_binary_20261020/README.md.
+Active-memory review: actual dynamic root/return memrefs and explicit
+memref.dim/subview SSA replace capacity-typed borrowed roots. Alias-aware
+initialization/writer/retirement verification passes 176 focused cases;
+487 final shared/public/transport cases and 32 combined current RTX5070 cases
+(24 compiler, eight device) pass. Native frame/member/PTX identities are
+unchanged. Initial broad gates pass 30,905 CPU cases / 3,721 declared skips
+and all 2,770 selected compiler cases execute; those are the first candidate's
+results. Current full compiler passes 2,779 with zero skips. First active-SSA CPU lane
+passes 30,902 with 3,721 declared skips; three routing failures exposed a
+missing historical Remaining field, corrected with all 19 routing/lifecycle
+cases passing. Twelve current timing rows retain one allocation per storage;
+24/72 captured windows pass the duration gate, shorter producer windows remain
+diagnostic. Current gfx1201 numerical/five-image controls, all five surfaces,
+Ruff and claim lint pass. Final delivery gates remain.
+
+Final local delivery: the CI-equivalent CPU lane passes **30,894** with
+**3,721 declared skips**, zero failures/errors. The 11 cases omitted versus
+the first CPU run all have explicit performance markers, matching CI's selector;
+no other test IDs differ. The initial log-field failure and correction are
+retained. All **2,779** compiler cases execute with zero skips. The 323 final
+documentation/registry cases, 790 ODS cases, all five surfaces, 33 generated
+documents, Ruff, zero-error mypy and Graphify pass. Exact-head public CI/review
+and delivery remain pending; all five aggregate programs remain open.
+
 <!-- entry-fields:end -->

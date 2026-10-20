@@ -1,5 +1,7 @@
 #pragma once
+#include <algorithm>
 #include <atomic>
+#include <iterator>
 // Included in matmul_prepared.cpp after shared ownership/ordering helpers.
 // Interprets compiler-projected dataflow and launch arguments, never op names.
 namespace {
@@ -25,7 +27,12 @@ struct NativeFrameOwner {
   std::vector<uint32_t> roots, outputs;
   std::vector<size_t> offsets;
   std::vector<CUmodule> modules;
-  std::vector<NativeFrameStage> stages;
+  std::vector<NativeFrameStage> stages, capacityStages;
+  std::vector<TesseraNvidiaMatmulHostView> activeDescriptors;
+  std::vector<TesseraNvidiaNativeFrameRowPlanV2> rowPlans;
+  std::vector<uint8_t> rowBuffers;
+  uint32_t rowRoot = 0;
+  int64_t rowBound = 0;
   std::vector<CUdeviceptr> bindings;
   std::vector<unsigned long long> allocationIds;
   std::vector<uint64_t> producerStreams;
@@ -79,14 +86,15 @@ bool nativeFrameOverlap(uintptr_t a,size_t ab,uintptr_t b,size_t bb) {
 }
 bool nativeFrameViews(NativeFrameOwner &owner,
     const TesseraNvidiaMatmulHostView *roots,size_t rootCount,
-    const TesseraNvidiaMatmulHostView *outputs,size_t outputCount,bool resident) {
+    const TesseraNvidiaMatmulHostView *outputs,size_t outputCount,bool resident,
+    const std::vector<TesseraNvidiaMatmulHostView> &expected) {
   if (!roots || !outputs || rootCount!=owner.roots.size() || outputCount!=owner.outputs.size())
     return bad("native frame root/output count differs"),false;
   for (size_t i=0;i<rootCount;++i)
-    if (!nativeFrameView(roots[i],owner.descriptors[owner.roots[i]]))
+    if (!nativeFrameView(roots[i],expected[owner.roots[i]]))
       return bad("native frame root shape/stride/storage differs"),false;
   for (size_t i=0;i<outputCount;++i) {
-    if (!nativeFrameView(outputs[i],owner.descriptors[owner.outputs[i]]))
+    if (!nativeFrameView(outputs[i],expected[owner.outputs[i]]))
       return bad("native frame output shape/stride/storage differs"),false;
     uintptr_t a=reinterpret_cast<uintptr_t>(outputs[i].data);
     if (!resident) for (size_t j=0;j<rootCount;++j)
@@ -97,6 +105,37 @@ bool nativeFrameViews(NativeFrameOwner &owner,
       if (nativeFrameOverlap(a,outputs[i].bytes,
           reinterpret_cast<uintptr_t>(outputs[j].data),outputs[j].bytes))
         return bad("native frame outputs overlap"),false;
+  }
+  return true;
+}
+// Pure active-frame planning. No retained fields, CUDA events, snapshots or
+// output bytes change until every actual view and borrowed allocation passes.
+bool planNativeFrameActive(const NativeFrameOwner &owner,
+    const TesseraNvidiaMatmulHostView *roots,size_t rootCount,
+    std::vector<TesseraNvidiaMatmulHostView> &descriptors,
+    std::vector<NativeFrameStage> &stages) {
+  descriptors=owner.descriptors;stages=owner.capacityStages;
+  if (!owner.rowBound) return true;
+  if (!roots || rootCount!=owner.roots.size())
+    return bad("bounded native frame root count differs"),false;
+  auto binding=std::find(owner.roots.begin(),owner.roots.end(),owner.rowRoot);
+  if (binding==owner.roots.end()) return bad("bounded native row root is not an input"),false;
+  int64_t rows=roots[std::distance(owner.roots.begin(),binding)].shape[0];
+  if (rows<=0 || rows>owner.rowBound)
+    return bad("bounded native frame active rows exceed capacity"),false;
+  for (size_t i=0;i<descriptors.size();++i) if (owner.rowBuffers[i]) {
+    auto &view=descriptors[i];view.shape[0]=rows;
+    view.bytes=size_t(rows)*size_t(view.shape[1])*(view.dtype==1?4:2);
+  }
+  for (size_t i=0;i<stages.size();++i) {
+    auto &stage=stages[i];const auto &plan=owner.rowPlans[i];
+    for (size_t j=0;j<stage.scalarCount;++j)
+      if (plan.scalar_multipliers[j]) stage.scalars[j]=rows*plan.scalar_multipliers[j];
+    for (size_t axis=0;axis<3;++axis) if (plan.grid_multipliers[axis]) {
+      // Metadata planning already proved every capacity product fits i64.
+      __int128 value=static_cast<__int128>(rows)*plan.grid_multipliers[axis];
+      stage.grid[axis]=uint32_t((value+plan.grid_divisors[axis]-1)/plan.grid_divisors[axis]);
+    }
   }
   return true;
 }
@@ -128,7 +167,10 @@ int invokeNativeFrame(uint64_t handle,const TesseraNvidiaMatmulHostView *roots,s
   bool resident=streams!=nullptr;
   if ((resident && producerCount!=rootCount) || (!resident && producerCount))
     return bad("native frame producer stream count differs");
-  if (!nativeFrameViews(owner,roots,rootCount,outputs,outputCount,resident) ||
+  std::vector<TesseraNvidiaMatmulHostView> activeDescriptors;
+  std::vector<NativeFrameStage> activeStages;
+  if (!planNativeFrameActive(owner,roots,rootCount,activeDescriptors,activeStages) ||
+      !nativeFrameViews(owner,roots,rootCount,outputs,outputCount,resident,activeDescriptors) ||
       !nativeFrameContext(owner)) return 1;
   std::vector<CUdeviceptr> bindings(owner.descriptors.size());
   std::vector<unsigned long long> allocationIds(rootCount);
@@ -154,6 +196,8 @@ int invokeNativeFrame(uint64_t handle,const TesseraNvidiaMatmulHostView *roots,s
   }
   owner.generation=0;
   ++owner.arena->generation;
+  owner.activeDescriptors=std::move(activeDescriptors);
+  owner.stages=std::move(activeStages);
   owner.bindings=std::move(bindings);
   auto *host=static_cast<unsigned char *>(owner.arena->host);
   bool status=true;
@@ -255,9 +299,43 @@ int validateNativeFrameMetadata(
 }
 } // namespace
 
-extern "C" int tessera_nvidia_native_frame_prepare_v1(
+namespace {
+int validateNativeFrameRows(NativeFrameOwner &owner,const uint8_t *rowBuffers,
+    uint32_t rowRoot,int64_t rowBound,const TesseraNvidiaNativeFrameRowPlanV2 *plans) {
+  if (!rowBuffers || !plans || rowBound<=0 || rowBound>INT32_MAX ||
+      rowRoot>=owner.descriptors.size() || rowBuffers[rowRoot]!=1 ||
+      std::find(owner.roots.begin(),owner.roots.end(),rowRoot)==owner.roots.end())
+    return bad("bounded native frame row binding metadata differs");
+  for (size_t i=0;i<owner.descriptors.size();++i)
+    if (rowBuffers[i]>1 || (rowBuffers[i] && owner.descriptors[i].shape[0]!=rowBound))
+      return bad("bounded native frame buffer capacity differs from row binding");
+  for (size_t i=0;i<owner.stages.size();++i) {
+    const auto &stage=owner.stages[i];const auto &plan=plans[i];
+    for (size_t j=0;j<8;++j) {
+      int64_t multiple=plan.scalar_multipliers[j];
+      __int128 value=static_cast<__int128>(rowBound)*multiple;
+      if (multiple<0 || value>INT64_MAX ||
+          (j>=stage.scalarCount ? multiple!=0 : multiple && value!=stage.scalars[j]))
+        return bad("bounded native frame scalar expression differs from capacity");
+    }
+    for (size_t axis=0;axis<3;++axis) {
+      int64_t multiple=plan.grid_multipliers[axis], divisor=plan.grid_divisors[axis];
+      __int128 value=static_cast<__int128>(rowBound)*multiple;
+      if (multiple<0 || divisor<=0 || value>INT64_MAX || (!multiple && divisor!=1) ||
+          (multiple && (value+divisor-1)/divisor!=stage.grid[axis]))
+        return bad("bounded native frame grid expression differs from capacity");
+    }
+  }
+  owner.rowRoot=rowRoot;owner.rowBound=rowBound;
+  owner.rowBuffers.assign(rowBuffers,rowBuffers+owner.descriptors.size());
+  owner.rowPlans.assign(plans,plans+owner.stages.size());
+  return 0;
+}
+int prepareNativeFrame(
     const TesseraNvidiaMatmulHostView *buffers,const uint8_t *roles,size_t count,
-    const TesseraNvidiaNativeFrameStepV1 *steps,size_t stageCount,uint64_t *handle) {
+    const TesseraNvidiaNativeFrameStepV1 *steps,size_t stageCount,
+    const uint8_t *rowBuffers,uint32_t rowRoot,int64_t rowBound,
+    const TesseraNvidiaNativeFrameRowPlanV2 *plans,uint64_t *handle) {
   error.clear();if (handle) *handle=0;
   if (getpid()!=process) return bad("native frame cannot cross fork");
   if (!handle) return bad("invalid native frame metadata extent");
@@ -266,6 +344,8 @@ extern "C" int tessera_nvidia_native_frame_prepare_v1(
     auto owner=std::make_unique<NativeFrameOwner>();
     if (int status=validateNativeFrameMetadata(
             buffers,roles,count,steps,stageCount,*owner)) return status;
+    if (rowBound || rowBuffers || plans)
+      if (int status=validateNativeFrameRows(*owner,rowBuffers,rowRoot,rowBound,plans)) return status;
     if (!current(owner->context) ||
         !ok(cuCtxGetId(owner->context,&owner->identity),"native frame context identity"))
       return bad("native frame requires an exact live SM120 context");
@@ -302,9 +382,29 @@ extern "C" int tessera_nvidia_native_frame_prepare_v1(
     owner->arena->context=owner->context;owner->arena->identity=owner->identity;
     if (!owner->arena->grow(owner->bytes) || !owner->arena->growHost(owner->bytes)) return 1;
     owner->bindings.resize(count);
+    owner->capacityStages=owner->stages;
+    owner->activeDescriptors=owner->descriptors;
     const uint64_t id=nextHandle++;
     nativeFrames.emplace(id,std::move(owner));*handle=id;return 0;
   } catch (...) {return bad("native frame preparation failed");}
+}
+} // namespace
+extern "C" int tessera_nvidia_native_frame_prepare_v1(
+    const TesseraNvidiaMatmulHostView *buffers,const uint8_t *roles,size_t count,
+    const TesseraNvidiaNativeFrameStepV1 *steps,size_t stageCount,uint64_t *handle) {
+  return prepareNativeFrame(buffers,roles,count,steps,stageCount,nullptr,0,0,nullptr,handle);
+}
+extern "C" int tessera_nvidia_native_frame_prepare_v2(
+    const TesseraNvidiaMatmulHostView *buffers,const uint8_t *roles,size_t count,
+    const TesseraNvidiaNativeFrameStepV1 *steps,size_t stageCount,
+    const uint8_t *rowBuffers,uint32_t rowRoot,int64_t rowBound,
+    const TesseraNvidiaNativeFrameRowPlanV2 *plans,uint64_t *handle) {
+  // An explicit v2 request must never degrade to static v1 preparation.
+  if (!rowBuffers || !plans || rowBound<=0) {
+    error.clear();if (handle) *handle=0;
+    return bad("bounded native frame requires explicit row metadata");
+  }
+  return prepareNativeFrame(buffers,roles,count,steps,stageCount,rowBuffers,rowRoot,rowBound,plans,handle);
 }
 extern "C" int tessera_nvidia_native_frame_invoke_v1(uint64_t handle,
     const TesseraNvidiaMatmulHostView *roots,size_t rootCount,
@@ -355,7 +455,7 @@ extern "C" int tessera_nvidia_native_frame_profile_v1(uint64_t handle,int repeat
       for (size_t i=0;i<owner.roots.size();++i) {
         auto pointer=owner.bindings[owner.roots[i]];
         unsigned long long identity=0;
-        if (!residentAllocation(pointer,owner.descriptors[owner.roots[i]].bytes,owner.context) ||
+        if (!residentAllocation(pointer,owner.activeDescriptors[owner.roots[i]].bytes,owner.context) ||
             !ok(cuPointerGetAttribute(&identity,CU_POINTER_ATTRIBUTE_BUFFER_ID,pointer),
                 "profile native root allocation identity") || identity!=owner.allocationIds[i])
           return bad("native frame profiled allocation was retired or replaced");

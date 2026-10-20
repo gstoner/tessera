@@ -1,0 +1,133 @@
+{
+  "reason": "Preserve exact compiler-printer bytes, including whitespace, without treating raw generated IR as authored whitespace-clean source. SHA256 values in timing receipts refer to decompressed bytes.",
+  "artifacts": [
+    {
+      "path": "active-ssa/owning-device/programs/bf16/member-0.mlir.gz",
+      "uncompressed_sha256": "c267c5b968311f6a240a1e4772934885a12f7ad882c581da0076b1672e49ac31"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/bf16/member-0.ptx.gz",
+      "uncompressed_sha256": "8d017297c95cdd5e46d667de17c8c4a2fbfa5e2550aa1f04b12547bad5af60f9"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/bf16/member-1.mlir.gz",
+      "uncompressed_sha256": "c56bcacae06d865dd4ad413ed351a1f5c248b9b3b0418d59083182bef16d56d3"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/bf16/member-1.ptx.gz",
+      "uncompressed_sha256": "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/bf16/schedule_ir.mlir.gz",
+      "uncompressed_sha256": "907f41eb89ef88b73262f62b4fd093bad3ff27a8a788bbc2fe5b8dea39ecc449"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/bf16/source_ir.mlir.gz",
+      "uncompressed_sha256": "d82eb42b8d4831488b8c8d7cc46369c9abdf9407588c1eccd54ed9e2969651b6"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/bf16/target_ir.mlir.gz",
+      "uncompressed_sha256": "fefe1d2fa34b81f1b1c80bea84f2b3a0333fa1e176cd2f7c05a2f6d7fcdf524f"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/bf16/tile_ir.mlir.gz",
+      "uncompressed_sha256": "44dbc2107294ffb6e67485c121b27f4e80afe668ead598ab82f88bc9e9e04697"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/f16/member-0.mlir.gz",
+      "uncompressed_sha256": "b0fe3d39043ed1426d0217583a8bba4c42775555b8eb868d4120132a94f7cd22"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/f16/member-0.ptx.gz",
+      "uncompressed_sha256": "66bdfc07ebe2789c68ebcf445e4a294fb33a3555f5b642a3c9eb3a77445873f2"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/f16/member-1.mlir.gz",
+      "uncompressed_sha256": "ae663a2646184cbea1c69683e6fc9bfaf1725d937c9f4b9ea38fd953d3bb0e3a"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/f16/member-1.ptx.gz",
+      "uncompressed_sha256": "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/f16/schedule_ir.mlir.gz",
+      "uncompressed_sha256": "cf38509fcae4beb0cb5486883f384ce116ebd6087f5ebecc2c02098fc6de666f"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/f16/source_ir.mlir.gz",
+      "uncompressed_sha256": "f5c694078d93daaed07da23ffcc7db2fc9707d3adefa1e2f3de6c5b24b29fac4"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/f16/target_ir.mlir.gz",
+      "uncompressed_sha256": "114894ecd7d510421c92bdf015dc5f53063c674958e9a587dd460733aa7041c6"
+    },
+    {
+      "path": "active-ssa/owning-device/programs/f16/tile_ir.mlir.gz",
+      "uncompressed_sha256": "690b66d3b18ea25465cff84562d8ff129afd6702389d677d7c98fd83c0e88081"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/bf16/member-0.mlir.gz",
+      "uncompressed_sha256": "c267c5b968311f6a240a1e4772934885a12f7ad882c581da0076b1672e49ac31"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/bf16/member-0.ptx.gz",
+      "uncompressed_sha256": "8d017297c95cdd5e46d667de17c8c4a2fbfa5e2550aa1f04b12547bad5af60f9"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/bf16/member-1.mlir.gz",
+      "uncompressed_sha256": "c56bcacae06d865dd4ad413ed351a1f5c248b9b3b0418d59083182bef16d56d3"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/bf16/member-1.ptx.gz",
+      "uncompressed_sha256": "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/bf16/schedule_ir.mlir.gz",
+      "uncompressed_sha256": "8b502757e53d4b9c84a881c445ee4a6d1ab185d3a36f32445480928d9aac75e3"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/bf16/source_ir.mlir.gz",
+      "uncompressed_sha256": "d82eb42b8d4831488b8c8d7cc46369c9abdf9407588c1eccd54ed9e2969651b6"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/bf16/target_ir.mlir.gz",
+      "uncompressed_sha256": "3c197fcdce1151df370d3efb40b8b9478ca83662edbab2825934b60c895b5c5a"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/bf16/tile_ir.mlir.gz",
+      "uncompressed_sha256": "87e3a7a63adf0c7025260db41585839300fc941fcb6bc0e928d1320c619b7eb2"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/f16/member-0.mlir.gz",
+      "uncompressed_sha256": "b0fe3d39043ed1426d0217583a8bba4c42775555b8eb868d4120132a94f7cd22"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/f16/member-0.ptx.gz",
+      "uncompressed_sha256": "66bdfc07ebe2789c68ebcf445e4a294fb33a3555f5b642a3c9eb3a77445873f2"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/f16/member-1.mlir.gz",
+      "uncompressed_sha256": "ae663a2646184cbea1c69683e6fc9bfaf1725d937c9f4b9ea38fd953d3bb0e3a"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/f16/member-1.ptx.gz",
+      "uncompressed_sha256": "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/f16/schedule_ir.mlir.gz",
+      "uncompressed_sha256": "4be0beaa3f294e25f3612c7227c79ccebd2dfd775c22ba63b59c19e108422fb8"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/f16/source_ir.mlir.gz",
+      "uncompressed_sha256": "f5c694078d93daaed07da23ffcc7db2fc9707d3adefa1e2f3de6c5b24b29fac4"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/f16/target_ir.mlir.gz",
+      "uncompressed_sha256": "83981ca52cbcfda31b1a160e3e719dd16614ad86f55e56684d11bdd98521ad22"
+    },
+    {
+      "path": "initial-candidate/owning-device/programs/f16/tile_ir.mlir.gz",
+      "uncompressed_sha256": "2f3d7f518c3ccf1dd7ed92c4399dc10bfc06732c239a1486545f68d86f623b29"
+    }
+  ]
+}

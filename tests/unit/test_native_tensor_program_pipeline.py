@@ -330,7 +330,7 @@ def test_flat_kernel_reference_is_rejected_before_member_projection(flags):
 
 @pytest.mark.parametrize("edit,marker", [
     ("member", "owned native program member module"),
-    ("schema", "requires native program module schema 1")])
+    ("schema", "requires native program module schema 1 or 2")])
 def test_native_controller_requires_owned_members_and_known_module_schema(edit, marker):
     compiled = _run(traced_source(relu_product, "f16"), "--tessera-graph-to-schedule",
                     "--tessera-schedule-to-tile", "--tessera-lower-to-nvidia-sm120")
@@ -339,7 +339,7 @@ def test_native_controller_requires_owned_members_and_known_module_schema(edit, 
         changed = compiled.stdout.replace("tessera.native.tensor_program_member, ", "")
     else:
         changed = compiled.stdout.replace("tessera.native.tensor_program = 1 : i64",
-                                          "tessera.native.tensor_program = 2 : i64", 1)
+                                          "tessera.native.tensor_program = 99 : i64", 1)
     assert changed != compiled.stdout
     result = _run(changed)
     assert result.returncode > 0, result.stderr

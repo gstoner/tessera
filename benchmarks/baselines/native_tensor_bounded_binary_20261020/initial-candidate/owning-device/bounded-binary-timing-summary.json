@@ -1,0 +1,187 @@
+{
+  "profiles": 2,
+  "rows": [
+    {
+      "storage": "f16",
+      "mkn": [
+        17,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_windows": 6,
+      "producer_us": 0.9673241875134408,
+      "consumer_us": 91.64319559931755,
+      "program_us": 92.57517755031586,
+      "public_ms": 0.8182332812499999,
+      "allocation_count": 1
+    },
+    {
+      "storage": "f16",
+      "mkn": [
+        1,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_windows": 6,
+      "producer_us": 0.8204335754271597,
+      "consumer_us": 83.97266268730164,
+      "program_us": 84.7351923584938,
+      "public_ms": 0.7637220625,
+      "allocation_count": 1
+    },
+    {
+      "storage": "f16",
+      "mkn": [
+        256,
+        4096,
+        256
+      ],
+      "captured_admitted": 6,
+      "captured_windows": 6,
+      "producer_us": 5.114351399242878,
+      "consumer_us": 99.50122609734535,
+      "program_us": 104.53822463750839,
+      "public_ms": 1.66880421875,
+      "allocation_count": 1
+    },
+    {
+      "storage": "f16",
+      "mkn": [
+        65,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_windows": 6,
+      "producer_us": 1.9067343673668802,
+      "consumer_us": 92.69456565380096,
+      "program_us": 94.57718580961227,
+      "public_ms": 0.89552128125,
+      "allocation_count": 1
+    },
+    {
+      "storage": "f16",
+      "mkn": [
+        5,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_windows": 6,
+      "producer_us": 0.8287265372928232,
+      "consumer_us": 86.78852021694183,
+      "program_us": 87.59493380784988,
+      "public_ms": 0.7904079374999999,
+      "allocation_count": 1
+    },
+    {
+      "storage": "f16",
+      "mkn": [
+        200,
+        4096,
+        256
+      ],
+      "captured_admitted": 6,
+      "captured_windows": 6,
+      "producer_us": 4.117999924346805,
+      "consumer_us": 95.99122032523155,
+      "program_us": 100.11448711156845,
+      "public_ms": 1.323269375,
+      "allocation_count": 1
+    },
+    {
+      "storage": "bf16",
+      "mkn": [
+        17,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_windows": 6,
+      "producer_us": 0.9112499828916043,
+      "consumer_us": 91.76735207438469,
+      "program_us": 92.70093590021133,
+      "public_ms": 0.84723640625,
+      "allocation_count": 1
+    },
+    {
+      "storage": "bf16",
+      "mkn": [
+        1,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_windows": 6,
+      "producer_us": 0.8397460915148258,
+      "consumer_us": 83.97201821208,
+      "program_us": 84.76511761546135,
+      "public_ms": 0.71729909375,
+      "allocation_count": 1
+    },
+    {
+      "storage": "bf16",
+      "mkn": [
+        256,
+        4096,
+        256
+      ],
+      "captured_admitted": 6,
+      "captured_windows": 6,
+      "producer_us": 5.116765620186925,
+      "consumer_us": 99.5146781206131,
+      "program_us": 104.53388094902039,
+      "public_ms": 1.6314272187499999,
+      "allocation_count": 1
+    },
+    {
+      "storage": "bf16",
+      "mkn": [
+        65,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_windows": 6,
+      "producer_us": 1.918515597935766,
+      "consumer_us": 92.73718670010567,
+      "program_us": 94.64241191744804,
+      "public_ms": 0.86702103125,
+      "allocation_count": 1
+    },
+    {
+      "storage": "bf16",
+      "mkn": [
+        5,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_windows": 6,
+      "producer_us": 0.8856132626533508,
+      "consumer_us": 86.78862452507019,
+      "program_us": 87.56553381681442,
+      "public_ms": 0.7298585625,
+      "allocation_count": 1
+    },
+    {
+      "storage": "bf16",
+      "mkn": [
+        200,
+        4096,
+        256
+      ],
+      "captured_admitted": 6,
+      "captured_windows": 6,
+      "producer_us": 4.101882688701153,
+      "consumer_us": 95.9642119705677,
+      "program_us": 100.14020279049873,
+      "public_ms": 1.4054509687499999,
+      "allocation_count": 1
+    }
+  ],
+  "all_same_capacity": true,
+  "scope": "Captured medians describe raw regions; only duration-admitted windows support timing interpretation. No baseline speedup claim."
+}

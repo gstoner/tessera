@@ -1,0 +1,45 @@
+{
+  "base": "09ec0ddfaf44e42a7a58831d30c380cafb8fbd97",
+  "compiler_sha256": "73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc",
+  "provider_sha256": "06fcdb02b05e52f681d35427afc76a8b3a6c772d4fa88a281b69fb70006c9465",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "gates": {
+    "ci_cpu": {
+      "tests": 34615,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 3721,
+      "passed": 30894
+    },
+    "compiler_route": {
+      "tests": 2779,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 2779,
+      "skip_policy": "zero skips required"
+    },
+    "registry_documentation": {
+      "tests": 323,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 323
+    },
+    "ods": {
+      "tests": 790,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 790
+    }
+  },
+  "numerical_device_cases": 8,
+  "combined_compiler_device_cases": 32,
+  "timing_rows": 12,
+  "captured_windows_admitted": 24,
+  "captured_windows_total": 72,
+  "all_measured_ir_frame_image_hashes_verified_after_lossless_packaging": true,
+  "cpu_marker": "not slow and not performance and not compiler_route and not hardware_apple_gpu and not hardware_nvidia and not hardware_rocm and not hardware_amx and not hardware_avx512",
+  "remaining": "exact-head public CI/review and merge; original five aggregate programs remain open"
+}

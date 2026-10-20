@@ -372,10 +372,18 @@ LogicalResult BinaryKernelOp::verify() {
           getArtifactHash(), getArch(), getStorage(), getAccum(), getWorkgroupSize())))
     return failure();
   auto type = dyn_cast<RankedTensorType>(getSubject().getType());
-  if (!type || type.getRank() != 2 || !type.hasStaticShape() ||
+  auto rowBound = getOperation()->getAttrOfType<IntegerAttr>("row_bound");
+  bool bounded = rowBound && rowBound.getType().isInteger(64) &&
+      rowBound.getInt() > 0 && rowBound.getInt() <= INT32_MAX &&
+      type && type.getRank() == 2 && type.isDynamicDim(0) && !type.isDynamicDim(1) &&
+      (getStorage() == "f16" || getStorage() == "bf16");
+  if (!type || type.getRank() != 2 ||
+      (bounded ? type.getDimSize(1) <= 0 || type.getDimSize(1) > INT32_MAX :
+       !type.hasStaticShape() || getOperation()->hasAttr("row_bound") ||
+       !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0 && d <= INT32_MAX; })) ||
       type.getEncoding() ||
-      !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0 && d <= INT32_MAX; }) ||
-      type.getNumElements() > static_cast<int64_t>(INT32_MAX) * 128 ||
+      (bounded ? rowBound.getInt() * type.getDimSize(1) : type.getNumElements()) >
+          static_cast<int64_t>(INT32_MAX) * 128 ||
       getArch() != "sm_120" || getWorkgroupSize() != 128 ||
       (getStorage() != "f16" && getStorage() != "bf16" && getStorage() != "f32") ||
       (getStorage() == "f16" ? !type.getElementType().isF16() :
@@ -384,7 +392,7 @@ LogicalResult BinaryKernelOp::verify() {
       getOutputStorage() != getStorage() || getAccum() != "f32" ||
       getKind() != "add" || getAxis() != -1 ||
       getSchedule() != "flat_128" || getNanMode() != "propagate")
-    return emitOpError("requires a static compact SM120 same-storage add "
+    return emitOpError("requires a compact static or bounded-row SM120 same-storage add "
                        "with f32 arithmetic and a valid flat_128 grid");
   return success();
 }

@@ -1,0 +1,7 @@
+{
+  "control_compiler": "f1ce99e7b0cc6cd94159f566ebecc40ad0cef6ce5226cb0119e84ef072269160",
+  "candidate_compiler": "73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc",
+  "programs": 8,
+  "images": 18,
+  "source_member_ir_frame_ptx_equal": true
+}

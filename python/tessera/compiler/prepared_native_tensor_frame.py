@@ -26,6 +26,12 @@ class NativeFrameStep(ct.Structure):
     ]
 
 
+class NativeFrameRowPlan(ct.Structure):
+    _fields_ = [("scalar_multipliers", ct.c_int64 * 8),
+                ("grid_multipliers", ct.c_int64 * 3),
+                ("grid_divisors", ct.c_int64 * 3)]
+
+
 def _storage(name):
     if name == "bf16":
         import ml_dtypes
@@ -45,9 +51,12 @@ def _integers(values, *, limit, count=None):
 
 def validate_frame(frame):
     """Validate transport structure; C++ verifies initialization and ownership."""
+    bounded = isinstance(frame, dict) and frame.get("schema") == "tessera.native.tensor_program_frame.v2"
     keys = {"schema", "target", "architecture", "function", "buffers", "roots", "stages", "output"}
+    if bounded:
+        keys |= {"row_bound", "row_root", "row_buffers"}
     if (not isinstance(frame, dict) or set(frame) != keys
-            or frame["schema"] != "tessera.native.tensor_program_frame.v1"
+            or frame["schema"] not in {"tessera.native.tensor_program_frame.v1", "tessera.native.tensor_program_frame.v2"}
             or frame["target"] != "nvidia_sm120" or frame["architecture"] != "sm_120"
             or not isinstance(frame["function"], str)):
         raise ValueError("native tensor frame schema/target differs")
@@ -75,12 +84,22 @@ def validate_frame(frame):
     outputs = [i for i, spec in enumerate(buffers) if spec["role"] == "output"]
     if type(frame["output"]) is not int or outputs != [frame["output"]]:
         raise ValueError("native frame result role differs")
+    if bounded:
+        flags = _integers(frame["row_buffers"], limit=2, count=len(buffers))
+        bound, root = frame["row_bound"], frame["row_root"]
+        if (type(bound) is not int or not 0 < bound < 2**31
+                or type(root) is not int or root not in roots or flags[root] != 1
+                or any(flag and spec["shape"][0] != bound for flag, spec in zip(flags, buffers, strict=True))):
+            raise ValueError("bounded native frame row binding/capacity differs")
     stages = frame["stages"]
     if not isinstance(stages, list) or not 1 <= len(stages) <= 64:
         raise ValueError("native frame stage extent differs")
     for stage in stages:
+        stage_keys = {"member", "entry", "inputs", "output", "scalars", "geometry"}
+        if bounded:
+            stage_keys |= {"scalar_row_multipliers", "grid_row_multipliers", "grid_row_divisors"}
         if (not isinstance(stage, dict)
-                or set(stage) != {"member", "entry", "inputs", "output", "scalars", "geometry"}
+                or set(stage) != stage_keys
                 or not isinstance(stage["member"], str) or not isinstance(stage["entry"], str)
                 or not stage["entry"] or "\0" in stage["entry"]):
             raise ValueError("native frame stage fields differ")
@@ -97,6 +116,18 @@ def validate_frame(frame):
                 or geometry[3] > 1024 or geometry[4] > 1024 or geometry[5] > 64
                 or geometry[3] * geometry[4] * geometry[5] > 1024):
             raise ValueError("native frame launch geometry exceeds CUDA limits")
+        if bounded:
+            scalar_rows = _integers(stage["scalar_row_multipliers"], limit=2**63, count=len(scalars))
+            grid_rows = _integers(stage["grid_row_multipliers"], limit=2**63, count=3)
+            divisors = _integers(stage["grid_row_divisors"], limit=2**63, count=3)
+            for multiple, capacity in zip(scalar_rows, scalars, strict=True):
+                if multiple and (bound * multiple >= 2**63 or bound * multiple != capacity):
+                    raise ValueError("bounded native scalar expression differs from capacity")
+            for multiple, divisor, capacity in zip(grid_rows, divisors, geometry[:3], strict=True):
+                if (not divisor or (not multiple and divisor != 1)
+                        or bound * multiple >= 2**63
+                        or (multiple and (bound * multiple + divisor - 1) // divisor != capacity)):
+                    raise ValueError("bounded native grid expression differs from capacity")
 
 
 def _descriptor(spec, data=None, strides=None):
@@ -122,9 +153,12 @@ class PreparedNativeTensorFrame:
             from tessera import runtime as rt
 
             provider = rt._load_nvidia_ptx_launch()
-        if provider is None or not hasattr(provider, "tessera_nvidia_native_frame_prepare_v1"):
+        self._bounded = frame["schema"] == "tessera.native.tensor_program_frame.v2"
+        prepare_name = "tessera_nvidia_native_frame_prepare_v2" if self._bounded else "tessera_nvidia_native_frame_prepare_v1"
+        if provider is None or not hasattr(provider, prepare_name):
             raise RuntimeError("native frame requires its updated native provider")
         self._frame = copy.deepcopy(frame)
+        self._active = copy.deepcopy(frame["buffers"])
         self.lib = provider
         self.pid, self.thread = os.getpid(), threading.current_thread()
         self.handle = 0
@@ -149,8 +183,21 @@ class PreparedNativeTensorFrame:
             step.grid[:] = stage["geometry"][:3]
             step.block[:] = stage["geometry"][3:]
         handle = ct.c_uint64()
-        self._check(self.lib.tessera_nvidia_native_frame_prepare_v1(
-            descriptors, roles, len(specs), steps, len(steps), ct.byref(handle)))
+        if self._bounded:
+            flags = (ct.c_uint8 * len(specs))(*frame["row_buffers"])
+            plans = (NativeFrameRowPlan * len(steps))()
+            for plan, stage in zip(plans, frame["stages"], strict=True):
+                for index, multiple in enumerate(stage["scalar_row_multipliers"]):
+                    plan.scalar_multipliers[index] = multiple
+                plan.grid_multipliers[:] = stage["grid_row_multipliers"]
+                plan.grid_divisors[:] = stage["grid_row_divisors"]
+            status = self.lib.tessera_nvidia_native_frame_prepare_v2(
+                descriptors, roles, len(specs), steps, len(steps), flags,
+                frame["row_root"], frame["row_bound"], plans, ct.byref(handle))
+        else:
+            status = self.lib.tessera_nvidia_native_frame_prepare_v1(
+                descriptors, roles, len(specs), steps, len(steps), ct.byref(handle))
+        self._check(status)
         self.handle = handle.value
 
     @property
@@ -166,6 +213,12 @@ class PreparedNativeTensorFrame:
         views = ct.POINTER(HostView)
         bind("prepare", [views, ct.POINTER(ct.c_uint8), ct.c_size_t,
                          ct.POINTER(NativeFrameStep), ct.c_size_t, ct.POINTER(ct.c_uint64)])
+        if self._bounded:
+            function = lib.tessera_nvidia_native_frame_prepare_v2
+            function.argtypes, function.restype = [
+                views, ct.POINTER(ct.c_uint8), ct.c_size_t, ct.POINTER(NativeFrameStep), ct.c_size_t,
+                ct.POINTER(ct.c_uint8), ct.c_uint32, ct.c_int64,
+                ct.POINTER(NativeFrameRowPlan), ct.POINTER(ct.c_uint64)], ct.c_int
         bind("invoke", [ct.c_uint64, views, ct.c_size_t, views, ct.c_size_t])
         bind("resident", [ct.c_uint64, views, ct.c_size_t, ct.POINTER(ct.c_uint64), ct.c_size_t,
                           views, ct.c_size_t])
@@ -187,12 +240,34 @@ class PreparedNativeTensorFrame:
         if not self.handle:
             raise RuntimeError("native tensor frame is closed")
 
-    def _root_views(self, roots, resident):
+    def _active_specs(self, roots):
+        specs = copy.deepcopy(self._frame["buffers"])
+        if not self._bounded:
+            return specs
+        if len(roots) != len(self._frame["roots"]):
+            raise ValueError("native frame root count differs")
+        ordinal = self._frame["roots"].index(self._frame["row_root"])
+        value = roots[ordinal]
+        shape = value.__cuda_array_interface__.get("shape") if hasattr(value, "__cuda_array_interface__") else getattr(value, "shape", None)
+        if (not isinstance(shape, (tuple, list)) or len(shape) != 2
+                or type(shape[0]) is not int or not 0 < shape[0] <= self._frame["row_bound"]):
+            raise ValueError("bounded native frame active rows exceed capacity")
+        # Generic view marshaling only. Native C++ derives and validates every
+        # stage scalar/grid from the compiler's expression plan.
+        for flag, spec in zip(self._frame["row_buffers"], specs, strict=True):
+            if flag:
+                _, dtype = _storage(spec["storage"])
+                spec["shape"][0] = shape[0]
+                spec["bytes"] = shape[0] * spec["shape"][1] * dtype.itemsize
+        return specs
+
+    def _root_views(self, roots, resident, specs=None):
         if len(roots) != len(self._frame["roots"]):
             raise ValueError("native frame root count differs")
         views, streams = [], []
+        specs = self._active if specs is None else specs
         for value, index in zip(roots, self._frame["roots"], strict=True):
-            spec = self._frame["buffers"][index]
+            spec = specs[index]
             _, expected_dtype = _storage(spec["storage"])
             if resident:
                 interface = value.__cuda_array_interface__
@@ -234,8 +309,9 @@ class PreparedNativeTensorFrame:
         resident = any(hasattr(value, "__cuda_array_interface__") for value in roots)
         if resident and not all(hasattr(value, "__cuda_array_interface__") for value in roots):
             raise ValueError("native frame roots must share host or resident storage")
-        inputs, streams = self._root_views(roots, resident)
-        spec = self._frame["buffers"][self._frame["output"]]
+        active = self._active_specs(roots)
+        inputs, streams = self._root_views(roots, resident, active)
+        spec = active[self._frame["output"]]
         _, dtype = _storage(spec["storage"])
         if output is None:
             output = np.empty(spec["shape"], dtype=dtype)
@@ -254,6 +330,7 @@ class PreparedNativeTensorFrame:
             if resident:
                 self._failed_borrows = (*self._failed_borrows, *roots)
             self._check(status)
+        self._active = active
         self._borrowed = tuple(roots) if resident else ()
         self._streams = tuple(streams)
         return output

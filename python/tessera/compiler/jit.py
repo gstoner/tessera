@@ -2675,12 +2675,12 @@ class JitFn:
     def _native_tensor_last_receipt(self, value):
         self._native_tensor_thread_state.last_receipt = value
 
-    def _try_native_tensor_program_call(self, args, kwargs):
+    def _try_native_tensor_program_call(self, args, kwargs, *, row_bound=None):
         """Bind a compiler-admitted program; warm calls do not trace or compile."""
         if (normalize_target_kind(self.target) != "nvidia_sm120"
                 or self.differentiation_request is not None):
             return _JIT_FALLBACK
-        from .native_tensor_jit import input_signature
+        from .native_tensor_jit import bounded_signature, input_signature, matches_bounded_signature
         from .native_tensor_program import compile_native_tensor_program
         from .scheduled_matmul import find_tessera_opt
         from tessera import runtime as rt
@@ -2694,6 +2694,13 @@ class JitFn:
         with self._native_tensor_lock:
             if self._native_tensor_pid is not None and self._native_tensor_pid != os.getpid():
                 raise RuntimeError("native tensor JIT cannot cross fork")
+            if row_bound is not None:
+                for key in self._native_tensor_program_cache:
+                    if matches_bounded_signature(signature, key, row_bound):
+                        signature = key
+                        break
+                else:
+                    signature = ("bounded_row_trace", row_bound, signature)
             if signature not in self._native_tensor_program_cache:
                 # Missing prerequisites leave old routes eligible only before
                 # admission. Cached programs never rediscover compiler tools.
@@ -2704,7 +2711,14 @@ class JitFn:
                 if provider is None or not hasattr(provider, "tessera_nvidia_native_frame_prepare_v1"):
                     return _JIT_FALLBACK
                 module = self._traced_autodiff_module(ordered, {})
+                if row_bound is not None:
+                    from dataclasses import replace
+
+                    module = replace(module, module_attrs={**module.module_attrs,
+                        "tessera.native.tensor_program_row_bound_request": f"{row_bound} : i64"})
                 program = compile_native_tensor_program(module, tool=tool)
+                if program is not None and row_bound is not None:
+                    signature = bounded_signature(input_signature(ordered), program.frame)
                 if len(self._native_tensor_program_cache) >= 24:
                     retired = next(iter(self._native_tensor_program_cache))
                     binding = self._native_tensor_calls.get(retired)
@@ -2861,6 +2875,15 @@ class JitFn:
         bound.apply_defaults()
         ordered = tuple(bound.arguments[name] for name in self.arg_names)
         module = self._traced_autodiff_module(ordered, {})
+        if self._bounded_lhs is not None:
+            from dataclasses import replace
+
+            self._bounded_lhs.certificate.validate()
+            bounds = dict(self._bounded_lhs.bounds)
+            if set(bounds) != {"M"} or self._bounded_lhs.rhs_storage_order not in (None, "row_major"):
+                raise TesseraJitError("native tensor program currently requires a compact M-only bound")
+            module = replace(module, module_attrs={**module.module_attrs,
+                "tessera.native.tensor_program_row_bound_request": f"{bounds['M']} : i64"})
         program = compile_native_tensor_program(module)
         if program is None:
             raise TesseraJitError("native compiler did not admit this tensor program profile")

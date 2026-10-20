@@ -1,0 +1,28 @@
+{
+  "base": "09ec0ddfaf44e42a7a58831d30c380cafb8fbd97",
+  "compiler_sha256": "73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc",
+  "frozen_compiler": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+  "layout_sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+  "source_sha256": {
+    "python/tessera/compiler/bounded_nvidia_lhs.py": "4030be795497f0741b733df79682b839fadbecb1c853b910301e48e49367337a",
+    "python/tessera/compiler/jit.py": "06e3d9bf6d1a28b956723d85638e7a9a84da1a9ea5f768c35f720b212d946d93",
+    "python/tessera/compiler/native_tensor_jit.py": "5f7864194be6c54026412c3f5b690c2a256b59ac615afa31253135bc5e1814aa",
+    "python/tessera/compiler/prepared_native_tensor_frame.py": "255ee72118708d51c91d7a1ef0dc8c3a85a5f3eff1d7db9ab53909aded246725",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "98c58cd8e2af99f7b3325cc06c4677b781c239f9fecd0498ebaf92d631b6f44b",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_native_frame.h": "39bf10595a59c411d719733942a94c2a370c6a170afeb2a6036c28d0901b38a0",
+    "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "a6855737392b6b5b8c0f28785832868c008ccbca1b86d7573b22477310e25dbd",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "71c20b193dfe1f82bd69ff3a186906115e714d01d8b8e736f4b9d0af84e51819",
+    "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "c91e134cbd316bef4e43d9cc2a7832a46f85f2f5a256ece825ccab86cc5ef7e0",
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "19328f4a7c2af39e76749df1f20b46c504e661869f2965ff36021ea854690051",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "3b511fa45e875558b7c918729c17c127ceca9f68d34a3200d2c8b2801a47bae7",
+    "tests/device/nvidia/test_native_tensor_bounded_producers.py": "7f114c25c088e164dee07c270270ce5520f17bbf47e5170e606b3f87cfb00d06",
+    "tests/unit/test_native_bounded_binary_recorder.py": "2a79f7ecbfe98a022d748ba07d7d939f7a78da7e64b8f626660f23c5d74b3727",
+    "tests/unit/test_native_tensor_bounded_frame_transport.py": "1560ec7b0332cb301ff85e236839c392b4286670dfc9894fbfee4f9b5164c92b",
+    "tests/unit/test_native_tensor_bounded_producers.py": "840520a8902ed3a692ab6e121b465971a982cbb0feb077c508975f199022846a",
+    "tests/unit/test_native_tensor_program_pipeline.py": "f3d490eda25ba259710ca2afc76889cf0af9a8b6c6984fc70ac092fe798b8b91",
+    "benchmarks/nvidia/record_native_tensor_bounded_binary.py": "e2cf6f9728e775a39c19152867e6cb3fc5e1287c53b877cacb34324b3eb5d12f"
+  },
+  "scope": "explicit active dynamic roots, root memref.dim, checked capacity subviews and alias-aware ownership; 176 focused compiler cases pass; native frame ABI/provider unchanged",
+  "verified_utc": "2026-10-20T23:38:53.923239+00:00",
+  "verification": "All frozen compiler/runtime/Python/test/recorder source hashes match final candidate; no tool substitution."
+}

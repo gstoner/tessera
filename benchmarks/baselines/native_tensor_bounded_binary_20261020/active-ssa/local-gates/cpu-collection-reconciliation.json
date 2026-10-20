@@ -1,0 +1,81 @@
+{
+  "first_current_run": {
+    "passed": 30902,
+    "failed": 3,
+    "skipped": 3721
+  },
+  "corrected_ci_cpu_run": {
+    "passed": 30894,
+    "failed": 0,
+    "skipped": 3721
+  },
+  "collection_difference": "The exact CI CPU selector additionally excludes performance; all 11 omitted cases have explicit performance markers. No other nodeids were removed or added.",
+  "performance_cases_excluded_by_ci": [
+    {
+      "nodeid": "tests.unit.test_megamoe_distributed::test_real_overlap_hides_dispatch_comm_under_gpu_compute",
+      "markers": [
+        "pytest.mark.performance"
+      ]
+    },
+    {
+      "nodeid": "tests.unit.test_megamoe_distributed::test_two_stage_hides_more_comm_than_one_stage",
+      "markers": [
+        "pytest.mark.performance"
+      ]
+    },
+    {
+      "nodeid": "tests.unit.test_nn_functional_conv_vectorized::test_conv1d_is_fast_enough_to_be_a_usable_reference",
+      "markers": [
+        "pytest.mark.performance"
+      ]
+    },
+    {
+      "nodeid": "tests.unit.test_pointwise_graph_fusion::test_pointwise_exit_scan_scales_linearly_with_graph_size",
+      "markers": [
+        "pytest.mark.performance"
+      ]
+    },
+    {
+      "nodeid": "tests.unit.test_rocm_dequant_gemm_compiled::test_dk4_rocm_dequant_gemm_perf_baseline_is_bounded",
+      "markers": [
+        "pytest.mark.performance"
+      ]
+    },
+    {
+      "nodeid": "tests.unit.test_rocm_mla_decode_step_compiled::test_dk1_rocm_mla_decode_step_perf_baseline_is_bounded",
+      "markers": [
+        "pytest.mark.performance"
+      ]
+    },
+    {
+      "nodeid": "tests.unit.test_rocm_moe_transport_compiled::test_dk3_rocm_moe_transport_perf_baseline_is_bounded",
+      "markers": [
+        "pytest.mark.performance"
+      ]
+    },
+    {
+      "nodeid": "tests.unit.test_rocm_sparse_attn_compiled::test_dk2_rocm_sparse_attention_perf_baseline_is_bounded",
+      "markers": [
+        "pytest.mark.performance"
+      ]
+    },
+    {
+      "nodeid": "tests.unit.test_ssm_block_decode::test_block_decode_beats_per_token",
+      "markers": [
+        "pytest.mark.performance"
+      ]
+    },
+    {
+      "nodeid": "tests.unit.test_stdlib_dspark_perf::test_ds1_reference_draft_block_has_cpu_perf_budget",
+      "markers": [
+        "pytest.mark.performance"
+      ]
+    },
+    {
+      "nodeid": "tests.unit.test_stdlib_dspark_perf::test_ds2_runtime_launch_overhead_is_bounded_against_ds1_oracle",
+      "markers": [
+        "pytest.mark.performance"
+      ]
+    }
+  ]
+}

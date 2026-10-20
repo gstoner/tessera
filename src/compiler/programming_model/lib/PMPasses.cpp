@@ -1791,6 +1791,7 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
 
 struct SemanticKernelSchedule {
   tessera::BoundedQueryNormShape queryShape;
+  int64_t binaryRowBound = 0;
   StringRef family;
   StringRef kind;
   StringRef target;
@@ -1838,9 +1839,20 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
         input.isDynamicDim(0) || input.isDynamicDim(1) || input.isDynamicDim(3) ||
         op->getName().getStringRef() != "tessera.rmsnorm")
       return failure();
-  } else if (!input.hasStaticShape() || !output.hasStaticShape()) return failure();
+  } else if (!input.hasStaticShape() || !output.hasStaticShape()) {
+    auto bound = function ? function->getAttrOfType<IntegerAttr>(
+        "tessera.native.tensor_row_bound") : IntegerAttr{};
+    if (!binary || !module->hasAttr("tessera.native.tensor_program_member") ||
+        !bound || !bound.getType().isInteger(64) || bound.getInt() <= 0 ||
+        bound.getInt() > INT32_MAX || input != output || input.getRank() != 2 ||
+        !input.isDynamicDim(0) || input.isDynamicDim(1) || input.getEncoding())
+      return failure();
+  }
 
   SemanticKernelSchedule schedule;
+  if (binary && !input.hasStaticShape())
+    schedule.binaryRowBound = function->getAttrOfType<IntegerAttr>(
+        "tessera.native.tensor_row_bound").getInt();
   schedule.queryShape.bounded = requested;
   if (requested) schedule.queryShape.sequenceBound = queryBound.getInt();
   schedule.target = moduleString(module, "tessera.target", "target");
@@ -1869,10 +1881,11 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     if (!nvidia || input != output || input.getRank() != 2 ||
         input.getEncoding() || op->getOperand(1).getType() != input ||
         schedule.storage.empty() ||
-        !llvm::all_of(input.getShape(), [](int64_t d) {
-          return d > 0 && d <= INT32_MAX;
-        }) ||
-        input.getNumElements() > static_cast<int64_t>(INT32_MAX) * 128)
+        (schedule.binaryRowBound && schedule.storage != "f16" && schedule.storage != "bf16") ||
+        (schedule.binaryRowBound ? input.getDimSize(1) <= 0 || input.getDimSize(1) > INT32_MAX :
+         !llvm::all_of(input.getShape(), [](int64_t d) { return d > 0 && d <= INT32_MAX; })) ||
+        (schedule.binaryRowBound ? schedule.binaryRowBound * input.getDimSize(1) :
+         input.getNumElements()) > static_cast<int64_t>(INT32_MAX) * 128)
       return failure();
     for (NamedAttribute attr : op->getAttrs()) {
       StringRef name = attr.getName().getValue();
@@ -1893,7 +1906,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     }
     schedule.family = "binary";
     schedule.kind = "add";
-    schedule.rows = input.getDimSize(0);
+    schedule.rows = schedule.binaryRowBound ? schedule.binaryRowBound : input.getDimSize(0);
     schedule.columns = input.getDimSize(1);
     schedule.reductionSchedule = "flat_128";
     schedule.workgroupSize = 128;
@@ -4001,6 +4014,8 @@ struct GraphToSchedulePass
       state.addAttribute("workgroup_size",
                          builder.getI64IntegerAttr(selected->workgroupSize));
       if (selected->family == "binary") {
+        if (selected->binaryRowBound)
+          state.addAttribute("row_bound", builder.getI64IntegerAttr(selected->binaryRowBound));
         state.addAttribute("kind", builder.getStringAttr(selected->kind));
         state.addAttribute("output_storage", builder.getStringAttr(selected->storage));
         state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
@@ -4731,6 +4746,9 @@ struct ScheduleToTilePass
             {FlatSymbolRefAttr::get(&getContext(), kernel.getName())}));
         invoke->setAttr("geometry", geometry);
         invoke->setAttr("scalars", scalars);
+        for (StringRef key : {"scalar_row_multipliers", "grid_row_multipliers", "grid_row_divisors"})
+          if (auto attr = kernel->getAttr((Twine("tessera.native.program_") + key).str()))
+            invoke->setAttr(key, attr);
       }
       if (failed(verify(mod))) return signalPassFailure();
       if (failed(tensor_program::exportFrame(mod))) return signalPassFailure();
@@ -5268,8 +5286,20 @@ struct ScheduleToTilePass
               tensor_program::bufferTypes(graph));
           kernelFunction->setAttr("tessera.native.program_geometry",
               builder.getDenseI64ArrayAttr(selectedKernel.geometry));
+          SmallVector<int64_t> frameScalars{selected->m, selected->n, selected->k};
+          if (dynamicSm120) frameScalars.append({selected->k, selected->n, selected->n});
           kernelFunction->setAttr("tessera.native.program_scalars",
-              builder.getDenseI64ArrayAttr({selected->m, selected->n, selected->k}));
+              builder.getDenseI64ArrayAttr(frameScalars));
+          if (dynamicSm120) {
+            kernelFunction->setAttr("tessera.native.program_active_buffer_types",
+                tensor_program::activeBufferTypes(graph));
+            kernelFunction->setAttr("tessera.native.program_scalar_row_multipliers",
+                builder.getDenseI64ArrayAttr({1, 0, 0, 0, 0, 0}));
+            kernelFunction->setAttr("tessera.native.program_grid_row_multipliers",
+                builder.getDenseI64ArrayAttr({0, 1, 0}));
+            kernelFunction->setAttr("tessera.native.program_grid_row_divisors",
+                builder.getDenseI64ArrayAttr({1, 16, 1}));
+          }
         }
 
         Block *entry = kernelFunction.addEntryBlock(moduleBuilder);
@@ -6012,7 +6042,9 @@ struct ScheduleToTilePass
                      attrInt("axis") != selected->axis ||
                      attrInt("workgroup_size") != selected->workgroupSize;
       if (isBinary) {
-        altered = altered || attrString("kind") != "add" ||
+        altered = altered || (selected->binaryRowBound ?
+                  attrInt("row_bound") != selected->binaryRowBound :
+                  scheduled->hasAttr("row_bound")) || attrString("kind") != "add" ||
                   attrString("output_storage") != selected->storage ||
                   attrString("schedule") != "flat_128" ||
                   attrString("nan_mode") != "propagate";
@@ -6111,6 +6143,16 @@ struct ScheduleToTilePass
               mb.getNamedAttr("elements", mb.getI64IntegerAttr(elements))}));
         }
         if (mod->hasAttr("tessera.native.tensor_program_member")) {
+          if (selected->binaryRowBound) {
+            kernel->setAttr("tessera.native.program_active_buffer_types",
+                tensor_program::activeBufferTypes(graph));
+            kernel->setAttr("tessera.native.program_scalar_row_multipliers",
+                mb.getDenseI64ArrayAttr({selected->columns}));
+            kernel->setAttr("tessera.native.program_grid_row_multipliers",
+                mb.getDenseI64ArrayAttr({selected->columns, 0, 0}));
+            kernel->setAttr("tessera.native.program_grid_row_divisors",
+                mb.getDenseI64ArrayAttr({128, 1, 1}));
+          }
           kernel->setAttr("tessera.native.program_buffer_types",
               tensor_program::bufferTypes(graph));
           kernel->setAttr("tessera.native.program_geometry",

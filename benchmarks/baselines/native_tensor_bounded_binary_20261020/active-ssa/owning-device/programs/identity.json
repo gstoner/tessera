@@ -1,0 +1,18 @@
+[
+  {
+    "storage": "f16",
+    "all_measured_ir_frame_images_byte_identical": true,
+    "image_sha256": [
+      "66bdfc07ebe2789c68ebcf445e4a294fb33a3555f5b642a3c9eb3a77445873f2",
+      "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+    ]
+  },
+  {
+    "storage": "bf16",
+    "all_measured_ir_frame_images_byte_identical": true,
+    "image_sha256": [
+      "8d017297c95cdd5e46d667de17c8c4a2fbfa5e2550aa1f04b12547bad5af60f9",
+      "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+    ]
+  }
+]

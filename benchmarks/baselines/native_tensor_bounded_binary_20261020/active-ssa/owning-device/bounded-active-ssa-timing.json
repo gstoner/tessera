@@ -1,0 +1,2884 @@
+{
+  "schema": "tessera.benchmark.native_tensor_bounded_binary.v1",
+  "status": "complete",
+  "source": {
+    "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+    "compiler_sha256": "73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc",
+    "provider_sha256": "06fcdb02b05e52f681d35427afc76a8b3a6c772d4fa88a281b69fb70006c9465",
+    "compiler_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+    "compiler_source": {
+      "base": "09ec0ddfaf44e42a7a58831d30c380cafb8fbd97",
+      "compiler_sha256": "73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc",
+      "frozen_compiler": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+      "layout_sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+      "source_sha256": {
+        "python/tessera/compiler/bounded_nvidia_lhs.py": "4030be795497f0741b733df79682b839fadbecb1c853b910301e48e49367337a",
+        "python/tessera/compiler/jit.py": "06e3d9bf6d1a28b956723d85638e7a9a84da1a9ea5f768c35f720b212d946d93",
+        "python/tessera/compiler/native_tensor_jit.py": "5f7864194be6c54026412c3f5b690c2a256b59ac615afa31253135bc5e1814aa",
+        "python/tessera/compiler/prepared_native_tensor_frame.py": "255ee72118708d51c91d7a1ef0dc8c3a85a5f3eff1d7db9ab53909aded246725",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "98c58cd8e2af99f7b3325cc06c4677b781c239f9fecd0498ebaf92d631b6f44b",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_native_frame.h": "39bf10595a59c411d719733942a94c2a370c6a170afeb2a6036c28d0901b38a0",
+        "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "a6855737392b6b5b8c0f28785832868c008ccbca1b86d7573b22477310e25dbd",
+        "src/compiler/programming_model/ir/ScheduleDialect.cpp": "71c20b193dfe1f82bd69ff3a186906115e714d01d8b8e736f4b9d0af84e51819",
+        "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "c91e134cbd316bef4e43d9cc2a7832a46f85f2f5a256ece825ccab86cc5ef7e0",
+        "src/compiler/programming_model/lib/NativeTensorProgram.h": "19328f4a7c2af39e76749df1f20b46c504e661869f2965ff36021ea854690051",
+        "src/compiler/programming_model/lib/PMPasses.cpp": "3b511fa45e875558b7c918729c17c127ceca9f68d34a3200d2c8b2801a47bae7",
+        "tests/device/nvidia/test_native_tensor_bounded_producers.py": "7f114c25c088e164dee07c270270ce5520f17bbf47e5170e606b3f87cfb00d06",
+        "tests/unit/test_native_bounded_binary_recorder.py": "2a79f7ecbfe98a022d748ba07d7d939f7a78da7e64b8f626660f23c5d74b3727",
+        "tests/unit/test_native_tensor_bounded_frame_transport.py": "1560ec7b0332cb301ff85e236839c392b4286670dfc9894fbfee4f9b5164c92b",
+        "tests/unit/test_native_tensor_bounded_producers.py": "840520a8902ed3a692ab6e121b465971a982cbb0feb077c508975f199022846a",
+        "tests/unit/test_native_tensor_program_pipeline.py": "f3d490eda25ba259710ca2afc76889cf0af9a8b6c6984fc70ac092fe798b8b91",
+        "benchmarks/nvidia/record_native_tensor_bounded_binary.py": "e2cf6f9728e775a39c19152867e6cb3fc5e1287c53b877cacb34324b3eb5d12f"
+      },
+      "scope": "explicit active dynamic roots, root memref.dim, checked capacity subviews and alias-aware ownership; 176 focused compiler cases pass; native frame ABI/provider unchanged"
+    },
+    "checkout_head": "09ec0ddfaf44e42a7a58831d30c380cafb8fbd97",
+    "source_sha256": {
+      "python/tessera/compiler/jit.py": "06e3d9bf6d1a28b956723d85638e7a9a84da1a9ea5f768c35f720b212d946d93",
+      "python/tessera/compiler/execution_matrix.py": "d998d4a9e385b794a0dc06405307aad1ed3d809ce5e905586c7a50a2b355647e",
+      "python/tessera/compiler/native_tensor_program.py": "34840d5af39c065b60c2f26e9933f7a4d723c4ef5c661013e5ef3d3b3885fe2f",
+      "python/tessera/compiler/native_tensor_jit.py": "5f7864194be6c54026412c3f5b690c2a256b59ac615afa31253135bc5e1814aa",
+      "python/tessera/compiler/prepared_native_tensor_frame.py": "255ee72118708d51c91d7a1ef0dc8c3a85a5f3eff1d7db9ab53909aded246725",
+      "python/tessera/runtime.py": "9e0184cb316e62d14848d01d5823bc9f5f500b0f402136d69a442a79b56013f3",
+      "tests/device/nvidia/test_native_tensor_program_package_execution.py": "e76b632edcd0299b7e4586a1497eeadfa3d935ca05c76c0630a68d7ff8113251",
+      "python/tessera/compiler/bounded_nvidia_lhs.py": "4030be795497f0741b733df79682b839fadbecb1c853b910301e48e49367337a",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "98c58cd8e2af99f7b3325cc06c4677b781c239f9fecd0498ebaf92d631b6f44b",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_native_frame.h": "39bf10595a59c411d719733942a94c2a370c6a170afeb2a6036c28d0901b38a0",
+      "tests/device/nvidia/test_native_tensor_bounded_producers.py": "7f114c25c088e164dee07c270270ce5520f17bbf47e5170e606b3f87cfb00d06"
+    },
+    "recorder_sha256": "e2cf6f9728e775a39c19152867e6cb3fc5e1287c53b877cacb34324b3eb5d12f",
+    "provider_build": {
+      "provider_sha256": "06fcdb02b05e52f681d35427afc76a8b3a6c772d4fa88a281b69fb70006c9465",
+      "source_sha256": {
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_gemm.cpp": "c5260d215618eef55564d97cdba50615efed759a3c40466244aadbd15ce07f08",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "24c3a6e4bdb2a4e15fd34750e846e57d528af6254828716daab7a1c25362382d",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/source_reverse_owner.h": "cb24a9ffd6a072c166829577ad33184ed750919211bc41aa1790479358691d6d",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "2a7084de05effc2cb65c058e44edec1595f3ee48defbd31a8230559b798e111a",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_source_reverse_program.h": "e88d4def02ee2f0e45f35869a456cab9eabf3e32b6052a05da806167af4f495a",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "4c876db7e491acd449e44d4a7ab840c31c7b642601b1e8244f8d2b80e259164e",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_active_source_program.h": "a170833b3ba65776dea8b521d612c21e377d46b2edd36d4d2a142ac87ede9ae3",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "98c58cd8e2af99f7b3325cc06c4677b781c239f9fecd0498ebaf92d631b6f44b",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_fft.h": "86def9804cc412b883d06b6faf6d46e979cbec53a5c1a55a6d7888bd502e10e3",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_native_frame.h": "39bf10595a59c411d719733942a94c2a370c6a170afeb2a6036c28d0901b38a0",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "bcac6691084a9e8d18ddae0302ddbdd1c997fbf805babc2c0bf2d91307840d2b",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/resident_tensor_result.inc": "295025b1d1fe7801b5ac1c384efc6ec551dac9afae4f32b38fbc4463084b3bb9",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/active_source_owner.inc": "6a6c07097d1a93600a24e9c24394975101cab778564f68c27f2b66d4dc8252a9"
+      },
+      "public_export_addition": [
+        "tessera_nvidia_native_frame_prepare_v2"
+      ],
+      "public_exports": [
+        "tessera_nvidia_active_source_program_close",
+        "tessera_nvidia_active_source_program_invoke",
+        "tessera_nvidia_active_source_program_invoke_resident_inputs",
+        "tessera_nvidia_active_source_program_prepare",
+        "tessera_nvidia_active_source_program_profile",
+        "tessera_nvidia_active_source_program_profile_resident_inputs",
+        "tessera_nvidia_active_source_program_scratch_stats",
+        "tessera_nvidia_attention_forward_close",
+        "tessera_nvidia_attention_forward_invoke",
+        "tessera_nvidia_attention_forward_last_error",
+        "tessera_nvidia_attention_forward_prepare",
+        "tessera_nvidia_attention_jvp_close",
+        "tessera_nvidia_attention_jvp_invoke",
+        "tessera_nvidia_attention_jvp_invoke_bounded",
+        "tessera_nvidia_attention_jvp_invoke_lse",
+        "tessera_nvidia_attention_jvp_invoke_lse_resident_ordered",
+        "tessera_nvidia_attention_jvp_invoke_resident_ordered",
+        "tessera_nvidia_attention_jvp_last_error",
+        "tessera_nvidia_attention_jvp_prepare",
+        "tessera_nvidia_attention_jvp_prepare_bias",
+        "tessera_nvidia_attention_jvp_prepare_bounded",
+        "tessera_nvidia_attention_jvp_prepare_lse",
+        "tessera_nvidia_attention_jvp_prepare_typed",
+        "tessera_nvidia_attention_vjp_close",
+        "tessera_nvidia_attention_vjp_invoke",
+        "tessera_nvidia_attention_vjp_invoke_resident_ordered",
+        "tessera_nvidia_attention_vjp_last_device_window",
+        "tessera_nvidia_attention_vjp_last_error",
+        "tessera_nvidia_attention_vjp_prepare",
+        "tessera_nvidia_attention_vjp_prepare_typed",
+        "tessera_nvidia_attention_vjp_rows_info",
+        "tessera_nvidia_attention_vjp_rows_invoke",
+        "tessera_nvidia_attention_vjp_rows_invoke_resident_ordered",
+        "tessera_nvidia_attention_vjp_rows_prepare",
+        "tessera_nvidia_matmul_append_producer",
+        "tessera_nvidia_matmul_attach_producer",
+        "tessera_nvidia_matmul_attach_rhs_producer",
+        "tessera_nvidia_matmul_close",
+        "tessera_nvidia_matmul_context_identity",
+        "tessera_nvidia_matmul_invoke",
+        "tessera_nvidia_matmul_invoke_dag_resident",
+        "tessera_nvidia_matmul_invoke_dag_resident_ordered",
+        "tessera_nvidia_matmul_invoke_dag_resident_to_host_ordered",
+        "tessera_nvidia_matmul_invoke_lhs_resident_ordered",
+        "tessera_nvidia_matmul_invoke_lhs_resident_to_host_ordered",
+        "tessera_nvidia_matmul_invoke_resident",
+        "tessera_nvidia_matmul_last_error",
+        "tessera_nvidia_matmul_prepare",
+        "tessera_nvidia_matmul_profile",
+        "tessera_nvidia_matmul_profile_captured",
+        "tessera_nvidia_matmul_profile_dag_resident_ordered",
+        "tessera_nvidia_matmul_profile_lhs_resident_ordered",
+        "tessera_nvidia_matmul_scratch_stats",
+        "tessera_nvidia_matmul_set_dynamic_axes",
+        "tessera_nvidia_matmul_supports_flat_activation",
+        "tessera_nvidia_native_frame_close_v1",
+        "tessera_nvidia_native_frame_invoke_v1",
+        "tessera_nvidia_native_frame_prepare_v1",
+        "tessera_nvidia_native_frame_prepare_v2",
+        "tessera_nvidia_native_frame_profile_v1",
+        "tessera_nvidia_native_frame_resident_v1",
+        "tessera_nvidia_native_frame_stats_v1",
+        "tessera_nvidia_norm_attention_last_times",
+        "tessera_nvidia_norm_attention_prepare",
+        "tessera_nvidia_ptx_benchmark",
+        "tessera_nvidia_ptx_benchmark_resident",
+        "tessera_nvidia_ptx_benchmark_v2",
+        "tessera_nvidia_ptx_device_memory",
+        "tessera_nvidia_ptx_invoke",
+        "tessera_nvidia_ptx_invoke_resident",
+        "tessera_nvidia_ptx_invoke_v2",
+        "tessera_nvidia_ptx_last_error",
+        "tessera_nvidia_ptx_register",
+        "tessera_nvidia_ptx_resources",
+        "tessera_nvidia_register_ptx_launcher",
+        "tessera_nvidia_scalar_matmul_invoke_resident_v1",
+        "tessera_nvidia_scalar_matmul_prepare_v1",
+        "tessera_nvidia_source_attention_reverse_bounded_invoke",
+        "tessera_nvidia_source_attention_reverse_bounded_prepare",
+        "tessera_nvidia_source_attention_reverse_close",
+        "tessera_nvidia_source_attention_reverse_invoke",
+        "tessera_nvidia_source_attention_reverse_last_times",
+        "tessera_nvidia_source_attention_reverse_prepare",
+        "tessera_nvidia_source_attention_reverse_rows_bounded_invoke",
+        "tessera_nvidia_source_attention_reverse_rows_bounded_prepare",
+        "tessera_nvidia_source_attention_reverse_rows_invoke",
+        "tessera_nvidia_source_attention_reverse_rows_last_times",
+        "tessera_nvidia_source_attention_reverse_rows_prepare",
+        "tessera_nvidia_source_reverse_close_v1",
+        "tessera_nvidia_source_reverse_invoke_v1",
+        "tessera_nvidia_source_reverse_prepare_v1",
+        "tessera_nvidia_source_reverse_profile_v1",
+        "tessera_nvidia_tensor_program_close",
+        "tessera_nvidia_tensor_program_invoke",
+        "tessera_nvidia_tensor_program_prepare",
+        "tessera_nvidia_tensor_program_profile",
+        "tessera_nvidia_tensor_program_reserve_result",
+        "tessera_nvidia_tensor_program_scratch_stats",
+        "tessera_nvidia_tensor_program_submit_result",
+        "tessera_nvidia_tensor_result_close",
+        "tessera_nvidia_tensor_result_query",
+        "tessera_nvidia_tensor_result_read",
+        "tessera_nvidia_tensor_result_record_consumer"
+      ],
+      "build_command": [
+        "g++",
+        "-std=c++17",
+        "-O3",
+        "-DNDEBUG",
+        "-shared",
+        "-fPIC",
+        "-pthread",
+        "-I/usr/local/cuda-13.3/include",
+        "-I/home/angstorms/scratch/bounded-source-attention-20261019/worktree/src/runtime/include",
+        "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp",
+        "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp",
+        "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp",
+        "-L/usr/lib/wsl/lib",
+        "-Wl,-rpath,/usr/lib/wsl/lib",
+        "-lcuda",
+        "-ldl",
+        "-o",
+        "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-binary-native-f1ce99e7-include-fix/.production.so.building"
+      ]
+    }
+  },
+  "bound_mkn": [
+    256,
+    4096,
+    256
+  ],
+  "active_rows": [
+    17,
+    1,
+    256,
+    65,
+    5,
+    200
+  ],
+  "rounds": 6,
+  "profiles": [
+    {
+      "storage": "f16",
+      "rows": [
+        {
+          "shape_mkn": [
+            17,
+            4096,
+            256
+          ],
+          "seed": 14218,
+          "correctness": "independent_fp64_stored_add_then_gamma_k_before_after",
+          "device_windows": [
+            {
+              "window": 0,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 14.813599586486816,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.014466405846178532,
+                0.09417331218719482
+              ],
+              "program_ms": 0.09820715337991714,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 0,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.9600958824157715,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.000966820283792913,
+                0.09152078628540039
+              ],
+              "program_ms": 0.09237843751907349,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.7467200756073,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0009147265809588134,
+                0.09167804569005966
+              ],
+              "program_ms": 0.09250597655773163,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 19.08336067199707,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.00931804720312357,
+                0.09415949881076813
+              ],
+              "program_ms": 0.09824826568365097,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 20.303264617919922,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.009913703426718712,
+                0.09429220110177994
+              ],
+              "program_ms": 0.09822645038366318,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 4.02953577041626,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0009837733814492822,
+                0.09168669581413269
+              ],
+              "program_ms": 0.09261001646518707,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 4.06822395324707,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0009932187385857105,
+                0.09161796420812607
+              ],
+              "program_ms": 0.09262241423130035,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 20.97907257080078,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.020487375557422638,
+                0.09415718913078308
+              ],
+              "program_ms": 0.09881731122732162,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 12.305824279785156,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.012017406523227692,
+                0.09415650367736816
+              ],
+              "program_ms": 0.09856140613555908,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.8284480571746826,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0009346797014586627,
+                0.09167768061161041
+              ],
+              "program_ms": 0.09259697049856186,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.707263946533203,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0009050937369465828,
+                0.09160996973514557
+              ],
+              "program_ms": 0.09262725710868835,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 14.135871887207031,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.013804562389850616,
+                0.09415046870708466
+              ],
+              "program_ms": 0.09824343770742416,
+              "measurement": "cuda_events"
+            }
+          ],
+          "completed_public_samples_ms": [
+            0.8579099375,
+            0.79069175,
+            0.7760639375,
+            0.837102875,
+            0.7859379375,
+            0.7792614375
+          ],
+          "completed_public_median_ms": 0.78831484375,
+          "completed_public_window_ms": [
+            13.726559,
+            12.651068,
+            12.417023,
+            13.393646,
+            12.575007,
+            12.468183
+          ],
+          "calls_per_sample": 16,
+          "allocation_after": {
+            "capacity": 8650752,
+            "allocations": 1,
+            "modules": 2,
+            "stages": 2,
+            "generation": 100,
+            "bytes": 8650752
+          }
+        },
+        {
+          "shape_mkn": [
+            1,
+            4096,
+            256
+          ],
+          "seed": 14202,
+          "correctness": "independent_fp64_stored_add_then_gamma_k_before_after",
+          "device_windows": [
+            {
+              "window": 0,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 15.292032241821289,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.014933625236153603,
+                0.0859885960817337
+              ],
+              "program_ms": 0.08829103410243988,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 0,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.302272081375122,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0008062187698669732,
+                0.08382938802242279
+              ],
+              "program_ms": 0.08464507013559341,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.1920320987701416,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0007793047116138041,
+                0.08389049768447876
+              ],
+              "program_ms": 0.08458271622657776,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 13.10582447052002,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.012798656709492207,
+                0.08600649982690811
+              ],
+              "program_ms": 0.08826453238725662,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": false,
+              "repeats": 256,
+              "minimum_region_window_ms": 11.291071891784668,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.04410574957728386,
+                0.0860811248421669
+              ],
+              "program_ms": 0.08861075341701508,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.7486720085144043,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.000915203127078712,
+                0.08387705683708191
+              ],
+              "program_ms": 0.08458118885755539,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.2138240337371826,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0007846250082366168,
+                0.08388610184192657
+              ],
+              "program_ms": 0.08462733775377274,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 15.277503967285156,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.01491943746805191,
+                0.08602656424045563
+              ],
+              "program_ms": 0.0885205939412117,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 14.024831771850586,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.013696124777197838,
+                0.08598509430885315
+              ],
+              "program_ms": 0.088345468044281,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.164799928665161,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0007726562325842679,
+                0.08388395607471466
+              ],
+              "program_ms": 0.08460244536399841,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.902656078338623,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0009527968941256404,
+                0.08391469717025757
+              ],
+              "program_ms": 0.08463726192712784,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": false,
+              "repeats": 512,
+              "minimum_region_window_ms": 12.307647705078125,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.024038374423980713,
+                0.08604918420314789
+              ],
+              "program_ms": 0.08835812658071518,
+              "measurement": "cuda_events"
+            }
+          ],
+          "completed_public_samples_ms": [
+            0.787025375,
+            0.73160425,
+            0.7279159375,
+            0.74081675,
+            0.7802984375,
+            0.7058889375
+          ],
+          "completed_public_median_ms": 0.7362105,
+          "completed_public_window_ms": [
+            12.592406,
+            11.705668,
+            11.646655,
+            11.853068,
+            12.484775,
+            11.294223
+          ],
+          "calls_per_sample": 16,
+          "allocation_after": {
+            "capacity": 8650752,
+            "allocations": 1,
+            "modules": 2,
+            "stages": 2,
+            "generation": 198,
+            "bytes": 8650752
+          }
+        },
+        {
+          "shape_mkn": [
+            256,
+            4096,
+            256
+          ],
+          "seed": 14457,
+          "correctness": "independent_fp64_stored_add_then_gamma_k_before_after",
+          "device_windows": [
+            {
+              "window": 0,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 10.22060775756836,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.009981062263250351,
+                0.1009337529540062
+              ],
+              "program_ms": 0.10859180986881256,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 0,
+              "captured": true,
+              "repeats": 2048,
+              "minimum_region_window_ms": 10.360575675964355,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.0050588748417794704,
+                0.09920047223567963
+              ],
+              "program_ms": 0.1042388305068016,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": true,
+              "repeats": 2048,
+              "minimum_region_window_ms": 10.49772834777832,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.005125843919813633,
+                0.09958244115114212
+              ],
+              "program_ms": 0.10449856519699097,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 10.021408081054688,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.009786531329154968,
+                0.10230252891778946
+              ],
+              "program_ms": 0.10955572128295898,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 11.96288013458252,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.011682500131428242,
+                0.10198071599006653
+              ],
+              "program_ms": 0.10963993519544601,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": true,
+              "repeats": 2048,
+              "minimum_region_window_ms": 10.324543952941895,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.0050412812270224094,
+                0.0994170606136322
+              ],
+              "program_ms": 0.10462184250354767,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": true,
+              "repeats": 2048,
+              "minimum_region_window_ms": 10.474207878112793,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.005114359315484762,
+                0.09959188848733902
+              ],
+              "program_ms": 0.10464409738779068,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 18.338176727294922,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.017908375710248947,
+                0.10182874649763107
+              ],
+              "program_ms": 0.10953971743583679,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 14.648320198059082,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.014305000193417072,
+                0.10190393775701523
+              ],
+              "program_ms": 0.109563909471035,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": true,
+              "repeats": 2048,
+              "minimum_region_window_ms": 10.788064002990723,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.005267609376460314,
+                0.09944065660238266
+              ],
+              "program_ms": 0.1044907495379448,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": true,
+              "repeats": 2048,
+              "minimum_region_window_ms": 10.508223533630371,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.005130968522280455,
+                0.09943365305662155
+              ],
+              "program_ms": 0.1047230139374733,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 12.154144287109375,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.011869281530380249,
+                0.10202134400606155
+              ],
+              "program_ms": 0.1100199967622757,
+              "measurement": "cuda_events"
+            }
+          ],
+          "completed_public_samples_ms": [
+            1.5661306875,
+            1.5002594375,
+            1.504954375,
+            1.644501,
+            1.653772875,
+            1.6391021875
+          ],
+          "completed_public_median_ms": 1.6026164375,
+          "completed_public_window_ms": [
+            25.058091,
+            24.004151,
+            24.07927,
+            26.312016,
+            26.460366,
+            26.225635
+          ],
+          "calls_per_sample": 16,
+          "allocation_after": {
+            "capacity": 8650752,
+            "allocations": 1,
+            "modules": 2,
+            "stages": 2,
+            "generation": 296,
+            "bytes": 8650752
+          }
+        },
+        {
+          "shape_mkn": [
+            65,
+            4096,
+            256
+          ],
+          "seed": 14266,
+          "correctness": "independent_fp64_stored_add_then_gamma_k_before_after",
+          "device_windows": [
+            {
+              "window": 0,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 35.48652648925781,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.017327405512332916,
+                0.09432578086853027
+              ],
+              "program_ms": 0.09849042445421219,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 0,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 7.835328102111816,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0019129218999296427,
+                0.092791348695755
+              ],
+              "program_ms": 0.09465501457452774,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 7.866399765014648,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0019205077551305294,
+                0.09279106557369232
+              ],
+              "program_ms": 0.09466298669576645,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 30.02390480041504,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.014660109765827656,
+                0.09441418945789337
+              ],
+              "program_ms": 0.09835933148860931,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 15.020959854125977,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.014668906107544899,
+                0.09427531063556671
+              ],
+              "program_ms": 0.09836722165346146,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 8.035807609558105,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.001961867092177272,
+                0.092679463326931
+              ],
+              "program_ms": 0.09456812590360641,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 7.848703861236572,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.00191618746612221,
+                0.0926811546087265
+              ],
+              "program_ms": 0.09456272423267365,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 18.60972785949707,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.009086781181395054,
+                0.09441481530666351
+              ],
+              "program_ms": 0.0983627662062645,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 10.133088111877441,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.009895593859255314,
+                0.09429315477609634
+              ],
+              "program_ms": 0.09837052971124649,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 7.829728126525879,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0019115547183901072,
+                0.09268096834421158
+              ],
+              "program_ms": 0.09455957263708115,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 7.929567813873291,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.001935929642058909,
+                0.09267254918813705
+              ],
+              "program_ms": 0.09457065165042877,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 14.70844841003418,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.014363719150424004,
+                0.09429484605789185
+              ],
+              "program_ms": 0.0986350029706955,
+              "measurement": "cuda_events"
+            }
+          ],
+          "completed_public_samples_ms": [
+            0.9378789375,
+            0.8651950625,
+            0.877504625,
+            0.8675231875,
+            0.8538105625,
+            0.8809676875
+          ],
+          "completed_public_median_ms": 0.87251390625,
+          "completed_public_window_ms": [
+            15.006063,
+            13.843121,
+            14.040074,
+            13.880371,
+            13.660969,
+            14.095483
+          ],
+          "calls_per_sample": 16,
+          "allocation_after": {
+            "capacity": 8650752,
+            "allocations": 1,
+            "modules": 2,
+            "stages": 2,
+            "generation": 394,
+            "bytes": 8650752
+          }
+        },
+        {
+          "shape_mkn": [
+            5,
+            4096,
+            256
+          ],
+          "seed": 14206,
+          "correctness": "independent_fp64_stored_add_then_gamma_k_before_after",
+          "device_windows": [
+            {
+              "window": 0,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 16.390304565429688,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.01600615680217743,
+                0.08826509118080139
+              ],
+              "program_ms": 0.09082137793302536,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 0,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.5197761058807373,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0008593203383497894,
+                0.08672560751438141
+              ],
+              "program_ms": 0.08760236948728561,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.304863929748535,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0008068515453487635,
+                0.08679541200399399
+              ],
+              "program_ms": 0.08753038197755814,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 39.18764877319336,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.01913459412753582,
+                0.08828145265579224
+              ],
+              "program_ms": 0.09078170359134674,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 22.54425621032715,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.022015875205397606,
+                0.08827656507492065
+              ],
+              "program_ms": 0.09078984707593918,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 4.3454718589782715,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.001060906215570867,
+                0.08672577142715454
+              ],
+              "program_ms": 0.0875934362411499,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.4028160572052,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0008307656389661133,
+                0.08678863197565079
+              ],
+              "program_ms": 0.08753500133752823,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 12.035039901733398,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.011752968654036522,
+                0.08851384371519089
+              ],
+              "program_ms": 0.09052278101444244,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": false,
+              "repeats": 256,
+              "minimum_region_window_ms": 10.147104263305664,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.03963712602853775,
+                0.08832412213087082
+              ],
+              "program_ms": 0.0905662477016449,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.185728073120117,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0007777656428515911,
+                0.08679639548063278
+              ],
+              "program_ms": 0.08760055154561996,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.6850240230560303,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0008996640681289136,
+                0.08680489659309387
+              ],
+              "program_ms": 0.0876084417104721,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 25.983680725097656,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.01268734410405159,
+                0.08825493603944778
+              ],
+              "program_ms": 0.09060243517160416,
+              "measurement": "cuda_events"
+            }
+          ],
+          "completed_public_samples_ms": [
+            0.791162375,
+            1.275770125,
+            0.73373225,
+            0.737938,
+            0.72257225,
+            0.7297910625
+          ],
+          "completed_public_median_ms": 0.7358351249999999,
+          "completed_public_window_ms": [
+            12.658598,
+            20.412322,
+            11.739716,
+            11.807008,
+            11.561156,
+            11.676657
+          ],
+          "calls_per_sample": 16,
+          "allocation_after": {
+            "capacity": 8650752,
+            "allocations": 1,
+            "modules": 2,
+            "stages": 2,
+            "generation": 492,
+            "bytes": 8650752
+          }
+        },
+        {
+          "shape_mkn": [
+            200,
+            4096,
+            256
+          ],
+          "seed": 14401,
+          "correctness": "independent_fp64_stored_add_then_gamma_k_before_after",
+          "device_windows": [
+            {
+              "window": 0,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 10.482208251953125,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.010236531496047974,
+                0.09824381023645401
+              ],
+              "program_ms": 0.10434412211179733,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 0,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 16.798112869262695,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.004101101774722338,
+                0.09575974941253662
+              ],
+              "program_ms": 0.09980788826942444,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 16.797279357910156,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.004100898280739784,
+                0.09592074155807495
+              ],
+              "program_ms": 0.10017430037260056,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 10.785696029663086,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.010532906278967857,
+                0.09832169115543365
+              ],
+              "program_ms": 0.10443443804979324,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 11.072256088256836,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.010812750086188316,
+                0.09832452982664108
+              ],
+              "program_ms": 0.10443062335252762,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 16.797792434692383,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.00410102354362607,
+                0.09597849100828171
+              ],
+              "program_ms": 0.1001221239566803,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 16.793439865112305,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.004099960904568434,
+                0.09591317921876907
+              ],
+              "program_ms": 0.10015679895877838,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 10.655712127685547,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.010405968874692917,
+                0.09831228107213974
+              ],
+              "program_ms": 0.1044919341802597,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 10.566847801208496,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.010319187305867672,
+                0.09834328293800354
+              ],
+              "program_ms": 0.10471378266811371,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 16.80361557006836,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.0041024452075362206,
+                0.0959748774766922
+              ],
+              "program_ms": 0.1000702753663063,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 16.80009651184082,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.004101586062461138,
+                0.09591281414031982
+              ],
+              "program_ms": 0.10015372931957245,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 23.24812889099121,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.022703250870108604,
+                0.09829668700695038
+              ],
+              "program_ms": 0.10443240404129028,
+              "measurement": "cuda_events"
+            }
+          ],
+          "completed_public_samples_ms": [
+            1.4337705625,
+            1.309628625,
+            1.3147193125,
+            1.3974001875,
+            1.4434206875,
+            1.4193166875
+          ],
+          "completed_public_median_ms": 1.4083584375,
+          "completed_public_window_ms": [
+            22.940329,
+            20.954058,
+            21.035509,
+            22.358403,
+            23.094731,
+            22.709067
+          ],
+          "calls_per_sample": 16,
+          "allocation_after": {
+            "capacity": 8650752,
+            "allocations": 1,
+            "modules": 2,
+            "stages": 2,
+            "generation": 590,
+            "bytes": 8650752
+          }
+        }
+      ],
+      "explicit_frontend_and_compile_ms": 2724.045752,
+      "explicit_prepare_ms": 412.022375,
+      "first_public_after_compile_prepare_probe_ms": 1798.701768,
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 2097152,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              256,
+              4096
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 2097152,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              256,
+              4096
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 2097152,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              4096,
+              256
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 2097152,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              256,
+              4096
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 262144,
+            "id": 4,
+            "role": "output",
+            "shape": [
+              256,
+              256
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "lhs_add",
+        "output": 4,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "row_bound": 256,
+        "row_buffers": [
+          1,
+          1,
+          0,
+          1,
+          1
+        ],
+        "row_root": 0,
+        "schema": "tessera.native.tensor_program_frame.v2",
+        "stages": [
+          {
+            "entry": "tessera_tile_binary_add_f16_0e37445a24",
+            "geometry": [
+              8192,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "grid_row_divisors": [
+              128,
+              1,
+              1
+            ],
+            "grid_row_multipliers": [
+              4096,
+              0,
+              0
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalar_row_multipliers": [
+              4096
+            ],
+            "scalars": [
+              1048576
+            ]
+          },
+          {
+            "entry": "source_row_rhs_kernel",
+            "geometry": [
+              32,
+              16,
+              1,
+              32,
+              1,
+              1
+            ],
+            "grid_row_divisors": [
+              1,
+              16,
+              1
+            ],
+            "grid_row_multipliers": [
+              0,
+              1,
+              0
+            ],
+            "inputs": [
+              3,
+              2
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalar_row_multipliers": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "scalars": [
+              256,
+              256,
+              4096,
+              4096,
+              256,
+              256
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "allocation_before": {
+        "capacity": 8650752,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 2,
+        "bytes": 8650752
+      },
+      "ir_sha256": {
+        "source_ir": "f5c694078d93daaed07da23ffcc7db2fc9707d3adefa1e2f3de6c5b24b29fac4",
+        "schedule_ir": "cf38509fcae4beb0cb5486883f384ce116ebd6087f5ebecc2c02098fc6de666f",
+        "tile_ir": "690b66d3b18ea25465cff84562d8ff129afd6702389d677d7c98fd83c0e88081",
+        "target_ir": "114894ecd7d510421c92bdf015dc5f53063c674958e9a587dd460733aa7041c6"
+      },
+      "image_sha256": [
+        "66bdfc07ebe2789c68ebcf445e4a294fb33a3555f5b642a3c9eb3a77445873f2",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ]
+    },
+    {
+      "storage": "bf16",
+      "rows": [
+        {
+          "shape_mkn": [
+            17,
+            4096,
+            256
+          ],
+          "seed": 14218,
+          "correctness": "independent_fp64_stored_add_then_gamma_k_before_after",
+          "device_windows": [
+            {
+              "window": 0,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 17.242687225341797,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.01683856174349785,
+                0.09421087801456451
+              ],
+              "program_ms": 0.0984993726015091,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 0,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.723968029022217,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0009091718820855021,
+                0.09176842868328094
+              ],
+              "program_ms": 0.09270055592060089,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.6873600482940674,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0009002343867905438,
+                0.09170220047235489
+              ],
+              "program_ms": 0.092701256275177,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 12.71343994140625,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.012415468692779541,
+                0.09417077898979187
+              ],
+              "program_ms": 0.09829040616750717,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 19.6592960357666,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.019198531284928322,
+                0.09417687356472015
+              ],
+              "program_ms": 0.09857143461704254,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.81548810005188,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0009315156494267285,
+                0.09178154915571213
+              ],
+              "program_ms": 0.09270381182432175,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.934976100921631,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.00096068752463907,
+                0.09170547872781754
+              ],
+              "program_ms": 0.09270220249891281,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 34.62492752075195,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.016906702890992165,
+                0.09417814016342163
+              ],
+              "program_ms": 0.09824778139591217,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 13.372159957885742,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.013058749958872795,
+                0.09458181262016296
+              ],
+              "program_ms": 0.0982552170753479,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.827967882156372,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.000934562471229583,
+                0.09170316904783249
+              ],
+              "program_ms": 0.09270606935024261,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.8352959156036377,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0009363515418954194,
+                0.09176956117153168
+              ],
+              "program_ms": 0.09270364046096802,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 26.224735260009766,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.012805046513676643,
+                0.09428887814283371
+              ],
+              "program_ms": 0.09823957830667496,
+              "measurement": "cuda_events"
+            }
+          ],
+          "completed_public_samples_ms": [
+            0.8329646875,
+            0.7560300625,
+            0.75847825,
+            0.7425268125,
+            0.75868325,
+            0.7393905625
+          ],
+          "completed_public_median_ms": 0.75725415625,
+          "completed_public_window_ms": [
+            13.327435,
+            12.096481,
+            12.135652,
+            11.880429,
+            12.138932,
+            11.830249
+          ],
+          "calls_per_sample": 16,
+          "allocation_after": {
+            "capacity": 8650752,
+            "allocations": 1,
+            "modules": 2,
+            "stages": 2,
+            "generation": 100,
+            "bytes": 8650752
+          }
+        },
+        {
+          "shape_mkn": [
+            1,
+            4096,
+            256
+          ],
+          "seed": 14202,
+          "correctness": "independent_fp64_stored_add_then_gamma_k_before_after",
+          "device_windows": [
+            {
+              "window": 0,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 18.263967514038086,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.00891795288771391,
+                0.08602284640073776
+              ],
+              "program_ms": 0.08827890455722809,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 0,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 4.585247993469238,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0011194453109055758,
+                0.08400141447782516
+              ],
+              "program_ms": 0.08477295190095901,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 4.077216148376465,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0009954140987247229,
+                0.08397530019283295
+              ],
+              "program_ms": 0.08470198512077332,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 15.981056213378906,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.015606500208377838,
+                0.08629290759563446
+              ],
+              "program_ms": 0.08830325305461884,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": false,
+              "repeats": 256,
+              "minimum_region_window_ms": 10.69264030456543,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.04176812618970871,
+                0.0860738754272461
+              ],
+              "program_ms": 0.08837412297725677,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 4.328703880310059,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.001056812470778823,
+                0.08397173881530762
+              ],
+              "program_ms": 0.08476616442203522,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.179935932159424,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0007763515459373593,
+                0.08390799909830093
+              ],
+              "program_ms": 0.08476340770721436,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 19.253503799438477,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.018802249804139137,
+                0.08604881167411804
+              ],
+              "program_ms": 0.08830515295267105,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 16.819232940673828,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.008212516084313393,
+                0.08603032678365707
+              ],
+              "program_ms": 0.08828181028366089,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 4.45900821685791,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0010886250529438257,
+                0.08397740125656128
+              ],
+              "program_ms": 0.0846998542547226,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.3736000061035156,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0008236328139901161,
+                0.0839710682630539
+              ],
+              "program_ms": 0.0847664475440979,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 19.650848388671875,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.009595140814781189,
+                0.0897212028503418
+              ],
+              "program_ms": 0.08827495574951172,
+              "measurement": "cuda_events"
+            }
+          ],
+          "completed_public_samples_ms": [
+            0.7785884375,
+            0.72518975,
+            0.7046733125,
+            0.713487125,
+            0.7075464375,
+            0.714139
+          ],
+          "completed_public_median_ms": 0.7138130625,
+          "completed_public_window_ms": [
+            12.457415,
+            11.603036,
+            11.274773,
+            11.415794,
+            11.320743,
+            11.426224
+          ],
+          "calls_per_sample": 16,
+          "allocation_after": {
+            "capacity": 8650752,
+            "allocations": 1,
+            "modules": 2,
+            "stages": 2,
+            "generation": 198,
+            "bytes": 8650752
+          }
+        },
+        {
+          "shape_mkn": [
+            256,
+            4096,
+            256
+          ],
+          "seed": 14457,
+          "correctness": "independent_fp64_stored_add_then_gamma_k_before_after",
+          "device_windows": [
+            {
+              "window": 0,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 10.613887786865234,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.01036512479186058,
+                0.10068940371274948
+              ],
+              "program_ms": 0.108606718480587,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 0,
+              "captured": true,
+              "repeats": 2048,
+              "minimum_region_window_ms": 10.480704307556152,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.0051175314001739025,
+                0.0995568260550499
+              ],
+              "program_ms": 0.10463381558656693,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": true,
+              "repeats": 2048,
+              "minimum_region_window_ms": 10.517760276794434,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.005135625135153532,
+                0.09955639392137527
+              ],
+              "program_ms": 0.10462581366300583,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 15.531135559082031,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.015167124569416046,
+                0.10193900018930435
+              ],
+              "program_ms": 0.1094992533326149,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 16.19811248779297,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.01581846922636032,
+                0.10178875178098679
+              ],
+              "program_ms": 0.10960356146097183,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": true,
+              "repeats": 2048,
+              "minimum_region_window_ms": 10.477952003479004,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.005116187501698732,
+                0.09944115579128265
+              ],
+              "program_ms": 0.1046406701207161,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": true,
+              "repeats": 2048,
+              "minimum_region_window_ms": 10.481056213378906,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.005117703229188919,
+                0.09951841831207275
+              ],
+              "program_ms": 0.10469814389944077,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 11.572511672973633,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.011301280930638313,
+                0.10202521830797195
+              ],
+              "program_ms": 0.10959287732839584,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 12.514528274536133,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.012221219018101692,
+                0.10197100043296814
+              ],
+              "program_ms": 0.10949684679508209,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": true,
+              "repeats": 2048,
+              "minimum_region_window_ms": 10.473855972290039,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.005114187486469746,
+                0.09950622171163559
+              ],
+              "program_ms": 0.10457900166511536,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": true,
+              "repeats": 2048,
+              "minimum_region_window_ms": 10.800992012023926,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.0052739218808710575,
+                0.09949323534965515
+              ],
+              "program_ms": 0.10457189381122589,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 15.88259220123291,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.015510343946516514,
+                0.10193415731191635
+              ],
+              "program_ms": 0.10998206585645676,
+              "measurement": "cuda_events"
+            }
+          ],
+          "completed_public_samples_ms": [
+            1.648192875,
+            1.5787553125,
+            1.613435125,
+            1.709922375,
+            1.688904,
+            1.75883725
+          ],
+          "completed_public_median_ms": 1.6685484375,
+          "completed_public_window_ms": [
+            26.371086,
+            25.260085,
+            25.814962,
+            27.358758,
+            27.022464,
+            28.141396
+          ],
+          "calls_per_sample": 16,
+          "allocation_after": {
+            "capacity": 8650752,
+            "allocations": 1,
+            "modules": 2,
+            "stages": 2,
+            "generation": 296,
+            "bytes": 8650752
+          }
+        },
+        {
+          "shape_mkn": [
+            65,
+            4096,
+            256
+          ],
+          "seed": 14266,
+          "correctness": "independent_fp64_stored_add_then_gamma_k_before_after",
+          "device_windows": [
+            {
+              "window": 0,
+              "captured": false,
+              "repeats": 256,
+              "minimum_region_window_ms": 12.716896057128906,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.04967537522315979,
+                0.09431249648332596
+              ],
+              "program_ms": 0.09876712411642075,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 0,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 7.939807891845703,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0019384296610951424,
+                0.09279458224773407
+              ],
+              "program_ms": 0.09465387463569641,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 7.884191989898682,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0019248515600338578,
+                0.09278005361557007
+              ],
+              "program_ms": 0.09464465826749802,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 37.41731262207031,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.01827017217874527,
+                0.0943211242556572
+              ],
+              "program_ms": 0.09850476682186127,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 16.062335968017578,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.015685874968767166,
+                0.0943465605378151
+              ],
+              "program_ms": 0.0986361876130104,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 7.825376033782959,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0019104921957477927,
+                0.09279057383537292
+              ],
+              "program_ms": 0.09463732689619064,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 7.837728023529053,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0019135078182443976,
+                0.09277690201997757
+              ],
+              "program_ms": 0.09465066343545914,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 16.47609519958496,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.01608993671834469,
+                0.09431847184896469
+              ],
+              "program_ms": 0.09837128221988678,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 20.249664306640625,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.009887531399726868,
+                0.0944594219326973
+              ],
+              "program_ms": 0.09836578369140625,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 7.754816055297852,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.001893265638500452,
+                0.09267627447843552
+              ],
+              "program_ms": 0.09456486999988556,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 7.911968231201172,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0019316328689455986,
+                0.09267660230398178
+              ],
+              "program_ms": 0.09455922991037369,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 25.851808547973633,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.01262295339256525,
+                0.09429465979337692
+              ],
+              "program_ms": 0.09854432940483093,
+              "measurement": "cuda_events"
+            }
+          ],
+          "completed_public_samples_ms": [
+            0.9230125,
+            0.82485025,
+            1.334022,
+            0.83785725,
+            0.832059625,
+            0.9119724375
+          ],
+          "completed_public_median_ms": 0.8749148437500001,
+          "completed_public_window_ms": [
+            14.7682,
+            13.197604,
+            21.344352,
+            13.405716,
+            13.312954,
+            14.591559
+          ],
+          "calls_per_sample": 16,
+          "allocation_after": {
+            "capacity": 8650752,
+            "allocations": 1,
+            "modules": 2,
+            "stages": 2,
+            "generation": 394,
+            "bytes": 8650752
+          }
+        },
+        {
+          "shape_mkn": [
+            5,
+            4096,
+            256
+          ],
+          "seed": 14206,
+          "correctness": "independent_fp64_stored_add_then_gamma_k_before_after",
+          "device_windows": [
+            {
+              "window": 0,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 13.052800178527832,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.012746875174343586,
+                0.08830884099006653
+              ],
+              "program_ms": 0.09056984633207321,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 0,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.4445440769195557,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0008409531437791884,
+                0.08672573417425156
+              ],
+              "program_ms": 0.08758343011140823,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.415231943130493,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0008337968611158431,
+                0.08678979426622391
+              ],
+              "program_ms": 0.08759741485118866,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": false,
+              "repeats": 512,
+              "minimum_region_window_ms": 14.981247901916504,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.02926024980843067,
+                0.08827787637710571
+              ],
+              "program_ms": 0.09046050161123276,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 15.33523178100586,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.014975812286138535,
+                0.08827497065067291
+              ],
+              "program_ms": 0.09045609086751938,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 4.138271808624268,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.001010320265777409,
+                0.08672673255205154
+              ],
+              "program_ms": 0.08759968727827072,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 4.0655999183654785,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.000992578105069697,
+                0.08678784966468811
+              ],
+              "program_ms": 0.08760156482458115,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 10.531392097473145,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.010284562595188618,
+                0.08858209103345871
+              ],
+              "program_ms": 0.0904635339975357,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 14.602592468261719,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.014260344207286835,
+                0.08828315883874893
+              ],
+              "program_ms": 0.0905323401093483,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.432192087173462,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0008379375212825835,
+                0.08678964525461197
+              ],
+              "program_ms": 0.08752701431512833,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 3.25980806350708,
+              "duration_admitted": false,
+              "stage_ms": [
+                0.0007958515780046582,
+                0.08671989291906357
+              ],
+              "program_ms": 0.08758793771266937,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 16.100736618041992,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.015723375603556633,
+                0.08827656507492065
+              ],
+              "program_ms": 0.09047740697860718,
+              "measurement": "cuda_events"
+            }
+          ],
+          "completed_public_samples_ms": [
+            0.783066,
+            0.723192875,
+            0.7182134375,
+            0.7465486875,
+            0.7159209375,
+            0.73553175
+          ],
+          "completed_public_median_ms": 0.7293623124999999,
+          "completed_public_window_ms": [
+            12.529056,
+            11.571086,
+            11.491415,
+            11.944779,
+            11.454735,
+            11.768508
+          ],
+          "calls_per_sample": 16,
+          "allocation_after": {
+            "capacity": 8650752,
+            "allocations": 1,
+            "modules": 2,
+            "stages": 2,
+            "generation": 492,
+            "bytes": 8650752
+          }
+        },
+        {
+          "shape_mkn": [
+            200,
+            4096,
+            256
+          ],
+          "seed": 14401,
+          "correctness": "independent_fp64_stored_add_then_gamma_k_before_after",
+          "device_windows": [
+            {
+              "window": 0,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 10.01740837097168,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.009782625362277031,
+                0.09824000298976898
+              ],
+              "program_ms": 0.10430196672677994,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 0,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 16.795551300048828,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.004100476391613483,
+                0.09589879214763641
+              ],
+              "program_ms": 0.09998694807291031,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 16.817760467529297,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.004105898551642895,
+                0.0958988144993782
+              ],
+              "program_ms": 0.10014305263757706,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 1,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 10.690112113952637,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.010439562611281872,
+                0.09830603003501892
+              ],
+              "program_ms": 0.10443899780511856,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 10.758848190307617,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.010506687685847282,
+                0.09834256023168564
+              ],
+              "program_ms": 0.1047128438949585,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 2,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 16.800128936767578,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.004101593978703022,
+                0.0959651917219162
+              ],
+              "program_ms": 0.10007035732269287,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 16.804800033569336,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.004102734383195639,
+                0.09590320289134979
+              ],
+              "program_ms": 0.10013772547245026,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 3,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 15.678048133850098,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.015310593880712986,
+                0.09830678254365921
+              ],
+              "program_ms": 0.10444027930498123,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": false,
+              "repeats": 1024,
+              "minimum_region_window_ms": 15.816927909851074,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.01544621866196394,
+                0.09831293672323227
+              ],
+              "program_ms": 0.10482949763536453,
+              "measurement": "cuda_events"
+            },
+            {
+              "window": 4,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 16.804607391357422,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.004102687351405621,
+                0.09601427614688873
+              ],
+              "program_ms": 0.1000763550400734,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": true,
+              "repeats": 4096,
+              "minimum_region_window_ms": 16.804256439208984,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.004102601669728756,
+                0.09598904848098755
+              ],
+              "program_ms": 0.10013202577829361,
+              "measurement": "cuda_graph_events"
+            },
+            {
+              "window": 5,
+              "captured": false,
+              "repeats": 2048,
+              "minimum_region_window_ms": 18.598655700683594,
+              "duration_admitted": true,
+              "stage_ms": [
+                0.009081374853849411,
+                0.10144232958555222
+              ],
+              "program_ms": 0.10443577915430069,
+              "measurement": "cuda_events"
+            }
+          ],
+          "completed_public_samples_ms": [
+            1.446945125,
+            1.3594460625,
+            1.38158375,
+            1.370439875,
+            1.365920625,
+            1.367883
+          ],
+          "completed_public_median_ms": 1.3691614374999999,
+          "completed_public_window_ms": [
+            23.151122,
+            21.751137,
+            22.10534,
+            21.927038,
+            21.85473,
+            21.886128
+          ],
+          "calls_per_sample": 16,
+          "allocation_after": {
+            "capacity": 8650752,
+            "allocations": 1,
+            "modules": 2,
+            "stages": 2,
+            "generation": 590,
+            "bytes": 8650752
+          }
+        }
+      ],
+      "explicit_frontend_and_compile_ms": 1956.480959,
+      "explicit_prepare_ms": 11.089634,
+      "first_public_after_compile_prepare_probe_ms": 1842.363046,
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 2097152,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              256,
+              4096
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 2097152,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              256,
+              4096
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 2097152,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              4096,
+              256
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 2097152,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              256,
+              4096
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 262144,
+            "id": 4,
+            "role": "output",
+            "shape": [
+              256,
+              256
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "lhs_add",
+        "output": 4,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "row_bound": 256,
+        "row_buffers": [
+          1,
+          1,
+          0,
+          1,
+          1
+        ],
+        "row_root": 0,
+        "schema": "tessera.native.tensor_program_frame.v2",
+        "stages": [
+          {
+            "entry": "tessera_tile_binary_add_bf16_45b607e062",
+            "geometry": [
+              8192,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "grid_row_divisors": [
+              128,
+              1,
+              1
+            ],
+            "grid_row_multipliers": [
+              4096,
+              0,
+              0
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalar_row_multipliers": [
+              4096
+            ],
+            "scalars": [
+              1048576
+            ]
+          },
+          {
+            "entry": "source_row_rhs_kernel",
+            "geometry": [
+              32,
+              16,
+              1,
+              32,
+              1,
+              1
+            ],
+            "grid_row_divisors": [
+              1,
+              16,
+              1
+            ],
+            "grid_row_multipliers": [
+              0,
+              1,
+              0
+            ],
+            "inputs": [
+              3,
+              2
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalar_row_multipliers": [
+              1,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            "scalars": [
+              256,
+              256,
+              4096,
+              4096,
+              256,
+              256
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "allocation_before": {
+        "capacity": 8650752,
+        "allocations": 1,
+        "modules": 2,
+        "stages": 2,
+        "generation": 2,
+        "bytes": 8650752
+      },
+      "ir_sha256": {
+        "source_ir": "d82eb42b8d4831488b8c8d7cc46369c9abdf9407588c1eccd54ed9e2969651b6",
+        "schedule_ir": "907f41eb89ef88b73262f62b4fd093bad3ff27a8a788bbc2fe5b8dea39ecc449",
+        "tile_ir": "44dbc2107294ffb6e67485c121b27f4e80afe668ead598ab82f88bc9e9e04697",
+        "target_ir": "fefe1d2fa34b81f1b1c80bea84f2b3a0333fa1e176cd2f7c05a2f6d7fcdf524f"
+      },
+      "image_sha256": [
+        "8d017297c95cdd5e46d667de17c8c4a2fbfa5e2550aa1f04b12547bad5af60f9",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ]
+    }
+  ],
+  "scope": "One retained compiler-owned program per storage across active M. Separate producer, consumer and whole-program CUDA event windows; isolated regions are not additive. Under-10ms event windows are diagnostic only. Completed public wall time includes marshaling, transfer, allocation and readback. Explicit compile/prepare probes are separate; first-public timing follows those probes and is not process-cold. No baseline speedup or universal promotion."
+}

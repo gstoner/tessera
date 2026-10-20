@@ -3,6 +3,38 @@ last_updated: 2026-10-20
 audit_role: reference
 ---
 
+## Native bounded binary producer candidate — 2026-10-20
+
+PR998 is delivered as 09ec0ddfaf44e42a7a58831d30c380cafb8fbd97 after exact-head
+CI/review. Its merged branch and eight byte-identical Super-Bear source
+changes are cleaned up; frozen tools and evidence are retained.
+
+The next W1.1 increment projects the original stored-add/matmul M-bound policy
+through native Graph/Schedule/Tile/Target ownership. Dynamic borrowed roots,
+explicit owned-capacity subviews and alias-aware lifetime checks preserve
+active memory SSA; frame v2 carries compiler-owned row expressions. The
+73739736 compiler passes 176 focused and 487 registry/public/transport cases;
+all 2,779 full compiler cases execute. RTX5070 passes eight device cases plus
+24 compiler cases, and 12 timing rows retain one allocation per storage.
+24/72 captured windows are admitted; shorter producer windows remain diagnostic.
+First active-SSA CPU run: 30,902 passed / 3,721 declared skips; three audit-routing failures
+were corrected and all 19 affected routing/lifecycle checks pass. gfx1201
+numerics and five image controls pass. Publication gates remain pending.
+See docs/spec/NATIVE_TENSOR_PROGRAM_BOUNDED.md and
+benchmarks/baselines/native_tensor_bounded_binary_20261020/README.md.
+
+Final local delivery: the CI-equivalent CPU lane passes **30,894** with
+**3,721 declared skips**, zero failures/errors. The 11 cases omitted versus
+the first CPU run all have explicit performance markers, matching CI's selector;
+no other test IDs differ. The initial log-field failure and correction are
+retained. All **2,779** compiler cases execute with zero skips. The 323 final
+documentation/registry cases, 790 ODS cases, all five surfaces, 33 generated
+documents, Ruff, zero-error mypy and Graphify pass. Exact-head public CI/review
+and delivery remain pending; all five aggregate programs remain open.
+
+All five original aggregate programs remain open.
+
+
 ## ROCM-BOUNDED-CONTIGUOUS-PACK-20261020 — guarded load candidate
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.

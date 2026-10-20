@@ -12,6 +12,9 @@ audit_role: reference
 
 
 
+
+
+
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -13874,4 +13877,42 @@ storage, compiler-free restoration and the complete five-slice program remain
 open.
 
 Evidence: benchmarks/baselines/native_tensor_jit_20261020/README.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-20 — native three-root MLP precision integration
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync NATIVE-TENSOR-MLP-20261020.
+
+Outcome: The native compiler retains both matmuls and the activation from
+original three-root source. Explicit FP16 intermediates use typed fragments;
+explicit FP32 intermediates retain F32 ReLU and ordered scalar-FMA consumption.
+Each member carries checked buffers, scalars and launch geometry into Target
+and the retained C++ frame. No implicit half/TF32 rounding is introduced.
+2619 production compiler, 25 focused numerical/compiler and 87 RTX5070
+cases pass. Owning gfx1201 scalar packages pass 67 cases; shared drift
+passes 470 and separate capacity/JIT/audit gates pass 40. Full CPU passes 30785 with 3710 declared skips; exact-head CI/review remain active. Larger-shape cancellation failures
+were attributed to FP32 accumulation before half storage using native prefix
+readback; a stagewise independent enclosure includes negative downcast and
+changed-arithmetic controls.
+Timing separates native captured/enqueued stage/program regions from completed
+public calls and cold compilation. All four backend queues are assessed.
+
+Remaining: Broader native producers, dynamic/layout/AD/encoded contracts and
+all five aggregate programs remain open. Precision profiles have distinct
+semantics and do not provide a cross-precision speedup comparison.
+Evidence: benchmarks/baselines/native_tensor_mlp_20261020/README.md.
+
+Review follow-up (PR994): the valid F32 admission/registry finding is addressed
+by completing standalone typed activation packaging and ordinary host JIT,
+rather than restricting native F32 arithmetic to a wrapper marker. FP32 has
+an explicit typed ABI and production CUDA entry/width dispatch. Buffer/scalar
+forgeries reject before launch; legacy producer and epilogue fixtures remain
+separate. A matching immutable provider passes 50 standalone/composed device
+cases and 511 applicable host gates pass (8 declared non-SM120 skips).
+Separated public/resident benchmarks are recorded. Final full CPU passes
+30,788 cases with 3,710 declared skips; 2,640 compiler cases pass without skips.
+All 33 generated documents and five surface audits pass; updated-commit CI
+and review remain required.
 <!-- entry-fields:end -->

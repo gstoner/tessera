@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import ast
 import re
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -52,6 +54,9 @@ _BACKEND_MODULES: tuple[tuple[str, str], ...] = (
 _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
     "matmul": ("scheduled_matmul", "supports_scheduled_matmul"),
     "scalar_matmul": ("scheduled_matmul", "supports_scheduled_matmul"),
+    # The driver and canonical native dispatcher consume the existing typed
+    # ScheduledKernelArtifact; no new Graph-owned Python packager is needed.
+    "activation": ("scheduled_kernel", "supports_scheduled_kernel"),
     "attention": ("scheduled_attention", "supports_scheduled_attention"),
     "attention_backward": (
         "scheduled_attention_backward",
@@ -100,11 +105,40 @@ class BackendInventory:
                      if not _is_bootstrap(t) and not _is_artifact(t))
 
 
-def _parse(path: Path) -> ast.Module | None:
+@dataclass
+class _CensusSourceSnapshot:
+    trees: dict[Path, ast.Module | None] = field(default_factory=dict)
+    inventories: dict[tuple, tuple[BackendInventory, ...]] = field(default_factory=dict)
+
+
+_PARSE_SNAPSHOT: ContextVar[_CensusSourceSnapshot | None] = ContextVar(
+    "tessera_census_parse_snapshot", default=None)
+
+
+@contextmanager
+def _source_snapshot():
+    """Share read-only ASTs inside one census, never across live-source checks."""
+    if _PARSE_SNAPSHOT.get() is not None:
+        yield
+        return
+    token = _PARSE_SNAPSHOT.set(_CensusSourceSnapshot())
     try:
-        return ast.parse(path.read_text(encoding="utf-8"))
+        yield
+    finally:
+        _PARSE_SNAPSHOT.reset(token)
+
+
+def _parse(path: Path) -> ast.Module | None:
+    snapshot = _PARSE_SNAPSHOT.get()
+    if snapshot is not None and path in snapshot.trees:
+        return snapshot.trees[path]
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
-        return None
+        tree = None
+    if snapshot is not None:
+        snapshot.trees[path] = tree
+    return tree
 
 
 def _first_param_type(node: ast.FunctionDef) -> str:
@@ -327,6 +361,10 @@ def _predicate_exists(module_stem: str, predicate: str) -> bool:
 
 def collect_inventories() -> tuple[BackendInventory, ...]:
     """Derive each backend's bootstrap surface from its live source."""
+    snapshot = _PARSE_SNAPSHOT.get()
+    key = (_COMPILER, _BACKEND_MODULES)
+    if snapshot is not None and key in snapshot.inventories:
+        return snapshot.inventories[key]
     out: list[BackendInventory] = []
     for target, filename in _BACKEND_MODULES:
         path = _COMPILER / filename
@@ -345,9 +383,13 @@ def collect_inventories() -> tuple[BackendInventory, ...]:
                 unresolved_returns=_unresolved_classifier_returns(tree),
             )
         )
-    return tuple(out)
+    result = tuple(out)
+    if snapshot is not None:
+        snapshot.inventories[key] = result
+    return result
 
 
+@_source_snapshot()
 def verify_declared_mapping() -> None:
     """Fail closed if a declared compiled route no longer exists.
 
@@ -699,6 +741,7 @@ def _packager_is_generic_scheduled(target: str, family: str) -> bool:
     return bool(returns)
 
 
+@_source_snapshot()
 def family_rows() -> tuple[tuple[str, str, str, str], ...]:
     """(target, family, compiled_route, status) for every classified family."""
     verify_declared_mapping()
@@ -719,6 +762,7 @@ def family_rows() -> tuple[tuple[str, str, str, str], ...]:
     return tuple(rows)
 
 
+@_source_snapshot()
 def orphan_packagers() -> tuple[tuple[str, str], ...]:
     """Packagers whose name matches no classified family.
 
@@ -738,6 +782,7 @@ def orphan_packagers() -> tuple[tuple[str, str], ...]:
     return tuple(out)
 
 
+@_source_snapshot()
 def summary() -> dict[str, int]:
     rows = family_rows()
     inventories = collect_inventories()
@@ -766,6 +811,7 @@ def summary() -> dict[str, int]:
     }
 
 
+@_source_snapshot()
 def render_markdown() -> str:
     inventories = collect_inventories()
     rows = family_rows()
@@ -912,6 +958,7 @@ def render_markdown() -> str:
     return "\n".join(out)
 
 
+@_source_snapshot()
 def render_csv() -> str:
     lines = ["target,family,compiled_route,status"]
     lines += [f"{t},{f},{r},{s}" for t, f, r, s in family_rows()]

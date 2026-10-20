@@ -1,0 +1,2595 @@
+{
+  "schema": "tessera.benchmark.native_tensor_mlp.v1",
+  "source": {
+    "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+    "compiler_sha256": "a2cc0401d531bc1599bb7ce917c2f676be5eb1b54235b646079d5304b59d824a",
+    "provider_sha256": "72aaf57b4819f6aaf7931e59bbeb4cb68b8bd794e68cb2bb9108924eb6547e45",
+    "compiler_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+    "compiler_source": {
+      "compiler_sha256": "a2cc0401d531bc1599bb7ce917c2f676be5eb1b54235b646079d5304b59d824a",
+      "base_commit": "1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31",
+      "uncommitted_compiler_changes": true,
+      "compiler_source_sha256": {
+        "src/compiler/programming_model/lib/NativeTensorProgram.h": "faf4fd6ecf4096a7456c1106858d08edf1b78a7473a244b75fbe1c5e39d24043",
+        "src/compiler/programming_model/lib/PMPasses.cpp": "1c59b4806572f375707e24c272e2d06821a10f45cf480cc594ce2038edbff70a",
+        "src/compiler/programming_model/ir/ScheduleDialect.cpp": "b08afa6523739ded922a03ec00a879b4bd011353c22f08e05b5db8ae7455d317",
+        "src/compiler/ir/TileOps.cpp": "19a1ffe8e43c3834ccabc8a51ce9da01f649ecf49f14991c527516f2bb05a8ff",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "c1f6fcfea95972d74ce003eaeffe0db3b26ae5794b0e935a9dbbfa0d6f1f1753"
+      },
+      "scope": "SM120 multi-matmul native program; explicit FP16 and FP32 intermediates, per-stage scalar precision"
+    },
+    "checkout_head": "1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31",
+    "source_sha256": {
+      "python/tessera/compiler/jit.py": "0aac913016ddcd70ac24ab7b1d641ad6de2c5da03aa1687525411da79d24573a",
+      "python/tessera/compiler/execution_matrix.py": "00081a6ec526f7026090ee46795769a49a8934cfaf8a6e4a39046e9229a05d6d",
+      "python/tessera/compiler/native_tensor_program.py": "34840d5af39c065b60c2f26e9933f7a4d723c4ef5c661013e5ef3d3b3885fe2f",
+      "python/tessera/compiler/native_tensor_jit.py": "7a5f164cfc7898948ebb28e845afefc09b875eceac1265d67ed904f358879d30",
+      "python/tessera/compiler/prepared_native_tensor_frame.py": "9b8c440ac08f41d66cae5823832b629098e661080be67a9a450ca45adec8dd07",
+      "python/tessera/runtime.py": "92a09b5f2bc8b2cdfb52617712e06563c23044b67a67047c46fdda6d1860c431",
+      "tests/device/nvidia/test_native_tensor_program_package_execution.py": "e76b632edcd0299b7e4586a1497eeadfa3d935ca05c76c0630a68d7ff8113251",
+      "tests/unit/test_native_tensor_mlp_program.py": "1d592c1e8756b327af67cdd32c978319d60122c71cb36f19ef6bed570bbaa93c",
+      "tests/device/nvidia/test_native_tensor_mlp_program.py": "1adaa79b537406f5bc68ac23f00ea216f3db4ee9d3e653816382978d37753457"
+    },
+    "recorder_sha256": "1c2cbd68da08610717569f969542a114df10faa4f171f18d3cfd218452e881f2"
+  },
+  "status": "complete",
+  "rows": [
+    {
+      "shape_mkhn": [
+        17,
+        32,
+        48,
+        11
+      ],
+      "root_profile": "f16",
+      "intermediate": "f16",
+      "correctness": "passed_before_after_and_profile",
+      "cold_call_ms": 3538.947221,
+      "completed_public_samples_ms": [
+        0.35812325,
+        0.30424825,
+        0.309880875,
+        0.302379375,
+        0.288756625,
+        0.3078895,
+        0.282166625
+      ],
+      "completed_public_median_ms": 0.30424825,
+      "rounds": 7,
+      "calls_per_sample": 8,
+      "profile_repeats": 64,
+      "device_windows": {
+        "enqueued": {
+          "stage_ms": [
+            0.008545500226318836,
+            0.009043499827384949,
+            0.009693999774754047
+          ],
+          "program_ms": 0.029417000710964203,
+          "measurement": "cuda_events"
+        },
+        "captured": {
+          "stage_ms": [
+            0.0010450000409036875,
+            0.002357000019401312,
+            0.0012865000171586871
+          ],
+          "program_ms": 0.00455900002270937,
+          "measurement": "cuda_graph_events"
+        }
+      },
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1088,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 3072,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              32,
+              48
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1056,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              48,
+              11
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1632,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1632,
+            "id": 4,
+            "role": "private",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 748,
+            "id": 5,
+            "role": "output",
+            "shape": [
+              17,
+              11
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "mlp",
+        "output": 5,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "source_fused_f16_none_b0_r0_outf16_kernel",
+            "geometry": [
+              6,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalars": [
+              17,
+              48,
+              32
+            ]
+          },
+          {
+            "entry": "tessera_tile_activation_relu_f16_e28f9353a8",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              3
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalars": [
+              17,
+              48
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              2,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "tensor_stage_2",
+            "output": 5,
+            "scalars": [
+              17,
+              11,
+              48
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "before": {
+        "capacity": 9984,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 9984
+      },
+      "after": {
+        "capacity": 9984,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 58,
+        "bytes": 9984
+      },
+      "ir_sha256": {
+        "source_ir": "fff941045f1d943cbbf45a4cfdf634df2e376ef76223374241841acda2a39ec1",
+        "schedule_ir": "569db5992d063275dbf03e0d0d4e0bc48011c170db585cc49aac6230821b458b",
+        "tile_ir": "737c217aa16f3920763e4c97bde3de8b713ed7293e2e99b926858c9b828679fa",
+        "target_ir": "2e7b2737c0ac9c32c389bad797482b46ed829201874a1c9252020875785deb71"
+      },
+      "image_sha256": [
+        "84fb0988a163968c7855dff73238b71c696fca6555dd77b51b524b7073be1c4f",
+        "9b68490c04548a9efdcbfebfc28caaf5624ba22a5a914b6f21ff2c42a62f917b",
+        "8322527a1e60adb4b7dbe62adc9b14995f299927c6a8a20b456678ba15a667c0"
+      ],
+      "max_abs_error": 8.940696716308594e-08
+    },
+    {
+      "shape_mkhn": [
+        17,
+        32,
+        48,
+        11
+      ],
+      "root_profile": "f16",
+      "intermediate": "f32",
+      "correctness": "passed_before_after_and_profile",
+      "cold_call_ms": 3043.908544,
+      "completed_public_samples_ms": [
+        0.389771375,
+        0.359320625,
+        0.377551125,
+        0.332200125,
+        0.317092375,
+        0.345246625,
+        0.376346125
+      ],
+      "completed_public_median_ms": 0.359320625,
+      "rounds": 7,
+      "calls_per_sample": 8,
+      "profile_repeats": 64,
+      "device_windows": {
+        "enqueued": {
+          "stage_ms": [
+            0.007732999976724386,
+            0.01027199998497963,
+            0.00895449984818697
+          ],
+          "program_ms": 0.02518399991095066,
+          "measurement": "cuda_events"
+        },
+        "captured": {
+          "stage_ms": [
+            0.00145650003105402,
+            0.002982999896630645,
+            0.005717500112950802
+          ],
+          "program_ms": 0.009544000029563904,
+          "measurement": "cuda_graph_events"
+        }
+      },
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1088,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 3072,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              32,
+              48
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1056,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              48,
+              11
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 3264,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 3264,
+            "id": 4,
+            "role": "private",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 748,
+            "id": 5,
+            "role": "output",
+            "shape": [
+              17,
+              11
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "default_mlp",
+        "output": 5,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              6,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalars": [
+              17,
+              48,
+              32
+            ]
+          },
+          {
+            "entry": "tessera_tile_activation_relu_f32_aad4eb46ed",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              3
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalars": [
+              17,
+              48
+            ]
+          },
+          {
+            "entry": "source_scalar_fma_kernel",
+            "geometry": [
+              2,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "tensor_stage_2",
+            "output": 5,
+            "scalars": [
+              17,
+              11,
+              48
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "before": {
+        "capacity": 13056,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 13056
+      },
+      "after": {
+        "capacity": 13056,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 58,
+        "bytes": 13056
+      },
+      "ir_sha256": {
+        "source_ir": "9b77a897067663a1d9a00aae6c64880837dbe6cb7cf18adb7b42e82c2da12fc3",
+        "schedule_ir": "85211f941d8fab46140670d7dbd4fe83fa5c14eac276c69a52faa969294c581d",
+        "tile_ir": "5ffa55c7447617c5be806a00182ffb64ade64d8f339b38da0f030782f23f2ce6",
+        "target_ir": "0a43da265447e1b2add6ef9be6bfaf3f4e8ae6d9f5bddb605681c885677b6474"
+      },
+      "image_sha256": [
+        "09fb4545fe06bcf8b3201dbd702732ad52d62ae58a6596975ce49c49a1f01213",
+        "f77588371c1a910a26c063ac19f2723e0446c14ceaf2a3c9f938ee486dc216db",
+        "230004fb6022f04af434b1c7200bb4fb29c93b1adf2aef0c6dab346ef92a6d13"
+      ],
+      "max_abs_error": 9.644509191275574e-08
+    },
+    {
+      "shape_mkhn": [
+        17,
+        32,
+        48,
+        11
+      ],
+      "root_profile": "bf16",
+      "intermediate": "f16",
+      "correctness": "passed_before_after_and_profile",
+      "cold_call_ms": 3008.105271,
+      "completed_public_samples_ms": [
+        0.358430625,
+        0.258735875,
+        0.285287875,
+        0.241635625,
+        0.248444375,
+        0.29542675,
+        0.291335375
+      ],
+      "completed_public_median_ms": 0.285287875,
+      "rounds": 7,
+      "calls_per_sample": 8,
+      "profile_repeats": 64,
+      "device_windows": {
+        "enqueued": {
+          "stage_ms": [
+            0.01245300006121397,
+            0.010851000435650349,
+            0.013999000191688538
+          ],
+          "program_ms": 0.03695100173354149,
+          "measurement": "cuda_events"
+        },
+        "captured": {
+          "stage_ms": [
+            0.0013714999658986926,
+            0.002413500100374222,
+            0.0012540000025182962
+          ],
+          "program_ms": 0.005241999868303537,
+          "measurement": "cuda_graph_events"
+        }
+      },
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1088,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 3072,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              32,
+              48
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1056,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              48,
+              11
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1632,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1632,
+            "id": 4,
+            "role": "private",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 748,
+            "id": 5,
+            "role": "output",
+            "shape": [
+              17,
+              11
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "mlp",
+        "output": 5,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "source_fused_bf16_none_b0_r0_outf16_kernel",
+            "geometry": [
+              6,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalars": [
+              17,
+              48,
+              32
+            ]
+          },
+          {
+            "entry": "tessera_tile_activation_relu_f16_e28f9353a8",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              3
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalars": [
+              17,
+              48
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              2,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "tensor_stage_2",
+            "output": 5,
+            "scalars": [
+              17,
+              11,
+              48
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "before": {
+        "capacity": 9984,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 9984
+      },
+      "after": {
+        "capacity": 9984,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 58,
+        "bytes": 9984
+      },
+      "ir_sha256": {
+        "source_ir": "e8c099961643a5b396b7ba2ea9b21abc24199921393b6b30da98177a7548bfb9",
+        "schedule_ir": "ff640c42fb82e6e334963a2d84adee9ed59fd70b22b8484de06f66bc95254351",
+        "tile_ir": "76195a654516774664d01563e6987551b92cd805102ba3f9b6782b3e38c944b8",
+        "target_ir": "8c4c31fc16b939e24a4443fd7d55bcf083b4c94a55956887938e20290a4d086b"
+      },
+      "image_sha256": [
+        "a441219d304fae3bf0d78ec83ce64420536ef2c9efe655b9a98de5a891d08959",
+        "9b68490c04548a9efdcbfebfc28caaf5624ba22a5a914b6f21ff2c42a62f917b",
+        "8322527a1e60adb4b7dbe62adc9b14995f299927c6a8a20b456678ba15a667c0"
+      ],
+      "max_abs_error": 1.0803341865539551e-07
+    },
+    {
+      "shape_mkhn": [
+        17,
+        32,
+        48,
+        11
+      ],
+      "root_profile": "bf16",
+      "intermediate": "f32",
+      "correctness": "passed_before_after_and_profile",
+      "cold_call_ms": 2986.301455,
+      "completed_public_samples_ms": [
+        0.33091625,
+        0.268928625,
+        0.26943875,
+        0.26915625,
+        1.188687125,
+        0.288096625,
+        0.254405875
+      ],
+      "completed_public_median_ms": 0.26943875,
+      "rounds": 7,
+      "calls_per_sample": 8,
+      "profile_repeats": 64,
+      "device_windows": {
+        "enqueued": {
+          "stage_ms": [
+            0.007724999915808439,
+            0.008768999949097633,
+            0.01506900042295456
+          ],
+          "program_ms": 0.02744949981570244,
+          "measurement": "cuda_events"
+        },
+        "captured": {
+          "stage_ms": [
+            0.0020504998974502087,
+            0.0030529999639838934,
+            0.00584500003606081
+          ],
+          "program_ms": 0.010862999595701694,
+          "measurement": "cuda_graph_events"
+        }
+      },
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1088,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 3072,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              32,
+              48
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1056,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              48,
+              11
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 3264,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 3264,
+            "id": 4,
+            "role": "private",
+            "shape": [
+              17,
+              48
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 748,
+            "id": 5,
+            "role": "output",
+            "shape": [
+              17,
+              11
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "default_mlp",
+        "output": 5,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              6,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalars": [
+              17,
+              48,
+              32
+            ]
+          },
+          {
+            "entry": "tessera_tile_activation_relu_f32_aad4eb46ed",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              3
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalars": [
+              17,
+              48
+            ]
+          },
+          {
+            "entry": "source_scalar_fma_kernel",
+            "geometry": [
+              2,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "tensor_stage_2",
+            "output": 5,
+            "scalars": [
+              17,
+              11,
+              48
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "before": {
+        "capacity": 13056,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 13056
+      },
+      "after": {
+        "capacity": 13056,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 58,
+        "bytes": 13056
+      },
+      "ir_sha256": {
+        "source_ir": "bca43630850498439e3e4261f5a7893dbb731e618d464a9523b3232961b96c1d",
+        "schedule_ir": "4dd5469b8d9eeefb96b20b2d07184b68fce9430c6033fe10abcad3c5e33b4057",
+        "tile_ir": "996441e430168796f3fc598df51c59b0d189d60b8c1d2e60cc4437b8b5e1f3e4",
+        "target_ir": "0e3e33b7ffc778799f5b67167d94f5405695fdf6eb2466c26008ac0b4d0c6de1"
+      },
+      "image_sha256": [
+        "749edd805c6cf7e5b918652fba582aa1cb658b5bdb55b5aba63127543ecb0d5a",
+        "f77588371c1a910a26c063ac19f2723e0446c14ceaf2a3c9f938ee486dc216db",
+        "aa62839ae14a909cdc407a3ba16d05d5066d296260fcacdcaa8aefc62737bc3e"
+      ],
+      "max_abs_error": 6.385653250617906e-08
+    },
+    {
+      "shape_mkhn": [
+        17,
+        35,
+        29,
+        19
+      ],
+      "root_profile": "f16",
+      "intermediate": "f16",
+      "correctness": "passed_before_after_and_profile",
+      "cold_call_ms": 3073.733827,
+      "completed_public_samples_ms": [
+        0.420480875,
+        0.380852375,
+        0.38247125,
+        0.354142,
+        0.3735535,
+        0.385853875,
+        0.367850875
+      ],
+      "completed_public_median_ms": 0.380852375,
+      "rounds": 7,
+      "calls_per_sample": 8,
+      "profile_repeats": 64,
+      "device_windows": {
+        "enqueued": {
+          "stage_ms": [
+            0.010916500352323055,
+            0.01246500015258789,
+            0.011854499578475952
+          ],
+          "program_ms": 0.02841399982571602,
+          "measurement": "cuda_events"
+        },
+        "captured": {
+          "stage_ms": [
+            0.004106500186026096,
+            0.004332500044256449,
+            0.004116499796509743
+          ],
+          "program_ms": 0.01196299958974123,
+          "measurement": "cuda_graph_events"
+        }
+      },
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1190,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 2030,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              35,
+              29
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1102,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              29,
+              19
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 986,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              17,
+              29
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 986,
+            "id": 4,
+            "role": "private",
+            "shape": [
+              17,
+              29
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1292,
+            "id": 5,
+            "role": "output",
+            "shape": [
+              17,
+              19
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "mlp",
+        "output": 5,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "source_fused_f16_none_b0_r0_outf16_kernel",
+            "geometry": [
+              4,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalars": [
+              17,
+              29,
+              35
+            ]
+          },
+          {
+            "entry": "tessera_tile_activation_relu_f16_e113c4b63c",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              3
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalars": [
+              17,
+              29
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              3,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "tensor_stage_2",
+            "output": 5,
+            "scalars": [
+              17,
+              19,
+              29
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "before": {
+        "capacity": 8192,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 8192
+      },
+      "after": {
+        "capacity": 8192,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 58,
+        "bytes": 8192
+      },
+      "ir_sha256": {
+        "source_ir": "2e53b22118bfada82c88d36ee514c304fdef8d82120c6ef758f9ea72cd12001a",
+        "schedule_ir": "ce7443aee61c9461708d73592dde3de42fce76c5a477ddea9fb0c48b37f05012",
+        "tile_ir": "389476bb11d0a7e7444064757c714a672724f198c082c09983b5a70b06d15a1f",
+        "target_ir": "0f23c1f55b4f2c82ae898114ce1a99e65190c7a05e79f8c2306dfc27839c3b08"
+      },
+      "image_sha256": [
+        "8d02679ab853d361505e4802b7f4fa38c597f9483e4586dab326a5676337ab69",
+        "6b705e895db4c626cb8d93b45c636d5d7810a84b88bfc93b094858ab797d1896",
+        "2abd6af44125c9f8a143780521f000df08ea736c6e619b2544e5757f6c954097"
+      ],
+      "max_abs_error": 8.409842848777771e-07
+    },
+    {
+      "shape_mkhn": [
+        17,
+        35,
+        29,
+        19
+      ],
+      "root_profile": "f16",
+      "intermediate": "f32",
+      "correctness": "passed_before_after_and_profile",
+      "cold_call_ms": 2977.011981,
+      "completed_public_samples_ms": [
+        0.3863315,
+        0.280604,
+        0.390390125,
+        0.345189125,
+        0.344782875,
+        0.427677375,
+        0.335823875
+      ],
+      "completed_public_median_ms": 0.345189125,
+      "rounds": 7,
+      "calls_per_sample": 8,
+      "profile_repeats": 64,
+      "device_windows": {
+        "enqueued": {
+          "stage_ms": [
+            0.012249499559402466,
+            0.00995550025254488,
+            0.012884999625384808
+          ],
+          "program_ms": 0.03482450172305107,
+          "measurement": "cuda_events"
+        },
+        "captured": {
+          "stage_ms": [
+            0.004062499850988388,
+            0.004224999807775021,
+            0.004865500144660473
+          ],
+          "program_ms": 0.013352000154554844,
+          "measurement": "cuda_graph_events"
+        }
+      },
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1190,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 2030,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              35,
+              29
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1102,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              29,
+              19
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1972,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              17,
+              29
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 1972,
+            "id": 4,
+            "role": "private",
+            "shape": [
+              17,
+              29
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 1292,
+            "id": 5,
+            "role": "output",
+            "shape": [
+              17,
+              19
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "default_mlp",
+        "output": 5,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              4,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalars": [
+              17,
+              29,
+              35
+            ]
+          },
+          {
+            "entry": "tessera_tile_activation_relu_f32_26b07d1728",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              3
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalars": [
+              17,
+              29
+            ]
+          },
+          {
+            "entry": "source_scalar_fma_kernel",
+            "geometry": [
+              3,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "tensor_stage_2",
+            "output": 5,
+            "scalars": [
+              17,
+              19,
+              29
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "before": {
+        "capacity": 10240,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 10240
+      },
+      "after": {
+        "capacity": 10240,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 58,
+        "bytes": 10240
+      },
+      "ir_sha256": {
+        "source_ir": "4bf45d359d199ce5f9a4a9f7122719342dc54713298b1c1f435185b742d7dbae",
+        "schedule_ir": "7cc03f58194211abeba5c854a1aea9236bd2881d212bcdbf8b8dc807481964b8",
+        "tile_ir": "05aa5b957c4f5d6703dac35aed5f83c8ff5fa1f7d4392356d0310fb92ad9e67d",
+        "target_ir": "1459fa4a160efbfd1e54527cae26aad4e28271e0bba532d627102e5bae5265cc"
+      },
+      "image_sha256": [
+        "72d79dddb67cddb5bf62f7f3dc0209bc5eef1d876700bac02324e1c3a0d467ae",
+        "fb147780f789a3189d1a34b3d4b3972c41e4cfd192c37e4cac0a1bd8f4615477",
+        "230004fb6022f04af434b1c7200bb4fb29c93b1adf2aef0c6dab346ef92a6d13"
+      ],
+      "max_abs_error": 1.2639566193684004e-07
+    },
+    {
+      "shape_mkhn": [
+        17,
+        35,
+        29,
+        19
+      ],
+      "root_profile": "bf16",
+      "intermediate": "f16",
+      "correctness": "passed_before_after_and_profile",
+      "cold_call_ms": 2982.108188,
+      "completed_public_samples_ms": [
+        0.390596375,
+        0.35868075,
+        0.389084,
+        0.434406125,
+        0.42688975,
+        0.44075775,
+        0.367770875
+      ],
+      "completed_public_median_ms": 0.390596375,
+      "rounds": 7,
+      "calls_per_sample": 8,
+      "profile_repeats": 64,
+      "device_windows": {
+        "enqueued": {
+          "stage_ms": [
+            0.009372499771416187,
+            0.010592999868094921,
+            0.008971500210464
+          ],
+          "program_ms": 0.030139999464154243,
+          "measurement": "cuda_events"
+        },
+        "captured": {
+          "stage_ms": [
+            0.004033000208437443,
+            0.004280500113964081,
+            0.0039519998244941235
+          ],
+          "program_ms": 0.012152000330388546,
+          "measurement": "cuda_graph_events"
+        }
+      },
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1190,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 2030,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              35,
+              29
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1102,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              29,
+              19
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 986,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              17,
+              29
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 986,
+            "id": 4,
+            "role": "private",
+            "shape": [
+              17,
+              29
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1292,
+            "id": 5,
+            "role": "output",
+            "shape": [
+              17,
+              19
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "mlp",
+        "output": 5,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "source_fused_bf16_none_b0_r0_outf16_kernel",
+            "geometry": [
+              4,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalars": [
+              17,
+              29,
+              35
+            ]
+          },
+          {
+            "entry": "tessera_tile_activation_relu_f16_e113c4b63c",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              3
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalars": [
+              17,
+              29
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              3,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "tensor_stage_2",
+            "output": 5,
+            "scalars": [
+              17,
+              19,
+              29
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "before": {
+        "capacity": 8192,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 8192
+      },
+      "after": {
+        "capacity": 8192,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 58,
+        "bytes": 8192
+      },
+      "ir_sha256": {
+        "source_ir": "38960cac164b96bc7875dfa573bea3857714e452c0cdc0fc112ee61b89272bbd",
+        "schedule_ir": "82cce4016e22120671c02cb1fb586d51518fb074689d31254e183b60db14c4e4",
+        "tile_ir": "4eecef8819ba51b8a18dba1ce89ef93f0a1e1da7436d48dd4e1b4a998c92da02",
+        "target_ir": "0b3fb02db56711e6596ec0fd5c77f991d7188ae2258675b5cf4dc1881ce5fab5"
+      },
+      "image_sha256": [
+        "138ce36df58c69215a1143c3a4ab37b351c413e9c6b089c694fe90598d6eb020",
+        "6b705e895db4c626cb8d93b45c636d5d7810a84b88bfc93b094858ab797d1896",
+        "2abd6af44125c9f8a143780521f000df08ea736c6e619b2544e5757f6c954097"
+      ],
+      "max_abs_error": 5.1746610552072525e-08
+    },
+    {
+      "shape_mkhn": [
+        17,
+        35,
+        29,
+        19
+      ],
+      "root_profile": "bf16",
+      "intermediate": "f32",
+      "correctness": "passed_before_after_and_profile",
+      "cold_call_ms": 2959.485445,
+      "completed_public_samples_ms": [
+        0.4869125,
+        0.43324875,
+        0.4424275,
+        0.427821125,
+        0.3456805,
+        0.33939275,
+        0.38211875
+      ],
+      "completed_public_median_ms": 0.427821125,
+      "rounds": 7,
+      "calls_per_sample": 8,
+      "profile_repeats": 64,
+      "device_windows": {
+        "enqueued": {
+          "stage_ms": [
+            0.008907999843358994,
+            0.015225999988615513,
+            0.010692499577999115
+          ],
+          "program_ms": 0.03319400176405907,
+          "measurement": "cuda_events"
+        },
+        "captured": {
+          "stage_ms": [
+            0.004128499887883663,
+            0.004211000166833401,
+            0.004827000200748444
+          ],
+          "program_ms": 0.012914500199258327,
+          "measurement": "cuda_graph_events"
+        }
+      },
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1190,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 2030,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              35,
+              29
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1102,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              29,
+              19
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1972,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              17,
+              29
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 1972,
+            "id": 4,
+            "role": "private",
+            "shape": [
+              17,
+              29
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 1292,
+            "id": 5,
+            "role": "output",
+            "shape": [
+              17,
+              19
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "default_mlp",
+        "output": 5,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              4,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalars": [
+              17,
+              29,
+              35
+            ]
+          },
+          {
+            "entry": "tessera_tile_activation_relu_f32_26b07d1728",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              3
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalars": [
+              17,
+              29
+            ]
+          },
+          {
+            "entry": "source_scalar_fma_kernel",
+            "geometry": [
+              3,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "tensor_stage_2",
+            "output": 5,
+            "scalars": [
+              17,
+              19,
+              29
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "before": {
+        "capacity": 10240,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 10240
+      },
+      "after": {
+        "capacity": 10240,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 58,
+        "bytes": 10240
+      },
+      "ir_sha256": {
+        "source_ir": "9cb274e8b3a27b1b110b8960c95140a920a0e8e93499a4016f1ca80757cf4fce",
+        "schedule_ir": "bed4d67f985fae9974899e462b3e3e0bab63882c379fe8d1eaef97c45b460adf",
+        "tile_ir": "2212792a463ddf802ffae9ade79d479319d820ee14e5d25b22d6cbdb4ffb0e6f",
+        "target_ir": "d55aad66320b8c0c9142a133a2d2a2ae16b3c99518521783b31d4f601de93581"
+      },
+      "image_sha256": [
+        "dd8762a1a3ac10685da56701273ca7c602a49f82658017787f54e536ffe3f4cd",
+        "fb147780f789a3189d1a34b3d4b3972c41e4cfd192c37e4cac0a1bd8f4615477",
+        "aa62839ae14a909cdc407a3ba16d05d5066d296260fcacdcaa8aefc62737bc3e"
+      ],
+      "max_abs_error": 8.787537808530033e-08
+    },
+    {
+      "shape_mkhn": [
+        64,
+        256,
+        128,
+        64
+      ],
+      "root_profile": "f16",
+      "intermediate": "f16",
+      "correctness": "passed_before_after_and_profile",
+      "cold_call_ms": 2959.365802,
+      "completed_public_samples_ms": [
+        0.44025375,
+        0.472724625,
+        0.45949925,
+        0.469045875,
+        0.458290375,
+        0.410473125,
+        0.43138625
+      ],
+      "completed_public_median_ms": 0.458290375,
+      "rounds": 7,
+      "calls_per_sample": 8,
+      "profile_repeats": 64,
+      "device_windows": {
+        "enqueued": {
+          "stage_ms": [
+            0.011506499722599983,
+            0.016642000526189804,
+            0.01109199970960617
+          ],
+          "program_ms": 0.03558950126171112,
+          "measurement": "cuda_events"
+        },
+        "captured": {
+          "stage_ms": [
+            0.004166500177234411,
+            0.01203049998730421,
+            0.004050999879837036
+          ],
+          "program_ms": 0.02013400010764599,
+          "measurement": "cuda_graph_events"
+        }
+      },
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 32768,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              64,
+              256
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 65536,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              256,
+              128
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 16384,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              128,
+              64
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 16384,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              64,
+              128
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 16384,
+            "id": 4,
+            "role": "private",
+            "shape": [
+              64,
+              128
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 16384,
+            "id": 5,
+            "role": "output",
+            "shape": [
+              64,
+              64
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "mlp",
+        "output": 5,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "source_fused_f16_none_b0_r0_outf16_kernel",
+            "geometry": [
+              16,
+              4,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalars": [
+              64,
+              128,
+              256
+            ]
+          },
+          {
+            "entry": "tessera_tile_activation_relu_f16_40f991f80a",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              3
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalars": [
+              64,
+              128
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              8,
+              4,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "tensor_stage_2",
+            "output": 5,
+            "scalars": [
+              64,
+              64,
+              128
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "before": {
+        "capacity": 163840,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 163840
+      },
+      "after": {
+        "capacity": 163840,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 58,
+        "bytes": 163840
+      },
+      "ir_sha256": {
+        "source_ir": "a9b2723568902d92901991aea2776e0ad40cbb8dc674c38b0d23009ff214a29d",
+        "schedule_ir": "e5d0582e0c7c3a8fde76942e04189ce976756abfb6260881024d93ed72fa10da",
+        "tile_ir": "901cd74664e55f6bc32c027529bedf29a89613d3caa1046cbf488845bb3fafea",
+        "target_ir": "73fe210786d9493d68424aaaec3612e744315af7093a0d0fcb451206f595a34c"
+      },
+      "image_sha256": [
+        "80f9f1b0ce943ae3dd28d6ff09bf37b660bcac274ac83d17a489633fac68b30c",
+        "793d18e456e16fa30c71243ea744b9cd46081f34d8f6dc3674b8b63c3ae03c69",
+        "7a7fb82f1db92a08ea4441f41652788d82450e3c8dbaa62de7b6b92e414d69ba"
+      ],
+      "max_abs_error": 0.00021803146228194237
+    },
+    {
+      "shape_mkhn": [
+        64,
+        256,
+        128,
+        64
+      ],
+      "root_profile": "f16",
+      "intermediate": "f32",
+      "correctness": "passed_before_after_and_profile",
+      "cold_call_ms": 2960.091069,
+      "completed_public_samples_ms": [
+        0.4911375,
+        0.45251675,
+        0.45062025,
+        0.44775525,
+        0.445868875,
+        0.424904875,
+        0.4228985
+      ],
+      "completed_public_median_ms": 0.44775525,
+      "rounds": 7,
+      "calls_per_sample": 8,
+      "profile_repeats": 64,
+      "device_windows": {
+        "enqueued": {
+          "stage_ms": [
+            0.010870000347495079,
+            0.015123999677598476,
+            0.018121499568223953
+          ],
+          "program_ms": 0.05626149848103523,
+          "measurement": "cuda_events"
+        },
+        "captured": {
+          "stage_ms": [
+            0.00413550017401576,
+            0.00974700041115284,
+            0.01390449982136488
+          ],
+          "program_ms": 0.027696499601006508,
+          "measurement": "cuda_graph_events"
+        }
+      },
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 32768,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              64,
+              256
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 65536,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              256,
+              128
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 16384,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              128,
+              64
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 32768,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              64,
+              128
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 32768,
+            "id": 4,
+            "role": "private",
+            "shape": [
+              64,
+              128
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 16384,
+            "id": 5,
+            "role": "output",
+            "shape": [
+              64,
+              64
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "default_mlp",
+        "output": 5,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              16,
+              4,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalars": [
+              64,
+              128,
+              256
+            ]
+          },
+          {
+            "entry": "tessera_tile_activation_relu_f32_9cb6c38b8e",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              3
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalars": [
+              64,
+              128
+            ]
+          },
+          {
+            "entry": "source_scalar_fma_kernel",
+            "geometry": [
+              8,
+              4,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "tensor_stage_2",
+            "output": 5,
+            "scalars": [
+              64,
+              64,
+              128
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "before": {
+        "capacity": 196608,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 196608
+      },
+      "after": {
+        "capacity": 196608,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 58,
+        "bytes": 196608
+      },
+      "ir_sha256": {
+        "source_ir": "fcfc4c6ef34855112024c17e36d012058457b04d4ab1fbd41944eba110734e58",
+        "schedule_ir": "a6134ce06e46755a248bb8b24fac1bdf5c3a5118df0dfa4aa5d968fa8a23de15",
+        "tile_ir": "58ad880dd92d31dbd745e9a020ca397b4847ccaa0611e506245de787c813b9eb",
+        "target_ir": "c810b3438dcbadeb835c55c5c946456d7e82ded859933bfee95ae7c8a1c7c288"
+      },
+      "image_sha256": [
+        "dce59a4138e805466061a63b968a35024469d906a480b166e400ec5f7488ff99",
+        "e11596697b11c250e96ecd60ec53ce610802da0b3572040974b22d396a5bd779",
+        "230004fb6022f04af434b1c7200bb4fb29c93b1adf2aef0c6dab346ef92a6d13"
+      ],
+      "max_abs_error": 2.0246076104513122e-06
+    },
+    {
+      "shape_mkhn": [
+        64,
+        256,
+        128,
+        64
+      ],
+      "root_profile": "bf16",
+      "intermediate": "f16",
+      "correctness": "passed_before_after_and_profile",
+      "cold_call_ms": 3001.726581,
+      "completed_public_samples_ms": [
+        1.440603125,
+        0.473212,
+        0.39584775,
+        0.403648,
+        0.34798175,
+        0.322515,
+        0.4077655
+      ],
+      "completed_public_median_ms": 0.403648,
+      "rounds": 7,
+      "calls_per_sample": 8,
+      "profile_repeats": 64,
+      "device_windows": {
+        "enqueued": {
+          "stage_ms": [
+            0.008987500332295895,
+            0.019024500623345375,
+            0.00868349988013506
+          ],
+          "program_ms": 0.03603550046682358,
+          "measurement": "cuda_events"
+        },
+        "captured": {
+          "stage_ms": [
+            0.002602499909698963,
+            0.011818500235676765,
+            0.0015574999852105975
+          ],
+          "program_ms": 0.016098499298095703,
+          "measurement": "cuda_graph_events"
+        }
+      },
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 32768,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              64,
+              256
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 65536,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              256,
+              128
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 16384,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              128,
+              64
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 16384,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              64,
+              128
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 16384,
+            "id": 4,
+            "role": "private",
+            "shape": [
+              64,
+              128
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 16384,
+            "id": 5,
+            "role": "output",
+            "shape": [
+              64,
+              64
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "mlp",
+        "output": 5,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "source_fused_bf16_none_b0_r0_outf16_kernel",
+            "geometry": [
+              16,
+              4,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalars": [
+              64,
+              128,
+              256
+            ]
+          },
+          {
+            "entry": "tessera_tile_activation_relu_f16_40f991f80a",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              3
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalars": [
+              64,
+              128
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              8,
+              4,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "tensor_stage_2",
+            "output": 5,
+            "scalars": [
+              64,
+              64,
+              128
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "before": {
+        "capacity": 163840,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 163840
+      },
+      "after": {
+        "capacity": 163840,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 58,
+        "bytes": 163840
+      },
+      "ir_sha256": {
+        "source_ir": "eef9380bca241987e9a8ea7d06f7aef4175c2f443dfdd98ed7b4e6e24041f7e1",
+        "schedule_ir": "ba8974e03a5e3f664c18a402fc8ec5663b43e4ab4342e540e8c1517e1f40faf1",
+        "tile_ir": "3475ca09970d571d327172914cc09cc753ce9849c6287bea04e1d0c9558729cc",
+        "target_ir": "593e911a2a8b450ae4f40338dfb689f66623bcf1fa15bd591b7527ff6f4db076"
+      },
+      "image_sha256": [
+        "f320ea7a7a8a843ccdb61e20accb755dd1fb41b34998b00d4379ece196048535",
+        "793d18e456e16fa30c71243ea744b9cd46081f34d8f6dc3674b8b63c3ae03c69",
+        "7a7fb82f1db92a08ea4441f41652788d82450e3c8dbaa62de7b6b92e414d69ba"
+      ],
+      "max_abs_error": 0.000247418531216681
+    },
+    {
+      "shape_mkhn": [
+        64,
+        256,
+        128,
+        64
+      ],
+      "root_profile": "bf16",
+      "intermediate": "f32",
+      "correctness": "passed_before_after_and_profile",
+      "cold_call_ms": 3099.825184,
+      "completed_public_samples_ms": [
+        0.4932675,
+        0.4735035,
+        0.432284875,
+        0.488893625,
+        0.392544,
+        0.370748625,
+        0.42768725
+      ],
+      "completed_public_median_ms": 0.432284875,
+      "rounds": 7,
+      "calls_per_sample": 8,
+      "profile_repeats": 64,
+      "device_windows": {
+        "enqueued": {
+          "stage_ms": [
+            0.010460499674081802,
+            0.015376999974250793,
+            0.017866000533103943
+          ],
+          "program_ms": 0.04744400084018707,
+          "measurement": "cuda_events"
+        },
+        "captured": {
+          "stage_ms": [
+            0.002583499997854233,
+            0.009608499705791473,
+            0.013860500417649746
+          ],
+          "program_ms": 0.025989999994635582,
+          "measurement": "cuda_graph_events"
+        }
+      },
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 32768,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              64,
+              256
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 65536,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              256,
+              128
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 16384,
+            "id": 2,
+            "role": "input",
+            "shape": [
+              128,
+              64
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 32768,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              64,
+              128
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 32768,
+            "id": 4,
+            "role": "private",
+            "shape": [
+              64,
+              128
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 16384,
+            "id": 5,
+            "role": "output",
+            "shape": [
+              64,
+              64
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "default_mlp",
+        "output": 5,
+        "roots": [
+          0,
+          1,
+          2
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              16,
+              4,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              0,
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 3,
+            "scalars": [
+              64,
+              128,
+              256
+            ]
+          },
+          {
+            "entry": "tessera_tile_activation_relu_f32_9cb6c38b8e",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              3
+            ],
+            "member": "tensor_stage_1",
+            "output": 4,
+            "scalars": [
+              64,
+              128
+            ]
+          },
+          {
+            "entry": "source_scalar_fma_kernel",
+            "geometry": [
+              8,
+              4,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              4,
+              2
+            ],
+            "member": "tensor_stage_2",
+            "output": 5,
+            "scalars": [
+              64,
+              64,
+              128
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "before": {
+        "capacity": 196608,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 2,
+        "bytes": 196608
+      },
+      "after": {
+        "capacity": 196608,
+        "allocations": 1,
+        "modules": 3,
+        "stages": 3,
+        "generation": 58,
+        "bytes": 196608
+      },
+      "ir_sha256": {
+        "source_ir": "a1696be8059a7d7372fa6fad5e7da4a1b8facce41d77f651f04265aac2eecebe",
+        "schedule_ir": "394d9046c40d9465a1116b82233d7a2e58576652237d908d6a3d55218c700683",
+        "tile_ir": "752b8f456738d376732c1961c181b0c33a1bf6bfafcefb52c0f04d50e1db9485",
+        "target_ir": "057f074df6e32964a39c1f8bf422ac7436ca28bd4075951c2f1bbc9eba9c365e"
+      },
+      "image_sha256": [
+        "018a348eaeff59831646266a748f36838a840e3e057ebd168b9e76965dd4ffc4",
+        "e11596697b11c250e96ecd60ec53ce610802da0b3572040974b22d396a5bd779",
+        "aa62839ae14a909cdc407a3ba16d05d5066d296260fcacdcaa8aefc62737bc3e"
+      ],
+      "max_abs_error": 1.5863897715462372e-06
+    }
+  ],
+  "scope": "Explicit FP16/FP32 precision profiles; no cross-precision speedup claim. Captured/enqueued stage and program windows are independent event regions; completed public calls and cold compilation are separate host timings."
+}

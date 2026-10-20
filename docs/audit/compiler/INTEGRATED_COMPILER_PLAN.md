@@ -483,7 +483,7 @@ Current increment: checked rank-four broadcast saved-LSE packages and private ta
   independent parity, allocation ownership, zero spills, and separate
   producer/consumer event times. Generic legacy tensor-valued Tile producers
   remain open.
-- Latest: [2026-10-20 — ordinary SM120 JIT consumes native tensor programs](INTEGRATED_COMPILER_LOG.md#2026-10-20--ordinary-sm120-jit-consumes-native-tensor-programs)
+- Latest: [2026-10-20 — native three-root MLP precision integration](INTEGRATED_COMPILER_LOG.md#2026-10-20--native-three-root-mlp-precision-integration)
 - Integration follow-through: zero-error Python type gate restored; bounded frontend lifetime, strict metadata and native stage lineage guards have 125 focused WSL regressions. General producer composition and wider dtype/layout/AD envelopes remain open.
 - Current RHS increment: static fp16/BF16 RMSNorm KxN output feeds typed matmul B through checked row-major packages. Exact RTX 5070 complete/ragged cases validate private resident lifetime and separate producer/consumer dispatch windows. FP8, MXFP8 and MXFP4 remain mandatory before strategy/default selection.
 - Census recheck (2026-10-02): both historical tensor/async-copy constructors
@@ -499,6 +499,8 @@ Current increment: checked rank-four broadcast saved-LSE packages and private ta
 - Current increment (2026-10-14, sync W11-RELU-PRODUCER-20261014): the named ordinary frontend RMSNorm -> ReLU -> matmul retains separate f16/bf16 stores and typed fragments. Twenty-eight new RTX 5070 tests and a six-case separated timing packet pass. Captured timing and explicit flat activation mapping are recorded by W11-RELU-FLAT-20261015. Native ReLU paired-Graph differentiation is recorded by W11-RELU-AD-20261015; the named static RHS JVP now executes through W11-TENSOR-RHS-JVP-20261015. Active-source/composed reverse and general producer/layout closure remain open. [Evidence](../../../benchmarks/baselines/sm120_norm_relu_matmul_20261014/README.md).
 
 - Current native JIT increment (2026-10-20): original compact-half Graph programs retain actual adjacent Schedule/Tile/Target stages and a checked retained native frame. Matching RTX 5070 host/resident and 64-stage boundary cases pass; broader producers/layout/dynamic/AD and captured-device attribution remain open. [Contract](../../spec/NATIVE_TENSOR_JIT.md); [evidence](../../../benchmarks/baselines/native_tensor_jit_20261020/README.md).
+- Current MLP increment (2026-10-20, sync NATIVE-TENSOR-MLP-20261020): three compact half roots feed two retained matmuls and ReLU, with explicit FP16 or FP32 intermediates. FP32 retains F32 activation and scalar-FMA consumption without downcasting. 87 RTX5070 device and 67 gfx1201 scalar regressions pass; 12 correctness-gated timing rows are recorded. Full CPU passes 30785 with 3710 declared skips; exact-head CI/review remain active. [Evidence](../../../benchmarks/baselines/native_tensor_mlp_20261020/README.md).
+
 
 ### W3.3
 

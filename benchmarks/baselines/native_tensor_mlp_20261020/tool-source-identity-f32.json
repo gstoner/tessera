@@ -1,0 +1,13 @@
+{
+  "compiler_sha256": "a2cc0401d531bc1599bb7ce917c2f676be5eb1b54235b646079d5304b59d824a",
+  "base_commit": "1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31",
+  "uncommitted_compiler_changes": true,
+  "compiler_source_sha256": {
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "faf4fd6ecf4096a7456c1106858d08edf1b78a7473a244b75fbe1c5e39d24043",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "1c59b4806572f375707e24c272e2d06821a10f45cf480cc594ce2038edbff70a",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "b08afa6523739ded922a03ec00a879b4bd011353c22f08e05b5db8ae7455d317",
+    "src/compiler/ir/TileOps.cpp": "19a1ffe8e43c3834ccabc8a51ce9da01f649ecf49f14991c527516f2bb05a8ff",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "c1f6fcfea95972d74ce003eaeffe0db3b26ae5794b0e935a9dbbfa0d6f1f1753"
+  },
+  "scope": "SM120 multi-matmul native program; explicit FP16 and FP32 intermediates, per-stage scalar precision"
+}

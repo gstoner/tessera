@@ -1,0 +1,30 @@
+{
+  "provider_sha256": "03bd30ed513d3362d915eb5cca7f61cb7e850b2cd120b2e89f362a210a88ffde",
+  "provider_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/public-relu-native/libtessera_public_relu.so",
+  "compiler": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "build_flags": [
+    "-std=c++17",
+    "-O3",
+    "-DNDEBUG",
+    "-fPIC",
+    "-shared",
+    "-pthread",
+    "-lcuda",
+    "-ldl"
+  ],
+  "source_sha256": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "2a7084de05effc2cb65c058e44edec1595f3ee48defbd31a8230559b798e111a",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "4c876db7e491acd449e44d4a7ab840c31c7b642601b1e8244f8d2b80e259164e",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "24c3a6e4bdb2a4e15fd34750e846e57d528af6254828716daab7a1c25362382d",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "1e326554f276163675e84256fec22bbfc6230b078f2eca42f99a76da46f7ef4b",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/source_reverse_owner.h": "cb24a9ffd6a072c166829577ad33184ed750919211bc41aa1790479358691d6d",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_active_source_program.h": "a170833b3ba65776dea8b521d612c21e377d46b2edd36d4d2a142ac87ede9ae3",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_fft.h": "86def9804cc412b883d06b6faf6d46e979cbec53a5c1a55a6d7888bd502e10e3",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_native_frame.h": "c27b322bc9759413c1eb477ab806547a70be74939c2e32435b7611eef491b6fa",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "bcac6691084a9e8d18ddae0302ddbdd1c997fbf805babc2c0bf2d91307840d2b",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_source_reverse_program.h": "e88d4def02ee2f0e45f35869a456cab9eabf3e32b6052a05da806167af4f495a"
+  },
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "wsl_release": "6.18.33.2-microsoft-standard-WSL2",
+  "scope": "matching immutable production runtime; previous 72aaf57 provider preserved"
+}

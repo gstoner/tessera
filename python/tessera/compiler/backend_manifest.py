@@ -2642,8 +2642,8 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
     "relu": {
         "dtypes": ("fp16", "bf16", "fp32", "fp8_e4m3", "fp8_e5m2"),
         "feature_flags": ("mma_sync", "fused_epilogue", "scheduled_activation", "cuda"),
-        "shape_envelope": "Standalone Schedule/Tile ReLU member: static row-major rank-2 f16/bf16, positive rows/columns, serial row or explicit flat_128 element launch with 128 threads; also the existing rank-2 matmul accumulator epilogue",
-        "notes": "Standalone f16/bf16 ReLU preserves a materialized storage boundary before typed matmul fragments, including RMSNorm -> ReLU -> matmul through canonical_nvidia_lhs_program. NaNs propagate; f16 zero is positive and bf16 zero preserves its sign. FP32/FP8 entries retain only the existing matmul-epilogue envelope; no standalone promotion. The fused accumulator route remains separately proved by tests/device/nvidia/test_matmul_relu.py.",
+        "shape_envelope": "Standalone Schedule/Tile ReLU: static row-major rank-2 f16/bf16/f32, positive rows/columns, serial row or explicit flat_128 element launch with 128 threads. Public host JIT and serialized packages preserve storage; f32 resident packages and native composed MLP members are separately proved. Also the existing rank-2 matmul accumulator epilogue",
+        "notes": "Standalone f16/bf16 ReLU preserves a materialized storage boundary before typed matmul fragments, including RMSNorm -> ReLU -> matmul through canonical_nvidia_lhs_program. NaNs propagate; f16 zero is positive and bf16 zero preserves its sign. Compiler-owned three-root MLP programs additionally retain an FP32 ReLU member before scalar-FMA consumption; tests/device/nvidia/test_native_tensor_mlp_program.py proves its storage semantics. Ordinary standalone host JIT and serialized packages additionally execute all three storage types; tests/device/nvidia/test_public_standalone_relu.py proves exact values, NaN payloads, zero signs and canaries, plus f32 resident packages. FP8 retains only the existing matmul-epilogue envelope. The fused accumulator route remains separately proved by tests/device/nvidia/test_matmul_relu.py.",
     },
     "dsa_block_sparse_attention": {
         "dtypes": ("fp32",),
@@ -3432,7 +3432,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     },
     ("gated_deltanet", "nvidia_sm120"): "tests/device/nvidia/test_training_autodiff_native.py",
     ("fused_epilogue", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
-    ("relu", "nvidia_sm120"): "tests/unit/test_sm120_scheduled_activation.py",
+    ("relu", "nvidia_sm120"): "tests/device/nvidia/test_public_standalone_relu.py",
     ("matmul_relu", "nvidia_sm120"): "tests/device/nvidia/test_matmul_relu.py",
     ("matmul_softmax", "nvidia_sm120"): "tests/device/nvidia/test_matmul_softmax.py",
     ("kv_cache_read", "nvidia_sm120"): "tests/device/nvidia/test_kv_cache.py",

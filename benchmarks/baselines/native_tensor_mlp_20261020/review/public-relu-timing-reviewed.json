@@ -1,0 +1,248 @@
+{
+  "schema": "tessera.benchmark.native_standalone_relu.v1",
+  "source": {
+    "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+    "compiler_sha256": "a2cc0401d531bc1599bb7ce917c2f676be5eb1b54235b646079d5304b59d824a",
+    "provider_sha256": "03bd30ed513d3362d915eb5cca7f61cb7e850b2cd120b2e89f362a210a88ffde",
+    "compiler_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+    "compiler_source": {
+      "compiler_sha256": "a2cc0401d531bc1599bb7ce917c2f676be5eb1b54235b646079d5304b59d824a",
+      "base_commit": "1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31",
+      "uncommitted_compiler_changes": true,
+      "compiler_source_sha256": {
+        "src/compiler/programming_model/lib/NativeTensorProgram.h": "faf4fd6ecf4096a7456c1106858d08edf1b78a7473a244b75fbe1c5e39d24043",
+        "src/compiler/programming_model/lib/PMPasses.cpp": "1c59b4806572f375707e24c272e2d06821a10f45cf480cc594ce2038edbff70a",
+        "src/compiler/programming_model/ir/ScheduleDialect.cpp": "b08afa6523739ded922a03ec00a879b4bd011353c22f08e05b5db8ae7455d317",
+        "src/compiler/ir/TileOps.cpp": "19a1ffe8e43c3834ccabc8a51ce9da01f649ecf49f14991c527516f2bb05a8ff",
+        "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "c1f6fcfea95972d74ce003eaeffe0db3b26ae5794b0e935a9dbbfa0d6f1f1753"
+      },
+      "scope": "SM120 multi-matmul native program; explicit FP16 and FP32 intermediates, per-stage scalar precision"
+    },
+    "checkout_head": "1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31",
+    "source_sha256": {
+      "python/tessera/compiler/jit.py": "0956ec48f35b9b3ce96858423f893a83fe0ab3d0ea491da22a5563b18378f3f9",
+      "python/tessera/compiler/execution_matrix.py": "d998d4a9e385b794a0dc06405307aad1ed3d809ce5e905586c7a50a2b355647e",
+      "python/tessera/compiler/native_tensor_program.py": "34840d5af39c065b60c2f26e9933f7a4d723c4ef5c661013e5ef3d3b3885fe2f",
+      "python/tessera/compiler/native_tensor_jit.py": "7a5f164cfc7898948ebb28e845afefc09b875eceac1265d67ed904f358879d30",
+      "python/tessera/compiler/prepared_native_tensor_frame.py": "9b8c440ac08f41d66cae5823832b629098e661080be67a9a450ca45adec8dd07",
+      "python/tessera/runtime.py": "9e0184cb316e62d14848d01d5823bc9f5f500b0f402136d69a442a79b56013f3",
+      "tests/device/nvidia/test_native_tensor_program_package_execution.py": "e76b632edcd0299b7e4586a1497eeadfa3d935ca05c76c0630a68d7ff8113251",
+      "tests/unit/test_native_tensor_mlp_program.py": "1d592c1e8756b327af67cdd32c978319d60122c71cb36f19ef6bed570bbaa93c",
+      "tests/device/nvidia/test_native_tensor_mlp_program.py": "f0bfb57259f7decc356e19c633a780ff8a2f60aa5a0a2e39020d9f43fd9f51e3",
+      "python/tessera/compiler/nvidia_native.py": "210a17474e5034d3d53e0d2d8542185c2ea98767db5510566c9557355e52d07c",
+      "python/tessera/compiler/scheduled_kernel.py": "04c8977be0ea5d0bf069475addd72950a660156c22c6c0fc316105f34b685fc3",
+      "tests/unit/test_sm120_public_relu.py": "8bd3a460f9c9789adb6dee8bf3cc7f7d5064a98a16d498c972dbaf3ed8d008ee",
+      "tests/device/nvidia/test_public_standalone_relu.py": "2cdbf903f2621c8e576d23c557c14e35e8fc8150e92a4084e750a94a86b8d7c8",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "2a7084de05effc2cb65c058e44edec1595f3ee48defbd31a8230559b798e111a"
+    },
+    "recorder_sha256": "3c13471d284576d776968f27661e7c0b7573a0fa66205eaafbe5384aad602b4a"
+  },
+  "status": "complete",
+  "rows": [
+    {
+      "shape": [
+        7,
+        32
+      ],
+      "storage": "f32",
+      "correctness": "bitwise_passed_before_and_after_timing",
+      "cold_public_call_ms": 1111.664278,
+      "completed_public_samples_ms": [
+        0.696154,
+        1.153213875,
+        0.584439625,
+        1.53676775,
+        0.5931985,
+        0.59763975,
+        0.600628625
+      ],
+      "completed_public_median_ms": 0.600628625,
+      "public_schedule": "serial",
+      "resident_arms": {
+        "serial": {
+          "package_compile_ms": 573.179701,
+          "device_event_samples_ms": [
+            0.010551000013947487,
+            0.01404650043696165,
+            0.01303349994122982,
+            0.01470549963414669,
+            0.009597999975085258,
+            0.010704999789595604,
+            0.010990000329911709
+          ],
+          "device_event_median_ms": 0.010990000329911709,
+          "measurement": "resident CUDA events including possible enqueue gaps",
+          "geometry": {
+            "grid": null,
+            "workgroup": null,
+            "policy": "sm120_activation_serial_rows"
+          },
+          "abi_id": "tessera.nvidia.relu.x_o_rows_columns.f32.v1",
+          "entry": "tessera_tile_activation_relu_f32_2618dc8ac5",
+          "schedule_digest": "2618dc8ac533de5d0219be32154e2e0030acf494cda0124201dabe180abaedb1",
+          "image_sha256": "5de666292adefe06d82d0d9fd4b767b31e190be9d070dad9216cddfdc0d611ab"
+        },
+        "flat_128": {
+          "package_compile_ms": 497.537465,
+          "device_event_samples_ms": [
+            0.011990999802947044,
+            0.013438500463962555,
+            0.011734999716281891,
+            0.011408999562263489,
+            0.011272000148892403,
+            0.010989000089466572,
+            0.010586000047624111
+          ],
+          "device_event_median_ms": 0.011408999562263489,
+          "measurement": "resident CUDA events including possible enqueue gaps",
+          "geometry": {
+            "grid": null,
+            "workgroup": null,
+            "policy": "sm120_activation_flat_elements"
+          },
+          "abi_id": "tessera.nvidia.relu.x_o_rows_columns.f32.v1",
+          "entry": "tessera_tile_activation_relu_f32_flat_128_2e2fea2945",
+          "schedule_digest": "2e2fea2945b476694987ef6b33cc34ddd47814c2d79f3d9cd728912e34e1e555",
+          "image_sha256": "acfb009eca7f5bd712fee81500a294101a4c6f63680fe5ddb1b4dd0209823f2c"
+        }
+      }
+    },
+    {
+      "shape": [
+        129,
+        33
+      ],
+      "storage": "f32",
+      "correctness": "bitwise_passed_before_and_after_timing",
+      "cold_public_call_ms": 551.884446,
+      "completed_public_samples_ms": [
+        0.66323325,
+        0.58226725,
+        0.581284375,
+        0.599145,
+        0.570647,
+        0.70544775,
+        0.6343305
+      ],
+      "completed_public_median_ms": 0.599145,
+      "public_schedule": "serial",
+      "resident_arms": {
+        "serial": {
+          "package_compile_ms": 410.757752,
+          "device_event_samples_ms": [
+            0.013147500343620777,
+            0.012024999596178532,
+            0.011556499637663364,
+            0.01176450029015541,
+            0.013519500382244587,
+            0.00948949996381998,
+            0.010126999579370022
+          ],
+          "device_event_median_ms": 0.01176450029015541,
+          "measurement": "resident CUDA events including possible enqueue gaps",
+          "geometry": {
+            "grid": null,
+            "workgroup": null,
+            "policy": "sm120_activation_serial_rows"
+          },
+          "abi_id": "tessera.nvidia.relu.x_o_rows_columns.f32.v1",
+          "entry": "tessera_tile_activation_relu_f32_e889971956",
+          "schedule_digest": "e889971956aadc1fb7886c72f98260afe1ec31c28389fbceb9ddb3f921eba802",
+          "image_sha256": "db327b62357ff0809cee11bc79569db13b9c346a67b4afa42d42a52ce60258c2"
+        },
+        "flat_128": {
+          "package_compile_ms": 509.266249,
+          "device_event_samples_ms": [
+            0.006775000132620335,
+            0.006910999771207571,
+            0.007311999797821045,
+            0.008471000008285046,
+            0.0071310000494122505,
+            0.0070504997856915,
+            0.006761999800801277
+          ],
+          "device_event_median_ms": 0.0070504997856915,
+          "measurement": "resident CUDA events including possible enqueue gaps",
+          "geometry": {
+            "grid": null,
+            "workgroup": null,
+            "policy": "sm120_activation_flat_elements"
+          },
+          "abi_id": "tessera.nvidia.relu.x_o_rows_columns.f32.v1",
+          "entry": "tessera_tile_activation_relu_f32_flat_128_d8ec70d86f",
+          "schedule_digest": "d8ec70d86f873a802e982862a0b7eb6719f390efcd5ba60743591d3d806f4243",
+          "image_sha256": "0a010ef1831e4056a988b30cdfe58114c53f8c34cec0084a4c81f736b5d2ef04"
+        }
+      }
+    },
+    {
+      "shape": [
+        128,
+        4096
+      ],
+      "storage": "f32",
+      "correctness": "bitwise_passed_before_and_after_timing",
+      "cold_public_call_ms": 538.261313,
+      "completed_public_samples_ms": [
+        1.719368375,
+        1.645115875,
+        1.634872,
+        1.6108065,
+        1.6111815,
+        1.626616875,
+        1.5693995
+      ],
+      "completed_public_median_ms": 1.626616875,
+      "public_schedule": "serial",
+      "resident_arms": {
+        "serial": {
+          "package_compile_ms": 466.653414,
+          "device_event_samples_ms": [
+            0.42045050859451294,
+            0.42009449005126953,
+            0.4204055070877075,
+            0.42050901055336,
+            0.42018699645996094,
+            0.4205015003681183,
+            0.4202654957771301
+          ],
+          "device_event_median_ms": 0.4204055070877075,
+          "measurement": "resident CUDA events including possible enqueue gaps",
+          "geometry": {
+            "grid": null,
+            "workgroup": null,
+            "policy": "sm120_activation_serial_rows"
+          },
+          "abi_id": "tessera.nvidia.relu.x_o_rows_columns.f32.v1",
+          "entry": "tessera_tile_activation_relu_f32_8cd799ab37",
+          "schedule_digest": "8cd799ab377ee65a3d6f797da1cbd5c567ef6015e366e8d1ed9021bb0fc76046",
+          "image_sha256": "0c7bbfa9a48efdd4a2c94b9f408c760c5c51f8a56ccb16d2b4dbfeeaff9a271c"
+        },
+        "flat_128": {
+          "package_compile_ms": 485.572718,
+          "device_event_samples_ms": [
+            0.015467500314116478,
+            0.010153500363230705,
+            0.008496499620378017,
+            0.008340500295162201,
+            0.010273999534547329,
+            0.01008750032633543,
+            0.009798499755561352
+          ],
+          "device_event_median_ms": 0.01008750032633543,
+          "measurement": "resident CUDA events including possible enqueue gaps",
+          "geometry": {
+            "grid": null,
+            "workgroup": null,
+            "policy": "sm120_activation_flat_elements"
+          },
+          "abi_id": "tessera.nvidia.relu.x_o_rows_columns.f32.v1",
+          "entry": "tessera_tile_activation_relu_f32_flat_128_d2813bf395",
+          "schedule_digest": "d2813bf395dead135ad9de5914d816293105029e3edf22ce11f215f992cae0a0",
+          "image_sha256": "89287b54e55547b728fbe3fcfcb7af0bf7aae2f2433a4e5b1325e80bbf5cfd45"
+        }
+      }
+    }
+  ],
+  "scope": "Public serial host completion and serial/flat resident CUDA-event windows are separate domains; no default schedule promotion."
+}

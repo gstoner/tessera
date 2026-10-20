@@ -102,10 +102,10 @@ def test_routes_prefer_compiled_over_bootstrap_over_none():
     assert kinds <= {prm.ROUTE_COMPILED, prm.ROUTE_BOOTSTRAP, prm.ROUTE_NONE,
                      prm.ROUTE_UNCLASSIFIED}
 
-    # `softmax` is the standing example of a family with a bootstrap packager on
-    # every backend and no compiled route -- if this ever flips, the mainline
-    # compiler absorbed it and the prune plan moved.
-    assert prm.derived_backend_kernel("softmax") == "partial"
+    # Generic Schedule/Tile consumers are derived from their wrapper bodies.
+    # They must not read as bootstrap-only after native migration.
+    assert prm.derived_backend_kernel("softmax") == "complete"
+    assert routes["relu"]["nvidia_sm120"] == prm.ROUTE_COMPILED
     # `flash_attn` has a compiled route (scheduled_attention).
     assert prm.derived_backend_kernel("flash_attn") == "complete"
     # A primitive no family claims has no route, and says so rather than
@@ -217,7 +217,7 @@ def test_a_silently_unclassifiable_target_is_refused(monkeypatch):
 
 def test_a_stale_compiled_route_restriction_is_refused(monkeypatch):
     monkeypatch.setattr(prm, "COMPILED_ROUTE_TARGETS",
-                        {**prm.COMPILED_ROUTE_TARGETS, "softmax": ("x86",)})
+                        {**prm.COMPILED_ROUTE_TARGETS, "nonexistent_compiled_family": ("x86",)})
     with pytest.raises(ValueError, match="stale restriction"):
         prm.verify_family_membership()
 
@@ -225,6 +225,7 @@ def test_a_stale_compiled_route_restriction_is_refused(monkeypatch):
 def test_primitive_route_cannot_inherit_missing_target_consumer(monkeypatch):
     from tessera.compiler import bootstrap_prune_audit
     monkeypatch.setattr(bootstrap_prune_audit, '_target_family_route', lambda target, family: None)
+    monkeypatch.setattr(bootstrap_prune_audit, '_packager_is_generic_scheduled', lambda target, family: False)
     routes = prm.primitive_routes()
     assert routes
     assert all(prm.ROUTE_COMPILED not in per.values() for per in routes.values())
@@ -241,3 +242,87 @@ def test_mixed_scalar_classifier_joins_the_sm120_compiled_matmul_route():
     assert prm.members_for("scalar_matmul", "nvidia_sm120") == ("matmul",)
     assert prm.COMPILED_ROUTE_TARGETS["scalar_matmul"] == ("nvidia_sm120",)
     prm.verify_family_membership()
+
+
+def test_generic_compiled_route_does_not_transfer_between_targets(monkeypatch):
+    from tessera.compiler import bootstrap_prune_audit as audit
+    original = audit._packager_is_generic_scheduled
+    monkeypatch.setattr(audit, "_packager_is_generic_scheduled",
+        lambda target, family: False if (target, family) == ("nvidia_sm120", "softmax")
+        else original(target, family))
+    # A compiled sibling must not recreate the removed NVIDIA consumer.
+    assert prm.primitive_routes()["softmax"]["nvidia_sm120"] == prm.ROUTE_BOOTSTRAP
+
+
+def test_route_census_reuses_ast_only_within_one_evaluation(monkeypatch):
+    import ast
+    from tessera.compiler import bootstrap_prune_audit as audit
+
+    original = ast.parse
+    parsed = []
+    def count(*args, **kwargs):
+        parsed.append(args[0])
+        return original(*args, **kwargs)
+    monkeypatch.setattr(audit.ast, "parse", count)
+    first = prm.primitive_routes()
+    first_count = len(parsed)
+    # Before scoped reuse, the same source was parsed 416 times in one join.
+    assert 0 < first_count < 100
+    parsed.clear()
+    assert prm.primitive_routes() == first
+    assert len(parsed) == first_count
+
+
+def test_census_snapshot_does_not_hide_same_size_source_edits(tmp_path):
+    import ast
+    import os
+    from tessera.compiler import bootstrap_prune_audit as audit
+
+    source = tmp_path / "backend.py"
+    source.write_text("answer = 1")
+    stamp = source.stat()
+    with audit._source_snapshot():
+        first = audit._parse(source)
+        assert isinstance(first, ast.Module)
+        assert audit._parse(source) is first
+    source.write_text("answer = 2")
+    os.utime(source, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    with audit._source_snapshot():
+        changed = audit._parse(source)
+        assert isinstance(changed, ast.Module)
+        assert changed.body[0].value.value == 2
+        assert changed is not first
+
+
+def test_census_snapshot_releases_cached_source_after_exception(tmp_path):
+    import ast
+    import pytest
+    from tessera.compiler import bootstrap_prune_audit as audit
+
+    source = tmp_path / "backend.py"
+    source.write_text("answer = 1")
+    with pytest.raises(RuntimeError):
+        with audit._source_snapshot():
+            assert audit._parse(source) is not None
+            raise RuntimeError("abort census")
+    source.write_text("answer = 3")
+    tree = audit._parse(source)
+    assert isinstance(tree, ast.Module)
+    assert tree.body[0].value.value == 3
+
+
+def test_census_inventory_snapshot_reopens_live_source(monkeypatch, tmp_path):
+    from tessera.compiler import bootstrap_prune_audit as audit
+    source = tmp_path / "backend.py"
+    source.write_text('def native_package_kind(module):\n    return "softmax"\n')
+    monkeypatch.setattr(audit, "_COMPILER", tmp_path)
+    monkeypatch.setattr(audit, "_BACKEND_MODULES", (("nvidia_sm120", "backend.py"),))
+    with audit._source_snapshot():
+        first = audit.collect_inventories()
+        assert audit.collect_inventories() is first
+        assert first[0].families == ("softmax",)
+    source.write_text('def native_package_kind(module):\n    return "norm"\n')
+    with audit._source_snapshot():
+        changed = audit.collect_inventories()
+        assert changed[0].families == ("norm",)
+        assert changed is not first

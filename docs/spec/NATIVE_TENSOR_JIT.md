@@ -7,11 +7,11 @@ audit_role: reference
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Sync: NATIVE-TENSOR-JIT-20261020.
-Status: PR #993 integration candidate; exact-head CI/review remain open.
+Status: PR #993 delivered as 1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31 after required CI and resolved review. The MLP extension below remains an unmerged candidate.
 
 ## Compiler and runtime boundary
 
-Ordinary primal SM120 calls with two compact half-storage roots query the
+Ordinary primal SM120 calls with compact half-storage roots query the
 native compiler. Python describes tensor metadata and binds arguments; native
 Graph/Schedule/Tile passes select operations, arithmetic, policies and kernels.
 An admitted product retains actual Graph, Schedule, Tile and NVIDIA Target IR.
@@ -84,3 +84,63 @@ Exact-head delivery CI and review remain required before merge. Wider producer/l
 portable restoration and all five aggregate programs remain open.
 
 Final reviewed-source evidence: benchmarks/baselines/native_tensor_jit_20261020/thread-review/README.md. All175 device cases pass and focused host gates pass445; exact-head CI/review remains required.
+
+## Native multi-matmul extension candidate
+
+Sync: NATIVE-TENSOR-MLP-20261020.
+
+The private extension admits two or more compact half roots within the same
+64-stage/128-buffer capacity. Nonterminal plain matmuls are retained as actual
+members, and every matrix checks its own operand pair and numerical policy.
+The named three-root MLP explicitly selects FP16 or FP32 intermediate output.
+FP32 ReLU preserves eager maximum(0, x) signed-zero and loaded NaN payload
+semantics, uses four-byte storage, and feeds the existing ordered FP32 scalar
+contraction with the original half RHS. No implicit tensor-core downcast occurs.
+Each native scalar member inherits its selected buffer/scalar/geometry contract.
+
+2619 production compiler cases, 25 focused MLP/oracle checks, 470 shared drift
+gates and 87 RTX5070 device cases pass. Owning gfx1201 scalar regressions pass
+67 cases. Twelve correctness-gated timing rows retain separate native and public
+windows. Artifact restoration still requires the matching compiler. Full CPU passes 30785 with 3710 declared skips; exact-head CI/review remain open. Evidence:
+benchmarks/baselines/native_tensor_mlp_20261020/README.md.
+
+## Standalone activation integration review follow-up
+
+Sync: NATIVE-TENSOR-MLP-20261020.
+
+Standalone static compact rank-two SM120 ReLU now uses the same native
+Graph/Schedule/Tile activation as composed programs. Ordinary host JIT and
+serialized packages support FP16/BF16/FP32 with storage-preserving outputs.
+Serial and explicit flat_128 policies carry distinct hashes/entries/geometry;
+the default physical policy remains serial. FP32 packages additionally have
+resident execution proof. All three typed ABIs bind exact buffer storage,
+rank, layout, direction and scalar order before launch. Invalid rank guards
+and narrower forged storage are rejected before memory access.
+
+FP32 uses tessera.nvidia.relu.x_o_rows_columns.f32.v1; the production CUDA
+bridge recognizes its exact hashed serial/flat entry names and four-byte
+storage. Existing half ABIs and their zero policies remain unchanged.
+Ordinary public host and resident-package proof are separate; this does not
+admit arbitrary public resident unary graphs or broaden differentiation.
+Numerical fixture: tests/device/nvidia/test_public_standalone_relu.py.
+Legacy half producer and fused accumulator epilogue fixtures remain distinct.
+
+The review follow-up passes 50 combined standalone/composed device cases
+and 511 applicable host checks (8 declared non-SM120 skips). Final full CPU
+passes 30,788 cases with 3,710 declared skips; 2,640 production compiler
+cases pass without skips. All 33 generated documents and five surface audits
+pass. Updated-commit CI/review remain required.
+
+Standalone native-image packages also pass fresh-process execution without
+compiler tools. This is a separate serialized descriptor contract; generic
+multi-member native source-program restoration retains its matching-compiler
+requirement. Evidence: benchmarks/baselines/native_tensor_mlp_20261020/review/README.md.
+
+
+Standalone activation dispatch checks the specialized traced Graph with its
+complete activation predicate before selecting native descriptor compilation.
+Rank-one/rank-three, FP64 and empty-extent inputs remain outside this bounded
+route; the operation-name request alone cannot claim their support.
+Host-free negative tests in tests/unit/test_sm120_activation_dispatch.py
+retain other JIT paths, while positive FP16/BF16/FP32 controls still select
+canonical native compilation. Once selected, compilation/launch errors propagate.

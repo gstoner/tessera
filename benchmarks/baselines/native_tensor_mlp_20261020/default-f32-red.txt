@@ -1,0 +1,82 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+_ test_default_fp32_mlp_preserves_precision_through_native_program[False-f16] __
+
+storage = 'f16', reordered = False
+
+    @pytest.mark.parametrize("storage", ["f16", "bf16"])
+    @pytest.mark.parametrize("reordered", [False, True])
+    def test_default_fp32_mlp_preserves_precision_through_native_program(storage, reordered):
+        source = mlp_source(storage, reordered, intermediate="f32")
+        verified = _run(source, "--verify-each")
+        assert verified.returncode == 0, verified.stderr
+        queried = _run(source, "--tessera-graph-to-schedule=tensor-program-query")
+        assert queried.returncode == 0, queried.stderr
+        assert "tessera.native.tensor_program_admission = true" in queried.stdout
+        tiled = _run(source, "--tessera-graph-to-schedule", "--tessera-schedule-to-tile")
+        assert tiled.returncode == 0, tiled.stderr
+>       assert "tile.scalar_matmul_kernel" in tiled.stdout
+E       assert 'tile.scalar_matmul_kernel' in 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...er = "row_major", leading_dim = 19>} : !tile.tile, !llvm.ptr, i64, i64, i64, i64\n      llvm.return\n    }\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...er = "row_major", leading_dim = 19>} : !tile.tile, !llvm.ptr, i64, i64, i64, i64\n      llvm.return\n    }\n  }\n}\n\n' = CompletedProcess(args=['/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt', '...jor", leading_dim = 19>} : !tile.tile, !llvm.ptr, i64, i64, i64, i64\n      llvm.return\n    }\n  }\n}\n\n', stderr='').stdout
+
+tests/unit/test_native_tensor_mlp_program.py:129: AssertionError
+_ test_default_fp32_mlp_preserves_precision_through_native_program[False-bf16] _
+
+storage = 'bf16', reordered = False
+
+    @pytest.mark.parametrize("storage", ["f16", "bf16"])
+    @pytest.mark.parametrize("reordered", [False, True])
+    def test_default_fp32_mlp_preserves_precision_through_native_program(storage, reordered):
+        source = mlp_source(storage, reordered, intermediate="f32")
+        verified = _run(source, "--verify-each")
+        assert verified.returncode == 0, verified.stderr
+        queried = _run(source, "--tessera-graph-to-schedule=tensor-program-query")
+        assert queried.returncode == 0, queried.stderr
+>       assert "tessera.native.tensor_program_admission = true" in queried.stdout
+E       assert 'tessera.native.tensor_program_admission = true' in 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser... "pure"} : (tensor<17x29xf32>, tensor<29x19xbf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser... "pure"} : (tensor<17x29xf32>, tensor<29x19xbf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n' = CompletedProcess(args=['/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt', '...tensor<17x29xf32>, tensor<29x19xbf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n', stderr='').stdout
+
+tests/unit/test_native_tensor_mlp_program.py:126: AssertionError
+__ test_default_fp32_mlp_preserves_precision_through_native_program[True-f16] __
+
+storage = 'f16', reordered = True
+
+    @pytest.mark.parametrize("storage", ["f16", "bf16"])
+    @pytest.mark.parametrize("reordered", [False, True])
+    def test_default_fp32_mlp_preserves_precision_through_native_program(storage, reordered):
+        source = mlp_source(storage, reordered, intermediate="f32")
+        verified = _run(source, "--verify-each")
+        assert verified.returncode == 0, verified.stderr
+        queried = _run(source, "--tessera-graph-to-schedule=tensor-program-query")
+        assert queried.returncode == 0, queried.stderr
+        assert "tessera.native.tensor_program_admission = true" in queried.stdout
+        tiled = _run(source, "--tessera-graph-to-schedule", "--tessera-schedule-to-tile")
+        assert tiled.returncode == 0, tiled.stderr
+>       assert "tile.scalar_matmul_kernel" in tiled.stdout
+E       assert 'tile.scalar_matmul_kernel' in 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...er = "row_major", leading_dim = 19>} : !tile.tile, !llvm.ptr, i64, i64, i64, i64\n      llvm.return\n    }\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...er = "row_major", leading_dim = 19>} : !tile.tile, !llvm.ptr, i64, i64, i64, i64\n      llvm.return\n    }\n  }\n}\n\n' = CompletedProcess(args=['/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt', '...jor", leading_dim = 19>} : !tile.tile, !llvm.ptr, i64, i64, i64, i64\n      llvm.return\n    }\n  }\n}\n\n', stderr='').stdout
+
+tests/unit/test_native_tensor_mlp_program.py:129: AssertionError
+_ test_default_fp32_mlp_preserves_precision_through_native_program[True-bf16] __
+
+storage = 'bf16', reordered = True
+
+    @pytest.mark.parametrize("storage", ["f16", "bf16"])
+    @pytest.mark.parametrize("reordered", [False, True])
+    def test_default_fp32_mlp_preserves_precision_through_native_program(storage, reordered):
+        source = mlp_source(storage, reordered, intermediate="f32")
+        verified = _run(source, "--verify-each")
+        assert verified.returncode == 0, verified.stderr
+        queried = _run(source, "--tessera-graph-to-schedule=tensor-program-query")
+        assert queried.returncode == 0, queried.stderr
+>       assert "tessera.native.tensor_program_admission = true" in queried.stdout
+E       assert 'tessera.native.tensor_program_admission = true' in 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser... "pure"} : (tensor<17x29xf32>, tensor<29x19xbf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser... "pure"} : (tensor<17x29xf32>, tensor<29x19xbf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n' = CompletedProcess(args=['/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt', '...tensor<17x29xf32>, tensor<29x19xbf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n', stderr='').stdout
+
+tests/unit/test_native_tensor_mlp_program.py:126: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_tensor_mlp_program.py::test_default_fp32_mlp_preserves_precision_through_native_program[False-f16]
+FAILED tests/unit/test_native_tensor_mlp_program.py::test_default_fp32_mlp_preserves_precision_through_native_program[False-bf16]
+FAILED tests/unit/test_native_tensor_mlp_program.py::test_default_fp32_mlp_preserves_precision_through_native_program[True-f16]
+FAILED tests/unit/test_native_tensor_mlp_program.py::test_default_fp32_mlp_preserves_precision_through_native_program[True-bf16]
+4 failed, 16 deselected in 0.61s

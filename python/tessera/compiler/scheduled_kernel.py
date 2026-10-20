@@ -187,10 +187,10 @@ def lower_scheduled_kernel(
     if schedule is not None:
         module = copy.deepcopy(module)
         if (module.functions and module.functions[0].body
-                and module.functions[0].body[0].op_name in {"tessera.reduce", "tessera.sum", "tessera.mean", "tessera.max", "tessera.min", "tessera.amax", "tessera.amin", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm", "tessera.softmax", "tessera.softmax_safe"}):
+                and module.functions[0].body[0].op_name in {"tessera.reduce", "tessera.sum", "tessera.mean", "tessera.max", "tessera.min", "tessera.amax", "tessera.amin", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm", "tessera.softmax", "tessera.softmax_safe", "tessera.relu"}):
             module.functions[0].body[0].kwargs["schedule"] = schedule
         else:
-            raise ValueError("explicit Schedule policy requires a normalization, reduction or softmax")
+            raise ValueError("explicit Schedule policy requires a normalization, reduction, softmax or activation")
     contract = _graph_contract(module, target)
     if architecture is not None:
         if target != 'x86' or architecture not in ('zen5-avx512','x86_64_base'):
@@ -241,14 +241,14 @@ def lower_scheduled_kernel(
                 _X86_GRAPH_CACHE.move_to_end(cache_key)
                 return cached
     schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
-    if contract[5] in {"norm", "softmax"} and contract[0] == "nvidia_sm120":
+    if contract[5] in {"norm", "softmax", "activation"} and contract[0] == "nvidia_sm120":
         # Read the compiler-owned physical decision; no Python shape selector.
         rows = re.findall(rf"(?m)^\s*%[^=]+ = schedule\.{contract[5]}[^\n]+", schedule_ir)
         if len(rows) != 1:
             raise RuntimeError("native semantic kernel needs one Schedule decision")
         decision = re.search(r'\bschedule = "([^"]+)"', rows[0])
         mode = decision[1] if decision is not None else "serial"
-        if mode not in {"serial","cooperative_128"}:
+        if mode not in ({"serial","flat_128"} if contract[5] == "activation" else {"serial","cooperative_128"}):
             raise RuntimeError("native semantic kernel Schedule policy is unsupported")
         if ("schedule" in module.functions[0].body[0].kwargs
                 and mode != contract[20]):
@@ -261,14 +261,21 @@ def lower_scheduled_kernel(
     hashes = _HASH_RE.findall(tile_ir)
     if len(hashes) != 1:
         raise RuntimeError("scheduled semantic-kernel lowering did not preserve one schedule digest")
+    function_name = contract[2]
+    if contract[0] == "nvidia_sm120":
+        if contract[5] == "norm":
+            strategy = "" if contract[20] == "serial" else "_cooperative_128"
+            function_name = f"tessera_tile_norm_{contract[6]}_{contract[10]}{strategy}_{hashes[0][:10]}"
+        elif contract[5] == "activation":
+            strategy = "_flat_128" if contract[20] == "flat_128" else ""
+            function_name = f"tessera_tile_activation_relu_{contract[10]}{strategy}_{hashes[0][:10]}"
     artifact = ScheduledKernelArtifact(
         graph_ir=graph_ir,
         schedule_ir=schedule_ir,
         tile_ir=tile_ir,
         target=contract[0],
         architecture=contract[1],
-        function_name=(f"tessera_tile_norm_{contract[6]}_{contract[10]}"+("" if contract[20]=="serial" else "_cooperative_128")+f"_{hashes[0][:10]}"
-                       if contract[5] == "norm" and contract[0] == "nvidia_sm120" else contract[2]),
+        function_name=function_name,
         input_name=contract[3],
         output_name=contract[4],
         family=contract[5],
@@ -342,13 +349,15 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     elif target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name == "tessera.softmax") or (
         target == "rocm_gfx1201" and op.op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}
     ):
-        expected_dtype = dtype if op.op_name in {"tessera.softmax", "tessera.softmax_safe", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"} else "fp32"
+        expected_dtype = dtype if op.op_name in {"tessera.softmax", "tessera.softmax_safe", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm", "tessera.relu"} else "fp32"
         if dtype not in {"fp16", "bf16", "fp32"} or output_dtype != expected_dtype:
             raise ValueError("NVIDIA scheduled unary storage contract is unsupported")
     elif dtype != "fp32" or output_dtype != "fp32":
         raise ValueError("initial scheduled semantic-kernel contract requires f32")
     mode = str(op.kwargs.get("schedule", "serial"))
-    if mode != "serial" and (target != "nvidia_sm120" or mode != "cooperative_128"):
+    allowed_modes = ({"serial", "flat_128"} if op.op_name == "tessera.relu"
+                     else {"serial", "cooperative_128"}) if target == "nvidia_sm120" else {"serial"}
+    if mode not in allowed_modes:
         raise ValueError("unsupported scheduled reduction policy")
     output_name = op.result or function.return_values[0].removeprefix("%")
     if target == "x86":
@@ -363,7 +372,16 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         raise ValueError("unsupported scheduled semantic-kernel target")
 
     epsilon = 0.0
-    if op.op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"}:
+    if op.op_name == "tessera.relu":
+        if (target != "nvidia_sm120" or len(function.args) != 1 or len(input_shape) != 2
+                or input_shape != output_shape or output_dtype != dtype
+                or not op.result or len(function.return_values) != 1
+                or function.return_values[0].removeprefix("%") != op.result.removeprefix("%")):
+            raise ValueError("scheduled ReLU requires its returned SM120 rank-two storage-preserving result")
+        family, kind, axis, keepdims = "activation", "relu", -1, False
+        rows, columns = input_shape
+        outer = axis_extent = inner = 1
+    elif op.op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"}:
         from .nvidia_native import _norm_contract
 
         # E2E-REAL-6 x86 (2026-09-28): Zen 5 carries the static f32

@@ -1854,7 +1854,8 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   StringRef opName = op->getName().getStringRef();
   if (opName == "tessera.relu") {
     if (!nvidia || input != output || input.getRank() != 2 || input.getEncoding() ||
-        (schedule.storage != "f16" && schedule.storage != "bf16") ||
+        (schedule.storage != "f16" && schedule.storage != "bf16" &&
+         schedule.storage != "f32") ||
         !llvm::all_of(input.getShape(), [](int64_t d) { return d > 0; }))
       return failure();
     for (NamedAttribute attr : op->getAttrs()) {
@@ -5053,9 +5054,18 @@ struct ScheduleToTilePass
         OpBuilder moduleBuilder(mod.getBody(), mod.getBody()->end());
         auto kernelFunction =
             LLVM::LLVMFuncOp::create(moduleBuilder, loc, kernelName, kernelType);
-        if (selected->target == "nvidia_sm120")
+        if (selected->target == "nvidia_sm120") {
           kernelFunction->setAttr("nvvm.kernel", UnitAttr::get(&getContext()));
-        else {
+          if (mod->hasAttr("tessera.native.tensor_program_member")) {
+            kernelFunction->setAttr("tessera.native.program_buffer_types",
+                tensor_program::bufferTypes(graph));
+            kernelFunction->setAttr("tessera.native.program_geometry",
+                builder.getDenseI64ArrayAttr(
+                    tensor_program::selectMatmulKernel(*selected).geometry));
+            kernelFunction->setAttr("tessera.native.program_scalars",
+                builder.getDenseI64ArrayAttr({selected->m, selected->n, selected->k}));
+          }
+        } else {
           kernelFunction->setAttr("tessera.rocm.scalar_contract",
               builder.getStringAttr(selected->physicalContract));
           kernelFunction->setAttr("tessera.rocm.arch",

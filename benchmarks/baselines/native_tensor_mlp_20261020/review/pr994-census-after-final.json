@@ -1,0 +1,231 @@
+{
+  "elapsed_seconds": 2.7865609690197743,
+  "ast_parse_calls": 6,
+  "route_sha256": "6bac9fbd00f28c8a3a8d5932327087de7122a067e3817ca2d76d679acf893480",
+  "routes": {
+    "flash_attn": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "compiled",
+      "rocm_gfx1151": "compiled",
+      "x86": "compiled"
+    },
+    "depth_attn": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "compiled",
+      "x86": "none"
+    },
+    "softmax": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "compiled",
+      "rocm_gfx1151": "compiled",
+      "x86": "compiled"
+    },
+    "relu": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "compiled",
+      "rocm_gfx1151": "none",
+      "x86": "none"
+    },
+    "layer_norm": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "compiled",
+      "rocm_gfx1151": "none",
+      "x86": "none"
+    },
+    "rmsnorm": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "compiled",
+      "rocm_gfx1151": "none",
+      "x86": "none"
+    },
+    "sum": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "compiled",
+      "rocm_gfx1151": "compiled",
+      "x86": "compiled"
+    },
+    "mean": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "compiled",
+      "rocm_gfx1151": "compiled",
+      "x86": "compiled"
+    },
+    "max": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "compiled",
+      "rocm_gfx1151": "compiled",
+      "x86": "compiled"
+    },
+    "amax": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "compiled",
+      "rocm_gfx1151": "compiled",
+      "x86": "compiled"
+    },
+    "min": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "compiled",
+      "rocm_gfx1151": "none",
+      "x86": "none"
+    },
+    "amin": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "compiled",
+      "rocm_gfx1151": "none",
+      "x86": "none"
+    },
+    "matmul": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "compiled",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "moe_dispatch": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "bootstrap",
+      "x86": "none"
+    },
+    "add": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "sub": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "mul": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "div": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "exp": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "log": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "sqrt": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "rsqrt": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "tanh": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "sigmoid": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "gelu": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "silu": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "erf": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "sign": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "where": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "pow": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "maximum": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    },
+    "minimum": {
+      "apple_cpu": "unclassified",
+      "apple_gpu": "unclassified",
+      "nvidia_sm120": "none",
+      "rocm_gfx1151": "none",
+      "x86": "compiled"
+    }
+  }
+}

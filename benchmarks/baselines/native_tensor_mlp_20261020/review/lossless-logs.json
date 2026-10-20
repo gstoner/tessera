@@ -1,0 +1,172 @@
+{
+  "public-relu-red.txt": {
+    "gzip_file": "public-relu-red.txt.gz",
+    "uncompressed_sha256": "4a2a79cb075bb258e42c2a9c18d078eb6affcd9822d2e3af7162ba0e50035b91",
+    "gzip_sha256": "7565e2274e215af6d2564e850913f2b39d29e319d6d121fe5f55f1cde31fe9dd"
+  },
+  "public-relu-green.txt": {
+    "gzip_file": "public-relu-green.txt.gz",
+    "uncompressed_sha256": "d3dae66b5da2c939d2d682dfff41cefa89cf9af9e52e5797adfd468dd13aed6f",
+    "gzip_sha256": "172afe0a04525fb2fd1ef0a5c2fbd3628a7c46472f93094bfc057c348b074d4f"
+  },
+  "public-relu-contracts.txt": {
+    "gzip_file": "public-relu-contracts.txt.gz",
+    "uncompressed_sha256": "6da8df869f90265fce796e47f2cd81c50779274217f0a5c77b6e94c00d25fab9",
+    "gzip_sha256": "cb5e125d79d713efbc1d4607726509b14801a347d4cbf1ce9fd25bd7972b5be1"
+  },
+  "public-relu-contracts-final.txt": {
+    "gzip_file": "public-relu-contracts-final.txt.gz",
+    "uncompressed_sha256": "8b14047c87a8dd8cb115b22b228e2a56305d872c23104c1c713b96d50fefc43e",
+    "gzip_sha256": "acbe88e01f64172e5851c8e05ac82c8fcc5f16c015b47d6acb2f2883015b2060"
+  },
+  "public-relu-final-unit.txt": {
+    "gzip_file": "public-relu-final-unit.txt.gz",
+    "uncompressed_sha256": "9a327494512948918be587bef9aeedd35db79d82c1caac651d85328383b2718b",
+    "gzip_sha256": "ec5ed80637c7a8ea49a4c40abd0eba9e45533a3212ee5fb6ba2cfa3817b01423"
+  },
+  "public-relu-route-census.txt": {
+    "gzip_file": "public-relu-route-census.txt.gz",
+    "uncompressed_sha256": "ec2d29bc2ad7ad5d403ed156e51d0d8f546be1a8ecfa7456d08bc521fe7831e1",
+    "gzip_sha256": "ac5ad019d4caff08615c13d466135afb23571107277b02a3188739a04a6ceafc"
+  },
+  "public-relu-census-final.txt": {
+    "gzip_file": "public-relu-census-final.txt.gz",
+    "uncompressed_sha256": "9e90c68ecebb4b853caa1b3e88ac0d5e0cce681a47b537f5530e85ca4ee68fa6",
+    "gzip_sha256": "49d29f0e07f9501c7ad70f1d4d335da108569ec1601a3d1f1b5420300b0a3d4b"
+  },
+  "public-relu-census-fixed.txt": {
+    "gzip_file": "public-relu-census-fixed.txt.gz",
+    "uncompressed_sha256": "c472b59a5f8f799217819592378cde73e2e67cc438aa5b51cd473b04719dbe2d",
+    "gzip_sha256": "dbeaaf3d4ba0bc6b225fcb04b5789ee52b9bc5c39c6f2d39e770fdd8672f2762"
+  },
+  "public-relu-prune-final.txt": {
+    "gzip_file": "public-relu-prune-final.txt.gz",
+    "uncompressed_sha256": "a7bf3f3026254b681d3613eedc7aee6d14889592c7db4635854a9f42a4f099bd",
+    "gzip_sha256": "1f20cf35c6f4686e734c562cde49afd5f79108755a3e8ee19d523368d0eee92e"
+  },
+  "public-relu-production.txt": {
+    "gzip_file": "public-relu-production.txt.gz",
+    "uncompressed_sha256": "047639c287eaeba9f98cca820a436077f7a45dd9088bb1b000a2e378878ec8f3",
+    "gzip_sha256": "35422719fbe07f85ff6cabc0414b39fe4e3a8c6fa7fc732134c3d75fe99fde4e"
+  },
+  "public-relu-full-unit.txt": {
+    "gzip_file": "public-relu-full-unit.txt.gz",
+    "uncompressed_sha256": "2cd67d08d4f4c43a8bb14d9b535bd78936e1c44ae3f36b7e9620a9af2e6e3aaf",
+    "gzip_sha256": "1d09d0464fdfadac61457865a09041a3c3fb2320396b6e559926f5964581be76"
+  },
+  "public-relu-mypy-final.txt": {
+    "gzip_file": "public-relu-mypy-final.txt.gz",
+    "uncompressed_sha256": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "gzip_sha256": "acf9f1fa9e0b29bfc06c5cd63aa5c6a540c7a3e250a0e05d12bdfe5b5acd153e"
+  },
+  "public-relu-device.txt": {
+    "gzip_file": "public-relu-device.txt.gz",
+    "uncompressed_sha256": "f0d464c06d00aaab30fde061a1a6719f53b64cd09890c6fe86eafe8f115af60b",
+    "gzip_sha256": "7afe20e2a089891461e7d6ae75e2d82c0d16f7a3079dfe67cdde8e3329189725"
+  },
+  "public-relu-device-green.txt": {
+    "gzip_file": "public-relu-device-green.txt.gz",
+    "uncompressed_sha256": "38c46efd0780b65884515ab8aa31b01c714b498e2e6db74b59a5d99b36145b6c",
+    "gzip_sha256": "4f3bf5b2ff028dbf43059a22a6a66de712574c79969ff8284deb9ea477c82bd8"
+  },
+  "public-relu-device-final.txt": {
+    "gzip_file": "public-relu-device-final.txt.gz",
+    "uncompressed_sha256": "2998cb924301a4324224f0a856fd9db5fb8d9de2b5802ba56f830e1339d77d69",
+    "gzip_sha256": "c9dc334b08ede09d813d836bba03570009fb73c7e144606b77c68dee2c72a650"
+  },
+  "public-relu-portable-final.txt": {
+    "gzip_file": "public-relu-portable-final.txt.gz",
+    "uncompressed_sha256": "da61df08704f57fe52c4ce33e4534f4eeb1ae78fcae24764f8942d4cd0201d6c",
+    "gzip_sha256": "4d36bf8d02542697a7da578ed8de10773af731e6ec555e67e4b5b5f857689a07"
+  },
+  "public-relu-compiler.xml": {
+    "gzip_file": "public-relu-compiler.xml.gz",
+    "uncompressed_sha256": "807abfb7d35fc4e5906e47e42140891e70c3f063d0f033dc7e338ff9210b20d9",
+    "gzip_sha256": "66f7e8a011052e2269fa6999ac9cf6c9f2c96a0972db638ba05ccb8d4b441950"
+  },
+  "public-relu-full-unit-final.txt": {
+    "gzip_file": "public-relu-full-unit-final.txt.gz",
+    "uncompressed_sha256": "dd64e855f502565cd35803b76e418d9806379774ba9700500ecd13168b748278",
+    "gzip_sha256": "3802b436ae871a59b50f18b7e92614498fdcb7dd7a370b6119a9c2b67cc84568"
+  },
+  "public-relu-final-ownership.txt": {
+    "gzip_file": "public-relu-final-ownership.txt.gz",
+    "uncompressed_sha256": "8129ace80abc8739f877ce8b6f0d74cbe1c4cee37c4f6b03aa9fdbc36a90f0a1",
+    "gzip_sha256": "fa373e41b69bc0af9cd5ffeba1e5066c790699f4b777e22a228cdb84ae50be4f"
+  },
+  "public-relu-doc-drift-final.txt": {
+    "gzip_file": "public-relu-doc-drift-final.txt.gz",
+    "uncompressed_sha256": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "gzip_sha256": "31851960e2603d92c5251627b4a3ee2b8cc9b7c5fd958a580f81273f8a94ff1a"
+  },
+  "public-relu-graphify-final.txt": {
+    "gzip_file": "public-relu-graphify-final.txt.gz",
+    "uncompressed_sha256": "7a8f865edd2a3cd4ca29db88b6c584ac350e0fa069d284030051681dafadfc2c",
+    "gzip_sha256": "c089fd257c45d6a6504deb777c18c62a8d3c86c4064a78d12dc5b4cda2205566"
+  },
+  "public-relu-text-frontend.txt": {
+    "gzip_file": "public-relu-text-frontend.txt.gz",
+    "uncompressed_sha256": "35835c3df16466fec6dba75631b022d5c644d5c924a2a46b37ddd342a92a45c4",
+    "gzip_sha256": "abde9a39b27b3cb30b6e3b556a46817d07ea3d06b0d05db697d36696930162e8"
+  },
+  "pr994-ci-unit-raw.txt": {
+    "gzip_file": "pr994-ci-unit-raw.txt.gz",
+    "uncompressed_sha256": "d8793893c3edda793e7dc6d8ac8748975c7fac55d36e3cbd7ae25a6a8c7c8cd1",
+    "gzip_sha256": "b6b0b89a9e0675fbfe3203eec4dadf25cf6df69adb8344487ea05a6a146aafa3"
+  },
+  "pr994-census-focused.txt": {
+    "gzip_file": "pr994-census-focused.txt.gz",
+    "uncompressed_sha256": "8c1dd80ceb43c139cac835ba135a8d62edcd4b9f8f433a2eaa4399bc7d7267e6",
+    "gzip_sha256": "5cbe14c7c50165679513213c71488dd74051f3612b6564ef7cb2a30d6471b681"
+  },
+  "pr994-census-focused-final.txt": {
+    "gzip_file": "pr994-census-focused-final.txt.gz",
+    "uncompressed_sha256": "2faf75f548de05d591d13c303d829f3ea63ca3dcde9a55bdf26ea1cc75128052",
+    "gzip_sha256": "812c48ecb8c1285aa8844237fcc0d6b4b09b691b594d177084bde0ad2b39a751"
+  },
+  "pr994-census-scoped-final.txt": {
+    "gzip_file": "pr994-census-scoped-final.txt.gz",
+    "uncompressed_sha256": "a072662ee157fa1aea8b2d067a8426abe8e2e851635891a8bfe568b8f9213d76",
+    "gzip_sha256": "a629fdbe579f1609fd6e05e7112d2666fa1236383cc5336e62baf6fdea558abb"
+  },
+  "pr994-census-mypy.txt": {
+    "gzip_file": "pr994-census-mypy.txt.gz",
+    "uncompressed_sha256": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "gzip_sha256": "acf9f1fa9e0b29bfc06c5cd63aa5c6a540c7a3e250a0e05d12bdfe5b5acd153e"
+  },
+  "pr994-census-docs.txt": {
+    "gzip_file": "pr994-census-docs.txt.gz",
+    "uncompressed_sha256": "f2c52145109920cd3769a131b645235594ac4501a7b432a6498e78ba543969e0",
+    "gzip_sha256": "e10cd2ef02934fe5ce439d56c75442102cb1c0bf5f2fc016c37a15b5840eee20"
+  },
+  "pr994-dispatch-red.txt": {
+    "gzip_file": "pr994-dispatch-red.txt.gz",
+    "uncompressed_sha256": "6c6a060f9c319611a1c23fc9e18f804e28c5c429d1695997698469af9c39fb27",
+    "gzip_sha256": "b9cbda40e5dcb9e3db7c10b6c5c89817fb4ac9a8f8a9c6761638b5bddaee679a"
+  },
+  "pr994-dispatch-green.txt": {
+    "gzip_file": "pr994-dispatch-green.txt.gz",
+    "uncompressed_sha256": "404b00b4f905910e007fc630d7eaceb6465b2b620d1d926af07aac2adae30a19",
+    "gzip_sha256": "4cbd87373563ac3e3afedf3e6c5dcd8959ad4fbd722218ea3d780643f8314776"
+  },
+  "pr994-dispatch-device.txt": {
+    "gzip_file": "pr994-dispatch-device.txt.gz",
+    "uncompressed_sha256": "ceb2d0fc76de8f2ce49f04dd518cce93dce1096c9db0ed375d73b51a8b1579da",
+    "gzip_sha256": "614de4b5443e90f778c5ea351c4d5e94d7512bf36cef2a7ef960211ec3396595"
+  },
+  "pr994-dispatch-mypy.txt": {
+    "gzip_file": "pr994-dispatch-mypy.txt.gz",
+    "uncompressed_sha256": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "gzip_sha256": "acf9f1fa9e0b29bfc06c5cd63aa5c6a540c7a3e250a0e05d12bdfe5b5acd153e"
+  },
+  "pr994-dispatch-docs.txt": {
+    "gzip_file": "pr994-dispatch-docs.txt.gz",
+    "uncompressed_sha256": "242ede9f5f834e8eea8c170c42fa0cb856062a153ae1ce5b38381717edd8f60d",
+    "gzip_sha256": "31851960e2603d92c5251627b4a3ee2b8cc9b7c5fd958a580f81273f8a94ff1a"
+  },
+  "pr994-dispatch-graph.txt": {
+    "gzip_file": "pr994-dispatch-graph.txt.gz",
+    "uncompressed_sha256": "b9ef8e83ecad5c18b5558a151a697ae9447d3c736714f81e6581f34056b3a85e",
+    "gzip_sha256": "0cc7d10925a0dfb6cff0a4b9896743f269c4f22262e7557aef500c62f5613004"
+  }
+}

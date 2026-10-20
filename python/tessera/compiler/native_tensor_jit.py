@@ -4,7 +4,7 @@ import numpy as np
 
 def input_signature(values):
     """Describe compact physical roots without inspecting or copying their values."""
-    if len(values) != 2:
+    if not 2 <= len(values) <= 128:
         return None
     resident = any(hasattr(value, "__cuda_array_interface__") for value in values)
     if resident and not all(hasattr(value, "__cuda_array_interface__") for value in values):

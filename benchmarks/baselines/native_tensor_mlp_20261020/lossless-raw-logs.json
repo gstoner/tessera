@@ -1,0 +1,22 @@
+{
+  "default-f32-green.txt": {
+    "uncompressed_sha256": "cf7495f9da9b1a90ef0e664e229243caba3ef92ecea53be8b4bd4c041aa01555",
+    "gzip_file": "default-f32-green.txt.gz",
+    "gzip_sha256": "3a1f531f0184f252d8bb9250789eaec99b4bab51800ddd7798ffa62c354efe5f"
+  },
+  "device-mlp-wide.txt": {
+    "uncompressed_sha256": "22c2e7a996b913522d684c650f2ac981ff9f880fe63ee0228e6ac490e66db65f",
+    "gzip_file": "device-mlp-wide.txt.gz",
+    "gzip_sha256": "c7de1f65af0aee543a9fddb88e1da50f7e8de1ab02e963faba1f95b0689b6c6d"
+  },
+  "mlp-numerical-attribution.txt": {
+    "uncompressed_sha256": "c90a4d18691b4c9ec6ff312563f488eaa21c37e828f6851a2b6c0685a0059519",
+    "gzip_file": "mlp-numerical-attribution.txt.gz",
+    "gzip_sha256": "3e1586aa0bb2f686fe8229685cdb075f28996c05b82e6ff6eb4afd8c62872eac"
+  },
+  "mlp-unit-initial.txt": {
+    "uncompressed_sha256": "110523af0b02926e651e5815f7a773706816d8728336e9a27e5e2f84ea81fc12",
+    "gzip_file": "mlp-unit-initial.txt.gz",
+    "gzip_sha256": "8bbd4f048e81c2ef8279f0e21a70009047922170b64006ea33d73ba843239db2"
+  }
+}

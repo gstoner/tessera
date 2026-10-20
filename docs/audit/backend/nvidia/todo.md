@@ -6,6 +6,51 @@ target: nvidia_sm120
 last_updated: 2026-10-20
 ---
 
+## NATIVE-TENSOR-MLP-20261020 — native multi-matmul integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-MLP-20261020.
+
+The private three-root X@Up -> ReLU -> hidden@Down program preserves
+explicit FP16 or FP32 intermediates through actual Graph/Schedule/Tile/Target
+members. FP32 retains native F32 ReLU and ordered scalar-FMA consumption, with
+checked per-member launch metadata and no precision downcast. 2619 production compiler cases,
+25 focused numerical/compiler checks and 87 owning RTX5070 device cases pass.
+Twelve correctness-gated timing rows separate native event regions and completed
+public calls; full CPU passes 30785/3710 declared skips; exact-head CI/review remain open; this does not close W1.1 or the five slices.
+
+Evidence: benchmarks/baselines/native_tensor_mlp_20261020/README.md.
+
+
+
+Eight additional resident MLP cases prove independent producer streams for all
+three roots, no host coercion and stable owner/output lifetime. No dynamic,
+layout, AD or encoded-envelope closure follows.
+
+Review follow-up (PR994): standalone f16/bf16/f32 ReLU now has a canonical
+Graph/Schedule/Tile package, typed ABI, checked host/resident runtime and
+ordinary host JIT. Native F32 names and widths are recognized by the production
+CUDA bridge. The separate standalone numerical fixture proves bitwise
+NaN/zero/subnormal behavior and output canaries; the legacy half producer
+fixture and post-matmul epilogue proof remain distinct. A matching new provider
+passes 50 standalone/composed cases. 511 applicable host gates pass with
+8 declared non-SM120 skips. Final full CPU passes 30,788 cases with
+3,710 declared skips; 2,640 production compiler cases execute without skips.
+All 33 generated documents and five surface audits pass; Ruff/mypy are clean.
+Updated-commit CI/review remain required before merge.
+
+The shared route census now includes body-proven generic Schedule/Tile
+consumers on their actual targets. This corrects structural metadata only;
+it does not add sibling kernel, dtype, AD or exact-device evidence. The
+no-growth Python Graph-packager gate remains unchanged.
+Census evaluation now shares AST/inventory snapshots only within one call;
+new calls reread live source. The route output is unchanged across all
+targets. This reduces repeated audit work and adds no physical support.
+Standalone SM120 activation dispatch now validates the specialized traced
+Graph before selecting its descriptor route. Unsupported ranks, FP64 and
+empty extents leave that path before native compilation. Sibling dispatch
+contracts and physical support are unchanged.
+
 ## NATIVE-TENSOR-JIT-20261020 — ordinary frontend integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

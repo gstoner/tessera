@@ -3209,6 +3209,7 @@ def _submit_nvidia_sm120_native(
         SM120_REDUCE_F32_ABI,
         SM120_RELU_F16_ABI,
         SM120_RELU_BF16_ABI,
+        SM120_RELU_F32_ABI,
         SM120_NORM_F16_ABI,
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
@@ -3296,6 +3297,7 @@ def _submit_nvidia_sm120_native(
         SM120_REDUCE_F32_ABI,
         SM120_RELU_F16_ABI,
         SM120_RELU_BF16_ABI,
+        SM120_RELU_F32_ABI,
         SM120_NORM_F16_ABI,
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
@@ -3360,7 +3362,7 @@ def _submit_nvidia_sm120_native(
         "bf16": SM120_SOFTMAX_BF16_ABI,
         "f32": SM120_SOFTMAX_F32_ABI,
     }
-    activation_storage_abis = {"f16": SM120_RELU_F16_ABI, "bf16": SM120_RELU_BF16_ABI}
+    activation_storage_abis = {"f16": SM120_RELU_F16_ABI, "bf16": SM120_RELU_BF16_ABI, "f32": SM120_RELU_F32_ABI}
     if descriptor.abi_id in activation_storage_abis.values():
         from tessera.compiler.nvidia_native import _validate_scheduled_relu_descriptor
         try:
@@ -3482,7 +3484,7 @@ def _submit_nvidia_sm120_native(
         SM120_REDUCE_BF16_ABI,
         SM120_REDUCE_F32_ABI,
     }
-    activation_abis = {SM120_RELU_F16_ABI, SM120_RELU_BF16_ABI}
+    activation_abis = {SM120_RELU_F16_ABI, SM120_RELU_BF16_ABI, SM120_RELU_F32_ABI}
     norm_abis = {
         SM120_NORM_F16_ABI,
         SM120_NORM_BF16_ABI,
@@ -6929,6 +6931,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_REDUCE_F32_ABI,
         SM120_RELU_F16_ABI,
         SM120_RELU_BF16_ABI,
+        SM120_RELU_F32_ABI,
         SM120_NORM_F16_ABI,
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
@@ -7004,6 +7007,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_REDUCE_F32_ABI,
                 SM120_RELU_F16_ABI,
                 SM120_RELU_BF16_ABI,
+                SM120_RELU_F32_ABI,
                 SM120_NORM_F16_ABI,
                 SM120_NORM_BF16_ABI,
                 SM120_NORM_F32_ABI,

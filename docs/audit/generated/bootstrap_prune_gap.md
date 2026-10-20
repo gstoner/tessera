@@ -30,9 +30,9 @@ the bootstrap row can go.
 |   ·  of the bootstrap, other (wrapper / dispatcher) | 36 |
 | — typed scheduled-artifact inputs (consumption needs verification) | 14 |
 | — unclassified/raw inputs (not assumed compiled) | 18 |
-| Lines in those modules | 12275 |
-| Classified family/target candidates (shape admission not implied) | 55 |
-| — covered by a compiled route | 7 |
+| Lines in those modules | 12309 |
+| Classified family/target candidates (shape admission not implied) | 56 |
+| — covered by a compiled route | 8 |
 | — packager lowers only through the generic Schedule→Tile route | 11 |
 | — **gap (no declared family route)** | 37 |
 | Packagers matching no family | 9 |
@@ -45,7 +45,7 @@ exact artifacts before treating a row as a constructor deletion target.
 
 | Target | Module | Graph input | Typed artifact input | Unknown/raw input | Family candidates | Lines |
 |---|---|---|---|---|---|---|
-| `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 15 | 13 | 5116 |
+| `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 15 | 14 | 5150 |
 | `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 1 | 5 | 3526 |
 | `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1603 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 10 | 215 |
@@ -88,6 +88,7 @@ queues own.
 | `nvidia_sm120` | `paged_kv` | — | 🔴 **gap** |
 | `nvidia_sm120` | `attention` | `scheduled_attention.supports_scheduled_attention` | ✅ compiled |
 | `nvidia_sm120` | `softmax` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
+| `nvidia_sm120` | `activation` | `scheduled_kernel.supports_scheduled_kernel` | ✅ compiled |
 | `nvidia_sm120` | `norm` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `nvidia_sm120` | `reduction` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `nvidia_sm120` | `nvfp4_matmul` | — | 🔴 **gap** |

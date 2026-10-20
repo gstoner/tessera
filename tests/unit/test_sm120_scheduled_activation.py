@@ -25,7 +25,7 @@ def _graph(storage="f16", arch="sm_120"):
 }}'''
 
 
-@pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.parametrize("storage", ["f16", "bf16", "f32"])
 def test_relu_has_explicit_native_schedule_and_storage_boundary(tool, storage):
     schedule = run_tessera_opt(tool, _graph(storage), "--tessera-graph-to-schedule")
     assert "schedule.activation" in schedule
@@ -54,8 +54,8 @@ def test_relu_schedule_rejects_policy_mutation(tool, old, new):
         run_tessera_opt(tool, schedule.replace(old, new), "--tessera-schedule-to-tile")
 
 
-def test_relu_schedule_does_not_promote_f32_or_sibling_architecture(tool):
-    for graph in (_graph("f32"), _graph(arch="gfx1201")):
+def test_relu_schedule_refuses_unimplemented_dtype_or_sibling_architecture(tool):
+    for graph in (_graph("f64"), _graph(arch="gfx1201"), _graph(arch="sm_80")):
         with pytest.raises(RuntimeError):
             run_tessera_opt(tool, graph, "--tessera-graph-to-schedule")
 
@@ -251,7 +251,7 @@ def test_relu_producer_execution_registration_keeps_epilogue_proof_separate():
     from tessera.compiler import backend_manifest as bm, conformance_matrix as cm
     from tessera.compiler.execution_matrix import lookup
 
-    fixture = "tests/unit/test_sm120_scheduled_activation.py"
+    fixture = "tests/device/nvidia/test_public_standalone_relu.py"
     row = next(item for item in bm.manifest_for("relu") if item.target == "nvidia_sm120")
     assert "scheduled_activation" in row.feature_flags
     assert row.execute_compare_fixture == fixture
@@ -259,7 +259,8 @@ def test_relu_producer_execution_registration_keeps_epilogue_proof_separate():
         "tests/device/nvidia/test_matmul_relu.py")
     execution = lookup("nvidia_sm120", "canonical_nvidia_lhs_program")
     assert execution.executable and execution.executor_id == "nvidia_lhs_program"
-    assert execution.numerical_fixture == fixture and execution.evidence_target == "nvidia_sm120"
+    assert execution.numerical_fixture == "tests/unit/test_sm120_scheduled_activation.py"
+    assert execution.evidence_target == "nvidia_sm120"
     assert cm._numerical_check_present("relu", "nvidia_sm120")
     for sibling in ("nvidia_sm80", "nvidia_sm90", "nvidia_sm100"):
         assert not cm._numerical_check_present("relu", sibling)

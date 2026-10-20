@@ -6,6 +6,17 @@ target: apple_gpu
 last_updated: 2026-10-19
 ---
 
+## NATIVE-TENSOR-FRAME-OWNER-20261019 — native consumer candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to Metal/Apple CPU execution: these six versioned native-frame symbols require CUDA driver SM120 contexts and PTX images. The shared ABI inventory is regenerated. No Apple operation, dtype, runtime or numerical/performance promotion; Apple native program integration requires its own consumer and owning-host proof.
+
+Contract: docs/spec/NATIVE_TENSOR_FRAME_OWNER.md.
+Evidence: benchmarks/baselines/native_tensor_frame_owner_20261019/README.md.
+
+
 ## NATIVE-TENSOR-PROGRAM-PIPELINE-20261019 — integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

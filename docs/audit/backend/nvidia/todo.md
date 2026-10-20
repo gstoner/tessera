@@ -6,6 +6,17 @@ target: nvidia_sm120
 last_updated: 2026-10-19
 ---
 
+## NATIVE-TENSOR-FRAME-OWNER-20261019 — native consumer candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+The generic native C++ consumer now owns typed buffers and emitted member images, enforces initialization/parameter/layout/context/thread lifetimes, orders resident producer streams, and profiles program/stage windows. Initial owning-device gates and timings are recorded in the runtime packet. Public JIT/portable admission, full source-to-Target program replay and broader producer/layout/AD closure remain follow-up required. No physical schedule or performance promotion.
+
+Contract: docs/spec/NATIVE_TENSOR_FRAME_OWNER.md.
+Evidence: benchmarks/baselines/native_tensor_frame_owner_20261019/README.md.
+
+
 ## NATIVE-TENSOR-PROGRAM-PIPELINE-20261019 — integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

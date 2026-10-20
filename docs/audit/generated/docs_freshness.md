@@ -6,8 +6,8 @@ Reference date for staleness: **2026-10-19**.
 
 ## Headline
 
-- **187** docs catalogued across the canonical doc tree.
-- **186** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **189** docs catalogued across the canonical doc tree.
+- **186** carry a `last_updated:` marker; **3** are undated (invisible to the freshness audit until tagged).
 - **52** updated within the last 30 days.
 - **70** older than 90 days; **0** older than 180 days.
 
@@ -15,6 +15,8 @@ Reference date for staleness: **2026-10-19**.
 
 These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-form `Last updated:` line to participate in the audit.  Until tagged, the freshness signal is unavailable.
 
+- `docs/spec/NATIVE_TENSOR_FRAME_OWNER.md`
+- `docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md`
 - `docs/reference/tessera_frontend_lanes.md`
 
 ## Per-root inventory
@@ -49,6 +51,8 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `NATIVE_ROCM_SILU_MATH_CONTRACT.md` | - | 2026-10-16 | 3 | ✓ |
 | `NATIVE_ROW_LOGICAL_PREFIX.md` | - | 2026-10-18 | 1 | ✓ |
 | `NATIVE_SOURCE_ATTENTION_PROGRAM.md` | - | 2026-10-18 | 1 | ✓ |
+| `NATIVE_TENSOR_FRAME_OWNER.md` | - | _undated_ | - | _body_ |
+| `NATIVE_TENSOR_PROGRAM_PIPELINE.md` | - | _undated_ | - | _body_ |
 | `PRODUCTION_COMPILER_PLAN.md` | Ratified | 2026-06-05 | 136 | ✓ |
 | `PYTHON_API_SPEC.md` | Normative | 2026-10-15 | 4 | ✓ |
 | `ROCM_FOLDED_INPUT_VIEWS.md` | - | 2026-10-16 | 3 | ✓ |

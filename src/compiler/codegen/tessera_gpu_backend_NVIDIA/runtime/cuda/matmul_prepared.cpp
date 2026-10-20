@@ -1,3 +1,4 @@
+#include "tessera_nvidia_native_frame.h"
 #include "tessera_nvidia_active_source_program.h"
 #include "tessera_nvidia_source_reverse_program.h"
 // Native ownership of checked static/bounded Schedule/Tile/LLVM SM120 matmul images.
@@ -1372,3 +1373,5 @@ extern "C" int tessera_nvidia_tensor_program_close(uint64_t handle) {
 #include "resident_tensor_result.inc"
 
 #include "source_reverse_owner.h"
+
+#include "NativeTensorFrameRuntime.h"

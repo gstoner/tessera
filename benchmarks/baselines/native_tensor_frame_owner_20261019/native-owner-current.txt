@@ -1,0 +1,8 @@
+.............................................                            [100%]
+=============================== warnings summary ===============================
+tests/device/nvidia/test_native_tensor_frame_owner.py::test_native_thread_and_fork_guards_precede_cuda_calls
+  /home/angstorms/scratch/bounded-source-attention-20261019/worktree/tests/device/nvidia/test_native_tensor_frame_owner.py:209: DeprecationWarning: This process (pid=505289) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    pid = os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+45 passed, 1 warning in 15.65s

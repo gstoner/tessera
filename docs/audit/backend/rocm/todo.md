@@ -5,6 +5,17 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NATIVE-TENSOR-FRAME-OWNER-20261019 — native consumer candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to gfx1151/gfx1201 physical execution: the six native-frame symbols consume CUDA driver contexts, SM120a images and explicit CUDA producer streams. Shared runtime-ABI inventory changes are regenerated. No HIP ABI, source selection or physical schedule changes; ROCm route/performance obligations and independent exact-device parity remain open.
+
+Contract: docs/spec/NATIVE_TENSOR_FRAME_OWNER.md.
+Evidence: benchmarks/baselines/native_tensor_frame_owner_20261019/README.md.
+
+
 ## NATIVE-TENSOR-PROGRAM-PIPELINE-20261019 — integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

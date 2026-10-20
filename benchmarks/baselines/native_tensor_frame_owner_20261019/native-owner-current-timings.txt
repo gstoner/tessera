@@ -1,0 +1,6 @@
+relu_matmul-f16 host_ms 0.204933 raw_host_ms 0.159539 device_ms 0.003159
+relu_matmul-bf16 host_ms 0.184116 raw_host_ms 0.159343 device_ms 0.003106
+norm_matmul-f16 host_ms 0.201219 raw_host_ms 0.146096 device_ms 0.004189
+norm_matmul-bf16 host_ms 0.211543 raw_host_ms 0.149668 device_ms 0.00413
+two_sided-f16 host_ms 0.194086 raw_host_ms 0.156975 device_ms 0.004895
+two_sided-bf16 host_ms 0.191071 raw_host_ms 0.167875 device_ms 0.004816

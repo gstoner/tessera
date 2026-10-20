@@ -4521,6 +4521,10 @@ struct GenerateWMMAGemmKernelPass
             request.foldedFragmentGroups, request.foldedRowPitched,
             request.bTransposed, requestArch == "gfx1201");
       } else if (scaled) {
+        // The checked register ABI and exported native member launch exactly
+        // one wave. Preserve that existing geometry in GPU IR so lane/K
+        // bounds are optimized with the same launch contract as execution.
+        gpuFunc.setKnownBlockSize(ArrayRef<int32_t>{32, 1, 1});
         gpuFunc->setAttr("tessera.rocm.block_scale_contract",
                          b.getStringAttr(
                              request.exactMXFP4 ? "rocm_mxfp4_w4a8_exact_v1" :

@@ -260,7 +260,8 @@ def main():
                 Path(__file__), ROOT / "python/tessera/runtime.py",
                 ROOT / "python/tessera/compiler/rocm_fp8_blockscale.py",
                 ROOT / "python/tessera/compiler/rocm_mxfp8_blockscale.py",
-                ROOT / "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp"]},
+                ROOT / "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp",
+                ROOT / "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp"]},
             compiler_source_sha256=sha(args.compiler_source) if args.compiler_source else None,
             reference_source_sha256=sha(args.reference_source) if args.reference_source else None,
             selector_promotion=False, rows=[])

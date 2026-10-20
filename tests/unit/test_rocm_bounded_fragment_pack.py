@@ -97,3 +97,17 @@ def test_strided_fragment_keeps_scalar_elements(compiler_toolchain, orders, expe
         fragment_source("e4m3", "e4m3", orders=orders), "gfx1201")
     assert lowered.count("vector.load") == expected
     assert "memref.load" in lowered
+
+
+@pytest.mark.compiler_route
+@pytest.mark.parametrize("scale_k,scale_n", [(128,128),(32,1)])
+def test_scaled_register_entry_binds_one_wave_geometry(compiler_toolchain,scale_k,scale_n):
+    from tessera.compiler.rocm_fp8_blockscale import BlockScaleShape,lower_blockscale
+    import re
+    program=lower_blockscale(BlockScaleShape(17,19,256,scale_k,scale_n,"nk","bf16"))
+    flag="--generate-wmma-gemm-kernel=via-tile=true"
+    compiler=compiler_toolchain.require_tessera_opt(flag)
+    result=subprocess.run([str(compiler),"-",flag],input=program.tile_ir,
+        text=True,capture_output=True,timeout=60)
+    assert result.returncode==0,result.stderr
+    assert re.search(r"known_block_size\s*=\s*array<i32:\s*32,\s*1,\s*1>",result.stdout)

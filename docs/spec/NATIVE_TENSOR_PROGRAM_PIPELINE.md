@@ -1,3 +1,7 @@
+---
+last_updated: 2026-10-20
+---
+
 # Native tensor program pipeline — integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
@@ -66,7 +70,14 @@ benchmarks/baselines/native_tensor_program_pipeline_20261019/README.md.
 The complete typed host controller now lowers from tile.program_invoke to the
 registered tessera_nvidia.program_invoke command. Both boundaries share
 NativeTensorProgramContract.h for buffer lifetime, exact SM120 architecture,
-symbol, storage, native parameter and selected launch checks. The Target form
+symbol, storage, native parameter and selected launch checks. The module
+schema must be 1 and references must have exactly one member::kernel level
+inside an owned native member module; malformed flat references are rejected
+before frame export. Every invocation's arity is checked before cross-operation
+lifetime traversal, including operations whose own verifier has not run. All
+roots and allocations must use positive compact rank-two f32/f16/bf16 physical
+storage within the ABI extent/byte limits. Empty or external hosts are
+diagnosed before frame export. The Target form
 must reference a lowered LLVM/NVVM kernel; semantic Graph members are invalid.
 The device NVVM pass preserves these effectful host commands for the checked
 native-frame runtime instead of erasing them as numerical artifact markers.

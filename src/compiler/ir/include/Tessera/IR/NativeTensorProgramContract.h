@@ -8,11 +8,28 @@
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include <climits>
+#include <cstdint>
 
 namespace tessera::native_tensor_program {
 inline bool isInvocation(mlir::Operation *op) {
   auto name = op->getName().getStringRef();
   return name == "tile.program_invoke" || name == "tessera_nvidia.program_invoke";
+}
+// The frame ABI carries only positive compact rank-two f32/f16/bf16
+// buffers. Check every root and allocation, even one not used by this stage.
+inline bool isPhysicalBuffer(mlir::Type raw) {
+  auto type = mlir::dyn_cast<mlir::MemRefType>(raw);
+  if (!type || !type.hasStaticShape() || type.getRank() != 2 ||
+      !type.getLayout().isIdentity() || type.getMemorySpace())
+    return false;
+  auto element = type.getElementType();
+  if (!element.isF16() && !element.isBF16() && !element.isF32()) return false;
+  int64_t bytes = element.isF32() ? 4 : 2;
+  for (int64_t extent : type.getShape()) {
+    if (extent <= 0 || extent > INT32_MAX || bytes > INT64_MAX / extent) return false;
+    bytes *= extent;
+  }
+  return true;
 }
 inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
   using namespace mlir;
@@ -25,13 +42,40 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
   auto arch = module ? module->getAttrOfType<StringAttr>("tessera.arch") : StringAttr{};
   if (!target || target.getValue() != "nvidia_sm120" || !arch || arch.getValue() != "sm_120")
     return emitOpError("requires exact nvidia_sm120 program target and sm_120 architecture");
+  auto moduleSchema = module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program");
+  if (!moduleSchema || !moduleSchema.getType().isInteger(64) || moduleSchema.getInt() != 1)
+    return emitOpError("requires native program module schema 1");
+  auto calleeRef = op->getAttrOfType<SymbolRefAttr>("callee");
+  if (!calleeRef || calleeRef.getNestedReferences().size() != 1)
+    return emitOpError("requires one isolated member::kernel symbol reference");
+  auto member = dyn_cast_or_null<ModuleOp>(
+      SymbolTable::lookupSymbolIn(module, calleeRef.getRootReference()));
+  if (!member)
+    return emitOpError("callee is not a visible native program member");
+  if (!member->hasAttr("tessera.native.tensor_program_member"))
+    return emitOpError("callee must belong to an owned native program member module");
   auto buffers = op->getOperands();
   auto count = op->getAttrOfType<IntegerAttr>("input_count");
-  if (!count) return emitOpError("requires an input count");
+  if (!count || !count.getType().isInteger(64))
+    return emitOpError("requires an i64 input count");
   int64_t reads = count.getInt();
-  if (!schema || schema.getInt() != 1 || !host.getBody().hasOneBlock() ||
+  if (!schema || !schema.getType().isInteger(64) || schema.getInt() != 1 ||
+      !host.getBody().hasOneBlock() ||
       reads < 1 || reads > 2 || buffers.size() != unsigned(reads + 1))
     return emitOpError("requires its typed native program and one fresh output");
+  for (Type type : host.getArgumentTypes())
+    if (!isPhysicalBuffer(type))
+      return emitOpError("program roots require checked static physical buffer types");
+  // Lifetime checks inspect other invocations before their own generated
+  // verifier may have run. Establish every arity before reading their output
+  // or counting allocation writers; malformed later operations must diagnose.
+  for (Operation &candidate : host.getBody().front()) {
+    if (!isInvocation(&candidate)) continue;
+    auto inputs = candidate.getAttrOfType<IntegerAttr>("input_count");
+    if (!inputs || !inputs.getType().isInteger(64) || inputs.getInt() < 1 ||
+        inputs.getInt() > 2 || candidate.getNumOperands() != unsigned(inputs.getInt() + 1))
+      return candidate.emitOpError("requires checked input/output arity before program lifetime verification");
+  }
   auto output = buffers.back().getDefiningOp<memref::AllocOp>();
   if (!output) return emitOpError("output must be a private or returned allocation");
   llvm::DenseSet<Value> initialized(host.getArguments().begin(), host.getArguments().end());
@@ -49,10 +93,8 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
     if (!initialized.contains(input) || retired.contains(input) || input == buffers.back())
       return emitOpError("input must retain initialized live storage and may not alias the output");
   for (Value buffer : buffers) {
-    auto type = cast<MemRefType>(buffer.getType());
-    if (!type.hasStaticShape() || type.getRank() != 2 ||
-        !type.getLayout().isIdentity() || type.getMemorySpace())
-      return emitOpError("requires static compact rank-two buffers");
+    if (!isPhysicalBuffer(buffer.getType()))
+      return emitOpError("requires static compact rank-two buffers with supported storage and positive ABI capacity");
   }
   auto result = dyn_cast<func::ReturnOp>(host.getBody().front().back());
   if (!result || result.getNumOperands() != 1)
@@ -65,9 +107,8 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
     if (auto allocation = dyn_cast<memref::AllocOp>(operation)) {
       unsigned writes = 0, releases = 0;
       auto type = allocation.getType();
-      if (!type.hasStaticShape() || type.getRank() != 2 ||
-          !type.getLayout().isIdentity() || type.getMemorySpace())
-        return emitOpError("program allocations require static compact storage");
+      if (!isPhysicalBuffer(type))
+        return emitOpError("program allocations require static compact storage and positive ABI capacity");
       for (OpOperand &use : allocation.getResult().getUses()) {
         if (auto *invocation = use.getOwner(); isInvocation(invocation)) {
           if (use.getOperandNumber() == unsigned(invocation->getAttrOfType<IntegerAttr>("input_count").getInt())) ++writes;

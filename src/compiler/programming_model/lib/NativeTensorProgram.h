@@ -39,7 +39,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
         return input.getDefiningOp() != nullptr;
       })) return success();
   auto reject = [&]() {
-    return root.emitError("native tensor program requires a static compact half "
+    return root.emitError("Graph->Schedule native tensor program requires a static compact half "
                           "producer DAG ending in one plain matmul");
   };
   for (Operation *owner : {module.getOperation(), root.getOperation()})
@@ -196,9 +196,18 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
 // Read-only transport projected from actual typed memory SSA.
 inline mlir::LogicalResult exportFrame(mlir::ModuleOp module) {
   using namespace mlir;
+  auto schema = module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program");
+  if (!schema || !schema.getType().isInteger(64) || schema.getInt() != 1)
+    return module.emitError("native tensor frame requires module schema 1");
   SmallVector<func::FuncOp> hosts(module.getOps<func::FuncOp>());
-  if (hosts.size() != 1) return module.emitError("native tensor frame needs one host program");
+  if (hosts.size() != 1 || !hosts.front().getBody().hasOneBlock() ||
+      hosts.front().getBody().front().empty())
+    return module.emitError("native tensor frame needs one defined single-block host program");
   auto host = hosts.front();
+  if (!llvm::any_of(host.getBody().front(), [](Operation &op) {
+        return native_tensor_program::isInvocation(&op);
+      }))
+    return host.emitError("native tensor frame needs at least one verified native invocation");
   auto ret = dyn_cast<func::ReturnOp>(host.getBody().front().back());
   if (!ret || ret.getNumOperands() != 1)
     return host.emitError("native tensor frame needs one returned allocation");

@@ -1,0 +1,11 @@
+{
+  "compiler_sha256": "ac26c9a7b9c760be129649ef39f3380635d7a334f7c1e3d7da81228295ef8452",
+  "source_sha256": {
+    "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "71b75d85480f286ed0c9cdc432580254a489dd1b28a8520200f32c015c1fc2a2",
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "4c934e2ca74012de6ebcf8d319180f9f9ce362aeec926f549a08e81364fb4ee4",
+    "tests/unit/test_native_tensor_program_pipeline.py": "ebacff0b22adc38ced108ae64a86c7ebea13493400015edcf03502ab5bb8289f",
+    "tests/unit/test_ods_op_has_consumer.py": "5414215e06cf4cbbc580d6d46af9f95fa75f5933b7508d82f933c78668025606"
+  },
+  "owning_device_packet": "../native_tensor_source_package_20261019/source-package-device-identity.json",
+  "numerical_scope": "same eight source/Target/image programs; no native provider or physical schedule change"
+}

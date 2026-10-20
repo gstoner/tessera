@@ -12,6 +12,8 @@ Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
 
 Not applicable to gfx1151/gfx1201 physical execution: the native source-package profile requires exact SM120/CUDA. Query/replay modes add no ROCm dtype, image, ABI or physical schedule admission. ROCm source-to-program and route/performance obligations retain independent exact-device gates.
 
+Delivery review: the shared typed-program verifier now checks module schema and isolated owned member references before frame export; malformed references, missing later arities, unused invalid root types and external/empty hosts produce diagnostics before unsafe traversal/export. This remains an SM120-only program contract; no sibling physical execution or schedule promotion follows.
+
 Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PACKAGE.md.
 Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
 

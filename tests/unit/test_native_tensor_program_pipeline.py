@@ -316,3 +316,86 @@ def test_native_replay_rejects_valid_typed_but_changed_program(edit):
     checked = _run(text, "--tessera-graph-to-schedule=tensor-program-replay")
     assert checked.returncode != 0
     assert "differs from original Graph replay" in checked.stderr
+
+
+@pytest.mark.parametrize("flags", [(), ("--tessera-schedule-to-tile=tensor-member=0",)])
+def test_flat_kernel_reference_is_rejected_before_member_projection(flags):
+    # Previously this passed verification then ArrayRef::back asserted while
+    # exporting the nonexistent nested member symbol.
+    source = 'module attributes {tessera.arch = "sm_120", tessera.target = "nvidia_sm120",\ntessera.native.tensor_program = 1 : i64, tessera.native.tensor_program_target = "nvidia_sm120"} {\nfunc.func @host(%a: memref<1x1xf16>) -> memref<1x1xf32>\nattributes {tessera.native.tensor_program = 1 : i64} {\n %o = memref.alloc() : memref<1x1xf32>\n tessera_nvidia.program_invoke %a, %o {arch = "sm_120", callee = @kernel,\n input_count = 1 : i64, geometry = array<i64: 1, 1, 1, 32, 1, 1>, scalars = array<i64>} : memref<1x1xf16>, memref<1x1xf32>\n return %o : memref<1x1xf32>\n}\nllvm.func @kernel(%a: !llvm.ptr, %o: !llvm.ptr)\nattributes {nvvm.kernel, tessera.native.program_buffer_types = [memref<1x1xf16>, memref<1x1xf32>],\ntessera.native.program_geometry = array<i64: 1, 1, 1, 32, 1, 1>, tessera.native.program_scalars = array<i64>} {\n llvm.return\n}\n}\n'
+    result = _run(source, *flags)
+    assert result.returncode > 0, result.stderr  # diagnostic, never SIGABRT
+    assert "requires one isolated member::kernel symbol reference" in result.stderr
+
+
+@pytest.mark.parametrize("edit,marker", [
+    ("member", "owned native program member module"),
+    ("schema", "requires native program module schema 1")])
+def test_native_controller_requires_owned_members_and_known_module_schema(edit, marker):
+    compiled = _run(traced_source(relu_product, "f16"), "--tessera-graph-to-schedule",
+                    "--tessera-schedule-to-tile", "--tessera-lower-to-nvidia-sm120")
+    assert compiled.returncode == 0, compiled.stderr
+    if edit == "member":
+        changed = compiled.stdout.replace("tessera.native.tensor_program_member, ", "")
+    else:
+        changed = compiled.stdout.replace("tessera.native.tensor_program = 1 : i64",
+                                          "tessera.native.tensor_program = 2 : i64", 1)
+    assert changed != compiled.stdout
+    result = _run(changed)
+    assert result.returncode > 0, result.stderr
+    assert marker in result.stderr
+
+
+@pytest.mark.parametrize("replacement,marker", [
+    ("", "checked input/output arity"),
+    ("input_count = 0 : i64, ", "checked input/output arity"),
+    ("input_count = 3 : i64, ", "checked input/output arity"),
+    ("input_count = 2 : i128, ", "64-bit signless integer attribute")])
+def test_later_invocation_arity_is_checked_before_cross_operation_lifetimes(replacement, marker):
+    compiled = _run(traced_source(relu_product, "f16"), "--tessera-graph-to-schedule",
+                    "--tessera-schedule-to-tile", "--tessera-lower-to-nvidia-sm120")
+    assert compiled.returncode == 0, compiled.stderr
+    lines = compiled.stdout.splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if "tessera_nvidia.program_invoke " in line and "input_count = 2 : i64, " in line:
+            lines[index] = line.replace("input_count = 2 : i64, ", replacement)
+            break
+    else:
+        raise AssertionError("expected matmul consumer invocation")
+    result = _run("".join(lines))
+    assert result.returncode > 0, result.stderr  # malformed IR must never SIGSEGV
+    assert marker in result.stderr
+
+
+@pytest.mark.parametrize("type_", [
+    "i64", "memref<*xf16>", "memref<?x1xf16>", "memref<0x1xf16>",
+    "memref<2147483648x1xf16>", "memref<2147483647x2147483647xf32>",
+    "memref<1x1xcomplex<f32>>", "memref<1x1xi8>"])
+def test_unused_root_cannot_escape_frame_physical_type_checks(type_):
+    compiled = _run(traced_source(relu_product, "f16"), "--tessera-graph-to-schedule",
+                    "--tessera-schedule-to-tile", "--tessera-lower-to-nvidia-sm120")
+    assert compiled.returncode == 0, compiled.stderr
+    changed = compiled.stdout.replace(") -> memref", ", %unused: " + type_ + ") -> memref", 1)
+    assert changed != compiled.stdout
+    result = _run(changed, "--tessera-schedule-to-tile")
+    assert result.returncode > 0, result.stderr
+    assert "program roots require checked static physical buffer types" in result.stderr
+
+
+@pytest.mark.parametrize("external", [False, True])
+def test_frame_export_requires_a_defined_host_with_native_invocations(external):
+    head = ('module attributes {tessera.arch = "sm_120", tessera.target = "nvidia_sm120", '
+            'tessera.native.tensor_program = 1 : i64, '
+            'tessera.native.tensor_program_target = "nvidia_sm120"} {')
+    if external:
+        function = ('func.func private @host() -> memref<1x1xf32> '
+                    'attributes {tessera.native.tensor_program = 1 : i64}')
+        marker = "needs one defined single-block host program"
+    else:
+        function = ('func.func @host(%a: memref<1x1xf16>) -> memref<1x1xf16> '
+                    'attributes {tessera.native.tensor_program = 1 : i64} '
+                    '{ return %a : memref<1x1xf16> }')
+        marker = "needs at least one verified native invocation"
+    result = _run(head + function + "}", "--tessera-schedule-to-tile")
+    assert result.returncode > 0, result.stderr
+    assert marker in result.stderr

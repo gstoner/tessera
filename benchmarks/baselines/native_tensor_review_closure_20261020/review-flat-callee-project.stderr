@@ -1,0 +1,28 @@
+tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/ArrayRef.h:151: const T& llvm::ArrayRef<T>::back() const [with T = mlir::FlatSymbolRefAttr]: Assertion `!empty()' failed.
+PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+Stack dump:
+0.	Program arguments: /home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt - --tessera-schedule-to-tile=tensor-member=0
+ #0 0x00006326cec782ac llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt+0x8a412ac)
+ #1 0x00006326cec75054 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+ #2 0x000074205dc45cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+ #3 0x000074205dca61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+ #4 0x000074205dc45b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+ #5 0x000074205dc288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+ #6 0x000074205dc29979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+ #7 0x000074205dc3bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+ #8 0x00006326c6603cee tessera::(anonymous namespace)::tensor_program::exportFrame(mlir::ModuleOp) (.cold) PMPasses.cpp:0:0
+ #9 0x00006326c7010e6c tessera::(anonymous namespace)::ScheduleToTilePass::runOnOperation() PMPasses.cpp:0:0
+#10 0x00006326c71a0d81 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt+0xf69d81)
+#11 0x00006326c71a10b6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt+0xf6a0b6)
+#12 0x00006326c71a180e mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt+0xf6a80e)
+#13 0x00006326c71a2fc8 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt+0xf6bfc8)
+#14 0x00006326c8a576f7 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+#15 0x00006326c8a5857f llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+#16 0x00006326ce8158bb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt+0x85de8bb)
+#17 0x00006326c8a53b7d mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+#18 0x00006326c8a58c5c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt+0x2821c5c)
+#19 0x00006326c8a58ebe mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt+0x2821ebe)
+#20 0x00006326c6e9bd7e main (/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt+0xc64d7e)
+#21 0x000074205dc2a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+#22 0x000074205dc2a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+#23 0x00006326c6f4a7c5 _start (/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt+0xd137c5)

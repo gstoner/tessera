@@ -1,0 +1,19 @@
+{
+  "flat_reference": {
+    "compiler_sha256": "93025a87078ee7de1456ef21f05470e7b70cd3a966427860dc2d9e202ab7e228",
+    "parse_exit": 0,
+    "projection_exit": -6
+  },
+  "missing_later_arity": {
+    "compiler_sha256": "0d43afe51a4cbfc0fc5e9f2257a7c8aaa9d59d9ba5ccd9650f24d17013e3d49a",
+    "parse_exit": -11
+  },
+  "unused_scalar_root": {
+    "compiler_sha256": "c38eb457243511f629cc6854944525b8055cd3534b18b18e4f94ef55dbb8c60e",
+    "projection_exit": -6
+  },
+  "external_host": {
+    "compiler_sha256": "c38eb457243511f629cc6854944525b8055cd3534b18b18e4f94ef55dbb8c60e",
+    "projection_exit": -6
+  }
+}

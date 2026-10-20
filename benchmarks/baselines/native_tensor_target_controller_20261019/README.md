@@ -30,7 +30,7 @@ commands remain explicit for the checked native-frame C++ consumer.
 index.json binds the actual compiler hash, original Graph source hashes and
 full Target program hashes. The compressed .target.mlir.gz files retain exact
 compiler output bytes, including printer whitespace; frame files are projected
-from the actual verified controller. compile-target-controller.py records the
+from the actual verified controller. compile_target_controller.py records the
 compilation/equivalence procedure; its paths reflect the owning scratch run.
 Original Graphs remain in the preceding pipeline packet.
 

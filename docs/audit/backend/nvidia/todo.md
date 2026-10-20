@@ -13,6 +13,8 @@ Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
 
 The original Graph now drives native admission and complete Target replay. The explicit frontend compile_native_tensor_program API produces immutable compiler-verified members/images and binds the retained C++ owner without tools on warm calls. Eight RTX5070 source-package cases pass; ordinary JIT dispatch, portable restoration and general producer/layout/dynamic/AD closure remain follow-up required.
 
+Delivery review: the shared typed-program verifier now checks module schema and isolated owned member references before frame export; malformed references, missing later arities, unused invalid root types and external/empty hosts produce diagnostics before unsafe traversal/export. The eight proved SM120 source/Target/image programs reproduce byte-for-byte with the corrected compiler. No physical schedule or execution envelope changes.
+
 Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PACKAGE.md.
 Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
 

@@ -51,7 +51,7 @@ producer from plain matmul. Changed-input checks compare every rounded producer
 and final product against NumPy float64 references, with explicit storage
 rounding and an accumulation bound.
 
-compile-candidate.py and candidate-device.py preserve the original capture
+compile_candidate.py and candidate_device.py preserve the original capture
 commands, including scratch paths. The first runs the actual standard compiler
 pipeline and native tensor-member projection before existing PTX packaging.
 The second is a **diagnostic generic CUDA-driver sequencer**, not the production

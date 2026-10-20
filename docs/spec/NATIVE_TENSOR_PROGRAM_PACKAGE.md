@@ -1,3 +1,7 @@
+---
+last_updated: 2026-10-20
+---
+
 # Original-source native SM120 tensor packages
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

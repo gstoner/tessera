@@ -1,3 +1,7 @@
+---
+last_updated: 2026-10-20
+---
+
 # Native SM120 tensor frame owner — integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

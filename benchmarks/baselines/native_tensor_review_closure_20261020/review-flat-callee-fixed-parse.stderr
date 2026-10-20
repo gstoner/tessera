@@ -1,0 +1,4 @@
+<stdin>:6:2: error: 'tessera_nvidia.program_invoke' op requires one isolated member::kernel symbol reference
+ tessera_nvidia.program_invoke %a, %o {arch = "sm_120", callee = @kernel,
+ ^
+<stdin>:6:2: note: see current operation: "tessera_nvidia.program_invoke"(%arg0, %0) <{arch = "sm_120", callee = @kernel, geometry = array<i64: 1, 1, 1, 32, 1, 1>, input_count = 1 : i64, scalars = array<i64>}> : (memref<1x1xf16>, memref<1x1xf32>) -> ()

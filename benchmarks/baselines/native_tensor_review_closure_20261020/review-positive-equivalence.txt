@@ -1,0 +1,8 @@
+relu-f16 source, Target and images identical
+relu-bf16 source, Target and images identical
+norm-f16 source, Target and images identical
+norm-bf16 source, Target and images identical
+two_sided-f16 source, Target and images identical
+two_sided-bf16 source, Target and images identical
+reverse-f16 source, Target and images identical
+reverse-bf16 source, Target and images identical

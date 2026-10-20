@@ -1,0 +1,47 @@
+{
+  "compiler_sha256": "ff8bad652b1a2c0f75d58c5589e37433e4774e5032664e3d202fa112cd59e070",
+  "compared_packet": "benchmarks/baselines/native_tensor_source_package_20261019",
+  "cases": [
+    {
+      "name": "relu-f16",
+      "source_target_images_identical": true,
+      "stages": 2
+    },
+    {
+      "name": "relu-bf16",
+      "source_target_images_identical": true,
+      "stages": 2
+    },
+    {
+      "name": "norm-f16",
+      "source_target_images_identical": true,
+      "stages": 2
+    },
+    {
+      "name": "norm-bf16",
+      "source_target_images_identical": true,
+      "stages": 2
+    },
+    {
+      "name": "two_sided-f16",
+      "source_target_images_identical": true,
+      "stages": 3
+    },
+    {
+      "name": "two_sided-bf16",
+      "source_target_images_identical": true,
+      "stages": 3
+    },
+    {
+      "name": "reverse-f16",
+      "source_target_images_identical": true,
+      "stages": 2
+    },
+    {
+      "name": "reverse-bf16",
+      "source_target_images_identical": true,
+      "stages": 2
+    }
+  ],
+  "scope": "contract verification changes only; unchanged SM120 images/provider"
+}

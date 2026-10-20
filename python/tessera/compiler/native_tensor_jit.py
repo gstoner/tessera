@@ -10,9 +10,28 @@ def input_signature(values):
     if resident and not all(hasattr(value, "__cuda_array_interface__") for value in values):
         raise ValueError("native tensor JIT requires all resident or all host roots")
     if resident:
-        if any(len(value.__cuda_array_interface__.get("shape", ())) != 2 for value in values):
-            return None
-        from .resident_nvidia_tensor import cuda_frontend_specs
+        from .resident_nvidia_tensor import _cuda_metadata_dtype, cuda_frontend_specs
+        # This profile owns compact half roots only. Decline other storage and
+        # layouts before the strict half-root parser so existing routes remain
+        # eligible; supported metadata still receives its complete validation.
+        for value in values:
+            interface = value.__cuda_array_interface__
+            if not isinstance(interface, dict):
+                raise ValueError("resident frontend requires CUDA metadata")
+            shape = interface.get("shape")
+            if not isinstance(shape, (tuple, list)) or len(shape) != 2:
+                return None
+            try:
+                dtype = _cuda_metadata_dtype(value, interface)
+            except (KeyError, TypeError, ValueError):
+                return None
+            if str(dtype) not in {"float16", "bfloat16"}:
+                return None
+            strides = interface.get("strides")
+            if (all(type(dim) is int and dim > 0 for dim in shape)
+                    and isinstance(strides, (tuple, list)) and len(strides) == 2
+                    and tuple(strides) != (shape[1] * dtype.itemsize, dtype.itemsize)):
+                return None
         specs = cuda_frontend_specs(values, ranks=(2,))
     elif all(isinstance(value, np.ndarray) for value in values):
         specs = tuple((tuple(value.shape), value.dtype) for value in values)
@@ -34,7 +53,7 @@ def input_signature(values):
 def lowering_artifacts(program):
     """Return the actual adjacent native stages, not fingerprints of leaf lists."""
     from .matmul_pipeline import LoweringArtifact
-    stages = []
+    stages: list[LoweringArtifact] = []
     for level, text, producer in (
         ("graph", program.source_ir, "frontend.tracer"),
         ("schedule", program.schedule_ir, "tessera-opt.tessera-graph-to-schedule"),

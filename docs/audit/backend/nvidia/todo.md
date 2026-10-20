@@ -13,7 +13,11 @@ Sync: NATIVE-TENSOR-JIT-20261020.
 
 Contract: docs/spec/NATIVE_TENSOR_JIT.md.
 
-Private static compact FP16/BF16 ordinary-JIT candidate uses compiler admission, retains actual Graph/Schedule/Tile/Target stages and caches a checked native owner. Eight source/storage cases pass initial RTX5070 overlay replay with tracing and tools forbidden on warm calls and close/rebind. Full integration, matching final compiler, negative/lifetime/resident gates and paired benchmarks remain required. Runtime artifact restoration explicitly requires the configured matching compiler. No general W1.1, portable, dynamic/layout/AD or five-slice closure.
+Evidence: benchmarks/baselines/native_tensor_jit_20261020/README.md.
+
+Native frame capacity checks run before outlining, during typed verification and before export, matching 64 stages/128 buffers and aligned 64-bit storage. The matching RTX5070 compiler passes named host/resident and 64-stage numerical envelopes; broader shapes, cold cost and captured-device attribution remain open.
+
+Static compact FP16/BF16 ordinary-JIT integration uses native compiler admission, retains actual Graph/Schedule/Tile/Target stages and caches a checked C++ owner. Matching RTX5070 proof passes 53 new ordinary/artifact/boundary/resident cases, 118 legacy/adjacent cases and 45 separate owner regressions. Final production proof passes 2594 with zero skips. Full CPU has 30783 passes/3710 skips plus one recorder naming failure fixed in the benchmark index and checked separately; exact-head CI/review remain required. Paired completed-public calls improve 1.8853-2.4551x for six tiny cases; cold calls and captured-device attribution remain open. Artifact restoration requires the configured matching compiler. No general W1.1, compiler-free portable, dynamic/layout/AD or five-slice closure.
 
 
 

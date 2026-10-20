@@ -142,6 +142,13 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
       if (!available.contains(input)) return reject();
     available.insert(op->getResult(0));
   }
+  SmallVector<Type> storage;
+  for (Value arg : root.getArguments()) storage.push_back(bufferType(arg.getType()));
+  for (Operation *op : operations)
+    storage.push_back(bufferType(op->getResult(0).getType()));
+  if (failed(tessera::native_tensor_program::verifyFrameCapacity(
+          root, storage, operations.size())))
+    return failure();
   // Work on detached members first. No mutation of the original source occurs
   // until its complete dependency closure and each native leaf are admitted.
   SmallVector<OwningOpRef<ModuleOp>> members;
@@ -253,6 +260,16 @@ inline mlir::LogicalResult exportFrame(mlir::ModuleOp module) {
   auto ret = dyn_cast<func::ReturnOp>(host.getBody().front().back());
   if (!ret || ret.getNumOperands() != 1)
     return host.emitError("native tensor frame needs one returned allocation");
+  SmallVector<Type> storage(host.getArgumentTypes());
+  size_t stageCount = 0;
+  for (Operation &operation : host.getBody().front()) {
+    if (auto allocation = dyn_cast<memref::AllocOp>(operation))
+      storage.push_back(allocation.getType());
+    if (native_tensor_program::isInvocation(&operation)) ++stageCount;
+  }
+  if (failed(tessera::native_tensor_program::verifyFrameCapacity(
+          host, storage, stageCount)))
+    return failure();
   llvm::DenseMap<Value,int64_t> ids;
   llvm::json::Array buffers, roots, stages;
   auto addBuffer = [&](Value value, StringRef role) {

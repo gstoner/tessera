@@ -2656,10 +2656,9 @@ class JitFn:
             if program is None:
                 return _JIT_FALLBACK
             self._native_tensor_pid = os.getpid()
-            owner = self._native_tensor_calls.get(signature)
-            created = owner is None or not owner.handle
-            if created:
-                owner = program.prepare()
+            created = (signature not in self._native_tensor_calls
+                       or not self._native_tensor_calls[signature].handle)
+            owner = program.prepare() if created else self._native_tensor_calls[signature]
             try:
                 from .native_tensor_result import input_scope
                 with input_scope(ordered):
@@ -4332,9 +4331,9 @@ class JitFn:
         from tessera.runtime import RuntimeArtifact
 
         if self._native_tensor_last_program is not None:
-            from .native_tensor_program import runtime_artifact
-            return runtime_artifact(self._native_tensor_last_program,
-                                    argument_names=tuple(self.arg_names))
+            from .native_tensor_program import runtime_artifact as native_tensor_artifact
+            return native_tensor_artifact(self._native_tensor_last_program,
+                                          argument_names=tuple(self.arg_names))
         source_attention = getattr(self, "_native_source_attention_last_owner", None)
         if source_attention is not None:
             return source_attention.runtime_artifact()

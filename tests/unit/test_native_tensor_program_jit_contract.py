@@ -145,3 +145,34 @@ def test_retained_jit_pins_owned_inputs_and_rebinds_without_compiler(monkeypatch
     assert fn._try_native_tensor_program_call(roots, {}) is output
     assert len(binds) == 2
     fn.close_native_storage()
+
+
+@pytest.mark.parametrize("typestr,strides", [
+    ("|u1", None), ("|V1", None), ("<f4", None),
+    ("<f2", (2, 4)), ("<f2", (16, 2)),
+])
+def test_resident_profile_declines_other_storage_and_layouts_before_strict_parser(
+    typestr, strides, monkeypatch,
+):
+    import tessera.compiler.resident_nvidia_tensor as resident
+    class Root:
+        __cuda_array_interface__ = {
+            "version": 3, "shape": (2, 3), "typestr": typestr,
+            "data": (4096, True), "stream": 1, "strides": strides,
+        }
+        def __array__(self, *args, **kwargs):
+            pytest.fail("metadata admission coerced resident data")
+    def forbidden(*args, **kwargs):
+        pytest.fail("unsupported profile entered the strict compact-half parser")
+    monkeypatch.setattr(resident, "cuda_frontend_specs", forbidden)
+    assert input_signature((Root(), Root())) is None
+
+
+def test_supported_resident_profile_still_checks_invalid_pointer():
+    class Root:
+        __cuda_array_interface__ = {
+            "version": 3, "shape": (2, 3), "typestr": "<f2",
+            "data": (0, True), "stream": 1, "strides": None,
+        }
+    with pytest.raises(ValueError, match="pointer metadata"):
+        input_signature((Root(), Root()))

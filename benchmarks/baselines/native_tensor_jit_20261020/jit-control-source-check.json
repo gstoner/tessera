@@ -1,0 +1,30 @@
+{
+  "main_commit": "fac21f5bc37deb99b4be8ef82b21f4d66296c1d1",
+  "control_files": [
+    {
+      "path": "python/tessera/compiler/jit.py",
+      "expected": "e34aa87189816e2998b02f588a32bb737550c339fe305821d8fd3dab552b6a58",
+      "merged_main_sha256": "e34aa87189816e2998b02f588a32bb737550c339fe305821d8fd3dab552b6a58",
+      "matches": true
+    },
+    {
+      "path": "python/tessera/compiler/execution_matrix.py",
+      "expected": "d5327865383656815d3dc6c4463aade97c7fbb4a0bf81b1d7f8a5e625eedb47b",
+      "merged_main_sha256": "d5327865383656815d3dc6c4463aade97c7fbb4a0bf81b1d7f8a5e625eedb47b",
+      "matches": true
+    },
+    {
+      "path": "python/tessera/compiler/native_tensor_program.py",
+      "expected": "9ea49250ea221716e3f4c13a5ffae705b52dbe82f275f578c51f8d8588b6bf0b",
+      "merged_main_sha256": "9ea49250ea221716e3f4c13a5ffae705b52dbe82f275f578c51f8d8588b6bf0b",
+      "matches": true
+    },
+    {
+      "path": "python/tessera/runtime.py",
+      "expected": "7d2b362d5f86062119699f90129d5257d817fe140d378a59f598635eec52bf54",
+      "merged_main_sha256": "7d2b362d5f86062119699f90129d5257d817fe140d378a59f598635eec52bf54",
+      "matches": true
+    }
+  ],
+  "candidate_files_match_current_source": true
+}

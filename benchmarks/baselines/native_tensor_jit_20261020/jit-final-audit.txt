@@ -1,0 +1,88 @@
+ok: compiler plan ownership, log links and start view
+<frozen runpy>:128: RuntimeWarning: 'tessera.compiler.audit' found in sys.modules after import of package 'tessera.compiler', but prior to execution of 'tessera.compiler.audit'; this may result in unpredictable behaviour
+claim_lint: no violations across 6 doc(s)
+[surface_audit:examples] 25 entries  {'runnable': 23, 'runnable_optional': 2, 'compile_only': 0, 'scaffold': 0, 'broken': 0, 'archived': 0}
+  PASS  examples/getting_started  (runnable)
+  PASS  examples/getting_started  (runnable)
+  SKIP  examples/getting_started/tessera_flash_attention_demo  (runnable_optional — extras missing: torch)
+  PASS  examples/compiler/ir_pipeline_tutorial  (runnable)
+  SKIP  examples/compiler/ir_pipeline_tutorial  (runnable_optional — extras missing: jupyter, nbconvert, ipykernel)
+  PASS  examples/compiler/dnas  (runnable)
+  PASS  examples/conformance  (runnable)
+  PASS  examples/matrix_calculus  (runnable)
+  PASS  examples/pde_learning  (runnable)
+  PASS  examples/tensor_calculus  (runnable)
+  PASS  examples/advanced/kv_cache_serving  (runnable)
+  PASS  examples/advanced/long_context_attention  (runnable)
+  PASS  examples/attention  (runnable)
+  PASS  examples/diffusion_guidance  (runnable)
+  PASS  examples/diffusion_guidance  (runnable)
+  PASS  examples/advanced/gumiho  (runnable)
+  PASS  examples/advanced/rlvr_reasoning_suite  (runnable)
+  PASS  examples/advanced/mla  (runnable)
+  PASS  examples/advanced/Fast_dLLM_v2  (runnable)
+  PASS  examples/advanced/Nemotron_Nano_12B_v2  (runnable)
+  PASS  examples/advanced/Diffusion_LLM  (runnable)
+  PASS  examples/advanced/Jet_nemotron  (runnable)
+  PASS  examples/advanced/Tessera_Empirical_Software_Agent  (runnable)
+  PASS  examples/integration/HF_transformer  (runnable)
+  PASS  examples/optimization  (runnable)
+
+[surface_audit:examples] passed=23 failed=0 skipped=2
+[surface_audit:benchmarks] 26 entries  {'runnable': 11, 'runnable_optional': 0, 'compile_only': 14, 'scaffold': 0, 'broken': 0, 'archived': 1}
+  PASS  benchmarks  (runnable)
+  PASS  benchmarks/baselines  (runnable)
+  PASS  benchmarks/apple_gpu  (runnable)
+  PASS  benchmarks/apple_gpu  (runnable)
+  PASS  benchmarks/rocm  (compile_only)
+  PASS  benchmarks/math  (compile_only)
+  PASS  benchmarks/x86  (compile_only)
+  PASS  benchmarks/autodiff  (compile_only)
+  PASS  benchmarks/dlop_longtail_core  (compile_only)
+  PASS  benchmarks/lattice_reasoning_core  (compile_only)
+  PASS  benchmarks/rl  (compile_only)
+  PASS  benchmarks/e2e_spine  (compile_only)
+  PASS  benchmarks/linalg  (runnable)
+  PASS  benchmarks/apple_cpu  (runnable)
+  PASS  benchmarks/spectral  (runnable)
+  PASS  benchmarks/spectral  (runnable)
+  PASS  benchmarks/Tessera_Operator_Benchmarks  (runnable)
+  PASS  benchmarks/Tessera_SuperBench  (compile_only)
+  PASS  benchmarks/DeepScholar-Bench  (runnable)
+  PASS  benchmarks/common  (compile_only)
+  PASS  benchmarks/clifford_core  (compile_only)
+  PASS  benchmarks/corrdiff  (runnable)
+  PASS  benchmarks/energy_core  (compile_only)
+  PASS  benchmarks/grid_ai_core  (compile_only)
+  PASS  benchmarks/visual_complex_core  (compile_only)
+  NOT-RUN  archive/benchmarks/matrix_multiplication  (archived)
+
+[surface_audit:benchmarks] passed=25 failed=0 skipped=0
+[surface_audit:research] 2 entries  {'runnable': 1, 'runnable_optional': 0, 'compile_only': 1, 'scaffold': 0, 'broken': 0, 'archived': 0}
+  PASS  research/pddl_instruct  (runnable)
+  PASS  research/sandbox_compilers  (compile_only)
+
+[surface_audit:research] passed=2 failed=0 skipped=0
+[surface_audit:tools] 6 entries  {'runnable': 3, 'runnable_optional': 0, 'compile_only': 2, 'scaffold': 0, 'broken': 0, 'archived': 1}
+  PASS  tools/tessera-opt  (compile_only)
+  PASS  tools/tessera-translate  (runnable)
+  PASS  tools/profiler  (compile_only)
+  PASS  tools/profiler/scripts  (runnable)
+  PASS  tools/roofline_tools  (runnable)
+  NOT-RUN  tools/CLI/Tessera_CLI_Starter_v0_1  (archived)
+
+[surface_audit:tools] passed=5 failed=0 skipped=0
+[surface_audit:tests] 10 entries  {'runnable': 1, 'runnable_optional': 0, 'compile_only': 3, 'scaffold': 4, 'broken': 0, 'archived': 2}
+  PASS  tests/unit  (runnable)
+  PASS  tests/unit/_slow_subset  (compile_only)
+  PASS  tests/tessera-ir  (compile_only)
+  PASS  tests/performance  (compile_only)
+  NOT-RUN  tests/kernel_tests  (scaffold)
+  NOT-RUN  tests/tessera_tests/tessera_kernels_scaffold  (archived)
+  NOT-RUN  tests/tessera_numerical_validation  (scaffold)
+  NOT-RUN  tests/integration  (scaffold)
+  NOT-RUN  tests/regression  (scaffold)
+  NOT-RUN  archive/tests  (archived)
+
+[surface_audit:tests] passed=4 failed=0 skipped=0
+[claim_lint:all surfaces + api_reference] clean — 8 scaffold/broken/archived directories scanned + API reference op-name references resolved.

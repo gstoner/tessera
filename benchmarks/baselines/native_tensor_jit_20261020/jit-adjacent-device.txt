@@ -1,0 +1,416 @@
+....................................................F....F..FF..FF...... [ 61%]
+FF......................FFFF..................                           [100%]
+=================================== FAILURES ===================================
+_______________ test_lhs_manifest_semantics_checked_before_cuda ________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78641f20a740>
+
+    def test_lhs_manifest_semantics_checked_before_cuda(monkeypatch):
+        from copy import deepcopy
+        from tessera.compiler import nvidia_tensor_lhs as lhs
+        from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
+        args=(np.ones((17,35),np.float16),np.ones((35,19),np.float16))
+        layer_lhs(*args)
+        artifact=layer_lhs.runtime_artifact()
+        metadata=deepcopy(artifact.metadata)
+        manifest=metadata["native_program"]
+>       manifest["semantics"]["producer"]="tessera.rmsnorm"
+        ^^^^^^^^^^^^^^^^^^^^^
+E       KeyError: 'semantics'
+
+tests/device/nvidia/test_lhs_tensor_jit.py:158: KeyError
+____________ test_lhs_storage_switch_keeps_distinct_sealed_packages ____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7864699365f0>
+
+    def test_lhs_storage_switch_keeps_distinct_sealed_packages(monkeypatch):
+        source = np.arange(17*35,dtype=np.float16).reshape(17,35)/1000
+        rhs = np.arange(35*19,dtype=np.float16).reshape(35,19)/1000
+        snapshots = {}
+        for order in ("C","F"):
+            right = np.array(rhs,copy=True,order=order)
+            actual = rms_lhs(source,right)
+            snapshots[order] = (actual.copy(),rms_lhs.native_lhs_packages())
+>       assert snapshots["C"][1][1].image.image_digest != snapshots["F"][1][1].image.image_digest
+               ^^^^^^^^^^^^^^^^^^^^
+E       IndexError: tuple index out of range
+
+tests/device/nvidia/test_lhs_tensor_jit.py:239: IndexError
+__________________ test_public_native_producer_chain[C-fp16] ___________________
+
+dtype = 'fp16', rhs_order = 'C'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78641f20ad60>
+
+    @pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+    @pytest.mark.parametrize("rhs_order", ["C", "F"])
+    def test_public_native_producer_chain(dtype, rhs_order, monkeypatch):
+        import subprocess
+        storage = _storage(dtype)
+        rng = np.random.default_rng(120518)
+        source = rng.normal(0, .2, (17, 35)).astype(storage)
+        rhs = np.array(rng.normal(0, .2, (35, 19)), dtype=storage, order=rhs_order)
+        x = source.astype(np.float64)
+        normalized = (x / np.sqrt(np.mean(x*x, axis=-1, keepdims=True)+1e-5)).astype(storage)
+        y = normalized.astype(np.float64)
+        exponential = np.exp(y-np.max(y, axis=-1, keepdims=True))
+        edge = (exponential/exponential.sum(axis=-1, keepdims=True)).astype(storage)
+        expected = edge.astype(np.float64) @ rhs.astype(np.float64)
+        actual = rms_softmax_lhs(source, rhs)
+        assert rms_softmax_lhs.execution_kind == "native_gpu"
+>       assert len(rms_softmax_lhs.native_lhs_packages()) == 3
+E       assert 0 == 3
+E        +  where 0 = len(())
+E        +    where () = native_lhs_packages()
+E        +      where native_lhs_packages = rms_softmax_lhs.native_lhs_packages
+
+tests/device/nvidia/test_lhs_tensor_jit.py:290: AssertionError
+__________________ test_public_native_producer_chain[C-bf16] ___________________
+
+dtype = 'bf16', rhs_order = 'C'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7864181caba0>
+
+    @pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+    @pytest.mark.parametrize("rhs_order", ["C", "F"])
+    def test_public_native_producer_chain(dtype, rhs_order, monkeypatch):
+        import subprocess
+        storage = _storage(dtype)
+        rng = np.random.default_rng(120518)
+        source = rng.normal(0, .2, (17, 35)).astype(storage)
+        rhs = np.array(rng.normal(0, .2, (35, 19)), dtype=storage, order=rhs_order)
+        x = source.astype(np.float64)
+        normalized = (x / np.sqrt(np.mean(x*x, axis=-1, keepdims=True)+1e-5)).astype(storage)
+        y = normalized.astype(np.float64)
+        exponential = np.exp(y-np.max(y, axis=-1, keepdims=True))
+        edge = (exponential/exponential.sum(axis=-1, keepdims=True)).astype(storage)
+        expected = edge.astype(np.float64) @ rhs.astype(np.float64)
+        actual = rms_softmax_lhs(source, rhs)
+        assert rms_softmax_lhs.execution_kind == "native_gpu"
+>       assert len(rms_softmax_lhs.native_lhs_packages()) == 3
+E       assert 0 == 3
+E        +  where 0 = len(())
+E        +    where () = native_lhs_packages()
+E        +      where native_lhs_packages = rms_softmax_lhs.native_lhs_packages
+
+tests/device/nvidia/test_lhs_tensor_jit.py:290: AssertionError
+_____ test_public_three_producer_scratch_alternation[shape0-False-C-fp16] ______
+
+dtype = 'fp16', rhs_order = 'C', fused = False, shape = (17, 35, 19)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7864181e17f0>
+
+    @pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+    @pytest.mark.parametrize("rhs_order", ["C", "F"])
+    @pytest.mark.parametrize("fused", [False, True])
+    @pytest.mark.parametrize("shape", [(17,35,19), (64,256,64)])
+    def test_public_three_producer_scratch_alternation(dtype,rhs_order,fused,shape,monkeypatch):
+        import subprocess
+        m,k,n=shape
+        storage=_storage(dtype)
+        rng=np.random.default_rng(120521)
+        source=rng.normal(0,.2,(m,k)).astype(storage)
+        rhs=np.array(rng.normal(0,.2,(k,n)),dtype=storage,order=rhs_order)
+        bias=rng.normal(0,.2,n).astype(np.float32)
+        residual=rng.normal(0,.2,(m,n)).astype(np.float32)
+        xf=source.astype(np.float64)
+        centered=xf-xf.mean(axis=-1,keepdims=True)
+        layer=(centered/np.sqrt(np.mean(centered*centered,axis=-1,keepdims=True)+1e-5)).astype(storage)
+        lf=layer.astype(np.float64)
+        rms=(lf/np.sqrt(np.mean(lf*lf,axis=-1,keepdims=True)+1e-5)).astype(storage)
+        rf=rms.astype(np.float64)
+        exponential=np.exp(rf-rf.max(axis=-1,keepdims=True))
+        edge=(exponential/exponential.sum(axis=-1,keepdims=True)).astype(storage)
+        expected=edge.astype(np.float64)@rhs.astype(np.float64)
+        if fused:
+            expected=(np.maximum(expected+bias,0)+residual).astype(np.float16)
+        function=layer_rms_softmax_lhs_fused if fused else layer_rms_softmax_lhs
+        args=(source,rhs,bias,residual) if fused else (source,rhs)
+        actual=function(*args)
+        assert function.execution_kind=="native_gpu"
+>       assert len(function.native_lhs_packages())==4
+E       AssertionError: assert 0 == 4
+E        +  where 0 = len(())
+E        +    where () = native_lhs_packages()
+E        +      where native_lhs_packages = <TesseraJitFn 'layer_rms_softmax_lhs' effect=pure deterministic=False target='nvidia_sm120'>.native_lhs_packages
+
+tests/device/nvidia/test_lhs_tensor_jit.py:346: AssertionError
+_____ test_public_three_producer_scratch_alternation[shape0-False-C-bf16] ______
+
+dtype = 'bf16', rhs_order = 'C', fused = False, shape = (17, 35, 19)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78641f20b460>
+
+    @pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+    @pytest.mark.parametrize("rhs_order", ["C", "F"])
+    @pytest.mark.parametrize("fused", [False, True])
+    @pytest.mark.parametrize("shape", [(17,35,19), (64,256,64)])
+    def test_public_three_producer_scratch_alternation(dtype,rhs_order,fused,shape,monkeypatch):
+        import subprocess
+        m,k,n=shape
+        storage=_storage(dtype)
+        rng=np.random.default_rng(120521)
+        source=rng.normal(0,.2,(m,k)).astype(storage)
+        rhs=np.array(rng.normal(0,.2,(k,n)),dtype=storage,order=rhs_order)
+        bias=rng.normal(0,.2,n).astype(np.float32)
+        residual=rng.normal(0,.2,(m,n)).astype(np.float32)
+        xf=source.astype(np.float64)
+        centered=xf-xf.mean(axis=-1,keepdims=True)
+        layer=(centered/np.sqrt(np.mean(centered*centered,axis=-1,keepdims=True)+1e-5)).astype(storage)
+        lf=layer.astype(np.float64)
+        rms=(lf/np.sqrt(np.mean(lf*lf,axis=-1,keepdims=True)+1e-5)).astype(storage)
+        rf=rms.astype(np.float64)
+        exponential=np.exp(rf-rf.max(axis=-1,keepdims=True))
+        edge=(exponential/exponential.sum(axis=-1,keepdims=True)).astype(storage)
+        expected=edge.astype(np.float64)@rhs.astype(np.float64)
+        if fused:
+            expected=(np.maximum(expected+bias,0)+residual).astype(np.float16)
+        function=layer_rms_softmax_lhs_fused if fused else layer_rms_softmax_lhs
+        args=(source,rhs,bias,residual) if fused else (source,rhs)
+        actual=function(*args)
+        assert function.execution_kind=="native_gpu"
+>       assert len(function.native_lhs_packages())==4
+E       AssertionError: assert 0 == 4
+E        +  where 0 = len(())
+E        +    where () = native_lhs_packages()
+E        +      where native_lhs_packages = <TesseraJitFn 'layer_rms_softmax_lhs' effect=pure deterministic=False target='nvidia_sm120'>.native_lhs_packages
+
+tests/device/nvidia/test_lhs_tensor_jit.py:346: AssertionError
+_____ test_public_three_producer_scratch_alternation[shape1-False-C-fp16] ______
+
+dtype = 'fp16', rhs_order = 'C', fused = False, shape = (64, 256, 64)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78641f2b4360>
+
+    @pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+    @pytest.mark.parametrize("rhs_order", ["C", "F"])
+    @pytest.mark.parametrize("fused", [False, True])
+    @pytest.mark.parametrize("shape", [(17,35,19), (64,256,64)])
+    def test_public_three_producer_scratch_alternation(dtype,rhs_order,fused,shape,monkeypatch):
+        import subprocess
+        m,k,n=shape
+        storage=_storage(dtype)
+        rng=np.random.default_rng(120521)
+        source=rng.normal(0,.2,(m,k)).astype(storage)
+        rhs=np.array(rng.normal(0,.2,(k,n)),dtype=storage,order=rhs_order)
+        bias=rng.normal(0,.2,n).astype(np.float32)
+        residual=rng.normal(0,.2,(m,n)).astype(np.float32)
+        xf=source.astype(np.float64)
+        centered=xf-xf.mean(axis=-1,keepdims=True)
+        layer=(centered/np.sqrt(np.mean(centered*centered,axis=-1,keepdims=True)+1e-5)).astype(storage)
+        lf=layer.astype(np.float64)
+        rms=(lf/np.sqrt(np.mean(lf*lf,axis=-1,keepdims=True)+1e-5)).astype(storage)
+        rf=rms.astype(np.float64)
+        exponential=np.exp(rf-rf.max(axis=-1,keepdims=True))
+        edge=(exponential/exponential.sum(axis=-1,keepdims=True)).astype(storage)
+        expected=edge.astype(np.float64)@rhs.astype(np.float64)
+        if fused:
+            expected=(np.maximum(expected+bias,0)+residual).astype(np.float16)
+        function=layer_rms_softmax_lhs_fused if fused else layer_rms_softmax_lhs
+        args=(source,rhs,bias,residual) if fused else (source,rhs)
+        actual=function(*args)
+        assert function.execution_kind=="native_gpu"
+>       assert len(function.native_lhs_packages())==4
+E       AssertionError: assert 0 == 4
+E        +  where 0 = len(())
+E        +    where () = native_lhs_packages()
+E        +      where native_lhs_packages = <TesseraJitFn 'layer_rms_softmax_lhs' effect=pure deterministic=False target='nvidia_sm120'>.native_lhs_packages
+
+tests/device/nvidia/test_lhs_tensor_jit.py:346: AssertionError
+_____ test_public_three_producer_scratch_alternation[shape1-False-C-bf16] ______
+
+dtype = 'bf16', rhs_order = 'C', fused = False, shape = (64, 256, 64)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78641f2b4280>
+
+    @pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+    @pytest.mark.parametrize("rhs_order", ["C", "F"])
+    @pytest.mark.parametrize("fused", [False, True])
+    @pytest.mark.parametrize("shape", [(17,35,19), (64,256,64)])
+    def test_public_three_producer_scratch_alternation(dtype,rhs_order,fused,shape,monkeypatch):
+        import subprocess
+        m,k,n=shape
+        storage=_storage(dtype)
+        rng=np.random.default_rng(120521)
+        source=rng.normal(0,.2,(m,k)).astype(storage)
+        rhs=np.array(rng.normal(0,.2,(k,n)),dtype=storage,order=rhs_order)
+        bias=rng.normal(0,.2,n).astype(np.float32)
+        residual=rng.normal(0,.2,(m,n)).astype(np.float32)
+        xf=source.astype(np.float64)
+        centered=xf-xf.mean(axis=-1,keepdims=True)
+        layer=(centered/np.sqrt(np.mean(centered*centered,axis=-1,keepdims=True)+1e-5)).astype(storage)
+        lf=layer.astype(np.float64)
+        rms=(lf/np.sqrt(np.mean(lf*lf,axis=-1,keepdims=True)+1e-5)).astype(storage)
+        rf=rms.astype(np.float64)
+        exponential=np.exp(rf-rf.max(axis=-1,keepdims=True))
+        edge=(exponential/exponential.sum(axis=-1,keepdims=True)).astype(storage)
+        expected=edge.astype(np.float64)@rhs.astype(np.float64)
+        if fused:
+            expected=(np.maximum(expected+bias,0)+residual).astype(np.float16)
+        function=layer_rms_softmax_lhs_fused if fused else layer_rms_softmax_lhs
+        args=(source,rhs,bias,residual) if fused else (source,rhs)
+        actual=function(*args)
+        assert function.execution_kind=="native_gpu"
+>       assert len(function.native_lhs_packages())==4
+E       AssertionError: assert 0 == 4
+E        +  where 0 = len(())
+E        +    where () = native_lhs_packages()
+E        +      where native_lhs_packages = <TesseraJitFn 'layer_rms_softmax_lhs' effect=pure deterministic=False target='nvidia_sm120'>.native_lhs_packages
+
+tests/device/nvidia/test_lhs_tensor_jit.py:346: AssertionError
+________ test_public_two_operand_jit_and_portable_replay[ordinary-fp16] ________
+
+dtype = 'fp16', variant = 'ordinary'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x786469936510>
+
+    @pytest.mark.hardware_nvidia
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("variant",["ordinary","reordered","fused","bounded"])
+    def test_public_two_operand_jit_and_portable_replay(dtype,variant,monkeypatch):
+        if rt._nvidia_device_name()!="sm_120":pytest.skip("exact SM120 required")
+        base=public_dag_reordered if variant=="reordered" else public_dag_fused if variant=="fused" else public_dag
+        function=ts.jit(target="nvidia_sm120",**(
+            {"shape_bounds":{"M":32,"N":24,"K":64}} if variant=="bounded" else {}))(base._fn)
+        storage=np.float16
+        if dtype=="bf16":
+            import ml_dtypes
+            storage=ml_dtypes.bfloat16
+        rng=np.random.default_rng(882)
+        def frame(m,n,k):
+            a=rng.normal(0,.2,(m,k)).astype(storage);b=rng.normal(0,.2,(k,n)).astype(storage)
+            expected=oracle(a,b,1)
+            if variant=="fused":
+                bias=rng.normal(0,.2,n).astype(np.float32);residual=rng.normal(0,.2,(m,n)).astype(np.float32)
+                expected=(np.maximum(expected+bias,0)+residual).astype(np.float16)
+                args=(a,b,bias,residual)
+            else:args=(b,a) if variant=="reordered" else (a,b)
+            return args,expected
+        args,expected=frame(17,19,35)
+        first=function(*args);saved=first.copy()
+        np.testing.assert_allclose(first,expected,rtol=.015,atol=.015)
+        assert function.execution_kind=="native_gpu"
+        packages=function.native_lhs_packages()
+>       assert len(packages)==3
+E       assert 0 == 3
+E        +  where 0 = len(())
+
+tests/device/nvidia/test_native_tensor_dag.py:140: AssertionError
+________ test_public_two_operand_jit_and_portable_replay[ordinary-bf16] ________
+
+dtype = 'bf16', variant = 'ordinary'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78641f116ac0>
+
+    @pytest.mark.hardware_nvidia
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("variant",["ordinary","reordered","fused","bounded"])
+    def test_public_two_operand_jit_and_portable_replay(dtype,variant,monkeypatch):
+        if rt._nvidia_device_name()!="sm_120":pytest.skip("exact SM120 required")
+        base=public_dag_reordered if variant=="reordered" else public_dag_fused if variant=="fused" else public_dag
+        function=ts.jit(target="nvidia_sm120",**(
+            {"shape_bounds":{"M":32,"N":24,"K":64}} if variant=="bounded" else {}))(base._fn)
+        storage=np.float16
+        if dtype=="bf16":
+            import ml_dtypes
+            storage=ml_dtypes.bfloat16
+        rng=np.random.default_rng(882)
+        def frame(m,n,k):
+            a=rng.normal(0,.2,(m,k)).astype(storage);b=rng.normal(0,.2,(k,n)).astype(storage)
+            expected=oracle(a,b,1)
+            if variant=="fused":
+                bias=rng.normal(0,.2,n).astype(np.float32);residual=rng.normal(0,.2,(m,n)).astype(np.float32)
+                expected=(np.maximum(expected+bias,0)+residual).astype(np.float16)
+                args=(a,b,bias,residual)
+            else:args=(b,a) if variant=="reordered" else (a,b)
+            return args,expected
+        args,expected=frame(17,19,35)
+        first=function(*args);saved=first.copy()
+        np.testing.assert_allclose(first,expected,rtol=.015,atol=.015)
+        assert function.execution_kind=="native_gpu"
+        packages=function.native_lhs_packages()
+>       assert len(packages)==3
+E       assert 0 == 3
+E        +  where 0 = len(())
+
+tests/device/nvidia/test_native_tensor_dag.py:140: AssertionError
+_______ test_public_two_operand_jit_and_portable_replay[reordered-fp16] ________
+
+dtype = 'fp16', variant = 'reordered'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78641f116c80>
+
+    @pytest.mark.hardware_nvidia
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("variant",["ordinary","reordered","fused","bounded"])
+    def test_public_two_operand_jit_and_portable_replay(dtype,variant,monkeypatch):
+        if rt._nvidia_device_name()!="sm_120":pytest.skip("exact SM120 required")
+        base=public_dag_reordered if variant=="reordered" else public_dag_fused if variant=="fused" else public_dag
+        function=ts.jit(target="nvidia_sm120",**(
+            {"shape_bounds":{"M":32,"N":24,"K":64}} if variant=="bounded" else {}))(base._fn)
+        storage=np.float16
+        if dtype=="bf16":
+            import ml_dtypes
+            storage=ml_dtypes.bfloat16
+        rng=np.random.default_rng(882)
+        def frame(m,n,k):
+            a=rng.normal(0,.2,(m,k)).astype(storage);b=rng.normal(0,.2,(k,n)).astype(storage)
+            expected=oracle(a,b,1)
+            if variant=="fused":
+                bias=rng.normal(0,.2,n).astype(np.float32);residual=rng.normal(0,.2,(m,n)).astype(np.float32)
+                expected=(np.maximum(expected+bias,0)+residual).astype(np.float16)
+                args=(a,b,bias,residual)
+            else:args=(b,a) if variant=="reordered" else (a,b)
+            return args,expected
+        args,expected=frame(17,19,35)
+        first=function(*args);saved=first.copy()
+        np.testing.assert_allclose(first,expected,rtol=.015,atol=.015)
+        assert function.execution_kind=="native_gpu"
+        packages=function.native_lhs_packages()
+>       assert len(packages)==3
+E       assert 0 == 3
+E        +  where 0 = len(())
+
+tests/device/nvidia/test_native_tensor_dag.py:140: AssertionError
+_______ test_public_two_operand_jit_and_portable_replay[reordered-bf16] ________
+
+dtype = 'bf16', variant = 'reordered'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x78620ce22740>
+
+    @pytest.mark.hardware_nvidia
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("variant",["ordinary","reordered","fused","bounded"])
+    def test_public_two_operand_jit_and_portable_replay(dtype,variant,monkeypatch):
+        if rt._nvidia_device_name()!="sm_120":pytest.skip("exact SM120 required")
+        base=public_dag_reordered if variant=="reordered" else public_dag_fused if variant=="fused" else public_dag
+        function=ts.jit(target="nvidia_sm120",**(
+            {"shape_bounds":{"M":32,"N":24,"K":64}} if variant=="bounded" else {}))(base._fn)
+        storage=np.float16
+        if dtype=="bf16":
+            import ml_dtypes
+            storage=ml_dtypes.bfloat16
+        rng=np.random.default_rng(882)
+        def frame(m,n,k):
+            a=rng.normal(0,.2,(m,k)).astype(storage);b=rng.normal(0,.2,(k,n)).astype(storage)
+            expected=oracle(a,b,1)
+            if variant=="fused":
+                bias=rng.normal(0,.2,n).astype(np.float32);residual=rng.normal(0,.2,(m,n)).astype(np.float32)
+                expected=(np.maximum(expected+bias,0)+residual).astype(np.float16)
+                args=(a,b,bias,residual)
+            else:args=(b,a) if variant=="reordered" else (a,b)
+            return args,expected
+        args,expected=frame(17,19,35)
+        first=function(*args);saved=first.copy()
+        np.testing.assert_allclose(first,expected,rtol=.015,atol=.015)
+        assert function.execution_kind=="native_gpu"
+        packages=function.native_lhs_packages()
+>       assert len(packages)==3
+E       assert 0 == 3
+E        +  where 0 = len(())
+
+tests/device/nvidia/test_native_tensor_dag.py:140: AssertionError
+=========================== short test summary info ============================
+FAILED tests/device/nvidia/test_lhs_tensor_jit.py::test_lhs_manifest_semantics_checked_before_cuda
+FAILED tests/device/nvidia/test_lhs_tensor_jit.py::test_lhs_storage_switch_keeps_distinct_sealed_packages
+FAILED tests/device/nvidia/test_lhs_tensor_jit.py::test_public_native_producer_chain[C-fp16]
+FAILED tests/device/nvidia/test_lhs_tensor_jit.py::test_public_native_producer_chain[C-bf16]
+FAILED tests/device/nvidia/test_lhs_tensor_jit.py::test_public_three_producer_scratch_alternation[shape0-False-C-fp16]
+FAILED tests/device/nvidia/test_lhs_tensor_jit.py::test_public_three_producer_scratch_alternation[shape0-False-C-bf16]
+FAILED tests/device/nvidia/test_lhs_tensor_jit.py::test_public_three_producer_scratch_alternation[shape1-False-C-fp16]
+FAILED tests/device/nvidia/test_lhs_tensor_jit.py::test_public_three_producer_scratch_alternation[shape1-False-C-bf16]
+FAILED tests/device/nvidia/test_native_tensor_dag.py::test_public_two_operand_jit_and_portable_replay[ordinary-fp16]
+FAILED tests/device/nvidia/test_native_tensor_dag.py::test_public_two_operand_jit_and_portable_replay[ordinary-bf16]
+FAILED tests/device/nvidia/test_native_tensor_dag.py::test_public_two_operand_jit_and_portable_replay[reordered-fp16]
+FAILED tests/device/nvidia/test_native_tensor_dag.py::test_public_two_operand_jit_and_portable_replay[reordered-bf16]
+12 failed, 106 passed in 188.08s (0:03:08)

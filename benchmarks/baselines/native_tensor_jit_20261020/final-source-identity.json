@@ -1,0 +1,36 @@
+{
+  "base_commit": "fac21f5bc37deb99b4be8ef82b21f4d66296c1d1",
+  "private_checkpoint": "b09663678ddee84381d3331cceadbe1cb213c973",
+  "uncommitted_candidate": true,
+  "compiler_source_matches_build_receipt": true,
+  "compiler_sha256": "ff8bad652b1a2c0f75d58c5589e37433e4774e5032664e3d202fa112cd59e070",
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "88006b2bb54929de44849899fe14d1bb3195525cf3c1aacccb7deea6b0476d9d",
+    "python/tessera/compiler/execution_matrix.py": "00081a6ec526f7026090ee46795769a49a8934cfaf8a6e4a39046e9229a05d6d",
+    "python/tessera/compiler/native_tensor_program.py": "34840d5af39c065b60c2f26e9933f7a4d723c4ef5c661013e5ef3d3b3885fe2f",
+    "python/tessera/compiler/native_tensor_jit.py": "adae140789027db75eca1e6fbc8f0b434d48474da1971038d63af677c0629bd5",
+    "python/tessera/compiler/prepared_native_tensor_frame.py": "9b8c440ac08f41d66cae5823832b629098e661080be67a9a450ca45adec8dd07",
+    "python/tessera/runtime.py": "92a09b5f2bc8b2cdfb52617712e06563c23044b67a67047c46fdda6d1860c431",
+    "tests/device/nvidia/test_native_tensor_program_jit.py": "81fbb219bca299c9c4e2716a9a92c96086d12b76570bc9891d722d7e16cd3230",
+    "tests/device/nvidia/test_lhs_tensor_jit.py": "de9835c0d9a01af57b9efd273f3ca250d353d99e81601eefbe6a50a4dca6384e",
+    "tests/device/nvidia/test_native_tensor_dag.py": "4b214ee187721f0b93a5997e13f0107bb5fba34d65e2b35c3b0f27450d21a6a0",
+    "benchmarks/nvidia/record_native_tensor_jit.py": "3968ffe2e6ff96b59676f745066ca0527cc235d9d088f7020a6578d287f84ff1"
+  },
+  "post_measurement_changes": [
+    "execution_matrix named proof annotations only; see execution-proof-annotations.json",
+    "resident input admission only; host AST equivalence in resident-admission-host-equivalence.json",
+    "device tests and documentation expanded"
+  ],
+  "owning_device_source_sha256": {
+    "python/tessera/compiler/jit.py": "88006b2bb54929de44849899fe14d1bb3195525cf3c1aacccb7deea6b0476d9d",
+    "python/tessera/compiler/native_tensor_program.py": "34840d5af39c065b60c2f26e9933f7a4d723c4ef5c661013e5ef3d3b3885fe2f",
+    "python/tessera/compiler/native_tensor_jit.py": "adae140789027db75eca1e6fbc8f0b434d48474da1971038d63af677c0629bd5",
+    "python/tessera/compiler/prepared_native_tensor_frame.py": "9b8c440ac08f41d66cae5823832b629098e661080be67a9a450ca45adec8dd07",
+    "python/tessera/runtime.py": "92a09b5f2bc8b2cdfb52617712e06563c23044b67a67047c46fdda6d1860c431",
+    "tests/device/nvidia/test_native_tensor_program_jit.py": "81fbb219bca299c9c4e2716a9a92c96086d12b76570bc9891d722d7e16cd3230",
+    "tests/device/nvidia/test_lhs_tensor_jit.py": "de9835c0d9a01af57b9efd273f3ca250d353d99e81601eefbe6a50a4dca6384e",
+    "tests/device/nvidia/test_native_tensor_dag.py": "4b214ee187721f0b93a5997e13f0107bb5fba34d65e2b35c3b0f27450d21a6a0",
+    "benchmarks/nvidia/record_native_tensor_jit.py": "3968ffe2e6ff96b59676f745066ca0527cc235d9d088f7020a6578d287f84ff1"
+  },
+  "owning_device_matches_final_source": true
+}

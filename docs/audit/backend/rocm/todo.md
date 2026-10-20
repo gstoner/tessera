@@ -12,6 +12,10 @@ Sync: NATIVE-TENSOR-JIT-20261020.
 
 Contract: docs/spec/NATIVE_TENSOR_JIT.md.
 
+Evidence: benchmarks/baselines/native_tensor_jit_20261020/README.md.
+
+Native frame capacity checks run before outlining, during typed verification and before export, matching 64 stages/128 buffers and aligned 64-bit storage. This is an SM120 contract; shared host/registry compatibility is assessed, with no sibling physical execution or schedule promotion.
+
 Not applicable to this backend's physical execution: the private native tensor executor is exact SM120/CUDA. Shared JIT/cache/inspection and execution-matrix changes require host regression gates; no sibling schedule, dtype or runtime promotion. Independent native-program integration remains follow-up required.
 
 

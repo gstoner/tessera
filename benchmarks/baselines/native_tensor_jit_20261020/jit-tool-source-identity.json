@@ -1,0 +1,12 @@
+{
+  "compiler_sha256": "ff8bad652b1a2c0f75d58c5589e37433e4774e5032664e3d202fa112cd59e070",
+  "base_commit": "b09663678ddee84381d3331cceadbe1cb213c973",
+  "uncommitted_compiler_changes": true,
+  "compiler_source_sha256": {
+    "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "b32bb8ff415ba103499ae6d8624c7e7aaa29e85cfddc36f62e88abafd61e174f",
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "593f7802cd7f9c178c9c91ef5466cd21b68f039284cf4dc223e7204b51405918",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "18d6d54c9c094ebdb4550f162f057a5e0b00cc8a73db1ff042b8d484685f5545"
+  },
+  "configuration": "LLVM/MLIR23.1.1 optimized with assertions; existing six-backend Q/build",
+  "scope": "capacity and aligned-arena verification additions; no numerical kernel change"
+}

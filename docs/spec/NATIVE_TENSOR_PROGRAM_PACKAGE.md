@@ -40,8 +40,8 @@ compact rank-two f16/bf16 inputs, admitted unary producers and a plain matmul.
 Explicit matching FP32 normalization policy survives unchanged. Reversed
 frontend argument order and two-sided producer dependencies remain native SSA.
 
-NativeTensorProgram stores immutable original Graph, complete Target, projected
-members and native image bytes. Construction validates native source replay,
+NativeTensorProgram stores immutable original Graph, actual Schedule and Tile,
+complete Target, projected members and native image bytes. Construction validates adjacent Schedule/Tile projections and native source replay,
 binds the external original Graph seal, reprojects each member from the actual
 Target and compares each image to native code generation. Replacing a frozen
 package field runs those checks again. Frame inspection returns a copy.
@@ -60,7 +60,8 @@ arguments. Compiler tools are forbidden during binding and warm replay.
 Independent float64 oracles include half-storage producer rounding, changed
 inputs, independent completed outputs, intact guards and stable arena capacity.
 
-Ordinary fn(a, b) dispatch and compiler-free portable deserialization remain
+The ordinary fn(a, b) integration candidate and its evidence are described in
+docs/spec/NATIVE_TENSOR_JIT.md. Compiler-free portable deserialization remains
 open. This API does not silently substitute for fused/dynamic legacy packages.
 There is no dictionary loader that admits images using self-consistent hashes
 alone. General source/layout/dynamic/AD and five-slice closure remain open.

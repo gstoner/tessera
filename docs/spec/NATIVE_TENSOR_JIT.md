@@ -39,22 +39,36 @@ Schedule, Tile, complete Target, member IR and image bytes are revalidated.
 This is not compiler-free portable restoration. Retained preparation and calls
 use the previously verified values without tools.
 
-## Evidence and remaining gates
+## Capacity and evidence
 
-Initial owning RTX5070 overlay proof passes twelve tests: eight source/storage
-JIT cases and four RuntimeArtifact executions. Changed input generations,
-independent outputs, warm tracing/tool prohibition, close/rebind and owned
-stream refusal are covered. This uses the preserved source-package compiler;
-matching final compiler and broader exact-device regressions remain required.
+Native admission, typed invocation verification and frame export enforce the
+published 64-stage/128-buffer limits before runtime preparation. Aggregate
+256-byte-aligned arena arithmetic uses a wider intermediate and rejects
+overflow of the 64-bit frame capacity. Python transport checks the same
+geometry and storage envelope. Boundary metadata tests allocate no described
+memory; a 64-stage source program also executes numerically on RTX5070.
 
-Focused package/registry/audit checks pass 343 cases. Updated transport,
-restoration, executor and inspection tests pass 52 cases; overlapping tests
-must not be added together. Owned-input scope and tool-free cache/rebind have
-a host transport regression.
+Matching RTX5070 compiler proof passes all 53 ordinary/artifact/boundary/
+resident cases. The separate native-frame owner suite passes 45 cases, the
+legacy/adjacent suite passes 118, and eight explicit source-package tests pass.
+ABI-specific legacy fixtures explicitly select the predecessor; the new suite
+uses unmodified ordinary dispatch. Initial fixture and selector failures remain
+in the packet. Source/Target/images for all eight original programs are unchanged.
 
-Before publication: align native admission with all frame capacity limits;
-run matching-toolchain resident/stream/lifetime and adjacent route tests;
-record paired public/device timings; finish documentation, type/lint, full
-unit and production compiler-route gates. Wider producer, layout, dynamic,
-AD, encoded storage and compiler-free portable work remain open. No aggregate
-five-slice closure or physical schedule/performance promotion follows.
+Focused host gates pass 602 tests; final production compiler proof passes 2594
+with zero skips. Resident admission passes 19 cases; Ruff and zero-baseline Mypy
+pass. The full CPU run passes 30783 with 3710 declared skips, plus one recorder
+naming failure resolved by indexing the recorder and a 319-test focused follow-up gate.
+Counts from overlapping runs are not added. Evidence and exact identities:
+benchmarks/baselines/native_tensor_jit_20261020/README.md.
+
+Paired tiny-program completed-public measurements improve 1.8853-2.4551x
+over the merged-main legacy control, across six comparable cases and both
+orders. Native cold calls still cost 1.9-3.2 seconds plus separately measured
+decoration. Two-sided captured device windows are slower despite identical
+producer images and consumer instruction/directive streams after entry
+normalization. Runtime/capture/device attribution remains open; no physical
+schedule or pure-kernel promotion is claimed.
+
+Exact-head delivery CI and review remain required before merge. Wider producer/layout/dynamic/AD/encoded envelopes, compiler-free
+portable restoration and all five aggregate programs remain open.

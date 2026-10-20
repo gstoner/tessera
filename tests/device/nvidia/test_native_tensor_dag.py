@@ -10,6 +10,19 @@ from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
 from tests.unit.test_native_sm120_tensor_dag import dag_module
 
 
+@pytest.fixture
+def legacy_native_lhs_dispatch(monkeypatch):
+    """Preserve predecessor manifest/portable ABI coverage after ordinary migration.
+
+    The unmodified dispatcher is covered by test_native_tensor_program_jit.
+    Only tests asserting this predecessor's ABI select its dispatch here.
+    """
+    from tessera.compiler.jit import JitFn, _JIT_FALLBACK
+    monkeypatch.setattr(JitFn, "_try_native_tensor_program_call",
+                        lambda self, args, kwargs: _JIT_FALLBACK)
+
+
+
 def module(dtype, rhs_first=False, depth=1):
     graph=dag_module(dtype,rhs_first=rhs_first)
     fn=graph.functions[0];producers=fn.body[:-1];consumer=fn.body[-1]
@@ -113,7 +126,7 @@ def public_dag_deep(source,rhs):
 @pytest.mark.hardware_nvidia
 @pytest.mark.parametrize("dtype",["fp16","bf16"])
 @pytest.mark.parametrize("variant",["ordinary","reordered","fused","bounded"])
-def test_public_two_operand_jit_and_portable_replay(dtype,variant,monkeypatch):
+def test_public_two_operand_jit_and_portable_replay(legacy_native_lhs_dispatch,dtype,variant,monkeypatch):
     if rt._nvidia_device_name()!="sm_120":pytest.skip("exact SM120 required")
     base=public_dag_reordered if variant=="reordered" else public_dag_fused if variant=="fused" else public_dag
     function=ts.jit(target="nvidia_sm120",**(

@@ -54,6 +54,7 @@ def validate_frame(frame):
     buffers = frame["buffers"]
     if not isinstance(buffers, list) or not 2 <= len(buffers) <= 128:
         raise ValueError("native frame buffer extent differs")
+    arena = 0
     for index, spec in enumerate(buffers):
         if (not isinstance(spec, dict) or set(spec) != {"id", "role", "shape", "storage", "bytes"}
                 or type(spec["id"]) is not int or spec["id"] != index
@@ -65,6 +66,9 @@ def validate_frame(frame):
                 or spec["bytes"] != shape[0] * shape[1] * dtype.itemsize
                 or spec["bytes"] >= 2**63):
             raise ValueError("native frame physical buffer bytes differ")
+        arena = (arena + spec["bytes"] + 255) & ~255
+        if arena >= 2**64:
+            raise ValueError("native frame aligned arena exceeds its 64-bit capacity")
     roots = _integers(frame["roots"], limit=len(buffers))
     if roots != [i for i, spec in enumerate(buffers) if spec["role"] == "input"] or not roots:
         raise ValueError("native frame source argument roles differ")
@@ -87,6 +91,10 @@ def validate_frame(frame):
                 or not all(geometry) or type(stage["output"]) is not int
                 or not 0 <= stage["output"] < len(buffers)):
             raise ValueError("native frame launch extent differs")
+        if (geometry[0] >= 2**31 or geometry[1] > 65535 or geometry[2] > 65535
+                or geometry[3] > 1024 or geometry[4] > 1024 or geometry[5] > 64
+                or geometry[3] * geometry[4] * geometry[5] > 1024):
+            raise ValueError("native frame launch geometry exceeds CUDA limits")
 
 
 def _descriptor(spec, data=None, strides=None):

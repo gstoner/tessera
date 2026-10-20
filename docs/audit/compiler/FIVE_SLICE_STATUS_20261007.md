@@ -10,13 +10,22 @@ required CI passed and the CUDA launch-geometry finding was fixed and resolved.
 Its explicit source program foundation is delivered; the original five-slice
 scope remains open.
 
-A private ordinary-JIT follow-on now uses native admission, actual adjacent
-IR stages and a retained C++ owner. Initial RTX5070 overlay proof passes
-twelve cases, including runtime artifact round trips. Warm calls and
-close/rebind forbid tracing and compiler tools. Native owned inputs are pinned
-through consumption. Final capacity, matching compiler, resident/lifetime,
-benchmark and delivery gates remain open.
+The ordinary-JIT candidate now uses native admission, actual adjacent IR
+stages and a retained C++ owner. Matching RTX5070 proof passes 53 new JIT
+cases, 118 legacy/adjacent cases, 45 separate owner regressions and eight
+explicit source packages. Capacity checks match the 64-stage/128-buffer frame,
+CUDA geometry and aligned arena arithmetic. Warm calls forbid tracing/tools.
+
+Final production compiler proof passes 2594 with zero skips. Full CPU runs
+30783 passes and 3710 declared skips; its recorder naming failure is resolved
+in the benchmark index and checked by a 319-test focused follow-up gate. Ruff/Mypy,
+all five surface audits and the initial 33 generated-document checks pass.
 Contract: docs/spec/NATIVE_TENSOR_JIT.md.
+
+Paired tiny-program public calls improve 1.8853-2.4551x over merged-main source
+controls. Cold calls and the two-sided captured device-window gap remain open.
+Exact-head CI/review and all original aggregate requirements remain open.
+Evidence: benchmarks/baselines/native_tensor_jit_20261020/README.md.
 
 
 

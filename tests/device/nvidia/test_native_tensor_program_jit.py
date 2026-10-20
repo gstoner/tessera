@@ -80,3 +80,138 @@ def test_ordinary_jit_runtime_artifact_executes_verified_source(kind, storage):
         assert refused.get("ok") is False
     finally:
         fn.close_native_storage()
+
+
+@pytest.mark.timeout(300)
+def test_full_frame_stage_capacity_executes_source_program():
+    from tessera.compiler.native_tensor_program import compile_native_tensor_program
+    from tests.unit.test_native_tensor_program_capacity import chain_source
+
+    assert rt._nvidia_device_name() == "sm_120"
+    program = compile_native_tensor_program(chain_source(64))
+    assert program is not None and len(program.members) == 64
+    a = np.linspace(-1, 1, 16, dtype=np.float16).reshape(1, 16)
+    b = np.linspace(.1, .9, 16, dtype=np.float16).reshape(16, 1)
+    expected = np.maximum(a.astype(np.float64), 0) @ b.astype(np.float64)
+    with program.prepare() as owner:
+        result = owner((a, b))
+        np.testing.assert_allclose(result, expected, rtol=.004, atol=2e-5)
+        assert owner.stats()["stages"] == 64
+
+
+@pytest.mark.parametrize("kind,storage", CASES)
+@pytest.mark.parametrize("mode", ["different", "shared", "legacy", "per_thread"])
+def test_ordinary_jit_orders_resident_inputs_and_retains_completed_outputs(
+    kind, storage, mode, monkeypatch,
+):
+    from contextlib import ExitStack
+    from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
+    from tests.device.nvidia.test_ordered_resident_tensor_dag import Borrowed, queue_delayed_upload
+
+    assert rt._nvidia_device_name() == "sm_120"
+    a, b = values(storage, 74)
+    fn = ts.jit(target="nvidia_sm120")(FUNCTIONS[kind])
+    with ExitStack() as stack:
+        first = stack.enter_context(NvidiaDeviceSession())
+        second = first if mode != "different" else stack.enter_context(NvidiaDeviceSession())
+        av, bv = first.upload(np.zeros_like(a)), second.upload(np.zeros_like(b))
+        assert first.synchronize() == 0 and second.synchronize() == 0
+        streams = ((1, 1) if mode == "legacy" else (2, 2) if mode == "per_thread"
+                   else (first.stream, second.stream))
+        resident = Borrowed(av, streams[0]), Borrowed(bv, streams[1])
+        try:
+            fn(*roots(kind, *resident))
+            owner = fn._native_tensor_last_owner
+            assert owner is not None and fn._native_tensor_last_program is not None
+            before = owner.stats()
+            done_a, done_b = [], []
+            callbacks = [
+                queue_delayed_upload(first, av, a, streams[0], done_a),
+                queue_delayed_upload(second, bv, b, streams[1], done_b),
+            ]
+            assert not done_a and not done_b
+
+            def forbidden(*args, **kwargs):
+                pytest.fail("resident JIT replay invoked tracing or external tools")
+
+            with monkeypatch.context() as guarded:
+                guarded.setattr(subprocess, "run", forbidden)
+                guarded.setattr(subprocess, "Popen", forbidden)
+                guarded.setattr(fn, "_trace_frontend_capture", forbidden)
+                output = fn(*roots(kind, *resident))
+                assert fn._native_tensor_last_owner is owner
+                assert owner.stats()["allocations"] == before["allocations"] == 1
+                assert owner.stats()["capacity"] == before["capacity"]
+            assert done_a and done_b and len(callbacks) == 2
+            np.testing.assert_allclose(output, oracle(kind, a, b), rtol=.004, atol=2e-5)
+            assert fn.execution_kind == "native_gpu"
+            np.testing.assert_array_equal(first.download(av), a)
+            np.testing.assert_array_equal(second.download(bv), b)
+            saved = output.copy()
+        finally:
+            fn.close_native_storage()
+    np.testing.assert_array_equal(output, saved)
+
+
+def layernorm_product(a, b):
+    return ts.ops.matmul(ts.ops.layer_norm(a, eps=1e-5),
+                         b, output_dtype="fp32")
+
+
+def softmax_product(a, b):
+    return ts.ops.matmul(ts.ops.softmax(a, axis=-1), b, output_dtype="fp32")
+
+
+def relu_half_product(a, b):
+    return ts.ops.matmul(ts.ops.relu(a), b, output_dtype="fp16")
+
+
+def norm_half_product(a, b):
+    return ts.ops.matmul(ts.ops.rmsnorm(a, eps=1e-5, numeric_policy={"accum": "fp32"}),
+                         b, output_dtype="fp16")
+
+
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.parametrize("kind,function", [
+    ("layernorm", layernorm_product), ("softmax", softmax_product),
+])
+def test_additional_unary_producers_follow_original_native_source(storage, kind, function):
+    assert rt._nvidia_device_name() == "sm_120"
+    a, b = values(storage, 75)
+    wide = a.astype(np.float64)
+    if kind == "layernorm":
+        centered = wide - np.mean(wide, axis=-1, keepdims=True)
+        produced = centered / np.sqrt(np.mean(centered * centered, axis=-1, keepdims=True)
+                                     + float(np.float32(1e-5)))
+    else:
+        exponents = np.exp(wide - wide.max(axis=-1, keepdims=True))
+        produced = exponents / exponents.sum(axis=-1, keepdims=True)
+    expected = produced.astype(a.dtype).astype(np.float64) @ b.astype(np.float64)
+    fn = ts.jit(target="nvidia_sm120")(function)
+    try:
+        output = fn(a, b)
+        assert fn._native_tensor_last_program is not None
+        assert fn.execution_kind == "native_gpu"
+        np.testing.assert_allclose(output, expected, rtol=.004, atol=2e-5)
+    finally:
+        fn.close_native_storage()
+
+
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.parametrize("kind,function", [
+    ("relu", relu_half_product), ("norm", norm_half_product),
+])
+def test_native_half_output_keeps_declared_store_storage(storage, kind, function):
+    assert rt._nvidia_device_name() == "sm_120"
+    a, b = values(storage, 76)
+    fn = ts.jit(target="nvidia_sm120")(function)
+    try:
+        output = fn(a, b)
+        program = fn._native_tensor_last_program
+        assert program is not None
+        assert output.dtype == np.dtype(np.float16)
+        assert program.frame["buffers"][program.frame["output"]]["storage"] == "f16"
+        expected = oracle(kind, a, b).astype(np.float16)
+        np.testing.assert_allclose(output, expected, rtol=.004, atol=2e-5)
+    finally:
+        fn.close_native_storage()

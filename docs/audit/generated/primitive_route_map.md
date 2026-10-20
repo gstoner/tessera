@@ -22,11 +22,11 @@ met that bar, not an axis carrying no information.
 
 | Metric | Count |
 |---|---:|
-| Primitives reached by any route | 31 |
-| — served by a **compiled** route on some target | 3 |
-| — **bootstrap only** (deleting the packager strands them) | 28 |
-| Families a backend classifies | 17 |
-| Families with a compiled route | 5 |
+| Primitives reached by any route | 32 |
+| — served by a **compiled** route on some target | 31 |
+| — **bootstrap only** (deleting the packager strands them) | 1 |
+| Families a backend classifies | 18 |
+| Families with a compiled route | 12 |
 
 **`❔ unclassified` is not `—`.** A dash means measured and nothing
 serves it; `unclassified` means this map cannot see that target's
@@ -42,37 +42,38 @@ whole backend reads as unserved.
 
 | Primitive | apple_cpu | apple_gpu | nvidia_sm120 | rocm_gfx1151 | x86 |
 |---|---|---|---|---|---|
-| `add` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `amax` | ❔ unclassified | ❔ unclassified | 🟡 bootstrap | 🟡 bootstrap | 🟡 bootstrap |
-| `amin` | ❔ unclassified | ❔ unclassified | 🟡 bootstrap | — | — |
+| `add` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `amax` | ❔ unclassified | ❔ unclassified | ✅ compiled | ✅ compiled | ✅ compiled |
+| `amin` | ❔ unclassified | ❔ unclassified | ✅ compiled | — | — |
 | `depth_attn` | ❔ unclassified | ❔ unclassified | — | ✅ compiled | — |
-| `div` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `erf` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `exp` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
+| `div` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `erf` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `exp` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
 | `flash_attn` | ❔ unclassified | ❔ unclassified | ✅ compiled | ✅ compiled | ✅ compiled |
-| `gelu` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `layer_norm` | ❔ unclassified | ❔ unclassified | 🟡 bootstrap | — | — |
-| `log` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
+| `gelu` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `layer_norm` | ❔ unclassified | ❔ unclassified | ✅ compiled | — | — |
+| `log` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
 | `matmul` | ❔ unclassified | ❔ unclassified | ✅ compiled | — | ✅ compiled |
-| `max` | ❔ unclassified | ❔ unclassified | 🟡 bootstrap | 🟡 bootstrap | 🟡 bootstrap |
-| `maximum` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `mean` | ❔ unclassified | ❔ unclassified | 🟡 bootstrap | 🟡 bootstrap | 🟡 bootstrap |
-| `min` | ❔ unclassified | ❔ unclassified | 🟡 bootstrap | — | — |
-| `minimum` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
+| `max` | ❔ unclassified | ❔ unclassified | ✅ compiled | ✅ compiled | ✅ compiled |
+| `maximum` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `mean` | ❔ unclassified | ❔ unclassified | ✅ compiled | ✅ compiled | ✅ compiled |
+| `min` | ❔ unclassified | ❔ unclassified | ✅ compiled | — | — |
+| `minimum` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
 | `moe_dispatch` | ❔ unclassified | ❔ unclassified | — | 🟡 bootstrap | — |
-| `mul` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `pow` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `rmsnorm` | ❔ unclassified | ❔ unclassified | 🟡 bootstrap | — | — |
-| `rsqrt` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `sigmoid` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `sign` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `silu` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `softmax` | ❔ unclassified | ❔ unclassified | 🟡 bootstrap | 🟡 bootstrap | 🟡 bootstrap |
-| `sqrt` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `sub` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `sum` | ❔ unclassified | ❔ unclassified | 🟡 bootstrap | 🟡 bootstrap | 🟡 bootstrap |
-| `tanh` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
-| `where` | ❔ unclassified | ❔ unclassified | — | — | 🟡 bootstrap |
+| `mul` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `pow` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `relu` | ❔ unclassified | ❔ unclassified | ✅ compiled | — | — |
+| `rmsnorm` | ❔ unclassified | ❔ unclassified | ✅ compiled | — | — |
+| `rsqrt` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `sigmoid` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `sign` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `silu` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `softmax` | ❔ unclassified | ❔ unclassified | ✅ compiled | ✅ compiled | ✅ compiled |
+| `sqrt` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `sub` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `sum` | ❔ unclassified | ❔ unclassified | ✅ compiled | ✅ compiled | ✅ compiled |
+| `tanh` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
+| `where` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
 
 ## Family membership
 
@@ -84,21 +85,22 @@ raises rather than degrading quietly.
 
 | Family | Compiled route | Classified by | Members |
 |---|---|---|---|
+| `activation` | ✅ nvidia_sm120 | nvidia_sm120 | **nvidia_sm120**: `relu` |
 | `attention` | ✅ | nvidia_sm120, rocm_gfx1151, x86 | `flash_attn` |
 | `attention_backward` | ✅ | nvidia_sm120, x86 | `flash_attn` |
 | `attention_backward_lse` | — | nvidia_sm120 | `flash_attn` |
 | `attention_lse` | — | nvidia_sm120 | `flash_attn` |
-| `breadth` | — | x86 | *benchmark cohort, not an op pattern* |
-| `cohort2` | — | x86 | *benchmark cohort, not an op pattern* |
+| `breadth` | ✅ | x86 | *benchmark cohort, not an op pattern* |
+| `cohort2` | ✅ | x86 | *benchmark cohort, not an op pattern* |
 | `depth_attention` | ✅ rocm_gfx1151 | — | `depth_attn` |
-| `elementwise` | — | x86 | `add`, `sub`, `mul`, `div`, `exp`, `log`, `sqrt`, `rsqrt`, `tanh`, `sigmoid`, `gelu`, `silu`, `erf`, `sign`, `where`, `pow`, `maximum`, `minimum` |
+| `elementwise` | ✅ | x86 | `add`, `sub`, `mul`, `div`, `exp`, `log`, `sqrt`, `rsqrt`, `tanh`, `sigmoid`, `gelu`, `silu`, `erf`, `sign`, `where`, `pow`, `maximum`, `minimum` |
 | `int4_matmul` | — | nvidia_sm120 | `matmul` |
 | `matmul` | ✅ | nvidia_sm120, x86 | `matmul` |
 | `moe_dispatch` | — | rocm_gfx1151 | `moe_dispatch` |
 | `mx_matmul` | — | nvidia_sm120 | `matmul` |
-| `norm` | — | nvidia_sm120 | *****: `layer_norm`, `rmsnorm`; **nvidia_sm120**: `layer_norm`, `rmsnorm`; **x86**: `layer_norm`, `rmsnorm` |
+| `norm` | ✅ | nvidia_sm120 | *****: `layer_norm`, `rmsnorm`; **nvidia_sm120**: `layer_norm`, `rmsnorm`; **x86**: `layer_norm`, `rmsnorm` |
 | `nvfp4_matmul` | — | nvidia_sm120 | `matmul` |
 | `paged_kv` | — | nvidia_sm120, rocm_gfx1151 | `flash_attn` |
-| `reduction` | — | nvidia_sm120, rocm_gfx1151, x86 | **nvidia_sm120**: `sum`, `mean`, `max`, `min`, `amax`, `amin`; **rocm_gfx1151**: `sum`, `mean`, `max`, `amax`; **x86**: `sum`, `mean`, `max`, `amax` |
+| `reduction` | ✅ | nvidia_sm120, rocm_gfx1151, x86 | **nvidia_sm120**: `sum`, `mean`, `max`, `min`, `amax`, `amin`; **rocm_gfx1151**: `sum`, `mean`, `max`, `amax`; **x86**: `sum`, `mean`, `max`, `amax` |
 | `scalar_matmul` | ✅ nvidia_sm120 | nvidia_sm120 | **nvidia_sm120**: `matmul` |
-| `softmax` | — | nvidia_sm120, rocm_gfx1151, x86 | `softmax` |
+| `softmax` | ✅ | nvidia_sm120, rocm_gfx1151, x86 | `softmax` |

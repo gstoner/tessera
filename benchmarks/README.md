@@ -56,7 +56,9 @@ See the [review of math, linalg, energy, Clifford, autodiff and operator suites]
 The MLP packet retains two frozen diagnostics:
 baselines/native_tensor_mlp_20261020/attribute_mlp.py reads actual producer
 prefixes, and baselines/native_tensor_mlp_20261020/record_mlp.py is the initial
-scratch timing recorder. Use nvidia/record_native_tensor_mlp.py for new runs.
+scratch timing recorder. Use nvidia/record_native_tensor_mlp.py for new runs. Its --standalone-relu mode
+records typed FP32 activation public completion and separate serial/flat resident
+CUDA-event regions with bitwise checks.
 
 - `nvidia/benchmark_active_source_jvp.py`: source-active JVP with optional resident roots, separate native device events and public completed-call timings. Evidence and standalone `capture_programs.py` recorder: `baselines/sm120_resident_source_jvp_20261016/README.md`.
 

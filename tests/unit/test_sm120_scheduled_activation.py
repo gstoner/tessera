@@ -251,7 +251,7 @@ def test_relu_producer_execution_registration_keeps_epilogue_proof_separate():
     from tessera.compiler import backend_manifest as bm, conformance_matrix as cm
     from tessera.compiler.execution_matrix import lookup
 
-    fixture = "tests/unit/test_sm120_scheduled_activation.py"
+    fixture = "tests/device/nvidia/test_public_standalone_relu.py"
     row = next(item for item in bm.manifest_for("relu") if item.target == "nvidia_sm120")
     assert "scheduled_activation" in row.feature_flags
     assert row.execute_compare_fixture == fixture
@@ -259,7 +259,8 @@ def test_relu_producer_execution_registration_keeps_epilogue_proof_separate():
         "tests/device/nvidia/test_matmul_relu.py")
     execution = lookup("nvidia_sm120", "canonical_nvidia_lhs_program")
     assert execution.executable and execution.executor_id == "nvidia_lhs_program"
-    assert execution.numerical_fixture == fixture and execution.evidence_target == "nvidia_sm120"
+    assert execution.numerical_fixture == "tests/unit/test_sm120_scheduled_activation.py"
+    assert execution.evidence_target == "nvidia_sm120"
     assert cm._numerical_check_present("relu", "nvidia_sm120")
     for sibling in ("nvidia_sm80", "nvidia_sm90", "nvidia_sm100"):
         assert not cm._numerical_check_present("relu", sibling)

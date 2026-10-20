@@ -2032,6 +2032,9 @@ class JitFn:
         native_math = requests_public_math(self.graph_ir, target)
         block_quant = target == "rocm_gfx1201" and block_quant_request
         parent_view = target == "rocm_gfx1201" and parent_view_request
+        from .nvidia_native import requests_activation
+        activation = (target == "nvidia_sm120" and self.differentiation_request is None
+                      and requests_activation(self.graph_ir))
         nvidia_softmax = target == "nvidia_sm120" and requests_softmax(self.graph_ir)
         softmax = (target.startswith("rocm_") or nvidia_softmax) and requests_softmax(self.graph_ir)
         movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)
@@ -2041,7 +2044,7 @@ class JitFn:
         typed_scaled = target == "rocm_gfx1201" and requests_typed_scaled(self.graph_ir)
         checkpoint = target == "rocm_gfx1201" and (
             supports_nvfp4_expansion(self.graph_ir) or supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
-        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4 and not typed_scaled and not rocm_matmul and not parent_view and not block_quant:
+        if not movement and not checkpoint and not softmax and not activation and not matmul and not attention and not native_math and not nvfp4 and not typed_scaled and not rocm_matmul and not parent_view and not block_quant:
             return _JIT_FALLBACK
         if self.differentiation_request is not None:
             raise ValueError("native descriptor call has no differentiation contract")
@@ -2050,7 +2053,7 @@ class JitFn:
         import numpy as np
         from .canonical_compile import canonical_compile
         from tessera import runtime as rt
-        signature_binding = self._native_frontend_signature() if matmul or attention or nvfp4 or nvidia_softmax else inspect.signature(self._fn)
+        signature_binding = self._native_frontend_signature() if matmul or attention or nvfp4 or nvidia_softmax or activation else inspect.signature(self._fn)
         bound = signature_binding.bind(*args, **kwargs)
         bound.apply_defaults()
         ordered = tuple(bound.arguments[name] for name in self.arg_names)
@@ -2234,6 +2237,15 @@ class JitFn:
                 raise ValueError("native math compilation did not produce its checked ABI")
             scalars = ({"Rows":info["rows"], "Columns":info["columns"]}
                        if info["family"] == "scan" else {"N":info["elements"]})
+        elif activation:
+            from .nvidia_native import _validate_scheduled_relu_descriptor
+            _validate_scheduled_relu_descriptor(descriptor)
+            if (len(ordered) != 1 or ordered[0].ndim != 2
+                    or tuple(descriptor.provenance.get("shape", ())) != ordered[0].shape
+                    or tuple(item.name for item in sorted(descriptor.scalars, key=lambda item: item.ordinal))
+                    != ("Rows", "Columns")):
+                raise ValueError("ReLU descriptor differs from its typed frontend extent")
+            scalars = dict(zip(("Rows", "Columns"), ordered[0].shape, strict=True))
         elif softmax:
             import math
             softmax_expected_abi: str | None = GFX_SOFTMAX_F32_ABI
@@ -2384,11 +2396,11 @@ class JitFn:
             if set(dimensions) != set(range(output.rank)):
                 raise ValueError("host tensor call requires fully static output guards")
             dtype = {"uint8": np.uint8, "fp64": np.float64, "fp32": np.float32,
-                     **({"fp16": np.float16} if matmul or rocm_scalar_matmul or nvidia_softmax or native_math else {})}.get(output.dtype)
+                     **({"fp16": np.float16} if matmul or rocm_scalar_matmul or nvidia_softmax or activation or native_math else {})}.get(output.dtype)
             if dtype is None and (descriptor.abi_id == NVFP4_EXPAND_ABI or block_quant) and output.dtype == "fp8_e4m3":
                 import ml_dtypes
                 dtype = ml_dtypes.float8_e4m3fn
-            if dtype is None and (nvidia_softmax or native_math or parent_view or rocm_scalar_matmul) and output.dtype == "bf16":
+            if dtype is None and (nvidia_softmax or activation or native_math or parent_view or rocm_scalar_matmul) and output.dtype == "bf16":
                 import ml_dtypes
                 dtype = ml_dtypes.bfloat16
             if dtype is None or output.layout != "row_major":
@@ -2444,7 +2456,7 @@ class JitFn:
                 compiled, module, artifact, movement_contract, ordered=ordered)
         if attention_saved_lse or block_quant:
             return tuple(arrays)
-        return arrays[0] if movement or softmax or matmul or rocm_matmul or attention or native_math or nvfp4 or typed_scaled or parent_view else tuple(arrays)
+        return arrays[0] if movement or softmax or activation or matmul or rocm_matmul or attention or native_math or nvfp4 or typed_scaled or parent_view else tuple(arrays)
 
 
     def _try_rocm_composed_scaled_call(self,args,kwargs):

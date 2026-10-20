@@ -102,6 +102,7 @@ UNCLASSIFIABLE_TARGETS: Mapping[str, str] = {
 COMPILED_ROUTE_TARGETS: Mapping[str, tuple[str, ...]] = {
     "depth_attention": ("rocm_gfx1151",),
     "scalar_matmul": ("nvidia_sm120",),
+    "activation": ("nvidia_sm120",),
 }
 
 #: family -> target -> the coverage primitives that target's contract accepts.
@@ -132,6 +133,7 @@ FAMILY_MEMBERS: Mapping[str, Mapping[str, tuple[str, ...]]] = {
     "attention_backward_lse": {"*": ("flash_attn",)},
     "depth_attention": {"*": ("depth_attn",)},
     "softmax": {"*": ("softmax",)},
+    "activation": {"nvidia_sm120": ("relu",)},
     "norm": {"nvidia_sm120": ("layer_norm", "rmsnorm"),
              "x86": ("layer_norm", "rmsnorm"),
              "*": ("layer_norm", "rmsnorm")},
@@ -234,8 +236,13 @@ def discovered_families() -> "dict[str, tuple[str, ...]]":
 
 def compiled_route_families() -> frozenset[str]:
     """Families the mainline compiler already covers."""
-    from .bootstrap_prune_audit import _FAMILY_TO_COMPILED
-    return frozenset(_FAMILY_TO_COMPILED)
+    from .bootstrap_prune_audit import (
+        _FAMILY_TO_COMPILED, _packager_is_generic_scheduled, collect_inventories,
+    )
+    generic = {family for inventory in collect_inventories()
+               for family in inventory.families
+               if _packager_is_generic_scheduled(inventory.target, family)}
+    return frozenset(_FAMILY_TO_COMPILED) | generic
 
 
 def verify_family_membership() -> None:
@@ -396,10 +403,11 @@ def primitive_routes() -> "dict[str, dict[str, str]]":
         # which is what published `depth_attn` as compiled on NVIDIA and x86.
         compiled_targets: tuple[str, ...] = ()
         if family in compiled:
-            from .bootstrap_prune_audit import _target_family_route
+            from .bootstrap_prune_audit import _target_family_route, _packager_is_generic_scheduled
             compiled_targets = tuple(
                 target for target in COMPILED_ROUTE_TARGETS.get(family, family_targets)
-                if _target_family_route(target, family) is not None
+                if (_target_family_route(target, family) is not None
+                    or _packager_is_generic_scheduled(target, family))
             )
         for target in set(family_targets) | set(compiled_targets):
             if target in UNCLASSIFIABLE_TARGETS:

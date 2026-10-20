@@ -102,10 +102,10 @@ def test_routes_prefer_compiled_over_bootstrap_over_none():
     assert kinds <= {prm.ROUTE_COMPILED, prm.ROUTE_BOOTSTRAP, prm.ROUTE_NONE,
                      prm.ROUTE_UNCLASSIFIED}
 
-    # `softmax` is the standing example of a family with a bootstrap packager on
-    # every backend and no compiled route -- if this ever flips, the mainline
-    # compiler absorbed it and the prune plan moved.
-    assert prm.derived_backend_kernel("softmax") == "partial"
+    # Generic Schedule/Tile consumers are derived from their wrapper bodies.
+    # They must not read as bootstrap-only after native migration.
+    assert prm.derived_backend_kernel("softmax") == "complete"
+    assert routes["relu"]["nvidia_sm120"] == prm.ROUTE_COMPILED
     # `flash_attn` has a compiled route (scheduled_attention).
     assert prm.derived_backend_kernel("flash_attn") == "complete"
     # A primitive no family claims has no route, and says so rather than
@@ -217,7 +217,7 @@ def test_a_silently_unclassifiable_target_is_refused(monkeypatch):
 
 def test_a_stale_compiled_route_restriction_is_refused(monkeypatch):
     monkeypatch.setattr(prm, "COMPILED_ROUTE_TARGETS",
-                        {**prm.COMPILED_ROUTE_TARGETS, "softmax": ("x86",)})
+                        {**prm.COMPILED_ROUTE_TARGETS, "nonexistent_compiled_family": ("x86",)})
     with pytest.raises(ValueError, match="stale restriction"):
         prm.verify_family_membership()
 
@@ -225,6 +225,7 @@ def test_a_stale_compiled_route_restriction_is_refused(monkeypatch):
 def test_primitive_route_cannot_inherit_missing_target_consumer(monkeypatch):
     from tessera.compiler import bootstrap_prune_audit
     monkeypatch.setattr(bootstrap_prune_audit, '_target_family_route', lambda target, family: None)
+    monkeypatch.setattr(bootstrap_prune_audit, '_packager_is_generic_scheduled', lambda target, family: False)
     routes = prm.primitive_routes()
     assert routes
     assert all(prm.ROUTE_COMPILED not in per.values() for per in routes.values())
@@ -241,3 +242,13 @@ def test_mixed_scalar_classifier_joins_the_sm120_compiled_matmul_route():
     assert prm.members_for("scalar_matmul", "nvidia_sm120") == ("matmul",)
     assert prm.COMPILED_ROUTE_TARGETS["scalar_matmul"] == ("nvidia_sm120",)
     prm.verify_family_membership()
+
+
+def test_generic_compiled_route_does_not_transfer_between_targets(monkeypatch):
+    from tessera.compiler import bootstrap_prune_audit as audit
+    original = audit._packager_is_generic_scheduled
+    monkeypatch.setattr(audit, "_packager_is_generic_scheduled",
+        lambda target, family: False if (target, family) == ("nvidia_sm120", "softmax")
+        else original(target, family))
+    # A compiled sibling must not recreate the removed NVIDIA consumer.
+    assert prm.primitive_routes()["softmax"]["nvidia_sm120"] == prm.ROUTE_BOOTSTRAP

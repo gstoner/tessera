@@ -125,6 +125,7 @@ SM120_REDUCE_BF16_ABI = "tessera.nvidia.reduce.x_o_outer_axis_inner.bf16_f32acc.
 SM120_REDUCE_F32_ABI = "tessera.nvidia.reduce.x_o_outer_axis_inner.f32_f32acc.v2"
 SM120_RELU_F16_ABI = "tessera.nvidia.relu.x_o_rows_columns.f16.v1"
 SM120_RELU_BF16_ABI = "tessera.nvidia.relu.x_o_rows_columns.bf16.v1"
+SM120_RELU_F32_ABI = "tessera.nvidia.relu.x_o_rows_columns.f32.v1"
 SM120_NORM_F16_ABI = "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1"
 SM120_NORM_BF16_ABI = "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1"
 SM120_NORM_F32_ABI = "tessera.nvidia.norm.x_o_rows_columns.f32_f32acc.v1"
@@ -1059,6 +1060,17 @@ def tools_available() -> bool:
     )
 
 
+def requests_activation(module: GraphIRModule) -> bool:
+    return (len(module.functions) == 1 and len(module.functions[0].body) == 1
+            and module.functions[0].body[0].op_name == "tessera.relu")
+
+
+def supports_activation(module: GraphIRModule) -> bool:
+    from .scheduled_kernel import supports_scheduled_kernel
+
+    return requests_activation(module) and supports_scheduled_kernel(module, target="nvidia_sm120")
+
+
 def native_package_kind(module: GraphIRModule) -> str | None:
     """Return the canonical SM120 descriptor family for ``module``.
 
@@ -1080,6 +1092,8 @@ def native_package_kind(module: GraphIRModule) -> str | None:
         return "attention"
     if supports_f32_softmax(module) or supports_f16_softmax(module) or supports_bf16_softmax(module):
         return "softmax"
+    if supports_activation(module):
+        return "activation"
     if supports_norm(module):
         return "norm"
     if supports_reduction(module):
@@ -1129,6 +1143,11 @@ def package_native(
         return package_attention(module, pipeline_name=pipeline_name)
     if kind == "softmax":
         return package_softmax(module, pipeline_name=pipeline_name)
+    if kind == "activation":
+        from .scheduled_kernel import lower_scheduled_kernel
+        return package_scheduled_kernel(
+            lower_scheduled_kernel(module, target="nvidia_sm120"),
+            pipeline_name=pipeline_name)
     if kind == "norm":
         return package_norm(module, pipeline_name=pipeline_name)
     if kind == "reduction":
@@ -3779,7 +3798,7 @@ def _validate_scheduled_relu_descriptor(descriptor: LaunchDescriptor) -> None:
     schedule = provenance.get("schedule")
     suffix = "_flat_128" if schedule == "flat_128" else ""
     geometry = "sm120_activation_flat_elements" if schedule == "flat_128" else "sm120_activation_serial_rows"
-    abis = {"f16": SM120_RELU_F16_ABI, "bf16": SM120_RELU_BF16_ABI}
+    abis = {"f16": SM120_RELU_F16_ABI, "bf16": SM120_RELU_BF16_ABI, "f32": SM120_RELU_F32_ABI}
     if (not isinstance(storage, str) or storage not in abis or not isinstance(digest, str)
             or re.fullmatch(r"[0-9a-f]{64}", digest) is None
             or descriptor.abi_id != abis[storage]
@@ -3790,6 +3809,18 @@ def _validate_scheduled_relu_descriptor(descriptor: LaunchDescriptor) -> None:
             or descriptor.entry_symbol != f"tessera_tile_activation_relu_{storage}{suffix}_{digest[:10]}"
             or descriptor.geometry != LaunchGeometry(policy=geometry)):
         raise ValueError("SM120 activation schedule/entry/geometry/numerical ABI mismatch")
+    dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}[storage]
+    width = 4 if storage == "f32" else 2
+    bindings = sorted(descriptor.buffers, key=lambda value: value.ordinal)
+    scalars = sorted(descriptor.scalars, key=lambda value: value.ordinal)
+    if (len(bindings) != 2 or any(
+            (binding.ordinal, binding.direction, binding.dtype, binding.rank, binding.layout)
+            != (index, "input" if index == 0 else "output", dtype, 2, "row_major")
+            or binding.alignment < width
+            for index, binding in enumerate(bindings))
+            or [(value.ordinal, value.name, value.dtype) for value in scalars]
+            != [(2, "Rows", "int64"), (3, "Columns", "int64")]):
+        raise ValueError("SM120 activation typed buffer/scalar numerical ABI mismatch")
 
 
 def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANativePackage:
@@ -3816,14 +3847,14 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     # (Decision #29 -- a declaration whose sole consumer is a test).
     nan_mode: str | None = None
     if activation:
-        if (artifact.kind != "relu" or storage not in {"f16","bf16"}
+        if (artifact.kind != "relu" or storage not in {"f16","bf16","f32"}
                 or len(shape) != 2 or output_shape != shape or artifact.axis != -1
                 or artifact.keepdims is not False or artifact.schedule not in {"serial", "flat_128"}
                 or artifact.epsilon != 0.0):
             raise ValueError("unsupported NVIDIA scheduled ReLU contract")
         suffix = "_flat_128" if artifact.schedule == "flat_128" else ""
         entry = f"tessera_tile_activation_relu_{storage}{suffix}_{artifact.schedule_digest[:10]}"
-        abi = SM120_RELU_F16_ABI if storage == "f16" else SM120_RELU_BF16_ABI
+        abi = {"f16": SM120_RELU_F16_ABI, "bf16": SM120_RELU_BF16_ABI, "f32": SM120_RELU_F32_ABI}[storage]
         scalar_names = ("Rows", "Columns")
         geometry = "sm120_activation_flat_elements" if artifact.schedule == "flat_128" else "sm120_activation_serial_rows"
         nan_mode = "propagate"
@@ -5001,6 +5032,7 @@ __all__ = [
     "SM120_REDUCE_F32_ABI",
     "SM120_RELU_F16_ABI",
     "SM120_RELU_BF16_ABI",
+    "SM120_RELU_F32_ABI",
     "SM120_NORM_F16_ABI",
     "SM120_NORM_BF16_ABI",
     "SM120_NORM_F32_ABI",
@@ -5080,6 +5112,8 @@ __all__ = [
     "supports_mx_matmul",
     "supports_reduction",
     "supports_norm",
+    "requests_activation",
+    "supports_activation",
     "supports_paged_kv_read",
     "supports_int8_matmul",
     "supports_int4_matmul",

@@ -99,7 +99,9 @@ constexpr const char* kTileNormPrefix = "tessera_tile_norm_";
 // The activation shares only the four-argument row launch, never norm arithmetic.
 bool isTileActivation(const char* name) {
     if (!name) return false;
-    for (const char* prefix : {"tessera_tile_activation_relu_f16_",
+    for (const char* prefix : {"tessera_tile_activation_relu_f32_",
+                               "tessera_tile_activation_relu_f32_flat_128_",
+                               "tessera_tile_activation_relu_f16_",
                                "tessera_tile_activation_relu_bf16_",
                                "tessera_tile_activation_relu_f16_flat_128_",
                                "tessera_tile_activation_relu_bf16_flat_128_"}) {

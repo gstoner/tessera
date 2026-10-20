@@ -5,6 +5,7 @@ nvidia_sm120,attention_backward,—,gap
 nvidia_sm120,paged_kv,—,gap
 nvidia_sm120,attention,scheduled_attention.supports_scheduled_attention,compiled
 nvidia_sm120,softmax,scheduled_kernel.supports_scheduled_kernel,generic_compiled
+nvidia_sm120,activation,scheduled_kernel.supports_scheduled_kernel,compiled
 nvidia_sm120,norm,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 nvidia_sm120,reduction,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 nvidia_sm120,nvfp4_matmul,—,gap

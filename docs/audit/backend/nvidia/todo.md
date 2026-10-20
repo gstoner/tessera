@@ -27,6 +27,23 @@ Eight additional resident MLP cases prove independent producer streams for all
 three roots, no host coercion and stable owner/output lifetime. No dynamic,
 layout, AD or encoded-envelope closure follows.
 
+Review follow-up (PR994): standalone f16/bf16/f32 ReLU now has a canonical
+Graph/Schedule/Tile package, typed ABI, checked host/resident runtime and
+ordinary host JIT. Native F32 names and widths are recognized by the production
+CUDA bridge. The separate standalone numerical fixture proves bitwise
+NaN/zero/subnormal behavior and output canaries; the legacy half producer
+fixture and post-matmul epilogue proof remain distinct. A matching new provider
+passes 50 standalone/composed cases. 511 applicable host gates pass with
+8 declared non-SM120 skips. Final full CPU passes 30,788 cases with
+3,710 declared skips; 2,640 production compiler cases execute without skips.
+All 33 generated documents and five surface audits pass; Ruff/mypy are clean.
+Updated-commit CI/review remain required before merge.
+
+The shared route census now includes body-proven generic Schedule/Tile
+consumers on their actual targets. This corrects structural metadata only;
+it does not add sibling kernel, dtype, AD or exact-device evidence. The
+no-growth Python Graph-packager gate remains unchanged.
+
 ## NATIVE-TENSOR-JIT-20261020 — ordinary frontend integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

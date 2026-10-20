@@ -116,3 +116,7 @@ allocation and completed output lifetime for both root/storage orders and
 intermediate precisions. These supplement the earlier 87-case device lane.
 Compiler arithmetic and the native provider are unchanged between these runs.
 Exact-head GitHub CI/review and aggregate five-slice closure remain open.
+
+PR994 review follow-through completes standalone typed activation and its
+public/runtime/registry boundary; see review/README.md. It preserves the
+no-growth Python packager gate and target-specific census evidence.

@@ -13903,4 +13903,16 @@ Remaining: Broader native producers, dynamic/layout/AD/encoded contracts and
 all five aggregate programs remain open. Precision profiles have distinct
 semantics and do not provide a cross-precision speedup comparison.
 Evidence: benchmarks/baselines/native_tensor_mlp_20261020/README.md.
+
+Review follow-up (PR994): the valid F32 admission/registry finding is addressed
+by completing standalone typed activation packaging and ordinary host JIT,
+rather than restricting native F32 arithmetic to a wrapper marker. FP32 has
+an explicit typed ABI and production CUDA entry/width dispatch. Buffer/scalar
+forgeries reject before launch; legacy producer and epilogue fixtures remain
+separate. A matching immutable provider passes 50 standalone/composed device
+cases and 511 applicable host gates pass (8 declared non-SM120 skips).
+Separated public/resident benchmarks are recorded. Final full CPU passes
+30,788 cases with 3,710 declared skips; 2,640 compiler cases pass without skips.
+All 33 generated documents and five surface audits pass; updated-commit CI
+and review remain required.
 <!-- entry-fields:end -->

@@ -22,6 +22,17 @@ Evidence: benchmarks/baselines/native_tensor_mlp_20261020/README.md.
 
 
 
+Review follow-up (PR994): not applicable to AVX-512 native program/descriptor consumers:
+standalone activation admission and the new typed F32 ReLU ABI are SM120-only.
+Shared scheduled-kernel parsing retains explicit sibling refusal and existing
+dtype/effect contracts. Independent sibling activation/program integration and
+exact-device proof remain follow-up work; no CUDA evidence transfers.
+
+The shared route census now includes body-proven generic Schedule/Tile
+consumers on their actual targets. This corrects structural metadata only;
+it does not add sibling kernel, dtype, AD or exact-device evidence. The
+no-growth Python Graph-packager gate remains unchanged.
+
 ## NATIVE-TENSOR-JIT-20261020 — ordinary frontend integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

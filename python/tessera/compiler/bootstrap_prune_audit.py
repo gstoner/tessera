@@ -52,6 +52,9 @@ _BACKEND_MODULES: tuple[tuple[str, str], ...] = (
 _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
     "matmul": ("scheduled_matmul", "supports_scheduled_matmul"),
     "scalar_matmul": ("scheduled_matmul", "supports_scheduled_matmul"),
+    # The driver and canonical native dispatcher consume the existing typed
+    # ScheduledKernelArtifact; no new Graph-owned Python packager is needed.
+    "activation": ("scheduled_kernel", "supports_scheduled_kernel"),
     "attention": ("scheduled_attention", "supports_scheduled_attention"),
     "attention_backward": (
         "scheduled_attention_backward",

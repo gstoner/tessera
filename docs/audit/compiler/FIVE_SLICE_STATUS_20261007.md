@@ -15,6 +15,14 @@ Evidence: benchmarks/baselines/native_tensor_mlp_20261020/README.md.
 
 
 
+PR994 review follow-up completes standalone SM120 FP16/BF16/FP32 ReLU
+packaging/JIT and explicit F32 resident packages, with typed buffer/scalar
+guards and native bridge width validation. 50 combined exact-device cases
+pass. Final full CPU passes 30,788 cases with 3,710 declared skips;
+2,640 production compiler cases execute without skips. All 33 generated
+documents and five surface audits pass. Updated-commit CI/review remain active. This does not close
+general W1.1, attention/AD or the aggregate five-slice obligations.
+
 ## Native tensor ordinary JIT candidate — 2026-10-20
 
 PR992 merged as fac21f5bc37deb99b4be8ef82b21f4d66296c1d1 after exact-head

@@ -103,3 +103,35 @@ gates and 87 RTX5070 device cases pass. Owning gfx1201 scalar regressions pass
 67 cases. Twelve correctness-gated timing rows retain separate native and public
 windows. Artifact restoration still requires the matching compiler. Full CPU passes 30785 with 3710 declared skips; exact-head CI/review remain open. Evidence:
 benchmarks/baselines/native_tensor_mlp_20261020/README.md.
+
+## Standalone activation integration review follow-up
+
+Sync: NATIVE-TENSOR-MLP-20261020.
+
+Standalone static compact rank-two SM120 ReLU now uses the same native
+Graph/Schedule/Tile activation as composed programs. Ordinary host JIT and
+serialized packages support FP16/BF16/FP32 with storage-preserving outputs.
+Serial and explicit flat_128 policies carry distinct hashes/entries/geometry;
+the default physical policy remains serial. FP32 packages additionally have
+resident execution proof. All three typed ABIs bind exact buffer storage,
+rank, layout, direction and scalar order before launch. Invalid rank guards
+and narrower forged storage are rejected before memory access.
+
+FP32 uses tessera.nvidia.relu.x_o_rows_columns.f32.v1; the production CUDA
+bridge recognizes its exact hashed serial/flat entry names and four-byte
+storage. Existing half ABIs and their zero policies remain unchanged.
+Ordinary public host and resident-package proof are separate; this does not
+admit arbitrary public resident unary graphs or broaden differentiation.
+Numerical fixture: tests/device/nvidia/test_public_standalone_relu.py.
+Legacy half producer and fused accumulator epilogue fixtures remain distinct.
+
+The review follow-up passes 50 combined standalone/composed device cases
+and 511 applicable host checks (8 declared non-SM120 skips). Final full CPU
+passes 30,788 cases with 3,710 declared skips; 2,640 production compiler
+cases pass without skips. All 33 generated documents and five surface audits
+pass. Updated-commit CI/review remain required.
+
+Standalone native-image packages also pass fresh-process execution without
+compiler tools. This is a separate serialized descriptor contract; generic
+multi-member native source-program restoration retains its matching-compiler
+requirement. Evidence: benchmarks/baselines/native_tensor_mlp_20261020/review/README.md.

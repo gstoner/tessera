@@ -2,7 +2,40 @@
 last_updated: 2026-10-20
 audit_role: reference
 ---
+## Native original FP32 producer roots candidate — 2026-10-20
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync NATIVE-TENSOR-FP32-ROOTS-20261020.
+
+Final local delivery gates: 30,815 CPU cases pass with 3,710 declared
+skips on the stable source. All 2,663 production compiler cases execute
+without skips; the JUnit census verifies actual execution. The final
+focused frontend/compiler gate passes 233 cases. All 33 distinct RTX5070
+root/final-store cases pass; three overlapping direct BF16 controls also
+require the prepared C++ scalar owner. All nine measured FP32 IR/native
+image identities remain unchanged. Generated-doc, type and lifecycle gates
+pass. Exact-head publication CI/review remains required; the five aggregate
+slices and broader producer/layout/dynamic/AD requirements remain open.
+
+The original FP32 root survives ReLU and the native scalar-FMA matmul consumer
+without half/TF32 conversion. The matching compiler passes 170 focused cases,
+481 shared registry/lifecycle gates and 18 RTX5070 host/resident cases,
+including independent pending producer streams. Nine correctness-gated rows
+separate stage/program event windows and completed public calls. Full local CPU
+passes 30,788 cases (3,710 declared skips); 2,663 compiler cases execute without
+skips. All five surfaces, 33 generated documents and the zero-error type gate
+pass. Synchronization with delivered PR994 is complete; publication CI remains active. Generic layout/dynamic/AD/encoded and all
+five aggregate programs remain open.
+Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
+
+
 ## Native multi-matmul MLP increment — 2026-10-20
+
+Delivery update: PR994 merged as 4f53a65c884aada5eaf8da8cef3c2a1a9bae0d23
+after exact-head CI and both resolved reviews. The original FP32-root
+successor above is synchronized with that main; its nine measured IR/frame/
+image identities are unchanged and 27 owning-device regressions pass.
+The earlier candidate statements below are historical checkpoints.
 
 PR993 is delivered as 1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31 after
 required exact-head CI and resolved review. The next private W1.1 increment

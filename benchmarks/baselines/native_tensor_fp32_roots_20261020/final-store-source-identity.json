@@ -1,0 +1,19 @@
+{
+  "status": "uncommitted candidate validation; publication pending",
+  "base": "4f53a65c884aada5eaf8da8cef3c2a1a9bae0d23",
+  "source_sha256": {
+    "python/tessera/__init__.py": "14d2c85af078229b9e4d8df48dcc1d9828879a167991ce87bdb9080930853b1b",
+    "python/tessera/compiler/graph_ir.py": "cfce0c81dbb28146a92f4a546272c1a649d48578ad18b2d5a5632a036a88abb4",
+    "python/tessera/compiler/trace.py": "48277e9b2b4cd5415b3418ef50c3e596ad9600bfa5cc3e43fb85e041f1cf7019",
+    "python/tessera/compiler/jit.py": "0bd8236fdf2a2efc4cd6ace00982cfbadff6fa4e03ba39556489182605930253",
+    "python/tessera/compiler/scheduled_matmul.py": "b0e9b8d48a5cecc18e5e771a556a33ad118ad589bd2dcb99ab01102029686f59"
+  },
+  "device": "NVIDIA GeForce RTX 5070",
+  "architecture": "sm_120",
+  "gpu_uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "compiler_sha256": "db3a4e86bb42c937d4da70fb98a45266e8e758241c7c773115906d9a6ab871ec",
+  "provider_sha256": "03bd30ed513d3362d915eb5cca7f61cb7e850b2cd120b2e89f362a210a88ffde",
+  "device_cases": 33,
+  "focused_cases": 233,
+  "shared_cases_before_last_admission_edit": 493
+}

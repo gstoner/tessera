@@ -1,0 +1,17 @@
+{
+  "merge_pr994": {
+    "headRefOid": "4caee7ce09c21cd9832df3f0e80e6e453b552112",
+    "mergeCommit": {
+      "oid": "4f53a65c884aada5eaf8da8cef3c2a1a9bae0d23"
+    },
+    "mergedAt": "2026-10-20T13:16:09Z",
+    "state": "MERGED",
+    "url": "https://github.com/gstoner/tessera/pull/994"
+  },
+  "successor_head": "236310ccb7a4e4ebcada9b6e6b7bb84036ce3bb8",
+  "base": "4f53a65c884aada5eaf8da8cef3c2a1a9bae0d23",
+  "compiled_source_delta_after_rebase": [],
+  "compiler_source_hashes_match": true,
+  "compiler_sha256": "db3a4e86bb42c937d4da70fb98a45266e8e758241c7c773115906d9a6ab871ec",
+  "scope": "Only compiler-independent census helpers, standalone dispatch gating and tests/docs were inherited; native producer/consumer/compiler/runtime C++ is unchanged."
+}

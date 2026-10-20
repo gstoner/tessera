@@ -1,0 +1,12 @@
+{
+  "fp32-root-relu-matmul": {
+    "returncode": 1,
+    "scalar_kernel": false,
+    "stderr": "<stdin>:2:1: error: Graph->Schedule native tensor program requires a static compact half producer DAG ending in a plain matmul\nfunc.func @source(%x: tensor<17x32xf32>, %w: tensor<32x19xf16>) -> tensor<17x19xf32> {\n^\n<stdin>:2:1: note: see current operation: \n\"func.func\"() <{function_type = (tensor<17x32xf32>, tensor<32x19xf16>) -> tensor<17x19xf32>, sym_name = \"source\"}> ({\n^bb0(%arg0: tensor<17x32xf32>, %arg1: tensor<32x19xf16>):\n  %0 = \"tessera.relu\"(%arg0) : (tensor<17x32xf32>) -> tensor<17x32xf32>\n  %1 = \"tessera.matmul\"(%0, %arg1) <{transposeA = false, transposeB = false}> {output_dtype = \"fp32\"} : (tensor<17x32xf32>, tensor<32x19xf16>) -> tensor<17x19xf32>\n  \"func.return\"(%1) : (tensor<17x19xf32>) -> ()\n}) : () -> ()\n"
+  },
+  "fp32-root-direct-matmul": {
+    "returncode": 0,
+    "scalar_kernel": false,
+    "stderr": ""
+  }
+}

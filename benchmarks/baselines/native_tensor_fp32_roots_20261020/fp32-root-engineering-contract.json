@@ -1,0 +1,39 @@
+{
+  "owner": "W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6",
+  "sync": "NATIVE-TENSOR-FP32-ROOTS-20261020",
+  "source": "original rank-two compact FP32 root -> storage-preserving ReLU -> existing FP32-by-FP16/BF16 scalar-FMA matmul",
+  "baseline": {
+    "focused_red": 8,
+    "direct_consumer": "compiles to llvm.func @source_scalar_fma_kernel",
+    "program": "refused by half-root admission",
+    "signature": "returns None for FP32 host root"
+  },
+  "architecture": "nvidia_sm120; owning proof requires RTX5070 Super-Bear",
+  "changes_needed": [
+    "Remove root-only F32 exclusion while retaining native per-member selection and complete storage-pair verification.",
+    "Transport FP32 host/resident signatures without coercion; retain strict CAI types/width/layout/stream validation.",
+    "Preserve original source graph, intermediate precision, derived native geometry/scalars, initialization and final-reader retirement.",
+    "Use existing native frame storage discriminator and allocation/lifetime ABI; no new Python numerical lowering."
+  ],
+  "required_validation": [
+    "FP16/BF16 RHS, both argument orders, aligned and ragged rows/columns/K; compiler must emit both actual source stages.",
+    "Host ordinary JIT, changed inputs, warm no tracing/tools, immutable snapshots, close/reopen and artifact replay.",
+    "Resident no-host-coercion, independent producer streams and pending writes for both roots, context/capacity and width mismatch rejection.",
+    "Independent FP64 reference with gamma_k FP32 accumulation enclosure; no early FP16 cast, no tolerance inflation.",
+    "Separate resident producer/consumer CUDA-event windows, captured whole-program windows and completed public wall time; same inputs and correctness before timing.",
+    "All four backend plan assessments; dtype/op/diagnostic/pass, route census, lifecycle/generated docs and full delivery checks as applicable."
+  ],
+  "shared_existing_abi": {
+    "NativeTensorFrameRuntime.h": "dtype1 is four-byte F32 and nativeFrameView validates root/output bytes, shape, stride and allocation capacity",
+    "prepared_native_tensor_frame.py": "_storage and checked descriptor already support F32 roots",
+    "resident_nvidia_tensor.py": "cuda_frontend_specs already supports float32; native_tensor_jit profile filters it before that parser"
+  },
+  "explicit_remaining": "General pitched, bounded/dynamic, reverse AD and encoded storage are separate aggregate requirements; do not relabel this static root slice as W1.1 closure.",
+  "source_identity": {
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "faf4fd6ecf4096a7456c1106858d08edf1b78a7473a244b75fbe1c5e39d24043",
+    "python/tessera/compiler/native_tensor_jit.py": "7a5f164cfc7898948ebb28e845afefc09b875eceac1265d67ed904f358879d30",
+    "python/tessera/compiler/resident_nvidia_tensor.py": "dbcb77a559e2744ca1934f6fb123725f1792a728fff6885983be457b8999ab1b",
+    "python/tessera/compiler/prepared_native_tensor_frame.py": "9b8c440ac08f41d66cae5823832b629098e661080be67a9a450ca45adec8dd07",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "1e326554f276163675e84256fec22bbfc6230b078f2eca42f99a76da46f7ef4b"
+  }
+}

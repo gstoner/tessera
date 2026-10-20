@@ -1,0 +1,149 @@
+{
+  "scope": "Independent oracle sensitivity, not extra GPU executions",
+  "rows": [
+    {
+      "shape": [
+        17,
+        35,
+        19
+      ],
+      "rhs_storage": "f16",
+      "negative_controls_rejected": {
+        "premature_half_root": true,
+        "arithmetic_plus_001": true
+      },
+      "input_sha256": [
+        "1153cf0371c61051f224e99fa24202ac74cc60e7ccff16c789eb5650c6a55392",
+        "868e4d95d664cb6999a64236905c598967345a48540662e962298247beb337b9"
+      ]
+    },
+    {
+      "shape": [
+        17,
+        35,
+        19
+      ],
+      "rhs_storage": "bf16",
+      "negative_controls_rejected": {
+        "premature_half_root": true,
+        "arithmetic_plus_001": true
+      },
+      "input_sha256": [
+        "1153cf0371c61051f224e99fa24202ac74cc60e7ccff16c789eb5650c6a55392",
+        "bd23b572067fb4a8d881bcc3982e869da812490d51c53ab34c6260852cfb8aaa"
+      ]
+    },
+    {
+      "shape": [
+        17,
+        35,
+        19
+      ],
+      "rhs_storage": "f32",
+      "negative_controls_rejected": {
+        "premature_half_root": true,
+        "arithmetic_plus_001": true
+      },
+      "input_sha256": [
+        "1153cf0371c61051f224e99fa24202ac74cc60e7ccff16c789eb5650c6a55392",
+        "fa132c9b16693f1688768ca6e5d178a3db6db9a7d0de815c04488ff2ac8b801d"
+      ]
+    },
+    {
+      "shape": [
+        64,
+        256,
+        64
+      ],
+      "rhs_storage": "f16",
+      "negative_controls_rejected": {
+        "premature_half_root": true,
+        "arithmetic_plus_001": true
+      },
+      "input_sha256": [
+        "2faf934df95fe9dcd33b18c444c2d07ae711d65756580e59d8d9f0f53346ea67",
+        "41159f08b03ea86ccfcd46c13a8006cfdf53962fcfdd656e237ea8ce5ee07a5d"
+      ]
+    },
+    {
+      "shape": [
+        64,
+        256,
+        64
+      ],
+      "rhs_storage": "bf16",
+      "negative_controls_rejected": {
+        "premature_half_root": true,
+        "arithmetic_plus_001": true
+      },
+      "input_sha256": [
+        "2faf934df95fe9dcd33b18c444c2d07ae711d65756580e59d8d9f0f53346ea67",
+        "bea445cea2d5524448a8396c8208267f2d4b047dfbc04717d826dd30011d7890"
+      ]
+    },
+    {
+      "shape": [
+        64,
+        256,
+        64
+      ],
+      "rhs_storage": "f32",
+      "negative_controls_rejected": {
+        "premature_half_root": true,
+        "arithmetic_plus_001": true
+      },
+      "input_sha256": [
+        "2faf934df95fe9dcd33b18c444c2d07ae711d65756580e59d8d9f0f53346ea67",
+        "c882793210862625cd2efb85ad59440c9ea00fe5291ffe63412231015cf095f3"
+      ]
+    },
+    {
+      "shape": [
+        256,
+        256,
+        128
+      ],
+      "rhs_storage": "f16",
+      "negative_controls_rejected": {
+        "premature_half_root": true,
+        "arithmetic_plus_001": true
+      },
+      "input_sha256": [
+        "07a8324c973118ac2c65476762d7254db3acdd998162157a37657125f732c27e",
+        "5aa6814428f9c5e0675950fc2587e85cad2dd80f5e11030eedbc0752f07c04ad"
+      ]
+    },
+    {
+      "shape": [
+        256,
+        256,
+        128
+      ],
+      "rhs_storage": "bf16",
+      "negative_controls_rejected": {
+        "premature_half_root": true,
+        "arithmetic_plus_001": true
+      },
+      "input_sha256": [
+        "07a8324c973118ac2c65476762d7254db3acdd998162157a37657125f732c27e",
+        "80c999ae360caaa8fbacd19c972dcc191bf0065fd05ba41e18a0a49328cc0381"
+      ]
+    },
+    {
+      "shape": [
+        256,
+        256,
+        128
+      ],
+      "rhs_storage": "f32",
+      "negative_controls_rejected": {
+        "premature_half_root": true,
+        "arithmetic_plus_001": true
+      },
+      "input_sha256": [
+        "07a8324c973118ac2c65476762d7254db3acdd998162157a37657125f732c27e",
+        "bfebac904980cd6e0d018d5316dfa826b49ce07f361cf6a5d167f564d817b864"
+      ]
+    }
+  ]
+}

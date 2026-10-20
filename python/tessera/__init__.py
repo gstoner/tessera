@@ -250,8 +250,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             out = np.matmul(A, B)
         else:
             requested_output_dtype = str(output_dtype).lower()
-            if requested_output_dtype not in {"fp16", "fp32"}:
-                raise ValueError("matmul output_dtype must be fp16 or fp32")
+            if requested_output_dtype not in {"fp16", "bf16", "fp32"}:
+                raise ValueError("matmul output_dtype must be fp16, bf16 or fp32")
             # Match the scheduled low-precision contract: keep the fp32
             # accumulator through the epilogue, then convert the final result.
             accum_a = np.asarray(A, dtype=np.float32)
@@ -283,6 +283,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             out = fused_epilogue(out, **epilogue)
         if requested_output_dtype == "fp16":
             out = out.astype(np.float16)
+        elif requested_output_dtype == "bf16":
+            import ml_dtypes
+            out = out.astype(ml_dtypes.bfloat16)
         return out
 
     def matmul(
@@ -6208,11 +6211,14 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
 
             requested_output = kwargs.get("output_dtype")
             if requested_output is not None:
-                output_types = {"fp16": _np.float16, "fp32": _np.float32}
+                output_types: dict[str, Any] = {"fp16": _np.float16, "fp32": _np.float32}
+                if str(requested_output).lower() == "bf16":
+                    import ml_dtypes
+                    output_types["bf16"] = ml_dtypes.bfloat16
                 try:
                     requested_type = output_types[str(requested_output).lower()]
                 except KeyError as exc:
-                    raise ValueError("matmul output_dtype must be fp16 or fp32") from exc
+                    raise ValueError("matmul output_dtype must be fp16, bf16 or fp32") from exc
                 return _np.asarray(out).astype(requested_type, copy=False)
 
             # Multi-result ops store back the PRIMARY tensor only. `out[0]` is

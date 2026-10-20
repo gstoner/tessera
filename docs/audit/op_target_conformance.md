@@ -67,7 +67,7 @@ Audit response to [docs/audit/compiler/COMPILER_AUDIT.md](compiler/COMPILER_AUDI
 
 ## `matmul_relu`
 
-_fused Tile accumulator epilogue on nvidia_sm120; composes elsewhere. This post-matmul row is distinct from the legacy f16/bf16 ReLU producer in canonical_nvidia_lhs_program. Standalone f16/bf16/f32 Schedule/Tile packages and host JIT are proved by tests/device/nvidia/test_public_standalone_relu.py._
+_fused Tile accumulator epilogue on nvidia_sm120; composes elsewhere. This post-matmul row is distinct from the legacy f16/bf16 ReLU producer in canonical_nvidia_lhs_program. Standalone f16/bf16/f32 Schedule/Tile packages and host JIT are proved by tests/device/nvidia/test_public_standalone_relu.py. Original FP32 root -> ReLU -> scalar-FMA matmul is a separate producer program, proved by tests/device/nvidia/test_native_tensor_fp32_roots.py; it is not this fused epilogue._
 
 **Composition:** `matmul`, `relu`.  Fused-single-kernel targets: nvidia_sm120.
 

@@ -11,7 +11,7 @@ Status: PR #993 delivered as 1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31 after requ
 
 ## Compiler and runtime boundary
 
-Ordinary primal SM120 calls with compact half-storage roots query the
+Ordinary primal SM120 calls with compact FP16/BF16/FP32 roots query the
 native compiler. Python describes tensor metadata and binds arguments; native
 Graph/Schedule/Tile passes select operations, arithmetic, policies and kernels.
 An admitted product retains actual Graph, Schedule, Tile and NVIDIA Target IR.
@@ -89,7 +89,7 @@ Final reviewed-source evidence: benchmarks/baselines/native_tensor_jit_20261020/
 
 Sync: NATIVE-TENSOR-MLP-20261020.
 
-The private extension admits two or more compact half roots within the same
+The private extension admits two or more compact typed roots within the same
 64-stage/128-buffer capacity. Nonterminal plain matmuls are retained as actual
 members, and every matrix checks its own operand pair and numerical policy.
 The named three-root MLP explicitly selects FP16 or FP32 intermediate output.
@@ -144,3 +144,61 @@ route; the operation-name request alone cannot claim their support.
 Host-free negative tests in tests/unit/test_sm120_activation_dispatch.py
 retain other JIT paths, while positive FP16/BF16/FP32 controls still select
 canonical native compilation. Once selected, compilation/launch errors propagate.
+
+## FP32 original root integration candidate — 2026-10-20
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync NATIVE-TENSOR-FP32-ROOTS-20261020.
+
+Original compact rank-two FP32 roots now pass through native program admission
+and host/resident signature transport. Each outlined member still must pass
+its own native storage-pair and numerical-policy selection. FP32 matmul inputs
+retain the existing ordered FP32 scalar-FMA strategy; no half or TF32
+conversion is introduced. The existing frame ABI already represents four-byte
+FP32 roots and checks byte capacity, strides, initialized storage and retirement.
+
+The initial eight positive compiler/signature cases fail on the frozen
+pre-change source. The matching candidate passes 170 focused cases, 481 shared
+registry/lifecycle gates and 18 RTX5070 host/resident cases. Nine timing rows
+separate producer/consumer event windows from completed public calls. Full
+delivery and publication gates remain active. This candidate does not
+establish pitched/dynamic roots, arbitrary operators or general AD closure.
+
+Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
+
+
+### Final-store integration follow-through
+
+Explicit matmul output storage admits the existing canonical fp16, bf16 and
+fp32 spellings in eager execution, abstract tracing and textual Graph shape
+inference. Accumulation remains FP32 through bias, activation and residual;
+only the completed result is converted. The native SM120 scalar route also
+admits FP32-by-FP32 inputs consistently with its existing native contract,
+and allocates BF16 descriptor results using the existing typed owner.
+This does not widen the half tensor-core output contract or the ROCm
+same-FP32 descriptor envelope.
+
+The initial expanded device test passes six FP16 stores and rejects six
+BF16 stores at frontend validation. After frontend integration, all twelve
+producer final stores pass; an additional warm direct FP32-by-FP32 BF16
+control exposes stale Python Schedule admission. The corrected full device
+rerun passes all 33 cases. Host frontend controls pass twelve cases; the preceding
+shared registry lane passes 493 and compiler regression lane passes 230.
+The final stable-source CPU refresh passes 30,815 cases with 3,710 declared skips.
+No new native ABI, Graph dtype or broader AD certificate is introduced.
+
+The corrected device rerun passes all 33 cases: 18 original host/resident
+producer cases, twelve FP16/BF16 final stores and three direct scalar BF16
+calls with warm tracing disabled. The final focused compiler/frontend gate
+passes 233 cases. Original nine FP32 timing rows remain the measured
+performance envelope; no BF16-store latency claim is added.
+
+Final local delivery gates: 30,815 CPU cases pass with 3,710 declared
+skips on the stable source. All 2,663 production compiler cases execute
+without skips; the JUnit census verifies actual execution. The final
+focused frontend/compiler gate passes 233 cases. All 33 distinct RTX5070
+root/final-store cases pass; three overlapping direct BF16 controls also
+require the prepared C++ scalar owner. All nine measured FP32 IR/native
+image identities remain unchanged. Generated-doc, type and lifecycle gates
+pass. Exact-head publication CI/review remains required; the five aggregate
+slices and broader producer/layout/dynamic/AD requirements remain open.

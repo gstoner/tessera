@@ -13916,3 +13916,41 @@ Separated public/resident benchmarks are recorded. Final full CPU passes
 All 33 generated documents and five surface audits pass; updated-commit CI
 and review remain required.
 <!-- entry-fields:end -->
+
+
+### 2026-10-20 — native original FP32 producer roots
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync NATIVE-TENSOR-FP32-ROOTS-20261020.
+
+Final local delivery gates: 30,815 CPU cases pass with 3,710 declared
+skips on the stable source. All 2,663 production compiler cases execute
+without skips; the JUnit census verifies actual execution. The final
+focused frontend/compiler gate passes 233 cases. All 33 distinct RTX5070
+root/final-store cases pass; three overlapping direct BF16 controls also
+require the prepared C++ scalar owner. All nine measured FP32 IR/native
+image identities remain unchanged. Generated-doc, type and lifecycle gates
+pass. Exact-head publication CI/review remains required; the five aggregate
+slices and broader producer/layout/dynamic/AD requirements remain open.
+
+
+Outcome: Original compact FP32 roots retain storage through native ReLU and
+existing scalar-FMA consumers with FP16/BF16/FP32 weights. The obsolete
+whole-program half-root restriction is removed; native leaf policy, checked
+frame capacity, initialization and lifetime validation remain enforced.
+170 focused and 481 shared gates pass; 18 RTX5070 host/resident cases prove
+numerics, owner reuse, replay and independent pending producer streams.
+Nine timing rows separate cold/public host costs and producer/consumer/program
+event windows. Independent numerical controls reject early half conversion.
+All four backend queues are assessed; no sibling device proof transfers.
+
+Final local delivery: 30,788 CPU passes (3,710 declared skips), all 2,663
+production compiler cases executed without skips, all five surface audits,
+33 generated documents and zero-error mypy pass. PR994 is delivered and the
+successor is synchronized with its main. Nine measured IR/frame/image
+identities are unchanged; 170 host and 27 RTX5070 post-sync checks pass.
+
+Remaining: Exact-head publication CI and review. General pitched/dynamic/
+AD/encoded producers and all five aggregate programs remain open.
+Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
+<!-- entry-fields:end -->

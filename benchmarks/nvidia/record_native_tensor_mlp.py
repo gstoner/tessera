@@ -156,10 +156,60 @@ def record_standalone_relu(shape, rounds, repeats, profile_repeats):
         fn.close_native_storage()
 
 
+def record_fp32_root_case(shape, storage, rounds, repeats, profile_repeats):
+    """Original FP32 producer roots; no precision-changing baseline."""
+    from tests.unit.test_native_tensor_fp32_roots import source
+    from tests.device.nvidia.test_native_tensor_fp32_roots import roots, check
+    fn = ts.jit(target="nvidia_sm120")(source)
+    values = roots(storage, shape, 12044, False)
+    saved = tuple(value.copy() for value in values)
+    try:
+        started = time.perf_counter_ns()
+        actual = fn(*values)
+        cold = (time.perf_counter_ns() - started) / 1e6
+        check(actual, values, False)
+        if fn.execution_kind != "native_gpu":
+            raise RuntimeError("FP32-root recorder requires native GPU completion")
+        program, owner = fn._native_tensor_last_program, fn._native_tensor_last_owner
+        if program is None or len(program.members) != 2:
+            raise RuntimeError("FP32-root recorder requires both actual source stages")
+        before = owner.stats()
+        windows = {}
+        for captured in (False, True):
+            windows["captured" if captured else "enqueued"] = [
+                owner.profile(profile_repeats, captured=captured) for _ in range(rounds)]
+        samples = []
+        for _ in range(rounds):
+            started = time.perf_counter_ns()
+            for _ in range(repeats):
+                actual = fn(*values)
+            samples.append((time.perf_counter_ns() - started) / repeats / 1e6)
+        check(actual, values, False)
+        for value, snapshot in zip(values, saved, strict=True):
+            np.testing.assert_array_equal(value, snapshot)
+        after = owner.stats()
+        if before["allocations"] != after["allocations"] or before["capacity"] != after["capacity"]:
+            raise RuntimeError("FP32-root recorder changed retained allocation")
+        return {"shape_mkn": list(shape), "root_storage": ["f32", storage],
+            "correctness": "independent_fp64_gamma_k_before_after",
+            "cold_public_ms": cold, "completed_public_samples_ms": samples,
+            "completed_public_median_ms": median(samples),
+            "stage_roles": ["fp32_relu_producer", "fp32_scalar_fma_consumer"],
+            "device_windows": windows, "profile_repeats": profile_repeats,
+            "rounds": rounds, "calls_per_sample": repeats,
+            "frame": program.frame, "before": before, "after": after,
+            "ir_sha256": {name: hashlib.sha256(getattr(program, name).encode()).hexdigest()
+                for name in ("source_ir", "schedule_ir", "tile_ir", "target_ir")},
+            "image_sha256": [hashlib.sha256(image).hexdigest() for image in program.images]}
+    finally:
+        fn.close_native_storage()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--standalone-relu", action="store_true")
+    parser.add_argument("--fp32-roots", action="store_true")
     parser.add_argument("--rounds", type=int, default=7)
     parser.add_argument("--repeats", type=int, default=8)
     parser.add_argument("--profile-repeats", type=int, default=64)
@@ -168,6 +218,10 @@ def main():
     if (not 1 <= args.rounds <= 1000 or not 1 <= args.repeats <= 10000
             or not 1 <= args.profile_repeats <= 10000):
         raise ValueError("MLP benchmark counts exceed the bounded recording envelope")
+    if args.standalone_relu and args.fp32_roots:
+        raise ValueError("standalone ReLU and FP32-root modes are mutually exclusive")
+    if args.fp32_roots and args.shape:
+        raise ValueError("FP32-root mode uses its fixed MKN sweep")
     if args.standalone_relu and args.shape:
         raise ValueError("--shape describes MLP matrices; standalone ReLU uses its fixed three-shape sweep")
     shapes = args.shape or [(17, 32, 48, 11), (17, 35, 29, 19), (64, 256, 128, 64)]
@@ -180,6 +234,27 @@ def main():
     for name in ("tests/unit/test_native_tensor_mlp_program.py",
                  "tests/device/nvidia/test_native_tensor_mlp_program.py"):
         source["source_sha256"][name] = hashlib.sha256(Path(name).read_bytes()).hexdigest()
+    if args.fp32_roots:
+        for name in ("tests/unit/test_native_tensor_fp32_roots.py",
+                     "tests/device/nvidia/test_native_tensor_fp32_roots.py",
+                     "src/compiler/programming_model/lib/NativeTensorProgram.h"):
+            source["source_sha256"][name] = hashlib.sha256(Path(name).read_bytes()).hexdigest()
+        packet = {"schema": "tessera.benchmark.native_tensor_fp32_roots.v1",
+            "source": source, "status": "recording", "rows": [],
+            "scope": "Original FP32 roots with existing scalar-FMA consumers. Captured/enqueued "
+                     "producer, consumer and program event windows are independent; do not add "
+                     "them or compare them to completed public wall time. No promotion claim."}
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        for shape in ((17, 35, 19), (64, 256, 64), (256, 256, 128)):
+            for storage in ("f16", "bf16", "f32"):
+                row = record_fp32_root_case(shape, storage, args.rounds,
+                    args.repeats, args.profile_repeats)
+                packet["rows"].append(row)
+                args.output.write_text(json.dumps(packet, indent=2) + "\n")
+                print(storage, shape, row["completed_public_median_ms"], flush=True)
+        packet["status"] = "complete"
+        args.output.write_text(json.dumps(packet, indent=2) + "\n")
+        return
     if args.standalone_relu:
         for name in ("python/tessera/compiler/nvidia_native.py",
                      "python/tessera/compiler/scheduled_kernel.py",

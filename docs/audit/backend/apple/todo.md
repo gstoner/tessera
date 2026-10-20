@@ -6,7 +6,34 @@ target: apple_gpu
 last_updated: 2026-10-20
 ---
 
+## NATIVE-TENSOR-FP32-ROOTS-20261020 — original producer storage candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-FP32-ROOTS-20261020.
+
+Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
+
+Shared frontend follow-through: explicit matmul BF16 final stores now retain
+FP32 accumulation through the complete eager epilogue, abstract tracing and
+textual Graph typing. BF16 is an existing registered dtype; target-specific
+Schedule admission remains authoritative. The SM120 scalar descriptor also
+allocates BF16 results through its existing typed ABI. This does not certify
+new AD envelopes, half tensor-core output modes or sibling physical support.
+Same-FP32 scalar descriptor admission is aligned only for SM120; the existing
+ROCm descriptor admission boundary remains unchanged.
+
+Follow-up required for owning-device BF16 final-store parity; no new Metal execution evidence is claimed.
+
+Not applicable to Metal physical execution: root admission is inside the
+SM120 native tensor outliner and CUDA JIT signature helper. Independent Metal
+producer storage and ownership parity remain follow-up required.
+
+
 ## NATIVE-TENSOR-MLP-20261020 — native multi-matmul integration candidate
+
+Delivery update: PR994 merged as 4f53a65c884aada5eaf8da8cef3c2a1a9bae0d23
+with all required checks green and both review findings resolved. Candidate
+statements below retain their original evidence checkpoint.
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Sync: NATIVE-TENSOR-MLP-20261020.

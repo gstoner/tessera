@@ -13834,9 +13834,9 @@ Evidence: benchmarks/baselines/rocm_folded_common_gate_20261019/README.md.
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
 PRs: pending; sync NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
 
-Outcome: Public sequence capacities retain one native original-source VJP owner across shrink/grow frames. Offline v3/v4 checks logical, trace and capacity identities without compiler access. RTX5070 passes 24 prepared, 16 bounded public/fresh-process and 14 static public cases. Shared portable/frame checks pass 241 and plugin/registry gates pass 346. All four sibling queues assessed.
+Outcome: Public sequence capacities retain one native original-source VJP owner across shrink/grow frames. Offline v3/v4 checks logical, trace and capacity identities without compiler access. RTX5070 passes 24 prepared, 18 bounded public/fresh-process and 14 static public cases. Shared portable/frame checks pass 241 and plugin/registry gates pass 346. All four sibling queues assessed.
 
-Remaining: General producer/layout/AD, mixed/quantized attention, representative model quality and ROCm route/performance closure. Broader delivery and paired benchmark results belong to the packet before publication.
+Remaining: General producer/layout/AD, mixed/quantized attention, representative model quality and ROCm route/performance closure. Delivery gates: 30,771 CPU tests pass with 3,710 declared skips; 2,459 production-route tests execute with no skips; zero-error mypy, Ruff, 22 lifecycle/ownership checks, all five surface audits and 33 generated-document checks pass. Paired benchmarks retain mixed tiny-frame outcomes; broader aggregate closure remains open.
 
 Evidence: benchmarks/baselines/native_bounded_source_public_20261019/README.md.
 <!-- entry-fields:end -->

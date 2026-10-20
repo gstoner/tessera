@@ -168,3 +168,42 @@ print(json.dumps({"frames": 3, "ok": True}))
     for frame, references in enumerate(expected):
         for i, ref in enumerate(references):
             np.testing.assert_allclose(restored[f"{frame}_{i}"], ref.astype(np.float32), rtol=.03, atol=.002)
+
+
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+def test_bounded_public_nontrivial_batch_and_grouped_heads(storage, monkeypatch):
+    # Exercise B*Hq=8 in the runtime row-multiple contract, rather than only
+    # the B=1,Hq=2 prefix in the main replay matrix.
+    assert rt._nvidia_device_name() == "sm_120"
+    dtype = np.float16 if storage == "f16" else ml_dtypes.bfloat16
+    fn = ts.jit(target="nvidia_sm120", autodiff="reverse", wrt=("q", "v"))(prefix_attention)
+    owner = handle = images = None
+    for step, (sq, sk) in enumerate(((1, 1), (7, 11), (3, 2), (1, 11))):
+        rng = np.random.default_rng(884 + step)
+        shapes = ((2, 4, sq, 35), (2, 2, sk, 35), (2, 2, sk, 7),
+                  (2, 4, sq, 7), (2, 4, sq))
+        values = tuple(rng.normal(0, .2, shape).astype(np.float32 if i == 4 else dtype)
+                       for i, shape in enumerate(shapes))
+        expected = oracle(*values)
+        def forbidden(*args, **kwargs):
+            pytest.fail("new sequence frame retraced or compiled the fixed batch/head prefix")
+        with monkeypatch.context() as guard:
+            if step:
+                guard.setattr(fn, "_specialized_autodiff_module", forbidden)
+                guard.setattr(fn, "_fn", forbidden)
+                guard.setattr(subprocess, "run", forbidden)
+                guard.setattr(subprocess, "Popen", forbidden)
+                guard.setattr(owner, "_prepare", forbidden)
+            outputs = fn.native_backward(*values[:3], out_cotangents=values[3:], sequence_bounds=(7, 11))
+        current = next(iter(fn._native_prepared_vjp_calls.values()))
+        receipt = fn.last_backward_execution
+        if not step:
+            owner, handle, images = current, current._handle, receipt["image_digests"]
+        assert len(fn._native_prepared_vjp_calls) == 1 and current is owner
+        assert current._handle == handle and receipt["image_digests"] == images
+        assert receipt["runtime_dims"] == (2, 4, 2, sq, sk, 35, 7)
+        assert receipt["shape_bounds"] == (2, 4, 2, 7, 11, 35, 7)
+        assert len(receipt["stage_device_ms"]) == 5
+        for actual, index in zip(outputs, (0, 2), strict=True):
+            np.testing.assert_allclose(actual.astype(np.float32), expected[index].astype(np.float32),
+                                       rtol=.03, atol=.002)

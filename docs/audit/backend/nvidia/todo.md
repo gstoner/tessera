@@ -11,7 +11,7 @@ last_updated: 2026-10-19
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
 Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
 
-The named public/portable capacity route passes 24 prepared and 16 bounded public/fresh-process cases plus 14 static public regressions on RTX5070. One owner/images survives sequence shrink/grow; four fresh processes replay with external tools forbidden. Portable/frame checks pass 241; shared/plugin/registry gates pass 346. Paired public timings and broader delivery gates belong to the packet. General source/layout/AD and performance closure remain follow-up required.
+The named public/portable capacity route passes 24 prepared and 18 bounded public/fresh-process cases plus 14 static public regressions on RTX5070. One owner/images survives sequence shrink/grow; four fresh processes replay with external tools forbidden. Portable/frame checks pass 241; shared/plugin/registry gates pass 346. Paired public timings and broader delivery gates belong to the packet. General source/layout/AD and performance closure remain follow-up required.
 
 Contract: docs/spec/NATIVE_BOUNDED_SOURCE_PUBLIC.md.
 Evidence: benchmarks/baselines/native_bounded_source_public_20261019/README.md.

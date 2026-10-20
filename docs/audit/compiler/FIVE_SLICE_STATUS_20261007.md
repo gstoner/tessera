@@ -10,7 +10,7 @@ Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
 
 The private candidate connects original static paired source AD to a bounded
 four/five-member native program, retained C++ capacity owner, public native_backward
-and offline portable replay. RTX5070 passes 24 prepared cases, 16 bounded public/
+and offline portable replay. RTX5070 passes 24 prepared cases, 18 bounded public/
 fresh-process cases and 14 static public regressions. Frames reuse one owner/
 images and reject exceeding the same capacities without compiling. Portable/
 frame checks pass 241; shared/plugin/registry gates pass 346.
@@ -29,20 +29,21 @@ increments without closing the original five aggregate programs.
 | Slice | Additional established scope | Remaining requirement |
 | --- | --- | --- |
 | GFX1201 NVFP4 ingest | Public seven-member quantized MLP and original layer-0 gate/up/down inputs; source-preserving bounded and native AD increments retain their own receipts. | Representative-corpus/full-model quality, broader composition/layout/encoded AD. Layer-0 projection and staged numerical bounds do not prove model quality. |
-| NVIDIA W1.1 | Named resident paired tensor results, original normalization/matmul source pullback and static normalization-attention forward/reverse are implemented in later receipts. | Generic producer/accumulator reconstruction and mixed/pitched/dynamic composition. |
-| NVIDIA saved-LSE forward | Standalone bounded half resident capture and static original RMSNorm(Q) source composition execute with independent O/LSE roles. | Bounded original-source composition, mixed/quantized storage, wider masks and nested AD. |
-| NVIDIA backward | Standalone bounded half row correction and static original-source public/portable VJP execute; native automatic row strategy is delivered by PR989. | Bounded original-source VJP, wider source/AD composition and independent performance closure. |
+| NVIDIA W1.1 | Named resident paired tensor results, original normalization/matmul source pullback and static/bounded normalization-attention forward/reverse execute through native programs. | Generic producer/accumulator reconstruction and mixed/pitched/dynamic composition beyond the named capacity envelope. |
+| NVIDIA saved-LSE forward | Standalone bounded half resident capture and static/bounded original RMSNorm(Q) source programs execute with independent O/LSE roles. | Mixed/quantized storage, wider source/mask composition and nested AD. |
+| NVIDIA backward | Standalone bounded half row correction and static/bounded original-source public/portable VJP execute; capacity owners survive shrink/grow replay. | Wider source/AD composition and independent performance closure; tiny-frame auto policies remain mixed. |
 | ROCm routes/performance | PR990 is delivered with exact gfx1201 folded common-gate correctness and paired timings; rejected staging/K64/CU variants remain historical evidence. | Wider image/layout families, W8A8 short/ragged coverage and MXFP4/Radiance gap. Mixed long-K outcomes prohibit universal promotion. |
 
-Next integration: native bounded original-source normalization-attention reverse.
-Matching compiler probes emit static f16/bf16 source plans but reject explicit
-sequence bounds. Schema-8 bounded logical rows now pass 410 focused cases, twelve RTX5070
-member tests, four additional compiler/device actual-attention adjoint cases,
-and 23 gfx1201 device regressions with 44 adjacent unit/compiler
-cases. Two twelve-profile timing orders remove the initial width257 regression;
-small-row measurements remain mixed. Composed normalization/AD/capacity-owner/
-public/portable and broad delivery gates remain pending. Evidence:
+The bounded original-source normalization-attention integration now reaches
+public/portable execution in the named FP16/BF16 capacity envelope; see the
+current integration record above. The earlier row-prerequisite checkpoint
+(410 focused cases, twelve member tests, four actual-attention adjoint cases,
+23 gfx1201 regressions and 44 adjacent checks) is retained separately at
 benchmarks/baselines/native_bounded_query_rows_20261019/README.md.
+Its initial compiler refusal and pending-composition status are historical;
+later norm/source/owner/public receipts establish the additional boundaries.
+General producers, encoded/mixed storage, broader AD and physical performance
+remain separate obligations.
 The original objective remains open.
 
 ## ROCm native folded common gate — 2026-10-19

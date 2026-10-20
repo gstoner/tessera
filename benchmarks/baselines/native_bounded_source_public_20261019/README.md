@@ -22,6 +22,7 @@ df4552fafd31f19fe03c858fba2c7da3e9310abed3076a50fd7c8bf8906d25ac.
   decompositions, normal/permuted/swapped roles and two capacity/width profiles.
 - public-bounded.xml: 30 public cases: 12 bounded shrink/grow, four bounded
   fresh-process portable replay and 14 pre-existing static public regressions.
+- public-prefix.xml: two additional B=2,Hq=4,Hkv=2 shrink/grow cases with selected gradients; total public coverage is 32 distinct cases (18 bounded and 14 static).
 - bounded-python-regression.xml: 241 portable/frame cases. Earlier subsets
   and reruns are not additional distinct evidence.
 - bounded-public-shared.txt: 346 plugin/portable-auto/diagnostic/pass cases.
@@ -87,7 +88,11 @@ five surface audits plus claim lint pass. All 33 generated views regenerate.
 The first full CPU run passed 30,770 and skipped 3,710, with one recorder naming
 failure: this new recorder lacked an explicit tracked README citation. The
 Recorded by line and reproduction commands above fix that ownership omission;
-the empty-orphan ratchet is unchanged. Its focused rerun and final generated
-drift result are recorded separately before public delivery.
+the empty-orphan ratchet is unchanged. Its focused rerun passes, followed by
+a clean full CPU run: 30,771 passed, 3,710 skipped, zero failures (cpu-final.txt
+and cpu-final-summary.json). The final generated drift check confirms all
+33 views in sync. Two added owning batch/grouped-head cases pass separately;
+no compiler, provider or production Python implementation changed after the
+clean CPU run. The cumulative source review found no actionable issues.
 This packet does not close generic source/layout/AD, mixed/quantized attention,
 representative model/corpus quality or ROCm physical performance obligations.

@@ -3,8 +3,19 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-10-19
+last_updated: 2026-10-20
 ---
+
+## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+The original Graph now drives native admission and complete Target replay. The explicit frontend compile_native_tensor_program API produces immutable compiler-verified members/images and binds the retained C++ owner without tools on warm calls. Eight RTX5070 source-package cases pass; ordinary JIT dispatch, portable restoration and general producer/layout/dynamic/AD closure remain follow-up required.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PACKAGE.md.
+Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
+
 
 ## NATIVE-TENSOR-TARGET-CONTROLLER-20261019 — verified controller candidate
 

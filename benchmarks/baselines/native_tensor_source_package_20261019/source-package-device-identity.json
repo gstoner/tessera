@@ -1,0 +1,16 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "architecture": "sm_120",
+  "compiler_path": "/home/angstorms/scratch/w11-program-pipeline-20261019/source-package-tools/tessera-opt",
+  "compiler_sha256": "93025a87078ee7de1456ef21f05470e7b70cd3a966427860dc2d9e202ab7e228",
+  "compiler_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+  "layout_library_sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+  "provider_sha256": "72aaf57b4819f6aaf7931e59bbeb4cb68b8bd794e68cb2bb9108924eb6547e45",
+  "source_sha256": {
+    "python/tessera/compiler/native_tensor_program.py": "9ea49250ea221716e3f4c13a5ffae705b52dbe82f275f578c51f8d8588b6bf0b",
+    "python/tessera/compiler/jit.py": "e34aa87189816e2998b02f588a32bb737550c339fe305821d8fd3dab552b6a58",
+    "python/tessera/compiler/prepared_native_tensor_frame.py": "5a8aec16701bcd7061966065cd59f4a99a02a8862913646d5ba23bf2c46f0c2a",
+    "tests/device/nvidia/test_native_tensor_program_package_execution.py": "e76b632edcd0299b7e4586a1497eeadfa3d935ca05c76c0630a68d7ff8113251",
+    "benchmarks/nvidia/record_native_tensor_program_package.py": "a356191627778de7efd3fe24687ac0d69ab6407b8ab5cb76796a77d0d3ae8a67"
+  }
+}

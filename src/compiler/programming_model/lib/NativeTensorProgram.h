@@ -142,7 +142,15 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
   llvm::raw_string_ostream stream(source);
   module.print(stream); stream.flush();
   module->setAttr("tessera.native.tensor_program", builder.getI64IntegerAttr(1));
-  module->setAttr("tessera.native.tensor_program_source", builder.getStringAttr(source));
+  // Module printers add a final newline only at the outermost scope.
+  // Canonicalize that transport whitespace identically for source replay in a
+  // nested compiler pipeline; preserve every interior semantic attribute.
+  module->setAttr("tessera.native.tensor_program_source",
+      builder.getStringAttr(StringRef(source).trim()));
+  module->setAttr("tessera.native.tensor_program_source_sha256",
+      builder.getStringAttr(llvm::toHex(llvm::SHA256::hash(
+          llvm::arrayRefFromStringRef(StringRef(source).trim())), true)));
+
   SmallVector<Type> inputs;
   for (Value arg : root.getArguments()) inputs.push_back(bufferType(arg.getType()));
   auto host = func::FuncOp::create(root.getLoc(), root.getName(),

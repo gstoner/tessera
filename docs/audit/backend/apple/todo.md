@@ -3,8 +3,19 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-10-19
+last_updated: 2026-10-20
 ---
+
+## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to Metal/Apple CPU physical execution: the new package profile requires exact SM120, PTX images and the CUDA native-frame owner. Shared Graph-to-Schedule options do not select Apple profiles and no numerical policy is rewritten. Independent Apple native-program consumers remain follow-up required.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PACKAGE.md.
+Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
+
 
 ## NATIVE-TENSOR-TARGET-CONTROLLER-20261019 — verified controller candidate
 

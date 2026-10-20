@@ -47,6 +47,7 @@
 #include "Tessera/IR/TransposeUtils.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/IR/Verifier.h"
+#include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/SetVector.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -3474,6 +3475,12 @@ struct GraphToSchedulePass
   Option<bool> scaleTransposeAuto{*this, "scale-transpose-auto",
       llvm::cl::desc("Select a bounded gfx1201 FP8 scale-adjoint recipe from native reduction SSA"),
       llvm::cl::init(false)};
+  Option<bool> tensorProgramQuery{*this, "tensor-program-query",
+      llvm::cl::desc("Query native tensor program admission without changing Graph SSA"),
+      llvm::cl::init(false)};
+  Option<bool> tensorProgramReplay{*this, "tensor-program-replay",
+      llvm::cl::desc("Replay original Graph into the complete native tensor Target program"),
+      llvm::cl::init(false)};
   StringRef getArgument() const override { return "tessera-graph-to-schedule"; }
   StringRef getDescription() const override {
     return "Create a content-addressed mixed-level schedule.matmul SSA edge "
@@ -3489,6 +3496,63 @@ struct GraphToSchedulePass
 
   void runOnOperation() override {
     ModuleOp mod = getOperation();
+    if (tensorProgramQuery && tensorProgramReplay) {
+      mod.emitError("native tensor admission query and source replay are distinct modes");
+      return signalPassFailure();
+    }
+    if (tensorProgramQuery) {
+      bool admitted = false;
+      OwningOpRef<ModuleOp> candidate(cast<ModuleOp>(mod->clone()));
+      // Admission queries report whether this native profile can own the
+      // source. They never erase or rewrite the caller's semantic Graph.
+      {
+        ScopedDiagnosticHandler quiet(&getContext(), [](Diagnostic &) { return success(); });
+        if (failed(tensor_program::outline(*candidate, admitted))) admitted = false;
+      }
+      mod->setAttr("tessera.native.tensor_program_admission",
+          BoolAttr::get(&getContext(), admitted));
+      return;
+    }
+    if (tensorProgramReplay) {
+      auto source = mod->getAttrOfType<StringAttr>("tessera.native.tensor_program_source");
+      if (!source || !mod->hasAttr("tessera.native.tensor_program_target")) {
+        mod.emitError("native tensor replay requires its original Graph and complete Target controller");
+        return signalPassFailure();
+      }
+      auto original = parseSourceString<ModuleOp>(source.getValue(), &getContext());
+      if (!original || (*original)->hasAttr("tessera.native.tensor_program") ||
+          (*original)->hasAttr("tessera.native.tensor_program_member")) {
+        mod.emitError("native tensor replay source must be an original semantic Graph");
+        return signalPassFailure();
+      }
+      OpPassManager pipeline(ModuleOp::getOperationName());
+      if (failed(parsePassPipeline(
+              "tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-lower-to-nvidia-sm120",
+              pipeline)))
+        return signalPassFailure();
+      // Dynamic pass execution requires a nested operation. Temporarily attach
+      // this isolated, separately owned source module; never mutate the caller's
+      // actual controller or its members while replaying the source.
+      mod.getBody()->push_back(original->getOperation());
+      LogicalResult replayed = runPipeline(pipeline, *original);
+      original->getOperation()->remove();
+      if (failed(replayed)) return signalPassFailure();
+      std::string expected, actual;
+      llvm::raw_string_ostream expectedStream(expected), actualStream(actual);
+      original->print(expectedStream); mod.print(actualStream);
+      expectedStream.flush(); actualStream.flush();
+      if (expected != actual) {
+        auto error = mod.emitError("native tensor Target program differs from original Graph replay");
+        size_t mismatch = 0;
+        while (mismatch < std::min(expected.size(), actual.size()) &&
+               expected[mismatch] == actual[mismatch]) ++mismatch;
+        error.attachNote() << "first difference at byte " << mismatch
+            << "; expected: " << StringRef(expected).substr(mismatch, 160)
+            << "; actual: " << StringRef(actual).substr(mismatch, 160);
+        return signalPassFailure();
+      }
+      return;
+    }
     bool tensorProgram = false;
     if (failed(tensor_program::outline(mod, tensorProgram)))
       return signalPassFailure();

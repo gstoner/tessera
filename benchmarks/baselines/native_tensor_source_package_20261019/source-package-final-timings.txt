@@ -1,0 +1,8 @@
+relu-f16 compile_ms 3191.683 bind_ms 336.709 host_ms 0.177383 device_ms 0.00328
+relu-bf16 compile_ms 2176.069 bind_ms 5.139 host_ms 0.205326 device_ms 0.003164
+norm-f16 compile_ms 2159.399 bind_ms 4.898 host_ms 0.236224 device_ms 0.004193
+norm-bf16 compile_ms 2021.098 bind_ms 4.455 host_ms 0.192674 device_ms 0.004207
+two_sided-f16 compile_ms 2961.515 bind_ms 15.295 host_ms 0.219443 device_ms 0.005662
+two_sided-bf16 compile_ms 2955.738 bind_ms 5.595 host_ms 0.269223 device_ms 0.00492
+reverse-f16 compile_ms 2028.86 bind_ms 3.737 host_ms 0.22798 device_ms 0.00313
+reverse-bf16 compile_ms 1996.74 bind_ms 3.792 host_ms 0.317977 device_ms 0.003265

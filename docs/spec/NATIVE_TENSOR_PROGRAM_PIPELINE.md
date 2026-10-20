@@ -41,7 +41,8 @@ routes, reversed-root and two-sided coverage, typed lifetime/symbol/geometry
 checks, native member images, a retained C++ owner and RTX5070 numerical/stream
 proof. The Target controller increment below records the current evidence.
 
-Before public delivery, finish original-source replay and public JIT/portable
+The original-source replay and explicit compile API are now covered by
+NATIVE_TENSOR_PROGRAM_PACKAGE.md. Before public delivery, finish ordinary JIT/portable
 admission, compiler-free warm calls, broader numerical-policy/layout/AD
 coverage, and completed public-call/device benchmarks with unchanged
 FP8/MXFP8/MXFP4 controls where applicable. Run shared registries, four-backend
@@ -77,4 +78,5 @@ on the original module/function is rejected before primal projection; the AD
 transform must consume it first.
 
 Evidence: benchmarks/baselines/native_tensor_target_controller_20261019/.
-This adds no public JIT/portable or general AD closure.
+The later NATIVE_TENSOR_PROGRAM_PACKAGE.md increment adds source replay and an
+explicit compile API; ordinary JIT/portable and general AD closure remain open.

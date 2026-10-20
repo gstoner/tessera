@@ -2686,6 +2686,27 @@ class JitFn:
         return replace(package_traced_lhs(module,dynamic_axes=dynamic_axes,shape_bounds=shape_bounds),
                        argument_names=tuple(self.arg_names))
 
+    def compile_native_tensor_program(self, *args, **kwargs):
+        """Compile original frontend SSA into a verified native tensor program.
+
+        Admission, complete producer dataflow and numerical policies are owned
+        by native Graph/Schedule/Tile/Target passes. The returned immutable
+        program prepares a retained native owner without compiler access.
+        """
+        if (normalize_target_kind(self.target) != "nvidia_sm120"
+                or self.differentiation_request is not None):
+            raise TesseraJitError("native tensor program requires primal exact nvidia_sm120")
+        from .native_tensor_program import compile_native_tensor_program
+
+        bound = self._native_frontend_signature().bind(*args, **kwargs)
+        bound.apply_defaults()
+        ordered = tuple(bound.arguments[name] for name in self.arg_names)
+        module = self._traced_autodiff_module(ordered, {})
+        program = compile_native_tensor_program(module)
+        if program is None:
+            raise TesseraJitError("native compiler did not admit this tensor program profile")
+        return program
+
     def _try_nvidia_rhs_call(self, args, kwargs):
         """Execute the named traced half-storage RHS producer on native SM120."""
         if normalize_target_kind(self.target) != "nvidia_sm120" or self.differentiation_request is not None:

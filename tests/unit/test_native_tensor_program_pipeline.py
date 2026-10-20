@@ -238,3 +238,81 @@ def test_target_invocation_cannot_bind_semantic_graph_member():
     rejected = _run(text)
     assert rejected.returncode != 0
     assert "Target invocation requires a lowered native kernel" in rejected.stderr
+
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.parametrize("function", [relu_product, norm_product, both_products, reversed_product])
+def test_native_admission_query_preserves_semantic_source(function, storage):
+    source = traced_source(function, storage)
+    queried = _run(source, "--tessera-graph-to-schedule=tensor-program-query")
+    assert queried.returncode == 0, queried.stderr
+    assert "tessera.native.tensor_program_admission = true" in queried.stdout
+    assert "tile.program_invoke" not in queried.stdout
+    assert "tensor_stage_" not in queried.stdout
+    assert "memref.alloc" not in queried.stdout
+    for op in ("tessera.relu", "tessera.rmsnorm", "tessera.softmax", "tessera.matmul"):
+        assert source.count(op) == queried.stdout.count(op)
+
+
+def test_native_admission_query_declines_fused_without_mutating_graph():
+    source = traced_source(relu_product, "f16")
+    source = source.replace('output_dtype = "fp32"', 'activation = "relu", output_dtype = "fp32"')
+    assert 'activation = "relu"' in source
+    queried = _run(source, "--tessera-graph-to-schedule=tensor-program-query")
+    assert queried.returncode == 0, queried.stderr
+    assert "tessera.native.tensor_program_admission = false" in queried.stdout
+    assert 'activation = "relu"' in queried.stdout
+    assert "tile.program_invoke" not in queried.stdout
+    # Real compilation remains strict. A query decline cannot rewrite a fused
+    # operation into an unfused program.
+    rejected = _run(source, "--tessera-graph-to-schedule")
+    assert rejected.returncode != 0
+
+
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.parametrize("function", [relu_product, norm_product, both_products, reversed_product])
+def test_native_target_replays_its_original_source(function, storage):
+    source = _run(traced_source(function, storage))
+    assert source.returncode == 0, source.stderr
+    target = _run(source.stdout, "--tessera-graph-to-schedule", "--tessera-schedule-to-tile",
+                  "--tessera-lower-to-nvidia-sm120")
+    assert target.returncode == 0, target.stderr
+    import hashlib
+    seal = hashlib.sha256(source.stdout.strip().encode()).hexdigest()
+    assert f'tessera.native.tensor_program_source_sha256 = "{seal}"' in target.stdout
+    checked = _run(target.stdout, "--tessera-graph-to-schedule=tensor-program-replay")
+    assert checked.returncode == 0, checked.stderr
+    assert checked.stdout == target.stdout
+
+
+@pytest.mark.parametrize("edit", ["source_hash", "policy", "body", "entry"])
+def test_native_replay_rejects_valid_typed_but_changed_program(edit):
+    target = _run(traced_source(norm_product, "f16"), "--tessera-graph-to-schedule",
+                  "--tessera-schedule-to-tile", "--tessera-lower-to-nvidia-sm120")
+    assert target.returncode == 0, target.stderr
+    text = target.stdout
+    if edit == "source_hash":
+        text = re.sub(r'(tessera.native.tensor_program_source_sha256 = ")[^"]+',
+                      r'\g<1>' + "0" * 64, text)
+    elif edit == "policy":
+        # Only alter the controller's semantic policy, preserving valid native
+        # pointer/scalar bindings and geometry. Ordinary type checking passes.
+        lines = text.splitlines(keepends=True)
+        for i, line in enumerate(lines):
+            if "tessera_nvidia.program_invoke " in line and 'accum = "fp32"' in line:
+                lines[i] = line.replace('accum = "fp32"', 'accum = "fp16"')
+                break
+        else:
+            raise AssertionError("expected explicit normalization policy")
+        text = "".join(lines)
+    elif edit == "body":
+        assert "arith.mulf " in text
+        text = text.replace("arith.mulf ", "arith.addf ", 1)
+    else:
+        entry = re.search(r"llvm.func @([A-Za-z0-9_]+)", text)[1]
+        text = text.replace(entry, entry + "_different")
+    assert text != target.stdout
+    typed = _run(text)
+    assert typed.returncode == 0, typed.stderr
+    checked = _run(text, "--tessera-graph-to-schedule=tensor-program-replay")
+    assert checked.returncode != 0
+    assert "differs from original Graph replay" in checked.stderr

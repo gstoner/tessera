@@ -1,9 +1,20 @@
 ---
-last_updated: 2026-10-19
+last_updated: 2026-10-20
 audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+
+## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to gfx1151/gfx1201 physical execution: the native source-package profile requires exact SM120/CUDA. Query/replay modes add no ROCm dtype, image, ABI or physical schedule admission. ROCm source-to-program and route/performance obligations retain independent exact-device gates.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PACKAGE.md.
+Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
+
 
 ## NATIVE-TENSOR-TARGET-CONTROLLER-20261019 — verified controller candidate
 

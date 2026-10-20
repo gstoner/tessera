@@ -1,11 +1,22 @@
 ---
-last_updated: 2026-10-19
+last_updated: 2026-10-20
 audit_role: plan
 plan_state: open
 owner: x86 backend
 target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
+
+## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to CPU physical execution: the immutable package carries SM120 images and CUDA ownership. Shared frontend target projection copies caller-owned module attributes and changes no x86 Graph operations or policies. Independent CPU native-program/AD evidence remains follow-up required.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PACKAGE.md.
+Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
+
 
 ## NATIVE-TENSOR-TARGET-CONTROLLER-20261019 — verified controller candidate
 

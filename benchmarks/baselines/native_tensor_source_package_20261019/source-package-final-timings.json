@@ -1,0 +1,1394 @@
+{
+  "scope": "named original-source native package API; ordinary JIT/portable integration remains open",
+  "shape_mnk": [
+    17,
+    11,
+    32
+  ],
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "architecture": "sm_120",
+  "provider_sha256": "72aaf57b4819f6aaf7931e59bbeb4cb68b8bd794e68cb2bb9108924eb6547e45",
+  "rounds": 7,
+  "repetitions": 32,
+  "timing_contract": {
+    "source_compile": "frontend trace, admission, full native lowering, image packaging and source replay; existing process/tool caches",
+    "native_bind": "driver context/module JIT, ABI checks and arena preparation; first bind may include lazy context initialization",
+    "completed_call": "validated roots, H2D, all kernels, D2H, completion and host result allocation; external tools forbidden",
+    "device": "captured native full-program/stage event windows; excludes transfers/readback/capture setup",
+    "stage_windows": "independent, nonadditive"
+  },
+  "cases": {
+    "relu-f16": {
+      "source_compile_ms": 3191.683346987702,
+      "native_bind_ms": 336.70948597136885,
+      "completed_call_samples_ms": [
+        0.22036862355889753,
+        0.18868574989028275,
+        0.17464746815676335,
+        0.17638687495491467,
+        0.17523596761748195,
+        0.40189209539676085,
+        0.17738315546012018
+      ],
+      "completed_call_median_ms": 0.17738315546012018,
+      "captured_program_samples_ms": [
+        0.004509999882429838,
+        0.003280000062659383,
+        0.003117999993264675,
+        0.0031300000846385956,
+        0.004226999823004007,
+        0.0031169999856501818,
+        0.004488000180572271
+      ],
+      "captured_program_median_ms": 0.003280000062659383,
+      "captured_stage_samples_ms": [
+        [
+          0.0022609999869018793,
+          0.0012570000253617764
+        ],
+        [
+          0.002082000020891428,
+          0.0010710000060498714
+        ],
+        [
+          0.0022060000337660313,
+          0.0010460000485181808
+        ],
+        [
+          0.0021830000914633274,
+          0.001196000026538968
+        ],
+        [
+          0.002454000059515238,
+          0.0018189999973401427
+        ],
+        [
+          0.002111000008881092,
+          0.001155999954789877
+        ],
+        [
+          0.002254999941214919,
+          0.0017330000409856439
+        ]
+      ],
+      "source_sha256": "80c239d8f306d58b918a19a559feebde452d7d0b9a864fce559bbeab117a9fda",
+      "target_sha256": "ee30d879ad8fd0360a245b64921f7edcacbc7d020ee231ed4a02c15dd5474564",
+      "image_sha256": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "compiler_identity": "765f317fc8d85c8979bd090a23b4a3747571832becbd203d22c0b0592d14631b",
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1088,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 704,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              32,
+              11
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1088,
+            "id": 2,
+            "role": "private",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 748,
+            "id": 3,
+            "role": "output",
+            "shape": [
+              17,
+              11
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "relu",
+        "output": 3,
+        "roots": [
+          0,
+          1
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "tessera_tile_activation_relu_f16_8f98fe60b2",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              0
+            ],
+            "member": "tensor_stage_0",
+            "output": 2,
+            "scalars": [
+              17,
+              32
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              2,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              2,
+              1
+            ],
+            "member": "tensor_stage_1",
+            "output": 3,
+            "scalars": [
+              17,
+              11,
+              32
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "device_allocations": 1,
+      "device_capacity_bytes": 4096,
+      "max_abs_error": 5.4016709327697754e-08,
+      "correctness": "passed_before_and_after_timing"
+    },
+    "relu-bf16": {
+      "source_compile_ms": 2176.068563014269,
+      "native_bind_ms": 5.138674983754754,
+      "completed_call_samples_ms": [
+        0.2651631548360456,
+        0.18330318744119722,
+        0.22715271916240454,
+        0.17418809511582367,
+        0.20353190666355658,
+        0.2097906562994467,
+        0.2053262487606844
+      ],
+      "completed_call_median_ms": 0.2053262487606844,
+      "captured_program_samples_ms": [
+        0.0031640001107007265,
+        0.004232000093907118,
+        0.003077999921515584,
+        0.003094000043347478,
+        0.0030529999639838934,
+        0.0031900000758469105,
+        0.0042860000394284725
+      ],
+      "captured_program_median_ms": 0.0031640001107007265,
+      "captured_stage_samples_ms": [
+        [
+          0.002131999935954809,
+          0.0011239999439567327
+        ],
+        [
+          0.0022690000478178263,
+          0.0022440000902861357
+        ],
+        [
+          0.0022040000185370445,
+          0.0010809999657794833
+        ],
+        [
+          0.0021299999207258224,
+          0.0010610000463202596
+        ],
+        [
+          0.002177000045776367,
+          0.00203000009059906
+        ],
+        [
+          0.0021699999924749136,
+          0.0010529999854043126
+        ],
+        [
+          0.002240000059828162,
+          0.0022499999031424522
+        ]
+      ],
+      "source_sha256": "09e3ecd59ffb5f79d487064dc8d0b35c63bc186406b0062658ccb7aa026bebc9",
+      "target_sha256": "0e824d846df1e56fc40c9174e97683a8512c0a0abb2d41d820c37f1ff02e405e",
+      "image_sha256": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "compiler_identity": "765f317fc8d85c8979bd090a23b4a3747571832becbd203d22c0b0592d14631b",
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1088,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 704,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              32,
+              11
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1088,
+            "id": 2,
+            "role": "private",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 748,
+            "id": 3,
+            "role": "output",
+            "shape": [
+              17,
+              11
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "relu",
+        "output": 3,
+        "roots": [
+          0,
+          1
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "tessera_tile_activation_relu_bf16_e08ed52a65",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              0
+            ],
+            "member": "tensor_stage_0",
+            "output": 2,
+            "scalars": [
+              17,
+              32
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              2,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              2,
+              1
+            ],
+            "member": "tensor_stage_1",
+            "output": 3,
+            "scalars": [
+              17,
+              11,
+              32
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "device_allocations": 1,
+      "device_capacity_bytes": 4096,
+      "max_abs_error": 3.725290298461914e-08,
+      "correctness": "passed_before_and_after_timing"
+    },
+    "norm-f16": {
+      "source_compile_ms": 2159.399309020955,
+      "native_bind_ms": 4.898282000795007,
+      "completed_call_samples_ms": [
+        0.1931505303218728,
+        0.4089668746019015,
+        0.18997890583705157,
+        0.23805909404472914,
+        0.236223750107456,
+        0.18661040485312697,
+        0.46442496932286303
+      ],
+      "completed_call_median_ms": 0.236223750107456,
+      "captured_program_samples_ms": [
+        0.004191000014543533,
+        0.004251000005751848,
+        0.00419300002977252,
+        0.004277000203728676,
+        0.00418600020930171,
+        0.004155000206083059,
+        0.00433199992403388
+      ],
+      "captured_program_median_ms": 0.00419300002977252,
+      "captured_stage_samples_ms": [
+        [
+          0.0033279999624937773,
+          0.0010369999799877405
+        ],
+        [
+          0.003280000062659383,
+          0.001171999960206449
+        ],
+        [
+          0.0046179997734725475,
+          0.0011259999591857195
+        ],
+        [
+          0.0032659999560564756,
+          0.0010969999711960554
+        ],
+        [
+          0.00330400001257658,
+          0.0010349999647587538
+        ],
+        [
+          0.0032969999592751265,
+          0.0010819999733939767
+        ],
+        [
+          0.003281000070273876,
+          0.0011030000168830156
+        ]
+      ],
+      "source_sha256": "ee5bc2c3d406f491d67eb54280d00002d4ad064710b8bdc457a3db5e55b0fe5d",
+      "target_sha256": "25e80d69bfe1f8512302b191f5326723d71583d9125f32fea62407988c184af5",
+      "image_sha256": [
+        "531396bb5373e245fec2890d23402a7eb7477424b3455cb776046e14e9b9b9f0",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "compiler_identity": "765f317fc8d85c8979bd090a23b4a3747571832becbd203d22c0b0592d14631b",
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1088,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 704,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              32,
+              11
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1088,
+            "id": 2,
+            "role": "private",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 748,
+            "id": 3,
+            "role": "output",
+            "shape": [
+              17,
+              11
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "norm",
+        "output": 3,
+        "roots": [
+          0,
+          1
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "tessera_tile_norm_rmsnorm_f16_be764451ec",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              0
+            ],
+            "member": "tensor_stage_0",
+            "output": 2,
+            "scalars": [
+              17,
+              32
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              2,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              2,
+              1
+            ],
+            "member": "tensor_stage_1",
+            "output": 3,
+            "scalars": [
+              17,
+              11,
+              32
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "device_allocations": 1,
+      "device_capacity_bytes": 4096,
+      "max_abs_error": 3.0710361897945404e-07,
+      "correctness": "passed_before_and_after_timing"
+    },
+    "norm-bf16": {
+      "source_compile_ms": 2021.0982389980927,
+      "native_bind_ms": 4.454531997907907,
+      "completed_call_samples_ms": [
+        0.21878668667341117,
+        0.19118796808470506,
+        0.22820337471785024,
+        0.19267399875388946,
+        0.19203737429052126,
+        0.22634334345639218,
+        0.19065609376411885
+      ],
+      "completed_call_median_ms": 0.19267399875388946,
+      "captured_program_samples_ms": [
+        0.004265999887138605,
+        0.0044479998759925365,
+        0.00419900007545948,
+        0.004201000090688467,
+        0.004207000136375427,
+        0.004188999999314547,
+        0.0042500002309679985
+      ],
+      "captured_program_median_ms": 0.004207000136375427,
+      "captured_stage_samples_ms": [
+        [
+          0.0032949999440461397,
+          0.0010930000571534038
+        ],
+        [
+          0.003324999939650297,
+          0.0010430000256747007
+        ],
+        [
+          0.003324999939650297,
+          0.00120900000911206
+        ],
+        [
+          0.0032420000061392784,
+          0.0010499999625608325
+        ],
+        [
+          0.004507000092417002,
+          0.0020580000709742308
+        ],
+        [
+          0.003263999940827489,
+          0.0010379999876022339
+        ],
+        [
+          0.0032649999484419823,
+          0.0011070000473409891
+        ]
+      ],
+      "source_sha256": "d10734047ad8c37ff90eb2830bd4e51706eadeda82e362ab61a2806665a62a08",
+      "target_sha256": "ab4bc58cd527dda834c6ae398466ebfbddefe03f96a26cb00cbc8f5e9b06064c",
+      "image_sha256": [
+        "090b018a9ab4c8e947e995cd4f76c0e3157a6bdf1b3d34e622bb6e07cfe124d2",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "compiler_identity": "765f317fc8d85c8979bd090a23b4a3747571832becbd203d22c0b0592d14631b",
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1088,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 704,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              32,
+              11
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1088,
+            "id": 2,
+            "role": "private",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 748,
+            "id": 3,
+            "role": "output",
+            "shape": [
+              17,
+              11
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "norm",
+        "output": 3,
+        "roots": [
+          0,
+          1
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "tessera_tile_norm_rmsnorm_bf16_3789979834",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              0
+            ],
+            "member": "tensor_stage_0",
+            "output": 2,
+            "scalars": [
+              17,
+              32
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              2,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              2,
+              1
+            ],
+            "member": "tensor_stage_1",
+            "output": 3,
+            "scalars": [
+              17,
+              11,
+              32
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "device_allocations": 1,
+      "device_capacity_bytes": 4096,
+      "max_abs_error": 3.8743019104003906e-07,
+      "correctness": "passed_before_and_after_timing"
+    },
+    "two_sided-f16": {
+      "source_compile_ms": 2961.515199043788,
+      "native_bind_ms": 15.295099001377821,
+      "completed_call_samples_ms": [
+        0.22968981284066103,
+        0.19839024935208727,
+        0.2589121249911841,
+        0.21944265608908609,
+        0.23615443751623388,
+        0.20472500000323635,
+        0.19861524924635887
+      ],
+      "completed_call_median_ms": 0.21944265608908609,
+      "captured_program_samples_ms": [
+        0.006426999811083078,
+        0.007561999838799238,
+        0.004726999904960394,
+        0.00546600017696619,
+        0.005661999806761742,
+        0.004747999832034111,
+        0.006173999980092049
+      ],
+      "captured_program_median_ms": 0.005661999806761742,
+      "captured_stage_samples_ms": [
+        [
+          0.0023560000117868185,
+          0.0022319999989122152,
+          0.002228999976068735
+        ],
+        [
+          0.0026000000070780516,
+          0.0018570000538602471,
+          0.001630999962799251
+        ],
+        [
+          0.0021250001154839993,
+          0.0017979999538511038,
+          0.0018439999548718333
+        ],
+        [
+          0.0022619999945163727,
+          0.0018550000386312604,
+          0.0013689999468624592
+        ],
+        [
+          0.0021440000273287296,
+          0.001979999942705035,
+          0.0019199999514967203
+        ],
+        [
+          0.002177000045776367,
+          0.0020169999916106462,
+          0.0010649999603629112
+        ],
+        [
+          0.0023129999171942472,
+          0.003599999938160181,
+          0.0026020000223070383
+        ]
+      ],
+      "source_sha256": "557b6d7a26c72c4a4f9393289f3084cec46bcbc5a18b0847b742071103ed94f5",
+      "target_sha256": "e80ae0e9fe78fe2a4f8da9e878bbb49c840da8d3c2487707ebd0b1d6afdc6446",
+      "image_sha256": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "af4e4a678f6a255cbc0f78fd1d7a0f9907df967b7278ea08db7b15c03b1dcce2",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "compiler_identity": "765f317fc8d85c8979bd090a23b4a3747571832becbd203d22c0b0592d14631b",
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1088,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 704,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              32,
+              11
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1088,
+            "id": 2,
+            "role": "private",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 704,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              32,
+              11
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 748,
+            "id": 4,
+            "role": "output",
+            "shape": [
+              17,
+              11
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "two_sided",
+        "output": 4,
+        "roots": [
+          0,
+          1
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "tessera_tile_activation_relu_f16_8f98fe60b2",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              0
+            ],
+            "member": "tensor_stage_0",
+            "output": 2,
+            "scalars": [
+              17,
+              32
+            ]
+          },
+          {
+            "entry": "tessera_tile_softmax_f16",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              1
+            ],
+            "member": "tensor_stage_1",
+            "output": 3,
+            "scalars": [
+              32,
+              11
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              2,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              2,
+              3
+            ],
+            "member": "tensor_stage_2",
+            "output": 4,
+            "scalars": [
+              17,
+              11,
+              32
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "device_allocations": 1,
+      "device_capacity_bytes": 4864,
+      "max_abs_error": 3.91155481338501e-08,
+      "correctness": "passed_before_and_after_timing"
+    },
+    "two_sided-bf16": {
+      "source_compile_ms": 2955.737911979668,
+      "native_bind_ms": 5.594599002506584,
+      "completed_call_samples_ms": [
+        0.32128278144227806,
+        0.5387544988479931,
+        0.2200873441324802,
+        0.48052543752419297,
+        0.2545430324971676,
+        0.23180184507509694,
+        0.2692228754312964
+      ],
+      "completed_call_median_ms": 0.2692228754312964,
+      "captured_program_samples_ms": [
+        0.004894999787211418,
+        0.005030000116676092,
+        0.004920000210404396,
+        0.004889000207185745,
+        0.0050479997880756855,
+        0.0049430001527071,
+        0.004887999966740608
+      ],
+      "captured_program_median_ms": 0.004920000210404396,
+      "captured_stage_samples_ms": [
+        [
+          0.00215000007301569,
+          0.0017950000474229455,
+          0.002578000072389841
+        ],
+        [
+          0.0022609999869018793,
+          0.00184599997010082,
+          0.0010689999908208847
+        ],
+        [
+          0.0022499999031424522,
+          0.0019399999873712659,
+          0.0011660000309348106
+        ],
+        [
+          0.0021589999087154865,
+          0.0019310000352561474,
+          0.0010849999962374568
+        ],
+        [
+          0.0022430000826716423,
+          0.001967000076547265,
+          0.001234999974258244
+        ],
+        [
+          0.002397000091150403,
+          0.0020570000633597374,
+          0.0012309999438002706
+        ],
+        [
+          0.002483000047504902,
+          0.001896000001579523,
+          0.0011660000309348106
+        ]
+      ],
+      "source_sha256": "c5112ad8877606e12e989caff36d47f09079e31156c114a68d493ff636a8dd18",
+      "target_sha256": "bbde93dc9f7f5a7f9a3abbead0916c2f82c1872ddaca48c6b153a905ed733357",
+      "image_sha256": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "2fa9b73308547179ecfe39a225139972dd76bb757bc58609f42d1d480f6b75e9",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "compiler_identity": "765f317fc8d85c8979bd090a23b4a3747571832becbd203d22c0b0592d14631b",
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 1088,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 704,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              32,
+              11
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1088,
+            "id": 2,
+            "role": "private",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 704,
+            "id": 3,
+            "role": "private",
+            "shape": [
+              32,
+              11
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 748,
+            "id": 4,
+            "role": "output",
+            "shape": [
+              17,
+              11
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "two_sided",
+        "output": 4,
+        "roots": [
+          0,
+          1
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "tessera_tile_activation_relu_bf16_e08ed52a65",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              0
+            ],
+            "member": "tensor_stage_0",
+            "output": 2,
+            "scalars": [
+              17,
+              32
+            ]
+          },
+          {
+            "entry": "tessera_tile_softmax_bf16",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              1
+            ],
+            "member": "tensor_stage_1",
+            "output": 3,
+            "scalars": [
+              32,
+              11
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              2,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              2,
+              3
+            ],
+            "member": "tensor_stage_2",
+            "output": 4,
+            "scalars": [
+              17,
+              11,
+              32
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "device_allocations": 1,
+      "device_capacity_bytes": 4864,
+      "max_abs_error": 2.60770320892334e-08,
+      "correctness": "passed_before_and_after_timing"
+    },
+    "reverse-f16": {
+      "source_compile_ms": 2028.8597459439188,
+      "native_bind_ms": 3.737129969522357,
+      "completed_call_samples_ms": [
+        0.2043715303443605,
+        0.23302278168557677,
+        0.20500906248344108,
+        0.23284000053536147,
+        0.20512312585196923,
+        0.24029006090131588,
+        0.2279802502016537
+      ],
+      "completed_call_median_ms": 0.2279802502016537,
+      "captured_program_samples_ms": [
+        0.003746999893337488,
+        0.003008000086992979,
+        0.0031709999311715364,
+        0.00304200011305511,
+        0.0031300000846385956,
+        0.003249000059440732,
+        0.0030269999988377094
+      ],
+      "captured_program_median_ms": 0.0031300000846385956,
+      "captured_stage_samples_ms": [
+        [
+          0.002191999927163124,
+          0.0010819999733939767
+        ],
+        [
+          0.002220999915152788,
+          0.0019680000841617584
+        ],
+        [
+          0.0021329999435693026,
+          0.001066999975591898
+        ],
+        [
+          0.002131999935954809,
+          0.0011129999766126275
+        ],
+        [
+          0.0024429999757558107,
+          0.004945000167936087
+        ],
+        [
+          0.002589999930933118,
+          0.0010600000387057662
+        ],
+        [
+          0.0023270000237971544,
+          0.0010969999711960554
+        ]
+      ],
+      "source_sha256": "211cbb3292d3e1d2276ac2eab03fecea8d0a249d0e40684f49132d2db822f8db",
+      "target_sha256": "f123868857789623f16a636a648a67a17156c4a89d390e17d6d3611ea1e9b45c",
+      "image_sha256": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "compiler_identity": "765f317fc8d85c8979bd090a23b4a3747571832becbd203d22c0b0592d14631b",
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 704,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              32,
+              11
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1088,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1088,
+            "id": 2,
+            "role": "private",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 748,
+            "id": 3,
+            "role": "output",
+            "shape": [
+              17,
+              11
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "reverse",
+        "output": 3,
+        "roots": [
+          0,
+          1
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "tessera_tile_activation_relu_f16_8f98fe60b2",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 2,
+            "scalars": [
+              17,
+              32
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              2,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              2,
+              0
+            ],
+            "member": "tensor_stage_1",
+            "output": 3,
+            "scalars": [
+              17,
+              11,
+              32
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "device_allocations": 1,
+      "device_capacity_bytes": 4096,
+      "max_abs_error": 5.4016709327697754e-08,
+      "correctness": "passed_before_and_after_timing"
+    },
+    "reverse-bf16": {
+      "source_compile_ms": 1996.7401460162364,
+      "native_bind_ms": 3.7918209563940763,
+      "completed_call_samples_ms": [
+        0.3047254685952794,
+        0.32056278178060893,
+        0.2941178136097733,
+        0.489854593979544,
+        0.31086174931260757,
+        0.31797712472325657,
+        0.3313994693598943
+      ],
+      "completed_call_median_ms": 0.31797712472325657,
+      "captured_program_samples_ms": [
+        0.0033650000113993883,
+        0.004015999846160412,
+        0.003261999925598502,
+        0.0032110000029206276,
+        0.0029929999727755785,
+        0.0032949999440461397,
+        0.0032649999484419823
+      ],
+      "captured_program_median_ms": 0.0032649999484419823,
+      "captured_stage_samples_ms": [
+        [
+          0.002205000026151538,
+          0.0011279999744147062
+        ],
+        [
+          0.002208000048995018,
+          0.0011269999668002129
+        ],
+        [
+          0.0021569998934865,
+          0.0010770000517368317
+        ],
+        [
+          0.0021649999544024467,
+          0.0011350000277161598
+        ],
+        [
+          0.0021120000164955854,
+          0.0011859999503940344
+        ],
+        [
+          0.0021120000164955854,
+          0.0012339999666437507
+        ],
+        [
+          0.002148000057786703,
+          0.002445999998599291
+        ]
+      ],
+      "source_sha256": "aaf2888b9a3c164bcfca32a62ddc0f96a3cb41568805ea0d6b1a8bfadfa33c5e",
+      "target_sha256": "f66ddb9180549b46fa08c6bf78afad27ad3b6a2ded1e311bc0394432aebfe019",
+      "image_sha256": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "compiler_identity": "765f317fc8d85c8979bd090a23b4a3747571832becbd203d22c0b0592d14631b",
+      "frame": {
+        "architecture": "sm_120",
+        "buffers": [
+          {
+            "bytes": 704,
+            "id": 0,
+            "role": "input",
+            "shape": [
+              32,
+              11
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1088,
+            "id": 1,
+            "role": "input",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1088,
+            "id": 2,
+            "role": "private",
+            "shape": [
+              17,
+              32
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 748,
+            "id": 3,
+            "role": "output",
+            "shape": [
+              17,
+              11
+            ],
+            "storage": "f32"
+          }
+        ],
+        "function": "reverse",
+        "output": 3,
+        "roots": [
+          0,
+          1
+        ],
+        "schema": "tessera.native.tensor_program_frame.v1",
+        "stages": [
+          {
+            "entry": "tessera_tile_activation_relu_bf16_e08ed52a65",
+            "geometry": [
+              1,
+              1,
+              1,
+              128,
+              1,
+              1
+            ],
+            "inputs": [
+              1
+            ],
+            "member": "tensor_stage_0",
+            "output": 2,
+            "scalars": [
+              17,
+              32
+            ]
+          },
+          {
+            "entry": "source_kernel",
+            "geometry": [
+              2,
+              2,
+              1,
+              32,
+              1,
+              1
+            ],
+            "inputs": [
+              2,
+              0
+            ],
+            "member": "tensor_stage_1",
+            "output": 3,
+            "scalars": [
+              17,
+              11,
+              32
+            ]
+          }
+        ],
+        "target": "nvidia_sm120"
+      },
+      "device_allocations": 1,
+      "device_capacity_bytes": 4096,
+      "max_abs_error": 3.725290298461914e-08,
+      "correctness": "passed_before_and_after_timing"
+    }
+  }
+}

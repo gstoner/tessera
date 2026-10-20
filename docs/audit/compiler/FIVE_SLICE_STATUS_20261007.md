@@ -3,6 +3,18 @@ last_updated: 2026-10-19
 audit_role: reference
 ---
 
+## Native tensor original-source packages — 2026-10-19
+
+Native admission preserves the original frontend Graph; complete Target replay
+reconstructs and compares native arithmetic, policy, buffers, symbols and
+launch contracts. The explicit frontend compile API now packages verified
+source/members/images and binds the C++ owner without tools on retained calls.
+Eight RTX5070 source/storage cases pass. Ordinary JIT dispatch, compiler-free
+portable restoration and broader producer/layout/dynamic/AD integration remain
+open. This advances W1.1 and keeps the complete five-slice goal open.
+Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
+
+
 ## Native tensor Target controller — 2026-10-19
 
 The private W1.1 candidate now preserves the complete host controller as

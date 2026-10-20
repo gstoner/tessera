@@ -74,8 +74,10 @@ context; it is not frontend/compiler cost.
 
 ## Next integration gates
 
-Finish source-to-program replay checks and whole-program Target IR/ABI
-integration before routing public calls through this owner. Preserve the native
+The named whole-program Target controller is now verified in
+NATIVE_TENSOR_PROGRAM_PIPELINE.md and the native_tensor_target_controller_20261019
+packet. Finish source-to-program replay and public ABI admission before routing
+public calls through this owner. Preserve the native
 Graph/Schedule/Tile/Target ancestry; do not replace the remaining integration
 with Python operation dispatch or reconstructed kernels. Then prove
 compiler-free warm public replay, portable reconstruction, broader source and

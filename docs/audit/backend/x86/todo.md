@@ -7,6 +7,17 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## NATIVE-TENSOR-TARGET-CONTROLLER-20261019 — verified controller candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to CPU physical execution: this Target controller has CUDA kernel bindings and exact SM120 admission. Shared Tile verifier refactoring introduces no CPU operation/dtype/runtime admission. Independent CPU native-program and AD consumers remain follow-up required.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_target_controller_20261019/README.md.
+
+
 ## NATIVE-TENSOR-FRAME-OWNER-20261019 — native consumer candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

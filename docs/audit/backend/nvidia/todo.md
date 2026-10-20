@@ -6,6 +6,17 @@ target: nvidia_sm120
 last_updated: 2026-10-19
 ---
 
+## NATIVE-TENSOR-TARGET-CONTROLLER-20261019 — verified controller candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Parity validated for the named complete static f16/bf16 producer controller: 44 compiler cases, 538 focused host gates and 45 repeated RTX5070 runtime cases pass. Target member images are byte-identical to prior controls. Public JIT, source replay, portable reconstruction and broader producer/layout/AD integration remain follow-up required; no performance promotion.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_target_controller_20261019/README.md.
+
+
 ## NATIVE-TENSOR-FRAME-OWNER-20261019 — native consumer candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

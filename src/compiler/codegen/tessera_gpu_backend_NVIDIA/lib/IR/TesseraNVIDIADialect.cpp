@@ -1,3 +1,4 @@
+#include "Tessera/IR/NativeTensorProgramContract.h"
 #include "Tessera/IR/RowRegionContract.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -237,3 +238,8 @@ LogicalResult CudaMathKernelOp::verify() {
 }
 
 mlir::LogicalResult tessera::nvidia::RowRegionKernelOp::verify() { return tessera::row_region::verifyKernel(getOperation()); }
+
+
+LogicalResult ProgramInvokeOp::verify() {
+  return tessera::native_tensor_program::verifyInvocation(getOperation());
+}

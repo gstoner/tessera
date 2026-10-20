@@ -34,26 +34,47 @@ geometry. Native Schedule-to-Tile supplies geometry and scalar arguments from
 the actual kernel selection. Original semantic policy attributes remain visible
 at the program boundary. Python must not manufacture numerical members.
 
-## Gates still required
+## Completed named milestones and remaining gates
 
-- Positive standard and explicit Schedule/Tile routes for FP16/BF16, two-sided
-  producers and reversed source argument order.
-- Adversarial buffer, lifetime, symbol, numerical-policy and layout checks.
-- Native member projection, image packaging and retained C++ owner execution.
-- Exact RTX5070 numerical comparisons, stream ordering and guarded allocations.
-- Separate completed public-call and device timing with unchanged primitive
-  FP8/MXFP8/MXFP4 controls where applicable.
-- Shared registry, diagnostic/pass, four-backend, generated-document and full
-  validation gates before one reviewed PR.
+The named static FP16/BF16 programs have positive standard/explicit compiler
+routes, reversed-root and two-sided coverage, typed lifetime/symbol/geometry
+checks, native member images, a retained C++ owner and RTX5070 numerical/stream
+proof. The Target controller increment below records the current evidence.
 
-This document records an unfinished private implementation. No executable
-whole-program route, general W1.1 closure or performance promotion is claimed.
+Before public delivery, finish original-source replay and public JIT/portable
+admission, compiler-free warm calls, broader numerical-policy/layout/AD
+coverage, and completed public-call/device benchmarks with unchanged
+FP8/MXFP8/MXFP4 controls where applicable. Run shared registries, four-backend
+assessments and final full validation/CI/review gates before one PR.
 
-## Current diagnostic proof
+This remains a private implementation with no general W1.1 closure or
+performance promotion.
+
+## Initial diagnostic proof
 
 The compiler-route cohort passes 27 positive/projection/adversarial cases; the
 shared audit/diagnostic/pass cohort brings the focused total to 342. Twelve
 RTX5070 generic-driver replays pass the six original counterexamples plus six
-changed-input cases. These are emitted-member arithmetic and guarded-buffer
-proof, not a retained C++ runtime or public package admission. See
+changed-input cases. That initial packet proves emitted-member arithmetic and guarded buffers;
+the subsequent native-owner and Target packets establish retained execution.
+Public package admission remains open. See
 benchmarks/baselines/native_tensor_program_pipeline_20261019/README.md.
+
+## NVIDIA Target controller increment
+
+The complete typed host controller now lowers from tile.program_invoke to the
+registered tessera_nvidia.program_invoke command. Both boundaries share
+NativeTensorProgramContract.h for buffer lifetime, exact SM120 architecture,
+symbol, storage, native parameter and selected launch checks. The Target form
+must reference a lowered LLVM/NVVM kernel; semantic Graph members are invalid.
+The device NVVM pass preserves these effectful host commands for the checked
+native-frame runtime instead of erasing them as numerical artifact markers.
+
+The tensor-member projection option accepts either verified Tile or Target
+programs and re-exports the actual controller frame before isolating a member.
+Target members are not sent through Schedule-to-Tile again. Pending AD intent
+on the original module/function is rejected before primal projection; the AD
+transform must consume it first.
+
+Evidence: benchmarks/baselines/native_tensor_target_controller_20261019/.
+This adds no public JIT/portable or general AD closure.

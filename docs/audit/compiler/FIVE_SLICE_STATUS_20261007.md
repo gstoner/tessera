@@ -3,6 +3,18 @@ last_updated: 2026-10-19
 audit_role: reference
 ---
 
+## Native tensor Target controller — 2026-10-19
+
+The private W1.1 candidate now preserves the complete host controller as
+registered NVIDIA Target commands with a shared typed lifetime/ABI verifier.
+44 compiler cases and 538 focused host gates pass. Six original-source programs
+retain identical device images; 45 runtime cases pass on RTX5070 with the new
+Target frames. Public JIT, original-source portable replay and broader
+producer/layout/AD integration remain open. This is progress on the five-slice
+goal, not closure of any aggregate program.
+Evidence: benchmarks/baselines/native_tensor_target_controller_20261019/README.md.
+
+
 ## Generic tensor program / native owner milestone — 2026-10-19
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

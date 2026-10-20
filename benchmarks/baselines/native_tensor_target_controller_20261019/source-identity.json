@@ -1,0 +1,18 @@
+{
+  "compiler_sha256": "ebfea7fa8e1f47a8f157c38cbc2fa96d37dd6b456abd22bf45b8e9b8041eea41",
+  "source_sha256": {
+    "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "f49a87d75606e30034efeed4b774459656b010c16fb8434ba027120b9402a916",
+    "src/compiler/ir/TileOps.cpp": "a361cd6c7cf6606fc78eabd738b52197f781b90b4207feacbf39cb5a5a94ee82",
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "18934d94da43cedd2df62d1ba031ae11af041a4a2e24a315a693ba1b52ae2787",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "5536c0246c221f3b093dcc3a03868891067b8de07f0ff759159d946f521c0ecc",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/include/tessera/gpu/IR/TesseraNVIDIADialect.td": "ecb17a6bd7f07135dd571a61cc355f146b959f826b1a3e940b4c63e2a6090476",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/IR/TesseraNVIDIADialect.cpp": "fc6f0fc4274e9e9e1d5805409b39aa008db60a7f782601de074ce6dc5af7a767",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "c7e6ab26e53b770658848f3aed468e4bc129d2e9bbba33f1275e0854ac78288f",
+    "tests/unit/test_native_tensor_program_pipeline.py": "b9e9a166e30dd38bffb4f811391a9ab3db2f609f49ef9348ee24d2d6c50e892a"
+  },
+  "provider_source_identity": "../native_tensor_frame_owner_20261019/native-owner-source-identity.json",
+  "gpu": "RTX5070",
+  "architecture": "sm_120",
+  "gpu_uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "driver": "610.88"
+}

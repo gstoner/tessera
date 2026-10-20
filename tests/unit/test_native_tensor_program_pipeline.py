@@ -158,3 +158,83 @@ def test_graph_schedule_pass_loads_program_carrier_without_later_passes(storage)
     assert "schedule.matmul " in compiled.stdout
     assert "schedule.activation " in compiled.stdout
     assert "nvvm.kernel" not in compiled.stdout
+
+@pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.parametrize("function,stages", [
+    (relu_product, 2), (norm_product, 2), (both_products, 3), (reversed_product, 2)])
+def test_complete_target_controller_and_member_projection(function, stages, storage):
+    import base64
+    import json
+
+    tile = _run(traced_source(function, storage),
+                "--tessera-graph-to-schedule", "--tessera-schedule-to-tile")
+    assert tile.returncode == 0, tile.stderr
+    target = _run(tile.stdout, "--tessera-lower-to-nvidia-sm120")
+    assert target.returncode == 0, target.stderr
+    assert "tile." not in target.stdout
+    assert target.stdout.count("tessera_nvidia.program_invoke ") == stages
+    assert "nvvm.mma" in target.stdout
+    def frame(text):
+        return json.loads(base64.b64decode(re.search(
+            r'tessera.native.tensor_program_frame_json = "([^"]+)"', text)[1]))
+    expected = frame(tile.stdout)
+    for index in range(stages):
+        projected = _run(target.stdout,
+                         f"--tessera-schedule-to-tile=tensor-member={index}")
+        assert projected.returncode == 0, projected.stderr
+        assert frame(projected.stdout) == expected
+        assert "program_invoke " not in projected.stdout
+        assert projected.stdout.count("nvvm.kernel") == 1
+        assert f"llvm.func @{expected['stages'][index]['entry']}(" in projected.stdout
+
+
+@pytest.mark.parametrize("edit", ["architecture", "target", "geometry", "early_retire"])
+def test_target_controller_retains_checked_ownership(edit):
+    tile = _run(traced_source(relu_product, "f16"),
+                "--tessera-graph-to-schedule", "--tessera-schedule-to-tile")
+    assert tile.returncode == 0, tile.stderr
+    target = _run(tile.stdout, "--tessera-lower-to-nvidia-sm120")
+    assert target.returncode == 0, target.stderr
+    text = target.stdout
+    if edit == "architecture":
+        text = text.replace('tessera.arch = "sm_120"', 'tessera.arch = "sm_100"')
+    elif edit == "target":
+        text = text.replace('tessera.target = "nvidia_sm120"', 'tessera.target = "rocm_gfx1201"')
+    elif edit == "geometry":
+        line = next(line for line in text.splitlines() if "tessera_nvidia.program_invoke " in line)
+        changed = line.replace("geometry = array<i64: 1,", "geometry = array<i64: 2,", 1)
+        assert changed != line
+        text = text.replace(line, changed, 1)
+    else:
+        line = "    memref.dealloc %alloc : memref<17x32xf16>\n"
+        assert line in text
+        text = text.replace(line, "", 1).replace(
+            "    %alloc_0 = memref.alloc()", line + "    %alloc_0 = memref.alloc()", 1)
+    assert text != target.stdout
+    rejected = _run(text)
+    assert rejected.returncode != 0
+    assert "program_invoke" in rejected.stderr
+
+@pytest.mark.parametrize("attribute", [
+    'tessera.autodiff = "reverse"', 'tessera.autodiff.mode = "jvp"'])
+@pytest.mark.parametrize("owner", ["module", "function"])
+def test_pending_differentiation_is_not_projected_as_primal(attribute, owner):
+    source = traced_source(norm_product, "f16")
+    if owner == "module":
+        source = source.replace("module attributes {", "module attributes {" + attribute + ", ", 1)
+    else:
+        source = source.replace(") attributes {", ") attributes {" + attribute + ", ", 1)
+    assert attribute in source
+    rejected = _run(source, "--tessera-graph-to-schedule")
+    assert rejected.returncode != 0
+    assert "pending differentiation must be transformed" in rejected.stderr
+
+
+def test_target_invocation_cannot_bind_semantic_graph_member():
+    scheduled = _run(traced_source(relu_product, "f16"), "--tessera-graph-to-schedule")
+    assert scheduled.returncode == 0, scheduled.stderr
+    text = scheduled.stdout.replace("tile.program_invoke ", "tessera_nvidia.program_invoke ")
+    text = text.replace("{callee = @tensor_stage_", '{arch = "sm_120", geometry = array<i64: 1, 1, 1, 32, 1, 1>, scalars = array<i64>, callee = @tensor_stage_')
+    rejected = _run(text)
+    assert rejected.returncode != 0
+    assert "Target invocation requires a lowered native kernel" in rejected.stderr

@@ -6,6 +6,17 @@ target: apple_gpu
 last_updated: 2026-10-19
 ---
 
+## NATIVE-TENSOR-TARGET-CONTROLLER-20261019 — verified controller candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Not applicable to Metal/Apple CPU physical execution: this registered Target command is SM120-specific. The shared Tile ownership verifier remains the same contract with explicit architecture admission. No Apple dtype, operation or runtime ABI admission; independent Apple native-program parity remains follow-up required.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_target_controller_20261019/README.md.
+
+
 ## NATIVE-TENSOR-FRAME-OWNER-20261019 — native consumer candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

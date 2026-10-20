@@ -42,6 +42,12 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     return root.emitError("native tensor program requires a static compact half "
                           "producer DAG ending in one plain matmul");
   };
+  for (Operation *owner : {module.getOperation(), root.getOperation()})
+    for (NamedAttribute attribute : owner->getAttrs()) {
+      StringRef name = attribute.getName().getValue();
+      if (name == "tessera.autodiff" || name.starts_with("tessera.autodiff."))
+        return root.emitError("pending differentiation must be transformed before primal tensor program projection");
+    }
   auto ret = dyn_cast<func::ReturnOp>(root.getBody().front().back());
   if (root.getNumArguments() != 2 || root.getNumResults() != 1 || !ret ||
       ret.getNumOperands() != 1 || product->getNumOperands() != 2 ||
@@ -208,18 +214,18 @@ inline mlir::LogicalResult exportFrame(mlir::ModuleOp module) {
   for (Operation &operation : host.getBody().front()) {
     if (auto allocation = dyn_cast<memref::AllocOp>(operation))
       addBuffer(allocation, allocation.getResult() == ret.getOperand(0) ? "output" : "private");
-    if (auto invoke = dyn_cast<tile::ProgramInvokeOp>(operation)) {
+    if (auto *invoke = &operation; native_tensor_program::isInvocation(invoke)) {
       llvm::json::Array inputs, scalars, geometry;
-      for (Value buffer : invoke.getBuffers().drop_back()) inputs.push_back(ids.lookup(buffer));
+      for (Value buffer : invoke->getOperands().drop_back()) inputs.push_back(ids.lookup(buffer));
       for (int64_t value : invoke->getAttrOfType<DenseI64ArrayAttr>("scalars").asArrayRef())
         scalars.push_back(value);
       for (int64_t value : invoke->getAttrOfType<DenseI64ArrayAttr>("geometry").asArrayRef())
         geometry.push_back(value);
-      auto symbol = invoke.getCalleeAttr();
+      auto symbol = invoke->getAttrOfType<SymbolRefAttr>("callee");
       stages.push_back(llvm::json::Object{
         {"member",symbol.getRootReference().getValue().str()},
         {"entry",symbol.getNestedReferences().back().getValue().str()},
-        {"inputs",std::move(inputs)},{"output",ids.lookup(invoke.getBuffers().back())},
+        {"inputs",std::move(inputs)},{"output",ids.lookup(invoke->getOperands().back())},
         {"scalars",std::move(scalars)},{"geometry",std::move(geometry)}});
     }
   }

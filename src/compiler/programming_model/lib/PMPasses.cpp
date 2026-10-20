@@ -1,3 +1,4 @@
+#include "Tessera/IR/NativeTensorProgramContract.h"
 #include "NativeSourceProgramOutline.h"
 #include "NativeGateUpSchedule.h"
 #include "NativeBlockQuantSchedule.h"
@@ -4577,6 +4578,7 @@ struct ScheduleToTilePass
   void runOnOperation() override {
     ModuleOp mod = getOperation();
     if (mod->hasAttr("tessera.native.tensor_program")) {
+      if (!mod->hasAttr("tessera.native.tensor_program_target"))
       for (auto child : mod.getOps<ModuleOp>()) {
         OpPassManager pipeline(ModuleOp::getOperationName());
         pipeline.addPass(createScheduleToTilePass());

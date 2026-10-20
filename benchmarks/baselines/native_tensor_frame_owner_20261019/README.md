@@ -4,7 +4,9 @@ Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
 
 This is a retained C++ runtime milestone. Public JIT/portable admission and
-whole-program Target IR integration remain open; no performance promotion.
+whole-program Target IR integration were open at this checkpoint; the later
+native_tensor_target_controller_20261019 packet records the Target increment.
+Public JIT/portable integration remains open; no performance promotion.
 
 ## Executed evidence
 
@@ -62,13 +64,13 @@ evaluation and the broader ROCm performance program remain independent.
 
 ## Remaining source-to-execution gate
 
-whole-program-target-probe.json / whole-program-target.mlir, with
+whole-program-target-probe.json / whole-program-target.mlir.gz, with
 whole-program-target.exit / whole-program-target.stderr, preserve an owning
-compiler probe: lowering the complete program succeeds, but currently leaves
+compiler probe: at that checkpoint, lowering the complete program succeeded but left
 two tile.program_invoke operations in the host controller while numerical
 members lower to NVVM. This is not full controller Target IR closure.
 
-Next work must consume the complete typed host program into Target IR and
-its checked ABI, validate original source/program/member ancestry, and integrate
+The later Target-controller packet consumes the typed host program. Remaining
+work must validate original source/program/member ancestry and integrate
 compiler-free warm public replay and portable reconstruction. Do not replace
 that work with a Python family dispatcher or regenerated numerical kernels.

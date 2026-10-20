@@ -407,4 +407,23 @@ def NVIDIA_RowRegionKernelOp : Op<TesseraNVIDIADialect, "row_region_kernel",
   let assemblyFormat = "attr-dict-with-keyword $body";
   let hasVerifier = 1;
 }
+ // TESSERA_NVIDIA_DIALECT
+
+
+// Host command in the native frame ABI. Deliberately effectful: its read/write
+// and ownership contract is verified against actual memref SSA and native ABI.
+def NVIDIA_ProgramInvokeOp : Op<TesseraNVIDIADialect, "program_invoke"> {
+  let summary = "Checked SM120 native-frame member command";
+  let arguments = (ins
+      Variadic<AnyMemRef>:$buffers,
+      SymbolRefAttr:$callee,
+      I64Attr:$input_count,
+      NVIDIA_EnumStrAttr<["sm_120"], "exact native frame architecture">:$arch,
+      DenseI64ArrayAttr:$scalars,
+      DenseI64ArrayAttr:$geometry);
+  let results = (outs);
+  let assemblyFormat = "$buffers attr-dict `:` type($buffers)";
+  let hasVerifier = 1;
+}
+
 #endif // TESSERA_NVIDIA_DIALECT

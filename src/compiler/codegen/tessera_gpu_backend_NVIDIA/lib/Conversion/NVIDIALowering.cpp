@@ -5732,6 +5732,29 @@ struct LowerTileToNVIDIAPass
     module->setAttr("tessera.nvidia.arch",
                     moduleBuilder.getStringAttr(archStringForSM(smVersion)));
 
+    SmallVector<tessera::tile::ProgramInvokeOp> programInvokes;
+    module.walk([&](tessera::tile::ProgramInvokeOp invoke) { programInvokes.push_back(invoke); });
+    if (!programInvokes.empty()) {
+      if (smVersion != 120 || !module->hasAttr("tessera.native.tensor_program")) {
+        module.emitError("native tensor controller requires exact SM120 program lowering");
+        return signalPassFailure();
+      }
+      // Preserve the complete typed ownership graph and selected kernel bindings.
+      // Device arithmetic below follows the existing native Target/NVVM lowering.
+      for (auto invoke : programInvokes) {
+        if (failed(invoke.verify())) return signalPassFailure();
+        OpBuilder builder(invoke);
+        OperationState state(invoke.getLoc(), "tessera_nvidia.program_invoke");
+        state.addOperands(invoke.getBuffers());
+        state.addAttributes(invoke->getAttrs());
+        state.addAttribute("arch", builder.getStringAttr("sm_120"));
+        builder.create(state);
+        invoke.erase();
+      }
+      module->setAttr("tessera.native.tensor_program_target",
+                      moduleBuilder.getStringAttr("nvidia_sm120"));
+    }
+
     SmallVector<tessera::tile::RowRegionKernelOp> rowKernels;
     for (auto kernel : module.getOps<tessera::tile::RowRegionKernelOp>()) rowKernels.push_back(kernel);
     if (!rowKernels.empty()) {
@@ -7021,7 +7044,8 @@ struct LowerNVIDIAToNVVMPass
     ModuleOp module = getOperation();
     SmallVector<Operation *> targetOps;
     module.walk([&](Operation *op) {
-      if (op->getName().getStringRef().starts_with("tessera_nvidia."))
+      if (op->getName().getStringRef().starts_with("tessera_nvidia.") &&
+          !isa<tessera::nvidia::ProgramInvokeOp>(op))
         targetOps.push_back(op);
     });
 

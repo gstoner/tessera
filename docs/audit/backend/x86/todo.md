@@ -7,6 +7,17 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## NATIVE-TENSOR-PROGRAM-PIPELINE-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Host-free sibling assessment retains the ReLU source and Graph wrapper on the Zen5 f32 route. The new SM120 program carrier adds no x86 execution admission. Shared Tile verification requires regression checks; no x86 numerical or performance claim is made.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_program_pipeline_20261019/README.md.
+
+
 ## NATIVE-BOUNDED-SOURCE-PUBLIC-20261019 — public capacity replay
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

@@ -1,0 +1,103 @@
+{
+  "architecture": "sm_120",
+  "buffers": [
+    {
+      "bytes": 1088,
+      "id": 0,
+      "role": "input",
+      "shape": [
+        17,
+        32
+      ],
+      "storage": "bf16"
+    },
+    {
+      "bytes": 704,
+      "id": 1,
+      "role": "input",
+      "shape": [
+        32,
+        11
+      ],
+      "storage": "bf16"
+    },
+    {
+      "bytes": 1088,
+      "id": 2,
+      "role": "private",
+      "shape": [
+        17,
+        32
+      ],
+      "storage": "bf16"
+    },
+    {
+      "bytes": 748,
+      "id": 3,
+      "role": "output",
+      "shape": [
+        17,
+        11
+      ],
+      "storage": "f32"
+    }
+  ],
+  "function": "relu_matmul",
+  "output": 3,
+  "roots": [
+    0,
+    1
+  ],
+  "schema": "tessera.native.tensor_program_frame.v1",
+  "stages": [
+    {
+      "entry": "tessera_tile_activation_relu_bf16_e08ed52a65",
+      "geometry": [
+        1,
+        1,
+        1,
+        128,
+        1,
+        1
+      ],
+      "inputs": [
+        0
+      ],
+      "member": "tensor_stage_0",
+      "output": 2,
+      "scalars": [
+        17,
+        32
+      ],
+      "ptx_file": "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab.ptx",
+      "ptx_sha256": "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab"
+    },
+    {
+      "entry": "source_kernel",
+      "geometry": [
+        2,
+        2,
+        1,
+        32,
+        1,
+        1
+      ],
+      "inputs": [
+        2,
+        1
+      ],
+      "member": "tensor_stage_1",
+      "output": 3,
+      "scalars": [
+        17,
+        11,
+        32
+      ],
+      "ptx_file": "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f.ptx",
+      "ptx_sha256": "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+    }
+  ],
+  "target": "nvidia_sm120",
+  "source_sha256": "66eef698c0f6aff1d51f0e36c7181485a11311ca43b24a227550b7cfb6a7ce6e",
+  "program_sha256": "d0dde33f11926e52900853a97d29c80943347b0a92526ee141fa3230f52403cf"
+}

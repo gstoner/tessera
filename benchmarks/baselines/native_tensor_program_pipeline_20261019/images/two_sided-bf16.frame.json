@@ -1,0 +1,135 @@
+{
+  "architecture": "sm_120",
+  "buffers": [
+    {
+      "bytes": 1088,
+      "id": 0,
+      "role": "input",
+      "shape": [
+        17,
+        32
+      ],
+      "storage": "bf16"
+    },
+    {
+      "bytes": 704,
+      "id": 1,
+      "role": "input",
+      "shape": [
+        32,
+        11
+      ],
+      "storage": "bf16"
+    },
+    {
+      "bytes": 1088,
+      "id": 2,
+      "role": "private",
+      "shape": [
+        17,
+        32
+      ],
+      "storage": "bf16"
+    },
+    {
+      "bytes": 704,
+      "id": 3,
+      "role": "private",
+      "shape": [
+        32,
+        11
+      ],
+      "storage": "bf16"
+    },
+    {
+      "bytes": 748,
+      "id": 4,
+      "role": "output",
+      "shape": [
+        17,
+        11
+      ],
+      "storage": "f32"
+    }
+  ],
+  "function": "two_sided",
+  "output": 4,
+  "roots": [
+    0,
+    1
+  ],
+  "schema": "tessera.native.tensor_program_frame.v1",
+  "stages": [
+    {
+      "entry": "tessera_tile_activation_relu_bf16_e08ed52a65",
+      "geometry": [
+        1,
+        1,
+        1,
+        128,
+        1,
+        1
+      ],
+      "inputs": [
+        0
+      ],
+      "member": "tensor_stage_0",
+      "output": 2,
+      "scalars": [
+        17,
+        32
+      ],
+      "ptx_file": "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab.ptx",
+      "ptx_sha256": "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab"
+    },
+    {
+      "entry": "tessera_tile_softmax_bf16",
+      "geometry": [
+        1,
+        1,
+        1,
+        128,
+        1,
+        1
+      ],
+      "inputs": [
+        1
+      ],
+      "member": "tensor_stage_1",
+      "output": 3,
+      "scalars": [
+        32,
+        11
+      ],
+      "ptx_file": "2fa9b73308547179ecfe39a225139972dd76bb757bc58609f42d1d480f6b75e9.ptx",
+      "ptx_sha256": "2fa9b73308547179ecfe39a225139972dd76bb757bc58609f42d1d480f6b75e9"
+    },
+    {
+      "entry": "source_kernel",
+      "geometry": [
+        2,
+        2,
+        1,
+        32,
+        1,
+        1
+      ],
+      "inputs": [
+        2,
+        3
+      ],
+      "member": "tensor_stage_2",
+      "output": 4,
+      "scalars": [
+        17,
+        11,
+        32
+      ],
+      "ptx_file": "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f.ptx",
+      "ptx_sha256": "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+    }
+  ],
+  "target": "nvidia_sm120",
+  "source_sha256": "e29d15064844041481f870c77a7f0a3c9713f54c88b27898323535d1dcc7e754",
+  "program_sha256": "f7d4a8f78dd87cfce1080677dc42c68e467adf199454358f96bb47b9b590d3cd"
+}

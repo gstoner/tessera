@@ -1,0 +1,103 @@
+{
+  "architecture": "sm_120",
+  "buffers": [
+    {
+      "bytes": 1088,
+      "id": 0,
+      "role": "input",
+      "shape": [
+        17,
+        32
+      ],
+      "storage": "f16"
+    },
+    {
+      "bytes": 704,
+      "id": 1,
+      "role": "input",
+      "shape": [
+        32,
+        11
+      ],
+      "storage": "f16"
+    },
+    {
+      "bytes": 1088,
+      "id": 2,
+      "role": "private",
+      "shape": [
+        17,
+        32
+      ],
+      "storage": "f16"
+    },
+    {
+      "bytes": 748,
+      "id": 3,
+      "role": "output",
+      "shape": [
+        17,
+        11
+      ],
+      "storage": "f32"
+    }
+  ],
+  "function": "norm_matmul",
+  "output": 3,
+  "roots": [
+    0,
+    1
+  ],
+  "schema": "tessera.native.tensor_program_frame.v1",
+  "stages": [
+    {
+      "entry": "tessera_tile_norm_rmsnorm_f16_be764451ec",
+      "geometry": [
+        1,
+        1,
+        1,
+        128,
+        1,
+        1
+      ],
+      "inputs": [
+        0
+      ],
+      "member": "tensor_stage_0",
+      "output": 2,
+      "scalars": [
+        17,
+        32
+      ],
+      "ptx_file": "531396bb5373e245fec2890d23402a7eb7477424b3455cb776046e14e9b9b9f0.ptx",
+      "ptx_sha256": "531396bb5373e245fec2890d23402a7eb7477424b3455cb776046e14e9b9b9f0"
+    },
+    {
+      "entry": "source_kernel",
+      "geometry": [
+        2,
+        2,
+        1,
+        32,
+        1,
+        1
+      ],
+      "inputs": [
+        2,
+        1
+      ],
+      "member": "tensor_stage_1",
+      "output": 3,
+      "scalars": [
+        17,
+        11,
+        32
+      ],
+      "ptx_file": "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0.ptx",
+      "ptx_sha256": "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+    }
+  ],
+  "target": "nvidia_sm120",
+  "source_sha256": "21c0c891eff61e3fc01f36534625516aacd7fef312320026807cbc4b3409cce7",
+  "program_sha256": "30730147aa1e895cdad32135804089f5d22c16c5dbfc905bce73816297834494"
+}

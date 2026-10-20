@@ -1,0 +1,103 @@
+{
+  "architecture": "sm_120",
+  "buffers": [
+    {
+      "bytes": 1088,
+      "id": 0,
+      "role": "input",
+      "shape": [
+        17,
+        32
+      ],
+      "storage": "bf16"
+    },
+    {
+      "bytes": 704,
+      "id": 1,
+      "role": "input",
+      "shape": [
+        32,
+        11
+      ],
+      "storage": "bf16"
+    },
+    {
+      "bytes": 1088,
+      "id": 2,
+      "role": "private",
+      "shape": [
+        17,
+        32
+      ],
+      "storage": "bf16"
+    },
+    {
+      "bytes": 748,
+      "id": 3,
+      "role": "output",
+      "shape": [
+        17,
+        11
+      ],
+      "storage": "f32"
+    }
+  ],
+  "function": "norm_matmul",
+  "output": 3,
+  "roots": [
+    0,
+    1
+  ],
+  "schema": "tessera.native.tensor_program_frame.v1",
+  "stages": [
+    {
+      "entry": "tessera_tile_norm_rmsnorm_bf16_3789979834",
+      "geometry": [
+        1,
+        1,
+        1,
+        128,
+        1,
+        1
+      ],
+      "inputs": [
+        0
+      ],
+      "member": "tensor_stage_0",
+      "output": 2,
+      "scalars": [
+        17,
+        32
+      ],
+      "ptx_file": "090b018a9ab4c8e947e995cd4f76c0e3157a6bdf1b3d34e622bb6e07cfe124d2.ptx",
+      "ptx_sha256": "090b018a9ab4c8e947e995cd4f76c0e3157a6bdf1b3d34e622bb6e07cfe124d2"
+    },
+    {
+      "entry": "source_kernel",
+      "geometry": [
+        2,
+        2,
+        1,
+        32,
+        1,
+        1
+      ],
+      "inputs": [
+        2,
+        1
+      ],
+      "member": "tensor_stage_1",
+      "output": 3,
+      "scalars": [
+        17,
+        11,
+        32
+      ],
+      "ptx_file": "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f.ptx",
+      "ptx_sha256": "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+    }
+  ],
+  "target": "nvidia_sm120",
+  "source_sha256": "f623166059b3e8ac43bff483c57d9adc1474f5661835beae670422acd777715a",
+  "program_sha256": "6eef030fd672206c23a168afb92909f67bae7da2527e6519046e6efc29367ef8"
+}

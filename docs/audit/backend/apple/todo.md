@@ -6,6 +6,17 @@ target: apple_gpu
 last_updated: 2026-10-19
 ---
 
+## NATIVE-TENSOR-PROGRAM-PIPELINE-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Host-free sibling assessment retains the ReLU source and Graph wrapper on Apple GPU f16/f32 routes. The new SM120 program carrier has no Metal/Apple CPU execution consumer. Shared Tile verification needs regression gates; no Apple numerical or performance claim is made.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_program_pipeline_20261019/README.md.
+
+
 ## NATIVE-BOUNDED-SOURCE-PUBLIC-20261019 — public capacity replay
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

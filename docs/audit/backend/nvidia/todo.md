@@ -6,6 +6,17 @@ target: nvidia_sm120
 last_updated: 2026-10-19
 ---
 
+## NATIVE-TENSOR-PROGRAM-PIPELINE-20261019 — integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-PROGRAM-PIPELINE-20261019.
+
+Six RTX5070 diagnostic cases prove that the previous general pipeline drops upstream ReLU/RMSNorm/softmax and executes bare matmul. A private native typed-buffer program candidate now outlines the actual source dependency closure and reuses existing Schedule/Tile leaf kernels. The frozen control fails all 16 positive compiler-route cases; the candidate passes 27 positive/projection/adversarial cases, with 342 focused shared gates. Twelve final RTX5070 generic-driver replays pass the original counterexamples and changed inputs with intact guards. Retained native owner/public packaging and separate timings remain pending. No closure or performance promotion is claimed.
+
+Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PIPELINE.md.
+Evidence: benchmarks/baselines/native_tensor_program_pipeline_20261019/README.md.
+
+
 ## NATIVE-BOUNDED-SOURCE-PUBLIC-20261019 — public capacity replay
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

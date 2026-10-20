@@ -1,0 +1,34 @@
+....................................................................sss. [ 23%]
+.....s..ssss.sss..ss.ssssssss.........................sssss............. [ 47%]
+......................................ssssssssssss................ssssss [ 71%]
+ssssssssssssssssssssssssssssssssssss.................................... [ 94%]
+................                                                         [100%]
+=========================== short test summary info ============================
+SKIPPED [2] tests/unit/test_nvidia_tensor_program.py:179: requires exact SM120 device execution
+SKIPPED [1] tests/unit/test_nvidia_tensor_program.py:217: requires exact SM120 device execution
+SKIPPED [1] tests/unit/test_nvidia_tensor_program.py:274: requires exact SM120 device execution
+SKIPPED [4] tests/unit/test_nvidia_tensor_program.py:351: requires exact SM120 device execution
+SKIPPED [2] tests/unit/test_nvidia_tensor_program.py:414: requires exact SM120 device execution
+SKIPPED [1] tests/unit/test_nvidia_tensor_program.py:477: requires exact SM120 device execution
+SKIPPED [2] tests/unit/test_nvidia_tensor_program.py:569: requires exact SM120 device execution
+SKIPPED [2] tests/unit/test_nvidia_tensor_program.py:656: requires exact SM120 device execution
+SKIPPED [2] tests/unit/test_nvidia_tensor_program.py:708: requires exact SM120 device execution
+SKIPPED [2] tests/unit/test_nvidia_tensor_program.py:766: requires exact SM120 device execution
+SKIPPED [2] tests/unit/test_nvidia_tensor_program.py:817: requires exact SM120 device execution
+SKIPPED [1] tests/unit/test_scheduled_matmul_consumers.py:367: requires the SM120 CUDA compiler, PTX bridge, and RTX host
+SKIPPED [2] tests/unit/test_scheduled_matmul_consumers.py:441: requires the SM120 CUDA compiler, PTX bridge, and RTX host
+SKIPPED [1] tests/unit/test_scheduled_matmul_consumers.py:497: requires the SM120 CUDA compiler, PTX bridge, and RTX host
+SKIPPED [1] tests/unit/test_scheduled_matmul_consumers.py:545: requires the SM120 CUDA compiler, PTX bridge, and RTX host
+SKIPPED [2] tests/unit/test_scheduled_matmul_consumers.py:1082: gfx1151 owning-device proof
+SKIPPED [2] tests/unit/test_scheduled_matmul_consumers.py:1117: rocm_gfx1151 packaging needs its own ROCm toolchain/arch
+SKIPPED [2] tests/unit/test_scheduled_matmul_consumers.py:1117: rocm_gfx1201 packaging needs its own ROCm toolchain/arch
+SKIPPED [6] tests/unit/test_scheduled_matmul_consumers.py:1150: needs an owning ROCm device
+SKIPPED [2] tests/unit/test_scheduled_matmul_consumers.py:1231: gfx1201 owning-device proof
+SKIPPED [6] tests/unit/test_scheduled_matmul_consumers.py:1275: gfx1151 owning-device proof; gfx1201 has its own row
+SKIPPED [10] tests/unit/test_scheduled_matmul_consumers.py:1309: gfx1151 exact-device test
+SKIPPED [2] tests/unit/test_scheduled_matmul_consumers.py:1341: requires the exact gfx1151 owning device
+SKIPPED [1] tests/unit/test_scheduled_matmul_consumers.py:1383: requires the exact gfx1151 owning device
+SKIPPED [17] tests/unit/test_scheduled_matmul_consumers.py:1427: requires the SM120 CUDA compiler, PTX bridge, and RTX host
+SKIPPED [2] tests/unit/test_scheduled_matmul_consumers.py:1740: Apple GPU runtime dylib / tessera-opt unavailable
+SKIPPED [2] tests/unit/test_scheduled_matmul_consumers.py:1781: Apple GPU runtime dylib / tessera-opt unavailable
+224 passed, 80 skipped in 19.43s

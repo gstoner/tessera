@@ -5,6 +5,8 @@
 #include "Tessera/IR/StaticPermutationContract.h"
 #include "Tessera/IR/NVFP4IngestContract.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/IR/SymbolTable.h"
 //===- TileOps.cpp - Tessera Tile IR op verifiers -------------*- C++ -*-===//
 //
 // Sprint 9: rank/shape verifiers for the contraction tile ops. These mirror the
@@ -38,6 +40,114 @@ using namespace mlir;
 
 namespace tessera {
 namespace tile {
+
+LogicalResult ProgramInvokeOp::verify() {
+  auto host = (*this)->getParentOfType<func::FuncOp>();
+  auto schema = host ? host->getAttrOfType<IntegerAttr>(
+      "tessera.native.tensor_program") : IntegerAttr{};
+  auto buffers = getBuffers();
+  int64_t reads = getInputCount();
+  if (!schema || schema.getInt() != 1 || !host.getBody().hasOneBlock() ||
+      reads < 1 || reads > 2 || buffers.size() != unsigned(reads + 1))
+    return emitOpError("requires its typed native program and one fresh output");
+  auto output = buffers.back().getDefiningOp<memref::AllocOp>();
+  if (!output) return emitOpError("output must be a private or returned allocation");
+  llvm::DenseSet<Value> initialized(host.getArguments().begin(), host.getArguments().end());
+  llvm::DenseSet<Value> retired;
+  for (Operation &operation : host.getBody().front()) {
+    if (&operation == getOperation()) break;
+    if (auto invoke = dyn_cast<ProgramInvokeOp>(operation))
+      initialized.insert(invoke.getBuffers().back());
+    if (auto release = dyn_cast<memref::DeallocOp>(operation))
+      retired.insert(release.getMemref());
+  }
+  if (initialized.contains(buffers.back()) || retired.contains(buffers.back()))
+    return emitOpError("output must be written exactly once before retirement");
+  for (Value input : buffers.take_front(reads))
+    if (!initialized.contains(input) || retired.contains(input) || input == buffers.back())
+      return emitOpError("input must retain initialized live storage and may not alias the output");
+  for (Value buffer : buffers) {
+    auto type = cast<MemRefType>(buffer.getType());
+    if (!type.hasStaticShape() || type.getRank() != 2 ||
+        !type.getLayout().isIdentity() || type.getMemorySpace())
+      return emitOpError("requires static compact rank-two buffers");
+  }
+  auto result = dyn_cast<func::ReturnOp>(host.getBody().front().back());
+  if (!result || result.getNumOperands() != 1)
+    return emitOpError("program must return one owned allocation");
+  ProgramInvokeOp lastInvoke;
+  for (Operation &operation : host.getBody().front()) {
+    if (auto invoke = dyn_cast<ProgramInvokeOp>(operation)) lastInvoke = invoke;
+    else if (!isa<memref::AllocOp,memref::DeallocOp,func::ReturnOp>(operation))
+      return emitOpError("program contains an unaccounted memory effect");
+    if (auto allocation = dyn_cast<memref::AllocOp>(operation)) {
+      unsigned writes = 0, releases = 0;
+      auto type = allocation.getType();
+      if (!type.hasStaticShape() || type.getRank() != 2 ||
+          !type.getLayout().isIdentity() || type.getMemorySpace())
+        return emitOpError("program allocations require static compact storage");
+      for (OpOperand &use : allocation.getResult().getUses()) {
+        if (auto invocation = dyn_cast<ProgramInvokeOp>(use.getOwner())) {
+          if (use.getOperandNumber() == unsigned(invocation.getInputCount())) ++writes;
+        } else if (auto release = dyn_cast<memref::DeallocOp>(use.getOwner())) {
+          ++releases;
+          if (allocation.getResult() == result.getOperand(0))
+            return emitOpError("returned allocation must remain live");
+          for (Operation *user : allocation.getResult().getUsers())
+            if (isa<ProgramInvokeOp>(user) && !user->isBeforeInBlock(release))
+              return emitOpError("private allocation retires before its final reader");
+        } else if (!isa<func::ReturnOp>(use.getOwner()))
+          return emitOpError("program allocation escapes its checked ownership uses");
+      }
+      if (writes != 1 ||
+          releases != (allocation.getResult() == result.getOperand(0) ? 0u : 1u))
+        return emitOpError("program allocations require one writer and exact ownership retirement");
+    }
+  }
+  if (!lastInvoke || lastInvoke.getBuffers().empty() ||
+      result.getOperand(0) != lastInvoke.getBuffers().back())
+    return emitOpError("program must return its final native stage allocation");
+  Operation *callee = SymbolTable::lookupNearestSymbolFrom(
+      getOperation(), getCalleeAttr());
+  if (!callee) return emitOpError("callee is not a visible native program member");
+  if (auto graph = dyn_cast<func::FuncOp>(callee)) {
+    if (graph.getNumArguments() != unsigned(reads) || graph.getNumResults() != 1)
+      return emitOpError("Graph member input/output arity differs");
+    SmallVector<Type> types(graph.getArgumentTypes());
+    types.push_back(graph.getResultTypes()[0]);
+    for (auto [buffer, type] : llvm::zip(buffers, types)) {
+      auto tensor = dyn_cast<RankedTensorType>(type);
+      auto storage = cast<MemRefType>(buffer.getType());
+      if (!tensor || tensor.getShape() != storage.getShape() ||
+          tensor.getElementType() != storage.getElementType())
+        return emitOpError("Graph member does not match physical buffer types");
+    }
+    return success();
+  }
+  auto kernel = dyn_cast<LLVM::LLVMFuncOp>(callee);
+  auto scalars = (*this)->getAttrOfType<DenseI64ArrayAttr>("scalars");
+  auto geometry = (*this)->getAttrOfType<DenseI64ArrayAttr>("geometry");
+  if (!kernel || !kernel->hasAttr("nvvm.kernel") || !scalars || !geometry ||
+      geometry.size() != 6 || kernel.getNumArguments() != buffers.size() + scalars.size() ||
+      kernel->getAttr("tessera.native.program_scalars") != scalars ||
+      kernel->getAttr("tessera.native.program_geometry") != geometry)
+    return emitOpError("native launch must retain the selected kernel ABI and geometry");
+  auto bindingTypes = kernel->getAttrOfType<ArrayAttr>("tessera.native.program_buffer_types");
+  if (!bindingTypes || bindingTypes.size() != buffers.size())
+    return emitOpError("native member lost its typed physical buffer bindings");
+  for (auto [buffer, binding] : llvm::zip(buffers, bindingTypes)) {
+    auto type = dyn_cast<TypeAttr>(binding);
+    if (!type || type.getValue() != buffer.getType())
+      return emitOpError("native member physical buffer shape or storage differs");
+  }
+  for (auto [index, type] : llvm::enumerate(kernel.getArgumentTypes()))
+    if (index < buffers.size() ? !isa<LLVM::LLVMPointerType>(type) : !type.isInteger(64))
+      return emitOpError("native member requires pointer buffers followed by i64 scalars");
+  for (int64_t extent : geometry.asArrayRef())
+    if (extent <= 0 || extent > INT32_MAX)
+      return emitOpError("native geometry exceeds the checked launch envelope");
+  return success();
+}
 
 namespace {
 

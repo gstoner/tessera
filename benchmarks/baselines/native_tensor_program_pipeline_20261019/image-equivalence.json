@@ -1,0 +1,38 @@
+{
+  "reason": "standalone Graph-to-Schedule dependent Tile dialect registration; no arithmetic changes",
+  "executed_device_compiler_sha256": "b8bb9a26b2e1b8155b04201b051962a5531159ad9f64f7402a08e044c99e7d02",
+  "current_compiler_sha256": "71bcb1c2dc71411b16b24b2b28549166a0ea427f8ba088953d4bef076a8a6b56",
+  "scope": "all six actual original Graph sources, native launch frames and eight executed PTX images",
+  "cases": [
+    {
+      "name": "norm_matmul-bf16",
+      "native_frame_identical": true,
+      "executed_ptx_hashes_identical": true
+    },
+    {
+      "name": "norm_matmul-f16",
+      "native_frame_identical": true,
+      "executed_ptx_hashes_identical": true
+    },
+    {
+      "name": "relu_matmul-bf16",
+      "native_frame_identical": true,
+      "executed_ptx_hashes_identical": true
+    },
+    {
+      "name": "relu_matmul-f16",
+      "native_frame_identical": true,
+      "executed_ptx_hashes_identical": true
+    },
+    {
+      "name": "two_sided-bf16",
+      "native_frame_identical": true,
+      "executed_ptx_hashes_identical": true
+    },
+    {
+      "name": "two_sided-f16",
+      "native_frame_identical": true,
+      "executed_ptx_hashes_identical": true
+    }
+  ]
+}

@@ -3458,6 +3458,8 @@ struct OutlineSourceProgramPass
   }
 };
 
+#include "NativeTensorProgram.h"
+
 struct GraphToSchedulePass
     : public PassWrapper<GraphToSchedulePass, OperationPass<ModuleOp>> {
 
@@ -3479,12 +3481,26 @@ struct GraphToSchedulePass
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
+    tile::registerTileDialect(registry);
     registry.insert<attn::TesseraAttnDialect, schedule::ScheduleDialect, gpu::GPUDialect, arith::ArithDialect,
                     scf::SCFDialect, memref::MemRefDialect, vector::VectorDialect>();
   }
 
   void runOnOperation() override {
     ModuleOp mod = getOperation();
+    bool tensorProgram = false;
+    if (failed(tensor_program::outline(mod, tensorProgram)))
+      return signalPassFailure();
+    if (tensorProgram) {
+      for (auto child : mod.getOps<ModuleOp>()) {
+        OpPassManager pipeline(ModuleOp::getOperationName());
+        pipeline.addPass(createGraphToSchedulePass());
+        if (failed(runPipeline(pipeline, child))) return signalPassFailure();
+      }
+      return;
+    }
+    if (mod->hasAttr("tessera.native.tensor_program")) return;
+
     for (auto function : mod.getOps<func::FuncOp>()) {
       if (!function->hasAttr("tessera.native.query_sequence_bound")) continue;
       auto reject = [&]() {
@@ -4534,6 +4550,9 @@ struct ScheduleToTilePass
   ScheduleToTilePass() = default;
   ScheduleToTilePass(const ScheduleToTilePass &other) : PassWrapper(other) {}
   Option<std::string> ssdGPU{*this, "ssd-gpu", llvm::cl::desc("Cooperative SSD GPU backend (nvidia or rocm)"), llvm::cl::init("")};
+  Option<int> tensorMember{*this, "tensor-member",
+      llvm::cl::desc("Project one verified native tensor program member image"),
+      llvm::cl::init(-1)};
   StringRef getArgument() const override { return "tessera-schedule-to-tile"; }
   StringRef getDescription() const override {
     return "Revalidate registered content-addressed Schedule decisions against "
@@ -4557,6 +4576,60 @@ struct ScheduleToTilePass
 
   void runOnOperation() override {
     ModuleOp mod = getOperation();
+    if (mod->hasAttr("tessera.native.tensor_program")) {
+      for (auto child : mod.getOps<ModuleOp>()) {
+        OpPassManager pipeline(ModuleOp::getOperationName());
+        pipeline.addPass(createScheduleToTilePass());
+        if (failed(runPipeline(pipeline, child))) return signalPassFailure();
+      }
+      SmallVector<tile::ProgramInvokeOp> invokes;
+      mod.walk([&](tile::ProgramInvokeOp invoke) { invokes.push_back(invoke); });
+      for (auto invoke : invokes) {
+        auto child = dyn_cast_or_null<ModuleOp>(SymbolTable::lookupSymbolIn(
+            mod, invoke.getCalleeAttr().getRootReference()));
+        SmallVector<LLVM::LLVMFuncOp> kernels;
+        if (child) for (auto kernel : child.getOps<LLVM::LLVMFuncOp>())
+          if (kernel->hasAttr("nvvm.kernel")) kernels.push_back(kernel);
+        if (kernels.size() != 1) {
+          invoke.emitError("native program member must lower to exactly one kernel");
+          return signalPassFailure();
+        }
+        auto kernel = kernels.front();
+        auto geometry = kernel->getAttr("tessera.native.program_geometry");
+        auto scalars = kernel->getAttr("tessera.native.program_scalars");
+        if (!geometry || !scalars) {
+          invoke.emitError("native program kernel lost its selected launch contract");
+          return signalPassFailure();
+        }
+        invoke->setAttr("callee", SymbolRefAttr::get(&getContext(),
+            child.getSymName().value(),
+            {FlatSymbolRefAttr::get(&getContext(), kernel.getName())}));
+        invoke->setAttr("geometry", geometry);
+        invoke->setAttr("scalars", scalars);
+      }
+      if (failed(verify(mod))) return signalPassFailure();
+      if (failed(tensor_program::exportFrame(mod))) return signalPassFailure();
+      if (tensorMember >= 0) {
+        SmallVector<ModuleOp> members(mod.getOps<ModuleOp>());
+        if (unsigned(tensorMember) >= members.size()) {
+          mod.emitError("native tensor member index is outside the program");
+          return signalPassFailure();
+        }
+        auto frame = mod->getAttr("tessera.native.tensor_program_frame_json");
+        OwningOpRef<ModuleOp> selected(cast<ModuleOp>(members[tensorMember]->clone()));
+        mod.getBody()->clear();
+        mod->setAttrs((*selected)->getAttrs());
+        mod->removeAttr(SymbolTable::getSymbolAttrName());
+        mod->removeAttr("tessera.metadata_snapshot");
+        mod->setAttr("tessera.native.tensor_program_frame_json", frame);
+        mod->setAttr("tessera.native.tensor_program_member_index",
+            IntegerAttr::get(IntegerType::get(&getContext(),64),tensorMember));
+        mod.getBody()->getOperations().splice(mod.getBody()->end(),
+            selected->getBody()->getOperations());
+      }
+      return;
+    }
+
     if (!ssdGPU.empty()) {
       if (failed(lowerCooperativeSSD(mod, ssdGPU))) signalPassFailure();
       return;
@@ -5074,6 +5147,19 @@ struct ScheduleToTilePass
         auto kernelFunction =
             LLVM::LLVMFuncOp::create(moduleBuilder, loc, kernelName, kernelType);
         kernelFunction->setAttr("nvvm.kernel", UnitAttr::get(&getContext()));
+        if (mod->hasAttr("tessera.native.tensor_program_member")) {
+          kernelFunction->setAttr("tessera.native.program_buffer_types",
+              tensor_program::bufferTypes(graph));
+          int64_t ctaM = macroKernelGeometry ? 32 : 16;
+          int64_t ctaN = macroKernelGeometry ? 32 : 8;
+          kernelFunction->setAttr("tessera.native.program_geometry",
+              builder.getDenseI64ArrayAttr({(selected->n + ctaN - 1) / ctaN,
+                  (selected->m + ctaM - 1) / ctaM, 1,
+                  macroKernelGeometry ? 128 : 32, 1, 1}));
+          kernelFunction->setAttr("tessera.native.program_scalars",
+              builder.getDenseI64ArrayAttr({selected->m, selected->n, selected->k}));
+        }
+
         Block *entry = kernelFunction.addEntryBlock(moduleBuilder);
         OpBuilder kernelBuilder(entry, entry->begin());
         auto mma = tile::TileMmaDescAttr::get(
@@ -5886,6 +5972,22 @@ struct ScheduleToTilePass
         OpBuilder mb(mod.getBody(), mod.getBody()->end());
         auto kernel = LLVM::LLVMFuncOp::create(mb, loc, name, type);
         kernel->setAttr("nvvm.kernel", mb.getUnitAttr());
+        if (mod->hasAttr("tessera.native.tensor_program_member")) {
+          kernel->setAttr("tessera.native.program_buffer_types",
+              tensor_program::bufferTypes(graph));
+          int64_t blocks = selected->rows;
+          if (isActivation)
+            blocks = selected->reductionSchedule == "flat_128"
+                         ? (selected->rows * selected->columns + 127) / 128
+                         : (selected->rows + 127) / 128;
+          else if (selected->reductionSchedule != "cooperative_128")
+            blocks = (selected->rows + 127) / 128;
+          kernel->setAttr("tessera.native.program_geometry",
+              mb.getDenseI64ArrayAttr({blocks, 1, 1, 128, 1, 1}));
+          kernel->setAttr("tessera.native.program_scalars",
+              mb.getDenseI64ArrayAttr({selected->rows, selected->columns}));
+        }
+
         Block *entry = kernel.addEntryBlock(mb);
         OpBuilder kb(entry, entry->begin());
         OperationState state(loc, isActivation ? "tile.activation_kernel" : isNorm ? "tile.norm_kernel" : isSoftmax ? "tile.softmax_kernel" : "tile.reduce_kernel");

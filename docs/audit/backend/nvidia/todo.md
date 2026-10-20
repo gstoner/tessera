@@ -6,6 +6,25 @@ target: nvidia_sm120
 last_updated: 2026-10-20
 ---
 
+## ROCM-MXFP4-FRAGMENT-DECODE-20261020 — exact packed decoder
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync: ROCM-MXFP4-FRAGMENT-DECODE-20261020.
+Evidence: benchmarks/baselines/rocm_mxfp4_fragment_decode_20261020/README.md.
+
+The exact packed E2M1-to-E4M3 decoder is simplified in native ROCm Tile
+materialization with signed-zero and bounds semantics preserved. No shared
+operation, dtype, diagnostic, pass, numeric policy or ABI is introduced.
+The existing recorder separates captured first-matmul, native program span
+and completed public @jit domains using shared duration admission.
+
+Not applicable to SM120 physical execution: the decoder is ROCm-target
+materialization. CUDA fragments, images and ownership are unchanged. Shared
+benchmark duration infrastructure retains host-free checks; no NVIDIA
+producer, attention or NVFP4 obligation is closed by AMD evidence.
+
+
+
 ## ROCM-BOUNDED-CONTIGUOUS-PACK-20261020 — guarded load candidate
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.

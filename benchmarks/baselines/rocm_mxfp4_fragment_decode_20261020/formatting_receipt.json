@@ -1,0 +1,42 @@
+{
+  "candidate-members-first.json": {
+    "original_sha256": "63127234a50d33f76d90a60bd68c8007bdd2e1e2b38dc45abfbb49fd9ecf73a7",
+    "checked_in_sha256": "d759dbb08fff704bede8d714d4ce8a8db8c74501ec9b2d2d648ff10aedae7a90",
+    "json_value_preserved": true
+  },
+  "candidate-members-repeat.json": {
+    "original_sha256": "1264425c6dcc420a2694994c9ce32313565fcd9916e8b3ae34a2417174d947ea",
+    "checked_in_sha256": "80e37935c4a6be38ed533f0fca548ec13b027c9231979674aee6afcdc0658f32",
+    "json_value_preserved": true
+  },
+  "candidate-program-spans.json": {
+    "original_sha256": "f9968344ac97e2721a7f379a313c604b894274e4260514e6aef0e4aade4717cb",
+    "checked_in_sha256": "84402c4f76f8caf3d6e8a43ba65fd0d9cbbf44568265ff909aa99a16fc0dc2b0",
+    "json_value_preserved": true
+  },
+  "candidate-completed-public.json": {
+    "original_sha256": "e5f019cd60c37e43ad42d144187f97e61ae01e4f0d89c3c4b7247c23757965ad",
+    "checked_in_sha256": "d7adce681d4ba61f0453b9939ee925d22cda49e6e54edde02f89717524a921e4",
+    "json_value_preserved": true
+  },
+  "candidate-completed-public-repeat.json": {
+    "original_sha256": "66d3c7df549d9fef55937702e69741919f4c0531515ee44030be82cbe72b79d0",
+    "checked_in_sha256": "67753fa6ddce0ebf5d27556186bb14620e8654afa60534a8c0dd990807527a43",
+    "json_value_preserved": true
+  },
+  "image-attribution.json": {
+    "original_sha256": "72fca9ad10ea18f714baeadd3fb6eac8fe928825a155120fe66a5eac5050ebc8",
+    "checked_in_sha256": "1f19bdd6aa613a8a062603990eba03d7924c0e0e507225d05b9d089a5ec8fd99",
+    "json_value_preserved": true
+  },
+  "isa-comparison.json": {
+    "original_sha256": "13c253eb6a4bf1f4e20994db33dae831d43c589dceb7cf1dfee48d252ef605f7",
+    "checked_in_sha256": "7bd1652dd6501f811956f16cf33afba1e0babac04156562209ecba70c5acec43",
+    "json_value_preserved": true
+  },
+  "candidate-tools.json": {
+    "original_sha256": "2b23a7ff64633bbb1203101d93fd7b4d9dcf968f343ea0220572632b86944a6d",
+    "checked_in_sha256": "cfb5a1cb4b79591ece737d453eb5f197ddaec2514a111613ce1b1b14b1ba95bf",
+    "json_value_preserved": true
+  }
+}

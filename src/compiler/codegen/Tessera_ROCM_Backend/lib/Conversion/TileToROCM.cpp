@@ -426,12 +426,17 @@ static FailureOr<Value> materializeFragmentPack(
           Value nibble = arith::AndIOp::create(builder, loc,
               arith::ShRUIOp::create(builder, loc, raw, shift), ci(15));
           Value magnitude = arith::AndIOp::create(builder, loc, nibble, ci(7));
-          Value bits = ci(0);
-          const int64_t e4m3[] = {0,0x30,0x38,0x3c,0x40,0x44,0x48,0x4c};
-          for (int64_t code = 1; code < 8; ++code)
-            bits = arith::SelectOp::create(builder, loc,
-                arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq,
-                                     magnitude, ci(code)), ci(e4m3[code]), bits);
+          // E2M1 magnitudes 2..7 have the affine E4M3 bit map 48 + 4*m.
+          // Keep zero and 0.5 explicit; applying the sign below also preserves
+          // negative zero without a floating conversion or rounding step.
+          Value bits = arith::AddIOp::create(builder, loc, ci(0x30),
+              arith::ShLIOp::create(builder, loc, magnitude, ci(2)));
+          bits = arith::SelectOp::create(builder, loc,
+              arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq,
+                                   magnitude, ci(1)), ci(0x30), bits);
+          bits = arith::SelectOp::create(builder, loc,
+              arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq,
+                                   magnitude, ci(0)), ci(0), bits);
           bits = arith::OrIOp::create(builder, loc, bits,
               arith::ShLIOp::create(builder, loc,
                   arith::AndIOp::create(builder, loc, nibble, ci(8)), ci(4)));

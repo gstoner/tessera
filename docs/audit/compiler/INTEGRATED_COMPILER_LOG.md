@@ -13925,7 +13925,7 @@ and review remain required.
 ### 2026-10-20 — native original FP32 producer roots
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
-PRs: pending; sync NATIVE-TENSOR-FP32-ROOTS-20261020.
+PRs: #995 (merged); sync NATIVE-TENSOR-FP32-ROOTS-20261020.
 
 Final local delivery gates: 30,815 CPU cases pass with 3,710 declared
 skips on the stable source. All 2,663 production compiler cases execute
@@ -13954,7 +13954,8 @@ production compiler cases executed without skips, all five surface audits,
 successor is synchronized with its main. Nine measured IR/frame/image
 identities are unchanged; 170 host and 27 RTX5070 post-sync checks pass.
 
-Remaining: Exact-head publication CI and review. General pitched/dynamic/
+Delivery: PR995 merged after exact-head required CI and review.
+Remaining: General pitched/dynamic/
 AD/encoded producers and all five aggregate programs remain open.
 Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
 <!-- entry-fields:end -->
@@ -13962,7 +13963,7 @@ Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
 ### 2026-10-20 — guarded bounded ROCm WMMA packs
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
-PRs: pending; sync ROCM-BOUNDED-CONTIGUOUS-PACK-20261020.
+PRs: #996 (merged); sync ROCM-BOUNDED-CONTIGUOUS-PACK-20261020.
 
 Outcome: native bounded contiguous K loads retain vectorization with generic
 zero-fill, preserving partial/strided/packed fallbacks. The retained compiler
@@ -13979,4 +13980,27 @@ exact MXFP4/Radiance attribution and original aggregate five-slice closure.
 All four backend queues are assessed; no sibling physical proof transfers.
 
 Evidence: benchmarks/baselines/rocm_bounded_fragment_loads_20261020/README.md.
+<!-- entry-fields:end -->
+
+
+### 2026-10-20 — exact packed MXFP4 fragment decoder
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync ROCM-MXFP4-FRAGMENT-DECODE-20261020.
+
+Outcome: native E2M1-to-E4M3 bit encoding preserves negative zero and bounded
+fragment semantics with fewer comparisons. 55 focused gfx1201 cases include
+raw bits and primal/JVP/reverse. Six captured matmul gains repeat; completed
+public calls improve at N1024/N2048, while small-case/N8192 outcomes remain
+separate. Registers, launch geometry and load/WMMA counts are unchanged;
+four neighboring format images are byte-identical. All four queues assessed.
+
+Local delivery: 30,818 CPU passes / 3,721 declared skips; 2,694 production
+compiler cases execute without skips; 329 focused drift checks, all five
+surfaces, 33 generated documents, zero-error mypy and Graphify pass.
+
+Remaining: exact-head publication/review, wider layout/model/AD envelopes
+and approximate folded Radiance attribution. All five aggregate programs open.
+
+Evidence: benchmarks/baselines/rocm_mxfp4_fragment_decode_20261020/README.md.
 <!-- entry-fields:end -->

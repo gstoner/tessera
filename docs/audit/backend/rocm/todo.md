@@ -5,6 +5,28 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## ROCM-MXFP4-FRAGMENT-DECODE-20261020 — exact packed decoder
+
+Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync: ROCM-MXFP4-FRAGMENT-DECODE-20261020.
+Evidence: benchmarks/baselines/rocm_mxfp4_fragment_decode_20261020/README.md.
+
+The exact packed E2M1-to-E4M3 decoder is simplified in native ROCm Tile
+materialization with signed-zero and bounds semantics preserved. No shared
+operation, dtype, diagnostic, pass, numeric policy or ABI is introduced.
+The existing recorder separates captured first-matmul, native program span
+and completed public @jit domains using shared duration admission.
+
+Owning parity validated: 55 focused gfx1201 tests include all-nibble raw
+fragment proof and exact packed primal/JVP/reverse execution. Counterbalanced
+six-shape captured matmul gains repeat; public gains repeat at N1024/N2048,
+while the small case and N8192 do not support universal promotion. Neighbor
+FP8/MXFP8/approximate unpacked folded images remain identical. gfx1151 has no
+FP8 WMMA instruction and receives no execution claim for this packed route.
+Broader layouts/model quality and approximate folded Radiance remain open.
+
+
+
 ## ROCM-BOUNDED-CONTIGUOUS-PACK-20261020 — guarded load candidate
 
 Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.

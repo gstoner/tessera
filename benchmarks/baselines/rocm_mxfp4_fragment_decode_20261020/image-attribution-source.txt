@@ -1,0 +1,45 @@
+import ctypes as c,hashlib,json,os,subprocess
+from pathlib import Path
+from types import SimpleNamespace
+import numpy as np
+from tessera import runtime
+from tests.unit.test_native_mxfp4_residual_gate import typed_case
+from tests.device.rocm.test_mxfp4_residual_native_execution import frame,coefficient
+from tessera.compiler.rocm_fp8_blockscale import BlockScaleShape,compile_blockscale
+from tessera.compiler.rocm_mxfp8_blockscale import compile_mxfp8
+from benchmarks.rocm.record_gfx1201_interleaved_compiler_formats import loaded_resources
+from benchmarks.rocm.benchmark_gfx1201_three_formats import quantize_folded
+from tessera.compiler.rocm_mxfp4_folded_frontend import compile_folded_scaled_matmul
+P=Path('/home/angstorms/scratch/w11-program-pipeline-20261019');D=Path(__file__).resolve().parent
+compilers={'control':P/'bounded-vector-tools-276e09df/tessera-opt','candidate':Path(os.environ['TESSERA_OPT'])}
+assert runtime._rocm_live_arch()=='gfx1201'
+(D/'native-images').mkdir(exist_ok=True)
+rows={};hip=c.CDLL('/opt/rocm/lib/libamdhip64.so')
+for label,tool in compilers.items():
+ os.environ['TESSERA_OPT']=str(tool);os.environ['TESSERA_NVIDIA_OPT']=str(tool)
+ owner,_=typed_case((256,4096,2048));values,_=frame((256,4096,2048))
+ try:
+  np.testing.assert_array_equal(owner(*values),coefficient(values)*values[4])
+  package=owner._native_composed_scaled_last_program
+  member=json.loads(package.members_json[0]);image=package.images[0];sha=hashlib.sha256(image).hexdigest();path=D/'native-images'/f'{sha}.hsaco';path.write_bytes(image)
+  module,function=c.c_void_p(),c.c_void_p();blob=c.create_string_buffer(image)
+  assert hip.hipModuleLoadData(c.byref(module),blob)==0
+  try:
+   assert hip.hipModuleGetFunction(c.byref(function),module,member['entry'].encode())==0
+   resources=loaded_resources(hip,SimpleNamespace(function=function,block=tuple(member['geometry'][3:])))
+  finally:assert hip.hipModuleUnload(module)==0
+  dis=subprocess.check_output(['/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/llvm-objdump','-d','--mcpu=gfx1201',str(path)],text=True)
+  notes=subprocess.check_output(['/opt/rocm/llvm/bin/llvm-readobj','--notes',str(path)],text=True)
+  (D/f'{label}-mxfp4-isa.txt').write_text(dis);(D/f'{label}-mxfp4-notes.txt').write_text(notes)
+  rows[label]={'compiler_sha256':hashlib.sha256(tool.read_bytes()).hexdigest(),'image_sha256':sha,'geometry':member['geometry'],'entry':member['entry'],'loaded_resources':resources,'member_image_sha256':[hashlib.sha256(i).hexdigest() for i in package.images],'neighbors':{}}
+ finally:owner.close_native_storage()
+ for name,sk,sn,mx in [('fp8_k128',128,128,False),('fp8_k32',32,1,False),('mxfp8',32,1,True)]:
+  shape=BlockScaleShape(200,1024,4096,sk,sn,'nk','bf16');pkg=compile_mxfp8(shape) if mx else compile_blockscale(shape)
+  rows[label]['neighbors'][name]={'image_sha256':hashlib.sha256(pkg.image.payload).hexdigest(),'entry':pkg.descriptor.entry_symbol,'provenance':pkg.descriptor.provenance}
+ rng=np.random.default_rng(3124);a=rng.normal(size=(256,4096)).astype(np.float32);b=rng.normal(size=(4096,1024)).astype(np.float32)
+ qa,sa,folded,*_=quantize_folded(a,b)
+ pkg=compile_folded_scaled_matmul(qa,sa,folded,tessera_opt=tool,allow_approximate=True).package
+ rows[label]['neighbors']['approximate_folded_mxfp4']={'image_sha256':hashlib.sha256(pkg.image.payload).hexdigest(),'entry':pkg.descriptor.entry_symbol,'provenance':pkg.descriptor.provenance}
+comparisons={name:rows['control']['neighbors'][name]['image_sha256']==rows['candidate']['neighbors'][name]['image_sha256'] for name in rows['control']['neighbors']}
+result={'architecture':runtime._rocm_live_arch(),'rows':rows,'neighbor_images_equal':comparisons};(D/'image-attribution.json').write_text(json.dumps(result,indent=2)+'\n')
+print(json.dumps({'resources':{k:r['loaded_resources'] for k,r in rows.items()},'neighbors_equal':comparisons},indent=2))

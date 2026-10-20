@@ -2602,3 +2602,14 @@ reproduce the observed float rounding bitwise. This does not change production
 numeric policies or promote gfx1151 FP8, which has no hardware WMMA form.
 
 Evidence: `benchmarks/baselines/rocm_bounded_fragment_loads_20261020/README.md`.
+
+## Exact packed E2M1 decoder simplification — 2026-10-20
+
+The native packed B materializer encodes magnitudes 2..7 as 48 + 4*m in E4M3,
+with explicit zero and 0.5 encodings and the original sign bit applied last.
+A raw fragment oracle checks all 16 nibbles, including negative zero, before
+MMA can erase its sign, plus partial and pitched bounds. No fragment mapping,
+scale contract, launch geometry or WMMA instruction changes. Exact packed
+matmul speedups repeat across six shapes; public-call timing remains separate.
+This does not settle the approximate folded Radiance gap. Packet:
+benchmarks/baselines/rocm_mxfp4_fragment_decode_20261020/README.md.

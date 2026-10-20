@@ -128,5 +128,40 @@
     "gzip_file": "fp32-root-final-stores-corrected.txt.gz",
     "uncompressed_sha256": "26abf698c9ece83304ce45b23598b1273202caebd48c87de154c3f5f2f4625d0",
     "gzip_sha256": "805de296e3955673425dffd1e488c7c9c5f8dc6bce196f0e6aa3fcf9bae77919"
+  },
+  "fp32-root-bf16-compiler-final.txt": {
+    "gzip_file": "fp32-root-bf16-compiler-final.txt.gz",
+    "uncompressed_sha256": "e7417e57d2015a4047183c077d050178555e79bfaf5edfca4e1ac6c0151807ef",
+    "gzip_sha256": "a681c585391adbd095484913d22d92f527c99f2239d98d07c161376e32536056"
+  },
+  "fp32-root-bf16-compiler-final.xml": {
+    "gzip_file": "fp32-root-bf16-compiler-final.xml.gz",
+    "uncompressed_sha256": "0f19a3c0423a828862c9f26188ba04d31eafb1d9e676e03b409a1fa522e77405",
+    "gzip_sha256": "d4dbcb731074c9df8111eb7c475c36bae3aefd65f5c2492dc2aa07618375c752"
+  },
+  "fp32-root-bf16-full-cpu.txt": {
+    "gzip_file": "fp32-root-bf16-full-cpu.txt.gz",
+    "uncompressed_sha256": "9f7ad366ea4437142bf7f3a1c20ecb23d1f57b1c48dd8ccbf46e707ee3b82234",
+    "gzip_sha256": "06d8a35eedb2d2e0d0f00c2382a3a209db9ba1cd7d406245f0a69113999f8629"
+  },
+  "fp32-root-bf16-final-types.txt": {
+    "gzip_file": "fp32-root-bf16-final-types.txt.gz",
+    "uncompressed_sha256": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "gzip_sha256": "acf9f1fa9e0b29bfc06c5cd63aa5c6a540c7a3e250a0e05d12bdfe5b5acd153e"
+  },
+  "fp32-root-bf16-final-cpu.txt": {
+    "gzip_file": "fp32-root-bf16-final-cpu.txt.gz",
+    "uncompressed_sha256": "2f4e696c2e883723d9ff58a82df7df6510fcdfb9960926b67732aecc0f084ace",
+    "gzip_sha256": "f4fb135ba1edc563020d77447f87c0c10c588b35576be8d99a7dd7160d29f72d"
+  },
+  "fp32-root-bf16-prepared-proof.txt": {
+    "gzip_file": "fp32-root-bf16-prepared-proof.txt.gz",
+    "uncompressed_sha256": "88cd89d70cdd90c2936c8cee0e79057d0aab90072eb5e88efc829c2b6c06880d",
+    "gzip_sha256": "fbcc180e9602018520e0ccbccd52fb50ccb9936dd05bac90ba72cd4acc015398"
+  },
+  "fp32-root-final-equivalence.txt": {
+    "gzip_file": "fp32-root-final-equivalence.txt.gz",
+    "uncompressed_sha256": "9c553bcee98559930eba65b0b58453d39ea13a0edcbdf337ba3ab901df844891",
+    "gzip_sha256": "f3f46da23815099311c54a6460d5ea5e3b6003683055f9d2f48781d398800a4b"
   }
 }

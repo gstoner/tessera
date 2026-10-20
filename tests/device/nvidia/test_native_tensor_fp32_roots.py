@@ -182,6 +182,8 @@ def test_direct_scalar_bf16_store_uses_native_descriptor(storage,monkeypatch):
     try:
         verify(fn(a,b))
         assert fn.execution_kind=="native_gpu"
+        assert fn._native_descriptor_last_receipt["native_call_binding"]=="prepared_cpp_scalar_matmul"
+        assert len(fn._native_prepared_matmul_calls)==1
         def forbidden(*args,**kwargs):
             pytest.fail("warm scalar BF16 store used eager code or tracing")
         with monkeypatch.context() as guard:

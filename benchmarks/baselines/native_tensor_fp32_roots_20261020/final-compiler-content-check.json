@@ -1,0 +1,13 @@
+{
+  "compiler_sha256": "db3a4e86bb42c937d4da70fb98a45266e8e758241c7c773115906d9a6ab871ec",
+  "recorded_compiler_source_hashes": {
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "a234595d89a48eff0474eba50c14cce8d1c4e45a1e1959ebd0a5c0e54195f030",
+    "python/tessera/compiler/native_tensor_jit.py": "af4ff4cb2c82412b6fb5e764a2881b1cb6eca1e6b826b55c318f9f305184ba9a"
+  },
+  "current_source_hashes": {
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "a234595d89a48eff0474eba50c14cce8d1c4e45a1e1959ebd0a5c0e54195f030",
+    "python/tessera/compiler/native_tensor_jit.py": "af4ff4cb2c82412b6fb5e764a2881b1cb6eca1e6b826b55c318f9f305184ba9a"
+  },
+  "compiled_cpp_delta_from_original_proof": [],
+  "timestamp_warning": "Rebase refreshed source file mtimes; compiler-source contents and compiled C++ tree are identical. No source mismatch is waived."
+}

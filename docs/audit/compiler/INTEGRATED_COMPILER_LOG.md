@@ -13923,6 +13923,17 @@ and review remain required.
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
 PRs: pending; sync NATIVE-TENSOR-FP32-ROOTS-20261020.
 
+Final local delivery gates: 30,815 CPU cases pass with 3,710 declared
+skips on the stable source. All 2,663 production compiler cases execute
+without skips; the JUnit census verifies actual execution. The final
+focused frontend/compiler gate passes 233 cases. All 33 distinct RTX5070
+root/final-store cases pass; three overlapping direct BF16 controls also
+require the prepared C++ scalar owner. All nine measured FP32 IR/native
+image identities remain unchanged. Generated-doc, type and lifecycle gates
+pass. Exact-head publication CI/review remains required; the five aggregate
+slices and broader producer/layout/dynamic/AD requirements remain open.
+
+
 Outcome: Original compact FP32 roots retain storage through native ReLU and
 existing scalar-FMA consumers with FP16/BF16/FP32 weights. The obsolete
 whole-program half-root restriction is removed; native leaf policy, checked

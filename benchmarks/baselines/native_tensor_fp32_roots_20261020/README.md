@@ -115,7 +115,7 @@ producer final stores pass; an additional warm direct FP32-by-FP32 BF16
 control exposes stale Python Schedule admission. The corrected full device
 rerun passes all 33 cases. Host frontend controls pass twelve cases; the preceding
 shared registry lane passes 493 and compiler regression lane passes 230.
-Full CPU validation predates the last admission edit and must be refreshed.
+The final stable-source CPU refresh passes 30,815 cases with 3,710 declared skips.
 No new native ABI, Graph dtype or broader AD certificate is introduced.
 
 The corrected device rerun passes all 33 cases: 18 original host/resident
@@ -123,3 +123,13 @@ producer cases, twelve FP16/BF16 final stores and three direct scalar BF16
 calls with warm tracing disabled. The final focused compiler/frontend gate
 passes 233 cases. Original nine FP32 timing rows remain the measured
 performance envelope; no BF16-store latency claim is added.
+
+Final local delivery gates: 30,815 CPU cases pass with 3,710 declared
+skips on the stable source. All 2,663 production compiler cases execute
+without skips; the JUnit census verifies actual execution. The final
+focused frontend/compiler gate passes 233 cases. All 33 distinct RTX5070
+root/final-store cases pass; three overlapping direct BF16 controls also
+require the prepared C++ scalar owner. All nine measured FP32 IR/native
+image identities remain unchanged. Generated-doc, type and lifecycle gates
+pass. Exact-head publication CI/review remains required; the five aggregate
+slices and broader producer/layout/dynamic/AD requirements remain open.

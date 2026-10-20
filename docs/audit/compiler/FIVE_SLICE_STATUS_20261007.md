@@ -6,6 +6,17 @@ audit_role: reference
 
 Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Sync NATIVE-TENSOR-FP32-ROOTS-20261020.
+
+Final local delivery gates: 30,815 CPU cases pass with 3,710 declared
+skips on the stable source. All 2,663 production compiler cases execute
+without skips; the JUnit census verifies actual execution. The final
+focused frontend/compiler gate passes 233 cases. All 33 distinct RTX5070
+root/final-store cases pass; three overlapping direct BF16 controls also
+require the prepared C++ scalar owner. All nine measured FP32 IR/native
+image identities remain unchanged. Generated-doc, type and lifecycle gates
+pass. Exact-head publication CI/review remains required; the five aggregate
+slices and broader producer/layout/dynamic/AD requirements remain open.
+
 The original FP32 root survives ReLU and the native scalar-FMA matmul consumer
 without half/TF32 conversion. The matching compiler passes 170 focused cases,
 481 shared registry/lifecycle gates and 18 RTX5070 host/resident cases,

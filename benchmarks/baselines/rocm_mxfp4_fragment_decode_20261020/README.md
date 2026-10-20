@@ -135,3 +135,16 @@ stale generated /tmp CMake cache from the previous checkout; regenerating that
 build resolves it without changing source or expectations.
 validation-summary.json records JUnit hashes/counts and owning receipt paths.
 Public exact-head CI and review remain separate publication gates.
+
+Review follow-up: optional public windows must be zero (disabled) or a positive
+even count. Odd/one-window requests are rejected before the hardware probe;
+valid 0/2/4 boundaries reach that probe. The committed measurements use 12 and
+16 windows and are unaffected. Native-program/captured-member windows also require a positive even count,
+with odd requests rejected before hardware. This seals both paired domains
+at the recorder CLI.
+
+public-window-review.xml/.txt record 21 passing follow-up timing-boundary
+tests. The full local suites above ran on original PR head 642444207; the
+follow-up changes CLI admission and tests only. The native compiler source,
+binary and recorded timing windows remain unchanged. Exact-head public CI
+reruns the full lanes on the correction.

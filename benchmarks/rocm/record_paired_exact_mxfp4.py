@@ -168,11 +168,13 @@ def main():
         parser.error("shapes require integer M,K,N")
     if any(len(s) != 3 or min(s) <= 0 or s[1] % 32 for s in shapes):
         parser.error("shapes require positive M,K,N and K divisible by 32")
-    if args.windows < 2 or not np.isfinite(args.min_window_ms) or args.min_window_ms < 10:
-        parser.error("at least two windows and a finite duration floor of at least 10 ms are required")
-    if (args.public_windows < 0 or not np.isfinite(args.public_min_window_ms)
+    if (args.windows < 2 or args.windows % 2
+            or not np.isfinite(args.min_window_ms) or args.min_window_ms < 10):
+        parser.error("positive even windows and a finite duration floor of at least 10 ms are required")
+    if (args.public_windows < 0 or args.public_windows % 2
+            or not np.isfinite(args.public_min_window_ms)
             or args.public_min_window_ms < 10):
-        parser.error("public windows must be nonnegative and their finite duration floor at least 10 ms")
+        parser.error("public windows must be zero or positive even and their finite duration floor at least 10 ms")
     compilers = {"candidate": args.compiler.resolve(), "reference": args.reference.resolve()}
     if any(not path.is_file() for path in compilers.values()):
         parser.error("both compiler files must exist")

@@ -13999,6 +13999,10 @@ Local delivery: 30,818 CPU passes / 3,721 declared skips; 2,694 production
 compiler cases execute without skips; 329 focused drift checks, all five
 surfaces, 33 generated documents, zero-error mypy and Graphify pass.
 
+Review follow-up: both paired timing domains reject odd/one-window counts
+before the hardware gate; 21 focused boundary tests pass. Recorded windows
+are even and native source/images remain unchanged.
+
 Remaining: exact-head publication/review, wider layout/model/AD envelopes
 and approximate folded Radiance attribution. All five aggregate programs open.
 

@@ -118,5 +118,13 @@
       "[surface_audit:tests] passed=4 failed=0 skipped=0"
     ]
   },
-  "surface_environment_correction": "A stale /tmp/tessera_opbench_audit_build CMake cache named the previous source checkout. Verified generated cache ownership, removed that /tmp build directory, reran benchmarks/research/tools/tests successfully; no source or audit expectation changed."
+  "surface_environment_correction": "A stale /tmp/tessera_opbench_audit_build CMake cache named the previous source checkout. Verified generated cache ownership, removed that /tmp build directory, reran benchmarks/research/tools/tests successfully; no source or audit expectation changed.",
+  "full_local_lanes_source_head": "6424442072cf58224211a76b20a9da950c2e7af0",
+  "review_followup": {
+    "scope": "CLI-only balanced-window validation and tests; native compiler source and recorded timing windows unchanged",
+    "focused_passes": 21,
+    "junit_sha256": "9310d48f95a7478970b726d8ccac320896a47e33b0fdcb0cb0e7118992feb4a8",
+    "receipt": "public-window-review.xml",
+    "final_head_ci": "required separately"
+  }
 }

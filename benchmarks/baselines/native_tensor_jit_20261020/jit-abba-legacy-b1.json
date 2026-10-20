@@ -1,0 +1,484 @@
+{
+  "schema": "tessera.native_tensor_jit_measurement.v1",
+  "label": "jit-abba-legacy-b1",
+  "architecture": "sm_120",
+  "route": "legacy",
+  "identity": {
+    "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+    "compiler_sha256": "ff8bad652b1a2c0f75d58c5589e37433e4774e5032664e3d202fa112cd59e070",
+    "provider_sha256": "72aaf57b4819f6aaf7931e59bbeb4cb68b8bd794e68cb2bb9108924eb6547e45",
+    "compiler_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+    "compiler_source": {
+      "compiler_sha256": "ff8bad652b1a2c0f75d58c5589e37433e4774e5032664e3d202fa112cd59e070",
+      "base_commit": "b09663678ddee84381d3331cceadbe1cb213c973",
+      "uncommitted_compiler_changes": true,
+      "compiler_source_sha256": {
+        "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "b32bb8ff415ba103499ae6d8624c7e7aaa29e85cfddc36f62e88abafd61e174f",
+        "src/compiler/programming_model/lib/NativeTensorProgram.h": "593f7802cd7f9c178c9c91ef5466cd21b68f039284cf4dc223e7204b51405918",
+        "src/compiler/programming_model/lib/PMPasses.cpp": "18d6d54c9c094ebdb4550f162f057a5e0b00cc8a73db1ff042b8d484685f5545"
+      },
+      "configuration": "LLVM/MLIR23.1.1 optimized with assertions; existing six-backend Q/build",
+      "scope": "capacity and aligned-arena verification additions; no numerical kernel change"
+    },
+    "checkout_head": "d0579fdb1546fda5278b700dbee8c77a251d339b",
+    "source_sha256": {
+      "python/tessera/compiler/jit.py": "e34aa87189816e2998b02f588a32bb737550c339fe305821d8fd3dab552b6a58",
+      "python/tessera/compiler/execution_matrix.py": "d5327865383656815d3dc6c4463aade97c7fbb4a0bf81b1d7f8a5e625eedb47b",
+      "python/tessera/compiler/native_tensor_program.py": "9ea49250ea221716e3f4c13a5ffae705b52dbe82f275f578c51f8d8588b6bf0b",
+      "python/tessera/compiler/native_tensor_jit.py": "fe729215e9f3e1d4969d8a055ba3107844186c478b738e04f046c01ea084a8ac",
+      "python/tessera/compiler/prepared_native_tensor_frame.py": "9b8c440ac08f41d66cae5823832b629098e661080be67a9a450ca45adec8dd07",
+      "python/tessera/runtime.py": "7d2b362d5f86062119699f90129d5257d817fe140d378a59f598635eec52bf54",
+      "tests/device/nvidia/test_native_tensor_program_package_execution.py": "e76b632edcd0299b7e4586a1497eeadfa3d935ca05c76c0630a68d7ff8113251"
+    },
+    "recorder_sha256": "3968ffe2e6ff96b59676f745066ca0527cc235d9d088f7020a6578d287f84ff1"
+  },
+  "rows": [
+    {
+      "kind": "relu",
+      "storage": "f16",
+      "status": "passed",
+      "route": "legacy",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 104.290001,
+      "cold_call_ms": 1712.746697,
+      "samples_completed_public_ms": [
+        0.626300375,
+        0.5883960625,
+        0.565788125,
+        0.5516223125,
+        0.5819715,
+        0.563711875,
+        0.5690525,
+        0.549481,
+        0.56578375,
+        0.5764064375,
+        0.5513460625,
+        0.559503,
+        0.540083375,
+        0.5778351875,
+        0.5465578125,
+        0.5704613125,
+        0.57869275,
+        0.5607704375,
+        0.565331875,
+        0.5446003125,
+        0.57219325
+      ],
+      "median_completed_public_ms": 0.56578375,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.01482400018721819,
+          "stage_windows_ms": [
+            0.008623500354588032,
+            0.008856999687850475
+          ],
+          "domain": "native_enqueue_event"
+        },
+        "captured": {
+          "program_ms": 0.003145500086247921,
+          "stage_windows_ms": [
+            0.0026549999602138996,
+            0.0010115000186488032
+          ],
+          "domain": "cuda_graph_batch"
+        }
+      },
+      "artifact_hash": "87165a8e919899766732931a1e2f43182acd9ea12be9242af66d5fd1d2730fb9",
+      "ir_sha256": {
+        "graph_ir": "05b354f44c7214aaeeb3443e0ddae8bc97a36ca24f1c3c7459452af0745225eb",
+        "schedule_ir": null,
+        "tile_ir": null,
+        "target_ir": null
+      },
+      "image_sha256": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "bbbc32c0e66ca0fc2f29cab13a996f71fd5b2856fa1386b8bd325d97a5c712ac"
+      ],
+      "before": null,
+      "after": null
+    },
+    {
+      "kind": "relu",
+      "storage": "bf16",
+      "status": "passed",
+      "route": "legacy",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 94.64784,
+      "cold_call_ms": 1085.446787,
+      "samples_completed_public_ms": [
+        0.6105489375,
+        0.6074050625,
+        0.63205675,
+        0.572593875,
+        0.8771444375,
+        0.6124583125,
+        0.600205625,
+        0.5921248125,
+        0.5979636875,
+        0.6121713125,
+        0.596412375,
+        0.594453,
+        0.6213421875,
+        0.5887710625,
+        0.6153514375,
+        0.5821365625,
+        0.607775,
+        0.596339875,
+        0.611088875,
+        0.577624,
+        1.0576181875
+      ],
+      "median_completed_public_ms": 0.6074050625,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.027712499722838402,
+          "stage_windows_ms": [
+            0.013521499931812286,
+            0.014007999561727047
+          ],
+          "domain": "native_enqueue_event"
+        },
+        "captured": {
+          "program_ms": 0.003010000102221966,
+          "stage_windows_ms": [
+            0.0020135000813752413,
+            0.0010470000561326742
+          ],
+          "domain": "cuda_graph_batch"
+        }
+      },
+      "artifact_hash": "42efd6f5f7ae43feaa45789a96653b2447b485fc7f88f485afb3293b1f6c935d",
+      "ir_sha256": {
+        "graph_ir": "7ed7db7e8a605d2a7b5103ab1f1fa19e352308eba9302689f9acdcd269208296",
+        "schedule_ir": null,
+        "tile_ir": null,
+        "target_ir": null
+      },
+      "image_sha256": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "3df964ed288a8f99a9e8bbef090d43d8e032c5529a4e12558196d8bca4e66273"
+      ],
+      "before": null,
+      "after": null
+    },
+    {
+      "kind": "norm",
+      "storage": "f16",
+      "status": "unsupported",
+      "reason": "LHS normalization needs a separate affine/axis contract",
+      "route": "legacy"
+    },
+    {
+      "kind": "norm",
+      "storage": "bf16",
+      "status": "unsupported",
+      "reason": "LHS normalization needs a separate affine/axis contract",
+      "route": "legacy"
+    },
+    {
+      "kind": "two_sided",
+      "storage": "f16",
+      "status": "passed",
+      "route": "legacy",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 127.474943,
+      "cold_call_ms": 1430.108214,
+      "samples_completed_public_ms": [
+        0.69266025,
+        0.770604625,
+        0.648232625,
+        0.6523733125,
+        0.641331875,
+        0.639801875,
+        0.647367,
+        0.6447025,
+        0.654258375,
+        0.640491875,
+        0.693915875,
+        0.7257064375,
+        0.646872,
+        0.651775125,
+        0.65823025,
+        1.0795160625,
+        0.6410763125,
+        0.6443875,
+        0.65678275,
+        0.641464375,
+        0.681407625
+      ],
+      "median_completed_public_ms": 0.651775125,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.038108501583337784,
+          "stage_windows_ms": [
+            0.007619000039994717,
+            0.013848000206053257,
+            0.010927500203251839
+          ],
+          "domain": "native_enqueue_event"
+        },
+        "captured": {
+          "program_ms": 0.004681500140577555,
+          "stage_windows_ms": [
+            0.002151499968022108,
+            0.0017900000093504786,
+            0.0010430000256747007
+          ],
+          "domain": "cuda_graph_batch"
+        }
+      },
+      "artifact_hash": "54e82be9c97526960d606104e1802f05376c8b488971863abbc52609b6b168c3",
+      "ir_sha256": {
+        "graph_ir": "557b6d7a26c72c4a4f9393289f3084cec46bcbc5a18b0847b742071103ed94f5",
+        "schedule_ir": null,
+        "tile_ir": null,
+        "target_ir": null
+      },
+      "image_sha256": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "af4e4a678f6a255cbc0f78fd1d7a0f9907df967b7278ea08db7b15c03b1dcce2",
+        "bbbc32c0e66ca0fc2f29cab13a996f71fd5b2856fa1386b8bd325d97a5c712ac"
+      ],
+      "before": null,
+      "after": null
+    },
+    {
+      "kind": "two_sided",
+      "storage": "bf16",
+      "status": "passed",
+      "route": "legacy",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 127.082712,
+      "cold_call_ms": 1415.922169,
+      "samples_completed_public_ms": [
+        0.6659785625,
+        0.6127594375,
+        0.632308625,
+        0.6064106875,
+        0.63805,
+        0.5993943125,
+        0.630277875,
+        0.617694625,
+        0.62008275,
+        0.5965480625,
+        0.6215234375,
+        0.5962505625,
+        0.61695325,
+        0.61677525,
+        0.61836275,
+        0.739642875,
+        0.6342961875,
+        0.594317375,
+        0.614942,
+        0.5999593125,
+        0.61801775
+      ],
+      "median_completed_public_ms": 0.617694625,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.025577999651432037,
+          "stage_windows_ms": [
+            0.008786500431597233,
+            0.00889500044286251,
+            0.010028500109910965
+          ],
+          "domain": "native_enqueue_event"
+        },
+        "captured": {
+          "program_ms": 0.00476149981841445,
+          "stage_windows_ms": [
+            0.002130999928340316,
+            0.0020234999246895313,
+            0.000981000019237399
+          ],
+          "domain": "cuda_graph_batch"
+        }
+      },
+      "artifact_hash": "f5404f9cf031f783bbaf0286d9d22c9e18cf0eda3d44141b8acc6bffd186aadb",
+      "ir_sha256": {
+        "graph_ir": "c5112ad8877606e12e989caff36d47f09079e31156c114a68d493ff636a8dd18",
+        "schedule_ir": null,
+        "tile_ir": null,
+        "target_ir": null
+      },
+      "image_sha256": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "2fa9b73308547179ecfe39a225139972dd76bb757bc58609f42d1d480f6b75e9",
+        "3df964ed288a8f99a9e8bbef090d43d8e032c5529a4e12558196d8bca4e66273"
+      ],
+      "before": null,
+      "after": null
+    },
+    {
+      "kind": "reverse",
+      "storage": "f16",
+      "status": "passed",
+      "route": "legacy",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 99.086602,
+      "cold_call_ms": 1022.818185,
+      "samples_completed_public_ms": [
+        0.588892875,
+        0.893588625,
+        0.5544121875,
+        1.0346328125,
+        0.5655094375,
+        0.560478,
+        0.5621975,
+        0.584908375,
+        0.542660875,
+        0.58754475,
+        0.5414615,
+        0.5688738125,
+        0.559099875,
+        0.60705825,
+        0.5967785625,
+        0.5556366875,
+        0.572147625,
+        0.5800865,
+        0.5504904375,
+        0.5462221875,
+        0.5776508125
+      ],
+      "median_completed_public_ms": 0.5688738125,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.018306000158190727,
+          "stage_windows_ms": [
+            0.008692500181496143,
+            0.00849900022149086
+          ],
+          "domain": "native_enqueue_event"
+        },
+        "captured": {
+          "program_ms": 0.003043500008061528,
+          "stage_windows_ms": [
+            0.002065500011667609,
+            0.0009955000132322311
+          ],
+          "domain": "cuda_graph_batch"
+        }
+      },
+      "artifact_hash": "082ebbbe9fdd669ab72520572598c9562c4a834d15bbca1cbc9f850f2170a5ed",
+      "ir_sha256": {
+        "graph_ir": "fba7ffb214f8211758ce49e94d7a9bddff5ff41a0a2b49a3de0db3be74fbc04a",
+        "schedule_ir": null,
+        "tile_ir": null,
+        "target_ir": null
+      },
+      "image_sha256": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "bbbc32c0e66ca0fc2f29cab13a996f71fd5b2856fa1386b8bd325d97a5c712ac"
+      ],
+      "before": null,
+      "after": null
+    },
+    {
+      "kind": "reverse",
+      "storage": "bf16",
+      "status": "passed",
+      "route": "legacy",
+      "shape_mnk": [
+        17,
+        11,
+        32
+      ],
+      "correctness": "passed_before_after_and_profile",
+      "decoration_ms": 109.521732,
+      "cold_call_ms": 892.9447,
+      "samples_completed_public_ms": [
+        0.6589734375,
+        0.5854353125,
+        0.6178765625,
+        0.574860125,
+        0.5903048125,
+        0.5946485,
+        0.5650388125,
+        0.5922723125,
+        0.5831259375,
+        0.573067625,
+        0.5962668125,
+        0.609971875,
+        0.58717975,
+        0.5779633125,
+        1.0530543125,
+        0.5831321875,
+        0.5982524375,
+        0.60657125,
+        0.616959,
+        0.5775214375,
+        0.6297510625
+      ],
+      "median_completed_public_ms": 0.5922723125,
+      "rounds": 21,
+      "calls_per_sample": 16,
+      "device_windows": {
+        "enqueued": {
+          "program_ms": 0.023576000705361366,
+          "stage_windows_ms": [
+            0.01889199949800968,
+            0.014182999730110168
+          ],
+          "domain": "native_enqueue_event"
+        },
+        "captured": {
+          "program_ms": 0.0029035001061856747,
+          "stage_windows_ms": [
+            0.002061000093817711,
+            0.0010465000523254275
+          ],
+          "domain": "cuda_graph_batch"
+        }
+      },
+      "artifact_hash": "4128d7de293d54fb31dc4fbe360c33896be40e8b428f60326bcf8945a4dc3264",
+      "ir_sha256": {
+        "graph_ir": "8ea5571325b9be0c4019e3dbae42839935a2a920377e54655af3cead2ef703c1",
+        "schedule_ir": null,
+        "tile_ir": null,
+        "target_ir": null
+      },
+      "image_sha256": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "3df964ed288a8f99a9e8bbef090d43d8e032c5529a4e12558196d8bca4e66273"
+      ],
+      "before": null,
+      "after": null
+    }
+  ],
+  "scope": "M17/N11/K32 completed public latency; cold compile/bind separated; CUDA program/stage windows exclude host copies and are independent/nonadditive; no pure-kernel, throughput or physical schedule promotion"
+}

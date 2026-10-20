@@ -1,0 +1,14 @@
+{
+  "scope": "Only the measured native execution row gains named evidence annotations; dispatch code and other rows unchanged",
+  "measured_execution_matrix_sha256": "6e6b9edf49d437fca2f30b55c64ec3161935edd291bac31fb10932a73112183d",
+  "annotated_execution_matrix_sha256": "00081a6ec526f7026090ee46795769a49a8934cfaf8a6e4a39046e9229a05d6d",
+  "ignored_fields": [
+    "numerical_fixture",
+    "evidence_target",
+    "proof_build",
+    "device_proof",
+    "appended named-proof reason sentence"
+  ],
+  "one_row_changed": true,
+  "remaining_module_ast_identical": true
+}

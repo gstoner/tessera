@@ -31,6 +31,27 @@ inline bool isPhysicalBuffer(mlir::Type raw) {
   }
   return true;
 }
+// Frame v1 capacity is shared with the retained runtime and Python transport.
+// Arithmetic uses a wider intermediate so individually valid buffers cannot
+// overflow the aggregate 256-byte-aligned arena before allocation.
+inline mlir::LogicalResult verifyFrameCapacity(
+    mlir::Operation *anchor, llvm::ArrayRef<mlir::Type> buffers, size_t stages) {
+  using namespace mlir;
+  if (buffers.size() < 2 || buffers.size() > 128 || stages < 1 || stages > 64)
+    return anchor->emitOpError("native frame supports at most 64 stages and 128 buffers");
+  __int128 arena = 0;
+  for (Type raw : buffers) {
+    if (!isPhysicalBuffer(raw))
+      return anchor->emitOpError("native frame capacity requires checked physical buffers");
+    auto type = cast<MemRefType>(raw);
+    __int128 bytes = static_cast<__int128>(type.getDimSize(0)) *
+                     type.getDimSize(1) * (type.getElementType().isF32() ? 4 : 2);
+    arena = (arena + bytes + 255) & ~static_cast<__int128>(255);
+    if (arena > UINT64_MAX)
+      return anchor->emitOpError("native frame aligned arena exceeds its 64-bit capacity");
+  }
+  return success();
+}
 // Match the versioned CUDA frame owner's grid and block ABI before export.
 inline bool isLaunchGeometry(llvm::ArrayRef<int64_t> geometry) {
   if (geometry.size() != 6) return false;
@@ -90,6 +111,17 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
         inputs.getInt() > 2 || candidate.getNumOperands() != unsigned(inputs.getInt() + 1))
       return candidate.emitOpError("requires checked input/output arity before program lifetime verification");
   }
+  SmallVector<Type> storage(host.getArgumentTypes());
+  size_t stages = 0;
+  for (Operation &candidate : host.getBody().front()) {
+    if (isInvocation(&candidate)) ++stages;
+    if (auto allocation = dyn_cast<memref::AllocOp>(candidate)) {
+      if (!isPhysicalBuffer(allocation.getType()))
+        return emitOpError("program allocations require static compact storage and positive ABI capacity");
+      storage.push_back(allocation.getType());
+    }
+  }
+  if (failed(verifyFrameCapacity(op, storage, stages))) return failure();
   auto output = buffers.back().getDefiningOp<memref::AllocOp>();
   if (!output) return emitOpError("output must be a private or returned allocation");
   llvm::DenseSet<Value> initialized(host.getArguments().begin(), host.getArguments().end());

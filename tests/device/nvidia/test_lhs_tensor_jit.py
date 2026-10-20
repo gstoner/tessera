@@ -8,6 +8,19 @@ from tests._support.nvidia import nvidia_cuda_host_ready
 pytestmark=pytest.mark.skipif(not nvidia_cuda_host_ready(),reason="owning NVIDIA host required")
 
 
+@pytest.fixture
+def legacy_native_lhs_dispatch(monkeypatch):
+    """Preserve predecessor manifest/portable ABI coverage after ordinary migration.
+
+    The unmodified dispatcher is covered by test_native_tensor_program_jit.
+    Only tests asserting this predecessor's ABI select its dispatch here.
+    """
+    from tessera.compiler.jit import JitFn, _JIT_FALLBACK
+    monkeypatch.setattr(JitFn, "_try_native_tensor_program_call",
+                        lambda self, args, kwargs: _JIT_FALLBACK)
+
+
+
 @ts.jit(target="nvidia_sm120")
 def rms_lhs(source,rhs):
     return ts.ops.matmul(ts.ops.rmsnorm(source,eps=1e-5),rhs,output_dtype="fp32")
@@ -146,7 +159,7 @@ def test_lhs_rejects_unimplemented_semantics_before_compile(field,value,monkeypa
         lhs.package_traced_lhs(graph)
 
 
-def test_lhs_manifest_semantics_checked_before_cuda(monkeypatch):
+def test_lhs_manifest_semantics_checked_before_cuda(legacy_native_lhs_dispatch,monkeypatch):
     from copy import deepcopy
     from tessera.compiler import nvidia_tensor_lhs as lhs
     from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
@@ -228,7 +241,7 @@ print('fresh replay native passed')
     assert result.returncode==0,result.stdout+result.stderr
 
 
-def test_lhs_storage_switch_keeps_distinct_sealed_packages(monkeypatch):
+def test_lhs_storage_switch_keeps_distinct_sealed_packages(legacy_native_lhs_dispatch,monkeypatch):
     source = np.arange(17*35,dtype=np.float16).reshape(17,35)/1000
     rhs = np.arange(35*19,dtype=np.float16).reshape(35,19)/1000
     snapshots = {}
@@ -273,7 +286,7 @@ def rms_softmax_lhs(source, rhs):
 
 @pytest.mark.parametrize("dtype", ["fp16", "bf16"])
 @pytest.mark.parametrize("rhs_order", ["C", "F"])
-def test_public_native_producer_chain(dtype, rhs_order, monkeypatch):
+def test_public_native_producer_chain(legacy_native_lhs_dispatch,dtype, rhs_order, monkeypatch):
     import subprocess
     storage = _storage(dtype)
     rng = np.random.default_rng(120518)
@@ -319,7 +332,7 @@ def layer_rms_softmax_lhs_fused(source, rhs, bias, residual):
 @pytest.mark.parametrize("rhs_order", ["C", "F"])
 @pytest.mark.parametrize("fused", [False, True])
 @pytest.mark.parametrize("shape", [(17,35,19), (64,256,64)])
-def test_public_three_producer_scratch_alternation(dtype,rhs_order,fused,shape,monkeypatch):
+def test_public_three_producer_scratch_alternation(legacy_native_lhs_dispatch,dtype,rhs_order,fused,shape,monkeypatch):
     import subprocess
     m,k,n=shape
     storage=_storage(dtype)

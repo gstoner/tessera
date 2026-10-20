@@ -6,6 +6,23 @@ target: nvidia_sm120
 last_updated: 2026-10-20
 ---
 
+## NATIVE-TENSOR-JIT-20261020 — ordinary frontend integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-JIT-20261020.
+
+Contract: docs/spec/NATIVE_TENSOR_JIT.md.
+
+Evidence: benchmarks/baselines/native_tensor_jit_20261020/README.md.
+
+Native frame capacity checks run before outlining, during typed verification and before export, matching 64 stages/128 buffers and aligned 64-bit storage. The matching RTX5070 compiler passes named host/resident and 64-stage numerical envelopes; broader shapes, cold cost and captured-device attribution remain open.
+
+Static compact FP16/BF16 ordinary-JIT integration uses native compiler admission, retains actual Graph/Schedule/Tile/Target stages and caches a checked C++ owner. Matching RTX5070 proof passes 57 new ordinary/artifact/boundary/resident cases, 118 legacy/adjacent cases and 45 separate owner regressions. Final production proof passes 2594 with zero skips. Full CPU has 30783 passes/3710 skips plus one recorder naming failure fixed in the benchmark index and checked separately; exact-head CI/review remain required. Paired completed-public calls improve 1.7488-2.4490x for six tiny cases; cold calls and captured-device attribution remain open. Artifact restoration requires the configured matching compiler. No general W1.1, compiler-free portable, dynamic/layout/AD or five-slice closure.
+
+
+Review follow-up: SM120 compiler products remain shared, while retained owners, completion receipts and native inspection artifacts are thread-local and bounded. Cleanup releases only the calling thread's frames; worker code closes before thread exit. Four RTX5070 worker-thread cases and 21 host contract cases pass, including same-thread cleanup/rebind and cross-thread product eviction. The full175-case rerun passes; paired timing updates and identities are in benchmarks/baselines/native_tensor_jit_20261020/thread-review/README.md.
+
+
 ## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

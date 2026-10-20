@@ -126,6 +126,7 @@ named here. Paths are relative to `benchmarks/`; outputs are under
 
 | Recorder | Output |
 |---|---|
+| nvidia/record_native_tensor_jit.py | baselines/native_tensor_jit_20261020/ (correctness-gated ABBA public latency and separate CUDA windows) |
 | `rocm/benchmark_gfx1201_resident_norm_matmul.py` | `baselines/gfx1201_resident_frontend_20260930/` (exact-device Graph -> Schedule -> Tile resident RMSNorm/matmul packet) |
 | `nvidia/benchmark_scheduled_rmsnorm_matmul_edge.py` | `baselines/sm120_rmsnorm_matmul_edge_20260929/` and `baselines/sm120_rmsnorm_matmul_edge_20260930/` (resident RMSNorm-to-matmul CUDA-event packets; 2026-09-30 includes bounded dynamic M) |
 | `nvidia/record_attention_forward_schedule_matrix.py` | `nvidia_sm120_attention_forward_schedules.json` |

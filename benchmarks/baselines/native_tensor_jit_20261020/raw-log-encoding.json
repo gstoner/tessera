@@ -1,0 +1,22 @@
+{
+  "jit-final-device.txt": {
+    "stored_as": "jit-final-device.txt.gz",
+    "uncompressed_sha256": "f7b9777947d874efa0649371f01ca1d30c6eae7db3f330b5bb95887eb485d07e",
+    "uncompressed_bytes": 54179
+  },
+  "ordinary-jit-integration-red-configured.txt": {
+    "stored_as": "ordinary-jit-integration-red-configured.txt.gz",
+    "uncompressed_sha256": "fed57283e1753e82a4757e1819440762a662d5ac3b60a6999ec85aaa84a353f2",
+    "uncompressed_bytes": 17292
+  },
+  "jit-matching-device-final.txt": {
+    "stored_as": "jit-matching-device-final.txt.gz",
+    "uncompressed_sha256": "7704d3be442a8354416911446147131641e5549b25f7e41142db1ad41528df6d",
+    "uncompressed_bytes": 109715
+  },
+  "jit-additional-device.txt": {
+    "stored_as": "jit-additional-device.txt.gz",
+    "uncompressed_sha256": "63ebf21468a098d638073fd2ba6048386527df1e5ed3a21d1b6b3dc712ac7ecb",
+    "uncompressed_bytes": 27207
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "scope": "Post-measurement resident admission fix only; measured host path unchanged",
+  "measured_sha256": "fe729215e9f3e1d4969d8a055ba3107844186c478b738e04f046c01ea084a8ac",
+  "final_sha256": "adae140789027db75eca1e6fbc8f0b434d48474da1971038d63af677c0629bd5",
+  "normalization": "Replace direct if resident body in input_signature with Pass",
+  "remaining_module_ast_identical": true
+}

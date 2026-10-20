@@ -6,6 +6,23 @@ target: apple_gpu
 last_updated: 2026-10-20
 ---
 
+## NATIVE-TENSOR-JIT-20261020 — ordinary frontend integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-JIT-20261020.
+
+Contract: docs/spec/NATIVE_TENSOR_JIT.md.
+
+Evidence: benchmarks/baselines/native_tensor_jit_20261020/README.md.
+
+Native frame capacity checks run before outlining, during typed verification and before export, matching 64 stages/128 buffers and aligned 64-bit storage. This is an SM120 contract; shared host/registry compatibility is assessed, with no sibling physical execution or schedule promotion.
+
+Not applicable to this backend's physical execution: the private native tensor executor is exact SM120/CUDA. Shared JIT/cache/inspection and execution-matrix changes require host regression gates; no sibling schedule, dtype or runtime promotion. Independent native-program integration remains follow-up required.
+
+
+Review follow-up: SM120 compiler products remain shared, while retained owners, completion receipts and native inspection artifacts are thread-local and bounded. Cleanup releases only the calling thread's frames; worker code closes before thread exit. Not applicable to this backend physical execution: the owner state contains only the SM120/CUDA frame. Shared JIT construction/cleanup remains covered by host gates; independent backend ownership contracts are unchanged.
+
+
 ## NATIVE-TENSOR-SOURCE-PACKAGE-20261019 — original-source replay candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

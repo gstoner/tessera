@@ -1,0 +1,358 @@
+[
+  {
+    "storage": "f16",
+    "legacy_entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel",
+    "native_entry": "source_kernel",
+    "native_frame_stage": {
+      "entry": "source_kernel",
+      "geometry": [
+        2,
+        2,
+        1,
+        32,
+        1,
+        1
+      ],
+      "inputs": [
+        2,
+        3
+      ],
+      "member": "tensor_stage_2",
+      "output": 4,
+      "scalars": [
+        17,
+        11,
+        32
+      ]
+    },
+    "legacy_descriptor": {
+      "schema_version": "tessera.launch_descriptor.v1",
+      "image_digest": "fd26a32c8fe7f52aedc17b68896d2128dbdef7cfc7a9f9ab8f6f0ed6945627ec",
+      "entry_symbol": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel",
+      "abi_id": "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1",
+      "buffers": [
+        {
+          "ordinal": 0,
+          "name": "edge",
+          "direction": "input",
+          "dtype": "fp16",
+          "rank": 2,
+          "layout": "row_major",
+          "alignment": 2
+        },
+        {
+          "ordinal": 1,
+          "name": "rhs",
+          "direction": "input",
+          "dtype": "fp16",
+          "rank": 2,
+          "layout": "row_major",
+          "alignment": 2
+        },
+        {
+          "ordinal": 2,
+          "name": "out",
+          "direction": "output",
+          "dtype": "fp32",
+          "rank": 2,
+          "layout": "row_major",
+          "alignment": 4
+        }
+      ],
+      "scalars": [
+        {
+          "ordinal": 3,
+          "name": "M",
+          "dtype": "int64"
+        },
+        {
+          "ordinal": 4,
+          "name": "N",
+          "dtype": "int64"
+        },
+        {
+          "ordinal": 5,
+          "name": "K",
+          "dtype": "int64"
+        }
+      ],
+      "shape_guards": [
+        {
+          "binding": "edge",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 17
+        },
+        {
+          "binding": "edge",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 32
+        },
+        {
+          "binding": "rhs",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 32
+        },
+        {
+          "binding": "rhs",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 11
+        },
+        {
+          "binding": "out",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 17
+        },
+        {
+          "binding": "out",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 11
+        }
+      ],
+      "geometry": {
+        "grid": null,
+        "workgroup": null,
+        "policy": "sm120_scheduled_typed_16x8_mn"
+      },
+      "dynamic_local_memory_bytes": 0,
+      "workspace": {
+        "bytes": 0,
+        "alignment": 1,
+        "lifetime": "launch",
+        "initialization": "undefined"
+      },
+      "ordering": {
+        "ordered_submission": true,
+        "residency": "none",
+        "synchronization": [
+          "completion"
+        ]
+      },
+      "provenance": {
+        "b_layout": "row_major",
+        "dynamic_shape_bounds": null,
+        "epilogue": {
+          "activation": "none",
+          "bias": false,
+          "order": [
+            "matmul",
+            "bias",
+            "activation",
+            "residual"
+          ],
+          "output": "f32",
+          "residual": false
+        },
+        "graph_ir_digest": "48895522fe856d59ceb4bfddb14f28076fa62c7213acbd7804e8f1b4d21820be",
+        "leading_dimension_abi": "compact",
+        "native_tensor_program_digest": "5aeda264115a5529a574460b3a918df0ce2ddaa8e1cb6c28c3aa3f74be776137",
+        "physical_route": "typed_fragment_global",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "shared",
+        "schedule_digest": "fd80b056b0db2c9bc4b2dc89716312183010063204adcd6ca498884fde29200d",
+        "schedule_ir_digest": "6856f52fb17d8b98e9bac19a975f88c92c8d55649bb60a6a238e13b4e1c2e72c",
+        "shape": [
+          17,
+          11,
+          32
+        ],
+        "storage": "f16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "0c3d55e0c7245f23adcbec7226af11292db1ce868925bf7791ba60366ff8c6fc",
+        "work_item": "NVIDIA-E2E-2"
+      },
+      "descriptor_digest": "002cae5af4f3dd11554ee5b46142c32592d1e3c11cb9393b01b6635e5dbec3ee",
+      "cache_fingerprint": "85b65accf8c64bd790d019fd1406c1d68f810461b098ee77dd007460d63eb7d5"
+    },
+    "legacy_sha256": "bbbc32c0e66ca0fc2f29cab13a996f71fd5b2856fa1386b8bd325d97a5c712ac",
+    "native_sha256": "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0",
+    "identical_after_entry_rename": false,
+    "identical_instructions_and_directives_after_entry_rename": true,
+    "legacy_image_file": "bbbc32c0e66ca0fc2f29cab13a996f71fd5b2856fa1386b8bd325d97a5c712ac.ptx.gz",
+    "native_image_reference": "../native_tensor_program_pipeline_20261019/images/05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0.ptx",
+    "comment_diff_file": "f16.consumer.diff.gz"
+  },
+  {
+    "storage": "bf16",
+    "legacy_entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel",
+    "native_entry": "source_kernel",
+    "native_frame_stage": {
+      "entry": "source_kernel",
+      "geometry": [
+        2,
+        2,
+        1,
+        32,
+        1,
+        1
+      ],
+      "inputs": [
+        2,
+        3
+      ],
+      "member": "tensor_stage_2",
+      "output": 4,
+      "scalars": [
+        17,
+        11,
+        32
+      ]
+    },
+    "legacy_descriptor": {
+      "schema_version": "tessera.launch_descriptor.v1",
+      "image_digest": "6c968a24b4d56eb5cb9d2992383aa2a1bd04a7292767217b3d9d89219d457701",
+      "entry_symbol": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel",
+      "abi_id": "tessera.nvidia.matmul.a_row_b_d_m_n_k.bf16.v1",
+      "buffers": [
+        {
+          "ordinal": 0,
+          "name": "edge",
+          "direction": "input",
+          "dtype": "bf16",
+          "rank": 2,
+          "layout": "row_major",
+          "alignment": 2
+        },
+        {
+          "ordinal": 1,
+          "name": "rhs",
+          "direction": "input",
+          "dtype": "bf16",
+          "rank": 2,
+          "layout": "row_major",
+          "alignment": 2
+        },
+        {
+          "ordinal": 2,
+          "name": "out",
+          "direction": "output",
+          "dtype": "fp32",
+          "rank": 2,
+          "layout": "row_major",
+          "alignment": 4
+        }
+      ],
+      "scalars": [
+        {
+          "ordinal": 3,
+          "name": "M",
+          "dtype": "int64"
+        },
+        {
+          "ordinal": 4,
+          "name": "N",
+          "dtype": "int64"
+        },
+        {
+          "ordinal": 5,
+          "name": "K",
+          "dtype": "int64"
+        }
+      ],
+      "shape_guards": [
+        {
+          "binding": "edge",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 17
+        },
+        {
+          "binding": "edge",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 32
+        },
+        {
+          "binding": "rhs",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 32
+        },
+        {
+          "binding": "rhs",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 11
+        },
+        {
+          "binding": "out",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 17
+        },
+        {
+          "binding": "out",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 11
+        }
+      ],
+      "geometry": {
+        "grid": null,
+        "workgroup": null,
+        "policy": "sm120_scheduled_typed_16x8_mn"
+      },
+      "dynamic_local_memory_bytes": 0,
+      "workspace": {
+        "bytes": 0,
+        "alignment": 1,
+        "lifetime": "launch",
+        "initialization": "undefined"
+      },
+      "ordering": {
+        "ordered_submission": true,
+        "residency": "none",
+        "synchronization": [
+          "completion"
+        ]
+      },
+      "provenance": {
+        "b_layout": "row_major",
+        "dynamic_shape_bounds": null,
+        "epilogue": {
+          "activation": "none",
+          "bias": false,
+          "order": [
+            "matmul",
+            "bias",
+            "activation",
+            "residual"
+          ],
+          "output": "f32",
+          "residual": false
+        },
+        "graph_ir_digest": "e7236a13ad838a09baf2ec4cc4849f22a931b811c77af71b7e61239a0d781a94",
+        "leading_dimension_abi": "compact",
+        "native_tensor_program_digest": "ea4dba20c7703deebd2966500651505fef89c99cee5775ea5f35b32b872c1bd0",
+        "physical_route": "typed_fragment_global",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "shared",
+        "schedule_digest": "b691272c4f145863a3389920dfd0465d9c4184f3d260592c7963f2e44dbdd583",
+        "schedule_ir_digest": "34d9afdeefb387d90571aec766518ed18176d7f2dea71307dcc41bacfec6d25a",
+        "shape": [
+          17,
+          11,
+          32
+        ],
+        "storage": "bf16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "5b1605f0089503d2f29841c4872040d6d27f96df69052be1ee3124026bbf0778",
+        "work_item": "NVIDIA-E2E-2"
+      },
+      "descriptor_digest": "05072ca96c8b9dc0aa82eebad07efe845aed50b3baa74b0c0228bc47ea9790e4",
+      "cache_fingerprint": "d13d2b9bedb8e39dad446ae852ba7a1886a2a864317d48affe0fe27885ab1cb3"
+    },
+    "legacy_sha256": "3df964ed288a8f99a9e8bbef090d43d8e032c5529a4e12558196d8bca4e66273",
+    "native_sha256": "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f",
+    "identical_after_entry_rename": false,
+    "identical_instructions_and_directives_after_entry_rename": true,
+    "legacy_image_file": "3df964ed288a8f99a9e8bbef090d43d8e032c5529a4e12558196d8bca4e66273.ptx.gz",
+    "native_image_reference": "../native_tensor_program_pipeline_20261019/images/7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f.ptx",
+    "comment_diff_file": "bf16.consumer.diff.gz"
+  }
+]

@@ -1,0 +1,154 @@
+{
+  "scope": "paired completed public latency; no physical schedule or kernel-only speedup claim",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "compiler_sha256": "ff8bad652b1a2c0f75d58c5589e37433e4774e5032664e3d202fa112cd59e070",
+  "provider_sha256": "72aaf57b4819f6aaf7931e59bbeb4cb68b8bd794e68cb2bb9108924eb6547e45",
+  "correctness_all_measured_rows": true,
+  "source_restored": true,
+  "control_source_sha256": {
+    "python/tessera/compiler/jit.py": "e34aa87189816e2998b02f588a32bb737550c339fe305821d8fd3dab552b6a58",
+    "python/tessera/compiler/execution_matrix.py": "d5327865383656815d3dc6c4463aade97c7fbb4a0bf81b1d7f8a5e625eedb47b",
+    "python/tessera/compiler/native_tensor_program.py": "9ea49250ea221716e3f4c13a5ffae705b52dbe82f275f578c51f8d8588b6bf0b",
+    "python/tessera/runtime.py": "7d2b362d5f86062119699f90129d5257d817fe140d378a59f598635eec52bf54"
+  },
+  "candidate_source_sha256": {
+    "python/tessera/compiler/jit.py": "88006b2bb54929de44849899fe14d1bb3195525cf3c1aacccb7deea6b0476d9d",
+    "python/tessera/compiler/execution_matrix.py": "6e6b9edf49d437fca2f30b55c64ec3161935edd291bac31fb10932a73112183d",
+    "python/tessera/compiler/native_tensor_program.py": "34840d5af39c065b60c2f26e9933f7a4d723c4ef5c661013e5ef3d3b3885fe2f",
+    "python/tessera/runtime.py": "92a09b5f2bc8b2cdfb52617712e06563c23044b67a67047c46fdda6d1860c431"
+  },
+  "public_ratio_range": [
+    1.8853328637659068,
+    2.455074005356238
+  ],
+  "native_cold_call_ms_range": [
+    1900.245996,
+    3205.018309
+  ],
+  "native_decoration_ms_range": [
+    88.960936,
+    131.696184
+  ],
+  "rows": [
+    {
+      "kind": "relu",
+      "storage": "f16",
+      "orders": [
+        {
+          "native_ms": 0.2796515,
+          "legacy_ms": 0.56578375,
+          "legacy_over_native": 2.0231743795402495,
+          "native_captured_device_ms": 0.003034499939531088,
+          "legacy_captured_device_ms": 0.003145500086247921
+        },
+        {
+          "native_ms": 0.284234125,
+          "legacy_ms": 0.5613236875,
+          "legacy_over_native": 1.9748638116552681,
+          "native_captured_device_ms": 0.003459000028669834,
+          "legacy_captured_device_ms": 0.0036524999886751175
+        }
+      ]
+    },
+    {
+      "kind": "relu",
+      "storage": "bf16",
+      "orders": [
+        {
+          "native_ms": 0.294179875,
+          "legacy_ms": 0.6074050625,
+          "legacy_over_native": 2.064740365057263,
+          "native_captured_device_ms": 0.003129499964416027,
+          "legacy_captured_device_ms": 0.003010000102221966
+        },
+        {
+          "native_ms": 0.254883,
+          "legacy_ms": 0.59854875,
+          "legacy_over_native": 2.3483274678970347,
+          "native_captured_device_ms": 0.003083999967202544,
+          "legacy_captured_device_ms": 0.003971999976783991
+        }
+      ]
+    },
+    {
+      "kind": "two_sided",
+      "storage": "f16",
+      "orders": [
+        {
+          "native_ms": 0.34570825,
+          "legacy_ms": 0.651775125,
+          "legacy_over_native": 1.8853328637659068,
+          "native_captured_device_ms": 0.007384500000625849,
+          "legacy_captured_device_ms": 0.004681500140577555
+        },
+        {
+          "native_ms": 0.277983375,
+          "legacy_ms": 0.6214790625,
+          "legacy_over_native": 2.235669893928009,
+          "native_captured_device_ms": 0.006440000142902136,
+          "legacy_captured_device_ms": 0.004745500162243843
+        }
+      ]
+    },
+    {
+      "kind": "two_sided",
+      "storage": "bf16",
+      "orders": [
+        {
+          "native_ms": 0.2515991875,
+          "legacy_ms": 0.617694625,
+          "legacy_over_native": 2.455074005356238,
+          "native_captured_device_ms": 0.0064245001412928104,
+          "legacy_captured_device_ms": 0.00476149981841445
+        },
+        {
+          "native_ms": 0.32398475,
+          "legacy_ms": 0.614415125,
+          "legacy_over_native": 1.8964322394804076,
+          "native_captured_device_ms": 0.006428999826312065,
+          "legacy_captured_device_ms": 0.004724499769508839
+        }
+      ]
+    },
+    {
+      "kind": "reverse",
+      "storage": "f16",
+      "orders": [
+        {
+          "native_ms": 0.2630705625,
+          "legacy_ms": 0.5688738125,
+          "legacy_over_native": 2.1624381196204725,
+          "native_captured_device_ms": 0.004214500077068806,
+          "legacy_captured_device_ms": 0.003043500008061528
+        },
+        {
+          "native_ms": 0.27895025,
+          "legacy_ms": 0.579887125,
+          "legacy_over_native": 2.0788191621982772,
+          "native_captured_device_ms": 0.0029915000777691603,
+          "legacy_captured_device_ms": 0.003028000006452203
+        }
+      ]
+    },
+    {
+      "kind": "reverse",
+      "storage": "bf16",
+      "orders": [
+        {
+          "native_ms": 0.266425,
+          "legacy_ms": 0.5922723125,
+          "legacy_over_native": 2.223035798066998,
+          "native_captured_device_ms": 0.00419399980455637,
+          "legacy_captured_device_ms": 0.0029035001061856747
+        },
+        {
+          "native_ms": 0.2997775,
+          "legacy_ms": 0.5997174375,
+          "legacy_over_native": 2.000541860212991,
+          "native_captured_device_ms": 0.004351499956101179,
+          "legacy_captured_device_ms": 0.0038509999867528677
+        }
+      ]
+    }
+  ]
+}

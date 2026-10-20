@@ -1,9 +1,12 @@
 ---
-last_updated: 2026-10-19
+last_updated: 2026-10-20
 audit_role: reference
 ---
 
 # Integrated compiler engineering log
+
+
+
 
 
 
@@ -13839,4 +13842,36 @@ Outcome: Public sequence capacities retain one native original-source VJP owner 
 Remaining: General producer/layout/AD, mixed/quantized attention, representative model quality and ROCm route/performance closure. Delivery gates: 30,771 CPU tests pass with 3,710 declared skips; 2,459 production-route tests execute with no skips; zero-error mypy, Ruff, 22 lifecycle/ownership checks, all five surface audits and 33 generated-document checks pass. Paired benchmarks retain mixed tiny-frame outcomes; broader aggregate closure remains open.
 
 Evidence: benchmarks/baselines/native_bounded_source_public_20261019/README.md.
+<!-- entry-fields:end -->
+
+### 2026-10-20 — ordinary SM120 JIT consumes native tensor programs
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: [#993](https://github.com/gstoner/tessera/pull/993); sync NATIVE-TENSOR-JIT-20261020. Foundation PR992 merged.
+
+Outcome: Native compiler admission and actual adjacent Graph/Schedule/Tile/
+Target stages drive ordinary compact-half producer programs. A retained C++
+owner executes without warm tracing/tools; artifact restoration requires the
+trusted configured matching compiler. Native capacity/geometry/arena guards
+match the frame ABI. RTX5070 passes 57 new JIT, 118 legacy/adjacent and 45
+separate owner cases; eight explicit source packages also pass. Production
+compiler proof passes 2594 with zero skips; Ruff and Mypy remain clean.
+Full CPU has 30783 passes and 3710 declared skips plus one recorder naming
+failure corrected in the tracked benchmark index; the final 319-test focused gate passes.
+
+Two measurement orders yield 1.7488-2.4490x completed-public improvements across
+six comparable tiny cases. Cold calls remain 1.9-3.2 seconds. Reviewed-source two-sided captured
+device windows are mixed; producer images match and consumer instructions/
+directives match after entry normalization. No kernel-only speedup or physical
+schedule promotion is claimed. All four backend queues are assessed; only
+SM120 receives the named physical proof.
+
+Review: mutable native owners, completion receipts and inspection artifacts are now local to each calling thread; compiler products remain shared. Each worker closes its own frames before exit. Four worker-thread device checks, the full175-case owning-device rerun and445 focused host gates pass, including cross-thread product eviction. Updated paired controls and source identities are in the packet thread-review subdirectory.
+
+Remaining: Exact-head delivery CI/review, runtime/capture timing
+attribution and cold compilation. Broader producers/layout/dynamic/AD/encoded
+storage, compiler-free restoration and the complete five-slice program remain
+open.
+
+Evidence: benchmarks/baselines/native_tensor_jit_20261020/README.md.
 <!-- entry-fields:end -->

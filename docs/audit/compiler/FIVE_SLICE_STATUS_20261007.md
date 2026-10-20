@@ -1,7 +1,33 @@
 ---
-last_updated: 2026-10-19
+last_updated: 2026-10-20
 audit_role: reference
 ---
+
+## Native tensor ordinary JIT candidate — 2026-10-20
+
+PR992 merged as fac21f5bc37deb99b4be8ef82b21f4d66296c1d1 after exact-head
+required CI passed and the CUDA launch-geometry finding was fixed and resolved.
+Its explicit source program foundation is delivered; the original five-slice
+scope remains open.
+
+The ordinary-JIT candidate now uses native admission, actual adjacent IR
+stages and a retained C++ owner. Matching RTX5070 proof passes 57 new JIT
+cases, 118 legacy/adjacent cases, 45 separate owner regressions and eight
+explicit source packages. Capacity checks match the 64-stage/128-buffer frame,
+CUDA geometry and aligned arena arithmetic. Warm calls forbid tracing/tools.
+
+Final production compiler proof passes 2594 with zero skips. Full CPU runs
+30783 passes and 3710 declared skips; its recorder naming failure is resolved
+in the benchmark index and checked by a 319-test focused follow-up gate. Ruff/Mypy,
+all five surface audits and the initial 33 generated-document checks pass.
+Contract: docs/spec/NATIVE_TENSOR_JIT.md.
+
+Paired tiny-program public calls improve 1.7488-2.4490x over merged-main source
+controls. Cold calls and mixed two-sided captured device-window attribution remain open.
+Exact-head CI/review and all original aggregate requirements remain open.
+Evidence: benchmarks/baselines/native_tensor_jit_20261020/README.md.
+
+
 
 ## Native tensor original-source packages — 2026-10-19
 
@@ -2557,3 +2583,5 @@ validation, the retained public adapter and ordinary JIT route, then fresh-proce
 replay and full delivery gates. The original five aggregate slices and their
 remaining model-quality, generic producer/layout/AD, mixed attention and ROCm
 performance requirements remain open.
+
+Reviewed thread-local native JIT source and final175-case proof: benchmarks/baselines/native_tensor_jit_20261020/thread-review/README.md. Original five-slice closure remains open.

@@ -1,0 +1,90 @@
+.F.F.FFF                                                                 [100%]
+=================================== FAILURES ===================================
+____________ test_native_admission_matches_frame_stage_capacity[65] ____________
+
+stages = 65
+
+    @pytest.mark.parametrize("stages", [64, 65])
+    def test_native_admission_matches_frame_stage_capacity(stages):
+        queried = _run(chain_source(stages), "--tessera-graph-to-schedule=tensor-program-query")
+        assert queried.returncode == 0, queried.stderr
+>       assert f"tessera.native.tensor_program_admission = {str(stages <= 64).lower()}" in queried.stdout
+E       assert 'tessera.native.tensor_program_admission = false' in 'module attributes {tessera.arch = "sm_120", tessera.native.tensor_program_admission = true, tessera.target = "nvidia_...type = "fp32"} : (tensor<1x16xf16>, tensor<16x1xf16>) -> tensor<1x1xf32>\n    return %64 : tensor<1x1xf32>\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.native.tensor_program_admission = true, tessera.target = "nvidia_...type = "fp32"} : (tensor<1x16xf16>, tensor<16x1xf16>) -> tensor<1x1xf32>\n    return %64 : tensor<1x1xf32>\n  }\n}\n\n' = CompletedProcess(args=['/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt', '..."} : (tensor<1x16xf16>, tensor<16x1xf16>) -> tensor<1x1xf32>\n    return %64 : tensor<1x1xf32>\n  }\n}\n\n', stderr='').stdout
+
+tests/unit/test_native_tensor_program_capacity.py:31: AssertionError
+____________ test_typed_program_matches_frame_buffer_capacity[125] _____________
+
+extra = 125
+
+    @pytest.mark.parametrize("extra", [124, 125])
+    def test_typed_program_matches_frame_buffer_capacity(extra):
+        scheduled = _run(traced_source(relu_product, "f16"), "--tessera-graph-to-schedule")
+        assert scheduled.returncode == 0, scheduled.stderr
+        changed = add_roots(scheduled.stdout, extra, "memref<1x1xf16>")
+        verified = _run(changed, "--verify-each")
+        if extra == 124:
+            assert verified.returncode == 0, verified.stderr
+        else:
+>           assert verified.returncode != 0
+E           AssertionError: assert 0 != 0
+E            +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt', '...: i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n      return %1 : tensor<17x11xf32>\n    }\n  }\n}\n\n', stderr='').returncode
+
+tests/unit/test_native_tensor_program_capacity.py:57: AssertionError
+_____ test_typed_program_checks_total_aligned_arena_without_allocating[3] ______
+
+extra = 3
+
+    @pytest.mark.parametrize("extra", [2, 3])
+    def test_typed_program_checks_total_aligned_arena_without_allocating(extra):
+        scheduled = _run(traced_source(relu_product, "f16"), "--tessera-graph-to-schedule")
+        assert scheduled.returncode == 0, scheduled.stderr
+        changed = add_roots(scheduled.stdout, extra, "memref<2147483647x2147483647xf16>")
+        verified = _run(changed, "--verify-each")
+        if extra == 2:
+            assert verified.returncode == 0, verified.stderr
+        else:
+>           assert verified.returncode != 0
+E           AssertionError: assert 0 != 0
+E            +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt', '...: i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n      return %1 : tensor<17x11xf32>\n    }\n  }\n}\n\n', stderr='').returncode
+
+tests/unit/test_native_tensor_program_capacity.py:70: AssertionError
+____ test_typed_program_checks_stage_count_independently_of_graph_admission ____
+
+    def test_typed_program_checks_stage_count_independently_of_graph_admission():
+        scheduled = _run(chain_source(64), "--tessera-graph-to-schedule")
+        assert scheduled.returncode == 0, scheduled.stderr
+        line = next(line for line in scheduled.stdout.splitlines() if "tile.program_invoke " in line)
+        added = line.replace(", %alloc ", ", %extra_stage ")
+        original = line.replace(" %arg0,", " %extra_stage,")
+        changed = scheduled.stdout.replace(line,
+            "    %extra_stage = memref.alloc() : memref<1x16xf16>\n" + added + "\n" + original, 1)
+        changed = re.sub(r"(?m)^(    return .*)$",
+                         "    memref.dealloc %extra_stage : memref<1x16xf16>\n" + r"\1", changed, count=1)
+        verified = _run(changed, "--verify-each")
+>       assert verified.returncode != 0
+E       AssertionError: assert 0 != 0
+E        +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt', '...8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n      return %1 : tensor<1x1xf32>\n    }\n  }\n}\n\n', stderr='').returncode
+
+tests/unit/test_native_tensor_program_capacity.py:85: AssertionError
+_________ test_native_admission_checks_arena_before_member_generation __________
+
+    def test_native_admission_checks_arena_before_member_generation():
+        source = chain_source(3, huge_rhs=True)
+        queried = _run(source, "--tessera-graph-to-schedule=tensor-program-query")
+        assert queried.returncode == 0, queried.stderr
+        assert "tessera.native.tensor_program_admission = false" in queried.stdout
+        scheduled = _run(source, "--tessera-graph-to-schedule")
+        assert scheduled.returncode != 0
+>       assert "aligned arena exceeds its 64-bit capacity" in scheduled.stderr
+E       assert 'aligned arena exceeds its 64-bit capacity' in '<stdin>:2:1: error: Graph->Schedule native tensor program requires a static compact half producer DAG ending in one p...x2147483647xf16>) -> tensor<1x2147483647xf32>\n  "func.return"(%2) : (tensor<1x2147483647xf32>) -> ()\n}) : () -> ()\n'
+E        +  where '<stdin>:2:1: error: Graph->Schedule native tensor program requires a static compact half producer DAG ending in one p...x2147483647xf16>) -> tensor<1x2147483647xf32>\n  "func.return"(%2) : (tensor<1x2147483647xf32>) -> ()\n}) : () -> ()\n' = CompletedProcess(args=['/home/angstorms/scratch/rocm-closure-baseline-20261018/build/tools/tessera-opt/tessera-opt', '...2147483647xf16>) -> tensor<1x2147483647xf32>\n  "func.return"(%2) : (tensor<1x2147483647xf32>) -> ()\n}) : () -> ()\n').stderr
+
+tests/unit/test_native_tensor_program_capacity.py:96: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_tensor_program_capacity.py::test_native_admission_matches_frame_stage_capacity[65]
+FAILED tests/unit/test_native_tensor_program_capacity.py::test_typed_program_matches_frame_buffer_capacity[125]
+FAILED tests/unit/test_native_tensor_program_capacity.py::test_typed_program_checks_total_aligned_arena_without_allocating[3]
+FAILED tests/unit/test_native_tensor_program_capacity.py::test_typed_program_checks_stage_count_independently_of_graph_admission
+FAILED tests/unit/test_native_tensor_program_capacity.py::test_native_admission_checks_arena_before_member_generation
+5 failed, 3 passed in 0.49s

@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-20**.
 
 ## Headline
 
-- **190** docs catalogued across the canonical doc tree.
-- **189** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **55** updated within the last 30 days.
+- **191** docs catalogued across the canonical doc tree.
+- **190** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **56** updated within the last 30 days.
 - **70** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -50,6 +50,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `NATIVE_ROW_LOGICAL_PREFIX.md` | - | 2026-10-18 | 2 | ✓ |
 | `NATIVE_SOURCE_ATTENTION_PROGRAM.md` | - | 2026-10-18 | 2 | ✓ |
 | `NATIVE_TENSOR_FRAME_OWNER.md` | - | 2026-10-20 | 0 | ✓ |
+| `NATIVE_TENSOR_JIT.md` | - | 2026-10-20 | 0 | ✓ |
 | `NATIVE_TENSOR_PROGRAM_PACKAGE.md` | - | 2026-10-20 | 0 | ✓ |
 | `NATIVE_TENSOR_PROGRAM_PIPELINE.md` | - | 2026-10-20 | 0 | ✓ |
 | `PRODUCTION_COMPILER_PLAN.md` | Ratified | 2026-06-05 | 137 | ✓ |
@@ -205,15 +206,15 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | - | 2026-09-07 | 43 | ✓ |
 | `compiler/EGGROLL_SUPPORT_PLAN.md` | - | 2026-09-07 | 43 | ✓ |
 | `compiler/EVALUATOR_PLAN.md` | - | 2026-10-06 | 14 | ✓ |
-| `compiler/FIVE_SLICE_STATUS_20261007.md` | - | 2026-10-19 | 1 | ✓ |
+| `compiler/FIVE_SLICE_STATUS_20261007.md` | - | 2026-10-20 | 0 | ✓ |
 | `compiler/FORGE_ASSESSMENT.md` | - | 2026-09-07 | 43 | ✓ |
 | `compiler/FRONTEND_GRAPH_SCHEDULE_REVIEW.md` | - | 2026-08-02 | 79 | ✓ |
 | `compiler/FRONT_END_LOWERING_ASSESSMENT.md` | - | 2026-09-03 | 47 | ✓ |
 | `compiler/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md` | - | 2026-09-06 | 44 | ✓ |
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-09-07 | 43 | ✓ |
 | `compiler/HEAP_BARRIER_ARCHITECTURE_REVIEW.md` | - | 2026-09-11 | 39 | ✓ |
-| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-10-19 | 1 | ✓ |
-| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-10-19 | 1 | ✓ |
+| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-10-20 | 0 | ✓ |
+| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-10-20 | 0 | ✓ |
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-09-23 | 27 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 79 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 85 | ✓ |

@@ -16,8 +16,9 @@ construct Graph IR, derivatives or kernel bodies. Source-program string schemas
 v3/v4 remain distinct from integer attention schema5 (saved-LSE plus bounded).
 
 This increment adds exact-SM120 native C entrypoints. The ordinary public
-PreparedSourceAttentionReverse adapter and offline portable validator still need
-bounded integration. Raw native execution is not public or portable closure.
+PreparedSourceAttentionReverse adapter and offline validator were integrated
+later; see NATIVE_BOUNDED_SOURCE_PUBLIC.md for separate public/portable proof.
+Raw native execution alone is not public or portable closure.
 
 | New C entrypoint | Contract |
 | --- | --- |
@@ -58,8 +59,8 @@ created per resident invocation; this is not a claim of allocation-free calls.
 No returned output borrows native private storage.
 
 The C interface accepts trusted typed pointers and image contracts. Public
-dtype/layout validation and portable Graph/image consistency checks must still
-be connected before exposing this bounded program through the public adapter.
+dtype/layout validation and portable Graph/image consistency checks are added
+by the later NATIVE_BOUNDED_SOURCE_PUBLIC.md integration.
 
 ## Validation and timing scopes
 

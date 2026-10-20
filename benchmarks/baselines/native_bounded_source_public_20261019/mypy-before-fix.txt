@@ -1,0 +1,13 @@
+[mypy ratchet] errors=4  baseline=0  (mypy rc=1)
+
+FAIL: mypy error count increased (0 -> 4).
+      New errors (or any error above the baseline) must be
+      fixed or the baseline updated explicitly via:
+        scripts/mypy_ratchet.sh --update-baseline
+
+      Full mypy output:
+python/tessera/compiler/portable_source_attention_reverse.py:287: error: Incompatible types in assignment (expression has type "list[dict[str, Any]]", variable has type "str")  [assignment]
+python/tessera/compiler/portable_source_attention_reverse.py:365: error: Incompatible types in assignment (expression has type "list[int]", variable has type "str")  [assignment]
+python/tessera/compiler/portable_source_attention_reverse.py:365: error: Argument 1 to "list" has incompatible type "list[int] | None"; expected "Iterable[int]"  [arg-type]
+python/tessera/compiler/portable_source_attention_reverse.py:366: error: Unsupported target for indexed assignment ("str")  [index]
+Found 4 errors in 1 file (checked 685 source files)

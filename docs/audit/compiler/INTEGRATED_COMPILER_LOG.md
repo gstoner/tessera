@@ -13827,3 +13827,16 @@ Remaining: Wider model-quality, frontend/AD/layout and physical performance requ
 Evidence: benchmarks/baselines/rocm_folded_common_gate_20261019/README.md.
 
 <!-- entry-fields:end -->
+
+
+### 2026-10-19 — bounded original-source public and portable reverse
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Outcome: Public sequence capacities retain one native original-source VJP owner across shrink/grow frames. Offline v3/v4 checks logical, trace and capacity identities without compiler access. RTX5070 passes 24 prepared, 16 bounded public/fresh-process and 14 static public cases. Shared portable/frame checks pass 241 and plugin/registry gates pass 346. All four sibling queues assessed.
+
+Remaining: General producer/layout/AD, mixed/quantized attention, representative model quality and ROCm route/performance closure. Broader delivery and paired benchmark results belong to the packet before publication.
+
+Evidence: benchmarks/baselines/native_bounded_source_public_20261019/README.md.
+<!-- entry-fields:end -->

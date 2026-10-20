@@ -5,6 +5,17 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NATIVE-BOUNDED-SOURCE-PUBLIC-20261019 — public capacity replay
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to gfx1151/gfx1201 physical execution: this route requires exact nvidia_sm120 and CUDA owner entrypoints. Existing static ROCm source programs, numerical policies and ABI are unchanged. Shared frontend/portable gates apply; no NVIDIA physical proof transfers. ROCm route/performance closure remains follow-up required.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_PUBLIC.md.
+Evidence: benchmarks/baselines/native_bounded_source_public_20261019/README.md.
+
+
 ## NATIVE-BOUNDED-SOURCE-OWNER-20261019 — native capacity execution
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

@@ -154,3 +154,9 @@ def execute_native_vjp_composite(jit, module, args, kwargs, *, out_cotangents):
         return None
     entry = matches[0]
     return entry.execute(jit, module, args, kwargs, out_cotangents, entry.declaration)
+
+
+def execute_bounded_native_vjp_composite(jit, args, kwargs, *, out_cotangents, bounds):
+    from .source_attention_reverse_frontend import execute_bounded
+    return execute_bounded(jit, args, kwargs, out_cotangents,
+                           _ATTENTION_SOURCE_DECLARATION, bounds)

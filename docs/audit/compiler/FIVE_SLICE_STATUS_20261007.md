@@ -3,6 +3,23 @@ last_updated: 2026-10-19
 audit_role: reference
 ---
 
+## Bounded source public integration — 2026-10-19
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+The private candidate connects original static paired source AD to a bounded
+four/five-member native program, retained C++ capacity owner, public native_backward
+and offline portable replay. RTX5070 passes 24 prepared cases, 16 bounded public/
+fresh-process cases and 14 static public regressions. Frames reuse one owner/
+images and reject exceeding the same capacities without compiling. Portable/
+frame checks pass 241; shared/plugin/registry gates pass 346.
+Evidence: benchmarks/baselines/native_bounded_source_public_20261019/README.md.
+The table below is an earlier checkpoint: bounded source composition now works
+in this named homogeneous half-storage envelope. General producer/layout/AD,
+mixed/quantized attention, representative model quality and ROCm physical
+performance remain open. No aggregate slice is closed.
+
 ## Current requirement reconciliation — 2026-10-19
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

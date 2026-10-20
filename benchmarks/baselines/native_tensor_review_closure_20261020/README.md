@@ -58,3 +58,22 @@ exercises native admission, replay, member projection and PTX packaging.
 Full final unit/compiler-route/CI/review gates remain required before merge.
 Ordinary JIT, compiler-free portable loading and the full five-slice goal remain
 open; this packet does not narrow their completion requirements.
+
+## PR992 launch-geometry review correction
+
+The corrected control reproduces seven failures and two valid grid-Y boundary
+cases. Native admission and emission now share kernel selection/geometry, and
+the typed verifier checks the CUDA frame's per-axis and total-thread limits
+even when invocation and kernel metadata match. Focused compiler/package/
+scalar gates pass 216 cases; diagnostic/pass/audit gates pass 315 cases.
+All eight original executed source/Target/image programs remain byte-identical.
+No new physical schedule, device execution or performance claim is made.
+
+Receipts: review-geometry-receipt.json, review-geometry-red-corrected.txt,
+review-geometry-focused.txt, review-geometry-shared.txt and
+review-geometry-equivalence.json.
+
+The complete production compiler-route lane passes 2,567 tests with zero skips
+(review-geometry-compiler-route.txt). Six raw FP16/BF16 macro, typed-tail and
+fused matmul controls retain identical Tile output against the immutable
+pre-change compiler (review-geometry-schedule-equivalence.json).

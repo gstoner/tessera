@@ -5144,33 +5144,15 @@ struct ScheduleToTilePass
         // cases are low-variance wins. This is not a global selector promotion
         // (WSL cannot supply that authority); it prevents the canonical route
         // from choosing an unproven crossover.
-        const __int128 sm120Work = static_cast<__int128>(2) * selected->m *
-                                   selected->n * selected->k;
+        const auto selectedKernel = tensor_program::selectMatmulKernel(*selected);
         const bool dynamicSm120 = selected->dynamicM || selected->dynamicN ||
                                   selected->dynamicK;
-        const bool macroSm120Producer =
-            !selected->scalarFma && selected->bLayout == "col_major" &&
-            selected->m >= 32 && selected->n >= 32 &&
-            selected->k >= 16 &&
-            (selected->storage == "f16" || selected->storage == "bf16") &&
-            selected->accum == "f32" &&
-            sm120Work >= 67108864;
+        const bool macroSm120Producer = selectedKernel.macroProducer;
+        const bool typedSm120Producer = selectedKernel.typedProducer;
+        const bool useMacroSm120Producer = selectedKernel.useMacroProducer;
+        const bool macroKernelGeometry = selectedKernel.macroGeometry;
         const bool fusedEpilogue = selected->bias || selected->residual ||
                                    selected->activation != "none";
-        const bool typedSm120Producer =
-            !selected->scalarFma && selected->m > 0 && selected->n > 0 && selected->k > 0 &&
-            selected->tileM == 16 && selected->tileN == 8 &&
-            selected->tileK == 16 &&
-            (selected->storage == "f16" || selected->storage == "bf16") &&
-            selected->accum == "f32" &&
-            (selected->output == "f32" || selected->output == "f16");
-        const bool useMacroSm120Producer =
-            macroSm120Producer && selected->k % 8 == 0 && !fusedEpilogue &&
-            selected->output == "f32";
-        // The bridge derives CTA geometry from this symbol suffix. A typed
-        // tail uses 16x8 tiles even when its workload exceeds the macro cutoff.
-        const bool macroKernelGeometry =
-            macroSm120Producer && (useMacroSm120Producer || !typedSm120Producer);
         std::string epilogueSuffix;
         if (fusedEpilogue || selected->output == "f16")
           epilogueSuffix =
@@ -5216,12 +5198,8 @@ struct ScheduleToTilePass
         if (mod->hasAttr("tessera.native.tensor_program_member")) {
           kernelFunction->setAttr("tessera.native.program_buffer_types",
               tensor_program::bufferTypes(graph));
-          int64_t ctaM = macroKernelGeometry ? 32 : 16;
-          int64_t ctaN = macroKernelGeometry ? 32 : 8;
           kernelFunction->setAttr("tessera.native.program_geometry",
-              builder.getDenseI64ArrayAttr({(selected->n + ctaN - 1) / ctaN,
-                  (selected->m + ctaM - 1) / ctaM, 1,
-                  macroKernelGeometry ? 128 : 32, 1, 1}));
+              builder.getDenseI64ArrayAttr(selectedKernel.geometry));
           kernelFunction->setAttr("tessera.native.program_scalars",
               builder.getDenseI64ArrayAttr({selected->m, selected->n, selected->k}));
         }
@@ -6041,15 +6019,8 @@ struct ScheduleToTilePass
         if (mod->hasAttr("tessera.native.tensor_program_member")) {
           kernel->setAttr("tessera.native.program_buffer_types",
               tensor_program::bufferTypes(graph));
-          int64_t blocks = selected->rows;
-          if (isActivation)
-            blocks = selected->reductionSchedule == "flat_128"
-                         ? (selected->rows * selected->columns + 127) / 128
-                         : (selected->rows + 127) / 128;
-          else if (selected->reductionSchedule != "cooperative_128")
-            blocks = (selected->rows + 127) / 128;
           kernel->setAttr("tessera.native.program_geometry",
-              mb.getDenseI64ArrayAttr({blocks, 1, 1, 128, 1, 1}));
+              mb.getDenseI64ArrayAttr(tensor_program::semanticGeometry(*selected)));
           kernel->setAttr("tessera.native.program_scalars",
               mb.getDenseI64ArrayAttr({selected->rows, selected->columns}));
         }

@@ -4,6 +4,39 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 namespace tensor_program {
+struct Sm120MatmulKernel {
+  bool macroProducer, typedProducer, useMacroProducer, macroGeometry;
+  mlir::SmallVector<int64_t> geometry;
+};
+// One selection supplies admission and emission; never infer a tile from
+// workload alone because row-major RHS and typed tails retain 16x8 geometry.
+inline Sm120MatmulKernel selectMatmulKernel(const MatmulSchedule &s) {
+  const __int128 work = static_cast<__int128>(2) * s.m * s.n * s.k;
+  bool macro = !s.scalarFma && s.bLayout == "col_major" &&
+      s.m >= 32 && s.n >= 32 && s.k >= 16 &&
+      (s.storage == "f16" || s.storage == "bf16") && s.accum == "f32" &&
+      work >= 67108864;
+  bool fused = s.bias || s.residual || s.activation != "none";
+  bool typed = !s.scalarFma && s.m > 0 && s.n > 0 && s.k > 0 &&
+      s.tileM == 16 && s.tileN == 8 && s.tileK == 16 &&
+      (s.storage == "f16" || s.storage == "bf16") && s.accum == "f32" &&
+      (s.output == "f32" || s.output == "f16");
+  bool useMacro = macro && s.k % 8 == 0 && !fused && s.output == "f32";
+  bool macroGeometry = macro && (useMacro || !typed);
+  int64_t rows = macroGeometry ? 32 : 16, cols = macroGeometry ? 32 : 8;
+  return {macro, typed, useMacro, macroGeometry,
+      {(s.n + cols - 1) / cols, (s.m + rows - 1) / rows, 1,
+       macroGeometry ? 128 : 32, 1, 1}};
+}
+inline mlir::SmallVector<int64_t> semanticGeometry(const SemanticKernelSchedule &s) {
+  int64_t blocks = s.rows;
+  if (s.family == "activation")
+    blocks = s.reductionSchedule == "flat_128"
+        ? (s.rows * s.columns + 127) / 128 : (s.rows + 127) / 128;
+  else if (s.reductionSchedule != "cooperative_128")
+    blocks = (s.rows + 127) / 128;
+  return {blocks, 1, 1, 128, 1, 1};
+}
 inline mlir::ArrayAttr bufferTypes(mlir::Operation *operation) {
   using namespace mlir;
   SmallVector<Attribute> result;
@@ -133,9 +166,18 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     if (op == product)
       cloned->setAttr("rhs_storage_order", builder.getStringAttr("row_major"));
     func::ReturnOp::create(leaf, op->getLoc(), cloned->getResults());
-    if (op == product ? failed(getMatmulSchedule(cloned))
-                      : failed(getSemanticKernelSchedule(cloned)))
-      return reject();
+    SmallVector<int64_t> geometry;
+    if (op == product) {
+      auto schedule = getMatmulSchedule(cloned);
+      if (failed(schedule)) return reject();
+      geometry = selectMatmulKernel(*schedule).geometry;
+    } else {
+      auto schedule = getSemanticKernelSchedule(cloned);
+      if (failed(schedule)) return reject();
+      geometry = semanticGeometry(*schedule);
+    }
+    if (!tessera::native_tensor_program::isLaunchGeometry(geometry))
+      return root.emitError("Graph->Schedule launch geometry exceeds the native frame CUDA limits");
     members.push_back(std::move(owner));
   }
   std::string source;

@@ -399,3 +399,44 @@ def test_frame_export_requires_a_defined_host_with_native_invocations(external):
     result = _run(head + function + "}", "--tessera-schedule-to-tile")
     assert result.returncode > 0, result.stderr
     assert marker in result.stderr
+
+
+@pytest.mark.parametrize("columns,tile_rows", [(32, 16), (11, 16)])
+@pytest.mark.parametrize("excess", [0, 1])
+def test_native_admission_obeys_selected_cuda_grid_y_limit(columns, tile_rows, excess):
+    rows = 65535 * tile_rows + excess
+    source = traced_source(relu_product, "f16")
+    source = source.replace("17x32", f"{rows}x16")
+    source = source.replace("32x11", f"16x{columns}")
+    source = source.replace("17x11", f"{rows}x{columns}")
+    queried = _run(source, "--tessera-graph-to-schedule=tensor-program-query")
+    assert queried.returncode == 0, queried.stderr
+    admitted = excess == 0
+    assert f"tessera.native.tensor_program_admission = {str(admitted).lower()}" in queried.stdout
+    scheduled = _run(source, "--tessera-graph-to-schedule")
+    if admitted:
+        assert scheduled.returncode == 0, scheduled.stderr
+        tile = _run(scheduled.stdout, "--tessera-schedule-to-tile")
+        assert tile.returncode == 0, tile.stderr
+        assert "65535, 1," in tile.stdout
+    else:
+        assert scheduled.returncode != 0
+        assert "launch geometry exceeds the native frame CUDA limits" in scheduled.stderr
+
+
+@pytest.mark.parametrize("geometry", [
+    "1, 65536, 1, 32, 1, 1",
+    "1, 1, 65536, 32, 1, 1",
+    "1, 1, 1, 1025, 1, 1",
+    "1, 1, 1, 32, 1, 65",
+    "1, 1, 1, 1024, 2, 1",
+])
+def test_native_verifier_checks_cuda_limits_even_with_matching_kernel_metadata(geometry):
+    compiled = _run(traced_source(relu_product, "f16"),
+                    "--tessera-graph-to-schedule", "--tessera-schedule-to-tile")
+    assert compiled.returncode == 0, compiled.stderr
+    # Rewrite both the call and its kernel witness: equality alone is insufficient.
+    changed = re.sub(r"(geometry = array<i64: )[^>]+", r"\g<1>" + geometry, compiled.stdout)
+    verified = _run(changed, "--verify-each")
+    assert verified.returncode != 0
+    assert "launch geometry exceeds the native frame CUDA limits" in verified.stderr

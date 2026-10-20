@@ -31,6 +31,20 @@ inline bool isPhysicalBuffer(mlir::Type raw) {
   }
   return true;
 }
+// Match the versioned CUDA frame owner's grid and block ABI before export.
+inline bool isLaunchGeometry(llvm::ArrayRef<int64_t> geometry) {
+  if (geometry.size() != 6) return false;
+  int64_t threads = 1;
+  for (unsigned axis = 0; axis < 3; ++axis) {
+    int64_t gridLimit = axis == 0 ? INT32_MAX : 65535;
+    int64_t blockLimit = axis == 2 ? 64 : 1024;
+    if (geometry[axis] <= 0 || geometry[axis] > gridLimit ||
+        geometry[axis + 3] <= 0 || geometry[axis + 3] > blockLimit)
+      return false;
+    threads *= geometry[axis + 3];
+  }
+  return threads <= 1024;
+}
 inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
   using namespace mlir;
   auto emitOpError = [&](const char *message) { return op->emitOpError(message); };
@@ -168,9 +182,8 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
   for (auto [index, type] : llvm::enumerate(kernel.getArgumentTypes()))
     if (index < buffers.size() ? !isa<LLVM::LLVMPointerType>(type) : !type.isInteger(64))
       return emitOpError("native member requires pointer buffers followed by i64 scalars");
-  for (int64_t extent : geometry.asArrayRef())
-    if (extent <= 0 || extent > INT32_MAX)
-      return emitOpError("native geometry exceeds the checked launch envelope");
+  if (!isLaunchGeometry(geometry.asArrayRef()))
+    return emitOpError("launch geometry exceeds the native frame CUDA limits");
   return success();
 }
 

@@ -15,6 +15,14 @@ Not applicable to Metal/Apple CPU physical execution: the new package profile re
 
 Delivery review: the shared typed-program verifier now checks module schema and isolated owned member references before frame export; malformed references, missing later arities, unused invalid root types and external/empty hosts produce diagnostics before unsafe traversal/export. This remains an SM120-only program contract; no sibling physical execution or schedule promotion follows.
 
+
+Review follow-up: native admission and emission now share the actual SM120 kernel
+selection and geometry calculation. CUDA grid X/Y/Z, per-axis block limits and
+the 1024-thread block product are checked before frame export; matching call
+and kernel metadata alone is insufficient. Exact grid-Y boundary and
+out-of-range source/metadata regressions cover the native CUDA frame limits.
+This changes admission/verification only; no sibling physical execution claim.
+
 Contract: docs/spec/NATIVE_TENSOR_PROGRAM_PACKAGE.md.
 Evidence: benchmarks/baselines/native_tensor_source_package_20261019/README.md.
 Review evidence: benchmarks/baselines/native_tensor_review_closure_20261020/README.md.

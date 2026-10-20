@@ -93,3 +93,13 @@ The later NATIVE_TENSOR_PROGRAM_PACKAGE.md increment adds source replay and an
 explicit compile API; ordinary JIT/portable and general AD closure remain open.
 
 Review evidence: benchmarks/baselines/native_tensor_review_closure_20261020/README.md.
+
+## Native launch admission
+
+The native program uses the same selected matmul and semantic-kernel geometry
+for admission and emission. The frame v1 CUDA limits are grid X <= 2^31-1,
+grid Y/Z <= 65535, block X/Y <= 1024, block Z <= 64, and total block threads
+<= 1024; every extent is positive. Typed invocations validate these limits
+even when the call and kernel metadata agree. An unsupported grid is rejected
+before packaging or device allocation. This does not flatten or otherwise
+change the arithmetic schedule for large matrices.

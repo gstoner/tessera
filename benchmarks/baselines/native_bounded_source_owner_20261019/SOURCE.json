@@ -1,0 +1,24 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, 12.0, 610.88, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "compiler_sha256": "0e8161de4555ae0626b19d2d79f509fc42fd6ef9f1b5f8178541dded7744e64c",
+  "production_provider_sha256": "df4552fafd31f19fe03c858fba2c7da3e9310abed3076a50fd7c8bf8906d25ac",
+  "observer_provider_sha256": "24226115323b57f280df5976ebc556d6c0b66e5bc9b49fdb385b467aad65f3c5",
+  "host_cxx": "g++ (Ubuntu 15.2.0-16ubuntu1) 15.2.0",
+  "cuda_sdk_header_sha256": "31df84e16179b6d97db4b3c0bae7697392a370b41983f4a8962f0e5a8069b577",
+  "production_build_command": "g++ -std=c++17 -O2 -fPIC -shared -pthread -I/usr/local/cuda-13.3/include -Isrc/runtime/include src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp -L/usr/lib/wsl/lib -lcuda -ldl -o native/libtessera_bounded_source_owner.so",
+  "observer_build_command": "g++ -std=c++17 -O2 -fPIC -shared -pthread -I/usr/local/cuda-13.3/include -Isrc/runtime/include src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp tests/native/bounded_source_owner_observer.cpp src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp -L/usr/lib/wsl/lib -lcuda -ldl -o native/libtessera_bounded_source_observer.so",
+  "source_sha256": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "4c876db7e491acd449e44d4a7ab840c31c7b642601b1e8244f8d2b80e259164e",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "bcac6691084a9e8d18ddae0302ddbdd1c997fbf805babc2c0bf2d91307840d2b",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "abcb8b5158187a1278513d53d9db16bcf1db77ca716aaa82f713b9af53ea4fc0",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "3126fe9e1271908e7fa390f50b3dee91bb7adfaae489b81c234fdf7e01a2b9c2",
+    "tests/native/bounded_source_owner_observer.cpp": "1d1f39047dc97dd960af2471dbe09e5a22bd3069f06a9a106de02d757076a749",
+    "tests/device/nvidia/test_bounded_source_reverse_owner.py": "2c7f0c84ad1ec1babbaf323dc8c8762253ebbe7b88706731391e5f190a14da43",
+    "tests/device/nvidia/test_bounded_source_owner_storage.py": "23be172a544ed4d39522b6c68313053b7d0245880992893ba62a9233061ed9c4",
+    "tests/device/nvidia/test_source_attention_reverse.py": "6df53a0094ecf87e2e2a9a97683cf9e7349286a9712563ff054cf3887c6315f3",
+    "benchmarks/nvidia/benchmark_bounded_source_owner.py": "9f5b0457e8b6a617b799638b66d150dc20e6ac3dd6862750bc396cba9294a6f3"
+  },
+  "frozen_initial_fixture_sha256": "c23facb4bf18b91a8843c1383aadc3dc2ff2da2165110595ac60c8940f516f0f",
+  "frozen_36_case_fixture_sha256": "0b0fc1cd3d90b1b087a51659873c6b5a3cab71f46a2dd28e307d61e3c5e7a428",
+  "cohort_provenance": "36-case source archived before timer metadata; cooperative12 and paired recorder use final helper preserving compiler-selected norm mode"
+}

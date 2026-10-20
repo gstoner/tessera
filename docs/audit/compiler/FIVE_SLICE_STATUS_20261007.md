@@ -2470,3 +2470,29 @@ seven images and separate 2.44–2.47 ms native events. Current-head public
 CI/review remains. All five aggregate rows,
 model-quality acceptance, general frontend/AD and wider performance obligations
 remain open.
+
+
+## Native bounded source owner progress — 2026-10-19
+
+The compiler-exported bounded source attention reverse program now has a retained
+native C++ capacity owner. Forty-eight distinct owning RTX5070 production-provider
+cases pass across two cohorts (36 plus 12 cooperative cases); 12 final observer
+cases prove immutable allocations/offsets and atomic rejected-frame behavior.
+Forty existing static source cases pass. Runtime ABI tests execute 28 cases across
+two cohorts after resolving the generic archive-discovery skips; the Apple
+hardware bridge remains unavailable on WSL.
+
+Two matched 18-profile paired timing orders separate compile/native preparation,
+stage/program CUDA events and completed ctypes-host calls. Common normalization,
+saved-forward and source-pullback images are identical between inline/row arms.
+Full Sq17/Sk19 width257 favors rows, while tiny frames pay extra launch cost.
+No universal actual-shape policy or public latency promotion follows.
+
+Evidence: benchmarks/baselines/native_bounded_source_owner_20261019/README.md.
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_OWNER.md.
+
+Next required integration is strict bounded portable source/paired/program/image
+validation, the retained public adapter and ordinary JIT route, then fresh-process
+replay and full delivery gates. The original five aggregate slices and their
+remaining model-quality, generic producer/layout/AD, mixed attention and ROCm
+performance requirements remain open.

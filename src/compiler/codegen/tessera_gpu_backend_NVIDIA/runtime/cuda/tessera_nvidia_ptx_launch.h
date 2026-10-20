@@ -261,6 +261,33 @@ int tessera_nvidia_source_attention_reverse_rows_invoke(
 int tessera_nvidia_source_attention_reverse_rows_last_times(
     uint64_t handle, float* milliseconds, size_t count);
 
+// Bounded source profiles keep B/H/D fixed and admit only Sq/Sk changes.
+// Prepare owns maximum capacities once; invoke validates the complete actual frame.
+int tessera_nvidia_source_attention_reverse_bounded_prepare(
+    const void* norm_image, size_t norm_bytes, const char* norm_entry, int cooperative,
+    const void* forward_image, size_t forward_bytes, const char* forward_entry,
+    const void* backward_image, size_t backward_bytes, const char* backward_entry,
+    const void* pullback_image, size_t pullback_bytes, const char* pullback_entry,
+    const int64_t* dims, const int* frontend_mapping, const int* cotangent_indices,
+    const int* selected_roles, size_t selected_count, int storage, uint64_t* handle);
+int tessera_nvidia_source_attention_reverse_bounded_invoke(
+    uint64_t handle, const int64_t *actualDims, const void* const* inputs, const size_t* input_bytes, size_t input_count,
+    const uint64_t* producer_streams, size_t producer_count,
+    void* const* outputs, const size_t* output_bytes, size_t output_count);
+int tessera_nvidia_source_attention_reverse_rows_bounded_prepare(
+    const void* norm_image, size_t norm_bytes, const char* norm_entry, int cooperative,
+    const void* forward_image, size_t forward_bytes, const char* forward_entry,
+    const void* row_image, size_t row_bytes, const char* row_entry,
+    const void* backward_image, size_t backward_bytes, const char* backward_entry,
+    const void* pullback_image, size_t pullback_bytes, const char* pullback_entry,
+    const int64_t* dims, const int* frontend_mapping, const int* cotangent_indices,
+    const int* selected_roles, size_t selected_count, int storage, uint64_t* handle);
+int tessera_nvidia_source_attention_reverse_rows_bounded_invoke(
+    uint64_t handle, const int64_t *actualDims, const void* const* inputs, const size_t* input_bytes, size_t input_count,
+    const uint64_t* producer_streams, size_t producer_count,
+    void* const* outputs, const size_t* output_bytes, size_t output_count);
+
+
 
 int tessera_nvidia_norm_attention_prepare(
     const void* norm_image, size_t norm_bytes, const char* norm_entry, int cooperative,

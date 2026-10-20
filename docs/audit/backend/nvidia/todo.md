@@ -6,6 +6,16 @@ target: nvidia_sm120
 last_updated: 2026-10-19
 ---
 
+## NATIVE-BOUNDED-SOURCE-OWNER-20261019 — native capacity execution
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+The retained native C++ owner now allocates maximum source/attention capacities once, validates a pure actual frame before committing geometry, orders producer streams and protects all private source spans. Production-provider cases pass 36 initial plus 12 added cooperative profiles; 40 legacy source cases pass. Two paired timing orders show larger-row benefits and tiny-frame overhead, with no universal policy promotion. Twelve final observer cases prove fixed allocations/offsets/capacities, private-root protection and atomic rejection of a changed valid geometry with incompatible spans. Evidence: benchmarks/baselines/native_bounded_source_owner_20261019/README.md. Public JIT/portable bounded source integration remains follow-up required.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_OWNER.md.
+
+
 ## NATIVE-BOUNDED-SOURCE-PROJECTION-20261019 — integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

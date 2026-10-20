@@ -5,6 +5,16 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NATIVE-BOUNDED-SOURCE-OWNER-20261019 — native capacity execution
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to HIP execution: these four new symbols are in the NVIDIA driver provider and require exact SM120 context/image contracts. No ROCm buffer, schedule, dtype or ownership ABI changes. Shared runtime-ABI views include the new exports; no NVIDIA physical proof transfers to gfx1151/gfx1201.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_OWNER.md.
+
+
 ## NATIVE-BOUNDED-SOURCE-PROJECTION-20261019 — integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

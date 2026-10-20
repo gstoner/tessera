@@ -6,6 +6,16 @@ target: apple_gpu
 last_updated: 2026-10-19
 ---
 
+## NATIVE-BOUNDED-SOURCE-OWNER-20261019 — native capacity execution
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SOURCE-ATTENTION-20261019.
+
+Not applicable to Metal/Apple CPU execution: CUDA source capacities and producer events have no Apple consumer. Shared ABI/audit views are regenerated; the Apple hardware ABI bridge remains an explicitly unavailable Darwin check on WSL. No Apple execution or lifetime proof transfers.
+
+Contract: docs/spec/NATIVE_BOUNDED_SOURCE_OWNER.md.
+
+
 ## NATIVE-BOUNDED-SOURCE-PROJECTION-20261019 — integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

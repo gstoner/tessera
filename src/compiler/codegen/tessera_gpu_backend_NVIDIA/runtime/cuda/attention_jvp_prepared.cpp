@@ -38,7 +38,7 @@ struct Owner {
   int64_t prefixRows=0,prefixColumns=0;
   unsigned prefixGrid=0;
   bool forwardCompleted=false;
-  bool sourceReverse=false;
+  bool sourceReverse=false,sourceBounded=false,sourceCooperative=false;
   CUmodule sourcePullbackModule=nullptr;
   CUfunction sourcePullbackFunction=nullptr;
   CUdeviceptr sourceGradient=0;
@@ -159,6 +159,13 @@ int prepareResidentDependencies(Owner &s,const void *const *inputs,
       // No caller can borrow private O/LSE or tangent scratch as a root.
       if(s.arena && pointer<s.arena+s.arenaBytes && s.arena<pointer+inputBytes[i])
         return bad("resident attention root aliases private arena");
+      const size_t prefixCapacity=s.capacityBytes[0]?s.capacityBytes[0]:s.bytes[0];
+      const size_t sourceCapacity=s.capacityBytes[7]?s.capacityBytes[7]:s.bytes[7];
+      if((s.prefixOutput && pointer<s.prefixOutput+prefixCapacity &&
+          s.prefixOutput<pointer+inputBytes[i]) ||
+         (s.sourceGradient && pointer<s.sourceGradient+sourceCapacity &&
+          s.sourceGradient<pointer+inputBytes[i]))
+        return bad("resident source root aliases private normalization storage");
       if(!producerStreams[i])return bad("resident attention requires an explicit producer stream");
       CUstream producer=reinterpret_cast<CUstream>(uintptr_t(producerStreams[i]));
       if(!ok(cuStreamGetCtx(producer,&streamContext),"resident producer stream context"))return 3;
@@ -818,7 +825,8 @@ static int prepareSourceAttentionReverse(
   const void *pullbackImage,size_t pullbackBytes,const char *pullbackEntry,
   const int64_t *dims,const int *mapping,const int *seedOrder,
   const int *selectedRoles,size_t selectedCount,int storage,uint64_t *handle,
-  bool sourceRows=false,const void *rimage=nullptr,size_t rbytes=0,const char *rentry=nullptr){
+  bool sourceRows=false,const void *rimage=nullptr,size_t rbytes=0,const char *rentry=nullptr,
+  bool boundedSource=false){
   ownerError.clear();if(handle)*handle=0;
   if(!handle || !normImage || !normBytes || !normEntry || !pullbackImage ||
      !pullbackBytes || !pullbackEntry || !seedOrder || !selectedRoles ||
@@ -826,6 +834,14 @@ static int prepareSourceAttentionReverse(
      (cooperative!=0 && cooperative!=1) || seedOrder[0]<3 || seedOrder[0]>4 ||
      seedOrder[1]<3 || seedOrder[1]>4 || seedOrder[0]==seedOrder[1])
     return bad("source attention reverse registration disagrees");
+  if(boundedSource){
+    if(!dims)return bad("bounded source capacity dimensions are missing");
+    for(unsigned i=0;i<7;++i)
+      if(dims[i]<=0 || dims[i]>=int64_t(1ULL<<31))
+        return bad("bounded source capacity dimensions exceed ABI");
+    if(uint64_t(dims[0])*uint64_t(dims[1])>uint64_t(INT_MAX)/uint64_t(dims[3]))
+      return bad("bounded source query row capacity exceeds ABI");
+  }
   bool seen[3]{};
   for(size_t i=0;i<selectedCount;++i){
     if(selectedRoles[i]<0 || selectedRoles[i]>2 || seen[selectedRoles[i]])
@@ -853,6 +869,8 @@ static int prepareSourceAttentionReverse(
   auto &s=*found->second;
   auto fail=[&](int code){owners.erase(found);return code;};
   s.sourceReverse=true;s.sourceCount=selectedCount;
+  s.sourceBounded=boundedSource;s.sourceCooperative=bool(cooperative);
+  s.capacityDims=s.dims;s.capacityBytes=s.bytes;
   for(size_t i=0;i<selectedCount;++i)s.sourceRoles[i]=selectedRoles[i];
   s.sourceSeeds={seedOrder[0],seedOrder[1]};
   s.prefixColumns=s.dims[5];s.prefixRows=int64_t(s.bytes[0]/2)/s.prefixColumns;
@@ -898,11 +916,80 @@ extern "C" int tessera_nvidia_source_attention_reverse_rows_prepare(
       dims,mapping,seedOrder,selectedRoles,selectedCount,storage,handle,true,rimage,rbytes,rentry);
 }
 
+extern "C" int tessera_nvidia_source_attention_reverse_bounded_prepare(
+  const void *normImage,size_t normBytes,const char *normEntry,int cooperative,
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *bimage,size_t bbytes,const char *bentry,
+  const void *pullbackImage,size_t pullbackBytes,const char *pullbackEntry,
+  const int64_t *dims,const int *mapping,const int *seedOrder,
+  const int *selectedRoles,size_t selectedCount,int storage,uint64_t *handle){
+  return prepareSourceAttentionReverse(normImage,normBytes,normEntry,cooperative,
+      fimage,fbytes,fentry,bimage,bbytes,bentry,pullbackImage,pullbackBytes,pullbackEntry,
+      dims,mapping,seedOrder,selectedRoles,selectedCount,storage,handle,false,nullptr,0,nullptr,true);
+}
+extern "C" int tessera_nvidia_source_attention_reverse_rows_bounded_prepare(
+  const void *normImage,size_t normBytes,const char *normEntry,int cooperative,
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *rimage,size_t rbytes,const char *rentry,
+  const void *bimage,size_t bbytes,const char *bentry,
+  const void *pullbackImage,size_t pullbackBytes,const char *pullbackEntry,
+  const int64_t *dims,const int *mapping,const int *seedOrder,
+  const int *selectedRoles,size_t selectedCount,int storage,uint64_t *handle){
+  return prepareSourceAttentionReverse(normImage,normBytes,normEntry,cooperative,
+      fimage,fbytes,fentry,bimage,bbytes,bentry,pullbackImage,pullbackBytes,pullbackEntry,
+      dims,mapping,seedOrder,selectedRoles,selectedCount,storage,handle,true,rimage,rbytes,rentry,true);
+}
+
+// Pure geometry value. Capacity offsets, modules, streams and allocations are
+// never copied or changed while validating an actual source frame.
+struct SourceReverseFrame {
+  std::array<int64_t,7> dims{};
+  std::array<size_t,13> bytes{};
+  int64_t rows=0,columns=0;
+  unsigned forwardGrid=0,reverseGrid=0,rowGrid=0,prefixGrid=0,pullbackGrid=0;
+};
+static int sourceReverseFrame(const Owner &s,const int64_t *actual,SourceReverseFrame &frame){
+  if(!actual)return bad("bounded source actual dimensions are missing");
+  for(unsigned i=0;i<7;++i){
+    if(actual[i]<=0 || actual[i]>s.capacityDims[i] ||
+       ((i!=3 && i!=4) && actual[i]!=s.capacityDims[i]))
+      return bad("bounded source actual dimensions exceed capacity or fixed geometry");
+    frame.dims[i]=actual[i];
+  }
+  auto [b,hq,hkv,sq,sk,d,dv]=frame.dims;
+  if(hq%hkv || !extent({b,hq,sq,d},frame.bytes[0]) ||
+     !extent({b,hkv,sk,d},frame.bytes[1]) || !extent({b,hkv,sk,dv},frame.bytes[2]) ||
+     !extent({b,hq,sq,dv},frame.bytes[3]) || !extent({b,hq,sq},frame.bytes[4]))
+    return bad("bounded source frame byte geometry overflows");
+  for(unsigned i:{0u,1u,2u,3u})frame.bytes[i]/=2;
+  frame.bytes[5]=frame.bytes[3];
+  frame.bytes[7]=frame.bytes[0];frame.bytes[8]=frame.bytes[1];frame.bytes[9]=frame.bytes[2];
+  frame.bytes[11]=frame.bytes[4];
+  if(s.reverseRows)frame.bytes[12]=frame.bytes[4];
+  for(unsigned i=0;i<frame.bytes.size();++i)
+    if(frame.bytes[i]>s.capacityBytes[i])return bad("bounded source frame byte capacity exceeded");
+  const uint64_t outputs=frame.bytes[3]/2;
+  const __uint128_t gradients=__uint128_t(frame.bytes[7]/2)+
+      frame.bytes[8]/2+frame.bytes[9]/2;
+  const uint64_t rows=uint64_t(b)*uint64_t(hq)*uint64_t(sq);
+  if(rows>INT_MAX || outputs>=(1ULL<<31) ||
+     gradients>uint64_t(INT_MAX)*s.reverseThreads)
+    return bad("bounded source frame launch geometry exceeds ABI");
+  frame.rows=int64_t(rows);frame.columns=d;
+  frame.forwardGrid=unsigned((outputs+127)/128);
+  frame.reverseGrid=unsigned((gradients+s.reverseThreads-1)/s.reverseThreads);
+  frame.rowGrid=s.reverseRows?unsigned((rows+31)/32):0;
+  frame.prefixGrid=unsigned(s.sourceCooperative?rows:(rows+127)/128);
+  frame.pullbackGrid=unsigned((rows+127)/128);
+  return 0;
+}
+
 static int invokeAttentionVjp(
   uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
   void *const *outputs,const size_t *outputBytes,size_t outputCount,float *deviceMilliseconds,
   const uint64_t *producerStreams=nullptr,size_t producerCount=0,
-  bool rowsABI=false,size_t timingCount=2,bool sourceABI=false){
+  bool rowsABI=false,size_t timingCount=2,bool sourceABI=false,const int64_t *actualSourceDims=nullptr,
+  bool boundedSourceABI=false){
   ownerError.clear();
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
@@ -910,6 +997,15 @@ static int invokeAttentionVjp(
   if(found==owners.end() || !found->second->reverse || found->second->forwardOnly)return bad("prepared reverse is closed or wrong product");
   auto &s=*found->second;CUcontext context=nullptr;unsigned long long identity=0;
   if(sourceABI!=s.sourceReverse)return bad("source reverse ABI version disagrees");
+  if(sourceABI)s.reverseCompleted=false;
+  if(boundedSourceABI!=s.sourceBounded || (s.sourceBounded && !actualSourceDims) ||
+     (!s.sourceBounded && actualSourceDims))
+    return bad("bounded source invoke ABI disagrees with registered capacity program");
+  SourceReverseFrame sourceFrame;
+  if(s.sourceBounded){
+    if(int status=sourceReverseFrame(s,actualSourceDims,sourceFrame))return status;
+  }
+  const auto &frameBytes=s.sourceBounded?sourceFrame.bytes:s.bytes;
   std::array<const void *,5> sourceInputs{};
   std::array<size_t,5> sourceBytes{};
   std::array<uint64_t,5> sourceStreams{};
@@ -941,13 +1037,13 @@ static int invokeAttentionVjp(
   };
   for(size_t i=0;i<primals;++i)
     if(!validSpan(inputs[s.mapping[i]],inputBytes[s.mapping[i]]) ||
-       inputBytes[s.mapping[i]]!=s.bytes[i==3?6:i])return bad("reverse primal extent disagrees");
-  if(!validSpan(inputs[primals],inputBytes[primals]) || inputBytes[primals]!=s.bytes[5])
+       inputBytes[s.mapping[i]]!=frameBytes[i==3?6:i])return bad("reverse primal extent disagrees");
+  if(!validSpan(inputs[primals],inputBytes[primals]) || inputBytes[primals]!=frameBytes[5])
     return bad("reverse cotangent extent disagrees");
-  if(s.reverseLseSeed && (!validSpan(inputs[primals+1],inputBytes[primals+1]) || inputBytes[primals+1]!=s.bytes[11]))
+  if(s.reverseLseSeed && (!validSpan(inputs[primals+1],inputBytes[primals+1]) || inputBytes[primals+1]!=frameBytes[11]))
     return bad("reverse LSE cotangent extent disagrees");
   for(size_t i=0;i<outputCount;++i){
-    if(!validSpan(outputs[i],outputBytes[i]) || outputBytes[i]!=s.bytes[7+outputRole(i)])
+    if(!validSpan(outputs[i],outputBytes[i]) || outputBytes[i]!=frameBytes[7+outputRole(i)])
       return bad("reverse gradient extent disagrees");
     for(size_t j=0;j<i;++j)if(overlap(outputs[i],outputBytes[i],outputs[j],outputBytes[j]))
       return bad("reverse outputs overlap");
@@ -959,6 +1055,15 @@ static int invokeAttentionVjp(
   int dependencies=prepareResidentDependencies(s,inputs,inputBytes,inputCount,
                                                producerStreams,producerCount,ordering,producers);
   if(dependencies)return dependencies;
+  if(s.sourceBounded){
+    // All dimensions, root/seed/output spans and resident dependencies passed.
+    // Commit only the value geometry; capacity allocations/offsets stay fixed.
+    s.dims=sourceFrame.dims;s.bytes=sourceFrame.bytes;
+    s.prefixRows=sourceFrame.rows;s.prefixColumns=sourceFrame.columns;
+    s.forwardGrid=sourceFrame.forwardGrid;s.reverseGrid=sourceFrame.reverseGrid;
+    s.rowGrid=sourceFrame.rowGrid;s.prefixGrid=sourceFrame.prefixGrid;
+    s.sourcePullbackGrid=sourceFrame.pullbackGrid;
+  }
   s.reverseCompleted=false;
   StreamDrain drain{s.stream};
   for(size_t i=0;i<producers.size();++i)
@@ -1064,6 +1169,20 @@ extern "C" int tessera_nvidia_source_attention_reverse_rows_invoke(
   void *const *outputs,const size_t *outputBytes,size_t outputCount){
   return invokeAttentionVjp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
                             outputCount,nullptr,producerStreams,producerCount,true,0,true);
+}
+extern "C" int tessera_nvidia_source_attention_reverse_bounded_invoke(
+  uint64_t handle,const int64_t *actualDims,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
+  const uint64_t *producerStreams,size_t producerCount,
+  void *const *outputs,const size_t *outputBytes,size_t outputCount){
+  return invokeAttentionVjp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
+                            outputCount,nullptr,producerStreams,producerCount,false,0,true,actualDims,true);
+}
+extern "C" int tessera_nvidia_source_attention_reverse_rows_bounded_invoke(
+  uint64_t handle,const int64_t *actualDims,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
+  const uint64_t *producerStreams,size_t producerCount,
+  void *const *outputs,const size_t *outputBytes,size_t outputCount){
+  return invokeAttentionVjp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
+                            outputCount,nullptr,producerStreams,producerCount,true,0,true,actualDims,true);
 }
 static int sourceAttentionReverseLastTimes(
   uint64_t handle,float *milliseconds,size_t count,bool rowsABI){

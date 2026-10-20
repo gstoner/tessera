@@ -7,6 +7,21 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## NATIVE-TENSOR-MLP-20261020 — native multi-matmul integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-MLP-20261020.
+
+Not applicable to this backend's physical execution: the new program uses
+the SM120 CUDA frame; no AVX-512 runtime or physical schedule changes. Shared Schedule/Tile verification now
+admits exact F32 SM120 ReLU storage; existing half policies remain unchanged.
+Shared registry/dtype/diagnostic/pass gates pass 470 cases. Independent native
+multi-matmul integration and exact-device parity remain follow-up required.
+
+Evidence: benchmarks/baselines/native_tensor_mlp_20261020/README.md.
+
+
+
 ## NATIVE-TENSOR-JIT-20261020 — ordinary frontend integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

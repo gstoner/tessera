@@ -1,0 +1,189 @@
+{
+  "scope": "Diagnostic native member prefix readback; original public program and images unchanged",
+  "rows": [
+    {
+      "storage": "f16",
+      "seed": 120321,
+      "producer_different_from_exact_then_round": 11,
+      "producer_max_difference": 0.00048828125,
+      "activation_bitwise_preserves_native_producer_relu": true,
+      "consumer_max_error_against_actual_producer": 9.592622518539429e-07,
+      "whole_mlp_max_error": 0.00021803146228194237,
+      "producer_examples": [
+        {
+          "index": [
+            25,
+            117
+          ],
+          "exact": -0.8366702814819291,
+          "ideal_half": -0.8369140625,
+          "native_half": -0.83642578125
+        },
+        {
+          "index": [
+            29,
+            121
+          ],
+          "exact": -0.026588423526845872,
+          "ideal_half": -0.026580810546875,
+          "native_half": -0.0265960693359375
+        },
+        {
+          "index": [
+            33,
+            70
+          ],
+          "exact": 0.4796142491977662,
+          "ideal_half": 0.4794921875,
+          "native_half": 0.479736328125
+        },
+        {
+          "index": [
+            34,
+            91
+          ],
+          "exact": 0.01197407828294672,
+          "ideal_half": 0.01197052001953125,
+          "native_half": 0.0119781494140625
+        },
+        {
+          "index": [
+            38,
+            88
+          ],
+          "exact": -0.017921509766892996,
+          "ideal_half": -0.0179290771484375,
+          "native_half": -0.017913818359375
+        },
+        {
+          "index": [
+            42,
+            20
+          ],
+          "exact": 0.007562744987808401,
+          "ideal_half": 0.007564544677734375,
+          "native_half": 0.00756072998046875
+        },
+        {
+          "index": [
+            44,
+            68
+          ],
+          "exact": -0.018928618112113327,
+          "ideal_half": -0.0189361572265625,
+          "native_half": -0.0189208984375
+        },
+        {
+          "index": [
+            44,
+            112
+          ],
+          "exact": -0.7409669063054025,
+          "ideal_half": -0.7412109375,
+          "native_half": -0.74072265625
+        },
+        {
+          "index": [
+            47,
+            13
+          ],
+          "exact": -0.3839111795205099,
+          "ideal_half": -0.384033203125,
+          "native_half": -0.3837890625
+        },
+        {
+          "index": [
+            48,
+            15
+          ],
+          "exact": -9.593332652002573e-05,
+          "ideal_half": -9.590387344360352e-05,
+          "native_half": -9.60230827331543e-05
+        },
+        {
+          "index": [
+            60,
+            72
+          ],
+          "exact": 0.6564945199352223,
+          "ideal_half": 0.65673828125,
+          "native_half": 0.65625
+        }
+      ]
+    },
+    {
+      "storage": "bf16",
+      "seed": 120322,
+      "producer_different_from_exact_then_round": 7,
+      "producer_max_difference": 0.00048828125,
+      "activation_bitwise_preserves_native_producer_relu": true,
+      "consumer_max_error_against_actual_producer": 1.1837109923362732e-06,
+      "whole_mlp_max_error": 0.00016067412070697173,
+      "producer_examples": [
+        {
+          "index": [
+            1,
+            98
+          ],
+          "exact": -0.7473145783878863,
+          "ideal_half": -0.74755859375,
+          "native_half": -0.7470703125
+        },
+        {
+          "index": [
+            8,
+            43
+          ],
+          "exact": -0.9899903223849833,
+          "ideal_half": -0.990234375,
+          "native_half": -0.98974609375
+        },
+        {
+          "index": [
+            10,
+            94
+          ],
+          "exact": 0.0960388109087944,
+          "ideal_half": 0.09600830078125,
+          "native_half": 0.0960693359375
+        },
+        {
+          "index": [
+            15,
+            50
+          ],
+          "exact": 0.3153075631707907,
+          "ideal_half": 0.315185546875,
+          "native_half": 0.3154296875
+        },
+        {
+          "index": [
+            20,
+            46
+          ],
+          "exact": -0.020012032240629196,
+          "ideal_half": -0.02001953125,
+          "native_half": -0.0200042724609375
+        },
+        {
+          "index": [
+            20,
+            97
+          ],
+          "exact": -1.7372891306877136e-05,
+          "ideal_half": -1.7344951629638672e-05,
+          "native_half": -1.7404556274414062e-05
+        },
+        {
+          "index": [
+            41,
+            72
+          ],
+          "exact": 0.0002443678677082062,
+          "ideal_half": 0.00024437904357910156,
+          "native_half": 0.0002446174621582031
+        }
+      ]
+    }
+  ]
+}

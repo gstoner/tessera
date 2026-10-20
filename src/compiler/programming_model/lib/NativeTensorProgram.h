@@ -73,7 +73,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
       })) return success();
   auto reject = [&]() {
     return root.emitError("Graph->Schedule native tensor program requires a static compact half "
-                          "producer DAG ending in one plain matmul");
+                          "producer DAG ending in a plain matmul");
   };
   for (Operation *owner : {module.getOperation(), root.getOperation()})
     for (NamedAttribute attribute : owner->getAttrs()) {
@@ -82,7 +82,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
         return root.emitError("pending differentiation must be transformed before primal tensor program projection");
     }
   auto ret = dyn_cast<func::ReturnOp>(root.getBody().front().back());
-  if (root.getNumArguments() != 2 || root.getNumResults() != 1 || !ret ||
+  if (root.getNumArguments() < 2 || root.getNumResults() != 1 || !ret ||
       ret.getNumOperands() != 1 || product->getNumOperands() != 2 ||
       product->getNumResults() != 1 || ret.getOperand(0) != product->getResult(0))
     return reject();
@@ -106,18 +106,6 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     if (!type || type.getElementType().isF32() || (attrs && !attrs.empty()))
       return reject();
   }
-  if (cast<RankedTensorType>(root.getArgument(0).getType()).getElementType() !=
-      cast<RankedTensorType>(root.getArgument(1).getType()).getElementType())
-    return reject();
-  auto order = product->getAttrOfType<StringAttr>("rhs_storage_order");
-  auto activation = product->getAttrOfType<StringAttr>("activation");
-  if ((order && order.getValue() != "row_major") ||
-      (activation && activation.getValue() != "none") ||
-      product->hasAttr("bias") || product->hasAttr("residual"))
-    return reject();
-  for (StringRef key : {"transposeA", "transposeB"})
-    if (auto flag = product->getAttrOfType<BoolAttr>(key); flag && flag.getValue())
-      return reject();
   llvm::DenseSet<Value> available(root.getArguments().begin(), root.getArguments().end());
   llvm::DenseSet<Operation *> live;
   SmallVector<Value> pending(product->getOperands());
@@ -129,14 +117,28 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
   for (Operation *op : operations) {
     auto name = op->getName().getStringRef();
     bool terminal = op == product;
-    if (!terminal &&
+    bool matrix = name == "tessera.matmul";
+    if (!matrix &&
         (name != "tessera.relu" && name != "tessera.rmsnorm" &&
          name != "tessera.layer_norm" && name != "tessera.softmax"))
       return reject();
+    if (matrix) {
+      auto order = op->getAttrOfType<StringAttr>("rhs_storage_order");
+      auto activation = op->getAttrOfType<StringAttr>("activation");
+      if (op->getNumOperands() != 2 ||
+          (order && order.getValue() != "row_major") ||
+          (activation && activation.getValue() != "none") ||
+          op->hasAttr("bias") || op->hasAttr("residual"))
+        return reject();
+      for (StringRef key : {"transposeA", "transposeB"})
+        if (auto flag = op->getAttrOfType<BoolAttr>(key); flag && flag.getValue())
+          return reject();
+    }
     if (op->getNumResults() != 1 || !bufferType(op->getResult(0).getType()) ||
         op->getNumRegions() || !isMemoryEffectFree(op) ||
-        (!terminal && (op->getNumOperands() != 1 || !live.contains(op) ||
-                       op->getOperand(0).getType() != op->getResult(0).getType())))
+        (!terminal && !live.contains(op)) ||
+        (!matrix && (op->getNumOperands() != 1 ||
+                     op->getOperand(0).getType() != op->getResult(0).getType())))
       return reject();
     for (Value input : op->getOperands())
       if (!available.contains(input)) return reject();
@@ -170,11 +172,12 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     for (auto [input, arg] : llvm::zip(op->getOperands(), block->getArguments()))
       mapping.map(input, arg);
     Operation *cloned = leaf.clone(*op, mapping);
-    if (op == product)
+    bool matrix = op->getName().getStringRef() == "tessera.matmul";
+    if (matrix)
       cloned->setAttr("rhs_storage_order", builder.getStringAttr("row_major"));
     func::ReturnOp::create(leaf, op->getLoc(), cloned->getResults());
     SmallVector<int64_t> geometry;
-    if (op == product) {
+    if (matrix) {
       auto schedule = getMatmulSchedule(cloned);
       if (failed(schedule)) return reject();
       geometry = selectMatmulKernel(*schedule).geometry;

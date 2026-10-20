@@ -25,7 +25,7 @@ def _graph(storage="f16", arch="sm_120"):
 }}'''
 
 
-@pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.parametrize("storage", ["f16", "bf16", "f32"])
 def test_relu_has_explicit_native_schedule_and_storage_boundary(tool, storage):
     schedule = run_tessera_opt(tool, _graph(storage), "--tessera-graph-to-schedule")
     assert "schedule.activation" in schedule
@@ -54,8 +54,8 @@ def test_relu_schedule_rejects_policy_mutation(tool, old, new):
         run_tessera_opt(tool, schedule.replace(old, new), "--tessera-schedule-to-tile")
 
 
-def test_relu_schedule_does_not_promote_f32_or_sibling_architecture(tool):
-    for graph in (_graph("f32"), _graph(arch="gfx1201")):
+def test_relu_schedule_refuses_unimplemented_dtype_or_sibling_architecture(tool):
+    for graph in (_graph("f64"), _graph(arch="gfx1201"), _graph(arch="sm_80")):
         with pytest.raises(RuntimeError):
             run_tessera_opt(tool, graph, "--tessera-graph-to-schedule")
 

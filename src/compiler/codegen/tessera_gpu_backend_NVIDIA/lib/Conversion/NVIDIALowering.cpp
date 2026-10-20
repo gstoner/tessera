@@ -2266,8 +2266,11 @@ static LogicalResult materializeSm120ActivationKernel(
   Location loc = op->getLoc();
   auto inputs = kernel.getInputs();
   auto storage = op->getAttrOfType<StringAttr>("storage");
+  bool f32Storage = storage.getValue() == "f32";
   Type element = storage.getValue() == "f16" ? Type(builder.getF16Type()) :
-                                                    Type(builder.getBF16Type());
+                 storage.getValue() == "bf16" ? Type(builder.getBF16Type()) :
+                                               Type(builder.getF32Type());
+  unsigned alignment = f32Storage ? 4 : 2;
   Type i32 = builder.getI32Type(), i64 = builder.getI64Type();
   Value block = arith::ExtUIOp::create(builder, loc, i64,
       NVVM::BlockIdXOp::create(builder, loc, i32));
@@ -2293,15 +2296,20 @@ static LogicalResult materializeSm120ActivationKernel(
         inputs[0], ValueRange{linear});
     Value output = LLVM::GEPOp::create(builder, loc, inputs[1].getType(), element,
         inputs[1], ValueRange{linear});
-    Value loaded = LLVM::LoadOp::create(builder, loc, element, source, 2);
-    Value wide = LLVM::FPExtOp::create(builder, loc, builder.getF32Type(), loaded);
+    Value loaded = LLVM::LoadOp::create(builder, loc, element, source, alignment);
+    Value wide = loaded;
+    if (!f32Storage)
+      wide = LLVM::FPExtOp::create(builder, loc, builder.getF32Type(), loaded);
     Value zero = arith::ConstantFloatOp::create(builder, loc, builder.getF32Type(), APFloat(0.0f));
     Value negative = arith::CmpFOp::create(builder, loc,
         storage.getValue() == "f16" ? arith::CmpFPredicate::OLE : arith::CmpFPredicate::OLT, wide, zero);
-    // Retain the original NaN payload; f16 canonicalizes zero and bf16 preserves its sign.
-    Value storedZero = LLVM::FPTruncOp::create(builder, loc, element, zero);
+    // Retain the loaded NaN payload. Eager maximum(0, x) preserves negative
+    // zero for f32/bf16; the existing f16 contract canonicalizes zero.
+    Value storedZero = zero;
+    if (!f32Storage)
+      storedZero = LLVM::FPTruncOp::create(builder, loc, element, zero);
     Value result = arith::SelectOp::create(builder, loc, negative, storedZero, loaded);
-    LLVM::StoreOp::create(builder, loc, result, output, 2);
+    LLVM::StoreOp::create(builder, loc, result, output, alignment);
   }
   op->erase();
   return success();

@@ -5,6 +5,23 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## NATIVE-TENSOR-MLP-20261020 — native multi-matmul integration candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-TENSOR-MLP-20261020.
+
+Not applicable to this backend's physical execution: the new program uses
+the SM120 CUDA frame; no HIP launch or RDNA physical schedule changes. Shared Schedule/Tile verification now
+admits exact F32 SM120 ReLU storage; existing half policies remain unchanged.
+Shared registry/dtype/diagnostic/pass gates pass 470 cases. Owning gfx1201 scalar-package regression passes 67 cases with exact dyadic
+oracles, canaries, changed inputs and retained snapshots. Gfx1151 is not
+revalidated by this packet. Independent ROCm multi-matmul program integration
+remains follow-up required.
+
+Evidence: benchmarks/baselines/native_tensor_mlp_20261020/README.md.
+
+
+
 ## NATIVE-TENSOR-JIT-20261020 — ordinary frontend integration candidate
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

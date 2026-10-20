@@ -7,11 +7,11 @@ audit_role: reference
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Sync: NATIVE-TENSOR-JIT-20261020.
-Status: PR #993 integration candidate; exact-head CI/review remain open.
+Status: PR #993 delivered as 1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31 after required CI and resolved review. The MLP extension below remains an unmerged candidate.
 
 ## Compiler and runtime boundary
 
-Ordinary primal SM120 calls with two compact half-storage roots query the
+Ordinary primal SM120 calls with compact half-storage roots query the
 native compiler. Python describes tensor metadata and binds arguments; native
 Graph/Schedule/Tile passes select operations, arithmetic, policies and kernels.
 An admitted product retains actual Graph, Schedule, Tile and NVIDIA Target IR.
@@ -84,3 +84,22 @@ Exact-head delivery CI and review remain required before merge. Wider producer/l
 portable restoration and all five aggregate programs remain open.
 
 Final reviewed-source evidence: benchmarks/baselines/native_tensor_jit_20261020/thread-review/README.md. All175 device cases pass and focused host gates pass445; exact-head CI/review remains required.
+
+## Native multi-matmul extension candidate
+
+Sync: NATIVE-TENSOR-MLP-20261020.
+
+The private extension admits two or more compact half roots within the same
+64-stage/128-buffer capacity. Nonterminal plain matmuls are retained as actual
+members, and every matrix checks its own operand pair and numerical policy.
+The named three-root MLP explicitly selects FP16 or FP32 intermediate output.
+FP32 ReLU preserves eager maximum(0, x) signed-zero and loaded NaN payload
+semantics, uses four-byte storage, and feeds the existing ordered FP32 scalar
+contraction with the original half RHS. No implicit tensor-core downcast occurs.
+Each native scalar member inherits its selected buffer/scalar/geometry contract.
+
+2619 production compiler cases, 25 focused MLP/oracle checks, 470 shared drift
+gates and 87 RTX5070 device cases pass. Owning gfx1201 scalar regressions pass
+67 cases. Twelve correctness-gated timing rows retain separate native and public
+windows. Artifact restoration still requires the matching compiler. Full CPU passes 30785 with 3710 declared skips; exact-head CI/review remain open. Evidence:
+benchmarks/baselines/native_tensor_mlp_20261020/README.md.

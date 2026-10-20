@@ -2642,8 +2642,8 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
     "relu": {
         "dtypes": ("fp16", "bf16", "fp32", "fp8_e4m3", "fp8_e5m2"),
         "feature_flags": ("mma_sync", "fused_epilogue", "scheduled_activation", "cuda"),
-        "shape_envelope": "Standalone Schedule/Tile ReLU member: static row-major rank-2 f16/bf16, positive rows/columns, serial row or explicit flat_128 element launch with 128 threads; also the existing rank-2 matmul accumulator epilogue",
-        "notes": "Standalone f16/bf16 ReLU preserves a materialized storage boundary before typed matmul fragments, including RMSNorm -> ReLU -> matmul through canonical_nvidia_lhs_program. NaNs propagate; f16 zero is positive and bf16 zero preserves its sign. FP32/FP8 entries retain only the existing matmul-epilogue envelope; no standalone promotion. The fused accumulator route remains separately proved by tests/device/nvidia/test_matmul_relu.py.",
+        "shape_envelope": "Legacy standalone Schedule/Tile ReLU member: static row-major rank-2 f16/bf16; native MLP programs additionally retain an f32 ReLU member. Both require positive rows/columns and serial row or explicit flat_128 element launch with 128 threads; also the existing rank-2 matmul accumulator epilogue",
+        "notes": "Standalone f16/bf16 ReLU preserves a materialized storage boundary before typed matmul fragments, including RMSNorm -> ReLU -> matmul through canonical_nvidia_lhs_program. NaNs propagate; f16 zero is positive and bf16 zero preserves its sign. Compiler-owned three-root MLP programs additionally retain an FP32 ReLU member before scalar-FMA consumption; tests/device/nvidia/test_native_tensor_mlp_program.py proves its storage semantics. The legacy standalone package is not promoted to FP32, and FP8 retains only the existing matmul-epilogue envelope. The fused accumulator route remains separately proved by tests/device/nvidia/test_matmul_relu.py.",
     },
     "dsa_block_sparse_attention": {
         "dtypes": ("fp32",),

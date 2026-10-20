@@ -2,6 +2,18 @@
 last_updated: 2026-10-20
 audit_role: reference
 ---
+## Native multi-matmul MLP increment — 2026-10-20
+
+PR993 is delivered as 1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31 after
+required exact-head CI and resolved review. The next private W1.1 increment
+retains three physical roots and both matmuls, with explicit FP16 or FP32
+intermediates. FP32 activation and scalar-FMA consumption preserve precision.
+2619 production compiler, 25 focused MLP/oracle and 87 RTX5070 cases pass;
+67 gfx1201 scalar regressions preserve sibling execution. Twelve independent
+timing rows are recorded; full CPU passes 30785/3710 declared skips; exact-head CI/review remain open. All five aggregate programs remain open.
+Evidence: benchmarks/baselines/native_tensor_mlp_20261020/README.md.
+
+
 
 ## Native tensor ordinary JIT candidate — 2026-10-20
 

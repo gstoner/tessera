@@ -3928,11 +3928,13 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         target="nvidia_sm120", compiler_path="canonical_native_tensor_program",
         execution_kind="native_gpu", executable=True, executor_id="native_tensor_program",
         runtime_status="success", execution_mode="cuda_runtime", owns_stream=True,
-        reason="Compiler-admitted static compact homogeneous half-storage producer DAG and plain matmul "
+        reason="Compiler-admitted static compact half-root producer DAGs and plain matmuls "
                "retain original Graph, Schedule, Tile and NVIDIA Target ancestry. A checked C++ frame "
                "owns buffers, modules, streams and completion. Artifact restoration requires the matching "
                "compiler; no compiler-free portability, general layout/dynamic/AD or quantized admission. "
-               "Named M17/N11/K32 host/resident and M1/N1/K16 64-stage validation is separate from broader shape proof.",
+               "Named M17/N11/K32 host/resident and M1/N1/K16 64-stage validation is separate from broader shape proof. "
+               "Three-root two-matmul programs retain explicit FP16/FP32 private intermediates; "
+               "tests/device/nvidia/test_native_tensor_mlp_program.py supplies the additional named numerical proof.",
         numerical_fixture="tests/device/nvidia/test_native_tensor_program_jit.py",
         evidence_target="nvidia_sm120", proof_build="LLVM/MLIR23.1.1+CUDA13.3+RTX5070",
         device_proof="device_verified_jit"),

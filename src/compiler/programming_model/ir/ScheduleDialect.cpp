@@ -356,12 +356,14 @@ LogicalResult ActivationOp::verify() {
   if (!type || type.getRank() != 2 || !type.hasStaticShape() || type.getEncoding() ||
       !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0; }) ||
       getArch() != "sm_120" || getWorkgroupSize() != 128 ||
-      (getStorage() != "f16" && getStorage() != "bf16") ||
-      (getStorage() == "f16" ? !type.getElementType().isF16() : !type.getElementType().isBF16()) ||
+      (getStorage() != "f16" && getStorage() != "bf16" && getStorage() != "f32") ||
+      (getStorage() == "f16" ? !type.getElementType().isF16() :
+       getStorage() == "bf16" ? !type.getElementType().isBF16() :
+                              !type.getElementType().isF32()) ||
       getAccum() != "f32" || getKind() != "relu" || getAxis() != -1 ||
       (getSchedule() != "serial" && getSchedule() != "flat_128") || getNanMode() != "propagate" ||
       getZeroMode() != (getStorage() == "f16" ? "positive" : "preserve"))
-    return emitOpError("requires static rank-two SM120 f16/bf16 serial|flat_128 ReLU with propagated NaNs");
+    return emitOpError("requires static rank-two SM120 f16/bf16/f32 serial|flat_128 ReLU with propagated NaNs");
   return success();
 }
 

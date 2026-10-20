@@ -2402,7 +2402,7 @@ class JitFn:
             if dtype is None and (descriptor.abi_id == NVFP4_EXPAND_ABI or block_quant) and output.dtype == "fp8_e4m3":
                 import ml_dtypes
                 dtype = ml_dtypes.float8_e4m3fn
-            if dtype is None and (nvidia_softmax or activation or native_math or parent_view or rocm_scalar_matmul) and output.dtype == "bf16":
+            if dtype is None and (nvidia_softmax or activation or native_math or parent_view or scalar_matmul) and output.dtype == "bf16":
                 import ml_dtypes
                 dtype = ml_dtypes.bfloat16
             if dtype is None or output.layout != "row_major":

@@ -667,7 +667,9 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         raise ValueError("scheduled matmul operands must be function arguments")
     pair = (args[a_name].ir_type.dtype, args[b_name].ir_type.dtype)
     scalar_fma = (target in {"nvidia_sm120", "rocm_gfx1151", "rocm_gfx1201"}
-                  and op.op_name == "tessera.matmul" and pair.count("fp32") == 1
+                  and op.op_name == "tessera.matmul"
+                  and (pair.count("fp32") == 1 or
+                       (target == "nvidia_sm120" and pair == ("fp32", "fp32")))
                   and set(pair) <= {"fp32", "fp16", "bf16"})
     if (transpose_a or transpose_b) and not nvfp4_scaled and not scalar_fma:
         raise ValueError("scheduled matmul does not support transpose")

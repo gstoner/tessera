@@ -508,15 +508,16 @@ class TraceBuilder:
             values = (None,)
         if graph_name == "tessera.matmul" and kwargs.get("output_dtype") is not None:
             output_dtype = str(kwargs["output_dtype"]).lower()
-            if output_dtype not in {"fp16", "fp32"}:
+            if output_dtype not in {"fp16", "bf16", "fp32"}:
                 raise TesseraTraceError(
-                    "matmul output_dtype must be fp16 or fp32"
+                    "matmul output_dtype must be fp16, bf16 or fp32"
                 )
             if len(dtypes) != 1:
                 raise TesseraTraceError(
                     "matmul output_dtype requires one tensor result"
                 )
             dtypes = (output_dtype,)
+            ir_kwargs["output_dtype"] = output_dtype
         if graph_name == "tessera.reduce":
             if name in {"sum", "mean"}:
                 ir_kwargs.setdefault("kind", name)

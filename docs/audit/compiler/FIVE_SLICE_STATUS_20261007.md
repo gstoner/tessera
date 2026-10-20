@@ -13,12 +13,18 @@ including independent pending producer streams. Nine correctness-gated rows
 separate stage/program event windows and completed public calls. Full local CPU
 passes 30,788 cases (3,710 declared skips); 2,663 compiler cases execute without
 skips. All five surfaces, 33 generated documents and the zero-error type gate
-pass. Publication and synchronization after PR994 remain active. Generic layout/dynamic/AD/encoded and all
+pass. Synchronization with delivered PR994 is complete; publication CI remains active. Generic layout/dynamic/AD/encoded and all
 five aggregate programs remain open.
 Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
 
 
 ## Native multi-matmul MLP increment — 2026-10-20
+
+Delivery update: PR994 merged as 4f53a65c884aada5eaf8da8cef3c2a1a9bae0d23
+after exact-head CI and both resolved reviews. The original FP32-root
+successor above is synchronized with that main; its nine measured IR/frame/
+image identities are unchanged and 27 owning-device regressions pass.
+The earlier candidate statements below are historical checkpoints.
 
 PR993 is delivered as 1b80c6db1ce2d43fbab27b60f4c4dd6df9aa6b31 after
 required exact-head CI and resolved review. The next private W1.1 increment

@@ -13,18 +13,35 @@ Sync: NATIVE-TENSOR-FP32-ROOTS-20261020.
 
 Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
 
+Shared frontend follow-through: explicit matmul BF16 final stores now retain
+FP32 accumulation through the complete eager epilogue, abstract tracing and
+textual Graph typing. BF16 is an existing registered dtype; target-specific
+Schedule admission remains authoritative. The SM120 scalar descriptor also
+allocates BF16 results through its existing typed ABI. This does not certify
+new AD envelopes, half tensor-core output modes or sibling physical support.
+Same-FP32 scalar descriptor admission is aligned only for SM120; the existing
+ROCm descriptor admission boundary remains unchanged.
+
+Exact SM120 final-store parity passes 33 cases, including warm direct scalar
+BF16 calls; publication remains pending.
+
 Candidate parity validated: matching compiler, 170 focused cases, 481 shared
 gates and 18 RTX5070 host/resident cases pass. Nine correctness-gated timing
 rows separate producer/consumer event windows and completed public calls.
 Full local CPU passes 30,788 cases (3,710 declared skips), and all 2,663
 production compiler cases execute without skips. All five surface audits,
-33 generated documents and the zero-error type gate pass. Publication and
-synchronization after PR994 remain follow-up required.
+33 generated documents and the zero-error type gate pass. Publication and exact-head CI remain follow-up required. Synchronization
+after PR994 is complete; measured IR/frame/images are unchanged and
+27 post-sync RTX5070 regressions pass.
 The existing scalar-FMA consumer preserves FP32 root precision; no MMA
 conversion or new frame ABI is introduced.
 
 
 ## NATIVE-TENSOR-MLP-20261020 — native multi-matmul integration candidate
+
+Delivery update: PR994 merged as 4f53a65c884aada5eaf8da8cef3c2a1a9bae0d23
+with all required checks green and both review findings resolved. Candidate
+statements below retain their original evidence checkpoint.
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Sync: NATIVE-TENSOR-MLP-20261020.

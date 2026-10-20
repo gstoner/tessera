@@ -13933,8 +13933,13 @@ Nine timing rows separate cold/public host costs and producer/consumer/program
 event windows. Independent numerical controls reject early half conversion.
 All four backend queues are assessed; no sibling device proof transfers.
 
-Remaining: Full CPU/compiler delivery, final derived-document and publication
-gates. General pitched/dynamic/AD/encoded producers and all five aggregate
-programs remain open.
+Final local delivery: 30,788 CPU passes (3,710 declared skips), all 2,663
+production compiler cases executed without skips, all five surface audits,
+33 generated documents and zero-error mypy pass. PR994 is delivered and the
+successor is synchronized with its main. Nine measured IR/frame/image
+identities are unchanged; 170 host and 27 RTX5070 post-sync checks pass.
+
+Remaining: Exact-head publication CI and review. General pitched/dynamic/
+AD/encoded producers and all five aggregate programs remain open.
 Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
 <!-- entry-fields:end -->

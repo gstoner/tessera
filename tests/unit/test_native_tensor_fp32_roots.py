@@ -100,3 +100,11 @@ def test_fp32_root_signature_declines_pitched_and_unsupported_storage():
     a,b = inputs("f16",False)
     assert input_signature((a[:, ::2], b)) is None
     assert input_signature((a.astype(np.float64), b)) is None
+
+
+def half_result_source(x, weight):
+    return ts.ops.matmul(ts.ops.relu(x), weight, output_dtype="fp16")
+
+
+def bf16_result_source(x, weight):
+    return ts.ops.matmul(ts.ops.relu(x), weight, output_dtype="bf16")

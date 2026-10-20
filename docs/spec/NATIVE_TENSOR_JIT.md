@@ -165,3 +165,30 @@ delivery and publication gates remain active. This candidate does not
 establish pitched/dynamic roots, arbitrary operators or general AD closure.
 
 Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
+
+
+### Final-store integration follow-through
+
+Explicit matmul output storage admits the existing canonical fp16, bf16 and
+fp32 spellings in eager execution, abstract tracing and textual Graph shape
+inference. Accumulation remains FP32 through bias, activation and residual;
+only the completed result is converted. The native SM120 scalar route also
+admits FP32-by-FP32 inputs consistently with its existing native contract,
+and allocates BF16 descriptor results using the existing typed owner.
+This does not widen the half tensor-core output contract or the ROCm
+same-FP32 descriptor envelope.
+
+The initial expanded device test passes six FP16 stores and rejects six
+BF16 stores at frontend validation. After frontend integration, all twelve
+producer final stores pass; an additional warm direct FP32-by-FP32 BF16
+control exposes stale Python Schedule admission. The corrected full device
+rerun passes all 33 cases. Host frontend controls pass twelve cases; the preceding
+shared registry lane passes 493 and compiler regression lane passes 230.
+Full CPU validation predates the last admission edit and must be refreshed.
+No new native ABI, Graph dtype or broader AD certificate is introduced.
+
+The corrected device rerun passes all 33 cases: 18 original host/resident
+producer cases, twelve FP16/BF16 final stores and three direct scalar BF16
+calls with warm tracing disabled. The final focused compiler/frontend gate
+passes 233 cases. Original nine FP32 timing rows remain the measured
+performance envelope; no BF16-store latency claim is added.

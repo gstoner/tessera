@@ -111,3 +111,82 @@ def test_fp32_resident_roots_order_independent_pending_producers(storage,reorder
         finally:
             fn.close_native_storage()
     np.testing.assert_array_equal(actual,saved)
+
+
+@pytest.mark.parametrize("storage", ["f16","bf16","f32"])
+@pytest.mark.parametrize("shape", [(16,32,16),(17,35,19)])
+@pytest.mark.parametrize("output_storage", ["f16","bf16"])
+def test_fp32_root_preserves_native_final_store(storage,shape,output_storage,monkeypatch):
+    from tests.unit.test_native_tensor_fp32_roots import half_result_source,bf16_result_source
+    assert rt._nvidia_device_name()=="sm_120"
+    function=half_result_source if output_storage=="f16" else bf16_result_source
+    dtype=np.float16 if output_storage=="f16" else ml_dtypes.bfloat16
+    fn=ts.jit(target="nvidia_sm120")(function)
+    values=roots(storage,shape,12045,False)
+    def verify(actual):
+        a,b=values
+        lhs=np.maximum(a.astype(np.float64),0)
+        expected=lhs@b.astype(np.float64)
+        u=2**-24
+        gamma=a.shape[1]*u/(1-a.shape[1]*u)
+        radius=gamma*(np.abs(lhs)@np.abs(b.astype(np.float64)))+np.finfo(np.float32).tiny
+        # Round both ends of an independent FP32 accumulation enclosure.
+        # This accounts for the declared final RNE store without a loose rtol.
+        lower=(expected-radius).astype(dtype).astype(np.float64)
+        upper=(expected+radius).astype(dtype).astype(np.float64)
+        assert actual.dtype==np.dtype(dtype)
+        assert np.all((actual.astype(np.float64)>=lower)&(actual.astype(np.float64)<=upper))
+    try:
+        result=fn(*values)
+        verify(result)
+        assert fn.execution_kind=="native_gpu"
+        program=fn._native_tensor_last_program
+        assert program.frame["buffers"][program.frame["output"]]["storage"]==output_storage
+        assert program.frame["buffers"][0]["storage"]=="f32"
+        owner=fn._native_tensor_last_owner
+        before=owner.stats()
+        def forbidden(*args,**kwargs):
+            pytest.fail("native final store used eager conversion, tracing or tools")
+        with monkeypatch.context() as guard:
+            guard.setattr(fn,"_fn",forbidden)
+            guard.setattr(fn,"_trace_frontend_capture",forbidden)
+            guard.setattr(subprocess,"run",forbidden)
+            guard.setattr(subprocess,"Popen",forbidden)
+            actual=fn(*values)
+            verify(actual)
+            assert fn._native_tensor_last_owner is owner
+            assert owner.stats()["allocations"]==before["allocations"]
+        artifact=rt.RuntimeArtifact.from_json(fn.runtime_artifact().to_json())
+        receipt=rt.launch(artifact,dict(zip(artifact.metadata["arg_names"],values,strict=True)))
+        assert receipt["ok"] and receipt["execution_kind"]=="native_gpu",receipt
+        verify(receipt["output"])
+    finally:
+        fn.close_native_storage()
+
+
+@pytest.mark.parametrize("storage", ["f16","bf16","f32"])
+def test_direct_scalar_bf16_store_uses_native_descriptor(storage,monkeypatch):
+    from tests.unit.test_matmul_explicit_store_frontend import bf16_product
+    assert rt._nvidia_device_name()=="sm_120"
+    a,b=roots(storage,(17,35,19),12047,False)
+    fn=ts.jit(target="nvidia_sm120")(bf16_product)
+    expected=a.astype(np.float64)@b.astype(np.float64)
+    u=2**-24
+    gamma=a.shape[1]*u/(1-a.shape[1]*u)
+    radius=gamma*(np.abs(a.astype(np.float64))@np.abs(b.astype(np.float64)))
+    lower=(expected-radius).astype(ml_dtypes.bfloat16).astype(np.float64)
+    upper=(expected+radius).astype(ml_dtypes.bfloat16).astype(np.float64)
+    def verify(result):
+        assert result.dtype==np.dtype(ml_dtypes.bfloat16)
+        assert np.all((result.astype(np.float64)>=lower)&(result.astype(np.float64)<=upper))
+    try:
+        verify(fn(a,b))
+        assert fn.execution_kind=="native_gpu"
+        def forbidden(*args,**kwargs):
+            pytest.fail("warm scalar BF16 store used eager code or tracing")
+        with monkeypatch.context() as guard:
+            guard.setattr(fn,"_fn",forbidden)
+            guard.setattr(fn,"_trace_frontend_capture",forbidden)
+            verify(fn(a,b))
+    finally:
+        fn.close_native_storage()

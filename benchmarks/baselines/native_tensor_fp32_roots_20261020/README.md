@@ -78,5 +78,48 @@ two declared optional-extra skips; benchmark/research/tool/test surfaces have
 no failures. All 33 generated documents are in sync; 41 final operator,
 attribute and audit lifecycle cases pass. Canonical metadata now separately
 names the original FP32-root producer proof, standalone activation proof and
-fused accumulator epilogue proof. Publication waits for PR994 delivery and
-synchronization with its merged main; this private branch is not a second PR.
+fused accumulator epilogue proof. PR994 is merged as
+4f53a65c884aada5eaf8da8cef3c2a1a9bae0d23 after exact-head CI and resolved
+reviews. This successor is synchronized with that main. Its only rebase
+conflict was additive specification text; both contracts are preserved.
+
+
+## Post-main synchronization proof
+
+All nine measured source/Schedule/Tile/Target IR boundaries, checked frames
+and native image hashes are unchanged after rebase (post-main-equivalence.json).
+Compiled compiler/runtime C++ source is unchanged and matches the immutable
+db3a4e86 compiler receipt. The new main contributes the source-fresh census
+and bounded standalone activation dispatch gate, without changing these kernels.
+
+Post-sync host admission/scalar/ownership/dispatch checks pass 170 cases.
+RTX5070 post-sync regressions pass 27 cases: the 18 original FP32-root cases
+and nine standalone activation controls. These overlap earlier runs and are
+not added as unique test counts. Final publication CI remains required.
+
+
+### Final-store integration follow-through
+
+Explicit matmul output storage admits the existing canonical fp16, bf16 and
+fp32 spellings in eager execution, abstract tracing and textual Graph shape
+inference. Accumulation remains FP32 through bias, activation and residual;
+only the completed result is converted. The native SM120 scalar route also
+admits FP32-by-FP32 inputs consistently with its existing native contract,
+and allocates BF16 descriptor results using the existing typed owner.
+This does not widen the half tensor-core output contract or the ROCm
+same-FP32 descriptor envelope.
+
+The initial expanded device test passes six FP16 stores and rejects six
+BF16 stores at frontend validation. After frontend integration, all twelve
+producer final stores pass; an additional warm direct FP32-by-FP32 BF16
+control exposes stale Python Schedule admission. The corrected full device
+rerun passes all 33 cases. Host frontend controls pass twelve cases; the preceding
+shared registry lane passes 493 and compiler regression lane passes 230.
+Full CPU validation predates the last admission edit and must be refreshed.
+No new native ABI, Graph dtype or broader AD certificate is introduced.
+
+The corrected device rerun passes all 33 cases: 18 original host/resident
+producer cases, twelve FP16/BF16 final stores and three direct scalar BF16
+calls with warm tracing disabled. The final focused compiler/frontend gate
+passes 233 cases. Original nine FP32 timing rows remain the measured
+performance envelope; no BF16-store latency claim is added.

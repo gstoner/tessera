@@ -16,7 +16,10 @@ Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
 Candidate parity validated: matching compiler, 170 focused cases, 481 shared
 gates and 18 RTX5070 host/resident cases pass. Nine correctness-gated timing
 rows separate producer/consumer event windows and completed public calls.
-Full delivery and publication gates remain follow-up required.
+Full local CPU passes 30,788 cases (3,710 declared skips), and all 2,663
+production compiler cases execute without skips. All five surface audits,
+33 generated documents and the zero-error type gate pass. Publication and
+synchronization after PR994 remain follow-up required.
 The existing scalar-FMA consumer preserves FP32 root precision; no MMA
 conversion or new frame ABI is introduced.
 

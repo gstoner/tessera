@@ -10,8 +10,10 @@ The original FP32 root survives ReLU and the native scalar-FMA matmul consumer
 without half/TF32 conversion. The matching compiler passes 170 focused cases,
 481 shared registry/lifecycle gates and 18 RTX5070 host/resident cases,
 including independent pending producer streams. Nine correctness-gated rows
-separate stage/program event windows and completed public calls. Full delivery
-and publication gates remain active. Generic layout/dynamic/AD/encoded and all
+separate stage/program event windows and completed public calls. Full local CPU
+passes 30,788 cases (3,710 declared skips); 2,663 compiler cases execute without
+skips. All five surfaces, 33 generated documents and the zero-error type gate
+pass. Publication and synchronization after PR994 remain active. Generic layout/dynamic/AD/encoded and all
 five aggregate programs remain open.
 Evidence: benchmarks/baselines/native_tensor_fp32_roots_20261020/README.md.
 

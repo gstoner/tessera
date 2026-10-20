@@ -69,3 +69,14 @@ x86: no AVX-512 consumer change; independent storage/lifetime proof required.
 General pitched/bounded/dynamic roots, arbitrary producer operators, encoded
 storage and broader AD remain open. This named static storage increment
 does not close W1.1 or any aggregate five-slice program.
+
+
+## Final local delivery checks
+
+The zero-error mypy ratchet and all five surface audits pass. Examples have
+two declared optional-extra skips; benchmark/research/tool/test surfaces have
+no failures. All 33 generated documents are in sync; 41 final operator,
+attribute and audit lifecycle cases pass. Canonical metadata now separately
+names the original FP32-root producer proof, standalone activation proof and
+fused accumulator epilogue proof. Publication waits for PR994 delivery and
+synchronization with its merged main; this private branch is not a second PR.

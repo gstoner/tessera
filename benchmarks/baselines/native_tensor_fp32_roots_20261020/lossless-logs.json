@@ -73,5 +73,20 @@
     "gzip_file": "fp32-root-compiler-final.xml.gz",
     "uncompressed_sha256": "3aed9773b5a0652c6d4cd6b6b4e363c19da43b50043cad41e5952533c77e1361",
     "gzip_sha256": "c5ebb441293e3761dc833d727be2e2ea54edb5b85cedeea450a34128628909f2"
+  },
+  "fp32-root-delivery-mypy.txt": {
+    "gzip_file": "fp32-root-delivery-mypy.txt.gz",
+    "uncompressed_sha256": "5ed9bf8f9e3566d76904ed42bb23ebd133e99469c9d0041a8039dacff7ab4b26",
+    "gzip_sha256": "acf9f1fa9e0b29bfc06c5cd63aa5c6a540c7a3e250a0e05d12bdfe5b5acd153e"
+  },
+  "fp32-root-delivery-surfaces.txt": {
+    "gzip_file": "fp32-root-delivery-surfaces.txt.gz",
+    "uncompressed_sha256": "d45f7d068ec24c02c7b11a425635599ab1a050c69424f2a33c8125a223e3e890",
+    "gzip_sha256": "939b97b6cf5262a96ab64b41c696ccbea7786ce218952a600727e22d03eeba6c"
+  },
+  "fp32-root-delivery-docs.txt": {
+    "gzip_file": "fp32-root-delivery-docs.txt.gz",
+    "uncompressed_sha256": "820681f30bd78df2b993621f65fd0a853c3c97eebe9e9d58ee349a6b0bf26476",
+    "gzip_sha256": "1bb7d0b27d4fbe2fceb6380c43b56002b185b79e3b8e92504802fb1f922e39d9"
   }
 }

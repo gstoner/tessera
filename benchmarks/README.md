@@ -138,6 +138,7 @@ named here. Paths are relative to `benchmarks/`; outputs are under
 | nvidia/record_native_tensor_full_pipeline.py | baselines/native_tensor_full_pipeline_20261020/ (complete registered Graph-to-NVVM route; separate compile/replay/image, preparation, member/program events and completed-owner timing) |
 | nvidia/record_native_tensor_bounded_dag.py | baselines/native_tensor_bounded_dag_20261020/ (seven native DAG families; changed-M image/arena reuse, independent numerical checks and separate CUDA/public-call domains) |
 | nvidia/record_native_semantic_dag.py | baselines/native_semantic_dag_20261021/ (one-root semantic DAGs; independent numerical checks, changed-M arena reuse and separate device/public-call timings) |
+| nvidia/record_native_independent_shapes.py | baselines/native_independent_shapes_20261021/ (four compact SM120 families; independent M/N/K, compiled native shape companion, owning-device numerics and separate member/program/public characterization) |
 | nvidia/record_native_tensor_bounded_binary.py | baselines/native_tensor_bounded_binary_20261020/ (one retained M-bounded program per storage; separate compile/prepare, device member/program and completed-public scopes) |
 | nvidia/record_native_tensor_mlp.py | baselines/native_tensor_mlp_20261020/ and baselines/native_tensor_fp32_roots_20261020/ (MLP and original FP32 roots; independent native event and public timing windows) |
 | nvidia/record_native_tensor_jit.py | baselines/native_tensor_jit_20261020/ (correctness-gated ABBA public latency and separate CUDA windows) |

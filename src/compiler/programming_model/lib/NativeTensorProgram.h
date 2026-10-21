@@ -2,6 +2,7 @@
 // Numerical kernels remain the existing independently verified leaf lowerings.
 #pragma once
 #include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "NativeTensorShapePlan.h"
 
 namespace tensor_program {
 struct Sm120MatmulKernel {
@@ -58,6 +59,11 @@ inline mlir::ArrayAttr bufferTypes(mlir::Operation *operation) {
   auto types = activeBufferTypes(operation);
   auto member = operation->getParentOfType<ModuleOp>();
   auto bound = member->getAttrOfType<IntegerAttr>("tessera.native.tensor_program_row_bound");
+  auto function = operation->getParentOfType<func::FuncOp>();
+  if (member->hasAttr("tessera.native.tensor_program_shape_profile") && function &&
+      function->hasAttr("tessera.native.tensor_shape_capacity"))
+    if (auto capacities = member->getAttrOfType<ArrayAttr>("tessera.native.tensor_program_capacity_types"))
+      return capacities;
   if (!bound) return types;
   SmallVector<Attribute> result;
   for (Attribute attr : types) {
@@ -69,7 +75,8 @@ inline mlir::ArrayAttr bufferTypes(mlir::Operation *operation) {
   return ArrayAttr::get(operation->getContext(),result);
 }
 inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
-                                   int64_t projectedRowBound = 0) {
+                                   int64_t projectedRowBound = 0,
+    const tessera::native_tensor_program::TensorShapeProfile *shapeProfile = nullptr) {
   using namespace mlir;
   selected = false;
   if (module->hasAttr("tessera.native.tensor_program") ||
@@ -110,13 +117,46 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
     return root.emitError("Graph->Schedule native tensor program requires a compact typed "
                           "producer DAG with verified static or bounded leading rows");
   };
+  OpBuilder builder(module.getContext());
+  if (module->hasAttr("tessera.native.tensor_program_shape_bounds_request")) {
+    auto bounds = module->getAttrOfType<DictionaryAttr>("tessera.native.tensor_program_shape_bounds_request");
+    if (!bounds) return reject();
+    std::string source;
+    llvm::raw_string_ostream stream(source); module.print(stream); stream.flush();
+    OwningOpRef<ModuleOp> projected(cast<ModuleOp>(module->clone()));
+    projected->getOperation()->removeAttr("tessera.native.tensor_program_shape_bounds_request");
+    auto function = *projected->getOps<func::FuncOp>().begin();
+    auto profile = tessera::native_tensor_program::TensorShapeProfile::analyze(function, bounds);
+    if (failed(profile)) return reject();
+    for (Operation &operation : function.getBody().front().without_terminator()) {
+      if (operation.getName().getStringRef() != "tessera.matmul") continue;
+      auto left = profile->capacities.find(operation.getOperand(0))->second;
+      auto right = profile->capacities.find(operation.getOperand(1))->second;
+      auto a = operation.getAttrOfType<BoolAttr>("transposeA");
+      auto b = operation.getAttrOfType<BoolAttr>("transposeB");
+      unsigned m = a && a.getValue() ? 1 : 0, n = b && b.getValue() ? 0 : 1;
+      auto wanted = builder.getI64ArrayAttr({left[m], right[n], left[1-m]});
+      if (Attribute prior = operation.getAttr("shape_bounds"); prior && prior != wanted)
+        return reject();
+      operation.setAttr("shape_bounds", wanted);
+    }
+    profile->projectTypes(function);
+    bool admitted = false;
+    if (failed(outline(*projected, admitted, 0, &*profile)) || !admitted) return reject();
+    projected->getOperation()->setAttr("tessera.native.tensor_program_source", builder.getStringAttr(StringRef(source).trim()));
+    projected->getOperation()->setAttr("tessera.native.tensor_program_source_sha256",
+        builder.getStringAttr(llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(StringRef(source).trim())),true)));
+    module->setAttrs(projected->getOperation()->getAttrs());
+    module.getBodyRegion().takeBody(projected->getRegion());
+    selected = true;
+    return success();
+  }
   for (Operation *owner : {module.getOperation(), root.getOperation()})
     for (NamedAttribute attribute : owner->getAttrs()) {
       StringRef name = attribute.getName().getValue();
       if (name == "tessera.autodiff" || name.starts_with("tessera.autodiff."))
         return root.emitError("pending differentiation must be transformed before primal tensor program projection");
     }
-  OpBuilder builder(module.getContext());
   auto ret = dyn_cast<func::ReturnOp>(root.getBody().front().back());
   if (root.getNumArguments() < 1 || root.getNumResults() != 1 || !ret ||
       ret.getNumOperands() != 1 ||
@@ -126,31 +166,24 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
   // same-shape semantic edges and matmul LHS/result rows are equal; equal
   // numeric extents (including trace-at-one and M == K) imply no relation.
   auto rowComponent = [&]() -> FailureOr<llvm::DenseSet<Value>> {
+    tessera::native_tensor_program::TensorShapeRelations relations;
+    for (Value argument : root.getArguments())
+      if (failed(relations.addValue(argument))) return failure();
+    for (Operation *op : operations)
+      if (failed(relations.addOperation(op))) return failure();
+    Value output = product->getResult(0);
     llvm::DenseSet<Value> varying;
-    varying.insert(product->getResult(0));
-    bool changed = true;
-    while (changed) {
-      changed = false;
-      for (Operation *op : operations) {
-        auto name = op->getName().getStringRef();
-        bool matrix = name == "tessera.matmul";
-        bool binary = name == "tessera.add";
-        if ((!matrix && !binary && name != "tessera.relu" &&
-             name != "tessera.rmsnorm" && name != "tessera.layer_norm" &&
-             name != "tessera.softmax") || op->getNumResults() != 1 ||
-            op->getNumOperands() != (matrix || binary ? 2u : 1u))
-          return failure();
-        SmallVector<Value> related{op->getResult(0), op->getOperand(0)};
-        if (binary) related.push_back(op->getOperand(1));
-        if (!llvm::any_of(related, [&](Value value) { return varying.contains(value); }))
-          continue;
-        for (Value value : related) changed |= varying.insert(value).second;
-      }
+    for (auto dimension : relations.getDimensions()) {
+      if (!relations.equivalent(dimension.tensor, dimension.axis, output, 0)) continue;
+      // The v2 row profile keeps all nonleading dimensions fixed. A general
+      // shape profile will bind independent components through native shape IR.
+      if (dimension.axis != 0) return failure();
+      varying.insert(dimension.tensor);
     }
     for (Operation *op : operations)
       if (op->getName().getStringRef() == "tessera.matmul" &&
           varying.contains(op->getOperand(1)))
-        return failure(); // The same SSA row cannot be both runtime M and fixed K.
+        return failure(); // Preserve the existing M-only fixed-K contract.
     return varying;
   };
   if (module->hasAttr("tessera.native.tensor_program_row_bound_request")) {
@@ -218,7 +251,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
     auto tensor = dyn_cast<RankedTensorType>(type);
     return tensor && !tensor.hasStaticShape();
   });
-  if (dynamic) {
+  if (dynamic && !shapeProfile) {
     auto component = rowComponent();
     if (failed(component)) return reject();
     if (!rowBound) {
@@ -251,15 +284,19 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
       if (op->getAttr("shape_bounds") != wanted) return reject();
     }
   }
-  auto bufferType = [&](Type type) -> MemRefType {
-    auto tensor = dyn_cast<RankedTensorType>(type);
+  auto bufferType = [&](Value value) -> MemRefType {
+    auto tensor = dyn_cast<RankedTensorType>(value.getType());
     if (!tensor || tensor.getRank() != 2 ||
-        (!tensor.hasStaticShape() && (!rowBound || !tensor.isDynamicDim(0) || tensor.isDynamicDim(1))) ||
+        (!tensor.hasStaticShape() && !shapeProfile && (!rowBound || !tensor.isDynamicDim(0) || tensor.isDynamicDim(1))) ||
         tensor.getEncoding() ||
         (!tensor.getElementType().isF16() && !tensor.getElementType().isBF16() &&
          !tensor.getElementType().isF32())) return {};
     SmallVector<int64_t> shape(tensor.getShape());
-    if (ShapedType::isDynamic(shape[0])) shape[0] = rowBound;
+    if (shapeProfile) {
+      auto capacity = shapeProfile->capacities.find(value);
+      if (capacity == shapeProfile->capacities.end()) return {};
+      shape.assign(capacity->second.begin(), capacity->second.end());
+    } else if (ShapedType::isDynamic(shape[0])) shape[0] = rowBound;
     int64_t bytes = tensor.getElementType().getIntOrFloatBitWidth() / 8;
     for (int64_t extent : shape) {
       if (extent <= 0 || extent > INT32_MAX || bytes > INT64_MAX / extent)
@@ -270,7 +307,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
   };
   for (auto [index, arg] : llvm::enumerate(root.getArguments())) {
     auto attrs = root.getArgAttrDict(index);
-    auto type = bufferType(arg.getType());
+    auto type = bufferType(arg);
     if (!type || (attrs && !attrs.empty()))
       return reject();
   }
@@ -311,7 +348,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
           if (!flag || flag.getValue()) return reject();
         }
     }
-    if (op->getNumResults() != 1 || !bufferType(op->getResult(0).getType()) ||
+    if (op->getNumResults() != 1 || !bufferType(op->getResult(0)) ||
         op->getNumRegions() || !isMemoryEffectFree(op) ||
         (!terminal && !live.contains(op)) ||
         (!matrix && (op->getNumOperands() != (name == "tessera.add" ? 2u : 1u) ||
@@ -324,9 +361,9 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
     available.insert(op->getResult(0));
   }
   SmallVector<Type> storage;
-  for (Value arg : root.getArguments()) storage.push_back(bufferType(arg.getType()));
+  for (Value arg : root.getArguments()) storage.push_back(bufferType(arg));
   for (Operation *op : operations)
-    storage.push_back(bufferType(op->getResult(0).getType()));
+    storage.push_back(bufferType(op->getResult(0)));
   if (failed(tessera::native_tensor_program::verifyFrameCapacity(
           root, storage, operations.size())))
     return failure();
@@ -347,6 +384,22 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
         builder.getFunctionType(inputs, op->getResultTypes()));
     if (rowBound && cast<RankedTensorType>(op->getResult(0).getType()).isDynamicDim(0))
       function->setAttr("tessera.native.tensor_row_bound", builder.getI64IntegerAttr(rowBound));
+    if (shapeProfile) {
+      child->setAttr("tessera.native.tensor_program_shape_profile", builder.getUnitAttr());
+      SmallVector<Attribute> capacities;
+      SmallVector<int64_t> bindings;
+      for (Value value : op->getOperands()) {
+        capacities.push_back(TypeAttr::get(bufferType(value)));
+        llvm::append_range(bindings, shapeProfile->symbols.find(value)->second);
+      }
+      capacities.push_back(TypeAttr::get(bufferType(op->getResult(0))));
+      llvm::append_range(bindings, shapeProfile->symbols.find(op->getResult(0))->second);
+      child->setAttr("tessera.native.tensor_program_capacity_types", builder.getArrayAttr(capacities));
+      child->setAttr("tessera.native.tensor_program_dimension_bindings", builder.getDenseI64ArrayAttr(bindings));
+      function->setAttr("tessera.native.tensor_shape_capacity",
+          builder.getDenseI64ArrayAttr(shapeProfile->capacities.find(op->getResult(0))->second));
+      function->setAttr("tessera.native.tensor_dimension_bindings", builder.getDenseI64ArrayAttr(bindings));
+    }
     child.push_back(function);
     Block *block = function.addEntryBlock();
     OpBuilder leaf(block, block->begin());
@@ -376,7 +429,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
   std::string source;
   llvm::raw_string_ostream stream(source);
   module.print(stream); stream.flush();
-  const int64_t version = rowBound ? 2 : 1;
+  const int64_t version = shapeProfile ? 3 : rowBound ? 2 : 1;
   module->setAttr("tessera.native.tensor_program", builder.getI64IntegerAttr(version));
   if (rowBound) {
     SmallVector<int64_t> active;
@@ -417,13 +470,70 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
   Value activeRows;
   if (rowBound)
     activeRows = memref::DimOp::create(hb,root.getLoc(),body->getArgument(rowRoot),0);
+  SmallVector<Value> activeDimensions;
+  if (shapeProfile) {
+    SmallVector<int64_t> variables;
+    SmallVector<Attribute> capacityTypes, bindings;
+    for (auto variable : shapeProfile->variables) {
+      Value extent = memref::DimOp::create(hb, root.getLoc(), body->getArgument(variable.argument), variable.axis);
+      auto zero = arith::ConstantIndexOp::create(hb, root.getLoc(), 0);
+      auto capacity = arith::ConstantIndexOp::create(hb, root.getLoc(), variable.capacity);
+      auto positive = arith::CmpIOp::create(hb, root.getLoc(), arith::CmpIPredicate::ugt, extent, zero);
+      auto fits = arith::CmpIOp::create(hb, root.getLoc(), arith::CmpIPredicate::ule, extent, capacity);
+      auto valid = arith::AndIOp::create(hb, root.getLoc(), positive, fits);
+      cf::AssertOp::create(hb, root.getLoc(), valid, hb.getStringAttr("native tensor shape extent violates positive capacity"));
+      activeDimensions.push_back(extent);
+      variables.push_back(variable.argument);
+      variables.push_back(variable.axis);
+      variables.push_back(variable.capacity);
+    }
+    for (auto [index, argument] : llvm::enumerate(root.getArguments())) {
+      auto bindings = shapeProfile->symbols.find(argument)->second;
+      for (unsigned axis = 0; axis < 2; ++axis) {
+        int64_t symbol = bindings[axis];
+        if (symbol < 0) continue;
+        auto origin = shapeProfile->variables[symbol];
+        if (origin.argument == index && origin.axis == axis) continue;
+        Value actual = memref::DimOp::create(hb, root.getLoc(), body->getArgument(index), axis);
+        auto same = arith::CmpIOp::create(hb, root.getLoc(), arith::CmpIPredicate::eq,
+                                        actual, activeDimensions[symbol]);
+        cf::AssertOp::create(hb, root.getLoc(), same,
+                            hb.getStringAttr("native tensor semantic dimension equality violated"));
+      }
+    }
+    for (Value value : shapeProfile->values) {
+      capacityTypes.push_back(TypeAttr::get(bufferType(value)));
+      bindings.push_back(builder.getDenseI64ArrayAttr(shapeProfile->symbols.find(value)->second));
+    }
+    module->setAttr("tessera.native.tensor_program_shape_variables", builder.getDenseI64ArrayAttr(variables));
+    module->setAttr("tessera.native.tensor_program_capacity_types", builder.getArrayAttr(capacityTypes));
+    module->setAttr("tessera.native.tensor_program_shape_bindings", builder.getArrayAttr(bindings));
+  }
   SmallVector<Value> privateBuffers;
   for (auto [index, op] : llvm::enumerate(operations)) {
     Value allocation = memref::AllocOp::create(hb, op->getLoc(),
-        bufferType(op->getResult(0).getType()));
+        bufferType(op->getResult(0)));
     Value output = allocation;
     auto type = activeType(op->getResult(0).getType());
-    if (rowBound && type.isDynamicDim(0)) {
+    if (shapeProfile && !type.hasStaticShape()) {
+      auto symbols = shapeProfile->symbols.find(op->getResult(0))->second;
+      auto capacity = shapeProfile->capacities.find(op->getResult(0))->second;
+      SmallVector<OpFoldResult> sizes;
+      SmallVector<Value> dims;
+      for (unsigned axis = 0; axis < 2; ++axis) {
+        Value dim = symbols[axis] >= 0 ? activeDimensions[symbols[axis]] :
+            arith::ConstantIndexOp::create(hb, op->getLoc(), capacity[axis]).getResult();
+        dims.push_back(dim);
+        sizes.push_back(symbols[axis] >= 0 ? OpFoldResult(dim) : OpFoldResult(hb.getIndexAttr(capacity[axis])));
+      }
+      Value count = arith::MulIOp::create(hb, op->getLoc(), dims[0], dims[1]);
+      Value limit = arith::ConstantIndexOp::create(hb, op->getLoc(), capacity[0] * capacity[1]);
+      auto fits = arith::CmpIOp::create(hb, op->getLoc(), arith::CmpIPredicate::ule, count, limit);
+      cf::AssertOp::create(hb, op->getLoc(), fits, hb.getStringAttr("native tensor active view exceeds allocation capacity"));
+      SmallVector<OpFoldResult> strides{sizes[1], hb.getIndexAttr(1)};
+      output = memref::ReinterpretCastOp::create(hb, op->getLoc(), type, allocation,
+          hb.getIndexAttr(0), sizes, strides);
+    } else if (rowBound && type.isDynamicDim(0)) {
       SmallVector<OpFoldResult> offsets{hb.getIndexAttr(0),hb.getIndexAttr(0)};
       SmallVector<OpFoldResult> sizes{activeRows,hb.getIndexAttr(type.getDimSize(1))};
       SmallVector<OpFoldResult> strides{hb.getIndexAttr(1),hb.getIndexAttr(1)};
@@ -459,9 +569,10 @@ inline mlir::LogicalResult exportFrame(mlir::ModuleOp module) {
   using namespace mlir;
   auto schema = module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program");
   if (!schema || !schema.getType().isInteger(64) ||
-      (schema.getInt() != 1 && schema.getInt() != 2))
-    return module.emitError("native tensor frame requires module schema 1 or 2");
+      (schema.getInt() != 1 && schema.getInt() != 2 && schema.getInt() != 3))
+    return module.emitError("native tensor frame requires module schema 1, 2 or 3");
   bool bounded = schema.getInt() == 2;
+  bool shaped = schema.getInt() == 3;
   SmallVector<func::FuncOp> hosts(module.getOps<func::FuncOp>());
   if (hosts.size() != 1 || !hosts.front().getBody().hasOneBlock() ||
       hosts.front().getBody().front().empty())
@@ -474,12 +585,19 @@ inline mlir::LogicalResult exportFrame(mlir::ModuleOp module) {
   auto ret = dyn_cast<func::ReturnOp>(host.getBody().front().back());
   if (!ret || ret.getNumOperands() != 1)
     return host.emitError("native tensor frame needs one returned allocation");
+  tessera::native_tensor_program::ShapeMemoryContract memory;
+  if (shaped) {
+    Operation *first = nullptr;
+    for (Operation &op : host.getBody().front())
+      if (tessera::native_tensor_program::isInvocation(&op)) { first = &op; break; }
+    if (!first || failed(memory.verify(module, host, first))) return failure();
+  }
   int64_t rowBound = bounded ? module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program_row_bound").getInt() : 0;
   auto capacityType = [&](Type raw) -> MemRefType {
     return bounded ? tessera::native_tensor_program::capacityType(raw,rowBound) : cast<MemRefType>(raw);
   };
   SmallVector<Type> storage;
-  for (Type type : host.getArgumentTypes()) storage.push_back(capacityType(type));
+  for (Value value : host.getArguments()) storage.push_back(shaped ? memory.capacity(value) : capacityType(value.getType()));
   size_t stageCount = 0;
   for (Operation &operation : host.getBody().front()) {
     if (auto allocation = dyn_cast<memref::AllocOp>(operation))
@@ -494,7 +612,7 @@ inline mlir::LogicalResult exportFrame(mlir::ModuleOp module) {
   auto addBuffer = [&](Value value, StringRef role) {
     int64_t id = buffers.size();
     ids[value] = id;
-    auto type = capacityType(value.getType());
+    auto type = shaped ? memory.capacity(value) : capacityType(value.getType());
     llvm::json::Array shape;
     for (int64_t dim : type.getShape()) shape.push_back(dim);
     std::string storage;
@@ -511,6 +629,8 @@ inline mlir::LogicalResult exportFrame(mlir::ModuleOp module) {
       addBuffer(allocation, allocation.getResult() ==
           tessera::native_tensor_program::capacityBase(ret.getOperand(0)) ? "output" : "private");
     if (auto view = dyn_cast<memref::SubViewOp>(operation))
+      ids[view.getResult()] = ids.lookup(view.getSource());
+    if (auto view = dyn_cast<memref::ReinterpretCastOp>(operation))
       ids[view.getResult()] = ids.lookup(view.getSource());
     if (auto *invoke = &operation; native_tensor_program::isInvocation(invoke)) {
       llvm::json::Array inputs, scalars, geometry;
@@ -537,11 +657,27 @@ inline mlir::LogicalResult exportFrame(mlir::ModuleOp module) {
     }
   }
   llvm::json::Object frame{
-    {"schema", bounded ? "tessera.native.tensor_program_frame.v2" : "tessera.native.tensor_program_frame.v1"},
+    {"schema", shaped ? "tessera.native.tensor_program_frame.v3" : bounded ? "tessera.native.tensor_program_frame.v2" : "tessera.native.tensor_program_frame.v1"},
     {"target","nvidia_sm120"},{"architecture","sm_120"},
     {"function",host.getName().str()},{"buffers",std::move(buffers)},
     {"roots",std::move(roots)},{"stages",std::move(stages)},
     {"output",ids.lookup(ret.getOperand(0))}};
+  if (shaped) {
+    auto program = exportShapeProgram(module, host, ids, stageCount);
+    if (failed(program)) return failure();
+    frame["shape_program"] = std::move(*program);
+    llvm::json::Array bindings, variables;
+    for (auto axes : memory.bindings) {
+      llvm::json::Array pair;
+      for (int64_t axis : axes) pair.push_back(axis);
+      bindings.push_back(std::move(pair));
+    }
+    auto source = module->getAttrOfType<DenseI64ArrayAttr>("tessera.native.tensor_program_shape_variables");
+    for (size_t i = 0; i < source.size(); i += 3)
+      variables.push_back(llvm::json::Array{source[i], source[i + 1], source[i + 2]});
+    frame["shape_bindings"] = std::move(bindings);
+    frame["shape_variables"] = std::move(variables);
+  }
   if (bounded) {
     frame["row_bound"] = module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program_row_bound").getInt();
     frame["row_root"] = module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program_row_root").getInt();

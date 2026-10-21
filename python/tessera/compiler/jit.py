@@ -2675,12 +2675,13 @@ class JitFn:
     def _native_tensor_last_receipt(self, value):
         self._native_tensor_thread_state.last_receipt = value
 
-    def _try_native_tensor_program_call(self, args, kwargs, *, row_bound=None):
+    def _try_native_tensor_program_call(self, args, kwargs, *, row_bound=None, shape_bounds=None):
         """Bind a compiler-admitted program; warm calls do not trace or compile."""
         if (normalize_target_kind(self.target) != "nvidia_sm120"
                 or self.differentiation_request is not None):
             return _JIT_FALLBACK
-        from .native_tensor_jit import bounded_signature, input_signature, matches_bounded_signature
+        from .native_tensor_jit import (bounded_signature, input_signature, matches_bounded_signature,
+                                        shape_signature, matches_shape_signature)
         from .native_tensor_program import compile_native_tensor_program
         from .scheduled_matmul import find_tessera_opt
         from tessera import runtime as rt
@@ -2694,7 +2695,14 @@ class JitFn:
         with self._native_tensor_lock:
             if self._native_tensor_pid is not None and self._native_tensor_pid != os.getpid():
                 raise RuntimeError("native tensor JIT cannot cross fork")
-            if row_bound is not None:
+            if shape_bounds is not None:
+                for key in self._native_tensor_program_cache:
+                    if matches_shape_signature(signature, key, shape_bounds):
+                        signature = key
+                        break
+                else:
+                    signature = ("bounded_shape_trace", tuple(sorted(shape_bounds.items())), signature)
+            elif row_bound is not None:
                 for key in self._native_tensor_program_cache:
                     if matches_bounded_signature(signature, key, row_bound):
                         signature = key
@@ -2708,18 +2716,29 @@ class JitFn:
                 if tool is None:
                     return _JIT_FALLBACK
                 provider = rt._load_nvidia_ptx_launch()
-                required_prepare = ("tessera_nvidia_native_frame_prepare_v2" if row_bound is not None
+                required_prepare = ("tessera_nvidia_native_frame_prepare_v3" if shape_bounds is not None else
+                                    "tessera_nvidia_native_frame_prepare_v2" if row_bound is not None
                                     else "tessera_nvidia_native_frame_prepare_v1")
-                if provider is None or not hasattr(provider, required_prepare):
+                if (provider is None or not hasattr(provider, required_prepare)
+                        or (shape_bounds is not None and not hasattr(provider, "tessera_nvidia_native_frame_shapes_v3"))):
                     return _JIT_FALLBACK
                 module = self._traced_autodiff_module(ordered, {})
-                if row_bound is not None:
+                if shape_bounds is not None:
+                    from dataclasses import replace
+
+                    request = "{" + ", ".join(f"{name} = {capacity} : i64"
+                                                for name, capacity in sorted(shape_bounds.items())) + "}"
+                    module = replace(module, module_attrs={**module.module_attrs,
+                        "tessera.native.tensor_program_shape_bounds_request": request})
+                elif row_bound is not None:
                     from dataclasses import replace
 
                     module = replace(module, module_attrs={**module.module_attrs,
                         "tessera.native.tensor_program_row_bound_request": f"{row_bound} : i64"})
                 program = compile_native_tensor_program(module, tool=tool)
-                if program is not None and row_bound is not None:
+                if program is not None and shape_bounds is not None:
+                    signature = shape_signature(input_signature(ordered), program.frame, shape_bounds)
+                elif program is not None and row_bound is not None:
                     signature = bounded_signature(input_signature(ordered), program.frame)
                 if len(self._native_tensor_program_cache) >= 24:
                     retired = next(iter(self._native_tensor_program_cache))
@@ -2882,10 +2901,15 @@ class JitFn:
 
             self._bounded_lhs.certificate.validate()
             bounds = dict(self._bounded_lhs.bounds)
-            if set(bounds) != {"M"} or self._bounded_lhs.rhs_storage_order not in (None, "row_major"):
-                raise TesseraJitError("native tensor program currently requires a compact M-only bound")
-            module = replace(module, module_attrs={**module.module_attrs,
-                "tessera.native.tensor_program_row_bound_request": f"{bounds['M']} : i64"})
+            if self._bounded_lhs.rhs_storage_order not in (None, "row_major"):
+                raise TesseraJitError("native tensor program requires compact row-major bounds")
+            if set(bounds) == {"M"}:
+                module = replace(module, module_attrs={**module.module_attrs,
+                    "tessera.native.tensor_program_row_bound_request": f"{bounds['M']} : i64"})
+            else:
+                request = "{" + ", ".join(f"{name} = {capacity} : i64" for name, capacity in sorted(bounds.items())) + "}"
+                module = replace(module, module_attrs={**module.module_attrs,
+                    "tessera.native.tensor_program_shape_bounds_request": request})
         program = compile_native_tensor_program(module)
         if program is None:
             raise TesseraJitError("native compiler did not admit this tensor program profile")

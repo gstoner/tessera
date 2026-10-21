@@ -1,0 +1,41 @@
+{
+  "shape_mnk": [
+    65,
+    47,
+    64
+  ],
+  "seed": 23403,
+  "programs": {
+    "f16": {
+      "frame_schema": "tessera.native.tensor_program_frame.v1",
+      "image_sha256": [
+        "803424fe33ffd68161f871e28d1c3e6e603d7a4e58233f942457de303f044132",
+        "3fdca3864f2b3dbf56e0ac5d08fe3492cdccae925768476ee40155ffd176bdd5"
+      ]
+    },
+    "f32": {
+      "frame_schema": "tessera.native.tensor_program_frame.v1",
+      "image_sha256": [
+        "eae8bbe6701a83c47e7156088b7af854979e0a8555e000b67e44a6c1e0846404",
+        "84b0664afaa6a28fa40c4dee7ca48d0ab1bbe99bfcd6be1d2d7c69afa49da2ca"
+      ]
+    }
+  },
+  "fp16_differs_from_float64_rounding_count": 1,
+  "fp16_matches_native_fp32_rounded": true,
+  "native_fp32_max_abs_error_from_float64": 2.602907360760298e-07,
+  "native_fp32_max_relative_error_from_float64": 1.243222542987451e-07,
+  "public_error_against_float64_rounded_intermediate": 0.00015599105972796679,
+  "public_error_against_measured_native_intermediate": 9.93022695183754e-07,
+  "public_matches_measured_intermediate_gemm_bound": true,
+  "quantization_boundary_witnesses": [
+    {
+      "row": 11,
+      "col": 33,
+      "ideal": -0.3160400430729253,
+      "native_f32": -0.3160400390625,
+      "rounded_ideal": -0.316162109375,
+      "native_f16": -0.31591796875
+    }
+  ]
+}

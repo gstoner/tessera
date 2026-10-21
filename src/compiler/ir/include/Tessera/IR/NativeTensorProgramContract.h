@@ -7,6 +7,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Verifier.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include <climits>
@@ -73,6 +74,7 @@ inline bool isLaunchGeometry(llvm::ArrayRef<int64_t> geometry) {
 // for a smaller resident input merely because its caller declared an M bound.
 inline mlir::Value capacityBase(mlir::Value value) {
   if (auto view = value.getDefiningOp<mlir::memref::SubViewOp>()) return view.getSource();
+  if (auto view = value.getDefiningOp<mlir::memref::ReinterpretCastOp>()) return view.getSource();
   return value;
 }
 inline mlir::MemRefType capacityType(mlir::Type raw, int64_t rowBound) {
@@ -87,6 +89,154 @@ inline mlir::MemRefType capacityType(mlir::Type raw, int64_t rowBound) {
   auto capacity = MemRefType::get(shape,type.getElementType());
   return isPhysicalBuffer(capacity) ? capacity : MemRefType{};
 }
+struct ShapeMemoryContract {
+  llvm::SmallVector<mlir::Value> owned, dimensions;
+  llvm::SmallVector<mlir::MemRefType> capacities;
+  llvm::SmallVector<llvm::SmallVector<int64_t>> bindings;
+
+  int64_t index(mlir::Value value) const {
+    if (auto view = value.getDefiningOp<mlir::memref::ReinterpretCastOp>())
+      value = view.getSource();
+    auto found = llvm::find(owned, value);
+    return found == owned.end() ? -1 : std::distance(owned.begin(), found);
+  }
+  mlir::MemRefType capacity(mlir::Value value) const {
+    int64_t id = index(value);
+    return id < 0 ? mlir::MemRefType{} : capacities[id];
+  }
+  bool matches(mlir::Value value, mlir::Type raw) const {
+    using namespace mlir;
+    int64_t id = index(value);
+    auto type = dyn_cast<ShapedType>(raw);
+    if (id < 0 || !type || !type.hasRank() || type.getRank() != 2 ||
+        type.getElementType() != capacities[id].getElementType()) return false;
+    for (unsigned axis = 0; axis < 2; ++axis)
+      if (type.getDimSize(axis) != (bindings[id][axis] < 0 ?
+          capacities[id].getDimSize(axis) : ShapedType::kDynamic)) return false;
+    return true;
+  }
+  static bool integer(mlir::Value value, int64_t expected) {
+    auto op = value.getDefiningOp<mlir::arith::ConstantOp>();
+    auto attr = op ? mlir::dyn_cast<mlir::IntegerAttr>(op.getValue()) : mlir::IntegerAttr{};
+    return attr && attr.getValue().getBitWidth() <= 64 && attr.getInt() == expected;
+  }
+  static bool folded(mlir::OpFoldResult value, mlir::Value dynamic, int64_t fixed) {
+    if (auto attr = mlir::dyn_cast<mlir::Attribute>(value)) {
+      auto number = mlir::dyn_cast<mlir::IntegerAttr>(attr);
+      return !dynamic && number && number.getInt() == fixed;
+    }
+    auto actual = mlir::cast<mlir::Value>(value);
+    return dynamic ? actual == dynamic : integer(actual, fixed);
+  }
+  mlir::LogicalResult verify(mlir::ModuleOp module, mlir::func::FuncOp host,
+                             mlir::Operation *anchor) {
+    using namespace mlir;
+    auto error = [&]() { return anchor->emitOpError("shape frame requires checked capacity, dimension bindings and compact active-view SSA"); };
+    auto types = module->getAttrOfType<ArrayAttr>("tessera.native.tensor_program_capacity_types");
+    auto axes = module->getAttrOfType<ArrayAttr>("tessera.native.tensor_program_shape_bindings");
+    auto variables = module->getAttrOfType<DenseI64ArrayAttr>("tessera.native.tensor_program_shape_variables");
+    if (!types || !axes || !variables || variables.empty() || variables.size() % 3 ||
+        types.size() != axes.size() || types.size() > 128) return error();
+    owned.append(host.getArguments().begin(), host.getArguments().end());
+    for (auto alloc : host.getBody().front().getOps<memref::AllocOp>()) owned.push_back(alloc);
+    if (owned.size() != types.size()) return error();
+    unsigned symbols = variables.size() / 3;
+    dimensions.resize(symbols);
+    for (auto [i, raw] : llvm::enumerate(types)) {
+      auto attr = dyn_cast<TypeAttr>(raw);
+      auto cap = attr ? dyn_cast<MemRefType>(attr.getValue()) : MemRefType{};
+      auto binding = dyn_cast<DenseI64ArrayAttr>(axes[i]);
+      if (!cap || !isPhysicalBuffer(cap) || !binding || binding.size() != 2) return error();
+      capacities.push_back(cap);
+      bindings.emplace_back(binding.asArrayRef().begin(), binding.asArrayRef().end());
+      for (unsigned axis = 0; axis < 2; ++axis) {
+        int64_t symbol = binding[axis];
+        if (symbol < -1 || symbol >= symbols ||
+            (symbol >= 0 && variables[symbol * 3 + 2] != cap.getDimSize(axis))) return error();
+      }
+      if (i < host.getNumArguments()) {
+        if (!matches(owned[i], owned[i].getType())) return error();
+        auto active = dyn_cast<MemRefType>(owned[i].getType());
+        if (!active || !active.getLayout().isIdentity() || active.getMemorySpace()) return error();
+      } else if (owned[i].getType() != cap) return error();
+    }
+    auto guarded = [&](arith::CmpIPredicate predicate, Value lhs, Value rhs,
+                       Operation *before) {
+      for (auto assertion : host.getBody().front().getOps<cf::AssertOp>()) {
+        if (!assertion->isBeforeInBlock(before)) continue;
+        auto cmp = assertion.getArg().getDefiningOp<arith::CmpIOp>();
+        if (cmp && cmp.getPredicate() == predicate && cmp.getLhs() == lhs && cmp.getRhs() == rhs) return true;
+      }
+      return false;
+    };
+    for (unsigned symbol = 0; symbol < symbols; ++symbol) {
+      int64_t arg = variables[symbol * 3], axis = variables[symbol * 3 + 1];
+      int64_t bound = variables[symbol * 3 + 2];
+      if (arg < 0 || arg >= host.getNumArguments() || axis < 0 || axis > 1 ||
+          bound <= 0 || bound > INT32_MAX || bindings[arg][axis] != symbol) return error();
+      for (auto dim : host.getBody().front().getOps<memref::DimOp>())
+        if (dim.getSource() == host.getArgument(arg) && dim.getConstantIndex() == axis) {
+          if (dimensions[symbol]) return error();
+          dimensions[symbol] = dim;
+        }
+      Value extent = dimensions[symbol];
+      if (!extent) return error();
+      bool checked = false;
+      for (auto assertion : host.getBody().front().getOps<cf::AssertOp>()) {
+        if (!assertion->isBeforeInBlock(anchor)) continue;
+        auto both = assertion.getArg().getDefiningOp<arith::AndIOp>();
+        if (!both) continue;
+        auto positive = both.getLhs().getDefiningOp<arith::CmpIOp>();
+        auto fits = both.getRhs().getDefiningOp<arith::CmpIOp>();
+        checked |= positive && fits && positive.getPredicate() == arith::CmpIPredicate::ugt &&
+          positive.getLhs() == extent && integer(positive.getRhs(), 0) &&
+          fits.getPredicate() == arith::CmpIPredicate::ule && fits.getLhs() == extent && integer(fits.getRhs(), bound);
+      }
+      if (!checked) return error();
+    }
+    for (auto dim : host.getBody().front().getOps<memref::DimOp>()) {
+      auto arg = dyn_cast<BlockArgument>(dim.getSource());
+      auto axis = dim.getConstantIndex();
+      if (!arg || arg.getOwner() != &host.getBody().front() || !axis || *axis < 0 || *axis > 1) return error();
+      int64_t symbol = bindings[arg.getArgNumber()][*axis];
+      if (symbol < 0 || (dim.getResult() != dimensions[symbol] &&
+          !guarded(arith::CmpIPredicate::eq, dim, dimensions[symbol], anchor))) return error();
+    }
+    for (auto view : host.getBody().front().getOps<memref::ReinterpretCastOp>()) {
+      int64_t id = index(view.getSource());
+      if (id < host.getNumArguments() || id < 0 || !view.getSource().getDefiningOp<memref::AllocOp>() ||
+          !matches(view, view.getType()) || !view.getType().getLayout().isIdentity() ||
+          view.getType().getMemorySpace()) return error();
+      auto sizes = view.getMixedSizes(), strides = view.getMixedStrides(), offsets = view.getMixedOffsets();
+      if (sizes.size() != 2 || strides.size() != 2 || offsets.size() != 1 ||
+          !folded(offsets[0], {}, 0) || !folded(strides[1], {}, 1)) return error();
+      for (unsigned axis = 0; axis < 2; ++axis) {
+        int64_t symbol = bindings[id][axis];
+        if (!folded(sizes[axis], symbol < 0 ? Value{} : dimensions[symbol], capacities[id].getDimSize(axis))) return error();
+      }
+      int64_t col = bindings[id][1];
+      if (!folded(strides[0], col < 0 ? Value{} : dimensions[col], capacities[id].getDimSize(1))) return error();
+      bool volumeGuard = false;
+      for (auto assertion : host.getBody().front().getOps<cf::AssertOp>()) {
+        if (!assertion->isBeforeInBlock(view)) continue;
+        auto cmp = assertion.getArg().getDefiningOp<arith::CmpIOp>();
+        auto product = cmp ? cmp.getLhs().getDefiningOp<arith::MulIOp>() : arith::MulIOp{};
+        if (!cmp || cmp.getPredicate() != arith::CmpIPredicate::ule || !product ||
+            !integer(cmp.getRhs(), capacities[id].getNumElements())) continue;
+        auto factors = product->getOperands();
+        bool same = true;
+        for (unsigned axis = 0; axis < 2; ++axis) {
+          int64_t symbol = bindings[id][axis];
+          same &= symbol < 0 ? integer(factors[axis], capacities[id].getDimSize(axis)) : factors[axis] == dimensions[symbol];
+        }
+        volumeGuard |= same;
+      }
+      if (!volumeGuard) return error();
+    }
+    return success();
+  }
+};
+
 inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
   using namespace mlir;
   auto emitOpError = [&](const char *message) { return op->emitOpError(message); };
@@ -100,9 +250,10 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
     return emitOpError("requires exact nvidia_sm120 program target and sm_120 architecture");
   auto moduleSchema = module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program");
   if (!moduleSchema || !moduleSchema.getType().isInteger(64) ||
-      (moduleSchema.getInt() != 1 && moduleSchema.getInt() != 2))
-    return emitOpError("requires native program module schema 1 or 2");
+      (moduleSchema.getInt() != 1 && moduleSchema.getInt() != 2 && moduleSchema.getInt() != 3))
+    return emitOpError("requires native program module schema 1, 2 or 3");
   bool bounded = moduleSchema.getInt() == 2;
+  bool shaped = moduleSchema.getInt() == 3;
   auto calleeRef = op->getAttrOfType<SymbolRefAttr>("callee");
   if (!calleeRef || calleeRef.getNestedReferences().size() != 1)
     return emitOpError("requires one isolated member::kernel symbol reference");
@@ -125,8 +276,28 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
   // Validate their standard operand/result invariants before typed accessors
   // or alias/lifetime traversal; never depend on verifier walk order.
   for (Operation &candidate : host.getBody().front())
-    if (isa<memref::AllocOp,memref::DimOp,memref::SubViewOp,arith::ConstantOp>(candidate) &&
+    if (isa<memref::AllocOp,memref::DimOp,memref::SubViewOp,memref::ReinterpretCastOp,arith::ConstantOp,arith::CmpIOp,arith::AndIOp,arith::MulIOp,cf::AssertOp>(candidate) &&
         failed(mlir::verify(&candidate))) return failure();
+  ShapeMemoryContract shape;
+  if (shaped && failed(shape.verify(module, host, op))) return failure();
+  if (shaped) {
+    auto bindings = member->getAttrOfType<DenseI64ArrayAttr>(
+        "tessera.native.tensor_program_dimension_bindings");
+    auto capacities = member->getAttrOfType<ArrayAttr>(
+        "tessera.native.tensor_program_capacity_types");
+    if (!bindings || bindings.size() != 2 * buffers.size() ||
+        !capacities || capacities.size() != buffers.size())
+      return emitOpError("shape member requires complete semantic dimension and capacity bindings");
+    for (auto [i, buffer] : llvm::enumerate(buffers)) {
+      int64_t id = shape.index(buffer);
+      auto type = dyn_cast<TypeAttr>(capacities[i]);
+      if (id < 0 || !type || type.getValue() != shape.capacity(buffer))
+        return emitOpError("shape member capacity binding differs from its original buffer");
+      for (unsigned axis = 0; axis < 2; ++axis)
+        if (bindings[i * 2 + axis] != shape.bindings[id][axis])
+          return emitOpError("shape member semantic dimension binding differs from its original buffer");
+    }
+  }
   auto rowBound = module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program_row_bound");
   auto rowRoot = module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program_row_root");
   auto rowBuffers = module->getAttrOfType<DenseI64ArrayAttr>("tessera.native.tensor_program_row_buffers");
@@ -137,8 +308,8 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
     return bounded ? capacityType(type,rowBound.getInt()) :
                      (isPhysicalBuffer(type) ? cast<MemRefType>(type) : MemRefType{});
   };
-  for (Type type : host.getArgumentTypes())
-    if (!physical(type))
+  for (Value argument : host.getArguments())
+    if (!(shaped ? shape.capacity(argument) : physical(argument.getType())))
       return emitOpError("program roots require checked static physical buffer types or bounded active views");
   // Lifetime checks inspect other invocations before their own generated
   // verifier may have run. Establish every arity before reading their output
@@ -151,7 +322,7 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
       return candidate.emitOpError("requires checked input/output arity before program lifetime verification");
   }
   SmallVector<Type> storage;
-  for (Type type : host.getArgumentTypes()) storage.push_back(physical(type));
+  for (Value argument : host.getArguments()) storage.push_back(shaped ? shape.capacity(argument) : physical(argument.getType()));
   SmallVector<Value> owned(host.getArguments());
   size_t stages = 0;
   for (Operation &candidate : host.getBody().front()) {
@@ -186,6 +357,7 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
     return it != owned.end() && rowBuffers[std::distance(owned.begin(),it)] == 1;
   };
   auto matchesActiveType = [&](Value buffer, Type active) {
+    if (shaped) return shape.matches(buffer, active);
     auto capacity = physical(buffer.getType());
     auto shape = dyn_cast<ShapedType>(active);
     if (!shape || !shape.hasRank() || shape.getRank() != 2 ||
@@ -238,7 +410,7 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
         capacityBase(input) == capacityBase(buffers.back()))
       return emitOpError("input must retain initialized live storage and may not alias the output");
   for (Value buffer : buffers) {
-    if (!physical(buffer.getType()) ||
+    if (!(shaped ? shape.matches(buffer, buffer.getType()) : bool(physical(buffer.getType()))) ||
         (bounded && activeRows(buffer) != cast<MemRefType>(buffer.getType()).isDynamicDim(0)))
       return emitOpError("requires compact active buffers with checked owned capacity");
   }
@@ -250,6 +422,7 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
     if (auto *invoke = &operation; isInvocation(invoke)) lastInvoke = invoke;
     else if (!isa<memref::AllocOp,memref::DeallocOp,func::ReturnOp>(operation)) {
       bool activeMetadata = bounded && isa<memref::DimOp,memref::SubViewOp>(operation);
+      if (shaped) activeMetadata = isa<memref::DimOp,memref::ReinterpretCastOp,arith::ConstantOp,arith::CmpIOp,arith::AndIOp,arith::MulIOp,cf::AssertOp>(operation);
       if (bounded) if (auto constant = dyn_cast<arith::ConstantOp>(operation)) {
         auto value = dyn_cast<IntegerAttr>(constant.getValue());
         activeMetadata = constant.getType().isIndex() && value && value.getInt() == 0 &&
@@ -257,6 +430,10 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
             isa<memref::DimOp>(*constant.getResult().getUsers().begin());
       }
       if (!activeMetadata) return emitOpError("program contains an unaccounted memory effect");
+    }
+    if (shaped) if (auto release = dyn_cast<memref::DeallocOp>(operation)) {
+      if (!release.getMemref().getDefiningOp<memref::AllocOp>())
+        return emitOpError("shape program may retire only its directly owned private allocations");
     }
     if (auto allocation = dyn_cast<memref::AllocOp>(operation)) {
       unsigned writes = 0, releases = 0;
@@ -266,6 +443,7 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
       SmallVector<Value> aliases{allocation.getResult()};
       for (Operation *user : allocation.getResult().getUsers())
         if (auto view = dyn_cast<memref::SubViewOp>(user)) aliases.push_back(view.getResult());
+        else if (shaped) if (auto view = dyn_cast<memref::ReinterpretCastOp>(user)) aliases.push_back(view.getResult());
       for (Value alias : aliases) for (OpOperand &use : alias.getUses()) {
         if (auto *invocation = use.getOwner(); isInvocation(invocation)) {
           if (use.getOperandNumber() == unsigned(invocation->getAttrOfType<IntegerAttr>("input_count").getInt())) ++writes;
@@ -274,10 +452,12 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
           if (alias != allocation.getResult() || capacityBase(result.getOperand(0)) == allocation.getResult())
             return emitOpError("returned allocation must remain live and views cannot own deallocation");
           for (Value view : aliases) for (Operation *user : view.getUsers())
-            if ((isInvocation(user) || isa<memref::SubViewOp>(user)) && !user->isBeforeInBlock(release))
+            if ((isInvocation(user) || isa<memref::SubViewOp,memref::ReinterpretCastOp>(user)) && !user->isBeforeInBlock(release))
               return emitOpError("private allocation retires before its final reader");
         } else if (!isa<func::ReturnOp>(use.getOwner()) &&
-                   !(bounded && alias == allocation.getResult() && isa<memref::SubViewOp>(use.getOwner())))
+                   !((bounded || shaped) && alias == allocation.getResult() &&
+                     (isa<memref::SubViewOp>(use.getOwner()) ||
+                      (shaped && isa<memref::ReinterpretCastOp>(use.getOwner())))))
           return emitOpError("program allocation escapes its checked ownership uses");
       }
       if (writes != 1 ||
@@ -318,7 +498,7 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
     return emitOpError("native member lost its typed physical buffer bindings");
   for (auto [buffer, binding] : llvm::zip(buffers, bindingTypes)) {
     auto type = dyn_cast<TypeAttr>(binding);
-    if (!type || type.getValue() != physical(buffer.getType()))
+    if (!type || type.getValue() != (shaped ? shape.capacity(buffer) : physical(buffer.getType())))
       return emitOpError("native member physical buffer shape or storage differs");
   }
   for (auto [index, type] : llvm::enumerate(kernel.getArgumentTypes()))
@@ -326,10 +506,23 @@ inline mlir::LogicalResult verifyInvocation(mlir::Operation *op) {
       return emitOpError("native member requires pointer buffers followed by i64 scalars");
   if (!isLaunchGeometry(geometry.asArrayRef()))
     return emitOpError("launch geometry exceeds the native frame CUDA limits");
-  if (!bounded) {
-    for (StringRef key : {"active_buffer_types", "scalar_row_multipliers", "grid_row_multipliers", "grid_row_divisors"})
+  if (!bounded && !shaped) {
+    for (StringRef key : {"active_buffer_types", "scalar_row_multipliers", "grid_row_multipliers", "grid_row_divisors", "shape_ir"})
       if (op->hasAttr(key) || kernel->hasAttr((Twine("tessera.native.program_") + key).str()))
         return emitOpError("static frame cannot carry bounded active-view metadata");
+  }
+  if (shaped) {
+    auto shapeIR = kernel->getAttrOfType<StringAttr>("tessera.native.program_shape_ir");
+    if (!shapeIR || shapeIR.getValue().empty() || op->getAttr("shape_ir") != shapeIR)
+      return emitOpError("shape member must retain the selected native shape computation");
+    auto activeTypes = kernel->getAttrOfType<ArrayAttr>("tessera.native.program_active_buffer_types");
+    if (!activeTypes || activeTypes.size() != buffers.size())
+      return emitOpError("shape member must retain its typed active buffer bindings");
+    for (auto [buffer, attr] : llvm::zip(buffers, activeTypes)) {
+      auto type = dyn_cast<TypeAttr>(attr);
+      if (!type || !shape.matches(buffer, type.getValue()))
+        return emitOpError("shape member active dimensions differ from its checked bindings");
+    }
   }
   if (bounded) {
     auto activeTypes = kernel->getAttrOfType<ArrayAttr>("tessera.native.program_active_buffer_types");

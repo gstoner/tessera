@@ -1,0 +1,33 @@
+{
+  "schema": 1,
+  "source_snapshot": "native-shape-runtime-source-5.json",
+  "current_code_sha256": {
+    "benchmarks/nvidia/record_native_independent_shapes.py": "602eb6026c08b19798146e375fe9c292356029549d47abb519f9254e0cdc68c0",
+    "python/tessera/compiler/bounded_nvidia_lhs.py": "bade2013d186be2fa07a4033736121a1543b48963c3eddb3c8efb17d7bebd1d4",
+    "python/tessera/compiler/jit.py": "8a6f5e5bb2848ea0a9678e8523422c828bd3152991c371da577881977cd6f7e0",
+    "python/tessera/compiler/native_tensor_jit.py": "18b24cdbd29f36acd4d487c31a67eb49c1b65a86474b56ba6d36a5db7378f2cb",
+    "python/tessera/compiler/native_tensor_program.py": "2d9a842f0c5deebedb7585f06a359a18d3c152398a71d9fd4c9ad694575d60e8",
+    "python/tessera/compiler/native_tensor_shape.py": "d6844fb1b558b9f34ddf4f9220dd0a56f76d1ff360e73afbc24aa60642d72076",
+    "python/tessera/compiler/pass_metadata.py": "7fefcd3f9ade4e3aa53dafe5855a57522321b9e3409f853888908c7d22381eb0",
+    "python/tessera/compiler/prepared_native_tensor_frame.py": "189b9f3222f2199993e641c4065d0dfa22541a8bf56c8791e7bebc2b3df9a83c",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "b80185f9e7fe9e7398452a82b2311f5e9e50cfa0186003f635f62845ba7928a6",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_native_frame.h": "0bbb9aa297ca144146de763749e893c75b41e092d6da36f579d0e9898ca4aa9a",
+    "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "bb24d442fb3b131a05bc62c1431d499740ad72c8ecbcf8663c2fed5ff9a3b872",
+    "src/compiler/ir/include/Tessera/IR/TensorShapeProfile.h": "a750e94e3f4c3f4809ad6893f6c81e54b43132dcdf8ca3c4575b3a2323a00da9",
+    "src/compiler/ir/include/Tessera/IR/TensorShapeRelations.h": "361d269abe2a1ca7204af733d3b07416716e462fdb830fecd4528db357100f93",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "ccdea24f92efe5c2e43deab5276aaaaedbafeb5866ccbfd7ababf69a2841a14d",
+    "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "85deeb0fdd0b73c9f360265271ee2ffbc6a4e9f29d3e28e4abe33dd1b2c9ade6",
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "15a8547a4b071160b43e3ce1fef7ed56bc2f2cc6d3156a822a077a627ac0846d",
+    "src/compiler/programming_model/lib/NativeTensorShapePlan.h": "5fe654377299e3c81368ae5e281605ac430cadaf414a4c89a5b71ed28fd78cc7",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "d659dd69c35d1092068a811ddcbb4048438d8cf8dffc2a559c67df82ba7efcbc",
+    "tests/device/nvidia/test_native_tensor_independent_shapes.py": "ccad7e32348abf83120909f2af8ce1fcbb4607193ba2e033f7317eaa596bdb7c",
+    "tests/unit/test_native_independent_oracle.py": "cc52d53241e95ff3af91184cb4dbef844e971f55da0a2aa3c3ad2210ca032d4c",
+    "tests/unit/test_native_independent_shape_recorder.py": "5a643f25bfe9b97727ee5dca4d3fcfb43c510204925efe0ba61ac19ef0886d9f",
+    "tests/unit/test_native_tensor_program_pipeline.py": "4daaf9a98005cba3c5429ec82c17ed04fd6233e1a6647e8f78442fd73de14a0c",
+    "tests/unit/test_native_tensor_shape_frontend.py": "e9983ef51e4e272cbdb1153e810a2d3e537eb5dac43ab8c358888ed9f7c5f508",
+    "tests/unit/test_native_tensor_shape_ownership.py": "8b2f5a2ca13cf190559dd948bc80d70d982fcdab9d06a36793461713f4fd4b8a",
+    "tests/unit/test_native_tensor_shape_package.py": "19181f8de1503e4b8f41f7b6bde2ca0608b8032ceeb2d7920823002be5d0a344",
+    "tests/unit/test_native_tensor_shape_plan.py": "c14fc651e43b0ba9fc1e43a84dfc2d5ffd59a4c1d64a70bb5567a5aa222b2f7c"
+  },
+  "result": "all measured compiler/runtime/frontend/recorder/test code unchanged; documentation regenerated separately"
+}

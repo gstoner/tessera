@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-20
+last_updated: 2026-10-21
 ---
 
 # Native bounded tensor program candidate
@@ -221,3 +221,109 @@ validation passes eight device cases plus 32 host transport cases (40 total).
 Ruff and zero-error mypy pass. Native compiler/runtime bytes are unchanged.
 The original timing packet retains its recorded pre-review Python identity;
 no new performance claim follows. See the packet's provider-review/ receipts.
+
+
+## Independent-dimension frame v3
+
+Sync: NATIVE-INDEPENDENT-SHAPE-20261021. Compiler shape ownership, retained
+GPU frame-v3 execution and public integration execute in the four named
+compact SM120 envelopes recorded below. Existing v1/v2 ABI is preserved.
+
+A module may request named positive i64 M/N/K capacities through
+`tessera.native.tensor_program_shape_bounds_request`. Semantic SSA relations,
+not coincident trace extents, identify which tensor axes share each variable.
+Projection operates on a detached Graph. Fixed contraction axes remain fixed;
+unrequested roles cannot silently become dynamic through an aliased role.
+The current admitted envelope is compact rank-two straight-line semantic
+producers ending in an unfused, untransposed ordinary matmul. Wider layouts,
+control flow, arbitrary accumulator lineage and AD are separate obligations.
+
+Private allocations retain static capacities. An active
+`memref.reinterpret_cast` uses zero offset and strides `[active_columns, 1]`;
+using a capacity-pitched subview when columns change is invalid. Native
+verification checks positive capacity guards, shared-root axis equality,
+active volume, actual view sizes/strides, initialization, writer uniqueness,
+retirement after every reader, and preservation of the returned allocation.
+
+Each selected native leaf ABI emits a typed member shape function. Its i64
+arguments are the dimensions of each input and output buffer in pointer-ABI
+order. Its results are the kernel scalars followed by the three grid axes.
+The exporter accepts only a single block of checked integer constants,
+multiplication, addition and unsigned division by positive constants. Memory
+access, extra functions, incompatible arity and zero division are refused.
+The selected function is bound identically on the kernel and invocation.
+
+The whole-program `shape_program` has these transport fields:
+
+- `entry`: `__tessera_tensor_shape_plan`;
+- `ir`: the actual typed host MLIR computation;
+- `sha256`: the exact UTF-8 IR content digest;
+- `root_words`: twice the number of original rank-two inputs;
+- `plan_words`: twice the buffer count plus eleven words per stage.
+
+The host entry has native ABI
+`int32_t(const int64_t *root_dimensions, int64_t *plan)` after LLVM lowering.
+Input words are each original input's rows and columns, in source argument
+order. Output words first contain rows/columns for every buffer in frame ID
+order. Each stage then contributes eight scalar slots (unused slots zero)
+and its three grid extents. Block dimensions remain selected constants.
+
+All root bounds and semantic equalities and every selected launch capacity
+are checked before any output word is stored. Status zero means success;
+nonzero leaves every output word unchanged. Shape arithmetic is compiled
+through matching, content-pinned `mlir-opt`, `mlir-translate` and `clang` during
+cold packaging. Python transports these native bytes and does not evaluate
+shape expressions. The runtime validates the capacity
+plan, then evaluates actual shapes transactionally before changing snapshots,
+generation, outputs or launch state. Native descriptor queries return shape,
+bytes and compact strides without CUDA effects. Borrowed storage, context,
+capacity and producer-stream ordering are checked by the native owner. The
+compiled companion remains loaded until successful frame close; failed close
+quarantines the frame and code image together.
+
+## NATIVE-INDEPENDENT-SHAPE-20261021 — native execution proof
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-INDEPENDENT-SHAPE-20261021.
+
+Native semantic dimension relations project independent M/N/K capacities
+through compact rank-two producer DAGs. Graph projection clones its source;
+verified Schedule/Tile views retain actual compact strides, capacity guards,
+initialized storage and retirement after every reader. Member semantic axis
+identities are checked even when capacities coincide. Selected leaf ABIs emit
+typed MLIR shape arithmetic; cold LLVM lowering supplies a native CPU companion.
+The retained C++ frame-v3 owner evaluates it transactionally before committing
+launch state. Pure native descriptor queries precede output allocation. Python
+transports the checked contract and native bytes without evaluating shapes.
+
+The final frozen e8d55135 compiler passes 648 focused cases and all 3,076
+production compiler-route cases with zero selected skips. Existing v1/v2
+programs retain byte-identical 28 Target programs and 12 PTX images versus
+merged cc3e73c8. The final identity check changes no measured GPU member image
+or CPU shape image relative to the preceding candidate. Frame-v3 adds two
+native exports; all 103 previous provider exports remain available. The code
+image is retained through frame close and quarantined if close fails.
+
+Owning RTX5070/sm120 proof covers four named families: RMSNorm LHS to matmul,
+RHS add with LHS ReLU to matmul, add/ReLU to matmul, and matmul/ReLU/matmul
+with FP32 middle storage. Roots use FP16 or BF16; independent dimensions vary
+within M65/N47/K64 (the first two-matmul contraction remains fixed K32).
+58 device cases and one CPU oracle case pass, including trace-at-one/equal
+extents, changed dimensions, failed transactions, retained outputs, one arena,
+artifact restoration and delayed explicit/legacy/PTDS producer streams.
+144 existing native device controls pass with the new provider.
+
+The final 24-row packet records six samples of 32 completed public calls.
+Public medians are 0.437324-0.696365 ms; captured native-program medians are
+0.002322-0.014476 ms. Only 144/288 whole event windows satisfy the duration
+gate for every region; short regions remain diagnostic. Domains are separate
+and nonadditive. These are characterization results, without a speedup claim
+or default-route promotion. The packet preserves the initial norm-rounding
+failure, the independently measured FP32 midpoint witness and the corrected
+storage-rounding interval oracle; numerical kernels and policy are unchanged.
+Evidence: benchmarks/baselines/native_independent_shapes_20261021/README.md.
+
+All five original aggregate programs remain open. General layouts, control
+flow, accumulator reconstruction, wider producers and AD composition remain
+follow-up required. Tensor frame schema 3 is independent of attention schema
+numbering; attention schema 5 remains saved-LSE plus bounded specifically.

@@ -9,6 +9,8 @@ import copy
 import ctypes as ct
 import os
 import threading
+from pathlib import Path
+import tempfile
 
 import numpy as np
 
@@ -52,11 +54,14 @@ def _integers(values, *, limit, count=None):
 def validate_frame(frame):
     """Validate transport structure; C++ verifies initialization and ownership."""
     bounded = isinstance(frame, dict) and frame.get("schema") == "tessera.native.tensor_program_frame.v2"
+    shaped = isinstance(frame, dict) and frame.get("schema") == "tessera.native.tensor_program_frame.v3"
     keys = {"schema", "target", "architecture", "function", "buffers", "roots", "stages", "output"}
+    if shaped:
+        keys |= {"shape_program", "shape_bindings", "shape_variables"}
     if bounded:
         keys |= {"row_bound", "row_root", "row_buffers"}
     if (not isinstance(frame, dict) or set(frame) != keys
-            or frame["schema"] not in {"tessera.native.tensor_program_frame.v1", "tessera.native.tensor_program_frame.v2"}
+            or frame["schema"] not in {"tessera.native.tensor_program_frame.v1", "tessera.native.tensor_program_frame.v2", "tessera.native.tensor_program_frame.v3"}
             or frame["target"] != "nvidia_sm120" or frame["architecture"] != "sm_120"
             or not isinstance(frame["function"], str)):
         raise ValueError("native tensor frame schema/target differs")
@@ -94,6 +99,32 @@ def validate_frame(frame):
     stages = frame["stages"]
     if not isinstance(stages, list) or not 1 <= len(stages) <= 64:
         raise ValueError("native frame stage extent differs")
+    if shaped:
+        from .native_tensor_shape import _validate_program
+
+        _validate_program(frame["shape_program"])
+        variables, bindings = frame["shape_variables"], frame["shape_bindings"]
+        if (not isinstance(variables, list) or not 1 <= len(variables) <= 2 * len(roots)
+                or not isinstance(bindings, list) or len(bindings) != len(buffers)):
+            raise ValueError("native shape dimension binding extent differs")
+        for variable in variables:
+            if (not isinstance(variable, list) or len(variable) != 3
+                    or any(type(value) is not int for value in variable)
+                    or not 0 <= variable[0] < len(roots) or variable[1] not in (0, 1)
+                    or not 0 < variable[2] < 2**31):
+                raise ValueError("native shape variable binding differs")
+        for binding, buffer in zip(bindings, buffers, strict=True):
+            if (not isinstance(binding, list) or len(binding) != 2
+                    or any(type(symbol) is not int or not -1 <= symbol < len(variables) for symbol in binding)
+                    or any(symbol >= 0 and variables[symbol][2] != buffer["shape"][axis]
+                           for axis, symbol in enumerate(binding))):
+                raise ValueError("native shape buffer capacity binding differs")
+        for symbol, (argument, axis, _) in enumerate(variables):
+            if bindings[roots[argument]][axis] != symbol:
+                raise ValueError("native shape variable does not originate at its declared root")
+        if (frame["shape_program"]["root_words"] != 2 * len(roots)
+                or frame["shape_program"]["plan_words"] != 2 * len(buffers) + 11 * len(stages)):
+            raise ValueError("native shape frame plan extent differs from selected ABI")
     for stage in stages:
         stage_keys = {"member", "entry", "inputs", "output", "scalars", "geometry"}
         if bounded:
@@ -134,7 +165,7 @@ def _descriptor(spec, data=None, strides=None):
     storage, dtype = _storage(spec["storage"])
     rows, columns = spec["shape"]
     return HostView(data, spec["bytes"], storage, 2, (ct.c_int64 * 2)(rows, columns),
-                    (ct.c_int64 * 2)(*(strides or (columns * dtype.itemsize, dtype.itemsize))))
+                    (ct.c_int64 * 2)(*(strides or spec.get("strides") or (columns * dtype.itemsize, dtype.itemsize))))
 
 
 # A failed native close retains the provider and borrowed storage until context
@@ -145,7 +176,7 @@ _quarantine: dict[int, "PreparedNativeTensorFrame"] = {}
 class PreparedNativeTensorFrame:
     """Retained C++ execution of an already compiler-projected static frame."""
 
-    def __init__(self, frame, images, *, provider=None):
+    def __init__(self, frame, images, *, provider=None, shape_companion=None):
         validate_frame(frame)
         if len(images) != len(frame["stages"]) or any(not isinstance(image, bytes) for image in images):
             raise ValueError("native frame images differ from its member count")
@@ -154,9 +185,26 @@ class PreparedNativeTensorFrame:
 
             provider = rt._load_nvidia_ptx_launch()
         self._bounded = frame["schema"] == "tessera.native.tensor_program_frame.v2"
-        prepare_name = "tessera_nvidia_native_frame_prepare_v2" if self._bounded else "tessera_nvidia_native_frame_prepare_v1"
-        if provider is None or not hasattr(provider, prepare_name):
+        self._shaped = frame["schema"] == "tessera.native.tensor_program_frame.v3"
+        prepare_name = ("tessera_nvidia_native_frame_prepare_v3" if self._shaped else
+                        "tessera_nvidia_native_frame_prepare_v2" if self._bounded else
+                        "tessera_nvidia_native_frame_prepare_v1")
+        if (provider is None or not hasattr(provider, prepare_name)
+                or (self._shaped and not hasattr(provider, "tessera_nvidia_native_frame_shapes_v3"))):
             raise RuntimeError("native frame requires its updated native provider")
+        self._shape_companion, self._shape_library = shape_companion, None
+        if self._shaped:
+            from .native_tensor_shape import NativeShapeCompanion
+
+            if not isinstance(shape_companion, NativeShapeCompanion):
+                raise ValueError("native shape frame requires its compiled shape companion")
+            shape_companion.validate(frame["shape_program"])
+            with tempfile.TemporaryDirectory(prefix="tessera-bound-shape-") as tmp:
+                library = Path(tmp) / "shape.so"
+                library.write_bytes(shape_companion.image)
+                self._shape_library = ct.CDLL(str(library))
+        elif shape_companion is not None:
+            raise ValueError("static/row frame cannot carry a general shape companion")
         self._frame = copy.deepcopy(frame)
         self._active = copy.deepcopy(frame["buffers"])
         self.lib = provider
@@ -183,7 +231,14 @@ class PreparedNativeTensorFrame:
             step.grid[:] = stage["geometry"][:3]
             step.block[:] = stage["geometry"][3:]
         handle = ct.c_uint64()
-        if self._bounded:
+        if self._shaped:
+            function = getattr(self._shape_library, shape_companion.entry)
+            function.argtypes = [ct.POINTER(ct.c_int64), ct.POINTER(ct.c_int64)]
+            function.restype = ct.c_int32
+            status = self.lib.tessera_nvidia_native_frame_prepare_v3(
+                descriptors, roles, len(specs), steps, len(steps), ct.cast(function, ct.c_void_p),
+                shape_companion.root_words, shape_companion.plan_words, ct.byref(handle))
+        elif self._bounded:
             flags = (ct.c_uint8 * len(specs))(*frame["row_buffers"])
             plans = (NativeFrameRowPlan * len(steps))()
             for plan, stage in zip(plans, frame["stages"], strict=True):
@@ -219,6 +274,14 @@ class PreparedNativeTensorFrame:
                 views, ct.POINTER(ct.c_uint8), ct.c_size_t, ct.POINTER(NativeFrameStep), ct.c_size_t,
                 ct.POINTER(ct.c_uint8), ct.c_uint32, ct.c_int64,
                 ct.POINTER(NativeFrameRowPlan), ct.POINTER(ct.c_uint64)], ct.c_int
+        if self._shaped:
+            prepare = lib.tessera_nvidia_native_frame_prepare_v3
+            prepare.argtypes, prepare.restype = [
+                views, ct.POINTER(ct.c_uint8), ct.c_size_t, ct.POINTER(NativeFrameStep), ct.c_size_t,
+                ct.c_void_p, ct.c_size_t, ct.c_size_t, ct.POINTER(ct.c_uint64)], ct.c_int
+            query = lib.tessera_nvidia_native_frame_shapes_v3
+            query.argtypes, query.restype = [ct.c_uint64, ct.POINTER(ct.c_int64), ct.c_size_t,
+                                             views, ct.c_size_t], ct.c_int
         bind("invoke", [ct.c_uint64, views, ct.c_size_t, views, ct.c_size_t])
         bind("resident", [ct.c_uint64, views, ct.c_size_t, ct.POINTER(ct.c_uint64), ct.c_size_t,
                           views, ct.c_size_t])
@@ -242,6 +305,26 @@ class PreparedNativeTensorFrame:
 
     def _active_specs(self, roots):
         specs = copy.deepcopy(self._frame["buffers"])
+        if self._shaped:
+            if len(roots) != len(self._frame["roots"]):
+                raise ValueError("native frame root count differs")
+            dimensions: list[int] = []
+            for value in roots:
+                interface = getattr(value, "__cuda_array_interface__", None)
+                shape = interface.get("shape") if isinstance(interface, dict) else getattr(value, "shape", None)
+                if (not isinstance(shape, (tuple, list)) or len(shape) != 2
+                        or any(type(axis) is not int or not -(2**63) <= axis < 2**63 for axis in shape)):
+                    raise ValueError("native shape frame requires rank-two i64 root dimensions")
+                dimensions.extend(shape)
+            words = (ct.c_int64 * len(dimensions))(*dimensions)
+            native = (HostView * len(specs))()
+            self._check(self.lib.tessera_nvidia_native_frame_shapes_v3(
+                self.handle, words, len(words), native, len(native)))
+            for spec, descriptor in zip(specs, native, strict=True):
+                spec["shape"] = list(descriptor.shape)
+                spec["bytes"] = descriptor.bytes
+                spec["strides"] = list(descriptor.strides)
+            return specs
         if not self._bounded:
             return specs
         if len(roots) != len(self._frame["roots"]):
@@ -357,12 +440,27 @@ class PreparedNativeTensorFrame:
         return dict(zip(("capacity", "allocations", "modules", "stages", "generation", "bytes"),
                         values, strict=True))
 
+    def _release_shape_library(self):
+        library = getattr(self, "_shape_library", None)
+        if library is not None:
+            import _ctypes
+
+            # The native frame has retired every call before successful close.
+            # Failed close retains this code image in the existing quarantine.
+            if os.name == "nt":
+                getattr(_ctypes, "FreeLibrary")(library._handle)
+            else:
+                _ctypes.dlclose(library._handle)
+            self._shape_library = None
+
     def close(self):
         if not self.handle:
+            self._release_shape_library()
             return
         self._owner()
         self._check(self.lib.tessera_nvidia_native_frame_close_v1(self.handle))
         self.handle = 0
+        self._release_shape_library()
         self._borrowed = self._failed_borrows = ()
         _quarantine.pop(id(self), None)
 
@@ -379,3 +477,5 @@ class PreparedNativeTensorFrame:
                 self.close()
             except Exception:
                 _quarantine[id(self)] = self
+        else:
+            self._release_shape_library()

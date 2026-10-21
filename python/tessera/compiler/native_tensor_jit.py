@@ -91,3 +91,32 @@ def matches_bounded_signature(signature, key, row_bound):
                 or (expected_shape[0] is not None and shape[0] != expected_shape[0])):
             return False
     return True
+
+
+
+def shape_signature(signature, frame, bounds):
+    """Erase only compiler-declared variable axes in compact-root cache keys."""
+    resident, roots = signature
+    if frame["schema"] != "tessera.native.tensor_program_frame.v3" or len(roots) != len(frame["roots"]):
+        raise ValueError("shape tensor signature differs from native frame")
+    result = []
+    for root, index in zip(roots, frame["roots"], strict=True):
+        dtype, shape, _ = root
+        axes = frame["shape_bindings"][index]
+        result.append((dtype, tuple(None if symbol >= 0 else extent
+                                   for symbol, extent in zip(axes, shape, strict=True))))
+    return "bounded_native_shape", tuple(sorted(bounds.items())), resident, tuple(result)
+
+
+def matches_shape_signature(signature, key, bounds):
+    """Match compiler-owned variable masks, leaving capacities to native code."""
+    if (len(key) != 4 or key[0] != "bounded_native_shape" or key[1] != tuple(sorted(bounds.items()))
+            or key[2] != signature[0] or len(key[3]) != len(signature[1])):
+        return False
+    for actual, expected in zip(signature[1], key[3], strict=True):
+        dtype, shape, _ = actual
+        expected_dtype, expected_shape = expected
+        if dtype != expected_dtype or any(wanted is not None and value != wanted
+                                          for value, wanted in zip(shape, expected_shape, strict=True)):
+            return False
+    return True

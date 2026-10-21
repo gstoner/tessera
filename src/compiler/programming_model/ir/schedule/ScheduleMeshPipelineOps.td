@@ -124,7 +124,8 @@ def Schedule_SoftmaxOp : Op<ScheduleDialect, "softmax", [Pure]> {
                        StrAttr:$exp_mode,
                        BoolAttr:$ftz,
                        I64Attr:$workgroup_size,
-                       OptionalAttr<I64Attr>:$row_bound);
+                       OptionalAttr<I64Attr>:$row_bound,
+                       OptionalAttr<I64ArrayAttr>:$shape_bounds);
   let results = (outs AnyType:$scheduled);
   let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
   let hasVerifier = 1;
@@ -137,7 +138,8 @@ def Schedule_ActivationOp : Op<ScheduleDialect, "activation", [Pure]> {
                        StrAttr:$arch, StrAttr:$storage, StrAttr:$accum,
                        StrAttr:$kind, I64Attr:$axis, I64Attr:$workgroup_size,
                        StrAttr:$schedule, StrAttr:$nan_mode, StrAttr:$zero_mode,
-                       OptionalAttr<I64Attr>:$row_bound);
+                       OptionalAttr<I64Attr>:$row_bound,
+                       OptionalAttr<I64ArrayAttr>:$shape_bounds);
   let results = (outs AnyType:$scheduled);
   let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
   let hasVerifier = 1;
@@ -150,7 +152,8 @@ def Schedule_BinaryKernelOp : Op<ScheduleDialect, "binary_kernel", [Pure]> {
                        StrAttr:$kind, StrAttr:$output_storage,
                        I64Attr:$axis, I64Attr:$workgroup_size,
                        StrAttr:$schedule, StrAttr:$nan_mode,
-                       OptionalAttr<I64Attr>:$row_bound);
+                       OptionalAttr<I64Attr>:$row_bound,
+                       OptionalAttr<I64ArrayAttr>:$shape_bounds);
   let results = (outs AnyType:$scheduled);
   let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
   let hasVerifier = 1;
@@ -167,7 +170,8 @@ def Schedule_NormOp : Op<ScheduleDialect, "norm", [Pure]> {
                        OptionalAttr<I64Attr>:$row_capacity,
                        OptionalAttr<I64Attr>:$fixed_columns,
                        OptionalAttr<I64Attr>:$row_multiple,
-                       OptionalAttr<I64Attr>:$row_bound);
+                       OptionalAttr<I64Attr>:$row_bound,
+                       OptionalAttr<I64ArrayAttr>:$shape_bounds);
   let results = (outs AnyType:$scheduled);
   let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
   let hasVerifier = 1;

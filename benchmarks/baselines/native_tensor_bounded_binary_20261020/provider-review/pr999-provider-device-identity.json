@@ -1,0 +1,23 @@
+{
+  "base_head": "334f45a421d29c28f9ffe3a9c7c170cafbbe4852",
+  "review_fix_source_sha256": {
+    "python/tessera/compiler/jit.py": "2b1b7b7879cad6ef5e0f4f51b41ce892c09020fcde9a45ca7898de0fe3b7c39d",
+    "tests/unit/test_native_tensor_bounded_frame_transport.py": "45c63a25f56b6332cddbf700d0af5aca39432a12c76e8965df32984cc04a00b1"
+  },
+  "compiler_sha256": "73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc",
+  "provider_sha256": "06fcdb02b05e52f681d35427afc76a8b3a6c772d4fa88a281b69fb70006c9465",
+  "native_cpp_source_sha256_unchanged": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "98c58cd8e2af99f7b3325cc06c4677b781c239f9fecd0498ebaf92d631b6f44b",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_native_frame.h": "39bf10595a59c411d719733942a94c2a370c6a170afeb2a6036c28d0901b38a0",
+    "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "a6855737392b6b5b8c0f28785832868c008ccbca1b86d7573b22477310e25dbd",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "71c20b193dfe1f82bd69ff3a186906115e714d01d8b8e736f4b9d0af84e51819",
+    "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "c91e134cbd316bef4e43d9cc2a7832a46f85f2f5a256ece825ccab86cc5ef7e0",
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "19328f4a7c2af39e76749df1f20b46c504e661869f2965ff36021ea854690051",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "3b511fa45e875558b7c918729c17c127ceca9f68d34a3200d2c8b2801a47bae7"
+  },
+  "hardware_probe": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0\nLLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+  "device_cases": 8,
+  "host_transport_cases": 32,
+  "passed": 40,
+  "scope": "Fresh provider-guard Python source; unchanged native compiler/runtime. Earlier timing packet retains its original Python source identity; no new performance claim."
+}

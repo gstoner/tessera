@@ -1,0 +1,8 @@
+{
+  "base_head": "334f45a421d29c28f9ffe3a9c7c170cafbbe4852",
+  "jit_source_sha256": "2b1b7b7879cad6ef5e0f4f51b41ce892c09020fcde9a45ca7898de0fe3b7c39d",
+  "only_jit_change": "select required prepare v2 for bounded calls, v1 for static calls, before tracing/admission",
+  "remaining_jit_source_byte_identical": true,
+  "native_source_and_binaries_unchanged": true,
+  "timing_scope": "Original twelve-row packet remains attributed to its recorded source; corrected source has fresh numerical proof, no newly asserted performance measurement."
+}

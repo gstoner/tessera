@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-20**.
 
 ## Headline
 
-- **191** docs catalogued across the canonical doc tree.
-- **190** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **56** updated within the last 30 days.
+- **192** docs catalogued across the canonical doc tree.
+- **191** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **57** updated within the last 30 days.
 - **70** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -51,6 +51,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `NATIVE_SOURCE_ATTENTION_PROGRAM.md` | - | 2026-10-18 | 2 | ✓ |
 | `NATIVE_TENSOR_FRAME_OWNER.md` | - | 2026-10-20 | 0 | ✓ |
 | `NATIVE_TENSOR_JIT.md` | - | 2026-10-20 | 0 | ✓ |
+| `NATIVE_TENSOR_PROGRAM_BOUNDED.md` | - | 2026-10-20 | 0 | ✓ |
 | `NATIVE_TENSOR_PROGRAM_PACKAGE.md` | - | 2026-10-20 | 0 | ✓ |
 | `NATIVE_TENSOR_PROGRAM_PIPELINE.md` | - | 2026-10-20 | 0 | ✓ |
 | `PRODUCTION_COMPILER_PLAN.md` | Ratified | 2026-06-05 | 137 | ✓ |

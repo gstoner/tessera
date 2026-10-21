@@ -11,11 +11,27 @@ struct TesseraNvidiaNativeFrameStepV1 {
   int64_t scalars[8];
   uint32_t grid[3], block[3];
 };
+// Generic expressions selected by the compiler, evaluated at active row M.
+// A zero multiplier retains the capacity constant. Otherwise scalars become
+// M*multiplier and grids become ceil(M*multiplier/divisor). No operation tags.
+struct TesseraNvidiaNativeFrameRowPlanV2 {
+  int64_t scalar_multipliers[8];
+  int64_t grid_multipliers[3], grid_divisors[3];
+};
 // Buffer roles: 0=original read-only input, 1=private, 2=returned output.
 // Descriptors have null data and exact compact physical rank-two storage.
 int tessera_nvidia_native_frame_prepare_v1(
     const TesseraNvidiaMatmulHostView *buffers, const uint8_t *roles, size_t count,
     const TesseraNvidiaNativeFrameStepV1 *steps, size_t stage_count, uint64_t *handle);
+// Capacity descriptors are immutable. Flagged buffers have active rows equal
+// to the original input buffer row_root, in [1,row_bound], on every call.
+// Prepared bounded owners share the checked invoke/resident/profile/close
+// handle API below; static v1 preparation never admits dynamic row metadata.
+int tessera_nvidia_native_frame_prepare_v2(
+    const TesseraNvidiaMatmulHostView *buffers, const uint8_t *roles, size_t count,
+    const TesseraNvidiaNativeFrameStepV1 *steps, size_t stage_count,
+    const uint8_t *row_buffers, uint32_t row_root, int64_t row_bound,
+    const TesseraNvidiaNativeFrameRowPlanV2 *plans, uint64_t *handle);
 int tessera_nvidia_native_frame_invoke_v1(uint64_t handle,
     const TesseraNvidiaMatmulHostView *roots, size_t root_count,
     const TesseraNvidiaMatmulHostView *outputs, size_t output_count);

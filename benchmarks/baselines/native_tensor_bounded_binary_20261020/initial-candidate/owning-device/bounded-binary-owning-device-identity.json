@@ -1,0 +1,7 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5070, 12.0, 610.88",
+  "compiler_sha256": "f1ce99e7b0cc6cd94159f566ebecc40ad0cef6ce5226cb0119e84ef072269160",
+  "provider_sha256": "06fcdb02b05e52f681d35427afc76a8b3a6c772d4fa88a281b69fb70006c9465",
+  "runtime_header_sha256": "98c58cd8e2af99f7b3325cc06c4677b781c239f9fecd0498ebaf92d631b6f44b",
+  "device_test_sha256": "7f114c25c088e164dee07c270270ce5520f17bbf47e5170e606b3f87cfb00d06"
+}

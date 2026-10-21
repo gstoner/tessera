@@ -57,7 +57,7 @@ class SourceCertificate:
             elif isinstance(statement,ast.Return) and statement is statements[-1]:
                 expression(statement.value)
             else:raise ValueError("bounded LHS requires shape-independent straight-line operations")
-        allowed_ops=(ts.ops.matmul,ts.ops.gemm,ts.ops.rmsnorm,ts.ops.layer_norm,ts.ops.softmax)
+        allowed_ops=(ts.ops.matmul,ts.ops.gemm,ts.ops.add,ts.ops.rmsnorm,ts.ops.layer_norm,ts.ops.softmax)
         self.paths=tuple(paths)
         self.calls=tuple(self.resolve(path) for path in paths)
         if not self.calls or any(type(call) not in (types.FunctionType,types.MethodType)
@@ -168,6 +168,11 @@ class BoundedLhsDispatcher:
             jit=self.jit()
             if jit is None:
                 raise ValueError("bounded LHS frontend owner has been released")
+            if dict(self.bounds).keys()=={"M"} and self.rhs_storage_order in (None,"row_major"):
+                from .jit import _JIT_FALLBACK
+                native=jit._try_native_tensor_program_call(args,kwargs,row_bound=dict(self.bounds)["M"])
+                if native is not _JIT_FALLBACK:
+                    return native
             bound=jit._nvidia_rhs_call_signature.bind(*args,**kwargs)
             bound.apply_defaults()
             ordered=tuple(bound.arguments[name] for name in jit.arg_names)

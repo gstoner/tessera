@@ -7,6 +7,66 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## NATIVE-BOUNDED-BINARY-PRODUCERS-20261020 — active frame candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Synchronization key: NATIVE-BOUNDED-BINARY-PRODUCERS-20261020.
+
+The original compact FP16/BF16 stored-add -> plain FP32-output matmul now
+has a compiler-owned bounded-M projection. Dynamic textual Graph types stay
+dynamic; a traced source's explicit M-bound policy is projected by native C++
+and retained in source replay. Capacity memrefs and active member types are
+separate. Frame v2 carries root-row equality bindings and checked scalar/grid
+expressions; the native owner plans active views before committing a call.
+Static frame v1 layouts and execution remain supported. The additive public
+ABI is `tessera_nvidia_native_frame_prepare_v2` with a separate row-plan struct.
+See `docs/spec/NATIVE_TENSOR_PROGRAM_BOUNDED.md`.
+
+Initial capacity-model proof (f1ce99e7) is retained as provenance; the current
+active-memory compiler is 73739736. Eight exact RTX5070 bounded cases and
+120 initial static controls pass; current static image equivalence covers
+18 images in eight programs. Wider layouts/DAGs/AD and all five original
+aggregate programs remain open. No performance improvement is claimed.
+
+Not applicable to the CUDA physical owner: AVX-512 keeps its native runtime ABI and schedule. The shared Schedule attribute does not admit x86 execution. CPU producer integration remains follow-up required; no NVIDIA evidence transfers.
+
+
+Active-memory refinement: borrowed roots and the returned result now have
+actual dynamic memref types. One original-root memref.dim supplies explicit
+owned-capacity subviews; initialization, unique writers and retirement follow
+aliases to their base allocations. Static frames reject bounded metadata.
+The 73739736 compiler passes 176 focused controller tests and 487 final
+registry/public/transport tests. RTX5070 passes 32 combined cases (24 compiler,
+eight owning-device). Native frames, member IR and PTX are byte-identical to
+the first capacity-model candidate; provider 06fcdb02 is unchanged. Initial
+broad gates pass 30,905 CPU cases and 2,770 executed compiler cases.
+Current full compiler: 2,779 passed, zero skipped. First active-SSA CPU lane: 30,902
+passed / 3,721 declared skips; three audit-routing failures share one missing
+log field, corrected with all 19 routing/lifecycle cases passing. Twelve fresh
+timing rows reuse one allocation per storage; 24/72 captured windows meet the
+10ms duration gate. Short producer regions remain diagnostic. All five
+surfaces and the gfx1201 numerical/five-image controls pass. Publication CI/review gates remain; final local delivery is below.
+No sibling architecture proof or five-program closure follows.
+
+Final local delivery: the CI-equivalent CPU lane passes **30,894** with
+**3,721 declared skips**, zero failures/errors. The 11 cases omitted versus
+the first CPU run all have explicit performance markers, matching CI's selector;
+no other test IDs differ. The initial log-field failure and correction are
+retained. All **2,779** compiler cases execute with zero skips. The 323 final
+documentation/registry cases, 790 ODS cases, all five surfaces, 33 generated
+documents, Ruff, zero-error mypy and Graphify pass. Exact-head public CI/review
+and delivery remain pending; all five aggregate programs remain open.
+
+Provider ABI review: bounded admission now requires prepare_v2 before
+tracing or compilation; static calls continue to require prepare_v1. An older
+v1-only provider leaves the existing route eligible and creates no cache entry.
+One red prerequisite case becomes eight passing missing/empty/v1/v2-provider
+cases; the affected JIT/compiler/transport cohort passes 97. Fresh RTX5070
+validation passes eight device cases plus 32 host transport cases (40 total).
+Ruff and zero-error mypy pass. Native compiler/runtime bytes are unchanged.
+The original timing packet retains its recorded pre-review Python identity;
+no new performance claim follows. See the packet's provider-review/ receipts.
+
 ## ROCM-MXFP4-FRAGMENT-DECODE-20261020 — exact packed decoder
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.

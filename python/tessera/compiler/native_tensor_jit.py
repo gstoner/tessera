@@ -63,3 +63,31 @@ def lowering_artifacts(program):
         stages.append(LoweringArtifact(level, text, producer,
                                        stages[-1].output_digest if stages else None))
     return tuple(stages)
+
+
+def bounded_signature(signature, frame):
+    """Use compiler-owned dimension bindings to erase only varying cache axes."""
+    resident, roots = signature
+    if frame["schema"] != "tessera.native.tensor_program_frame.v2" or len(roots) != len(frame["roots"]):
+        raise ValueError("bounded tensor signature differs from native frame")
+    result = []
+    for root, index in zip(roots, frame["roots"], strict=True):
+        dtype, shape, strides = root
+        if frame["row_buffers"][index]:
+            shape = (None, shape[1])
+        result.append((dtype, shape, strides))
+    return "bounded_native_rows", frame["row_bound"], resident, tuple(result)
+
+
+def matches_bounded_signature(signature, key, row_bound):
+    """Match a compiler-derived cache key without reparsing IR on warm calls."""
+    if (len(key) != 4 or key[0] != "bounded_native_rows" or key[1] != row_bound
+            or key[2] != signature[0] or len(key[3]) != len(signature[1])):
+        return False
+    for actual, expected in zip(signature[1], key[3], strict=True):
+        dtype, shape, strides = actual
+        expected_dtype, expected_shape, expected_strides = expected
+        if (dtype != expected_dtype or strides != expected_strides or shape[1] != expected_shape[1]
+                or (expected_shape[0] is not None and shape[0] != expected_shape[0])):
+            return False
+    return True

@@ -1,0 +1,23 @@
+{
+  "base": "09ec0ddfaf44e42a7a58831d30c380cafb8fbd97",
+  "branch": "codex/native-bounded-tensor-producers",
+  "compiler_sha256": "f1ce99e7b0cc6cd94159f566ebecc40ad0cef6ce5226cb0119e84ef072269160",
+  "frozen_compiler": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-binary-tools-f1ce99e7/tessera-opt",
+  "layout_sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+  "source_sha256": {
+    "python/tessera/compiler/bounded_nvidia_lhs.py": "4030be795497f0741b733df79682b839fadbecb1c853b910301e48e49367337a",
+    "python/tessera/compiler/jit.py": "06e3d9bf6d1a28b956723d85638e7a9a84da1a9ea5f768c35f720b212d946d93",
+    "python/tessera/compiler/native_tensor_jit.py": "5f7864194be6c54026412c3f5b690c2a256b59ac615afa31253135bc5e1814aa",
+    "python/tessera/compiler/prepared_native_tensor_frame.py": "255ee72118708d51c91d7a1ef0dc8c3a85a5f3eff1d7db9ab53909aded246725",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "f42814df94a1745af6c3b4fbdf57dc676053cf962f60a07ab82b6fbf68fd7ad1",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_native_frame.h": "39bf10595a59c411d719733942a94c2a370c6a170afeb2a6036c28d0901b38a0",
+    "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "75c7c1a9b55487a64e0ff5030bec127536fd2bd9a9ca3da40cc7a41e4aef54ca",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "71c20b193dfe1f82bd69ff3a186906115e714d01d8b8e736f4b9d0af84e51819",
+    "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "c91e134cbd316bef4e43d9cc2a7832a46f85f2f5a256ece825ccab86cc5ef7e0",
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "0420a9b38d4b8d38f02645ae60608a2bfc5f73e731cdcd4be81d2fa32f73ff03",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "3b511fa45e875558b7c918729c17c127ceca9f68d34a3200d2c8b2801a47bae7",
+    "tests/device/nvidia/test_native_tensor_bounded_producers.py": "93f0d9e8800fe4d0ada5408f68ede44daf5ab59cb002e2081b24f37f19957835",
+    "tests/unit/test_native_tensor_bounded_producers.py": "e4f8ba26823ea0eb084aa42caa52a7133843dd0b5186ce8fc01b1000035a9f7c"
+  },
+  "compiler_tests": "95 passed; native device proof pending"
+}

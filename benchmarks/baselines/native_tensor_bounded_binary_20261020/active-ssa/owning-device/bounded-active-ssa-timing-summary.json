@@ -1,0 +1,201 @@
+{
+  "compiler_sha256": "73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc",
+  "provider_sha256": "06fcdb02b05e52f681d35427afc76a8b3a6c772d4fa88a281b69fb70006c9465",
+  "rows": [
+    {
+      "storage": "f16",
+      "shape_mkn": [
+        17,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_count": 6,
+      "producer_us": 0.9507499926257879,
+      "consumer_us": 91.64782240986824,
+      "program_us": 92.60349348187447,
+      "completed_public_ms": 0.78831484375,
+      "allocations": 1,
+      "capacity_unchanged": true
+    },
+    {
+      "storage": "f16",
+      "shape_mkn": [
+        1,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_count": 6,
+      "producer_us": 0.795421889051795,
+      "consumer_us": 83.88502895832062,
+      "program_us": 84.61489155888557,
+      "completed_public_ms": 0.7362105,
+      "allocations": 1,
+      "capacity_unchanged": true
+    },
+    {
+      "storage": "f16",
+      "shape_mkn": [
+        256,
+        4096,
+        256
+      ],
+      "captured_admitted": 6,
+      "captured_count": 6,
+      "producer_us": 5.120101617649198,
+      "consumer_us": 99.4371548295021,
+      "program_us": 104.56020385026932,
+      "completed_public_ms": 1.6026164375,
+      "allocations": 1,
+      "capacity_unchanged": true
+    },
+    {
+      "storage": "f16",
+      "shape_mkn": [
+        65,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_count": 6,
+      "producer_us": 1.9183476106263697,
+      "consumer_us": 92.68106147646904,
+      "program_us": 94.5693887770176,
+      "completed_public_ms": 0.87251390625,
+      "allocations": 1,
+      "capacity_unchanged": true
+    },
+    {
+      "storage": "f16",
+      "shape_mkn": [
+        5,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_count": 6,
+      "producer_us": 0.8450429886579514,
+      "consumer_us": 86.79202198982239,
+      "program_us": 87.59699389338493,
+      "completed_public_ms": 0.7358351249999999,
+      "allocations": 1,
+      "capacity_unchanged": true
+    },
+    {
+      "storage": "f16",
+      "shape_mkn": [
+        200,
+        4096,
+        256
+      ],
+      "captured_admitted": 6,
+      "captured_count": 6,
+      "producer_us": 4.101062659174204,
+      "consumer_us": 95.91696038842201,
+      "program_us": 100.13792663812637,
+      "completed_public_ms": 1.4083584375,
+      "allocations": 1,
+      "capacity_unchanged": true
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        17,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_count": 6,
+      "producer_us": 0.9330390603281558,
+      "consumer_us": 91.73695370554924,
+      "program_us": 92.70292147994041,
+      "completed_public_ms": 0.75725415625,
+      "allocations": 1,
+      "capacity_unchanged": true
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        1,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_count": 6,
+      "producer_us": 1.0261132847517729,
+      "consumer_us": 83.97351950407028,
+      "program_us": 84.76478606462479,
+      "completed_public_ms": 0.7138130625,
+      "allocations": 1,
+      "capacity_unchanged": true
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        256,
+        4096,
+        256
+      ],
+      "captured_admitted": 6,
+      "captured_count": 6,
+      "producer_us": 5.117617314681411,
+      "consumer_us": 99.51232001185417,
+      "program_us": 104.62981462478638,
+      "completed_public_ms": 1.6685484375,
+      "allocations": 1,
+      "capacity_unchanged": true
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        65,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_count": 6,
+      "producer_us": 1.9191796891391277,
+      "consumer_us": 92.77847781777382,
+      "program_us": 94.64099258184433,
+      "completed_public_ms": 0.8749148437500001,
+      "allocations": 1,
+      "capacity_unchanged": true
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        5,
+        4096,
+        256
+      ],
+      "captured_admitted": 0,
+      "captured_count": 6,
+      "producer_us": 0.8394453325308859,
+      "consumer_us": 86.75729110836983,
+      "program_us": 87.59267628192902,
+      "completed_public_ms": 0.7293623124999999,
+      "allocations": 1,
+      "capacity_unchanged": true
+    },
+    {
+      "storage": "bf16",
+      "shape_mkn": [
+        200,
+        4096,
+        256
+      ],
+      "captured_admitted": 6,
+      "captured_count": 6,
+      "producer_us": 4.102644510567188,
+      "consumer_us": 95.934197306633,
+      "program_us": 100.1041904091835,
+      "completed_public_ms": 1.3691614374999999,
+      "allocations": 1,
+      "capacity_unchanged": true
+    }
+  ],
+  "captured_admitted": 24,
+  "captured_total": 72,
+  "scope": "Raw captured medians are diagnostic where duration admission is false; no baseline speedup claim."
+}

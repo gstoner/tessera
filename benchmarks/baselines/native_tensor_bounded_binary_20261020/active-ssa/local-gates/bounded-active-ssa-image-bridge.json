@@ -1,0 +1,50 @@
+{
+  "prior_compiler": "f1ce99e7b0cc6cd94159f566ebecc40ad0cef6ce5226cb0119e84ef072269160",
+  "candidate_compiler": "73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc",
+  "provider_unchanged": "06fcdb02b05e52f681d35427afc76a8b3a6c772d4fa88a281b69fb70006c9465",
+  "rows": [
+    {
+      "storage": "f16",
+      "frame_equal": true,
+      "all_ptx_images_equal": true,
+      "original_source_equal": true,
+      "member_ir_equal": [
+        true,
+        true
+      ],
+      "ir_sha256": {
+        "source_ir": "f5c694078d93daaed07da23ffcc7db2fc9707d3adefa1e2f3de6c5b24b29fac4",
+        "schedule_ir": "cf38509fcae4beb0cb5486883f384ce116ebd6087f5ebecc2c02098fc6de666f",
+        "tile_ir": "690b66d3b18ea25465cff84562d8ff129afd6702389d677d7c98fd83c0e88081",
+        "target_ir": "114894ecd7d510421c92bdf015dc5f53063c674958e9a587dd460733aa7041c6"
+      },
+      "image_sha256": [
+        "66bdfc07ebe2789c68ebcf445e4a294fb33a3555f5b642a3c9eb3a77445873f2",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "host_memory_ssa": "dynamic roots, one original root memref.dim, two capacity subviews"
+    },
+    {
+      "storage": "bf16",
+      "frame_equal": true,
+      "all_ptx_images_equal": true,
+      "original_source_equal": true,
+      "member_ir_equal": [
+        true,
+        true
+      ],
+      "ir_sha256": {
+        "source_ir": "d82eb42b8d4831488b8c8d7cc46369c9abdf9407588c1eccd54ed9e2969651b6",
+        "schedule_ir": "907f41eb89ef88b73262f62b4fd093bad3ff27a8a788bbc2fe5b8dea39ecc449",
+        "tile_ir": "44dbc2107294ffb6e67485c121b27f4e80afe668ead598ab82f88bc9e9e04697",
+        "target_ir": "fefe1d2fa34b81f1b1c80bea84f2b3a0333fa1e176cd2f7c05a2f6d7fcdf524f"
+      },
+      "image_sha256": [
+        "8d017297c95cdd5e46d667de17c8c4a2fbfa5e2550aa1f04b12547bad5af60f9",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "host_memory_ssa": "dynamic roots, one original root memref.dim, two capacity subviews"
+    }
+  ],
+  "scope": "compiler/frame/image equivalence; current public exact-device replay still required"
+}

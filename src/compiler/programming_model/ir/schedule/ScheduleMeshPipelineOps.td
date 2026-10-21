@@ -147,7 +147,8 @@ def Schedule_BinaryKernelOp : Op<ScheduleDialect, "binary_kernel", [Pure]> {
                        StrAttr:$arch, StrAttr:$storage, StrAttr:$accum,
                        StrAttr:$kind, StrAttr:$output_storage,
                        I64Attr:$axis, I64Attr:$workgroup_size,
-                       StrAttr:$schedule, StrAttr:$nan_mode);
+                       StrAttr:$schedule, StrAttr:$nan_mode,
+                       OptionalAttr<I64Attr>:$row_bound);
   let results = (outs AnyType:$scheduled);
   let assemblyFormat = "$subject attr-dict `:` type($subject) `->` type($scheduled)";
   let hasVerifier = 1;

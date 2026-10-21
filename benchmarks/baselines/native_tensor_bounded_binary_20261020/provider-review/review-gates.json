@@ -1,0 +1,20 @@
+{
+  "review_comment": 4331561718,
+  "red": {
+    "failed": 1,
+    "passed": 7,
+    "case": "old v1-only provider plus bounded call"
+  },
+  "corrected_provider_cases": 8,
+  "affected_jit_compiler_transport_passed": 97,
+  "fresh_gpu_cases": 8,
+  "fresh_host_transport_cases": 32,
+  "fresh_combined_passed": 40,
+  "documentation_routing_lifecycle_passed": 19,
+  "generated_documents": 33,
+  "ruff": "passed",
+  "mypy_errors": 0,
+  "graphify": "completed",
+  "native_compiler_runtime_source_and_binary": "unchanged",
+  "earlier_full_gates_and_timings": "retain their original pre-review source identity; corrected Python has targeted plus fresh owning-device proof; exact-head public CI must rerun"
+}

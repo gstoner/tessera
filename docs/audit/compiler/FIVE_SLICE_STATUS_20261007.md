@@ -3,6 +3,62 @@ last_updated: 2026-10-20
 audit_role: reference
 ---
 
+## NATIVE-BOUNDED-SSA-DAG-20261020 — native row-relation candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-BOUNDED-SSA-DAG-20261020.
+
+Complete registered Graph-to-NVVM lowering preserves explicit compact layouts
+and shares owned-member canonicalization with strict native source replay.
+Native Graph projection now derives runtime M from SSA relationships across
+same-shape semantic edges and matmul LHS/result rows. RHS contraction rows
+remain fixed; trace-at-one and M=K imply no additional relation. Conflicting
+roles reject before mutation. Projection uses a detached source clone and
+strict original-source replay. FP32 intermediates retain native scalar FMA.
+Schedule unary members retain a checked row_bound capacity. Every frame-v2
+stage has row expressions and original active types, including static RHS
+stages with zero multipliers/unit divisors. Existing alias/lifetime verifiers
+remain unchanged. No operation, dtype, diagnostic, registered pass or runtime
+ABI is added. Sibling physical schedules remain separate.
+
+The frozen 06e3712d compiler passes 107 focused tests and all 2,862 full
+compiler-route cases with zero skips. Separately, the da1c9468 static candidate
+passes 2,827 compiler cases. New DAG regression history: 34 failures/one
+refusal pass; then 29 passes/six static-RHS active-type failures; then all
+35 cases pass. Exact RTX5070 proof passes 28 new changed-M DAG cases plus
+eight existing bounded regressions. Public JIT initially found fixture
+imports and genuine ReLU/literal-policy certificate gaps. The Python-only
+correction passes 35 certificate controls; all 42 corrected ordinary public
+JIT cases pass, including trace-at-one, M=K, changed-M image/arena reuse and
+serialized artifact replay. All 42 bounded timing rows complete; 253/504
+event windows meet the duration threshold, and all fourteen case/storage
+groups preserve images across M=1,17,65. The twelve-row
+static packet retains its earlier da1c9468 compiler/source identity at
+benchmarks/baselines/native_tensor_full_pipeline_20261020/README.md.
+
+Final explicit-ODS compiler 8903c769 passes all 2,886 compiler cases without
+skips. The final RTX5070 suite passes 102 cases; eight fixture-gated unit
+cases pass separately after stale legacy-schema assertions are replaced with
+native-schema/three-stage lineage checks. All forty bounded member images,
+fourteen frames and Target modules match the measured compiler exactly.
+The selected compiler also owns member image generation, immutable validation
+and restoration; an environment backend cannot silently replace it. Three
+red cases become 120 passing focused checks. The final 102-case device suite
+passes again. Controlled A/B verifies actual backend fingerprints for all
+22 programs / 58 images. Historical common-backend comparisons are annotated;
+the recorded timing/source identities remain unchanged.
+The CPU selector records 30,922 passes / 3,721 declared skips and one recorder
+inventory failure; the central recorder-table correction and related gates
+pass 23. No whole-CPU rerun is claimed; exact-head public CI remains required.
+Ruff and zero-error mypy pass. The packet retains all initial/corrected results.
+
+General dynamic axes/layouts, noncanonical accumulator reconstruction,
+control flow, AD integration and all five original aggregate programs remain
+open. Final local generated-doc, all five surface, claim-lint, Ruff and zero-error
+mypy gates pass. Exact-head public CI/review and delivery remain pending.
+
+
+
 ## Native bounded binary producer candidate — 2026-10-20
 
 PR998 is delivered as 09ec0ddfaf44e42a7a58831d30c380cafb8fbd97 after exact-head

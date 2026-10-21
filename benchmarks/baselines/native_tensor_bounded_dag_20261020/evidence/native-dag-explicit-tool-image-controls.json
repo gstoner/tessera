@@ -1,0 +1,1472 @@
+{
+  "status": "complete",
+  "candidate_sha256": "8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817",
+  "rows": [
+    {
+      "profile": "bounded",
+      "case": "chain",
+      "storage": "f16",
+      "source_sha256": "3cd2b2c3850376cc4905a73b29974ef41f439dcb30587f4b00cf10e61f7a405b",
+      "control_images": [
+        "01c29b7abe9e4576633285dfb034a6765f860bcf6c048362be484ab8b341cfba",
+        "5769545bbf2cbc4567b930675897c6f2900a8d64af6f1b9743d515408dfa2ca2",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "candidate_images": [
+        "01c29b7abe9e4576633285dfb034a6765f860bcf6c048362be484ab8b341cfba",
+        "5769545bbf2cbc4567b930675897c6f2900a8d64af6f1b9743d515408dfa2ca2",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "static_rhs",
+      "storage": "f16",
+      "source_sha256": "6af627e5b90a928bba9b039f990e70ecc5d8f68dbb39aac92a2ba8317051ce95",
+      "control_images": [
+        "32f82ee9490433320c1d41f117a024ceecca47bc906de6b2f582c0a39d6d1bf6",
+        "5769545bbf2cbc4567b930675897c6f2900a8d64af6f1b9743d515408dfa2ca2",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "candidate_images": [
+        "32f82ee9490433320c1d41f117a024ceecca47bc906de6b2f582c0a39d6d1bf6",
+        "5769545bbf2cbc4567b930675897c6f2900a8d64af6f1b9743d515408dfa2ca2",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "fork_join",
+      "storage": "f16",
+      "source_sha256": "4834a247bfe81ae07a99ef8b6f08f8115a2d761cf7ac34881db4284458f29f01",
+      "control_images": [
+        "5769545bbf2cbc4567b930675897c6f2900a8d64af6f1b9743d515408dfa2ca2",
+        "01c29b7abe9e4576633285dfb034a6765f860bcf6c048362be484ab8b341cfba",
+        "01c29b7abe9e4576633285dfb034a6765f860bcf6c048362be484ab8b341cfba",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "candidate_images": [
+        "5769545bbf2cbc4567b930675897c6f2900a8d64af6f1b9743d515408dfa2ca2",
+        "01c29b7abe9e4576633285dfb034a6765f860bcf6c048362be484ab8b341cfba",
+        "01c29b7abe9e4576633285dfb034a6765f860bcf6c048362be484ab8b341cfba",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "two_matmuls",
+      "storage": "f16",
+      "source_sha256": "d2666590299b9aa362226e24486d92860acbef128edd07dd0e516dc7a20c1c32",
+      "control_images": [
+        "ff8dc4b01bd08e1b6d8aa92a3bcfcd1b67bcd5896c5ef1c682e28fbfb61eaddf",
+        "7ce06fe030ae2b6ab8e752555c959bbee929012cf22586598c7b1dba9cedf2b3",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "candidate_images": [
+        "ff8dc4b01bd08e1b6d8aa92a3bcfcd1b67bcd5896c5ef1c682e28fbfb61eaddf",
+        "7ce06fe030ae2b6ab8e752555c959bbee929012cf22586598c7b1dba9cedf2b3",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "fp32_middle",
+      "storage": "f16",
+      "source_sha256": "3a7cca37ca053a67c2fe48142499986b86dd2a5fdc9f122c93c58b972fb89ff3",
+      "control_images": [
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254",
+        "217fb7cb395821509c64e52ea1b5a6b39bdcb1137da1790a6f3f4039e5719c67",
+        "230004fb6022f04af434b1c7200bb4fb29c93b1adf2aef0c6dab346ef92a6d13"
+      ],
+      "candidate_images": [
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254",
+        "217fb7cb395821509c64e52ea1b5a6b39bdcb1137da1790a6f3f4039e5719c67",
+        "230004fb6022f04af434b1c7200bb4fb29c93b1adf2aef0c6dab346ef92a6d13"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "rmsnorm",
+      "storage": "f16",
+      "source_sha256": "3a80b279c6c1be73d1226b2512737f20ed3ab3326a060d5c1569113f417125fb",
+      "control_images": [
+        "88a8e231b38becee7e803a5132c098f3356ab8b5c7467a7c6137214a18da02d2",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "candidate_images": [
+        "88a8e231b38becee7e803a5132c098f3356ab8b5c7467a7c6137214a18da02d2",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "softmax",
+      "storage": "f16",
+      "source_sha256": "96c6c0f8142273e8090c811b22e1fbc16cd0daefaaa6a26cdee849f9b59dde0c",
+      "control_images": [
+        "af4e4a678f6a255cbc0f78fd1d7a0f9907df967b7278ea08db7b15c03b1dcce2",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "candidate_images": [
+        "af4e4a678f6a255cbc0f78fd1d7a0f9907df967b7278ea08db7b15c03b1dcce2",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "chain",
+      "storage": "bf16",
+      "source_sha256": "fc1e96a375250da905e6efa524f833d61eef5d150c80d79c9cbd80a75b197953",
+      "control_images": [
+        "aeb17d203b6c4dde1109826bf1145b8352296b526df8b2bf0ae876b4678c695e",
+        "77e96edbfbca18e69deb68ea5204137e2760e3884fb12d8971a1a3d0bf07bb21",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "candidate_images": [
+        "aeb17d203b6c4dde1109826bf1145b8352296b526df8b2bf0ae876b4678c695e",
+        "77e96edbfbca18e69deb68ea5204137e2760e3884fb12d8971a1a3d0bf07bb21",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "static_rhs",
+      "storage": "bf16",
+      "source_sha256": "9a399c81211e2ccd933f3dfd3714ed83311e8bd2237c6c262f38ebe1423d6138",
+      "control_images": [
+        "c3e3658d06f1ecbeb70e28209858d763bd3ab0ca6f90ee6c095d99c7f022a47b",
+        "77e96edbfbca18e69deb68ea5204137e2760e3884fb12d8971a1a3d0bf07bb21",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "candidate_images": [
+        "c3e3658d06f1ecbeb70e28209858d763bd3ab0ca6f90ee6c095d99c7f022a47b",
+        "77e96edbfbca18e69deb68ea5204137e2760e3884fb12d8971a1a3d0bf07bb21",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "fork_join",
+      "storage": "bf16",
+      "source_sha256": "3fc6f8638a8bbeb1287d5129efcf04e27f93c49565ba84520bfb4eccc4c3131c",
+      "control_images": [
+        "77e96edbfbca18e69deb68ea5204137e2760e3884fb12d8971a1a3d0bf07bb21",
+        "aeb17d203b6c4dde1109826bf1145b8352296b526df8b2bf0ae876b4678c695e",
+        "aeb17d203b6c4dde1109826bf1145b8352296b526df8b2bf0ae876b4678c695e",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "candidate_images": [
+        "77e96edbfbca18e69deb68ea5204137e2760e3884fb12d8971a1a3d0bf07bb21",
+        "aeb17d203b6c4dde1109826bf1145b8352296b526df8b2bf0ae876b4678c695e",
+        "aeb17d203b6c4dde1109826bf1145b8352296b526df8b2bf0ae876b4678c695e",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "two_matmuls",
+      "storage": "bf16",
+      "source_sha256": "80799d24c17019a72cd94d9def4f8f5db52cba1ab76348597c2da4b6645b3251",
+      "control_images": [
+        "e09efc29905c8e986c7d684fd8966b932c29d919991067ee90329476bea9c6f8",
+        "7ce06fe030ae2b6ab8e752555c959bbee929012cf22586598c7b1dba9cedf2b3",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "candidate_images": [
+        "e09efc29905c8e986c7d684fd8966b932c29d919991067ee90329476bea9c6f8",
+        "7ce06fe030ae2b6ab8e752555c959bbee929012cf22586598c7b1dba9cedf2b3",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "fp32_middle",
+      "storage": "bf16",
+      "source_sha256": "e35c5902ce992b9e4d7e4210e7a41b283bcf4cab4b94f7c0416cbba7df4afe5f",
+      "control_images": [
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298",
+        "217fb7cb395821509c64e52ea1b5a6b39bdcb1137da1790a6f3f4039e5719c67",
+        "aa62839ae14a909cdc407a3ba16d05d5066d296260fcacdcaa8aefc62737bc3e"
+      ],
+      "candidate_images": [
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298",
+        "217fb7cb395821509c64e52ea1b5a6b39bdcb1137da1790a6f3f4039e5719c67",
+        "aa62839ae14a909cdc407a3ba16d05d5066d296260fcacdcaa8aefc62737bc3e"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "rmsnorm",
+      "storage": "bf16",
+      "source_sha256": "751a00365dd4e5e989037dadb33091ff99d1e66a16c56393b39b2538aa576934",
+      "control_images": [
+        "318ffd1fecc3210db7eae866d9f08a0b72f3f9921f4b6f5c14c63b47c37f7efe",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "candidate_images": [
+        "318ffd1fecc3210db7eae866d9f08a0b72f3f9921f4b6f5c14c63b47c37f7efe",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "bounded",
+      "case": "softmax",
+      "storage": "bf16",
+      "source_sha256": "87086227614a40583952814ceba65249becd265c98491557b0c331dbe9bf4dd6",
+      "control_images": [
+        "2fa9b73308547179ecfe39a225139972dd76bb757bc58609f42d1d480f6b75e9",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "candidate_images": [
+        "2fa9b73308547179ecfe39a225139972dd76bb757bc58609f42d1d480f6b75e9",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": true,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "static",
+      "case": "relu_product",
+      "storage": "f16",
+      "source_sha256": "dffeb4f356c268a488db21b8edf3f4db390a7b4c37609803c8d288abec5cf9b5",
+      "control_images": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "candidate_images": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": false,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "static",
+      "case": "norm_product",
+      "storage": "f16",
+      "source_sha256": "07eb37c101f0ce2895b63076bb0a80985c0126400795b2169cd8e358854a2e40",
+      "control_images": [
+        "531396bb5373e245fec2890d23402a7eb7477424b3455cb776046e14e9b9b9f0",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "candidate_images": [
+        "531396bb5373e245fec2890d23402a7eb7477424b3455cb776046e14e9b9b9f0",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": false,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "static",
+      "case": "both_products",
+      "storage": "f16",
+      "source_sha256": "0ee5c2148025297d2b5211438a6dc5f58a293c190c2c945d866287d052a5da07",
+      "control_images": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "af4e4a678f6a255cbc0f78fd1d7a0f9907df967b7278ea08db7b15c03b1dcce2",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "candidate_images": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "af4e4a678f6a255cbc0f78fd1d7a0f9907df967b7278ea08db7b15c03b1dcce2",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": false,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "static",
+      "case": "reversed_product",
+      "storage": "f16",
+      "source_sha256": "f826ad82efce6f6f795eb586603d7aaac5175229e6669dc08c7c6f9a13f7b902",
+      "control_images": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "candidate_images": [
+        "53bae52919a27ff7401ba7b21f1096d1f6a894c074450f024860e11b24786157",
+        "05f4baedc8456774608f56db30917b32d8047eda648de9d694cb733d6f92f8c0"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": false,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "static",
+      "case": "relu_product",
+      "storage": "bf16",
+      "source_sha256": "f29c20fb7a4c40366ee2a862aa3f4e142ae8d8779f5c06c19dc73c0abb815c37",
+      "control_images": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "candidate_images": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": false,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "static",
+      "case": "norm_product",
+      "storage": "bf16",
+      "source_sha256": "3a7c391785b13e700580ea324a33a23a137747cec41992be131dd27347a7bee6",
+      "control_images": [
+        "090b018a9ab4c8e947e995cd4f76c0e3157a6bdf1b3d34e622bb6e07cfe124d2",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "candidate_images": [
+        "090b018a9ab4c8e947e995cd4f76c0e3157a6bdf1b3d34e622bb6e07cfe124d2",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": false,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "static",
+      "case": "both_products",
+      "storage": "bf16",
+      "source_sha256": "7b6adb3d198b8002f218de92c877b319864429a212759980da35617a8dface97",
+      "control_images": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "2fa9b73308547179ecfe39a225139972dd76bb757bc58609f42d1d480f6b75e9",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "candidate_images": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "2fa9b73308547179ecfe39a225139972dd76bb757bc58609f42d1d480f6b75e9",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": false,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    },
+    {
+      "profile": "static",
+      "case": "reversed_product",
+      "storage": "bf16",
+      "source_sha256": "0ffb7be7edeb598388af02b9d6a35b93a5021ff4bd4fb92d84bc3626a065c7d2",
+      "control_images": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "candidate_images": [
+        "b8c2324f51cd9fcee24f7cb86b3339f15d074599d7a4daed9080d9047db555ab",
+        "7aff9357de9a57a2eccd91c89e7263cf3b1839951140d65ab28c394609354f7f"
+      ],
+      "frames_equal": true,
+      "images_equal": true,
+      "target_ir_equal": false,
+      "backend_calls": [
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-bounded-active-ssa-tools-73739736/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:73739736aa3449078c9c9d0c5a508ca365bf71b0bfd22605556b12f83ef8c4cc"
+          }
+        ],
+        [
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          },
+          {
+            "explicit_tool": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+            "compiler_fp": "lower-tile-to-nvidia:8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817"
+          }
+        ]
+      ]
+    }
+  ],
+  "environment_backend_compiler": "da1c946840304c4a456445e105e18d389927817e00779236c3c99ab846a8f7ec",
+  "scope": "Selected compiler must override the different common environment backend for packaging and validation; each returned compiler fingerprint is checked",
+  "programs": 22,
+  "member_images": 58
+}

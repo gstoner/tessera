@@ -171,7 +171,13 @@ def test_frontend_norm_relu_matmul_prepared_numerics_and_retained_outputs(sm120_
             public_output = public(*values)
             assert public.execution_kind == "native_gpu"
             artifact = public.runtime_artifact()
-            assert artifact.metadata["native_program"]["schema"] == "tessera.nvidia.lhs_tensor_program.v3"
+            assert artifact.metadata["compiler_path"] == "canonical_native_tensor_program"
+            assert artifact.metadata["native_program"]["schema"] == "tessera.native.tensor_program.v1"
+            native = public._native_tensor_last_program
+            assert native is not None and len(native.images) == 3
+            assert native.frame["roots"] == [0, 1]
+            assert [stage["inputs"] for stage in native.frame["stages"]] == [[0], [2], [3, 1]]
+            assert native.frame["output"] == 4
             np.testing.assert_allclose(public_output, expected,
                 atol=0.02 if storage == "bf16" else 0.003,
                 rtol=0.02 if storage == "bf16" else 0.003)
@@ -182,6 +188,7 @@ def test_frontend_norm_relu_matmul_prepared_numerics_and_retained_outputs(sm120_
             np.testing.assert_array_equal(actual, before)
     finally:
         owner.close()
+        public.close_native_storage()
 
 
 @pytest.mark.compiler_route

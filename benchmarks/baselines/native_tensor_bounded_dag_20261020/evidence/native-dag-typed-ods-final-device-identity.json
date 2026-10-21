@@ -1,0 +1,58 @@
+{
+  "compiler_sha256": "8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817",
+  "provider_sha256": "06fcdb02b05e52f681d35427afc76a8b3a6c772d4fa88a281b69fb70006c9465",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "compiler_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+  "frozen_source_identity": {
+    "base": "7d83bf5a0db9492d5ea8752f1bcd37714d9a0f90",
+    "compiler_sha256": "8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817",
+    "frozen_compiler": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-typed-ods-tools-8903c769/tessera-opt",
+    "layout_sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+    "source_sha256": {
+      "python/tessera/compiler/bounded_nvidia_lhs.py": "554ecf4af67fce78ec2b36ade48bb2126469e0488e2dcaf7b4df4eba1d49fa09",
+      "python/tessera/compiler/jit.py": "2b1b7b7879cad6ef5e0f4f51b41ce892c09020fcde9a45ca7898de0fe3b7c39d",
+      "python/tessera/compiler/native_tensor_jit.py": "5f7864194be6c54026412c3f5b690c2a256b59ac615afa31253135bc5e1814aa",
+      "python/tessera/compiler/prepared_native_tensor_frame.py": "255ee72118708d51c91d7a1ef0dc8c3a85a5f3eff1d7db9ab53909aded246725",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "98c58cd8e2af99f7b3325cc06c4677b781c239f9fecd0498ebaf92d631b6f44b",
+      "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_native_frame.h": "39bf10595a59c411d719733942a94c2a370c6a170afeb2a6036c28d0901b38a0",
+      "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "a6855737392b6b5b8c0f28785832868c008ccbca1b86d7573b22477310e25dbd",
+      "src/compiler/programming_model/ir/ScheduleDialect.cpp": "1b378ee5e4c028a52d7eacc1c2a208af8a2f088e6c95dde5a5be3fff9580cbc5",
+      "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "8ad5e15d0afe080bb1e61ad9375d1e47436d7d2de88cc17b0348971a302d4290",
+      "src/compiler/programming_model/lib/NativeTensorProgram.h": "1e9365e28b529412bf4614b1d893845ac9301b17ec90c5bc7ffef6e8cc6a5f9b",
+      "src/compiler/programming_model/lib/PMPasses.cpp": "3a6ae3809aef69cd3f4b516b32a13ac02e760d477bf8e48a5bec14820077a6da",
+      "tests/device/nvidia/test_native_tensor_bounded_producers.py": "7f114c25c088e164dee07c270270ce5520f17bbf47e5170e606b3f87cfb00d06",
+      "tests/unit/test_native_bounded_binary_recorder.py": "2a79f7ecbfe98a022d748ba07d7d939f7a78da7e64b8f626660f23c5d74b3727",
+      "tests/unit/test_native_tensor_bounded_frame_transport.py": "45c63a25f56b6332cddbf700d0af5aca39432a12c76e8965df32984cc04a00b1",
+      "tests/unit/test_native_tensor_bounded_producers.py": "840520a8902ed3a692ab6e121b465971a982cbb0feb077c508975f199022846a",
+      "tests/unit/test_native_tensor_program_pipeline.py": "f3d490eda25ba259710ca2afc76889cf0af9a8b6c6984fc70ac092fe798b8b91",
+      "benchmarks/nvidia/record_native_tensor_bounded_binary.py": "e2cf6f9728e775a39c19152867e6cb3fc5e1287c53b877cacb34324b3eb5d12f",
+      "tests/unit/test_native_tensor_pipeline_layout.py": "f154240006500cc8939df5d70af67038d802b27714e79c00165259a779e94fd5",
+      "tests/device/nvidia/test_native_tensor_pipeline_layout.py": "52e602cd41996cefb7fcb765392d7dcb9bbd4dd567240b424369e195bd304490",
+      "tests/unit/test_native_tensor_bounded_dag.py": "207655a894a53b40309f5120b260b8b80d40013d1984ec175383512fdd5dea02",
+      "tests/device/nvidia/test_native_tensor_bounded_dag.py": "7d0019fbdf1778d69ecdb1e8708287213ffc648569dd0c10c0c9ef0d9ffe3a24",
+      "tests/unit/test_bounded_lhs_frontend_contract.py": "6bfae7de04b196022f09b33ce26296015888a39c728829f27461861ad1f3a839",
+      "tests/unit/test_native_tensor_full_pipeline_recorder.py": "a0eb5416ba691d44309187d08f6e59553466622b967318857981df99a2741524",
+      "benchmarks/nvidia/record_native_tensor_bounded_dag.py": "d3370e0ee645d57afc9c183a35e9c9deb3c435258bc039331c27b8bcbd82fd27",
+      "benchmarks/nvidia/record_native_tensor_full_pipeline.py": "c18b1cf953f2d891f65e8967531a7d541e801e548f658bab45ea5bc05942686b"
+    },
+    "scope": "Native SSA bounded producer DAGs with explicit unary Schedule ODS row_bound; frontend certificate overlay included",
+    "native_patch_sha256": "6f01a435ee0fea4f0a638a48b6713901efee40226a8f1e97d5a97f0ab1ca5bf0"
+  },
+  "test_only_overlays": {
+    "tests/unit/test_sm120_scheduled_activation.py": {
+      "tested_sha256": "105dd04fc99f9e665a10360892e72a33416de8b5ffc98b09c60bcc3679defeca"
+    }
+  },
+  "results": {
+    "final_device": 102,
+    "final_fixture_device_corrected": 8,
+    "fixture_initial_failed": 6,
+    "fixture_initial_passed": 2,
+    "bounded_program_image_controls": 14,
+    "bounded_member_images_equal": 40,
+    "bounded_target_ir_equal": true,
+    "prior_static_program_controls": 8,
+    "prior_static_member_images_equal": 18
+  },
+  "scope": "Final explicit unary Schedule ODS fields; timing packet remains attributed to 06e3712d, images/frames/Target identical to 8903c769; no old timing relabel"
+}

@@ -336,7 +336,26 @@ static LogicalResult verifyContentAddressedKernel(Operation *op, Value subject,
   return success();
 }
 
+// Reuse the checked leading-row capacity across native semantic members.
+// This is distinct from attention's rank-four query-sequence contract.
+static FailureOr<int64_t> nativeRowBound(Operation *op, Value subject) {
+  if (!op->hasAttr("row_bound")) return int64_t{0};
+  auto bound = op->getAttrOfType<IntegerAttr>("row_bound");
+  auto type = dyn_cast<RankedTensorType>(subject.getType());
+  auto arch = op->getAttrOfType<StringAttr>("arch");
+  if (!bound || !bound.getType().isInteger(64) || bound.getInt() <= 0 ||
+      bound.getInt() > INT32_MAX || !type || type.getRank() != 2 ||
+      !type.isDynamicDim(0) || type.isDynamicDim(1) || type.getDimSize(1) <= 0 ||
+      type.getDimSize(1) > INT32_MAX || type.getEncoding() || !arch ||
+      arch.getValue() != "sm_120" || op->hasAttr("shape_policy") ||
+      (!type.getElementType().isF16() && !type.getElementType().isBF16() &&
+       !type.getElementType().isF32()))
+    return op->emitOpError("requires a compact SM120 leading-row capacity contract"), failure();
+  return bound.getInt();
+}
+
 LogicalResult SoftmaxOp::verify() {
+  if (failed(nativeRowBound(getOperation(), getSubject()))) return failure();
   if (failed(verifyContentAddressedKernel(
           *this, getSubject(), getScheduled(), getArtifactHash(), getArch(),
           getStorage(), getAccum(), getWorkgroupSize())))
@@ -353,8 +372,10 @@ LogicalResult ActivationOp::verify() {
           getArtifactHash(), getArch(), getStorage(), getAccum(), getWorkgroupSize())))
     return failure();
   auto type = dyn_cast<RankedTensorType>(getSubject().getType());
-  if (!type || type.getRank() != 2 || !type.hasStaticShape() || type.getEncoding() ||
-      !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0; }) ||
+  auto bound = nativeRowBound(getOperation(), getSubject());
+  if (failed(bound)) return failure();
+  if (!type || type.getRank() != 2 || (!*bound && !type.hasStaticShape()) || type.getEncoding() ||
+      (!*bound && !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0; })) ||
       getArch() != "sm_120" || getWorkgroupSize() != 128 ||
       (getStorage() != "f16" && getStorage() != "bf16" && getStorage() != "f32") ||
       (getStorage() == "f16" ? !type.getElementType().isF16() :
@@ -376,7 +397,7 @@ LogicalResult BinaryKernelOp::verify() {
   bool bounded = rowBound && rowBound.getType().isInteger(64) &&
       rowBound.getInt() > 0 && rowBound.getInt() <= INT32_MAX &&
       type && type.getRank() == 2 && type.isDynamicDim(0) && !type.isDynamicDim(1) &&
-      (getStorage() == "f16" || getStorage() == "bf16");
+      (getStorage() == "f16" || getStorage() == "bf16" || getStorage() == "f32");
   if (!type || type.getRank() != 2 ||
       (bounded ? type.getDimSize(1) <= 0 || type.getDimSize(1) > INT32_MAX :
        !type.hasStaticShape() || getOperation()->hasAttr("row_bound") ||
@@ -398,6 +419,7 @@ LogicalResult BinaryKernelOp::verify() {
 }
 
 LogicalResult NormOp::verify() {
+  if (failed(nativeRowBound(getOperation(), getSubject()))) return failure();
   if (failed(tessera::readBoundedQueryNormShape(getOperation(),getSubject().getType())))
     return failure();
   if (failed(verifyContentAddressedKernel(*this, getSubject(), getScheduled(),

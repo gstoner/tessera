@@ -7,6 +7,51 @@ last_updated: 2026-10-20
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
 Sync: NATIVE-BOUNDED-BINARY-PRODUCERS-20261020.
 
+## General leading-row DAG candidate
+
+Sync: NATIVE-BOUNDED-SSA-DAG-20261020. PR999 delivered the original profile
+below. The candidate generalizes native row analysis across compact rank-two
+straight-line producer DAGs. Same-shape add/ReLU/RMSNorm/layer-normalization/
+softmax edges equate leading rows; matmul equates LHS and result rows while
+keeping RHS contraction rows fixed. Only actual SSA relationships propagate.
+Numerically equal dimensions, including extent one, imply no varying axis.
+A value cannot have both runtime-M and fixed RHS row roles.
+
+Explicit dynamic source types must agree with the complete varying component;
+mixed static/dynamic row assertions cannot be silently weakened. Every dynamic
+matmul carries the same M capacity and its own fixed K/N. Static RHS producers
+stay static. Projection clones the checked source and retains strict replay.
+
+Schedule row_bound extends to SM120 unary members. Active types, capacities,
+and scalar/grid expressions remain separate. Static frame-v2 stages carry
+zero multipliers and unit grid divisors. Private capacity allocations and
+active memref subviews preserve actual memory SSA, aliases and lifetime.
+FP32 intermediates use the existing runtime-M/N/K scalar FMA body without
+narrowing storage. No new frame ABI is introduced.
+
+The frontend certificate admits registered ReLU and fresh dictionaries with
+literal string keys/scalar values. It rejects shape branches, mutable global
+metadata, argument-derived dictionary values, unpacking and hidden helpers.
+This validates frontend capture; native passes still own numerical arithmetic
+and launch expressions.
+
+Compiler proof covers chains, forks/joins, static RHS producers, two-matmul
+FP16/FP32 intermediate programs, RMSNorm and softmax with FP16/BF16 roots,
+including trace-at-one/M=K controls. Architecture queues record device proof.
+General dynamic axes, pitches, control flow, fused epilogues, arbitrary
+accumulator reconstruction and AD remain open.
+
+## Compiler identity across packaging and replay
+
+An explicitly selected compiler owns Graph/Schedule/Tile/Target projection and
+member image lowering. Immutable validation and serialized restoration use
+that same compiler; a conflicting TESSERA_NVIDIA_OPT environment cannot
+replace it. The image builder's fingerprint names the actual executable.
+This changes no numerical kernel or runtime ABI. Existing standalone image
+builders retain their default environment selection when no explicit tool is
+supplied. Fresh conflicting-environment and image-equivalence controls bind
+the final source overlay separately from the unchanged native compiler build.
+
 ## Source and typed ownership
 
 The first bounded profile is compact rank-two matching FP16/BF16 A and

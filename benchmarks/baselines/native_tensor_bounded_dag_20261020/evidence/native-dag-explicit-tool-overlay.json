@@ -1,0 +1,16 @@
+{
+  "compiler_sha256": "8903c7698b18164b6e430d7e549ddafb8a1119fcb3a3de696adfe167124b8817",
+  "scope": "Explicit selected compiler forwarded to image packaging, immutable validation and restoration; test full-route helper also forwards selection. Native compiler/provider bytes unchanged.",
+  "source_sha256": {
+    "python/tessera/compiler/nvidia_native.py": "b50e49f678d9ed5b939c7e1cabe7a1e438478899fc0579a2f801053d68763545",
+    "python/tessera/compiler/native_tensor_program.py": "30b73b6521c6a38b9fccf8441653389f22f11f440df0f98a701c732afa5da7ab",
+    "tests/device/nvidia/test_native_tensor_pipeline_layout.py": "266ba55da7e647637c53d01391dcfadc2dc90c867bf133a5e83a8c10ef31cf0a",
+    "tests/unit/test_native_tensor_compiler_binding.py": "a64fe6c24bae7fe17dbab451470f3dbdd1fccaed71d950e04abe3cfbc73f889d"
+  },
+  "red": {
+    "failed": 3
+  },
+  "green": {
+    "passed": 120
+  }
+}

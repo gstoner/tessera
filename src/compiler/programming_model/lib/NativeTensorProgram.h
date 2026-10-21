@@ -107,27 +107,50 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
       ret.getNumOperands() != 1 || product->getNumOperands() != 2 ||
       product->getNumResults() != 1 || ret.getOperand(0) != product->getResult(0))
     return reject();
+  // Classify the varying row component from actual SSA relationships. Only
+  // same-shape semantic edges and matmul LHS/result rows are equal; equal
+  // numeric extents (including trace-at-one and M == K) imply no relation.
+  auto rowComponent = [&]() -> FailureOr<llvm::DenseSet<Value>> {
+    llvm::DenseSet<Value> varying;
+    varying.insert(product->getResult(0));
+    bool changed = true;
+    while (changed) {
+      changed = false;
+      for (Operation *op : operations) {
+        auto name = op->getName().getStringRef();
+        bool matrix = name == "tessera.matmul";
+        bool binary = name == "tessera.add";
+        if ((!matrix && !binary && name != "tessera.relu" &&
+             name != "tessera.rmsnorm" && name != "tessera.layer_norm" &&
+             name != "tessera.softmax") || op->getNumResults() != 1 ||
+            op->getNumOperands() != (matrix || binary ? 2u : 1u))
+          return failure();
+        SmallVector<Value> related{op->getResult(0), op->getOperand(0)};
+        if (binary) related.push_back(op->getOperand(1));
+        if (!llvm::any_of(related, [&](Value value) { return varying.contains(value); }))
+          continue;
+        for (Value value : related) changed |= varying.insert(value).second;
+      }
+    }
+    for (Operation *op : operations)
+      if (op->getName().getStringRef() == "tessera.matmul" &&
+          varying.contains(op->getOperand(1)))
+        return failure(); // The same SSA row cannot be both runtime M and fixed K.
+    return varying;
+  };
   if (module->hasAttr("tessera.native.tensor_program_row_bound_request")) {
     auto request = module->getAttrOfType<IntegerAttr>("tessera.native.tensor_program_row_bound_request");
-    auto add = operations.front();
-    auto lhs = dyn_cast<RankedTensorType>(product->getOperand(0).getType());
-    auto rhs = dyn_cast<RankedTensorType>(product->getOperand(1).getType());
+    auto component = rowComponent();
     auto out = dyn_cast<RankedTensorType>(product->getResult(0).getType());
     if (!request || !request.getType().isInteger(64) || request.getInt() <= 0 ||
-        request.getInt() > INT32_MAX || operations.size() != 2 || root.getNumArguments() != 3 ||
-        add->getName().getStringRef() != "tessera.add" || add->getNumOperands() != 2 ||
-        add->getNumResults() != 1 || product->getOperand(0) != add->getResult(0) ||
-        !isa<BlockArgument>(add->getOperand(0)) || !isa<BlockArgument>(add->getOperand(1)) ||
-        !isa<BlockArgument>(product->getOperand(1)) ||
-        !lhs || !rhs || !out || lhs.getRank() != 2 || rhs.getRank() != 2 || out.getRank() != 2 ||
-        !lhs.hasStaticShape() || !rhs.hasStaticShape() || !out.hasStaticShape() ||
-        lhs.getEncoding() || rhs.getEncoding() || out.getEncoding() ||
-        lhs.getDimSize(0) <= 0 || lhs.getDimSize(0) > request.getInt() ||
-        add->getOperand(0).getType() != lhs || add->getOperand(1).getType() != lhs)
+        request.getInt() > INT32_MAX || failed(component) || !out ||
+        out.getRank() != 2 || !out.hasStaticShape() ||
+        out.getDimSize(0) <= 0 || out.getDimSize(0) > request.getInt())
       return reject();
-    if (auto existing = product->getAttr("shape_bounds")) {
-      auto wanted = builder.getI64ArrayAttr({request.getInt(),rhs.getDimSize(1),lhs.getDimSize(1)});
-      if (existing != wanted) return reject();
+    for (Value value : *component) {
+      auto type = dyn_cast<RankedTensorType>(value.getType());
+      if (!type || type.getRank() != 2 || !type.hasStaticShape() ||
+          type.getEncoding() || type.getDimSize(0) != out.getDimSize(0)) return reject();
     }
     std::string source;
     llvm::raw_string_ostream stream(source); module.print(stream); stream.flush();
@@ -135,19 +158,34 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     projected->getOperation()->removeAttr("tessera.native.tensor_program_row_bound_request");
     auto function = *projected->getOps<func::FuncOp>().begin();
     auto &body = function.getBody().front();
-    auto producer = &body.front();
-    auto product = producer->getNextNode();
-    auto dynamicType = [&](RankedTensorType type) {
-      return RankedTensorType::get({ShapedType::kDynamic,type.getDimSize(1)},type.getElementType());
-    };
-    auto dynamicInput = dynamicType(lhs), dynamicOutput = dynamicType(out);
-    for (Value input : producer->getOperands()) input.setType(dynamicInput);
-    producer->getResult(0).setType(dynamicInput);
-    product->getResult(0).setType(dynamicOutput);
+    // The clone preserves argument/result positions; bind the checked source
+    // component to cloned SSA values without matching tensor shapes by number.
+    llvm::DenseMap<Value, Value> values;
+    for (auto pair : llvm::zip(root.getArguments(), function.getArguments()))
+      values[std::get<0>(pair)] = std::get<1>(pair);
+    SmallVector<Operation *> clonedOperations;
+    for (auto &op : body.without_terminator()) clonedOperations.push_back(&op);
+    for (auto pair : llvm::zip(operations, clonedOperations))
+      values[std::get<0>(pair)->getResult(0)] = std::get<1>(pair)->getResult(0);
+    for (Value original : *component) {
+      auto type = cast<RankedTensorType>(original.getType());
+      values.lookup(original).setType(RankedTensorType::get(
+          {ShapedType::kDynamic, type.getDimSize(1)}, type.getElementType()));
+    }
+    for (Operation *op : clonedOperations) {
+      if (op->getName().getStringRef() != "tessera.matmul") continue;
+      auto lhs = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
+      auto rhs = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
+      if (!lhs || !rhs || lhs.getRank() != 2 || rhs.getRank() != 2) return reject();
+      if (!lhs.isDynamicDim(0)) continue;
+      auto wanted = builder.getI64ArrayAttr({request.getInt(),rhs.getDimSize(1),lhs.getDimSize(1)});
+      if (Attribute existing = op->getAttr("shape_bounds"); existing && existing != wanted)
+        return reject();
+      op->setAttr("shape_bounds",wanted);
+    }
     SmallVector<Type> arguments(function.getArgumentTypes());
     for (auto [index,arg] : llvm::enumerate(body.getArguments())) arguments[index]=arg.getType();
-    function.setType(builder.getFunctionType(arguments,{dynamicOutput}));
-    product->setAttr("shape_bounds",builder.getI64ArrayAttr({request.getInt(),rhs.getDimSize(1),lhs.getDimSize(1)}));
+    function.setType(builder.getFunctionType(arguments,{clonedOperations.back()->getResult(0).getType()}));
     bool admitted=false;
     if (failed(outline(*projected,admitted)) || !admitted) return reject();
     projected->getOperation()->setAttr("tessera.native.tensor_program_source",builder.getStringAttr(StringRef(source).trim()));
@@ -165,37 +203,34 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     return tensor && !tensor.hasStaticShape();
   });
   if (dynamic) {
-    // Initial bounded program: the original two-input stored add feeds a
-    // typed row-major half matmul. No static clone replaces the dynamic leaf.
-    auto add = operations.front();
-    auto lhs = dyn_cast<RankedTensorType>(product->getOperand(0).getType());
-    auto rhs = dyn_cast<RankedTensorType>(product->getOperand(1).getType());
-    auto out = dyn_cast<RankedTensorType>(product->getResult(0).getType());
+    auto component = rowComponent();
     auto bounds = product->getAttrOfType<ArrayAttr>("shape_bounds");
-    if (operations.size() != 2 || root.getNumArguments() != 3 ||
-        add->getName().getStringRef() != "tessera.add" ||
-        add->getNumOperands() != 2 || add->getNumResults() != 1 ||
-        product->getOperand(0) != add->getResult(0) ||
-        !isa<BlockArgument>(add->getOperand(0)) || !isa<BlockArgument>(add->getOperand(1)) ||
-        !isa<BlockArgument>(product->getOperand(1)) ||
-        !lhs || !rhs || !out || lhs.getRank() != 2 || rhs.getRank() != 2 || out.getRank() != 2 ||
-        !lhs.isDynamicDim(0) || lhs.isDynamicDim(1) || !rhs.hasStaticShape() ||
-        !out.isDynamicDim(0) || out.isDynamicDim(1) ||
-        (!lhs.getElementType().isF16() && !lhs.getElementType().isBF16()) ||
-        rhs.getElementType() != lhs.getElementType() || !out.getElementType().isF32() ||
-        lhs.getDimSize(1) <= 0 || rhs.getDimSize(0) != lhs.getDimSize(1) ||
-        out.getDimSize(1) != rhs.getDimSize(1) || !bounds || bounds.size() != 3)
-      return reject();
-    SmallVector<int64_t> sizes;
-    for (Attribute value : bounds) {
-      auto size = dyn_cast<IntegerAttr>(value);
-      if (!size || !size.getType().isInteger(64) || size.getInt() <= 0 || size.getInt() > INT32_MAX)
-        return reject();
-      sizes.push_back(size.getInt());
+    if (failed(component) || !bounds || bounds.size() != 3) return reject();
+    auto capacity = dyn_cast<IntegerAttr>(bounds[0]);
+    if (!capacity || !capacity.getType().isInteger(64) ||
+        capacity.getInt() <= 0 || capacity.getInt() > INT32_MAX) return reject();
+    rowBound = capacity.getInt();
+    auto checkType = [&](Value value) {
+      auto type = dyn_cast<RankedTensorType>(value.getType());
+      return type && type.getRank() == 2 && !type.getEncoding() &&
+          type.isDynamicDim(0) == component->contains(value) &&
+          !type.isDynamicDim(1) && type.getDimSize(1) > 0 &&
+          (component->contains(value) || type.getDimSize(0) > 0);
+    };
+    for (auto argument : root.getArguments()) {
+      if (!checkType(argument)) return reject();
+      if (rowRoot < 0 && component->contains(argument)) rowRoot = argument.getArgNumber();
     }
-    if (sizes[1] != rhs.getDimSize(1) || sizes[2] != lhs.getDimSize(1)) return reject();
-    rowBound = sizes[0];
-    rowRoot = cast<BlockArgument>(add->getOperand(0)).getArgNumber();
+    if (rowRoot < 0) return reject();
+    for (Operation *op : operations) {
+      if (!checkType(op->getResult(0))) return reject();
+      if (op->getName().getStringRef() != "tessera.matmul") continue;
+      auto lhs = cast<RankedTensorType>(op->getOperand(0).getType());
+      auto rhs = cast<RankedTensorType>(op->getOperand(1).getType());
+      if (!lhs.isDynamicDim(0)) continue;
+      auto wanted = builder.getI64ArrayAttr({rowBound,rhs.getDimSize(1),lhs.getDimSize(1)});
+      if (op->getAttr("shape_bounds") != wanted) return reject();
+    }
   }
   auto bufferType = [&](Type type) -> MemRefType {
     auto tensor = dyn_cast<RankedTensorType>(type);
@@ -291,7 +326,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     SmallVector<Type> inputs(op->getOperandTypes());
     auto function = func::FuncOp::create(op->getLoc(), "source",
         builder.getFunctionType(inputs, op->getResultTypes()));
-    if (rowBound && op->getName().getStringRef() == "tessera.add")
+    if (rowBound && cast<RankedTensorType>(op->getResult(0).getType()).isDynamicDim(0))
       function->setAttr("tessera.native.tensor_row_bound", builder.getI64IntegerAttr(rowBound));
     child.push_back(function);
     Block *block = function.addEntryBlock();

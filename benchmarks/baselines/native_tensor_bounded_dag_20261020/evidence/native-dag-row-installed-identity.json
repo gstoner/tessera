@@ -1,0 +1,31 @@
+{
+  "base": "7d83bf5a0db9492d5ea8752f1bcd37714d9a0f90",
+  "compiler_sha256": "06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c",
+  "frozen_compiler": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-dag-row-tools-06e3712d/tessera-opt",
+  "layout_sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+  "source_sha256": {
+    "python/tessera/compiler/bounded_nvidia_lhs.py": "4030be795497f0741b733df79682b839fadbecb1c853b910301e48e49367337a",
+    "python/tessera/compiler/jit.py": "2b1b7b7879cad6ef5e0f4f51b41ce892c09020fcde9a45ca7898de0fe3b7c39d",
+    "python/tessera/compiler/native_tensor_jit.py": "5f7864194be6c54026412c3f5b690c2a256b59ac615afa31253135bc5e1814aa",
+    "python/tessera/compiler/prepared_native_tensor_frame.py": "255ee72118708d51c91d7a1ef0dc8c3a85a5f3eff1d7db9ab53909aded246725",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/NativeTensorFrameRuntime.h": "98c58cd8e2af99f7b3325cc06c4677b781c239f9fecd0498ebaf92d631b6f44b",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_native_frame.h": "39bf10595a59c411d719733942a94c2a370c6a170afeb2a6036c28d0901b38a0",
+    "src/compiler/ir/include/Tessera/IR/NativeTensorProgramContract.h": "a6855737392b6b5b8c0f28785832868c008ccbca1b86d7573b22477310e25dbd",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "1b378ee5e4c028a52d7eacc1c2a208af8a2f088e6c95dde5a5be3fff9580cbc5",
+    "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "c91e134cbd316bef4e43d9cc2a7832a46f85f2f5a256ece825ccab86cc5ef7e0",
+    "src/compiler/programming_model/lib/NativeTensorProgram.h": "1e9365e28b529412bf4614b1d893845ac9301b17ec90c5bc7ffef6e8cc6a5f9b",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "3a6ae3809aef69cd3f4b516b32a13ac02e760d477bf8e48a5bec14820077a6da",
+    "tests/device/nvidia/test_native_tensor_bounded_producers.py": "7f114c25c088e164dee07c270270ce5520f17bbf47e5170e606b3f87cfb00d06",
+    "tests/unit/test_native_bounded_binary_recorder.py": "2a79f7ecbfe98a022d748ba07d7d939f7a78da7e64b8f626660f23c5d74b3727",
+    "tests/unit/test_native_tensor_bounded_frame_transport.py": "45c63a25f56b6332cddbf700d0af5aca39432a12c76e8965df32984cc04a00b1",
+    "tests/unit/test_native_tensor_bounded_producers.py": "840520a8902ed3a692ab6e121b465971a982cbb0feb077c508975f199022846a",
+    "tests/unit/test_native_tensor_program_pipeline.py": "f3d490eda25ba259710ca2afc76889cf0af9a8b6c6984fc70ac092fe798b8b91",
+    "benchmarks/nvidia/record_native_tensor_bounded_binary.py": "e2cf6f9728e775a39c19152867e6cb3fc5e1287c53b877cacb34324b3eb5d12f",
+    "tests/unit/test_native_tensor_pipeline_layout.py": "f154240006500cc8939df5d70af67038d802b27714e79c00165259a779e94fd5",
+    "tests/device/nvidia/test_native_tensor_pipeline_layout.py": "52e602cd41996cefb7fcb765392d7dcb9bbd4dd567240b424369e195bd304490",
+    "tests/unit/test_native_tensor_bounded_dag.py": "514613fc4c255392508b21d5ec368b7a24a13a404dcef45847cf104359ead53c",
+    "tests/device/nvidia/test_native_tensor_bounded_dag.py": "478784b2573f9e8754d20df100c49658942771a7fd191f1f485e9a6355997583"
+  },
+  "scope": "native SSA bounded producer DAG row relations, semantic runtime rows, FP32 scalar dynamic M and static RHS active contracts",
+  "native_patch_sha256": "94328996e78061fc84f7aa32b7fd5b2093a220bea36e07ea376497b712623a6d"
+}

@@ -1,0 +1,15 @@
+{
+  "compiler_sha256": "06e3712d8122e21b4ddb022acb8e01a08566ac87d044dbd61caedf830e87859c",
+  "scope": "Python frontend certificate ReLU/literal metadata extension plus public test fixtures; compiler/provider unchanged",
+  "source_sha256": {
+    "python/tessera/compiler/bounded_nvidia_lhs.py": "554ecf4af67fce78ec2b36ade48bb2126469e0488e2dcaf7b4df4eba1d49fa09",
+    "tests/device/nvidia/test_native_tensor_bounded_dag.py": "7d0019fbdf1778d69ecdb1e8708287213ffc648569dd0c10c0c9ef0d9ffe3a24",
+    "tests/unit/test_bounded_lhs_frontend_contract.py": "6bfae7de04b196022f09b33ce26296015888a39c728829f27461861ad1f3a839"
+  },
+  "prior_public_result": {
+    "failed": 36,
+    "passed": 6,
+    "deselected": 28,
+    "note": "18 import-fixture refusals, 12 ReLU certificate refusals and six literal-policy refusals before native execution; see full traceback"
+  }
+}

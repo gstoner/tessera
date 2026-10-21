@@ -135,6 +135,8 @@ named here. Paths are relative to `benchmarks/`; outputs are under
 
 | Recorder | Output |
 |---|---|
+| nvidia/record_native_tensor_full_pipeline.py | baselines/native_tensor_full_pipeline_20261020/ (complete registered Graph-to-NVVM route; separate compile/replay/image, preparation, member/program events and completed-owner timing) |
+| nvidia/record_native_tensor_bounded_dag.py | baselines/native_tensor_bounded_dag_20261020/ (seven native DAG families; changed-M image/arena reuse, independent numerical checks and separate CUDA/public-call domains) |
 | nvidia/record_native_tensor_bounded_binary.py | baselines/native_tensor_bounded_binary_20261020/ (one retained M-bounded program per storage; separate compile/prepare, device member/program and completed-public scopes) |
 | nvidia/record_native_tensor_mlp.py | baselines/native_tensor_mlp_20261020/ and baselines/native_tensor_fp32_roots_20261020/ (MLP and original FP32 roots; independent native event and public timing windows) |
 | nvidia/record_native_tensor_jit.py | baselines/native_tensor_jit_20261020/ (correctness-gated ABBA public latency and separate CUDA windows) |

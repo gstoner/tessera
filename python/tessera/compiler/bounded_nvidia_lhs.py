@@ -40,6 +40,18 @@ class SourceCertificate:
             if isinstance(node,ast.Constant) and type(node.value) in (str,int,float,bool,type(None)):return
             if isinstance(node,ast.UnaryOp) and isinstance(node.op,(ast.USub,ast.UAdd)) and isinstance(node.operand,ast.Constant):
                 expression(node.operand);return
+            if isinstance(node,ast.Dict):
+                # Fresh literal metadata has no mutable external dependency.
+                # Values must be scalar literals, never tensor arguments,
+                # helpers or dictionary unpacking hidden in keyword syntax.
+                def literal(value):
+                    return (isinstance(value,ast.Constant)
+                            and type(value.value) in (str,int,float,bool,type(None)))
+                if (any(not isinstance(key,ast.Constant) or type(key.value) is not str
+                        for key in node.keys)
+                        or any(not literal(value) for value in node.values)):
+                    raise ValueError("bounded LHS keyword dictionaries require literal string keys and scalar values")
+                return
             if isinstance(node,ast.Call):
                 paths.append(_path(node.func))
                 if any(isinstance(a,ast.Starred) for a in node.args) or any(k.arg is None for k in node.keywords):
@@ -57,7 +69,7 @@ class SourceCertificate:
             elif isinstance(statement,ast.Return) and statement is statements[-1]:
                 expression(statement.value)
             else:raise ValueError("bounded LHS requires shape-independent straight-line operations")
-        allowed_ops=(ts.ops.matmul,ts.ops.gemm,ts.ops.add,ts.ops.rmsnorm,ts.ops.layer_norm,ts.ops.softmax)
+        allowed_ops=(ts.ops.matmul,ts.ops.gemm,ts.ops.add,ts.ops.relu,ts.ops.rmsnorm,ts.ops.layer_norm,ts.ops.softmax)
         self.paths=tuple(paths)
         self.calls=tuple(self.resolve(path) for path in paths)
         if not self.calls or any(type(call) not in (types.FunctionType,types.MethodType)
@@ -70,7 +82,7 @@ class SourceCertificate:
         # source string cannot hide shape branches/helpers in actual bytecode.
         allowed={"RESUME","LOAD_GLOBAL","LOAD_DEREF","LOAD_ATTR","LOAD_METHOD","LOAD_CONST",
                  "CALL","CALL_KW","PRECALL","KW_NAMES","PUSH_NULL","RETURN_VALUE","RETURN_CONST",
-                 "COPY_FREE_VARS","CACHE","EXTENDED_ARG","NOP"}
+                 "COPY_FREE_VARS","CACHE","EXTENDED_ARG","NOP","BUILD_MAP","BUILD_CONST_KEY_MAP"}
         for instruction in dis.get_instructions(fn):
             if (instruction.opname not in allowed and not instruction.opname.startswith(("LOAD_FAST","STORE_FAST"))):
                 raise ValueError("bounded LHS live code requires a shape-independent certificate")

@@ -14110,3 +14110,61 @@ The original timing packet retains its recorded pre-review Python identity;
 no new performance claim follows. See the packet's provider-review/ receipts.
 
 <!-- entry-fields:end -->
+
+
+### 2026-10-20 — native bounded SSA producer DAGs
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync NATIVE-BOUNDED-SSA-DAG-20261020.
+
+Outcome: native C++ derives bounded leading rows from actual SSA relationships,
+not equal numeric trace extents. Same-shape semantic edges, multiple matmuls,
+forks/joins and static RHS producers retain active types, checked capacity,
+constant/dynamic frame expressions and existing alias/lifetime verification.
+FP32 intermediates retain scalar FMA. Compact layout declarations and shared
+owned-member canonicalization make complete registered Graph-to-NVVM lowering
+agree with strict source replay. Unary capacities now have explicit Schedule
+ODS fields; the frame/runtime ABI is unchanged. Frontend certificates admit
+registered ReLU and fresh scalar-literal policy dictionaries while rejecting
+hidden helpers, mutable metadata, unpacking and shape control flow.
+
+The measured 06e3712d candidate passes 107 focused and all 2,862 production
+compiler cases without skips. Exact RTX5070 proof passes 28 new bounded DAG
+cases plus eight existing regressions and 42 ordinary JIT/replay cases.
+Forty-two timing rows preserve member images across M=1,17,65 in fourteen
+case/storage groups; 253/504 event windows meet the duration gate. Warm public
+medians are 0.441–0.860 ms at these validation shapes; this is no speedup or
+application-scale claim. Exact gfx1201 composed MXFP4 numerics and five native
+image controls pass unchanged. Static NVIDIA controls retain eighteen images
+in eight programs. All four backend queues are assessed.
+
+Regression history retains 34 initial new-suite failures, six static-RHS active
+type failures after row analysis, and 36 public certificate/fixture failures.
+The corresponding corrections pass; no oracle tolerance is widened. The final
+explicit-ODS compiler 8903c769 passes 173 focused cases plus all 2,883 compiler
+cases without skips. The final SM120 suite passes 102; eight fixture-gated
+unit cases pass separately after six stale legacy-schema assertions are
+corrected with stronger native lineage checks. All forty bounded images,
+fourteen frames and Target modules equal the measured compiler. Final gfx1201
+numerics/five images pass. The CPU selector records 30,922 passes / 3,721 skips
+and one recorder inventory failure; the tracked recorder-table correction and
+related gates pass 23. No full CPU rerun is claimed. Earlier timing/source
+identities and initial failures are retained explicitly.
+
+Selected-tool provenance correction: member generation, immutable image
+validation and restoration now forward the selected compiler. Three red
+conflicting-environment cases become 120 passing focused checks. The final
+full compiler lane passes 2,886 without skips; the 102-case SM120 suite passes
+again. Explicit A/B checks verify every actual backend fingerprint and equal
+frames/images across 22 programs / 58 member images. Historical common-backend
+comparisons are annotated in the packet. Recorded timing identities remain
+unchanged. Native compiler/provider bytes are unchanged by this Python overlay.
+
+Remaining: exact-head public CI/review and delivery. All 33 generated docs,
+all five surfaces, claim lint, Graphify, Ruff and zero-error mypy pass.
+General axes/layouts, arbitrary producer/accumulator reconstruction, control
+flow, AD integration and all five original aggregate programs remain open.
+
+Evidence: benchmarks/baselines/native_tensor_bounded_dag_20261020/README.md;
+benchmarks/baselines/native_tensor_full_pipeline_20261020/README.md.
+<!-- entry-fields:end -->

@@ -126,3 +126,49 @@ def test_dispatcher_rejects_released_frontend_owner_before_tracing():
     gc.collect()
     with pytest.raises(ValueError, match="frontend owner has been released"):
         dispatcher((), {})
+
+
+def certified_relu(source, rhs):
+    return ts.ops.matmul(ts.ops.relu(source), rhs, output_dtype="fp32")
+
+
+def certified_norm_policy(source, rhs):
+    return ts.ops.matmul(ts.ops.rmsnorm(source, eps=1e-5, numeric_policy={"accum": "fp32"}), rhs,
+                         output_dtype="fp32")
+
+
+_EXTERNAL_POLICY = {"accum": "fp32"}
+
+
+def external_policy(source, rhs):
+    return ts.ops.matmul(source, rhs, numeric_policy=_EXTERNAL_POLICY)
+
+
+def argument_policy(source, rhs, policy):
+    return ts.ops.matmul(source, rhs, numeric_policy={"accum": policy})
+
+
+def unpacked_policy(source, rhs):
+    return ts.ops.matmul(source, rhs, numeric_policy={**_EXTERNAL_POLICY})
+
+
+def policy_name():
+    return "fp32"
+
+
+def helper_policy(source, rhs):
+    return ts.ops.matmul(source, rhs, numeric_policy={"accum": policy_name()})
+
+
+@pytest.mark.parametrize("fn", [certified_relu, certified_norm_policy])
+def test_registered_relu_and_fresh_literal_policy_have_frontend_certificates(fn):
+    import inspect
+    certificate = SourceCertificate(fn, inspect.getsource(fn))
+    certificate.validate()
+
+
+@pytest.mark.parametrize("fn", [external_policy, argument_policy, unpacked_policy, helper_policy])
+def test_keyword_dictionary_cannot_hide_mutable_dependencies_or_calls(fn):
+    import inspect
+    with pytest.raises(ValueError, match="bounded LHS"):
+        SourceCertificate(fn, inspect.getsource(fn))

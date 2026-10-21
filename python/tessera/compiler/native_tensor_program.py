@@ -106,7 +106,7 @@ class NativeTensorProgram:
                                        f"--tessera-schedule-to-tile=tensor-member={index}")
             if projected != member:
                 raise ValueError("native tensor member differs from verified Target projection")
-            _, ptx, *_ = _compile_tile_ir(member, stage["entry"])
+            _, ptx, *_ = _compile_tile_ir(member, stage["entry"], tessera_opt=self.compiler)
             if image != ptx.encode():
                 raise ValueError("native tensor image differs from its native member")
         if _tool_digest(self.compiler) != self.compiler_identity:
@@ -141,7 +141,7 @@ def compile_native_tensor_program(source, *, tool=None):
     for index, stage in enumerate(frame["stages"]):
         member = run_tessera_opt(compiler, target,
                                 f"--tessera-schedule-to-tile=tensor-member={index}")
-        _, ptx, *_ = _compile_tile_ir(member, stage["entry"])
+        _, ptx, *_ = _compile_tile_ir(member, stage["entry"], tessera_opt=compiler)
         members.append(member)
         images.append(ptx.encode())
     return NativeTensorProgram(source_ir=original, schedule_ir=scheduled, tile_ir=tile,

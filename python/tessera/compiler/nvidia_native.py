@@ -2845,6 +2845,8 @@ _TILE_TO_PTX_MLIR_PASSES = (
 def _compile_tile_ir(
     tile_ir: str,
     entry: str,
+    *,
+    tessera_opt: Path | None = None,
 ) -> tuple[
     str,
     str,
@@ -2865,6 +2867,9 @@ def _compile_tile_ir(
             "ptxas",
         )
     }
+    if tessera_opt is not None:
+        selected = Path(tessera_opt).expanduser().resolve()
+        tools["tessera-nvidia-opt"] = selected if selected.is_file() else None
     missing = [name for name, path in tools.items() if path is None]
     if missing:
         raise RuntimeError(f"NVIDIA native packaging tools unavailable: {missing}")

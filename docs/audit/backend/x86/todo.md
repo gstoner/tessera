@@ -6,6 +6,16 @@ owner: x86 backend
 target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
+## NATIVE-SEMANTIC-DAG-20261021 — semantic ownership candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-SEMANTIC-DAG-20261021.
+
+Native Graph ownership now admits compact one-root semantic DAGs in f16, bf16 and f32 without requiring a terminal matmul. Static and bounded leading rows use the existing checked frame ABI and strict original-source replay. Existing matmul epilogue ownership remains separate. No dtype, operation, registered pass or runtime ABI is added.
+
+Not applicable to x86 physical admission: this semantic owner selects SM120 and changes no AVX kernels or runtime ABI. Shared compiler-route parity passes 2,930 cases; native x86 composition requires its own admission and owning-host evidence.
+
+
 
 ## NATIVE-BOUNDED-SSA-DAG-20261020 — native row-relation candidate
 

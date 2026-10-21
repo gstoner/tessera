@@ -68,7 +68,8 @@ inline mlir::ArrayAttr bufferTypes(mlir::Operation *operation) {
   }
   return ArrayAttr::get(operation->getContext(),result);
 }
-inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
+inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
+                                   int64_t projectedRowBound = 0) {
   using namespace mlir;
   selected = false;
   if (module->hasAttr("tessera.native.tensor_program") ||
@@ -87,13 +88,27 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     operations.push_back(&op);
   if (operations.size() < 2) return success();
   auto product = operations.back();
-  if (product->getName().getStringRef() != "tessera.matmul" ||
-      !llvm::any_of(product->getOperands(), [](Value input) {
+  // The existing matmul epilogue lowering owns matrix-result consumers.
+  // Do not replace a fused native image with separate program launches.
+  bool hasMatmul = llvm::any_of(operations, [](Operation *op) {
+    return op->getName().getStringRef() == "tessera.matmul";
+  });
+  if (hasMatmul && product->getName().getStringRef() != "tessera.matmul")
+    return success();
+  // Claim only the semantic families this native owner can lower. Other
+  // source-program families retain their registered consumers.
+  if (!hasMatmul && !llvm::all_of(operations, [](Operation *op) {
+        auto name = op->getName().getStringRef();
+        return name == "tessera.add" || name == "tessera.relu" ||
+               name == "tessera.rmsnorm" || name == "tessera.layer_norm" ||
+               name == "tessera.softmax";
+      })) return success();
+  if (!llvm::any_of(product->getOperands(), [](Value input) {
         return input.getDefiningOp() != nullptr;
       })) return success();
   auto reject = [&]() {
-    return root.emitError("Graph->Schedule native tensor program requires a static compact typed "
-                          "producer DAG ending in a plain matmul");
+    return root.emitError("Graph->Schedule native tensor program requires a compact typed "
+                          "producer DAG with verified static or bounded leading rows");
   };
   for (Operation *owner : {module.getOperation(), root.getOperation()})
     for (NamedAttribute attribute : owner->getAttrs()) {
@@ -103,8 +118,8 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     }
   OpBuilder builder(module.getContext());
   auto ret = dyn_cast<func::ReturnOp>(root.getBody().front().back());
-  if (root.getNumArguments() < 2 || root.getNumResults() != 1 || !ret ||
-      ret.getNumOperands() != 1 || product->getNumOperands() != 2 ||
+  if (root.getNumArguments() < 1 || root.getNumResults() != 1 || !ret ||
+      ret.getNumOperands() != 1 ||
       product->getNumResults() != 1 || ret.getOperand(0) != product->getResult(0))
     return reject();
   // Classify the varying row component from actual SSA relationships. Only
@@ -144,12 +159,13 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     auto out = dyn_cast<RankedTensorType>(product->getResult(0).getType());
     if (!request || !request.getType().isInteger(64) || request.getInt() <= 0 ||
         request.getInt() > INT32_MAX || failed(component) || !out ||
-        out.getRank() != 2 || !out.hasStaticShape() ||
-        out.getDimSize(0) <= 0 || out.getDimSize(0) > request.getInt())
+        out.getRank() != 2 || out.isDynamicDim(1) ||
+        (!out.isDynamicDim(0) &&
+         (out.getDimSize(0) <= 0 || out.getDimSize(0) > request.getInt())))
       return reject();
     for (Value value : *component) {
       auto type = dyn_cast<RankedTensorType>(value.getType());
-      if (!type || type.getRank() != 2 || !type.hasStaticShape() ||
+      if (!type || type.getRank() != 2 || type.isDynamicDim(1) ||
           type.getEncoding() || type.getDimSize(0) != out.getDimSize(0)) return reject();
     }
     std::string source;
@@ -187,7 +203,7 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     for (auto [index,arg] : llvm::enumerate(body.getArguments())) arguments[index]=arg.getType();
     function.setType(builder.getFunctionType(arguments,{clonedOperations.back()->getResult(0).getType()}));
     bool admitted=false;
-    if (failed(outline(*projected,admitted)) || !admitted) return reject();
+    if (failed(outline(*projected,admitted,request.getInt())) || !admitted) return reject();
     projected->getOperation()->setAttr("tessera.native.tensor_program_source",builder.getStringAttr(StringRef(source).trim()));
     projected->getOperation()->setAttr("tessera.native.tensor_program_source_sha256",
         builder.getStringAttr(llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(StringRef(source).trim())),true)));
@@ -197,19 +213,22 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected) {
     selected=true;
     return success();
   }
-  int64_t rowBound = 0, rowRoot = -1;
+  int64_t rowBound = projectedRowBound, rowRoot = -1;
   bool dynamic = llvm::any_of(root.getArgumentTypes(), [](Type type) {
     auto tensor = dyn_cast<RankedTensorType>(type);
     return tensor && !tensor.hasStaticShape();
   });
   if (dynamic) {
     auto component = rowComponent();
-    auto bounds = product->getAttrOfType<ArrayAttr>("shape_bounds");
-    if (failed(component) || !bounds || bounds.size() != 3) return reject();
-    auto capacity = dyn_cast<IntegerAttr>(bounds[0]);
-    if (!capacity || !capacity.getType().isInteger(64) ||
-        capacity.getInt() <= 0 || capacity.getInt() > INT32_MAX) return reject();
-    rowBound = capacity.getInt();
+    if (failed(component)) return reject();
+    if (!rowBound) {
+      auto bounds = product->getAttrOfType<ArrayAttr>("shape_bounds");
+      if (!bounds || bounds.size() != 3) return reject();
+      auto capacity = dyn_cast<IntegerAttr>(bounds[0]);
+      if (!capacity || !capacity.getType().isInteger(64)) return reject();
+      rowBound = capacity.getInt();
+    }
+    if (rowBound <= 0 || rowBound > INT32_MAX) return reject();
     auto checkType = [&](Value value) {
       auto type = dyn_cast<RankedTensorType>(value.getType());
       return type && type.getRank() == 2 && !type.getEncoding() &&

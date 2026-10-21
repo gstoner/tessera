@@ -4,6 +4,16 @@ audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+## NATIVE-SEMANTIC-DAG-20261021 — semantic ownership candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-SEMANTIC-DAG-20261021.
+
+Native Graph ownership now admits compact one-root semantic DAGs in f16, bf16 and f32 without requiring a terminal matmul. Static and bounded leading rows use the existing checked frame ABI and strict original-source replay. Existing matmul epilogue ownership remains separate. No dtype, operation, registered pass or runtime ABI is added.
+
+Not applicable to gfx1151/gfx1201 physical admission: semantic DAG ownership selects SM120 and does not change HIP kernels, WMMA selection or scale semantics. Shared compiler-route parity passes 2,930 cases; bounded ROCm producer ownership and original quantized/performance obligations remain follow-up required.
+
+
 
 ## NATIVE-BOUNDED-SSA-DAG-20261020 — native row-relation candidate
 

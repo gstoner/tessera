@@ -14168,3 +14168,16 @@ flow, AD integration and all five original aggregate programs remain open.
 Evidence: benchmarks/baselines/native_tensor_bounded_dag_20261020/README.md;
 benchmarks/baselines/native_tensor_full_pipeline_20261020/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-21 — native semantic DAG ownership
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync NATIVE-SEMANTIC-DAG-20261021.
+
+Outcome: Native Graph ownership admits one-root compact f16/bf16/f32 semantic DAGs through Schedule/Tile/Target, checked frames and strict source replay. Static and bounded rows retain native lifetime checks and public JIT reuse. Existing matrix epilogues keep their fused owner. The frozen cc3e73c8 compiler passes 2,930 compiler-route cases with zero skips; 44 final semantic controls pass separately. Exact RTX5070 proof passes 48 numerical/lifetime/public cases and 18 delayed-resident-stream cases. All 36 correctness-gated timing rows complete, with 334/432 duration-admitted event windows and 0.386-0.496ms completed public medians. No speedup claim. All four backend queues assessed; no sibling physical admission or runtime ABI changes.
+
+Remaining: Local CPU validation passes 30,931 with 3,721 declared skips; final local audit/type/lint gates pass. Public exact-head CI/review and merge remain pending. General axes/layouts, noncanonical accumulators, control flow, general AD composition and all five original aggregate programs remain open.
+
+Evidence: benchmarks/baselines/native_semantic_dag_20261021/README.md; semantic-dag-timings.json; semantic-dag-ci-compiler-tests.txt; semantic-dag-device-first.txt; semantic-dag-resident-tests.txt; integrity.json.
+<!-- entry-fields:end -->

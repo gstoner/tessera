@@ -2,6 +2,18 @@
 last_updated: 2026-10-20
 audit_role: reference
 ---
+## NATIVE-SEMANTIC-DAG-20261021 — semantic ownership candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-SEMANTIC-DAG-20261021.
+
+Native Graph ownership now admits compact one-root semantic DAGs in f16, bf16 and f32 without requiring a terminal matmul. Static and bounded leading rows use the existing checked frame ABI and strict original-source replay. Existing matmul epilogue ownership remains separate. No dtype, operation, registered pass or runtime ABI is added.
+
+RTX5070/sm120 parity validated for 48 owning cases plus 18 delayed-resident-stream cases: independent numerical oracle, changed rows, input immutability, output canaries, retained outputs, one arena and compiler-free warm public JIT. The candidate passes 213 compiler/JIT tests and 23 recorder guards. All 36 timing rows complete; public-call medians are 0.386-0.496 ms with no speedup claim. All 2,930 compiler-route cases pass with zero skips. The CPU lane passes 30,931 with 3,721 declared skips; all five surfaces, generated docs, claims, Ruff, zero-error mypy and 42 final drift cases pass. Public CI/review and merge remain pending. Evidence: benchmarks/baselines/native_semantic_dag_20261021/README.md. General axes/layouts, noncanonical accumulators, control flow and AD composition remain follow-up required.
+
+All five original aggregate programs remain open. Evidence is being collected in host scratch; no performance promotion or full-program closure is claimed.
+
+
 
 ## NATIVE-BOUNDED-SSA-DAG-20261020 — native row-relation candidate
 

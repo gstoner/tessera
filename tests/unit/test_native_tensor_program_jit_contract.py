@@ -296,3 +296,12 @@ def test_shared_product_eviction_never_closes_a_foreign_thread_owner(thread_owne
     finally:
         fn.close_native_storage()
     assert not primary.handle
+
+
+@pytest.mark.parametrize("dtype", [np.float16, np.float32])
+def test_single_root_signature_preserves_compact_semantic_programs(dtype):
+    root = np.zeros((3, 32), dtype)
+    signature = input_signature((root,))
+    assert signature == (False, ((str(root.dtype), (3, 32), (32 * root.itemsize, root.itemsize)),))
+    assert input_signature(()) is None
+    assert input_signature((root[:, ::2],)) is None

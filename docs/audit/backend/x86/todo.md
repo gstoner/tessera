@@ -57,6 +57,16 @@ documentation/registry cases, 790 ODS cases, all five surfaces, 33 generated
 documents, Ruff, zero-error mypy and Graphify pass. Exact-head public CI/review
 and delivery remain pending; all five aggregate programs remain open.
 
+Provider ABI review: bounded admission now requires prepare_v2 before
+tracing or compilation; static calls continue to require prepare_v1. An older
+v1-only provider leaves the existing route eligible and creates no cache entry.
+One red prerequisite case becomes eight passing missing/empty/v1/v2-provider
+cases; the affected JIT/compiler/transport cohort passes 97. Fresh RTX5070
+validation passes eight device cases plus 32 host transport cases (40 total).
+Ruff and zero-error mypy pass. Native compiler/runtime bytes are unchanged.
+The original timing packet retains its recorded pre-review Python identity;
+no new performance claim follows. See the packet's provider-review/ receipts.
+
 ## ROCM-MXFP4-FRAGMENT-DECODE-20261020 — exact packed decoder
 
 Owner: ROCM-NVFP4-INGEST-1 / ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.

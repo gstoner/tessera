@@ -2,7 +2,7 @@
   "algorithm": "sha256",
   "scope": "Every committed packet file except this integrity manifest; hashes apply to compressed bytes where present. Original IR/PTX hashes are separately verified against measured receipts.",
   "files": {
-    "README.md": "76ec4fe21242cded0eee4caedc3f1ffb66037d5a7cca495d62a7eed136778591",
+    "README.md": "967d42777e5ceabfca327f54e3dc475e12aa88975bbab7d093bd741f9d86b58f",
     "active-ssa/local-gates/bounded-active-ssa-claim-lint.txt.gz": "88444fe652a861d269fedeb5219b192473b8bc3b9678e84c5c853cbf7dd58bf4",
     "active-ssa/local-gates/bounded-active-ssa-cpu-corrected.txt.gz": "0c76bde63c8f273c4ab713f2e1a6d538a7fa3e1320a8cab53bccf7544f77cf14",
     "active-ssa/local-gates/bounded-active-ssa-cpu-corrected.xml.gz": "2915d14f3cc82383af45b80a00d9fddd25650ef7a19a2aee80c4fd50978a5119",
@@ -129,6 +129,23 @@
     "initial-candidate/owning-device/provider/production-build.txt.gz": "9ceffb7310338057cfe71a4ae1e2c98d2c485d81cdef906532a801f457a38d64",
     "initial-candidate/owning-device/provider/production-command.json": "8a8187b317db299ee204f83a23ba97de07cbdddfb53ada48a51d887117089a7f",
     "initial-candidate/owning-device/provider/production-identity.json": "52314e5073d9299fe10cc74b968f60e2fade5c22e753bbca4bbef0de3ef768b9",
-    "lossless-artifact-storage.json": "5b73968e16c8b60c050631aa3e11e39ccd03f2444d91d3a81f2d56e2d8a1a21d"
+    "lossless-artifact-storage.json": "5b73968e16c8b60c050631aa3e11e39ccd03f2444d91d3a81f2d56e2d8a1a21d",
+    "provider-review/pr999-provider-device-identity.json": "8cea0d3149978ef0c8393819735d28120b79914d78b3f513cebbeba6b0b04868",
+    "provider-review/pr999-provider-device-probe.txt.gz": "2c7b8e2061263ce4c128ce13d96ce66277f340a384c1f938b6feda938a0b89cf",
+    "provider-review/pr999-provider-device.txt.gz": "0081ecf72a141ad76b74c10b56648538cc8b218757b84d66fe5b620c409ff458",
+    "provider-review/pr999-provider-device.xml.gz": "c1e9dc06c2163c9be7e064900142780e8e54ed591ec54ea7e357e603b3ce3aab",
+    "provider-review/pr999-provider-docs.txt.gz": "7baae3b45af7b11e68b12d5b8a0626f6e221a640f3e316410e88e0c6be816734",
+    "provider-review/pr999-provider-docs.xml.gz": "f8bddf3feef50eead712357e450bad309352e39dd2d59fb08ac0999a45900463",
+    "provider-review/pr999-provider-generated.txt.gz": "31851960e2603d92c5251627b4a3ee2b8cc9b7c5fd958a580f81273f8a94ff1a",
+    "provider-review/pr999-provider-graphify.txt.gz": "31d68e7eaf1c0122c436f443aeb2b1c960817abc321fb67bb1c4a9f4a5940aca",
+    "provider-review/pr999-provider-green.txt.gz": "ed98b6402ea785617c7133f38991cd3a32fe9c7db005058d542c10f9adfe353f",
+    "provider-review/pr999-provider-green.xml.gz": "7922404c8998d5c05d2c859314bffb2ce4618ff5af2b582b61d7341f237ac5e5",
+    "provider-review/pr999-provider-mypy.txt.gz": "acf9f1fa9e0b29bfc06c5cd63aa5c6a540c7a3e250a0e05d12bdfe5b5acd153e",
+    "provider-review/pr999-provider-plan.txt.gz": "14dd18c5fb7ab875009f4762cad6506075e95034522eece1ce5287a153518c92",
+    "provider-review/pr999-provider-red.txt.gz": "49e986a0d9b52a96b622681ec36faa76df361696e632b4805a5eb52c071b901d",
+    "provider-review/pr999-provider-red.xml.gz": "318a45ecba60b7b9b13c897d5eb043b92c7d881895e633bac21fbaf2ac4b3f4b",
+    "provider-review/pr999-provider-ruff.txt.gz": "f3af4d142827f5aad2eb0c72d556d325488a57fb6219aac10afeb51085667d53",
+    "provider-review/review-gates.json": "a2696e616462bc4a7bc790089e160d96a31963729342e6013ac4708dae650e08",
+    "provider-review/source-delta.json": "45e23cfcb947dbe0d6b0b8ffa1b084235edbd2862f21308e2a9c281f6161b03d"
   }
 }

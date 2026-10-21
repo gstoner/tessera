@@ -2708,7 +2708,9 @@ class JitFn:
                 if tool is None:
                     return _JIT_FALLBACK
                 provider = rt._load_nvidia_ptx_launch()
-                if provider is None or not hasattr(provider, "tessera_nvidia_native_frame_prepare_v1"):
+                required_prepare = ("tessera_nvidia_native_frame_prepare_v2" if row_bound is not None
+                                    else "tessera_nvidia_native_frame_prepare_v1")
+                if provider is None or not hasattr(provider, required_prepare):
                     return _JIT_FALLBACK
                 module = self._traced_autodiff_module(ordered, {})
                 if row_bound is not None:

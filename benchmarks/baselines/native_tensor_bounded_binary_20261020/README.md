@@ -132,3 +132,22 @@ gzip compression. Decompress before reproducing the original IR/image hashes;
 `lossless-artifact-storage.json` records each original MLIR/PTX digest. This
 preserves compiler-printer whitespace byte-for-byte. The packet integrity
 manifest separately hashes the committed compressed files.
+
+## Provider ABI review correction
+
+Provider ABI review: bounded admission now requires prepare_v2 before
+tracing or compilation; static calls continue to require prepare_v1. An older
+v1-only provider leaves the existing route eligible and creates no cache entry.
+One red prerequisite case becomes eight passing missing/empty/v1/v2-provider
+cases; the affected JIT/compiler/transport cohort passes 97. Fresh RTX5070
+validation passes eight device cases plus 32 host transport cases (40 total).
+Ruff and zero-error mypy pass. Native compiler/runtime bytes are unchanged.
+The original timing packet retains its recorded pre-review Python identity;
+no new performance claim follows. See the packet's provider-review/ receipts.
+
+The full CPU/compiler receipts and `active-ssa/local-gates/final-source-identity.json`
+record the initial reviewed source before this guard correction. The current
+Python overlay and fresh device probe are bound in `provider-review/`.
+`source-delta.json` verifies that the guard is the only JIT source change;
+`pr999-provider-device-identity.json` binds both changed Python files and all
+unchanged native compiler/runtime sources to the fresh owning-device run.

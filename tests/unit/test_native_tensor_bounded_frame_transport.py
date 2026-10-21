@@ -67,3 +67,54 @@ def test_static_schema_does_not_accept_bounded_extension_fields():
     packet["schema"] = "tessera.native.tensor_program_frame.v1"
     with pytest.raises(ValueError):
         validate_frame(packet)
+
+
+@pytest.mark.parametrize("row_bound", [None, 65])
+@pytest.mark.parametrize("provider_version", ["missing", "empty", "v1", "v2"])
+def test_jit_checks_required_prepare_symbol_before_tracing(row_bound, provider_version, monkeypatch):
+    from pathlib import Path
+    from types import SimpleNamespace
+    import tessera as ts
+    from tessera import runtime
+    from tessera.compiler.jit import _JIT_FALLBACK
+    import tessera.compiler.native_tensor_program as packages
+    import tessera.compiler.scheduled_matmul as tools
+    from tests.unit.test_native_tensor_binary_producers import lhs_add
+    import numpy as np
+
+    exports = {}
+    if provider_version in {"v1", "v2"}:
+        exports["tessera_nvidia_native_frame_prepare_v1"] = object()
+    if provider_version == "v2":
+        exports["tessera_nvidia_native_frame_prepare_v2"] = object()
+    provider = None if provider_version == "missing" else SimpleNamespace(**exports)
+    monkeypatch.setattr(runtime, "_load_nvidia_ptx_launch", lambda: provider)
+    monkeypatch.setattr(tools, "find_tessera_opt", lambda: Path("/configured/compiler"))
+    fn = ts.jit(target="nvidia_sm120")(lhs_add)
+    roots = (np.zeros((17, 32), np.float16), np.zeros((17, 32), np.float16),
+             np.zeros((32, 11), np.float16))
+    admitted = provider_version == "v2" or (provider_version == "v1" and row_bound is None)
+
+    class TraceReached(Exception):
+        pass
+
+    def trace(*args, **kwargs):
+        if not admitted:
+            pytest.fail("missing preparation ABI was admitted before tracing")
+        raise TraceReached
+
+    def forbidden_compile(*args, **kwargs):
+        pytest.fail("prerequisite check reached compilation")
+
+    monkeypatch.setattr(fn, "_traced_autodiff_module", trace)
+    monkeypatch.setattr(packages, "compile_native_tensor_program", forbidden_compile)
+    try:
+        if admitted:
+            with pytest.raises(TraceReached):
+                fn._try_native_tensor_program_call(roots, {}, row_bound=row_bound)
+        else:
+            assert fn._try_native_tensor_program_call(roots, {}, row_bound=row_bound) is _JIT_FALLBACK
+        assert not fn._native_tensor_program_cache
+        assert not fn._native_tensor_calls
+    finally:
+        fn.close_native_storage()

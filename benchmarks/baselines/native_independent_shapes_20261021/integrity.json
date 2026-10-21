@@ -2,8 +2,8 @@
   "schema": 1,
   "files": {
     "README.md": {
-      "sha256": "94911c1e60b145310d39a49c8253816a36d5b9b21ffada39388dcc13b080e6de",
-      "bytes": 6335
+      "sha256": "33202dc5ef5f80bb2e98a1b7b763fbd18369ad00f35653f129f9934abe7d34d8",
+      "bytes": 7535
     },
     "compiler-source-identity.json": {
       "sha256": "ec6a7ab28734b5976b352cbff88bf2f9256c08af4f7916d36afd582f7b8a9f2c",
@@ -504,6 +504,38 @@
     "norm-rounding-witness.npz": {
       "sha256": "ca19537f3d2b8a4a43793fa26bb90fca975b984380f925b5a7380825bb3b21dd",
       "bytes": 102916
+    },
+    "prerequisite-review/native-independent-shapes-20261021-review.json": {
+      "sha256": "96b66147c041e645464e5973152c8e52f04eefa98c87f2dc374b351014f47f92",
+      "bytes": 880331
+    },
+    "prerequisite-review/native-independent-shapes-benchmark-review.txt": {
+      "sha256": "d71ccbc20ea960eaaccafecfae3d54f76d6f96ff7e1735a6f695b90588d58c1e",
+      "bytes": 1094
+    },
+    "prerequisite-review/native-shape-review-device.txt": {
+      "sha256": "f1c6235208acac60a69ddd70f710ae0d832b700a2eae99821c8097c896f61c7f",
+      "bytes": 111
+    },
+    "prerequisite-review/native-shape-review-generated.txt": {
+      "sha256": "9d8b85d764f7e4ee9cddcad4256bc591602b3561b272a9d99fe967c4d938cd18",
+      "bytes": 3490
+    },
+    "prerequisite-review/native-shape-review-graphify.txt": {
+      "sha256": "7d65af64129a8d5056e0d558ef649ea16d465f96742e824a3181cfba2418abfa",
+      "bytes": 2309
+    },
+    "prerequisite-review/native-shape-review-prereq-final.txt": {
+      "sha256": "d82d343dc412621cdcf4c5f1d52dd55f3ea1e308bc2f8d68d3fa9ceaad956d7a",
+      "bytes": 100
+    },
+    "prerequisite-review/native-shape-review-prereq-red.txt": {
+      "sha256": "008947e5140fc9a3a7bb729112cf39db9e1c7eebfe13fa76c4b5c657cb3ab45f",
+      "bytes": 13945
+    },
+    "prerequisite-review/native-shape-review-summary.json": {
+      "sha256": "952e55c7b8e95de16f93051ee6ee7263e3fabb0eb1969a55f20ba70dfdc56092",
+      "bytes": 10047
     },
     "provider-production-identity.json": {
       "sha256": "1d9995d9eb743c1e2a809825b90bfe7eb84a39068c00639db70cd6fc9445e7ff",

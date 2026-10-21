@@ -2722,6 +2722,13 @@ class JitFn:
                 if (provider is None or not hasattr(provider, required_prepare)
                         or (shape_bounds is not None and not hasattr(provider, "tessera_nvidia_native_frame_shapes_v3"))):
                     return _JIT_FALLBACK
+                if shape_bounds is not None:
+                    from .llvm_tools import find_llvm_tool
+
+                    for name in ("mlir-opt", "mlir-translate", "clang"):
+                        candidate = find_llvm_tool(name)
+                        if candidate is None or not candidate.is_file() or not os.access(candidate, os.X_OK):
+                            return _JIT_FALLBACK
                 module = self._traced_autodiff_module(ordered, {})
                 if shape_bounds is not None:
                     from dataclasses import replace

@@ -327,3 +327,22 @@ All five original aggregate programs remain open. General layouts, control
 flow, accumulator reconstruction, wider producers and AD composition remain
 follow-up required. Tensor frame schema 3 is independent of attention schema
 numbering; attention schema 5 remains saved-LSE plus bounded specifically.
+
+## Automatic-route prerequisite review — PR1002
+
+The cold frame-v3 automatic route now checks all three executable host shape
+tools (`mlir-opt`, `mlir-translate`, `clang`) before tracing/admission. Missing,
+undiscovered or nonexecutable tools leave existing routes eligible; admitted
+programs still propagate real compiler errors. Cached warm frames do not
+rediscover tools. Six original regression failures are retained, followed by
+30 passing prerequisite/frontend/package cases. The expanded ten-case tool
+matrix covers three failure modes per tool and a positive admission control.
+
+On RTX5070, the revised source passes 58 device cases, ten prerequisites and
+one CPU oracle regression (69 total). A fresh six-sample/32-call benchmark
+completes all 24 rows: public medians 0.439771-0.684228 ms. All copied compiler
+artifacts, native member images, shape companions and frames are byte-identical
+to the original final packet. The review packet references those retained
+artifacts without duplicating them. Earlier timings retain their original
+source fingerprints. No speedup or aggregate closure follows.
+Evidence: benchmarks/baselines/native_independent_shapes_20261021/prerequisite-review/.

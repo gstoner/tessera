@@ -5,6 +5,16 @@ owner: Apple backend
 target: apple_gpu
 last_updated: 2026-10-20
 ---
+## NATIVE-SEMANTIC-DAG-20261021 — semantic ownership candidate
+
+Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync: NATIVE-SEMANTIC-DAG-20261021.
+
+Native Graph ownership now admits compact one-root semantic DAGs in f16, bf16 and f32 without requiring a terminal matmul. Static and bounded leading rows use the existing checked frame ABI and strict original-source replay. Existing matmul epilogue ownership remains separate. No dtype, operation, registered pass or runtime ABI is added.
+
+Not applicable to Apple physical admission: this semantic owner selects SM120 and changes no Metal/AIR calls or runtime ABI. Shared compiler-route parity passes 2,930 cases; Apple compiler-owned composition requires its own route and exact-device evidence.
+
+
 
 ## NATIVE-BOUNDED-SSA-DAG-20261020 — native row-relation candidate
 

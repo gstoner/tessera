@@ -33,3 +33,20 @@ def test_invalid_bounded_dag_recording_never_probes_hardware(arguments, monkeypa
     with pytest.raises(ValueError):
         bounded.main(["--output", str(output), *arguments])
     assert not output.exists()
+
+
+@pytest.mark.parametrize("arguments", [
+    ["--bound", "16"], ["--rows", "0"], ["--rows", "66"],
+    ["--rows", "1", "1"], ["--rounds", "3"], ["--calls", "0"],
+    ["--storage", "f32", "f32"], ["--case", "fork_join", "fork_join"],
+])
+def test_invalid_semantic_dag_recording_never_probes_hardware(arguments, monkeypatch, tmp_path):
+    from benchmarks.nvidia import record_native_semantic_dag as semantic
+
+    def forbidden():
+        pytest.fail("invalid semantic recorder arguments reached hardware identity")
+    monkeypatch.setattr(semantic, "identity", forbidden)
+    output = tmp_path / "must-not-exist.json"
+    with pytest.raises(ValueError):
+        semantic.main(["--output", str(output), *arguments])
+    assert not output.exists()

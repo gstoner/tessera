@@ -41,6 +41,35 @@ including trace-at-one/M=K controls. Architecture queues record device proof.
 General dynamic axes, pitches, control flow, fused epilogues, arbitrary
 accumulator reconstruction and AD remain open.
 
+## Semantic DAG ownership without a matrix terminal
+
+Sync: NATIVE-SEMANTIC-DAG-20261021.
+
+On SM120, a compact rank-two straight-line DAG of add, ReLU, RMSNorm,
+layer normalization and softmax may have one or more physical roots and
+return its final semantic tensor without a matmul consumer. At least two
+semantic operations and an actual producer-to-consumer SSA edge are required.
+Existing dtype/effects/layout, complete source replay, alias/lifetime and
+capacity checks remain authoritative; this is not an operation-name-only
+execution certificate. FP16, BF16 and FP32 storage keep their stored intermediate
+precision. No Python layer constructs numerical kernels.
+
+The explicit module leading-row capacity policy projects both traced static
+source and already-dynamic textual source onto the checked row component.
+A semantic-only dynamic DAG requires that policy, since it has no terminal
+matmul shape bounds from which to obtain capacity. All component rows must
+agree; malformed capacities, inconsistent types and over-capacity execution
+are rejected. The frame-v1 static and frame-v2 bounded ABIs are unchanged.
+
+The public JIT transports one compact host or resident root through the same
+native admission query, packaging and prepared owner used for multiple roots.
+Warm execution preserves producer-stream ordering, immutable inputs and retained
+outputs without tracing or compilation. Matrix-result epilogues continue to use
+the existing fused owner; this extension does not split them into new launches.
+General dynamic axes/layouts, control flow, arbitrary accumulator reconstruction
+and general AD composition remain open. Exact-device numerical and timing
+scope is recorded in benchmarks/baselines/native_semantic_dag_20261021/README.md.
+
 ## Compiler identity across packaging and replay
 
 An explicitly selected compiler owns Graph/Schedule/Tile/Target projection and

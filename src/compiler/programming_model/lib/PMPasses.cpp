@@ -1,3 +1,6 @@
+#include "Tessera/IR/TensorShapeProfile.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "Tessera/IR/TensorShapeRelations.h"
 #include "Tessera/IR/NativeTensorProgramContract.h"
 #include "NativeSourceProgramOutline.h"
 #include "NativeGateUpSchedule.h"
@@ -912,6 +915,27 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
         out.isDynamicDim(0) && !out.isDynamicDim(1) &&
         !flag("transposeA") && !flag("transposeB") &&
         rowCapacity > 0 && rowCapacity <= INT32_MAX;
+    bool shapedScalar = scalarTargetName == "nvidia_sm120" &&
+        module->hasAttr("tessera.native.tensor_program_member") &&
+        module->hasAttr("tessera.native.tensor_program_shape_profile");
+    SmallVector<int64_t> scalarBounds;
+    if (shapedScalar) {
+      if (!rowBounds || rowBounds.size() != 3 || flag("transposeA") || flag("transposeB"))
+        return failure();
+      for (Attribute field : rowBounds) {
+        auto bound = dyn_cast<IntegerAttr>(field);
+        if (!bound || !bound.getType().isInteger(64) || bound.getInt() <= 0 ||
+            bound.getInt() > INT32_MAX) return failure();
+        scalarBounds.push_back(bound.getInt());
+      }
+      auto agrees = [](int64_t extent, int64_t capacity) {
+        return ShapedType::isDynamic(extent) || extent == capacity;
+      };
+      if (!agrees(lhs.getDimSize(0),scalarBounds[0]) || !agrees(lhs.getDimSize(1),scalarBounds[2]) ||
+          !agrees(rhs.getDimSize(0),scalarBounds[2]) || !agrees(rhs.getDimSize(1),scalarBounds[1]) ||
+          !agrees(out.getDimSize(0),scalarBounds[0]) || !agrees(out.getDimSize(1),scalarBounds[1]))
+        return failure();
+    }
     if (dynamicRows) {
       auto n = dyn_cast<IntegerAttr>(rowBounds[1]);
       auto k = dyn_cast<IntegerAttr>(rowBounds[2]);
@@ -920,12 +944,12 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
         return failure();
     }
     if (op->getNumOperands() != 2 ||
-        (!dynamicRows && (!lhs.hasStaticShape() || !rhs.hasStaticShape() || !out.hasStaticShape())) ||
+        (!dynamicRows && !shapedScalar && (!lhs.hasStaticShape() || !rhs.hasStaticShape() || !out.hasStaticShape())) ||
         lhs.getEncoding() || rhs.getEncoding() || out.getEncoding())
       return failure();
     for (NamedAttribute field : op->getAttrs()) {
       StringRef key = field.getName().getValue();
-      if (key == "shape_bounds" && dynamicRows) continue;
+      if (key == "shape_bounds" && (dynamicRows || shapedScalar)) continue;
       if (key != "transposeA" && key != "transposeB" && key != "output_dtype" &&
           key != "activation" && key != "rhs_storage_order" &&
           key != "numeric_policy" && key != "tessera.effect_kind" &&
@@ -1005,14 +1029,16 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     result.physicalContract = scalarArch == "gfx1151" ? "rocm_gfx1151_scalar_fma_v1" :
         scalarArch == "gfx1201" ? "rocm_gfx1201_scalar_fma_v1" :
         "nvidia_sm120_scalar_fma_v1";
-    result.dynamicM = dynamicRows;
-    result.m = dynamicRows ? rowCapacity : lhs.getDimSize(result.scalarTransposeA ? 1 : 0);
-    result.k = lhs.getDimSize(result.scalarTransposeA ? 0 : 1);
-    result.n = rhs.getDimSize(result.scalarTransposeB ? 0 : 1);
+    result.dynamicM = shapedScalar ? lhs.isDynamicDim(0) : dynamicRows;
+    result.dynamicN = shapedScalar && rhs.isDynamicDim(1);
+    result.dynamicK = shapedScalar && lhs.isDynamicDim(1);
+    result.m = shapedScalar ? scalarBounds[0] : dynamicRows ? rowCapacity : lhs.getDimSize(result.scalarTransposeA ? 1 : 0);
+    result.k = shapedScalar ? scalarBounds[2] : lhs.getDimSize(result.scalarTransposeA ? 0 : 1);
+    result.n = shapedScalar ? scalarBounds[1] : rhs.getDimSize(result.scalarTransposeB ? 0 : 1);
     if (result.m <= 0 || result.m > 65535LL * 16 || result.n <= 0 ||
         result.n > INT32_MAX || result.k <= 0 || result.k > INT32_MAX ||
-        rhs.getDimSize(result.scalarTransposeB ? 1 : 0) != result.k ||
-        out.getShape() != ArrayRef<int64_t>({dynamicRows ? ShapedType::kDynamic : result.m, result.n}))
+        (!shapedScalar && (rhs.getDimSize(result.scalarTransposeB ? 1 : 0) != result.k ||
+        out.getShape() != ArrayRef<int64_t>({dynamicRows ? ShapedType::kDynamic : result.m, result.n}))))
       return failure();
     result.tileM = result.macroTileM = 16;
     result.tileN = result.macroTileN = 8;
@@ -1815,6 +1841,7 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
 struct SemanticKernelSchedule {
   tessera::BoundedQueryNormShape queryShape;
   int64_t rowBound = 0;
+  SmallVector<int64_t> shapeBounds;
   StringRef family;
   StringRef kind;
   StringRef target;
@@ -1855,6 +1882,21 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   bool requested = function && function->hasAttr("tessera.native.query_sequence_bound");
   auto queryBound = function ? function->getAttrOfType<IntegerAttr>("tessera.native.query_sequence_bound") : IntegerAttr{};
   if (!input || !output || input.getRank() < 1) return failure();
+  auto shapeCapacity = function ? function->getAttrOfType<DenseI64ArrayAttr>(
+      "tessera.native.tensor_shape_capacity") : DenseI64ArrayAttr{};
+  bool shaped = function && function->hasAttr("tessera.native.tensor_shape_capacity");
+  if (shaped) {
+    if (!shapeCapacity || shapeCapacity.size() != 2 || requested ||
+        !module->hasAttr("tessera.native.tensor_program_member") ||
+        !module->hasAttr("tessera.native.tensor_program_shape_profile") ||
+        moduleString(module,"tessera.target","target") != "nvidia_sm120" ||
+        moduleString(module,"tessera.arch","arch") != "sm_120" ||
+        input != output || input.getRank() != 2 || input.getEncoding()) return failure();
+    for (unsigned axis = 0; axis < 2; ++axis)
+      if (shapeCapacity[axis] <= 0 || shapeCapacity[axis] > INT32_MAX ||
+          (!input.isDynamicDim(axis) && input.getDimSize(axis) != shapeCapacity[axis]))
+        return failure();
+  }
   if (requested) {
     if (!queryBound || !queryBound.getType().isInteger(64) || queryBound.getInt() <= 0 ||
         queryBound.getInt() > INT32_MAX || input != output || input.getEncoding() ||
@@ -1862,7 +1904,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
         input.isDynamicDim(0) || input.isDynamicDim(1) || input.isDynamicDim(3) ||
         op->getName().getStringRef() != "tessera.rmsnorm")
       return failure();
-  } else if (!input.hasStaticShape() || !output.hasStaticShape()) {
+  } else if (!shaped && (!input.hasStaticShape() || !output.hasStaticShape())) {
     auto bound = function ? function->getAttrOfType<IntegerAttr>(
         "tessera.native.tensor_row_bound") : IntegerAttr{};
     if (!module->hasAttr("tessera.native.tensor_program_member") ||
@@ -1873,9 +1915,13 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   }
 
   SemanticKernelSchedule schedule;
-  if (!input.hasStaticShape() && !requested)
+  if (!input.hasStaticShape() && !requested && !shaped)
     schedule.rowBound = function->getAttrOfType<IntegerAttr>(
         "tessera.native.tensor_row_bound").getInt();
+  if (shaped) schedule.shapeBounds.assign(shapeCapacity.asArrayRef().begin(), shapeCapacity.asArrayRef().end());
+  SmallVector<int64_t> inputCapacity(input.getShape());
+  if (shaped) inputCapacity = schedule.shapeBounds;
+  else if (schedule.rowBound) inputCapacity[0] = schedule.rowBound;
   schedule.queryShape.bounded = requested;
   if (requested) schedule.queryShape.sequenceBound = queryBound.getInt();
   schedule.target = moduleString(module, "tessera.target", "target");
@@ -1893,7 +1939,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   // delegated MSL route owns its threadgroup), so workgroupSize stays 1.
   bool apple_gpu = schedule.target == "apple_gpu";
   bool nvidia = schedule.target == "nvidia_sm120" && schedule.arch == "sm_120";
-  if (schedule.rowBound && !nvidia) return failure();
+  if ((schedule.rowBound || shaped) && !nvidia) return failure();
   if (requested && (!nvidia || (schedule.storage != "f16" && schedule.storage != "bf16")))
     return failure();
   if (nvidia) schedule.expMode = "approx_exp2";
@@ -1921,10 +1967,8 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     if (!nvidia || input != output || input.getRank() != 2 ||
         input.getEncoding() || op->getOperand(1).getType() != input ||
         schedule.storage.empty() ||
-        (schedule.rowBound ? input.getDimSize(1) <= 0 || input.getDimSize(1) > INT32_MAX :
-         !llvm::all_of(input.getShape(), [](int64_t d) { return d > 0 && d <= INT32_MAX; })) ||
-        (schedule.rowBound ? schedule.rowBound * input.getDimSize(1) :
-         input.getNumElements()) > static_cast<int64_t>(INT32_MAX) * 128)
+        !llvm::all_of(inputCapacity, [](int64_t d) { return d > 0 && d <= INT32_MAX; }) ||
+        inputCapacity[0] * inputCapacity[1] > static_cast<int64_t>(INT32_MAX) * 128)
       return failure();
     for (NamedAttribute attr : op->getAttrs()) {
       StringRef name = attr.getName().getValue();
@@ -1945,8 +1989,8 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     }
     schedule.family = "binary";
     schedule.kind = "add";
-    schedule.rows = schedule.rowBound ? schedule.rowBound : input.getDimSize(0);
-    schedule.columns = input.getDimSize(1);
+    schedule.rows = inputCapacity[0];
+    schedule.columns = inputCapacity[1];
     schedule.reductionSchedule = "flat_128";
     schedule.workgroupSize = 128;
     return schedule;
@@ -1955,8 +1999,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     if (!nvidia || input != output || input.getRank() != 2 || input.getEncoding() ||
         (schedule.storage != "f16" && schedule.storage != "bf16" &&
          schedule.storage != "f32") ||
-        (schedule.rowBound ? input.getDimSize(1) <= 0 :
-         !llvm::all_of(input.getShape(), [](int64_t d) { return d > 0; })))
+        !llvm::all_of(inputCapacity, [](int64_t d) { return d > 0; }))
       return failure();
     for (NamedAttribute attr : op->getAttrs()) {
       if (attr.getName().getValue() == "schedule.artifact_hash" ||
@@ -1973,14 +2016,14 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
           !effect || effect.getValue() != "pure") return failure();
     }
     // Match the checked runtime envelope before forming a flat grid or bytes.
-    int64_t rows = schedule.rowBound ? schedule.rowBound : input.getDimSize(0);
-    if (rows >= (1LL << 31) || input.getDimSize(1) >= (1LL << 31) ||
-        rows > (1LL << 31) / input.getDimSize(1))
+    int64_t rows = inputCapacity[0];
+    if (rows >= (1LL << 31) || inputCapacity[1] >= (1LL << 31) ||
+        rows > (1LL << 31) / inputCapacity[1])
       return failure();
     schedule.family = "activation";
     schedule.kind = "relu";
     schedule.rows = rows;
-    schedule.columns = input.getDimSize(1);
+    schedule.columns = inputCapacity[1];
     schedule.workgroupSize = 128;
     return schedule;
   }
@@ -2011,8 +2054,7 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     schedule.epsilon = static_cast<float>(eps ? eps.getValueAsDouble() :
         opName == "tessera.rmsnorm_safe" ? 1e-6 : 1e-5);
     if (!std::isfinite(schedule.epsilon) || schedule.epsilon <= 0.0) return failure();
-    SmallVector<int64_t> capacity(input.getShape());
-    if (schedule.rowBound) capacity[0] = schedule.rowBound;
+    SmallVector<int64_t> capacity(inputCapacity);
     if (requested) {
       if (!op->hasAttr("numeric_policy")) return failure();
       capacity[2] = queryBound.getInt();
@@ -2063,9 +2105,8 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
       return failure();
     schedule.family = "softmax";
     schedule.rows = 1;
-    for (int64_t dim : input.getShape().drop_back())
-      schedule.rows *= ShapedType::isDynamic(dim) ? schedule.rowBound : dim;
-    schedule.columns = input.getShape().back();
+    for (int64_t dim : ArrayRef<int64_t>(inputCapacity).drop_back()) schedule.rows *= dim;
+    schedule.columns = inputCapacity.back();
     schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
     // Native row policy; explicit physical schedules remain authoritative.
     schedule.reductionSchedule =
@@ -2147,6 +2188,10 @@ static std::string semanticKernelDigest(const SemanticKernelSchedule &schedule) 
        Twine(schedule.workgroupSize) + ";exp=" + schedule.expMode +
        ";ftz=0;schedule=" + schedule.reductionSchedule + ";nan=propagate")
           .str();
+  if (!schedule.shapeBounds.empty()) {
+    contract += ";shape_bounds=";
+    for (int64_t extent : schedule.shapeBounds) contract += std::to_string(extent) + ",";
+  }
   if (schedule.queryShape.bounded)
     contract += ";shape_policy=bounded_query_v1;sequence_bound=" +
         std::to_string(schedule.queryShape.sequenceBound) + ";row_multiple=" +
@@ -3596,7 +3641,7 @@ struct GraphToSchedulePass
 
   void getDependentDialects(DialectRegistry &registry) const override {
     tile::registerTileDialect(registry);
-    registry.insert<attn::TesseraAttnDialect, schedule::ScheduleDialect, gpu::GPUDialect, arith::ArithDialect,
+    registry.insert<attn::TesseraAttnDialect, schedule::ScheduleDialect, gpu::GPUDialect, arith::ArithDialect, cf::ControlFlowDialect,
                     scf::SCFDialect, memref::MemRefDialect, vector::VectorDialect>();
   }
 
@@ -4060,6 +4105,8 @@ struct GraphToSchedulePass
                          builder.getI64IntegerAttr(selected->workgroupSize));
       if (selected->rowBound)
         state.addAttribute("row_bound", builder.getI64IntegerAttr(selected->rowBound));
+      if (!selected->shapeBounds.empty())
+        state.addAttribute("shape_bounds", builder.getI64ArrayAttr(selected->shapeBounds));
       if (selected->family == "binary") {
         state.addAttribute("kind", builder.getStringAttr(selected->kind));
         state.addAttribute("output_storage", builder.getStringAttr(selected->storage));
@@ -4745,8 +4792,9 @@ struct ScheduleToTilePass
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<gpu::GPUDialect, arith::ArithDialect, bufferization::BufferizationDialect,
-                    func::FuncDialect, LLVM::LLVMDialect, memref::MemRefDialect,
+    registry.insert<gpu::GPUDialect, arith::ArithDialect, cf::ControlFlowDialect,
+                    bufferization::BufferizationDialect, func::FuncDialect,
+                    LLVM::LLVMDialect, memref::MemRefDialect,
                     NVVM::NVVMDialect, scf::SCFDialect, math::MathDialect,
                     schedule::ScheduleDialect, tensor::TensorDialect>();
     registerTesseraDialects(registry);
@@ -4810,9 +4858,20 @@ struct ScheduleToTilePass
             {FlatSymbolRefAttr::get(&getContext(), kernel.getName())}));
         invoke->setAttr("geometry", geometry);
         invoke->setAttr("scalars", scalars);
-        for (StringRef key : {"scalar_row_multipliers", "grid_row_multipliers", "grid_row_divisors"})
+        for (StringRef key : {"scalar_row_multipliers", "grid_row_multipliers", "grid_row_divisors", "shape_ir"})
           if (auto attr = kernel->getAttr((Twine("tessera.native.program_") + key).str()))
             invoke->setAttr(key, attr);
+      }
+      // The registered pipeline also canonicalizes the host controller.
+      // Own that normalization here for v3 so original-source replay takes
+      // exactly the same boundary as direct and registered packaging.
+      if (auto version = mod->getAttrOfType<IntegerAttr>("tessera.native.tensor_program");
+          version && version.getInt() == 3) {
+        for (auto host : mod.getOps<func::FuncOp>()) {
+          OpPassManager normalization(func::FuncOp::getOperationName());
+          normalization.addPass(mlir::createCanonicalizerPass());
+          if (failed(runPipeline(normalization, host))) return signalPassFailure();
+        }
       }
       if (failed(verify(mod))) return signalPassFailure();
       if (failed(tensor_program::exportFrame(mod))) return signalPassFailure();
@@ -5197,7 +5256,8 @@ struct ScheduleToTilePass
         if (selected->target == "nvidia_sm120") {
           kernelFunction->setAttr("nvvm.kernel", UnitAttr::get(&getContext()));
           if (mod->hasAttr("tessera.native.tensor_program_member")) {
-            if (mod->hasAttr("tessera.native.tensor_program_row_bound"))
+            if (mod->hasAttr("tessera.native.tensor_program_row_bound") ||
+              mod->hasAttr("tessera.native.tensor_program_shape_profile"))
             kernelFunction->setAttr("tessera.native.program_active_buffer_types",
                 tensor_program::activeBufferTypes(graph));
           kernelFunction->setAttr("tessera.native.program_buffer_types",
@@ -5224,6 +5284,13 @@ struct ScheduleToTilePass
           kernelFunction->setAttr("tessera.rocm.arch",
               builder.getStringAttr(selected->arch));
         }
+        tensor_program::attachShapeProgram(kernelFunction, graph,
+            [&](OpBuilder &b, Location l, ArrayRef<Value> dims) {
+              return SmallVector<Value>{dims[4], dims[5], dims[1],
+                  tensor_program::shapeCeilDiv(b, l, dims[5], 8),
+                  tensor_program::shapeCeilDiv(b, l, dims[4], 16),
+                  tensor_program::shapeConstant(b, l, 1)};
+            });
         Block *entry = kernelFunction.addEntryBlock(moduleBuilder);
         OpBuilder kernelBuilder(entry, entry->begin());
           OperationState scalar(loc, "tile.scalar_matmul_kernel");
@@ -5359,7 +5426,8 @@ struct ScheduleToTilePass
             LLVM::LLVMFuncOp::create(moduleBuilder, loc, kernelName, kernelType);
         kernelFunction->setAttr("nvvm.kernel", UnitAttr::get(&getContext()));
         if (mod->hasAttr("tessera.native.tensor_program_member")) {
-          if (mod->hasAttr("tessera.native.tensor_program_row_bound"))
+          if (mod->hasAttr("tessera.native.tensor_program_row_bound") ||
+              mod->hasAttr("tessera.native.tensor_program_shape_profile"))
             kernelFunction->setAttr("tessera.native.program_active_buffer_types",
                 tensor_program::activeBufferTypes(graph));
           kernelFunction->setAttr("tessera.native.program_buffer_types",
@@ -5382,6 +5450,15 @@ struct ScheduleToTilePass
           }
         }
 
+        tensor_program::attachShapeProgram(kernelFunction, graph,
+            [&](OpBuilder &b, Location l, ArrayRef<Value> dims) {
+              SmallVector<Value> values{dims[4], dims[5], dims[1]};
+              if (dynamicSm120) values.append({dims[1], dims[3], dims[5]});
+              values.push_back(tensor_program::shapeCeilDiv(b, l, dims[5], macroKernelGeometry ? 32 : 8));
+              values.push_back(tensor_program::shapeCeilDiv(b, l, dims[4], macroKernelGeometry ? 32 : 16));
+              values.push_back(tensor_program::shapeConstant(b, l, 1));
+              return values;
+            });
         Block *entry = kernelFunction.addEntryBlock(moduleBuilder);
         OpBuilder kernelBuilder(entry, entry->begin());
         auto mma = tile::TileMmaDescAttr::get(
@@ -6123,6 +6200,10 @@ struct ScheduleToTilePass
                      attrInt("workgroup_size") != selected->workgroupSize;
       altered = altered || (selected->rowBound ?
                   attrInt("row_bound") != selected->rowBound : scheduled->hasAttr("row_bound"));
+      if (!selected->shapeBounds.empty())
+        altered = altered || scheduled->getAttr("shape_bounds") !=
+            OpBuilder(scheduled).getI64ArrayAttr(selected->shapeBounds);
+      else altered = altered || scheduled->hasAttr("shape_bounds");
       if (isBinary) {
         altered = altered || attrString("kind") != "add" ||
                   attrString("output_storage") != selected->storage ||
@@ -6236,7 +6317,8 @@ struct ScheduleToTilePass
             kernel->setAttr("tessera.native.program_grid_row_divisors",
                 mb.getDenseI64ArrayAttr({cooperative ? 1 : 128, 1, 1}));
           }
-          if (mod->hasAttr("tessera.native.tensor_program_row_bound"))
+          if (mod->hasAttr("tessera.native.tensor_program_row_bound") ||
+              mod->hasAttr("tessera.native.tensor_program_shape_profile"))
             kernel->setAttr("tessera.native.program_active_buffer_types",
                 tensor_program::activeBufferTypes(graph));
           kernel->setAttr("tessera.native.program_buffer_types",
@@ -6248,6 +6330,18 @@ struct ScheduleToTilePass
                          mb.getDenseI64ArrayAttr({selected->rows, selected->columns}));
         }
 
+        tensor_program::attachShapeProgram(kernel, graph,
+            [&](OpBuilder &b, Location l, ArrayRef<Value> dims) {
+              Value elements = arith::MulIOp::create(b, l, dims[0], dims[1]);
+              SmallVector<Value> values = isBinary ? SmallVector<Value>{elements} :
+                  SmallVector<Value>{dims[0], dims[1]};
+              bool flat = isBinary || (isActivation && selected->reductionSchedule == "flat_128");
+              bool cooperative = selected->reductionSchedule == "cooperative_128";
+              Value grid = flat ? elements : dims[0];
+              if (!cooperative) grid = tensor_program::shapeCeilDiv(b, l, grid, 128);
+              values.append({grid, tensor_program::shapeConstant(b, l, 1), tensor_program::shapeConstant(b, l, 1)});
+              return values;
+            });
         Block *entry = kernel.addEntryBlock(mb);
         OpBuilder kb(entry, entry->begin());
         OperationState state(loc, isBinary ? "tile.elementwise_kernel" :

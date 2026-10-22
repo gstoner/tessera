@@ -1,0 +1,11 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__ test_equal_capacities_do_not_erase_member_dimension_identity[swapped_root] __
+tests/unit/test_native_tensor_shape_ownership.py:193: in test_equal_capacities_do_not_erase_member_dimension_identity
+    assert result.returncode > 0, result.stderr
+E   AssertionError: 
+E   assert 0 > 0
+E    +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/w11-program-pipeline-20261019/native-shape-public-tools-7aff1d3a/tesse...8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n      return %1 : tensor<?x?xf32>\n    }\n  }\n}\n\n', stderr='').returncode
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_tensor_shape_ownership.py::test_equal_capacities_do_not_erase_member_dimension_identity[swapped_root]
+1 failed, 63 deselected in 0.33s

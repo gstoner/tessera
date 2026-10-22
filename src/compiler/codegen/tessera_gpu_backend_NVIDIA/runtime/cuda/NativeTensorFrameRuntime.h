@@ -33,6 +33,8 @@ struct NativeFrameOwner {
   std::vector<uint8_t> rowBuffers;
   uint32_t rowRoot = 0;
   int64_t rowBound = 0;
+  TesseraNvidiaNativeShapeFunctionV3 shapeFunction = nullptr;
+  size_t shapeRootWords = 0, shapePlanWords = 0;
   std::vector<CUdeviceptr> bindings;
   std::vector<unsigned long long> allocationIds;
   std::vector<uint64_t> producerStreams;
@@ -108,12 +110,73 @@ bool nativeFrameViews(NativeFrameOwner &owner,
   }
   return true;
 }
+// Execute compiled shape IR into local storage. Only this native layer
+// interprets the resulting typed descriptors and launch ABI. The selected
+// capacity plan was checked before creating the owner; actual plans cannot
+// enlarge storage or launch bounds, alter topology or mutate retained state.
+bool planNativeFrameShape(const NativeFrameOwner &owner,
+    const int64_t *rootDimensions,size_t rootWords,
+    std::vector<TesseraNvidiaMatmulHostView> &descriptors,
+    std::vector<NativeFrameStage> &stages) {
+  if (!owner.shapeFunction || !rootDimensions || rootWords!=owner.shapeRootWords ||
+      rootWords!=2*owner.roots.size() ||
+      owner.shapePlanWords!=2*owner.descriptors.size()+11*owner.capacityStages.size())
+    return bad("native shape frame dimension/plan extent differs"),false;
+  std::vector<int64_t> plan(owner.shapePlanWords,0);
+  if (owner.shapeFunction(rootDimensions,plan.data())!=0)
+    return bad("native shape program rejected root dimensions"),false;
+  descriptors=owner.descriptors;stages=owner.capacityStages;
+  for (size_t i=0;i<descriptors.size();++i) {
+    auto &view=descriptors[i];const auto &capacity=owner.descriptors[i];
+    int64_t rows=plan[i*2],columns=plan[i*2+1];
+    if (rows<=0 || columns<=0 || rows>capacity.shape[0] || columns>capacity.shape[1])
+      return bad("native shape plan exceeds selected buffer capacity"),false;
+    const size_t width=view.dtype==1?4:2;
+    const __int128 bytes=static_cast<__int128>(rows)*columns*width;
+    if (bytes>INT64_MAX || bytes>capacity.bytes)
+      return bad("native shape plan byte extent exceeds selected capacity"),false;
+    view.shape[0]=rows;view.shape[1]=columns;view.bytes=size_t(bytes);
+    view.strides[0]=columns*int64_t(width);view.strides[1]=int64_t(width);
+  }
+  for (size_t i=0;i<owner.roots.size();++i)
+    for (size_t axis=0;axis<2;++axis)
+      if (descriptors[owner.roots[i]].shape[axis]!=rootDimensions[i*2+axis])
+        return bad("native shape plan changed an original root dimension"),false;
+  size_t cursor=2*descriptors.size();
+  for (auto &stage : stages) {
+    for (size_t j=0;j<8;++j) {
+      int64_t actual=plan[cursor++];
+      if (j>=stage.scalarCount ? actual!=0 : actual<=0 || actual>stage.scalars[j])
+        return bad("native shape plan scalar differs from selected ABI capacity"),false;
+      if (j<stage.scalarCount) stage.scalars[j]=actual;
+    }
+    for (size_t axis=0;axis<3;++axis) {
+      int64_t actual=plan[cursor++];
+      if (actual<=0 || uint64_t(actual)>stage.grid[axis])
+        return bad("native shape plan grid exceeds selected launch capacity"),false;
+      stage.grid[axis]=uint32_t(actual);
+    }
+  }
+  return true;
+}
+
 // Pure active-frame planning. No retained fields, CUDA events, snapshots or
 // output bytes change until every actual view and borrowed allocation passes.
 bool planNativeFrameActive(const NativeFrameOwner &owner,
     const TesseraNvidiaMatmulHostView *roots,size_t rootCount,
     std::vector<TesseraNvidiaMatmulHostView> &descriptors,
     std::vector<NativeFrameStage> &stages) {
+  if (owner.shapeFunction) {
+    if (!roots || rootCount!=owner.roots.size())
+      return bad("native shape frame root count differs"),false;
+    std::vector<int64_t> dimensions;
+    dimensions.reserve(2*rootCount);
+    for (size_t i=0;i<rootCount;++i) {
+      if (roots[i].rank!=2) return bad("native shape root rank differs"),false;
+      dimensions.push_back(roots[i].shape[0]);dimensions.push_back(roots[i].shape[1]);
+    }
+    return planNativeFrameShape(owner,dimensions.data(),dimensions.size(),descriptors,stages);
+  }
   descriptors=owner.descriptors;stages=owner.capacityStages;
   if (!owner.rowBound) return true;
   if (!roots || rootCount!=owner.roots.size())
@@ -335,7 +398,9 @@ int prepareNativeFrame(
     const TesseraNvidiaMatmulHostView *buffers,const uint8_t *roles,size_t count,
     const TesseraNvidiaNativeFrameStepV1 *steps,size_t stageCount,
     const uint8_t *rowBuffers,uint32_t rowRoot,int64_t rowBound,
-    const TesseraNvidiaNativeFrameRowPlanV2 *plans,uint64_t *handle) {
+    const TesseraNvidiaNativeFrameRowPlanV2 *plans,uint64_t *handle,
+    TesseraNvidiaNativeShapeFunctionV3 shapeFunction=nullptr,
+    size_t rootWords=0,size_t planWords=0) {
   error.clear();if (handle) *handle=0;
   if (getpid()!=process) return bad("native frame cannot cross fork");
   if (!handle) return bad("invalid native frame metadata extent");
@@ -346,6 +411,32 @@ int prepareNativeFrame(
             buffers,roles,count,steps,stageCount,*owner)) return status;
     if (rowBound || rowBuffers || plans)
       if (int status=validateNativeFrameRows(*owner,rowBuffers,rowRoot,rowBound,plans)) return status;
+    if (shapeFunction || rootWords || planWords) {
+      if (!shapeFunction || rowBound || rowBuffers || plans ||
+          rootWords!=2*owner->roots.size() || planWords!=2*count+11*stageCount)
+        return bad("native shape frame requires its exact compiled plan ABI");
+      owner->shapeFunction=shapeFunction;owner->shapeRootWords=rootWords;owner->shapePlanWords=planWords;
+      owner->capacityStages=owner->stages;
+      std::vector<int64_t> dimensions;
+      for (auto id : owner->roots) {
+        dimensions.push_back(owner->descriptors[id].shape[0]);
+        dimensions.push_back(owner->descriptors[id].shape[1]);
+      }
+      std::vector<TesseraNvidiaMatmulHostView> checked;
+      std::vector<NativeFrameStage> stages;
+      if (!planNativeFrameShape(*owner,dimensions.data(),dimensions.size(),checked,stages)) return 1;
+      for (size_t i=0;i<count;++i)
+        if (checked[i].shape[0]!=buffers[i].shape[0] || checked[i].shape[1]!=buffers[i].shape[1])
+          return bad("native shape capacity projection differs from selected buffers");
+      for (size_t i=0;i<stageCount;++i) {
+        for (size_t j=0;j<stages[i].scalarCount;++j)
+          if (stages[i].scalars[j]!=steps[i].scalars[j])
+            return bad("native shape capacity projection differs from selected scalars");
+        for (size_t axis=0;axis<3;++axis)
+          if (stages[i].grid[axis]!=steps[i].grid[axis])
+            return bad("native shape capacity projection differs from selected grid");
+      }
+    }
     if (!current(owner->context) ||
         !ok(cuCtxGetId(owner->context,&owner->identity),"native frame context identity"))
       return bad("native frame requires an exact live SM120 context");
@@ -405,6 +496,37 @@ extern "C" int tessera_nvidia_native_frame_prepare_v2(
     return bad("bounded native frame requires explicit row metadata");
   }
   return prepareNativeFrame(buffers,roles,count,steps,stageCount,rowBuffers,rowRoot,rowBound,plans,handle);
+}
+extern "C" int tessera_nvidia_native_frame_prepare_v3(
+    const TesseraNvidiaMatmulHostView *buffers,const uint8_t *roles,size_t count,
+    const TesseraNvidiaNativeFrameStepV1 *steps,size_t stageCount,
+    TesseraNvidiaNativeShapeFunctionV3 shapeFunction,
+    size_t rootWords,size_t planWords,uint64_t *handle) {
+  if (!shapeFunction || !rootWords || !planWords) {
+    error.clear();if (handle) *handle=0;
+    return bad("native shape frame requires its compiled shape function");
+  }
+  return prepareNativeFrame(buffers,roles,count,steps,stageCount,nullptr,0,0,nullptr,
+                            handle,shapeFunction,rootWords,planWords);
+}
+extern "C" int tessera_nvidia_native_frame_shapes_v3(uint64_t handle,
+    const int64_t *dimensions,size_t rootWords,
+    TesseraNvidiaMatmulHostView *active,size_t count) {
+  error.clear();if (getpid()!=process) return bad("native frame cannot cross fork");
+  std::lock_guard<std::mutex> lock(mutex);
+  try {
+    auto found=nativeFrames.find(handle);
+    if (found==nativeFrames.end()) return bad("invalid native frame handle");
+    const auto &owner=*found->second;
+    if (nativeFrameThreadIdentity()!=owner.thread || owner.poisoned ||
+        !active || count!=owner.descriptors.size())
+      return bad("native shape query ownership/output extent differs");
+    std::vector<TesseraNvidiaMatmulHostView> descriptors;
+    std::vector<NativeFrameStage> stages;
+    if (!planNativeFrameShape(owner,dimensions,rootWords,descriptors,stages)) return 1;
+    std::copy(descriptors.begin(),descriptors.end(),active);
+    return 0;
+  } catch (...) {return bad("native shape query failed");}
 }
 extern "C" int tessera_nvidia_native_frame_invoke_v1(uint64_t handle,
     const TesseraNvidiaMatmulHostView *roots,size_t rootCount,

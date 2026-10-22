@@ -1,0 +1,17 @@
+norm_lhs f16 [17, 11, 23] passed and recorded
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/benchmarks/nvidia/record_native_independent_shapes.py", line 154, in <module>
+    main()
+    ~~~~^^
+  File "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/benchmarks/nvidia/record_native_independent_shapes.py", line 141, in main
+    record_program(case, storage, args, packet, artifacts, save)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/benchmarks/nvidia/record_native_independent_shapes.py", line 74, in record_program
+    check(case, fn(*values), values)
+    ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/bounded-source-attention-20261019/worktree/tests/device/nvidia/test_native_tensor_independent_shapes.py", line 63, in check
+    assert np.all(error <= bound), (float(error.max()), float(np.max(bound)))
+           ~~~~~~^^^^^^^^^^^^^^^^
+AssertionError: (0.00015599105972796679, 0.00013141646548263353)

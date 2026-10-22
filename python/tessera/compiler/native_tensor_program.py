@@ -15,6 +15,7 @@ import re
 
 from .graph_ir import GraphIRModule
 from .nvidia_native import _compile_tile_ir
+from .native_tensor_shape import NativeShapeCompanion, build_shape_companion
 from .prepared_native_tensor_frame import PreparedNativeTensorFrame, validate_frame
 from .rocm_native import _tool_digest
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
@@ -67,6 +68,7 @@ class NativeTensorProgram:
     images: tuple[bytes, ...]
     compiler: Path
     compiler_identity: str
+    shape_companion: NativeShapeCompanion | None = None
 
     def __post_init__(self):
         self.validate()
@@ -98,6 +100,14 @@ class NativeTensorProgram:
         if replay != self.target_ir:
             raise ValueError("native tensor Target differs after original Graph replay")
         frame = self.frame
+        if frame["schema"] == "tessera.native.tensor_program_frame.v3":
+            if not isinstance(self.shape_companion, NativeShapeCompanion):
+                raise ValueError("native tensor shape program requires its compiled companion")
+            self.shape_companion.validate(frame["shape_program"])
+            if self.shape_companion != build_shape_companion(frame["shape_program"]):
+                raise ValueError("native shape companion differs from trusted LLVM source replay")
+        elif self.shape_companion is not None:
+            raise ValueError("static/row tensor program cannot carry a general shape companion")
         if len(self.members) != len(frame["stages"]) or len(self.images) != len(self.members):
             raise ValueError("native tensor member/image arity differs")
         for index, (stage, member, image) in enumerate(zip(
@@ -114,7 +124,8 @@ class NativeTensorProgram:
 
     def prepare(self, *, provider=None):
         """Bind verified bytes to a retained native owner; no compiler invocation."""
-        return PreparedNativeTensorFrame(self.frame, self.images, provider=provider)
+        return PreparedNativeTensorFrame(self.frame, self.images, provider=provider,
+                                         shape_companion=self.shape_companion)
 
 
 def compile_native_tensor_program(source, *, tool=None):
@@ -146,7 +157,9 @@ def compile_native_tensor_program(source, *, tool=None):
         images.append(ptx.encode())
     return NativeTensorProgram(source_ir=original, schedule_ir=scheduled, tile_ir=tile,
                                target_ir=target, members=tuple(members), images=tuple(images),
-                               compiler=compiler, compiler_identity=identity)
+                               compiler=compiler, compiler_identity=identity,
+                               shape_companion=(build_shape_companion(frame["shape_program"])
+                                                if frame["schema"] == "tessera.native.tensor_program_frame.v3" else None))
 
 
 def runtime_artifact(program, *, argument_names=()):
@@ -168,6 +181,9 @@ def runtime_artifact(program, *, argument_names=()):
         "images": [base64.b64encode(image).decode() for image in program.images],
         "compiler_identity": program.compiler_identity,
     }
+    if program.shape_companion is not None:
+        manifest["schema"] = "tessera.native.tensor_program.v2"
+        manifest["shape_companion"] = program.shape_companion.to_record()
     return RuntimeArtifact(
         graph_ir=program.source_ir, schedule_ir=program.schedule_ir,
         tile_ir=program.tile_ir, target_ir=program.target_ir,
@@ -184,10 +200,13 @@ def restore_runtime_artifact(artifact):
     data = metadata.get("native_program")
     keys = {"schema", "source_ir", "schedule_ir", "tile_ir", "target_ir",
             "members", "images", "compiler_identity"}
+    shaped = isinstance(data, dict) and data.get("schema") == "tessera.native.tensor_program.v2"
+    if shaped:
+        keys.add("shape_companion")
     if (metadata.get("target") != "nvidia_sm120"
             or metadata.get("compiler_path") != "canonical_native_tensor_program"
             or not isinstance(data, dict) or set(data) != keys
-            or data["schema"] != "tessera.native.tensor_program.v1"
+            or data["schema"] not in {"tessera.native.tensor_program.v1", "tessera.native.tensor_program.v2"}
             or not isinstance(data["members"], list) or not isinstance(data["images"], list)
             or any(not isinstance(value, str) for value in data["images"])
             or any(getattr(artifact, field) != data[key] for field, key in (
@@ -203,6 +222,9 @@ def restore_runtime_artifact(artifact):
         members=tuple(data["members"]),
         images=tuple(base64.b64decode(value, validate=True) for value in data["images"]),
         compiler=Path(tool).resolve(), compiler_identity=data["compiler_identity"],
+        shape_companion=(NativeShapeCompanion.from_record(data["shape_companion"],
+                                                         _frame(data["target_ir"])["shape_program"])
+                         if shaped else None),
     )
 
 

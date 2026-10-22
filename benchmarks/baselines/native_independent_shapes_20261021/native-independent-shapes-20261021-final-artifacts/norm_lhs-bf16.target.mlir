@@ -1,0 +1,510 @@
+module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tessera.native.tensor_program = 3 : i64, tessera.native.tensor_program_capacity_types = [memref<65x64xbf16>, memref<64x47xbf16>, memref<65x64xbf16>, memref<65x47xf32>], tessera.native.tensor_program_frame_json = "eyJhcmNoaXRlY3R1cmUiOiJzbV8xMjAiLCJidWZmZXJzIjpbeyJieXRlcyI6ODMyMCwiaWQiOjAsInJvbGUiOiJpbnB1dCIsInNoYXBlIjpbNjUsNjRdLCJzdG9yYWdlIjoiYmYxNiJ9LHsiYnl0ZXMiOjYwMTYsImlkIjoxLCJyb2xlIjoiaW5wdXQiLCJzaGFwZSI6WzY0LDQ3XSwic3RvcmFnZSI6ImJmMTYifSx7ImJ5dGVzIjo4MzIwLCJpZCI6Miwicm9sZSI6InByaXZhdGUiLCJzaGFwZSI6WzY1LDY0XSwic3RvcmFnZSI6ImJmMTYifSx7ImJ5dGVzIjoxMjIyMCwiaWQiOjMsInJvbGUiOiJvdXRwdXQiLCJzaGFwZSI6WzY1LDQ3XSwic3RvcmFnZSI6ImYzMiJ9XSwiZnVuY3Rpb24iOiJub3JtX2xocyIsIm91dHB1dCI6Mywicm9vdHMiOlswLDFdLCJzY2hlbWEiOiJ0ZXNzZXJhLm5hdGl2ZS50ZW5zb3JfcHJvZ3JhbV9mcmFtZS52MyIsInNoYXBlX2JpbmRpbmdzIjpbWzAsMV0sWzEsMl0sWzAsMV0sWzAsMl1dLCJzaGFwZV9wcm9ncmFtIjp7ImVudHJ5IjoiX190ZXNzZXJhX3RlbnNvcl9zaGFwZV9wbGFuIiwiaXIiOiJtb2R1bGUge1xuICBmdW5jLmZ1bmMgQF9fdGVzc2VyYV90ZW5zb3Jfc2hhcGVfcGxhbiglYXJnMDogIWxsdm0ucHRyLCAlYXJnMTogIWxsdm0ucHRyKSAtPiBpMzIge1xuICAgICVjMF9pNjQgPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJTAgPSBsbHZtLmdldGVsZW1lbnRwdHIgJWFyZzBbJWMwX2k2NF0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgJTEgPSBsbHZtLmxvYWQgJTAgOiAhbGx2bS5wdHIgLT4gaTY0XG4gICAgJWMxX2k2NCA9IGFyaXRoLmNvbnN0YW50IDEgOiBpNjRcbiAgICAlMiA9IGxsdm0uZ2V0ZWxlbWVudHB0ciAlYXJnMFslYzFfaTY0XSA6ICghbGx2bS5wdHIsIGk2NCkgLT4gIWxsdm0ucHRyLCBpNjRcbiAgICAlMyA9IGxsdm0ubG9hZCAlMiA6ICFsbHZtLnB0ciAtPiBpNjRcbiAgICAlYzJfaTY0ID0gYXJpdGguY29uc3RhbnQgMiA6IGk2NFxuICAgICU0ID0gbGx2bS5nZXRlbGVtZW50cHRyICVhcmcwWyVjMl9pNjRdIDogKCFsbHZtLnB0ciwgaTY0KSAtPiAhbGx2bS5wdHIsIGk2NFxuICAgICU1ID0gbGx2bS5sb2FkICU0IDogIWxsdm0ucHRyIC0+IGk2NFxuICAgICVjM19pNjQgPSBhcml0aC5jb25zdGFudCAzIDogaTY0XG4gICAgJTYgPSBsbHZtLmdldGVsZW1lbnRwdHIgJWFyZzBbJWMzX2k2NF0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgJTcgPSBsbHZtLmxvYWQgJTYgOiAhbGx2bS5wdHIgLT4gaTY0XG4gICAgJWMwX2k2NF8wID0gYXJpdGguY29uc3RhbnQgMCA6IGk2NFxuICAgICU4ID0gYXJpdGguY21waSB1Z3QsICUxLCAlYzBfaTY0XzAgOiBpNjRcbiAgICAlYzY1X2k2NCA9IGFyaXRoLmNvbnN0YW50IDY1IDogaTY0XG4gICAgJTkgPSBhcml0aC5jbXBpIHVsZSwgJTEsICVjNjVfaTY0IDogaTY0XG4gICAgJTEwID0gYXJpdGguYW5kaSAlOCwgJTkgOiBpMVxuICAgIGNmLmNvbmRfYnIgJTEwLCBeYmIyLCBeYmIxXG4gIF5iYjE6ICAvLyAyMSBwcmVkczogXmJiMCwgXmJiMiwgXmJiMywgXmJiNCwgXmJiNSwgXmJiNiwgXmJiNywgXmJiOCwgXmJiOSwgXmJiMTAsIF5iYjExLCBeYmIxMiwgXmJiMTMsIF5iYjE0LCBeYmIxNSwgXmJiMTYsIF5iYjE3LCBeYmIxOCwgXmJiMTksIF5iYjIwLCBeYmIyMVxuICAgICVjMV9pMzIgPSBhcml0aC5jb25zdGFudCAxIDogaTMyXG4gICAgcmV0dXJuICVjMV9pMzIgOiBpMzJcbiAgXmJiMjogIC8vIHByZWQ6IF5iYjBcbiAgICAlYzBfaTY0XzEgPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJTExID0gYXJpdGguY21waSB1Z3QsICUzLCAlYzBfaTY0XzEgOiBpNjRcbiAgICAlYzY0X2k2NCA9IGFyaXRoLmNvbnN0YW50IDY0IDogaTY0XG4gICAgJTEyID0gYXJpdGguY21waSB1bGUsICUzLCAlYzY0X2k2NCA6IGk2NFxuICAgICUxMyA9IGFyaXRoLmFuZGkgJTExLCAlMTIgOiBpMVxuICAgIGNmLmNvbmRfYnIgJTEzLCBeYmIzLCBeYmIxXG4gIF5iYjM6ICAvLyBwcmVkOiBeYmIyXG4gICAgJWMwX2k2NF8yID0gYXJpdGguY29uc3RhbnQgMCA6IGk2NFxuICAgICUxNCA9IGFyaXRoLmNtcGkgdWd0LCAlNywgJWMwX2k2NF8yIDogaTY0XG4gICAgJWM0N19pNjQgPSBhcml0aC5jb25zdGFudCA0NyA6IGk2NFxuICAgICUxNSA9IGFyaXRoLmNtcGkgdWxlLCAlNywgJWM0N19pNjQgOiBpNjRcbiAgICAlMTYgPSBhcml0aC5hbmRpICUxNCwgJTE1IDogaTFcbiAgICBjZi5jb25kX2JyICUxNiwgXmJiNCwgXmJiMVxuICBeYmI0OiAgLy8gcHJlZDogXmJiM1xuICAgICUxNyA9IGFyaXRoLmNtcGkgZXEsICUxLCAlMSA6IGk2NFxuICAgIGNmLmNvbmRfYnIgJTE3LCBeYmI1LCBeYmIxXG4gIF5iYjU6ICAvLyBwcmVkOiBeYmI0XG4gICAgJTE4ID0gYXJpdGguY21waSBlcSwgJTMsICUzIDogaTY0XG4gICAgY2YuY29uZF9iciAlMTgsIF5iYjYsIF5iYjFcbiAgXmJiNjogIC8vIHByZWQ6IF5iYjVcbiAgICAlMTkgPSBhcml0aC5jbXBpIGVxLCAlNSwgJTMgOiBpNjRcbiAgICBjZi5jb25kX2JyICUxOSwgXmJiNywgXmJiMVxuICBeYmI3OiAgLy8gcHJlZDogXmJiNlxuICAgICUyMCA9IGFyaXRoLmNtcGkgZXEsICU3LCAlNyA6IGk2NFxuICAgIGNmLmNvbmRfYnIgJTIwLCBeYmI4LCBeYmIxXG4gIF5iYjg6ICAvLyBwcmVkOiBeYmI3XG4gICAgJTIxID0gYXJpdGgubXVsaSAlMSwgJTMgOiBpNjRcbiAgICAlYzEyN19pNjQgPSBhcml0aC5jb25zdGFudCAxMjcgOiBpNjRcbiAgICAlMjIgPSBhcml0aC5hZGRpICUxLCAlYzEyN19pNjQgOiBpNjRcbiAgICAlYzEyOF9pNjQgPSBhcml0aC5jb25zdGFudCAxMjggOiBpNjRcbiAgICAlMjMgPSBhcml0aC5kaXZ1aSAlMjIsICVjMTI4X2k2NCA6IGk2NFxuICAgICVjMV9pNjRfMyA9IGFyaXRoLmNvbnN0YW50IDEgOiBpNjRcbiAgICAlYzFfaTY0XzQgPSBhcml0aC5jb25zdGFudCAxIDogaTY0XG4gICAgJWMwX2k2NF81ID0gYXJpdGguY29uc3RhbnQgMCA6IGk2NFxuICAgICUyNCA9IGFyaXRoLmNtcGkgdWd0LCAlMSwgJWMwX2k2NF81IDogaTY0XG4gICAgJWM2NV9pNjRfNiA9IGFyaXRoLmNvbnN0YW50IDY1IDogaTY0XG4gICAgJTI1ID0gYXJpdGguY21waSB1bGUsICUxLCAlYzY1X2k2NF82IDogaTY0XG4gICAgJTI2ID0gYXJpdGguYW5kaSAlMjQsICUyNSA6IGkxXG4gICAgY2YuY29uZF9iciAlMjYsIF5iYjksIF5iYjFcbiAgXmJiOTogIC8vIHByZWQ6IF5iYjhcbiAgICAlYzBfaTY0XzcgPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJTI3ID0gYXJpdGguY21waSB1Z3QsICUzLCAlYzBfaTY0XzcgOiBpNjRcbiAgICAlYzY0X2k2NF84ID0gYXJpdGguY29uc3RhbnQgNjQgOiBpNjRcbiAgICAlMjggPSBhcml0aC5jbXBpIHVsZSwgJTMsICVjNjRfaTY0XzggOiBpNjRcbiAgICAlMjkgPSBhcml0aC5hbmRpICUyNywgJTI4IDogaTFcbiAgICBjZi5jb25kX2JyICUyOSwgXmJiMTAsIF5iYjFcbiAgXmJiMTA6ICAvLyBwcmVkOiBeYmI5XG4gICAgJWMwX2k2NF85ID0gYXJpdGguY29uc3RhbnQgMCA6IGk2NFxuICAgICUzMCA9IGFyaXRoLmNtcGkgdWd0LCAlMjMsICVjMF9pNjRfOSA6IGk2NFxuICAgICVjMV9pNjRfMTAgPSBhcml0aC5jb25zdGFudCAxIDogaTY0XG4gICAgJTMxID0gYXJpdGguY21waSB1bGUsICUyMywgJWMxX2k2NF8xMCA6IGk2NFxuICAgICUzMiA9IGFyaXRoLmFuZGkgJTMwLCAlMzEgOiBpMVxuICAgIGNmLmNvbmRfYnIgJTMyLCBeYmIxMSwgXmJiMVxuICBeYmIxMTogIC8vIHByZWQ6IF5iYjEwXG4gICAgJWMwX2k2NF8xMSA9IGFyaXRoLmNvbnN0YW50IDAgOiBpNjRcbiAgICAlMzMgPSBhcml0aC5jbXBpIHVndCwgJWMxX2k2NF8zLCAlYzBfaTY0XzExIDogaTY0XG4gICAgJWMxX2k2NF8xMiA9IGFyaXRoLmNvbnN0YW50IDEgOiBpNjRcbiAgICAlMzQgPSBhcml0aC5jbXBpIHVsZSwgJWMxX2k2NF8zLCAlYzFfaTY0XzEyIDogaTY0XG4gICAgJTM1ID0gYXJpdGguYW5kaSAlMzMsICUzNCA6IGkxXG4gICAgY2YuY29uZF9iciAlMzUsIF5iYjEyLCBeYmIxXG4gIF5iYjEyOiAgLy8gcHJlZDogXmJiMTFcbiAgICAlYzBfaTY0XzEzID0gYXJpdGguY29uc3RhbnQgMCA6IGk2NFxuICAgICUzNiA9IGFyaXRoLmNtcGkgdWd0LCAlYzFfaTY0XzQsICVjMF9pNjRfMTMgOiBpNjRcbiAgICAlYzFfaTY0XzE0ID0gYXJpdGguY29uc3RhbnQgMSA6IGk2NFxuICAgICUzNyA9IGFyaXRoLmNtcGkgdWxlLCAlYzFfaTY0XzQsICVjMV9pNjRfMTQgOiBpNjRcbiAgICAlMzggPSBhcml0aC5hbmRpICUzNiwgJTM3IDogaTFcbiAgICBjZi5jb25kX2JyICUzOCwgXmJiMTMsIF5iYjFcbiAgXmJiMTM6ICAvLyBwcmVkOiBeYmIxMlxuICAgICVjMF9pNjRfMTUgPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJWMwX2k2NF8xNiA9IGFyaXRoLmNvbnN0YW50IDAgOiBpNjRcbiAgICAlYzBfaTY0XzE3ID0gYXJpdGguY29uc3RhbnQgMCA6IGk2NFxuICAgICVjMF9pNjRfMTggPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJWMwX2k2NF8xOSA9IGFyaXRoLmNvbnN0YW50IDAgOiBpNjRcbiAgICAlYzBfaTY0XzIwID0gYXJpdGguY29uc3RhbnQgMCA6IGk2NFxuICAgICVjN19pNjQgPSBhcml0aC5jb25zdGFudCA3IDogaTY0XG4gICAgJTM5ID0gYXJpdGguYWRkaSAlNywgJWM3X2k2NCA6IGk2NFxuICAgICVjOF9pNjQgPSBhcml0aC5jb25zdGFudCA4IDogaTY0XG4gICAgJTQwID0gYXJpdGguZGl2dWkgJTM5LCAlYzhfaTY0IDogaTY0XG4gICAgJWMxNV9pNjQgPSBhcml0aC5jb25zdGFudCAxNSA6IGk2NFxuICAgICU0MSA9IGFyaXRoLmFkZGkgJTEsICVjMTVfaTY0IDogaTY0XG4gICAgJWMxNl9pNjQgPSBhcml0aC5jb25zdGFudCAxNiA6IGk2NFxuICAgICU0MiA9IGFyaXRoLmRpdnVpICU0MSwgJWMxNl9pNjQgOiBpNjRcbiAgICAlYzFfaTY0XzIxID0gYXJpdGguY29uc3RhbnQgMSA6IGk2NFxuICAgICVjMF9pNjRfMjIgPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJTQzID0gYXJpdGguY21waSB1Z3QsICUxLCAlYzBfaTY0XzIyIDogaTY0XG4gICAgJWM2NV9pNjRfMjMgPSBhcml0aC5jb25zdGFudCA2NSA6IGk2NFxuICAgICU0NCA9IGFyaXRoLmNtcGkgdWxlLCAlMSwgJWM2NV9pNjRfMjMgOiBpNjRcbiAgICAlNDUgPSBhcml0aC5hbmRpICU0MywgJTQ0IDogaTFcbiAgICBjZi5jb25kX2JyICU0NSwgXmJiMTQsIF5iYjFcbiAgXmJiMTQ6ICAvLyBwcmVkOiBeYmIxM1xuICAgICVjMF9pNjRfMjQgPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJTQ2ID0gYXJpdGguY21waSB1Z3QsICU3LCAlYzBfaTY0XzI0IDogaTY0XG4gICAgJWM0N19pNjRfMjUgPSBhcml0aC5jb25zdGFudCA0NyA6IGk2NFxuICAgICU0NyA9IGFyaXRoLmNtcGkgdWxlLCAlNywgJWM0N19pNjRfMjUgOiBpNjRcbiAgICAlNDggPSBhcml0aC5hbmRpICU0NiwgJTQ3IDogaTFcbiAgICBjZi5jb25kX2JyICU0OCwgXmJiMTUsIF5iYjFcbiAgXmJiMTU6ICAvLyBwcmVkOiBeYmIxNFxuICAgICVjMF9pNjRfMjYgPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJTQ5ID0gYXJpdGguY21waSB1Z3QsICUzLCAlYzBfaTY0XzI2IDogaTY0XG4gICAgJWM2NF9pNjRfMjcgPSBhcml0aC5jb25zdGFudCA2NCA6IGk2NFxuICAgICU1MCA9IGFyaXRoLmNtcGkgdWxlLCAlMywgJWM2NF9pNjRfMjcgOiBpNjRcbiAgICAlNTEgPSBhcml0aC5hbmRpICU0OSwgJTUwIDogaTFcbiAgICBjZi5jb25kX2JyICU1MSwgXmJiMTYsIF5iYjFcbiAgXmJiMTY6ICAvLyBwcmVkOiBeYmIxNVxuICAgICVjMF9pNjRfMjggPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJTUyID0gYXJpdGguY21waSB1Z3QsICUzLCAlYzBfaTY0XzI4IDogaTY0XG4gICAgJWM2NF9pNjRfMjkgPSBhcml0aC5jb25zdGFudCA2NCA6IGk2NFxuICAgICU1MyA9IGFyaXRoLmNtcGkgdWxlLCAlMywgJWM2NF9pNjRfMjkgOiBpNjRcbiAgICAlNTQgPSBhcml0aC5hbmRpICU1MiwgJTUzIDogaTFcbiAgICBjZi5jb25kX2JyICU1NCwgXmJiMTcsIF5iYjFcbiAgXmJiMTc6ICAvLyBwcmVkOiBeYmIxNlxuICAgICVjMF9pNjRfMzAgPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJTU1ID0gYXJpdGguY21waSB1Z3QsICU3LCAlYzBfaTY0XzMwIDogaTY0XG4gICAgJWM0N19pNjRfMzEgPSBhcml0aC5jb25zdGFudCA0NyA6IGk2NFxuICAgICU1NiA9IGFyaXRoLmNtcGkgdWxlLCAlNywgJWM0N19pNjRfMzEgOiBpNjRcbiAgICAlNTcgPSBhcml0aC5hbmRpICU1NSwgJTU2IDogaTFcbiAgICBjZi5jb25kX2JyICU1NywgXmJiMTgsIF5iYjFcbiAgXmJiMTg6ICAvLyBwcmVkOiBeYmIxN1xuICAgICVjMF9pNjRfMzIgPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJTU4ID0gYXJpdGguY21waSB1Z3QsICU3LCAlYzBfaTY0XzMyIDogaTY0XG4gICAgJWM0N19pNjRfMzMgPSBhcml0aC5jb25zdGFudCA0NyA6IGk2NFxuICAgICU1OSA9IGFyaXRoLmNtcGkgdWxlLCAlNywgJWM0N19pNjRfMzMgOiBpNjRcbiAgICAlNjAgPSBhcml0aC5hbmRpICU1OCwgJTU5IDogaTFcbiAgICBjZi5jb25kX2JyICU2MCwgXmJiMTksIF5iYjFcbiAgXmJiMTk6ICAvLyBwcmVkOiBeYmIxOFxuICAgICVjMF9pNjRfMzQgPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJTYxID0gYXJpdGguY21waSB1Z3QsICU0MCwgJWMwX2k2NF8zNCA6IGk2NFxuICAgICVjNl9pNjQgPSBhcml0aC5jb25zdGFudCA2IDogaTY0XG4gICAgJTYyID0gYXJpdGguY21waSB1bGUsICU0MCwgJWM2X2k2NCA6IGk2NFxuICAgICU2MyA9IGFyaXRoLmFuZGkgJTYxLCAlNjIgOiBpMVxuICAgIGNmLmNvbmRfYnIgJTYzLCBeYmIyMCwgXmJiMVxuICBeYmIyMDogIC8vIHByZWQ6IF5iYjE5XG4gICAgJWMwX2k2NF8zNSA9IGFyaXRoLmNvbnN0YW50IDAgOiBpNjRcbiAgICAlNjQgPSBhcml0aC5jbXBpIHVndCwgJTQyLCAlYzBfaTY0XzM1IDogaTY0XG4gICAgJWM1X2k2NCA9IGFyaXRoLmNvbnN0YW50IDUgOiBpNjRcbiAgICAlNjUgPSBhcml0aC5jbXBpIHVsZSwgJTQyLCAlYzVfaTY0IDogaTY0XG4gICAgJTY2ID0gYXJpdGguYW5kaSAlNjQsICU2NSA6IGkxXG4gICAgY2YuY29uZF9iciAlNjYsIF5iYjIxLCBeYmIxXG4gIF5iYjIxOiAgLy8gcHJlZDogXmJiMjBcbiAgICAlYzBfaTY0XzM2ID0gYXJpdGguY29uc3RhbnQgMCA6IGk2NFxuICAgICU2NyA9IGFyaXRoLmNtcGkgdWd0LCAlYzFfaTY0XzIxLCAlYzBfaTY0XzM2IDogaTY0XG4gICAgJWMxX2k2NF8zNyA9IGFyaXRoLmNvbnN0YW50IDEgOiBpNjRcbiAgICAlNjggPSBhcml0aC5jbXBpIHVsZSwgJWMxX2k2NF8yMSwgJWMxX2k2NF8zNyA6IGk2NFxuICAgICU2OSA9IGFyaXRoLmFuZGkgJTY3LCAlNjggOiBpMVxuICAgIGNmLmNvbmRfYnIgJTY5LCBeYmIyMiwgXmJiMVxuICBeYmIyMjogIC8vIHByZWQ6IF5iYjIxXG4gICAgJWMwX2k2NF8zOCA9IGFyaXRoLmNvbnN0YW50IDAgOiBpNjRcbiAgICAlYzBfaTY0XzM5ID0gYXJpdGguY29uc3RhbnQgMCA6IGk2NFxuICAgICVjMF9pNjRfNDAgPSBhcml0aC5jb25zdGFudCAwIDogaTY0XG4gICAgJTcwID0gbGx2bS5nZXRlbGVtZW50cHRyICVhcmcxWyVjMF9pNjRfNDBdIDogKCFsbHZtLnB0ciwgaTY0KSAtPiAhbGx2bS5wdHIsIGk2NFxuICAgIGxsdm0uc3RvcmUgJTEsICU3MCA6IGk2NCwgIWxsdm0ucHRyXG4gICAgJWMxX2k2NF80MSA9IGFyaXRoLmNvbnN0YW50IDEgOiBpNjRcbiAgICAlNzEgPSBsbHZtLmdldGVsZW1lbnRwdHIgJWFyZzFbJWMxX2k2NF80MV0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgbGx2bS5zdG9yZSAlMywgJTcxIDogaTY0LCAhbGx2bS5wdHJcbiAgICAlYzJfaTY0XzQyID0gYXJpdGguY29uc3RhbnQgMiA6IGk2NFxuICAgICU3MiA9IGxsdm0uZ2V0ZWxlbWVudHB0ciAlYXJnMVslYzJfaTY0XzQyXSA6ICghbGx2bS5wdHIsIGk2NCkgLT4gIWxsdm0ucHRyLCBpNjRcbiAgICBsbHZtLnN0b3JlICUzLCAlNzIgOiBpNjQsICFsbHZtLnB0clxuICAgICVjM19pNjRfNDMgPSBhcml0aC5jb25zdGFudCAzIDogaTY0XG4gICAgJTczID0gbGx2bS5nZXRlbGVtZW50cHRyICVhcmcxWyVjM19pNjRfNDNdIDogKCFsbHZtLnB0ciwgaTY0KSAtPiAhbGx2bS5wdHIsIGk2NFxuICAgIGxsdm0uc3RvcmUgJTcsICU3MyA6IGk2NCwgIWxsdm0ucHRyXG4gICAgJWM0X2k2NCA9IGFyaXRoLmNvbnN0YW50IDQgOiBpNjRcbiAgICAlNzQgPSBsbHZtLmdldGVsZW1lbnRwdHIgJWFyZzFbJWM0X2k2NF0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgbGx2bS5zdG9yZSAlMSwgJTc0IDogaTY0LCAhbGx2bS5wdHJcbiAgICAlYzVfaTY0XzQ0ID0gYXJpdGguY29uc3RhbnQgNSA6IGk2NFxuICAgICU3NSA9IGxsdm0uZ2V0ZWxlbWVudHB0ciAlYXJnMVslYzVfaTY0XzQ0XSA6ICghbGx2bS5wdHIsIGk2NCkgLT4gIWxsdm0ucHRyLCBpNjRcbiAgICBsbHZtLnN0b3JlICUzLCAlNzUgOiBpNjQsICFsbHZtLnB0clxuICAgICVjNl9pNjRfNDUgPSBhcml0aC5jb25zdGFudCA2IDogaTY0XG4gICAgJTc2ID0gbGx2bS5nZXRlbGVtZW50cHRyICVhcmcxWyVjNl9pNjRfNDVdIDogKCFsbHZtLnB0ciwgaTY0KSAtPiAhbGx2bS5wdHIsIGk2NFxuICAgIGxsdm0uc3RvcmUgJTEsICU3NiA6IGk2NCwgIWxsdm0ucHRyXG4gICAgJWM3X2k2NF80NiA9IGFyaXRoLmNvbnN0YW50IDcgOiBpNjRcbiAgICAlNzcgPSBsbHZtLmdldGVsZW1lbnRwdHIgJWFyZzFbJWM3X2k2NF80Nl0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgbGx2bS5zdG9yZSAlNywgJTc3IDogaTY0LCAhbGx2bS5wdHJcbiAgICAlYzhfaTY0XzQ3ID0gYXJpdGguY29uc3RhbnQgOCA6IGk2NFxuICAgICU3OCA9IGxsdm0uZ2V0ZWxlbWVudHB0ciAlYXJnMVslYzhfaTY0XzQ3XSA6ICghbGx2bS5wdHIsIGk2NCkgLT4gIWxsdm0ucHRyLCBpNjRcbiAgICBsbHZtLnN0b3JlICUxLCAlNzggOiBpNjQsICFsbHZtLnB0clxuICAgICVjOV9pNjQgPSBhcml0aC5jb25zdGFudCA5IDogaTY0XG4gICAgJTc5ID0gbGx2bS5nZXRlbGVtZW50cHRyICVhcmcxWyVjOV9pNjRdIDogKCFsbHZtLnB0ciwgaTY0KSAtPiAhbGx2bS5wdHIsIGk2NFxuICAgIGxsdm0uc3RvcmUgJTMsICU3OSA6IGk2NCwgIWxsdm0ucHRyXG4gICAgJWMxMF9pNjQgPSBhcml0aC5jb25zdGFudCAxMCA6IGk2NFxuICAgICU4MCA9IGxsdm0uZ2V0ZWxlbWVudHB0ciAlYXJnMVslYzEwX2k2NF0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgbGx2bS5zdG9yZSAlYzBfaTY0XzE1LCAlODAgOiBpNjQsICFsbHZtLnB0clxuICAgICVjMTFfaTY0ID0gYXJpdGguY29uc3RhbnQgMTEgOiBpNjRcbiAgICAlODEgPSBsbHZtLmdldGVsZW1lbnRwdHIgJWFyZzFbJWMxMV9pNjRdIDogKCFsbHZtLnB0ciwgaTY0KSAtPiAhbGx2bS5wdHIsIGk2NFxuICAgIGxsdm0uc3RvcmUgJWMwX2k2NF8xNiwgJTgxIDogaTY0LCAhbGx2bS5wdHJcbiAgICAlYzEyX2k2NCA9IGFyaXRoLmNvbnN0YW50IDEyIDogaTY0XG4gICAgJTgyID0gbGx2bS5nZXRlbGVtZW50cHRyICVhcmcxWyVjMTJfaTY0XSA6ICghbGx2bS5wdHIsIGk2NCkgLT4gIWxsdm0ucHRyLCBpNjRcbiAgICBsbHZtLnN0b3JlICVjMF9pNjRfMTcsICU4MiA6IGk2NCwgIWxsdm0ucHRyXG4gICAgJWMxM19pNjQgPSBhcml0aC5jb25zdGFudCAxMyA6IGk2NFxuICAgICU4MyA9IGxsdm0uZ2V0ZWxlbWVudHB0ciAlYXJnMVslYzEzX2k2NF0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgbGx2bS5zdG9yZSAlYzBfaTY0XzE4LCAlODMgOiBpNjQsICFsbHZtLnB0clxuICAgICVjMTRfaTY0ID0gYXJpdGguY29uc3RhbnQgMTQgOiBpNjRcbiAgICAlODQgPSBsbHZtLmdldGVsZW1lbnRwdHIgJWFyZzFbJWMxNF9pNjRdIDogKCFsbHZtLnB0ciwgaTY0KSAtPiAhbGx2bS5wdHIsIGk2NFxuICAgIGxsdm0uc3RvcmUgJWMwX2k2NF8xOSwgJTg0IDogaTY0LCAhbGx2bS5wdHJcbiAgICAlYzE1X2k2NF80OCA9IGFyaXRoLmNvbnN0YW50IDE1IDogaTY0XG4gICAgJTg1ID0gbGx2bS5nZXRlbGVtZW50cHRyICVhcmcxWyVjMTVfaTY0XzQ4XSA6ICghbGx2bS5wdHIsIGk2NCkgLT4gIWxsdm0ucHRyLCBpNjRcbiAgICBsbHZtLnN0b3JlICVjMF9pNjRfMjAsICU4NSA6IGk2NCwgIWxsdm0ucHRyXG4gICAgJWMxNl9pNjRfNDkgPSBhcml0aC5jb25zdGFudCAxNiA6IGk2NFxuICAgICU4NiA9IGxsdm0uZ2V0ZWxlbWVudHB0ciAlYXJnMVslYzE2X2k2NF80OV0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgbGx2bS5zdG9yZSAlMjMsICU4NiA6IGk2NCwgIWxsdm0ucHRyXG4gICAgJWMxN19pNjQgPSBhcml0aC5jb25zdGFudCAxNyA6IGk2NFxuICAgICU4NyA9IGxsdm0uZ2V0ZWxlbWVudHB0ciAlYXJnMVslYzE3X2k2NF0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgbGx2bS5zdG9yZSAlYzFfaTY0XzMsICU4NyA6IGk2NCwgIWxsdm0ucHRyXG4gICAgJWMxOF9pNjQgPSBhcml0aC5jb25zdGFudCAxOCA6IGk2NFxuICAgICU4OCA9IGxsdm0uZ2V0ZWxlbWVudHB0ciAlYXJnMVslYzE4X2k2NF0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgbGx2bS5zdG9yZSAlYzFfaTY0XzQsICU4OCA6IGk2NCwgIWxsdm0ucHRyXG4gICAgJWMxOV9pNjQgPSBhcml0aC5jb25zdGFudCAxOSA6IGk2NFxuICAgICU4OSA9IGxsdm0uZ2V0ZWxlbWVudHB0ciAlYXJnMVslYzE5X2k2NF0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgbGx2bS5zdG9yZSAlMSwgJTg5IDogaTY0LCAhbGx2bS5wdHJcbiAgICAlYzIwX2k2NCA9IGFyaXRoLmNvbnN0YW50IDIwIDogaTY0XG4gICAgJTkwID0gbGx2bS5nZXRlbGVtZW50cHRyICVhcmcxWyVjMjBfaTY0XSA6ICghbGx2bS5wdHIsIGk2NCkgLT4gIWxsdm0ucHRyLCBpNjRcbiAgICBsbHZtLnN0b3JlICU3LCAlOTAgOiBpNjQsICFsbHZtLnB0clxuICAgICVjMjFfaTY0ID0gYXJpdGguY29uc3RhbnQgMjEgOiBpNjRcbiAgICAlOTEgPSBsbHZtLmdldGVsZW1lbnRwdHIgJWFyZzFbJWMyMV9pNjRdIDogKCFsbHZtLnB0ciwgaTY0KSAtPiAhbGx2bS5wdHIsIGk2NFxuICAgIGxsdm0uc3RvcmUgJTMsICU5MSA6IGk2NCwgIWxsdm0ucHRyXG4gICAgJWMyMl9pNjQgPSBhcml0aC5jb25zdGFudCAyMiA6IGk2NFxuICAgICU5MiA9IGxsdm0uZ2V0ZWxlbWVudHB0ciAlYXJnMVslYzIyX2k2NF0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgbGx2bS5zdG9yZSAlMywgJTkyIDogaTY0LCAhbGx2bS5wdHJcbiAgICAlYzIzX2k2NCA9IGFyaXRoLmNvbnN0YW50IDIzIDogaTY0XG4gICAgJTkzID0gbGx2bS5nZXRlbGVtZW50cHRyICVhcmcxWyVjMjNfaTY0XSA6ICghbGx2bS5wdHIsIGk2NCkgLT4gIWxsdm0ucHRyLCBpNjRcbiAgICBsbHZtLnN0b3JlICU3LCAlOTMgOiBpNjQsICFsbHZtLnB0clxuICAgICVjMjRfaTY0ID0gYXJpdGguY29uc3RhbnQgMjQgOiBpNjRcbiAgICAlOTQgPSBsbHZtLmdldGVsZW1lbnRwdHIgJWFyZzFbJWMyNF9pNjRdIDogKCFsbHZtLnB0ciwgaTY0KSAtPiAhbGx2bS5wdHIsIGk2NFxuICAgIGxsdm0uc3RvcmUgJTcsICU5NCA6IGk2NCwgIWxsdm0ucHRyXG4gICAgJWMyNV9pNjQgPSBhcml0aC5jb25zdGFudCAyNSA6IGk2NFxuICAgICU5NSA9IGxsdm0uZ2V0ZWxlbWVudHB0ciAlYXJnMVslYzI1X2k2NF0gOiAoIWxsdm0ucHRyLCBpNjQpIC0+ICFsbHZtLnB0ciwgaTY0XG4gICAgbGx2bS5zdG9yZSAlYzBfaTY0XzM4LCAlOTUgOiBpNjQsICFsbHZtLnB0clxuICAgICVjMjZfaTY0ID0gYXJpdGguY29uc3RhbnQgMjYgOiBpNjRcbiAgICAlOTYgPSBsbHZtLmdldGVsZW1lbnRwdHIgJWFyZzFbJWMyNl9pNjRdIDogKCFsbHZtLnB0ciwgaTY0KSAtPiAhbGx2bS5wdHIsIGk2NFxuICAgIGxsdm0uc3RvcmUgJWMwX2k2NF8zOSwgJTk2IDogaTY0LCAhbGx2bS5wdHJcbiAgICAlYzI3X2k2NCA9IGFyaXRoLmNvbnN0YW50IDI3IDogaTY0XG4gICAgJTk3ID0gbGx2bS5nZXRlbGVtZW50cHRyICVhcmcxWyVjMjdfaTY0XSA6ICghbGx2bS5wdHIsIGk2NCkgLT4gIWxsdm0ucHRyLCBpNjRcbiAgICBsbHZtLnN0b3JlICU0MCwgJTk3IDogaTY0LCAhbGx2bS5wdHJcbiAgICAlYzI4X2k2NCA9IGFyaXRoLmNvbnN0YW50IDI4IDogaTY0XG4gICAgJTk4ID0gbGx2bS5nZXRlbGVtZW50cHRyICVhcmcxWyVjMjhfaTY0XSA6ICghbGx2bS5wdHIsIGk2NCkgLT4gIWxsdm0ucHRyLCBpNjRcbiAgICBsbHZtLnN0b3JlICU0MiwgJTk4IDogaTY0LCAhbGx2bS5wdHJcbiAgICAlYzI5X2k2NCA9IGFyaXRoLmNvbnN0YW50IDI5IDogaTY0XG4gICAgJTk5ID0gbGx2bS5nZXRlbGVtZW50cHRyICVhcmcxWyVjMjlfaTY0XSA6ICghbGx2bS5wdHIsIGk2NCkgLT4gIWxsdm0ucHRyLCBpNjRcbiAgICBsbHZtLnN0b3JlICVjMV9pNjRfMjEsICU5OSA6IGk2NCwgIWxsdm0ucHRyXG4gICAgJWMwX2kzMiA9IGFyaXRoLmNvbnN0YW50IDAgOiBpMzJcbiAgICByZXR1cm4gJWMwX2kzMiA6IGkzMlxuICB9XG59XG4iLCJwbGFuX3dvcmRzIjozMCwicm9vdF93b3JkcyI6NCwic2hhMjU2IjoiZjVmYTgxMjY3MzBlYjk0MjJkNThjODdlNjI0YjFjMzcxOTE4NTJkYzE3MzFjN2I2NWMwYWNkNjc2Y2VkZTgzMSJ9LCJzaGFwZV92YXJpYWJsZXMiOltbMCwwLDY1XSxbMCwxLDY0XSxbMSwxLDQ3XV0sInN0YWdlcyI6W3siZW50cnkiOiJ0ZXNzZXJhX3RpbGVfbm9ybV9ybXNub3JtX2JmMTZfN2U1NDBlYmE2ZiIsImdlb21ldHJ5IjpbMSwxLDEsMTI4LDEsMV0sImlucHV0cyI6WzBdLCJtZW1iZXIiOiJ0ZW5zb3Jfc3RhZ2VfMCIsIm91dHB1dCI6Miwic2NhbGFycyI6WzY1LDY0XX0seyJlbnRyeSI6InNvdXJjZV9yb3dfcmhzX2tlcm5lbCIsImdlb21ldHJ5IjpbNiw1LDEsMzIsMSwxXSwiaW5wdXRzIjpbMiwxXSwibWVtYmVyIjoidGVuc29yX3N0YWdlXzEiLCJvdXRwdXQiOjMsInNjYWxhcnMiOls2NSw0Nyw2NCw2NCw0Nyw0N119XSwidGFyZ2V0IjoibnZpZGlhX3NtMTIwIn0=", tessera.native.tensor_program_shape_bindings = [array<i64: 0, 1>, array<i64: 1, 2>, array<i64: 0, 1>, array<i64: 0, 2>], tessera.native.tensor_program_shape_variables = array<i64: 0, 0, 65, 0, 1, 64, 1, 1, 47>, tessera.native.tensor_program_source = "module attributes {tessera.arch = \22sm_120\22, tessera.frontend.authority = \22tracer\22, tessera.ir.version = \221.0\22, tessera.native.tensor_program_shape_bounds_request = {K = 64 : i64, M = 65 : i64, N = 47 : i64}, tessera.target = \22nvidia_sm120\22} {\0A  func.func @norm_lhs(%arg0: tensor<1x1xbf16>, %arg1: tensor<1x1xbf16>) -> tensor<1x1xf32> attributes {tessera.frontend.authority = \22tracer\22, tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \2295c9e304d0a75dc18cf890b24c90c8a8e9799dd275a50c29e378c8c24c575401\22, tessera.structured_cfg.schema = \22tessera.structured_cfg.v1\22} {\0A    %0 = tessera.rmsnorm %arg0 {tessera.effect_kind = \22pure\22} : (tensor<1x1xbf16>) -> tensor<1x1xbf16>\0A    %1 = tessera.matmul %0, %arg1 {output_dtype = \22fp32\22, tessera.effect_kind = \22pure\22} : (tensor<1x1xbf16>, tensor<1x1xbf16>) -> tensor<1x1xf32>\0A    return %1 : tensor<1x1xf32>\0A  }\0A}", tessera.native.tensor_program_source_sha256 = "664287008eaac5f9ba43666482a9f5fffb2519c53c6a74e081042c6af8cd2613", tessera.native.tensor_program_target = "nvidia_sm120", tessera.nvidia.arch = "sm_120", tessera.target = "nvidia_sm120"} {
+  func.func @norm_lhs(%arg0: memref<?x?xbf16>, %arg1: memref<?x?xbf16>) -> memref<?x?xf32> attributes {tessera.frontend.authority = "tracer", tessera.native.tensor_program = 3 : i64, tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = "95c9e304d0a75dc18cf890b24c90c8a8e9799dd275a50c29e378c8c24c575401", tessera.structured_cfg.schema = "tessera.structured_cfg.v1"} {
+    %c3055 = arith.constant 3055 : index
+    %c4160 = arith.constant 4160 : index
+    %c47 = arith.constant 47 : index
+    %c64 = arith.constant 64 : index
+    %c1 = arith.constant 1 : index
+    %c65 = arith.constant 65 : index
+    %c0 = arith.constant 0 : index
+    %dim = memref.dim %arg0, %c0 : memref<?x?xbf16>
+    %0 = arith.cmpi ugt, %dim, %c0 : index
+    %1 = arith.cmpi ule, %dim, %c65 : index
+    %2 = arith.andi %0, %1 : i1
+    cf.assert %2, "native tensor shape extent violates positive capacity"
+    %dim_0 = memref.dim %arg0, %c1 : memref<?x?xbf16>
+    %3 = arith.cmpi ugt, %dim_0, %c0 : index
+    %4 = arith.cmpi ule, %dim_0, %c64 : index
+    %5 = arith.andi %3, %4 : i1
+    cf.assert %5, "native tensor shape extent violates positive capacity"
+    %dim_1 = memref.dim %arg1, %c1 : memref<?x?xbf16>
+    %6 = arith.cmpi ugt, %dim_1, %c0 : index
+    %7 = arith.cmpi ule, %dim_1, %c47 : index
+    %8 = arith.andi %6, %7 : i1
+    cf.assert %8, "native tensor shape extent violates positive capacity"
+    %dim_2 = memref.dim %arg1, %c0 : memref<?x?xbf16>
+    %9 = arith.cmpi eq, %dim_2, %dim_0 : index
+    cf.assert %9, "native tensor semantic dimension equality violated"
+    %alloc = memref.alloc() : memref<65x64xbf16>
+    %10 = arith.muli %dim, %dim_0 : index
+    %11 = arith.cmpi ule, %10, %c4160 : index
+    cf.assert %11, "native tensor active view exceeds allocation capacity"
+    %reinterpret_cast = memref.reinterpret_cast %alloc to offset: [0], sizes: [%dim, %dim_0], strides: [%dim_0, 1] : memref<65x64xbf16> to memref<?x?xbf16>
+    tessera_nvidia.program_invoke %arg0, %reinterpret_cast {arch = "sm_120", callee = @tensor_stage_0::@tessera_tile_norm_rmsnorm_bf16_7e540eba6f, geometry = array<i64: 1, 1, 1, 128, 1, 1>, input_count = 1 : i64, scalars = array<i64: 65, 64>, shape_ir = "module {\0A  func.func @__tessera_native_member_shape(%arg0: i64, %arg1: i64, %arg2: i64, %arg3: i64) -> (i64, i64, i64, i64, i64) {\0A    %0 = arith.muli %arg0, %arg1 : i64\0A    %c127_i64 = arith.constant 127 : i64\0A    %1 = arith.addi %arg0, %c127_i64 : i64\0A    %c128_i64 = arith.constant 128 : i64\0A    %2 = arith.divui %1, %c128_i64 : i64\0A    %c1_i64 = arith.constant 1 : i64\0A    %c1_i64_0 = arith.constant 1 : i64\0A    return %arg0, %arg1, %2, %c1_i64, %c1_i64_0 : i64, i64, i64, i64, i64\0A  }\0A}\0A", source_attributes = {tessera.effect_kind = "pure"}} : memref<?x?xbf16>, memref<?x?xbf16>
+    %alloc_3 = memref.alloc() : memref<65x47xf32>
+    %12 = arith.muli %dim, %dim_1 : index
+    %13 = arith.cmpi ule, %12, %c3055 : index
+    cf.assert %13, "native tensor active view exceeds allocation capacity"
+    %reinterpret_cast_4 = memref.reinterpret_cast %alloc_3 to offset: [0], sizes: [%dim, %dim_1], strides: [%dim_1, 1] : memref<65x47xf32> to memref<?x?xf32>
+    tessera_nvidia.program_invoke %reinterpret_cast, %arg1, %reinterpret_cast_4 {arch = "sm_120", callee = @tensor_stage_1::@source_row_rhs_kernel, geometry = array<i64: 6, 5, 1, 32, 1, 1>, grid_row_divisors = array<i64: 1, 16, 1>, grid_row_multipliers = array<i64: 0, 1, 0>, input_count = 2 : i64, scalar_row_multipliers = array<i64: 1, 0, 0, 0, 0, 0>, scalars = array<i64: 65, 47, 64, 64, 47, 47>, shape_ir = "module {\0A  func.func @__tessera_native_member_shape(%arg0: i64, %arg1: i64, %arg2: i64, %arg3: i64, %arg4: i64, %arg5: i64) -> (i64, i64, i64, i64, i64, i64, i64, i64, i64) {\0A    %c7_i64 = arith.constant 7 : i64\0A    %0 = arith.addi %arg5, %c7_i64 : i64\0A    %c8_i64 = arith.constant 8 : i64\0A    %1 = arith.divui %0, %c8_i64 : i64\0A    %c15_i64 = arith.constant 15 : i64\0A    %2 = arith.addi %arg4, %c15_i64 : i64\0A    %c16_i64 = arith.constant 16 : i64\0A    %3 = arith.divui %2, %c16_i64 : i64\0A    %c1_i64 = arith.constant 1 : i64\0A    return %arg4, %arg5, %arg1, %arg1, %arg3, %arg5, %1, %3, %c1_i64 : i64, i64, i64, i64, i64, i64, i64, i64, i64\0A  }\0A}\0A", source_attributes = {output_dtype = "fp32", shape_bounds = [65, 47, 64], tessera.effect_kind = "pure", transposeA = false, transposeB = false}} : memref<?x?xbf16>, memref<?x?xbf16>, memref<?x?xf32>
+    memref.dealloc %alloc : memref<65x64xbf16>
+    return %reinterpret_cast_4 : memref<?x?xf32>
+  }
+  module @tensor_stage_0 attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tessera.native.tensor_program_capacity_types = [memref<65x64xbf16>, memref<65x64xbf16>], tessera.native.tensor_program_dimension_bindings = array<i64: 0, 1, 0, 1>, tessera.native.tensor_program_member, tessera.native.tensor_program_shape_profile, tessera.target = "nvidia_sm120"} {
+    llvm.func @tessera_tile_norm_rmsnorm_bf16_7e540eba6f(%arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: i64, %arg3: i64) attributes {nvvm.kernel, tessera.native.program_active_buffer_types = [memref<?x?xbf16>, memref<?x?xbf16>], tessera.native.program_buffer_types = [memref<65x64xbf16>, memref<65x64xbf16>], tessera.native.program_geometry = array<i64: 1, 1, 1, 128, 1, 1>, tessera.native.program_scalars = array<i64: 65, 64>, tessera.native.program_shape_ir = "module {\0A  func.func @__tessera_native_member_shape(%arg0: i64, %arg1: i64, %arg2: i64, %arg3: i64) -> (i64, i64, i64, i64, i64) {\0A    %0 = arith.muli %arg0, %arg1 : i64\0A    %c127_i64 = arith.constant 127 : i64\0A    %1 = arith.addi %arg0, %c127_i64 : i64\0A    %c128_i64 = arith.constant 128 : i64\0A    %2 = arith.divui %1, %c128_i64 : i64\0A    %c1_i64 = arith.constant 1 : i64\0A    %c1_i64_0 = arith.constant 1 : i64\0A    return %arg0, %arg1, %2, %c1_i64, %c1_i64_0 : i64, i64, i64, i64, i64\0A  }\0A}\0A"} {
+      %cst = arith.constant 9.99999974E-6 : f32
+      %0 = nvvm.read.ptx.sreg.ctaid.x : i32
+      %1 = arith.extui %0 : i32 to i64
+      %2 = nvvm.read.ptx.sreg.tid.x : i32
+      %3 = arith.extui %2 : i32 to i64
+      %c128_i64 = arith.constant 128 : i64
+      %4 = arith.muli %1, %c128_i64 : i64
+      %5 = arith.addi %4, %3 : i64
+      %6 = arith.cmpi ult, %5, %arg2 : i64
+      scf.if %6 {
+        %c0_i64 = arith.constant 0 : i64
+        %c1_i64 = arith.constant 1 : i64
+        %7 = arith.muli %5, %arg3 : i64
+        %cst_0 = arith.constant 0.000000e+00 : f32
+        %8:2 = scf.for %arg4 = %c0_i64 to %arg3 step %c1_i64 iter_args(%arg5 = %cst_0, %arg6 = %cst_0) -> (f32, f32)  : i64 {
+          %13 = arith.addi %7, %arg4 : i64
+          %14 = llvm.getelementptr %arg0[%13] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+          %15 = llvm.load %14 {alignment = 2 : i64} : !llvm.ptr -> bf16
+          %16 = llvm.fpext %15 : bf16 to f32
+          %17 = arith.mulf %16, %16 : f32
+          %18 = arith.subf %17, %arg6 : f32
+          %19 = arith.addf %arg5, %18 : f32
+          %20 = arith.subf %19, %arg5 : f32
+          %21 = arith.subf %20, %18 : f32
+          %cst_1 = arith.constant 0x7F800000 : f32
+          %22 = math.absf %19 : f32
+          %23 = arith.cmpf olt, %22, %cst_1 : f32
+          %24 = arith.select %23, %21, %cst_0 : f32
+          scf.yield %19, %24 : f32, f32
+        }
+        %9 = arith.uitofp %arg3 : i64 to f32
+        %10 = arith.divf %8#0, %9 : f32
+        %11 = arith.addf %10, %cst : f32
+        %12 = math.sqrt %11 : f32
+        scf.for %arg4 = %c0_i64 to %arg3 step %c1_i64  : i64 {
+          %13 = arith.addi %7, %arg4 : i64
+          %14 = llvm.getelementptr %arg0[%13] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+          %15 = llvm.load %14 {alignment = 2 : i64} : !llvm.ptr -> bf16
+          %16 = llvm.fpext %15 : bf16 to f32
+          %17 = arith.divf %16, %12 : f32
+          %18 = llvm.fptrunc %17 : f32 to bf16
+          %19 = llvm.getelementptr %arg1[%13] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+          llvm.store %18, %19 {alignment = 2 : i64} : bf16, !llvm.ptr
+        }
+      }
+      llvm.return
+    }
+  }
+  module @tensor_stage_1 attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tessera.lowering.dropped = {layout = "consumed_by_pass"}, tessera.native.tensor_program_capacity_types = [memref<65x64xbf16>, memref<64x47xbf16>, memref<65x47xf32>], tessera.native.tensor_program_dimension_bindings = array<i64: 0, 1, 1, 2, 0, 2>, tessera.native.tensor_program_member, tessera.native.tensor_program_shape_profile, tessera.target = "nvidia_sm120"} {
+    llvm.func @source_row_rhs_kernel(%arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr, %arg3: i64, %arg4: i64, %arg5: i64, %arg6: i64, %arg7: i64, %arg8: i64) attributes {nvvm.kernel, tessera.native.program_active_buffer_types = [memref<?x?xbf16>, memref<?x?xbf16>, memref<?x?xf32>], tessera.native.program_buffer_types = [memref<65x64xbf16>, memref<64x47xbf16>, memref<65x47xf32>], tessera.native.program_geometry = array<i64: 6, 5, 1, 32, 1, 1>, tessera.native.program_grid_row_divisors = array<i64: 1, 16, 1>, tessera.native.program_grid_row_multipliers = array<i64: 0, 1, 0>, tessera.native.program_scalar_row_multipliers = array<i64: 1, 0, 0, 0, 0, 0>, tessera.native.program_scalars = array<i64: 65, 47, 64, 64, 47, 47>, tessera.native.program_shape_ir = "module {\0A  func.func @__tessera_native_member_shape(%arg0: i64, %arg1: i64, %arg2: i64, %arg3: i64, %arg4: i64, %arg5: i64) -> (i64, i64, i64, i64, i64, i64, i64, i64, i64) {\0A    %c7_i64 = arith.constant 7 : i64\0A    %0 = arith.addi %arg5, %c7_i64 : i64\0A    %c8_i64 = arith.constant 8 : i64\0A    %1 = arith.divui %0, %c8_i64 : i64\0A    %c15_i64 = arith.constant 15 : i64\0A    %2 = arith.addi %arg4, %c15_i64 : i64\0A    %c16_i64 = arith.constant 16 : i64\0A    %3 = arith.divui %2, %c16_i64 : i64\0A    %c1_i64 = arith.constant 1 : i64\0A    return %arg4, %arg5, %arg1, %arg1, %arg3, %arg5, %1, %3, %c1_i64 : i64, i64, i64, i64, i64, i64, i64, i64, i64\0A  }\0A}\0A"} {
+      %c16_i64 = arith.constant 16 : i64
+      %c0_i64 = arith.constant 0 : i64
+      %0 = nvvm.read.ptx.sreg.ctaid.x : i32
+      %1 = arith.extui %0 : i32 to i64
+      %2 = nvvm.read.ptx.sreg.ctaid.y : i32
+      %3 = arith.extui %2 : i32 to i64
+      %c16_i64_0 = arith.constant 16 : i64
+      %4 = arith.muli %3, %c16_i64_0 : i64
+      %c8_i64 = arith.constant 8 : i64
+      %5 = arith.muli %1, %c8_i64 : i64
+      %cst = arith.constant 0.000000e+00 : f32
+      %cst_1 = arith.constant 0.000000e+00 : f32
+      %cst_2 = arith.constant 0.000000e+00 : f32
+      %cst_3 = arith.constant 0.000000e+00 : f32
+      %6 = llvm.mlir.undef : !llvm.struct<(f32, f32, f32, f32)>
+      %7 = llvm.insertvalue %cst, %6[0] : !llvm.struct<(f32, f32, f32, f32)> 
+      %8 = llvm.insertvalue %cst_1, %7[1] : !llvm.struct<(f32, f32, f32, f32)> 
+      %9 = llvm.insertvalue %cst_2, %8[2] : !llvm.struct<(f32, f32, f32, f32)> 
+      %10 = llvm.insertvalue %cst_3, %9[3] : !llvm.struct<(f32, f32, f32, f32)> 
+      %11 = scf.for %arg9 = %c0_i64 to %arg5 step %c16_i64 iter_args(%arg10 = %10) -> (!llvm.struct<(f32, f32, f32, f32)>)  : i64 {
+        %c0_i64_6 = arith.constant 0 : i64
+        %c0_i64_7 = arith.constant 0 : i64
+        %c1_i64_8 = arith.constant 1 : i64
+        %59 = arith.muli %4, %c1_i64_8 : i64
+        %60 = arith.addi %c0_i64_7, %59 : i64
+        %61 = arith.muli %60, %arg6 : i64
+        %62 = arith.addi %c0_i64_6, %61 : i64
+        %c1_i64_9 = arith.constant 1 : i64
+        %c0_i64_10 = arith.constant 0 : i64
+        %c1_i64_11 = arith.constant 1 : i64
+        %63 = arith.muli %arg9, %c1_i64_11 : i64
+        %64 = arith.addi %c0_i64_10, %63 : i64
+        %65 = arith.muli %64, %c1_i64_9 : i64
+        %66 = arith.addi %62, %65 : i64
+        %c0_i64_12 = arith.constant 0 : i64
+        %c0_i64_13 = arith.constant 0 : i64
+        %c1_i64_14 = arith.constant 1 : i64
+        %67 = arith.muli %arg9, %c1_i64_14 : i64
+        %68 = arith.addi %c0_i64_13, %67 : i64
+        %69 = arith.muli %68, %arg7 : i64
+        %70 = arith.addi %c0_i64_12, %69 : i64
+        %c1_i64_15 = arith.constant 1 : i64
+        %c0_i64_16 = arith.constant 0 : i64
+        %c1_i64_17 = arith.constant 1 : i64
+        %71 = arith.muli %5, %c1_i64_17 : i64
+        %72 = arith.addi %c0_i64_16, %71 : i64
+        %73 = arith.muli %72, %c1_i64_15 : i64
+        %74 = arith.addi %70, %73 : i64
+        %75 = nvvm.read.ptx.sreg.tid.x : i32
+        %c31_i32_18 = arith.constant 31 : i32
+        %76 = arith.andi %75, %c31_i32_18 : i32
+        %c2_i32_19 = arith.constant 2 : i32
+        %77 = arith.shrui %76, %c2_i32_19 : i32
+        %c3_i32_20 = arith.constant 3 : i32
+        %78 = arith.andi %76, %c3_i32_20 : i32
+        %79 = arith.extui %77 : i32 to i64
+        %80 = arith.extui %78 : i32 to i64
+        %c8_i64_21 = arith.constant 8 : i64
+        %c2_i64 = arith.constant 2 : i64
+        %81 = arith.muli %80, %c2_i64 : i64
+        %c8_i64_22 = arith.constant 8 : i64
+        %82 = arith.addi %79, %c8_i64_21 : i64
+        %83 = arith.addi %81, %c8_i64_22 : i64
+        %84 = arith.addi %79, %c8_i64_21 : i64
+        %85 = arith.addi %81, %c8_i64_22 : i64
+        %86 = arith.addi %4, %79 : i64
+        %87 = arith.addi %arg9, %81 : i64
+        %88 = arith.muli %79, %arg6 : i64
+        %89 = arith.addi %88, %81 : i64
+        %90 = arith.addi %66, %89 : i64
+        %cst_23 = arith.constant dense<0.000000e+00> : vector<2xbf16>
+        %c0_i64_24 = arith.constant 0 : i64
+        %91 = arith.addi %87, %c0_i64_24 : i64
+        %92 = arith.cmpi ult, %91, %arg5 : i64
+        %93 = arith.cmpi ult, %86, %arg3 : i64
+        %94 = arith.andi %93, %92 : i1
+        %95 = arith.addi %81, %c0_i64_24 : i64
+        %96 = arith.muli %79, %arg6 : i64
+        %97 = arith.addi %96, %95 : i64
+        %98 = arith.addi %66, %97 : i64
+        %c0_i64_25 = arith.constant 0 : i64
+        %99 = arith.select %94, %98, %c0_i64_25 : i64
+        %100 = llvm.getelementptr %arg0[%99] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+        %101 = llvm.load %100 {alignment = 2 : i64} : !llvm.ptr -> bf16
+        %cst_26 = arith.constant 0.000000e+00 : bf16
+        %102 = arith.select %94, %101, %cst_26 : bf16
+        %c0_i64_27 = arith.constant 0 : i64
+        %103 = llvm.insertelement %102, %cst_23[%c0_i64_27 : i64] : vector<2xbf16>
+        %c1_i64_28 = arith.constant 1 : i64
+        %104 = arith.addi %87, %c1_i64_28 : i64
+        %105 = arith.cmpi ult, %104, %arg5 : i64
+        %106 = arith.cmpi ult, %86, %arg3 : i64
+        %107 = arith.andi %106, %105 : i1
+        %108 = arith.addi %81, %c1_i64_28 : i64
+        %109 = arith.muli %79, %arg6 : i64
+        %110 = arith.addi %109, %108 : i64
+        %111 = arith.addi %66, %110 : i64
+        %c0_i64_29 = arith.constant 0 : i64
+        %112 = arith.select %107, %111, %c0_i64_29 : i64
+        %113 = llvm.getelementptr %arg0[%112] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+        %114 = llvm.load %113 {alignment = 2 : i64} : !llvm.ptr -> bf16
+        %cst_30 = arith.constant 0.000000e+00 : bf16
+        %115 = arith.select %107, %114, %cst_30 : bf16
+        %c1_i64_31 = arith.constant 1 : i64
+        %116 = llvm.insertelement %115, %103[%c1_i64_31 : i64] : vector<2xbf16>
+        %117 = llvm.bitcast %116 : vector<2xbf16> to i32
+        %118 = arith.addi %4, %82 : i64
+        %119 = arith.addi %arg9, %81 : i64
+        %120 = arith.muli %82, %arg6 : i64
+        %121 = arith.addi %120, %81 : i64
+        %122 = arith.addi %66, %121 : i64
+        %cst_32 = arith.constant dense<0.000000e+00> : vector<2xbf16>
+        %c0_i64_33 = arith.constant 0 : i64
+        %123 = arith.addi %119, %c0_i64_33 : i64
+        %124 = arith.cmpi ult, %123, %arg5 : i64
+        %125 = arith.cmpi ult, %118, %arg3 : i64
+        %126 = arith.andi %125, %124 : i1
+        %127 = arith.addi %81, %c0_i64_33 : i64
+        %128 = arith.muli %82, %arg6 : i64
+        %129 = arith.addi %128, %127 : i64
+        %130 = arith.addi %66, %129 : i64
+        %c0_i64_34 = arith.constant 0 : i64
+        %131 = arith.select %126, %130, %c0_i64_34 : i64
+        %132 = llvm.getelementptr %arg0[%131] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+        %133 = llvm.load %132 {alignment = 2 : i64} : !llvm.ptr -> bf16
+        %cst_35 = arith.constant 0.000000e+00 : bf16
+        %134 = arith.select %126, %133, %cst_35 : bf16
+        %c0_i64_36 = arith.constant 0 : i64
+        %135 = llvm.insertelement %134, %cst_32[%c0_i64_36 : i64] : vector<2xbf16>
+        %c1_i64_37 = arith.constant 1 : i64
+        %136 = arith.addi %119, %c1_i64_37 : i64
+        %137 = arith.cmpi ult, %136, %arg5 : i64
+        %138 = arith.cmpi ult, %118, %arg3 : i64
+        %139 = arith.andi %138, %137 : i1
+        %140 = arith.addi %81, %c1_i64_37 : i64
+        %141 = arith.muli %82, %arg6 : i64
+        %142 = arith.addi %141, %140 : i64
+        %143 = arith.addi %66, %142 : i64
+        %c0_i64_38 = arith.constant 0 : i64
+        %144 = arith.select %139, %143, %c0_i64_38 : i64
+        %145 = llvm.getelementptr %arg0[%144] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+        %146 = llvm.load %145 {alignment = 2 : i64} : !llvm.ptr -> bf16
+        %cst_39 = arith.constant 0.000000e+00 : bf16
+        %147 = arith.select %139, %146, %cst_39 : bf16
+        %c1_i64_40 = arith.constant 1 : i64
+        %148 = llvm.insertelement %147, %135[%c1_i64_40 : i64] : vector<2xbf16>
+        %149 = llvm.bitcast %148 : vector<2xbf16> to i32
+        %150 = arith.addi %4, %79 : i64
+        %151 = arith.addi %arg9, %83 : i64
+        %152 = arith.muli %79, %arg6 : i64
+        %153 = arith.addi %152, %83 : i64
+        %154 = arith.addi %66, %153 : i64
+        %cst_41 = arith.constant dense<0.000000e+00> : vector<2xbf16>
+        %c0_i64_42 = arith.constant 0 : i64
+        %155 = arith.addi %151, %c0_i64_42 : i64
+        %156 = arith.cmpi ult, %155, %arg5 : i64
+        %157 = arith.cmpi ult, %150, %arg3 : i64
+        %158 = arith.andi %157, %156 : i1
+        %159 = arith.addi %83, %c0_i64_42 : i64
+        %160 = arith.muli %79, %arg6 : i64
+        %161 = arith.addi %160, %159 : i64
+        %162 = arith.addi %66, %161 : i64
+        %c0_i64_43 = arith.constant 0 : i64
+        %163 = arith.select %158, %162, %c0_i64_43 : i64
+        %164 = llvm.getelementptr %arg0[%163] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+        %165 = llvm.load %164 {alignment = 2 : i64} : !llvm.ptr -> bf16
+        %cst_44 = arith.constant 0.000000e+00 : bf16
+        %166 = arith.select %158, %165, %cst_44 : bf16
+        %c0_i64_45 = arith.constant 0 : i64
+        %167 = llvm.insertelement %166, %cst_41[%c0_i64_45 : i64] : vector<2xbf16>
+        %c1_i64_46 = arith.constant 1 : i64
+        %168 = arith.addi %151, %c1_i64_46 : i64
+        %169 = arith.cmpi ult, %168, %arg5 : i64
+        %170 = arith.cmpi ult, %150, %arg3 : i64
+        %171 = arith.andi %170, %169 : i1
+        %172 = arith.addi %83, %c1_i64_46 : i64
+        %173 = arith.muli %79, %arg6 : i64
+        %174 = arith.addi %173, %172 : i64
+        %175 = arith.addi %66, %174 : i64
+        %c0_i64_47 = arith.constant 0 : i64
+        %176 = arith.select %171, %175, %c0_i64_47 : i64
+        %177 = llvm.getelementptr %arg0[%176] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+        %178 = llvm.load %177 {alignment = 2 : i64} : !llvm.ptr -> bf16
+        %cst_48 = arith.constant 0.000000e+00 : bf16
+        %179 = arith.select %171, %178, %cst_48 : bf16
+        %c1_i64_49 = arith.constant 1 : i64
+        %180 = llvm.insertelement %179, %167[%c1_i64_49 : i64] : vector<2xbf16>
+        %181 = llvm.bitcast %180 : vector<2xbf16> to i32
+        %182 = arith.addi %4, %84 : i64
+        %183 = arith.addi %arg9, %85 : i64
+        %184 = arith.muli %84, %arg6 : i64
+        %185 = arith.addi %184, %85 : i64
+        %186 = arith.addi %66, %185 : i64
+        %cst_50 = arith.constant dense<0.000000e+00> : vector<2xbf16>
+        %c0_i64_51 = arith.constant 0 : i64
+        %187 = arith.addi %183, %c0_i64_51 : i64
+        %188 = arith.cmpi ult, %187, %arg5 : i64
+        %189 = arith.cmpi ult, %182, %arg3 : i64
+        %190 = arith.andi %189, %188 : i1
+        %191 = arith.addi %85, %c0_i64_51 : i64
+        %192 = arith.muli %84, %arg6 : i64
+        %193 = arith.addi %192, %191 : i64
+        %194 = arith.addi %66, %193 : i64
+        %c0_i64_52 = arith.constant 0 : i64
+        %195 = arith.select %190, %194, %c0_i64_52 : i64
+        %196 = llvm.getelementptr %arg0[%195] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+        %197 = llvm.load %196 {alignment = 2 : i64} : !llvm.ptr -> bf16
+        %cst_53 = arith.constant 0.000000e+00 : bf16
+        %198 = arith.select %190, %197, %cst_53 : bf16
+        %c0_i64_54 = arith.constant 0 : i64
+        %199 = llvm.insertelement %198, %cst_50[%c0_i64_54 : i64] : vector<2xbf16>
+        %c1_i64_55 = arith.constant 1 : i64
+        %200 = arith.addi %183, %c1_i64_55 : i64
+        %201 = arith.cmpi ult, %200, %arg5 : i64
+        %202 = arith.cmpi ult, %182, %arg3 : i64
+        %203 = arith.andi %202, %201 : i1
+        %204 = arith.addi %85, %c1_i64_55 : i64
+        %205 = arith.muli %84, %arg6 : i64
+        %206 = arith.addi %205, %204 : i64
+        %207 = arith.addi %66, %206 : i64
+        %c0_i64_56 = arith.constant 0 : i64
+        %208 = arith.select %203, %207, %c0_i64_56 : i64
+        %209 = llvm.getelementptr %arg0[%208] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+        %210 = llvm.load %209 {alignment = 2 : i64} : !llvm.ptr -> bf16
+        %cst_57 = arith.constant 0.000000e+00 : bf16
+        %211 = arith.select %203, %210, %cst_57 : bf16
+        %c1_i64_58 = arith.constant 1 : i64
+        %212 = llvm.insertelement %211, %199[%c1_i64_58 : i64] : vector<2xbf16>
+        %213 = llvm.bitcast %212 : vector<2xbf16> to i32
+        %214 = llvm.mlir.undef : !llvm.struct<(i32, i32, i32, i32)>
+        %215 = llvm.insertvalue %117, %214[0] : !llvm.struct<(i32, i32, i32, i32)> 
+        %216 = llvm.insertvalue %149, %215[1] : !llvm.struct<(i32, i32, i32, i32)> 
+        %217 = llvm.insertvalue %181, %216[2] : !llvm.struct<(i32, i32, i32, i32)> 
+        %218 = llvm.insertvalue %213, %217[3] : !llvm.struct<(i32, i32, i32, i32)> 
+        %219 = nvvm.read.ptx.sreg.tid.x : i32
+        %c31_i32_59 = arith.constant 31 : i32
+        %220 = arith.andi %219, %c31_i32_59 : i32
+        %c2_i32_60 = arith.constant 2 : i32
+        %221 = arith.shrui %220, %c2_i32_60 : i32
+        %c3_i32_61 = arith.constant 3 : i32
+        %222 = arith.andi %220, %c3_i32_61 : i32
+        %223 = arith.extui %221 : i32 to i64
+        %224 = arith.extui %222 : i32 to i64
+        %c8_i64_62 = arith.constant 8 : i64
+        %c2_i64_63 = arith.constant 2 : i64
+        %225 = arith.muli %224, %c2_i64_63 : i64
+        %c8_i64_64 = arith.constant 8 : i64
+        %226 = arith.addi %225, %c8_i64_64 : i64
+        %227 = arith.addi %arg9, %225 : i64
+        %228 = arith.addi %5, %223 : i64
+        %229 = arith.muli %225, %arg7 : i64
+        %230 = arith.addi %229, %223 : i64
+        %231 = arith.addi %74, %230 : i64
+        %cst_65 = arith.constant dense<0.000000e+00> : vector<2xbf16>
+        %c0_i64_66 = arith.constant 0 : i64
+        %232 = arith.addi %227, %c0_i64_66 : i64
+        %233 = arith.cmpi ult, %228, %arg4 : i64
+        %234 = arith.cmpi ult, %232, %arg5 : i64
+        %235 = arith.andi %234, %233 : i1
+        %236 = arith.addi %225, %c0_i64_66 : i64
+        %237 = arith.muli %236, %arg7 : i64
+        %238 = arith.addi %237, %223 : i64
+        %239 = arith.addi %74, %238 : i64
+        %c0_i64_67 = arith.constant 0 : i64
+        %240 = arith.select %235, %239, %c0_i64_67 : i64
+        %241 = llvm.getelementptr %arg1[%240] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+        %242 = llvm.load %241 {alignment = 2 : i64} : !llvm.ptr -> bf16
+        %cst_68 = arith.constant 0.000000e+00 : bf16
+        %243 = arith.select %235, %242, %cst_68 : bf16
+        %c0_i64_69 = arith.constant 0 : i64
+        %244 = llvm.insertelement %243, %cst_65[%c0_i64_69 : i64] : vector<2xbf16>
+        %c1_i64_70 = arith.constant 1 : i64
+        %245 = arith.addi %227, %c1_i64_70 : i64
+        %246 = arith.cmpi ult, %228, %arg4 : i64
+        %247 = arith.cmpi ult, %245, %arg5 : i64
+        %248 = arith.andi %247, %246 : i1
+        %249 = arith.addi %225, %c1_i64_70 : i64
+        %250 = arith.muli %249, %arg7 : i64
+        %251 = arith.addi %250, %223 : i64
+        %252 = arith.addi %74, %251 : i64
+        %c0_i64_71 = arith.constant 0 : i64
+        %253 = arith.select %248, %252, %c0_i64_71 : i64
+        %254 = llvm.getelementptr %arg1[%253] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+        %255 = llvm.load %254 {alignment = 2 : i64} : !llvm.ptr -> bf16
+        %cst_72 = arith.constant 0.000000e+00 : bf16
+        %256 = arith.select %248, %255, %cst_72 : bf16
+        %c1_i64_73 = arith.constant 1 : i64
+        %257 = llvm.insertelement %256, %244[%c1_i64_73 : i64] : vector<2xbf16>
+        %258 = llvm.bitcast %257 : vector<2xbf16> to i32
+        %259 = arith.addi %arg9, %226 : i64
+        %260 = arith.addi %5, %223 : i64
+        %261 = arith.muli %226, %arg7 : i64
+        %262 = arith.addi %261, %223 : i64
+        %263 = arith.addi %74, %262 : i64
+        %cst_74 = arith.constant dense<0.000000e+00> : vector<2xbf16>
+        %c0_i64_75 = arith.constant 0 : i64
+        %264 = arith.addi %259, %c0_i64_75 : i64
+        %265 = arith.cmpi ult, %260, %arg4 : i64
+        %266 = arith.cmpi ult, %264, %arg5 : i64
+        %267 = arith.andi %266, %265 : i1
+        %268 = arith.addi %226, %c0_i64_75 : i64
+        %269 = arith.muli %268, %arg7 : i64
+        %270 = arith.addi %269, %223 : i64
+        %271 = arith.addi %74, %270 : i64
+        %c0_i64_76 = arith.constant 0 : i64
+        %272 = arith.select %267, %271, %c0_i64_76 : i64
+        %273 = llvm.getelementptr %arg1[%272] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+        %274 = llvm.load %273 {alignment = 2 : i64} : !llvm.ptr -> bf16
+        %cst_77 = arith.constant 0.000000e+00 : bf16
+        %275 = arith.select %267, %274, %cst_77 : bf16
+        %c0_i64_78 = arith.constant 0 : i64
+        %276 = llvm.insertelement %275, %cst_74[%c0_i64_78 : i64] : vector<2xbf16>
+        %c1_i64_79 = arith.constant 1 : i64
+        %277 = arith.addi %259, %c1_i64_79 : i64
+        %278 = arith.cmpi ult, %260, %arg4 : i64
+        %279 = arith.cmpi ult, %277, %arg5 : i64
+        %280 = arith.andi %279, %278 : i1
+        %281 = arith.addi %226, %c1_i64_79 : i64
+        %282 = arith.muli %281, %arg7 : i64
+        %283 = arith.addi %282, %223 : i64
+        %284 = arith.addi %74, %283 : i64
+        %c0_i64_80 = arith.constant 0 : i64
+        %285 = arith.select %280, %284, %c0_i64_80 : i64
+        %286 = llvm.getelementptr %arg1[%285] : (!llvm.ptr, i64) -> !llvm.ptr, bf16
+        %287 = llvm.load %286 {alignment = 2 : i64} : !llvm.ptr -> bf16
+        %cst_81 = arith.constant 0.000000e+00 : bf16
+        %288 = arith.select %280, %287, %cst_81 : bf16
+        %c1_i64_82 = arith.constant 1 : i64
+        %289 = llvm.insertelement %288, %276[%c1_i64_82 : i64] : vector<2xbf16>
+        %290 = llvm.bitcast %289 : vector<2xbf16> to i32
+        %291 = llvm.mlir.undef : !llvm.struct<(i32, i32)>
+        %292 = llvm.insertvalue %258, %291[0] : !llvm.struct<(i32, i32)> 
+        %293 = llvm.insertvalue %290, %292[1] : !llvm.struct<(i32, i32)> 
+        %294 = llvm.extractvalue %218[0] : !llvm.struct<(i32, i32, i32, i32)> 
+        %295 = llvm.extractvalue %218[1] : !llvm.struct<(i32, i32, i32, i32)> 
+        %296 = llvm.extractvalue %218[2] : !llvm.struct<(i32, i32, i32, i32)> 
+        %297 = llvm.extractvalue %218[3] : !llvm.struct<(i32, i32, i32, i32)> 
+        %298 = llvm.extractvalue %293[0] : !llvm.struct<(i32, i32)> 
+        %299 = llvm.extractvalue %293[1] : !llvm.struct<(i32, i32)> 
+        %300 = llvm.extractvalue %arg10[0] : !llvm.struct<(f32, f32, f32, f32)> 
+        %301 = llvm.extractvalue %arg10[1] : !llvm.struct<(f32, f32, f32, f32)> 
+        %302 = llvm.extractvalue %arg10[2] : !llvm.struct<(f32, f32, f32, f32)> 
+        %303 = llvm.extractvalue %arg10[3] : !llvm.struct<(f32, f32, f32, f32)> 
+        %304 = nvvm.mma.sync A[%294, %295, %296, %297]  B[%298, %299]  C[%300, %301, %302, %303]  {layoutA = #nvvm.mma_layout<row>, layoutB = #nvvm.mma_layout<col>, multiplicandAPtxType = #nvvm.mma_type<bf16>, multiplicandBPtxType = #nvvm.mma_type<bf16>, shape = #nvvm.shape<m = 16, n = 8, k = 16>} : (i32, i32, f32) -> !llvm.struct<(f32, f32, f32, f32)>
+        scf.yield %304 : !llvm.struct<(f32, f32, f32, f32)>
+      }
+      %12 = nvvm.read.ptx.sreg.tid.x : i32
+      %c31_i32 = arith.constant 31 : i32
+      %13 = arith.andi %12, %c31_i32 : i32
+      %c2_i32 = arith.constant 2 : i32
+      %14 = arith.shrui %13, %c2_i32 : i32
+      %c3_i32 = arith.constant 3 : i32
+      %15 = arith.andi %13, %c3_i32 : i32
+      %c2_i32_4 = arith.constant 2 : i32
+      %16 = arith.muli %15, %c2_i32_4 : i32
+      %17 = arith.extui %14 : i32 to i64
+      %18 = arith.extui %16 : i32 to i64
+      %c1_i64 = arith.constant 1 : i64
+      %c8_i64_5 = arith.constant 8 : i64
+      %19 = arith.addi %18, %c1_i64 : i64
+      %20 = arith.addi %17, %c8_i64_5 : i64
+      %21 = arith.addi %17, %c8_i64_5 : i64
+      %22 = arith.addi %18, %c1_i64 : i64
+      %23 = arith.addi %4, %17 : i64
+      %24 = arith.addi %5, %18 : i64
+      %25 = arith.muli %23, %arg8 : i64
+      %26 = arith.addi %25, %24 : i64
+      %27 = llvm.getelementptr %arg2[%26] : (!llvm.ptr, i64) -> !llvm.ptr, f32
+      %28 = llvm.extractvalue %11[0] : !llvm.struct<(f32, f32, f32, f32)> 
+      %29 = arith.cmpi ult, %24, %arg4 : i64
+      %30 = arith.cmpi ult, %23, %arg3 : i64
+      %31 = arith.andi %30, %29 : i1
+      scf.if %31 {
+        llvm.store %28, %27 {alignment = 4 : i64} : f32, !llvm.ptr
+      }
+      %32 = arith.addi %4, %17 : i64
+      %33 = arith.addi %5, %19 : i64
+      %34 = arith.muli %32, %arg8 : i64
+      %35 = arith.addi %34, %33 : i64
+      %36 = llvm.getelementptr %arg2[%35] : (!llvm.ptr, i64) -> !llvm.ptr, f32
+      %37 = llvm.extractvalue %11[1] : !llvm.struct<(f32, f32, f32, f32)> 
+      %38 = arith.cmpi ult, %33, %arg4 : i64
+      %39 = arith.cmpi ult, %32, %arg3 : i64
+      %40 = arith.andi %39, %38 : i1
+      scf.if %40 {
+        llvm.store %37, %36 {alignment = 4 : i64} : f32, !llvm.ptr
+      }
+      %41 = arith.addi %4, %20 : i64
+      %42 = arith.addi %5, %18 : i64
+      %43 = arith.muli %41, %arg8 : i64
+      %44 = arith.addi %43, %42 : i64
+      %45 = llvm.getelementptr %arg2[%44] : (!llvm.ptr, i64) -> !llvm.ptr, f32
+      %46 = llvm.extractvalue %11[2] : !llvm.struct<(f32, f32, f32, f32)> 
+      %47 = arith.cmpi ult, %42, %arg4 : i64
+      %48 = arith.cmpi ult, %41, %arg3 : i64
+      %49 = arith.andi %48, %47 : i1
+      scf.if %49 {
+        llvm.store %46, %45 {alignment = 4 : i64} : f32, !llvm.ptr
+      }
+      %50 = arith.addi %4, %21 : i64
+      %51 = arith.addi %5, %22 : i64
+      %52 = arith.muli %50, %arg8 : i64
+      %53 = arith.addi %52, %51 : i64
+      %54 = llvm.getelementptr %arg2[%53] : (!llvm.ptr, i64) -> !llvm.ptr, f32
+      %55 = llvm.extractvalue %11[3] : !llvm.struct<(f32, f32, f32, f32)> 
+      %56 = arith.cmpi ult, %51, %arg4 : i64
+      %57 = arith.cmpi ult, %50, %arg3 : i64
+      %58 = arith.andi %57, %56 : i1
+      scf.if %58 {
+        llvm.store %55, %54 {alignment = 4 : i64} : f32, !llvm.ptr
+      }
+      llvm.return
+    }
+  }
+}
+

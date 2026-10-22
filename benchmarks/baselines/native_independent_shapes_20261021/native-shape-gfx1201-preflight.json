@@ -1,0 +1,6 @@
+{
+  "host": "tajasarus",
+  "architecture": "gfx1201",
+  "compiler": "/home/angstorms/scratch/w11-program-pipeline-20261019/native-shape-identity-tools-e8d55135/tessera-opt",
+  "scope": "gfx1201 FP8/MXFP8/MXFP4 regression control; no new physical schedule or performance promotion"
+}

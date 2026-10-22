@@ -180,9 +180,12 @@ class BoundedLhsDispatcher:
             jit=self.jit()
             if jit is None:
                 raise ValueError("bounded LHS frontend owner has been released")
-            if dict(self.bounds).keys()=={"M"} and self.rhs_storage_order in (None,"row_major"):
+            if self.rhs_storage_order in (None,"row_major"):
                 from .jit import _JIT_FALLBACK
-                native=jit._try_native_tensor_program_call(args,kwargs,row_bound=dict(self.bounds)["M"])
+                if dict(self.bounds).keys()=={"M"}:
+                    native=jit._try_native_tensor_program_call(args,kwargs,row_bound=dict(self.bounds)["M"])
+                else:
+                    native=jit._try_native_tensor_program_call(args,kwargs,shape_bounds=dict(self.bounds))
                 if native is not _JIT_FALLBACK:
                     return native
             bound=jit._nvidia_rhs_call_signature.bind(*args,**kwargs)

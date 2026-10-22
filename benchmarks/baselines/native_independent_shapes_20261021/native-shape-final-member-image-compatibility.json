@@ -1,0 +1,212 @@
+{
+  "control_sha256": "7aff1d3ad81f28c42ce347f4e3da0fc107571907556fe7f37199da1fec48888c",
+  "candidate_sha256": "e8d55135ff96de7ecebf6e2c78e773e9d24b31bbb5bc6aafe4d6669e1e1c0f4a",
+  "programs": [
+    {
+      "case": "norm_lhs",
+      "storage": "f16",
+      "explicit_dynamic": false,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "8cc505d1d4025ca917781df16f9fe9520628bb335ac468c43961d686560ee92c",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "shape_library_sha256": "ff5023501e95bc02b27ae1f9180f93c2825793d1e6c57bf4eba8dbb080151375"
+    },
+    {
+      "case": "norm_lhs",
+      "storage": "f16",
+      "explicit_dynamic": true,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "8cc505d1d4025ca917781df16f9fe9520628bb335ac468c43961d686560ee92c",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "shape_library_sha256": "ff5023501e95bc02b27ae1f9180f93c2825793d1e6c57bf4eba8dbb080151375"
+    },
+    {
+      "case": "norm_lhs",
+      "storage": "bf16",
+      "explicit_dynamic": false,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "b1d14940fa9ea266fe45d2dea8c11c396d5157ea2d21612ae33486d82ffffe1b",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "shape_library_sha256": "ff5023501e95bc02b27ae1f9180f93c2825793d1e6c57bf4eba8dbb080151375"
+    },
+    {
+      "case": "norm_lhs",
+      "storage": "bf16",
+      "explicit_dynamic": true,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "b1d14940fa9ea266fe45d2dea8c11c396d5157ea2d21612ae33486d82ffffe1b",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "shape_library_sha256": "ff5023501e95bc02b27ae1f9180f93c2825793d1e6c57bf4eba8dbb080151375"
+    },
+    {
+      "case": "rhs_add",
+      "storage": "f16",
+      "explicit_dynamic": false,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "73b7f46b87561415454c3c7ba5c847053dbab4682bd1e40a51abeaf6ce4d32d5",
+        "03043b1aeb77ec621048941b532d3a6ee67b2f7b7ec917fb58976409aa6ed2a5",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "shape_library_sha256": "26ec5f5a641a79e0eda61741db18577e7905d45af7304f0ccbc16e8c9ae4d182"
+    },
+    {
+      "case": "rhs_add",
+      "storage": "f16",
+      "explicit_dynamic": true,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "73b7f46b87561415454c3c7ba5c847053dbab4682bd1e40a51abeaf6ce4d32d5",
+        "03043b1aeb77ec621048941b532d3a6ee67b2f7b7ec917fb58976409aa6ed2a5",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "shape_library_sha256": "26ec5f5a641a79e0eda61741db18577e7905d45af7304f0ccbc16e8c9ae4d182"
+    },
+    {
+      "case": "rhs_add",
+      "storage": "bf16",
+      "explicit_dynamic": false,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "c0983c61815a8e395739f4d6eb937fd56815d980cc1976b61bd0ffe3d74394d7",
+        "a8cf58243169daa4a2567682afae420e5d565e0e99e93ebf0570ec2ae2cda7d4",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "shape_library_sha256": "26ec5f5a641a79e0eda61741db18577e7905d45af7304f0ccbc16e8c9ae4d182"
+    },
+    {
+      "case": "rhs_add",
+      "storage": "bf16",
+      "explicit_dynamic": true,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "c0983c61815a8e395739f4d6eb937fd56815d980cc1976b61bd0ffe3d74394d7",
+        "a8cf58243169daa4a2567682afae420e5d565e0e99e93ebf0570ec2ae2cda7d4",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "shape_library_sha256": "26ec5f5a641a79e0eda61741db18577e7905d45af7304f0ccbc16e8c9ae4d182"
+    },
+    {
+      "case": "chain",
+      "storage": "f16",
+      "explicit_dynamic": false,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "b65cbe22c7c820832740ed7842b800c5eba9cfb6b8154375ef1b4a6d051b8f8e",
+        "03043b1aeb77ec621048941b532d3a6ee67b2f7b7ec917fb58976409aa6ed2a5",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "shape_library_sha256": "b414b367c2ec84506f3c4308cb88ef09890b4dbf6f6cb224843bea366805f1f4"
+    },
+    {
+      "case": "chain",
+      "storage": "f16",
+      "explicit_dynamic": true,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "b65cbe22c7c820832740ed7842b800c5eba9cfb6b8154375ef1b4a6d051b8f8e",
+        "03043b1aeb77ec621048941b532d3a6ee67b2f7b7ec917fb58976409aa6ed2a5",
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254"
+      ],
+      "shape_library_sha256": "b414b367c2ec84506f3c4308cb88ef09890b4dbf6f6cb224843bea366805f1f4"
+    },
+    {
+      "case": "chain",
+      "storage": "bf16",
+      "explicit_dynamic": false,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "b843e31960c51da48a7bdf2589418f64dd1dd7e1b6bc65ac34dffc932b23eb60",
+        "a8cf58243169daa4a2567682afae420e5d565e0e99e93ebf0570ec2ae2cda7d4",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "shape_library_sha256": "b414b367c2ec84506f3c4308cb88ef09890b4dbf6f6cb224843bea366805f1f4"
+    },
+    {
+      "case": "chain",
+      "storage": "bf16",
+      "explicit_dynamic": true,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "b843e31960c51da48a7bdf2589418f64dd1dd7e1b6bc65ac34dffc932b23eb60",
+        "a8cf58243169daa4a2567682afae420e5d565e0e99e93ebf0570ec2ae2cda7d4",
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298"
+      ],
+      "shape_library_sha256": "b414b367c2ec84506f3c4308cb88ef09890b4dbf6f6cb224843bea366805f1f4"
+    },
+    {
+      "case": "two_matmuls",
+      "storage": "f16",
+      "explicit_dynamic": false,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254",
+        "747f863984e1c9d31f4321095624386a5c01cde42142097d3c1ec6f366dc37b1",
+        "230004fb6022f04af434b1c7200bb4fb29c93b1adf2aef0c6dab346ef92a6d13"
+      ],
+      "shape_library_sha256": "545d06d02f63e61acdccbc41477326de81bd5bcd53df8eb7cc8c491d3dc8bc13"
+    },
+    {
+      "case": "two_matmuls",
+      "storage": "f16",
+      "explicit_dynamic": true,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "5094af4bf25e9e4ff31a97e595526526f4ddac87a0299655b0aef9744aa27254",
+        "747f863984e1c9d31f4321095624386a5c01cde42142097d3c1ec6f366dc37b1",
+        "230004fb6022f04af434b1c7200bb4fb29c93b1adf2aef0c6dab346ef92a6d13"
+      ],
+      "shape_library_sha256": "545d06d02f63e61acdccbc41477326de81bd5bcd53df8eb7cc8c491d3dc8bc13"
+    },
+    {
+      "case": "two_matmuls",
+      "storage": "bf16",
+      "explicit_dynamic": false,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298",
+        "747f863984e1c9d31f4321095624386a5c01cde42142097d3c1ec6f366dc37b1",
+        "aa62839ae14a909cdc407a3ba16d05d5066d296260fcacdcaa8aefc62737bc3e"
+      ],
+      "shape_library_sha256": "545d06d02f63e61acdccbc41477326de81bd5bcd53df8eb7cc8c491d3dc8bc13"
+    },
+    {
+      "case": "two_matmuls",
+      "storage": "bf16",
+      "explicit_dynamic": true,
+      "frames_equal": true,
+      "target_equal_except_added_semantic_bindings": true,
+      "image_sha256": [
+        "e820fe9747e5263cea92d785020a420cd690b509278ac375ef809c34c3f89298",
+        "747f863984e1c9d31f4321095624386a5c01cde42142097d3c1ec6f366dc37b1",
+        "aa62839ae14a909cdc407a3ba16d05d5066d296260fcacdcaa8aefc62737bc3e"
+      ],
+      "shape_library_sha256": "545d06d02f63e61acdccbc41477326de81bd5bcd53df8eb7cc8c491d3dc8bc13"
+    }
+  ],
+  "member_images_compared": 44,
+  "scope": "Final compiler adds semantic dimension identity checks and complete dialect registration; generated GPU images and native host shape code are byte-identical."
+}

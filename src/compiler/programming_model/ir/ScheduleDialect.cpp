@@ -354,8 +354,38 @@ static FailureOr<int64_t> nativeRowBound(Operation *op, Value subject) {
   return bound.getInt();
 }
 
+// General capacities are independent of the legacy one-variable row policy.
+// They describe physical maxima; the subject retains its active tensor type.
+static FailureOr<SmallVector<int64_t>> nativeShapeBounds(Operation *op, Value subject) {
+  if (!op->hasAttr("shape_bounds")) return SmallVector<int64_t>{};
+  auto bounds = op->getAttrOfType<ArrayAttr>("shape_bounds");
+  auto type = dyn_cast<RankedTensorType>(subject.getType());
+  auto arch = op->getAttrOfType<StringAttr>("arch");
+  if (!bounds || bounds.size() != 2 || !type || type.getRank() != 2 ||
+      type.getEncoding() || !arch || arch.getValue() != "sm_120" ||
+      op->hasAttr("row_bound") || op->hasAttr("shape_policy") ||
+      (!type.getElementType().isF16() && !type.getElementType().isBF16() &&
+       !type.getElementType().isF32()))
+    return op->emitOpError("requires compact SM120 independent shape capacities"), failure();
+  SmallVector<int64_t> result;
+  __int128 bytes = type.getElementType().isF32() ? 4 : 2;
+  for (unsigned axis = 0; axis < 2; ++axis) {
+    auto bound = dyn_cast<IntegerAttr>(bounds[axis]);
+    if (!bound || !bound.getType().isInteger(64) || bound.getInt() <= 0 ||
+        bound.getInt() > INT32_MAX ||
+        (!type.isDynamicDim(axis) && type.getDimSize(axis) != bound.getInt()))
+      return op->emitOpError("shape_bounds must match static extents and bound dynamic extents"), failure();
+    result.push_back(bound.getInt());
+    bytes *= bound.getInt();
+  }
+  if (bytes > INT64_MAX)
+    return op->emitOpError("shape_bounds storage exceeds signed 64-bit capacity"), failure();
+  return result;
+}
+
 LogicalResult SoftmaxOp::verify() {
-  if (failed(nativeRowBound(getOperation(), getSubject()))) return failure();
+  if (failed(nativeRowBound(getOperation(), getSubject())) ||
+      failed(nativeShapeBounds(getOperation(), getSubject()))) return failure();
   if (failed(verifyContentAddressedKernel(
           *this, getSubject(), getScheduled(), getArtifactHash(), getArch(),
           getStorage(), getAccum(), getWorkgroupSize())))
@@ -373,9 +403,11 @@ LogicalResult ActivationOp::verify() {
     return failure();
   auto type = dyn_cast<RankedTensorType>(getSubject().getType());
   auto bound = nativeRowBound(getOperation(), getSubject());
-  if (failed(bound)) return failure();
-  if (!type || type.getRank() != 2 || (!*bound && !type.hasStaticShape()) || type.getEncoding() ||
-      (!*bound && !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0; })) ||
+  auto shape = nativeShapeBounds(getOperation(), getSubject());
+  if (failed(bound) || failed(shape)) return failure();
+  bool bounded = *bound || !shape->empty();
+  if (!type || type.getRank() != 2 || (!bounded && !type.hasStaticShape()) || type.getEncoding() ||
+      (!bounded && !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0; })) ||
       getArch() != "sm_120" || getWorkgroupSize() != 128 ||
       (getStorage() != "f16" && getStorage() != "bf16" && getStorage() != "f32") ||
       (getStorage() == "f16" ? !type.getElementType().isF16() :
@@ -393,18 +425,18 @@ LogicalResult BinaryKernelOp::verify() {
           getArtifactHash(), getArch(), getStorage(), getAccum(), getWorkgroupSize())))
     return failure();
   auto type = dyn_cast<RankedTensorType>(getSubject().getType());
-  auto rowBound = getOperation()->getAttrOfType<IntegerAttr>("row_bound");
-  bool bounded = rowBound && rowBound.getType().isInteger(64) &&
-      rowBound.getInt() > 0 && rowBound.getInt() <= INT32_MAX &&
-      type && type.getRank() == 2 && type.isDynamicDim(0) && !type.isDynamicDim(1) &&
-      (getStorage() == "f16" || getStorage() == "bf16" || getStorage() == "f32");
-  if (!type || type.getRank() != 2 ||
-      (bounded ? type.getDimSize(1) <= 0 || type.getDimSize(1) > INT32_MAX :
-       !type.hasStaticShape() || getOperation()->hasAttr("row_bound") ||
-       !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0 && d <= INT32_MAX; })) ||
-      type.getEncoding() ||
-      (bounded ? rowBound.getInt() * type.getDimSize(1) : type.getNumElements()) >
-          static_cast<int64_t>(INT32_MAX) * 128 ||
+  auto rowBound = nativeRowBound(getOperation(), getSubject());
+  auto shape = nativeShapeBounds(getOperation(), getSubject());
+  if (failed(rowBound) || failed(shape)) return failure();
+  SmallVector<int64_t> capacity;
+  if (type && type.getRank() == 2) {
+    capacity.assign(type.getShape().begin(), type.getShape().end());
+    if (*rowBound) capacity[0] = *rowBound;
+    if (!shape->empty()) capacity = *shape;
+  }
+  if (!type || type.getRank() != 2 || capacity.size() != 2 ||
+      !llvm::all_of(capacity, [](int64_t dim) { return dim > 0 && dim <= INT32_MAX; }) ||
+      type.getEncoding() || capacity[0] * capacity[1] > static_cast<int64_t>(INT32_MAX) * 128 ||
       getArch() != "sm_120" || getWorkgroupSize() != 128 ||
       (getStorage() != "f16" && getStorage() != "bf16" && getStorage() != "f32") ||
       (getStorage() == "f16" ? !type.getElementType().isF16() :
@@ -419,7 +451,8 @@ LogicalResult BinaryKernelOp::verify() {
 }
 
 LogicalResult NormOp::verify() {
-  if (failed(nativeRowBound(getOperation(), getSubject()))) return failure();
+  if (failed(nativeRowBound(getOperation(), getSubject())) ||
+      failed(nativeShapeBounds(getOperation(), getSubject()))) return failure();
   if (failed(tessera::readBoundedQueryNormShape(getOperation(),getSubject().getType())))
     return failure();
   if (failed(verifyContentAddressedKernel(*this, getSubject(), getScheduled(),

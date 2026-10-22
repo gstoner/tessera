@@ -32,6 +32,20 @@ int tessera_nvidia_native_frame_prepare_v2(
     const TesseraNvidiaNativeFrameStepV1 *steps, size_t stage_count,
     const uint8_t *row_buffers, uint32_t row_root, int64_t row_bound,
     const TesseraNvidiaNativeFrameRowPlanV2 *plans, uint64_t *handle);
+// Compiler-generated MLIR/LLVM shape computation. The retained caller keeps
+// the code image alive until frame close succeeds. Nonzero status must leave
+// all plan words untouched. No Python callback or numerical dispatcher.
+typedef int32_t (*TesseraNvidiaNativeShapeFunctionV3)(const int64_t *, int64_t *);
+int tessera_nvidia_native_frame_prepare_v3(
+    const TesseraNvidiaMatmulHostView *buffers, const uint8_t *roles, size_t count,
+    const TesseraNvidiaNativeFrameStepV1 *steps, size_t stage_count,
+    TesseraNvidiaNativeShapeFunctionV3 shape_function,
+    size_t root_words, size_t plan_words, uint64_t *handle);
+// Pure shape query. Returns every active buffer descriptor with null data;
+// does not allocate, enqueue work or change the last successful frame.
+int tessera_nvidia_native_frame_shapes_v3(uint64_t handle,
+    const int64_t *root_dimensions, size_t root_words,
+    TesseraNvidiaMatmulHostView *active, size_t buffer_count);
 int tessera_nvidia_native_frame_invoke_v1(uint64_t handle,
     const TesseraNvidiaMatmulHostView *roots, size_t root_count,
     const TesseraNvidiaMatmulHostView *outputs, size_t output_count);

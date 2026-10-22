@@ -1,0 +1,238 @@
+FFFFFF.                                                                  [100%]
+=================================== FAILURES ===================================
+_______ test_missing_shape_tool_leaves_route_unclaimed[missing-mlir-opt] _______
+
+shape_preflight = ({'mlir-opt': PosixPath('/tmp/pytest-of-angstorms/pytest-332/test_missing_shape_tool_leaves0/mlir-opt'), 'mlir-transla...   [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]], dtype=float16)))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7060e8083950>
+name = 'mlir-opt', fault = 'missing'
+
+    @pytest.mark.parametrize("name", ["mlir-opt", "mlir-translate", "clang"])
+    @pytest.mark.parametrize("fault", ["missing", "not_executable"])
+    def test_missing_shape_tool_leaves_route_unclaimed(shape_preflight, monkeypatch, name, fault):
+        tools, fn, args = shape_preflight
+        if fault == "missing":
+            tools[name].unlink()
+        else:
+            tools[name].chmod(0o644)
+        def forbidden(*args, **kwargs):
+            pytest.fail("missing shape tool traced frontend source")
+        monkeypatch.setattr(fn, "_traced_autodiff_module", forbidden)
+>       assert fn._try_native_tensor_program_call(args, {}, shape_bounds={"M": 65, "N": 47, "K": 64}) is _JIT_FALLBACK
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_tensor_shape_prerequisites.py:48: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:2725: in _try_native_tensor_program_call
+    module = self._traced_autodiff_module(ordered, {})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = ((array([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., ...1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]], dtype=float16)), {})
+kwargs = {}
+
+    def forbidden(*args, **kwargs):
+>       pytest.fail("missing shape tool traced frontend source")
+E       Failed: missing shape tool traced frontend source
+
+tests/unit/test_native_tensor_shape_prerequisites.py:46: Failed
+____ test_missing_shape_tool_leaves_route_unclaimed[missing-mlir-translate] ____
+
+shape_preflight = ({'mlir-opt': PosixPath('/tmp/pytest-of-angstorms/pytest-332/test_missing_shape_tool_leaves1/mlir-opt'), 'mlir-transla...   [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]], dtype=float16)))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7060e80835c0>
+name = 'mlir-translate', fault = 'missing'
+
+    @pytest.mark.parametrize("name", ["mlir-opt", "mlir-translate", "clang"])
+    @pytest.mark.parametrize("fault", ["missing", "not_executable"])
+    def test_missing_shape_tool_leaves_route_unclaimed(shape_preflight, monkeypatch, name, fault):
+        tools, fn, args = shape_preflight
+        if fault == "missing":
+            tools[name].unlink()
+        else:
+            tools[name].chmod(0o644)
+        def forbidden(*args, **kwargs):
+            pytest.fail("missing shape tool traced frontend source")
+        monkeypatch.setattr(fn, "_traced_autodiff_module", forbidden)
+>       assert fn._try_native_tensor_program_call(args, {}, shape_bounds={"M": 65, "N": 47, "K": 64}) is _JIT_FALLBACK
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_tensor_shape_prerequisites.py:48: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:2725: in _try_native_tensor_program_call
+    module = self._traced_autodiff_module(ordered, {})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = ((array([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., ...1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]], dtype=float16)), {})
+kwargs = {}
+
+    def forbidden(*args, **kwargs):
+>       pytest.fail("missing shape tool traced frontend source")
+E       Failed: missing shape tool traced frontend source
+
+tests/unit/test_native_tensor_shape_prerequisites.py:46: Failed
+________ test_missing_shape_tool_leaves_route_unclaimed[missing-clang] _________
+
+shape_preflight = ({'mlir-opt': PosixPath('/tmp/pytest-of-angstorms/pytest-332/test_missing_shape_tool_leaves2/mlir-opt'), 'mlir-transla...   [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]], dtype=float16)))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7060e7def530>
+name = 'clang', fault = 'missing'
+
+    @pytest.mark.parametrize("name", ["mlir-opt", "mlir-translate", "clang"])
+    @pytest.mark.parametrize("fault", ["missing", "not_executable"])
+    def test_missing_shape_tool_leaves_route_unclaimed(shape_preflight, monkeypatch, name, fault):
+        tools, fn, args = shape_preflight
+        if fault == "missing":
+            tools[name].unlink()
+        else:
+            tools[name].chmod(0o644)
+        def forbidden(*args, **kwargs):
+            pytest.fail("missing shape tool traced frontend source")
+        monkeypatch.setattr(fn, "_traced_autodiff_module", forbidden)
+>       assert fn._try_native_tensor_program_call(args, {}, shape_bounds={"M": 65, "N": 47, "K": 64}) is _JIT_FALLBACK
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_tensor_shape_prerequisites.py:48: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:2725: in _try_native_tensor_program_call
+    module = self._traced_autodiff_module(ordered, {})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = ((array([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., ...1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]], dtype=float16)), {})
+kwargs = {}
+
+    def forbidden(*args, **kwargs):
+>       pytest.fail("missing shape tool traced frontend source")
+E       Failed: missing shape tool traced frontend source
+
+tests/unit/test_native_tensor_shape_prerequisites.py:46: Failed
+___ test_missing_shape_tool_leaves_route_unclaimed[not_executable-mlir-opt] ____
+
+shape_preflight = ({'mlir-opt': PosixPath('/tmp/pytest-of-angstorms/pytest-332/test_missing_shape_tool_leaves3/mlir-opt'), 'mlir-transla...   [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]], dtype=float16)))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7060e7f79260>
+name = 'mlir-opt', fault = 'not_executable'
+
+    @pytest.mark.parametrize("name", ["mlir-opt", "mlir-translate", "clang"])
+    @pytest.mark.parametrize("fault", ["missing", "not_executable"])
+    def test_missing_shape_tool_leaves_route_unclaimed(shape_preflight, monkeypatch, name, fault):
+        tools, fn, args = shape_preflight
+        if fault == "missing":
+            tools[name].unlink()
+        else:
+            tools[name].chmod(0o644)
+        def forbidden(*args, **kwargs):
+            pytest.fail("missing shape tool traced frontend source")
+        monkeypatch.setattr(fn, "_traced_autodiff_module", forbidden)
+>       assert fn._try_native_tensor_program_call(args, {}, shape_bounds={"M": 65, "N": 47, "K": 64}) is _JIT_FALLBACK
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_tensor_shape_prerequisites.py:48: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:2725: in _try_native_tensor_program_call
+    module = self._traced_autodiff_module(ordered, {})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = ((array([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., ...1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]], dtype=float16)), {})
+kwargs = {}
+
+    def forbidden(*args, **kwargs):
+>       pytest.fail("missing shape tool traced frontend source")
+E       Failed: missing shape tool traced frontend source
+
+tests/unit/test_native_tensor_shape_prerequisites.py:46: Failed
+_ test_missing_shape_tool_leaves_route_unclaimed[not_executable-mlir-translate] _
+
+shape_preflight = ({'mlir-opt': PosixPath('/tmp/pytest-of-angstorms/pytest-332/test_missing_shape_tool_leaves4/mlir-opt'), 'mlir-transla...   [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]], dtype=float16)))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7060e7f7a140>
+name = 'mlir-translate', fault = 'not_executable'
+
+    @pytest.mark.parametrize("name", ["mlir-opt", "mlir-translate", "clang"])
+    @pytest.mark.parametrize("fault", ["missing", "not_executable"])
+    def test_missing_shape_tool_leaves_route_unclaimed(shape_preflight, monkeypatch, name, fault):
+        tools, fn, args = shape_preflight
+        if fault == "missing":
+            tools[name].unlink()
+        else:
+            tools[name].chmod(0o644)
+        def forbidden(*args, **kwargs):
+            pytest.fail("missing shape tool traced frontend source")
+        monkeypatch.setattr(fn, "_traced_autodiff_module", forbidden)
+>       assert fn._try_native_tensor_program_call(args, {}, shape_bounds={"M": 65, "N": 47, "K": 64}) is _JIT_FALLBACK
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_tensor_shape_prerequisites.py:48: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:2725: in _try_native_tensor_program_call
+    module = self._traced_autodiff_module(ordered, {})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = ((array([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., ...1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]], dtype=float16)), {})
+kwargs = {}
+
+    def forbidden(*args, **kwargs):
+>       pytest.fail("missing shape tool traced frontend source")
+E       Failed: missing shape tool traced frontend source
+
+tests/unit/test_native_tensor_shape_prerequisites.py:46: Failed
+_____ test_missing_shape_tool_leaves_route_unclaimed[not_executable-clang] _____
+
+shape_preflight = ({'mlir-opt': PosixPath('/tmp/pytest-of-angstorms/pytest-332/test_missing_shape_tool_leaves5/mlir-opt'), 'mlir-transla...   [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]], dtype=float16)))
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7060e800e350>
+name = 'clang', fault = 'not_executable'
+
+    @pytest.mark.parametrize("name", ["mlir-opt", "mlir-translate", "clang"])
+    @pytest.mark.parametrize("fault", ["missing", "not_executable"])
+    def test_missing_shape_tool_leaves_route_unclaimed(shape_preflight, monkeypatch, name, fault):
+        tools, fn, args = shape_preflight
+        if fault == "missing":
+            tools[name].unlink()
+        else:
+            tools[name].chmod(0o644)
+        def forbidden(*args, **kwargs):
+            pytest.fail("missing shape tool traced frontend source")
+        monkeypatch.setattr(fn, "_traced_autodiff_module", forbidden)
+>       assert fn._try_native_tensor_program_call(args, {}, shape_bounds={"M": 65, "N": 47, "K": 64}) is _JIT_FALLBACK
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_tensor_shape_prerequisites.py:48: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:2725: in _try_native_tensor_program_call
+    module = self._traced_autodiff_module(ordered, {})
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = ((array([[1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.,
+        1., 1., 1., 1., 1., 1., 1., 1., 1., ...1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
+       [1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]], dtype=float16)), {})
+kwargs = {}
+
+    def forbidden(*args, **kwargs):
+>       pytest.fail("missing shape tool traced frontend source")
+E       Failed: missing shape tool traced frontend source
+
+tests/unit/test_native_tensor_shape_prerequisites.py:46: Failed
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_tensor_shape_prerequisites.py::test_missing_shape_tool_leaves_route_unclaimed[missing-mlir-opt]
+FAILED tests/unit/test_native_tensor_shape_prerequisites.py::test_missing_shape_tool_leaves_route_unclaimed[missing-mlir-translate]
+FAILED tests/unit/test_native_tensor_shape_prerequisites.py::test_missing_shape_tool_leaves_route_unclaimed[missing-clang]
+FAILED tests/unit/test_native_tensor_shape_prerequisites.py::test_missing_shape_tool_leaves_route_unclaimed[not_executable-mlir-opt]
+FAILED tests/unit/test_native_tensor_shape_prerequisites.py::test_missing_shape_tool_leaves_route_unclaimed[not_executable-mlir-translate]
+FAILED tests/unit/test_native_tensor_shape_prerequisites.py::test_missing_shape_tool_leaves_route_unclaimed[not_executable-clang]
+6 failed, 1 passed in 0.74s

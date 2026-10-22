@@ -330,7 +330,7 @@ def test_flat_kernel_reference_is_rejected_before_member_projection(flags):
 
 @pytest.mark.parametrize("edit,marker", [
     ("member", "owned native program member module"),
-    ("schema", "requires native program module schema 1 or 2")])
+    ("schema", "requires native program module schema 1, 2 or 3")])
 def test_native_controller_requires_owned_members_and_known_module_schema(edit, marker):
     compiled = _run(traced_source(relu_product, "f16"), "--tessera-graph-to-schedule",
                     "--tessera-schedule-to-tile", "--tessera-lower-to-nvidia-sm120")

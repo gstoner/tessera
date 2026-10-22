@@ -82,6 +82,26 @@ not the destination for new shared lowering infrastructure.
 
 ## Development status
 
+### Native program integration
+
+On RTX 5070 / `sm_120`, ordinary `@jit` can retain compiler-owned compact
+rank-two producer/matmul programs across independent bounded M/N/K shapes.
+The proved FP16/BF16-root families are RMSNorm→matmul, RHS add with LHS
+ReLU→matmul, add→ReLU→matmul, and matmul→ReLU→matmul with FP32 intermediate
+storage. Native MLIR owns dimension identities, capacity guards and buffer
+lifetimes. Selected leaf ABIs emit typed shape arithmetic, compiled through
+LLVM into a host shape companion; the retained C++ runtime owns active
+sizes/strides, launch parameters and stream ordering. Warm calls reuse native
+images and allocations without tracing or compilation.
+
+See the [exact-device packet](benchmarks/baselines/native_independent_shapes_20261021/README.md)
+and [bounded tensor-program contract](docs/spec/NATIVE_TENSOR_PROGRAM_BOUNDED.md)
+for capacities, toolchain prerequisites and separate native/public timing
+scopes. General layouts, control flow, accumulator reconstruction and AD
+composition remain active work.
+
+### Backend coverage
+
 Static rank-2/3 ROCm `sqrt`, `exp`, `add`, `div`, `cumsum` and `cummax`
 have ordinary `@jit` and portable native package proof on gfx1151 and gfx1201.
 Explicit Graph casts admit f16/bf16 input storage with f32 computation/output;
@@ -89,15 +109,17 @@ native MLIR folds widening into loads. This is a bounded route, with
 [owning-device tests and separate kernel/host timings](benchmarks/baselines/rocm_native_math_20261006/README.md);
 general composition, dynamic layouts and AD remain active work.
 
-
 On RX 9070 XT / gfx1201, an explicit NVFP4 expansion followed by a K16
 block-scaled FP8 matmul now executes through ordinary host-input JIT and portable
 native replay. The compiler owns both stages and their private device edge;
 prepared execution can import weights once and update only activations.
-[Original-checkpoint evidence](benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md)
-covers one Qwen3 layer-0 gate/up projection with FP32 output, not full-model
-accuracy or general NVFP4 support.
-
+[Original-checkpoint projection evidence](benchmarks/baselines/rocm_nvfp4_public_source_20261015/README.md)
+covers a Qwen3 layer-0 gate/up projection with FP32 output. A later
+[seven-member native MLP packet](benchmarks/baselines/rocm_checkpoint_mlp_20261017/README.md)
+uses original gate/up/down weights and captured upstream BF16 inputs under one
+checked HIP owner. Its staged numerical bounds and flat-reference differences
+are recorded separately. Representative-corpus/full-model quality and broader
+NVFP4 composition remain open.
 
 Support is specific to the operation, shape, dtype, layout, target and execution
 route. Consult the linked evidence before treating a whole backend or domain as
@@ -110,12 +132,26 @@ supported.
 | NVIDIA CUDA | Native scheduled packages and specialized candidates, with RTX 5070 / `sm_120` evidence for admitted families. | [NVIDIA queue](docs/audit/backend/nvidia/todo.md) |
 | AMD ROCm | MLIR→ROCDL/LLVM native packages with separate `gfx1151` and RX 9070 XT / `gfx1201` evidence for admitted families; neither architecture proves the other's coverage. | [ROCm queue](docs/audit/backend/rocm/todo.md) and [gfx1201 W8A8 packet](benchmarks/baselines/gfx1201_fp8_blockscale_ragged_20260927/README.md) |
 
+### Differentiation and remaining work
+
 Autodiff includes Python reference rules, compiler-generated forward/reverse
-products and bounded native packages. Persistent static f32 tensor tapes now
-have CUDA/HIP evidence; isolated Q/K attention JVP programs have CUDA evidence.
-General persistent tapes, composed attention AD, native jets and broader backend
-promotion remain active work. See the [autodiff plan](docs/audit/compiler/AUTODIFF_EXECUTION_PLAN.md)
-and [implementation packets](benchmarks/NATIVE_STORAGE_FOLLOWUP.md).
+products and bounded native packages. Persistent static f32 tensor tapes have
+CUDA/HIP evidence. NVIDIA packets prove named static FP32 resident attention
+[JVP](benchmarks/baselines/sm120_resident_attention_jvp_20261009/README.md) and
+[VJP](benchmarks/baselines/sm120_resident_attention_vjp_20261009/README.md) routes.
+[Bounded original-source reverse execution](benchmarks/baselines/native_bounded_source_public_20261019/README.md)
+also covers FP16/BF16 RMSNorm(Q)→saved-LSE attention with retained owners and
+changing sequence lengths. These routes carry typed Graph/native MLIR AD,
+Schedule/Tile, Target and LLVM/PTX packages through checked native execution.
+General persistent tapes, mixed/quantized and nested attention AD, native jets
+and wider layout/composition envelopes remain active work. See the
+[autodiff plan](docs/audit/compiler/AUTODIFF_EXECUTION_PLAN.md).
+
+The [five-program ledger](docs/audit/compiler/FIVE_SLICE_STATUS_20261007.md)
+tracks the remaining GFX1201 NVFP4 ingest, NVIDIA producer migration,
+saved-LSE forward, attention backward and ROCm route/performance obligations.
+All five aggregate programs remain open. W8A8 short/ragged-K coverage and the
+MXFP4 M=256 attribution gap remain ROCm performance work.
 
 Distributed APIs and placement/collective IR do not imply completed multi-rank
 execution or measured overlap. Reference, mock, compiler-only and exact-device
@@ -190,23 +226,3 @@ contract tests, and `tests/tessera-ir/` contains native MLIR fixtures.
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).
-
-### Resident attention forward AD on NVIDIA SM120
-
-The named static compact FP32 native_jvp attention route accepts resident
-CUDA Q/K/V and tangent roots through typed Graph IR, native MLIR AD,
-Schedule/Tile, Target and LLVM/PTX packages. Native stream ordering and private
-snapshots are numerically proved on RTX5070. Structural frontend certification
-performs zero concrete tensor executions; numerical authority is the native
-package. This is not full resident attention AD or a general performance claim.
-See [the exact-device packet](benchmarks/baselines/sm120_resident_attention_jvp_20261009/README.md).
-
-### Resident attention backward on NVIDIA SM120
-
-Static compact FP32 native_backward now accepts CUDA Q/K/V, optional broadcast
-bias and cotangent through typed Graph and native MLIR AD/Schedule/Tile/Target/
-LLVM-PTX packages. Native stream ordering and private saved-LSE lifetime are
-proved on RTX5070. Structural certification performs zero concrete tensor
-executions and pins the exact Graph consumed by native backward.
-See [the exact-device packet](benchmarks/baselines/sm120_resident_attention_vjp_20261009/README.md).
-Dynamic/composed resident AD and binding performance remain open.

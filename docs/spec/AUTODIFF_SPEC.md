@@ -446,15 +446,25 @@ a partial laundering a wrong nonzero answer. `grad` and `jacrev` now look for
 operands that the sweep reached with a nonzero cotangent, that no recorded op
 produced, and that the caller did not supply (argument, keyword, closure or
 global array). For those, `tessera.autodiff.untracked` replays `fn` under
-fresh tapes, once unchanged and once with the differentiated arguments
-perturbed, and refuses when the operand moves with the arguments. Only
-positive evidence refuses: an operand stable under perturbation is a constant
-to first order (`ops.mul(x, W)`, `np.sign(x)` masks), and a replay whose op
-sequence differs (data-dependent Python control flow) or whose operand
-changes between two unperturbed runs (unseeded randomness) is inconclusive
-and left alone. Those two cases are the residual fail-open. The probe runs
-only when such an operand exists, so all-`ops.*` programs pay nothing.
-`jacfwd` / `jvp` are not covered by this check.
+fresh tapes with the differentiated arguments moved by a scale-aware step `h`
+(`sqrt(eps)` relative) and by `h/2`, and refuses only on derivative evidence:
+the operand moves under both steps, the two changes scale linearly (a
+threshold mask crossing its boundary jumps by the same amount at both and is
+not refused -- its derivative is zero), and an unchanged replay reproduces it.
+An operand stable under the step is a constant to first order (`ops.mul(x,
+W)`, `np.sign(x)` masks). A replay whose op sequence differs (data-dependent
+Python control flow) or whose operand changes between two unperturbed runs
+(unseeded randomness) is inconclusive and left alone; those two cases are the
+residual fail-open. `jacfwd` / `jvp` are not covered by this check.
+
+**`grad` / `jacrev` assume `fn` is pure, as `jacfwd`, `vmap` and `hvp`
+already do by re-executing it.** The probe replays caller code only when such
+an operand exists: an all-`ops.*` program never replays, and a correct program
+with a locally built constant replays once (each further replay runs only when
+the previous test left a candidate). Replays start from the global numpy and
+Python `random` states the original forward pass saw, and the post-forward
+states are restored afterwards, so the caller's random streams are unchanged.
+Any other side effect in `fn` (a counter, a buffer update, I/O) does repeat.
 
 `jet_trace` reuses the tape (there is one interception mechanism, #31) and
 re-traces per point, so it inherits the tape's straight-line restriction

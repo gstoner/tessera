@@ -12,22 +12,30 @@ every component reads zero.
 The tape cannot tell a laundered intermediate from a genuine constant
 (``ops.mul(x, W)``) by identity alone, so this module asks the question it
 actually needs answered: **does the operand's value depend on the
-differentiated arguments?** It replays ``fn`` twice under fresh tapes -- once
-unchanged, once with the arguments perturbed -- and compares the operand at the
-same position of the structurally identical replay.
+differentiated arguments?** It replays ``fn`` under fresh tapes with the
+arguments moved by a scale-aware step ``h`` and by ``h/2``, and compares the
+operand at the same position of the structurally identical replay; see
+:func:`refuse_untracked_dependence` for the full test.
 
-Only positive evidence refuses. An operand that is stable under perturbation
-is a constant to first order (a captured weight, ``np.sign(x)``, a threshold
-mask) and its zero contribution is the correct one. A replay whose op
-sequence differs (data-dependent Python control flow), or an operand that
-changes between two *unperturbed* runs (unseeded randomness), is
-inconclusive and left alone: refusing there would reject correct programs,
-and the residual is documented in ``docs/spec/AUTODIFF_SPEC.md``.
+Only positive evidence refuses. An operand that is stable under the step is a
+constant to first order (a captured weight, ``np.sign(x)``), and one whose
+change does not scale with the step is a threshold jump (a mask crossing its
+boundary), whose derivative is zero. A replay whose op sequence differs
+(data-dependent Python control flow), or an operand that changes between two
+*unperturbed* runs (unseeded randomness), is inconclusive and left alone:
+refusing there would reject correct programs, and the residual is documented
+in ``docs/spec/AUTODIFF_SPEC.md``.
 
-The probe runs only when the sweep actually reached an untracked operand that
-is not an array the caller handed in (an argument, keyword or closure/global
-value), so programs written entirely in ``ops.*`` over captured constants pay
-nothing.
+**Replays re-execute caller code.** The probe runs only when the sweep reached
+an untracked operand that is not an array the caller handed in (an argument,
+keyword or closure/global value), so programs written entirely in ``ops.*``
+over captured constants never replay; a correct program with a locally built
+constant replays once. Each replay starts from the global numpy and Python
+``random`` states the original forward pass saw, and the post-forward states
+are restored afterwards, so the caller's random streams are unchanged. Other
+side effects (counters, buffer mutation, I/O) repeat: ``fn`` must be pure, the
+same contract ``jacfwd``, ``vmap`` and ``hvp`` already rely on by
+re-executing it.
 """
 
 from __future__ import annotations
@@ -127,31 +135,56 @@ def nonzero_cotangent_ids(t: Tape) -> set[int]:
     }
 
 
-def _perturbed(value: Any) -> np.ndarray | None:
+def rng_snapshot() -> tuple[Any, Any]:
+    """The global numpy and Python ``random`` states, for :func:`refuse_untracked_dependence`."""
+    import random
+
+    return np.random.get_state(), random.getstate()
+
+
+def _rng_restore(snapshot: tuple[Any, Any]) -> None:
+    import random
+
+    np.random.set_state(snapshot[0])
+    random.setstate(snapshot[1])
+
+
+def _perturbed(value: Any, fraction: float) -> np.ndarray | None:
     arr = np.array(value, copy=True)
     if not np.issubdtype(arr.dtype, np.floating):
         return None
-    # Deterministic and nonzero at every element; a local generator so the
-    # caller's global numpy RNG stream is untouched.
-    scale = max(1e-3, 64 * float(np.finfo(arr.dtype).eps))
+    # A scale-aware step (sqrt(eps) relative, the finite-difference crossover)
+    # keeps the probe local: a threshold a coarse step would cross stays put.
+    # Deterministic, nonzero at every element; a local generator so no RNG
+    # stream is consumed.
+    scale = fraction * float(np.sqrt(np.finfo(arr.dtype).eps))
     sign = np.where(np.random.default_rng(0x7E55).random(arr.shape) < 0.5, -1.0, 1.0)
     return (arr + scale * (1.0 + np.abs(arr)) * sign).astype(arr.dtype)
 
 
 def _replay(fn: Callable, args: Sequence[Any], kwargs: dict,
-            argnums: Sequence[int], perturb: bool, signature: list[str],
-            positions: list[_Position]) -> list[np.ndarray] | None:
+            argnums: Sequence[int], fraction: float, signature: list[str],
+            positions: list[_Position],
+            rng_before: tuple[Any, Any] | None) -> list[np.ndarray] | None:
+    """Re-run ``fn`` with the differentiated arguments moved by ``fraction``
+    of the probe step (0 = unchanged) and return the operands at
+    ``positions``, or ``None`` when the replay is not comparable."""
     from .grad import _wrap_as_parameter
 
     new_args = list(args)
     for i in argnums:
         value = np.array(args[i], copy=True)
-        if perturb:
-            moved = _perturbed(value)
+        if fraction:
+            moved = _perturbed(value, fraction)
             if moved is None:
                 return None
             value = moved
         new_args[i] = _wrap_as_parameter(value)
+    if rng_before is not None:
+        # The replay draws the same global random stream the original
+        # forward pass drew, so seeded-by-state noise reads as the constant
+        # it is to the derivative.
+        _rng_restore(rng_before)
     try:
         with tape() as replay:
             fn(*new_args, **kwargs)
@@ -167,6 +200,11 @@ def _same(a: np.ndarray, b: np.ndarray) -> bool:
     return a.shape == b.shape and bool(np.array_equal(a, b, equal_nan=True))
 
 
+def _change(base: np.ndarray, moved: np.ndarray) -> float:
+    return float(np.linalg.norm(
+        np.asarray(moved, dtype=np.float64) - np.asarray(base, dtype=np.float64)))
+
+
 def refuse_untracked_dependence(
     surface: str,
     fn: Callable,
@@ -175,26 +213,56 @@ def refuse_untracked_dependence(
     argnums: Sequence[int],
     t: Tape,
     nonzero_ids: set[int],
+    rng_before: tuple[Any, Any] | None = None,
 ) -> None:
     """Raise when a gradient path ran through a value the tape never saw.
 
     ``nonzero_ids`` is the union, over every backward sweep the caller ran, of
     :func:`nonzero_cotangent_ids` -- ``jacrev`` sweeps once per output element.
+    ``rng_before`` is :func:`rng_snapshot` taken before the original forward
+    pass; replays start from it and the post-forward state is restored after.
+
+    Evidence is a *derivative*, not a difference. An operand counts as
+    depending on the arguments only when it moves under a step ``h``, moves
+    again under ``h/2``, the two changes scale linearly (ratio ~2, which a
+    threshold jump cannot produce), and an unchanged replay reproduces the
+    original operand (which unseeded randomness cannot). Replays run lazily
+    and stop at the first test that clears every operand, so a correct
+    program with a locally built constant costs one replay, not three.
     """
     caller_ids = _caller_array_ids(fn, args, kwargs, argnums)
     positions = untracked_operand_positions(t, nonzero_ids, caller_ids)
     if not positions:
         return
     signature = [entry.op for entry in t.entries]
-    base = [np.array(_flat_operands(t.entries[k])[j].array, copy=True) for k, j in positions]
-    repeat = _replay(fn, args, kwargs, argnums, False, signature, positions)
-    moved = _replay(fn, args, kwargs, argnums, True, signature, positions)
-    if repeat is None or moved is None:
-        return
-    dependent = [
-        position for position, b, r, m in zip(positions, base, repeat, moved)
-        if _same(b, r) and not _same(b, m)
-    ]
+    base = {pos: np.array(_flat_operands(t.entries[pos[0]])[pos[1]].array, copy=True)
+            for pos in positions}
+    after = rng_snapshot()
+    try:
+        full = _replay(fn, args, kwargs, argnums, 1.0, signature, positions, rng_before)
+        if full is None:
+            return
+        moved = {pos: _change(base[pos], value)
+                 for pos, value in zip(positions, full) if not _same(base[pos], value)}
+        if not moved:
+            return
+        candidates = list(moved)
+        half = _replay(fn, args, kwargs, argnums, 0.5, signature, candidates, rng_before)
+        if half is None:
+            return
+        linear = []
+        for pos, value in zip(candidates, half):
+            step_half = _change(base[pos], value)
+            if step_half > 0.0 and 1.5 <= moved[pos] / step_half <= 2.5:
+                linear.append(pos)
+        if not linear:
+            return
+        repeat = _replay(fn, args, kwargs, argnums, 0.0, signature, linear, rng_before)
+        if repeat is None:
+            return
+        dependent = [pos for pos, value in zip(linear, repeat) if _same(base[pos], value)]
+    finally:
+        _rng_restore(after)
     if not dependent:
         return
     k, j = dependent[0]
@@ -213,6 +281,7 @@ def refuse_untracked_dependence(
 
 __all__ = [
     "nonzero_cotangent_ids",
+    "rng_snapshot",
     "refuse_untracked_dependence",
     "untracked_operand_positions",
 ]

@@ -33,7 +33,7 @@ from .tape import (
     shadow_blocks_zero_claim,
     tape,
 )
-from .untracked import nonzero_cotangent_ids, refuse_untracked_dependence
+from .untracked import nonzero_cotangent_ids, refuse_untracked_dependence, rng_snapshot
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -215,6 +215,7 @@ def jacrev(
             new_args[i] = p
             params.append(p)
 
+        rng_before = rng_snapshot()
         # ── ONE forward pass, recorded on ONE tape ────────────────────
         with tape() as t:
             out = fn(*new_args, **kwargs)
@@ -323,7 +324,7 @@ def jacrev(
             # A path through raw numpy leaves no cotangent behind it, so the
             # missing contribution would read as part of an honest Jacobian.
             refuse_untracked_dependence(
-                "jacrev(fn)", fn, args, kwargs, argnums_tuple, t, reached)
+                "jacrev(fn)", fn, args, kwargs, argnums_tuple, t, reached, rng_before)
 
         result = tuple(jac for _, jac, _ in jacobians)
         return result[0] if singleton else result

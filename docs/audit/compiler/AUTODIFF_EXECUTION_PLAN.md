@@ -960,7 +960,12 @@ through raw numpy between recorded ops: `grad(lambda x: ops.sum(ops.sin(x) *
 x))` was `[0, 0, 0]` (`grad.py` filled the missing cotangent with zeros).
 `grad` and `jacrev` now refuse, through `python/tessera/autodiff/untracked.py`,
 when an untracked operand the sweep reached moves with the differentiated
-arguments under a perturbed replay. The refusal runs after the nested-tape
+arguments under perturbed replays whose changes scale linearly with the step
+(review on #1004: a finite step alone flagged a threshold mask crossing its
+boundary). Replays are lazy (one for a correct program with a local constant,
+none for an all-`ops.*` program) and preserve the global numpy / `random`
+streams; other side effects repeat, under the purity contract `jacfwd` and
+`hvp` already assume. The refusal runs after the nested-tape
 guard, so a path an inner tape swallowed keeps that guard's diagnostic.
 Residual fail-open: data-dependent Python control flow and unseeded randomness
 make the replay inconclusive, and `jacfwd` / `jvp` are unchecked. The first

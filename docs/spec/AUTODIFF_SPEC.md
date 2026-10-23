@@ -438,6 +438,24 @@ order 0 yields a derivative that is wrong without looking wrong. And a
 program that never calls `ops.*` raises rather than returning zeros, since
 raw numpy is invisible to the tape.
 
+**A path through raw numpy *between* recorded ops refuses too (2026-10-23).**
+In `ops.sum(ops.sin(x) * x)` numpy's `*` returns an array no recorded op
+produced; `ops.sum` records it as an operand, indistinguishable by identity
+from a constant, and the sweep stops there -- `grad` used to return zeros, and
+a partial laundering a wrong nonzero answer. `grad` and `jacrev` now look for
+operands that the sweep reached with a nonzero cotangent, that no recorded op
+produced, and that the caller did not supply (argument, keyword, closure or
+global array). For those, `tessera.autodiff.untracked` replays `fn` under
+fresh tapes, once unchanged and once with the differentiated arguments
+perturbed, and refuses when the operand moves with the arguments. Only
+positive evidence refuses: an operand stable under perturbation is a constant
+to first order (`ops.mul(x, W)`, `np.sign(x)` masks), and a replay whose op
+sequence differs (data-dependent Python control flow) or whose operand
+changes between two unperturbed runs (unseeded randomness) is inconclusive
+and left alone. Those two cases are the residual fail-open. The probe runs
+only when such an operand exists, so all-`ops.*` programs pay nothing.
+`jacfwd` / `jvp` are not covered by this check.
+
 `jet_trace` reuses the tape (there is one interception mechanism, #31) and
 re-traces per point, so it inherits the tape's straight-line restriction
 rather than inventing a new one. The record is cached on the primal point,

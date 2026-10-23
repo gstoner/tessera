@@ -19204,3 +19204,9 @@ test-only observer share one pure C++ metadata planner; the shipped provider's
 tests, with a pinned absence from the public ABI inventory. The recorder gates
 K <2^24 before hardware so its FP32 gamma-K oracle remains mathematically valid.
 Not applicable to HIP physical ABI: this frame schema is NVIDIA-owned. The five gfx1201 quantized image controls remain unchanged under the same compiler. No gfx1151/gfx1201 scalar range or binary program execution is inferred from NVIDIA transport proof.
+
+## JIT-DROPPED-CALL-EAGER-2026-10-23
+
+Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Closes the follow-up recorded under JIT-UNLOWERED-OP-2026-10-11, which turned out to be a wrong answer rather than an eager fallback: a body like `y = tessera.ops.relu(x); return np.exp(y)` emitted `relu` and a bare `return`, and the default lane (`jit_cpu_numpy`) and `apple_cpu` executed that graph, returning `relu(x)` with `last_fallback_reason` None. Shared change: `JitFn.__call__` now runs the original Python function whenever `GraphIRModule.frontend_unlowered_calls` is non-empty, records `FallbackReason.FRONTEND_UNLOWERED_CALL`, raises `TesseraNativeRequiredError` under `native_required=True`, and raises for a differentiation request (its derivative would omit the dropped calls). A control-flow `apple_gpu` body routed to the Phase-F tracer is exempt, since the tracer runs the body itself. The `tessera.ops` decoration refusal (`JIT_UNLOWERED_OP_NATIVE_TARGET`) is unchanged. Test: `tests/unit/test_jit_dropped_body_call_eager.py`.
+
+ROCm: a dropped non-`tessera.ops` call now runs eagerly with the reason recorded rather than reporting a compiled lane. Decoration and fallback only; no gfx1151 or gfx1201 execution evidence is claimed or affected.

@@ -97,6 +97,7 @@ class TestFallbackReason:
             "CAPABILITY_NOT_READY": "capability_not_ready",
             "OPT_OUT": "opt_out",
             "REFERENCE_FORCED": "reference_forced",
+            "FRONTEND_UNLOWERED_CALL": "frontend_unlowered_call",
         }
         for name, value in expected.items():
             assert FallbackReason[name].value == value

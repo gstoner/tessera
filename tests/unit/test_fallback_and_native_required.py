@@ -60,6 +60,7 @@ def test_fallback_reason_is_closed_enum() -> None:
         "capability_not_ready",
         "opt_out",
         "reference_forced",
+        "frontend_unlowered_call",
     }
 
 

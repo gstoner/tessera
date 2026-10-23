@@ -350,7 +350,7 @@ def forward_deepseek_v3_mla_moe_decode(params: ArrayTree, batch: ArrayTree) -> n
 
 def loss_deepseek_v3_mla_moe_decode(params: ArrayTree, batch: ArrayTree):
     logits = forward_deepseek_v3_mla_moe_decode(params, batch)
-    ce = ts.losses.cross_entropy_loss(logits, np.array([1], dtype=np.int64))
+    ce = ts.ops.cross_entropy_loss(logits, np.array([1], dtype=np.int64))
     return ts.ops.add(ce, _mse_to_target(logits, batch["target"]))
 
 

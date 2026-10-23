@@ -33,6 +33,7 @@ from .tape import (
     shadow_blocks_zero_claim,
     tape,
 )
+from .untracked import nonzero_cotangent_ids, refuse_untracked_dependence
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -133,6 +134,14 @@ def grad(
                 # Argument wasn't on the gradient path → zero grad.
                 g = np.zeros_like(p._data._data)
             grads.append(g)
+
+        # A path through raw numpy leaves no cotangent behind it, so the
+        # missing contribution would read as part of an honest gradient.
+        # After the nested-tape checks above: a path an inner tape swallowed
+        # is also untracked here, and that guard names the actual cause.
+        refuse_untracked_dependence(
+            "grad(fn)", fn, args, kwargs, argnums_tuple, t,
+            nonzero_cotangent_ids(t))
 
         if metric is not None:
             from ..metric import riemannian_gradient

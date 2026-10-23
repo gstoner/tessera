@@ -58,6 +58,11 @@ class FallbackReason(str, Enum):
     #: Reference path forced because compile-time gating chose it.
     REFERENCE_FORCED = "reference_forced"
 
+    #: The Graph IR front end dropped a call in the function body (raw numpy,
+    #: a user helper, an unresolved spelling), so the emitted graph is a
+    #: truncated program. The original Python function ran instead.
+    FRONTEND_UNLOWERED_CALL = "frontend_unlowered_call"
+
     def message(self) -> str:
         """Canonical human-readable message for this reason."""
         return message_for(self)
@@ -93,6 +98,10 @@ _MESSAGES: dict[FallbackReason, str] = {
     ),
     FallbackReason.REFERENCE_FORCED: (
         "reference path was forced by compile-time gating"
+    ),
+    FallbackReason.FRONTEND_UNLOWERED_CALL: (
+        "the Graph IR front end dropped a call in the function body, so the "
+        "emitted graph is incomplete; the original Python function ran instead"
     ),
 }
 

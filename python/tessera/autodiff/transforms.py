@@ -33,6 +33,7 @@ from .tape import (
     shadow_blocks_zero_claim,
     tape,
 )
+from .untracked import nonzero_cotangent_ids, refuse_untracked_dependence
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -288,6 +289,7 @@ def jacrev(
                 return result[0] if singleton else result
 
             # ── One backward sweep per output element, reusing the tape ──
+            reached: set[int] = set()
             for k in range(out_arr.size):
                 cotan = np.zeros(out_shape, dtype=np.float64)
                 cotan.flat[k] = 1.0
@@ -298,6 +300,7 @@ def jacrev(
                     retain_graph=True,
                     accumulate_param_grad=False,
                 )
+                reached |= nonzero_cotangent_ids(t)
 
                 out_idx = np.unravel_index(k, out_shape)
                 for p, jac_buf, ai_shape in jacobians:
@@ -316,6 +319,11 @@ def jacrev(
                         # Genuinely not on the gradient path → zero row.
                         continue
                     jac_buf[out_idx] = np.asarray(g).reshape(ai_shape)
+
+            # A path through raw numpy leaves no cotangent behind it, so the
+            # missing contribution would read as part of an honest Jacobian.
+            refuse_untracked_dependence(
+                "jacrev(fn)", fn, args, kwargs, argnums_tuple, t, reached)
 
         result = tuple(jac for _, jac, _ in jacobians)
         return result[0] if singleton else result

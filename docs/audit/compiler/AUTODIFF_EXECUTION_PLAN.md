@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-14
+last_updated: 2026-10-23
 audit_role: plan
 plan_state: landing
 ---
@@ -952,3 +952,27 @@ closed-frame refusal. No additional exported residual tensors are needed for
 this example; the frame retains 136 bytes of primal-input snapshots.
 Broader raising, dynamic/alias residual layouts and general solver frontend
 integration remain open. [Evidence](../../../benchmarks/baselines/frontend_residual_fragments_20260928/README.md).
+
+## Untracked-dependence refusal (AD-CLOSEOUT-1) — 2026-10-23
+
+The eager tape returned a silently wrong gradient when a tracked value passed
+through raw numpy between recorded ops: `grad(lambda x: ops.sum(ops.sin(x) *
+x))` was `[0, 0, 0]` (`grad.py` filled the missing cotangent with zeros).
+`grad` and `jacrev` now refuse, through `python/tessera/autodiff/untracked.py`,
+when an untracked operand the sweep reached moves with the differentiated
+arguments under a perturbed replay. The refusal runs after the nested-tape
+guard, so a path an inner tape swallowed keeps that guard's diagnostic.
+Residual fail-open: data-dependent Python control flow and unseeded randomness
+make the replay inconclusive, and `jacfwd` / `jvp` are unchecked. The first
+Mac sweep with the refusal found two gradients that had been wrong on `main`
+behind shape-only assertions, both now fixed and pinned against central
+differences: `tessera.scan` stacked its per-step outputs with `np.stack`
+(`control.py`), so the `ys` term of a scan loss never reached the gradient
+(`[0.69, 0.70, 0.76]` vs the true `[2.11, 1.93, 1.52]`); and the
+`tiny_deepseek_v3_mla_moe_decode` conformance model took its loss through the
+numpy `ts.losses.cross_entropy_loss` instead of the tape-aware
+`ts.ops.cross_entropy_loss` (relative error 1.01). The other nine tiny models
+matched finite differences to ~1e-13 and were not refused. Spec:
+`docs/spec/AUTODIFF_SPEC.md`. Test:
+`tests/unit/test_autodiff_untracked_dependence.py`. Host-independent numpy
+reference behaviour; no device evidence is involved.

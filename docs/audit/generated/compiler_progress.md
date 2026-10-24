@@ -42,7 +42,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
 | `Verifier coverage` | closed | 299 | 299 | 0 | real=299 | No action unless this row reopens. |
-| `Direct test evidence` | mixed | 415 | 530 | 115 | covered_by_family=29, directly_tested=422, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
+| `Direct test evidence` | mixed | 436 | 530 | 94 | covered_by_family=23, directly_tested=438, hardware_gated=4, structural_only=65 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
 | `Runtime execution matrix` | closed | 295 | 295 | 0 | apple_cpu=2, apple_gpu=24, cpu=7, nvidia_sm120=64, rocm=96, rocm_gfx1151=3, rocm_gfx1201=12, x86=87 | Add rows only when a launch path actually executes. |
 | `Runtime ABI symbols` | mixed | 739 | 1070 | 331 | apple=723, nvidia=107, rocm=75, x86=165 | Reduce stub-only ABI rows where a backend claims native execution. |
 | `Audited repo surfaces` | mixed | 39 | 69 | 30 | archived=4, compile_only=20, runnable=39, runnable_optional=2, scaffold=4 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
@@ -66,7 +66,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | Item | Status | Open | Detail | Next | Source |
 |---|---|---:|---|---|---|
 | `backend_kernel` | mixed | 430 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. | `docs/audit/generated/s_series_status.md` |
-| `Direct test evidence` | mixed | 115 | covered_by_family=29, directly_tested=422, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. | `tessera.compiler.generated_docs:test_coverage (live renderer)` |
+| `Direct test evidence` | mixed | 94 | covered_by_family=23, directly_tested=438, hardware_gated=4, structural_only=65 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. | `tessera.compiler.generated_docs:test_coverage (live renderer)` |
 | `ROCm target-map native promotion` | mixed | 53 | artifact_only=15, device_verified_abi=2, device_verified_jit=37, planned=3, ready=23, unsupported=12 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |
 | `CUDA target-map native promotion` | open | 45 | artifact_only=42, planned=3 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/nvidia_sm90_target_map.csv` |
 | `Audited repo surfaces` | mixed | 30 | archived=4, compile_only=20, runnable=39, runnable_optional=2, scaffold=4 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. | `docs/audit/generated/surface_status.csv` |

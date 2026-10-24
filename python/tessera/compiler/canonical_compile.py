@@ -1171,7 +1171,7 @@ def canonical_compile(
     source_origin: str = "<canonical>",
     options: Mapping[str, Any] | None = None,
     cpu_tile: tuple[int, int, int] = (128, 128, 64),
-    enable_tool_validation: bool = True,
+    enable_tool_validation: bool = False,
 ) -> CompileResult:
     """Run the full Tessera compile ladder and return a typed result.
 

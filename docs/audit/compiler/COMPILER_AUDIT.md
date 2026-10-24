@@ -442,7 +442,13 @@ The executed path and the C++ MLIR optimizer are largely **disconnected**:
 
 - `tessera-opt`'s optimized IR is run for **validation only** — its stdout is
   hashed for provenance and discarded (`driver.py` `_try_validate_with_tessera_opt`,
-  ~`:955/:970`). Execution dispatches off the **in-memory Python `GraphIRModule`**
+  ~`:955/:970`). **Updated 2026-10-24 (`GRAPH-IR-STRICT-VALIDATION-2026-10-24`):**
+  that validator is gone. It ran a lowering pipeline over a render the parser
+  cannot read, with `--allow-unregistered-dialect`, and nothing read its
+  `status="failed"`. `enable_tool_validation` now defaults off and, when set,
+  parse-and-verifies the recorded Graph IR with no pipeline and raises
+  (`GraphIRToolValidationError`); `tests/unit/test_graph_ir_parse_contract.py`
+  ratchets a specialized-module corpus. Execution dispatches off the **in-memory Python `GraphIRModule`**
   (`jit.py` `recognize(self.graph_ir)`), so the C++ fusion/canonicalize/CSE passes
   do not reach runtime.
 - Consequence: fusion logic exists **twice** — real C++ rewrites the executor

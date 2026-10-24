@@ -57,7 +57,7 @@ def _warn_schedule_key_not_honored(target_kind: str, options) -> None:
         )
 from typing import Any, Mapping
 
-from .graph_ir import GraphIRModule, unresolved_element_type_diagnostics
+from .graph_ir import GraphIRModule, GraphIRVerificationError, unresolved_element_type_diagnostics
 from .capabilities import CAPABILITY_REGISTRY_VERSION, supports_op
 from .matmul_pipeline import (
     CPUPlan,
@@ -506,8 +506,18 @@ def compile_graph_module(
     cpu_tile: tuple[int, int, int] = (128, 128, 64),
     options: Mapping[str, Any] | None = None,
     example_id: str | None = None,
-    enable_tool_validation: bool = True,
+    enable_tool_validation: bool = False,
 ) -> CompileArtifactBundle:
+    """Lower ``module`` toward ``target`` and package the stage artifacts.
+
+    ``enable_tool_validation=True`` is a strict, opt-in gate: the recorded
+    Graph IR artifact is parsed and verified by ``tessera-opt`` with no
+    pipeline and no ``--allow-unregistered-dialect``, and any failure -- an
+    unparseable render, a verifier rejection, or no runnable ``tessera-opt``
+    -- raises :class:`GraphIRToolValidationError`. It used to default on,
+    run a lowering pipeline over a render the parser cannot read, record
+    ``status="failed"``, and let nothing read the record.
+    """
     target_kind = normalize_target_kind(target)
     resolved_options = dict(options or {})
     if target_kind in ("apple_cpu", "apple_gpu"):
@@ -536,6 +546,7 @@ def compile_graph_module(
     # Graph IR verifier defaults to CPU for standalone callers, so the driver
     # must carry its normalized target through this pre-lowering verification.
     graph_text = module.to_mlir(target=target_kind)
+    default_graph_text = graph_text
     scheduled_matmul_artifact = None
     scheduled_kernel_artifact = None
     scheduled_attention_artifact = None
@@ -742,7 +753,25 @@ def compile_graph_module(
     )
 
     if enable_tool_validation:
-        invocation, event = _try_validate_with_tessera_opt(request)
+        # The default render is the inspection form; validate the parser-bound
+        # (canonical) render of the same module. A scheduled route recorded its
+        # own artifact text, already the form tessera-opt consumes.
+        if graph_text == default_graph_text:
+            # Decision #21a, as the value lane applies it: a symbolic module
+            # whose element types are unresolved is not meant for the parser,
+            # so refuse it by its semantic key rather than by the parser's
+            # symptom ("expected non-function type").
+            unresolved = unresolved_element_type_diagnostics(module)
+            if unresolved:
+                raise GraphIRToolValidationError(
+                    f"Graph IR tool validation was requested for "
+                    f"{function_name!r} (target {target_kind!r}), but the "
+                    f"module is not specialized: "
+                    + "; ".join(f"{d.code}: {d.message}" for d in unresolved))
+            validated_text = module.to_mlir(target=target_kind, canonical=True, verify=False)
+        else:
+            validated_text = graph_text
+        invocation, event = _validate_graph_ir_with_tessera_opt(request, validated_text)
         tool_invocations.append(invocation)
         trace_events.append(event)
 
@@ -2289,82 +2318,68 @@ def _backend_artifact_for(target_kind: str, cpu_plan: CPUPlan | None) -> Lowerin
     return None
 
 
-def _try_validate_with_tessera_opt(request: CompileRequest) -> tuple[ToolInvocation, CompileTraceEvent]:
-    tool = _find_tessera_opt()
-    input_hash = stable_hash(request.graph_ir)
-    if tool is None:
-        invocation = ToolInvocation(
-            tool="tessera-opt",
-            pipeline_name=request.pipeline_name,
-            available=False,
-            status="missing",
-        )
-        event = CompileTraceEvent(
-            pass_name=request.pipeline_name,
-            target=request.target,
-            input_hash=input_hash,
-            output_hash=input_hash,
-            elapsed_ms=0.0,
-            status="tool-missing",
-            metadata={"tool": "tessera-opt"},
-        )
-        return invocation, event
+class GraphIRToolValidationError(GraphIRVerificationError):
+    """``enable_tool_validation=True`` and ``tessera-opt`` did not accept the
+    Graph IR artifact, or no runnable ``tessera-opt`` exists to ask."""
 
+
+def _validate_graph_ir_with_tessera_opt(
+    request: CompileRequest, graph_text: str,
+) -> tuple[ToolInvocation, CompileTraceEvent]:
+    """Parse and verify ``graph_text`` with ``tessera-opt``; raise on failure.
+
+    No pipeline runs and ``--allow-unregistered-dialect`` is never passed: the
+    question is whether the artifact is valid MLIR in the registered dialects,
+    and an op no dialect declares is exactly the answer to report.
+    """
+    tool = _resolve_tessera_opt()
+    input_hash = stable_hash(graph_text)
+    if tool is None:
+        raise GraphIRToolValidationError(
+            f"Graph IR tool validation was requested for {request.function_name!r} "
+            f"(target {request.target!r}), but no runnable tessera-opt was found "
+            f"(set TESSERA_OPT, add it to PATH, or build build/tools/tessera-opt)")
     start = time.perf_counter()
     try:
         proc = subprocess.run(
-            [tool, f"-{request.pipeline_name}", "--allow-unregistered-dialect"],
-            input=request.graph_ir,
+            [tool, "-", "-o", os.devnull],
+            input=graph_text,
             text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            timeout=10,
+            capture_output=True,
+            timeout=60,
             check=False,
         )
-        elapsed_ms = (time.perf_counter() - start) * 1000.0
-        stdout_hash = stable_hash(proc.stdout)
-        status = "ok" if proc.returncode == 0 else "failed"
-        invocation = ToolInvocation(
-            tool=tool,
-            pipeline_name=request.pipeline_name,
-            available=True,
-            status=status,
-            elapsed_ms=elapsed_ms,
-            stdout_hash=stdout_hash,
-            stderr=proc.stderr.strip()[:1000],
-        )
-        event = CompileTraceEvent(
-            pass_name=request.pipeline_name,
-            target=request.target,
-            input_hash=input_hash,
-            output_hash=stdout_hash if proc.stdout else input_hash,
-            elapsed_ms=elapsed_ms,
-            status=f"tool-{status}",
-            diagnostic_count=0 if proc.returncode == 0 else 1,
-            metadata={"tool": tool, "returncode": proc.returncode},
-        )
-        return invocation, event
-    except Exception as exc:
-        elapsed_ms = (time.perf_counter() - start) * 1000.0
-        invocation = ToolInvocation(
-            tool=tool,
-            pipeline_name=request.pipeline_name,
-            available=True,
-            status="error",
-            elapsed_ms=elapsed_ms,
-            stderr=str(exc),
-        )
-        event = CompileTraceEvent(
-            pass_name=request.pipeline_name,
-            target=request.target,
-            input_hash=input_hash,
-            output_hash=input_hash,
-            elapsed_ms=elapsed_ms,
-            status="tool-error",
-            diagnostic_count=1,
-            metadata={"tool": tool, "reason": str(exc)},
-        )
-        return invocation, event
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise GraphIRToolValidationError(
+            f"Graph IR tool validation could not run {tool}: "
+            f"{type(exc).__name__}: {exc}") from exc
+    elapsed_ms = (time.perf_counter() - start) * 1000.0
+    if proc.returncode != 0:
+        lines = proc.stderr.strip().splitlines()
+        first = next((line for line in lines if "error:" in line),
+                     lines[0] if lines else f"returncode {proc.returncode}")
+        raise GraphIRToolValidationError(
+            f"tessera-opt rejected the Graph IR for {request.function_name!r} "
+            f"(target {request.target!r}): {first}")
+    invocation = ToolInvocation(
+        tool=tool,
+        pipeline_name="parse+verify",
+        available=True,
+        status="ok",
+        elapsed_ms=elapsed_ms,
+        stdout_hash=stable_hash(proc.stdout),
+        stderr=proc.stderr.strip()[:1000],
+    )
+    event = CompileTraceEvent(
+        pass_name="tessera-opt-parse-verify",
+        target=request.target,
+        input_hash=input_hash,
+        output_hash=input_hash,
+        elapsed_ms=elapsed_ms,
+        status="tool-ok",
+        metadata={"tool": tool},
+    )
+    return invocation, event
 
 
 def _find_tessera_opt() -> str | None:
@@ -2519,6 +2534,7 @@ __all__ = [
     "CompileArtifactBundle",
     "CompileRequest",
     "CompileTraceEvent",
+    "GraphIRToolValidationError",
     "ToolInvocation",
     "compile_graph_module",
     "stable_hash",

@@ -113,6 +113,17 @@ def test_s8_tiny_recurrent_conformance_forward_backward_rng_state():
     value, grad = ts.value_and_grad(recurrent_loss)(xs)
     assert np.asarray(value).shape == ()
     assert grad.shape == xs.shape
+    # The shape alone passed while `scan` stacked `ys` with raw numpy and the
+    # `ys` term never reached the gradient. Pin the values.
+    def plain(v):
+        carry, total = 0.0, 0.0
+        for item in v[:, 0]:
+            carry = np.tanh(carry + item)
+            total += carry * carry
+        return carry * carry + total
+    fd = np.array([(plain(xs + e) - plain(xs - e)) / 2e-6
+                   for e in np.eye(3)[:, :, None] * 1e-6]).reshape(xs.shape)
+    np.testing.assert_allclose(grad, fd, rtol=1e-6)
 
     key = ts.rng.RNGKey.from_seed(7, name="diffusion")
     noisy = ts.rng.normal(key, (2, 3))

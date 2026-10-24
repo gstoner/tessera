@@ -553,6 +553,12 @@ class JitFn:
         # Last fallback reason (None on a native run).  Inspectable by
         # callers + by CompileReport.fallback_reason emission.
         self.last_fallback_reason: Optional[FallbackReason] = None
+        # Calls the AST front end dropped from the traced body (raw numpy, a
+        # user helper, an unresolved spelling). Every lane below executes the
+        # emitted graph, so with any of these present it would run a
+        # truncated program and return its partial result as the answer.
+        self._frontend_dropped_calls: Tuple[str, ...] = tuple(
+            getattr(graph_ir, "frontend_unlowered_calls", ()) or ())
         # Phase 8.2 launch-overhead reduction: the artifact + its metadata
         # depend only on immutable construction inputs, so we lazily build
         # them once and reuse on every __call__. Without caching the small-
@@ -1049,6 +1055,9 @@ class JitFn:
         self._rocm_quantized_product_last_receipts = ()
         self._enforce_call_time_constraints(args, kwargs)
         self._enforce_call_time_stochastic_certificate(args, kwargs)
+        dropped_calls = self._dropped_calls_for_this_call()
+        if dropped_calls:
+            return self._eager_for_dropped_calls(args, kwargs, dropped_calls)
         if self._bounded_lhs is not None:
             return self._bounded_lhs(args,kwargs)
         native_pair = getattr(self, "_native_storage_pair", None)
@@ -1172,6 +1181,63 @@ class JitFn:
             return self._fn(*args, **kwargs)
         finally:
             from . import compile_report as _cr
+            if _cr.active_sink_is_capturing():
+                _cr.emit_compile_report(self.compile_report())
+
+    def _dropped_calls_for_this_call(self) -> Tuple[str, ...]:
+        """Dropped body calls that make the emitted graph a truncated program.
+
+        A control-flow ``apple_gpu`` body routed to the Phase-F tracer is
+        exempt: the tracer runs the body itself and never reads the AST graph.
+        """
+        dropped = self._frontend_dropped_calls
+        if not dropped:
+            return ()
+        if self.target == "apple_gpu" and self._needs_trace:
+            from .trace import jit_trace_enabled
+
+            if jit_trace_enabled():
+                return ()
+        return dropped
+
+    def _eager_for_dropped_calls(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any],
+        dropped: Tuple[str, ...],
+    ) -> Any:
+        """Run the original function when the graph is missing body calls.
+
+        Before this, every lane executed the graph the AST front end emitted.
+        A body like ``y = ops.relu(x); return np.exp(y)`` lowers to ``relu``
+        and a bare ``return`` -- ``np.exp`` is not a Graph op -- so the call
+        returned ``relu(x)`` with ``last_fallback_reason`` None. Running the
+        Python function is the honest answer; the reason says why.
+        """
+        from . import compile_report as _cr
+
+        reason = FallbackReason.FRONTEND_UNLOWERED_CALL
+        self.last_fallback_reason = reason
+        names = ", ".join(sorted(set(dropped)))
+        fn_name = getattr(self._fn, "__name__", "")
+        if self.differentiation_request is not None:
+            raise TesseraJitError(
+                f"[{reason.value}] {fn_name!r} requests differentiation, but "
+                f"the Graph IR front end dropped {names} from its body: the "
+                f"derivative of the emitted graph would omit those calls. "
+                f"Express them with catalogued tessera.ops calls."
+            )
+        if self.native_required:
+            raise TesseraNativeRequiredError(
+                reason,
+                target=str(normalize_target_kind(self.target) or "cpu"),
+                op_name=fn_name,
+                detail=(
+                    f"the Graph IR front end dropped {names} from the body, "
+                    f"so no compiled lane can run the whole function"
+                ),
+            )
+        try:
+            return self._fn(*args, **kwargs)
+        finally:
             if _cr.active_sink_is_capturing():
                 _cr.emit_compile_report(self.compile_report())
 

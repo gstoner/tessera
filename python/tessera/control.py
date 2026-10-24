@@ -97,7 +97,11 @@ def _stack_outputs(outputs: list[Any], axis: int = 0) -> Any:
     if isinstance(first, list):
         return [_stack_outputs([out[i] for out in outputs], axis=axis)
                 for i in range(len(first))]
-    return np.stack([np.asarray(out) for out in outputs], axis=axis)
+    # Through ``ops.stack`` so a scan inside ``tape()`` records the stacking:
+    # ``np.stack`` returned an array no recorded op produced, and every
+    # gradient path through the per-step outputs was silently dropped.
+    from . import ops
+    return ops.stack(list(outputs), axis=axis)
 
 
 def scan(

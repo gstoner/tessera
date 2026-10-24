@@ -39,6 +39,20 @@ def _assert_loss_grad(spec: TinyModelSpec) -> None:
     assert np.isfinite(value)
     assert grad_w.shape == spec.expected_grad_shapes["w"]
     assert np.all(np.isfinite(grad_w))
+    # Shape and finiteness passed for a gradient that was 100% wrong: the
+    # DeepSeek model's loss ran in raw numpy, invisible to the tape. Check the
+    # values against central differences of the loss itself.
+    w0 = np.asarray(params["w"], dtype=np.float64)
+    step = 1e-5
+    fd = np.zeros(w0.size)
+    for i in range(w0.size):
+        e = np.zeros(w0.size)
+        e[i] = step
+        hi = spec.loss({**params, "w": (w0.ravel() + e).reshape(w0.shape).astype(params["w"].dtype)}, batch)
+        lo = spec.loss({**params, "w": (w0.ravel() - e).reshape(w0.shape).astype(params["w"].dtype)}, batch)
+        fd[i] = (float(np.asarray(hi)) - float(np.asarray(lo))) / (2 * step)
+    np.testing.assert_allclose(np.asarray(grad_w, dtype=np.float64).ravel(), fd,
+                               rtol=1e-4, atol=1e-6, err_msg=spec.model_id)
 
 
 def test_s8_manifest_names_all_real_tiny_model_families():

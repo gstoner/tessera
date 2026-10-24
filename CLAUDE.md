@@ -204,7 +204,7 @@ Per-phase deliverables and the open-work priority queue live in
 |--------|---------|
 | `__init__.py` | Top-level exports: `jit`, `kernel`, `Region`, `domain`, `dist`, `array`, `index_launch`, `constraint`, `ops`, `Tensor`, `dtype`. `train` is lazily bound via PEP 562 `__getattr__`. |
 | `dtype.py` | Canonical dtype enforcement + `Dtype` typed object + promotion lattice (`canonicalize_dtype`, `result_type`, `is_canonical_dtype`, …). Canonical 15-name set; aliases normalize at API boundaries; `tf32` rejected as storage dtype (use `numeric_policy.math_mode`). See Decision #15a. |
-| `compiler/jit.py` | `@jit`/`@kernel` decorators; routes to x86, GPU, or string-target pipeline. Call-time constraint re-check via `JitFn._enforce_call_time_constraints`. **In migration (E2E-REAL-6):** family selection / package construction is moving out of `JitFn` into the tracer as the one compiler authority; the AST `_OpExtractor` is deleted only after differential execution covers each migrated family — see `MASTER_AUDIT.md` §1. |
+| `compiler/jit.py` | `@jit`/`@kernel` decorators; routes to x86, GPU, or string-target pipeline. Call-time constraint re-check via `JitFn._enforce_call_time_constraints`. **In migration (E2E-REAL-6):** family selection / package construction is moving out of `JitFn` into the tracer as the one compiler authority; the AST `_OpExtractor` is deleted only after differential execution covers each migrated family — see `MASTER_AUDIT.md` §1. **Fail-closed on dropped ops (2026-10-11, `JIT-UNLOWERED-OP-2026-10-11`):** `@jit(target=<native>)` raises `JIT_UNLOWERED_OP_NATIVE_TARGET` at decoration when the body calls a `tessera.ops` callable the AST front end dropped (no `op_catalog` OpSpec, or an unresolved spelling; resolved by object identity, so aliases count; recorded on `GraphIRModule.frontend_unlowered_calls` so cache hits still refuse). Before, the call left an empty `func.func` body and `JitFn.__call__` silently returned eager numpy. No target / `target="cpu"` keep the eager path. **Any other dropped call (raw numpy, a user helper) — 2026-10-23, `JIT-DROPPED-CALL-EAGER-2026-10-23`:** the default and `apple_cpu` lanes used to *execute the truncated graph* (`relu(x); return np.exp(y)` returned `relu(x)`); `JitFn.__call__` now runs the original function and records `FallbackReason.FRONTEND_UNLOWERED_CALL`, raises under `native_required=True` or a differentiation request, and exempts only tracer-routed `apple_gpu` bodies. |
 | `compiler/op_catalog.py` | Canonical op-name catalog — "what we accept today" across all IR layers. |
 | `compiler/primitive_coverage.py` | **Audit truth** (Decision #24) — standalone primitive contract registry over 12 axes; consults `autodiff.vjp._VJPS`/`jvp._JVPS` so registered (V/J)VPs auto-flip to complete. Renders `docs/audit/standalone_primitive_coverage.md`. |
 | `compiler/backend_manifest.py` | Per-op × per-target × per-dtype kernel manifest synthesizer; `BackendKernelEntry` + statuses `fused`/`reference`/`compileable`/`artifact_only`/`planned`. |
@@ -212,8 +212,8 @@ Per-phase deliverables and the open-work priority queue live in
 | `compiler/{constraints,effects,graph_ir}.py` | `ConstraintSolver` (decoration-time), `EffectLattice` (`pure<random<memory<io<top`, derived from registered traced Graph IR since W2.2 — see Decision #5), Python→Graph IR emission. |
 | `compiler/{autotune_v2,attn_lower,matmul_pipeline,checkpoint,solver_config,distributed_planner,pipeline_planner}.py` | Bayesian autotuner; FA-4 lowering config; multi-target matmul dispatch; checkpoint extension; solver/ZeRO/resilience config; dp/tp/pp + 1F1B planners. |
 | `compiler/evaluator.py` + `conformance_evaluator.py` + `ptx_emit.py` + `flywheel{,_autotune}.py` + `compiler_grader.py` + `attention_tasks.py` + `magellan.py` + `alphaevolve.py` | **Evaluator program** — execution-derived, rung-aware scoring engine; four oracles (vertical/horizontal/metamorphic/DESIL cross-path), conformance re-derivation, NVIDIA WGMMA PTX emission, device-keyed autotuning records, anti-cheat scored-environment search. See `docs/audit/compiler/EVALUATOR_PLAN.md` §9.5. |
-| `rng.py` / `state/` / `control.py` / `sharding.py` | S4 RNG (Philox `RNGKey` + 12 samplers); S3 pytrees + 8-collection state taxonomy; S5 control flow + autodiff transforms; S6 `shard_map`/collectives + `MemoryShardSpec`. |
-| `losses.py` / `rl.py` / `optim.py` / `quantization.py` | S11 21 losses; RL PPO/GRPO/CISPO; S10 9 optimizers + schedules + grad transforms; S9 int8/int4 quant + fake-quant + observers. |
+| `rng.py` / `state/` / `control.py` / `sharding.py` | S4 RNG (Philox `RNGKey` + samplers); S3 pytrees + 8-collection state taxonomy; S5 control flow + autodiff transforms; S6 `shard_map`/collectives + `MemoryShardSpec`. |
+| `losses.py` / `rl.py` / `optim.py` / `quantization.py` | S11 losses (since 2026-10 incl. calibration metrics and proper scoring rules for calibrated decision heads, each with a reference backend owner); RL PPO/GRPO/CISPO; S10 optimizers + schedules + grad transforms; S9 int8/int4 quant + fake-quant + observers. |
 | `data.py` / `aot.py` / `custom.py` / `memory.py` | S15 `Dataset` + tokenizers; S14 AOT export + compilation cache; S13 `@custom_primitive`; S7 Titans/Atlas memory primitives. |
 | `nn/{module,layers,functional,utils}.py` | Complete stateful `nn.*` surface — `Module`/`Parameter`/`Buffer`, layers, attention, KV cache, conv, LSTM. `functional.py` decomposes through `ops.*` so autodiff sees every step. |
 | `autodiff/{tape,vjp,jvp,mixed_precision,rematerialize}.py` | Tape-based numpy-reference reverse/forward mode; `tape()`/`reverse()`/`custom_rule()`; autocast + GradScaler + remat. See `docs/spec/AUTODIFF_SPEC.md`. |
@@ -250,7 +250,7 @@ Per-phase deliverables and the open-work priority queue live in
 
 | Path | Purpose |
 |------|---------|
-| `tessera-opt/` | MLIR opt-style driver — all dialects + 70+ passes + named lowering pipelines. Build: `ninja -C build tessera-opt`. |
+| `tessera-opt/` | MLIR opt-style driver — all dialects + the registered passes (`tessera-opt --help`) + named lowering pipelines. Build: `ninja -C build tessera-opt`. |
 | `tessera-translate/` | C++ `tessera-translate-mlir` (MLIR↔LLVM IR / SPIR-V) + Python `tessera-translate` (StableHLO/GGUF/SafeTensors export) |
 | `profiler/` / `roofline_tools/` | tprof runtime + Perfetto export; roofline ingestion + HTML reports |
 | `tessera-jit/` / `tessera-target-opt/` | Real MLIR `ExecutionEngine` CPU lane through linalg/vector/SCF/LLVM (the reuse target named by `MLIR_NATIVE_FOUNDATION_SURVEY.md`); Target-IR-level opt driver |
@@ -277,8 +277,8 @@ Per-phase deliverables and the open-work priority queue live in
 > to match new behavior; the record of the change is the point.
 >
 > **A decision the code no longer matches is a bug in this file, not a
-> constraint on the code.** As of 2026-08-30 this section carries **20**
-> recorded amendments: six `Adopted 2026-08-02` entries, four letter-suffixed
+> constraint on the code.** As of 2026-08-30 this section carried **20**
+> recorded amendments (later ones are the dated banners below, not recounted here): six `Adopted 2026-08-02` entries, four letter-suffixed
 > sub-decisions, and ten dated banners. Decision #5 has been amended twice —
 > fail-open AST inference was recorded as a correction, then superseded when
 > W2.2 made inference IR-derived and fail-closed. That is the protocol
@@ -517,7 +517,7 @@ Per-phase deliverables and the open-work priority queue live in
 
 24. **`primitive_coverage.py` is the standalone compiler's audit truth, not `op_catalog.py`.** Catalog = runtime/frontend op acceptor; coverage = audit dashboard (what each primitive must prove across 12 axes). Ship a new primitive → update *both*. The registry auto-flips (V/J)VP axes from registered `_VJPS`/`_JVPS`, and rejects duplicate planned entries. The dashboard is drift-gated.
 
-25. **Registry `partial` ≠ compiler-complete.** Coverage is layered: Python reference, frontend, Graph IR, sharding/transpose/batching, backend manifest, runtime, benchmark proof are separate claims. A row can be useful and still `partial`. The generated dashboards are the **primary current-status evidence** — reconcile them against implementation, tests, and exact-device proof when they conflict or look stale; do not copy numeric snapshots into prose unless a drift gate owns the copy. When a sprint says "shipped", read the generated rows to see what is actually proven vs. `planned`/`partial`/`reference`/`artifact_only`/hardware-gated.
+25. **Registry `partial` ≠ compiler-complete.** Coverage is layered: Python reference, frontend, Graph IR, sharding/transpose/batching, backend manifest, runtime, benchmark proof are separate claims. A row can be useful and still `partial`. The generated dashboards are the **primary current-status evidence** — reconcile them against implementation, tests, and exact-device proof when they conflict or look stale; do not copy numeric snapshots into prose unless a drift gate owns the copy. When a sprint says "shipped", read the generated rows to see what is actually proven vs. `planned`/`partial`/`reference`/`artifact_only`/hardware-gated. **Worked case (2026-10-11):** Graph-less rows claimed `lowering_rule: complete` because the registry consulted a rule nothing exercised; they no longer do, and a dialect lowering row now needs emission evidence (`docs/audit/coverage/COVERAGE_AUDIT.md`).
 
 26. **The audit folder is the canonical "what's done / what's open" surface — follow its flow.** `docs/audit/` = one root audit + theme audits + generated dashboards + theme-local archives:
     1. **Start at `docs/audit/MASTER_AUDIT.md`** — single entry point; do not reconstruct status by grepping. **Restructured 2026-09-12:** §1 is seven named programs under the foundation program (sync key `IR-NATIVE-FOUNDATION-1`), not a P0/P1/P2 queue, and it deliberately owns no copied totals — it routes to `generated/compiler_progress.md` first, then `INTEGRATED_COMPILER_PLAN.md#live-queue`. Program numbering is theme, not priority.
@@ -826,6 +826,16 @@ own arch** (`tests/_support/rocm_build.refused_for_host_arch`). A refusal about
 an arch a test pinned on purpose stays a failure. Before this, a full sweep on
 Tajasarus reported ~1500 gfx1151-lane tests as failures; read a gfx1201 sweep's
 skip reasons, not just its counts.
+
+**A host that never built a backend skips its tests instead of failing them
+(since 2026-10-11, sync `HOST-AWARE-SKIPS-2026-10-11`).** `tests/conftest.py`
+converts a failure to a skip only when `tests/_support/backend_absence.py`
+matches a known backend-absent message (NVIDIA dialect, ROCm pass, NVIDIA tool)
+**and** a probe of the running host confirms that dialect/pass/tool is missing;
+fixture setup is covered too. A host that *has* the backend never skips — the
+same message there stays a failure. It covers no Apple lane. Read a Mac or
+Super-Bear sweep's skip reasons, not just its counts: a skip here means "this
+host cannot evaluate the lane" (Hard — claim integrity), never a pass.
 
 Two fleet-wide lit facts: `tests/tessera-ir` fixture counts move weekly (read
 the tree, not this file),

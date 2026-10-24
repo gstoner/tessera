@@ -174,3 +174,38 @@ def test_every_canonical_module_render_that_opts_out_says_why():
     undocumented = [(name, line) for name, line, ok in sites if not ok]
     assert not undocumented, f"allow_unresolved=True without a stated reason: {undocumented}"
 
+
+
+# ── Review on #1007: both bounded native AD entry points hash symbolically ──
+
+
+def _sentinel(*_args, **_kwargs):
+    raise LookupError("past the prepared-call key")
+
+
+def _symbolic_attention(q, k, v):
+    import tessera as ts
+
+    return ts.ops.flash_attn(q, k, v, lse_checkpoint="saved")
+
+
+def _roots():
+    import numpy as np
+
+    return tuple(np.zeros(shape, np.float16) for shape in
+                 ((1, 2, 3, 16), (1, 1, 4, 16), (1, 1, 4, 16)))
+
+
+def test_bounded_source_reverse_keys_a_symbolic_legacy_module(monkeypatch):
+    """`execute_bounded` hashes the unannotated legacy module for its owner key;
+    a cache miss then specializes. Reaching the specialization proves the key
+    render did not refuse the symbolic module."""
+    import tessera as ts
+    from tessera.compiler.source_attention_reverse_frontend import execute_bounded
+
+    fn = ts.jit(target="nvidia_sm120", autodiff="reverse", wrt=("q", "k", "v"))(
+        _symbolic_attention)
+    assert any("?" in str(arg.ir_type) for arg in fn._ensure_legacy_graph_ir().functions[0].args)
+    monkeypatch.setattr(fn, "_specialized_autodiff_module", _sentinel)
+    with pytest.raises(LookupError, match="past the prepared-call key"):
+        execute_bounded(fn, _roots(), {}, (), None, (7, 9))

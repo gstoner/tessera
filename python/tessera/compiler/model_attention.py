@@ -110,7 +110,9 @@ def build_msa_physical_package(
     if op.result is None:
         raise ValueError("MSA physical package requires one result")
 
-    graph_ir = module.to_mlir(target=target, canonical=True)
+    # Recorded as package lineage and lowered through the Python Schedule/Tile
+    # route, not parsed; a symbolic module records its `?` element types.
+    graph_ir = module.to_mlir(target=target, canonical=True, allow_unresolved=True)
     graph_digest = _digest_text(graph_ir)
     schedule = lower_graph_to_schedule_ir(module, target_kind=target)
     for schedule_function in schedule.functions:

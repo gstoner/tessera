@@ -1391,11 +1391,30 @@ class GraphIRModule:
         verify: bool = True,
         canonical: bool = False,
         target: object = "cpu",
+        allow_unresolved: bool = False,
     ) -> str:
+        """Render the module as MLIR text.
+
+        ``canonical=True`` is the parser-bound form and refuses a module with
+        an unresolved element type (``GRAPH_IR_UNRESOLVED_ELEMENT_TYPE``).
+        ``allow_unresolved=True`` is for callers that render a symbolic module
+        only to hash or record it -- never to hand it to ``tessera-opt``.
+        """
         if verify:
             result = self.verify(target=target)
             if not result.ok:
                 raise GraphIRVerificationError(result.format())
+        if canonical and not allow_unresolved:
+            # The canonical render is the parser-bound form; the symbolic
+            # decoration-time module (element type `?`) is not meant for the
+            # parser. Refuse here, by the semantic key (Decision #21a), so no
+            # parser-bound caller can forget the check and surface the parser's
+            # symptom ("expected non-function type") instead.
+            unresolved = unresolved_element_type_diagnostics(self)
+            if unresolved:
+                raise GraphIRVerificationError(
+                    "canonical Graph IR render refused: "
+                    + "; ".join(f"{d.code}: {d.message}" for d in unresolved))
         attrs = self._emitted_module_attrs()
         attr_lines = ", ".join(f"{k} = {v}" for k, v in attrs.items())
         lines = [f"module attributes {{{attr_lines}}} {{"]

@@ -134,7 +134,10 @@ def execute_bounded(jit, args, kwargs, cotangents, declaration, bounds):
         raise TesseraJitError("bounded source reverse requires three rank-four roots")
     fixed = tuple((str(dtype), tuple(n for axis, n in enumerate(shape) if axis != 2))
                   for shape, dtype in specs)
-    graph = jit._ensure_legacy_graph_ir().to_mlir(target="nvidia_sm120", canonical=True)
+    # Hashed for the prepared-owner key only; the legacy module may be symbolic
+    # and is never handed to the parser from here.
+    graph = jit._ensure_legacy_graph_ir().to_mlir(
+        target="nvidia_sm120", canonical=True, allow_unresolved=True)
     key = ("bounded_source_attention_reverse", bounds,
            tuple(jit.differentiation_request.wrt_indices),
            hashlib.sha256(graph.encode()).hexdigest(), threading.current_thread(), fixed)

@@ -141,7 +141,12 @@ def test_non_cpu_target_artifacts_are_traceable_and_non_executable():
     assert metadata["executable"] is False
     assert metadata["compiler_path"] == "target_ir_artifact"
     assert "tessera_nvidia.wgmma" in artifact.target_ir
-    assert any(event["status"] in {"tool-missing", "tool-ok", "tool-failed", "tool-error"} for event in mm.lowering_trace())
+    # Decoration does not shell out to tessera-opt: validation is opt-in
+    # (`enable_tool_validation=True`) and strict. This assertion used to accept
+    # "tool-failed" and "tool-error" as passing outcomes, so it held for a
+    # validator that ran on an unparseable render and whose result nothing read.
+    assert not any(event["status"].startswith("tool-") for event in mm.lowering_trace())
+    assert mm.compile_bundle.tool_invocations == ()
 
 
 def test_compiler_example_manifest_qualifies_each_foundation_target():

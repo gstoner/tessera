@@ -5535,6 +5535,10 @@ enters the replayed contract:
    taking tile M/N from the attention options `tile-q`/`tile-kv`.
    - Production use: only `driver._try_validate_with_tessera_opt`, which runs
      it on every NVIDIA compile and discards the output.
+     **Updated 2026-10-24:** that validator is gone
+     (`GRAPH-IR-STRICT-VALIDATION-2026-10-24`); opt-in strict validation runs
+     no pipeline and checks the recorded artifact (the scheduled route's text
+     when one was taken). Production use of these pipelines is now none.
    - Other appearances: lit (`nvidia_pipeline_alias.mlir`,
    `tile_ir_lowering.mlir`) and as a `pipeline_name` label in several
    modules.
@@ -16645,3 +16649,9 @@ Owning proof: three compiler/PTX/native metadata probes cover N=2^31 without CUD
 Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Closes the follow-up recorded under JIT-UNLOWERED-OP-2026-10-11, which turned out to be a wrong answer rather than an eager fallback: a body like `y = tessera.ops.relu(x); return np.exp(y)` emitted `relu` and a bare `return`, and the default lane (`jit_cpu_numpy`) and `apple_cpu` executed that graph, returning `relu(x)` with `last_fallback_reason` None. Shared change: `JitFn.__call__` now runs the original Python function whenever `GraphIRModule.frontend_unlowered_calls` is non-empty, records `FallbackReason.FRONTEND_UNLOWERED_CALL`, raises `TesseraNativeRequiredError` under `native_required=True`, and raises for a differentiation request (its derivative would omit the dropped calls). A control-flow `apple_gpu` body routed to the Phase-F tracer is exempt, since the tracer runs the body itself. The `tessera.ops` decoration refusal (`JIT_UNLOWERED_OP_NATIVE_TARGET`) is unchanged. Test: `tests/unit/test_jit_dropped_body_call_eager.py`.
 
 NVIDIA: native sm_120 tensor-program and prepared routes are bypassed for a body with a dropped call, which now runs eagerly with the reason recorded. Decoration and fallback only; no sm_120 execution evidence is claimed or affected.
+
+## GRAPH-IR-STRICT-VALIDATION-2026-10-24
+
+Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority / COMPILER-DEVEX-1). Shared change: `compile_graph_module` / `canonical_compile` `enable_tool_validation` now defaults **off**. The old default-on check ran the target's lowering pipeline over the non-canonical render (which `tessera-opt` cannot parse) with `--allow-unregistered-dialect`, recorded `status="failed"`, and nothing read the record (156 call sites already opted out). When set, it now parse-and-verifies the recorded Graph IR artifact with no pipeline and no unregistered escape, refuses an unspecialized module by `GRAPH_IR_UNRESOLVED_ELEMENT_TYPE` before the parser, and raises `GraphIRToolValidationError` on any failure, including no runnable `tessera-opt`. A scheduled route's own artifact text is validated as recorded. Gate: `tests/unit/test_graph_ir_parse_contract.py` (typed elementwise ops + foundation examples through the real `@jit` front end; ratcheted exemptions, currently undeclared catalog ops). Mac M1 Max measurement over the unit suite: 2,014 of 3,127 distinct modules parsed and verified, most of the rest symbolic by design.
+
+NVIDIA: `tessera-lower-to-gpu` / `tessera-nvidia-pipeline-*` lose their only production caller (item 1). No sm_120 execution evidence is claimed or affected.

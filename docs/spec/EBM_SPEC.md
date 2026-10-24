@@ -2,7 +2,7 @@
 status: Normative (live specification)
 classification: Spec
 authority: Defines the EBM (Energy-Based Models) primitive surface across all four Tessera IR levels
-last_updated: 2026-05-16
+last_updated: 2026-10-24
 provenance: Adapted from `archive/examples/advanced/EBT/Tessera_EBT_Package_v1/docs/EBT_in_Tessera.md` (archived)
 ---
 
@@ -83,6 +83,14 @@ Contract:
 - `temperature=0` collapses to pure gradient descent.
 - Differentiable through the energy gradient (for higher-order training).
 
+> **Note 2026-10-24:** the Python reference `tessera.ebm.langevin_step`
+> (`python/tessera/ebm/energy.py`) does not call `tessera.autodiff.vjp`: it
+> takes an optional analytic `grad_fn` and otherwise uses central
+> differences, so the reference step is not differentiable through the
+> gradient. The compiled loop does derive the gradient (`@E__bwd`, see §4).
+> The reference surface also exports `langevin_step_philox`, `refinement`,
+> `energy_quadratic` and `ebt_tiny` beyond the five primitives here.
+
 ### 2.4 `tessera.ebm.self_verify(energies, candidates, *, beta=None) -> y_best`
 
 Reduce K candidates to the lowest-energy one. When `beta is None`,
@@ -110,10 +118,10 @@ Contract:
 
 | Level | What lives here |
 |---|---|
-| **Graph IR** | `ebm.energy`, `ebm.inner_step`, `ebm.langevin_step`, `ebm.self_verify`, `ebm.decode_init`, `ebm.partition_z`. New dialect lands in EBM5. |
+| **Graph IR** | `tessera_ebm.energy`, `tessera_ebm.inner_step`, `tessera_ebm.langevin_step`, `tessera_ebm.self_verify`, `tessera_ebm.decode_init`, `tessera_ebm.partition_z` (dialect `tessera_ebm`, `src/solvers/ebm/`; driver `ts-ebm-opt`, also registered in `tessera-opt` when `TESSERA_BUILD_EBM_BACKEND=ON`). The shorthand `ebm.*` below names these ops. |
 | **Schedule IR** | The K-candidates × T-steps loop nest. Inner loop is a `tessera.control.scan` (S5), not a hand-rolled `scf.for`. Candidates map across streams / devices via existing parallelization policies. |
 | **Tile IR** | Energy-head kernels (MLP or attention-conditioned bilinear). `grad_y` reuses backward paths of the underlying ops. Sampler kernels (Langevin / MALA / HMC) are vectorized; bf16 storage, fp32 accumulators (Decision #15a). |
-| **Target IR** | Each backend follows Decision #19's hardware-free layer (per Q4 lock, x86 → Apple CPU → Apple GPU → NVIDIA after Phase G). |
+| **Target IR** | Each backend follows Decision #19's toolchain-free, contract-carrying layer (original Q4 lock order: x86 → Apple CPU → Apple GPU → NVIDIA after Phase G; current per-target rows: `docs/audit/generated/runtime_execution_matrix.md`). |
 
 ### 3.1 Canonical Schedule IR
 
@@ -136,6 +144,12 @@ Contract:
 %y_best = ebm.self_verify %E_all, %Y_final
 ```
 
+> **Note 2026-10-24:** the dialect declares no `ebm.grad_y` op. The
+> implemented native loop (`tessera-ebm-lower-langevin`) lowers each
+> `tessera_ebm.langevin_step` inside an `scf.for` over the compiler-derived
+> reverse-mode gradient `@E__bwd` (produced by the paired autodiff pass;
+> the lowering refuses when it is absent), not a `tessera.control.scan` nest.
+
 ### 3.2 Training-time variant
 
 For training, energies and candidates feed into a loss
@@ -146,7 +160,10 @@ is opt-in for geometric energies.
 
 ## 4. Pass pipelines (EBM5 + EBM6)
 
-- **`-ebm-canonicalize`** (EBM5):
+Registered pass arguments carry a `tessera-` prefix
+(`src/solvers/ebm/include/tessera/EBM/EBMPasses.td`).
+
+- **`-tessera-ebm-canonicalize`** (EBM5):
   - Inline `decode_init` when the strategy is `"copy"` or simple noise.
   - Normalize `self_verify` to a min-reduce + soft-min in the `beta`
     branch.
@@ -158,15 +175,26 @@ is opt-in for geometric energies.
     `grad_y` kernels.
   - Tile → Target: dispatch via existing backend pipelines.
 
-- **`-ebm-fuse-energy-grad`** (EBM6): fuse `energy` evaluation with
+- **`-tessera-ebm-fuse-energy-grad`** (EBM6): fuse `energy` evaluation with
   its `grad_y` to reuse activations; target ≥ 30% memory-traffic
   reduction.
 
-- **`-ebm-checkpoint-inner-loop`** (EBM6): apply Phase F2 rematerialization
+- **`-tessera-ebm-checkpoint-inner-loop`** (EBM6): apply Phase F2 rematerialization
   to the T-step inner-loop trajectory; tunable budget.
 
-- **`-ebm-pipeline-candidates`** (EBM6): map K across streams / devices
+- **`-tessera-ebm-pipeline-candidates`** (EBM6): map K across streams / devices
   for `self_verify`.
+
+> **Note 2026-10-24:** no `-ebm-lower` pass exists. The one lowering is
+> **`-tessera-ebm-lower-langevin`** (2026-09-16): `energy` / `inner_step` /
+> `langevin_step` (manifold `euclidean`, `sphere`, `bivector`) to
+> arith/linalg over `@E__bwd`, with Philox-4x32-10 / Box-Muller noise
+> generated inside a `linalg.generic`. `-tessera-ebm-canonicalize` attaches
+> `tessera.ebm.canonical` / `tessera.ebm.manifold` and normalizes
+> `self_verify` with `beta = 0` to hard argmin; it does not inline
+> `decode_init` or hoist invariants. Fuse-energy-grad, checkpoint-inner-loop
+> and pipeline-candidates are annotation-only: they attach attributes and
+> rewrite no IR.
 
 ## 5. Training losses (EBM4 — in `tessera.losses`)
 
@@ -183,11 +211,31 @@ All four register VJP + JVP per S11 conventions.
 - `denoising_score_matching_loss(energy_fn, x, y, sigma, rng_key)` —
   Vincent (2011); noisy-y target with a closed-form denoiser objective.
 
+> **Note 2026-10-24:** the implemented losses in `python/tessera/losses.py`
+> take precomputed values, not `energy_fn`: `contrastive_divergence_loss(energy_pos,
+> energy_neg)`, `persistent_cd_loss(energy_pos, energy_persistent_neg)`,
+> `score_matching_loss(score, target_score)` (explicit `½‖s − s*‖²`), and
+> `denoising_score_matching_loss(score_noisy, y_clean, y_noisy, sigma)`; the
+> caller runs the sampler and holds the persistent chain. The
+> `½‖∇E‖² + tr(∇²E)` objective is `implicit_score_matching_loss(score,
+> divergence_score)`, with the trace estimate left to the caller. All five
+> register VJP and JVP rules.
+
 ## 6. Runtime expectations
 
 EBM1 ships pure-Python reference implementations on numpy arrays —
 same shape as the S2–S15 reference surface. EBM5 brings the IR
 dialect; EBM6 brings fusion; backend lowering follows Q4.
+
+Native execution is recorded per target and per device in
+[`docs/audit/generated/runtime_execution_matrix.md`](../audit/generated/runtime_execution_matrix.md)
+(the `*_ebm_*` rows) and summarized in
+[`docs/audit/generated/domain_proof_ladder.md`](../audit/generated/domain_proof_ladder.md).
+Since 2026-09-16 the quadratic-energy Langevin loop compiles through
+`tessera-ebm-lower-langevin` to the CPU MLIR/LLVM JIT lane and, through
+the row-program emitter, to one cooperative kernel on the ROCm and sm_120
+rows named there — a correctness lane, not a performance promotion.
+Proof on one device does not transfer to another; read the row.
 
 The archived runner ([`ebt_runner.h`](../../archive/examples/advanced/EBT/Tessera_EBT_Package_v1/models/ebt/runtime/ebt_runner.h))
 is a useful reference for the C++ runtime shim signatures that will

@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Shape, layout, shard, and schedule feasibility contract
-last_updated: 2026-05-22
+last_updated: 2026-10-24
 ---
 
 # Tessera Shape System Specification
@@ -271,7 +271,7 @@ B, N, M, D = ts.sym("B N M D")
 @ts.check_shapes
 def attention(q: ts.Tensor[B, N, D],
               k: ts.Tensor[B, M, D]) -> ts.Tensor[B, N, M]:
-    return ts.ops.matmul(q, ts.ops.transpose(k, (0, 2, 1))) * (1.0 / ts.sqrt(D))
+    return ts.ops.matmul(q, ts.ops.transpose(k, (0, 2, 1))) * (1.0 / ts.ops.sqrt(D))
 ```
 
 The Python surface is intentionally a mirror of the compiler semantics:
@@ -361,6 +361,14 @@ through to each backend?
 | `target="apple_gpu"` (MPS + MSL) | ✅ accepted; MPS matrix descriptors built from concrete shape | ✅ | ✅ | Verified in `tests/unit/test_dynamic_shapes.py` |
 | `target="rocm"` / `"nvidia"` | n/a — artifact-only, no execution to test | ✅ | n/a | Symbolic dims appear in emitted IR text; runtime semantics undefined until backend executes |
 
+> **Note 2026-10-24.** The ROCm / NVIDIA row above is the 2026-05-09 audit
+> and is stale on its execution premise: ROCm (gfx1151, gfx1201) and NVIDIA
+> (sm_120, RTX 5070) lanes now execute natively for specific families, per
+> device — see `docs/audit/generated/runtime_execution_matrix.md`. Dynamic /
+> symbolic-shape behavior on those lanes has not been re-audited here, and
+> several sm_120 rows there state no dynamic-shape admission; do not read
+> this row as either a pass or a fail for native execution.
+
 ### Call-time constraint enforcement
 
 `@tessera.jit(bindings={"K": 7})` on a body with `tessera.require(Divisible("K", 8))`
@@ -415,20 +423,20 @@ it is enforced today vs. where it is a gap. The legend:
 
 | Contract | Where checked today | Evidence | Gap (if any) |
 |----------|--------------------|---------|---------------|
-| Symbolic dim equality (`Equal(A, B)`) | PY-DT, PY-CT | `python/tessera/compiler/constraints.py::ConstraintSolver.check`; `tests/unit/test_constraints.py` | **MLIR-PASS** — symbolic-dim equality is not re-checked at the MLIR level after Graph IR lowering; would belong in `src/compiler/diagnostics/ShapeInferencePass.cpp` |
+| Symbolic dim equality (`Equal(A, B)`) | PY-DT, PY-CT, MLIR-PASS | `python/tessera/compiler/constraints.py::ConstraintSolver.check`; `tests/unit/test_constraints.py`; `src/transforms/lib/SymbolicDimEqualityPass.cpp` (`--tessera-symdim-equality`, §11.2 item 2) | Closed at MLIR-PASS by Sprint V5 (see §11.2 item 2); typed Presburger carrier remains backlog |
 | Concrete dim divisibility (`Divisible(D, k)`) | PY-DT, PY-CT | `constraints.py::Divisible`; `tests/unit/test_constraints.py`, `test_dynamic_shapes.py` | **MLIR-PASS** — schedule feasibility check uses Python `check_schedule_tile`; MLIR equivalent not yet a verifier |
 | Range constraints (`Range(D, lo, hi)`) | PY-DT, PY-CT | `constraints.py::Range`; `tests/unit/test_constraints.py` | **MLIR-PASS** — same gap pattern as divisibility |
-| Derived dim products (`D = H * Dh`) | PY-DT, PY-CT | `constraints.py::Derived`; `shape.py::DimProduct`; `tests/unit/test_shape_system_foundation.py` | **MLIR-PASS** — product factorization not verified at MLIR level after Graph IR; only inference-by-binding today |
-| Mesh axis name existence | PY-DT, PY-CT | `shape.py::check_shard`; `distributed/shard.py::MeshSpec` | **MLIR-PASS** — `tessera.shard` ops do not have an ODS verifier that checks mesh axis name against the active `MeshSpec` (`src/compiler/ir/TesseraOps.td`) |
-| Shard divisibility (`B % dp == 0`) | PY-DT | `shape.py::check_shard`; `tests/unit/test_shape_system_foundation.py` | **MLIR-VERIFIER** — would belong on the `tessera.shard` op; today the check fires before Graph IR emission |
-| Layout cast insertion (producer/consumer disagreement) | PY (frontend) | `compiler/graph_ir.py` inserts `layout_cast` ops | **MLIR-PASS** — no pass-level verifier enforces "every producer layout matches consumer accept-set"; would belong as a `LayoutLegalityPass` |
+| Derived dim products (`D = H * Dh`) | PY-DT, PY-CT, MLIR-PASS | `shape.py::ShapeConstraintGraph.derived`; `shape.py::DimProduct`; `tests/unit/test_shape_system_foundation.py`; `SymbolicDimEqualityPass.cpp` (`tessera.dim_bindings`) | MLIR-PASS checks concrete bindings only (V5/V3a, §11.2 item 2); unresolved symbolic factorization is not proven |
+| Mesh axis name existence | PY-DT, PY-CT | `shape.py::check_shard`; `distributed/shard.py::MeshSpec` | **MLIR-PASS** — `tessera.shard` is a function-argument attribute (lowered by `src/transforms/lib/DistributionLoweringPass.cpp`), not an op; nothing at the MLIR level checks its mesh axis names against the active `MeshSpec` |
+| Shard divisibility (`B % dp == 0`) | PY-DT | `shape.py::check_shard`; `tests/unit/test_shape_system_foundation.py` | **MLIR-PASS** — `DistributionLoweringPass` does not check divisibility of `tessera.shard` attributes; today the check fires before Graph IR emission |
+| Layout cast insertion (producer/consumer disagreement) | PY (frontend), MLIR-PASS | `compiler/graph_ir.py` inserts `layout_cast` ops; `src/transforms/lib/LayoutLegalityPass.cpp` (`--tessera-layout-legality`, §11.2 item 3) | Partial — accept-set rules exist for selected consumer ops only (§11.2 item 3); identity-cascade folding planned |
 | NumPy-style broadcasting | PY (op shape rule) | `shape.py::broadcast_shape`; verified via Graph IR `inferElementwise` | **MLIR-VERIFIER** — elementwise ops do not have an ODS verifier for the broadcasting rule (only inference); per-op `verify()` would catch shape mismatches at parse time |
-| Matmul inner-dim equality | PY (op rule) + MLIR-PASS | `shape.py::matmul_shape`; `ShapeInferencePass.cpp::inferMatmul` | **MLIR-VERIFIER** — `tessera.matmul` ODS does not have a custom verifier; inference catches mismatches but only when both shapes are concrete |
-| FlashAttn shape rule | PY (op rule) + MLIR-PASS | `inferFlashAttn` in ShapeInferencePass | **MLIR-VERIFIER** — same gap pattern as matmul |
-| Reshape / Transpose / Concat / Slice / Reduce shape rules | MLIR-PASS | 8 per-op rules in `ShapeInferencePass.cpp` (inferReshape, inferTranspose, inferConcat, inferSlice, inferReduce) | **MLIR-VERIFIER** for per-op verifiers; inference handles correctness today |
+| Matmul inner-dim equality | PY (op rule) + MLIR-PASS + MLIR-VERIFIER | `shape.py::matmul_shape`; `ShapeInferencePass.cpp::inferMatmul`; `MatmulOp::verify()` in `src/compiler/ir/TesseraOps.cpp` | Static extents only — `MatmulOp::verify()` rejects mismatched contracting dims when both are static; dynamic extents are not checked |
+| FlashAttn shape rule | PY (op rule) + MLIR-PASS + MLIR-VERIFIER | `inferFlashAttn` in ShapeInferencePass; `FlashAttnOp::verify()` in `TesseraOps.cpp` (row-LSE shape, target-aware `head_dim`, §11.2 item 4) | Static extents only, as for matmul |
+| Reshape / Transpose / Concat / Slice / Reduce shape rules | MLIR-PASS | per-op rules in `ShapeInferencePass.cpp` (inferReshape, inferTranspose, inferConcat, inferSlice, inferReduce) | **MLIR-VERIFIER** for per-op verifiers; inference handles correctness today |
 | Tile fragment size legality (WGMMA/MFMA/TCgen05) | MLIR-PASS + backend lit | Typed Tile→NVIDIA and Tile→ROCm fixtures under the backend-owned lit suites; FileCheck on Target IR / NVVM / ROCDL contracts | **MLIR-VERIFIER** — `tile.mma` does not enforce every fragment-size rule independent of target; architecture-owned lowering remains the legality gate |
 | Shared-memory bank/vector alignment | structural verifier (lit) | Tile IR lowering tests for `tile.alloc_shared` | **MLIR-PASS** — no dedicated alignment legality pass; falls out of lowering failure if violated |
-| Async copy / TMA / mbarrier memory-model legality | PY-VERIFIER + lit | `compiler/memory_verifier.py` (Sprint M4 + M5); `tests/unit/test_memory_verifier.py` (46 tests) | None — memory-model verifier covers the Tile IR layer; backend lowering is Phase G/H |
+| Async copy / TMA / mbarrier memory-model legality | PY-VERIFIER + lit | `compiler/memory_verifier.py` (Sprint M4 + M5); `tests/unit/test_memory_verifier.py` | None — memory-model verifier covers the Tile IR layer; backend lowering is Phase G/H |
 | Runtime shape witnesses | RT-WITNESS | `shape.py::RuntimeShapeWitness`; `JitFn.__call__` re-runs ConstraintSolver | None — the witness contract IS the runtime check |
 
 ### 11.2 Summary of gaps
@@ -571,6 +579,18 @@ items:**
    packed-rhs).  Identity-cascade folding remains a comment-only
    placeholder.  **Status: skeleton + 2 rules closed; identity-cascade
    folding planned.**
+
+   > **Note 2026-10-24.** The pass has grown past the two rules above. Per
+   > `tessera-opt --help` and `LayoutLegalityPass.cpp`, the producer/consumer
+   > rule now also covers `tessera.batched_gemm`, `tessera.conv2d_nhwc`
+   > (`nhwc`), `tessera.flash_attn` (`bhsd`) and last-axis `tessera.reduce`
+   > (`row_major`), and a scale-layout rule
+   > (`LAYOUT_LEGALITY_SCALE_WITHOUT_LAYOUT`) covers `tessera.grouped_gemm` /
+   > `tessera.moe_swiglu_block`. It is wired into the named lowering
+   > pipelines (since 2026-06-17; `tests/tessera-ir/phase2/layout_legality_in_pipeline.mlir`,
+   > `tests/unit/test_layout_legality_pipeline_wiring.py`), paired with
+   > `LayoutAssignmentPass`. Identity-cascade folding is still not
+   > implemented.
 4. **Target-aware verifier on the canonical attention/MMA op family.**
    **Sprint V3 closure (2026-05-22):** `FlashAttnOp::verify()` extended
    to walk the parent op chain for a `tessera.target_sm` attribute and
@@ -585,6 +605,13 @@ items:**
    next slice.  **Status: head_dim ceiling closed; tile-shape legality
    planned.**
 
+   > **Note 2026-10-24.** The `tessera_attn.scaled_dot_product` slice
+   > landed as Sprint V6c: a per-SM `tile_q` × `tile_kv` ceiling,
+   > exercised by
+   > `tests/tessera-ir/phase3/sprint_v6c_scaled_dot_product_target_aware.mlir`.
+   > `tile.mma` fragment-shape legality remains owned by architecture
+   > lowering (§11.1).
+
 ### 11.3 Active evidence pointers
 
 Specs that claim stronger MLIR-verifier coverage should cite tests; the
@@ -596,7 +623,7 @@ following are the canonical evidence files:
 | Python shape objects + helpers | `python/tessera/shape.py`; `tests/unit/test_shape_system_foundation.py` |
 | MLIR per-op shape inference | `src/compiler/diagnostics/ShapeInferencePass.cpp`; `tests/unit/test_shape_inference.py` |
 | Dynamic shape call-time enforcement | `python/tessera/compiler/jit.py::JitFn._enforce_call_time_constraints`; `tests/unit/test_dynamic_shapes.py` |
-| Memory-model verifier (Tile IR layer) | `python/tessera/compiler/memory_verifier.py`; `tests/unit/test_memory_verifier.py` (46 tests) |
+| Memory-model verifier (Tile IR layer) | `python/tessera/compiler/memory_verifier.py`; `tests/unit/test_memory_verifier.py` |
 | Runtime shape witnesses | `python/tessera/shape.py::RuntimeShapeWitness`; `tests/unit/test_shape_system_foundation.py` |
 
 A primitive that claims a contract not in §11.1 above must add a row

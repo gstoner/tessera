@@ -1,7 +1,7 @@
 ---
 status: Informative
 classification: Architecture
-last_updated: 2026-05-20
+last_updated: 2026-10-24
 ---
 
 # Stencil Materialization + 2D Local-Window Lowering — Design
@@ -14,6 +14,14 @@ last_updated: 2026-05-20
 >
 > Conventions: each section ends with "What's shipped today" so the doc
 > stays honest as work lands incrementally.
+>
+> **Note 2026-10-24:** re-checked against the tree. The Ask 3 walker landed
+> as its own pass (`HaloMeshIntegrationPass`, below), the materialize pass is
+> now rank-N, and `halo.exchange` has a structural transport lowering
+> (`-tessera-halo-transport-lower`). Each section carries a dated note;
+> device execution status lives in
+> `docs/audit/generated/runtime_execution_matrix.md` and
+> `docs/audit/generated/domain_proof_ladder.md`, not here.
 
 ---
 
@@ -41,7 +49,7 @@ into the output.
 
 **Pipeline placement:** runs *after* `stencil-lower` + `bc-lower`, *before*
 any target lowering. The materialized loops are still in the
-function-level `tensor` domain — `TileToX86Pass` / `TileToGPUPass` /
+function-level `tensor` domain — `TileToX86Pass` / GPU and other
 target-specific lowering picks them up and re-tiles for vectors / TMA /
 shared-memory tiles.
 
@@ -92,6 +100,10 @@ extract uses the per-axis fixed indices; neumann OOB adds the BC offset.
   periodic+dirichlet).
 - Python guard wires structural + behavioral contract (skipped when
   binary is stale, per the project convention).
+- **Update 2026-10-24:** the pass is now rank-N (1..6; the cap is a
+  sanity guard) through a recursive `buildLoopNest` helper, with a rank-3
+  fixture `tests/tessera-ir/phase7/neighbors_stencil_materialize_rank3.mlir`.
+  Reflect is still the first-cut clamp.
 
 ---
 
@@ -158,6 +170,21 @@ Two coordinated changes:
   stencil: window=(rh, rw) is the halo width. See Ask 4 for the
   registry-side attribute that drives this.
 
+> **Note 2026-10-24:** the walker landed as a separate Neighbors pass,
+> `src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/HaloMeshIntegrationPass.cpp`
+> (`-tessera-halo-mesh-integration`), not as an extension of
+> `DistributionLoweringPass`; there is no `HaloMeshReconcile.{h,cpp}`. The
+> mesh axis policy is a pass option, `mesh-axis-policy=open|periodic`
+> (default `open`), not an attribute on `schedule.mesh.define`. Semantic
+> divergence from the matrix above: a periodic BC on an open mesh axis sets
+> a `mesh.bc_conflict` attribute and emits a **warning**, not a
+> `ConstraintError`; consumers may elevate it. `attn_local_window_2d` is
+> handled by the same pass (fixture
+> `tests/tessera-ir/phase7/halo_mesh_integration_attn_local_window_2d.mlir`).
+> `-tessera-halo-transport-lower` (`HaloTransportLowerPass.cpp`) now expands
+> each `halo.exchange` into `halo.pack` / `halo.transport` / `halo.unpack`
+> per (axis, side) — structural ops; it is not a transport execution claim.
+
 ### What's shipped today
 
 - Lit fixture demonstrating the post-walker behaviour against a
@@ -167,6 +194,8 @@ Two coordinated changes:
   numerical correctness of asks 1+2+4).
 - Python guard sentinels the fixture shape so the doc and the lit
   fixture cannot drift apart.
+- **Update 2026-10-24:** the C++ walker is no longer staged — see the
+  note above.
 
 ---
 
@@ -249,6 +278,13 @@ applies. Three registry-level changes:
 - `metadata["halo_aware"]` annotation + `_HALO_AWARE_OPS` set landed.
 - Sharding-rule status stays `partial` (intentional — the C++ walker
   is staged behind this doc until a hardware lane exercises it).
+- **Update 2026-10-24:** `_HALO_AWARE_OPS` is a dict, not a set: it maps
+  `attn_local_window_2d` to `halo_width_from_kwarg="window"`,
+  `halo_width_attr="attn.window"` and `spatial_axes="2,3"`, copied into
+  `metadata["halo_aware"]`. The registry now records
+  `sharding_rule: complete` for `attn_local_window_2d` (its
+  `backend_kernel` axis stays `partial`); that is a registry claim, not a
+  hardware result.
 
 ---
 
@@ -273,4 +309,6 @@ applies. Three registry-level changes:
   remains the long-form contract; this doc is the *executed* slice.
 - Gap 5 (async halo transport) still deferred. The materialized loops
   and inserted halo.exchange ops are the consumers it will eventually
-  lower.
+  lower. (2026-10-24: the structural pack/transport/unpack expansion
+  exists — see the Ask 3 note; real transport execution is not claimed
+  here.)

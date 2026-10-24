@@ -2,7 +2,7 @@
 status: Informative
 classification: Guide
 authority: Debugging workflows; defers stable diagnostics to docs/guides/Tessera_Error_Handling_And_Diagnostics_Guide.md
-last_updated: 2026-05-06
+last_updated: 2026-10-24
 ---
 
 # Tessera Debugging Tools Guide
@@ -77,7 +77,13 @@ Recognized stages: `graph`, `schedule`, `tile`, `target`. Aliases that match
 are accepted. Unknown values are silently dropped — never crashes user code.
 
 The implementation lives at `python/tessera/debug_env.py` and is wired into
-`compiler/jit.py.runtime_artifact()`.
+`JitFn._build_runtime_artifact()` in `compiler/jit.py` (reached through
+`runtime_artifact()`).
+
+This stage-list scheme (`TESSERA_DEBUG_IR=<stages>` + `TESSERA_DEBUG_DUMP_DIR`)
+is separate from the compiler-bundle switch in Section 6
+(`TESSERA_DEBUG_IR=1` + `TESSERA_DUMP_DIR`, read by `compiler/driver.py`): the
+value `1` is not a stage name, so it is ignored by the per-stage dumper.
 
 ## 2. Graph Inspection
 
@@ -215,11 +221,20 @@ print(result.format())
 ```
 
 The checker intentionally validates scalar-valued functions. For large models,
-wrap a focused subgraph and reduce to a scalar loss. Future compiler
-integration should add:
+wrap a focused subgraph and reduce to a scalar loss.
+
+Two stronger checks sit beside it in `tessera.debug`:
+`check_grad_directional(fn, inputs, directional_derivative, probes=3)` compares
+a supplied `f'(x)[v]` against a central difference along random directions, and
+`check_order_of_accuracy(...)` measures the finite-difference convergence rate,
+which catches a derivative that is wrong by a constant factor and would pass a
+loose tolerance. `fd_step(x)` gives the scale-aware step both use by default.
+
+Future compiler integration should add:
 
 - `backward(wrt="weights" | "arch")` agreement checks.
-- Custom VJP/JVP validation.
+- Custom VJP/JVP validation wired to registered rules (the directional
+  checker accepts any callable today).
 - Distributed gradient all-reduce determinism checks.
 - Gradient logging by tensor name and mesh axis.
 
@@ -303,6 +318,9 @@ The current Python foundation is in `python/tessera/debug.py`:
 - `save_replay_manifest(path, value=None, **metadata)`
 - `replay_capture(value=None, **metadata)`
 - `check_grad(fn, inputs, analytic_grads=...)`
+- `check_grad_directional(fn, inputs, directional_derivative, probes=3)`
+- `check_order_of_accuracy(fn, inputs, directional_derivative, scheme="central")`
+- `fd_step(x)`
 - `check_determinism(fn, runs=5)`
 
 The command foundation is in `python/tessera/cli/mlir.py` and is installed as:

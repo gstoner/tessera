@@ -2,7 +2,7 @@
 status: Normative (live specification)
 classification: Spec
 authority: Defines the Clifford / geometric-algebra primitive surface across Tessera IR levels
-last_updated: 2026-05-17
+last_updated: 2026-10-24
 ---
 
 # Tessera Clifford / Geometric Algebra Specification
@@ -283,9 +283,18 @@ Passes:
   rotor-sandwich op when the rotor matches.
 - `tessera-clifford-grade-fusion` — fuses grade projections into producer
   metadata so later expansion emits only requested output grades.
-- `tessera-clifford-expand-product-table` — lowers rank-1 v1
-  `geo_product` ops through compile-time Cayley tables into tensor extract,
-  arithmetic, and tensor construction operations.
+- `tessera-clifford-expand-product-table` — lowers the product family
+  (`geo_product`, `wedge`, `left_contract`, `inner`, `norm`, `reverse`,
+  `grade_involute`, `conjugate`, `hodge_star`, `grade`, and
+  `rotor_sandwich` by rewrite) through compile-time Cayley tables into
+  tensor extract, arithmetic, and tensor construction operations. Rank-1
+  operands are the single multivector; since 2026-09-16 static batched
+  `[..., dim]` operands lower to an `scf.for` nest over the leading axes,
+  and dynamic extents fail closed.
+
+The passes are also registered in `tessera-opt` when
+`TESSERA_BUILD_CLIFFORD_BACKEND=ON`, and `ts-clifford-opt` exposes the
+order below as the `tessera-clifford-pipeline` alias.
 
 The canonical pipeline order is:
 
@@ -307,9 +316,14 @@ Clifford summary is:
 | Python reference | implemented | `python/tessera/ga/`, `python/tessera/autodiff/geometric/` |
 | MLIR dialect and lit fixtures | implemented / lit-testable | `src/solvers/clifford/` |
 | Backend manifest | implemented | `python/tessera/compiler/backend_manifest.py` |
-| Apple GPU native path | hardware-runtime for all 17 registered GA primitives as fused MSL kernels | `src/compiler/codegen/Tessera_Apple_Backend/` and focused Apple GPU tests |
-| x86 / Apple CPU native GA kernels | reference-first | Python reference path; native batched kernels are follow-up work |
-| NVIDIA / ROCm GA kernels | planned | No v1 hardware-runtime claim |
+| Apple GPU native path | backend-manifest `fused` for the registered GA primitive set as hand-written MSL kernels in the runtime | `_CLIFFORD_APPLE_GPU_FUSED` in `backend_manifest.py`, `src/compiler/codegen/Tessera_Apple_Backend/runtime/apple_gpu_runtime.mm`, focused Apple GPU tests |
+| CPU MLIR/LLVM JIT | executable row `cpu_clifford_llvm_jit` (product family through GradeFusion + ExpandProductTable, f32) | `docs/audit/generated/runtime_execution_matrix.md` |
+| x86 AVX-512 | executable row `x86_clifford_compiled` (Cl(3,0) bilinear products, f32) | `docs/audit/generated/runtime_execution_matrix.md` |
+| ROCm / NVIDIA sm_120 GA kernels | executable rows `rocm_clifford_compiled`, `rocm_clifford_native_compiled`, `nvidia_clifford_native_compiled`; per-device scope is what each row states | `docs/audit/generated/runtime_execution_matrix.md`, `python/tessera/compiler/native_clifford_gpu.py` |
+
+Per-domain native row totals live in
+[`docs/audit/generated/domain_proof_ladder.md`](../audit/generated/domain_proof_ladder.md);
+do not copy them here.
 
 Backend contract:
 
@@ -318,8 +332,9 @@ Backend contract:
 - Hardware-runtime status requires a concrete backend build and test path.
 - Quantitative performance claims require benchmarks in addition to correctness
   tests.
-- For Apple GPU, the current Clifford manifest maps the full 17-op GA primitive
-  set to fused MSL kernels. `clifford_geometric_product` and
+- For Apple GPU, the current Clifford manifest maps the full GA primitive
+  set to fused MSL kernels. The execution matrix carries no dedicated
+  Apple GPU Clifford row, so treat this as a manifest/runtime claim. `clifford_geometric_product` and
   `clifford_rotor_sandwich` carry fp32/fp16/bf16; the other GA kernels are fp32
   in v1.
 
@@ -343,6 +358,10 @@ performance:
   at parity with the tensor autodiff path.
 - Native NVIDIA / ROCm GA kernels.
 - Symbolic exterior calculus or exact manifold integration.
+
+> **Note 2026-10-24:** native ROCm and sm_120 GA product kernels have
+> landed since this list was written (§7 rows). This v1 scope list is left
+> as specified; read §7 and the execution matrix for what runs.
 
 ## Appendix A — References
 

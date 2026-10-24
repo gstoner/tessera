@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: High-level DSL and multi-level IR specification; defers public Python symbols to docs/spec/PYTHON_API_SPEC.md and backend ABI details to docs/spec/RUNTIME_ABI_SPEC.md
-last_updated: 2026-05-06
+last_updated: 2026-10-24
 ---
 
 # Tessera Language And IR Specification
@@ -68,6 +68,15 @@ FP8/FP6, INT8, FP16, BF16, TF32, and FP64 as Tensor Core precision families,
 with FP64, FP32, INT32, FP16, and BF16 listed for CUDA-core execution. Tessera
 therefore treats `nvfp4`, `fp4_e2m1`, `fp6_e2m3`, and `fp6_e3m2` as standard
 low-precision dtype names, while exact bit encodings remain target-specific.
+
+> **Note 2026-10-24.** The scalar terminal list above diverges from the
+> canonical dtype set in `python/tessera/dtype.py` /
+> `docs/reference/tessera_tensor_attributes.md` (Decision #15a, which wins):
+> `tf32` is rejected as a storage dtype there (model it as
+> `numeric_policy.math_mode="tf32"` on `fp32`). `uint64`/`uint32`/`uint16`/
+> `uint8` are reserved names whose status is `planned_gated`, not
+> first-class. The terminal list is left as specified pending a spec
+> decision on `tf32`.
 
 Compound types:
 
@@ -184,18 +193,19 @@ NumericPolicy(storage, accum, rounding, scale, quant_axis, deterministic)
 KVCacheType(shape, dtype_policy, eviction, page_size)
 ```
 
-Selected operations:
+Selected operations (the Graph IR dialect is `tessera`; op names are
+`tessera.<op>` as declared in `src/compiler/ir/TesseraOps.td`):
 
 ```mlir
-%y = tessera.graph.matmul %a, %b
-%p = tessera.graph.softmax %x {axis = -1}
-%f = tessera.graph.fft %x
-%c = tessera.graph.kv_cache.create {eviction = "rolling_window"}
-%o = tessera.graph.flash_attn %q, %k, %v, %c
-%r = tessera.graph.all_reduce %x {axis = "dp", op = "sum"}
-%a = tessera.graph.arch.parameter {size = 4, dtype = "fp32"}
-%g = tessera.graph.arch.gumbel_softmax %a {temperature = 4.0}
-%m = tessera.graph.arch.mixed %x, %g {candidates = ["flash", "performer", "gmlp"]}
+%y = tessera.matmul %a, %b
+%p = tessera.softmax %x {axis = -1}
+%f = tessera.fft %x
+%c = tessera.kv_cache.create {eviction = "rolling_window"}
+%o = tessera.flash_attn %q, %k, %v, %c
+%r = tessera.all_reduce %x {axis = "dp", op = "sum"}
+%a = tessera.arch.parameter {size = 4, dtype = "fp32"}
+%g = tessera.arch.gumbel_softmax %a {temperature = 4.0}
+%m = tessera.arch.mixed %x, %g {candidates = ["flash", "performer", "gmlp"]}
 ```
 
 Verification:
@@ -264,25 +274,37 @@ tile.wait_async {stage = 0}
 %ok = tile.mbarrier.try_wait %bar, %tok
 %mm = tile.mma %a, %b, %c {accum = "fp32"}
 tessera_attn.online_softmax %scores {policy = "safe"}
-tessera.queue.create {queue_id = 0, depth = 2}
-tessera.queue.push {queue_id = 0, stage = 0}
-tessera.queue.pop {queue_id = 0, stage = 0}
-tessera.queue.barrier {queue_id = 0, scope = "warpgroup"}
 tile.barrier
 ```
 
-> **Note (2026-08-10).** The `tessera.queue.{create,push,pop,barrier}` forms
-> above are the **Python tile IR reference spine's textual vocabulary**
-> (emitted by `python/tessera/compiler/tile_ir.py` with `queue_id`/`depth`/
-> `stage`/`scope` attributes and verified by `tile_ir.py` +
-> `memory_verifier.py`). They are not an MLIR dialect — the `tessera.queue`
-> MLIR dialect was deleted 2026-08-10 (Decisions #29/#31). On the MLIR side,
-> `WarpSpecializationPass` synchronizes warp roles through
+> **Note (2026-08-10, updated 2026-10-24).** The `tessera.queue.*` forms that
+> used to appear in this listing are gone from both surfaces. The `tessera.queue`
+> MLIR dialect was deleted 2026-08-10 (Decisions #29/#31), and the Python Tile
+> IR verifier (`python/tessera/compiler/tile_ir.py`) now rejects any
+> `tessera.queue.*` op as a forbidden legacy compatibility op
+> (`TILE_IR_LEGACY_QUEUE`). Async ordering is expressed by SSA token lineage:
+> on the MLIR side `WarpSpecializationPass` synchronizes warp roles through
 > `!tile.pipeline_state` + `!tile.async_token` SSA chains; see
 > `LOWERING_PIPELINE_SPEC.md` §3.7.
 
+> **Note 2026-10-24.** The MLIR Tile dialect
+> (`src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td`) spells the
+> transaction-barrier ops `tile.mbarrier.init` (with `slots` / `phase_bits`
+> attributes, not `tile.mbarrier.alloc` with `count` / `scope`),
+> `tile.mbarrier.arrive_expect_tx` (`slot`, `bytes`; no `semantics` / `scope`
+> attribute), `tile.mbarrier.try_wait`, and `tile.mbarrier.wait`. It has no
+> `tile.barrier`; execution barriers are `tile.cta_sync` (CTA-wide) and
+> `tile.s_barrier` (workgroup/wave). `tile.alloc_shared` is recognized by
+> name in the arena/reuse passes (`TileBufferArenaPass`,
+> `TileBufferReusePass`) rather than declared in that ODS file. The listing
+> above is kept as the specified vocabulary; the release/scope semantics it
+> states are not carried as attributes by the current MLIR ops.
+
 Hopper forward rule: mbarrier transaction barriers are available for NVIDIA
-targets with `isa >= SM_90`. They are required for TMA-style asynchronous copy
+targets whose target profile carries the `mbarrier_arrive_tx` feature
+(sm_90, sm_100, and sm_120 in `python/tessera/compiler/capabilities.py`).
+Gate on that feature flag, not on an `isa >= SM_90` ordering, which reads as
+excluding sm_120 (CLAUDE.md Decision #1, corrected 2026-08-30). They are required for TMA-style asynchronous copy
 completion tracking and may lower to PTX `mbarrier.*` primitives.
 
 Tile verification:
@@ -311,7 +333,9 @@ AMD lowering includes:
 MFMA/WMMA intrinsics, LDS operations, DS swizzles, cache controls
 ```
 
-Apple lowering includes hardware-free Target IR artifacts for CPU and GPU:
+Apple lowering includes toolchain-free Target IR artifacts for CPU and GPU
+(Decision #19: parseable and verifiable without the vendor toolchain or
+device; ops may name the machine):
 
 ```text
 tessera_apple.cpu.accelerate_gemm, tessera_apple.cpu.vector_reduce,
@@ -319,10 +343,11 @@ tessera_apple.cpu.vector_op, tessera_apple.gpu.metal_kernel,
 tessera_apple.gpu.dispatch, tessera_apple.diagnostic
 ```
 
-ROCm lowering includes hardware-free Target IR artifacts:
+ROCm lowering includes toolchain-free Target IR artifacts (MFMA is CDNA-only;
+the fleet's RDNA parts use `tessera_rocm.wmma`):
 
 ```text
-tessera_rocm.mfma, tessera_rocm.async_copy, tessera_rocm.wait,
+tessera_rocm.mfma, tessera_rocm.wmma, tessera_rocm.async_copy, tessera_rocm.wait,
 tessera_rocm.elementwise, tessera.target.diagnostic
 ```
 
@@ -373,7 +398,7 @@ module demo {
 Graph IR:
 
 ```mlir
-%C = tessera.graph.matmul %A, %B
+%C = tessera.matmul %A, %B
   : (tensor<1024x1024xbf16>, tensor<1024x1024xbf16>) -> tensor<1024x1024xbf16>
 ```
 

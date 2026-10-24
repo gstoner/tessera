@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Canonical error handling and diagnostics guidance; defers runtime status details to docs/spec/RUNTIME_ABI_SPEC.md and Python symbols to docs/spec/PYTHON_API_SPEC.md
-last_updated: 2026-04-28
+last_updated: 2026-10-24
 ---
 
 # Tessera Error Handling And Diagnostics Guide
@@ -93,6 +93,17 @@ Future Python API aliases may add more specific names such as `CompileError`,
 `LaunchError`, `DistributedError`, `NumericsError`, `AutotuneError`, and
 `TimeoutError`; these should map back to the same stable codes.
 
+Related code families live beside this enum: JIT-level outcomes are
+`tessera.compiler.diagnostics.JitDiagnosticCode` (for example
+`JIT_UNLOWERED_OP_NATIVE_TARGET`), and `tessera.compiler.diagnostic_codes` is
+the central registry that names every `E_*`, `JIT_*`, `TS_ERR_*`, and
+MLIR-side code under one drift gate (`tests/unit/test_diagnostic_code_registry.py`).
+A program that ran on a fallback instead of its native path records a
+`tessera.compiler.fallback.FallbackReason` (for example
+`FRONTEND_UNLOWERED_CALL`, recorded when the Graph IR front end dropped a call
+and the original Python function ran instead); a fallback reason is a
+`WARNING`-class outcome, not an error code.
+
 Example:
 
 ```python
@@ -129,6 +140,11 @@ if (!s.ok()) {
 
 Python runtime wrappers map non-success statuses to `TesseraRuntimeError` with
 the failing function name and `TsrStatus`.
+
+> **Note 2026-10-24:** the `Status` / `TesseraException` C++ surface above is
+> specified, not implemented — no `TesseraException` class exists under `src/`
+> today. The implemented low-level surface is the C ABI status code
+> (`TsrStatus`, mirrored in `tessera.runtime`) and `TesseraRuntimeError`.
 
 ## Compile-Time Errors
 
@@ -242,6 +258,24 @@ TESSERA_CACHE_DIR=/path/to/cache
 | `TESSERA_DISABLE_FUSION=1` | Dev-only switch to isolate fusion problems. |
 | `TESSERA_DISABLE_PIPELINE=1` | Dev-only switch to isolate pipeline scheduling. |
 | `TESSERA_DISABLE_TENSORCORES=1` | Dev-only switch to isolate MMA/tensor-core lowering. |
+
+> **Note 2026-10-24 — implementation status of the switches and helpers in
+> this guide.** Implemented today: `TESSERA_DEBUG_IR` (accepts a stage list
+> such as `graph,schedule` and needs `TESSERA_DEBUG_DUMP_DIR`; see
+> `tessera.debug_env.dump_ir`), `TESSERA_DUMP_STATE=1` (compiler driver),
+> `TESSERA_CACHE_DIR` (autotune cache and runtime build cache),
+> `tessera-mlir model.py --emit=tile-ir --debug`, `tessera-prof --trace`, and
+> `ErrorReporter.check_shape`. `TESSERA_LOG_LEVEL`, `TESSERA_KEEP_PTX`, and
+> `TESSERA_PROF_TRACE` are only recorded in the `tessera.debug` replay
+> environment snapshot; no code path reads them to change behavior. Not
+> implemented: `TESSERA_DISABLE_FUSION`, `TESSERA_DISABLE_PIPELINE`,
+> `TESSERA_DISABLE_TENSORCORES`, `TESSERA_KERNEL_ASSERT`, `TESSERA_DIST_DEBUG`,
+> `tessera.logging`, a `tessera-tune` CLI, `tessera-prof --crash-dump`, and the
+> `graph.dump_ir` / `graph.trace` / `dist.inspect` / `dist.profile` /
+> `op.check_numerics` / `numerics.*` helpers shown in the Diagnostics blocks.
+> `tessera.debug.check_determinism` exists for the determinism workflow. The
+> specified semantics above are unchanged; treat the unimplemented entries as
+> the contract an implementation should honor.
 
 ## Recommended Debugging Workflow
 

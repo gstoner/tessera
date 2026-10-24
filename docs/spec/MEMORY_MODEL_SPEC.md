@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Memory ordering, visibility, synchronization, and determinism model
-last_updated: 2026-05-22
+last_updated: 2026-10-24
 ---
 
 # Tessera Memory Model Specification
@@ -37,8 +37,8 @@ that these three rows are now `structural verifier` with evidence.
 
 Implementation source:
 `python/tessera/compiler/memory_verifier.py::_verify_atomic`,
-`_verify_fence`, `_function_is_deterministic`. Locked by **19 new
-tests** in `tests/unit/test_memory_verifier.py` (46 total).
+`_verify_fence`, `_function_is_deterministic`. Locked by
+`tests/unit/test_memory_verifier.py`.
 
 ## 1. Memory Spaces
 
@@ -94,8 +94,12 @@ mbarrier.try_wait(token_or_parity)
 mbarrier.arrive_and_drop()
 ```
 
-Hopper forward rule: NVIDIA targets with `isa >= SM_90` support asynchronous
-transaction barriers for shared-memory block or cluster scope. Tessera models
+Hopper forward rule: NVIDIA targets whose target profile carries the
+`mbarrier_arrive_tx` feature (sm_90, sm_100, and sm_120 in
+`python/tessera/compiler/capabilities.py`) support asynchronous transaction
+barriers for shared-memory block or cluster scope. Gate on that feature flag,
+not on an `isa >= SM_90` ordering, which reads as excluding sm_120 (CLAUDE.md
+Decision #1, corrected 2026-08-30). Tessera models
 these as mbarriers. They may track both thread arrivals and asynchronous
 transaction byte counts, which is required for TMA-style producer/consumer
 pipelines.
@@ -241,6 +245,18 @@ tile.async_copy %global, %shared {bytes = 16384, completion = %tok}
 The consumer may read `%shared` only after `%ready` establishes completion for
 the same mbarrier phase. The byte count must match the copied region.
 
+> **Note 2026-10-24.** The MLIR Tile dialect
+> (`src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td`) spells this
+> sequence differently from the example: the barrier is created by
+> `tile.mbarrier.init` (`slots` / `phase_bits`, not `alloc` with
+> `count` / `scope`); `tile.mbarrier.arrive_expect_tx` takes `slot` and
+> `bytes` and returns a `!tile.mbarrier_token`, with no `semantics` / `scope`
+> attribute; waits are `tile.mbarrier.try_wait` / `tile.mbarrier.wait`; and
+> the TMA copy is `tile.tma.copy_async`, bound to an SSA mbarrier. The
+> release/block-scope ordering the example states is therefore implied by the
+> op, not carried as an attribute. The example is kept as the specified
+> model.
+
 ### 10.4 Deterministic Mesh Reduction
 
 ```python
@@ -279,7 +295,7 @@ deterministic mesh-reduction enforcement for native collectives.
 | Graph IR | Preserve memory effects, state/cache effects, collective ordering, and deterministic profile requirements. |
 | Schedule IR | Represent movement effects before lowering: prefetch, async copy, staging, overlap, memory space, and completion edges. |
 | Tile IR | Verify barriers, fences, mbarriers, shared-memory visibility, async-copy completion, alignment, and resource bounds. |
-| Target IR | Lower scopes/orders to backend primitives and reject unsupported target features such as mbarriers before SM_90. |
+| Target IR | Lower scopes/orders to backend primitives and reject unsupported target features, such as mbarriers on a target profile without the `mbarrier_arrive_tx` feature. |
 | Runtime | Establish stream/event/kernel/collective ordering and record replay metadata for deterministic profiles. |
 
 | Enforcement area | Current status | Evidence / next step |
@@ -290,7 +306,7 @@ deterministic mesh-reduction enforcement for native collectives.
 | Scoped atomic attribute validation (Sprint M5) | structural verifier | `_verify_atomic` validates 9 ops × 5 orders × 6 scopes per §3 + §5; `MEM_ATOMIC_INVALID_{OP,ORDER,SCOPE}`; tests in `test_memory_verifier.py` |
 | Fence scope attribute validation (Sprint M5) | structural verifier | `_verify_fence` validates the 6 canonical scopes per §3; `MEM_FENCE_INVALID_SCOPE`; tests in `test_memory_verifier.py` |
 | Deterministic profile reduction enforcement (Sprint M5) | structural verifier | `_verify_atomic` + `_function_is_deterministic` reject float atomic reductions under `deterministic=True` per §7; `MEM_DETERMINISTIC_NONDETERMINISTIC_REDUCTION`; tests in `test_memory_verifier.py` |
-| Backend lowering of atomics to PTX/HIP/Metal | planned | NVIDIA `atom.*` / `red.*` + ROCm flat/global/LDS atomics + Apple atomic intrinsics — Phase G/H gate |
+| Backend lowering of atomics to PTX/HIP/Metal | planned | NVIDIA `atom.*` / `red.*` + ROCm flat/global/LDS atomics + Apple atomic intrinsics — no lowering exists for the Tile-level atomic op the verifier checks (`tile.atomic` / `atomic`) |
 | Device-wide fence target capability gating | planned | add target capability checks + diagnostics for legality of `fence.device()` on each backend |
 | Complete happens-before race checking | planned | requires dataflow analysis; add Graph/Schedule/Tile verifier tests for illegal aliasing patterns |
 | Deterministic native mesh reductions (collective execution) | planned | add native NCCL/RCCL acceptance tests that verify stable reduction tree under `deterministic=True` |

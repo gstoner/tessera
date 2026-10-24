@@ -2,14 +2,16 @@
 status: Informative
 classification: Informative
 authority: Target IR usage examples; normative op semantics and ABI in docs/spec/TARGET_IR_SPEC.md and docs/spec/RUNTIME_ABI_SPEC.md
-last_updated: 2026-04-30
+last_updated: 2026-10-24
 ---
 
 > **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
+>
+> **Refreshed 2026-10-24:** op, pass, pipeline and `GPUTargetProfile` names below were re-checked against the code. Several MLIR snippets describe the original design rather than what the passes emit today; each such section now says so and names the real output. What actually executes on which device is recorded only in `docs/audit/generated/runtime_execution_matrix.md` — nothing in this guide is a device claim.
 
 # Tessera Target IR — Usage Guide
 
-Target IR is the **fourth and final layer** of the Tessera compilation pipeline. It receives Tile IR from the backend-specific lowering passes and emits vendor intrinsics — WGMMA/TMA/mbarrier for NVIDIA, MFMA/LDS for AMD, and AMX/AVX-512 function calls for x86. Programmers do not write Target IR directly; they write Python using `@tessera.jit` and the compiler produces Target IR.
+Target IR is the **fourth and final layer** of the Tessera compilation pipeline. It receives Tile IR from the backend-specific lowering passes and is expressed in one toolchain-free, contract-carrying dialect per backend — `tessera_nvidia`, `tessera_rocm`, `tessera_apple` and `tessera_x86` (Decision #19) — which then lowers to upstream NVVM / ROCDL / LLVM or to a declared runtime ABI call. The fleet's machine primitives are WGMMA/`mma.sync`/TMA/mbarrier for NVIDIA, WMMA for RDNA AMD parts (MFMA is CDNA-only and hardware-gated), simdgroup / Metal 4 `matmul2d` for Apple, and AVX-512 for x86 (AMX is a retired target). Programmers do not write Target IR directly; they write Python using `@tessera.jit` and the compiler produces Target IR.
 
 For normative op semantics, see [`docs/spec/TARGET_IR_SPEC.md`](../spec/TARGET_IR_SPEC.md).
 For the runtime C ABI that executes the compiled kernels, see [`docs/spec/RUNTIME_ABI_SPEC.md`](../spec/RUNTIME_ABI_SPEC.md).
@@ -29,19 +31,30 @@ Schedule IR (schedule.mesh.region, schedule.pipeline, ...)
      │  [TileIRLoweringPass → WarpSpecializationPass → AsyncCopyLoweringPass]
      ▼
 Tile IR     (tile.async_copy, tile.mma, tile.mbarrier.*, tessera_attn.*)
-     │  [NVWGMMALoweringPass → NVTMADescriptorPass → NVFlashAttnKernelEmitter]  ← NVIDIA
+     │  [lower-tile-to-nvidia → lower-tessera-nvidia-to-nvvm]                    ← NVIDIA (exact per-arch)
      │  [TileToX86Pass]                                                           ← x86
      ▼
-Target IR   (tessera.nvgpu.wgmma.*, tessera.tma.*, mbarrier.* → LLVM NVPTX)
-             (func.call @tessera_x86_amx_gemm_bf16 → x86 binary)
+Target IR   (tessera_nvidia.{wgmma,mma_sync,tcgen05_mma,tma_async_copy,mbarrier,...} → NVVM → PTX)
+             (func.call @tessera_x86_avx512_gemm_bf16 + tessera_x86.abi_call marker → x86 binary)
 ```
 
-The two named lowering pipelines are:
+The main named lowering pipelines (authoritative pass lists live in
+`python/tessera/compiler/pipeline_registry.py`, drift-gated against the C++
+registrations; `tessera-opt --help` lists what a given build registered):
 
 | Pipeline | Target | Passes |
 |----------|--------|--------|
-| `tessera-lower-to-x86` | x86 AMX/AVX-512 | EffectAnnotation → Canonicalize → Distribution → Tiling → TileToX86 |
-| `tessera-lower-to-gpu` | NVIDIA SM_90+ | EffectAnnotation → Canonicalize → Distribution → TileIRLowering → WarpSpecialization → AsyncCopyLowering → NVWGMMALowering → NVTMADescriptor → NVFlashAttnKernelEmitter |
+| `tessera-lower-to-x86` | x86 AVX-512 (AMX ops kept as IR contract only) | EffectAnnotation → Canonicalize → Distribution → layout / compute / IR-contract / symdim legality → Tiling → TileToX86 |
+| `tessera-lower-to-gpu` | NVIDIA generic Tile-level chain (sm_90 / sm_100 / sm_120) | EffectAnnotation → Canonicalize → Distribution → legality gates → TileIRLowering → WarpSpecialization → pipeline / warp-spec / barrier-reuse legality → AsyncCopyLowering → TMADescriptor → legality + tile-dataflow legality |
+| `tessera-lower-to-nvidia-sm{90,100,120}` | NVIDIA exact-arch Tile → `tessera_nvidia` → NVVM | `lower-tile-to-nvidia` → `lower-tessera-nvidia-to-nvvm` (sm_120 adds `convert-nvgpu-to-nvvm`) |
+| `tessera-lower-to-rocm` | AMD ROCm family pipeline (typed GEMM subset) | see the registry |
+| `tessera-lower-to-apple_{cpu,gpu}[-full,-runtime]` | Apple CPU (Accelerate) / GPU (Metal) | see the registry |
+
+`NVWGMMALoweringPass` (`--tessera-nvwgmma-lowering`), `NVTMADescriptorPass`
+(`--tessera-nvtma-descriptor`) and `NVFlashAttnKernelEmitter`
+(`--tessera-nvflash-attn-emitter`) are still registered as standalone passes
+and are what the examples below describe; they are no longer stages of
+`tessera-lower-to-gpu`.
 
 ---
 
@@ -68,7 +81,8 @@ def flash_attn_fwd(
     tessera.require(tessera.constraint.Divisible("D", 64))
     return tessera.ops.flash_attn(Q, K, V, causal=True)
 
-# x86 AMX/AVX-512 — uses tessera-lower-to-x86 (no target= → CPU path)
+# CPU — no target= records the tessera-lower-to-x86 alias; execution may stay
+# on the NumPy reference plan (see last_fallback_reason)
 @tessera.jit
 def cpu_gemm(A: tessera.Tensor["M", "K"], B: tessera.Tensor["K", "N"]):
     tessera.require(tessera.constraint.Divisible("K", 64))
@@ -82,56 +96,72 @@ print(flash_attn_fwd.graph_ir.to_mlir())
 
 | Parameter | Default | Notes |
 |-----------|---------|-------|
-| `isa` | required | `ISA.SM_80` / `SM_90` / `SM_100` |
+| `isa` | `ISA.SM_90` | `ISA.SM_80` / `SM_86` / `SM_89` / `SM_90` / `SM_100` / `SM_120` |
 | `warps_per_cta` | 4 | must be power of 2 |
-| `shared_mem_bytes` | SM default | override per-kernel |
+| `shared_mem_bytes` | `None` (SM default) | override per-kernel |
+| `prefer_ptx` | `True` | |
 | `pipeline_stages` | 2 | double-buffer depth |
 
-`.supports_wgmma` → `isa >= SM_90`. `.supports_tma` → `isa >= SM_90`.
+Feature properties read the per-SM feature table (`cuda_feature_status`), not
+an ISA ordering: `.supports_wgmma` is true on SM_90 / SM_100 only — consumer
+Blackwell **sm_120 has no `wgmma`** and uses `mma.sync` — and `.supports_tma`
+is true on SM_90 / SM_100 / SM_120.
 
 ---
 
 ## What Target IR Looks Like
 
-Target IR ops are MLIR operations in the `tessera.nvgpu.*`, `tessera.tma.*`,
-and `tessera.tcgen05.*` namespaces. They are produced by the lowering passes
-from Tile IR — not authored by hand.
+NVIDIA Target IR ops live in the `tessera_nvidia` dialect
+(`src/compiler/codegen/tessera_gpu_backend_NVIDIA/include/tessera/gpu/IR/TesseraNVIDIADialect.td`:
+`wgmma`, `mma_sync`, `wmma`, `tcgen05_mma`, `tmem_{alloc,load,store}`,
+`tma_async_copy`, `mbarrier`, `nvfp4_block_scale_mma`, `kernel_call`, …). They
+are produced by the lowering passes from Tile IR — not authored by hand. There
+are no `tessera.nvgpu.*`, `tessera.tma.*` or `tessera.tcgen05.*` dialects; the
+snippets in this section that use those spellings show the original design, and
+each says what the pass emits today.
 
 ### NVIDIA SM_90 (Hopper) — WGMMA + TMA
 
-`NVWGMMALoweringPass` converts `tile.mma` → `tessera.nvgpu.wgmma.mma_async`:
+`NVWGMMALoweringPass` converts `tile.mma` into a WGMMA backend call:
 
 ```mlir
 // tile.mma in Tile IR
 %fragC = tile.mma %fragA, %fragB, %fragC
            {m = 64, n = 256, k = 32, accum = "fp32"}
 
-// After NVWGMMALoweringPass — Target IR
-%c = tessera.nvgpu.wgmma.mma_async %desc_a, %desc_b, %c
-       {shape = [64, 256, 32], typeA = bf16, typeB = bf16, typeC = f32,
-        layoutA = "row", layoutB = "col"}
-     : (!llvm.ptr<shared>, !llvm.ptr<shared>,
-        !llvm.array<64 x f32>) -> !llvm.array<64 x f32>
-
-tessera.nvgpu.wgmma.wait_group.sync.aligned {pendings = 0}
+// After NVWGMMALoweringPass (sm >= 90) — what the pass emits today
+%c = func.call @tessera_nvidia_wgmma_mma_async_bf16_m64n64k16(...)
+       {tessera.nvidia.shape = "m64n64k16", tessera.nvidia.dtype_ab = "bf16",
+        tessera.nvidia.dtype_c = "f32"}
 ```
 
-`NVTMADescriptorPass` converts `tile.async_copy` → TMA descriptor setup + bulk copy:
+The pass replaces `tile.mma` with a `func.call` to a declared backend symbol
+(`..._f16_...` for f16 operands) carrying the shape and dtype contract as
+attributes; it does not emit `tessera_nvidia.wgmma`. Its gate is a numeric
+`sm >= 90` comparison, which would also admit sm_120 (no `wgmma`; see
+Decision #1's correction), so use it only for sm_90 / sm_100 — sm_120 kernels
+go through `tessera-lower-to-nvidia-sm120` instead.
+
+`NVTMADescriptorPass` stays in the Tile dialect: it deduplicates
+`tile.tma.descriptor` ops by `(src_ptr, tile_rows, tile_cols)`, hoists one
+descriptor per kernel to the preamble (Decision #9), and assigns mbarrier slots:
 
 ```mlir
-// tile.async_copy in Tile IR
-tile.async_copy %A_global, %A_shared {stage = 0, vector = 16}
+// Before
+%desc_q = tile.tma.descriptor(%Q) {tile_rows=64, tile_cols=64}
+tile.tma.copy_async %desc_q {mbarrier_slot=0}
 
-// After NVTMADescriptorPass — Target IR
-%desc = tessera.tma.create_descriptor %A_global
-          {dtype = bf16, rank = 2, swizzle = "128B",
-           l2_promotion = "128B", oob_fill = "zero"}
-
-tessera.tma.async_load %A_shared, %desc, %bar, [%coord_m, %coord_k]
-  {multicast_mask = 0 : i16}
+// After NVTMADescriptorPass — preamble mbarrier init + hoisted descriptor
+tile.mbarrier.init {slots=2, phase_bits=2}
+tile.tma.copy_async %Q_desc {mbarrier_slot=0, expect_tx=8192}
 ```
 
-mbarrier tracking (emitted by `NVFlashAttnKernelEmitter`):
+The `tessera_nvidia.tma_async_copy` / `tessera_nvidia.mbarrier` Target ops are
+reached through the exact per-arch pipelines.
+
+mbarrier tracking (original design sketch for `NVFlashAttnKernelEmitter`; the
+pass inserts the arrive/wait sequence between producer and consumer, and the
+`tessera.nvgpu.mbarrier.*` spellings below are not a registered dialect):
 
 ```mlir
 // Allocate one transaction barrier per pipeline stage
@@ -152,7 +182,10 @@ mbarrier tracking (emitted by `NVFlashAttnKernelEmitter`):
 The compiled kernel entry point follows this ABI:
 
 ```mlir
-// Emitted by NVFlashAttnKernelEmitter
+// Design sketch — NVFlashAttnKernelEmitter attaches launch bounds
+// (nvvm.maxntidx, nvvm.minctasm) and tessera.nvidia.kernel /
+// tessera.smem_bytes / tessera.tile_q / tessera.tile_kv / tessera.sm
+// attributes to a func.func rather than emitting a `kernel` op.
 kernel @flash_attn_fwd(
     %q_ptr  : !llvm.ptr<global>,   // BF16 Q tensor
     %k_ptr  : !llvm.ptr<global>,   // BF16 K tensor
@@ -176,8 +209,14 @@ shared-memory size must be explicit. Scalar uniforms are 32-bit or 64-bit.
 
 ### NVIDIA SM_100 (Blackwell) — tcgen05
 
+Datacenter sm_100 only (sm_120 has no tcgen05/TMEM) and hardware-gated: no
+fleet device. The registered ops are Tile `tile.tcgen05.mma` /
+`tile.tmem.*` and Target `tessera_nvidia.tcgen05_mma` /
+`tessera_nvidia.tmem_{alloc,load,store}`; the snippet below is the original
+design spelling.
+
 ```mlir
-// Blackwell TMEM MMA via tcgen05
+// Blackwell TMEM MMA via tcgen05 (design sketch)
 %tmem = tessera.tcgen05.alloc {cols = 128}
 
 tessera.tcgen05.mma.async %tmem, %desc_a, %desc_b, %instr_desc
@@ -187,28 +226,43 @@ tessera.tcgen05.mma.async %tmem, %desc_a, %desc_b, %instr_desc
 tessera.tcgen05.dealloc %tmem
 ```
 
-### x86 — AMX/AVX-512 Function Calls
+### x86 — AVX-512 Function Calls
 
-`TileToX86Pass` converts tiled Schedule IR matmul ops to C function calls:
+`TileToX86Pass` converts tiled matmul / `fused_epilogue` ops to C function
+calls, and marks each one with a registered `tessera_x86.abi_call` op so the
+delegated boundary stays visible in Target IR:
 
 ```mlir
 // After TileToX86Pass — Target IR
-func.call @tessera_x86_amx_gemm_bf16(%a_ptr, %b_ptr, %c_ptr, %M, %N, %K, %beta)
+func.call @tessera_x86_avx512_gemm_bf16(%a_ptr, %b_ptr, %c_ptr, %M, %N, %K, %beta)
   : (!llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64, f32) -> ()
+tessera_x86.abi_call {symbol = "tessera_x86_avx512_gemm_bf16", abi = "tessera_x86_c"}
 
 // With bias+GELU epilogue
 func.call @tessera_x86_epilogue_bias_gelu_fp32(%c_ptr, %bias_ptr, %M, %N)
   : (!llvm.ptr, !llvm.ptr, i64, i64) -> ()
 ```
 
-The x86 backend (`src/compiler/codegen/tessera_x86_backend/`) implements these
-functions with AMX BF16 tiles or AVX-512 fallback. This path is fully functional
-in Phase 2 and is the recommended CPU validation path before deploying to GPU.
+The `tessera_x86` dialect
+(`src/compiler/codegen/tessera_x86_backend/include/TesseraX86/IR/TesseraX86Ops.td`)
+also declares `avx512_gemm_microkernel`, `pack_b_panel`, `elementwise`,
+`kernel`, and the AMX `amx_tile_*` / `amx_dp*` ops. The pass can still select
+`tessera_x86_amx_gemm_bf16`, but AMX is a retired target with no fleet
+hardware; native x86 proof means AVX-512 on the Zen 5 hosts. See
+`docs/audit/backend/x86/todo.md` for what is proven.
 
 ### AMD ROCm — MFMA / WMMA
 
+ROCm Target IR is the `tessera_rocm` dialect (`TesseraROCMOps.td`: `mfma`,
+`wmma`, `wmma_gemm`, `scaled_wmma_gemm`, `swmmac`, `async_copy`, `wait`, …).
+The fleet's parts are RDNA and use **WMMA**: gfx1151 (RDNA 3.5, F16/BF16/IU8/IU4,
+no FP8/BF8 WMMA) and gfx1201 (RDNA4, adds FP8/BF8 and 2:4 sparse `swmmac`).
+Proof on one never transfers to the other. MFMA is CDNA-only and
+hardware-gated; the snippet below is an upstream-ROCDL illustration for a part
+the fleet does not have.
+
 ```mlir
-// MFMA lowering for gfx90a (MI210/250)
+// MFMA lowering for gfx90a (MI210/250) — CDNA, hardware-gated
 %result = rocdl.mfma.f32.32x32x8.f16 %a, %b, %c
             {cbsz = 0, abid = 0, blgp = 0}
           : (vector<4xf16>, vector<4xf16>, vector<32xf32>) -> vector<32xf32>
@@ -218,8 +272,9 @@ rocdl.ds.read.b128 %addr : (!llvm.ptr<3>) -> vector<4xi32>
 ```
 
 ROCm target support is split by architecture family. CDNA targets use MFMA
-shapes where the inventory reports them; RDNA4 / `gfx1200` is modeled as
-WMMA-only, including FP8/BF8 and planned-gated INT4 coverage. See
+shapes where the inventory reports them; RDNA4 (`gfx1200` / `gfx1201`) is
+modeled as WMMA-only, including FP8/BF8 and planned-gated INT4 coverage —
+`gfx1201` has device proof on Tajasarus, `gfx1200` has none. See
 `docs/backends/rocm/kernel-inventory.md` and
 `docs/audit/backend/BACKEND_AUDIT.md` for the current dtype and
 instruction matrix.
@@ -228,7 +283,7 @@ instruction matrix.
 
 ## Warp Specialization in the Pipeline
 
-`WarpSpecializationPass` (Phase 3) assigns warps to producer or consumer roles
+`WarpSpecializationPass` (Phase 3; the warp-role split targets sm_90 / sm_100) assigns warps to producer or consumer roles
 before the WGMMA and TMA passes run. This creates the double-buffering structure:
 
 ```mlir
@@ -259,18 +314,22 @@ boundaries — not advisory annotations. (Earlier revisions of this guide showed
 
 ## ISA Feature Matrix
 
-| Feature | SM_80 (A100) | SM_90 (H100) | SM_100 (B100) |
-|---------|-------------|-------------|--------------|
-| WGMMA | ❌ | ✅ | ✅ |
-| TMA / cp.async.bulk | ❌ | ✅ | ✅ |
-| mbarrier (transaction) | ❌ | ✅ | ✅ |
-| tcgen05 / TMEM | ❌ | ❌ | ✅ |
-| FP8 (e4m3 / e5m2) | ❌ | ✅ | ✅ |
-| NVFP4 | ❌ | ❌ | ✅ |
-| Fallback (WMMA + cp.async) | ✅ | ✅ | ✅ |
+| Feature | SM_80 (A100) | SM_90 (H100) | SM_100 (B100) | SM_120 (RTX 50) |
+|---------|-------------|-------------|--------------|----------------|
+| WGMMA | ❌ | ✅ | ✅ | ❌ (`mma.sync`) |
+| TMA / cp.async.bulk | ❌ | ✅ | ✅ | ✅ |
+| mbarrier (transaction) | ❌ | ✅ | ✅ | ✅ |
+| tcgen05 / TMEM | ❌ | ❌ | ✅ | ❌ |
+| FP8 (e4m3 / e5m2) | ❌ | ✅ | ✅ | ✅ |
+| NVFP4 | ❌ | ❌ | ✅ | ✅ (`mma.sync` block-scale) |
+| Fallback (WMMA + cp.async) | ✅ | ✅ | ✅ | ✅ |
 
-Below SM_90, `NVWGMMALoweringPass` falls back to `nvcuda::wmma` WMMA
-intrinsics and `cp.async` (non-bulk) copies.
+This is the ISA capability table in `python/tessera/compiler/gpu_target.py`,
+not an execution claim: sm_90 and sm_100 are hardware-gated (no fleet device),
+and sm_120 evidence comes from the RTX 5070 only.
+
+Below SM_90, `NVWGMMALoweringPass` falls back to a
+`tessera_nvidia_wmma_mma_sync_bf16_m16n16k16` backend call.
 
 ---
 
@@ -296,10 +355,14 @@ named pipeline flag:
 
 ```bash
 tessera-opt my_module.mlir \
-  --pass-pipeline="tessera-lower-to-gpu" \
+  --tessera-lower-to-gpu \
   --mlir-print-ir-after-all \
   -o my_module_target.mlir
 ```
+
+The exact per-arch `tessera-lower-to-nvidia-sm*` pipelines are only registered
+in a build with the NVIDIA dialect enabled (it is off by default); use
+`tessera-opt --help` to see what yours has.
 
 ---
 

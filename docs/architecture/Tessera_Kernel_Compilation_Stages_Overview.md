@@ -2,10 +2,10 @@
 status: Informative
 classification: Informative
 authority: Companion overview; defers to docs/spec/COMPILER_REFERENCE.md
-last_updated: 2026-05-06
+last_updated: 2026-10-24
 ---
 
-> **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`.
+> **Current-state note (2026-05-20):** This is historical architecture guidance. Phase labels below are design lineage, not current support claims. For implementation status, use `docs/spec/COMPILER_REFERENCE.md`, `docs/audit/generated/support_table.md`, `docs/audit/generated/e2e_op_coverage.md`, and `docs/spec/VALIDATION_SPINE.md`. For what executes on which device, use `docs/audit/generated/runtime_execution_matrix.md` (refreshed 2026-10-24).
 
 # Tessera Kernel Compilation Stages (Part 1: Concepts & Stage Overview)
 
@@ -21,7 +21,7 @@ Parses and verifies Python API annotations, shape constraints, dtype policies, a
 Normalizes loops, propagates masks, desugars epilogues. Prepares IR for optimization.
 
 ## Stage 3: Scheduling & Autotuning
-Injects tunable attributes (`tile_q`, `tile_kv`, stages, swizzle) and placement structure. Phase 5 planned Bayesian autotuning may choose optimized configs with constraints. Produces **Schedule IR**.
+Injects tunable attributes (`tile_q`, `tile_kv`, stages, swizzle) and placement structure. The Bayesian autotuner (`python/tessera/compiler/autotune_v2.py`, SQLite warm-start cache) may choose optimized configs with constraints. Produces **Schedule IR**.
 
 ## Stage 4: Lowering to Tile IR and Target IR
 Converts high-level ops into explicit target dialect:
@@ -36,13 +36,23 @@ Converts high-level ops into explicit target dialect:
 This section provides a worked GEMM/FlashAttention example and shows artifacts at each stage.
 
 ## Stage 5: Backend Lowering
-- NVIDIA path: Graph IR → Schedule IR → Tile IR → Target IR → NVVM/PTX → cubin
-- x86/AMX: Graph IR → Schedule IR → Target IR calls into AMX/AVX-512 backend functions
-- AMD/ROCm: verified hardware-free MFMA/async-copy/wait artifacts are
-  implemented; native runtime coverage remains backend-specific
+- NVIDIA path: Graph IR → Schedule IR → Tile IR → `tessera_nvidia` Target IR → NVVM/PTX
+  (exact per-arch `tessera-lower-to-nvidia-sm{90,100,120}`; sm_120 is the only
+  arch with fleet hardware)
+- x86: Graph IR → Schedule IR → Tile IR → `TileToX86Pass` → C ABI calls into the
+  AVX-512 backend functions, each marked by a `tessera_x86.abi_call` Target op
+  (AMX is a retired target)
+- AMD/ROCm: verified hardware-free `tessera_rocm` MFMA/WMMA/async-copy/wait
+  artifacts are implemented; native execution is proven per device (gfx1151 and
+  gfx1201 separately) and remains family-specific
+- Apple: `tessera_apple.cpu.*` (Accelerate) and `tessera_apple.gpu.*` (MPS / MSL /
+  simdgroup / Metal 4 `matmul2d`) Target IR
 
 ## Stage 6: Codegen & Linking
-Produces binaries (cubin/ELF/shared lib) and reflection JSON (shapes, regs, smem, features).
+Produces binaries and reflection JSON (shapes, regs, smem, features). Today NVIDIA
+kernels are PTX that the driver JIT-loads (stamped with the driver's PTX ISA, not
+the toolkit's), ROCm kernels are precompiled hsaco from `gpu-module-to-binary`,
+Apple uses runtime-compiled or AOT `.metallib` MSL, and x86 links shared libraries.
 
 ## Stage 7: Runtime Integration
 Runtime sets up descriptors, mbarriers, streams, launches grid/block. Collects metrics & profiles.
@@ -56,8 +66,10 @@ fn.tile_ir
 fn.target_ir
 fn.lowering_artifacts()
 ```
-Graph, Schedule, Tile, and Apple/ROCm Target IR artifacts are emitted from
-verified Python object models before they are presented as textual IR.
+Graph, Schedule, Tile, and CPU/x86, NVIDIA, Apple and ROCm Target IR artifacts
+are emitted from verified Python object models before they are presented as
+textual IR. `fn.explain_lowering()` and `fn.last_fallback_reason` report whether
+a call took a compiled lane or fell back.
 
 ---
 
@@ -76,7 +88,7 @@ verified Python object models before they are presented as textual IR.
 ## Appendix: Mapping (Triton vs Tessera)
 | Triton | Tessera |
 |--------|---------|
-| `dot` | `tessera_tile.gemm` |
-| `cp.async` | `tessera_target.memcpy` |
-| `bar.sync` | `tessera_target.mbarrier` |
-| `mma` | `tessera_target.tensor_core` |
+| `dot` | `tile.mma` / `tile.gemm` (Tile IR) |
+| `cp.async` | `tile.async_copy` (Tile IR) → `tessera_nvidia.tma_async_copy` (Target IR) |
+| `bar.sync` | `tile.mbarrier.*` (Tile IR) → `tessera_nvidia.mbarrier` (Target IR) |
+| `mma` | `tessera_nvidia.{mma_sync,wgmma,tcgen05_mma}` / `tessera_rocm.{wmma,mfma}` (Target IR) |

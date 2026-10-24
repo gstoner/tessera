@@ -1,7 +1,7 @@
 ---
 status: Normative
 classification: Reference
-last_updated: 2026-05-11
+last_updated: 2026-10-24
 ---
 
 # Tessera Tensor Attributes And Dtypes
@@ -24,7 +24,7 @@ specs. This document defines the public vocabulary those specs should use.
 | `layout` | Logical or physical layout metadata, separate from shape. Layout may be unspecified until schedule or target lowering. | `IRType.layout`, `IRArg.layout`, `TensorContract.layout`, textual `; layout=...` |
 | `device` / `target` | Execution target profile. Tessera currently models this at JIT/module/legality level, not as a PyTorch-style per-tensor device attribute. | `@tessera.jit(target=...)`, `GPUTargetProfile`, capability registry target names |
 | `distribution` | Mesh and sharding placement for distributed arrays. This is separate from both shape and layout. | `ShardSpec`, `MeshSpec`, `DistributedArray.shard_spec` |
-| `numeric_policy` | Tessera-specific numerics contract: storage type, accumulator type, rounding, quantization scale/axis, determinism, and optional math mode. | `NumericPolicy(storage, accum, rounding, scale, quant_axis, deterministic[, math_mode])` |
+| `numeric_policy` | Tessera-specific numerics contract: storage type, accumulator type, rounding, quantization scale/axis, determinism, and optional math mode. | `NumericPolicy(storage, accum, rounding, scale, quant_axis, deterministic[, math_mode])` — `compiler/graph_ir.py` carries the first six; `compiler/primitive_coverage.py` adds `math_mode` and `scale_layout` |
 
 ## Multivector — A Parallel Tensor Kind (GA0 Scope Lock)
 
@@ -42,7 +42,7 @@ A `Multivector` value carries:
 | `algebra` | Clifford signature `Cl(p, q, r)`. v1 supports `Cl(3, 0)` (3D Euclidean) and `Cl(1, 3)` (Minkowski) only. | `tessera.ga.Cl(p, q, r)`, `Multivector.algebra`, `Multivector.algebra.signature` |
 | `coefficients` | Coefficient array on the algebra's basis blades. Last axis size = `algebra.dim`; preceding axes are batch. | `Multivector.coefficients` (`np.ndarray` shape `(*batch, algebra.dim)`) |
 | `grades` | Set of grades present (subset of `{0, 1, …, algebra.n}`). `None` ⇒ all grades active; `grade_projection` narrows it. | `Multivector.grades`, `Multivector.active_grades` |
-| `dtype` | Coefficient element type. Same canonical dtype set as the tensor kind — `f32` / `f64` / `f16` / `bf16`. | `Multivector.dtype` (NumPy dtype, canonicalized at the public-API boundary) |
+| `dtype` | Coefficient element type. Same canonical dtype set as the tensor kind — `fp32` / `fp64` / `fp16` / `bf16`. | `Multivector.dtype` (NumPy dtype, canonicalized at the public-API boundary) |
 | `shape` | Leading (batch) shape, **excluding** the algebra axis. A scalar (rank-0) Multivector has `shape=()`. | `Multivector.shape` (= `coefficients.shape[:-1]`) |
 
 A `MultivectorField` adds:
@@ -65,10 +65,12 @@ products) live in `tessera.ga` without leaking into the tensor IR.
 **Shared with the tensor kind**: dtype canonicalization (the same
 canonical dtype names + alias normalization apply), the broader
 `@jit(target=…)` lowering pipeline, and `tessera._apple_gpu_dispatch`
-for Apple GPU dispatch.  Manifest entries for Clifford ops live in
-the **parallel** `_CLIFFORD_APPLE_GPU_FUSED` table inside
-[`backend_manifest.py`](../../python/tessera/compiler/backend_manifest.py),
-not in the tensor `OP_SPECS` catalog.
+for Apple GPU dispatch.  Apple GPU manifest entries for Clifford ops live
+in the **parallel** `_CLIFFORD_APPLE_GPU_FUSED` table inside
+[`backend_manifest.py`](../../python/tessera/compiler/backend_manifest.py).
+`OP_SPECS` in `compiler/op_catalog.py` also carries a flat-coefficient
+Cl(3,0) projection (`clifford_geometric_product`, `clifford_wedge`, …) as
+ordinary tensor ops; the `Multivector` kind itself stays in `tessera.ga`.
 
 ## Dtype Names
 
@@ -90,6 +92,7 @@ canonical spelling.
 | FP4 | `fp4_e2m1` | Low-precision storage/quantization family; backend support is target-gated |
 | NVFP4 | `nvfp4` | NVIDIA block-scaled FP4 policy name; do not alias to OCP FP4 or AMD MXFP4 |
 | Signed integers | `int8`, `int16`, `int32`, `int64` | `i8`, `i16`, `i32`, `i64` may appear in MLIR spellings |
+| Direct packed INT4 | `int4` | First-class signed logical storage. Physical storage is two two's-complement nibbles per `int8` byte, low logical element in the low nibble. Unsigned packed-4 remains a separate, unregistered policy. |
 | Boolean | `bool` | Lowers to `i1` in MLIR-like inspection text |
 
 ### Planned Or Gated Dtypes
@@ -97,8 +100,7 @@ canonical spelling.
 | Family | Intended names | Status |
 | --- | --- | --- |
 | Unsigned integers | `uint8`, `uint16`, `uint32`, `uint64` | Planned Graph IR mappings; storage legality should be separate from acceleration legality |
-| Complex | `complex64`, `complex128`; possible future `complex32` | Planned; no canonical Graph IR complex dtype family today |
-| Direct packed INT4 | `int4` | First-class signed logical storage. Physical storage is two two's-complement nibbles per `int8` byte, low logical element in the low nibble. Unsigned packed-4 remains a separate, unregistered policy. |
+| Complex | `complex64`, `complex128`, `complex32` | Planned; no canonical Graph IR complex dtype family today |
 | AMD MX formats | `mxfp8`, `mxfp6`, `mxfp4` | Planned/gated; needs block-scale metadata and ROCm/CDNA target gates |
 | TF32 | Not a storage dtype | Model as `math_mode="tf32"` on `fp32` tensors or numeric policy, not as `dtype="tf32"` |
 
@@ -110,8 +112,8 @@ Tessera keeps string compatibility for existing APIs, and also exposes
 | API | Purpose |
 | --- | --- |
 | `tessera.dtype.Dtype(value)` | Str-compatible wrapper around a canonical dtype name. Aliases normalize at construction. |
-| `tessera.dtype.canonicalize_dtype(value, allow_planned_gated=False)` | Normalize aliases such as `f32` or `float32` to canonical storage spellings such as `fp32`. |
-| `tessera.dtype.assert_canonical_dtype(value, context=None)` | Canonicalize or raise a contextual `TesseraDtypeError`. |
+| `tessera.dtype.canonicalize_dtype(value, *, allow_planned_gated=False)` | Normalize aliases such as `f32` or `float32` to canonical storage spellings such as `fp32`. |
+| `tessera.dtype.assert_canonical_dtype(value, *, allow_planned_gated=False, context=None)` | Canonicalize or raise a contextual `TesseraDtypeError`. |
 | `tessera.dtype.result_type(*dtypes, mode="standard")` | Compute the standard promotion result or reject mixed dtypes in `mode="strict"`. |
 | `tessera.dtype.canonical_dtypes()` | Return the canonical dtype set. |
 | `tessera.dtype.planned_gated_dtypes()` | Return the recognized-but-gated dtype set. |

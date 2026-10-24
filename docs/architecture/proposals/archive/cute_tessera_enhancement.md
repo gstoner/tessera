@@ -6,6 +6,13 @@ last_updated: 2026-04-26
 
 # CuTe Flash Attention Enhancement for Tessera Programming Model
 
+> **Archived 2026-10-24 — provenance only.** An unadopted 2026-04 proposal
+> sketching a CuTe-style `tessera.Layout` API, hardware-atom registry and
+> composable copies. No plan cites it as live work: layout algebra is owned
+> by LAYOUT-ALG-1 (`docs/audit/MASTER_AUDIT.md`), and the FA-4 tile dialect it
+> anticipated lives under `src/compiler/tile_opt_fa4/`. API names here are
+> pre-canonical; see `docs/CANONICAL_API.md`.
+
 > **API names in this document are pre-canonical.** older decorator aliases should be replaced with `.kernel` or `.jit`. See `docs/CANONICAL_API.md` for authoritative names and `docs/spec/PYTHON_API_SPEC.md` for the full API reference.
 
 

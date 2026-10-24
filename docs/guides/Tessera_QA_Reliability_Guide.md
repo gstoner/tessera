@@ -2,7 +2,7 @@
 status: Informative
 classification: Informative
 authority: QA and reliability behavior guide
-last_updated: 2026-04-28
+last_updated: 2026-10-24
 ---
 
 # Tessera QA And Reliability Guide
@@ -52,14 +52,14 @@ tolerances.
 
 ```python
 import numpy as np
+import tessera
 from tessera.testing import assert_close_to_reference
 
 A = np.random.randn(128, 128).astype(np.float32)
 B = np.random.randn(128, 128).astype(np.float32)
 ref = A @ B
 
-# Replace this with op.matmul(tensor.from_numpy(A), tensor.from_numpy(B)).numpy()
-out = A @ B
+out = tessera.ops.matmul(A, B)
 
 assert_close_to_reference(out, ref, rtol=1e-5, atol=1e-6)
 ```
@@ -129,6 +129,11 @@ Examples:
 - invalid mesh axes fail before collective launch
 - runaway kernels are stopped by watchdogs
 - runtime backend errors include device, stream, kernel, and launch parameters
+- a `@tessera.jit` body whose call the Graph IR front end dropped (raw numpy,
+  a user helper) runs the original Python function and records
+  `FallbackReason.FRONTEND_UNLOWERED_CALL` in `last_fallback_reason`; tests that
+  claim native execution should pass `native_required=True` so the fallback
+  raises instead of passing on the eager path
 
 ```python
 import pytest

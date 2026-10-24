@@ -2,7 +2,7 @@
 status: Informative
 classification: Guide
 authority: Fault tolerance, elastic membership, and runtime checkpointing workflows
-last_updated: 2026-04-28
+last_updated: 2026-10-24
 ---
 
 # Tessera Fault Tolerance and Elasticity Guide
@@ -14,8 +14,12 @@ The runtime uses those artifacts to survive failures and re-form distributed
 jobs.
 
 This guide is practical and status-aware: the Python foundation exists today for
-policies, manifests, failure injection, and elastic metadata. Full distributed
-communicator reformation and on-device restart are production-runtime work.
+policy metadata, checkpoint manifests, recorded (not executed) failure-injection
+events, and elastic metadata. Nothing in the compiler or runtime consumes the
+`tessera.fault` policies, injected-fault records, `tessera.elastic` config, or
+topology-change policy yet, so retry, drain, preemption handling, resharding,
+full distributed communicator reformation, and on-device restart are planned
+production-runtime work.
 
 ---
 
@@ -75,6 +79,11 @@ Supported policies:
 - `fail_fast`: abort and let the scheduler restart the job.
 - `pause_for_manual`: stop scheduling new work and wait for an operator.
 
+Status: `fault.on_failure` validates the policy and attaches a `FailurePolicy`
+to the wrapped function as `__tessera_failure_policy__` (with a
+`to_ir_attr()` serialization); the wrapper calls the function once and performs
+no retry or drain itself. The behaviors above are the planned runtime contract.
+
 Preemption hooks:
 
 ```python
@@ -83,14 +92,20 @@ def main():
     ...
 ```
 
-Failure injection for tests/staging:
+`on_preempt` accepts `checkpoint_then_exit`, `partial_flush_then_exit`, and
+`fail_fast`; like `on_failure`, it attaches metadata (`__tessera_preempt_policy__`)
+and installs no signal handler.
+
+Failure injection for tests/staging (today `fault.inject` records a `FaultEvent`
+visible through `fault.active_faults()` for the duration of the block; it does
+not drop a device or partition the network):
 
 ```python
 with fault.inject(drop_device=3):
     train_step(batch)
 
 with fault.inject(network_partition=[(0, 64)]):
-    op.all_gather(x)
+    tessera.ops.all_gather(x)
 ```
 
 ---
@@ -153,6 +168,11 @@ plan = elastic.reshard(
 print(plan.moved_fraction())
 ```
 
+`elastic.reshard` returns a `ReshardPlan` record (policy, old/new mesh,
+estimated moved fraction); it moves no data. Accepted policies are
+`consistent_hash`, `balanced`, `replicate`, and `none`; `elastic.configure`
+accepts backends `k8s`, `etcd`, `redis`, `slurm`, `ray`, and `custom`.
+
 `consistent_hash` should be the default for optimizer shards and MoE experts
 because it minimizes movement during resize.
 
@@ -173,8 +193,8 @@ from tessera import checkpoint
 
 manifest = checkpoint.save(
     tag="step_120000",
-    tensors=model.parameters(),
-    optimizer=optimizer.state_dict(),
+    tensors=dict(model.named_parameters()),
+    optimizer={"name": "adamw", "step": 120000},
     mesh={"dp": 16, "tp": 8, "pp": 4},
     atomic=True,
     numerics="deterministic",
@@ -187,15 +207,27 @@ Load and remap:
 
 ```python
 state = checkpoint.load("step_120000", remap_to={"dp": 32, "tp": 8, "pp": 2})
-model.load_parameters(state.tensors)
-optimizer.load_state_dict(state.optimizer)
+print(state.manifest.mesh, list(state.tensors))   # TensorShard records
 ```
+
+Status: `checkpoint.save` writes `manifest.json`, a per-tensor shape/dtype
+placeholder file, and a `COMMITTED` marker (via a temporary directory renamed
+into place when `atomic=True`); it does **not** write tensor payloads.
+`checkpoint.load` refuses an uncommitted checkpoint, and `remap_to` rewrites
+only the manifest's mesh metadata, so payload resharding is planned. To persist
+and restore actual values, use `checkpoint.save_state(tree, path)` /
+`checkpoint.load_state(path)` (typed, checksummed `.npz` state trees) or
+`checkpoint.save_sharded(tree, path, mesh)` / `checkpoint.load_sharded(path)`,
+which today writes a single payload shard plus mesh metadata.
 
 Async policy:
 
 ```python
 checkpoint.enable_async(max_bandwidth_gbps=4.0, flush_interval_s=5.0)
 ```
+
+`enable_async` validates and records the policy (readable through
+`checkpoint.async_config()`); no asynchronous writer consumes it yet.
 
 Production checkpointing should use two-phase commit:
 
@@ -219,7 +251,9 @@ A resilient checkpoint manifest should include:
 - Data loader offset, epoch, and seed when training.
 - Optional KV cache state for inference serving.
 
-Example manifest fragment:
+Example manifest fragment (shown as YAML for readability; `checkpoint.save`
+writes the same fields as `manifest.json`, with `backend` defaulting to
+`"python"` and parameter `path` pointing at the placeholder file described above):
 
 ```yaml
 version: 1
@@ -258,6 +292,9 @@ Topology changes can invalidate kernels and tuning entries:
 policy = elastic.on_topology_change(retune_autotuner=True, invalidate_kernels=True)
 ```
 
+This returns a `TopologyChangePolicy` record; no autotuner or kernel cache
+consumes it yet.
+
 When hardware changes across recovery, checkpoints remain hardware-agnostic, but
 compiled kernels and autotune artifacts should be invalidated or retuned.
 
@@ -274,7 +311,8 @@ Track:
 - Autotune retune duration after topology changes.
 - Determinism divergence flags and checksums.
 
-Example:
+Example (`monitor` stands for the deployment's metrics client; Tessera does
+not provide one):
 
 ```python
 monitor.emit({
@@ -297,8 +335,9 @@ Required staging tests:
 - Resize at epoch boundary and verify deterministic replay.
 - Resize at step boundary and verify nondeterminism is explicitly allowed.
 
-Use `tessera.fault.inject(...)` for local policy testing and
-`tessera.testing.ChaosEvent` for QA contracts.
+Use `tessera.fault.inject(...)` to record fault scenarios for local policy
+testing and `tessera.testing.ChaosEvent` for QA contracts; both describe the
+fault, and the harness that actually injects it is not provided today.
 
 ---
 

@@ -1,7 +1,7 @@
 ---
 status: Active
 classification: Plan
-last_updated: 2026-05-20
+last_updated: 2026-10-24
 ---
 
 # Frontend Substrate Plan
@@ -11,6 +11,20 @@ last_updated: 2026-05-20
 > exploratory framing in earlier "Graph IR vs Middle IR" discussions.
 >
 > **Last updated:** 2026-05-20
+>
+> **Status check 2026-10-24 (code read; body below left as written):**
+> Phase A landed (`IROp.value_kind` / `verification_facts`,
+> `GraphIRFunction.verification_facts` / `source_hash`, gated by
+> `test_optional_ir_metadata_contract.py`). Phase B landed
+> (`to_graph_ir_view()` on the Clifford / Complex / Energy lanes; contract in
+> `COMPILER_REFERENCE.md` §"Constrained-lane Graph IR views"). Phase C is
+> partial: `normalization.py` defines `NORMALIZATION_PIPELINE` with six
+> implemented passes and `test_normalization_pipeline_order.py`, but
+> `@tessera.jit` does not invoke `run_normalization_pipeline`, so its exit
+> criterion is unmet. Phase D stays deferred. Cross-lane composition (an open
+> question below) now has rules in `compiler/cross_lane.py`. This plan is not
+> routed from `docs/audit/compiler/README.md`; frontend authority work now
+> lives in the foundation program (`INTEGRATED_COMPILER_PLAN.md`, E2E-REAL-6).
 
 ## Decision
 

@@ -2,7 +2,7 @@
 status: Informative
 classification: Informative
 authority: Production reliability, stress, chaos, node-scale, and rack-scale QA guide
-last_updated: 2026-04-28
+last_updated: 2026-10-24
 ---
 
 # Tessera Production Reliability And Chaos Guide
@@ -107,6 +107,12 @@ manifest = ReplayManifest(
 manifest.validate()
 ```
 
+`ReplayManifest` is a hand-filled record that validates required fields. To
+capture one from a compiled program, `tessera.debug.replay_manifest(fn)` (alias
+`replay_capture`) accepts an `@tessera.jit` wrapper, runtime artifact, or compile
+bundle and returns a JSON-serializable manifest with IR hashes, the compiler
+lowering trace, and the debug environment snapshot; tensor payloads are excluded.
+
 Production incidents should attach replay manifests to logs or ticket artifacts.
 
 ## 5. Observability And Profiling
@@ -121,6 +127,11 @@ Tessera production deployments should integrate with:
 Trace spans should include graph hash, schedule hash, device/rank, mesh axis,
 collective kind, and kernel variant when available.
 
+Status: Chrome Trace Event / Perfetto-compatible JSON export exists today
+(`tessera-prof --trace`, `tools/profiler/`). Tessera ships no Prometheus,
+Grafana, or TensorBoard exporter; those integrations are the deployment's
+responsibility and are planned, not provided.
+
 ## 6. Fault Tolerance In Production
 
 Validate the recovery path before depending on it:
@@ -132,7 +143,12 @@ Validate the recovery path before depending on it:
 - partial collective failure does not deadlock the job
 
 Fallback should be a policy decision, not accidental behavior. Some workloads
-should fail fast instead of silently moving to a slower backend.
+should fail fast instead of silently moving to a slower backend. In the current
+compiler, a `@tessera.jit` program that did not run its native path records a
+`tessera.compiler.fallback.FallbackReason` on `last_fallback_reason` (for example
+`FRONTEND_UNLOWERED_CALL` when the front end dropped a call and the original
+Python function ran); `@tessera.jit(..., native_required=True)` turns that
+fallback into a raised error.
 
 ## 7. Stress Testing
 
@@ -178,6 +194,13 @@ event = ChaosEvent(kind="kill_device", target="gpu:5", expected_recovery="checkp
 event.validate()
 ```
 
+`ChaosEvent` is a test-plan descriptor: `validate()` checks the event against
+its accepted kinds (`kill_device`, `network_latency`, `collective_timeout`,
+`ecc_error`, `drop_rank`, `restart_worker`) and requires a target and expected
+recovery. Tessera does not ship a fault injector; the harness that actually
+kills devices, delays links, or drops a pipeline stage is planned and must
+come from the deployment today.
+
 Every chaos test should define:
 
 - injected event
@@ -203,7 +226,9 @@ contention from other jobs.
 
 ## 10. Rack-Scale And NVL72 QA
 
-Rack-scale validation adds topology and failure-domain concerns.
+Rack-scale validation adds topology and failure-domain concerns. No rack-scale
+or NVL72 system is in the current validation fleet, so this section is a
+checklist for future validation, not a description of tested behavior.
 
 Required checks:
 

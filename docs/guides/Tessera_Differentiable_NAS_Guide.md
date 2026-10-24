@@ -2,7 +2,7 @@
 status: Draft
 classification: Normative
 authority: Differentiable neural architecture search design guidance; defers operator semantics to docs/operations/Tessera_Standard_Operations.md and compiler layers to docs/spec/LANGUAGE_AND_IR_SPEC.md
-last_updated: 2026-04-28
+last_updated: 2026-10-24
 ---
 
 # Tessera Differentiable NAS Guide
@@ -87,7 +87,12 @@ DNAS uses separate parameter classes:
 - architecture logits `alpha`, updated on validation loss plus hardware cost
 - optional cost-model parameters `phi`, updated from measurements
 
-Canonical training pattern:
+Target training pattern (planned spelling; `tg` stands for a training
+namespace that does not exist yet, and `tg.Adam`, `tg.zipcycle`,
+`tg.no_grad_for`, `model.weight_parameters()`, `model.arch_parameters()`, and
+`Tensor.backward(wrt=...)` are not implemented today — the current foundation is
+`arch.collect_parameters(obj, kind=...)`, `arch.arch_parameters(obj)`, and the
+declarative `arch.BilevelStepPlan(inner_steps=..., arch_every=..., gradient=...)`):
 
 ```python
 opt_w = tg.Adam(model.weight_parameters(), lr=3e-4)
@@ -130,9 +135,11 @@ sm_arch, bandwidth, clock, movement_plan, schedule_hash
 ```
 
 The current Python foundation exposes `arch.CostFeatures`,
-`arch.HardwareCost`, `arch.AnalyticalCostModel`, `arch.hw_cost(...)`, and
-`arch.measure(...)`. Future compiler passes should emit the same features from
-Graph and Schedule IR.
+`arch.HardwareCost`, `arch.AnalyticalCostModel`,
+`arch.LearnedSurrogateCostModel` (a small online linear surrogate),
+`arch.extract_cost_features(...)`, `arch.hw_cost(...)`, and `arch.measure(...)`.
+These are pure-Python helpers; no compiler pass consumes them yet. Future
+compiler passes should emit the same features from Graph and Schedule IR.
 
 Example:
 
@@ -202,37 +209,44 @@ Architecture logits are tiny but semantically important. Distributed DNAS must:
 | Area | Current foundation | Needed next |
 |------|--------------------|-------------|
 | Python surface | `tessera.arch` parameters, relaxations, mixed ops, schedule spaces, bilevel plans | Integrate with full model modules and optimizer wrappers. |
-| Graph IR | ODS anchors for `arch.parameter`, `arch.gumbel_softmax`, `arch.hard_concrete`, `arch.ste_one_hot`, `arch.weighted_sum`, `arch.switch`, `arch.mixed` | Lower Python search modules into these ops automatically. |
-| Schedule IR | `schedule.knob`, schedule artifacts, autotuner cache | Feature extraction pass from Schedule IR. |
+| Graph IR | ODS anchors with verifiers for `tessera.arch.parameter`, `tessera.arch.gumbel_softmax`, `tessera.arch.hard_concrete`, `tessera.arch.ste_one_hot`, `tessera.arch.weighted_sum`, `tessera.arch.switch`, `tessera.arch.mixed`; no pass produces or consumes them yet | Lower Python search modules into these ops automatically. |
+| Schedule IR | `schedule.knob` (ODS + verifier), schedule artifacts, autotuner cache | Feature extraction pass from Schedule IR. |
 | Cost model | Bayesian autotuner measurements, analytical proxy, learned online surrogate | Replace linear surrogate with MLP once tensor autodiff is ready. |
 | Runtime | Deterministic alpha all-reduce helper and replay docs | Distributed runtime binding for alpha gradients. |
 | Tooling | QA/reliability docs | Alpha histograms, cost curves, predicted-vs-measured drift reports. |
 
 ## 9. Graph IR And Schedule IR Expansion
 
-DNAS has concrete compiler anchors today, but only the foundation is wired.
+DNAS has concrete compiler anchors today, but only the foundation is wired:
+the ops below are declared in ODS with verifiers, and no Python lowering or
+compiler pass emits or reads them yet.
 
 Graph IR dialect anchors live in `src/compiler/ir/TesseraOps.td`:
 
 ```mlir
 %tau   = tessera.graph.constant 4.0 : f32
-%alpha = tessera.graph.arch.parameter {size = 4, name = "block0.attn"}
-%gate  = tessera.graph.arch.gumbel_softmax %alpha {temperature = 4.0, seed = 17}
+%alpha = tessera.arch.parameter {size = 4, name = "block0.attn"}
+%gate  = tessera.arch.gumbel_softmax %alpha {temperature = 4.0, seed = 17}
 
 %y0 = tessera.graph.op.flash_attention(%x)
 %y1 = tessera.graph.op.performer_attention(%x)
 %y2 = tessera.graph.op.multi_query_attention(%x)
 %y3 = tessera.graph.op.gmlp(%x)
-%y  = tessera.graph.arch.weighted_sum %y0, %y1, %y2, %y3 by %gate
+%y  = tessera.arch.weighted_sum %y0, %y1, %y2, %y3 by %gate
 ```
+
+This is a sketch, not parseable IR: type annotations are omitted, and the
+`tessera.graph.constant` / `tessera.graph.op.*` candidate spellings are
+illustrative stand-ins rather than declared ops (attention, for example, is
+`tessera.flash_attn`). The `tessera.arch.*` names match the ODS op names.
 
 Schedule IR anchors live in
 `src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td`:
 
 ```mlir
-%tm = tessera.schedule.knob %matmul {name = "tile_m", choices = [64, 128]}
-%tn = tessera.schedule.knob %matmul {name = "tile_n", choices = [128, 256]}
-%st = tessera.schedule.knob %matmul {name = "stages", choices = [2, 3, 4]}
+%tm = schedule.knob %matmul {name = "tile_m", choices = [64, 128]}
+%tn = schedule.knob %matmul {name = "tile_n", choices = [128, 256]}
+%st = schedule.knob %matmul {name = "stages", choices = [2, 3, 4]}
 ```
 
 Compiler work still needed:
@@ -250,7 +264,8 @@ Examples:
 
 ## 10. Autodiff And Runtime Plumbing
 
-DNAS uses explicit autodiff partitions:
+DNAS uses explicit autodiff partitions (planned `backward(wrt=...)` spelling;
+not implemented on Tessera tensors today):
 
 ```python
 loss_w.backward(wrt="weights")

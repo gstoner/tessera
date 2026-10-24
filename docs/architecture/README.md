@@ -2,7 +2,7 @@
 status: Informative
 classification: Informative
 authority: Architecture entry point; defers normative details to docs/spec/
-last_updated: 2026-05-20
+last_updated: 2026-10-24
 ---
 
 # Tessera Architecture Index
@@ -45,10 +45,15 @@ packagers and source emitters are inventoried in the
 ## How To Read Current Status
 
 Use the generated dashboards for status claims instead of older phase labels:
+`docs/audit/generated/compiler_progress.md` is the all-up compiler rollup (start
+there, as `docs/audit/MASTER_AUDIT.md` routes),
 `docs/audit/generated/support_table.md` is the per-op compiler-support truth,
-`docs/audit/generated/e2e_op_coverage.md` is the execution-path truth, and
-`docs/spec/VALIDATION_SPINE.md` is the command/CI truth. Architecture guides
-explain shape and intent; the dashboards say what is proven today.
+`docs/audit/generated/runtime_execution_matrix.md` says what executes on which
+device, `docs/audit/generated/e2e_op_coverage.md` is the execution-path truth,
+and `docs/spec/VALIDATION_SPINE.md` is the command/CI truth. Architecture guides
+explain shape and intent; the dashboards say what is proven today. Device
+evidence is per device: gfx1151 and gfx1201 proofs never transfer, and sm_120
+evidence is the RTX 5070's alone.
 
 ## Current Capability Table
 
@@ -57,7 +62,7 @@ explain shape and intent; the dashboards say what is proven today.
 | Python frontend + Graph IR | Implemented and documented; `fn.explain()`, `from_text`, support queries, and typed diagnostics are the current developer surface. | `docs/spec/PYTHON_API_SPEC.md`, `docs/reference/tessera-api-reference.md`, `docs/spec/GRAPH_IR_SPEC.md` |
 | Schedule / Tile / Target IR | Implemented as inspectable compiler layers; some target paths are artifact-only or hardware-gated. | `docs/spec/COMPILER_REFERENCE.md`, `docs/spec/LOWERING_PIPELINE_SPEC.md`, `docs/spec/TARGET_IR_SPEC.md` |
 | Runtime ABI | C ABI and Python wrapper exist; smoke and sanitizer coverage guard lifecycle and handle behavior. | `docs/spec/RUNTIME_ABI_SPEC.md`, `docs/spec/VALIDATION_SPINE.md` |
-| Native/runtime execution | Complete for a small audited subset; most ops are CPU-reference or artifact-only today. | `docs/audit/generated/e2e_op_coverage.md`, `docs/audit/generated/support_table.md` |
+| Native/runtime execution | Proven per target and per family: x86 AVX-512, Apple CPU/GPU, ROCm gfx1151 and gfx1201, and NVIDIA sm_120 each have executing lanes for specific families; other paths are CPU-reference or artifact-only, and datacenter archs stay hardware-gated. Read the matrix for which. | `docs/audit/generated/runtime_execution_matrix.md`, `docs/audit/generated/e2e_op_coverage.md`, `docs/audit/generated/support_table.md` |
 | Distributed / collective surfaces | Lowering, adapter, and validation surfaces exist; production multi-rank readiness is target-gated. | `docs/spec/CONFORMANCE.md`, `docs/spec/VALIDATION_SPINE.md` |
 | GA / EBM / Visual Complex lanes | Public constrained lanes with audit visibility; native coverage differs by family and target. | `docs/status/ga_ebm.md`, `docs/status/visual_complex.md` |
 
@@ -85,15 +90,21 @@ explain shape and intent; the dashboards say what is proven today.
 | `docs/architecture/Compiler/Tessera_Compiler_TileIR_Design.md` | Tile IR design, memory movement, MMA, and barriers |
 | `docs/architecture/Compiler/Tessera_Compiler_TargetIR_Design.md` | Target IR design and backend mapping concepts |
 | `docs/architecture/tessera_target_ir_usage_guide.md` | Informative target-lowering examples; defer API claims to canonical specs |
+| `docs/architecture/Tessera_Kernel_Compilation_Stages_Overview.md` | Conceptual tour of the kernel compilation stages |
+| `docs/architecture/compiler_test_architecture.md` | Normative compiler test architecture |
+| `docs/architecture/frontend_substrate_plan.md` | Frontend substrate plan; see its dated status note for what landed and what the foundation program now owns |
+| `docs/architecture/compiler_gaps_1_3_5_plan.md` | Compiler gaps 1/3/5 plan (gaps 1 and 5 landed, 3 partial) |
+| `docs/architecture/stencil_materialize_and_window_lowering.md` | Stencil materialization and 2D local-window lowering design |
+| `docs/architecture/proposals/tile_fragment_abi.md` | Proposal: portable Tile fragment ABI |
+| `docs/architecture/proposals/tiled_ssd_tile_ir_schedule.md` | Decision (deferred): tiled fused SSD as a Tile IR schedule |
 | `docs/architecture/workloads/` | Cross-target workload architecture: attention family, DFlash, and MSA |
 | `docs/architecture/distributed/megamoe.md` | Distributed MegaMoE architecture |
 | `docs/architecture/inference/serving.md` | Inference-serving orchestration plan |
 | `docs/backends/` | Per-target architecture, implementation guides, and links to evidence |
-| `docs/architecture/proposals/cute_tessera_enhancement.md` | Proposal material for CuTe-inspired enhancements |
 
 ## Historical Material
 
-Pre-canonical architecture material lives in `archive/docs/old_concepts/` or `archive/docs/pre_canonical/`. It is retained for design history only. Do not use archived documents as implementation guidance unless the canonical specs explicitly restore a concept.
+Pre-canonical architecture material lives in `archive/docs/old_concepts/` or `archive/docs/pre_canonical/`; theme-local `archive/` folders (for example `docs/architecture/proposals/archive/`, which holds the unadopted 2026-04 CuTe-inspired layout/copy proposal) hold superseded docs. It is retained for design history only. Do not use archived documents as implementation guidance unless the canonical specs explicitly restore a concept.
 
 ## Rules For New Architecture Docs
 

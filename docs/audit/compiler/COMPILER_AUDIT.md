@@ -448,7 +448,11 @@ The executed path and the C++ MLIR optimizer are largely **disconnected**:
   `status="failed"`. `enable_tool_validation` now defaults off and, when set,
   parse-and-verifies the recorded Graph IR with no pipeline and raises
   (`GraphIRToolValidationError`); `tests/unit/test_graph_ir_parse_contract.py`
-  ratchets a specialized-module corpus. Execution dispatches off the **in-memory Python `GraphIRModule`**
+  ratchets a specialized-module corpus. **Stage 3 gate (2026-10-24):**
+  `tests/unit/test_catalog_ods_registration.py` probes `tessera-opt` for every
+  catalogued Graph op name; 143 of 352 were unregistered, each now tracked with
+  its family (`reduce-kind` / `dotted-spelling` / `renamed` candidates, or
+  `undeclared: <family>`) in a list that may only shrink. Execution dispatches off the **in-memory Python `GraphIRModule`**
   (`jit.py` `recognize(self.graph_ir)`), so the C++ fusion/canonicalize/CSE passes
   do not reach runtime.
 - Consequence: fusion logic exists **twice** — real C++ rewrites the executor

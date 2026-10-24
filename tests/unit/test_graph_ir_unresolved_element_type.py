@@ -3,9 +3,15 @@
 A tensor whose element slot is ``?`` (``tensor<*x?>``, ``tensor<?x?x?>``) is what
 ``tensor_ir_type`` renders for an unresolved dtype. MLIR rejects every such
 type, so a parser-bound consumer must fail closed with a NAMED reason before
-rendering -- not surface the parser's symptom one level down. The renders
-themselves are untouched: ``?`` remains the symbolic module's placeholder.
+rendering -- not surface the parser's symptom one level down. ``?`` remains the
+symbolic module's placeholder in the inspection render and in function-level
+renders; since 2026-10-24 the module's canonical (parser-bound) render refuses
+it itself, so no parser-bound caller can forget the check.
 """
+
+import pytest
+
+from tessera.compiler.graph_ir import GraphIRVerificationError
 
 from tessera.compiler.graph_ir import (
     BOOL,
@@ -121,3 +127,50 @@ def test_renders_are_untouched_placeholder_survives():
     fn = GraphIRFunction(name="f", args=[IRArg("x", TENSOR_OPAQUE)])
     assert "tensor<*x?>" in fn.to_mlir()
     assert "tensor<*x?>" in fn.to_mlir(canonical=True)
+
+
+# ── The canonical module render is the boundary (2026-10-24) ───────────────
+
+
+def test_canonical_module_render_refuses_an_unresolved_element_type():
+    fn = GraphIRFunction(name="f", args=[IRArg("x", TENSOR_OPAQUE)])
+    with pytest.raises(GraphIRVerificationError, match=CODE) as info:
+        _module(fn).to_mlir(canonical=True, verify=False)
+    assert "%x" in str(info.value)
+
+
+def test_inspection_render_of_a_symbolic_module_is_unchanged():
+    fn = GraphIRFunction(name="f", args=[IRArg("x", TENSOR_OPAQUE)])
+    assert "tensor<*x?>" in _module(fn).to_mlir(verify=False)
+
+
+def test_allow_unresolved_is_an_explicit_opt_out_for_hashing_callers():
+    fn = GraphIRFunction(name="f", args=[IRArg("x", TENSOR_OPAQUE)])
+    text = _module(fn).to_mlir(canonical=True, verify=False, allow_unresolved=True)
+    assert "tensor<*x?>" in text
+
+
+def test_canonical_render_of_a_specialized_module_is_not_refused():
+    fn = GraphIRFunction(name="f", args=[IRArg("x", tensor_ir_type((4, 8), "fp32"))])
+    assert "tensor<4x8xf32>" in _module(fn).to_mlir(canonical=True, verify=False)
+
+
+def test_every_canonical_module_render_that_opts_out_says_why():
+    """An opt-out must be a decision, not a workaround: each call site carries
+    a comment naming why that render never reaches the parser."""
+    import pathlib
+    import re
+
+    root = pathlib.Path(__file__).resolve().parents[2] / "python" / "tessera"
+    sites = []
+    for path in root.rglob("*.py"):
+        lines = path.read_text(encoding="utf-8").splitlines()
+        for i, line in enumerate(lines):
+            call = "to_mlir(" in line or (i > 0 and "to_mlir(" in lines[i - 1])
+            if "allow_unresolved=True" in line and call:
+                window = "\n".join(lines[max(0, i - 4):i + 1])
+                sites.append((path.name, i + 1, bool(re.search(r"#.*(hash|record|never|not parsed)", window))))
+    assert sites, "expected the documented opt-out call sites"
+    undocumented = [(name, line) for name, line, ok in sites if not ok]
+    assert not undocumented, f"allow_unresolved=True without a stated reason: {undocumented}"
+

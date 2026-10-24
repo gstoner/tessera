@@ -125,7 +125,10 @@ def execute(fn, args, kwargs, ordered, tangents, bounds):
     from .jit import TesseraJitError
     # Include immutable source semantics and a real Thread object. Integer thread
     # IDs can be reused; a new lifetime must not inherit another CUDA owner.
-    graph = fn._ensure_legacy_graph_ir().to_mlir(target="nvidia_sm120", canonical=True)
+    # Hashed for the prepared-call key only; the legacy module may be symbolic
+    # and is never handed to the parser from here.
+    graph = fn._ensure_legacy_graph_ir().to_mlir(
+        target="nvidia_sm120", canonical=True, allow_unresolved=True)
     base_key = ("native_bounded_attention_jvp", bounds,
            tuple(fn.differentiation_request.wrt_indices),
            hashlib.sha256(graph.encode()).hexdigest(), threading.current_thread())

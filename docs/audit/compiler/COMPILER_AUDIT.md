@@ -448,7 +448,12 @@ The executed path and the C++ MLIR optimizer are largely **disconnected**:
   `status="failed"`. `enable_tool_validation` now defaults off and, when set,
   parse-and-verifies the recorded Graph IR with no pipeline and raises
   (`GraphIRToolValidationError`); `tests/unit/test_graph_ir_parse_contract.py`
-  ratchets a specialized-module corpus. Execution dispatches off the **in-memory Python `GraphIRModule`**
+  ratchets a specialized-module corpus. **Stage 2 (same day):** the module's
+  canonical (parser-bound) render itself now refuses an unresolved element type
+  as `GRAPH_IR_UNRESOLVED_ELEMENT_TYPE` (Decision #21a), so the ~40 parser-bound
+  render sites no longer depend on each remembering the check; renders that
+  only hash or record a symbolic module opt out with `allow_unresolved=True`
+  and a stated reason (gated). Execution dispatches off the **in-memory Python `GraphIRModule`**
   (`jit.py` `recognize(self.graph_ir)`), so the C++ fusion/canonicalize/CSE passes
   do not reach runtime.
 - Consequence: fusion logic exists **twice** — real C++ rewrites the executor

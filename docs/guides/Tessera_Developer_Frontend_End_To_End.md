@@ -214,9 +214,9 @@ print(mixed.last_fallback_reason)                 # FRONTEND_UNLOWERED_CALL
 
 ## 6. Next Frontend Improvements
 
-Historical priority order (the live compiler queue is
-`docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#live-queue`; items 4 and 5 are
-partially landed):
+Historical priority order (the live compiler queue is the
+[integrated plan's live queue](../audit/compiler/INTEGRATED_COMPILER_PLAN.md#live-queue);
+items 4 and 5 are partially landed):
 
 1. Improve notebook/REPL source capture beyond explicit `source=` handoff.
 2. Extend native MLIR Python binding construction beyond the current verified

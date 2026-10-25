@@ -137,7 +137,8 @@ int prepareResidentDependencies(Owner &s,const void *const *inputs,
       CUdeviceptr pointer=reinterpret_cast<uintptr_t>(inputs[i]),base=0;
       size_t capacity=0;CUcontext allocationContext=nullptr,streamContext=nullptr;
       unsigned memoryType=0;
-      unsigned alignment=s.forwardOnly && i<3 && (i==0?s.storage:s.kvStorage)!=1?2:4;
+      const int roleStorage=i==0?s.storage:s.kvStorage;
+      unsigned alignment=s.forwardOnly && i<3 && roleStorage!=1?(roleStorage>=4?1:2):4;
       if(!s.reverse && !s.forwardOnly && s.storage!=1){
         for(unsigned role=0;role<3;++role)
           if(i==size_t(s.mapping[role]))alignment=2;
@@ -1297,7 +1298,8 @@ extern "C" int tessera_nvidia_attention_forward_prepare_kv(
   const int64_t *biasShape,int storage,int kvStorage,int outputStorage,int savedLse,int biasScalars,uint64_t *handle){
   ownerError.clear();if(handle)*handle=0;
   if(getpid()!=ownerProcess)return bad("prepared forward cannot cross fork");
-  if(kvStorage<1 || kvStorage>3 || (kvStorage!=storage && !savedLse))
+  // kvStorage 4=fp8_e4m3, 5=fp8_e5m2: unscaled one-byte K/V, forward only.
+  if(kvStorage<1 || kvStorage>5 || (kvStorage!=storage && !savedLse))
     return bad("prepared forward K/V storage requires the saved-LSE forward");
   if(!image || !imageBytes || !entry || !dims || !handle || storage<1 || storage>3 ||
      (savedLse!=0 && savedLse!=1) || (biasScalars!=0 && biasScalars!=1) ||
@@ -1319,7 +1321,8 @@ extern "C" int tessera_nvidia_attention_forward_prepare_kv(
   // A distinct K/V storage is sealed into the entry right after Q's storage.
   if(savedLse){
     const char *query=storage==2?"f16":storage==3?"bf16":"f32";
-    const char *kv=kvStorage==2?"f16":kvStorage==3?"bf16":"f32";
+    const char *kv=kvStorage==2?"f16":kvStorage==3?"bf16":kvStorage==4?"fp8_e4m3":
+                   kvStorage==5?"fp8_e5m2":"f32";
     std::string mixed=std::string("tessera_tile_attention_lse_")+query+"_kv_"+kv+"_";
     bool named=std::strstr(entry,"_kv_")!=nullptr;
     if((kvStorage!=storage)!=named ||
@@ -1345,7 +1348,7 @@ extern "C" int tessera_nvidia_attention_forward_prepare_kv(
        !extent({b,hkv,sk,d},state->bytes[1]) ||
        !extent({b,hkv,sk,dv},state->bytes[2]))return bad("prepared forward input extent overflows");
     if(storage!=1)state->bytes[0]/=2;
-    if(kvStorage!=1)for(size_t i=1;i<3;++i)state->bytes[i]/=2;
+    if(kvStorage!=1)for(size_t i=1;i<3;++i)state->bytes[i]/=kvStorage>=4?4:2;
     const size_t primals=3+unsigned(state->bias),outputs=1+unsigned(state->savedLse);
     if(state->bias){
       const int64_t score[4]={b,hq,sq,sk};

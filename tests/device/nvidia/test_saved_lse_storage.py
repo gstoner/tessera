@@ -61,6 +61,8 @@ def compare(pair, expected, storage):
 
 
 def _dtype(name):
+    if name in ("float8_e4m3fn", "float8_e5m2"):
+        return np.dtype(getattr(ml_dtypes, name))
     return np.dtype(ml_dtypes.bfloat16 if name == "bfloat16" else name)
 
 
@@ -83,6 +85,20 @@ def test_saved_storage_public_resident_and_serialized_byte_boundaries(
 @pytest.mark.parametrize("bias_kind", ["none", "broadcast", "dense"])
 @pytest.mark.parametrize("causal", [False, True])
 def test_mixed_kv_storage_public_resident_and_serialized_byte_boundaries(
+    storage_name, kv_name, sk, bias_kind, causal, monkeypatch,
+):
+    _run_saved_storage_case(storage_name, kv_name, sk, bias_kind, causal, monkeypatch)
+
+
+# SM120-SAVED-LSE-FP8-KV-20261025: unscaled FP8 K/V. Resident roots stay
+# f16/bf16/f32 under the shared resident-tensor contract, so FP8 covers the
+# public host call and the serialized launch, and resident FP8 must refuse.
+@pytest.mark.parametrize("storage_name", ["float16", "bfloat16", "float32"])
+@pytest.mark.parametrize("kv_name", ["float8_e4m3fn", "float8_e5m2"])
+@pytest.mark.parametrize("sk", [5, 129])
+@pytest.mark.parametrize("bias_kind", ["none", "broadcast", "dense"])
+@pytest.mark.parametrize("causal", [False, True])
+def test_fp8_kv_storage_public_and_serialized_byte_boundaries(
     storage_name, kv_name, sk, bias_kind, causal, monkeypatch,
 ):
     _run_saved_storage_case(storage_name, kv_name, sk, bias_kind, causal, monkeypatch)
@@ -112,36 +128,46 @@ def _run_saved_storage_case(storage_name, kv_name, sk, bias_kind, causal, monkey
         owner = next(iter(fn._native_prepared_attention_calls.values()))
         artifact = rt.RuntimeArtifact.from_dict(json.loads(json.dumps(owner.artifact.to_dict())))
         handle = owner.handle
-        with ExitStack() as stack:
-            sessions = {name: stack.enter_context(NvidiaDeviceSession()) for name in values}
-            buffers = {name: sessions[name].upload(np.zeros_like(value)) for name, value in values.items()}
-            roots = {name: Borrowed(value) for name, value in buffers.items()}
-            for session in sessions.values():
-                assert session.synchronize() == 0
-            fn(**roots)
-            completed = []
-            callback = queue_delayed_upload(sessions["k"], buffers["k"], values["k"],
-                                            sessions["k"].stream, completed)
-            for name, value in values.items():
-                if name != "k":
-                    assert sessions[name].lib.tessera_nvidia_device_upload(
-                        ct.c_void_p(buffers[name].ptr), ct.c_void_p(value.ctypes.data),
-                        value.nbytes, ct.c_void_p(sessions[name].stream)) == 0
-            assert not completed
-            def forbidden(*args, **kwargs):
-                pytest.fail("warm saved-LSE forward compiled or evaluated concrete frontend")
-            with monkeypatch.context() as guard:
-                guard.setattr(subprocess, "run", forbidden)
-                guard.setattr(fn, "_fn", forbidden)
-                guard.setattr(fn, "_trace_frontend_capture", forbidden)
-                resident = fn(**roots)
-            assert completed and callback is not None and owner.handle == handle
-            compare(resident, expected, storage)
-            assert fn._native_descriptor_last_receipt["execution_kind"] == "native_gpu"
-            for actual, original in zip(resident, host, strict=True):
-                np.testing.assert_array_equal(actual, original)
-            for actual, original in zip(host, preserved, strict=True):
-                np.testing.assert_array_equal(actual, original)
+        fp8 = kv_storage.itemsize == 1
+        if fp8:
+            with ExitStack() as stack:
+                sessions = {name: stack.enter_context(NvidiaDeviceSession()) for name in values}
+                roots = {name: Borrowed(sessions[name].upload(value)) for name, value in values.items()}
+                for session in sessions.values():
+                    assert session.synchronize() == 0
+                with pytest.raises(ValueError, match="dtype"):
+                    fn(**roots)
+        if not fp8:
+            with ExitStack() as stack:
+                sessions = {name: stack.enter_context(NvidiaDeviceSession()) for name in values}
+                buffers = {name: sessions[name].upload(np.zeros_like(value)) for name, value in values.items()}
+                roots = {name: Borrowed(value) for name, value in buffers.items()}
+                for session in sessions.values():
+                    assert session.synchronize() == 0
+                fn(**roots)
+                completed = []
+                callback = queue_delayed_upload(sessions["k"], buffers["k"], values["k"],
+                                                sessions["k"].stream, completed)
+                for name, value in values.items():
+                    if name != "k":
+                        assert sessions[name].lib.tessera_nvidia_device_upload(
+                            ct.c_void_p(buffers[name].ptr), ct.c_void_p(value.ctypes.data),
+                            value.nbytes, ct.c_void_p(sessions[name].stream)) == 0
+                assert not completed
+                def forbidden(*args, **kwargs):
+                    pytest.fail("warm saved-LSE forward compiled or evaluated concrete frontend")
+                with monkeypatch.context() as guard:
+                    guard.setattr(subprocess, "run", forbidden)
+                    guard.setattr(fn, "_fn", forbidden)
+                    guard.setattr(fn, "_trace_frontend_capture", forbidden)
+                    resident = fn(**roots)
+                assert completed and callback is not None and owner.handle == handle
+                compare(resident, expected, storage)
+                assert fn._native_descriptor_last_receipt["execution_kind"] == "native_gpu"
+                for actual, original in zip(resident, host, strict=True):
+                    np.testing.assert_array_equal(actual, original)
+                for actual, original in zip(host, preserved, strict=True):
+                    np.testing.assert_array_equal(actual, original)
 
         ins = sorted((binding for binding in artifact.launch_descriptor.buffers
                       if binding.direction == "input"), key=lambda binding: binding.ordinal)

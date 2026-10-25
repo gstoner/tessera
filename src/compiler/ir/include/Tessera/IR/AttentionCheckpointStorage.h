@@ -24,6 +24,9 @@ struct NativeCheckpointStorage {
 inline llvm::StringRef checkpointStorageSpelling(mlir::Type element) {
   if (element.isF16()) return "f16";
   if (element.isBF16()) return "bf16";
+  // Unscaled FP8 is a K/V-only forward storage (SM120-SAVED-LSE-FP8-KV-20261025).
+  if (llvm::isa<mlir::Float8E4M3FNType>(element)) return "fp8_e4m3";
+  if (llvm::isa<mlir::Float8E5M2Type>(element)) return "fp8_e5m2";
   assert(element.isF32() && "checkpoint storage must have been verified");
   return "f32";
 }
@@ -58,8 +61,11 @@ resolveNativeCheckpointStorage(mlir::Operation *op, bool backward) {
   Type kv = operands[base + 1].getElementType();
   Type output = backward ? operands[4].getElementType() : results[0].getElementType();
   auto supported = [](Type type) { return type.isF16() || type.isBF16() || type.isF32(); };
-  if (!supported(input) || !supported(kv))
-    return op->emitError("checkpoint Q/K/V storage requires f16/bf16/f32"), failure();
+  // Unscaled FP8 K/V: each stored value is the operand, widened exactly to
+  // the f32 accumulation. Q, O and every backward role stay f16/bf16/f32.
+  auto fp8 = [](Type type) { return isa<Float8E4M3FNType, Float8E5M2Type>(type); };
+  if (!supported(input) || (!supported(kv) && !(fp8(kv) && !backward)))
+    return op->emitError("checkpoint Q/K/V storage requires f16/bf16/f32 (FP8 only for forward K/V)"), failure();
   if (output != input && !output.isF32())
     return op->emitError("checkpoint output storage must be f32 or match Q"), failure();
   if (operands[base + 2].getElementType() != kv)

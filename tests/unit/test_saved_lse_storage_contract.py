@@ -280,3 +280,65 @@ def test_mixed_forward_is_refused_by_the_paired_ad_contract(compiler):
         backward=True)
     with pytest.raises(ValueError):
         native.package_scheduled_checkpoint_pair(forward, backward, pipeline_name="test")
+
+
+# SM120-SAVED-LSE-FP8-KV-20261025: unscaled FP8 K/V on the forward only.
+FP8 = {"fp8_e4m3": "f8E4M3FN", "fp8_e5m2": "f8E5M2"}
+
+
+@pytest.mark.parametrize("storage", ["f16", "bf16", "f32"])
+@pytest.mark.parametrize("kv", sorted(FP8))
+@pytest.mark.parametrize("public", [True, False])
+def test_fp8_kv_forward_reaches_tile_with_byte_storage(compiler, storage, kv, public):
+    tile = run_tessera_opt(compiler, run_tessera_opt(compiler,
+        module(storage=storage, kv=FP8[kv], public=public), "--tessera-graph-to-schedule"),
+        "--tessera-schedule-to-tile")
+    contract = re.search(r"tessera.native_contract = \{([^\n]*)\}", tile)
+    assert contract is not None and f'kv_storage = "{kv}"' in contract[1]
+    entry = re.findall(r"llvm.func @([\w]+)\(", tile)
+    suffix = "_" if storage == "f32" else f"_out_{storage}_"
+    assert entry[0].startswith(f"tessera_tile_attention_lse_{storage}_kv_{kv}{suffix}")
+
+
+@pytest.mark.parametrize("edits,reason", [
+    ({"storage": "f8E4M3FN", "output": "f32", "kv": "f16"}, "FP8 only for forward K/V"),
+    ({"kv": "f8E4M3FN", "output": "f8E4M3FN"}, "output storage must be f32 or match Q"),
+    ({"kv": "f8E4M3FN", "key": "f8E5M2"}, "K/V storage must agree"),
+    ({"kv": "f8E5M2", "target": "rocm", "arch": "gfx1201"}, "SM120 native contract"),
+])
+def test_fp8_kv_refusals(compiler, edits, reason):
+    process = subprocess.run([str(compiler), "--tessera-graph-to-schedule"],
+                             input=module(public=False, **edits), capture_output=True, text=True)
+    assert process.returncode == 1, process.stdout + process.stderr
+    assert reason in process.stderr
+
+
+@pytest.mark.parametrize("kv", sorted(FP8))
+def test_fp8_kv_descriptor_declares_one_byte_buffers(compiler, monkeypatch, kv):
+    from tessera.compiler import nvidia_native as native, scheduled_checkpoint as checkpoint
+    from tessera.compiler.typed_attention_checkpoint import validate_typed_saved_lse_descriptor
+    graph = module(storage="f16", kv=FP8[kv], public=False)
+    schedule = run_tessera_opt(compiler, graph, "--tessera-graph-to-schedule")
+    tile = run_tessera_opt(compiler, schedule, "--tessera-schedule-to-tile")
+    scheduled = checkpoint._decode_checkpoint(graph, schedule, tile, backward=False)
+    assert scheduled.kv_storage == kv
+    monkeypatch.setattr(native, "_compile_tile_ir",
+        lambda text, entry: (text, "// PTX", {}, "compiler", "toolchain", (), "cold"))
+    descriptor = native.package_scheduled_checkpoint(
+        scheduled, pipeline_name="tessera-nvidia-pipeline-sm120").descriptor
+    buffers = sorted(descriptor.buffers, key=lambda value: value.ordinal)
+    assert [(b.dtype, b.alignment) for b in buffers[1:3]] == [(kv, 1), (kv, 1)]
+    assert validate_typed_saved_lse_descriptor(descriptor) == ("f16", "f16")
+
+
+def test_fp8_kv_forward_is_refused_by_the_paired_ad_contract(compiler):
+    from tessera.compiler import nvidia_native as native, scheduled_checkpoint as checkpoint
+    graph = module(storage="f16", kv="f8E4M3FN", public=False)
+    schedule = run_tessera_opt(compiler, graph, "--tessera-graph-to-schedule")
+    tile = run_tessera_opt(compiler, schedule, "--tessera-schedule-to-tile")
+    forward = checkpoint._decode_checkpoint(graph, schedule, tile, backward=False)
+    backward = checkpoint.lower_scheduled_checkpoint(
+        ("do", "q", "k", "v", "o", "lse", "dq", "dk", "dv"), forward.dims, forward.scale, True,
+        backward=True)
+    with pytest.raises(ValueError):
+        native.package_scheduled_checkpoint_pair(forward, backward, pipeline_name="test")

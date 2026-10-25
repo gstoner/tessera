@@ -2667,11 +2667,14 @@ static LogicalResult materializeSm120AttentionKernel(
   if (op->hasAttr("kv_storage") && (!kvStorageAttr || !hasSavedLse))
     return op->emitError("sm_120 attention kv_storage requires the saved-LSE forward");
   StringRef kvSpelling = kvStorageAttr ? kvStorageAttr.getValue() : storage.getValue();
+  // Unscaled FP8 K/V load one byte and decode it exactly to f32 below.
+  bool kvE4M3 = kvSpelling == "fp8_e4m3", kvE5M2 = kvSpelling == "fp8_e5m2";
   Type kvStorageType = kvSpelling == "f16" ? Type(builder.getF16Type())
                        : kvSpelling == "bf16" ? Type(builder.getBF16Type())
-                       : kvSpelling == "f32" ? Type(f32) : Type();
+                       : kvSpelling == "f32" ? Type(f32)
+                       : (kvE4M3 || kvE5M2) ? Type(builder.getI8Type()) : Type();
   if (!kvStorageType)
-    return op->emitError("sm_120 attention kv_storage requires f16/bf16/f32");
+    return op->emitError("sm_120 attention kv_storage requires f16/bf16/f32/fp8_e4m3/fp8_e5m2");
   Value B = in[dimStart], Hq = in[dimStart + 1], Hkv = in[dimStart + 2];
   Value Sq = in[dimStart + 3], Sk = in[dimStart + 4];
   Value D = in[dimStart + 5], Dv = in[dimStart + 6];
@@ -2703,11 +2706,50 @@ static LogicalResult materializeSm120AttentionKernel(
         builder, loc, f32, scaleAttr.getValue());
     Value log2e = arith::ConstantFloatOp::create(
         builder, loc, f32, APFloat(1.4426950408889634f));
+    // Exact FP8 -> f32. E5M2 is the high byte of an IEEE f16. E4M3FN has no
+    // infinities: S.1111.111 is NaN, exponent 0 is subnormal (m * 2^-9),
+    // otherwise the f32 exponent is e + 120 with the mantissa in bits 22..20.
+    auto decodeFp8 = [&](Value byte) -> Value {
+      Type i16 = builder.getI16Type();
+      if (kvE5M2) {
+        Value wide = arith::ExtUIOp::create(builder, loc, i16, byte);
+        Value bits = arith::ShLIOp::create(builder, loc, wide,
+            arith::ConstantIntOp::create(builder, loc, 8, 16));
+        Value half = arith::BitcastOp::create(builder, loc, builder.getF16Type(), bits);
+        return LLVM::FPExtOp::create(builder, loc, f32, half);
+      }
+      auto c32 = [&](int64_t v) -> Value { return arith::ConstantIntOp::create(builder, loc, v, 32); };
+      Value b32 = arith::ExtUIOp::create(builder, loc, i32, byte);
+      Value sign = arith::AndIOp::create(builder, loc, b32, c32(0x80));
+      Value exponent = arith::AndIOp::create(builder, loc,
+          arith::ShRUIOp::create(builder, loc, b32, c32(3)), c32(15));
+      Value mantissa = arith::AndIOp::create(builder, loc, b32, c32(7));
+      Value normalBits = arith::OrIOp::create(builder, loc,
+          arith::ShLIOp::create(builder, loc,
+              arith::AddIOp::create(builder, loc, exponent, c32(120)), c32(23)),
+          arith::ShLIOp::create(builder, loc, mantissa, c32(20)));
+      Value normal = arith::BitcastOp::create(builder, loc, f32, normalBits);
+      Value subnormal = arith::MulFOp::create(builder, loc,
+          arith::UIToFPOp::create(builder, loc, f32, mantissa),
+          arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.001953125f)));
+      Value isSubnormal = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq, exponent, c32(0));
+      Value isNan = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq,
+          arith::AndIOp::create(builder, loc, b32, c32(0x7f)), c32(0x7f));
+      Value magnitude = arith::SelectOp::create(builder, loc, isSubnormal, subnormal, normal);
+      magnitude = arith::SelectOp::create(builder, loc, isNan,
+          arith::ConstantFloatOp::create(builder, loc, f32, APFloat::getNaN(APFloat::IEEEsingle())),
+          magnitude);
+      Value negative = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ne, sign, c32(0));
+      return arith::SelectOp::create(builder, loc, negative,
+          arith::NegFOp::create(builder, loc, magnitude), magnitude);
+    };
     auto load = [&](Value base, Value index) -> Value {
       Type type = base == in[0] ? storageType : kvStorageType;
       Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), type,
                                       base, ValueRange{index});
-      Value value = LLVM::LoadOp::create(builder, loc, type, ptr, type.isF32() ? 4 : 2);
+      unsigned width = type.isF32() ? 4 : type.isInteger(8) ? 1 : 2;
+      Value value = LLVM::LoadOp::create(builder, loc, type, ptr, width);
+      if (type.isInteger(8)) return decodeFp8(value);
       return type.isF32() ? value : Value(LLVM::FPExtOp::create(builder, loc, f32, value));
     };
     auto score = [&](Value key) -> Value {

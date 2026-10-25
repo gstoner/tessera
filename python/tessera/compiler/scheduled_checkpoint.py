@@ -48,7 +48,7 @@ class ScheduledCheckpointArtifact:
                 not isinstance(self.output_storage, str) or self.output_storage not in {self.storage, "f32"}):
             raise ValueError("checkpoint storage requires homogeneous forward data and f32 auxiliaries")
         if self.kv_storage is not None and (
-                not isinstance(self.kv_storage, str) or self.kv_storage not in {"f16", "bf16", "f32"}
+                not isinstance(self.kv_storage, str) or self.kv_storage not in {"f16", "bf16", "f32", "fp8_e4m3", "fp8_e5m2"}
                 or self.kv_storage == self.storage or self.backward):
             raise ValueError("checkpoint K/V storage differs from Q only on the saved-LSE forward")
         if type(self.lse_cotangent) is not bool or (self.lse_cotangent and not self.backward):
@@ -332,7 +332,7 @@ def _decode_checkpoint(graph, schedule, tile, *, backward,
     bounds = re.search(r'\bshape_bounds = array<i64: ([0-9, ]+)>',text)
     storage = re.search(r'\bstorage = "([a-z0-9]+)"', text)
     output_storage = re.search(r'\boutput_storage = "([a-z0-9]+)"', text)
-    kv_storage = re.search(r'\bkv_storage = "([a-z0-9]+)"', text)
+    kv_storage = re.search(r'\bkv_storage = "([a-z0-9_]+)"', text)
     artifact = ScheduledCheckpointArtifact(graph,schedule,tile,entries[0],hashes[0],backward,names,
         tuple(map(int,shape[1].split(','))),scale_value,causal[1]=='true',bias,bias_gradient,indices,
         tuple(map(int,physical_bias[1].split(','))) if physical_bias else (),

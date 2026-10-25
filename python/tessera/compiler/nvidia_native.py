@@ -2252,7 +2252,7 @@ def _checkpoint_identity(
         policy["schema"] = "tessera.attention_checkpoint.bounded_sequences.v1"
         policy["shape_bounds"] = list(shape_bounds)
     kv_storage = storage if kv_storage is None else kv_storage
-    if (storage not in {"f16", "bf16", "f32"} or kv_storage not in {"f16", "bf16", "f32"}
+    if (storage not in {"f16", "bf16", "f32"} or kv_storage not in {"f16", "bf16", "f32", "fp8_e4m3", "fp8_e5m2"}
             or output_storage not in {storage, "f32"}):
         raise ValueError("checkpoint data/output storage disagrees")
     if storage != "f32" or output_storage != "f32" or kv_storage != storage:
@@ -2293,7 +2293,9 @@ def _attention_lse_contract(
     kv_dtype = args[k_name].ir_type.dtype
     # K/V share one storage that may differ from Q; the native checkpoint
     # verifier owns admission (SM120-SAVED-LSE-MIXED-STORAGE-20261025).
-    if (dtype not in {"fp16", "bf16", "fp32"} or kv_dtype not in {"fp16", "bf16", "fp32"}
+    # Unscaled FP8 is a K/V-only storage (SM120-SAVED-LSE-FP8-KV-20261025).
+    if (dtype not in {"fp16", "bf16", "fp32"}
+            or kv_dtype not in {"fp16", "bf16", "fp32", "fp8_e4m3", "fp8_e5m2"}
             or args[v_name].ir_type.dtype != kv_dtype or b != bk or b != bv
             or hkv != hv or sk != sv or d != dk or hq % hkv):
         return None
@@ -4314,6 +4316,10 @@ def package_attention_lse(
         lower_checkpoint_graph(module, backward=False), pipeline_name=pipeline_name)
 
 
+def _element_bytes(storage: str) -> int:
+    return {"f32": 4, "f16": 2, "bf16": 2, "fp8_e4m3": 1, "fp8_e5m2": 1}[storage]
+
+
 def _package_attention_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativePackage:
     names, dims, scale, causal = scheduled.names, scheduled.dims, scheduled.scale, scheduled.causal
     bias_name = names[3] if scheduled.bias else None
@@ -4327,7 +4333,7 @@ def _package_attention_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativ
         abi_id = SM120_ATTN_LSE_BCAST_F32_ABI
     storage, output_storage = scheduled.storage, scheduled.output_storage
     kv_storage = scheduled.key_value_storage
-    dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}
+    dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32", "fp8_e4m3": "fp8_e4m3", "fp8_e5m2": "fp8_e5m2"}
     if storage != "f32" or kv_storage != storage:
         abi_id = (SM120_ATTN_LSE_BCAST_TYPED_ABI if scheduled.bias_shape else
                   SM120_ATTN_LSE_BIAS_TYPED_ABI if scheduled.bias else SM120_ATTN_LSE_TYPED_ABI)
@@ -4343,8 +4349,8 @@ def _package_attention_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativ
     )
     buffers: tuple[BufferBinding, ...] = (
         BufferBinding(0, q_name, "input", dtype[storage], 4, "row_major", 4 if storage == "f32" else 2),
-        BufferBinding(1, k_name, "input", dtype[kv_storage], 4, "row_major", 4 if kv_storage == "f32" else 2),
-        BufferBinding(2, v_name, "input", dtype[kv_storage], 4, "row_major", 4 if kv_storage == "f32" else 2),
+        BufferBinding(1, k_name, "input", dtype[kv_storage], 4, "row_major", _element_bytes(kv_storage)),
+        BufferBinding(2, v_name, "input", dtype[kv_storage], 4, "row_major", _element_bytes(kv_storage)),
         BufferBinding(3, output_name, "output", dtype[output_storage], 4, "row_major", 4 if output_storage == "f32" else 2),
         BufferBinding(4, lse_name, "output", "fp32", 3, "row_major", 4),
     )

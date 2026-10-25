@@ -87,7 +87,7 @@ class PreparedAttentionForward:
             raise ValueError("prepared attention input arity differs")
         self.storage = {"fp32": 1, "fp16": 2, "bf16": 3}.get(bindings[0].dtype)
         # K/V share one storage; it differs from Q only on the saved-LSE forward.
-        self.kv_storage = {"fp32": 1, "fp16": 2, "bf16": 3}.get(bindings[1].dtype)
+        self.kv_storage = {"fp32": 1, "fp16": 2, "bf16": 3, "fp8_e4m3": 4, "fp8_e5m2": 5}.get(bindings[1].dtype)
         if (self.storage is None or self.kv_storage is None or bindings[2].dtype != bindings[1].dtype
                 or (self.kv_storage != self.storage and not self.saved)):
             raise ValueError("prepared attention storage differs")
@@ -231,7 +231,8 @@ class PreparedAttentionForward:
                 raise ValueError("prepared attention input count differs")
             values = tuple(ordered[index] for index in self.positions)
             signature = tuple(signature[index] for index in self.positions)
-            expected_types = {"fp32": "float32", "fp16": "float16", "bf16": "bfloat16"}
+            expected_types = {"fp32": "float32", "fp16": "float16", "bf16": "bfloat16",
+                              "fp8_e4m3": "float8_e4m3fn", "fp8_e5m2": "float8_e5m2"}
             if signature != tuple((expected_types[dtype], shape)
                                   for dtype, shape in zip(self.input_dtypes, self.shapes, strict=True)):
                 raise ValueError("prepared attention input storage differs")
@@ -255,7 +256,8 @@ class PreparedAttentionForward:
             else:
                 pointers = (ct.c_void_p * len(values))(*(value.ctypes.data for value in values))
                 streams = None
-            sizes = (ct.c_size_t * len(values))(*(math.prod(shape) * (2 if dtype in ("fp16", "bf16") else 4)
+            width = {"fp16": 2, "bf16": 2, "fp8_e4m3": 1, "fp8_e5m2": 1}
+            sizes = (ct.c_size_t * len(values))(*(math.prod(shape) * width.get(dtype, 4)
                       for shape, dtype in zip(self.shapes, self.input_dtypes, strict=True)))
             destinations = (ct.c_void_p * len(outputs))(*(value.ctypes.data for value in outputs))
             lengths = (ct.c_size_t * len(outputs))(*(value.nbytes for value in outputs))

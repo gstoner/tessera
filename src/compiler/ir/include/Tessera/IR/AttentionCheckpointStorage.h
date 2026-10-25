@@ -13,8 +13,12 @@
 
 namespace tessera {
 struct NativeCheckpointStorage {
+  // Q storage. K and V share kvElement, which differs from Q only on the
+  // forward role (SM120-SAVED-LSE-MIXED-STORAGE-20261025).
   mlir::Type inputElement;
   mlir::Type outputElement;
+  mlir::Type kvElement;
+  bool mixed() const { return kvElement != inputElement; }
 };
 
 inline llvm::StringRef checkpointStorageSpelling(mlir::Type element) {
@@ -24,8 +28,11 @@ inline llvm::StringRef checkpointStorageSpelling(mlir::Type element) {
   return "f32";
 }
 
-// Q/K/V and their gradients use homogeneous storage. Saved output and dO
-// share independently declared storage; bias, row LSE and their seeds are f32.
+// Backward Q/K/V and their gradients use homogeneous storage. Forward K/V
+// share one storage that may differ from Q; accumulation is the declared f32
+// and each operand widens to it exactly. Saved output and dO share
+// independently declared storage (f32 or Q's); bias, row LSE and their seeds
+// are f32.
 inline mlir::FailureOr<NativeCheckpointStorage>
 resolveNativeCheckpointStorage(mlir::Operation *op, bool backward) {
   using namespace mlir;
@@ -48,16 +55,19 @@ resolveNativeCheckpointStorage(mlir::Operation *op, bool backward) {
     results.push_back(tensor);
   }
   Type input = operands[base].getElementType();
+  Type kv = operands[base + 1].getElementType();
   Type output = backward ? operands[4].getElementType() : results[0].getElementType();
-  if (!input.isF16() && !input.isBF16() && !input.isF32())
+  auto supported = [](Type type) { return type.isF16() || type.isBF16() || type.isF32(); };
+  if (!supported(input) || !supported(kv))
     return op->emitError("checkpoint Q/K/V storage requires f16/bf16/f32"), failure();
   if (output != input && !output.isF32())
-    return op->emitError("checkpoint output storage must be f32 or match Q/K/V"), failure();
-  for (unsigned index : {base + 1, base + 2})
-    if (operands[index].getElementType() != input)
-      return op->emitError("checkpoint Q/K/V storage must agree"), failure();
+    return op->emitError("checkpoint output storage must be f32 or match Q"), failure();
+  if (operands[base + 2].getElementType() != kv)
+    return op->emitError("checkpoint K/V storage must agree"), failure();
+  if (backward && kv != input)
+    return op->emitError("checkpoint backward requires homogeneous Q/K/V storage"), failure();
   for (auto [index, tensor] : llvm::enumerate(operands)) {
-    Type expected = index >= base && index < base + 3 ? input :
+    Type expected = index == base ? input : index > base && index < base + 3 ? kv :
         backward && (index == 0 || index == 4) ? output : Float32Type::get(op->getContext());
     if (tensor.getElementType() != expected)
       return op->emitError("checkpoint auxiliary and backward seed storage disagrees with its typed role"), failure();
@@ -73,14 +83,14 @@ resolveNativeCheckpointStorage(mlir::Operation *op, bool backward) {
       return op->emitError("checkpoint result storage disagrees with its gradient/output/f32 auxiliary role"), failure();
     }
   }
-  if (!input.isF32() || !output.isF32()) {
+  if (!input.isF32() || !output.isF32() || !kv.isF32()) {
     auto module = op->getParentOfType<ModuleOp>();
     auto target = module ? module->getAttrOfType<StringAttr>("tessera.target") : StringAttr();
     auto arch = module ? module->getAttrOfType<StringAttr>("tessera.arch") : StringAttr();
     if (!target || target.getValue() != "nvidia_sm120" || !arch || arch.getValue() != "sm_120")
       return op->emitError("half checkpoint storage requires the SM120 native contract"), failure();
   }
-  return NativeCheckpointStorage{input, output};
+  return NativeCheckpointStorage{input, output, kv};
 }
 } // namespace tessera
 #endif

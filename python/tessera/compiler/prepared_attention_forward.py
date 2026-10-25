@@ -86,14 +86,17 @@ class PreparedAttentionForward:
         if inputs not in (3, 4):
             raise ValueError("prepared attention input arity differs")
         self.storage = {"fp32": 1, "fp16": 2, "bf16": 3}.get(bindings[0].dtype)
-        if self.storage is None:
+        # K/V share one storage; it differs from Q only on the saved-LSE forward.
+        self.kv_storage = {"fp32": 1, "fp16": 2, "bf16": 3}.get(bindings[1].dtype)
+        if (self.storage is None or self.kv_storage is None or bindings[2].dtype != bindings[1].dtype
+                or (self.kv_storage != self.storage and not self.saved)):
             raise ValueError("prepared attention storage differs")
         self.output_dtype = bindings[inputs].dtype
         self.output_storage = {"fp32": 1, "fp16": 2, "bf16": 3}.get(self.output_dtype)
         if (self.output_storage is None or self.output_dtype != module.functions[0].result_types[0].dtype
                 or (self.output_storage != 1 and self.output_storage != self.storage)):
             raise ValueError("prepared attention result storage differs")
-        if self.saved and self.storage != 1:
+        if self.saved and (self.storage != 1 or self.kv_storage != self.storage):
             from .typed_attention_checkpoint import validate_typed_saved_lse_descriptor
             validate_typed_saved_lse_descriptor(descriptor)
         elif self.saved and descriptor.abi_id in SM120_ATTN_LSE_TYPED_ABIS:
@@ -121,7 +124,7 @@ class PreparedAttentionForward:
         if self.bias_shape:
             shapes += (self.bias_shape,)
         self.output_shapes = ((b, hq, sq, dv),) + (((b, hq, sq),) if self.saved else ())
-        types = (bindings[0].dtype,) * 3 + (("fp32",) if inputs == 4 else ()) + (self.output_dtype,) + (("fp32",) if self.saved else ())
+        types = (bindings[0].dtype,) + (bindings[1].dtype,) * 2 + (("fp32",) if inputs == 4 else ()) + (self.output_dtype,) + (("fp32",) if self.saved else ())
         guards = {(g.binding, g.dimension): (g.value, g.predicate) for g in descriptor.shape_guards}
         if len(guards) != len(descriptor.shape_guards):
             raise ValueError("prepared attention requires unique shape guards")
@@ -181,6 +184,14 @@ class PreparedAttentionForward:
             P, S, ct.c_char_p, ct.POINTER(L), ct.POINTER(L), I, I, I, I, ct.POINTER(U),
         ]
         self.lib.tessera_nvidia_attention_forward_prepare.restype = I
+        mixed = self.kv_storage != self.storage
+        if mixed and not hasattr(self.lib, "tessera_nvidia_attention_forward_prepare_kv"):
+            raise RuntimeError("native attention forward owner lacks the K/V storage ABI")
+        if mixed:
+            self.lib.tessera_nvidia_attention_forward_prepare_kv.argtypes = [
+                P, S, ct.c_char_p, ct.POINTER(L), ct.POINTER(L), I, I, I, I, I, ct.POINTER(U),
+            ]
+            self.lib.tessera_nvidia_attention_forward_prepare_kv.restype = I
         self.lib.tessera_nvidia_attention_forward_invoke.argtypes = [
             U, ct.POINTER(P), ct.POINTER(S), S, ct.POINTER(U), S,
             ct.POINTER(P), ct.POINTER(S), S, ct.POINTER(ct.c_float),
@@ -193,9 +204,15 @@ class PreparedAttentionForward:
         payload = ct.create_string_buffer(self.image.payload)
         handle = U()
         bias = (L * 4)(*self.bias_shape) if self.bias_shape else None
-        self._check(self.lib.tessera_nvidia_attention_forward_prepare(
-            payload, len(self.image.payload), self.descriptor.entry_symbol.encode(),
-            (L * 7)(*self.dims), bias, self.storage, self.output_storage, self.saved, self.bias_scalars, ct.byref(handle)))
+        if mixed:
+            self._check(self.lib.tessera_nvidia_attention_forward_prepare_kv(
+                payload, len(self.image.payload), self.descriptor.entry_symbol.encode(),
+                (L * 7)(*self.dims), bias, self.storage, self.kv_storage, self.output_storage,
+                self.saved, self.bias_scalars, ct.byref(handle)))
+        else:
+            self._check(self.lib.tessera_nvidia_attention_forward_prepare(
+                payload, len(self.image.payload), self.descriptor.entry_symbol.encode(),
+                (L * 7)(*self.dims), bias, self.storage, self.output_storage, self.saved, self.bias_scalars, ct.byref(handle)))
         self.handle = handle.value
         self._finalizer = weakref.finalize(self, _retire, self.lib, self.handle, self.pid)
 

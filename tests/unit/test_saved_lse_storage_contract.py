@@ -10,11 +10,11 @@ pytestmark = pytest.mark.compiler_route
 
 
 def module(storage="f16", output=None, lse="f32", key=None, bias=None,
-           bias_storage="f32", target="nvidia_sm120", arch="sm_120", public=True):
+           bias_storage="f32", target="nvidia_sm120", arch="sm_120", public=True, kv=None):
     output = output or storage
     tensors = [
-        f"tensor<1x2x3x4x{storage}>", f"tensor<1x1x5x4x{key or storage}>",
-        f"tensor<1x1x5x3x{storage}>"]
+        f"tensor<1x2x3x4x{storage}>", f"tensor<1x1x5x4x{key or kv or storage}>",
+        f"tensor<1x1x5x3x{kv or storage}>"]
     names = ["q", "k", "v"]
     if bias:
         tensors.append(f"tensor<{bias}x{bias_storage}>")
@@ -77,7 +77,8 @@ def test_registered_checkpoint_forward_has_independent_output_and_auxiliary_type
 
 @pytest.mark.parametrize("edits,reason", [
     ({"lse": "f16"}, "row LSE storage"),
-    ({"key": "f32"}, "Q/K/V storage"),
+    ({"key": "f32"}, "K/V storage must agree"),
+    ({"kv": "bf16", "output": "bf16"}, "output storage must be f32 or match Q"),
     ({"output": "bf16"}, "output storage"),
     ({"bias": "1x2x1x1", "bias_storage": "f16"}, "auxiliary and backward"),
     ({"target": "rocm", "arch": "gfx1201"}, "SM120 native contract"),
@@ -179,4 +180,103 @@ def test_scheduled_ad_pair_rejects_half_forward_before_target_compilation(
     monkeypatch.setattr(native, "_compile_tile_ir",
         lambda *args: pytest.fail("compiled a mismatched half/f32 AD pair"))
     with pytest.raises(ValueError, match="paired checkpoint AD requires its f32 storage"):
+        native.package_scheduled_checkpoint_pair(forward, backward, pipeline_name="test")
+
+
+# SM120-SAVED-LSE-MIXED-STORAGE-20261025: K/V share one storage that may
+# differ from Q on the forward; O is f32 or Q's storage; accumulation is f32.
+MIXED = [("f16", "bf16"), ("bf16", "f16"), ("f32", "f16"), ("f32", "bf16"),
+         ("f16", "f32"), ("bf16", "f32")]
+
+
+@pytest.mark.parametrize("storage,kv", MIXED)
+@pytest.mark.parametrize("bias", [None, "1x2x1x1", "1x2x3x5"])
+@pytest.mark.parametrize("public", [True, False])
+def test_mixed_forward_storage_reaches_tile_with_distinct_kv_storage(compiler, storage, kv, bias, public):
+    tile = run_tessera_opt(compiler, run_tessera_opt(compiler,
+        module(storage=storage, kv=kv, bias=bias, public=public), "--tessera-graph-to-schedule"),
+        "--tessera-schedule-to-tile")
+    contract = re.search(r"tessera.native_contract = \{([^\n]*)\}", tile)
+    assert contract is not None
+    assert f'kv_storage = "{kv}"' in contract[1] and f'storage = "{storage}"' in contract[1]
+    assert 'accum = "f32"' in contract[1] and 'row_lse_storage = "f32"' in contract[1]
+    entry = re.findall(r"llvm.func @([\w]+)\(", tile)
+    suffix = "_" if storage == "f32" else f"_out_{storage}_"
+    assert len(entry) == 1 and entry[0].startswith(
+        f"tessera_tile_attention_lse_{storage}_kv_{kv}{suffix}")
+    kernel = [line for line in tile.splitlines() if "tile.attention_kernel" in line]
+    assert len(kernel) == 1 and f'kv_storage = "{kv}"' in kernel[0]
+
+
+@pytest.mark.parametrize("storage,kv", MIXED)
+def test_mixed_forward_with_f32_output_and_homogeneous_controls(compiler, storage, kv):
+    tile = run_tessera_opt(compiler, run_tessera_opt(compiler,
+        module(storage=storage, kv=kv, output="f32", public=False), "--tessera-graph-to-schedule"),
+        "--tessera-schedule-to-tile")
+    assert f"_kv_{kv}_" in tile and "_out_" not in re.findall(r"llvm.func @([\w]+)\(", tile)[0]
+    homogeneous = run_tessera_opt(compiler, run_tessera_opt(compiler,
+        module(storage=storage, public=False), "--tessera-graph-to-schedule"),
+        "--tessera-schedule-to-tile")
+    assert "kv_storage" not in homogeneous and "_kv_" not in homogeneous
+
+
+@pytest.mark.parametrize("target,arch", [("rocm", "gfx1201"), ("x86", "zen5-avx512")])
+def test_mixed_forward_storage_requires_the_sm120_contract(compiler, target, arch):
+    process = subprocess.run([str(compiler), "--tessera-graph-to-schedule"],
+        input=module(storage="f32", kv="f16", output="f32", public=False, target=target, arch=arch),
+        capture_output=True, text=True)
+    assert process.returncode == 1 and "SM120 native contract" in process.stderr
+
+
+@pytest.mark.parametrize("storage,kv", MIXED)
+def test_mixed_forward_descriptor_and_identity(compiler, monkeypatch, storage, kv):
+    from tessera.compiler import nvidia_native as native, scheduled_checkpoint as checkpoint
+    from tessera.compiler.typed_attention_checkpoint import validate_typed_saved_lse_descriptor
+    graph = module(storage=storage, kv=kv, bias="1x2x1x1", public=False)
+    schedule = run_tessera_opt(compiler, graph, "--tessera-graph-to-schedule")
+    tile = run_tessera_opt(compiler, schedule, "--tessera-schedule-to-tile")
+    scheduled = checkpoint._decode_checkpoint(graph, schedule, tile, backward=False)
+    assert scheduled.kv_storage == kv and scheduled.storage == storage
+    monkeypatch.setattr(native, "_compile_tile_ir",
+        lambda text, entry: (text, "// PTX", {}, "compiler", "toolchain", (), "cold"))
+    package = native.package_scheduled_checkpoint(scheduled, pipeline_name="tessera-nvidia-pipeline-sm120")
+    descriptor = package.descriptor
+    dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}
+    buffers = sorted(descriptor.buffers, key=lambda value: value.ordinal)
+    assert [b.dtype for b in buffers[:3]] == [dtype[storage], dtype[kv], dtype[kv]]
+    assert descriptor.abi_id in native.SM120_ATTN_LSE_TYPED_ABIS
+    assert validate_typed_saved_lse_descriptor(descriptor) == (storage, storage)
+    homogeneous = native._checkpoint_identity(scheduled.dims, scheduled.scale, scheduled.causal,
+        bias=True, storage=storage, output_storage=storage)
+    assert descriptor.provenance["checkpoint_contract"] != homogeneous
+    from dataclasses import replace
+    for provenance in ({**descriptor.provenance, "kv_storage": storage},
+                       {key: value for key, value in descriptor.provenance.items() if key != "kv_storage"}):
+        with pytest.raises(ValueError):
+            validate_typed_saved_lse_descriptor(replace(descriptor, provenance=provenance))
+    changed = list(descriptor.buffers)
+    changed[2] = replace(changed[2], dtype=dtype[storage])
+    with pytest.raises(ValueError):
+        validate_typed_saved_lse_descriptor(replace(descriptor, buffers=tuple(changed)))
+
+
+def test_homogeneous_identity_is_unchanged_by_the_kv_field():
+    from tessera.compiler.nvidia_native import _checkpoint_identity
+    dims = (1, 2, 1, 3, 5, 4, 3)
+    for storage in ("f16", "bf16", "f32"):
+        assert _checkpoint_identity(dims, 0.5, True, storage=storage, output_storage=storage) == \
+            _checkpoint_identity(dims, 0.5, True, storage=storage, output_storage=storage,
+                                 kv_storage=storage)
+
+
+def test_mixed_forward_is_refused_by_the_paired_ad_contract(compiler):
+    from tessera.compiler import nvidia_native as native, scheduled_checkpoint as checkpoint
+    graph = module(storage="f16", kv="bf16", public=False)
+    schedule = run_tessera_opt(compiler, graph, "--tessera-graph-to-schedule")
+    tile = run_tessera_opt(compiler, schedule, "--tessera-schedule-to-tile")
+    forward = checkpoint._decode_checkpoint(graph, schedule, tile, backward=False)
+    backward = checkpoint.lower_scheduled_checkpoint(
+        ("do", "q", "k", "v", "o", "lse", "dq", "dk", "dv"), forward.dims, forward.scale, True,
+        backward=True)
+    with pytest.raises(ValueError):
         native.package_scheduled_checkpoint_pair(forward, backward, pipeline_name="test")

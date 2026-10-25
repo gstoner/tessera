@@ -44,6 +44,8 @@ class PreparedSourceAttentionReverse:
         plan = program.manifest
         stages = program.lower_members()
         forward = _decode_checkpoint(*stages[1][:3], backward=False)
+        if forward.kv_storage is not None:
+            raise ValueError("source attention reverse requires homogeneous Q/K/V storage")
         from .portable_source_attention_reverse import _rows
         expected_bounds = tuple(plan.get("shape_bounds", ()))
         if _rows(plan):

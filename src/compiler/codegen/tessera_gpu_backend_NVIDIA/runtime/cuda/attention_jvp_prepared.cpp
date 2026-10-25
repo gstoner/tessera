@@ -65,6 +65,7 @@ struct Owner {
   bool reverseLseSeed=false,reverseRows=false,reverseRowStage=false,reverseCompleted=false;
   unsigned rowGrid=0;
   int storage=1,outputStorage=1;
+  int kvStorage=1; // forward-only saved-LSE K/V storage; equals storage elsewhere
   CUstream stream=nullptr;
   std::array<int64_t,4> biasShape{};
   unsigned reverseGrid=0,reverseThreads=128;
@@ -136,7 +137,7 @@ int prepareResidentDependencies(Owner &s,const void *const *inputs,
       CUdeviceptr pointer=reinterpret_cast<uintptr_t>(inputs[i]),base=0;
       size_t capacity=0;CUcontext allocationContext=nullptr,streamContext=nullptr;
       unsigned memoryType=0;
-      unsigned alignment=s.forwardOnly && i<3 && s.storage!=1?2:4;
+      unsigned alignment=s.forwardOnly && i<3 && (i==0?s.storage:s.kvStorage)!=1?2:4;
       if(!s.reverse && !s.forwardOnly && s.storage!=1){
         for(unsigned role=0;role<3;++role)
           if(i==size_t(s.mapping[role]))alignment=2;
@@ -1281,11 +1282,23 @@ extern "C" int tessera_nvidia_attention_vjp_close(uint64_t handle){
 }
 
 extern "C" const char *tessera_nvidia_attention_forward_last_error(){return ownerError.c_str();}
+extern "C" int tessera_nvidia_attention_forward_prepare_kv(
+  const void *image,size_t imageBytes,const char *entry,const int64_t *dims,
+  const int64_t *biasShape,int storage,int kvStorage,int outputStorage,int savedLse,int biasScalars,uint64_t *handle);
+// Homogeneous Q/K/V storage: the original ABI, unchanged for every caller.
 extern "C" int tessera_nvidia_attention_forward_prepare(
   const void *image,size_t imageBytes,const char *entry,const int64_t *dims,
   const int64_t *biasShape,int storage,int outputStorage,int savedLse,int biasScalars,uint64_t *handle){
+  return tessera_nvidia_attention_forward_prepare_kv(image,imageBytes,entry,dims,biasShape,
+      storage,storage,outputStorage,savedLse,biasScalars,handle);
+}
+extern "C" int tessera_nvidia_attention_forward_prepare_kv(
+  const void *image,size_t imageBytes,const char *entry,const int64_t *dims,
+  const int64_t *biasShape,int storage,int kvStorage,int outputStorage,int savedLse,int biasScalars,uint64_t *handle){
   ownerError.clear();if(handle)*handle=0;
   if(getpid()!=ownerProcess)return bad("prepared forward cannot cross fork");
+  if(kvStorage<1 || kvStorage>3 || (kvStorage!=storage && !savedLse))
+    return bad("prepared forward K/V storage requires the saved-LSE forward");
   if(!image || !imageBytes || !entry || !dims || !handle || storage<1 || storage>3 ||
      (savedLse!=0 && savedLse!=1) || (biasScalars!=0 && biasScalars!=1) ||
      (biasScalars && !biasShape) ||
@@ -1294,19 +1307,32 @@ extern "C" int tessera_nvidia_attention_forward_prepare(
     return bad("prepared forward registration disagrees");
   constexpr char f16Prefix[]="tessera_tile_attention_lse_f16_";
   constexpr char bf16Prefix[]="tessera_tile_attention_lse_bf16_";
+  constexpr char f32Prefix[]="tessera_tile_attention_lse_f32_";
   bool typedF16=std::strncmp(entry,f16Prefix,sizeof(f16Prefix)-1)==0;
   bool typedBF16=std::strncmp(entry,bf16Prefix,sizeof(bf16Prefix)-1)==0;
+  bool typedF32=std::strncmp(entry,f32Prefix,sizeof(f32Prefix)-1)==0;
   if ((typedF16 && (!savedLse || storage!=2)) ||
       (typedBF16 && (!savedLse || storage!=3)) ||
-      (savedLse && storage!=1 && !(typedF16 || typedBF16)))
+      (typedF32 && (!savedLse || storage!=1 || kvStorage==1)) ||
+      (savedLse && (storage!=1 || kvStorage!=1) && !(typedF16 || typedBF16 || typedF32)))
     return bad("prepared typed saved-LSE entry storage disagrees");
+  // A distinct K/V storage is sealed into the entry right after Q's storage.
+  if(savedLse){
+    const char *query=storage==2?"f16":storage==3?"bf16":"f32";
+    const char *kv=kvStorage==2?"f16":kvStorage==3?"bf16":"f32";
+    std::string mixed=std::string("tessera_tile_attention_lse_")+query+"_kv_"+kv+"_";
+    bool named=std::strstr(entry,"_kv_")!=nullptr;
+    if((kvStorage!=storage)!=named ||
+       (named && std::strncmp(entry,mixed.c_str(),mixed.size())))
+      return bad("prepared saved-LSE K/V storage differs from entry");
+  }
   bool namedF16=std::strstr(entry,"_out_f16_"),namedBF16=std::strstr(entry,"_out_bf16_");
   if ((outputStorage==2)!=namedF16 || (outputStorage==3)!=namedBF16)
     return bad("prepared forward result storage differs from entry");
   std::lock_guard<std::mutex> lock(ownerMutex);
   try{
     auto state=std::make_unique<Owner>();
-    state->forwardOnly=true;state->savedLse=savedLse;state->storage=storage;
+    state->forwardOnly=true;state->savedLse=savedLse;state->storage=storage;state->kvStorage=kvStorage;
     state->outputStorage=outputStorage;
     state->bias=biasShape;state->forwardBiasScalars=biasScalars;
     for(size_t i=0;i<7;++i){
@@ -1318,7 +1344,8 @@ extern "C" int tessera_nvidia_attention_forward_prepare(
     if(!extent({b,hq,sq,d},state->bytes[0]) ||
        !extent({b,hkv,sk,d},state->bytes[1]) ||
        !extent({b,hkv,sk,dv},state->bytes[2]))return bad("prepared forward input extent overflows");
-    if(storage!=1)for(size_t i=0;i<3;++i)state->bytes[i]/=2;
+    if(storage!=1)state->bytes[0]/=2;
+    if(kvStorage!=1)for(size_t i=1;i<3;++i)state->bytes[i]/=2;
     const size_t primals=3+unsigned(state->bias),outputs=1+unsigned(state->savedLse);
     if(state->bias){
       const int64_t score[4]={b,hq,sq,sk};

@@ -2661,7 +2661,17 @@ static LogicalResult materializeSm120AttentionKernel(
   Type storageType = f16Storage
                          ? Type(builder.getF16Type())
                          : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
-  unsigned alignment = (f16Storage || bf16Storage) ? 2 : 4;
+  // K/V may carry their own declared storage (saved-LSE forward only; the
+  // Tile verifier checks it). Every operand widens exactly to the f32 accum.
+  auto kvStorageAttr = op->getAttrOfType<StringAttr>("kv_storage");
+  if (op->hasAttr("kv_storage") && (!kvStorageAttr || !hasSavedLse))
+    return op->emitError("sm_120 attention kv_storage requires the saved-LSE forward");
+  StringRef kvSpelling = kvStorageAttr ? kvStorageAttr.getValue() : storage.getValue();
+  Type kvStorageType = kvSpelling == "f16" ? Type(builder.getF16Type())
+                       : kvSpelling == "bf16" ? Type(builder.getBF16Type())
+                       : kvSpelling == "f32" ? Type(f32) : Type();
+  if (!kvStorageType)
+    return op->emitError("sm_120 attention kv_storage requires f16/bf16/f32");
   Value B = in[dimStart], Hq = in[dimStart + 1], Hkv = in[dimStart + 2];
   Value Sq = in[dimStart + 3], Sk = in[dimStart + 4];
   Value D = in[dimStart + 5], Dv = in[dimStart + 6];
@@ -2694,12 +2704,11 @@ static LogicalResult materializeSm120AttentionKernel(
     Value log2e = arith::ConstantFloatOp::create(
         builder, loc, f32, APFloat(1.4426950408889634f));
     auto load = [&](Value base, Value index) -> Value {
-      Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), storageType,
+      Type type = base == in[0] ? storageType : kvStorageType;
+      Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), type,
                                       base, ValueRange{index});
-      Value value = LLVM::LoadOp::create(builder, loc, storageType, ptr, alignment);
-      return (f16Storage || bf16Storage)
-                 ? Value(LLVM::FPExtOp::create(builder, loc, f32, value))
-                 : value;
+      Value value = LLVM::LoadOp::create(builder, loc, type, ptr, type.isF32() ? 4 : 2);
+      return type.isF32() ? value : Value(LLVM::FPExtOp::create(builder, loc, f32, value));
     };
     auto score = [&](Value key) -> Value {
       Value qBase = mulI64(builder, loc,

@@ -19250,3 +19250,12 @@ Synchronization key: SM120-SAVED-LSE-MIXED-STORAGE-20261025.
 Not applicable to rocm: the saved-LSE checkpoint resolver change is shared C++, but the native checkpoint contract requires the SM120 target and ROCm has no consumer for it; no ROCm selector, ABI or result changes, and no RTX 5070 evidence transfers.
 
 Evidence: benchmarks/baselines/sm120_saved_lse_mixed_storage_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+
+## SM120-SAVED-LSE-FP8-KV-20261025 — saved-LSE forward with unscaled FP8 K/V
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: SM120-SAVED-LSE-FP8-KV-20261025.
+
+Not applicable to rocm physical execution: the shared checkpoint resolver admits FP8 K/V only under the SM120 native contract. The shared `flash_attn` Graph render change (infer `head_dim` from Q when K/V are FP8) also applies to ROCm traces; no ROCm FP8 attention route consumed such a graph before, so no selector or result changes. No RTX 5070 evidence transfers.
+
+Evidence: benchmarks/baselines/sm120_saved_lse_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.

@@ -93,3 +93,36 @@ def test_uninvoked_helper_drop_does_not_count():
     x = _x()
     np.testing.assert_allclose(np.asarray(fn(x)), np.maximum(x, 0.0))
     assert fn.last_fallback_reason is None
+
+
+# ── Native routes run before the guard (regression found on gfx1201) ───────
+
+from tessera.compiler.nvfp4_expansion import nvfp4_expansion_policy  # noqa: E402
+
+
+def _expand_with_policy_helper(codes, scales, globals_):
+    return tessera.ops.nvfp4_expand(codes, scales, globals_,
+        row_offsets=[0, 3, 7], numeric_policy=nvfp4_expansion_policy())
+
+
+def test_native_route_runs_before_the_dropped_call_guard(monkeypatch):
+    """`nvfp4_expansion_policy()` in a keyword argument is a dropped AST call,
+    but the native gfx1201 route re-traces the live function and computes the
+    whole body. Guarding before it sent the call to the eager oracle; the
+    guard now applies only to the lanes that execute the AST graph."""
+    fn = tessera.jit(target="rocm_gfx1201")(_expand_with_policy_helper)
+    assert fn.graph_ir.frontend_unlowered_calls == ["nvfp4_expansion_policy"]
+    monkeypatch.setattr(fn, "_try_source_attention_call", lambda args, kwargs: "native")
+
+    def eager(*_args, **_kwargs):
+        pytest.fail("a dropped AST call pre-empted a native route")
+
+    monkeypatch.setattr(fn, "_fn", eager)
+    assert fn(None, None, None) == "native"
+    assert fn.last_fallback_reason is not REASON
+
+
+def test_guard_still_refuses_the_ast_lanes_once_native_routes_decline():
+    fn = tessera.jit(native_required=True)(_relu_then_numpy_exp)
+    with pytest.raises(TesseraNativeRequiredError):
+        fn(_x())

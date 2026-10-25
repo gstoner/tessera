@@ -1055,9 +1055,6 @@ class JitFn:
         self._rocm_quantized_product_last_receipts = ()
         self._enforce_call_time_constraints(args, kwargs)
         self._enforce_call_time_stochastic_certificate(args, kwargs)
-        dropped_calls = self._dropped_calls_for_this_call()
-        if dropped_calls:
-            return self._eager_for_dropped_calls(args, kwargs, dropped_calls)
         if self._bounded_lhs is not None:
             return self._bounded_lhs(args,kwargs)
         native_pair = getattr(self, "_native_storage_pair", None)
@@ -1140,6 +1137,15 @@ class JitFn:
                 if jit_trace_enabled():
                     return self._run_traced_with_diagnostic(
                         run_jit_traced, args, kwargs)
+            # Every lane from here on executes the AST-emitted graph (the CPU
+            # plan, the Apple fast paths) or ends in the original function.
+            # The native routes above re-trace the live function, so a call the
+            # AST front end dropped cannot truncate them; checking before them
+            # sent native gfx1201 NVFP4 bodies with a policy helper in a
+            # keyword argument to eager Python (review of #1004 on Tajasarus).
+            dropped_calls = self._dropped_calls_for_this_call()
+            if dropped_calls:
+                return self._eager_for_dropped_calls(args, kwargs, dropped_calls)
             if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
                 if self.execution_kind == "native_cpu":
                     return self._native_cpu_fast_call(args, kwargs)
@@ -1206,14 +1212,15 @@ class JitFn:
     ) -> Any:
         """Run the original function when the graph is missing body calls.
 
-        Before this, every lane executed the graph the AST front end emitted.
-        A body like ``y = ops.relu(x); return np.exp(y)`` lowers to ``relu``
-        and a bare ``return`` -- ``np.exp`` is not a Graph op -- so the call
-        returned ``relu(x)`` with ``last_fallback_reason`` None. Running the
-        Python function is the honest answer; the reason says why.
+        Called only once every native route has declined: those re-trace the
+        live function, while the lanes after this point execute the graph the
+        AST front end emitted. A body like ``y = ops.relu(x); return
+        np.exp(y)`` lowers to ``relu`` and a bare ``return`` -- ``np.exp`` is
+        not a Graph op -- so those lanes returned ``relu(x)`` with
+        ``last_fallback_reason`` None. Running the Python function is the
+        honest answer; the reason says why. The caller's ``finally`` emits the
+        compile report.
         """
-        from . import compile_report as _cr
-
         reason = FallbackReason.FRONTEND_UNLOWERED_CALL
         self.last_fallback_reason = reason
         names = ", ".join(sorted(set(dropped)))
@@ -1235,11 +1242,7 @@ class JitFn:
                     f"so no compiled lane can run the whole function"
                 ),
             )
-        try:
-            return self._fn(*args, **kwargs)
-        finally:
-            if _cr.active_sink_is_capturing():
-                _cr.emit_compile_report(self.compile_report())
+        return self._fn(*args, **kwargs)
 
     def _run_traced_with_diagnostic(
         self, run_jit_traced: Callable, args: Tuple[Any, ...],

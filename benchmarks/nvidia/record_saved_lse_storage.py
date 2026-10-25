@@ -23,11 +23,19 @@ from tests.device.nvidia.test_saved_lse_storage import (
 )
 
 
+def _dtype(name):
+    return np.dtype(ml_dtypes.bfloat16 if name == "bfloat16" else name)
+
+
 def inputs(row):
-    storage = np.dtype(ml_dtypes.bfloat16 if row["storage"] == "bfloat16" else row["storage"])
+    # K/V take row["kv_storage"] when present (SM120-SAVED-LSE-MIXED-STORAGE-20261025);
+    # O follows Q's storage, so the returned storage is Q's.
+    storage = _dtype(row["storage"])
+    kv_storage = _dtype(row.get("kv_storage", row["storage"]))
     b, hq, hkv, sq, sk, d, dv = row["shape"]
     rng = np.random.default_rng(20261016)
-    values = {name: rng.normal(0, .2, shape).astype(storage) for name, shape in {
+    values = {name: rng.normal(0, .2, shape).astype(storage if name == "q" else kv_storage)
+              for name, shape in {
         "q": (b, hq, sq, d), "k": (b, hkv, sk, d), "v": (b, hkv, sk, dv)}.items()}
     if row["bias"]:
         values["bias"] = rng.normal(0, .1, (b, hq, 1, 1)).astype(np.float32)
@@ -131,6 +139,8 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--repetitions", type=int, default=9)
     parser.add_argument("--replay-only", action="store_true")
+    parser.add_argument("--mixed", action="store_true",
+                        help="record mixed Q vs K/V storage arms and their homogeneous controls")
     args = parser.parse_args()
     gpu = subprocess.check_output(["/usr/lib/wsl/lib/nvidia-smi",
         "--query-gpu=name,uuid,compute_cap,driver_version", "--format=csv,noheader"], text=True).strip()
@@ -153,8 +163,13 @@ def main():
         raise RuntimeError("recording requires a clean source freeze")
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "packages").mkdir(exist_ok=True)
-    rows = [{"storage": storage, "shape": list(shape), "causal": causal, "bias": bias}
-        for storage in ("float16", "bfloat16", "float32")
+    pairs = ((("float16", "float16"), ("bfloat16", "bfloat16"), ("float32", "float32"),
+              ("float16", "bfloat16"), ("bfloat16", "float16"), ("float32", "float16"),
+              ("float32", "bfloat16"), ("float16", "float32"), ("bfloat16", "float32"))
+             if args.mixed else (("float16", "float16"), ("bfloat16", "bfloat16"), ("float32", "float32")))
+    rows = [{"storage": storage, **({"kv_storage": kv} if kv != storage else {}),
+             "shape": list(shape), "causal": causal, "bias": bias}
+        for storage, kv in pairs
         for shape in ((1, 2, 1, 3, 5, 4, 3), (1, 2, 1, 32, 129, 32, 32))
         for causal in (False, True) for bias in (False, True)]
     for index, row in enumerate(rows):
@@ -164,7 +179,9 @@ def main():
     packet = {"device": gpu, "architecture": "sm120", "source_before": before, "source_after": after,
         "rows": rows, "correctness": "independent FP64 oracle from exact stored operands before timing",
         "timing_scope": "CUDA events cover kernel only; completed public calls include waits, snapshots and host O/LSE downloads",
-        "scope": "static compact homogeneous QKV; optional broadcast FP32 bias; O matches input; LSE FP32; no AD or default promotion"}
+        "scope": ("static compact Q with K/V of the same or a distinct storage; O follows Q; "
+                  "optional broadcast FP32 bias; LSE FP32; no AD or default promotion" if args.mixed else
+                  "static compact homogeneous QKV; optional broadcast FP32 bias; O matches input; LSE FP32; no AD or default promotion")}
     (args.output / "packet.json").write_text(json.dumps(packet, indent=2)+"\n")
     print(f"recorded {len(rows)} correctness-gated rows")
 

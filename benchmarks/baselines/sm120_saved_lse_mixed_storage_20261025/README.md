@@ -37,6 +37,10 @@ The new field and its effects:
 Still homogeneous-only, refusing a mixed forward: the backward checkpoint,
 paired AD, original-source reverse, and the JVP owners.
 
+Recorded by `benchmarks/nvidia/record_saved_lse_storage.py --mixed` (`packet.json`,
+`replay.json` via `--replay-only`) and
+`benchmarks/nvidia/diagnose_saved_lse_mixed_pairing.py` (`paired-interleaved.json`).
+
 ## Host and protocol
 
 - Device: The-Super-Bear, RTX 5070 (sm_120, cc 12.0), WSL2, CUDA 13.4, using the

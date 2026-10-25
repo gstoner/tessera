@@ -193,3 +193,35 @@ def _run_saved_storage_case(storage_name, kv_name, sk, bias_kind, causal, monkey
     finally:
         fn.close_native_storage()
 
+
+
+@pytest.mark.parametrize("kv_name", ["float8_e4m3fn", "float8_e5m2"])
+@pytest.mark.parametrize("causal", [False, True])
+def test_fp8_kv_decodes_every_finite_code_exactly(kv_name, causal):
+    """Every finite FP8 code point appears once in K and once in V, so the
+    in-kernel decode (subnormals, signed zero, largest finite) meets an fp64
+    oracle computed from the same stored values. Q is f32 so O is not rounded."""
+    if rt._nvidia_device_name() != "sm_120":
+        pytest.skip("owning RTX5070/SM120 required")
+    kv_storage = _dtype(kv_name)
+    codes = np.arange(256, dtype=np.uint8).view(kv_storage)
+    finite = codes[np.isfinite(codes.astype(np.float64))]
+    sk = finite.size
+    rng = np.random.default_rng(20261025)
+    # Distinct K/V code orders; a tiny Q keeps scores in a well-conditioned range.
+    k = rng.permutation(np.repeat(finite, 4)).reshape(1, 1, sk, 4)
+    v = rng.permutation(np.repeat(finite, 3)).reshape(1, 1, sk, 3)
+    q = rng.normal(0, 1e-6, (1, 2, 3, 4)).astype(np.float32)
+    values = {"q": q, "k": k.astype(kv_storage), "v": v.astype(kv_storage)}
+    fn = ts.jit(target="nvidia_sm120")(saved if causal else saved_open)
+    try:
+        output, lse = fn(**values)
+        assert fn._native_descriptor_last_receipt["execution_kind"] == "native_gpu"
+        assert f"_kv_fp8_{'e4m3' if 'e4m3' in kv_name else 'e5m2'}_" in \
+            fn._native_descriptor_last_receipt["entry"]
+        want_output, want_lse = reference(values, causal)
+        scale = np.abs(values["v"].astype(np.float64)).max()
+        np.testing.assert_allclose(output.astype(np.float64), want_output, rtol=0, atol=2e-6 * scale)
+        np.testing.assert_allclose(lse, want_lse, rtol=3e-6, atol=3e-6)
+    finally:
+        fn.close_native_storage()

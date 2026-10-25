@@ -126,3 +126,42 @@ def test_guard_still_refuses_the_ast_lanes_once_native_routes_decline():
     fn = tessera.jit(native_required=True)(_relu_then_numpy_exp)
     with pytest.raises(TesseraNativeRequiredError):
         fn(_x())
+
+
+# ── Review on #1009: a real route's failed trace must decline, not raise ────
+
+_UFUNC_SOURCE = "def f(x):\n    y = tessera.ops.exp(x)\n    return np.exp(y)\n"
+
+
+@pytest.mark.parametrize("target", ["rocm_gfx1151", "rocm_gfx1201"])
+def test_failed_native_trace_on_dropped_dataflow_reaches_the_fallback(target):
+    """No mocks: the native descriptor route admits the AST graph, re-traces
+    the function, and the tracer fails on `np.exp(<Tracer>)`. That failure is
+    explained by the dropped call, so the route declines and the original
+    function runs, instead of raising out of `__call__`."""
+    namespace = {"tessera": tessera, "np": np}
+    exec(_UFUNC_SOURCE, namespace)  # noqa: S102 -- literal test source
+    fn = tessera.jit(target=target, source=_UFUNC_SOURCE)(namespace["f"])
+    x = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+    np.testing.assert_allclose(np.asarray(fn(x)), np.exp(np.exp(x)), rtol=1e-6)
+    assert fn.last_fallback_reason is REASON
+
+
+def test_a_trace_failure_without_a_dropped_call_still_raises(monkeypatch):
+    """The decline is reserved for bodies the AST front end found incomplete;
+    any other tracer failure keeps raising the plain error."""
+    import importlib
+
+    jit_module = importlib.import_module("tessera.compiler.jit")  # the module, not the decorator
+    trace_module = importlib.import_module("tessera.compiler.trace")
+
+    fn = tessera.jit(target="rocm_gfx1151")(_catalogued_only)
+    assert fn.graph_ir.frontend_unlowered_calls == []
+
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("tracer exploded")
+
+    monkeypatch.setattr(trace_module, "trace", broken)
+    with pytest.raises(jit_module.TesseraJitError, match="tracer frontend failed") as info:
+        fn._trace_frontend_capture((_x(),), {})
+    assert not isinstance(info.value, jit_module._DroppedCallTraceDecline)

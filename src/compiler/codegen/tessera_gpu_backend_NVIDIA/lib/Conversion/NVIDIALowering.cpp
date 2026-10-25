@@ -2706,42 +2706,27 @@ static LogicalResult materializeSm120AttentionKernel(
         builder, loc, f32, scaleAttr.getValue());
     Value log2e = arith::ConstantFloatOp::create(
         builder, loc, f32, APFloat(1.4426950408889634f));
-    // Exact FP8 -> f32. E5M2 is the high byte of an IEEE f16. E4M3FN has no
-    // infinities: S.1111.111 is NaN, exponent 0 is subnormal (m * 2^-9),
-    // otherwise the f32 exponent is e + 120 with the mantissa in bits 22..20.
+    // Exact FP8 -> f32. E5M2 is the high byte of an IEEE f16. E4M3FN goes
+    // through sm_120's cvt.rn.f16x2.e4m3x2 (nvvm.convert.f8x2.to.f16x2):
+    // every E4M3FN value, subnormals and NaN included, is exact in f16.
     auto decodeFp8 = [&](Value byte) -> Value {
       Type i16 = builder.getI16Type();
+      Value wide = arith::ExtUIOp::create(builder, loc, i16, byte);
       if (kvE5M2) {
-        Value wide = arith::ExtUIOp::create(builder, loc, i16, byte);
         Value bits = arith::ShLIOp::create(builder, loc, wide,
             arith::ConstantIntOp::create(builder, loc, 8, 16));
         Value half = arith::BitcastOp::create(builder, loc, builder.getF16Type(), bits);
         return LLVM::FPExtOp::create(builder, loc, f32, half);
       }
-      auto c32 = [&](int64_t v) -> Value { return arith::ConstantIntOp::create(builder, loc, v, 32); };
-      Value b32 = arith::ExtUIOp::create(builder, loc, i32, byte);
-      Value sign = arith::AndIOp::create(builder, loc, b32, c32(0x80));
-      Value exponent = arith::AndIOp::create(builder, loc,
-          arith::ShRUIOp::create(builder, loc, b32, c32(3)), c32(15));
-      Value mantissa = arith::AndIOp::create(builder, loc, b32, c32(7));
-      Value normalBits = arith::OrIOp::create(builder, loc,
-          arith::ShLIOp::create(builder, loc,
-              arith::AddIOp::create(builder, loc, exponent, c32(120)), c32(23)),
-          arith::ShLIOp::create(builder, loc, mantissa, c32(20)));
-      Value normal = arith::BitcastOp::create(builder, loc, f32, normalBits);
-      Value subnormal = arith::MulFOp::create(builder, loc,
-          arith::UIToFPOp::create(builder, loc, f32, mantissa),
-          arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.001953125f)));
-      Value isSubnormal = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq, exponent, c32(0));
-      Value isNan = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq,
-          arith::AndIOp::create(builder, loc, b32, c32(0x7f)), c32(0x7f));
-      Value magnitude = arith::SelectOp::create(builder, loc, isSubnormal, subnormal, normal);
-      magnitude = arith::SelectOp::create(builder, loc, isNan,
-          arith::ConstantFloatOp::create(builder, loc, f32, APFloat::getNaN(APFloat::IEEEsingle())),
-          magnitude);
-      Value negative = arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ne, sign, c32(0));
-      return arith::SelectOp::create(builder, loc, negative,
-          arith::NegFOp::create(builder, loc, magnitude), magnitude);
+      // Lane 0 holds the code (little-endian); lane 1 is a zero byte.
+      Value pair = LLVM::BitcastOp::create(builder, loc,
+          VectorType::get({2}, builder.getI8Type()), wide);
+      Value halves = NVVM::ConvertF8x2ToF16x2Op::create(builder, loc,
+          VectorType::get({2}, builder.getF16Type()), pair,
+          Type(builder.getType<Float8E4M3FNType>()));
+      Value half = LLVM::ExtractElementOp::create(builder, loc, halves,
+          arith::ConstantIntOp::create(builder, loc, 0, 32));
+      return LLVM::FPExtOp::create(builder, loc, f32, half);
     };
     auto load = [&](Value base, Value index) -> Value {
       Type type = base == in[0] ? storageType : kvStorageType;

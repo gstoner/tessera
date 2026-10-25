@@ -60,6 +60,10 @@ def compare(pair, expected, storage):
     np.testing.assert_allclose(pair[1], expected[1], rtol=3e-6, atol=3e-6)
 
 
+def _dtype(name):
+    return np.dtype(ml_dtypes.bfloat16 if name == "bfloat16" else name)
+
+
 @pytest.mark.parametrize("storage_name", ["float16", "bfloat16", "float32"])
 @pytest.mark.parametrize("sk", [5, 129])
 @pytest.mark.parametrize("bias_kind", ["none", "broadcast", "dense"])
@@ -67,12 +71,30 @@ def compare(pair, expected, storage):
 def test_saved_storage_public_resident_and_serialized_byte_boundaries(
     storage_name, sk, bias_kind, causal, monkeypatch,
 ):
+    _run_saved_storage_case(storage_name, storage_name, sk, bias_kind, causal, monkeypatch)
+
+
+# SM120-SAVED-LSE-MIXED-STORAGE-20261025: K/V share a storage that differs
+# from Q; O takes Q's storage (the frontend result type), LSE stays f32.
+@pytest.mark.parametrize("storage_name,kv_name", [
+    ("float16", "bfloat16"), ("bfloat16", "float16"), ("float32", "float16"),
+    ("float32", "bfloat16"), ("float16", "float32"), ("bfloat16", "float32")])
+@pytest.mark.parametrize("sk", [5, 129])
+@pytest.mark.parametrize("bias_kind", ["none", "broadcast", "dense"])
+@pytest.mark.parametrize("causal", [False, True])
+def test_mixed_kv_storage_public_resident_and_serialized_byte_boundaries(
+    storage_name, kv_name, sk, bias_kind, causal, monkeypatch,
+):
+    _run_saved_storage_case(storage_name, kv_name, sk, bias_kind, causal, monkeypatch)
+
+
+def _run_saved_storage_case(storage_name, kv_name, sk, bias_kind, causal, monkeypatch):
     if rt._nvidia_device_name() != "sm_120":
         pytest.skip("owning RTX5070/SM120 required")
-    storage = np.dtype(ml_dtypes.bfloat16 if storage_name == "bfloat16" else storage_name)
+    storage, kv_storage = _dtype(storage_name), _dtype(kv_name)
     rng = np.random.default_rng(20261016)
-    values = {name: rng.normal(0, .2, shape).astype(storage) for name, shape in {
-        "q": (1, 2, 3, 4), "k": (1, 1, sk, 4), "v": (1, 1, sk, 3)}.items()}
+    values = {name: rng.normal(0, .2, shape).astype(storage if name == "q" else kv_storage)
+              for name, shape in {"q": (1, 2, 3, 4), "k": (1, 1, sk, 4), "v": (1, 1, sk, 3)}.items()}
     if bias_kind != "none":
         shape = (1, 2, 1, 1) if bias_kind == "broadcast" else (1, 2, 3, sk)
         values["bias"] = rng.normal(0, .1, shape).astype(np.float32)
@@ -83,6 +105,8 @@ def test_saved_storage_public_resident_and_serialized_byte_boundaries(
     try:
         host = fn(**values)
         assert fn._native_prepared_attention_calls, "saved-LSE call did not create a native owner"
+        assert fn._native_descriptor_last_receipt["execution_kind"] == "native_gpu"
+        assert ("_kv_" in fn._native_descriptor_last_receipt["entry"]) == (kv_storage != storage)
         compare(host, expected, storage)
         preserved = tuple(value.copy() for value in host)
         owner = next(iter(fn._native_prepared_attention_calls.values()))

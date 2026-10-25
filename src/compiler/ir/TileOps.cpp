@@ -2429,6 +2429,18 @@ LogicalResult AttentionKernelOp::verify() {
           (outputStorage.getValue() != "f16" && outputStorage.getValue() != "bf16"))))
       return emitOpError("half result storage requires NVIDIA attention and matching input storage");
   }
+  // Absent kv_storage means K/V share Q's storage. When present it is a
+  // distinct declared storage for the saved-LSE forward on SM120 only.
+  if (getOperation()->hasAttr("kv_storage")) {
+    auto kvStorage = getOperation()->getAttrOfType<StringAttr>("kv_storage");
+    auto module = getOperation()->getParentOfType<ModuleOp>();
+    auto target = module ? module->getAttrOfType<StringAttr>("tessera.target") : StringAttr();
+    if (!kvStorage || kvStorage.getValue() == storage.getValue() ||
+        (kvStorage.getValue() != "f16" && kvStorage.getValue() != "bf16" &&
+         kvStorage.getValue() != "f32") ||
+        !hasSavedLse || !target || target.getValue() != "nvidia_sm120")
+      return emitOpError("kv_storage requires a distinct f16/bf16/f32 K/V storage on the SM120 saved-LSE forward");
+  }
   if (!accum || accum.getValue() != "f32")
     return emitOpError("requires accum=\"f32\"");
   if (!scale || !scale.getValue().isFinite() || scale.getValueAsDouble() <= 0.0)

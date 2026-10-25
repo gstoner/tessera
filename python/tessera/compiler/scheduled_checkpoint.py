@@ -36,11 +36,21 @@ class ScheduledCheckpointArtifact:
     shape_bounds: tuple[int, ...] = ()
     storage: str = "f32"
     output_storage: str = "f32"
+    #: K/V storage; equals ``storage`` except on a mixed saved-LSE forward.
+    kv_storage: str | None = None
+
+    @property
+    def key_value_storage(self) -> str:
+        return self.storage if self.kv_storage is None else self.kv_storage
 
     def validate(self) -> None:
         if (not isinstance(self.storage, str) or self.storage not in {"f16", "bf16", "f32"} or
                 not isinstance(self.output_storage, str) or self.output_storage not in {self.storage, "f32"}):
             raise ValueError("checkpoint storage requires homogeneous forward data and f32 auxiliaries")
+        if self.kv_storage is not None and (
+                not isinstance(self.kv_storage, str) or self.kv_storage not in {"f16", "bf16", "f32"}
+                or self.kv_storage == self.storage or self.backward):
+            raise ValueError("checkpoint K/V storage differs from Q only on the saved-LSE forward")
         if type(self.lse_cotangent) is not bool or (self.lse_cotangent and not self.backward):
             raise ValueError("LSE cotangent requires a boolean backward role")
         if type(self.compact_threads) is not int or self.compact_threads not in (64,128) or (not self.compact_gradients and self.compact_threads != 128):
@@ -102,7 +112,11 @@ class ScheduledCheckpointArtifact:
             "causal": str(self.causal).lower(),
             "bias": str(self.bias).lower(),
         }
-        if self.storage != "f32" or self.output_storage != "f32":
+        if self.kv_storage is not None:
+            fields["kv_storage"] = json.dumps(self.kv_storage)
+        elif "kv_storage =" in contract_text:
+            raise ValueError("checkpoint K/V storage metadata is missing")
+        if self.storage != "f32" or self.output_storage != "f32" or self.kv_storage is not None:
             fields.update(storage=json.dumps(self.storage), output_storage=json.dumps(self.output_storage),
                           row_lse_storage=json.dumps("f32"), accum=json.dumps("f32"))
             if self.backward:
@@ -318,6 +332,7 @@ def _decode_checkpoint(graph, schedule, tile, *, backward,
     bounds = re.search(r'\bshape_bounds = array<i64: ([0-9, ]+)>',text)
     storage = re.search(r'\bstorage = "([a-z0-9]+)"', text)
     output_storage = re.search(r'\boutput_storage = "([a-z0-9]+)"', text)
+    kv_storage = re.search(r'\bkv_storage = "([a-z0-9]+)"', text)
     artifact = ScheduledCheckpointArtifact(graph,schedule,tile,entries[0],hashes[0],backward,names,
         tuple(map(int,shape[1].split(','))),scale_value,causal[1]=='true',bias,bias_gradient,indices,
         tuple(map(int,physical_bias[1].split(','))) if physical_bias else (),
@@ -326,6 +341,7 @@ def _decode_checkpoint(graph, schedule, tile, *, backward,
         lse_cotangent="lse_cotangent = true" in text,
         shape_bounds=tuple(map(int,bounds[1].split(","))) if bounds else (),
         storage=storage[1] if storage else "f32",
-        output_storage=output_storage[1] if output_storage else "f32")
+        output_storage=output_storage[1] if output_storage else "f32",
+        kv_storage=kv_storage[1] if kv_storage else None)
     artifact.validate()
     return artifact

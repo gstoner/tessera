@@ -654,7 +654,7 @@ static mlir::LogicalResult verifyCheckpointTensorOp(mlir::Operation *op, bool ba
   auto shape = tessera::resolveNativeAttentionShape(op, symbolic);
   if (failed(shape)) return failure();
 
-  auto tensor = [&](ArrayRef<int64_t> shape) { return RankedTensorType::get(shape,q.getElementType()); };
+  auto tensor = [&](ArrayRef<int64_t> shape) { return RankedTensorType::get(shape,storage->kvElement); };
   auto output=RankedTensorType::get({b,hq,sq,dv},storage->outputElement);
   auto lse=RankedTensorType::get({b,hq,sq},Float32Type::get(op->getContext()));
   if (bias) {

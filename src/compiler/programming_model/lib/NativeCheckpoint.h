@@ -67,7 +67,7 @@ static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
   if (failed(shape)) return failure();
   auto bounds = shape->bounds;
 
-  auto tensor = [&](ArrayRef<int64_t> shape) { return RankedTensorType::get(shape, q.getElementType()); };
+  auto tensor = [&](ArrayRef<int64_t> shape) { return RankedTensorType::get(shape, storage->kvElement); };
   auto output = RankedTensorType::get({b,hq,sq,dv}, storage->outputElement);
   auto lse = RankedTensorType::get({b,hq,sq}, Float32Type::get(graph->getContext()));
   unsigned lseIndex = 5 + unsigned(bias);
@@ -130,9 +130,12 @@ static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
       builder.getNamedAttr("arguments", args), builder.getNamedAttr("results", results),
       builder.getNamedAttr("mask_alignment", builder.getStringAttr("end_aligned_v1")),
       builder.getNamedAttr("target", target), builder.getNamedAttr("arch", arch)});
-  if (!storage->inputElement.isF32() || !storage->outputElement.isF32()) {
+  if (!storage->inputElement.isF32() || !storage->outputElement.isF32() || storage->mixed()) {
     NamedAttrList fields(contract);
     fields.set("storage", builder.getStringAttr(checkpointStorageSpelling(storage->inputElement)));
+    // Absent means K/V share Q's storage, so homogeneous identities are unchanged.
+    if (storage->mixed())
+      fields.set("kv_storage", builder.getStringAttr(checkpointStorageSpelling(storage->kvElement)));
     fields.set("output_storage", builder.getStringAttr(checkpointStorageSpelling(storage->outputElement)));
     fields.set("row_lse_storage", builder.getStringAttr("f32"));
     fields.set("accum", builder.getStringAttr("f32"));
@@ -370,9 +373,10 @@ static LogicalResult lowerNativeCheckpoints(ModuleOp mod) {
         c->hash.substr(0,10)).str();
     auto storage = resolveNativeCheckpointStorage(graph, c->backward);
     if (failed(storage)) return failure();
-    if (!c->backward && !storage->inputElement.isF32()) {
+    if (!c->backward && (!storage->inputElement.isF32() || storage->mixed())) {
       entry = "tessera_tile_attention_lse_" +
           checkpointStorageSpelling(storage->inputElement).str() +
+          (storage->mixed() ? "_kv_" + checkpointStorageSpelling(storage->kvElement).str() : std::string()) +
           (storage->outputElement.isF32() ? "_" :
            "_out_" + checkpointStorageSpelling(storage->outputElement).str() + "_") +
           c->hash.substr(0,10);
@@ -405,6 +409,8 @@ static LogicalResult lowerNativeCheckpoints(ModuleOp mod) {
     kernel.addOperands(block->getArguments().take_front(
         types.size() - scalarCount + (dynamicBias ? 11 : 7)));
     kernel.addAttribute("storage",builder.getStringAttr(checkpointStorageSpelling(storage->inputElement)));
+    if (storage->mixed())
+      kernel.addAttribute("kv_storage", builder.getStringAttr(checkpointStorageSpelling(storage->kvElement)));
     if ((!c->backward && !storage->outputElement.isF32()) ||
         (c->backward && !storage->inputElement.isF32()))
       kernel.addAttribute("output_storage", builder.getStringAttr(checkpointStorageSpelling(storage->outputElement)));

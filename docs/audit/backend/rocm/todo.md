@@ -19241,3 +19241,12 @@ Inside the GFX1201-W8A8-SHORT-RAGGED-20261016 envelope (NK W8A8, K128/N128 FP32 
 Not applicable to gfx1151: no FP8 WMMA; its selectors are unchanged and no gfx1201 result transfers.
 
 Evidence: benchmarks/baselines/gfx1201_w8a8_smallgrid_64x32_20261025/README.md.
+
+## SM120-SAVED-LSE-MIXED-STORAGE-20261025 — saved-LSE forward with K/V storage distinct from Q
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: SM120-SAVED-LSE-MIXED-STORAGE-20261025.
+
+Not applicable to rocm: the saved-LSE checkpoint resolver change is shared C++, but the native checkpoint contract requires the SM120 target and ROCm has no consumer for it; no ROCm selector, ABI or result changes, and no RTX 5070 evidence transfers.
+
+Evidence: benchmarks/baselines/sm120_saved_lse_mixed_storage_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.

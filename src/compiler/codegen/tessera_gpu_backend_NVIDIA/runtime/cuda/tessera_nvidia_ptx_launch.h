@@ -226,6 +226,12 @@ int tessera_nvidia_attention_forward_prepare(
     const void* image, size_t image_bytes, const char* entry, const int64_t* dims,
     const int64_t* bias_shape, int storage, int result_storage, int saved_lse, int bias_scalars,
     uint64_t* handle);
+// As above with a distinct K/V storage (1=f32, 2=f16, 3=bf16), admitted only
+// for the saved-LSE forward; K/V widen exactly to the f32 accumulation.
+int tessera_nvidia_attention_forward_prepare_kv(
+    const void* image, size_t image_bytes, const char* entry, const int64_t* dims,
+    const int64_t* bias_shape, int storage, int kv_storage, int result_storage, int saved_lse,
+    int bias_scalars, uint64_t* handle);
 // Static homogeneous half RMSNorm(Q) -> saved-LSE attention. The producer
 // output is private, reused across calls and never exposed as a caller buffer.
 // cooperative: 0=serial norm rows, 1=cooperative_128. Results: half O, f32 LSE.

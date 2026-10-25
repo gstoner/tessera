@@ -14191,3 +14191,13 @@ Outcome: inside the 2026-10-16 four-wave envelope, the native Schedule takes 64x
 Remaining: exact-head CI/review; the 64-workgroup boundary row 127x2048x1536 (1.106x AITER) and large-M 1024x3072x1536 (1.03x). The original five-slice obligations remain active.
 Evidence: benchmarks/baselines/gfx1201_w8a8_smallgrid_64x32_20261025/README.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-25 — SM120 saved-LSE forward with mixed Q vs K/V storage
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-SAVED-LSE-MIXED-STORAGE-20261025.
+Outcome: the native saved-LSE forward admits K/V storage distinct from Q (any f16/bf16/f32 pair), with O f32 or Q's storage and f32 accumulation/LSE; such calls previously ran eager Python with no recorded fallback. The contract carries `kv_storage` only when distinct, so homogeneous identities and bytes are unchanged. RTX 5070: 108 device cases (72 mixed), a 72-row fp64-gated packet with compiler-free replay, and paired interleaved events within about 1% of homogeneous controls (diagnostic, no promotion). Backward/AD/JVP owners remain homogeneous and refuse a mixed forward. All four backend queues assessed.
+Remaining: exact-head CI/review; half-storage AD with mixed K/V; FP8 KV storage; the original five-slice obligations remain active.
+Evidence: benchmarks/baselines/sm120_saved_lse_mixed_storage_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+<!-- entry-fields:end -->

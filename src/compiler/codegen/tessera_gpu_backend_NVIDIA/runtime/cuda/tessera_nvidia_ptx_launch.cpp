@@ -977,6 +977,20 @@ bool attentionStoragePrefix(const char* name, bool saved, bool bf16) {
     return name && std::strncmp(name, prefix, std::strlen(prefix)) == 0;
 }
 
+// Saved-LSE forward entries name a distinct K/V storage as `_kv_<storage>_`
+// after Q's storage; absent, K/V share Q's width.
+bool attentionKeyValueWidth(const char* name, bool saved, size_t queryWidth, size_t &width) {
+    width = queryWidth;
+    const bool f16 = std::strstr(name, "_kv_f16_") != nullptr;
+    const bool bf16 = std::strstr(name, "_kv_bf16_") != nullptr;
+    const bool f32 = std::strstr(name, "_kv_f32_") != nullptr;
+    if (unsigned(f16) + unsigned(bf16) + unsigned(f32) > 1) return false;
+    if (!f16 && !bf16 && !f32) return true;
+    if (!saved) return false;
+    width = f32 ? sizeof(float) : 2;
+    return true;
+}
+
 bool attentionResultWidth(const char* name,bool saved,size_t &width) {
     width=sizeof(float);
     bool f16=std::strstr(name,"_out_f16_")!=nullptr;
@@ -1033,14 +1047,15 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
     const bool narrow = attentionStoragePrefix(name, hasSavedLse, false) ||
                         attentionStoragePrefix(name, hasSavedLse, true);
     const size_t elementBytes = narrow ? 2 : 4;
-    size_t outputBytes=0;
-    if (!attentionResultWidth(name,hasSavedLse,outputBytes)) return 5;
-    if (qElements > SIZE_MAX / elementBytes || kElements > SIZE_MAX / elementBytes ||
-        vElements > SIZE_MAX / elementBytes || oElements > SIZE_MAX / outputBytes ||
+    size_t outputBytes=0, kvBytes=0;
+    if (!attentionResultWidth(name,hasSavedLse,outputBytes) ||
+        !attentionKeyValueWidth(name,hasSavedLse,elementBytes,kvBytes)) return 5;
+    if (qElements > SIZE_MAX / elementBytes || kElements > SIZE_MAX / kvBytes ||
+        vElements > SIZE_MAX / kvBytes || oElements > SIZE_MAX / outputBytes ||
         (hasSavedLse && rowElements > SIZE_MAX / sizeof(float)) ||
         (hasBias && biasElements > SIZE_MAX / sizeof(float))) return 5;
-    size_t sizes[6] = {qElements * elementBytes, kElements * elementBytes,
-                       vElements * elementBytes, 0, 0, 0};
+    size_t sizes[6] = {qElements * elementBytes, kElements * kvBytes,
+                       vElements * kvBytes, 0, 0, 0};
     if (hasBias) sizes[3] = biasElements * sizeof(float);
     sizes[outputIndex] = oElements * outputBytes;
     if (hasSavedLse) sizes[lseIndex] = rowElements * sizeof(float);
@@ -1815,12 +1830,14 @@ int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
     const bool narrow = attentionStoragePrefix(name, hasSavedLse, false) ||
                         attentionStoragePrefix(name, hasSavedLse, true);
     const size_t elementBytes = narrow ? 2 : 4;
-    size_t outputBytes=0;
-    if (!attentionResultWidth(name,hasSavedLse,outputBytes)) return 5;
+    size_t outputBytes=0, kvBytes=0;
+    if (!attentionResultWidth(name,hasSavedLse,outputBytes) ||
+        !attentionKeyValueWidth(name,hasSavedLse,elementBytes,kvBytes)) return 5;
     size_t sizes[6] = {};
     for (int i = 0; i < 3; ++i) {
-        if (counts[i] > SIZE_MAX / elementBytes) return 5;
-        sizes[i] = counts[i] * elementBytes;
+        const size_t width = i == 0 ? elementBytes : kvBytes;
+        if (counts[i] > SIZE_MAX / width) return 5;
+        sizes[i] = counts[i] * width;
     }
     if (hasBias && counts[3] > SIZE_MAX / sizeof(float)) return 5;
     if (hasBias) sizes[3] = counts[3] * sizeof(float);

@@ -159,7 +159,8 @@ SM120_ATTN_LSE_BCAST_F32_ABI = "tessera.nvidia.attention.q_k_v_bias_o_row_lse_di
 SM120_ATTN_BWD_LSE_BCAST_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dims_bias_shape.f32.v1"
 SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims_bias_shape.f32.v1"
 SM120_ATTN_LSE_F32_ABI = "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1"
-# Additive typed forward ABIs: homogeneous half Q/K/V, f32 accumulation/LSE.
+# Additive typed forward ABIs: descriptor-declared Q and K/V storage (K/V may
+# differ from Q since SM120-SAVED-LSE-MIXED-STORAGE-20261025), f32 accumulation/LSE.
 # O may retain the source storage or use f32. Existing f32 and AD schemas stay stable.
 SM120_ATTN_LSE_TYPED_ABI = "tessera.nvidia.attention.q_k_v_o_row_lse_dims.typed_f32acc.v1"
 SM120_ATTN_LSE_BIAS_TYPED_ABI = "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.typed_f32acc.v1"
@@ -2225,7 +2226,7 @@ def _saved_lse_policy(op: Any, head_dim: int) -> tuple[float, bool] | None:
 def _checkpoint_identity(
     dims: tuple[int, ...], scale: float, causal: bool, *, bias: bool = False,
     bias_shape: tuple[int, ...] = (), shape_bounds: tuple[int, ...] = (),
-    storage: str = "f32", output_storage: str = "f32",
+    storage: str = "f32", output_storage: str = "f32", kv_storage: str | None = None,
 ) -> str:
     from .attention_shape_contract import attention_dimensions
     attention_dimensions(dims,shape_bounds)
@@ -2250,11 +2251,16 @@ def _checkpoint_identity(
     if shape_bounds:
         policy["schema"] = "tessera.attention_checkpoint.bounded_sequences.v1"
         policy["shape_bounds"] = list(shape_bounds)
-    if storage not in {"f16", "bf16", "f32"} or output_storage not in {storage, "f32"}:
+    kv_storage = storage if kv_storage is None else kv_storage
+    if (storage not in {"f16", "bf16", "f32"} or kv_storage not in {"f16", "bf16", "f32"}
+            or output_storage not in {storage, "f32"}):
         raise ValueError("checkpoint data/output storage disagrees")
-    if storage != "f32" or output_storage != "f32":
+    if storage != "f32" or output_storage != "f32" or kv_storage != storage:
         policy.update(schema="tessera.attention_checkpoint.typed_forward.v1", storage=storage,
                       output_storage=output_storage, row_lse_storage="f32")
+        if kv_storage != storage:
+            # Absent for homogeneous storage, so those identities are unchanged.
+            policy["kv_storage"] = kv_storage
     return hashlib.sha256(json.dumps(policy, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -2284,8 +2290,11 @@ def _attention_lse_contract(
     bk, hkv, sk, dk = k_shape
     bv, hv, sv, dv = v_shape
     dtype = args[q_name].ir_type.dtype
-    if (dtype not in {"fp16", "bf16", "fp32"} or args[k_name].ir_type.dtype != dtype
-            or args[v_name].ir_type.dtype != dtype or b != bk or b != bv
+    kv_dtype = args[k_name].ir_type.dtype
+    # K/V share one storage that may differ from Q; the native checkpoint
+    # verifier owns admission (SM120-SAVED-LSE-MIXED-STORAGE-20261025).
+    if (dtype not in {"fp16", "bf16", "fp32"} or kv_dtype not in {"fp16", "bf16", "fp32"}
+            or args[v_name].ir_type.dtype != kv_dtype or b != bk or b != bv
             or hkv != hv or sk != sv or d != dk or hq % hkv):
         return None
     output_type, lse_type = fn.result_types
@@ -4298,7 +4307,7 @@ def package_attention_lse(
     """Package typed Q/K/V -> O,f32 row_lse through native checkpoint IR."""
     contract = _attention_lse_contract(module)
     if contract is None:
-        raise ValueError("SM120 saved-LSE forward requires canonical homogeneous storage and f32 LSE")
+        raise ValueError("SM120 saved-LSE forward requires canonical Q and K/V storage and f32 LSE")
     from .scheduled_checkpoint import lower_checkpoint_graph
 
     return package_scheduled_checkpoint(
@@ -4317,8 +4326,9 @@ def _package_attention_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativ
     if scheduled.bias_shape:
         abi_id = SM120_ATTN_LSE_BCAST_F32_ABI
     storage, output_storage = scheduled.storage, scheduled.output_storage
+    kv_storage = scheduled.key_value_storage
     dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}
-    if storage != "f32":
+    if storage != "f32" or kv_storage != storage:
         abi_id = (SM120_ATTN_LSE_BCAST_TYPED_ABI if scheduled.bias_shape else
                   SM120_ATTN_LSE_BIAS_TYPED_ABI if scheduled.bias else SM120_ATTN_LSE_TYPED_ABI)
     entry, tile_ir = scheduled.entry, scheduled.tile_ir
@@ -4333,8 +4343,8 @@ def _package_attention_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativ
     )
     buffers: tuple[BufferBinding, ...] = (
         BufferBinding(0, q_name, "input", dtype[storage], 4, "row_major", 4 if storage == "f32" else 2),
-        BufferBinding(1, k_name, "input", dtype[storage], 4, "row_major", 4 if storage == "f32" else 2),
-        BufferBinding(2, v_name, "input", dtype[storage], 4, "row_major", 4 if storage == "f32" else 2),
+        BufferBinding(1, k_name, "input", dtype[kv_storage], 4, "row_major", 4 if kv_storage == "f32" else 2),
+        BufferBinding(2, v_name, "input", dtype[kv_storage], 4, "row_major", 4 if kv_storage == "f32" else 2),
         BufferBinding(3, output_name, "output", dtype[output_storage], 4, "row_major", 4 if output_storage == "f32" else 2),
         BufferBinding(4, lse_name, "output", "fp32", 3, "row_major", 4),
     )
@@ -4374,7 +4384,8 @@ def _package_attention_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativ
             "target_ir_digest": image.target_ir_digest,
             "schedule_ir_digest": hashlib.sha256(scheduled.schedule_ir.encode()).hexdigest(),
 
-            "checkpoint_contract": _checkpoint_identity(dims, scale, causal, bias=scheduled.bias, bias_shape=scheduled.bias_shape, shape_bounds=scheduled.shape_bounds, storage=storage, output_storage=output_storage),
+            "checkpoint_contract": _checkpoint_identity(dims, scale, causal, bias=scheduled.bias, bias_shape=scheduled.bias_shape, shape_bounds=scheduled.shape_bounds, storage=storage, output_storage=output_storage, kv_storage=kv_storage),
+            **({"kv_storage": kv_storage} if kv_storage != storage else {}),
             "mask_alignment": "end_aligned_v1", "bias": scheduled.bias,
             "bias_shape": list(scheduled.bias_shape),
             "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1" if scheduled.bias_shape else "none",
@@ -4385,7 +4396,7 @@ def _package_attention_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativ
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )
-    if storage != "f32":
+    if storage != "f32" or kv_storage != storage:
         from .typed_attention_checkpoint import validate_typed_saved_lse_descriptor
         validate_typed_saved_lse_descriptor(descriptor)
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
@@ -4581,6 +4592,8 @@ def package_scheduled_checkpoint_pair(forward,backward, *, pipeline_name: str):
         raise ValueError("checkpoint pair requires forward then backward native products")
     if (forward.storage, forward.output_storage) != (backward.storage, backward.output_storage):
         raise ValueError("paired checkpoint AD requires its f32 storage contract or matching typed storage")
+    if getattr(forward, "kv_storage", None) is not None:
+        raise ValueError("paired checkpoint AD requires homogeneous Q/K/V storage")
     f_identity=_checkpoint_identity(forward.dims,forward.scale,forward.causal,
         bias=forward.bias,bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage)
     b_identity=_checkpoint_identity(backward.dims,backward.scale,backward.causal,
@@ -4603,7 +4616,8 @@ def package_generated_attention_forward_checkpoint(source: str, *, pipeline_name
     forward = lower_generated_checkpoint(source)
     identity = _checkpoint_identity(
         forward.dims, forward.scale, forward.causal,
-        bias=forward.bias, bias_shape=forward.bias_shape, shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage)
+        bias=forward.bias, bias_shape=forward.bias_shape, shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage,
+        kv_storage=getattr(forward, "kv_storage", None))
     return AttentionForwardCheckpoint(
         package_scheduled_checkpoint(forward, pipeline_name=pipeline_name), identity)
 

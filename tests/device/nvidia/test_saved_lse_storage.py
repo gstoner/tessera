@@ -135,7 +135,7 @@ def _run_saved_storage_case(storage_name, kv_name, sk, bias_kind, causal, monkey
                 roots = {name: Borrowed(sessions[name].upload(value)) for name, value in values.items()}
                 for session in sessions.values():
                     assert session.synchronize() == 0
-                with pytest.raises(ValueError, match="dtype"):
+                with pytest.raises(ValueError, match="resident frontend CUDA storage is unsupported"):
                     fn(**roots)
         if not fp8:
             with ExitStack() as stack:

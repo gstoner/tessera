@@ -3934,7 +3934,8 @@ struct GraphToSchedulePass
       FailureOr<MatmulSchedule> selected = getMatmulSchedule(op);
       if (failed(selected)) {
         op->emitError("E2E-REAL-2 Graph->Schedule requires static rank-2 "
-                      "x86 f32/bf16->f32, ROCm f16->f32, NVIDIA f16/bf16->f32 or signed int4->i32, "
+                      "x86 f32/bf16->f32, ROCm f16->f32, gfx1151/gfx1201 or sm_120 "
+                      "f32-operand scalar FMA, NVIDIA f16/bf16->f32 or signed int4->i32, "
                       "or Apple-GPU f32->f32 "
                       "matmul with no transpose");
         return signalPassFailure();

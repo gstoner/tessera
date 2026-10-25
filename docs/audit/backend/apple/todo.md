@@ -16049,3 +16049,12 @@ Synchronization key: GFX1201-W8A8-SMALLGRID-64X32-20261025.
 Not applicable to apple: gfx1201-only physical selector in the shared PM pass; no Apple selector, op or ABI changes and no result transfers.
 
 Evidence: benchmarks/baselines/gfx1201_w8a8_smallgrid_64x32_20261025/README.md.
+
+## SM120-SAVED-LSE-MIXED-STORAGE-20261025 — saved-LSE forward with K/V storage distinct from Q
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: SM120-SAVED-LSE-MIXED-STORAGE-20261025.
+
+Not applicable to apple: the shared checkpoint resolver still refuses half or mixed storage outside the SM120 native contract; no Apple selector, ABI or result changes.
+
+Evidence: benchmarks/baselines/sm120_saved_lse_mixed_storage_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.

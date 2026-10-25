@@ -16678,3 +16678,12 @@ Synchronization key: GFX1201-W8A8-SMALLGRID-64X32-20261025.
 Not applicable to nvidia physical execution: the shared PM pass changes only the gfx1201 NK W8A8 selector inside its measured envelope. No Graph/Tile op, dtype, diagnostic, pass, numerical semantics or runtime ABI changes; no RDNA result transfers to SM120.
 
 Evidence: benchmarks/baselines/gfx1201_w8a8_smallgrid_64x32_20261025/README.md.
+
+## SM120-SAVED-LSE-MIXED-STORAGE-20261025 — saved-LSE forward with K/V storage distinct from Q
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: SM120-SAVED-LSE-MIXED-STORAGE-20261025.
+
+The SM120 saved-LSE forward now admits K/V sharing one storage distinct from Q (any f16/bf16/f32 pair); O is f32 or Q's storage, accumulation the declared f32, row-LSE f32. Before, such calls ran eager Python with no fallback reason recorded. `kv_storage` appears in the native contract, identity, entry (`_kv_<kv>_`) and Tile kernel only when distinct, so homogeneous bytes are unchanged; the retained owner uses the new `tessera_nvidia_attention_forward_prepare_kv` (the original C entry is its homogeneous wrapper). RTX 5070: device suite 108 passed (72 mixed), 72-row fp64-gated packet plus compiler-free replay, paired interleaved events within about 1% of each arm's homogeneous-Q control (diagnostic only, scalar materializer, no promotion). Backward, paired AD, source reverse and JVP owners stay homogeneous and refuse a mixed forward. Open: half-storage AD with mixed K/V; FP8 KV storage.
+
+Evidence: benchmarks/baselines/sm120_saved_lse_mixed_storage_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.

@@ -1,0 +1,29 @@
+{
+ "commit": "95b35714bad61dfde24035815eb3aaa161de4c76",
+ "worktree_dirty": false,
+ "device": "NVIDIA GeForce RTX 5070, 12.0",
+ "timing": "CUDA events around the retained kernel launch; 40 alternating rounds; median us",
+ "correctness": "fp64 oracle before timing",
+ "medians_us": {
+  "(1, 2, 1, 3, 5, 4, 3)": {
+   "float16/float16": 47.09,
+   "float16/bfloat16": 46.53,
+   "bfloat16/bfloat16": 43.6,
+   "bfloat16/float16": 47.17,
+   "float32/float32": 44.82,
+   "float32/float16": 46.69,
+   "float32/bfloat16": 41.52,
+   "float16/float32": 44.1
+  },
+  "(1, 8, 2, 128, 512, 64, 64)": {
+   "float16/float16": 6164.83,
+   "float16/bfloat16": 6163.09,
+   "bfloat16/bfloat16": 6205.25,
+   "bfloat16/float16": 6219.31,
+   "float32/float32": 5882.11,
+   "float32/float16": 5925.81,
+   "float32/bfloat16": 5944.13,
+   "float16/float32": 6101.49
+  }
+ }
+}

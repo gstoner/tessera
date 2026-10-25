@@ -93,3 +93,98 @@ def test_uninvoked_helper_drop_does_not_count():
     x = _x()
     np.testing.assert_allclose(np.asarray(fn(x)), np.maximum(x, 0.0))
     assert fn.last_fallback_reason is None
+
+
+# ── Native routes run before the guard (regression found on gfx1201) ───────
+
+from tessera.compiler.nvfp4_expansion import nvfp4_expansion_policy  # noqa: E402
+
+
+def _expand_with_policy_helper(codes, scales, globals_):
+    return tessera.ops.nvfp4_expand(codes, scales, globals_,
+        row_offsets=[0, 3, 7], numeric_policy=nvfp4_expansion_policy())
+
+
+def test_native_route_runs_before_the_dropped_call_guard(monkeypatch):
+    """`nvfp4_expansion_policy()` in a keyword argument is a dropped AST call,
+    but the native gfx1201 route re-traces the live function and computes the
+    whole body. Guarding before it sent the call to the eager oracle; the
+    guard now applies only to the lanes that execute the AST graph."""
+    fn = tessera.jit(target="rocm_gfx1201")(_expand_with_policy_helper)
+    assert fn.graph_ir.frontend_unlowered_calls == ["nvfp4_expansion_policy"]
+    monkeypatch.setattr(fn, "_try_source_attention_call", lambda args, kwargs: "native")
+
+    def eager(*_args, **_kwargs):
+        pytest.fail("a dropped AST call pre-empted a native route")
+
+    monkeypatch.setattr(fn, "_fn", eager)
+    assert fn(None, None, None) == "native"
+    assert fn.last_fallback_reason is not REASON
+
+
+def test_guard_still_refuses_the_ast_lanes_once_native_routes_decline():
+    fn = tessera.jit(native_required=True)(_relu_then_numpy_exp)
+    with pytest.raises(TesseraNativeRequiredError):
+        fn(_x())
+
+
+# ── Review on #1009: a real route's failed trace must decline, not raise ────
+
+_UFUNC_SOURCE = "def f(x):\n    y = tessera.ops.exp(x)\n    return np.exp(y)\n"
+
+
+@pytest.mark.parametrize("target", ["rocm_gfx1151", "rocm_gfx1201"])
+def test_failed_native_trace_on_dropped_dataflow_reaches_the_fallback(target):
+    """No mocks: the native descriptor route admits the AST graph, re-traces
+    the function, and the tracer fails on `np.exp(<Tracer>)`. That failure is
+    explained by the dropped call, so the route declines and the original
+    function runs, instead of raising out of `__call__`."""
+    namespace = {"tessera": tessera, "np": np}
+    exec(_UFUNC_SOURCE, namespace)  # noqa: S102 -- literal test source
+    fn = tessera.jit(target=target, source=_UFUNC_SOURCE)(namespace["f"])
+    x = np.array([0.1, 0.2, 0.3], dtype=np.float32)
+    np.testing.assert_allclose(np.asarray(fn(x)), np.exp(np.exp(x)), rtol=1e-6)
+    assert fn.last_fallback_reason is REASON
+
+
+def test_a_trace_failure_without_a_dropped_call_still_raises(monkeypatch):
+    """The decline is reserved for bodies the AST front end found incomplete;
+    any other tracer failure keeps raising the plain error."""
+    import importlib
+
+    jit_module = importlib.import_module("tessera.compiler.jit")  # the module, not the decorator
+    trace_module = importlib.import_module("tessera.compiler.trace")
+
+    fn = tessera.jit(target="rocm_gfx1151")(_catalogued_only)
+    assert fn.graph_ir.frontend_unlowered_calls == []
+
+    def broken(*_args, **_kwargs):
+        raise RuntimeError("tracer exploded")
+
+    monkeypatch.setattr(trace_module, "trace", broken)
+    with pytest.raises(jit_module.TesseraJitError, match="tracer frontend failed") as info:
+        fn._trace_frontend_capture((_x(),), {})
+    assert not isinstance(info.value, jit_module._DroppedCallTraceDecline)
+
+
+def test_an_input_refusal_during_trace_is_not_swallowed_by_the_decline(monkeypatch):
+    """A body with a dropped call whose trace fails for an unrelated reason
+    (here an input refusal) must keep raising: only NumPy applied to a traced
+    value is explained by the dropped call. Found on gfx1201, where the decline
+    turned an NVFP4 input-dtype refusal into eager execution."""
+    import importlib
+
+    jit_module = importlib.import_module("tessera.compiler.jit")
+    trace_module = importlib.import_module("tessera.compiler.trace")
+    namespace = {"tessera": tessera, "np": np}
+    exec(_UFUNC_SOURCE, namespace)  # noqa: S102 -- literal test source
+    fn = tessera.jit(target="rocm_gfx1151", source=_UFUNC_SOURCE)(namespace["f"])
+    assert fn.graph_ir.frontend_unlowered_calls == ["np.exp"]
+
+    def refuses(*_args, **_kwargs):
+        raise TypeError("NVFP4 ingest codes must be uint8 rank two")
+
+    monkeypatch.setattr(trace_module, "trace", refuses)
+    with pytest.raises(jit_module.TesseraJitError, match="NVFP4 ingest codes") as info:
+        fn._trace_frontend_capture((_x(),), {})
+    assert not isinstance(info.value, jit_module._DroppedCallTraceDecline)

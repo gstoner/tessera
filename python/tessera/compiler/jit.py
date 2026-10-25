@@ -404,6 +404,31 @@ class _NativeTensorThreadState(threading.local):
         self.artifact: Any = None
 
 
+class _DroppedCallTraceDecline(TesseraJitError):
+    """A native route's trace failed because NumPy was applied to a traced
+    value, on a body the AST front end also found incomplete. That is the
+    dropped call itself (``np.exp(<Tracer>)``), so the route declines instead
+    of raising and the call reaches the dropped-call guard before the
+    AST-executing lanes. Every other trace failure -- an input refusal, an
+    unsupported op -- still raises: the decline is evidence-bound, never a
+    catch-all for bodies that happen to contain a dropped call."""
+
+
+def _numpy_touched_a_tracer(exc: BaseException) -> bool:
+    """Whether ``exc`` (or anything it chains from) is NumPy's refusal to apply
+    a ufunc to a ``Tracer`` ("... does not support argument 0 of type Tracer
+    ..."). ``Tracer`` defines no NumPy hooks, so this is how a dropped NumPy
+    call on traced dataflow surfaces."""
+    seen: set[int] = set()
+    current: Optional[BaseException] = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, TypeError) and "type Tracer" in str(current):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 class JitFn:
     """
     A @jit-decorated Tessera function.
@@ -1055,9 +1080,6 @@ class JitFn:
         self._rocm_quantized_product_last_receipts = ()
         self._enforce_call_time_constraints(args, kwargs)
         self._enforce_call_time_stochastic_certificate(args, kwargs)
-        dropped_calls = self._dropped_calls_for_this_call()
-        if dropped_calls:
-            return self._eager_for_dropped_calls(args, kwargs, dropped_calls)
         if self._bounded_lhs is not None:
             return self._bounded_lhs(args,kwargs)
         native_pair = getattr(self, "_native_storage_pair", None)
@@ -1085,50 +1107,45 @@ class JitFn:
                     raise ValueError("no oracle-verified native storage candidate")
                 return winner.run(region, *inputs)[0]
             return native_storage(*args, **kwargs)
-        source_attention = self._try_source_attention_call(args, kwargs)
-        if source_attention is not _JIT_FALLBACK:
-            return source_attention
-        prepared_attention = self._try_prepared_attention_call(args, kwargs)
-        if prepared_attention is not _JIT_FALLBACK:
-            return prepared_attention
-        prepared_matmul = self._try_prepared_matmul_call(args, kwargs)
-        if prepared_matmul is not _JIT_FALLBACK:
-            from . import compile_report as _cr
-            if _cr.active_sink_is_capturing():
-                _cr.emit_compile_report(self.compile_report())
-            return prepared_matmul
-        native_tensor = self._try_native_tensor_program_call(args, kwargs)
-        if native_tensor is not _JIT_FALLBACK:
-            return native_tensor
-        # Explicit bounded compilation already captured and verified the
-        # frontend Graph. Replay binds that immutable native program, as the
-        # prepared matmul route above does, instead of re-running the tracer.
-        if getattr(self,"_rocm_nvfp4_bounded_program",None) is not None:
-            native_ingest=self._try_rocm_nvfp4_program_call(args,kwargs)
-            if native_ingest is not _JIT_FALLBACK:
-                return native_ingest
-        self._establish_tracer_authority(args, kwargs)
-        if self.differentiation_request is not None:
-            self._specialized_autodiff_module(args, kwargs)
+        native_routes_declined = False
         try:
-            quantized_product = self._try_rocm_quantized_product_call(args,kwargs)
-            if quantized_product is not _JIT_FALLBACK:
-                return quantized_product
-            native_ingest = self._try_rocm_nvfp4_program_call(args,kwargs)
-            if native_ingest is not _JIT_FALLBACK:
-                return native_ingest
-            native_scaled_program = self._try_rocm_composed_scaled_call(args, kwargs)
-            if native_scaled_program is not _JIT_FALLBACK:
-                return native_scaled_program
-            native_descriptor = self._try_native_descriptor_call(args, kwargs)
-            if native_descriptor is not _JIT_FALLBACK:
-                return native_descriptor
-            native_lhs = self._try_nvidia_lhs_call(args, kwargs)
-            if native_lhs is not _JIT_FALLBACK:
-                return native_lhs
-            native_rhs = self._try_nvidia_rhs_call(args, kwargs)
-            if native_rhs is not _JIT_FALLBACK:
-                return native_rhs
+            source_attention = self._try_source_attention_call(args, kwargs)
+            if source_attention is not _JIT_FALLBACK:
+                return source_attention
+            prepared_attention = self._try_prepared_attention_call(args, kwargs)
+            if prepared_attention is not _JIT_FALLBACK:
+                return prepared_attention
+            prepared_matmul = self._try_prepared_matmul_call(args, kwargs)
+            if prepared_matmul is not _JIT_FALLBACK:
+                from . import compile_report as _cr
+                if _cr.active_sink_is_capturing():
+                    _cr.emit_compile_report(self.compile_report())
+                return prepared_matmul
+            native_tensor = self._try_native_tensor_program_call(args, kwargs)
+            if native_tensor is not _JIT_FALLBACK:
+                return native_tensor
+            # Explicit bounded compilation already captured and verified the
+            # frontend Graph. Replay binds that immutable native program, as the
+            # prepared matmul route above does, instead of re-running the tracer.
+            if getattr(self,"_rocm_nvfp4_bounded_program",None) is not None:
+                native_ingest=self._try_rocm_nvfp4_program_call(args,kwargs)
+                if native_ingest is not _JIT_FALLBACK:
+                    return native_ingest
+        except _DroppedCallTraceDecline:
+            # A trace failed on a body the AST front end found incomplete; the
+            # dropped-call guard before the AST lanes decides what runs.
+            native_routes_declined = True
+        self._establish_tracer_authority(args, kwargs)
+        if self.differentiation_request is not None and not native_routes_declined:
+            try:
+                self._specialized_autodiff_module(args, kwargs)
+            except _DroppedCallTraceDecline:
+                native_routes_declined = True
+        try:
+            if not native_routes_declined:
+                traced = self._try_traced_native_routes(args, kwargs)
+                if traced is not _JIT_FALLBACK:
+                    return traced
             # Phase-F F5 — surgical tracer dispatch (supersedes the AST bridge).
             # ONLY control-flow apple_gpu functions route through the tracer; pure
             # straight-line functions fall through to the existing package /
@@ -1140,6 +1157,15 @@ class JitFn:
                 if jit_trace_enabled():
                     return self._run_traced_with_diagnostic(
                         run_jit_traced, args, kwargs)
+            # Every lane from here on executes the AST-emitted graph (the CPU
+            # plan, the Apple fast paths) or ends in the original function.
+            # The native routes above re-trace the live function, so a call the
+            # AST front end dropped cannot truncate them; checking before them
+            # sent native gfx1201 NVFP4 bodies with a policy helper in a
+            # keyword argument to eager Python (review of #1004 on Tajasarus).
+            dropped_calls = self._dropped_calls_for_this_call()
+            if dropped_calls:
+                return self._eager_for_dropped_calls(args, kwargs, dropped_calls)
             if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
                 if self.execution_kind == "native_cpu":
                     return self._native_cpu_fast_call(args, kwargs)
@@ -1184,6 +1210,29 @@ class JitFn:
             if _cr.active_sink_is_capturing():
                 _cr.emit_compile_report(self.compile_report())
 
+    def _try_traced_native_routes(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any],
+    ) -> Any:
+        """The native routes that capture the live function by tracing, in
+        dispatch order. A trace that fails on a body the AST front end found
+        incomplete declines (``_JIT_FALLBACK``) rather than raising."""
+        routes = (
+            self._try_rocm_quantized_product_call,
+            self._try_rocm_nvfp4_program_call,
+            self._try_rocm_composed_scaled_call,
+            self._try_native_descriptor_call,
+            self._try_nvidia_lhs_call,
+            self._try_nvidia_rhs_call,
+        )
+        try:
+            for route in routes:
+                result = route(args, kwargs)
+                if result is not _JIT_FALLBACK:
+                    return result
+        except _DroppedCallTraceDecline:
+            pass
+        return _JIT_FALLBACK
+
     def _dropped_calls_for_this_call(self) -> Tuple[str, ...]:
         """Dropped body calls that make the emitted graph a truncated program.
 
@@ -1206,14 +1255,15 @@ class JitFn:
     ) -> Any:
         """Run the original function when the graph is missing body calls.
 
-        Before this, every lane executed the graph the AST front end emitted.
-        A body like ``y = ops.relu(x); return np.exp(y)`` lowers to ``relu``
-        and a bare ``return`` -- ``np.exp`` is not a Graph op -- so the call
-        returned ``relu(x)`` with ``last_fallback_reason`` None. Running the
-        Python function is the honest answer; the reason says why.
+        Called only once every native route has declined: those re-trace the
+        live function, while the lanes after this point execute the graph the
+        AST front end emitted. A body like ``y = ops.relu(x); return
+        np.exp(y)`` lowers to ``relu`` and a bare ``return`` -- ``np.exp`` is
+        not a Graph op -- so those lanes returned ``relu(x)`` with
+        ``last_fallback_reason`` None. Running the Python function is the
+        honest answer; the reason says why. The caller's ``finally`` emits the
+        compile report.
         """
-        from . import compile_report as _cr
-
         reason = FallbackReason.FRONTEND_UNLOWERED_CALL
         self.last_fallback_reason = reason
         names = ", ".join(sorted(set(dropped)))
@@ -1235,11 +1285,7 @@ class JitFn:
                     f"so no compiled lane can run the whole function"
                 ),
             )
-        try:
-            return self._fn(*args, **kwargs)
-        finally:
-            if _cr.active_sink_is_capturing():
-                _cr.emit_compile_report(self.compile_report())
+        return self._fn(*args, **kwargs)
 
     def _run_traced_with_diagnostic(
         self, run_jit_traced: Callable, args: Tuple[Any, ...],
@@ -1614,6 +1660,8 @@ class JitFn:
                 constraints=self.constraints,
             )
         except Exception as exc:
+            if self._frontend_dropped_calls and _numpy_touched_a_tracer(exc):
+                raise _DroppedCallTraceDecline(f"tracer frontend failed: {exc}") from exc
             raise TesseraJitError(f"tracer frontend failed: {exc}") from exc
         self._traced_frontend_specializations[signature] = module
         return module, traced

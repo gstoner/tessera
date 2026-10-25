@@ -2706,24 +2706,19 @@ static LogicalResult materializeSm120AttentionKernel(
         builder, loc, f32, scaleAttr.getValue());
     Value log2e = arith::ConstantFloatOp::create(
         builder, loc, f32, APFloat(1.4426950408889634f));
-    // Exact FP8 -> f32. E5M2 is the high byte of an IEEE f16. E4M3FN goes
-    // through sm_120's cvt.rn.f16x2.e4m3x2 (nvvm.convert.f8x2.to.f16x2):
-    // every E4M3FN value, subnormals and NaN included, is exact in f16.
+    // Exact FP8 -> f32 through sm_120's cvt.rn.f16x2.{e4m3,e5m2}x2
+    // (nvvm.convert.f8x2.to.f16x2): every E4M3FN and E5M2 value, subnormals
+    // and NaN included, is exact in f16.
     auto decodeFp8 = [&](Value byte) -> Value {
       Type i16 = builder.getI16Type();
       Value wide = arith::ExtUIOp::create(builder, loc, i16, byte);
-      if (kvE5M2) {
-        Value bits = arith::ShLIOp::create(builder, loc, wide,
-            arith::ConstantIntOp::create(builder, loc, 8, 16));
-        Value half = arith::BitcastOp::create(builder, loc, builder.getF16Type(), bits);
-        return LLVM::FPExtOp::create(builder, loc, f32, half);
-      }
       // Lane 0 holds the code (little-endian); lane 1 is a zero byte.
       Value pair = LLVM::BitcastOp::create(builder, loc,
           VectorType::get({2}, builder.getI8Type()), wide);
+      Type format = kvE5M2 ? Type(builder.getType<Float8E5M2Type>())
+                           : Type(builder.getType<Float8E4M3FNType>());
       Value halves = NVVM::ConvertF8x2ToF16x2Op::create(builder, loc,
-          VectorType::get({2}, builder.getF16Type()), pair,
-          Type(builder.getType<Float8E4M3FNType>()));
+          VectorType::get({2}, builder.getF16Type()), pair, format);
       Value half = LLVM::ExtractElementOp::create(builder, loc, halves,
           arith::ConstantIntOp::create(builder, loc, 0, 32));
       return LLVM::FPExtOp::create(builder, loc, f32, half);

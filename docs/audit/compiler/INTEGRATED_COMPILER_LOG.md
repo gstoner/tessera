@@ -14181,3 +14181,13 @@ Remaining: Local CPU validation passes 30,931 with 3,721 declared skips; final l
 
 Evidence: benchmarks/baselines/native_semantic_dag_20261021/README.md; semantic-dag-timings.json; semantic-dag-ci-compiler-tests.txt; semantic-dag-device-first.txt; semantic-dag-resident-tests.txt; integrity.json.
 <!-- entry-fields:end -->
+
+
+### 2026-10-25 — gfx1201 W8A8 small-grid 64x32 split
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync GFX1201-W8A8-SMALLGRID-64X32-20261025.
+Outcome: inside the 2026-10-16 four-wave envelope, the native Schedule takes 64x32 tiles when the 64x64 grid under-fills gfx1201's 64 CUs; the Python oracle mirrors it. Nine selected Tajasarus rows improve 1.06-1.29x and now beat AITER (0.85-0.99x, BF16 arm); five controls stay within ±1.2%. fp64 checks precede timing; every arm admissible. Unit 169 and device 160 pass on gfx1201. All four backend queues assessed; gfx1151 not applicable (no FP8 WMMA).
+Remaining: exact-head CI/review; the 64-workgroup boundary row 127x2048x1536 (1.106x AITER) and large-M 1024x3072x1536 (1.03x). The original five-slice obligations remain active.
+Evidence: benchmarks/baselines/gfx1201_w8a8_smallgrid_64x32_20261025/README.md.
+<!-- entry-fields:end -->

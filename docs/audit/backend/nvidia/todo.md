@@ -16669,3 +16669,12 @@ NVIDIA: two sm_120 entry points hashed the symbolic legacy module for a prepared
 Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Corrects JIT-DROPPED-CALL-EAGER-2026-10-23. `JitFn.__call__` now checks `frontend_unlowered_calls` immediately before the CPU-plan and Apple fast-path lanes, the only lanes that execute the AST-emitted graph, instead of at entry. Every native route ahead of them executes a module traced from the live function (or a program prepared from one) and reads the AST graph only for admission; a real numpy dataflow call fails tracing and the route declines, so it cannot be truncated. `native_required=True` and differentiation refusals moved with the guard. Regression test: `tests/unit/test_jit_dropped_body_call_eager.py::test_native_route_runs_before_the_dropped_call_guard` (fails on the earlier placement).
 
 NVIDIA (RTX 5070, The-Super-Bear, build-nvidia-cuda at dd1c9af38, lane environment exported): 36 device tests that pass at 8b1fdb83f failed at dd1c9af38 (native tensor MLP 20, FP32 roots 9, shipped GEMM delegate 5, solver children 1, plugin 1); all 36 pass with this change. The 111 other residual device failures are identical at 8b1fdb83f and with this change (pre-existing). The earlier note "native sm_120 tensor-program and prepared routes are bypassed" described the regression, not intended behaviour.
+
+## GFX1201-W8A8-SMALLGRID-64X32-20261025 — under-filled small-grid tiles split to 64x32
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Synchronization key: GFX1201-W8A8-SMALLGRID-64X32-20261025.
+
+Not applicable to nvidia physical execution: the shared PM pass changes only the gfx1201 NK W8A8 selector inside its measured envelope. No Graph/Tile op, dtype, diagnostic, pass, numerical semantics or runtime ABI changes; no RDNA result transfers to SM120.
+
+Evidence: benchmarks/baselines/gfx1201_w8a8_smallgrid_64x32_20261025/README.md.

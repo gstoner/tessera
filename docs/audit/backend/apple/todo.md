@@ -16040,3 +16040,12 @@ Apple: assessed compatible. The value lane already refused unresolved types by n
 Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Corrects JIT-DROPPED-CALL-EAGER-2026-10-23. `JitFn.__call__` now checks `frontend_unlowered_calls` immediately before the CPU-plan and Apple fast-path lanes, the only lanes that execute the AST-emitted graph, instead of at entry. Every native route ahead of them executes a module traced from the live function (or a program prepared from one) and reads the AST graph only for admission; a real numpy dataflow call fails tracing and the route declines, so it cannot be truncated. `native_required=True` and differentiation refusals moved with the guard. Regression test: `tests/unit/test_jit_dropped_body_call_eager.py::test_native_route_runs_before_the_dropped_call_guard` (fails on the earlier placement).
 
 Apple: the guard still covers the `apple_cpu` / `apple_gpu` fast paths, which execute the AST graph; the Mac regression tests for the repro pass. No Metal execution claim.
+
+## GFX1201-W8A8-SMALLGRID-64X32-20261025 — under-filled small-grid tiles split to 64x32
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Synchronization key: GFX1201-W8A8-SMALLGRID-64X32-20261025.
+
+Not applicable to apple: gfx1201-only physical selector in the shared PM pass; no Apple selector, op or ABI changes and no result transfers.
+
+Evidence: benchmarks/baselines/gfx1201_w8a8_smallgrid_64x32_20261025/README.md.

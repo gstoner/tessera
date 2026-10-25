@@ -405,10 +405,28 @@ class _NativeTensorThreadState(threading.local):
 
 
 class _DroppedCallTraceDecline(TesseraJitError):
-    """A native route's trace failed on a body the AST front end also found
-    incomplete. The dropped call explains the failure (a NumPy ufunc applied to
-    a tracer, say), so the route declines instead of raising, and the call
-    reaches the dropped-call guard before the AST-executing lanes."""
+    """A native route's trace failed because NumPy was applied to a traced
+    value, on a body the AST front end also found incomplete. That is the
+    dropped call itself (``np.exp(<Tracer>)``), so the route declines instead
+    of raising and the call reaches the dropped-call guard before the
+    AST-executing lanes. Every other trace failure -- an input refusal, an
+    unsupported op -- still raises: the decline is evidence-bound, never a
+    catch-all for bodies that happen to contain a dropped call."""
+
+
+def _numpy_touched_a_tracer(exc: BaseException) -> bool:
+    """Whether ``exc`` (or anything it chains from) is NumPy's refusal to apply
+    a ufunc to a ``Tracer`` ("... does not support argument 0 of type Tracer
+    ..."). ``Tracer`` defines no NumPy hooks, so this is how a dropped NumPy
+    call on traced dataflow surfaces."""
+    seen: set[int] = set()
+    current: Optional[BaseException] = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, TypeError) and "type Tracer" in str(current):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 class JitFn:
@@ -1642,7 +1660,7 @@ class JitFn:
                 constraints=self.constraints,
             )
         except Exception as exc:
-            if self._frontend_dropped_calls:
+            if self._frontend_dropped_calls and _numpy_touched_a_tracer(exc):
                 raise _DroppedCallTraceDecline(f"tracer frontend failed: {exc}") from exc
             raise TesseraJitError(f"tracer frontend failed: {exc}") from exc
         self._traced_frontend_specializations[signature] = module

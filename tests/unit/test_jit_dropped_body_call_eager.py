@@ -165,3 +165,26 @@ def test_a_trace_failure_without_a_dropped_call_still_raises(monkeypatch):
     with pytest.raises(jit_module.TesseraJitError, match="tracer frontend failed") as info:
         fn._trace_frontend_capture((_x(),), {})
     assert not isinstance(info.value, jit_module._DroppedCallTraceDecline)
+
+
+def test_an_input_refusal_during_trace_is_not_swallowed_by_the_decline(monkeypatch):
+    """A body with a dropped call whose trace fails for an unrelated reason
+    (here an input refusal) must keep raising: only NumPy applied to a traced
+    value is explained by the dropped call. Found on gfx1201, where the decline
+    turned an NVFP4 input-dtype refusal into eager execution."""
+    import importlib
+
+    jit_module = importlib.import_module("tessera.compiler.jit")
+    trace_module = importlib.import_module("tessera.compiler.trace")
+    namespace = {"tessera": tessera, "np": np}
+    exec(_UFUNC_SOURCE, namespace)  # noqa: S102 -- literal test source
+    fn = tessera.jit(target="rocm_gfx1151", source=_UFUNC_SOURCE)(namespace["f"])
+    assert fn.graph_ir.frontend_unlowered_calls == ["np.exp"]
+
+    def refuses(*_args, **_kwargs):
+        raise TypeError("NVFP4 ingest codes must be uint8 rank two")
+
+    monkeypatch.setattr(trace_module, "trace", refuses)
+    with pytest.raises(jit_module.TesseraJitError, match="NVFP4 ingest codes") as info:
+        fn._trace_frontend_capture((_x(),), {})
+    assert not isinstance(info.value, jit_module._DroppedCallTraceDecline)

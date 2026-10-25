@@ -159,7 +159,8 @@ SM120_ATTN_LSE_BCAST_F32_ABI = "tessera.nvidia.attention.q_k_v_bias_o_row_lse_di
 SM120_ATTN_BWD_LSE_BCAST_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dims_bias_shape.f32.v1"
 SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims_bias_shape.f32.v1"
 SM120_ATTN_LSE_F32_ABI = "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1"
-# Additive typed forward ABIs: homogeneous half Q/K/V, f32 accumulation/LSE.
+# Additive typed forward ABIs: descriptor-declared Q and K/V storage (K/V may
+# differ from Q since SM120-SAVED-LSE-MIXED-STORAGE-20261025), f32 accumulation/LSE.
 # O may retain the source storage or use f32. Existing f32 and AD schemas stay stable.
 SM120_ATTN_LSE_TYPED_ABI = "tessera.nvidia.attention.q_k_v_o_row_lse_dims.typed_f32acc.v1"
 SM120_ATTN_LSE_BIAS_TYPED_ABI = "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.typed_f32acc.v1"
@@ -4591,7 +4592,7 @@ def package_scheduled_checkpoint_pair(forward,backward, *, pipeline_name: str):
         raise ValueError("checkpoint pair requires forward then backward native products")
     if (forward.storage, forward.output_storage) != (backward.storage, backward.output_storage):
         raise ValueError("paired checkpoint AD requires its f32 storage contract or matching typed storage")
-    if forward.kv_storage is not None:
+    if getattr(forward, "kv_storage", None) is not None:
         raise ValueError("paired checkpoint AD requires homogeneous Q/K/V storage")
     f_identity=_checkpoint_identity(forward.dims,forward.scale,forward.causal,
         bias=forward.bias,bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage)
@@ -4616,7 +4617,7 @@ def package_generated_attention_forward_checkpoint(source: str, *, pipeline_name
     identity = _checkpoint_identity(
         forward.dims, forward.scale, forward.causal,
         bias=forward.bias, bias_shape=forward.bias_shape, shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage,
-        kv_storage=forward.key_value_storage)
+        kv_storage=getattr(forward, "kv_storage", None))
     return AttentionForwardCheckpoint(
         package_scheduled_checkpoint(forward, pipeline_name=pipeline_name), identity)
 

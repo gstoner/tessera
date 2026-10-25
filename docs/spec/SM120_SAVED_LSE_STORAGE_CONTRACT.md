@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-16
+last_updated: 2026-10-25
 audit_role: reference
 ---
 
@@ -20,8 +20,9 @@ or convert half roots to FP32 tensors before launching.
 
 ## Storage and numerical roles
 
-Q/K/V share compact row-major FP16, BF16 or FP32 storage. O either matches
-that storage or is FP32; row-LSE is always FP32. Optional dense or broadcast
+Q/K/V share compact row-major FP16, BF16 or FP32 storage, except that the
+forward admits a distinct K/V storage (see below). O either matches Q's
+storage or is FP32; row-LSE is always FP32. Optional dense or broadcast
 bias is FP32. GQA head divisibility and exact tensor shapes are checked.
 The native recurrence accumulates in FP32; only the final O store may narrow.
 Causal masking retains the existing end-aligned policy.
@@ -30,6 +31,37 @@ Production tracing must preserve each result's dtype independently. A
 same-storage primary result must not overwrite the independently inferred
 FP32 auxiliary. The public half-storage trace previously violated this rule
 and silently missed native package selection; tests now require a native owner.
+
+## Mixed Q vs K/V storage (forward)
+
+Synchronization key: SM120-SAVED-LSE-MIXED-STORAGE-20261025.
+
+K and V always share one storage. On the saved-LSE forward that storage may
+differ from Q: any pair of FP16, BF16 and FP32 is admitted. O is FP32 or Q's
+storage, which is the result type the frontend gives `flash_attn`. Each operand
+widens exactly to the declared FP32 accumulation, so no conversion policy is
+chosen. Row-LSE remains FP32.
+
+- **Contract:** the native checkpoint contract carries `kv_storage` only when it
+  differs from Q. Every homogeneous contract, checkpoint identity, entry name
+  and Tile kernel is therefore byte-unchanged.
+- **Mixed forward:** the contract and the checkpoint identity both include
+  `kv_storage`. The entry is named
+  `tessera_tile_attention_lse_<q>_kv_<kv>_[out_<o>_]<digest>`. The Tile
+  `attention_kernel` carries `kv_storage`, and its verifier rejects that
+  attribute outside the SM120 saved-LSE forward or when it repeats Q's storage.
+- **Typed ABI:** a mixed forward uses the same typed ABI identifiers, because
+  their buffers already declare per-role storage. The descriptor's K/V
+  bindings carry the K/V dtype.
+- **Runtime sizing:** both the checked launch and the retained owner size each
+  buffer from its own storage. The owner is reached through
+  `tessera_nvidia_attention_forward_prepare_kv`, and the original
+  `tessera_nvidia_attention_forward_prepare` remains its homogeneous wrapper.
+
+The backward checkpoint, paired AD, original-source reverse and the JVP owners
+still require homogeneous Q/K/V. They refuse a mixed forward: the backward
+resolver refuses it, the pair checks refuse it, and the sealed entry-name
+checks refuse it.
 
 ## Additive forward ABI domain
 

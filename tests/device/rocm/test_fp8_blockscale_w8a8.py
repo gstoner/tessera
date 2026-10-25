@@ -255,8 +255,12 @@ LDS_SHAPES = [
     (BlockScaleShape(200, 2048, 384, 128, 128, "nk"), (128, 64)),
     (BlockScaleShape(1000, 4096, 256, 128, 128, "nk"), (128, 128)),
     (BlockScaleShape(300, 4000, 256, 128, 128, "nk", "bf16"), (128, 128)),
-    (BlockScaleShape(100, 1024, 1024, 128, 128, "nk"), (64, 64)),
-    (BlockScaleShape(127, 1024, 1024, 128, 128, "nk"), (64, 64)),
+    # GFX1201-W8A8-SMALLGRID-64X32-20261025: 32 workgroups at 64x64 take 64x32;
+    # 64 workgroups (97x2048) keep 64x64.
+    (BlockScaleShape(100, 1024, 1024, 128, 128, "nk"), (64, 32)),
+    (BlockScaleShape(127, 1024, 1024, 128, 128, "nk"), (64, 32)),
+    (BlockScaleShape(97, 1024, 2048, 128, 128, "nk", "bf16"), (64, 32)),
+    (BlockScaleShape(97, 2048, 2048, 128, 128, "nk"), (64, 64)),
 ]
 
 
@@ -274,7 +278,7 @@ def test_blockscale_w8a8_lds_body_on_gfx1201(shape, macro, exact):
     assert rt._rocm_live_arch() == "gfx1201"
     package = package_blockscale(lower_blockscale(shape))
     prov = package.descriptor.provenance
-    expected_warps = 4 if macro == (64, 64) else 8
+    expected_warps = 4 if macro[0] == 64 else 8
     assert (prov["staging"], prov["warps"], tuple(prov["macro_tile"])) == (
         "lds", expected_warps, macro)
     assert prov["workgroup"] == [expected_warps * 32, 1, 1]

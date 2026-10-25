@@ -19230,3 +19230,14 @@ ROCm: assessed compatible by code read. The gfx1201 NVFP4 / quantized-product an
 Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Corrects JIT-DROPPED-CALL-EAGER-2026-10-23. `JitFn.__call__` now checks `frontend_unlowered_calls` immediately before the CPU-plan and Apple fast-path lanes, the only lanes that execute the AST-emitted graph, instead of at entry. Every native route ahead of them executes a module traced from the live function (or a program prepared from one) and reads the AST graph only for admission; a real numpy dataflow call fails tracing and the route declines, so it cannot be truncated. `native_required=True` and differentiation refusals moved with the guard. Regression test: `tests/unit/test_jit_dropped_body_call_eager.py::test_native_route_runs_before_the_dropped_call_guard` (fails on the earlier placement).
 
 ROCm: gfx1201 (Tajasarus) -- the 7 `rocm_nvfp4_expansion_jit` / `rocm_nvfp4_ingest_jit` tests that pass at 8b1fdb83f and failed at dd1c9af38 pass with this change, and the full gfx1201 unit sweep shows no other difference from the dd1c9af38 baseline. gfx1151 (Princess-Luna): its dd1c9af38 baseline showed no regression from the earlier placement (the NVFP4 lanes are gfx1201-only); this change was not re-swept there.
+
+## GFX1201-W8A8-SMALLGRID-64X32-20261025 — under-filled small-grid tiles split to 64x32
+
+Owner: ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Synchronization key: GFX1201-W8A8-SMALLGRID-64X32-20261025.
+
+Inside the GFX1201-W8A8-SHORT-RAGGED-20261016 envelope (NK W8A8, K128/N128 FP32 scales, 64<M<128 not 32-aligned, N1024..3072 /128, K1024..2048), the native PM Schedule now takes 64x32 four-wave LDS tiles when the 64x64 grid has fewer workgroups than gfx1201's 64 CUs; the Python panel oracle mirrors it. Tajasarus paired device-clock windows, fp64-checked: all nine selected rows improve 1.06-1.29x (BF16) and now run 0.85-0.99x AITER (was 0.95-1.23x); five boundary controls stay within ±1.2%. Device W8A8 suite 160 passed. Open: 127x2048x1536 at the 64-workgroup boundary (1.106x AITER) and 1024x3072x1536 (1.03x BF16).
+
+Not applicable to gfx1151: no FP8 WMMA; its selectors are unchanged and no gfx1201 result transfers.
+
+Evidence: benchmarks/baselines/gfx1201_w8a8_smallgrid_64x32_20261025/README.md.

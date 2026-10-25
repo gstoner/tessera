@@ -733,6 +733,15 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
   // rows. Owning-device paired controls exclude aligned M and wider N,
   // where this geometry can regress. Keep K128/N128 scale semantics and the
   // measured short-K envelope explicit; no physical policy transfers to MX.
+  //
+  // GFX1201-W8A8-SMALLGRID-64X32-20261025: inside that envelope, a 64x64
+  // grid that leaves CUs idle (32 or 48 workgroups on the 64 CUs) takes
+  // 64x32 tiles instead, doubling the grid at the same four waves. Paired
+  // Tajasarus device-clock windows (benchmarks/baselines/
+  // gfx1201_w8a8_smallgrid_64x32_20261025/): 64x32 was faster at every
+  // under-filled point (BF16 0.86-0.99x AITER vs 0.95-1.24x at 64x64); at
+  // exactly 64 workgroups the two split by K, and from 80 up 64x64 wins, so
+  // the strict `<` is the measured boundary, not a tuned one.
   if (nk && schedule.arch == "gfx1201" && computeUnits &&
       schedule.scaleBlockK == 128 && schedule.scaleBlockN == 128 &&
       schedule.m > 64 && schedule.m < 128 && schedule.m % 32 != 0 &&
@@ -742,7 +751,7 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
     schedule.warps = 4;
     schedule.pipelineDepth = 1;
     schedule.macroTileM = 64;
-    schedule.macroTileN = 64;
+    schedule.macroTileN = tiles(64, 64) < *computeUnits ? 32 : 64;
     return;
   }
   // ROCM-FP8-BLOCKSCALE-1, gfx1201 ragged 97..127-row follow-up: the

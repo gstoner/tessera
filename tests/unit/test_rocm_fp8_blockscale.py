@@ -339,7 +339,7 @@ def test_panel_oracle_states_the_rule(m, n, layout, expected):
 
 @pytest.mark.parametrize(("m", "n", "k", "expected"), [
     (96, 8192, 1024, ("global", 32, 32, 1)),
-    (97, 1024, 1024, ("lds", 64, 64, 4)),
+    (97, 1024, 1024, ("lds", 64, 32, 4)),   # 32 workgroups at 64x64
     (100, 2048, 4096, ("lds", 128, 64, 8)),
     (127, 24576, 1536, ("lds", 128, 64, 8)),
     (128, 8192, 1024, ("lds", 128, 128, 8)),
@@ -431,7 +431,10 @@ def test_small_grid_schedule_envelope(m, n, k, selected):
         BlockScalePanel, blockscale_panel_oracle, verify_blockscale_schedule,
     )
     shape = BlockScaleShape(m, n, k, 128, 128, "nk")
-    expected = BlockScalePanel("lds", 64, 64, 4)
+    # GFX1201-W8A8-SMALLGRID-64X32-20261025: fewer than 64 workgroups at
+    # 64x64 (the RX 9070 XT's CU count) takes 64x32 tiles.
+    narrow = -(-m // 64) * -(-n // 64) < 64
+    expected = BlockScalePanel("lds", 64, 32 if narrow else 64, 4)
     assert (blockscale_panel_oracle(shape) == expected) == selected
     if find_tessera_opt() is None:
         pytest.skip("production tessera-opt unavailable")
@@ -447,6 +450,29 @@ def test_small_grid_does_not_admit_sibling_contracts(layout, scale_n, scale_k, a
     from tessera.compiler.rocm_fp8_blockscale import BlockScalePanel, blockscale_panel_oracle
     shape = BlockScaleShape(127, 2048, 2048, scale_k, scale_n, layout)
     assert blockscale_panel_oracle(shape, arch=arch) != BlockScalePanel("lds", 64, 64, 4)
+    narrow = BlockScaleShape(97, 1024, 2048, scale_k, scale_n, layout)
+    assert blockscale_panel_oracle(narrow, arch=arch) != BlockScalePanel("lds", 64, 32, 4)
+
+
+@pytest.mark.parametrize(("m", "n", "k", "macro_n"), [
+    (65, 1024, 1024, 32),   # 2 x 16 = 32 workgroups at 64x64
+    (97, 1024, 2048, 32),
+    (125, 1024, 1024, 32),
+    (65, 1536, 1024, 32),   # 48
+    (97, 1536, 2048, 32),
+    (127, 2048, 1024, 64),  # exactly 64: the strict boundary keeps 64x64
+    (97, 2048, 2048, 64),
+    (75, 2560, 1536, 64),   # 80
+    (113, 3072, 2048, 64),  # 96
+])
+def test_small_grid_splits_n_when_64x64_underfills_the_cus(m, n, k, macro_n):
+    """GFX1201-W8A8-SMALLGRID-64X32-20261025: the measured tile-count split,
+    checked on the oracle and (where built) on the native Schedule."""
+    from tessera.compiler.rocm_fp8_blockscale import (
+        BlockScalePanel, blockscale_panel_oracle, verify_blockscale_schedule)
+    shape = BlockScaleShape(m, n, k, 128, 128, "nk")
+    assert blockscale_panel_oracle(shape) == BlockScalePanel("lds", 64, macro_n, 4)
+    verify_blockscale_schedule(shape, _schedule_ir(shape))
 
 
 @pytest.mark.parametrize("shape", [

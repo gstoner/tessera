@@ -206,7 +206,9 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201") ->
             and 64 < shape.m < 128 and shape.m % 32 != 0
             and 1024 <= shape.n <= 3072 and shape.n % 128 == 0
             and 1024 <= shape.k <= 2048):
-        return BlockScalePanel("lds", 64, 64, 4)
+        # GFX1201-W8A8-SMALLGRID-64X32-20261025: an under-filled 64x64 grid
+        # takes 64x32 tiles (mirror of the native rule's tile-count split).
+        return BlockScalePanel("lds", 64, 32 if tiles(64, 64) < units else 64, 4)
     # Differential mirror of the bounded gfx1201 ragged-row rule in PMPasses.
     # The Schedule pass remains the sole selector authority.
     if (shape.weight_layout == "nk" and arch == "gfx1201" and units is not None

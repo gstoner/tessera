@@ -17,6 +17,9 @@ def harness(monkeypatch, tmp_path):
     monkeypatch.setattr(scheduled_matmul, "find_tessera_opt", lambda: compiler)
     monkeypatch.setattr(adapter, "_cache", adapter.OrderedDict())
     monkeypatch.setattr(adapter, "_pid", os.getpid())
+    # The stub graphs carry no flash_attn signature for the automatic row
+    # policy to read; pin the policy so these cache/ownership checks stand alone.
+    monkeypatch.setenv("TESSERA_NVIDIA_ATTENTION_ROW_CORRECTION", "inline")
     compiled, launches = [], []
 
     def compile_program(graph, active, **kwargs):

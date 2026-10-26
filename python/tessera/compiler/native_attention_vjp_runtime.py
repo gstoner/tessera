@@ -23,7 +23,7 @@ def _operand_storages(graph):
     for line in graph.splitlines():
         if "tessera.flash_attn" not in line:
             continue
-        signature=re.search(r"\)\s*\{.*\}\s*:\s*\((.*)\)\s*->",line) or re.search(r":\s*\((.*)\)\s*->",line)
+        signature=re.search(r":\s*\((.*)\)\s*->",line)
         if signature is None:
             break
         types=re.findall(r"tensor<[^>]*x([A-Za-z0-9]+)>",signature[1])

@@ -335,7 +335,7 @@ def _validate_traced_fp8_program(program: NvidiaTracedRhsProgram) -> None:
     graph=program.graph_ir
     src,lhs,scl=(f"%arg{i}" for i in (program.source_index,program.lhs_index,program.scale_index))
     norms=re.findall(r"(%\w+) = tessera\.(?:rmsnorm|layer_norm) (%arg[012])\s",graph)
-    quants=re.findall(r'(%\w+) = tessera\.quantize_scaled (%\w+), (%arg[012]) \{format = "(fp8_e4m3|fp8_e5m2)"\}',graph)
+    quants=re.findall(r'(%\w+) = tessera\.quantize_scaled (%\w+), (%arg[012]) \{format = "(fp8_e4m3|fp8_e5m2)"[,}]',graph)
     dequants=re.findall(r"(%\w+) = tessera\.dequantize_scaled (%\w+), (%arg[012])\s",graph)
     matmuls=re.findall(r"(%\w+) = tessera\.matmul (%arg[012]), (%\w+)\s",graph)
     if (len(norms)!=1 or len(quants)!=1 or len(dequants)!=1 or len(matmuls)!=1

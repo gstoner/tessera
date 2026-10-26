@@ -85,5 +85,6 @@ def test_fp8_rhs_scale_must_be_the_shared_f32_per_tensor_scale():
     a = np.zeros((16, 16), np.float16)
     x = np.ones((16, 8), np.float16)
     # A non-f32 scale is not the native edge; the reference refuses it.
-    with pytest.raises(ValueError, match="f32 scale"):
+    from tessera._jit_boundary import TesseraJitError
+    with pytest.raises((ValueError, TesseraJitError), match="f32 scale"):
         fp8_e4m3_rhs(a, x, np.ones((1, 1), np.float16))

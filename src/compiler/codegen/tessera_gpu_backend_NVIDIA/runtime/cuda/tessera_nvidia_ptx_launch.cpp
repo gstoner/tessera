@@ -870,6 +870,42 @@ int invokeSoftmax(CUfunction fn, void** buffers, size_t nbuf,
     return rc;
 }
 
+// SM120-W11-FP8-RHS-20261026: a norm fused with quantize_scaled names its FP8
+// destination as `_to_fp8_`; it takes source, per-tensor f32 scale, codes.
+bool isScaledFp8Norm(const char* name) {
+    if (std::strncmp(name, kTileNormPrefix, std::strlen(kTileNormPrefix)) != 0) return false;
+    return std::strstr(name, "_to_fp8_e4m3_") != nullptr ||
+           std::strstr(name, "_to_fp8_e5m2_") != nullptr;
+}
+
+// Source element bytes of a scaled FP8 norm: the storage token precedes `_to_`.
+size_t scaledNormSourceBytes(const char* name) {
+    return std::strstr(name, "_f16_to_") || std::strstr(name, "_bf16_to_") ? 2 : 4;
+}
+
+int invokeScaledNorm(CUfunction fn, const char* name, void** buffers, size_t nbuf,
+                     const int64_t* dims, size_t ndim) {
+    if (nbuf != 3 || ndim != 2 || !buffers[0] || !buffers[1] || !buffers[2]) return 5;
+    const long long rows = dims[0], columns = dims[1];
+    if (rows <= 0 || columns <= 0 || rows >= (1LL << 31) || columns >= (1LL << 31) ||
+        rows > (1LL << 31) / columns) return 5;
+    const size_t elements = (size_t)rows * (size_t)columns;
+    const size_t sizes[] = {elements * scaledNormSourceBytes(name), sizeof(float), elements};
+    CUdeviceptr device[3] = {};
+    if (!stagingPointersLocked(sizes, 3, device)) return 3;
+    long long rowsArg = rows, columnsArg = columns;
+    void* args[] = {&device[0], &device[1], &device[2], &rowsArg, &columnsArg};
+    const bool cooperative = std::strstr(name, "_cooperative_128_") != nullptr;
+    const unsigned grid = (unsigned)(cooperative ? rows : (rows + 127) / 128);
+    if (!cuOk(cuMemcpyHtoD(device[0], buffers[0], sizes[0]), "cuMemcpyHtoD") ||
+        !cuOk(cuMemcpyHtoD(device[1], buffers[1], sizes[1]), "cuMemcpyHtoD") ||
+        !cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0), "cuLaunchKernel") ||
+        !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+        !cuOk(cuMemcpyDtoH(buffers[2], device[2], sizes[2]), "cuMemcpyDtoH"))
+        return 3;
+    return 0;
+}
+
 int invokeReduce(CUfunction fn, void** buffers, size_t nbuf,
                  const int64_t* dims, size_t ndim, size_t elementBytes,
                  bool cooperative) {
@@ -2794,6 +2830,8 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
             fn, buffers, nbuf, dims, ndim, narrow ? 2 : 4,
             std::strstr(kernel_name, "_cooperative_128") != nullptr);
     }
+    if (isScaledFp8Norm(kernel_name))
+        return invokeScaledNorm(fn, kernel_name, buffers, nbuf, dims, ndim);
     if (isTileActivation(kernel_name) ||
         std::strncmp(kernel_name, kTileNormPrefix,
                      std::strlen(kTileNormPrefix)) == 0) {
@@ -2844,6 +2882,21 @@ int invokeResident(const char* name, void** buffers, size_t nbuf,
     std::lock_guard<std::mutex> lock(g_mu);
     CUfunction fn = getFunctionLocked(name);
     if (!fn) return g_ptx.count(name) ? 3 : 4;
+    if (isScaledFp8Norm(name)) {
+        if (nbuf != 3 || ndim != 2 || dims[0] <= 0 || dims[1] <= 0 ||
+            dims[0] >= (1LL << 31) || dims[1] >= (1LL << 31) ||
+            dims[0] > (1LL << 31) / dims[1]) return 5;
+        CUdeviceptr x = reinterpret_cast<CUdeviceptr>(buffers[0]);
+        CUdeviceptr scale = reinterpret_cast<CUdeviceptr>(buffers[1]);
+        CUdeviceptr codes = reinterpret_cast<CUdeviceptr>(buffers[2]);
+        long long rows = dims[0], columns = dims[1];
+        void* args[] = {&x, &scale, &codes, &rows, &columns};
+        const unsigned grid = static_cast<unsigned>(
+            std::strstr(name, "_cooperative_128_") != nullptr ? rows : (rows + 127) / 128);
+        return cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0,
+                                   static_cast<CUstream>(stream), args, 0),
+                    "cuLaunchKernel(resident scaled fp8 norm)") ? 0 : 3;
+    }
     if (isTileActivation(name) ||
         std::strncmp(name, kTileNormPrefix, std::strlen(kTileNormPrefix)) == 0) {
         if (nbuf != 2 || ndim != 2 || dims[0] <= 0 || dims[1] <= 0 ||

@@ -6286,6 +6286,34 @@ LogicalResult tessera::DequantizeScaledOp::verify() {
   return success();
 }
 
+LogicalResult tessera::QuantizeScaledOp::verify() {
+  auto values = dyn_cast<RankedTensorType>(getValues().getType());
+  auto scale = dyn_cast<RankedTensorType>(getScale().getType());
+  auto codes = dyn_cast<RankedTensorType>(getCodes().getType());
+  if (!values || !scale || !codes || values.getEncoding() || scale.getEncoding() ||
+      codes.getEncoding())
+    return emitOpError("requires plain ranked values, scale and codes tensors");
+  Type element = values.getElementType();
+  if (!element.isF16() && !element.isBF16() && !element.isF32())
+    return emitOpError("requires f16, bf16 or f32 values");
+  if (!scale.getElementType().isF32())
+    return emitOpError("requires an f32 scale");
+  StringRef format = getFormat();
+  bool e4m3 = isa<Float8E4M3FNType>(codes.getElementType());
+  bool e5m2 = isa<Float8E5M2Type>(codes.getElementType());
+  if ((format != "fp8_e4m3" && format != "fp8_e5m2") ||
+      (format == "fp8_e4m3" && !e4m3) || (format == "fp8_e5m2" && !e5m2))
+    return emitOpError("format must be fp8_e4m3 or fp8_e5m2 and name the result storage");
+  if (codes.getShape() != values.getShape())
+    return emitOpError("codes shape must equal the values shape");
+  if (scale.getRank() != values.getRank())
+    return emitOpError("scale rank must equal the values rank");
+  for (auto [extent, logical] : llvm::zip(scale.getShape(), values.getShape()))
+    if (extent != 1 && extent != logical)
+      return emitOpError("each scale axis must be 1 or the values extent");
+  return success();
+}
+
 LogicalResult tessera::NVFP4ExpandOp::verify() {
   if (failed(mlir::tessera_contract::verifyNVFP4ExpandPolicy(
           getOperation(), getNumericPolicy())))

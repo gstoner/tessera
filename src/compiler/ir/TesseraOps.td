@@ -3782,6 +3782,23 @@ def Tessera_DequantizeScaledOp : Op<Tessera_Dialect, "dequantize_scaled", [Pure]
   let hasVerifier = 1;
 }
 
+def Tessera_QuantizeScaledOp : Op<Tessera_Dialect, "quantize_scaled", [Pure]> {
+  let summary = "f32(value) / broadcast f32 scale, saturated and rounded once to FP8 codes";
+  let description = [{
+    The inverse storage map of `dequantize_scaled`
+    (SM120-W11-FP8-RHS-20261026). Each value widens exactly to f32, is divided
+    by its broadcast f32 scale with IEEE round-to-nearest-even, and is then
+    rounded to the FP8 format named by `format` with round-to-nearest-even and
+    finite saturation: values beyond the largest finite code (and infinities)
+    become the signed largest finite code, NaN stays NaN. `format` names the
+    result storage explicitly and must agree with the result element type.
+  }];
+  let arguments = (ins TensorType:$values, TensorType:$scale, StrAttr:$format);
+  let results = (outs TensorType:$codes);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 def Tessera_NVFP4ExpandOp : Op<Tessera_Dialect, "nvfp4_expand", [Pure]> {
   let summary = "NVFP4 K16 to exact FP8 codes and rounded FP32 scale plane";
   let arguments = (ins TensorType:$codes, TensorType:$scales,

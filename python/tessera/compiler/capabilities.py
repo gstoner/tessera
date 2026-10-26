@@ -1271,6 +1271,11 @@ def _with_nvfp4_ingest_state(target: TargetCapability) -> TargetCapability:
             reason="Executes only fused into tessera_attn.checkpoint_forward_scaled_kv "
                    "(dequantize_scaled K and V feeding one saved-LSE flash_attn); "
                    "no standalone SM120 kernel")
+    # SM120-W11-FP8-RHS-20261026: values / broadcast f32 scale to FP8 codes.
+    ops["tessera.quantize_scaled"] = OpCapability(
+        "tessera.quantize_scaled", "unsupported", dtypes=("fp16", "bf16", "fp32", "fp8_e4m3", "fp8_e5m2"),
+        reason="No standalone native kernel; this backend requires its own physical "
+               "consumer and device proof")
     ops["tessera.mxfp4_folded_storage"]=OpCapability(
         "tessera.mxfp4_folded_storage","unsupported",dtypes=("uint8",),ranks=(2,),
         reason="Native lossless storage bridge is gfx1201-only; sibling physical proof required")

@@ -9,7 +9,10 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "Tessera/IR/AttentionShapeContract.h"
 namespace tessera {
-inline bool denseAttentionAD(mlir::Operation *op, bool allowBias = false, bool allowLse = false, bool allowBoundedSequences = false, bool allowHalfStorage = false) {
+// allowMixedKeyValue (SM120-SAVED-LSE-MIXED-BACKWARD-20261026): K and V share
+// one f16/bf16/f32 storage that differs from Q. Only the paired saved-LSE
+// reverse opts in; JVP, projection and source-reverse owners keep refusing.
+inline bool denseAttentionAD(mlir::Operation *op, bool allowBias = false, bool allowLse = false, bool allowBoundedSequences = false, bool allowHalfStorage = false, bool allowMixedKeyValue = false) {
   if ((op->getNumOperands() != 3 && !(allowBias && op->getNumOperands() == 4)) || (op->getNumResults() != 1 && !(allowLse && op->getNumResults() == 2)) ||
       op->hasAttr("numeric_policy")) return false;
   for (auto attr : op->getAttrs())
@@ -28,10 +31,12 @@ inline bool denseAttentionAD(mlir::Operation *op, bool allowBias = false, bool a
     if (!t || t.getRank() != 4 || t.getEncoding() ||
         llvm::any_of(t.getShape(), [](int64_t d) { return !mlir::ShapedType::isDynamic(d) && d <= 0; })) return false;
   auto storage = q.getElementType();
-  if ((!storage.isF16() && !storage.isBF16() && !storage.isF32()) ||
-      k.getElementType() != storage || v.getElementType() != storage ||
+  auto keyValue = k.getElementType();
+  auto supported = [](mlir::Type type) { return type.isF16() || type.isBF16() || type.isF32(); };
+  if (!supported(storage) || !supported(keyValue) || v.getElementType() != keyValue ||
+      (keyValue != storage && !(allowMixedKeyValue && allowLse && op->getNumResults() == 2)) ||
       (o.getElementType() != storage && !o.getElementType().isF32())) return false;
-  if (!storage.isF32()) {
+  if (!storage.isF32() || !keyValue.isF32()) {
     if (!allowHalfStorage) return false;
     auto module = op->getParentOfType<mlir::ModuleOp>();
     auto target = module ? module->getAttrOfType<mlir::StringAttr>("tessera.target") : mlir::StringAttr();

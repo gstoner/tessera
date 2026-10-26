@@ -2786,7 +2786,19 @@ LogicalResult AttentionBackwardKernelOp::verify() {
         "storage=\"bf16\", or storage=\"f32\"");
   auto correction = getOperation()->getAttrOfType<StringAttr>("row_correction");
   auto outputStorage = getOperation()->getAttrOfType<StringAttr>("output_storage");
-  bool halfSaved = hasSavedOutput && storage.getValue() != "f32";
+  // SM120-SAVED-LSE-MIXED-BACKWARD-20261026: an optional distinct K/V storage.
+  auto kvStorage = getOperation()->getAttrOfType<StringAttr>("kv_storage");
+  if (getOperation()->hasAttr("kv_storage")) {
+    auto module = getOperation()->getParentOfType<ModuleOp>();
+    auto target = module ? module->getAttrOfType<StringAttr>("tessera.target") : StringAttr();
+    if (!kvStorage || kvStorage.getValue() == storage.getValue() ||
+        (kvStorage.getValue() != "f16" && kvStorage.getValue() != "bf16" &&
+         kvStorage.getValue() != "f32") || !hasSavedOutput || !hasSavedLse ||
+        !target || target.getValue() != "nvidia_sm120")
+      return emitOpError("backward kv_storage requires a distinct f16/bf16/f32 K/V storage on the SM120 saved checkpoint");
+  }
+  bool halfSaved = hasSavedOutput && (storage.getValue() != "f32" ||
+      (kvStorage && kvStorage.getValue() != "f32"));
   if (halfSaved && (!hasSavedLse || !correction ||
       correction.getValue() != "probability_dot_v_f32_v1" || !outputStorage ||
       (outputStorage.getValue() != storage.getValue() && outputStorage.getValue() != "f32")))

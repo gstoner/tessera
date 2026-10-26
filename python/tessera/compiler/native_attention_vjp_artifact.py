@@ -44,7 +44,9 @@ def payload(program):
                     correction=package(program.correction) if program.correction is not None else None,
                     checkpoint_digest=program.pair.contract_digest,active=list(active),
                     frontend_argument_indices=list(mapping))
-    typed = program.pair.forward.descriptor.provenance.get("storage") != "f32"
+    provenance = program.pair.forward.descriptor.provenance
+    # Mixed Q vs K/V storage is typed even with f32 Q (SM120-SAVED-LSE-MIXED-BACKWARD-20261026).
+    typed = provenance.get("storage") != "f32" or "kv_storage" in provenance
     return dict(schema="tessera.native_attention_vjp_program.v2" if typed else "tessera.native_attention_vjp_program.v1",
                 forward=package(program.pair.forward),backward=package(program.pair.backward),
                 checkpoint_digest=program.pair.contract_digest,

@@ -70,8 +70,6 @@ resolveNativeCheckpointStorage(mlir::Operation *op, bool backward) {
     return op->emitError("checkpoint output storage must be f32 or match Q"), failure();
   if (operands[base + 2].getElementType() != kv)
     return op->emitError("checkpoint K/V storage must agree"), failure();
-  if (backward && kv != input)
-    return op->emitError("checkpoint backward requires homogeneous Q/K/V storage"), failure();
   for (auto [index, tensor] : llvm::enumerate(operands)) {
     Type expected = index == base ? input : index > base && index < base + 3 ? kv :
         backward && (index == 0 || index == 4) ? output : Float32Type::get(op->getContext());
@@ -79,7 +77,8 @@ resolveNativeCheckpointStorage(mlir::Operation *op, bool backward) {
       return op->emitError("checkpoint auxiliary and backward seed storage disagrees with its typed role"), failure();
   }
   for (auto [index, tensor] : llvm::enumerate(results)) {
-    Type expected = backward ? (index < 3 ? input : Type(Float32Type::get(op->getContext()))) :
+    // Backward gradients take their primal's storage: dQ = Q, dK = dV = K/V.
+    Type expected = backward ? (index == 0 ? input : index < 3 ? kv : Type(Float32Type::get(op->getContext()))) :
         (index == 0 ? output : Type(Float32Type::get(op->getContext())));
     if (tensor.getElementType() != expected) {
       if (!backward && index == 1)

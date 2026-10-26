@@ -52,8 +52,9 @@ class ScheduledCheckpointArtifact:
             raise ValueError("checkpoint storage requires homogeneous forward data and f32 auxiliaries")
         if self.kv_storage is not None and (
                 not isinstance(self.kv_storage, str) or self.kv_storage not in {"f16", "bf16", "f32", "fp8_e4m3", "fp8_e5m2"}
-                or self.kv_storage == self.storage or self.backward):
-            raise ValueError("checkpoint K/V storage differs from Q only on the saved-LSE forward")
+                or self.kv_storage == self.storage
+                or (self.backward and self.kv_storage not in {"f16", "bf16", "f32"})):
+            raise ValueError("checkpoint K/V storage differs from Q; FP8 K/V is forward-only")
         if self.kv_scale_shapes and (
                 self.backward or self.kv_storage not in {"fp8_e4m3", "fp8_e5m2"}
                 or len(self.kv_scale_shapes) != 8 or self.shape_bounds

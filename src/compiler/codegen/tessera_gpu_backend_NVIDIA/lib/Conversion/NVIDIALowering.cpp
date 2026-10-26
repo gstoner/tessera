@@ -3142,7 +3142,18 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   const bool bf16Storage = storage && storage.getValue() == "bf16";
   auto outputStorage = op->getAttrOfType<StringAttr>("output_storage");
   auto correction = op->getAttrOfType<StringAttr>("row_correction");
-  bool halfSaved = hasSavedOutput && (f16Storage || bf16Storage);
+  // SM120-SAVED-LSE-MIXED-BACKWARD-20261026: K/V (and dK/dV) may carry their
+  // own f16/bf16/f32 storage. The typed saved-output path applies whenever
+  // either storage is half.
+  auto kvStorageAttr = op->getAttrOfType<StringAttr>("kv_storage");
+  if (op->hasAttr("kv_storage") && (externalRows || !kvStorageAttr || !storage ||
+      kvStorageAttr.getValue() == storage.getValue() ||
+      (kvStorageAttr.getValue() != "f16" && kvStorageAttr.getValue() != "bf16" &&
+       kvStorageAttr.getValue() != "f32")))
+    return op->emitError("backward kv_storage requires a distinct f16/bf16/f32 K/V storage");
+  StringRef kvSpelling = kvStorageAttr ? kvStorageAttr.getValue() : (storage ? storage.getValue() : "");
+  const bool kvHalf = kvSpelling == "f16" || kvSpelling == "bf16";
+  bool halfSaved = hasSavedOutput && (f16Storage || bf16Storage || kvHalf);
   if (halfSaved && (!outputStorage || !correction ||
       correction.getValue() != "probability_dot_v_f32_v1" ||
       (outputStorage.getValue() != storage.getValue() && outputStorage.getValue() != "f32")))
@@ -3188,7 +3199,8 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   Type storageType = f16Storage
                          ? Type(builder.getF16Type())
                          : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
-  unsigned storageAlignment = (f16Storage || bf16Storage) ? 2 : 4;
+  Type kvType = kvSpelling == "f16" ? Type(builder.getF16Type())
+                : kvSpelling == "bf16" ? Type(builder.getBF16Type()) : Type(f32);
   const unsigned savedOutputIndex = 4;
   const unsigned biasIndex = 4 + unsigned(hasSavedOutput && !externalRows);
   const unsigned lseIndex = biasIndex + unsigned(hasBias);
@@ -3233,22 +3245,20 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
         (pointer == 0 || pointer == savedOutputIndex);
     bool wide = biasPointer || lsePointer || lseSeedPointer || wideOutputPointer ||
         (externalRows && pointer == rowCorrectionIndex);
-    Type type = wide ? Type(f32) : storageType;
-    unsigned alignment = wide ? 4 : storageAlignment;
+    Type type = wide ? Type(f32) : (pointer == 2 || pointer == 3) ? kvType : storageType;
+    unsigned alignment = type.isF32() ? 4 : 2;
     Value ptr = LLVM::GEPOp::create(builder, loc, in[pointer].getType(), type,
                                     in[pointer], ValueRange{index});
     Value loaded = LLVM::LoadOp::create(builder, loc, type, ptr, alignment);
-    return !wide && (f16Storage || bf16Storage)
-        ? Value(LLVM::FPExtOp::create(builder, loc, f32, loaded))
-        : loaded;
+    return type.isF32() ? loaded : Value(LLVM::FPExtOp::create(builder, loc, f32, loaded));
   };
   auto store = [&](unsigned pointer, Value index, Value value) {
     bool biasGradientPointer = hasBiasGradient && pointer == dbIndex;
-    Type type = biasGradientPointer ? Type(f32) : storageType;
-    unsigned alignment = biasGradientPointer ? 4 : storageAlignment;
-    Value stored = !biasGradientPointer && (f16Storage || bf16Storage)
-        ? Value(LLVM::FPTruncOp::create(builder, loc, storageType, value))
-        : value;
+    bool keyValueGradient = (gradientActive(1) && pointer == gradientIndex(1)) ||
+                            (gradientActive(2) && pointer == gradientIndex(2));
+    Type type = biasGradientPointer ? Type(f32) : keyValueGradient ? kvType : storageType;
+    unsigned alignment = type.isF32() ? 4 : 2;
+    Value stored = !type.isF32() ? Value(LLVM::FPTruncOp::create(builder, loc, type, value)) : value;
     Value ptr = LLVM::GEPOp::create(builder, loc, in[pointer].getType(),
                                     type, in[pointer], ValueRange{index});
     LLVM::StoreOp::create(builder, loc, stored, ptr, alignment);

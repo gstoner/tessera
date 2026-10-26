@@ -416,6 +416,14 @@ int tessera_nvidia_attention_vjp_prepare_typed(
     const int64_t* dims, const int64_t* bias_shape, const int* frontend_mapping,
     const int* active_roles, size_t active_count, int storage, int output_storage,
     int lse_cotangent, uint64_t* handle);
+// As above with a distinct K/V and dK/dV storage code (1=f32, 2=f16, 3=bf16),
+// inline saved-LSE path only (SM120-SAVED-LSE-MIXED-BACKWARD-20261026).
+int tessera_nvidia_attention_vjp_prepare_typed_kv(
+    const void* fimage, size_t fbytes, const char* fentry,
+    const void* bimage, size_t bbytes, const char* bentry,
+    const int64_t* dims, const int64_t* bias_shape, const int* mapping,
+    const int* roles, size_t active_count, int storage, int kv_storage, int output_storage,
+    int lse_cotangent, uint64_t* handle);
 int tessera_nvidia_attention_vjp_invoke(
     uint64_t handle, const void* const* inputs, const size_t* input_bytes,
     size_t input_count, void* const* outputs, const size_t* output_bytes,

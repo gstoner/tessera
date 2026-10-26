@@ -22,7 +22,13 @@ def _integer_policy(policy, key):
 def _policy(descriptor):
     p = descriptor.provenance
     storage, output = p.get("storage"), p.get("output")
-    if (storage not in ("f16", "bf16") or output not in (storage, "f32") or
+    # SM120-SAVED-LSE-MIXED-BACKWARD-20261026: K/V and dK/dV may carry a
+    # distinct kv_storage; the typed path then admits an f32 Q.
+    kv = p.get("kv_storage", storage)
+    if ("kv_storage" in p and (kv == storage or kv not in ("f16", "bf16", "f32"))):
+        raise ValueError("typed backward K/V storage disagrees")
+    if (storage not in ("f16", "bf16", "f32") or (storage == "f32" and kv == "f32") or
+            output not in (storage, "f32") or
             p.get("gradient_storage") != storage or p.get("accum") != "f32" or
             p.get("row_lse") != "f32[B,Hq,Sq]" or
             p.get("row_correction") != "probability_dot_v_f32_v1" or
@@ -56,6 +62,7 @@ def validate_typed_backward_descriptor(descriptor: LaunchDescriptor) -> tuple[st
         raise ValueError("typed backward requires its distinct ABI")
     p = _policy(descriptor)
     storage, output = p["storage"], p["output"]
+    kv = p.get("kv_storage", storage)
     bias, bias_gradient, seeded = p["bias"], p["bias_gradient"], p["lse_cotangent"]
     compact = p.get("gradient_output") == "compact_v1"
     if p.get("gradient_output") not in ("complete_v1", "compact_v1"):
@@ -79,13 +86,15 @@ def validate_typed_backward_descriptor(descriptor: LaunchDescriptor) -> tuple[st
             launch not in (("logical_v1", "packed_v1") if compact else ("logical_v1",))):
         raise ValueError("typed backward launch policy disagrees")
     dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}
-    expected = [(dtype[output], 4, "input")] + [(dtype[storage], 4, "input")]*3 + [(dtype[output], 4, "input")]
+    expected = ([(dtype[output], 4, "input"), (dtype[storage], 4, "input")] +
+                [(dtype[kv], 4, "input")]*2 + [(dtype[output], 4, "input")])
     if bias:
         expected += [("fp32", 4, "input")]
     expected += [("fp32", 3, "input")]
     if seeded:
         expected += [("fp32", 3, "input")]
-    expected += [(dtype[storage] if role < 3 else "fp32", 4, "output") for role in roles]
+    expected += [((dtype[storage] if role == 0 else dtype[kv]) if role < 3 else "fp32", 4, "output")
+                 for role in roles]
     buffers = sorted(descriptor.buffers, key=lambda x: x.ordinal)
     if len(buffers) != len(expected) or len({x.name for x in buffers}) != len(buffers):
         raise ValueError("typed backward physical buffer count or names disagree")
@@ -119,12 +128,13 @@ def validate_typed_backward_descriptor(descriptor: LaunchDescriptor) -> tuple[st
             prefix += "bias_gradient_"
         if seeded:
             prefix += "cotangent_"
-    entry = prefix+storage+"_out_"+output+"_"+digest[:10]+("_cotangent_" if seeded and compact else "")
+    entry = (prefix+storage+("_kv_"+kv if kv != storage else "")+"_out_"+output+"_"+digest[:10]+
+             ("_cotangent_" if seeded and compact else ""))
     if descriptor.entry_symbol != entry:
         raise ValueError("typed backward entry differs from native storage/gradient policy")
     identity = _checkpoint_identity(_integer_policy(p, "shape"), p["scale"], p["causal"],
         bias=bias, bias_shape=_integer_policy(p, "bias_shape"), shape_bounds=_integer_policy(p, "shape_bounds"),
-        storage=storage, output_storage=output)
+        storage=storage, output_storage=output, kv_storage=kv)
     if p.get("checkpoint_contract") != identity:
         raise ValueError("typed backward checkpoint identity disagrees")
     return storage, output
@@ -188,6 +198,8 @@ def _verify_package(package, backward):
             raise ValueError("typed checkpoint native storage/policy differs: "+key)
     if backward and (string("gradient_storage") != p["gradient_storage"] or string("row_correction") != p["row_correction"]):
         raise ValueError("typed backward native gradient/residual storage differs")
+    if string("kv_storage", None) != p.get("kv_storage"):
+        raise ValueError("typed checkpoint native K/V storage differs")
     if array("shape") != _integer_policy(p, "shape") or array("shape_bounds") != _integer_policy(p, "shape_bounds"):
         raise ValueError("typed checkpoint native dimensions differ")
     if array("frontend_argument_indices") != _integer_policy(p, "frontend_argument_indices"):
@@ -233,7 +245,8 @@ def checkpoint_forward_shapes(pair, *, runtime_dims=None):
     p=forward.provenance
     identity=_checkpoint_identity(tuple(p['shape']),p['scale'],p['causal'],
         bias=p['bias'],bias_shape=tuple(p.get('bias_shape',())),
-        shape_bounds=tuple(p.get('shape_bounds',())),storage=storage,output_storage=output)
+        shape_bounds=tuple(p.get('shape_bounds',())),storage=storage,output_storage=output,
+        kv_storage=p.get('kv_storage'))
     if pair.contract_digest!=identity:
         raise ValueError("typed forward checkpoint generation differs")
     dims=attention_dimensions(p['shape'],p.get('shape_bounds',()),runtime_dims)
@@ -255,9 +268,11 @@ def checkpoint_pair_shapes(pair, *, runtime_dims=None):
     if validate_typed_backward_descriptor(backward) != (storage, output):
         raise ValueError("typed checkpoint producer and consumer storage differ")
     f, b = forward.provenance, backward.provenance
+    if f.get('kv_storage') != b.get('kv_storage'):
+        raise ValueError("typed checkpoint producer and consumer K/V storage differ")
     identity = _checkpoint_identity(tuple(f['shape']), f['scale'], f['causal'],
         bias=f['bias'], bias_shape=tuple(f.get('bias_shape', ())), shape_bounds=tuple(f.get('shape_bounds', ())),
-        storage=storage, output_storage=output)
+        storage=storage, output_storage=output, kv_storage=f.get('kv_storage'))
     if pair.contract_digest != identity or b.get('checkpoint_contract') != identity:
         raise ValueError("typed checkpoint producer and consumer generations differ")
     fn = [x.name for x in forward.buffers]
@@ -277,7 +292,8 @@ def checkpoint_pair_shapes(pair, *, runtime_dims=None):
 
 
 def vjp_checkpoint_shapes(pair):
-    if pair.forward.descriptor.provenance.get("storage") in ("f16", "bf16"):
+    provenance = pair.forward.descriptor.provenance
+    if provenance.get("storage") in ("f16", "bf16") or "kv_storage" in provenance:
         return checkpoint_pair_shapes(pair)
     from .resident_attention import checkpoint_shapes
     return checkpoint_shapes(pair)

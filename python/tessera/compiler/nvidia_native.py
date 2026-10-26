@@ -4601,7 +4601,12 @@ def package_attention_backward_lse(
 def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativePackage:
     names, dims, scale, causal = scheduled.names, scheduled.dims, scheduled.scale, scheduled.causal
     storage, output_storage = scheduled.storage, scheduled.output_storage
+    # SM120-SAVED-LSE-MIXED-BACKWARD-20261026: K/V and dK/dV take kv_storage.
+    kv_storage = scheduled.key_value_storage
+    typed = storage != "f32" or kv_storage != storage
     data_dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}[storage]
+    kv_dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}[kv_storage]
+    kv_alignment = 4 if kv_storage == "f32" else 2
     output_dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}[output_storage]
     data_alignment = 4 if storage == "f32" else 2
     output_alignment = 4 if output_storage == "f32" else 2
@@ -4628,7 +4633,7 @@ def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NV
         abi_id = SM120_ATTN_BWD_LSE_COMPACT_F32_ABI
     if seeded:
         abi_id = SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI
-    if storage != "f32":
+    if typed:
         abi_id = SM120_ATTN_BWD_LSE_TYPED_ABI
     entry, tile_ir = scheduled.entry, scheduled.tile_ir
     lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state = _compile_tile_ir(tile_ir, entry)
@@ -4643,13 +4648,13 @@ def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NV
     buffers: tuple[BufferBinding, ...] = (
         BufferBinding(0, do_name, "input", output_dtype, 4, "row_major", output_alignment),
         BufferBinding(1, q_name, "input", data_dtype, 4, "row_major", data_alignment),
-        BufferBinding(2, k_name, "input", data_dtype, 4, "row_major", data_alignment),
-        BufferBinding(3, v_name, "input", data_dtype, 4, "row_major", data_alignment),
+        BufferBinding(2, k_name, "input", kv_dtype, 4, "row_major", kv_alignment),
+        BufferBinding(3, v_name, "input", kv_dtype, 4, "row_major", kv_alignment),
         BufferBinding(4, output_name, "input", output_dtype, 4, "row_major", output_alignment),
         BufferBinding(5, lse_name, "input", "fp32", 3, "row_major", 4),
         BufferBinding(6, dq_name, "output", data_dtype, 4, "row_major", data_alignment),
-        BufferBinding(7, dk_name, "output", data_dtype, 4, "row_major", data_alignment),
-        BufferBinding(8, dv_name, "output", data_dtype, 4, "row_major", data_alignment),
+        BufferBinding(7, dk_name, "output", kv_dtype, 4, "row_major", kv_alignment),
+        BufferBinding(8, dv_name, "output", kv_dtype, 4, "row_major", kv_alignment),
     )
     guards = tuple(
         ShapeGuard(name, axis, "eq", extent)
@@ -4708,7 +4713,8 @@ def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NV
             "graph_ir_digest": hashlib.sha256(scheduled.graph_ir.encode()).hexdigest(),
             "target_ir_digest": image.target_ir_digest,
             "schedule_ir_digest": hashlib.sha256(scheduled.schedule_ir.encode()).hexdigest(),
-            "checkpoint_contract": _checkpoint_identity(dims, scale, causal, bias=scheduled.bias, bias_shape=scheduled.bias_shape, shape_bounds=scheduled.shape_bounds, storage=scheduled.storage, output_storage=scheduled.output_storage),
+            "checkpoint_contract": _checkpoint_identity(dims, scale, causal, bias=scheduled.bias, bias_shape=scheduled.bias_shape, shape_bounds=scheduled.shape_bounds, storage=scheduled.storage, output_storage=scheduled.output_storage, kv_storage=kv_storage),
+            **({"kv_storage": kv_storage} if kv_storage != storage else {}),
             "mask_alignment": "end_aligned_v1", "bias": scheduled.bias,
             "bias_shape": list(scheduled.bias_shape),
             "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1" if scheduled.bias_shape else "none",
@@ -4724,12 +4730,12 @@ def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NV
             "lse_checkpoint": "saved", "shape": list(dims), "storage": storage,
             "gradient_storage": storage, "row_lse": "f32[B,Hq,Sq]",
             **({"output": output_storage, "accum": "f32",
-                "row_correction": "probability_dot_v_f32_v1"} if storage != "f32" else {}),
+                "row_correction": "probability_dot_v_f32_v1"} if typed else {}),
             "scale": scale, "causal": causal, "workspace_bytes": 0,
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )
-    if storage != "f32":
+    if typed:
         from .typed_attention_backward import validate_typed_backward_descriptor
         validate_typed_backward_descriptor(descriptor)
     elif seeded:
@@ -4775,12 +4781,17 @@ def package_scheduled_checkpoint_pair(forward,backward, *, pipeline_name: str):
         raise ValueError("checkpoint pair requires forward then backward native products")
     if (forward.storage, forward.output_storage) != (backward.storage, backward.output_storage):
         raise ValueError("paired checkpoint AD requires its f32 storage contract or matching typed storage")
-    if getattr(forward, "kv_storage", None) is not None:
-        raise ValueError("paired checkpoint AD requires homogeneous Q/K/V storage")
+    # Mixed Q vs K/V storage pairs only with the same K/V storage on both
+    # sides (SM120-SAVED-LSE-MIXED-BACKWARD-20261026); scaled K/V never pairs.
+    if (getattr(forward, "kv_scale_shapes", ()) or
+            getattr(forward, "kv_storage", None) != getattr(backward, "kv_storage", None)):
+        raise ValueError("paired checkpoint AD requires matching homogeneous or mixed Q vs K/V storage")
     f_identity=_checkpoint_identity(forward.dims,forward.scale,forward.causal,
-        bias=forward.bias,bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage)
+        bias=forward.bias,bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage,
+        kv_storage=getattr(forward, "kv_storage", None))
     b_identity=_checkpoint_identity(backward.dims,backward.scale,backward.causal,
-        bias=backward.bias,bias_shape=backward.bias_shape,shape_bounds=backward.shape_bounds, storage=backward.storage, output_storage=backward.output_storage)
+        bias=backward.bias,bias_shape=backward.bias_shape,shape_bounds=backward.shape_bounds, storage=backward.storage, output_storage=backward.output_storage,
+        kv_storage=getattr(backward, "kv_storage", None))
     if f_identity!=b_identity:
         raise ValueError("checkpoint producer and consumer policies disagree")
     f,b=forward.names,backward.names

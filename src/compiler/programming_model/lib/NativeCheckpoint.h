@@ -436,8 +436,9 @@ static LogicalResult lowerNativeCheckpoints(ModuleOp mod) {
           "_t" + Twine(cast<IntegerAttr>(c->contract.get("gradient_block_threads")).getInt()) +
           "_" + c->hash.substr(0,10)).str();
     }
-    if (c->backward && !storage->inputElement.isF32())
+    if (c->backward && (!storage->inputElement.isF32() || storage->mixed()))
       entry.insert(entry.size() - 10, checkpointStorageSpelling(storage->inputElement).str() +
+          (storage->mixed() ? "_kv_" + checkpointStorageSpelling(storage->kvElement).str() : std::string()) +
           "_out_" + checkpointStorageSpelling(storage->outputElement).str() + "_");
     if (c->lseCotangent && compact) entry += "_cotangent_";
     if (SymbolTable::lookupSymbolIn(mod, entry)) return scheduled->emitError("checkpoint entry symbol collision");
@@ -469,7 +470,7 @@ static LogicalResult lowerNativeCheckpoints(ModuleOp mod) {
     if (storage->mixed())
       kernel.addAttribute("kv_storage", builder.getStringAttr(checkpointStorageSpelling(storage->kvElement)));
     if ((!c->backward && !storage->outputElement.isF32()) ||
-        (c->backward && !storage->inputElement.isF32()))
+        (c->backward && (!storage->inputElement.isF32() || storage->mixed())))
       kernel.addAttribute("output_storage", builder.getStringAttr(checkpointStorageSpelling(storage->outputElement)));
     if (auto correction = c->contract.get("row_correction"))
       kernel.addAttribute("row_correction", correction);

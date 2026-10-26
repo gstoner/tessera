@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-25
+last_updated: 2026-10-26
 audit_role: reference
 ---
 
@@ -58,10 +58,48 @@ chosen. Row-LSE remains FP32.
   `tessera_nvidia_attention_forward_prepare_kv`, and the original
   `tessera_nvidia_attention_forward_prepare` remains its homogeneous wrapper.
 
-The backward checkpoint, paired AD, original-source reverse and the JVP owners
-still require homogeneous Q/K/V. They refuse a mixed forward: the backward
-resolver refuses it, the pair checks refuse it, and the sealed entry-name
-checks refuse it.
+The reverse admits the same mixed pairs (next section). Original-source
+reverse and the JVP owners still require homogeneous Q/K/V and refuse a mixed
+forward.
+
+## Mixed Q vs K/V storage (backward)
+
+Synchronization key: SM120-SAVED-LSE-MIXED-BACKWARD-20261026.
+
+The saved-LSE backward checkpoint and the paired native reverse admit the same
+pairs as the forward: K/V share one of FP16, BF16 or FP32, and Q may hold any
+other of the three. Each gradient takes its primal's storage — dQ is Q's, dK
+and dV are the K/V storage. dO and the saved O follow Q's storage or are FP32;
+LSE, the LSE cotangent and bias stay FP32. The recurrence and the
+`probability_dot_v_f32_v1` row correction accumulate in FP32; only the final
+gradient stores narrow.
+
+- **AD opt-in:** `denseAttentionAD` admits a distinct K/V storage only when its
+  caller opts in. `FlashAttnOp::buildAdjoint` and both `AutodiffPairedPass`
+  sites do. The JVP, projection and original-source reverse callers do not.
+- **Contract and entry:** as on the forward, `kv_storage` appears in the native
+  contract and the checkpoint identity only when it differs from Q, so every
+  homogeneous backward is byte-unchanged. A mixed backward entry is
+  `..._<q>_kv_<kv>_out_<o>_<digest>`. The Tile `attention_backward_kernel`
+  carries `kv_storage`, and its verifier requires a distinct FP16/BF16/FP32
+  value on an SM120 saved-output-plus-LSE backward.
+- **Pair checks:** the forward and backward of a checkpoint pair must agree on
+  `kv_storage`. The scheduled and generated pair packagers refuse a mismatch,
+  and refuse a scaled K/V forward outright.
+- **Typed ABI:** a mixed backward uses the typed backward ABI and the VJP
+  program schema v2, even when Q is FP32. Descriptor K/V/dK/dV bindings carry
+  the K/V dtype.
+- **Retained owner:** `prepareAttentionVjp` sizes each role from its own
+  storage and keeps `kvStorage` in its state. The new
+  `tessera_nvidia_attention_vjp_prepare_typed_kv` entry reaches it, and
+  `tessera_nvidia_attention_vjp_prepare_typed` remains its homogeneous wrapper.
+  External-row and source-program owners refuse a mixed K/V.
+
+**Not admitted:**
+- FP8 or scaled K/V in any reverse (FP8 is forward-only);
+- K and V in different storages, or a dK/dV whose storage differs from K/V's;
+- original-source reverse, JVP or projection over a mixed forward;
+- any non-SM120 target.
 
 ## Unscaled FP8 K/V storage (forward)
 
@@ -82,7 +120,7 @@ Every finite code point of both formats is checked bit-exactly on the device.
 |---|---|
 | Q | f16, bf16 or f32 |
 | O | Q's storage or f32 |
-| Backward roles | homogeneous storage only (FP8 is refused) |
+| Backward roles | f16, bf16 or f32 K/V, mixed or homogeneous (FP8 is refused) |
 | Resident roots | f16, bf16 or f32 only (FP8 roots are refused); FP8 K/V are host roots |
 | K/V buffers | one-byte elements, alignment 1 |
 | Retained owner | `kv_storage` codes 4 (`fp8_e4m3`) and 5 (`fp8_e5m2`) |

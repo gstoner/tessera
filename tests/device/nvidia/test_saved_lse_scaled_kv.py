@@ -106,8 +106,8 @@ def test_scaled_kv_public_and_serialized(q_name, kv_name, granularity, sk, varia
     arguments.update((binding.name, value) for binding, value in zip(outputs, returned, strict=True))
     scalar_names = [scalar.name for scalar in sorted(descriptor.scalars, key=lambda value: value.ordinal)]
     provenance = descriptor.provenance
-    scalar_values = (*provenance["shape"], *provenance["bias_shape"] if "BiasB" in scalar_names else (),
-                     *provenance["kv_scale_shapes"])
+    bias_values = tuple(provenance["bias_shape"]) if "BiasB" in scalar_names else ()
+    scalar_values = (*provenance["shape"], *bias_values, *provenance["kv_scale_shapes"])
     arguments.update(zip(scalar_names, scalar_values, strict=True))
     result = rt.launch(artifact, arguments)
     assert result["ok"] and result["execution_kind"] == "native_gpu", result

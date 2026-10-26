@@ -2247,7 +2247,8 @@ Each value widens exactly to float32 and is divided by its scale with IEEE
 round-to-nearest, ties-to-even. The quotient is then rounded to format,
 which is required and is fp8_e4m3 (E4M3FN) or fp8_e5m2, again with ties to
 even and finite saturation: out-of-range values and infinities become the
-signed largest finite code (448 or 57344), and NaN stays NaN. The result is FP8
+signed largest finite code (448 or 57344), and every NaN becomes the canonical
+code 0x7F (positive, all exponent and mantissa bits set). The result is FP8
 storage codes. dequantize_scaled(quantize_scaled(dequantize_scaled(c, s), s,
 format=...), s) reproduces every finite code c exactly. On SM120, an RMSNorm
 whose only use is quantize_scaled, feeding the row-major B of one matmul

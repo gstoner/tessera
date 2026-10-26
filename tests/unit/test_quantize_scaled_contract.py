@@ -57,6 +57,9 @@ def test_reference_saturates_and_round_trips_every_finite_code(fmt):
     decoded = codes.astype(np.float32)
     np.testing.assert_array_equal(decoded[0, :7], [0, 0, 1, largest, -largest, largest, -largest])
     assert np.signbit(decoded[0, 1]) and np.isnan(decoded[0, 7])
+    assert codes.view(np.uint8)[0, 7] == 0x7F  # the canonical NaN code
+    negative_nan = ts.ops.quantize_scaled(np.array([[-np.nan]], np.float32), np.ones((1, 1), np.float32), format=fmt)
+    assert negative_nan.view(np.uint8)[0, 0] == 0x7F
     every = np.arange(256, dtype=np.uint8).view(target)
     every = every[np.isfinite(every.astype(np.float32))].reshape(1, -1)
     scale = np.full((1, 1), 0.375, np.float32)

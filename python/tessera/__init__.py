@@ -3838,7 +3838,8 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         nearest, ties to even), then rounds to ``format`` (``"fp8_e4m3"`` or
         ``"fp8_e5m2"``, required) with ties to even and finite saturation:
         out-of-range values and infinities become the signed largest finite
-        code, NaN stays NaN. SM120-W11-FP8-RHS-20261026.
+        code, and every NaN becomes the canonical code 0x7F.
+        SM120-W11-FP8-RHS-20261026.
         """
         from .dtype import canonicalize_dtype
         import ml_dtypes
@@ -3860,7 +3861,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             quotient = values.astype(np.float32) / scale
         # Saturate before the cast: the native cast maps out-of-range finite
         # values to NaN (E4M3FN) or infinity (E5M2); NaN passes through clip.
-        return np.clip(quotient, -largest, largest).astype(target)
+        codes = np.clip(quotient, -largest, largest).astype(target)
+        # Every NaN becomes the canonical code 0x7F in both formats (what
+        # cvt.rn.satfinite produces); the cast alone would pick 0x7E for E5M2.
+        codes.view(np.uint8)[np.isnan(quotient)] = 0x7F
+        return codes
 
     def nvfp4_expand(codes, scales, projection_globals, *, row_offsets, numeric_policy):
         """Expand E2M1 codes exactly; round the projection scale product once."""

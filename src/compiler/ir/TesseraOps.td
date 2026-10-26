@@ -3790,7 +3790,8 @@ def Tessera_QuantizeScaledOp : Op<Tessera_Dialect, "quantize_scaled", [Pure]> {
     by its broadcast f32 scale with IEEE round-to-nearest-even, and is then
     rounded to the FP8 format named by `format` with round-to-nearest-even and
     finite saturation: values beyond the largest finite code (and infinities)
-    become the signed largest finite code, NaN stays NaN. `format` names the
+    become the signed largest finite code, and every NaN becomes the canonical
+    code 0x7F. `format` names the
     result storage explicitly and must agree with the result element type.
   }];
   let arguments = (ins TensorType:$values, TensorType:$scale, StrAttr:$format);

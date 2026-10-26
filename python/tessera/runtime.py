@@ -3214,6 +3214,7 @@ def _submit_nvidia_sm120_native(
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
         SM120_NORM_SCALED_FP8_ABIS,
+        SM120_ROW_B_FP8_SCALED_ABIS,
         SM120_TF32_ABI,
         SM120_SOFTMAX_F16_ABI,
         SM120_SOFTMAX_BF16_ABI,
@@ -3309,7 +3310,7 @@ def _submit_nvidia_sm120_native(
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
         SM120_GROUPED_GEMM_F32_ABI,
-    } | set(SM120_EPILOGUE_ABIS) | set(SM120_REDUCED_OUTPUT_ABIS) | set(SM120_MOE_ABIS) | set(SM120_TRAINING_ABIS) | set(SM120_NORM_SCALED_FP8_ABIS) | {
+    } | set(SM120_EPILOGUE_ABIS) | set(SM120_REDUCED_OUTPUT_ABIS) | set(SM120_MOE_ABIS) | set(SM120_TRAINING_ABIS) | set(SM120_NORM_SCALED_FP8_ABIS) | set(SM120_ROW_B_FP8_SCALED_ABIS) | {
         SM120_DYNAMIC_SMEM_ABI,
         SM120_DYNAMIC_EXPR_SMEM_ABI,
     }:
@@ -6972,6 +6973,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
         SM120_NORM_SCALED_FP8_ABIS,
+        SM120_ROW_B_FP8_SCALED_ABIS,
         SM120_TF32_ABI,
         SM120_SOFTMAX_F16_ABI,
         SM120_SOFTMAX_BF16_ABI,
@@ -7057,6 +7059,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_GROUPED_GEMM_F32_ABI,
             }
             | set(SM120_NORM_SCALED_FP8_ABIS)
+            | set(SM120_ROW_B_FP8_SCALED_ABIS)
             | set(SM120_EPILOGUE_ABIS)
             | set(SM120_REDUCED_OUTPUT_ABIS)
             | set(SM120_MOE_ABIS)

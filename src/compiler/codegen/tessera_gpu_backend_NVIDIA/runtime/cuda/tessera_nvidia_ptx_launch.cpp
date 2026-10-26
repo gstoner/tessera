@@ -906,6 +906,44 @@ int invokeScaledNorm(CUfunction fn, const char* name, void** buffers, size_t nbu
     return 0;
 }
 
+// SM120-W11-FP8-RHS-20261026: a scheduled matmul whose row-major B is FP8
+// codes decoded in its B gather, with a per-tensor f32 scale on the f32
+// accumulator. ABI: A (half), B codes (1 byte), scale (f32), D (f32), M, N, K.
+bool isScaledFp8RhsMatmul(const char* name) {
+    if (std::strncmp(name, kScheduledSm120MatmulPrefix,
+                     std::strlen(kScheduledSm120MatmulPrefix)) != 0) return false;
+    return std::strstr(name, "_rhs_fp8_e4m3_scaled_kernel") != nullptr ||
+           std::strstr(name, "_rhs_fp8_e5m2_scaled_kernel") != nullptr;
+}
+
+bool scaledFp8RhsExtents(const int64_t* dims, size_t ndim) {
+    return ndim == 3 && dims[0] > 0 && dims[1] > 0 && dims[2] > 0 &&
+           dims[0] < (1LL << 31) && dims[1] < (1LL << 31) && dims[2] < (1LL << 31) &&
+           (__int128)dims[0] * dims[2] < (1LL << 31) && (__int128)dims[2] * dims[1] < (1LL << 31) &&
+           (__int128)dims[0] * dims[1] < (1LL << 31);
+}
+
+int invokeScaledFp8RhsMatmul(CUfunction fn, void** buffers, size_t nbuf,
+                             const int64_t* dims, size_t ndim) {
+    if (nbuf != 4 || !scaledFp8RhsExtents(dims, ndim)) return 5;
+    for (size_t i = 0; i < 4; ++i) if (!buffers[i]) return 5;
+    const long long m = dims[0], n = dims[1], k = dims[2];
+    const size_t sizes[] = {(size_t)m * (size_t)k * 2, (size_t)k * (size_t)n,
+                            sizeof(float), (size_t)m * (size_t)n * sizeof(float)};
+    CUdeviceptr device[4] = {};
+    if (!stagingPointersLocked(sizes, 4, device)) return 3;
+    long long mArg = m, nArg = n, kArg = k;
+    void* args[] = {&device[0], &device[1], &device[2], &device[3], &mArg, &nArg, &kArg};
+    const unsigned gx = (unsigned)((n + 7) / 8), gy = (unsigned)((m + 15) / 16);
+    for (size_t i = 0; i < 3; ++i)
+        if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) return 3;
+    if (!cuOk(cuLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0, 0, args, 0), "cuLaunchKernel") ||
+        !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+        !cuOk(cuMemcpyDtoH(buffers[3], device[3], sizes[3]), "cuMemcpyDtoH"))
+        return 3;
+    return 0;
+}
+
 int invokeReduce(CUfunction fn, void** buffers, size_t nbuf,
                  const int64_t* dims, size_t ndim, size_t elementBytes,
                  bool cooperative) {
@@ -2786,6 +2824,8 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         std::strcmp(kernel_name, kTileSharedBf16) == 0)
         return invokeMmaGemm16(fn, buffers, nbuf, dims, ndim,
                                32, 32, 128, true, true, true);
+    if (isScaledFp8RhsMatmul(kernel_name))
+        return invokeScaledFp8RhsMatmul(fn, buffers, nbuf, dims, ndim);
     if (std::strncmp(kernel_name, kScheduledSm120MatmulPrefix,
                      std::strlen(kScheduledSm120MatmulPrefix)) == 0) {
         if (std::strstr(kernel_name, "_fused_") != nullptr)
@@ -2924,6 +2964,19 @@ int invokeResident(const char* name, void** buffers, size_t nbuf,
         return cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0,
                                    static_cast<CUstream>(stream), args, 0),
                     "cuLaunchKernel(resident softmax)") ? 0 : 3;
+    }
+    if (isScaledFp8RhsMatmul(name)) {
+        if (nbuf != 4 || !scaledFp8RhsExtents(dims, ndim)) return 5;
+        CUdeviceptr device[4] = {};
+        for (size_t i = 0; i < 4; ++i)
+            device[i] = reinterpret_cast<CUdeviceptr>(buffers[i]);
+        long long mArg = dims[0], nArg = dims[1], kArg = dims[2];
+        void* args[] = {&device[0], &device[1], &device[2], &device[3], &mArg, &nArg, &kArg};
+        const unsigned gx = static_cast<unsigned>((dims[1] + 7) / 8);
+        const unsigned gy = static_cast<unsigned>((dims[0] + 15) / 16);
+        return cuOk(cuLaunchKernel(fn, gx, gy, 1, 32, 1, 1, 0,
+                                   static_cast<CUstream>(stream), args, 0),
+                    "cuLaunchKernel(resident scaled fp8 rhs matmul)") ? 0 : 3;
     }
     if (std::strncmp(name, kScheduledSm120MatmulPrefix,
                      std::strlen(kScheduledSm120MatmulPrefix)) == 0) {

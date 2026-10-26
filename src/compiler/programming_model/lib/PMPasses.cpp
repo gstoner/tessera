@@ -320,6 +320,11 @@ struct MatmulSchedule {
   //: V_WMMA_F32_16X16X16_FP8_BF8 and its mirror, and the descriptor is where
   //: that pairing has to be expressible or nothing below it can select it.
   StringRef storageB;
+  //: SM120-W11-FP8-RHS-20261026: "per_tensor_f32" when B is the FP8 codes of
+  //: a dequantize_scaled. The codes decode exactly to A's half storage in the
+  //: B gather and the scale multiplies the f32 accumulator once. Empty
+  //: otherwise.
+  StringRef rhsScale;
   //: The block-scale contract, when the Graph op carried one. `scaleBlockK`
   //: is the contraction extent sharing a scale (0 = unscaled) and
   //: `scaleFormat` its element form. The Schedule is where this has to live:
@@ -906,7 +911,12 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   auto scalarElement = [](Type type) {
     return type.isF32() || type.isF16() || type.isBF16();
   };
-  if (scalarTarget && !scaledMatmul &&
+  // SM120-W11-FP8-RHS-20261026: an f32 B that is dequantize_scaled(FP8, s)
+  // is the scaled FP8 RHS contract below, not a mixed scalar FMA product.
+  Operation *rhsProducer = op->getOperand(1).getDefiningOp();
+  const bool scaledFp8Rhs = rhsProducer &&
+      rhsProducer->getName().getStringRef() == "tessera.dequantize_scaled";
+  if (scalarTarget && !scaledMatmul && !scaledFp8Rhs &&
       (lhs.getElementType().isF32() || rhs.getElementType().isF32()) &&
       scalarElement(lhs.getElementType()) && scalarElement(rhs.getElementType()) &&
       scalarElement(out.getElementType())) {
@@ -1198,6 +1208,42 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       (scaledMatmul && (op->getNumOperands() != 4 || schedule.bias ||
                         schedule.residual || schedule.activation != "none")))
     return failure();
+  // SM120-W11-FP8-RHS-20261026: matmul(A, dequantize_scaled(Bq, s)) with a
+  // half A, FP8 codes Bq and a per-tensor f32 scale s, all entry arguments.
+  if (nvidia_sm120) {
+    Operation *dequant = op->getOperand(1).getDefiningOp();
+    if (dequant && dequant->getName().getStringRef() == "tessera.dequantize_scaled") {
+      auto codes = dyn_cast<RankedTensorType>(dequant->getOperand(0).getType());
+      auto scale = dyn_cast<RankedTensorType>(dequant->getOperand(1).getType());
+      if (!codes || !scale || codes.getEncoding() || scale.getEncoding() ||
+          !isa<BlockArgument>(dequant->getOperand(0)) ||
+          !isa<BlockArgument>(dequant->getOperand(1)) ||
+          !dequant->getResult(0).hasOneUse() || scaledMatmul ||
+          scale.getRank() != 2 || !scale.getElementType().isF32() ||
+          llvm::any_of(scale.getShape(), [](int64_t d) { return d != 1; }) ||
+          codes.getShape() != rhs.getShape() ||
+          !(lhsElement.isF16() || lhsElement.isBF16()) || !outElement.isF32() ||
+          schedule.bias || schedule.residual || schedule.activation != "none" ||
+          schedule.dynamicM || schedule.dynamicN || schedule.dynamicK ||
+          !(isa<Float8E4M3FNType>(codes.getElementType()) ||
+            isa<Float8E5M2Type>(codes.getElementType())))
+        return failure();
+      schedule.storage = lhsElement.isBF16() ? "bf16" : "f16";
+      schedule.storageB = isa<Float8E4M3FNType>(codes.getElementType()) ? "e4m3" : "e5m2";
+      schedule.rhsScale = "per_tensor_f32";
+      schedule.accum = "f32";
+      schedule.output = "f32";
+      schedule.tileM = 16;
+      schedule.tileN = 8;
+      schedule.tileK = 16;
+      schedule.macroTileM = 128;
+      schedule.macroTileN = 128;
+      schedule.warps = 1;
+      if (schedule.arch.empty())
+        schedule.arch = "sm_120";
+      return schedule;
+    }
+  }
   unsigned epilogueOperand = 2;
   if (schedule.bias) {
     auto bias = dyn_cast<RankedTensorType>(
@@ -1752,6 +1798,11 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
     }
     schedule->bLayout = order.getValue();
   }
+  // The FP8 RHS decode lives in the row-major B gather only.
+  if (!schedule->rhsScale.empty() && schedule->bLayout != "row_major") {
+    op->emitError("SM120 scaled FP8 RHS requires rhs_storage_order = \"row_major\"");
+    return failure();
+  }
   auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
   if (!policy)
     return schedule;
@@ -1843,6 +1894,8 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
     contract += (Twine(";staging=") + schedule.staging).str();
   if (schedule.bLayout != "col_major")
     contract += (Twine(";b_storage_layout=") + schedule.bLayout).str();
+  if (!schedule.rhsScale.empty())
+    contract += (Twine(";b_scale=") + schedule.rhsScale).str();
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
 }
@@ -4016,6 +4069,8 @@ struct GraphToSchedulePass
                          builder.getI64IntegerAttr(selected->pipelineDepth));
       state.addAttribute("storage", builder.getStringAttr(selected->storage));
       state.addAttribute("storage_b", builder.getStringAttr(selected->storageB));
+      if (!selected->rhsScale.empty())
+        state.addAttribute("b_scale", builder.getStringAttr(selected->rhsScale));
       state.addAttribute("block_k", builder.getI64IntegerAttr(selected->blockK));
       // Stated only when a split exists, so unsplit schedule IR is unchanged.
       if (selected->splitK > 1) {
@@ -5233,6 +5288,10 @@ struct ScheduleToTilePass
           scheduled.getPipelineDepthAttr().getInt() != selected->pipelineDepth ||
           scheduled.getStorage() != selected->storage ||
           scheduled.getStorageB() != selected->storageB ||
+          (scheduled->getAttrOfType<StringAttr>("b_scale")
+               ? scheduled->getAttrOfType<StringAttr>("b_scale").getValue()
+               : StringRef()) != selected->rhsScale ||
+          (scheduled->hasAttr("b_scale") && !scheduled->getAttrOfType<StringAttr>("b_scale")) ||
           scheduled.getBlockK() != selected->blockK ||
           scheduled.getSplitK() != selected->splitK ||
           scheduled.getSplitKReduction() != selected->splitKReduction ||
@@ -5440,9 +5499,16 @@ struct ScheduleToTilePass
                Twine(selected->residual) +
                (selected->output == "f16" ? "_outf16" : ""))
                   .str();
+        const bool scaledRhs = !selected->rhsScale.empty();
+        if (scaledRhs && (!typedSm120Producer || useMacroSm120Producer || dynamicSm120 ||
+                          fusedEpilogue || selected->output != "f32")) {
+          scheduled.emitError("SM120 scaled FP8 RHS requires the static unfused typed producer");
+          return signalPassFailure();
+        }
         std::string kernelName =
             (graphFunction.getName() + epilogueSuffix +
              (dynamicSm120 && selected->bLayout == "row_major" ? "_row_rhs" : "") +
+             (scaledRhs ? (Twine("_rhs_fp8_") + selected->storageB + "_scaled").str() : std::string()) +
              (macroKernelGeometry ? "_macro_kernel" : "_kernel"))
                 .str();
         if (selected->scalarFma)
@@ -5458,6 +5524,7 @@ struct ScheduleToTilePass
         auto pointerType = LLVM::LLVMPointerType::get(&getContext());
         auto i64 = builder.getI64Type();
         SmallVector<Type> kernelInputs{pointerType, pointerType};
+        if (scaledRhs) kernelInputs.push_back(pointerType);  // A, B codes, scale
         const bool nvfp4 = selected->storage == "nvfp4";
         if (nvfp4) kernelInputs.append({pointerType, pointerType});
         if (selected->bias)
@@ -5586,10 +5653,11 @@ struct ScheduleToTilePass
           // through bounded pointer-backed views and typed fragment carries.
           // Macro CTA schedules use their separate shared-panel producer.
           auto tileType = tile::TileValueType::get(&getContext());
+          // A decoded FP8 B reaches the MMA in A's half storage.
           auto typedMma = tile::TileMmaDescAttr::get(
               &getContext(), "mma_sync", selected->tileM, selected->tileN,
               selected->tileK, selected->storage,
-            selected->storageB.empty() ? selected->storage : selected->storageB,
+            selected->storageB.empty() || scaledRhs ? selected->storage : selected->storageB,
               selected->accum, "row_major", "col_major",
             // ROCM-MACRO-K-TILE-1: kBlocks = blockK / instruction K. The
             // schedule states the K block; this is where it becomes the
@@ -5687,12 +5755,15 @@ struct ScheduleToTilePass
             state.addAttribute("role", kernelBuilder.getStringAttr(role)); state.addAttribute("mma", typedMma);
             if (role == "b" && selected->bLayout == "row_major")
               state.addAttribute("transpose", kernelBuilder.getUnitAttr());
+            if (role == "b" && scaledRhs)
+              state.addAttribute("decode", kernelBuilder.getStringAttr(
+                  (Twine("fp8_") + selected->storageB).str()));
             return kernelBuilder.create(state)->getResult(0);
           };
           OperationState zeroState(loc, "tile.fragment_zero"); zeroState.addTypes(cType);
           zeroState.addAttribute("role", kernelBuilder.getStringAttr("acc")); zeroState.addAttribute("mma", typedMma);
           Value c = kernelBuilder.create(zeroState)->getResult(0);
-          unsigned dIndex = 2 + unsigned(selected->bias) +
+          unsigned dIndex = 2 + unsigned(scaledRhs) + unsigned(selected->bias) +
                             unsigned(selected->residual);
           Value runtimeM = entry->getArgument(dIndex + 1);
           Value runtimeN = entry->getArgument(dIndex + 2);
@@ -5789,6 +5860,10 @@ struct ScheduleToTilePass
               storeState.addAttribute("tile.epilogue_order",
                   kernelBuilder.getStringAttr("matmul_bias_activation_residual"));
             }
+          }
+          if (scaledRhs) {
+            storeState.addOperands(entry->getArgument(2));
+            storeState.addAttribute("tile.output_scale", kernelBuilder.getStringAttr(selected->rhsScale));
           }
           storeState.addAttribute("tile.layout", bLayout); storeState.addAttribute("tile.memory", dMemory);
           kernelBuilder.create(storeState);

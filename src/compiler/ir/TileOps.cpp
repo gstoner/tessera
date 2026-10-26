@@ -1063,6 +1063,17 @@ LogicalResult FragmentPackOp::verify() {
                          "got role '")
              << role << "'";
   }
+  // SM120-W11-FP8-RHS-20261026: a transposed b fragment may gather FP8
+  // codes and decode them exactly to its own f16/bf16 element type.
+  if (getOperation()->hasAttr("decode")) {
+    auto decode = getOperation()->getAttrOfType<StringAttr>("decode");
+    FragmentType typed = typedFragment(getOperation()->getResult(0));
+    if (!decode || (decode.getValue() != "fp8_e4m3" && decode.getValue() != "fp8_e5m2") ||
+        !getTranspose() || !typed || typed.getRole() != "b" ||
+        (typed.getElem() != "f16" && typed.getElem() != "bf16"))
+      return emitOpError("decode requires fp8_e4m3|fp8_e5m2 codes gathered into a "
+                         "transposed f16/bf16 b fragment");
+  }
   if (getOperation()->getNumResults() == 1)
     if (FragmentType typed = typedFragment(getOperation()->getResult(0))) {
       if (failed(verifyFragmentProducerAgainstType(getOperation(), typed)))
@@ -1349,6 +1360,18 @@ LogicalResult StoreOp::verify() {
           (!memref || memref.getRank() != 1 || !memref.getElementType().isF32()))
         return emitOpError("biased epilogue store needs an opaque pointer or rank-1 f32 memref");
     }
+  }
+  // SM120-W11-FP8-RHS-20261026: a per-tensor f32 scale multiplies the f32
+  // accumulator once; its pointer is the single trailing operand and it does
+  // not compose with a fused epilogue.
+  if (getOperation()->hasAttr("tile.output_scale")) {
+    auto scale = getOperation()->getAttrOfType<StringAttr>("tile.output_scale");
+    if (!scale || scale.getValue() != "per_tensor_f32" ||
+        getOperation()->hasAttr("tile.epilogue") || getOperation()->hasAttr("tile.residual") ||
+        inputs == 0 || !isa<LLVM::LLVMPointerType>(getInputs().back().getType()))
+      return emitOpError("tile.output_scale requires per_tensor_f32, one trailing scale "
+                         "pointer and no fused epilogue");
+    --inputs;
   }
   if (auto residual = getOperation()->getAttrOfType<BoolAttr>("tile.residual");
       residual && residual.getValue()) {

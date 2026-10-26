@@ -50,6 +50,12 @@ SM120_F16_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.v1"
 SM120_BF16_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.bf16.v1"
 SM120_ROW_B_F16_ABI = "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1"
 SM120_ROW_B_BF16_ABI = "tessera.nvidia.matmul.a_row_b_d_m_n_k.bf16.v1"
+# SM120-W11-FP8-RHS-20261026: half A, row-major FP8 B codes decoded in the B
+# gather, per-tensor f32 scale applied to the f32 accumulator, f32 D.
+SM120_ROW_B_FP8_SCALED_ABI = "tessera.nvidia.matmul.a_row_bcodes_scale_d_m_n_k.{storage}_{fp8}.v1"
+SM120_ROW_B_FP8_SCALED_ABIS = frozenset(
+    SM120_ROW_B_FP8_SCALED_ABI.format(storage=storage, fp8=fp8)
+    for storage in ("f16", "bf16") for fp8 in ("fp8_e4m3", "fp8_e5m2"))
 SM120_STRIDED_F16_ABI = (
     "tessera.nvidia.matmul.a_b_d_m_n_k_lda_ldb_ldd.f16.v1"
 )
@@ -3349,6 +3355,12 @@ def package_scheduled_matmul(
     entry = artifact.function_name
     storage = artifact.storage
     bias, residual = artifact.bias_name, artifact.residual_name
+    fp8_b = getattr(artifact, "b_codes_dtype", "")
+    if fp8_b and (fp8_b not in {"fp8_e4m3", "fp8_e5m2"} or not getattr(artifact, "scale_name", "")
+                  or dynamic or bias or residual or artifact.activation != "none"
+                  or artifact.output_dtype != "fp32" or artifact.b_layout != "row_major"
+                  or not entry.endswith(f"_rhs_{fp8_b}_scaled_kernel")):
+        raise ValueError("scaled FP8 RHS matmul requires a static unfused row-major fp32 contract")
     suffix = "bias_residual_" if bias and residual else "bias_" if bias else "residual_" if residual else ""
     abi_id = SM120_F16_ABI if storage == "f16" else SM120_BF16_ABI
     if suffix:
@@ -3364,6 +3376,8 @@ def package_scheduled_matmul(
             abi_id = abi_id.replace(".a_b_", ".a_row_b_")
         else:
             abi_id = SM120_ROW_B_F16_ABI if storage == "f16" else SM120_ROW_B_BF16_ABI
+    if fp8_b:
+        abi_id = SM120_ROW_B_FP8_SCALED_ABI.format(storage=storage, fp8=fp8_b)
     m, n, k = artifact.m, artifact.n, artifact.k
     # The frontend names are binding labels; shape/storage and pointer arity
     # must agree with the durable Schedule record and the emitted launch IR.
@@ -3381,12 +3395,19 @@ def package_scheduled_matmul(
     for field, present in (("bias", bool(bias)), ("residual", bool(residual))):
         if f"{field} = {str(present).lower()}" not in schedule_op.group():
             raise ValueError(f"NVIDIA scheduled launch contract disagrees on {field}")
+    if fp8_b and (f'storage_b = "{fp8_b.removeprefix("fp8_")}"' not in schedule_op.group()
+                  or 'b_scale = "per_tensor_f32"' not in schedule_op.group()
+                  or f'decode = "{fp8_b}"' not in artifact.tile_ir
+                  or 'tile.output_scale = "per_tensor_f32"' not in artifact.tile_ir):
+        raise ValueError("NVIDIA scaled FP8 RHS contract disagrees with its Schedule/Tile IR")
+    if not fp8_b and "b_scale" in schedule_op.group():
+        raise ValueError("NVIDIA scheduled matmul carries an unrequested B scale")
     if f'shape_key = "M={m};N={n};K={k};dtype={storage}"' not in artifact.schedule_ir:
         raise ValueError("NVIDIA scheduled launch contract disagrees on shape bounds")
     signature = re.search(
         rf"llvm\.func @{re.escape(entry)}\(([^)]*)\)", artifact.tile_ir
     )
-    expected_types = ["!llvm.ptr"] * (3 + bool(bias) + bool(residual))
+    expected_types = ["!llvm.ptr"] * (3 + bool(fp8_b) + bool(bias) + bool(residual))
     expected_types += ["i64"] * (6 if dynamic else 3)
     actual_types = [] if signature is None else [
         arg.split(":", 1)[-1].strip() for arg in signature.group(1).split(",")
@@ -3395,8 +3416,10 @@ def package_scheduled_matmul(
         raise ValueError("NVIDIA scheduled launch contract disagrees with Tile entry ABI")
     rows: list[tuple[str, str, str, tuple[int, ...], str, int]] = [
         (artifact.a_name, "input", artifact.a_dtype, (m, k), "row_major", 2),
-        (artifact.b_name, "input", artifact.b_dtype, (k, n), artifact.b_layout, 2),
+        (artifact.b_name, "input", fp8_b or artifact.b_dtype, (k, n), artifact.b_layout, 1 if fp8_b else 2),
     ]
+    if fp8_b:
+        rows.append((artifact.scale_name, "input", "fp32", (1, 1), "row_major", 4))
     if bias:
         rows.append((bias, "input", "fp32", (n,), "row_major", 4))
     if residual:
@@ -3443,6 +3466,8 @@ def package_scheduled_matmul(
         dynamic_axes[bias] = (artifact.dynamic_n,)
     if residual:
         dynamic_axes[residual] = (artifact.dynamic_m, artifact.dynamic_n)
+    if fp8_b:
+        dynamic_axes[artifact.scale_name] = (False, False)
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
@@ -3491,6 +3516,8 @@ def package_scheduled_matmul(
             "physical_route": physical_route,
             "dynamic_shape_bounds": [m, n, k] if dynamic else None,
             "leading_dimension_abi": "runtime_i64" if dynamic else "compact",
+            **({"b_codes": fp8_b, "b_scale": "per_tensor_f32",
+                "b_decode": "exact_fp8_to_" + storage} if fp8_b else {}),
         },
     )
     return NVIDIANativePackage(artifact.tile_ir, lowered, ptx, image, descriptor)
@@ -5246,6 +5273,8 @@ __all__ = [
     "SM120_F16_ABI",
     "SM120_ROW_B_F16_ABI",
     "SM120_ROW_B_BF16_ABI",
+    "SM120_ROW_B_FP8_SCALED_ABI",
+    "SM120_ROW_B_FP8_SCALED_ABIS",
     "SM120_STRIDED_F16_ABI",
     "SM120_STRIDED_ROW_B_F16_ABI",
     "SM120_STRIDED_ROW_B_BF16_ABI",

@@ -3254,8 +3254,11 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   };
   auto store = [&](unsigned pointer, Value index, Value value) {
     bool biasGradientPointer = hasBiasGradient && pointer == dbIndex;
-    bool keyValueGradient = (gradientActive(1) && pointer == gradientIndex(1)) ||
-                            (gradientActive(2) && pointer == gradientIndex(2));
+    // A K/V gradient buffer is physically present whenever the launch is not
+    // compact, including an inactive one that is only zero-filled; it always
+    // takes the K/V storage.
+    bool keyValueGradient = ((!compact || gradientActive(1)) && pointer == gradientIndex(1)) ||
+                            ((!compact || gradientActive(2)) && pointer == gradientIndex(2));
     Type type = biasGradientPointer ? Type(f32) : keyValueGradient ? kvType : storageType;
     unsigned alignment = type.isF32() ? 4 : 2;
     Value stored = !type.isF32() ? Value(LLVM::FPTruncOp::create(builder, loc, type, value)) : value;

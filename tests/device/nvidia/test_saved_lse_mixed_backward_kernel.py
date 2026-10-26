@@ -52,7 +52,7 @@ def test_mixed_reverse_zero_fills_inactive_gradients_in_their_own_storage(storag
         forward = NativeKernel(original, "forward")
         backward = None
         try:
-            forward.launch(session, roots+[output, lse], output.size)
+            forward.launch(session, roots+[output, lse], b*hq*sq*dv)
             assert session.synchronize() == 0
             backward = NativeKernel(original, "backward", " prune-checkpoint-gradients=true")
             assert "gradient_activity" in backward.tile and 'gradient_output = "compact_v1"' not in backward.tile

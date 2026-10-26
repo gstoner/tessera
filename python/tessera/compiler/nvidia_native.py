@@ -129,6 +129,12 @@ SM120_RELU_F32_ABI = "tessera.nvidia.relu.x_o_rows_columns.f32.v1"
 SM120_NORM_F16_ABI = "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1"
 SM120_NORM_BF16_ABI = "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1"
 SM120_NORM_F32_ABI = "tessera.nvidia.norm.x_o_rows_columns.f32_f32acc.v1"
+# SM120-W11-FP8-RHS-20261026: norm fused with quantize_scaled -- source,
+# per-tensor f32 scale, FP8 codes; {storage}_to_{fp8} names both roles.
+SM120_NORM_SCALED_FP8_ABI = "tessera.nvidia.norm.x_scale_o_rows_columns.{storage}_to_{fp8}_f32acc.v1"
+SM120_NORM_SCALED_FP8_ABIS = frozenset(
+    SM120_NORM_SCALED_FP8_ABI.format(storage=storage, fp8=fp8)
+    for storage in ("f16", "bf16", "f32") for fp8 in ("fp8_e4m3", "fp8_e5m2"))
 SM120_ATTN_F16_ABI = "tessera.nvidia.attention.q_k_v_o_dims.f16_f32acc.v1"
 SM120_ATTN_BF16_ABI = "tessera.nvidia.attention.q_k_v_o_dims.bf16_f32acc.v2"
 SM120_ATTN_F16_RESULT_ABI = "tessera.nvidia.attention.q_k_v_o_dims.f16_f32acc_f16out.v1"
@@ -3948,6 +3954,10 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
         raise ValueError("NVIDIA scheduled unary contract requires positive static shapes")
     scalar_names: tuple[str, ...]
     norm = artifact.family == "norm"
+    fp8_output = getattr(artifact, "output_storage", "")
+    if fp8_output and (not norm or fp8_output not in {"fp8_e4m3", "fp8_e5m2"}
+                       or not getattr(artifact, "scale_name", "")):
+        raise ValueError("scaled FP8 output requires a normalization with a named per-tensor scale")
     # NaN policy is semantic (Decision #21a); a reduction's validated policy is
     # carried into the descriptor, not dropped at this boundary (Decision #32).
     # Provenance parity only: the kernel honours the IR's policy either way,
@@ -3975,11 +3985,15 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
                 or not math.isfinite(artifact.epsilon) or artifact.epsilon <= 0.0):
             raise ValueError("unsupported NVIDIA scheduled norm contract")
         strategy = "" if artifact.schedule == "serial" else "_cooperative_128"
-        entry = f"tessera_tile_norm_{artifact.kind}_{storage}{strategy}_{artifact.schedule_digest[:10]}"
-        abi = {"f16": SM120_NORM_F16_ABI, "bf16": SM120_NORM_BF16_ABI, "f32": SM120_NORM_F32_ABI}[storage]
+        to = f"_to_{fp8_output}" if fp8_output else ""
+        entry = f"tessera_tile_norm_{artifact.kind}_{storage}{to}{strategy}_{artifact.schedule_digest[:10]}"
+        abi = ({"f16": SM120_NORM_F16_ABI, "bf16": SM120_NORM_BF16_ABI, "f32": SM120_NORM_F32_ABI}[storage]
+               if not fp8_output else SM120_NORM_SCALED_FP8_ABI.format(storage=storage, fp8=fp8_output))
         scalar_names = ("Rows", "Columns")
         geometry = f"sm120_norm_{artifact.schedule}_rows"
         required = {"kind": f'"{artifact.kind}"'}
+        if fp8_output:
+            required.update(output_storage=f'"{fp8_output}"', scale='"per_tensor_f32"')
         if artifact.schedule != "serial":
             required["schedule"] = f'"{artifact.schedule}"'
         elif (not re.search(r'\bschedule = "serial"', artifact.tile_ir)
@@ -4025,13 +4039,15 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
         if not re.search(pattern, artifact.tile_ir) or not re.search(pattern, artifact.schedule_ir):
             raise ValueError(f"NVIDIA scheduled unary policy disagrees on {field}")
     # Require the Schedule wrapper to retain the input/output shape contract.
-    for dims, element in ((shape, storage), (output_shape, storage if softmax or norm or activation else "f32")):
+    fp8_element = {"fp8_e4m3": "f8E4M3FN", "fp8_e5m2": "f8E5M2"}.get(fp8_output)
+    for dims, element in ((shape, storage), (output_shape, fp8_element or (storage if softmax or norm or activation else "f32"))):
         tensor = "tensor<" + "".join(f"{d}x" for d in dims) + element + ">"
         if tensor not in artifact.schedule_ir:
             raise ValueError("NVIDIA scheduled unary shape disagrees with Schedule IR")
     signature = re.search(rf"llvm\.func @{re.escape(entry)}\(([^)]*)\)", artifact.tile_ir)
     types = [] if signature is None else [a.split(":", 1)[-1].strip() for a in signature.group(1).split(",")]
-    if artifact.function_name != entry or types != ["!llvm.ptr", "!llvm.ptr"] + ["i64"] * len(scalar_names):
+    pointers = 3 if fp8_output else 2
+    if artifact.function_name != entry or types != ["!llvm.ptr"] * pointers + ["i64"] * len(scalar_names):
         raise ValueError("NVIDIA scheduled unary Tile entry ABI disagrees")
     # Serialized Tile text is untrusted even when its attributes and hash match.
     # Replay every unary family to bind executable dataflow to the Schedule IR.
@@ -4054,13 +4070,22 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
         device_libraries=libraries,
         resource_record=ResourceRecord(provenance="scheduled Tile IR; ptxas --arch=sm_120a -v", metrics=metrics),
     )
+    if fp8_output:
+        scale_shape = (1,) * len(shape)
+        buffers = (BufferBinding(0, artifact.input_name, "input", artifact.dtype, len(shape), "row_major", 4 if storage == "f32" else 2),
+                   BufferBinding(1, artifact.scale_name, "input", "fp32", len(shape), "row_major", 4),
+                   BufferBinding(2, artifact.output_name, "output", fp8_output, len(output_shape), "row_major", 1))
+        guarded = ((artifact.input_name, shape), (artifact.scale_name, scale_shape), (artifact.output_name, output_shape))
+    else:
+        buffers = (BufferBinding(0, artifact.input_name, "input", artifact.dtype, len(shape), "row_major", 4 if storage == "f32" else 2),
+                   BufferBinding(1, artifact.output_name, "output", artifact.dtype if softmax or norm or activation else "fp32", len(output_shape), "row_major", 2 if (softmax or norm or activation) and storage != "f32" else 4))
+        guarded = ((artifact.input_name, shape), (artifact.output_name, output_shape))
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=entry, abi_id=abi,
-        buffers=(BufferBinding(0, artifact.input_name, "input", artifact.dtype, len(shape), "row_major", 4 if storage == "f32" else 2),
-                 BufferBinding(1, artifact.output_name, "output", artifact.dtype if softmax or norm or activation else "fp32", len(output_shape), "row_major", 2 if (softmax or norm or activation) and storage != "f32" else 4)),
-        scalars=tuple(ScalarArgument(i + 2, name, "int64") for i, name in enumerate(scalar_names)),
+        buffers=buffers,
+        scalars=tuple(ScalarArgument(i + len(buffers), name, "int64") for i, name in enumerate(scalar_names)),
         shape_guards=tuple(ShapeGuard(name, dim, "eq", value)
-                           for name, dims in ((artifact.input_name, shape), (artifact.output_name, output_shape))
+                           for name, dims in guarded
                            for dim, value in enumerate(dims)),
         geometry=LaunchGeometry(policy=geometry),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
@@ -4069,6 +4094,7 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
                     "shape": list(shape), "storage": storage, "accum": "f32",
                     "axis": artifact.axis, "kind": artifact.kind, "keepdims": artifact.keepdims,
                     "epsilon": artifact.epsilon,
+                    **({"output_storage": fp8_output, "scale": "per_tensor_f32"} if fp8_output else {}),
                     **({"nan_mode": nan_mode} if nan_mode is not None else {}),
                     **({"zero_mode": "positive" if storage == "f16" else "preserve"} if activation else {}),
                     "graph_ir_digest": hashlib.sha256(artifact.graph_ir.encode()).hexdigest(),
@@ -5249,6 +5275,8 @@ __all__ = [
     "SM120_NORM_F16_ABI",
     "SM120_NORM_BF16_ABI",
     "SM120_NORM_F32_ABI",
+    "SM120_NORM_SCALED_FP8_ABI",
+    "SM120_NORM_SCALED_FP8_ABIS",
     "SM120_INT8_ABI",
     "SM120_INT4_ABI",
     "SM120_CUDA_INTRINSIC_ABI",

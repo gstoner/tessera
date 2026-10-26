@@ -3213,6 +3213,7 @@ def _submit_nvidia_sm120_native(
         SM120_NORM_F16_ABI,
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
+        SM120_NORM_SCALED_FP8_ABIS,
         SM120_TF32_ABI,
         SM120_SOFTMAX_F16_ABI,
         SM120_SOFTMAX_BF16_ABI,
@@ -3308,7 +3309,7 @@ def _submit_nvidia_sm120_native(
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
         SM120_GROUPED_GEMM_F32_ABI,
-    } | set(SM120_EPILOGUE_ABIS) | set(SM120_REDUCED_OUTPUT_ABIS) | set(SM120_MOE_ABIS) | set(SM120_TRAINING_ABIS) | {
+    } | set(SM120_EPILOGUE_ABIS) | set(SM120_REDUCED_OUTPUT_ABIS) | set(SM120_MOE_ABIS) | set(SM120_TRAINING_ABIS) | set(SM120_NORM_SCALED_FP8_ABIS) | {
         SM120_DYNAMIC_SMEM_ABI,
         SM120_DYNAMIC_EXPR_SMEM_ABI,
     }:
@@ -3952,6 +3953,14 @@ def _submit_nvidia_sm120_native(
             or int(cast(int, descriptor.provenance.get("scale_bytes", -1))) != scale_bytes
         ):
             raise RuntimeError("SM120 packed decode byte extents disagree with physical view")
+    elif descriptor.abi_id in SM120_NORM_SCALED_FP8_ABIS:
+        # SM120-W11-FP8-RHS-20261026: norm source, per-tensor f32 scale, FP8 codes.
+        x, scale, output = raw
+        rows, columns = (int(cast(int, scalars[name])) for name in ("Rows", "Columns"))
+        if (x.size != rows * columns or tuple(output.shape) != tuple(x.shape)
+                or scale.size != 1 or scale.ndim != x.ndim):
+            raise RuntimeError("SM120 scaled FP8 norm X/scale/O shapes disagree with Rows/Columns scalars")
+        dimensions = (rows, columns)
     elif descriptor.abi_id in unary_abis:
         x, output = raw
         if descriptor.abi_id in softmax_abis:
@@ -6961,6 +6970,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_NORM_F16_ABI,
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
+        SM120_NORM_SCALED_FP8_ABIS,
         SM120_TF32_ABI,
         SM120_SOFTMAX_F16_ABI,
         SM120_SOFTMAX_BF16_ABI,
@@ -7045,6 +7055,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_MOE_COMBINE_F32_ABI,
                 SM120_GROUPED_GEMM_F32_ABI,
             }
+            | set(SM120_NORM_SCALED_FP8_ABIS)
             | set(SM120_EPILOGUE_ABIS)
             | set(SM120_REDUCED_OUTPUT_ABIS)
             | set(SM120_MOE_ABIS)

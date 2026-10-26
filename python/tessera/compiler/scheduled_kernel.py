@@ -66,6 +66,11 @@ class ScheduledKernelArtifact:
     #: order. Empty for the semantic-kernel families (softmax/reduce/norm).
     record: str = ""
     input_names: tuple[str, ...] = ()
+    #: SM120-W11-FP8-RHS-20261026: a norm fused with quantize_scaled stores
+    #: FP8 codes (``fp8_e4m3``/``fp8_e5m2``) scaled by the named per-tensor
+    #: f32 argument. Empty for every other artifact.
+    output_storage: str = ""
+    scale_name: str = ""
 
     @property
     def graph_digest(self) -> str:
@@ -304,6 +309,82 @@ def lower_scheduled_kernel(
             _X86_GRAPH_CACHE.move_to_end(cache_key)
             if len(_X86_GRAPH_CACHE) > _X86_GRAPH_CACHE_LIMIT:
                 _X86_GRAPH_CACHE.popitem(last=False)
+    return artifact
+
+
+def lower_scheduled_fp8_norm(module: GraphIRModule, *, target: str) -> ScheduledKernelArtifact:
+    """Lower ``quantize_scaled(norm(x), s, format=...)`` to one native kernel.
+
+    SM120-W11-FP8-RHS-20261026. The norm keeps every check of the single-op
+    contract; the fused store rounds the norm result to its declared storage,
+    divides by the per-tensor f32 scale and saturates to the named FP8
+    format, exactly as the unfused Graph composition does.
+    """
+    if target != "nvidia_sm120":
+        raise ValueError("scaled FP8 normalization output is an SM120 native contract")
+    if len(module.functions) != 1:
+        raise ValueError("scaled FP8 norm requires one Graph function")
+    function = module.functions[0]
+    if len(function.args) != 2 or len(function.body) != 2 or len(function.result_types) != 1:
+        raise ValueError("scaled FP8 norm requires (source, scale) and norm then quantize_scaled")
+    norm, quantize = function.body
+    scale_arg = function.args[1]
+    if (norm.op_name not in {"tessera.rmsnorm", "tessera.layer_norm"}
+            or quantize.op_name != "tessera.quantize_scaled" or not norm.result or not quantize.result
+            or quantize.operands != ["%" + norm.result, "%" + scale_arg.name]
+            or norm.operands != ["%" + function.args[0].name]
+            or function.return_values != ["%" + quantize.result]
+            or set(quantize.kwargs) != {"format"}):
+        raise ValueError("scaled FP8 norm must return quantize_scaled(norm(source), scale)")
+    fmt = quantize.kwargs["format"]
+    if fmt not in ("fp8_e4m3", "fp8_e5m2") or function.result_types[0].dtype != fmt:
+        raise ValueError("scaled FP8 norm result storage must match its format")
+    rank = len(function.args[0].ir_type.shape)
+    if (scale_arg.ir_type.dtype != "fp32" or len(scale_arg.ir_type.shape) != rank
+            or any(int(d) != 1 for d in scale_arg.ir_type.shape)):
+        raise ValueError("scaled FP8 norm requires a per-tensor f32 scale")
+    norm_only = copy.deepcopy(module)
+    only = norm_only.functions[0]
+    only.args = [only.args[0]]
+    only.body = [only.body[0]]
+    only.result_types = [only.args[0].ir_type]
+    only.return_values = ["%" + norm.result]
+    contract = _graph_contract(norm_only, target)
+    if contract[5] != "norm":
+        raise ValueError("scaled FP8 output requires a normalization")
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("scaled FP8 norm lowering requires production tessera-opt")
+    targeted = copy.deepcopy(module)
+    targeted.functions[0].body[0].kwargs = {"eps": contract[21]}
+    targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
+    targeted.module_attrs["tessera.arch"] = f'"{contract[1]}"'
+    graph_ir = targeted.to_mlir(target=target, canonical=True)
+    schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+    rows = re.findall(r"(?m)^\s*%[^=]+ = schedule\.norm[^\n]+", schedule_ir)
+    if len(rows) != 1 or f'output_storage = "{fmt}"' not in rows[0] or 'scale = "per_tensor_f32"' not in rows[0]:
+        raise RuntimeError("scaled FP8 norm needs one fused Schedule decision")
+    decision = re.search(r'\bschedule = "([^"]+)"', rows[0])
+    mode = decision[1] if decision is not None else "serial"
+    if mode not in {"serial", "cooperative_128"}:
+        raise RuntimeError("native semantic kernel Schedule policy is unsupported")
+    tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
+    hashes = _HASH_RE.findall(tile_ir)
+    if len(hashes) != 1:
+        raise RuntimeError("scaled FP8 norm lowering did not preserve one schedule digest")
+    strategy = "" if mode == "serial" else "_cooperative_128"
+    artifact = ScheduledKernelArtifact(
+        graph_ir=graph_ir, schedule_ir=schedule_ir, tile_ir=tile_ir,
+        target=contract[0], architecture=contract[1],
+        function_name=f"tessera_tile_norm_{contract[6]}_{contract[10]}_to_{fmt}{strategy}_{hashes[0][:10]}",
+        input_name=contract[3], output_name=quantize.result, family=contract[5], kind=contract[6],
+        input_shape=contract[7], output_shape=contract[8], dtype=contract[9], storage=contract[10],
+        accum=contract[11], rows=contract[12], columns=contract[13], axis=contract[14],
+        keepdims=contract[15], outer=contract[16], axis_extent=contract[17], inner=contract[18],
+        workgroup_size=contract[19], schedule_digest=hashes[0], schedule=mode, epsilon=contract[21],
+        output_storage=fmt, scale_name=scale_arg.name,
+    )
+    artifact.validate()
     return artifact
 
 

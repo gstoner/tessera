@@ -2275,13 +2275,29 @@ LogicalResult ActivationKernelOp::verify() {
 
 LogicalResult NormKernelOp::verify() {
   if (failed(tessera::readBoundedQueryNormShape(getOperation()))) return failure();
-  if (getInputs().size() != 5)
-    return emitOpError("expects source, destination, rows, columns, and epsilon");
-  if (!isa<LLVM::LLVMPointerType>(getInputs()[0].getType()) ||
-      !isa<LLVM::LLVMPointerType>(getInputs()[1].getType()) ||
-      !getInputs()[2].getType().isInteger(64) ||
-      !getInputs()[3].getType().isInteger(64) ||
-      !getInputs()[4].getType().isF32())
+  // SM120-W11-FP8-RHS-20261026: a scaled FP8 output adds the per-tensor f32
+  // scale pointer between the source and the destination.
+  auto outputStorage = getOperation()->getAttrOfType<StringAttr>("output_storage");
+  auto scaleMode = getOperation()->getAttrOfType<StringAttr>("scale");
+  bool scaled = getOperation()->hasAttr("output_storage") || getOperation()->hasAttr("scale");
+  if (scaled) {
+    auto module = getOperation()->getParentOfType<ModuleOp>();
+    auto arch = module ? module->getAttrOfType<StringAttr>("tessera.arch") : StringAttr();
+    if (!outputStorage || !scaleMode || scaleMode.getValue() != "per_tensor_f32" ||
+        (outputStorage.getValue() != "fp8_e4m3" && outputStorage.getValue() != "fp8_e5m2") ||
+        !arch || arch.getValue() != "sm_120" || getOperation()->hasAttr("shape_policy"))
+      return emitOpError("scaled norm output requires sm_120 fp8_e4m3|fp8_e5m2 with a per_tensor_f32 scale");
+  }
+  unsigned pointers = scaled ? 3 : 2;
+  if (getInputs().size() != pointers + 3)
+    return emitOpError(scaled ? "expects source, scale, destination, rows, columns, and epsilon"
+                              : "expects source, destination, rows, columns, and epsilon");
+  for (unsigned i = 0; i < pointers; ++i)
+    if (!isa<LLVM::LLVMPointerType>(getInputs()[i].getType()))
+      return emitOpError("requires pointer data operands followed by i64, i64, f32");
+  if (!getInputs()[pointers].getType().isInteger(64) ||
+      !getInputs()[pointers + 1].getType().isInteger(64) ||
+      !getInputs()[pointers + 2].getType().isF32())
     return emitOpError("requires ptr, ptr, i64, i64, f32 operands");
   auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
   auto storage = getOperation()->getAttrOfType<StringAttr>("storage");

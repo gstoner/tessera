@@ -1276,6 +1276,12 @@ def _with_nvfp4_ingest_state(target: TargetCapability) -> TargetCapability:
         "tessera.quantize_scaled", "unsupported", dtypes=("fp16", "bf16", "fp32", "fp8_e4m3", "fp8_e5m2"),
         reason="No standalone native kernel; this backend requires its own physical "
                "consumer and device proof")
+    if target.name == "nvidia_sm120":
+        ops["tessera.quantize_scaled"] = OpCapability(
+            "tessera.quantize_scaled", "artifact_only", dtypes=("fp16", "bf16", "fp32", "fp8_e4m3", "fp8_e5m2"),
+            ranks=(2,),
+            reason="Executes only fused into an SM120 native RMSNorm/LayerNorm whose only use "
+                   "it is, with a per-tensor f32 scale; no standalone SM120 kernel")
     ops["tessera.mxfp4_folded_storage"]=OpCapability(
         "tessera.mxfp4_folded_storage","unsupported",dtypes=("uint8",),ranks=(2,),
         reason="Native lossless storage bridge is gfx1201-only; sibling physical proof required")

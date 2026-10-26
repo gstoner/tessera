@@ -2396,12 +2396,23 @@ static LogicalResult materializeSm120NormKernel(
   bool cooperative = schedule && schedule.getValue() == "cooperative_128";
   if (schedule && schedule.getValue() != "serial" && !cooperative)
     return op->emitError("SM120 norm schedule must be serial|cooperative_128");
-  if (inputs.size() != 5 || !storage ||
+  // SM120-W11-FP8-RHS-20261026: a fused quantize_scaled store. The norm value
+  // first rounds to the Graph's declared norm storage (the unfused composition
+  // reads that rounded tensor), widens exactly, divides by the per-tensor f32
+  // scale with IEEE f32 division and converts with cvt.rn.satfinite to FP8.
+  auto fp8Output = op->getAttrOfType<StringAttr>("output_storage");
+  bool scaled = bool(fp8Output);
+  if (scaled && failed(kernel.verify())) return failure();
+  bool e5m2Output = scaled && fp8Output.getValue() == "fp8_e5m2";
+  Value scaleBase = scaled ? inputs[1] : Value();
+  SmallVector<Value> normalized{inputs[0]};
+  for (unsigned i = scaled ? 2 : 1; i < inputs.size(); ++i) normalized.push_back(inputs[i]);
+  if (normalized.size() != 5 || !storage ||
       (!f16Storage && !bf16Storage && storage.getValue() != "f32") ||
       !accum || accum.getValue() != "f32" || !kind ||
       (!layer && kind.getValue() != "rmsnorm") || !axis ||
       axis.getInt() != -1 || !affine || affine.getValue() ||
-      !inputs[4].getType().isF32()) {
+      !normalized[4].getType().isF32()) {
     op->emitError(
         "sm_120 norm_kernel requires f16/bf16/f32 storage, f32 accumulation, "
         "rmsnorm|layernorm, axis=-1, affine=false, and f32 epsilon");
@@ -2415,8 +2426,11 @@ static LogicalResult materializeSm120NormKernel(
                          ? Type(builder.getF16Type())
                          : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
   unsigned alignment = (f16Storage || bf16Storage) ? 2 : 4;
-  Value xBase = inputs[0], outBase = inputs[1];
-  Value rows = inputs[2], columns = inputs[3], epsilon = inputs[4];
+  Value xBase = normalized[0], outBase = normalized[1];
+  Value rows = normalized[2], columns = normalized[3], epsilon = normalized[4];
+  Value scale;
+  if (scaled)
+    scale = LLVM::LoadOp::create(builder, loc, f32, scaleBase, /*alignment=*/4);
   Value block = arith::ExtUIOp::create(
       builder, loc, i64, NVVM::BlockIdXOp::create(builder, loc, i32));
   Value thread = arith::ExtUIOp::create(
@@ -2457,6 +2471,22 @@ static LogicalResult materializeSm120NormKernel(
                        ? Value(LLVM::FPTruncOp::create(
                              builder, loc, storageType, value))
                        : value;
+    if (scaled) {
+      Value rounded = (f16Storage || bf16Storage)
+          ? Value(LLVM::FPExtOp::create(builder, loc, f32, stored)) : stored;
+      Value quotient = arith::DivFOp::create(builder, loc, rounded, scale);
+      Type fp8 = e5m2Output ? Type(builder.getType<Float8E5M2Type>())
+                            : Type(builder.getType<Float8E4M3FNType>());
+      // Both halves convert the same value, so either byte is the code.
+      Value pair = NVVM::ConvertF32x2ToF8x2Op::create(builder, loc, builder.getI16Type(),
+          quotient, quotient, NVVM::FPRoundingMode::RN, NVVM::SaturationMode::SATFINITE,
+          /*relu=*/false, fp8);
+      Value code = LLVM::TruncOp::create(builder, loc, builder.getI8Type(), pair);
+      Value ptr = LLVM::GEPOp::create(builder, loc, outBase.getType(), builder.getI8Type(),
+                                      outBase, ValueRange{linear});
+      LLVM::StoreOp::create(builder, loc, code, ptr, /*alignment=*/1);
+      return;
+    }
     Value ptr = LLVM::GEPOp::create(
         builder, loc, outBase.getType(), storageType, outBase,
         ValueRange{linear});

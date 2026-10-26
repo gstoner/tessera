@@ -473,6 +473,15 @@ LogicalResult NormOp::verify() {
     return emitOpError("requires SM120, Zen 5, or the bounded gfx1201 RMSNorm row contract with positive finite f32 epsilon");
   if (getSchedule() != "serial" && (!sm120 || getSchedule() != "cooperative_128"))
     return emitOpError("norm cooperative_128 schedule requires SM120");
+  // SM120-W11-FP8-RHS-20261026: a fused quantize_scaled store names its FP8
+  // storage and the per-tensor f32 scale together, on SM120 only.
+  auto output = getOperation()->getAttrOfType<StringAttr>("output_storage");
+  auto scale = getOperation()->getAttrOfType<StringAttr>("scale");
+  if (getOperation()->hasAttr("output_storage") || getOperation()->hasAttr("scale")) {
+    if (!sm120 || !output || !scale || scale.getValue() != "per_tensor_f32" ||
+        (output.getValue() != "fp8_e4m3" && output.getValue() != "fp8_e5m2"))
+      return emitOpError("scaled norm output requires SM120 fp8_e4m3|fp8_e5m2 with a per_tensor_f32 scale");
+  }
   return success();
 }
 

@@ -2729,19 +2729,12 @@ static LogicalResult materializeSm120AttentionKernel(
           arith::ConstantIntOp::create(builder, loc, 0, 32));
       return LLVM::FPExtOp::create(builder, loc, f32, half);
     };
-    // Broadcast K/V scale for one element at flat index `index` of K (width
-    // D) or V (width Dv): recover (b,h,s,d) and drop axes whose static scale
-    // extent is 1. The product rounds once to f32.
-    auto applyScale = [&](Value decoded, Value index, bool key) -> Value {
+    // Broadcast K/V scale for one element at coordinates (b, h, s, d) of K
+    // or V, which the call site already holds: axes whose static scale extent
+    // is 1 drop out and the rest multiply-add by static extents, so no
+    // integer division runs per element. The product rounds once to f32.
+    auto applyScale = [&](Value decoded, ArrayRef<Value> coords, bool key) -> Value {
       ArrayRef<int64_t> shape = scaleShapes.asArrayRef().slice(key ? 0 : 4, 4);
-      Value width = key ? D : Dv;
-      Value d = arith::RemUIOp::create(builder, loc, index, width);
-      Value t0 = arith::DivUIOp::create(builder, loc, index, width);
-      Value s = arith::RemUIOp::create(builder, loc, t0, Sk);
-      Value t1 = arith::DivUIOp::create(builder, loc, t0, Sk);
-      Value h = arith::RemUIOp::create(builder, loc, t1, Hkv);
-      Value b = arith::DivUIOp::create(builder, loc, t1, Hkv);
-      Value coords[4] = {b, h, s, d};
       Value flat = i64Constant(builder, loc, 0);
       for (unsigned axis = 0; axis < 4; ++axis) {
         flat = mulI64(builder, loc, flat, i64Constant(builder, loc, shape[axis]));
@@ -2752,7 +2745,7 @@ static LogicalResult materializeSm120AttentionKernel(
       Value factor = LLVM::LoadOp::create(builder, loc, f32, scalePtr, 4);
       return arith::MulFOp::create(builder, loc, decoded, factor);
     };
-    auto load = [&](Value base, Value index) -> Value {
+    auto load = [&](Value base, Value index, ArrayRef<Value> coords = {}) -> Value {
       Type type = base == in[0] ? storageType : kvStorageType;
       Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), type,
                                       base, ValueRange{index});
@@ -2760,7 +2753,7 @@ static LogicalResult materializeSm120AttentionKernel(
       Value value = LLVM::LoadOp::create(builder, loc, type, ptr, width);
       if (type.isInteger(8)) {
         Value decoded = decodeFp8(value);
-        return scaledKV ? applyScale(decoded, index, base == in[1]) : decoded;
+        return scaledKV ? applyScale(decoded, coords, base == in[1]) : decoded;
       }
       return type.isF32() ? value : Value(LLVM::FPExtOp::create(builder, loc, f32, value));
     };
@@ -2777,7 +2770,8 @@ static LogicalResult materializeSm120AttentionKernel(
         OpBuilder::InsertionGuard dotGuard(builder);
         builder.setInsertionPointToStart(dot.getBody());
         Value qv = load(in[0], addI64(builder, loc, qBase, dot.getInductionVar()));
-        Value kv = load(in[1], addI64(builder, loc, kBase, dot.getInductionVar()));
+        Value kv = load(in[1], addI64(builder, loc, kBase, dot.getInductionVar()),
+                        {b, hkv, key, dot.getInductionVar()});
         Value product = arith::MulFOp::create(builder, loc, qv, kv);
         Value next = arith::AddFOp::create(
             builder, loc, dot.getRegionIterArgs()[0], product);
@@ -2901,7 +2895,7 @@ static LogicalResult materializeSm120AttentionKernel(
               addI64(builder, loc, mulI64(builder, loc,
                   addI64(builder, loc, mulI64(builder, loc, b, Hkv), hkv), Sk), key), Dv),
           dv);
-      Value vv = load(in[2], vIndex);
+      Value vv = load(in[2], vIndex, {b, hkv, key, dv});
       Value denom = arith::AddFOp::create(
           builder, loc, accumLoop.getRegionIterArgs()[0], weight);
       Value numer = arith::AddFOp::create(

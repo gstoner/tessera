@@ -2402,6 +2402,13 @@ def _attention_scaled_kv_contract(module: GraphIRModule):
                 or any(extent not in (1, logical)
                        for extent, logical in zip(physical, (b, hq, sq, sk), strict=True))):
             return None
+    # Only the two-result checkpoint (O, row LSE, both returned in order) is in
+    # the envelope; anything else declines rather than failing to unpack.
+    if (len(fn.result_types) != 2 or len(fn.return_values) != 2
+            or len(attention.result_names) != 2
+            or [value.removeprefix("%") for value in fn.return_values]
+            != [name.removeprefix("%") for name in attention.result_names]):
+        return None
     output_type, lse_type = fn.result_types
     if (output_type.dtype not in {args[q_name].ir_type.dtype, "fp32"} or lse_type.dtype != "fp32"):
         return None
@@ -4554,7 +4561,7 @@ def _package_attention_scaled_kv(scheduled: Any, *, pipeline_name: str) -> NVIDI
         for i, (name, direction, element, shape) in enumerate(roles))
     guards = tuple(ShapeGuard(name, axis, "eq", extent)
                    for name, _, _, shape in roles for axis, extent in enumerate(shape))
-    scalar_names = ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv")
+    scalar_names: tuple[str, ...] = ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv")
     if bias_name is not None:
         scalar_names += ("BiasB", "BiasH", "BiasQ", "BiasK")
     scalar_names += ("KScaleB", "KScaleH", "KScaleS", "KScaleD", "VScaleB", "VScaleH", "VScaleS", "VScaleD")

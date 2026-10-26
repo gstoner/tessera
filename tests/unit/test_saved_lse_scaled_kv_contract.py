@@ -158,3 +158,21 @@ def test_public_trace_emits_the_dequantize_chain():
     assert requests_scaled_kv_attention(fn.graph_ir)
     traced = fn._trace_frontend_capture(values, {})[0]
     assert supports_attention_scaled_kv(traced)
+
+
+def test_single_result_scaled_chain_declines_instead_of_crashing():
+    """Codex PR #1014 review: a chain returning only O is outside the
+    two-result checkpoint envelope and must decline, not raise."""
+    from tessera.compiler.nvidia_native import supports_attention_scaled_kv
+    def only_output(q, k8, v8, ks, vs):
+        k = ts.ops.dequantize_scaled(k8, ks)
+        v = ts.ops.dequantize_scaled(v8, vs)
+        o, lse = ts.ops.flash_attn(q, k, v, causal=True, lse_checkpoint="saved")
+        return o
+    rng = np.random.default_rng(0)
+    values = (rng.normal(0, .2, (1, 2, 3, 4)).astype(np.float16),
+              rng.normal(0, 2, (1, 1, 5, 4)).astype(ml_dtypes.float8_e4m3fn),
+              rng.normal(0, 2, (1, 1, 5, 3)).astype(ml_dtypes.float8_e4m3fn),
+              np.full((1, 1, 5, 1), .05, np.float32), np.full((1, 1, 1, 3), .07, np.float32))
+    traced = ts.jit(target="nvidia_sm120")(only_output)._trace_frontend_capture(values, {})[0]
+    assert supports_attention_scaled_kv(traced) is False

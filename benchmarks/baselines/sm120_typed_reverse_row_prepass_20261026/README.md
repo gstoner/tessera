@@ -48,6 +48,14 @@ computes the correction once per row into an f32 [B, Hq, Sq] buffer, and a
 - With `tests/device/nvidia/test_prepared_attention_row_owner.py`,
   `test_saved_lse_mixed_backward_kernel.py` and
   `test_saved_lse_half_backward_kernel.py`: **601 passed**.
+- `tests/device/nvidia/test_public_bounded_attention_rows_program.py::test_static_mixed_kv_row_program_replay_and_resident_capture`:
+  10 static mixed row programs (five storage pairs, with and without bias)
+  pass compiler-free replay and the resident capture frame. Before `928930fea` all
+  10 failed at capture, because the resident tape typed K/V snapshots and dK/dV
+  from Q's storage (review finding on #1016). Together with the resident, JVP
+  and bounded attention device files, 712 tests pass.
+- The bounded-sequence forward projection refuses mixed storage, so there is
+  no mixed v4 row program.
 - Tajasarus, assertions-ON 23.1.1: 276 row-correction, backward-rows, saved-LSE
   and policy contract tests pass.
 - Full device sweep: see the PR (compared against the #1015 failure set).
@@ -87,6 +95,5 @@ No route or default promotion beyond the row-correction selection follows.
 
 ## Not covered
 
-Bounded/dynamic-sequence mixed K/V on the row path is not separately device
-tested here; FP8 or scaled K/V reverse; original-source reverse and JVP over
+Bounded/dynamic-sequence mixed K/V (the bounded forward projection refuses it); FP8 or scaled K/V reverse; original-source reverse and JVP over
 mixed storage; any non-SM120 device.

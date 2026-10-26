@@ -40,7 +40,8 @@ namespace tessera {
 
 llvm::SmallVector<mlir::Value> FlashAttnOp::buildAdjoint(
     mlir::OpBuilder &builder, mlir::ValueRange cotangents) {
-  if (!denseAttentionAD(*this, true, true, false, true) || cotangents.size() != getNumResults() ||
+  if (!denseAttentionAD(*this, true, true, false, true, /*allowMixedKeyValue=*/true) ||
+      cotangents.size() != getNumResults() ||
       llvm::none_of(cotangents, [](mlir::Value value) { return bool(value); })) return {};
   auto zeroIfInactive = [&](mlir::Value primal, mlir::Value seed) {
     if (seed) return seed;

@@ -40,12 +40,15 @@ class PreparedAttentionVJP:
         import numpy as np
         self.storage = provenance["storage"]
         self.output_storage = provenance["output"]
+        # SM120-SAVED-LSE-MIXED-BACKWARD-20261026: K/V and dK/dV storage.
+        self.kv_storage = provenance.get("kv_storage", self.storage)
         self.seeded = self.program.pair.backward.descriptor.provenance.get("lse_cotangent", False)
         types = {"f32": np.dtype("float32"), "f16": np.dtype("float16")}
-        if "bf16" in (self.storage, self.output_storage):
+        if "bf16" in (self.storage, self.output_storage, self.kv_storage):
             from ml_dtypes import bfloat16
             types["bf16"] = np.dtype(bfloat16)
-        role_dtypes = (types[self.storage],)*3 + ((types["f32"],) if self.bias_shape else ())
+        role_dtypes = ((types[self.storage],) + (types[self.kv_storage],)*2 +
+                       ((types["f32"],) if self.bias_shape else ()))
         frontend_dtypes = [None]*len(frontend)
         for role, index in enumerate(self.program.input_indices):
             frontend_dtypes[index] = role_dtypes[role]
@@ -138,6 +141,15 @@ class PreparedAttentionVJP:
             prepare.restype=I
             codes={"f16":2,"bf16":3,"f32":1}
             status=prepare(*arguments[:6],*row_arguments,*arguments[6:],codes[self.storage],codes[self.output_storage],int(self.seeded),ct.byref(handle))
+        elif self.kv_storage != self.storage:
+            prepare = getattr(lib, "tessera_nvidia_attention_vjp_prepare_typed_kv", None)
+            if prepare is None:
+                raise RuntimeError("mixed K/V native reverse requires the versioned K/V preparation symbol")
+            prepare.argtypes = lib.tessera_nvidia_attention_vjp_prepare.argtypes[:-1] + [I, I, I, I, ct.POINTER(U)]
+            prepare.restype = I
+            codes = {"f32": 1, "f16": 2, "bf16": 3}
+            status = prepare(*arguments, codes[self.storage], codes[self.kv_storage],
+                             codes[self.output_storage], int(self.seeded), ct.byref(handle))
         elif self.storage != "f32" or self.seeded:
             prepare = getattr(lib, "tessera_nvidia_attention_vjp_prepare_typed", None)
             if prepare is None:

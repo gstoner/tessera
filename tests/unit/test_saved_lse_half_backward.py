@@ -9,12 +9,13 @@ from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
 
 
 def source(storage="f16", *, bias=False, saved=False, output=None,
-           dims=(1, 2, 1, 3, 5, 4, 3), causal=True):
+           dims=(1, 2, 1, 3, 5, 4, 3), causal=True, kv_storage=None):
     output = output or storage
+    kv_storage = kv_storage or storage
     b, hq, hkv, sq, sk, d, dv = dims
     q = f"tensor<{b}x{hq}x{sq}x{d}x{storage}>"
-    k = f"tensor<{b}x{hkv}x{sk}x{d}x{storage}>"
-    v = f"tensor<{b}x{hkv}x{sk}x{dv}x{storage}>"
+    k = f"tensor<{b}x{hkv}x{sk}x{d}x{kv_storage}>"
+    v = f"tensor<{b}x{hkv}x{sk}x{dv}x{kv_storage}>"
     o = f"tensor<{b}x{hq}x{sq}x{dv}x{output}>"
     lse = f"tensor<{b}x{hq}x{sq}xf32>"
     bt = f"tensor<1x{hq}x1x{sk}xf32>"

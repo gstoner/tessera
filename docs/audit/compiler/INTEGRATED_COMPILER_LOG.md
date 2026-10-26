@@ -14221,3 +14221,14 @@ Outcome: new Graph op `tessera.dequantize_scaled` (codes x broadcast f32 scale, 
 Remaining: exact-head CI/review; AD, resident FP8 roots, dynamic sequences, standalone dequantize_scaled kernels; the original five-slice obligations remain active.
 Evidence: benchmarks/baselines/sm120_saved_lse_scaled_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-26 — SM120 saved-LSE reverse with mixed Q vs K/V storage
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-SAVED-LSE-MIXED-BACKWARD-20261026.
+Outcome: the saved-LSE backward checkpoint and the paired native reverse admit K/V in an f16/bf16/f32 storage distinct from Q (dQ follows Q, dK/dV follow K/V, f32 LSE/seed/bias); the public reverse previously failed at Graph AD with zero cotangents. The admission is an explicit `denseAttentionAD` opt-in for the paired reverse only, and `kv_storage` is carried only when distinct, so homogeneous contracts are byte-unchanged. RTX 5070: 192 mixed public reverse cases pass through public, warm, serialized and resident replay against an fp64 oracle; no new device-sweep failures; contract tests pass on the assertions-ON LLVM. Paired events put mixed within 0.3% of its homogeneous half control, and showed a pre-existing defect: the typed half reverse kernel recomputes the row correction per dK/dV element and runs about 220x the f32 kernel at 1x8x2x128x512x64x64 (also on main). All four backend queues assessed.
+Remaining: exact-head CI/review; the once-per-row correction for the typed reverse kernel; FP8/scaled K/V reverse; source reverse/JVP over mixed storage; the original five-slice obligations remain active.
+Evidence: benchmarks/baselines/sm120_saved_lse_mixed_backward_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+<!-- entry-fields:end -->
+

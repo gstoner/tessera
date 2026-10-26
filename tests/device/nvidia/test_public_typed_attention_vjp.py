@@ -41,12 +41,31 @@ def function(saved=False, bias=False, causal=True):
 @pytest.mark.parametrize("dims", [(1, 2, 1, 3, 5, 4, 3), (2, 2, 2, 1, 129, 8, 6), (1, 2, 1, 7, 3, 4, 5)])
 @pytest.mark.parametrize("subset", [False, True])
 def test_public_typed_reverse_replays_without_compilers_and_retains_results(storage, saved, bias, causal, dims, subset, monkeypatch):
+    _run_public_typed_reverse(storage, storage, saved, bias, causal, dims, subset, monkeypatch)
+
+
+# SM120-SAVED-LSE-MIXED-BACKWARD-20261026: K/V (and dK/dV) in a storage
+# distinct from Q; dO and O follow Q's storage, LSE and bias stay f32.
+@pytest.mark.parametrize("storage,kv_storage", [
+    ("float16", "bfloat16"), ("bfloat16", "float16"), ("float32", "float16"),
+    ("float32", "bfloat16"), ("float16", "float32"), ("bfloat16", "float32")])
+@pytest.mark.parametrize("saved", [False, True])
+@pytest.mark.parametrize("bias", [False, True])
+@pytest.mark.parametrize("causal", [False, True])
+@pytest.mark.parametrize("dims", [(1, 2, 1, 3, 5, 4, 3), (2, 2, 2, 1, 129, 8, 6)])
+@pytest.mark.parametrize("subset", [False, True])
+def test_public_mixed_kv_reverse(storage, kv_storage, saved, bias, causal, dims, subset, monkeypatch):
+    _run_public_typed_reverse(storage, kv_storage, saved, bias, causal, dims, subset, monkeypatch)
+
+
+def _run_public_typed_reverse(storage, kv_storage, saved, bias, causal, dims, subset, monkeypatch):
     if rt._nvidia_device_name() != "sm_120":
         pytest.skip("owning RTX5070/SM120 required")
     dtype = np.dtype(ml_dtypes.bfloat16 if storage == "bfloat16" else storage)
+    kv_dtype = np.dtype(ml_dtypes.bfloat16 if kv_storage == "bfloat16" else kv_storage)
     rng = np.random.default_rng(20261016)
     b, hq, hkv, sq, sk, d, dv = dims
-    values = {name: rng.normal(0, .3, shape).astype(dtype) for name, shape in {
+    values = {name: rng.normal(0, .3, shape).astype(dtype if name == "q" else kv_dtype) for name, shape in {
         "q": (b, hq, sq, d), "k": (b, hkv, sk, d), "v": (b, hkv, sk, dv)}.items()}
     if bias:
         values["bias"] = rng.normal(0, .1, (1, hq, 1, sk)).astype(np.float32)
@@ -62,14 +81,16 @@ def test_public_typed_reverse_replays_without_compilers_and_retains_results(stor
         seeds = (do, seed) if saved else do
         first = fn.native_backward(**values, out_cotangents=seeds)
         for name, result in zip(wrt, first, strict=True):
-            assert result.dtype == (np.dtype("float32") if name == "bias" else dtype)
+            assert result.dtype == (np.dtype("float32") if name == "bias" else
+                                    dtype if name == "q" else kv_dtype)
             compare(result, expected[role[name]])
         receipt = fn.last_backward_execution
         assert receipt["execution_kind"] == "native_gpu"
         assert receipt["compiler_path"] == "nvidia_sm120_attention_vjp_compiled"
         artifact = rt.RuntimeArtifact.from_json(fn.native_backward_runtime_artifact().to_json())
         assert json.loads(artifact.metadata["program_json"])["program"]["schema"] == (
-            "tessera.native_attention_vjp_program.v1" if storage == "float32" else "tessera.native_attention_vjp_program.v2")
+            "tessera.native_attention_vjp_program.v1" if storage == kv_storage == "float32"
+            else "tessera.native_attention_vjp_program.v2")
         held = tuple(x.copy() for x in first)
         def forbidden(*args, **kwargs):
             pytest.fail("warm typed backward invoked compiler or concrete frontend")
@@ -96,7 +117,7 @@ def test_public_typed_reverse_replays_without_compilers_and_retains_results(stor
             for name, result in zip(wrt, resident_replay["output"], strict=True):
                 compare(result, expected[role[name]])
             k_index = fn.arg_names.index("k")
-            changed_key = (values["k"].astype(np.float32)*.7).astype(dtype)
+            changed_key = (values["k"].astype(np.float32)*.7).astype(kv_dtype)
             completed = []
             callback = queue_delayed_upload(sessions[k_index], resident[k_index], changed_key,
                                             sessions[k_index].stream, completed)

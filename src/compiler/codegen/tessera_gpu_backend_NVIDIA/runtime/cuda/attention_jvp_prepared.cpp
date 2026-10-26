@@ -65,7 +65,7 @@ struct Owner {
   bool reverseLseSeed=false,reverseRows=false,reverseRowStage=false,reverseCompleted=false;
   unsigned rowGrid=0;
   int storage=1,outputStorage=1;
-  int kvStorage=1; // forward-only saved-LSE K/V storage; equals storage elsewhere
+  int kvStorage=0; // distinct saved-LSE K/V storage code; 0 = same as storage
   CUstream stream=nullptr;
   std::array<int64_t,4> biasShape{};
   unsigned reverseGrid=0,reverseThreads=128;
@@ -137,7 +137,8 @@ int prepareResidentDependencies(Owner &s,const void *const *inputs,
       CUdeviceptr pointer=reinterpret_cast<uintptr_t>(inputs[i]),base=0;
       size_t capacity=0;CUcontext allocationContext=nullptr,streamContext=nullptr;
       unsigned memoryType=0;
-      const int roleStorage=i==0?s.storage:s.kvStorage;
+      const int kvCode=s.kvStorage?s.kvStorage:s.storage;
+      const int roleStorage=i==0?s.storage:kvCode;
       unsigned alignment=s.forwardOnly && i<3 && roleStorage!=1?(roleStorage>=4?1:2):4;
       if(!s.reverse && !s.forwardOnly && s.storage!=1){
         for(unsigned role=0;role<3;++role)
@@ -147,7 +148,7 @@ int prepareResidentDependencies(Owner &s,const void *const *inputs,
       }
       if(s.reverse){
         for(size_t role=0;role<3;++role)
-          if(i==size_t(s.mapping[role]) && s.storage!=1)alignment=2;
+          if(i==size_t(s.mapping[role]) && (role==0?s.storage:kvCode)!=1)alignment=2;
         if(i==3+unsigned(s.bias) && s.outputStorage!=1)alignment=2;
       }
       if(pointer%alignment || pointer>UINTPTR_MAX-inputBytes[i])
@@ -624,10 +625,15 @@ static int prepareAttentionVjp(
   const int64_t *dims,const int64_t *biasShape,const int *mapping,
   const int *roles,size_t activeCount,int storage,int outputStorage,int lseCotangent,uint64_t *handle,
   bool externalRows=false,const void *rimage=nullptr,size_t rbytes=0,const char *rentry=nullptr,
-  bool sourceProgram=false){
+  bool sourceProgram=false,int kvStorage=0){
   ownerError.clear();if(handle)*handle=0;
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
+  // SM120-SAVED-LSE-MIXED-BACKWARD-20261026: 0 = K/V share Q's storage. A
+  // distinct K/V storage (and dK/dV) is admitted only on the inline-row path.
+  const int kv=kvStorage?kvStorage:storage;
+  if(kv<1 || kv>3 || (kv!=storage && (externalRows || sourceProgram)))
+    return bad("reverse K/V storage requires the inline saved-LSE path");
   if(!handle || !fimage || !fbytes || !fentry || !bimage || !bbytes || !bentry ||
      !dims || !mapping || !roles || activeCount<1 || activeCount>4 ||
      storage<1 || storage>3 || outputStorage<1 || outputStorage>3 ||
@@ -665,8 +671,10 @@ static int prepareAttentionVjp(
     return bad("unsupported reverse forward entry contract");
   const char *dataName=storage==2?"f16":storage==3?"bf16":"f32";
   const char *outputName=outputStorage==2?"f16":outputStorage==3?"bf16":"f32";
-  if(storage!=1){
-    std::string suffix=std::string(dataName)+"_out_"+outputName+"_";
+  const char *kvName=kv==2?"f16":kv==3?"bf16":"f32";
+  const std::string kvToken=kv!=storage?std::string("_kv_")+kvName:std::string();
+  if(storage!=1 || kv!=storage){
+    std::string suffix=std::string(dataName)+kvToken+"_out_"+outputName+"_";
     if(std::strncmp(cursor,suffix.c_str(),suffix.size()))return bad("typed reverse entry storage disagrees");
     cursor+=suffix.size();
   }
@@ -679,8 +687,8 @@ static int prepareAttentionVjp(
   if(std::strlen(cursor)!=10+std::strlen(seedSuffix) || !hashSuffix(cursor) ||
      std::strcmp(cursor+10,seedSuffix))return bad("invalid reverse digest/seed suffix");
   std::string forwardPrefix="tessera_tile_attention_lse_";
-  if(storage!=1){
-    forwardPrefix+=dataName;forwardPrefix+="_";
+  if(storage!=1 || kv!=storage){
+    forwardPrefix+=dataName;forwardPrefix+=kvToken;forwardPrefix+="_";
     if(outputStorage!=1)forwardPrefix+=std::string("out_")+outputName+"_";
   }
   if(std::strncmp(fentry,forwardPrefix.c_str(),forwardPrefix.size()) ||
@@ -703,7 +711,7 @@ static int prepareAttentionVjp(
     auto state=std::make_unique<Owner>();
     state->reverse=true;state->bias=bias;state->activeCount=activeCount;
     state->reverseRows=externalRows;state->reverseRowStage=rowStage;
-    state->storage=storage;state->outputStorage=outputStorage;state->reverseLseSeed=lseCotangent;
+    state->storage=storage;state->kvStorage=kv;state->outputStorage=outputStorage;state->reverseLseSeed=lseCotangent;
     state->reverseThreads=threads;
     const size_t primals=3+bias;
     bool mapped[4]{},active[4]{};unsigned requestedMask=0;
@@ -727,7 +735,7 @@ static int prepareAttentionVjp(
        !extent({b,hkv,sk,d},state->bytes[1]) || !extent({b,hkv,sk,dv},state->bytes[2]) ||
        !extent({b,hq,sq,dv},state->bytes[3]) || !extent({b,hq,sq},state->bytes[4]))
       return bad("invalid reverse extent");
-    if(storage!=1)for(unsigned role=0;role<3;++role)state->bytes[role]/=2;
+    for(unsigned role=0;role<3;++role)if((role==0?storage:kv)!=1)state->bytes[role]/=2;
     if(outputStorage!=1)state->bytes[3]/=2;
     state->bytes[5]=state->bytes[3];
     if(lseCotangent)state->bytes[11]=state->bytes[4];
@@ -746,7 +754,8 @@ static int prepareAttentionVjp(
     uint64_t forwardElements=state->bytes[3]/(outputStorage==1?4:2);
     __uint128_t reverseElements=0;
     for(size_t i=0;i<4;++i)
-      if(active[i] || (logical && i<3+biasGradient))reverseElements+=state->bytes[i==3?6:i]/(i==3 || storage==1?4:2);
+      if(active[i] || (logical && i<3+biasGradient))
+        reverseElements+=state->bytes[i==3?6:i]/(i==3 || (i==0?storage:kv)==1?4:2);
     if(!reverseElements || reverseElements>uint64_t(INT_MAX)*threads ||
        forwardElements>=(1ULL<<31))return bad("reverse grid exceeds bounds");
     state->forwardGrid=unsigned((forwardElements+127)/128);
@@ -810,6 +819,18 @@ extern "C" int tessera_nvidia_attention_vjp_prepare_typed(
   const int *roles,size_t activeCount,int storage,int outputStorage,int lseCotangent,uint64_t *handle){
   return prepareAttentionVjp(fimage,fbytes,fentry,bimage,bbytes,bentry,dims,biasShape,
                             mapping,roles,activeCount,storage,outputStorage,lseCotangent,handle);
+}
+// As tessera_nvidia_attention_vjp_prepare_typed with a distinct K/V (and
+// dK/dV) storage code, kvStorage in 1..3 (SM120-SAVED-LSE-MIXED-BACKWARD-20261026).
+extern "C" int tessera_nvidia_attention_vjp_prepare_typed_kv(
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *bimage,size_t bbytes,const char *bentry,
+  const int64_t *dims,const int64_t *biasShape,const int *mapping,
+  const int *roles,size_t activeCount,int storage,int kvStorage,int outputStorage,int lseCotangent,
+  uint64_t *handle){
+  return prepareAttentionVjp(fimage,fbytes,fentry,bimage,bbytes,bentry,dims,biasShape,
+                            mapping,roles,activeCount,storage,outputStorage,lseCotangent,handle,
+                            false,nullptr,0,nullptr,false,kvStorage);
 }
 extern "C" int tessera_nvidia_attention_vjp_rows_prepare(
   const void *fimage,size_t fbytes,const char *fentry,

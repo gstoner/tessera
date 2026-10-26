@@ -2415,7 +2415,8 @@ private:
       auto materialized = op->getAttrOfType<mlir::BoolAttr>(
           "tessera.autodiff.residual_materialized");
       llvm::SmallVector<mlir::Value> values;
-      if (op->getName().getStringRef() == "tessera.flash_attn" && denseAttentionAD(op, true, true, true, true)) {
+      if (op->getName().getStringRef() == "tessera.flash_attn" &&
+          denseAttentionAD(op, true, true, true, true, /*allowMixedKeyValue=*/true)) {
         mlir::OpBuilder attentionBuilder(op);
         auto saved = attentionCheckpoint(attentionBuilder, op, false, op->getOperands());
         if (!saved) return mlir::failure();
@@ -3131,7 +3132,8 @@ private:
     auto savedAttention = explicitRegionResiduals.find(op);
     if (op->getName().getStringRef() == "tessera.flash_attn" &&
         savedAttention != explicitRegionResiduals.end()) {
-      if (!denseAttentionAD(op, true, true, true, true) || savedAttention->second.size() != 2 ||
+      if (!denseAttentionAD(op, true, true, true, true, /*allowMixedKeyValue=*/true) ||
+          savedAttention->second.size() != 2 ||
           outputCotangents.size() != op->getNumResults()) return mlir::failure();
       auto outputSeed = outputCotangents[0] ? outputCotangents[0] : buildZeroLike(builder, op->getResult(0));
       llvm::SmallVector<mlir::Value> args{outputSeed, op->getOperand(0),

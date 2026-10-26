@@ -14211,3 +14211,13 @@ Outcome: the native saved-LSE forward admits unscaled `fp8_e4m3`/`fp8_e5m2` K/V 
 Remaining: exact-head CI/review; scaled FP8 KV; resident FP8 roots; FP8 in saved-LSE AD; the original five-slice obligations remain active.
 Evidence: benchmarks/baselines/sm120_saved_lse_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-25 — SM120 scaled FP8 K/V via dequantize_scaled fusion
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-SAVED-LSE-SCALED-FP8-KV-20261025.
+Outcome: new Graph op `tessera.dequantize_scaled` (codes x broadcast f32 scale, rounded once) and its SM120 fusion: dequantize_scaled(K), dequantize_scaled(V) feeding one saved-LSE flash_attn lower to `tessera_attn.checkpoint_forward_scaled_kv`, decoding and scaling in registers. 180 RTX 5070 device cases across Q storage, FP8 format and five scale granularities meet the fp64 oracle, plus a bit-exact per-code scale check; contract tests pass on the assertions-ON LLVM. Paired events: per-tensor 1.04x, per-token 1.07x, per-element 1.29x unscaled FP8; a flat-index-division first version measured 6.4x and was fixed. All four backend queues assessed.
+Remaining: exact-head CI/review; AD, resident FP8 roots, dynamic sequences, standalone dequantize_scaled kernels; the original five-slice obligations remain active.
+Evidence: benchmarks/baselines/sm120_saved_lse_scaled_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+<!-- entry-fields:end -->

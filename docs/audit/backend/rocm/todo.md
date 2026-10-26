@@ -19259,3 +19259,12 @@ Synchronization key: SM120-SAVED-LSE-FP8-KV-20261025.
 Not applicable to rocm physical execution: the shared checkpoint resolver admits FP8 K/V only under the SM120 native contract. The shared `flash_attn` Graph render change (infer `head_dim` from Q when K/V are FP8) also applies to ROCm traces; no ROCm FP8 attention route consumed such a graph before, so no selector or result changes. No RTX 5070 evidence transfers.
 
 Evidence: benchmarks/baselines/sm120_saved_lse_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+
+## SM120-SAVED-LSE-SCALED-FP8-KV-20261025 — scaled FP8 K/V via dequantize_scaled + fusion
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: SM120-SAVED-LSE-SCALED-FP8-KV-20261025.
+
+Not applicable to rocm physical execution: `tessera.dequantize_scaled` is registered with an eager reference and `unsupported` ROCm capability; the fusion runs only in the SM120 checkpoint importer, and on ROCm targets the chain is refused at Graph->Schedule. Shared frontend registration only; no ROCm selector, ABI or result changes.
+
+Evidence: benchmarks/baselines/sm120_saved_lse_scaled_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.

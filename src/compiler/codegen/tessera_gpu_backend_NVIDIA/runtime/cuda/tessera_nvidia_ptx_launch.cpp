@@ -984,10 +984,12 @@ bool attentionKeyValueWidth(const char* name, bool saved, size_t queryWidth, siz
     const bool f16 = std::strstr(name, "_kv_f16_") != nullptr;
     const bool bf16 = std::strstr(name, "_kv_bf16_") != nullptr;
     const bool f32 = std::strstr(name, "_kv_f32_") != nullptr;
-    if (unsigned(f16) + unsigned(bf16) + unsigned(f32) > 1) return false;
-    if (!f16 && !bf16 && !f32) return true;
+    const bool fp8 = std::strstr(name, "_kv_fp8_e4m3_") != nullptr ||
+                     std::strstr(name, "_kv_fp8_e5m2_") != nullptr;
+    if (unsigned(f16) + unsigned(bf16) + unsigned(f32) + unsigned(fp8) > 1) return false;
+    if (!f16 && !bf16 && !f32 && !fp8) return true;
     if (!saved) return false;
-    width = f32 ? sizeof(float) : 2;
+    width = f32 ? sizeof(float) : fp8 ? 1 : 2;
     return true;
 }
 

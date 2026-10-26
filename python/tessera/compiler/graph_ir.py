@@ -1100,7 +1100,9 @@ class IROp:
         dense_attention = (
             self.op_name == "tessera.flash_attn"
             and len(self.operand_types) in {3, 4}
-            and all(re.fullmatch(r"tensor<(?:[0-9]+|\?)x(?:[0-9]+|\?)x(?:[0-9]+|\?)x[0-9]+x(?:f16|bf16|f32|f64)>", t)
+            # FP8 is admitted as K/V storage (SM120-SAVED-LSE-FP8-KV-20261025);
+            # the inferred width is always Q's.
+            and all(re.fullmatch(r"tensor<(?:[0-9]+|\?)x(?:[0-9]+|\?)x(?:[0-9]+|\?)x[0-9]+x(?:f16|bf16|f32|f64|f8E4M3FN|f8E5M2)>", t)
                     for t in self.operand_types)
         )
         if (dense_attention and "head_dim" not in self.kwargs

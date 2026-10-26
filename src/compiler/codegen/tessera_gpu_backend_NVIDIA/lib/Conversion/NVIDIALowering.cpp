@@ -2667,11 +2667,14 @@ static LogicalResult materializeSm120AttentionKernel(
   if (op->hasAttr("kv_storage") && (!kvStorageAttr || !hasSavedLse))
     return op->emitError("sm_120 attention kv_storage requires the saved-LSE forward");
   StringRef kvSpelling = kvStorageAttr ? kvStorageAttr.getValue() : storage.getValue();
+  // Unscaled FP8 K/V load one byte and decode it exactly to f32 below.
+  bool kvE4M3 = kvSpelling == "fp8_e4m3", kvE5M2 = kvSpelling == "fp8_e5m2";
   Type kvStorageType = kvSpelling == "f16" ? Type(builder.getF16Type())
                        : kvSpelling == "bf16" ? Type(builder.getBF16Type())
-                       : kvSpelling == "f32" ? Type(f32) : Type();
+                       : kvSpelling == "f32" ? Type(f32)
+                       : (kvE4M3 || kvE5M2) ? Type(builder.getI8Type()) : Type();
   if (!kvStorageType)
-    return op->emitError("sm_120 attention kv_storage requires f16/bf16/f32");
+    return op->emitError("sm_120 attention kv_storage requires f16/bf16/f32/fp8_e4m3/fp8_e5m2");
   Value B = in[dimStart], Hq = in[dimStart + 1], Hkv = in[dimStart + 2];
   Value Sq = in[dimStart + 3], Sk = in[dimStart + 4];
   Value D = in[dimStart + 5], Dv = in[dimStart + 6];
@@ -2703,11 +2706,30 @@ static LogicalResult materializeSm120AttentionKernel(
         builder, loc, f32, scaleAttr.getValue());
     Value log2e = arith::ConstantFloatOp::create(
         builder, loc, f32, APFloat(1.4426950408889634f));
+    // Exact FP8 -> f32 through sm_120's cvt.rn.f16x2.{e4m3,e5m2}x2
+    // (nvvm.convert.f8x2.to.f16x2): every E4M3FN and E5M2 value, subnormals
+    // and NaN included, is exact in f16.
+    auto decodeFp8 = [&](Value byte) -> Value {
+      Type i16 = builder.getI16Type();
+      Value wide = arith::ExtUIOp::create(builder, loc, i16, byte);
+      // Lane 0 holds the code (little-endian); lane 1 is a zero byte.
+      Value pair = LLVM::BitcastOp::create(builder, loc,
+          VectorType::get({2}, builder.getI8Type()), wide);
+      Type format = kvE5M2 ? Type(builder.getType<Float8E5M2Type>())
+                           : Type(builder.getType<Float8E4M3FNType>());
+      Value halves = NVVM::ConvertF8x2ToF16x2Op::create(builder, loc,
+          VectorType::get({2}, builder.getF16Type()), pair, format);
+      Value half = LLVM::ExtractElementOp::create(builder, loc, halves,
+          arith::ConstantIntOp::create(builder, loc, 0, 32));
+      return LLVM::FPExtOp::create(builder, loc, f32, half);
+    };
     auto load = [&](Value base, Value index) -> Value {
       Type type = base == in[0] ? storageType : kvStorageType;
       Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), type,
                                       base, ValueRange{index});
-      Value value = LLVM::LoadOp::create(builder, loc, type, ptr, type.isF32() ? 4 : 2);
+      unsigned width = type.isF32() ? 4 : type.isInteger(8) ? 1 : 2;
+      Value value = LLVM::LoadOp::create(builder, loc, type, ptr, width);
+      if (type.isInteger(8)) return decodeFp8(value);
       return type.isF32() ? value : Value(LLVM::FPExtOp::create(builder, loc, f32, value));
     };
     auto score = [&](Value key) -> Value {

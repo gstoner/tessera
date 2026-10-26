@@ -16058,3 +16058,12 @@ Synchronization key: SM120-SAVED-LSE-MIXED-STORAGE-20261025.
 Not applicable to apple: the shared checkpoint resolver still refuses half or mixed storage outside the SM120 native contract; no Apple selector, ABI or result changes.
 
 Evidence: benchmarks/baselines/sm120_saved_lse_mixed_storage_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+
+## SM120-SAVED-LSE-FP8-KV-20261025 — saved-LSE forward with unscaled FP8 K/V
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: SM120-SAVED-LSE-FP8-KV-20261025.
+
+Not applicable to apple: FP8 K/V is admitted only under the SM120 native contract. The shared `flash_attn` Graph render change (infer `head_dim` from Q when K/V are FP8) is frontend-only; no Apple selector, ABI or result changes (Mac attention/graph_ir unit tests show no new failures).
+
+Evidence: benchmarks/baselines/sm120_saved_lse_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.

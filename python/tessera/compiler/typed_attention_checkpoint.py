@@ -26,7 +26,7 @@ def validate_typed_saved_lse_descriptor(descriptor: LaunchDescriptor) -> tuple[s
     # Present only when K/V storage differs from Q (forward-only mixed storage).
     kv_storage = policy.get("kv_storage", storage)
     if (not isinstance(storage, str) or storage not in {"f16", "bf16", "f32"} or
-            not isinstance(kv_storage, str) or kv_storage not in {"f16", "bf16", "f32"} or
+            not isinstance(kv_storage, str) or kv_storage not in {"f16", "bf16", "f32", "fp8_e4m3", "fp8_e5m2"} or
             ("kv_storage" in policy and kv_storage == storage) or
             (storage == "f32" and kv_storage == "f32") or
             not isinstance(output, str) or output not in {storage, "f32"} or
@@ -35,7 +35,7 @@ def validate_typed_saved_lse_descriptor(descriptor: LaunchDescriptor) -> tuple[s
             policy.get("bias") is not bias):
         raise ValueError("typed saved-LSE storage or result roles disagree")
     buffers = sorted(descriptor.buffers, key=lambda value: value.ordinal)
-    dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}
+    dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32", "fp8_e4m3": "fp8_e4m3", "fp8_e5m2": "fp8_e5m2"}
     expected = [(dtype[storage], 4, "input")] + [(dtype[kv_storage], 4, "input")] * 2
     if bias:
         expected += [("fp32", 4, "input")]
@@ -45,7 +45,7 @@ def validate_typed_saved_lse_descriptor(descriptor: LaunchDescriptor) -> tuple[s
     for index, (binding, (element, rank, direction)) in enumerate(zip(buffers, expected, strict=True)):
         if (binding.ordinal != index or binding.dtype != element or binding.rank != rank or
                 binding.direction != direction or binding.layout != "row_major" or
-                binding.alignment < (4 if element == "fp32" else 2)):
+                binding.alignment < {"fp32": 4, "fp8_e4m3": 1, "fp8_e5m2": 1}.get(element, 2)):
             raise ValueError("typed saved-LSE physical buffer storage disagrees")
     scalar_names: tuple[str, ...] = ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv")
     if broadcast:

@@ -63,6 +63,36 @@ still require homogeneous Q/K/V. They refuse a mixed forward: the backward
 resolver refuses it, the pair checks refuse it, and the sealed entry-name
 checks refuse it.
 
+## Unscaled FP8 K/V storage (forward)
+
+Synchronization key: SM120-SAVED-LSE-FP8-KV-20261025.
+
+The shared K/V storage of the saved-LSE forward may also be `fp8_e4m3`
+(E4M3FN) or `fp8_e5m2`.
+
+**Unscaled means the stored FP8 values are the operands.** The kernel loads one
+byte and decodes it exactly to the declared f32 accumulation:
+- **E5M2** is the high byte of an IEEE f16.
+- **E4M3FN** is decoded bit for bit: subnormals are m·2⁻⁹, S.1111.111 is NaN,
+  and there are no infinities.
+
+Every finite code point of both formats is checked bit-exactly on the device.
+
+| Role | What this slice allows |
+|---|---|
+| Q | f16, bf16 or f32 |
+| O | Q's storage or f32 |
+| Backward roles | homogeneous storage only (FP8 is refused) |
+| Resident roots | f16, bf16 or f32 only (FP8 roots are refused); FP8 K/V are host roots |
+| K/V buffers | one-byte elements, alignment 1 |
+| Retained owner | `kv_storage` codes 4 (`fp8_e4m3`) and 5 (`fp8_e5m2`) |
+
+The resident restriction comes from the shared resident-tensor contract.
+
+**A scaled KV cache is a different contract.** K = k_fp8 · k_scale (and the
+same for V) needs scale operands and a declared scale layout, which are
+semantic keys. It is not admitted by spelling FP8 storage.
+
 ## Additive forward ABI domain
 
 The new identifiers are:

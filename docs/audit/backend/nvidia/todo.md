@@ -16687,3 +16687,12 @@ Synchronization key: SM120-SAVED-LSE-MIXED-STORAGE-20261025.
 The SM120 saved-LSE forward now admits K/V sharing one storage distinct from Q (any f16/bf16/f32 pair); O is f32 or Q's storage, accumulation the declared f32, row-LSE f32. Before, such calls ran eager Python with no fallback reason recorded. `kv_storage` appears in the native contract, identity, entry (`_kv_<kv>_`) and Tile kernel only when distinct, so homogeneous bytes are unchanged; the retained owner uses the new `tessera_nvidia_attention_forward_prepare_kv` (the original C entry is its homogeneous wrapper). RTX 5070: device suite 108 passed (72 mixed), 72-row fp64-gated packet plus compiler-free replay, paired interleaved events within about 1% of each arm's homogeneous-Q control (diagnostic only, scalar materializer, no promotion). Backward, paired AD, source reverse and JVP owners stay homogeneous and refuse a mixed forward. Open: half-storage AD with mixed K/V; FP8 KV storage.
 
 Evidence: benchmarks/baselines/sm120_saved_lse_mixed_storage_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+
+## SM120-SAVED-LSE-FP8-KV-20261025 — saved-LSE forward with unscaled FP8 K/V
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: SM120-SAVED-LSE-FP8-KV-20261025.
+
+The SM120 saved-LSE forward admits shared K/V storage `fp8_e4m3` or `fp8_e5m2` (unscaled) with Q f16/bf16/f32; O is Q's storage or f32. The kernel decodes one byte through sm_120 `cvt.rn.f16x2.{e4m3,e5m2}x2` (`nvvm.convert.f8x2.to.f16x2`) and widens exactly to f32. A bit-exact check covers every finite code point of both formats; 72 FP8 device cases pass against the fp64 oracle; resident FP8 roots stay refused. Paired interleaved events: about 1.04x the homogeneous control at 1x8x2x128x512x64x64 (a software E4M3FN decode measured 1.59x and was replaced). Shared frontend fix: `flash_attn` Graph render now infers `head_dim` from Q when K/V are FP8. Open: scaled FP8 KV (scale operands + layout), resident FP8 roots, FP8 in saved-LSE AD.
+
+Evidence: benchmarks/baselines/sm120_saved_lse_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.

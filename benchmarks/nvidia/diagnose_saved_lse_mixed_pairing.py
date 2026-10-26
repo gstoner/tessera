@@ -11,12 +11,21 @@ from tests.device.nvidia.test_saved_lse_storage import saved, reference, compare
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--output", type=pathlib.Path, required=True)
+parser.add_argument("--fp8", action="store_true",
+                    help="time unscaled FP8 K/V arms (SM120-SAVED-LSE-FP8-KV-20261025) beside their controls")
 args = parser.parse_args()
 
 
-def dt(n): return np.dtype(ml_dtypes.bfloat16 if n == "bfloat16" else n)
+def dt(n):
+    if n in ("bfloat16", "float8_e4m3fn", "float8_e5m2"):
+        return np.dtype(getattr(ml_dtypes, n))
+    return np.dtype(n)
 ARMS = [("float16", "float16"), ("float16", "bfloat16"), ("bfloat16", "bfloat16"), ("bfloat16", "float16"),
         ("float32", "float32"), ("float32", "float16"), ("float32", "bfloat16"), ("float16", "float32")]
+if args.fp8:
+    ARMS = [("float16", "float16"), ("float16", "float8_e4m3fn"), ("float16", "float8_e5m2"),
+            ("bfloat16", "bfloat16"), ("bfloat16", "float8_e4m3fn"), ("bfloat16", "float8_e5m2"),
+            ("float32", "float32"), ("float32", "float8_e4m3fn"), ("float32", "float8_e5m2")]
 out = {}
 for shape in ((1, 2, 1, 3, 5, 4, 3), (1, 8, 2, 128, 512, 64, 64)):
     b, hq, hkv, sq, sk, d, dv = shape

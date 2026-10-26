@@ -14201,3 +14201,13 @@ Outcome: the native saved-LSE forward admits K/V storage distinct from Q (any f1
 Remaining: exact-head CI/review; half-storage AD with mixed K/V; FP8 KV storage; the original five-slice obligations remain active.
 Evidence: benchmarks/baselines/sm120_saved_lse_mixed_storage_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
 <!-- entry-fields:end -->
+
+
+### 2026-10-25 — SM120 saved-LSE forward with unscaled FP8 K/V
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-SAVED-LSE-FP8-KV-20261025.
+Outcome: the native saved-LSE forward admits unscaled `fp8_e4m3`/`fp8_e5m2` K/V beside f16/bf16/f32 Q; such calls previously ran eager Python. The kernel decodes through sm_120's f8x2-to-f16x2 conversion and widens exactly to f32; every finite code point of both formats is checked bit-exactly on the RTX 5070, and 72 FP8 cases meet the fp64 oracle. Paired interleaved events put FP8 K/V at about 1.04x the homogeneous control (diagnostic); a software E4M3FN decode measured 1.59x and was replaced. Shared frontend fix: `flash_attn` infers `head_dim` from Q when K/V are FP8. All four backend queues assessed.
+Remaining: exact-head CI/review; scaled FP8 KV; resident FP8 roots; FP8 in saved-LSE AD; the original five-slice obligations remain active.
+Evidence: benchmarks/baselines/sm120_saved_lse_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+<!-- entry-fields:end -->

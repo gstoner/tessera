@@ -2437,9 +2437,10 @@ LogicalResult AttentionKernelOp::verify() {
     auto target = module ? module->getAttrOfType<StringAttr>("tessera.target") : StringAttr();
     if (!kvStorage || kvStorage.getValue() == storage.getValue() ||
         (kvStorage.getValue() != "f16" && kvStorage.getValue() != "bf16" &&
-         kvStorage.getValue() != "f32") ||
+         kvStorage.getValue() != "f32" && kvStorage.getValue() != "fp8_e4m3" &&
+         kvStorage.getValue() != "fp8_e5m2") ||
         !hasSavedLse || !target || target.getValue() != "nvidia_sm120")
-      return emitOpError("kv_storage requires a distinct f16/bf16/f32 K/V storage on the SM120 saved-LSE forward");
+      return emitOpError("kv_storage requires a distinct f16/bf16/f32/fp8_e4m3/fp8_e5m2 K/V storage on the SM120 saved-LSE forward");
   }
   if (!accum || accum.getValue() != "f32")
     return emitOpError("requires accum=\"f32\"");

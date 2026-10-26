@@ -12461,3 +12461,12 @@ Synchronization key: SM120-SAVED-LSE-MIXED-STORAGE-20261025.
 Not applicable to x86: the shared checkpoint resolver still refuses half or mixed storage outside the SM120 native contract (lit and unit tests cover the refusal); no x86 selector, ABI or result changes.
 
 Evidence: benchmarks/baselines/sm120_saved_lse_mixed_storage_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+
+## SM120-SAVED-LSE-FP8-KV-20261025 — saved-LSE forward with unscaled FP8 K/V
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: SM120-SAVED-LSE-FP8-KV-20261025.
+
+Not applicable to x86: FP8 K/V is admitted only under the SM120 native contract; the shared `flash_attn` Graph render change is frontend-only, and no x86 selector, ABI or result changes.
+
+Evidence: benchmarks/baselines/sm120_saved_lse_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.

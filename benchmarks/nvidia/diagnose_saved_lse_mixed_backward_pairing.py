@@ -24,6 +24,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--output", type=pathlib.Path, required=True)
 parser.add_argument("--rounds", type=int, default=30)
 parser.add_argument("--reps", type=int, default=5)
+# The typed (half) reverse kernel takes seconds per call at the large shape
+# (pre-existing on main; see the packet README), so that shape is sampled
+# with fewer alternating rounds of one call each.
+parser.add_argument("--large-rounds", type=int, default=6)
 args = parser.parse_args()
 
 
@@ -55,7 +59,9 @@ def owner_for(metadata, inputs):
 
 
 out = {}
-for shape in ((1, 2, 1, 3, 5, 4, 3), (1, 8, 2, 128, 512, 64, 64)):
+SHAPES = (((1, 2, 1, 3, 5, 4, 3), args.rounds, args.reps),
+          ((1, 8, 2, 128, 512, 64, 64), args.large_rounds, 1))
+for shape, rounds, reps in SHAPES:
     b, hq, hkv, sq, sk, d, dv = shape
     rng = np.random.default_rng(1)
     base = {"q": rng.normal(0, .3, (b, hq, sq, d)), "k": rng.normal(0, .3, (b, hkv, sk, d)),
@@ -78,12 +84,12 @@ for shape in ((1, 2, 1, 3, 5, 4, 3), (1, 8, 2, 128, 512, 64, 64)):
         inputs = tuple(np.ascontiguousarray(x) for x in (*(values[n] for n in fn.arg_names), do))
         arms[label] = (metadata, inputs)
     samples = {label: {"forward": [], "backward": []} for label in arms}
-    for round_ in range(args.rounds):
+    for round_ in range(rounds):
         order = list(arms) if round_ % 2 == 0 else list(arms)[::-1]
         for label in order:
             metadata, inputs = arms[label]
             owner = owner_for(metadata, inputs)
-            for _ in range(args.reps):
+            for _ in range(reps):
                 owner.invoke(metadata, inputs)
                 forward, backward = owner.last_device_ms[:2]
                 samples[label]["forward"].append(forward * 1000)
@@ -97,8 +103,9 @@ status = subprocess.check_output(["git", "status", "--porcelain"], text=True).st
 gpu = subprocess.check_output(["/usr/lib/wsl/lib/nvidia-smi", "--query-gpu=name,compute_cap",
                                "--format=csv,noheader"], text=True).strip()
 args.output.write_text(json.dumps({"commit": commit, "worktree_dirty": bool(status), "device": gpu,
-    "timing": (f"prepared reverse owner CUDA events (saved-LSE forward window, backward window); "
-               f"{args.reps} calls per arm per round, {args.rounds} alternating rounds; median us"),
+    "timing": ("prepared reverse owner CUDA events (saved-LSE forward window, backward window); "
+               f"small shape {args.reps} calls x {args.rounds} alternating rounds, large shape "
+               f"1 call x {args.large_rounds} alternating rounds; median us"),
     "correctness": "fp64 reverse oracle on dQ/dK/dV before timing",
     "medians_us": out}, indent=1) + "\n")
 print(json.dumps(out, indent=1))

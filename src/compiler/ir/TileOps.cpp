@@ -2394,10 +2394,21 @@ LogicalResult AttentionKernelOp::verify() {
       [](int64_t dim) { return ShapedType::isDynamic(dim); });
   if (dynamicBias && !hasSavedLse)
     return emitOpError("symbolic physical bias requires saved LSE");
-  if (getInputs().size() != 11 + unsigned(hasBias) + unsigned(hasSavedLse) + 4 * unsigned(dynamicBias))
+  // SM120-SAVED-LSE-SCALED-FP8-KV-20261025: K/V scale pointers follow row_lse.
+  auto scaleShapes = getOperation()->getAttrOfType<DenseI64ArrayAttr>("kv_scale_shapes");
+  bool scaledKV = getOperation()->hasAttr("kv_scale_shapes");
+  if (scaledKV) {
+    auto kvStorage = getOperation()->getAttrOfType<StringAttr>("kv_storage");
+    if (!scaleShapes || scaleShapes.size() != 8 || !hasSavedLse || dynamicBias || !kvStorage ||
+        (kvStorage.getValue() != "fp8_e4m3" && kvStorage.getValue() != "fp8_e5m2") ||
+        llvm::any_of(scaleShapes.asArrayRef(), [](int64_t extent) { return extent <= 0; }))
+      return emitOpError("kv_scale_shapes requires eight positive static extents, saved LSE and FP8 kv_storage");
+  }
+  if (getInputs().size() != 11 + unsigned(hasBias) + unsigned(hasSavedLse) + 4 * unsigned(dynamicBias) +
+                             2 * unsigned(scaledKV))
     return emitOpError(
-        "expects Q, K, V, optional bias, O, optional row_lse, B, Hq, Hkv, Sq, Sk, D, and Dv operands");
-  unsigned pointerCount = 4 + unsigned(hasBias) + unsigned(hasSavedLse);
+        "expects Q, K, V, optional bias, O, optional row_lse, optional K/V scales, B, Hq, Hkv, Sq, Sk, D, and Dv operands");
+  unsigned pointerCount = 4 + unsigned(hasBias) + unsigned(hasSavedLse) + 2 * unsigned(scaledKV);
   for (Value pointer : getInputs().take_front(pointerCount))
     if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
       return emitOpError("Q, K, V, optional bias, O, and optional row_lse operands must be !llvm.ptr");

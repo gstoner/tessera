@@ -8,6 +8,7 @@ struct NativeCheckpoint {
   bool bias;
   bool biasGradient;
   bool lseCotangent;
+  bool scaledKV;
   SmallVector<int64_t> dims;
   SmallVector<int64_t> biasShape;
   DictionaryAttr contract;
@@ -16,11 +17,14 @@ struct NativeCheckpoint {
 
 static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
   bool backward = graph->getName().getStringRef() == "tessera_attn.checkpoint_backward";
+  // SM120-SAVED-LSE-SCALED-FP8-KV-20261025: Q, K codes, V codes, K scale,
+  // V scale, [bias]. Scales are f32 roles 3 and 4; bias, when present, is 5.
+  bool scaledKV = graph->getName().getStringRef() == "tessera_attn.checkpoint_forward_scaled_kv";
   auto seedAttr = graph->getAttrOfType<BoolAttr>("lse_cotangent");
   bool lseCotangent = seedAttr && seedAttr.getValue();
   if (graph->hasAttr("lse_cotangent") && (!seedAttr || !backward))
     return graph->emitError("LSE cotangent requires a boolean backward policy"), failure();
-  bool bias = graph->getNumOperands() == (backward ? 7u : 4u) + unsigned(lseCotangent);
+  bool bias = graph->getNumOperands() == (backward ? 7u : 4u) + unsigned(lseCotangent) + 2u * unsigned(scaledKV);
   bool biasGradient = backward && graph->getNumResults() == 4;
   auto fn = graph->getParentOfType<func::FuncOp>();
   auto mod = graph->getParentOfType<ModuleOp>();
@@ -28,7 +32,7 @@ static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
   auto arch = mod ? mod->getAttrOfType<StringAttr>("tessera.arch") : StringAttr();
   if (!fn || !target || target.getValue() != "nvidia_sm120" ||
       !arch || arch.getValue() != "sm_120" || !llvm::hasSingleElement(fn.getBody()) ||
-      fn.getNumArguments() != (backward ? 6 : 3) + unsigned(bias) + unsigned(lseCotangent) ||
+      fn.getNumArguments() != (backward ? 6 : 3) + unsigned(bias) + unsigned(lseCotangent) + 2 * unsigned(scaledKV) ||
       fn.getNumResults() != (backward ? 3 + unsigned(biasGradient) : 2) ||
       graph->getNumOperands() != fn.getNumArguments() ||
       graph->getResultTypes() != fn.getResultTypes())
@@ -73,7 +77,7 @@ static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
   unsigned lseIndex = 5 + unsigned(bias);
   SmallVector<int64_t> biasShape;
   if (bias) {
-    auto biasType = types[backward ? 5 : 3];
+    auto biasType = types[backward ? 5 : scaledKV ? 5 : 3];
     if (biasType.getRank() != 4)
       return graph->emitError("checkpoint bias requires rank-four f32 shape"), failure();
     SmallVector<int64_t, 4> scores{b,hq,sq,sk};
@@ -145,6 +149,17 @@ static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
     }
     contract = builder.getDictionaryAttr(fields);
   }
+  if (scaledKV) {
+    if (bounds)
+      return graph->emitError("scaled K/V checkpoint requires static sequences"), failure();
+    SmallVector<int64_t> scaleShapes;
+    for (unsigned role : {3u, 4u})
+      llvm::append_range(scaleShapes, types[role].getShape());
+    NamedAttrList fields(contract);
+    fields.set("kv_scale_shapes", builder.getDenseI64ArrayAttr(scaleShapes));
+    fields.set("kv_dequantize", builder.getStringAttr("code_times_f32_scale_round_once_v1"));
+    contract = builder.getDictionaryAttr(fields);
+  }
   if (bounds) {
     NamedAttrList fields(contract);
     fields.set("shape_bounds", bounds);
@@ -197,7 +212,7 @@ static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
   }
   if (auto mappingAttr = mod->getAttr("tessera.attention_argument_indices")) {
     auto mapping = dyn_cast<DenseI64ArrayAttr>(mappingAttr);
-    unsigned count = 3 + unsigned(bias);
+    unsigned count = 3 + unsigned(bias) + 2 * unsigned(scaledKV);
     llvm::SmallDenseSet<int64_t> unique;
     if (!mapping || mapping.size() != count)
       return graph->emitError("checkpoint frontend input mapping requires all input roles"), failure();
@@ -210,7 +225,7 @@ static FailureOr<NativeCheckpoint> checkpointContract(Operation *graph) {
   }
   std::string text; llvm::raw_string_ostream os(text); contract.print(os); os.flush();
   auto hash = llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(text)), true);
-  return NativeCheckpoint{fn,graph,backward,bias,biasGradient,lseCotangent,dims,biasShape,contract,hash};
+  return NativeCheckpoint{fn,graph,backward,bias,biasGradient,lseCotangent,scaledKV,dims,biasShape,contract,hash};
 }
 
 // Preserve directly authored saved-LSE Graph semantics in the native pipeline.
@@ -286,9 +301,32 @@ static LogicalResult importSavedAttentionGraphs(ModuleOp mod) {
     auto causal = graph->getAttrOfType<BoolAttr>("causal");
     if (graph->hasAttr("causal") && !causal)
       return graph->emitError("saved attention causal must be boolean");
-    OperationState state(graph->getLoc(), backward ?
-        "tessera_attn.checkpoint_backward" : "tessera_attn.checkpoint_forward");
-    state.addOperands(graph->getOperands());
+    // SM120-SAVED-LSE-SCALED-FP8-KV-20261025: fuse dequantize_scaled(K) and
+    // dequantize_scaled(V) into the forward. Both or neither: a half-scaled
+    // chain is refused by name rather than as an argument-role error.
+    auto dequantized = [&](unsigned index) -> Operation * {
+      Operation *producer = graph->getOperand(index).getDefiningOp();
+      return producer && producer->getName().getStringRef() == "tessera.dequantize_scaled"
+          ? producer : nullptr;
+    };
+    Operation *keyDequant = backward ? nullptr : dequantized(1);
+    Operation *valueDequant = backward ? nullptr : dequantized(2);
+    if (bool(keyDequant) != bool(valueDequant))
+      return graph->emitError("saved attention scaled K/V requires both K and V dequantize_scaled producers");
+    if (backward && (dequantized(2) || dequantized(3)))
+      return graph->emitError("saved attention backward does not admit scaled K/V");
+    bool scaledKV = keyDequant != nullptr;
+    if (scaledKV && (keyDequant == valueDequant || !keyDequant->hasOneUse() || !valueDequant->hasOneUse()))
+      return graph->emitError("saved attention scaled K/V requires single-use K and V dequantize_scaled producers");
+    OperationState state(graph->getLoc(), backward ? "tessera_attn.checkpoint_backward" :
+        scaledKV ? "tessera_attn.checkpoint_forward_scaled_kv" : "tessera_attn.checkpoint_forward");
+    if (scaledKV) {
+      state.addOperands({graph->getOperand(0), keyDequant->getOperand(0), valueDequant->getOperand(0),
+                         keyDequant->getOperand(1), valueDequant->getOperand(1)});
+      state.addOperands(graph->getOperands().drop_front(3));
+    } else {
+      state.addOperands(graph->getOperands());
+    }
     state.addTypes(graph->getResultTypes());
     state.addAttribute("scale", builder.getF32FloatAttr(scaleValue));
     state.addAttribute("causal", builder.getBoolAttr(causal && causal.getValue()));
@@ -303,6 +341,7 @@ static LogicalResult importSavedAttentionGraphs(ModuleOp mod) {
     for (auto [before, after] : llvm::zip(graph->getResults(), checkpoint->getResults()))
       before.replaceAllUsesWith(after);
     graph->erase();
+    if (scaledKV) { keyDequant->erase(); valueDequant->erase(); }
   }
   return success();
 }
@@ -311,6 +350,7 @@ static LogicalResult scheduleNativeCheckpoints(ModuleOp mod) {
   SmallVector<Operation *> graphs;
   mod.walk([&](Operation *op) {
     if (op->getName().getStringRef() == "tessera_attn.checkpoint_forward" ||
+        op->getName().getStringRef() == "tessera_attn.checkpoint_forward_scaled_kv" ||
         op->getName().getStringRef() == "tessera_attn.checkpoint_backward") graphs.push_back(op);
   });
   for (Operation *graph : graphs) {
@@ -340,6 +380,7 @@ static LogicalResult lowerNativeCheckpoints(ModuleOp mod) {
   for (Operation *scheduled : ops) {
     Operation *graph = scheduled->getNumOperands() ? scheduled->getOperand(0).getDefiningOp() : nullptr;
     if (!graph || (graph->getName().getStringRef() != "tessera_attn.checkpoint_forward" &&
+                   graph->getName().getStringRef() != "tessera_attn.checkpoint_forward_scaled_kv" &&
                    graph->getName().getStringRef() != "tessera_attn.checkpoint_backward"))
       return scheduled->emitError("checkpoint schedule requires its retained tensor producer");
     auto c = checkpointContract(graph); if (failed(c)) return failure();
@@ -362,7 +403,10 @@ static LogicalResult lowerNativeCheckpoints(ModuleOp mod) {
       for (unsigned i = 0; i < activity.size(); ++i)
         if (activity[i]) { ++outputCount; mask |= 1u << i; }
     }
-    SmallVector<Type> types((c->backward ? 6 : 3) + unsigned(c->bias) + unsigned(c->lseCotangent) + outputCount, ptr);
+    // Scaled K/V adds two input pointers (K scale, V scale) after the
+    // optional bias, so the entry stays inputs-then-outputs.
+    SmallVector<Type> types((c->backward ? 6 : 3) + unsigned(c->bias) + unsigned(c->lseCotangent) +
+        2 * unsigned(c->scaledKV) + outputCount, ptr);
     bool dynamicBias = llvm::any_of(c->biasShape, [](int64_t extent) {
       return ShapedType::isDynamic(extent);
     });
@@ -377,6 +421,7 @@ static LogicalResult lowerNativeCheckpoints(ModuleOp mod) {
       entry = "tessera_tile_attention_lse_" +
           checkpointStorageSpelling(storage->inputElement).str() +
           (storage->mixed() ? "_kv_" + checkpointStorageSpelling(storage->kvElement).str() : std::string()) +
+          (c->scaledKV ? std::string("_scaled") : std::string()) +
           (storage->outputElement.isF32() ? "_" :
            "_out_" + checkpointStorageSpelling(storage->outputElement).str() + "_") +
           c->hash.substr(0,10);
@@ -406,8 +451,20 @@ static LogicalResult lowerNativeCheckpoints(ModuleOp mod) {
     OperationState kernel(scheduled->getLoc(), c->backward ? "tile.attention_backward_kernel" : "tile.attention_kernel");
     // Symbolic physical bias carries four checked runtime extents after the
     // logical dimensions. Static carriers retain their original operand ABI.
-    kernel.addOperands(block->getArguments().take_front(
-        types.size() - scalarCount + (dynamicBias ? 11 : 7)));
+    if (c->scaledKV) {
+      // Entry: Q,K,V,[bias],Kscale,Vscale,O,LSE,dims. Tile kernel keeps its
+      // Q,K,V,[bias],O,LSE prefix and takes the scale pointers after LSE.
+      auto args = block->getArguments();
+      unsigned scales = 3 + unsigned(c->bias), outputs = scales + 2;
+      kernel.addOperands(args.take_front(scales));
+      kernel.addOperands(args.slice(outputs, 2));
+      kernel.addOperands(args.slice(scales, 2));
+      kernel.addOperands(args.slice(outputs + 2, 7));
+      kernel.addAttribute("kv_scale_shapes", c->contract.get("kv_scale_shapes"));
+    } else {
+      kernel.addOperands(block->getArguments().take_front(
+          types.size() - scalarCount + (dynamicBias ? 11 : 7)));
+    }
     kernel.addAttribute("storage",builder.getStringAttr(checkpointStorageSpelling(storage->inputElement)));
     if (storage->mixed())
       kernel.addAttribute("kv_storage", builder.getStringAttr(checkpointStorageSpelling(storage->kvElement)));

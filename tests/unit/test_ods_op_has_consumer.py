@@ -304,7 +304,7 @@ def test_scan_parses_every_ods_form() -> None:
 # Two existing public slice spellings now have registered Graph ODS records.
 # 695 -> 697: typed Tile and NVIDIA native-program invocation records.
 # 697 -> 698: native storage-preserving schedule.binary_kernel.
-_DECLARED_OP_RECORDS = 698
+_DECLARED_OP_RECORDS = 699
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:

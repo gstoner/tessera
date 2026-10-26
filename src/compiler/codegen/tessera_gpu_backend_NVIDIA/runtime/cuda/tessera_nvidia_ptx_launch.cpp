@@ -1005,12 +1005,111 @@ bool attentionResultWidth(const char* name,bool saved,size_t &width) {
     return true;
 }
 
+// SM120-SAVED-LSE-SCALED-FP8-KV-20261025. Buffers Q, K codes, V codes,
+// [bias], K scale, V scale, O, row LSE. Dims: the seven logical extents, the
+// four physical bias extents when bias is present, then the eight K/V scale
+// extents. The kernel reads only the first seven; the rest size host copies.
+// With latencyMs, times `repetitions` launches after `warmup` (benchmark).
+int invokeScaledKVAttention(CUfunction fn, const char* name, void** buffers,
+                            size_t nbuf, const int64_t* dims, size_t ndim,
+                            int warmup, int repetitions, float* latencyMs) {
+    const bool hasBias = nbuf == 8;
+    if (!name || (nbuf != 7 && nbuf != 8) || ndim != (hasBias ? 19u : 15u) ||
+        !std::strstr(name, "_lse_") || (!std::strstr(name, "_kv_fp8_e4m3_") &&
+        !std::strstr(name, "_kv_fp8_e5m2_"))) return 5;
+    for (size_t i = 0; i < ndim; ++i)
+        if (dims[i] <= 0 || dims[i] >= (1LL << 31)) return 5;
+    const size_t B = (size_t)dims[0], Hq = (size_t)dims[1], Hkv = (size_t)dims[2];
+    const size_t Sq = (size_t)dims[3], Sk = (size_t)dims[4], D = (size_t)dims[5], Dv = (size_t)dims[6];
+    if (Hq % Hkv) return 5;
+    size_t BiasB = 0, BiasH = 0, BiasQ = 0, BiasK = 0;
+    if (hasBias && !attentionBiasExtents(dims, 11, true, BiasB, BiasH, BiasQ, BiasK)) return 5;
+    const int64_t* scale = dims + (hasBias ? 11 : 7);
+    const size_t keyShape[4] = {B, Hkv, Sk, D}, valueShape[4] = {B, Hkv, Sk, Dv};
+    for (size_t axis = 0; axis < 4; ++axis)
+        if ((size_t)scale[axis] != 1 && (size_t)scale[axis] != keyShape[axis]) return 5;
+    for (size_t axis = 0; axis < 4; ++axis)
+        if ((size_t)scale[4 + axis] != 1 && (size_t)scale[4 + axis] != valueShape[axis]) return 5;
+    const size_t queryWidth = attentionStoragePrefix(name, true, false) ||
+                              attentionStoragePrefix(name, true, true) ? 2 : 4;
+    size_t outputBytes = 0;
+    if (!attentionResultWidth(name, true, outputBytes)) return 5;
+    auto product = [](std::initializer_list<size_t> values, size_t& out) {
+        out = 1;
+        for (size_t value : values) {
+            if (value && out > SIZE_MAX / value) return false;
+            out *= value;
+        }
+        return true;
+    };
+    size_t q, k, v, o, rows, bias = 0, ks, vs;
+    if (!product({B, Hq, Sq, D}, q) || !product({B, Hkv, Sk, D}, k) ||
+        !product({B, Hkv, Sk, Dv}, v) || !product({B, Hq, Sq, Dv}, o) ||
+        !product({B, Hq, Sq}, rows) ||
+        (hasBias && !product({BiasB, BiasH, BiasQ, BiasK}, bias)) ||
+        !product({(size_t)scale[0], (size_t)scale[1], (size_t)scale[2], (size_t)scale[3]}, ks) ||
+        !product({(size_t)scale[4], (size_t)scale[5], (size_t)scale[6], (size_t)scale[7]}, vs)) return 5;
+    if (q > SIZE_MAX / queryWidth || o > SIZE_MAX / outputBytes || rows > SIZE_MAX / 4 ||
+        bias > SIZE_MAX / 4 || ks > SIZE_MAX / 4 || vs > SIZE_MAX / 4) return 5;
+    const size_t scaleIndex = 3 + unsigned(hasBias), outputIndex = scaleIndex + 2;
+    size_t sizes[8] = {q * queryWidth, k, v, 0, 0, 0, 0, 0};
+    if (hasBias) sizes[3] = bias * 4;
+    sizes[scaleIndex] = ks * 4;
+    sizes[scaleIndex + 1] = vs * 4;
+    sizes[outputIndex] = o * outputBytes;
+    sizes[outputIndex + 1] = rows * 4;
+    CUdeviceptr device[8] = {};
+    CUevent start = nullptr, stop = nullptr;
+    int rc = 0;
+    for (size_t i = 0; i < nbuf; ++i)
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) { rc = 3; break; }
+    for (size_t i = 0; !rc && i < outputIndex; ++i)
+        if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) rc = 3;
+    if (!rc) {
+        long long args64[7];
+        for (int i = 0; i < 7; ++i) args64[i] = dims[i];
+        void* args[15] = {};
+        size_t arg = 0;
+        for (size_t i = 0; i < nbuf; ++i) args[arg++] = &device[i];
+        for (int i = 0; i < 7; ++i) args[arg++] = &args64[i];
+        unsigned grid = (unsigned)((o + 127) / 128);
+        auto launch = [&]() { return cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0); };
+        if (grid == 0 || grid > 0x7fffffffU) rc = 5;
+        if (!rc && latencyMs) {
+            for (int i = 0; !rc && i < warmup; ++i)
+                if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
+            if (!rc && (!cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+                        !cuOk(cuEventCreate(&start, CU_EVENT_DEFAULT), "cuEventCreate") ||
+                        !cuOk(cuEventCreate(&stop, CU_EVENT_DEFAULT), "cuEventCreate") ||
+                        !cuOk(cuEventRecord(start, 0), "cuEventRecord"))) rc = 3;
+            for (int i = 0; !rc && i < repetitions; ++i)
+                if (!cuOk(launch(), "cuLaunchKernel")) rc = 3;
+            float totalMs = 0.0f;
+            if (!rc && (!cuOk(cuEventRecord(stop, 0), "cuEventRecord") ||
+                        !cuOk(cuEventSynchronize(stop), "cuEventSynchronize") ||
+                        !cuOk(cuEventElapsedTime(&totalMs, start, stop), "cuEventElapsedTime"))) rc = 3;
+            if (!rc) *latencyMs = totalMs / (float)repetitions;
+        } else if (!rc && (!cuOk(launch(), "cuLaunchKernel") ||
+                           !cuOk(cuCtxSynchronize(), "cuCtxSynchronize"))) {
+            rc = 3;
+        }
+        for (size_t i = outputIndex; !rc && i < nbuf; ++i)
+            if (!cuOk(cuMemcpyDtoH(buffers[i], device[i], sizes[i]), "cuMemcpyDtoH")) rc = 3;
+    }
+    if (start) cuEventDestroy(start);
+    if (stop) cuEventDestroy(stop);
+    for (CUdeviceptr ptr : device) if (ptr) cuMemFree(ptr);
+    return rc;
+}
+
 int invokeAttention(CUfunction fn, const char* name, void** buffers,
                     size_t nbuf, const int64_t* dims, size_t ndim) {
     // 7 dims: full-shape bias (or none); 9: batch/head-broadcast bias (BiasB,
     // BiasH); 11: every bias axis physical (BiasB, BiasH, BiasQ, BiasK). The
     // static kernel bakes physical extents in; bounded kernels also consume
     // these scalar arguments for runtime physical-bias indexing.
+    if (name && std::strstr(name, "_scaled_"))
+        return invokeScaledKVAttention(fn, name, buffers, nbuf, dims, ndim, 0, 0, nullptr);
     if ((ndim != 7 && ndim != 9 && ndim != 11) || !name) return 5;
     const bool hasSavedLse = std::strstr(name, "_lse_") != nullptr;
     if ((!hasSavedLse && nbuf != 4 && nbuf != 5) ||
@@ -1798,6 +1897,8 @@ int benchmarkUnary(CUfunction fn, const char* name, void** buffers,
 int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
                        size_t nbuf, const int64_t* dims, size_t ndim,
                        int warmup, int repetitions, float* latencyMs) {
+    if (name && latencyMs && warmup >= 0 && repetitions > 0 && std::strstr(name, "_scaled_"))
+        return invokeScaledKVAttention(fn, name, buffers, nbuf, dims, ndim, warmup, repetitions, latencyMs);
     if ((ndim != 7 && ndim != 11) || !name || !latencyMs || warmup < 0 || repetitions <= 0)
         return 5;
     const bool hasSavedLse = std::strstr(name, "_lse_") != nullptr;

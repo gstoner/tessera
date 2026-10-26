@@ -3808,6 +3808,27 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         dq = _ms.dequantize(q).astype(np.float32)
         return dq, np.asarray(q.scales, np.float32)
 
+    def dequantize_scaled(codes, scale):
+        """FP8 storage codes times a broadcast f32 scale, rounded once to f32.
+
+        ``codes`` hold ``fp8_e4m3``/``fp8_e5m2`` storage; ``scale`` is f32 with
+        the same rank and each axis 1 or the codes' extent. Unlike
+        :func:`dequantize_fp8`, the input is codes, not a rescaled payload.
+        SM120-SAVED-LSE-SCALED-FP8-KV-20261025.
+        """
+        from .dtype import canonicalize_dtype
+        codes = getattr(codes, "_data", codes)
+        scale = getattr(scale, "_data", scale)
+        codes, scale = np.asarray(codes), np.asarray(scale)
+        if canonicalize_dtype(str(codes.dtype), allow_planned_gated=True) not in {"fp8_e4m3", "fp8_e5m2"}:
+            raise ValueError("dequantize_scaled requires fp8_e4m3 or fp8_e5m2 storage codes")
+        if scale.dtype != np.float32:
+            raise ValueError("dequantize_scaled requires an f32 scale")
+        if scale.ndim != codes.ndim or any(
+                extent not in (1, logical) for extent, logical in zip(scale.shape, codes.shape)):
+            raise ValueError("dequantize_scaled scale axes must each be 1 or the codes extent")
+        return codes.astype(np.float32) * scale
+
     def nvfp4_expand(codes, scales, projection_globals, *, row_offsets, numeric_policy):
         """Expand E2M1 codes exactly; round the projection scale product once."""
         from .compiler.nvfp4_expansion import reference_nvfp4_expand
@@ -5165,6 +5186,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "dequantize_fp4": dequantize_fp4,
         "quantize_nvfp4": quantize_nvfp4,
         "nvfp4_expand": nvfp4_expand,
+        "dequantize_scaled": dequantize_scaled,
         "nvfp4_requantize": nvfp4_requantize,
         "mxfp4_folded_storage": mxfp4_folded_storage,
         "scaled_matmul": scaled_matmul,
@@ -5815,6 +5837,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         dequantize_fp4=dequantize_fp4,
         quantize_nvfp4=quantize_nvfp4,
         nvfp4_expand=nvfp4_expand,
+        dequantize_scaled=dequantize_scaled,
         nvfp4_requantize=nvfp4_requantize,
         mxfp4_folded_storage=mxfp4_folded_storage,
         scaled_matmul=scaled_matmul,

@@ -4049,6 +4049,12 @@ def _submit_nvidia_sm120_native(
         a, b, d = raw
         if tuple(a.shape) != (m, k) or tuple(b.shape) != (k, n) or tuple(d.shape) != (m, n):
             raise RuntimeError("SM120 A/B/D shapes disagree with M/N/K descriptor scalars")
+    elif descriptor.abi_id in SM120_ROW_B_FP8_SCALED_ABIS:
+        # SM120-W11-FP8-RHS-20261026: half A, FP8 B codes, per-tensor scale, D.
+        a, b, scale, d = raw
+        if (tuple(a.shape) != (m, k) or tuple(b.shape) != (k, n) or scale.size != 1
+                or tuple(d.shape) != (m, n)):
+            raise RuntimeError("SM120 scaled FP8 RHS A/B/scale/D shapes disagree with M/N/K scalars")
     elif descriptor.abi_id == SM120_INT4_ABI:
         a, b, d = raw
         packed_k = (k + 1) // 2

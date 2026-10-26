@@ -34,7 +34,7 @@ inline bool denseAttentionAD(mlir::Operation *op, bool allowBias = false, bool a
   auto keyValue = k.getElementType();
   auto supported = [](mlir::Type type) { return type.isF16() || type.isBF16() || type.isF32(); };
   if (!supported(storage) || !supported(keyValue) || v.getElementType() != keyValue ||
-      (keyValue != storage && !(allowMixedKeyValue && allowLse && op->getNumResults() == 2)) ||
+      (keyValue != storage && !allowMixedKeyValue) ||
       (o.getElementType() != storage && !o.getElementType().isF32())) return false;
   if (!storage.isF32() || !keyValue.isF32()) {
     if (!allowHalfStorage) return false;

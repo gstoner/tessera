@@ -3412,6 +3412,8 @@ def _submit_nvidia_sm120_native(
         is_matmul = (
             entry.startswith("nvidia_sm120_scheduled_matmul_")
             and len(raw) == 3 + int(bool(epilogue.get("bias"))) + int(bool(epilogue.get("residual")))
+            # SM120-W11-FP8-RHS-20261026: the per-tensor scale is a fourth buffer.
+            + int(descriptor.abi_id in SM120_ROW_B_FP8_SCALED_ABIS)
         )
         is_native_attention = descriptor.abi_id in {
             SM120_ATTN_F32_ABI, SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI,

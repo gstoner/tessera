@@ -94,11 +94,12 @@ def test_scaled_kv_public_and_serialized(q_name, kv_name, granularity, sk, varia
     artifact = rt.RuntimeArtifact.from_dict(json.loads(json.dumps(artifact.to_dict())))
     descriptor = artifact.launch_descriptor
     bindings = sorted(descriptor.buffers, key=lambda binding: binding.ordinal)
-    # Input bindings carry the frontend argument names, in entry order
-    # (Q, K, V, [bias], K scale, V scale), which differs from the signature.
+    # Input bindings are the tracer's positional names (`aN` = frontend
+    # argument N) in entry order (Q, K, V, [bias], K scale, V scale), which
+    # differs from the signature order.
     inputs = [binding for binding in bindings if binding.direction == "input"]
-    assert sorted(binding.name for binding in inputs) == sorted(values)
-    arguments = {binding.name: values[binding.name] for binding in inputs}
+    assert sorted(binding.name for binding in inputs) == [f"a{i}" for i in range(len(values))]
+    arguments = {binding.name: values[fn.arg_names[int(binding.name[1:])]] for binding in inputs}
     arenas = [np.full(value.size + 16, 37, value.dtype) for value in host]
     returned = tuple(arena[8:-8].reshape(value.shape) for arena, value in zip(arenas, host, strict=True))
     outputs = [binding for binding in bindings if binding.direction == "output"]

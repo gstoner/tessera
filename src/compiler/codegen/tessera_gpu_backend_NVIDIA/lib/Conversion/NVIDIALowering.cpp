@@ -2622,13 +2622,19 @@ static LogicalResult materializeSm120AttentionKernel(
   bool hasSavedLse = lseCheckpoint && lseCheckpoint.getValue() == "saved";
   unsigned outputIndex = 3 + unsigned(hasBias);
   unsigned lseIndex = outputIndex + 1;
-  unsigned dimStart = lseIndex + unsigned(hasSavedLse);
+  // SM120-SAVED-LSE-SCALED-FP8-KV-20261025: K/V scale pointers follow row_lse.
+  auto scaleShapes = op->getAttrOfType<DenseI64ArrayAttr>("kv_scale_shapes");
+  bool scaledKV = op->hasAttr("kv_scale_shapes");
+  if (scaledKV && (!scaleShapes || scaleShapes.size() != 8 || !hasSavedLse))
+    return op->emitError("sm_120 attention kv_scale_shapes requires eight extents and saved LSE");
+  unsigned dimStart = lseIndex + unsigned(hasSavedLse) + 2 * unsigned(scaledKV);
   bool f16Storage = storage && storage.getValue() == "f16";
   bool bf16Storage = storage && storage.getValue() == "bf16";
   auto biasShape = op->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
   bool dynamicBias = biasShape && llvm::any_of(biasShape.asArrayRef(),
       [](int64_t dim) { return ShapedType::isDynamic(dim); });
-  if (in.size() != 11 + unsigned(hasBias) + unsigned(hasSavedLse) + 4 * unsigned(dynamicBias) || !storage ||
+  if (in.size() != 11 + unsigned(hasBias) + unsigned(hasSavedLse) + 4 * unsigned(dynamicBias) +
+                   2 * unsigned(scaledKV) || !storage ||
       (!f16Storage && !bf16Storage && storage.getValue() != "f32") || !accum ||
       accum.getValue() != "f32" || !scaleAttr || !causalAttr || !biasAttr ||
       !windowLeftAttr || !windowRightAttr || !softcapAttr || !dropoutAttr ||
@@ -2723,13 +2729,32 @@ static LogicalResult materializeSm120AttentionKernel(
           arith::ConstantIntOp::create(builder, loc, 0, 32));
       return LLVM::FPExtOp::create(builder, loc, f32, half);
     };
-    auto load = [&](Value base, Value index) -> Value {
+    // Broadcast K/V scale for one element at coordinates (b, h, s, d) of K
+    // or V, which the call site already holds: axes whose static scale extent
+    // is 1 drop out and the rest multiply-add by static extents, so no
+    // integer division runs per element. The product rounds once to f32.
+    auto applyScale = [&](Value decoded, ArrayRef<Value> coords, bool key) -> Value {
+      ArrayRef<int64_t> shape = scaleShapes.asArrayRef().slice(key ? 0 : 4, 4);
+      Value flat = i64Constant(builder, loc, 0);
+      for (unsigned axis = 0; axis < 4; ++axis) {
+        flat = mulI64(builder, loc, flat, i64Constant(builder, loc, shape[axis]));
+        if (shape[axis] != 1) flat = addI64(builder, loc, flat, coords[axis]);
+      }
+      Value scalePtr = LLVM::GEPOp::create(builder, loc, in[0].getType(), f32,
+          in[lseIndex + 1 + unsigned(!key)], ValueRange{flat});
+      Value factor = LLVM::LoadOp::create(builder, loc, f32, scalePtr, 4);
+      return arith::MulFOp::create(builder, loc, decoded, factor);
+    };
+    auto load = [&](Value base, Value index, ArrayRef<Value> coords = {}) -> Value {
       Type type = base == in[0] ? storageType : kvStorageType;
       Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), type,
                                       base, ValueRange{index});
       unsigned width = type.isF32() ? 4 : type.isInteger(8) ? 1 : 2;
       Value value = LLVM::LoadOp::create(builder, loc, type, ptr, width);
-      if (type.isInteger(8)) return decodeFp8(value);
+      if (type.isInteger(8)) {
+        Value decoded = decodeFp8(value);
+        return scaledKV ? applyScale(decoded, coords, base == in[1]) : decoded;
+      }
       return type.isF32() ? value : Value(LLVM::FPExtOp::create(builder, loc, f32, value));
     };
     auto score = [&](Value key) -> Value {
@@ -2745,7 +2770,8 @@ static LogicalResult materializeSm120AttentionKernel(
         OpBuilder::InsertionGuard dotGuard(builder);
         builder.setInsertionPointToStart(dot.getBody());
         Value qv = load(in[0], addI64(builder, loc, qBase, dot.getInductionVar()));
-        Value kv = load(in[1], addI64(builder, loc, kBase, dot.getInductionVar()));
+        Value kv = load(in[1], addI64(builder, loc, kBase, dot.getInductionVar()),
+                        {b, hkv, key, dot.getInductionVar()});
         Value product = arith::MulFOp::create(builder, loc, qv, kv);
         Value next = arith::AddFOp::create(
             builder, loc, dot.getRegionIterArgs()[0], product);
@@ -2869,7 +2895,7 @@ static LogicalResult materializeSm120AttentionKernel(
               addI64(builder, loc, mulI64(builder, loc,
                   addI64(builder, loc, mulI64(builder, loc, b, Hkv), hkv), Sk), key), Dv),
           dv);
-      Value vv = load(in[2], vIndex);
+      Value vv = load(in[2], vIndex, {b, hkv, key, dv});
       Value denom = arith::AddFOp::create(
           builder, loc, accumLoop.getRegionIterArgs()[0], weight);
       Value numer = arith::AddFOp::create(

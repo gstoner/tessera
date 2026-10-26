@@ -3769,6 +3769,19 @@ def Tessera_NVFP4RequantizeOp : Op<Tessera_Dialect, "nvfp4_requantize", [Pure]> 
   let hasVerifier = 1;
 }
 
+// SM120-SAVED-LSE-SCALED-FP8-KV-20261025. Unlike dequantize_fp8 (whose
+// input is an already-rescaled f32 payload), this op's input is storage codes:
+// result = f32(code) * scale, the product rounded once to f32. `scale` is f32
+// with the codes' rank; each axis is 1 (broadcast) or the codes' extent, which
+// spans per-tensor, per-head, per-token and per-channel schemes.
+def Tessera_DequantizeScaledOp : Op<Tessera_Dialect, "dequantize_scaled", [Pure]> {
+  let summary = "FP8 storage codes times a broadcast f32 scale, rounded once to f32";
+  let arguments = (ins TensorType:$codes, TensorType:$scale);
+  let results = (outs TensorType:$values);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 def Tessera_NVFP4ExpandOp : Op<Tessera_Dialect, "nvfp4_expand", [Pure]> {
   let summary = "NVFP4 K16 to exact FP8 codes and rounded FP32 scale plane";
   let arguments = (ins TensorType:$codes, TensorType:$scales,

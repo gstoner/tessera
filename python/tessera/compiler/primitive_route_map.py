@@ -127,6 +127,8 @@ FAMILY_MEMBERS: Mapping[str, Mapping[str, tuple[str, ...]]] = {
     # conflation.
     "attention": {"*": ("flash_attn",)},
     "attention_lse": {"*": ("flash_attn",)},
+    # SM120-SAVED-LSE-SCALED-FP8-KV-20261025: the fused dequantize chain.
+    "attention_scaled_kv": {"*": ("flash_attn", "dequantize_scaled")},
     # There is no separate `*_bwd` coverage primitive: a backward is the VJP
     # axis of its forward, so the backward families claim the same member. The
     # route map therefore does NOT answer "is the backward compiled" -- that

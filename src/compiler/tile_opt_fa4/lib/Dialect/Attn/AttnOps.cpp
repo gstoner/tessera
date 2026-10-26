@@ -685,6 +685,50 @@ static mlir::LogicalResult verifyCheckpointTensorOp(mlir::Operation *op, bool ba
 mlir::LogicalResult CheckpointForwardOp::verify() { return verifyCheckpointTensorOp(*this,false); }
 mlir::LogicalResult CheckpointBackwardOp::verify() { return verifyCheckpointTensorOp(*this,true); }
 
+mlir::LogicalResult CheckpointForwardScaledKVOp::verify() {
+  using namespace mlir;
+  auto storage = tessera::resolveNativeCheckpointStorage(*this, /*backward=*/false);
+  if (failed(storage)) return failure();
+  if (!isa<Float8E4M3FNType, Float8E5M2Type>(storage->kvElement))
+    return emitOpError("scaled K/V requires fp8_e4m3 or fp8_e5m2 codes");
+  auto q = cast<RankedTensorType>(getQuery().getType());
+  auto k = cast<RankedTensorType>(getKeyCodes().getType());
+  auto v = cast<RankedTensorType>(getValueCodes().getType());
+  if (q.getRank() != 4 || k.getRank() != 4 || v.getRank() != 4 || !q.hasStaticShape() ||
+      !k.hasStaticShape() || !v.hasStaticShape())
+    return emitOpError("scaled K/V requires static rank-four Q, K and V");
+  for (auto [scale, codes] : {std::pair{getKeyScale(), k}, std::pair{getValueScale(), v}}) {
+    auto type = cast<RankedTensorType>(scale.getType());
+    if (type.getRank() != 4 || !type.hasStaticShape())
+      return emitOpError("scaled K/V scales must be static rank four");
+    for (auto [extent, logical] : llvm::zip(type.getShape(), codes.getShape()))
+      if (extent != 1 && extent != logical)
+        return emitOpError("each K/V scale axis must be 1 or the codes extent");
+  }
+  int64_t b = q.getDimSize(0), hq = q.getDimSize(1), sq = q.getDimSize(2), d = q.getDimSize(3);
+  int64_t hkv = k.getDimSize(1), sk = k.getDimSize(2), dv = v.getDimSize(3);
+  if (k.getDimSize(0) != b || v.getDimSize(0) != b || v.getDimSize(1) != hkv ||
+      v.getDimSize(2) != sk || k.getDimSize(3) != d || hkv <= 0 || hq % hkv)
+    return emitOpError("scaled K/V shapes disagree with Q and grouped heads");
+  auto output = RankedTensorType::get({b, hq, sq, dv}, storage->outputElement);
+  auto lse = RankedTensorType::get({b, hq, sq}, Float32Type::get(getContext()));
+  if (getOutput().getType() != output || getRowLse().getType() != lse)
+    return emitOpError("scaled K/V output or row LSE shapes disagree");
+  if (getBias()) {
+    auto bias = cast<RankedTensorType>(getBias().getType());
+    SmallVector<int64_t, 4> scores{b, hq, sq, sk};
+    if (bias.getRank() != 4 || !bias.hasStaticShape())
+      return emitOpError("scaled K/V bias must be static rank four");
+    for (auto [extent, logical] : llvm::zip(bias.getShape(), scores))
+      if (extent != 1 && extent != logical)
+        return emitOpError("scaled K/V bias axes must be one or match [B,Hq,Sq,Sk]");
+  }
+  auto scale = getScale();
+  if (!scale.isFinite() || scale.isNegative() || scale.isZero())
+    return emitOpError("scaled K/V scale must be finite and positive");
+  return success();
+}
+
 static mlir::LogicalResult verifyCheckpointRowProduct(mlir::Operation *op, bool backward) {
   using namespace mlir;
   auto biasAttr = op->getAttrOfType<BoolAttr>("bias");

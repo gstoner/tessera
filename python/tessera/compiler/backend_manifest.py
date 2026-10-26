@@ -2569,6 +2569,18 @@ _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
 # table above: ``device_verified_jit`` proves a generated binary was launched,
 # while ``device_verified_abi`` additionally proves a packaged runtime symbol.
 _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
+    # SM120-SAVED-LSE-SCALED-FP8-KV-20261025: executes only fused into the
+    # saved-LSE checkpoint (dequantize_scaled K and V feeding one flash_attn);
+    # a standalone dequantize_scaled has no SM120 kernel. Proven by
+    # tests/device/nvidia/test_saved_lse_scaled_kv.py on the RTX 5070.
+    "dequantize_scaled": {
+        "dtypes": ("fp8_e4m3", "fp8_e5m2", "fp32"),
+        "feature_flags": ("fused_saved_lse_scaled_kv", "fp8_decode_cvt_f16x2", "cuda"),
+        "shape_envelope": "static rank-four K/V codes; f32 scale axes 1 or the codes extent; "
+                          "only as the K and V producers of one saved-LSE flash_attn",
+        "notes": "Fused into tessera_attn.checkpoint_forward_scaled_kv: each FP8 code decodes "
+                 "exactly and multiplies by its broadcast f32 scale in registers, rounded once.",
+    },
     **{
         op: {
             "dtypes": ("fp32", "fp16", "bf16"),
@@ -3438,6 +3450,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("kv_cache_read", "nvidia_sm120"): "tests/device/nvidia/test_kv_cache.py",
     ("conv2d", "nvidia_sm120"): "tests/device/nvidia/test_conv2d.py",
     ("flash_attn", "nvidia_sm120"): "tests/device/nvidia/test_flash_attention.py",
+    ("dequantize_scaled", "nvidia_sm120"): "tests/device/nvidia/test_saved_lse_scaled_kv.py",
     ("dsa_block_sparse_attention", "nvidia_sm120"): "tests/device/nvidia/test_sparse_attention.py",
     ("mla_decode", "nvidia_sm120"): "tests/device/nvidia/test_mla_decode.py",
     ("mla_decode_fused", "nvidia_sm120"): "tests/device/nvidia/test_mla_decode.py",

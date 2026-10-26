@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 299 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 301 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 299 | |
+| **Total** | 301 | |
 
 ## Per-dialect details
 
@@ -95,6 +95,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `DequantMatmulOp` | `real` |
 | `DequantizeFP4Op` | `real` |
 | `DequantizeFP8Op` | `real` |
+| `DequantizeScaledOp` | `real` |
 | `DiffusionBlockStepOp` | `real` |
 | `DigammaOp` | `real` |
 | `DistributionLossBackwardOp` | `real` |
@@ -311,6 +312,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `CheckpointBackwardOp` | `real` |
 | `CheckpointBackwardRowsOp` | `real` |
 | `CheckpointForwardOp` | `real` |
+| `CheckpointForwardScaledKVOp` | `real` |
 | `CheckpointJVPOp` | `real` |
 | `CheckpointRowCorrectionOp` | `real` |
 | `DropoutMaskOp` | `real` |

@@ -358,6 +358,8 @@ _SPECS = [
     OpSpec("dequantize_fp4", "tessera.dequantize_fp4", 2, 2, lowering="quantize"),
     OpSpec("quantize_nvfp4", "tessera.quantize_nvfp4", 1, 1, lowering="quantize"),
     OpSpec("nvfp4_expand", "tessera.nvfp4_expand", 3, 3, lowering="quantize", shape_rule="nvfp4_expand"),
+    # SM120-SAVED-LSE-SCALED-FP8-KV-20261025: storage codes x broadcast f32 scale.
+    OpSpec("dequantize_scaled", "tessera.dequantize_scaled", 2, 2, lowering="quantize", shape_rule="dequantize_scaled"),
     OpSpec("nvfp4_requantize", "tessera.nvfp4_requantize", 3, 3, lowering="quantize", shape_rule="nvfp4_requantize"),
     OpSpec("mxfp4_folded_storage", "tessera.mxfp4_folded_storage", 2, 2, lowering="layout_transform", shape_rule="mxfp4_folded_storage"),
     OpSpec("dequantize_nvfp4", "tessera.dequantize_nvfp4", 2, 2, lowering="quantize"),
@@ -1144,6 +1146,7 @@ SHAPE_RULE_NAMES = frozenset({
     "alibi_bias",
     "depth_attention",
     "attention_value_width",
+    "dequantize_scaled",
     "matmul_2d",
     "es_population_features",
     "coalition_marginal",

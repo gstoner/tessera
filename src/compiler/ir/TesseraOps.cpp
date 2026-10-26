@@ -6265,6 +6265,27 @@ LogicalResult tessera::NVFP4RequantizeOp::verify() {
   return success();
 }
 
+LogicalResult tessera::DequantizeScaledOp::verify() {
+  auto codes = dyn_cast<RankedTensorType>(getCodes().getType());
+  auto scale = dyn_cast<RankedTensorType>(getScale().getType());
+  auto values = dyn_cast<RankedTensorType>(getValues().getType());
+  if (!codes || !scale || !values || codes.getEncoding() || scale.getEncoding() ||
+      values.getEncoding())
+    return emitOpError("requires plain ranked codes, scale and result tensors");
+  if (!isa<Float8E4M3FNType, Float8E5M2Type>(codes.getElementType()))
+    return emitOpError("requires f8E4M3FN or f8E5M2 storage codes");
+  if (!scale.getElementType().isF32() || !values.getElementType().isF32())
+    return emitOpError("requires an f32 scale and an f32 result");
+  if (values.getShape() != codes.getShape())
+    return emitOpError("result shape must equal the codes shape");
+  if (scale.getRank() != codes.getRank())
+    return emitOpError("scale rank must equal the codes rank");
+  for (auto [extent, logical] : llvm::zip(scale.getShape(), codes.getShape()))
+    if (extent != 1 && extent != logical)
+      return emitOpError("each scale axis must be 1 or the codes extent");
+  return success();
+}
+
 LogicalResult tessera::NVFP4ExpandOp::verify() {
   if (failed(mlir::tessera_contract::verifyNVFP4ExpandPolicy(
           getOperation(), getNumericPolicy())))

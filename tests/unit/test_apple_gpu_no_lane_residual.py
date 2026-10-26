@@ -156,6 +156,10 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         # as `adafactor` above, which is already here. Added with the ops
         # rather than after, so the residual never silently absorbs them.
         "adagrad", "rmsprop", "adadelta", "shampoo",
+        # SM120-SAVED-LSE-SCALED-FP8-KV-20261025: FP8 codes x broadcast scale.
+        # Executes natively only fused into the SM120 saved-LSE checkpoint;
+        # Apple runs the reference. Added with the op, not after.
+        "dequantize_scaled",
     }
 )
 

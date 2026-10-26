@@ -3219,6 +3219,7 @@ def _submit_nvidia_sm120_native(
         SM120_SOFTMAX_F32_ABI,
         SM120_ATTN_LSE_TYPED_ABIS,
         SM120_ATTN_LSE_BIASED_ABIS, SM120_ATTN_LSE_BROADCAST_ABIS,
+        SM120_ATTN_LSE_SCALED_KV_ABIS, SM120_ATTN_LSE_BIAS_SCALED_KV_ABI,
     )
     from tessera.compiler.nvidia_training import (
         SM120_ADAM_ABIS,
@@ -3242,7 +3243,7 @@ def _submit_nvidia_sm120_native(
         evaluate_launch_expression,
     )
 
-    if descriptor.abi_id not in {*SM120_ATTN_LSE_TYPED_ABIS,
+    if descriptor.abi_id not in {*SM120_ATTN_LSE_TYPED_ABIS, *SM120_ATTN_LSE_SCALED_KV_ABIS,
         SM120_ATTN_F16_ABI,
         SM120_ATTN_F16_RESULT_ABI,
         SM120_ATTN_BF16_RESULT_ABI,
@@ -3490,7 +3491,7 @@ def _submit_nvidia_sm120_native(
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
     }
-    attention_abis = {*SM120_ATTN_LSE_TYPED_ABIS,
+    attention_abis = {*SM120_ATTN_LSE_TYPED_ABIS, *SM120_ATTN_LSE_SCALED_KV_ABIS,
         SM120_ATTN_F16_ABI,
         SM120_ATTN_F16_RESULT_ABI,
         SM120_ATTN_BF16_RESULT_ABI,
@@ -3803,6 +3804,31 @@ def _submit_nvidia_sm120_native(
                 raise RuntimeError("SM120 paged-KV table contains an invalid physical page")
         except AttributeError as exc:
             raise RuntimeError("SM120 paged-KV table must support array validation") from exc
+    elif descriptor.abi_id in SM120_ATTN_LSE_SCALED_KV_ABIS:
+        # SM120-SAVED-LSE-SCALED-FP8-KV-20261025: Q, K/V codes, [bias], K/V
+        # scales, O, LSE; scalars B..Dv, [bias extents], eight scale extents.
+        dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
+        b, hq, hkv, sq, sk, d, dv = dimensions
+        has_bias = descriptor.abi_id == SM120_ATTN_LSE_BIAS_SCALED_KV_ABI
+        bias_extents: tuple[int, ...] = ()
+        if has_bias:
+            bias_extents = tuple(int(cast(int, scalars[name])) for name in ("BiasB", "BiasH", "BiasQ", "BiasK"))
+            dimensions += bias_extents
+        scale_extents = tuple(int(cast(int, scalars[name])) for name in (
+            "KScaleB", "KScaleH", "KScaleS", "KScaleD", "VScaleB", "VScaleH", "VScaleS", "VScaleD"))
+        if list(scale_extents) != descriptor.provenance.get("kv_scale_shapes"):
+            raise RuntimeError("SM120 scaled K/V scale scalars disagree with the compiled scale shapes")
+        dimensions += scale_extents
+        q, key, value = raw[:3]
+        bias = raw[3] if has_bias else None
+        key_scale, value_scale, output, row_lse = raw[3 + int(has_bias):]
+        if (tuple(q.shape) != (b, hq, sq, d) or tuple(key.shape) != (b, hkv, sk, d)
+                or tuple(value.shape) != (b, hkv, sk, dv) or tuple(output.shape) != (b, hq, sq, dv)
+                or tuple(row_lse.shape) != (b, hq, sq)
+                or tuple(key_scale.shape) != scale_extents[:4] or tuple(value_scale.shape) != scale_extents[4:]
+                or (bias is not None and tuple(bias.shape) != bias_extents)):
+            raise RuntimeError("SM120 scaled K/V attention shapes disagree with descriptor scalars")
+        output = (output, row_lse)
     elif descriptor.abi_id in attention_abis:
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
@@ -6940,6 +6966,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_SOFTMAX_BF16_ABI,
         SM120_SOFTMAX_F32_ABI,
         SM120_ATTN_LSE_TYPED_ABIS,
+        SM120_ATTN_LSE_SCALED_KV_ABIS,
     )
     from tessera.compiler.nvidia_training import SM120_TRAINING_ABIS
     from tessera.compiler.nvidia_dynamic_smem import (
@@ -6951,7 +6978,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         target == "nvidia_sm120"
         and abi_id
         in (
-            {*SM120_ATTN_LSE_TYPED_ABIS,
+            {*SM120_ATTN_LSE_TYPED_ABIS, *SM120_ATTN_LSE_SCALED_KV_ABIS,
                 SM120_ATTN_F16_ABI,
                 SM120_ATTN_F16_RESULT_ABI,
                 SM120_ATTN_BF16_RESULT_ABI,

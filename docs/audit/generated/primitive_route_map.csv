@@ -19,6 +19,11 @@ depth_attn,apple_gpu,unclassified
 depth_attn,nvidia_sm120,none
 depth_attn,rocm_gfx1151,compiled
 depth_attn,x86,none
+dequantize_scaled,apple_cpu,unclassified
+dequantize_scaled,apple_gpu,unclassified
+dequantize_scaled,nvidia_sm120,bootstrap
+dequantize_scaled,rocm_gfx1151,none
+dequantize_scaled,x86,none
 div,apple_cpu,unclassified
 div,apple_gpu,unclassified
 div,nvidia_sm120,none

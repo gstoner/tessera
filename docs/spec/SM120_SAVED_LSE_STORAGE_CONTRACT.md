@@ -93,6 +93,78 @@ The resident restriction comes from the shared resident-tensor contract.
 same for V) needs scale operands and a declared scale layout, which are
 semantic keys. It is not admitted by spelling FP8 storage.
 
+## Scaled FP8 K/V (forward)
+
+Synchronization key: SM120-SAVED-LSE-SCALED-FP8-KV-20261025.
+
+**The public form is a composition, not a new attention signature:**
+
+```python
+k = ts.ops.dequantize_scaled(k_codes, k_scale)
+v = ts.ops.dequantize_scaled(v_codes, v_scale)
+o, lse = ts.ops.flash_attn(q, k, v, lse_checkpoint="saved")
+```
+
+**`tessera.dequantize_scaled(codes, scale)`** is a Graph op with an ODS
+verifier and an eager reference. It returns f32(code) · scale, rounded once to
+f32, under these constraints:
+
+| Role | Rule |
+|---|---|
+| codes | `fp8_e4m3` or `fp8_e5m2` |
+| scale | f32, same rank as codes; each axis 1 or the codes' extent |
+
+The broadcast rule covers per-tensor, per-head, per-token, per-channel and
+per-element scales.
+
+`tessera.dequantize_fp8` is different: its input is an already-rescaled f32
+payload paired with `quantize_fp8`. It keeps that contract unchanged.
+
+**Fusion on SM120.** The checkpoint importer fuses the three-op chain into
+`tessera_attn.checkpoint_forward_scaled_kv`. Its operands are Q, K codes,
+V codes, K scale, V scale and an optional bias.
+
+Fusion requires:
+- both K and V to come from single-use `dequantize_scaled` producers of
+  function arguments;
+- a forward checkpoint;
+- static sequences.
+
+A half-scaled chain is refused by name.
+
+The new checkpoint is a sibling of `checkpoint_forward`. The AD and JVP owners
+match `checkpoint_forward` by name, so they never admit scaled K/V.
+
+**What the contract carries.** The native contract and the checkpoint identity
+both carry:
+- `kv_scale_shapes`: K scale extents, then V scale extents;
+- `kv_dequantize = "code_times_f32_scale_round_once_v1"`;
+- the existing FP8 `kv_storage`.
+
+**Entry, kernel and ABI.**
+- The entry is named `tessera_tile_attention_lse_<q>_kv_<fp8>_scaled_[out_<o>_]<digest>`.
+- The entry takes Q, K, V, [bias], K scale, V scale, O, LSE.
+- The Tile `attention_kernel` takes the two scale pointers after row-LSE, with
+  static `kv_scale_shapes`.
+- The kernel decodes each code exactly through the sm_120 f8x2 conversion. It
+  then multiplies by its scale, indexed from the element's (b, h, s, d)
+  coordinates, so no integer division runs per element.
+- ABI ids are new:
+  `…q_kcodes_vcodes_kscale_vscale_o_row_lse_dims_scale_shape.scaled_kv_f32acc.v1`
+  and its bias variant.
+- Scalars are B..Dv, the four bias extents when bias is present, and the eight
+  scale extents.
+- The checked launcher sizes the scale buffers from those scalars.
+- Execution goes through the checked descriptor launch. The homogeneous
+  retained owner is not used.
+
+**Not admitted:**
+- other `dequantize_scaled` uses on SM120, which execute the reference;
+- resident FP8 roots;
+- dynamic or bounded sequences;
+- AD;
+- any non-SM120 target.
+
 ## Additive forward ABI domain
 
 The new identifiers are:

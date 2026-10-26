@@ -291,6 +291,24 @@ def CheckpointForwardOp : Op<Tessera_Attn_Dialect, "checkpoint_forward", [Pure]>
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
+// SM120-SAVED-LSE-SCALED-FP8-KV-20261025. The fused form of
+// tessera.dequantize_scaled(K codes, K scale), dequantize_scaled(V codes,
+// V scale) feeding a saved-LSE forward: K = f32(k_code) * k_scale and
+// V = f32(v_code) * v_scale, each product rounded once to f32. Codes are
+// fp8_e4m3/fp8_e5m2, scales are f32 rank four with each axis 1 or the K/V
+// extent. A sibling of checkpoint_forward, so AD/JVP owners (which match
+// checkpoint_forward by name) never admit scaled K/V.
+def CheckpointForwardScaledKVOp : Op<Tessera_Attn_Dialect, "checkpoint_forward_scaled_kv", [Pure]> {
+  let summary = "Saved-LSE attention over scaled FP8 K/V codes";
+  let arguments = (ins AnyRankedTensor:$query, AnyRankedTensor:$key_codes,
+                      AnyRankedTensor:$value_codes, AnyRankedTensor:$key_scale,
+                      AnyRankedTensor:$value_scale, Optional<AnyRankedTensor>:$bias,
+                      F32Attr:$scale, BoolAttr:$causal);
+  let results = (outs AnyRankedTensor:$output, AnyRankedTensor:$row_lse);
+  let hasVerifier = 1;
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+}
+
 def CheckpointBackwardOp : Op<Tessera_Attn_Dialect, "checkpoint_backward", [Pure]> {
   let summary = "Compute deterministic attention gradients using saved row LSE";
   let description = [{

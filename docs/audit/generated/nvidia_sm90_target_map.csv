@@ -26,6 +26,7 @@ layer_norm,norm,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA
 rmsnorm,norm,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
 rmsnorm_safe,norm,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
 conv2d_nhwc,other,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
+dequantize_scaled,other,planned,"fp8_e4m3,fp8_e5m2,fp32",sm_90a,,,,
 kv_cache.read,other,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
 memory_index_score,other,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G
 msa_index_scores,other,artifact_only,fp32,sm_90a,,,,Target IR artifact ships under CUDA 13.3; execution gated on Phase G

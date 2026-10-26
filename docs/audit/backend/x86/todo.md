@@ -12470,3 +12470,12 @@ Synchronization key: SM120-SAVED-LSE-FP8-KV-20261025.
 Not applicable to x86: FP8 K/V is admitted only under the SM120 native contract; the shared `flash_attn` Graph render change is frontend-only, and no x86 selector, ABI or result changes.
 
 Evidence: benchmarks/baselines/sm120_saved_lse_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+
+## SM120-SAVED-LSE-SCALED-FP8-KV-20261025 — scaled FP8 K/V via dequantize_scaled + fusion
+
+Owner: E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Synchronization key: SM120-SAVED-LSE-SCALED-FP8-KV-20261025.
+
+Not applicable to x86: `tessera.dequantize_scaled` executes the eager reference off SM120 and its x86 capability is `unsupported`; shared registration only, no x86 selector, ABI or result changes.
+
+Evidence: benchmarks/baselines/sm120_saved_lse_scaled_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.

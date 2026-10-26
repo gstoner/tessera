@@ -2225,6 +2225,19 @@ Named rank-two/shared-RHS/independent-RHS profiles return an f32 ndarray;
 general vmap, dynamic batches, transpose, AD and sibling physical bindings
 remain separate work.
 
+### dequantize_scaled
+
+tessera.ops.dequantize_scaled(codes, scale) returns float32 values
+f32(code) * scale, the product rounded once to float32 with
+round-to-nearest, ties-to-even. codes hold fp8_e4m3 (E4M3FN) or fp8_e5m2
+storage; scale is float32 with the same rank, and each of its axes is 1
+(broadcast) or the codes' extent, which spans per-tensor, per-head, per-token
+and per-channel schemes. Unlike dequantize_fp8, whose input is an already
+rescaled float32 payload, the input here is storage codes. On SM120, two
+dequantize_scaled producers feeding the K and V of one saved-LSE flash_attn
+fuse into a single native checkpoint that decodes and scales in registers
+(SM120-SAVED-LSE-SCALED-FP8-KV-20261025); other uses execute the reference.
+
 ### nvfp4_expand
 
 tessera.ops.nvfp4_expand(codes, scales, projection_globals, *, row_offsets,

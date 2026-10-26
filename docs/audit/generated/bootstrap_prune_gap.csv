@@ -1,5 +1,6 @@
 target,family,compiled_route,status
 nvidia_sm120,attention_backward_lse,—,gap
+nvidia_sm120,attention_scaled_kv,—,gap
 nvidia_sm120,attention_lse,—,gap
 nvidia_sm120,attention_backward,—,gap
 nvidia_sm120,paged_kv,—,gap

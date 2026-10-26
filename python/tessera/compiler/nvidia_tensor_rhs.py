@@ -21,13 +21,26 @@ class NvidiaNormRhsProgram:
     k: int
     n: int
     dtype: str
+    #: SM120-W11-FP8-RHS-20261026: the edge holds FP8 codes (``fp8_e4m3`` or
+    #: ``fp8_e5m2``) produced by quantize_scaled(norm(source), scale) and read
+    #: by matmul(lhs, dequantize_scaled(edge, scale)); ``scale_name`` names the
+    #: one per-tensor f32 scale both kernels bind. Empty for a half edge.
+    edge_storage: str = ""
+    scale_name: str = ""
 
     def validate(self) -> None:
         if self.dtype not in {"fp16", "bf16"} or any(type(x) is not int or x <= 0 for x in (self.m,self.k,self.n)):
             raise ValueError("RHS edge requires positive static half-storage dimensions")
+        if (self.edge_storage not in {"", "fp8_e4m3", "fp8_e5m2"}
+                or bool(self.edge_storage) != bool(self.scale_name)):
+            raise ValueError("RHS edge FP8 storage requires its named per-tensor scale")
+        fp8=self.edge_storage
         storage="f16" if self.dtype=="fp16" else "bf16"
         expected_producer=native.SM120_NORM_F16_ABI if storage=="f16" else native.SM120_NORM_BF16_ABI
         expected_consumer=native.SM120_ROW_B_F16_ABI if storage=="f16" else native.SM120_ROW_B_BF16_ABI
+        if fp8:
+            expected_producer=native.SM120_NORM_SCALED_FP8_ABI.format(storage=storage,fp8=fp8)
+            expected_consumer=native.SM120_ROW_B_FP8_SCALED_ABI.format(storage=storage,fp8=fp8)
         for package,abi in ((self.producer,expected_producer),(self.consumer,expected_consumer)):
             provenance=package.descriptor.provenance
             if (package.image.target!="nvidia_sm120" or package.image.architecture!="sm_120a"
@@ -41,23 +54,33 @@ class NvidiaNormRhsProgram:
                     or "completion" not in package.descriptor.ordering.synchronization):
                 raise ValueError("RHS edge requires identity-bound ordered native Schedule packages")
         kind=self.producer.descriptor.provenance.get("kind")
+        to=f"to_{fp8}_" if fp8 else ""
         if (kind not in {"rmsnorm","layernorm"}
-                or not self.producer.descriptor.entry_symbol.startswith(f"tessera_tile_norm_{kind}_{storage}_")):
+                or not self.producer.descriptor.entry_symbol.startswith(f"tessera_tile_norm_{kind}_{storage}_{to}")):
             raise ValueError("RHS producer must be native RMSNorm or LayerNorm")
         if 'role = "b", transpose' not in self.consumer.tile_ir:
             raise ValueError("RHS consumer must carry typed transposed B fragments")
+        if fp8 and (self.producer.descriptor.provenance.get("output_storage")!=fp8
+                    or self.consumer.descriptor.provenance.get("b_codes")!=fp8
+                    or f'decode = "{fp8}"' not in self.consumer.tile_ir):
+            raise ValueError("RHS FP8 edge producer/consumer storage disagrees")
         epilogue=self.consumer.descriptor.provenance.get("epilogue")
         if (self.consumer.descriptor.provenance.get("b_layout")!="row_major"
                 or epilogue!={"bias":False,"residual":False,"activation":"none","output":"f32","order":["matmul","bias","activation","residual"]}):
             raise ValueError("RHS consumer must be static unfused row-major with fp32 output")
         bind=native.NVIDIANativeTensorProgram._binding
         shape=native.NVIDIANativeTensorProgram._static_shape
-        specifications=((self.producer,self.source_name,"input",(self.k,self.n),self.dtype),
-            (self.producer,self.edge_name,"output",(self.k,self.n),self.dtype),
+        edge=fp8 or self.dtype
+        specifications=[(self.producer,self.source_name,"input",(self.k,self.n),self.dtype),
+            (self.producer,self.edge_name,"output",(self.k,self.n),edge),
             (self.consumer,self.lhs_name,"input",(self.m,self.k),self.dtype),
-            (self.consumer,self.rhs_name,"input",(self.k,self.n),self.dtype),
-            (self.consumer,self.output_name,"output",(self.m,self.n),"fp32"))
-        if len(self.producer.descriptor.buffers)!=2 or len(self.consumer.descriptor.buffers)!=3:
+            (self.consumer,self.rhs_name,"input",(self.k,self.n),edge),
+            (self.consumer,self.output_name,"output",(self.m,self.n),"fp32")]
+        if fp8:
+            specifications+=[(self.producer,self.scale_name,"input",(1,1),"fp32"),
+                             (self.consumer,self.scale_name,"input",(1,1),"fp32")]
+        if (len(self.producer.descriptor.buffers)!=2+bool(fp8)
+                or len(self.consumer.descriptor.buffers)!=3+bool(fp8)):
             raise ValueError("RHS edge has unexpected buffers")
         for package,name,direction,dimensions,dtype in specifications:
             b=bind(package,name,direction)
@@ -72,11 +95,12 @@ class NvidiaNormRhsProgram:
         return rt.RuntimeArtifact(metadata={"target":"nvidia_sm120"},native_image=package.image,
             launch_descriptor=package.descriptor,tile_ir=package.tile_ir,target_ir=package.target_ir)
 
-    def arguments(self,source: Any,lhs: Any,edge: Any,output: Any) -> tuple[dict,dict]:
-        return ({self.source_name:source,self.edge_name:edge,"Rows":self.k,"Columns":self.n},
-            {self.lhs_name:lhs,self.rhs_name:edge,self.output_name:output,"M":self.m,"N":self.n,"K":self.k})
+    def arguments(self,source: Any,lhs: Any,edge: Any,output: Any,scale: Any=None) -> tuple[dict,dict]:
+        extra={self.scale_name:scale} if self.edge_storage else {}
+        return ({self.source_name:source,self.edge_name:edge,"Rows":self.k,"Columns":self.n,**extra},
+            {self.lhs_name:lhs,self.rhs_name:edge,self.output_name:output,"M":self.m,"N":self.n,"K":self.k,**extra})
 
-    def execute_resident(self,source: Any,lhs: Any) -> native.NVIDIANativeTensorProgramResult:
+    def execute_resident(self,source: Any,lhs: Any,scale: Any=None) -> native.NVIDIANativeTensorProgramResult:
         self.validate()
         import numpy as np
         from tessera import runtime as rt
@@ -89,13 +113,23 @@ class NvidiaNormRhsProgram:
         lhs=np.asarray(lhs)
         if source.shape!=(self.k,self.n) or lhs.shape!=(self.m,self.k) or source.dtype!=dtype or lhs.dtype!=dtype:
             raise ValueError("RHS producer input and matmul LHS must match static shapes and storage")
+        edge_dtype=dtype
+        if self.edge_storage:
+            import ml_dtypes
+            edge_dtype=np.dtype(ml_dtypes.float8_e4m3fn if self.edge_storage=="fp8_e4m3" else ml_dtypes.float8_e5m2)
+            scale=np.asarray(scale) if scale is not None else None
+            if scale is None or scale.shape!=(1,1) or scale.dtype!=np.float32:
+                raise ValueError("RHS FP8 edge requires its (1, 1) f32 per-tensor scale")
+        elif scale is not None:
+            raise ValueError("RHS half edge takes no scale")
         session=NvidiaDeviceSession()
         try:
             x=session.upload(np.array(source,copy=True,order="C"))
             a=session.upload(np.array(lhs,copy=True,order="C"))
-            edge=session.empty((self.k,self.n),dtype)
+            s=session.upload(np.array(scale,copy=True,order="C")) if self.edge_storage else None
+            edge=session.empty((self.k,self.n),edge_dtype)
             out=session.empty((self.m,self.n),np.float32)
-            pa,ca=self.arguments(x,a,edge,out)
+            pa,ca=self.arguments(x,a,edge,out,s)
             receipts=[]
             for package,args in ((self.producer,pa),(self.consumer,ca)):
                 receipt=rt.launch(self.runtime_artifact(package),args,stream=session.stream)
@@ -111,10 +145,25 @@ class NvidiaNormRhsProgram:
 
 
 def package_norm_rhs_matmul(producer: GraphIRModule,consumer: GraphIRModule,*,pipeline_name: str) -> NvidiaNormRhsProgram:
-    from .scheduled_kernel import lower_scheduled_kernel
-    from .scheduled_matmul import lower_scheduled_matmul
+    from .scheduled_kernel import lower_scheduled_fp8_norm, lower_scheduled_kernel
+    from .scheduled_matmul import lower_scheduled_fp8_rhs_matmul, lower_scheduled_matmul
     if not isinstance(producer,GraphIRModule) or not isinstance(consumer,GraphIRModule):
         raise TypeError("RHS edge requires Graph modules")
+    if any(op.op_name=="tessera.quantize_scaled" for fn in producer.functions for op in fn.body):
+        # SM120-W11-FP8-RHS-20261026: quantize_scaled(norm(x), s) feeding
+        # matmul(lhs, dequantize_scaled(edge, s)); each side fuses natively.
+        p=lower_scheduled_fp8_norm(producer,target="nvidia_sm120")
+        c=lower_scheduled_fp8_rhs_matmul(consumer,target="nvidia_sm120")
+        if p.scale_name!=c.scale_name or p.output_storage!=c.b_codes_dtype:
+            raise ValueError("RHS FP8 edge producer and consumer must share one scale and storage")
+        if p.kind not in {"rmsnorm","layernorm"} or p.input_shape!=p.output_shape:
+            raise ValueError("RHS edge requires shape-preserving normalization")
+        program=NvidiaNormRhsProgram(native.package_scheduled_kernel(p,pipeline_name=pipeline_name),
+            native.package_scheduled_matmul(c,pipeline_name=pipeline_name),p.input_name,p.output_name,
+            c.a_name,c.b_name,c.output_name,c.m,c.k,c.n,p.dtype,
+            edge_storage=p.output_storage,scale_name=p.scale_name)
+        program.validate()
+        return program
     # Preserve caller semantics; an explicit conflicting order is never replaced.
     consumer=deepcopy(consumer)
     ops=[op for function in consumer.functions for op in function.body if op.op_name in {"tessera.matmul","tessera.gemm"}]
@@ -139,6 +188,9 @@ class NvidiaTracedRhsProgram:
     source_index: int
     lhs_index: int
     graph_ir: str
+    #: SM120-W11-FP8-RHS-20261026: frontend index of the per-tensor scale of
+    #: an FP8 edge; -1 for a half edge.
+    scale_index: int = -1
 
     def execute_resident(self,*args: Any,**kwargs: Any) -> native.NVIDIANativeTensorProgramResult:
         import inspect
@@ -146,7 +198,65 @@ class NvidiaTracedRhsProgram:
                                      for name in self.argument_names])
         bound=signature.bind(*args,**kwargs)
         values=[bound.arguments[name] for name in self.argument_names]
-        return self.edge.execute_resident(values[self.source_index],values[self.lhs_index])
+        scale=values[self.scale_index] if self.scale_index>=0 else None
+        return self.edge.execute_resident(values[self.source_index],values[self.lhs_index],scale)
+
+
+def _traced_fp8_rhs_program(module: GraphIRModule,*,pipeline_name: str) -> NvidiaTracedRhsProgram:
+    """Partition ``matmul(lhs, dequantize_scaled(quantize_scaled(norm(x), s), s))``.
+
+    SM120-W11-FP8-RHS-20261026. The producer owns norm + quantize_scaled and the
+    consumer owns dequantize_scaled + matmul; both bind the same scale argument.
+    """
+    from dataclasses import replace
+    from .graph_ir import IRArg
+    from .structured_cfg import recover_structured_cfg
+    fn=module.functions[0]
+    if len(fn.args)!=3 or len(fn.body)!=4 or len(fn.result_types)!=1:
+        raise ValueError("FP8 RHS trace requires (source, lhs, scale) and four operations")
+    norm,quantize,dequant,matmul=fn.body
+    names=[arg.name for arg in fn.args]
+    ref=lambda op:"%"+str(op.result)
+    scale=quantize.operands[1] if len(quantize.operands)==2 else None
+    if (norm.op_name not in {"tessera.rmsnorm","tessera.layer_norm"} or quantize.op_name!="tessera.quantize_scaled"
+            or dequant.op_name!="tessera.dequantize_scaled" or matmul.op_name!="tessera.matmul"
+            or len(norm.operands)!=1 or norm.operands[0] not in ["%"+n for n in names]
+            or scale not in ["%"+n for n in names] or scale==norm.operands[0]
+            or quantize.operands[0]!=ref(norm) or dequant.operands!=[ref(quantize),scale]
+            or len(matmul.operands)!=2 or matmul.operands[1]!=ref(dequant)
+            or matmul.operands[0] not in ["%"+n for n in names]
+            or len({norm.operands[0],scale,matmul.operands[0]})!=3
+            or fn.return_values!=[ref(matmul)] or any(op.kwargs.get("_region") for op in fn.body)):
+        raise ValueError("FP8 RHS trace must return matmul(lhs, dequantize_scaled(quantize_scaled(norm(source), s), s))")
+    if (set(norm.kwargs)-{"eps","gamma","beta"} or norm.kwargs.get("gamma") is not None
+            or norm.kwargs.get("beta") is not None or norm.numeric_policy is not None
+            or set(matmul.kwargs)-{"rhs_storage_order","output_dtype"} or matmul.numeric_policy is not None
+            or matmul.kwargs.get("rhs_storage_order","row_major")!="row_major"):
+        raise ValueError("FP8 RHS trace has unsupported explicit semantic attributes")
+    matmul=deepcopy(matmul)
+    matmul.kwargs["rhs_storage_order"]="row_major"
+    source_index=names.index(norm.operands[0].removeprefix("%"))
+    lhs_index=names.index(matmul.operands[0].removeprefix("%"))
+    scale_index=names.index(scale.removeprefix("%"))
+    source,lhs,scale_arg=fn.args[source_index],fn.args[lhs_index],fn.args[scale_index]
+    from .graph_ir import tensor_ir_type
+    codes=IRArg(str(quantize.result),tensor_ir_type(tuple(source.ir_type.shape),quantize.kwargs["format"]))
+    producer=replace(fn,name=fn.name+"__rhs",args=[source,scale_arg],body=[norm,quantize],
+        result_types=[codes.ir_type],return_values=[ref(quantize)])
+    consumer=replace(fn,name=fn.name+"__matmul",args=[lhs,codes,scale_arg],body=[dequant,matmul])
+    for partition in (producer,consumer):
+        partition.structured_cfg=recover_structured_cfg(partition.body)
+        partition.fn_attrs={**partition.fn_attrs,
+            "tessera.structured_cfg.digest": '"'+partition.structured_cfg.digest+'"',
+            "tessera.structured_cfg.blocks": str(len(partition.structured_cfg.blocks))}
+    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+    tool=find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("RHS graph verification requires the native compiler")
+    native_graph=run_tessera_opt(tool,module.to_mlir(canonical=True,target="nvidia_sm120"),"--verify-each")
+    edge=package_norm_rhs_matmul(replace(module,functions=[producer]),
+                                 replace(module,functions=[consumer]),pipeline_name=pipeline_name)
+    return NvidiaTracedRhsProgram(edge,tuple(names),source_index,lhs_index,native_graph,scale_index)
 
 
 def package_traced_norm_rhs(module: GraphIRModule,*,pipeline_name: str) -> NvidiaTracedRhsProgram:
@@ -158,6 +268,8 @@ def package_traced_norm_rhs(module: GraphIRModule,*,pipeline_name: str) -> Nvidi
     if len(module.functions)!=1:
         raise ValueError("RHS trace requires one function")
     fn=module.functions[0]
+    if any(op.op_name=="tessera.quantize_scaled" for op in fn.body):
+        return _traced_fp8_rhs_program(module,pipeline_name=pipeline_name)
     if len(fn.args)!=2 or len(fn.body)!=2 or len(fn.result_types)!=1:
         raise ValueError("RHS trace requires exactly normalization and matmul with two inputs")
     from .structured_cfg import recover_structured_cfg
@@ -209,11 +321,57 @@ def package_traced_norm_rhs(module: GraphIRModule,*,pipeline_name: str) -> Nvidi
     return NvidiaTracedRhsProgram(edge,tuple(names),source_index,lhs_index,native_graph)
 
 
+def _validate_traced_fp8_program(program: NvidiaTracedRhsProgram) -> None:
+    """Portable lineage checks for an FP8 edge (SM120-W11-FP8-RHS-20261026)."""
+    import re
+    import struct
+    edge=program.edge
+    names=program.argument_names
+    indices={program.source_index,program.lhs_index,program.scale_index}
+    if (len(names)!=3 or len(set(names))!=3 or indices!={0,1,2}
+            or any(not isinstance(name,str) or not name.isidentifier() for name in names)
+            or any(type(i) is not int for i in indices)):
+        raise ValueError("native FP8 RHS program has an invalid frontend argument ABI")
+    graph=program.graph_ir
+    src,lhs,scl=(f"%arg{i}" for i in (program.source_index,program.lhs_index,program.scale_index))
+    norms=re.findall(r"(%\w+) = tessera\.(?:rmsnorm|layer_norm) (%arg[012])\s",graph)
+    quants=re.findall(r'(%\w+) = tessera\.quantize_scaled (%\w+), (%arg[012]) \{format = "(fp8_e4m3|fp8_e5m2)"\}',graph)
+    dequants=re.findall(r"(%\w+) = tessera\.dequantize_scaled (%\w+), (%arg[012])\s",graph)
+    matmuls=re.findall(r"(%\w+) = tessera\.matmul (%arg[012]), (%\w+)\s",graph)
+    if (len(norms)!=1 or len(quants)!=1 or len(dequants)!=1 or len(matmuls)!=1
+            or norms[0][1]!=src or quants[0][1]!=norms[0][0] or quants[0][2]!=scl
+            or quants[0][3]!=edge.edge_storage or dequants[0][1]!=quants[0][0] or dequants[0][2]!=scl
+            or matmuls[0][1]!=lhs or matmuls[0][2]!=dequants[0][0]
+            or not re.search(r"\breturn "+re.escape(matmuls[0][0])+rf" : tensor<{edge.m}x{edge.n}xf32>",graph)
+            or len(re.findall(r"^\s*%\w+\s*=",graph,re.M))!=4 or len(re.findall(r"\bfunc\.func\s",graph))!=1):
+        raise ValueError("native FP8 RHS program operand lineage differs from its verified Graph")
+    norm_line=next(line for line in graph.splitlines() if " = tessera.rmsnorm " in line or " = tessera.layer_norm " in line)
+    if ("rmsnorm" if " = tessera.rmsnorm " in norm_line else "layernorm")!=edge.producer.descriptor.provenance.get("kind"):
+        raise ValueError("native FP8 RHS program normalization kind differs from its producer")
+    elem="f16" if edge.dtype=="fp16" else "bf16"
+    fp8={"fp8_e4m3":"f8E4M3FN","fp8_e5m2":"f8E5M2"}[edge.edge_storage]
+    expected={program.source_index:f"tensor<{edge.k}x{edge.n}x{elem}>",
+              program.lhs_index:f"tensor<{edge.m}x{edge.k}x{elem}>",
+              program.scale_index:"tensor<1x1xf32>"}
+    arguments=dict(re.findall(r"%arg([012]): (tensor<[^>]+>)",graph))
+    if {int(i):t for i,t in arguments.items()}!=expected or f"tensor<{edge.k}x{edge.n}x{fp8}>" not in graph:
+        raise ValueError("native FP8 RHS program Graph argument shapes/storage differ from its packages")
+    epsilon=re.search(r"\beps = ([0-9.eE+-]+) : f64",graph)
+    eps32=struct.unpack("f",struct.pack("f",float(epsilon[1]) if epsilon else 1e-5))[0]
+    if eps32!=edge.producer.descriptor.provenance.get("epsilon"):
+        raise ValueError("native FP8 RHS program epsilon differs from its producer")
+
+
 def validate_traced_program(program: NvidiaTracedRhsProgram) -> None:
     """Check portable argument/shape/epsilon lineage without invoking a compiler."""
     import re
     import struct
     program.edge.validate()
+    if program.edge.edge_storage or program.scale_index!=-1:
+        if not program.edge.edge_storage or program.scale_index<0:
+            raise ValueError("native RHS program FP8 edge and scale argument disagree")
+        _validate_traced_fp8_program(program)
+        return
     names=program.argument_names
     if (len(names)!=2 or len(set(names))!=2
             or any(not isinstance(name,str) or not name.isidentifier() for name in names)
@@ -258,12 +416,16 @@ def rhs_program_manifest(program: NvidiaTracedRhsProgram) -> dict:
     validate_traced_program(program)
     edge=program.edge
     fields=("source_name","edge_name","lhs_name","rhs_name","output_name","m","k","n","dtype")
-    manifest=dict(schema="tessera.nvidia.norm_rhs_program.v2",graph_ir=program.graph_ir,
+    fp8=bool(edge.edge_storage)
+    if fp8:
+        fields+=("edge_storage","scale_name")
+    manifest=dict(schema="tessera.nvidia.norm_rhs_program.v3" if fp8 else "tessera.nvidia.norm_rhs_program.v2",graph_ir=program.graph_ir,
         graph_digest=hashlib.sha256(program.graph_ir.encode()).hexdigest(),
         argument_names=list(program.argument_names),source_index=program.source_index,lhs_index=program.lhs_index,
         edge={name:getattr(edge,name) for name in fields},
         producer=edge.runtime_artifact(edge.producer).to_dict(),
-        consumer=edge.runtime_artifact(edge.consumer).to_dict())
+        consumer=edge.runtime_artifact(edge.consumer).to_dict(),
+        **({"scale_index":program.scale_index} if fp8 else {}))
     manifest["contract_digest"]=hashlib.sha256(json.dumps(manifest,sort_keys=True).encode()).hexdigest()
     return manifest
 
@@ -273,7 +435,10 @@ def rhs_program_from_manifest(manifest: dict) -> NvidiaTracedRhsProgram:
     from tessera import runtime as rt
     keys={"schema","graph_ir","graph_digest","argument_names","source_index","lhs_index",
           "edge","producer","consumer","contract_digest"}
-    if not isinstance(manifest,dict) or set(manifest)!=keys or manifest["schema"] not in {"tessera.nvidia.rmsnorm_rhs_program.v1","tessera.nvidia.norm_rhs_program.v2"}:
+    fp8=isinstance(manifest,dict) and manifest.get("schema")=="tessera.nvidia.norm_rhs_program.v3"
+    if fp8:
+        keys=keys|{"scale_index"}
+    if not isinstance(manifest,dict) or set(manifest)!=keys or manifest["schema"] not in {"tessera.nvidia.rmsnorm_rhs_program.v1","tessera.nvidia.norm_rhs_program.v2","tessera.nvidia.norm_rhs_program.v3"}:
         raise ValueError("invalid native RHS program schema")
     body={key:value for key,value in manifest.items() if key!="contract_digest"}
     if hashlib.sha256(json.dumps(body,sort_keys=True).encode()).hexdigest()!=manifest["contract_digest"]:
@@ -282,6 +447,8 @@ def rhs_program_from_manifest(manifest: dict) -> NvidiaTracedRhsProgram:
     if not isinstance(graph,str) or hashlib.sha256(graph.encode()).hexdigest()!=manifest["graph_digest"]:
         raise ValueError("native RHS program Graph digest mismatch")
     fields={"source_name","edge_name","lhs_name","rhs_name","output_name","m","k","n","dtype"}
+    if fp8:
+        fields|={"edge_storage","scale_name"}
     if not isinstance(manifest["edge"],dict) or set(manifest["edge"])!=fields:
         raise ValueError("invalid native RHS program edge schema")
     packages=[]
@@ -297,7 +464,7 @@ def rhs_program_from_manifest(manifest: dict) -> NvidiaTracedRhsProgram:
     if not isinstance(manifest["argument_names"],list):
         raise ValueError("native RHS program argument names must be an array")
     program=NvidiaTracedRhsProgram(edge,tuple(manifest["argument_names"]),
-        manifest["source_index"],manifest["lhs_index"],graph)
+        manifest["source_index"],manifest["lhs_index"],graph,manifest.get("scale_index",-1) if fp8 else -1)
     validate_traced_program(program)
     if manifest["schema"]=="tessera.nvidia.rmsnorm_rhs_program.v1" and edge.producer.descriptor.provenance.get("kind")!="rmsnorm":
         raise ValueError("legacy RHS schema requires RMSNorm")

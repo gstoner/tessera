@@ -3070,22 +3070,34 @@ class JitFn:
         bound = self._native_frontend_signature().bind(*args, **kwargs)
         bound.apply_defaults()
         ordered = [bound.arguments[name] for name in self.arg_names]
-        if ordered is None or len(ordered) != 2 or not all(
-            isinstance(value, np.ndarray) and value.ndim == 2
-            and str(value.dtype) in {"float16", "bfloat16"} for value in ordered
-        ):
+        half = [isinstance(value, np.ndarray) and value.ndim == 2
+                and str(value.dtype) in {"float16", "bfloat16"} for value in ordered]
+        # SM120-W11-FP8-RHS-20261026: an FP8 edge adds one (1, 1) f32 scale.
+        scale = [isinstance(value, np.ndarray) and value.shape == (1, 1)
+                 and value.dtype == np.float32 for value in ordered]
+        if not ((len(ordered) == 2 and all(half))
+                or (len(ordered) == 3 and sum(half) == 2 and sum(scale) == 1)):
             return _JIT_FALLBACK
         module = self._traced_autodiff_module(tuple(ordered), {})
         if len(module.functions) != 1:
             return _JIT_FALLBACK
         function = module.functions[0]
-        if len(function.body) != 2:
-            return _JIT_FALLBACK
-        producer, consumer = function.body
-        if (producer.op_name not in {"tessera.rmsnorm", "tessera.layer_norm"} or len(producer.operands) != 1
-                or consumer.op_name not in {"tessera.matmul", "tessera.gemm"}
-                or len(consumer.operands) != 2
-                or consumer.operands[1] != "%" + str(producer.result)):
+        if len(function.body) == 4:
+            norm, quantize, dequant, consumer = function.body
+            if (norm.op_name not in {"tessera.rmsnorm", "tessera.layer_norm"}
+                    or quantize.op_name != "tessera.quantize_scaled"
+                    or dequant.op_name != "tessera.dequantize_scaled"
+                    or consumer.op_name != "tessera.matmul" or len(consumer.operands) != 2
+                    or consumer.operands[1] != "%" + str(dequant.result)):
+                return _JIT_FALLBACK
+        elif len(function.body) == 2 and len(ordered) == 2:
+            producer, consumer = function.body
+            if (producer.op_name not in {"tessera.rmsnorm", "tessera.layer_norm"} or len(producer.operands) != 1
+                    or consumer.op_name not in {"tessera.matmul", "tessera.gemm"}
+                    or len(consumer.operands) != 2
+                    or consumer.operands[1] != "%" + str(producer.result)):
+                return _JIT_FALLBACK
+        else:
             return _JIT_FALLBACK
         # Once this semantic edge matches, compilation/launch failures propagate.
         # They must never be replaced by eager arithmetic.

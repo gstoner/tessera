@@ -4158,6 +4158,7 @@ def _submit_nvidia_sm120_native(
     return (
         output
         if descriptor.abi_id in unary_abis | attention_abis | attention_backward_abis | moe_abis | training_abis
+        or descriptor.abi_id in SM120_NORM_SCALED_FP8_ABIS
         or descriptor.abi_id
         in {
             SM120_PAGED_KV_F32_ABI,

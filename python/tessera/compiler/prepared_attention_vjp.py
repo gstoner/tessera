@@ -131,16 +131,20 @@ class PreparedAttentionVJP:
                      bimage, len(backward.image.payload), backward.descriptor.entry_symbol.encode(),
                      dims, bias, mapping, roles, len(program.active))
         if self.row_program:
-            prepare=getattr(lib,"tessera_nvidia_attention_vjp_rows_prepare",None)
+            # SM120-TYPED-REVERSE-ROW-PREPASS-20261026: a distinct K/V storage
+            # reaches the row owner through its versioned _kv entry.
+            mixed=self.kv_storage!=self.storage
+            prepare=getattr(lib,"tessera_nvidia_attention_vjp_rows_prepare_kv" if mixed else "tessera_nvidia_attention_vjp_rows_prepare",None)
             if prepare is None:
                 raise RuntimeError("row reverse requires the versioned native rows owner")
             correction=program.correction
             row_image=ct.create_string_buffer(correction.image.payload) if correction is not None else None
             row_arguments=(row_image,len(correction.image.payload),correction.descriptor.entry_symbol.encode()) if correction is not None else (None,0,None)
-            prepare.argtypes=[P,S,ct.c_char_p]*3+[ct.POINTER(L),ct.POINTER(L),ct.POINTER(I),ct.POINTER(I),S,I,I,I,ct.POINTER(U)]
-            prepare.restype=I
             codes={"f16":2,"bf16":3,"f32":1}
-            status=prepare(*arguments[:6],*row_arguments,*arguments[6:],codes[self.storage],codes[self.output_storage],int(self.seeded),ct.byref(handle))
+            storages=(codes[self.storage],*((codes[self.kv_storage],) if mixed else ()),codes[self.output_storage])
+            prepare.argtypes=[P,S,ct.c_char_p]*3+[ct.POINTER(L),ct.POINTER(L),ct.POINTER(I),ct.POINTER(I),S]+[I]*(len(storages)+1)+[ct.POINTER(U)]
+            prepare.restype=I
+            status=prepare(*arguments[:6],*row_arguments,*arguments[6:],*storages,int(self.seeded),ct.byref(handle))
         elif self.kv_storage != self.storage:
             prepare = getattr(lib, "tessera_nvidia_attention_vjp_prepare_typed_kv", None)
             if prepare is None:

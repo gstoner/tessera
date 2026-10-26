@@ -39,9 +39,10 @@ def _row_policy(graph):
     ``inline`` recomputes it inside the backward kernel for every dQ/dK/dV
     element; ``prepass`` computes it once per row in a separate native kernel
     (the compiler's row_correction + backward_rows checkpoint products). The
-    prepass is admitted for homogeneous f16/bf16 Q/K/V, where it measured about
-    200x faster on the RTX 5070 (SM120-TYPED-REVERSE-ROW-PREPASS-20261026);
-    every other storage keeps the inline kernel. The environment variable
+    prepass is selected whenever Q or the shared K/V storage is f16/bf16: there
+    it measured about 200x faster than inline on the RTX 5070
+    (SM120-TYPED-REVERSE-ROW-PREPASS-20261026). Homogeneous f32 keeps the
+    inline kernel, whose correction is the O(Dv) dot(dO, O). The environment variable
     overrides the selection; an explicit prepass the compiler cannot admit
     still fails closed at the row-correction export."""
     requested=os.environ.get("TESSERA_NVIDIA_ATTENTION_ROW_CORRECTION","auto")
@@ -50,7 +51,8 @@ def _row_policy(graph):
     if requested!="auto":
         return requested
     q,k,v=_operand_storages(graph)
-    return "prepass" if q in ("f16","bf16") and q==k==v else "inline"
+    half=("f16","bf16")
+    return "prepass" if k==v and (q in half or k in half) else "inline"
 
 
 def execute_unprepared(metadata,args):

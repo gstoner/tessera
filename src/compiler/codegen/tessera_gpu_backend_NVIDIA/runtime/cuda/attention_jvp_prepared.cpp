@@ -630,10 +630,12 @@ static int prepareAttentionVjp(
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
   // SM120-SAVED-LSE-MIXED-BACKWARD-20261026: 0 = K/V share Q's storage. A
-  // distinct K/V storage (and dK/dV) is admitted only on the inline-row path.
+  // distinct K/V storage (and dK/dV) is admitted on the saved-LSE inline and
+  // external-row paths (SM120-TYPED-REVERSE-ROW-PREPASS-20261026), not on the
+  // original-source program.
   const int kv=kvStorage?kvStorage:storage;
-  if(kv<1 || kv>3 || (kv!=storage && (externalRows || sourceProgram)))
-    return bad("reverse K/V storage requires the inline saved-LSE path");
+  if(kv<1 || kv>3 || (kv!=storage && sourceProgram))
+    return bad("reverse K/V storage requires the saved-LSE reverse path");
   if(!handle || !fimage || !fbytes || !fentry || !bimage || !bbytes || !bentry ||
      !dims || !mapping || !roles || activeCount<1 || activeCount>4 ||
      storage<1 || storage>3 || outputStorage<1 || outputStorage>3 ||
@@ -696,10 +698,10 @@ static int prepareAttentionVjp(
     return bad("reverse forward entry storage/digest disagrees");
   const bool rowStage=externalRows && mask!=4;
   if(externalRows){
-    if(storage==1)return bad("row reverse requires half QKV storage");
+    if(storage==1 && kv==1)return bad("row reverse requires half Q or half K/V storage");
     if(rowStage){
       std::string rowPrefix=std::string("tessera_tile_attention_row_correction_b")+
-        std::to_string(bias)+"_s"+std::to_string(lseCotangent)+"_"+dataName+"_out_"+outputName+"_";
+        std::to_string(bias)+"_s"+std::to_string(lseCotangent)+"_"+dataName+kvToken+"_out_"+outputName+"_";
       if(!rimage || !rbytes || !rentry || std::strncmp(rentry,rowPrefix.c_str(),rowPrefix.size()) ||
          std::strlen(rentry+rowPrefix.size())!=10 || !hashSuffix(rentry+rowPrefix.size()))
         return bad("row producer image/storage/bias/seed contract differs");
@@ -840,6 +842,19 @@ extern "C" int tessera_nvidia_attention_vjp_rows_prepare(
   const int *roles,size_t activeCount,int storage,int outputStorage,int lseCotangent,uint64_t *handle){
   return prepareAttentionVjp(fimage,fbytes,fentry,bimage,bbytes,bentry,dims,biasShape,
       mapping,roles,activeCount,storage,outputStorage,lseCotangent,handle,true,rimage,rbytes,rentry);
+}
+// As tessera_nvidia_attention_vjp_rows_prepare with a distinct K/V (and dK/dV)
+// storage code, kvStorage in 1..3 (SM120-TYPED-REVERSE-ROW-PREPASS-20261026).
+extern "C" int tessera_nvidia_attention_vjp_rows_prepare_kv(
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *bimage,size_t bbytes,const char *bentry,
+  const void *rimage,size_t rbytes,const char *rentry,
+  const int64_t *dims,const int64_t *biasShape,const int *mapping,
+  const int *roles,size_t activeCount,int storage,int kvStorage,int outputStorage,int lseCotangent,
+  uint64_t *handle){
+  return prepareAttentionVjp(fimage,fbytes,fentry,bimage,bbytes,bentry,dims,biasShape,
+      mapping,roles,activeCount,storage,outputStorage,lseCotangent,handle,true,rimage,rbytes,rentry,
+      false,kvStorage);
 }
 static int prepareSourceAttentionReverse(
   const void *normImage,size_t normBytes,const char *normEntry,int cooperative,

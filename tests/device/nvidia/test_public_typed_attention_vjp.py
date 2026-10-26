@@ -88,12 +88,11 @@ def _run_public_typed_reverse(storage, kv_storage, saved, bias, causal, dims, su
         assert receipt["execution_kind"] == "native_gpu"
         assert receipt["compiler_path"] == "nvidia_sm120_attention_vjp_compiled"
         artifact = rt.RuntimeArtifact.from_json(fn.native_backward_runtime_artifact().to_json())
-        # SM120-TYPED-REVERSE-ROW-PREPASS-20261026: homogeneous half storage
-        # computes the row correction once per row (row program v3).
+        # SM120-TYPED-REVERSE-ROW-PREPASS-20261026: any half role computes the
+        # row correction once per row (row program v3).
         assert json.loads(artifact.metadata["program_json"])["program"]["schema"] == (
             "tessera.native_attention_vjp_program.v1" if storage == kv_storage == "float32"
-            else "tessera.native_attention_vjp_program.v3" if storage == kv_storage
-            else "tessera.native_attention_vjp_program.v2")
+            else "tessera.native_attention_vjp_program.v3")
         held = tuple(x.copy() for x in first)
         def forbidden(*args, **kwargs):
             pytest.fail("warm typed backward invoked compiler or concrete frontend")

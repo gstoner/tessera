@@ -2528,12 +2528,24 @@ static LogicalResult verifyAttentionRowKernel(Operation *op, bool backward) {
   auto shape = op->getAttrOfType<DenseI64ArrayAttr>("shape");
   auto bytes = op->getAttrOfType<IntegerAttr>("row_bytes");
   auto threads = op->getAttrOfType<IntegerAttr>("block_threads");
-  if (!bias || !seeded || !causal || !storage ||
-      (storage.getValue() != "f16" && storage.getValue() != "bf16") ||
+  // SM120-TYPED-REVERSE-ROW-PREPASS-20261026: an optional K/V storage distinct
+  // from Q; at least one of the two is half.
+  auto kvStorage = op->getAttrOfType<StringAttr>("kv_storage");
+  auto known = [](StringAttr attr) {
+    return attr && (attr.getValue() == "f16" || attr.getValue() == "bf16" || attr.getValue() == "f32");
+  };
+  auto isHalf = [](StringRef name) { return name == "f16" || name == "bf16"; };
+  if (op->hasAttr("kv_storage") && (!known(kvStorage) || !storage || kvStorage == storage))
+    return op->emitOpError("row correction kv_storage must name a distinct f16/bf16/f32 storage");
+  StringRef keyValueName = kvStorage ? kvStorage.getValue() : storage ? storage.getValue() : "";
+  if (!bias || !seeded || !causal || !known(storage) ||
+      (!isHalf(storage.getValue()) && !isHalf(keyValueName)) ||
       !output || (output.getValue() != storage.getValue() && output.getValue() != "f32") ||
       !row || row.getValue() != "f32" || !accum || accum.getValue() != "f32" ||
       !correction || correction.getValue() != "probability_dot_v_f32_v1")
     return op->emitOpError("row correction requires its explicit typed f32 probability policy");
+  const int64_t queryBytes = storage.getValue() == "f32" ? 4 : 2;
+  const int64_t keyValueBytes = keyValueName == "f32" ? 4 : 2;
   if (!scale || !scale.getType().isF32() || !scale.getValue().isFinite() ||
       scale.getValue().isNegative() || scale.getValue().isZero())
     return op->emitOpError("row correction requires finite positive f32 scale");
@@ -2628,9 +2640,9 @@ static LogicalResult verifyAttentionRowKernel(Operation *op, bool backward) {
     }
     return true;
   };
-  if (!spanFits(2, {shape[0], shape[1], shape[3], shape[5]}) ||
-      !spanFits(2, {shape[0], shape[2], shape[4], shape[5]}) ||
-      !spanFits(2, {shape[0], shape[2], shape[4], shape[6]}) ||
+  if (!spanFits(queryBytes, {shape[0], shape[1], shape[3], shape[5]}) ||
+      !spanFits(keyValueBytes, {shape[0], shape[2], shape[4], shape[5]}) ||
+      !spanFits(keyValueBytes, {shape[0], shape[2], shape[4], shape[6]}) ||
       !spanFits(output.getValue() == "f32" ? 4 : 2, {shape[0], shape[1], shape[3], shape[6]}) ||
       (physicalBias && !spanFits(4, physicalBiasCapacity)))
     return op->emitOpError("row correction physical input byte span overflows i64");
@@ -2655,7 +2667,8 @@ static LogicalResult verifyAttentionRowKernel(Operation *op, bool backward) {
   }
   for (NamedAttribute attr : op->getAttrs()) {
     StringRef name = attr.getName().strref();
-    if (name != "shape" && name != "shape_bounds" && name != "shape_policy" && name != "storage" && name != "output_storage" &&
+    if (name != "shape" && name != "shape_bounds" && name != "shape_policy" && name != "storage" &&
+        name != "kv_storage" && name != "output_storage" &&
         name != "row_storage" && name != "accum" && name != "row_correction" &&
         name != "scale" && name != "causal" && name != "bias" &&
         name != "lse_cotangent" && name != "row_bytes" && name != "block_threads" &&

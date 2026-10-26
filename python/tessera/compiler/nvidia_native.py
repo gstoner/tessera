@@ -3342,8 +3342,11 @@ def package_scheduled_matmul(
         from .prepared_nvidia_scalar_matmul import package
         return package(artifact, pipeline_name=pipeline_name)
     artifact.validate()
-    from .scheduled_matmul import verify_matmul_projection
-    verify_matmul_projection(artifact)
+    from .scheduled_matmul import verify_fp8_rhs_projection, verify_matmul_projection
+    if getattr(artifact, "b_codes_dtype", ""):
+        verify_fp8_rhs_projection(artifact)
+    else:
+        verify_matmul_projection(artifact)
     if (artifact.target != "nvidia_sm120" or artifact.architecture != "sm_120"
             or artifact.storage not in {"f16", "bf16"}
             or artifact.a_dtype != artifact.b_dtype

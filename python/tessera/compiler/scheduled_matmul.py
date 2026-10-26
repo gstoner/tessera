@@ -1165,6 +1165,47 @@ def digest_text(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
+def verify_fp8_rhs_projection(artifact: ScheduledMatmulArtifact) -> None:
+    """Replay and project a scaled FP8 RHS matmul (SM120-W11-FP8-RHS-20261026).
+
+    The fused Graph holds dequantize_scaled then matmul, so the operand roles
+    are read from both ops: A is the matmul LHS, the codes and the scale are
+    the dequantize_scaled operands. Every other field comes from the native
+    Schedule record, as in :func:`verify_matmul_projection`.
+    """
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("FP8 RHS projection requires native Schedule replay")
+    if run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
+        raise ValueError("FP8 RHS Tile product disagrees with native Schedule replay")
+    parent = run_tessera_opt(tool, artifact.schedule_ir, "--canonicalize")
+    records = re.findall(r" = schedule.matmul %\w+ \{([^{}]*)\}", parent)
+    keys = re.findall(r'shape_key = "M=(\d+);N=(\d+);K=(\d+);dtype=(\w+)"', parent)
+    arguments = dict(re.findall(r"(%[A-Za-z0-9_]+): (tensor<[^>]+>)", " ".join(
+        re.findall(r"func.func @\w+\(([^\n]*)\) ->", parent))))
+    dequant = re.findall(r"= tessera\.dequantize_scaled (%\w+), (%\w+)", parent)
+    matmul = re.findall(r"= tessera\.matmul (%\w+), %\w+", parent)
+    if len(records) != 1 or len(keys) != 1 or len(dequant) != 1 or len(matmul) != 1 or len(arguments) != 3:
+        raise ValueError("FP8 RHS projection requires one native fused product")
+    attrs = records[0]
+    fp8 = artifact.b_codes_dtype
+    element = {"fp8_e4m3": "f8E4M3FN", "fp8_e5m2": "f8E5M2"}.get(fp8)
+    m, n, k = (int(x) for x in keys[0][:3])
+    storage = keys[0][3]
+    codes, scale = dequant[0]
+    expected = {matmul[0]: f"tensor<{m}x{k}x{storage}>", codes: f"tensor<{k}x{n}x{element}>",
+                scale: "tensor<1x1xf32>"}
+    for field in (f'storage = "{storage}"', f'storage_b = "{fp8.removeprefix("fp8_")}"',
+                  'b_scale = "per_tensor_f32"', 'b_layout = "row_major"', 'output = "f32"',
+                  'accum = "f32"', 'bias = false', 'residual = false', 'activation = "none"'):
+        if field not in attrs:
+            raise ValueError("FP8 RHS native Schedule disagrees on " + field)
+    entries = re.findall(r"llvm.func @(\w+)\(", artifact.tile_ir)
+    if (element is None or arguments != expected or (m, n, k) != (artifact.m, artifact.n, artifact.k)
+            or storage != artifact.storage or entries != [artifact.function_name]):
+        raise ValueError("FP8 RHS native roles, shapes or entry disagree with the artifact")
+
+
 def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
     """Project matmul ABI fields from its native Schedule parent.
 

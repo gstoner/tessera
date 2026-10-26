@@ -18,6 +18,41 @@ _lock=threading.RLock()
 _LIMIT=96
 _pid=os.getpid()
 
+def _operand_storages(graph):
+    """Q/K/V element types of the traced flash_attn, read from the Graph IR."""
+    for line in graph.splitlines():
+        if "tessera.flash_attn" not in line:
+            continue
+        signature=re.search(r"\)\s*\{.*\}\s*:\s*\((.*)\)\s*->",line) or re.search(r":\s*\((.*)\)\s*->",line)
+        if signature is None:
+            break
+        types=re.findall(r"tensor<[^>]*x([A-Za-z0-9]+)>",signature[1])
+        if len(types)>=3:
+            return tuple(types[:3])
+        break
+    raise ValueError("native attention reverse cannot read flash_attn operand storage")
+
+
+def _row_policy(graph):
+    """Select where the half saved-output row correction sum(P*dP) is computed.
+
+    ``inline`` recomputes it inside the backward kernel for every dQ/dK/dV
+    element; ``prepass`` computes it once per row in a separate native kernel
+    (the compiler's row_correction + backward_rows checkpoint products). The
+    prepass is admitted for homogeneous f16/bf16 Q/K/V, where it measured about
+    200x faster on the RTX 5070 (SM120-TYPED-REVERSE-ROW-PREPASS-20261026);
+    every other storage keeps the inline kernel. The environment variable
+    overrides the selection; an explicit prepass the compiler cannot admit
+    still fails closed at the row-correction export."""
+    requested=os.environ.get("TESSERA_NVIDIA_ATTENTION_ROW_CORRECTION","auto")
+    if requested not in ("auto","inline","prepass"):
+        raise ValueError("attention row correction policy must be auto, inline or prepass")
+    if requested!="auto":
+        return requested
+    q,k,v=_operand_storages(graph)
+    return "prepass" if q in ("f16","bf16") and q==k==v else "inline"
+
+
 def execute_unprepared(metadata,args):
     import numpy as np
     from .native_attention_program import NativeAttentionVJPProgram
@@ -91,9 +126,7 @@ def execute_family(*,source,target,ordered_inputs,arg_names,source_arg_names,
     compiler=find_tessera_opt()
     if compiler is None:raise ValueError("attention VJP requires the selected native compiler")
     st=Path(compiler).stat()
-    row_policy=os.environ.get("TESSERA_NVIDIA_ATTENTION_ROW_CORRECTION","inline")
-    if row_policy not in ("inline","prepass"):
-        raise ValueError("attention row correction policy must be inline or prepass")
+    row_policy=_row_policy(source_graph_ir)
     key=(source_graph_ir,active,str(Path(compiler).resolve()),st.st_ino,st.st_size,st.st_mtime_ns,st.st_ctime_ns,row_policy)
     with _lock:
         cached=_cache.get(key)

@@ -22,19 +22,19 @@ the bootstrap row can go.
 | Metric | Count |
 |---|---|
 | Backends with a bootstrap module | 5 |
-| `package_*` functions total | 77 |
-| — Graph-input boundaries (including scheduled wrappers) | 45 |
+| `package_*` functions total | 78 |
+| — Graph-input boundaries (including scheduled wrappers) | 46 |
 |   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 9 |
 |   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 0 |
 |   ·  of the bootstrap, both | 0 |
-|   ·  of the bootstrap, other (wrapper / dispatcher) | 36 |
+|   ·  of the bootstrap, other (wrapper / dispatcher) | 37 |
 | — typed scheduled-artifact inputs (consumption needs verification) | 14 |
 | — unclassified/raw inputs (not assumed compiled) | 18 |
-| Lines in those modules | 12314 |
-| Classified family/target candidates (shape admission not implied) | 56 |
+| Lines in those modules | 12514 |
+| Classified family/target candidates (shape admission not implied) | 57 |
 | — covered by a compiled route | 8 |
 | — packager lowers only through the generic Schedule→Tile route | 11 |
-| — **gap (no declared family route)** | 37 |
+| — **gap (no declared family route)** | 38 |
 | Packagers matching no family | 9 |
 
 Graph input alone does not prove reconstruction: wrappers may call the
@@ -45,7 +45,7 @@ exact artifacts before treating a row as a constructor deletion target.
 
 | Target | Module | Graph input | Typed artifact input | Unknown/raw input | Family candidates | Lines |
 |---|---|---|---|---|---|---|
-| `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 15 | 14 | 5155 |
+| `nvidia_sm120` | `nvidia_native.py` | 20 | 1 | 15 | 15 | 5355 |
 | `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 1 | 5 | 3526 |
 | `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1603 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 10 | 215 |
@@ -83,6 +83,7 @@ queues own.
 | Target | Family | Compiled route | Status |
 |---|---|---|---|
 | `nvidia_sm120` | `attention_backward_lse` | — | 🔴 **gap** |
+| `nvidia_sm120` | `attention_scaled_kv` | — | 🔴 **gap** |
 | `nvidia_sm120` | `attention_lse` | — | 🔴 **gap** |
 | `nvidia_sm120` | `attention_backward` | — | 🔴 **gap** |
 | `nvidia_sm120` | `paged_kv` | — | 🔴 **gap** |

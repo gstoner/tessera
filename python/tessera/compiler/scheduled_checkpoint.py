@@ -38,6 +38,9 @@ class ScheduledCheckpointArtifact:
     output_storage: str = "f32"
     #: K/V storage; equals ``storage`` except on a mixed saved-LSE forward.
     kv_storage: str | None = None
+    #: K scale then V scale extents (eight) on a scaled FP8 K/V forward
+    #: (SM120-SAVED-LSE-SCALED-FP8-KV-20261025); empty otherwise.
+    kv_scale_shapes: tuple[int, ...] = ()
 
     @property
     def key_value_storage(self) -> str:
@@ -51,6 +54,11 @@ class ScheduledCheckpointArtifact:
                 not isinstance(self.kv_storage, str) or self.kv_storage not in {"f16", "bf16", "f32", "fp8_e4m3", "fp8_e5m2"}
                 or self.kv_storage == self.storage or self.backward):
             raise ValueError("checkpoint K/V storage differs from Q only on the saved-LSE forward")
+        if self.kv_scale_shapes and (
+                self.backward or self.kv_storage not in {"fp8_e4m3", "fp8_e5m2"}
+                or len(self.kv_scale_shapes) != 8 or self.shape_bounds
+                or any(type(extent) is not int or extent <= 0 for extent in self.kv_scale_shapes)):
+            raise ValueError("scaled K/V requires a static forward over FP8 codes with eight scale extents")
         if type(self.lse_cotangent) is not bool or (self.lse_cotangent and not self.backward):
             raise ValueError("LSE cotangent requires a boolean backward role")
         if type(self.compact_threads) is not int or self.compact_threads not in (64,128) or (not self.compact_gradients and self.compact_threads != 128):
@@ -69,7 +77,8 @@ class ScheduledCheckpointArtifact:
             raise ValueError("bias gradient requires a biased backward checkpoint")
         if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
             raise ValueError("checkpoint role and causal must be boolean")
-        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient) + int(self.lse_cotangent):
+        scaled = 2 * int(bool(self.kv_scale_shapes))
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient) + int(self.lse_cotangent) + scaled:
             raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
         from .attention_shape_contract import attention_dimensions
         attention_dimensions(self.dims,self.shape_bounds)
@@ -103,7 +112,7 @@ class ScheduledCheckpointArtifact:
         # Embedded paired lineage may describe the sibling's seed/activity.
         # Validate this executable's policy against its own sealed contract.
         contract_text = physical_contract[1]
-        count = (6 if self.backward else 3) + int(self.bias) + int(self.lse_cotangent)
+        count = (6 if self.backward else 3) + int(self.bias) + int(self.lse_cotangent) + scaled
         fields = {
             "family": json.dumps("attention_checkpoint_backward" if self.backward else "attention_checkpoint_forward"),
             "arguments": json.dumps(self.names[:count]),
@@ -112,6 +121,11 @@ class ScheduledCheckpointArtifact:
             "causal": str(self.causal).lower(),
             "bias": str(self.bias).lower(),
         }
+        if self.kv_scale_shapes:
+            fields["kv_scale_shapes"] = "array<i64: " + ", ".join(map(str, self.kv_scale_shapes)) + ">"
+            fields["kv_dequantize"] = json.dumps("code_times_f32_scale_round_once_v1")
+        elif "kv_scale_shapes =" in contract_text:
+            raise ValueError("checkpoint K/V scale metadata is missing")
         if self.kv_storage is not None:
             fields["kv_storage"] = json.dumps(self.kv_storage)
         elif "kv_storage =" in contract_text:
@@ -159,7 +173,7 @@ class ScheduledCheckpointArtifact:
             raise ValueError("checkpoint frontend mapping must be a tuple")
         if mapping:
             if (not isinstance(mapping, tuple) or any(type(i) is not int for i in mapping) or
-                    sorted(mapping) != list(range(3 + int(self.bias)))):
+                    sorted(mapping) != list(range(3 + int(self.bias) + scaled))):
                 raise ValueError("checkpoint frontend input mapping must be a permutation")
             text = "frontend_argument_indices = array<i64: " + ", ".join(map(str,mapping)) + ">"
             if text not in contract_text:
@@ -333,6 +347,7 @@ def _decode_checkpoint(graph, schedule, tile, *, backward,
     storage = re.search(r'\bstorage = "([a-z0-9]+)"', text)
     output_storage = re.search(r'\boutput_storage = "([a-z0-9]+)"', text)
     kv_storage = re.search(r'\bkv_storage = "([a-z0-9_]+)"', text)
+    kv_scale_shapes = re.search(r'\bkv_scale_shapes = array<i64: ([0-9, ]+)>', text)
     artifact = ScheduledCheckpointArtifact(graph,schedule,tile,entries[0],hashes[0],backward,names,
         tuple(map(int,shape[1].split(','))),scale_value,causal[1]=='true',bias,bias_gradient,indices,
         tuple(map(int,physical_bias[1].split(','))) if physical_bias else (),
@@ -342,6 +357,7 @@ def _decode_checkpoint(graph, schedule, tile, *, backward,
         shape_bounds=tuple(map(int,bounds[1].split(","))) if bounds else (),
         storage=storage[1] if storage else "f32",
         output_storage=output_storage[1] if output_storage else "f32",
-        kv_storage=kv_storage[1] if kv_storage else None)
+        kv_storage=kv_storage[1] if kv_storage else None,
+        kv_scale_shapes=tuple(map(int, kv_scale_shapes[1].split(","))) if kv_scale_shapes else ())
     artifact.validate()
     return artifact

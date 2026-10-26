@@ -100,6 +100,7 @@ dequantize_fp4,pure,,1,1,0
 dequantize_fp6,pure,,1,1,0
 dequantize_fp8,pure,,1,1,0
 dequantize_nvfp4,pure,,1,1,0
+dequantize_scaled,pure,,1,1,0
 det,pure,,1,1,0
 digamma,pure,,1,1,0
 div,pure,,1,1,0

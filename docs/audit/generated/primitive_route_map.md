@@ -22,10 +22,10 @@ met that bar, not an axis carrying no information.
 
 | Metric | Count |
 |---|---:|
-| Primitives reached by any route | 32 |
+| Primitives reached by any route | 33 |
 | — served by a **compiled** route on some target | 31 |
-| — **bootstrap only** (deleting the packager strands them) | 1 |
-| Families a backend classifies | 18 |
+| — **bootstrap only** (deleting the packager strands them) | 2 |
+| Families a backend classifies | 19 |
 | Families with a compiled route | 12 |
 
 **`❔ unclassified` is not `—`.** A dash means measured and nothing
@@ -46,6 +46,7 @@ whole backend reads as unserved.
 | `amax` | ❔ unclassified | ❔ unclassified | ✅ compiled | ✅ compiled | ✅ compiled |
 | `amin` | ❔ unclassified | ❔ unclassified | ✅ compiled | — | — |
 | `depth_attn` | ❔ unclassified | ❔ unclassified | — | ✅ compiled | — |
+| `dequantize_scaled` | ❔ unclassified | ❔ unclassified | 🟡 bootstrap | — | — |
 | `div` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
 | `erf` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
 | `exp` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
@@ -90,6 +91,7 @@ raises rather than degrading quietly.
 | `attention_backward` | ✅ | nvidia_sm120, x86 | `flash_attn` |
 | `attention_backward_lse` | — | nvidia_sm120 | `flash_attn` |
 | `attention_lse` | — | nvidia_sm120 | `flash_attn` |
+| `attention_scaled_kv` | — | nvidia_sm120 | `flash_attn`, `dequantize_scaled` |
 | `breadth` | ✅ | x86 | *benchmark cohort, not an op pattern* |
 | `cohort2` | ✅ | x86 | *benchmark cohort, not an op pattern* |
 | `depth_attention` | ✅ rocm_gfx1151 | — | `depth_attn` |

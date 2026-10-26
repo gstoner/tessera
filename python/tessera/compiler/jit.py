@@ -2124,9 +2124,15 @@ class JitFn:
         if logical_inputs and any(isinstance(value, NVFP4Tensor) for value in logical_inputs) and not nvfp4:
             raise ValueError("logical NVFP4 host bindings require the named scaled matmul Graph contract")
         from .nvidia_native import supports_attention, supports_attention_lse, requests_attention
+        from .nvidia_native import requests_scaled_kv_attention, supports_attention_scaled_kv
         attention_saved_lse = False
         attention = (target == "nvidia_sm120" and self.differentiation_request is None
                      and requests_attention(self.graph_ir))
+        # SM120-SAVED-LSE-SCALED-FP8-KV-20261025: dequantize_scaled(K),
+        # dequantize_scaled(V) feeding one saved-LSE flash_attn. It runs through
+        # the checked descriptor launch, not the homogeneous prepared owner.
+        scaled_attention = (target == "nvidia_sm120" and self.differentiation_request is None
+                            and requests_scaled_kv_attention(self.graph_ir))
         scalar_matmul = (target == "nvidia_sm120" and self.differentiation_request is None
                          and supports_scalar_matmul(self.graph_ir))
         matmul = (target == "nvidia_sm120" and self.differentiation_request is None
@@ -2158,7 +2164,7 @@ class JitFn:
         typed_scaled = target == "rocm_gfx1201" and requests_typed_scaled(self.graph_ir)
         checkpoint = target == "rocm_gfx1201" and (
             supports_nvfp4_expansion(self.graph_ir) or supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
-        if not movement and not checkpoint and not softmax and not activation and not matmul and not attention and not native_math and not nvfp4 and not typed_scaled and not rocm_matmul and not parent_view and not block_quant:
+        if not movement and not checkpoint and not softmax and not activation and not matmul and not attention and not scaled_attention and not native_math and not nvfp4 and not typed_scaled and not rocm_matmul and not parent_view and not block_quant:
             return _JIT_FALLBACK
         if self.differentiation_request is not None:
             raise ValueError("native descriptor call has no differentiation contract")
@@ -2167,7 +2173,7 @@ class JitFn:
         import numpy as np
         from .canonical_compile import canonical_compile
         from tessera import runtime as rt
-        signature_binding = self._native_frontend_signature() if matmul or attention or nvfp4 or nvidia_softmax or activation else inspect.signature(self._fn)
+        signature_binding = self._native_frontend_signature() if matmul or attention or scaled_attention or nvfp4 or nvidia_softmax or activation else inspect.signature(self._fn)
         bound = signature_binding.bind(*args, **kwargs)
         bound.apply_defaults()
         ordered = tuple(bound.arguments[name] for name in self.arg_names)
@@ -2246,6 +2252,8 @@ class JitFn:
             raise ValueError("native parent-view requires static rank-2 f32 parent and output")
         if native_math and not supports_math(module):
             raise ValueError("native math requires explicit f32 Graph computation and supported input storage")
+        if scaled_attention and not supports_attention_scaled_kv(module):
+            return _JIT_FALLBACK
         if attention and not (supports_attention(module) or supports_attention_lse(module)):
             if resident_attention:
                 raise ValueError("resident attention result storage requires a matching native output ABI")
@@ -2429,6 +2437,23 @@ class JitFn:
                     raise ValueError("NVFP4 descriptor batch scalar_values differ")
                 scalar_values.extend((batch_rows[1], batch_rows[0]))
             scalars = dict(zip(scalar_names, scalar_values, strict=True))
+        elif scaled_attention:
+            from .nvidia_native import _attention_scaled_kv_contract, SM120_ATTN_LSE_SCALED_KV_ABIS
+            scaled_contract = _attention_scaled_kv_contract(module)
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            scalar_names = ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv")
+            bias_shape = descriptor.provenance.get("bias_shape", [])
+            if bias_shape:
+                scalar_names += ("BiasB", "BiasH", "BiasQ", "BiasK")
+            scalar_names += ("KScaleB", "KScaleH", "KScaleS", "KScaleD",
+                             "VScaleB", "VScaleH", "VScaleS", "VScaleD")
+            if (scaled_contract is None or descriptor.abi_id not in SM120_ATTN_LSE_SCALED_KV_ABIS
+                    or tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != scaled_contract[1]
+                    or tuple(descriptor.provenance.get("kv_scale_shapes", ())) != scaled_contract[4]):
+                raise ValueError("scaled K/V descriptor differs from its typed frontend contract")
+            scalars = dict(zip(scalar_names, (*scaled_contract[1], *bias_shape, *scaled_contract[4]), strict=True))
         elif attention:
             from .nvidia_native import (
                 _attention_contract, _attention_lse_contract, SM120_ATTN_LSE_ABIS,
@@ -2512,11 +2537,11 @@ class JitFn:
             if set(dimensions) != set(range(output.rank)):
                 raise ValueError("host tensor call requires fully static output guards")
             dtype = {"uint8": np.uint8, "fp64": np.float64, "fp32": np.float32,
-                     **({"fp16": np.float16} if matmul or rocm_scalar_matmul or nvidia_softmax or activation or native_math else {})}.get(output.dtype)
+                     **({"fp16": np.float16} if matmul or rocm_scalar_matmul or nvidia_softmax or activation or native_math or scaled_attention else {})}.get(output.dtype)
             if dtype is None and (descriptor.abi_id == NVFP4_EXPAND_ABI or block_quant) and output.dtype == "fp8_e4m3":
                 import ml_dtypes
                 dtype = ml_dtypes.float8_e4m3fn
-            if dtype is None and (nvidia_softmax or activation or native_math or parent_view or scalar_matmul) and output.dtype == "bf16":
+            if dtype is None and (nvidia_softmax or activation or native_math or parent_view or scalar_matmul or scaled_attention) and output.dtype == "bf16":
                 import ml_dtypes
                 dtype = ml_dtypes.bfloat16
             if dtype is None or output.layout != "row_major":
@@ -2570,7 +2595,7 @@ class JitFn:
             from .prepared_rocm_movement import PreparedMovementCall
             self._native_prepared_movement_calls[signature] = PreparedMovementCall(
                 compiled, module, artifact, movement_contract, ordered=ordered)
-        if attention_saved_lse or block_quant:
+        if attention_saved_lse or block_quant or scaled_attention:
             return tuple(arrays)
         return arrays[0] if movement or softmax or activation or matmul or rocm_matmul or attention or native_math or nvfp4 or typed_scaled or parent_view else tuple(arrays)
 

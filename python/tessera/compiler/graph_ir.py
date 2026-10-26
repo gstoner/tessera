@@ -2896,6 +2896,13 @@ def _shape_same_as_first(operand_types: List[IRType], attrs: Optional[Dict[str, 
     return operand_types[0]
 
 
+def _shape_dequantize_scaled(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """The codes' shape and layout with an f32 element type
+    (SM120-SAVED-LSE-SCALED-FP8-KV-20261025)."""
+    codes = operand_types[0]
+    return tensor_ir_type(codes.shape, "fp32", layout=codes.layout)
+
+
 def _shape_attention_value_width(operand_types: List[IRType],
                                  attrs: Optional[Dict[str, Any]] = None):
     q = operand_types[0]
@@ -4640,6 +4647,7 @@ def _shape_nvfp4_requantize(operands, attrs):
 _SHAPE_RULES = {
     "nvfp4_expand": _shape_nvfp4_expand,
     "same_as_first": _shape_same_as_first,
+    "dequantize_scaled": _shape_dequantize_scaled,
     "nvfp4_requantize": _shape_nvfp4_requantize,
     "mxfp4_folded_storage": _shape_mxfp4_folded_storage,
     "scaled_matmul": _shape_scaled_matmul,

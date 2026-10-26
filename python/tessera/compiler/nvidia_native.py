@@ -166,6 +166,12 @@ SM120_ATTN_LSE_TYPED_ABI = "tessera.nvidia.attention.q_k_v_o_row_lse_dims.typed_
 SM120_ATTN_LSE_BIAS_TYPED_ABI = "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.typed_f32acc.v1"
 SM120_ATTN_LSE_BCAST_TYPED_ABI = "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims_bias_shape.typed_f32acc.v1"
 SM120_ATTN_LSE_TYPED_ABIS = frozenset({SM120_ATTN_LSE_TYPED_ABI, SM120_ATTN_LSE_BIAS_TYPED_ABI, SM120_ATTN_LSE_BCAST_TYPED_ABI})
+# SM120-SAVED-LSE-SCALED-FP8-KV-20261025: K/V codes plus broadcast f32 scales.
+# Scalars are B..Dv, the four physical bias extents when bias is present, then
+# the eight K/V scale extents.
+SM120_ATTN_LSE_SCALED_KV_ABI = "tessera.nvidia.attention.q_kcodes_vcodes_kscale_vscale_o_row_lse_dims_scale_shape.scaled_kv_f32acc.v1"
+SM120_ATTN_LSE_BIAS_SCALED_KV_ABI = "tessera.nvidia.attention.q_kcodes_vcodes_bias_kscale_vscale_o_row_lse_dims_bias_shape_scale_shape.scaled_kv_f32acc.v1"
+SM120_ATTN_LSE_SCALED_KV_ABIS = frozenset({SM120_ATTN_LSE_SCALED_KV_ABI, SM120_ATTN_LSE_BIAS_SCALED_KV_ABI})
 SM120_ATTN_LSE_ABIS = frozenset({SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI}) | SM120_ATTN_LSE_TYPED_ABIS
 SM120_ATTN_LSE_BIASED_ABIS = frozenset({SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI, SM120_ATTN_LSE_BIAS_TYPED_ABI, SM120_ATTN_LSE_BCAST_TYPED_ABI})
 SM120_ATTN_LSE_BROADCAST_ABIS = frozenset({SM120_ATTN_LSE_BCAST_F32_ABI, SM120_ATTN_LSE_BCAST_TYPED_ABI})
@@ -1083,6 +1089,8 @@ def native_package_kind(module: GraphIRModule) -> str | None:
 
     if supports_attention_backward_lse(module):
         return "attention_backward_lse"
+    if supports_attention_scaled_kv(module):
+        return "attention_scaled_kv"
     if supports_attention_lse(module):
         return "attention_lse"
     if supports_attention_backward(module):
@@ -1134,6 +1142,8 @@ def package_native(
     resolved = options or {}
     if kind == "attention_backward_lse":
         return package_attention_backward_lse(module, pipeline_name=pipeline_name)
+    if kind == "attention_scaled_kv":
+        return package_attention_scaled_kv(module, pipeline_name=pipeline_name)
     if kind == "attention_lse":
         return package_attention_lse(module, pipeline_name=pipeline_name)
     if kind == "attention_backward":
@@ -2227,6 +2237,7 @@ def _checkpoint_identity(
     dims: tuple[int, ...], scale: float, causal: bool, *, bias: bool = False,
     bias_shape: tuple[int, ...] = (), shape_bounds: tuple[int, ...] = (),
     storage: str = "f32", output_storage: str = "f32", kv_storage: str | None = None,
+    kv_scale_shapes: tuple[int, ...] = (),
 ) -> str:
     from .attention_shape_contract import attention_dimensions
     attention_dimensions(dims,shape_bounds)
@@ -2261,6 +2272,13 @@ def _checkpoint_identity(
         if kv_storage != storage:
             # Absent for homogeneous storage, so those identities are unchanged.
             policy["kv_storage"] = kv_storage
+    if kv_scale_shapes:
+        if (len(kv_scale_shapes) != 8 or kv_storage not in {"fp8_e4m3", "fp8_e5m2"}
+                or any(type(extent) is not int or extent <= 0 for extent in kv_scale_shapes)):
+            raise ValueError("checkpoint K/V scale shapes require eight extents over FP8 codes")
+        policy.update(schema="tessera.attention_checkpoint.scaled_kv.v1",
+                      kv_scale_shapes=list(kv_scale_shapes),
+                      kv_dequantize="code_times_f32_scale_round_once_v1")
     return hashlib.sha256(json.dumps(policy, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
@@ -2327,6 +2345,88 @@ def _attention_lse_contract(
 
 def supports_attention_lse(module: GraphIRModule) -> bool:
     return _attention_lse_contract(module) is not None
+
+
+def requests_scaled_kv_attention(module: GraphIRModule) -> bool:
+    """dequantize_scaled(K), dequantize_scaled(V) feeding one flash_attn."""
+    if len(module.functions) != 1 or len(module.functions[0].body) != 3:
+        return False
+    names = [op.op_name for op in module.functions[0].body]
+    return names == ["tessera.dequantize_scaled", "tessera.dequantize_scaled", "tessera.flash_attn"]
+
+
+def _attention_scaled_kv_contract(module: GraphIRModule):
+    """SM120-SAVED-LSE-SCALED-FP8-KV-20261025: the frontend half of the fused
+    checkpoint. Returns (argument names, dims, scale, causal, scale shapes,
+    bias name) or None; the native importer re-derives and owns admission."""
+    if not requests_scaled_kv_attention(module):
+        return None
+    fn = module.functions[0]
+    key_op, value_op, attention = fn.body
+    if any(arg.layout is not None or arg.ir_type.layout is not None for arg in fn.args):
+        return None
+    if attention.kwargs.get("lse_checkpoint") != "saved" or len(attention.operands) not in (3, 4):
+        return None
+    args = {arg.name: arg for arg in fn.args}
+    def operand(op, index):
+        return op.operands[index].removeprefix("%")
+    if (operand(attention, 1) != key_op.result_names[0].removeprefix("%")
+            or operand(attention, 2) != value_op.result_names[0].removeprefix("%")):
+        return None
+    q_name = operand(attention, 0)
+    k_name, k_scale = operand(key_op, 0), operand(key_op, 1)
+    v_name, v_scale = operand(value_op, 0), operand(value_op, 1)
+    bias_name = operand(attention, 3) if len(attention.operands) == 4 else None
+    roots = (q_name, k_name, v_name, k_scale, v_scale) + ((bias_name,) if bias_name else ())
+    if any(name not in args for name in roots) or len(set(roots)) != len(roots):
+        return None
+    q_shape, k_shape, v_shape, ks_shape, vs_shape = (_shape(module, name) for name in roots[:5])
+    if any(shape is None or len(shape) != 4 for shape in (q_shape, k_shape, v_shape, ks_shape, vs_shape)):
+        return None
+    b, hq, sq, d = cast(tuple[int, ...], q_shape)
+    bk, hkv, sk, dk = cast(tuple[int, ...], k_shape)
+    bv, hv, sv, dv = cast(tuple[int, ...], v_shape)
+    kv_dtype = args[k_name].ir_type.dtype
+    if (args[q_name].ir_type.dtype not in {"fp16", "bf16", "fp32"}
+            or kv_dtype not in {"fp8_e4m3", "fp8_e5m2"} or args[v_name].ir_type.dtype != kv_dtype
+            or args[k_scale].ir_type.dtype != "fp32" or args[v_scale].ir_type.dtype != "fp32"
+            or b != bk or b != bv or hkv != hv or sk != sv or d != dk or hkv <= 0 or hq % hkv):
+        return None
+    for scale_shape, codes in ((ks_shape, k_shape), (vs_shape, v_shape)):
+        if any(extent not in (1, logical) for extent, logical in zip(
+                cast(tuple[int, ...], scale_shape), cast(tuple[int, ...], codes), strict=True)):
+            return None
+    if bias_name is not None:
+        physical = _shape(module, bias_name)
+        if (args[bias_name].ir_type.dtype != "fp32" or physical is None or len(physical) != 4
+                or any(extent not in (1, logical)
+                       for extent, logical in zip(physical, (b, hq, sq, sk), strict=True))):
+            return None
+    output_type, lse_type = fn.result_types
+    if (output_type.dtype not in {args[q_name].ir_type.dtype, "fp32"} or lse_type.dtype != "fp32"):
+        return None
+    policy = _saved_lse_policy(attention, d)
+    if policy is None:
+        return None
+    return (roots, (b, hq, hkv, sq, sk, d, dv), policy[0], policy[1],
+            tuple(ks_shape) + tuple(vs_shape), bias_name)  # type: ignore[arg-type]
+
+
+def supports_attention_scaled_kv(module: GraphIRModule) -> bool:
+    return _attention_scaled_kv_contract(module) is not None
+
+
+def package_attention_scaled_kv(
+    module: GraphIRModule, *, pipeline_name: str
+) -> NVIDIANativePackage:
+    """Package Q, FP8 K/V codes and broadcast f32 scales through the fused checkpoint."""
+    if _attention_scaled_kv_contract(module) is None:
+        raise ValueError("SM120 scaled K/V requires dequantize_scaled(K), dequantize_scaled(V) "
+                         "feeding one saved-LSE flash_attn")
+    from .scheduled_checkpoint import lower_checkpoint_graph
+
+    return package_scheduled_checkpoint(
+        lower_checkpoint_graph(module, backward=False), pipeline_name=pipeline_name)
 
 
 def _attention_backward_lse_contract(
@@ -4321,6 +4421,8 @@ def _element_bytes(storage: str) -> int:
 
 
 def _package_attention_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativePackage:
+    if getattr(scheduled, "kv_scale_shapes", ()):
+        return _package_attention_scaled_kv(scheduled, pipeline_name=pipeline_name)
     names, dims, scale, causal = scheduled.names, scheduled.dims, scheduled.scale, scheduled.causal
     bias_name = names[3] if scheduled.bias else None
     unbiassed_names = names[:3] + names[4:] if scheduled.bias else names
@@ -4405,6 +4507,84 @@ def _package_attention_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativ
     if storage != "f32" or kv_storage != storage:
         from .typed_attention_checkpoint import validate_typed_saved_lse_descriptor
         validate_typed_saved_lse_descriptor(descriptor)
+    return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
+
+
+def _package_attention_scaled_kv(scheduled: Any, *, pipeline_name: str) -> NVIDIANativePackage:
+    """SM120-SAVED-LSE-SCALED-FP8-KV-20261025. Contract arguments arrive in
+    checkpoint operand order (Q, K, V, K scale, V scale, [bias]); the entry and
+    descriptor use inputs-then-outputs order (Q, K, V, [bias], K scale, V scale,
+    O, LSE)."""
+    names, dims, scale, causal = scheduled.names, scheduled.dims, scheduled.scale, scheduled.causal
+    if scheduled.shape_bounds:
+        raise ValueError("scaled K/V checkpoint requires static sequences")
+    count = 5 + int(scheduled.bias)
+    q_name, k_name, v_name, ks_name, vs_name = names[:5]
+    bias_name = names[5] if scheduled.bias else None
+    output_name, lse_name = names[count:]
+    b, hq, hkv, sq, sk, d, dv = dims
+    storage, output_storage = scheduled.storage, scheduled.output_storage
+    kv_storage, scale_shapes = scheduled.key_value_storage, tuple(scheduled.kv_scale_shapes)
+    from .attention_shape_contract import physical_attention_bias_shape
+    physical_bias = physical_attention_bias_shape(dims, scheduled.bias_shape) if scheduled.bias else ()
+    dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32", "fp8_e4m3": "fp8_e4m3", "fp8_e5m2": "fp8_e5m2"}
+    abi_id = SM120_ATTN_LSE_BIAS_SCALED_KV_ABI if scheduled.bias else SM120_ATTN_LSE_SCALED_KV_ABI
+    entry, tile_ir = scheduled.entry, scheduled.tile_ir
+    lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state = _compile_tile_ir(tile_ir, entry)
+    image = NativeImageArtifact(
+        target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp, toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(), binary_format="ptx",
+        payload=ptx.encode("ascii"), entry_points=(NativeEntryPoint(entry, abi_id),),
+        compile_state=compile_state, device_libraries=device_libraries,
+        resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
+    )
+    roles: list[tuple[str, str, str, tuple[int, ...]]] = [
+        (q_name, "input", dtype[storage], (b, hq, sq, d)),
+        (k_name, "input", dtype[kv_storage], (b, hkv, sk, d)),
+        (v_name, "input", dtype[kv_storage], (b, hkv, sk, dv)),
+    ]
+    if bias_name is not None:
+        roles.append((bias_name, "input", "fp32", tuple(physical_bias)))
+    roles += [(ks_name, "input", "fp32", scale_shapes[:4]), (vs_name, "input", "fp32", scale_shapes[4:]),
+              (output_name, "output", dtype[output_storage], (b, hq, sq, dv)),
+              (lse_name, "output", "fp32", (b, hq, sq))]
+    buffers = tuple(BufferBinding(i, name, direction, element, len(shape), "row_major", _element_bytes(
+        {"fp32": "f32", "fp16": "f16", "bf16": "bf16"}.get(element, element)))
+        for i, (name, direction, element, shape) in enumerate(roles))
+    guards = tuple(ShapeGuard(name, axis, "eq", extent)
+                   for name, _, _, shape in roles for axis, extent in enumerate(shape))
+    scalar_names = ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv")
+    if bias_name is not None:
+        scalar_names += ("BiasB", "BiasH", "BiasQ", "BiasK")
+    scalar_names += ("KScaleB", "KScaleH", "KScaleS", "KScaleD", "VScaleB", "VScaleH", "VScaleS", "VScaleD")
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=entry, abi_id=abi_id, buffers=buffers,
+        scalars=tuple(ScalarArgument(len(buffers) + i, name, "int64") for i, name in enumerate(scalar_names)),
+        shape_guards=guards,
+        geometry=LaunchGeometry(policy="sm120_attention_lse_thread_per_output_128"),
+        workspace=WorkspaceRequirement(bytes=0, alignment=4),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
+        provenance={
+            "schedule_digest": scheduled.schedule_digest,
+            "frontend_argument_indices": list(scheduled.frontend_argument_indices),
+            "graph_ir_digest": hashlib.sha256(scheduled.graph_ir.encode()).hexdigest(),
+            "target_ir_digest": image.target_ir_digest,
+            "schedule_ir_digest": hashlib.sha256(scheduled.schedule_ir.encode()).hexdigest(),
+            "checkpoint_contract": _checkpoint_identity(dims, scale, causal, bias=scheduled.bias,
+                bias_shape=scheduled.bias_shape, storage=storage, output_storage=output_storage,
+                kv_storage=kv_storage, kv_scale_shapes=scale_shapes),
+            "kv_storage": kv_storage, "kv_scale_shapes": list(scale_shapes),
+            "kv_dequantize": "code_times_f32_scale_round_once_v1",
+            "mask_alignment": "end_aligned_v1", "bias": scheduled.bias,
+            "bias_shape": list(physical_bias),
+            "work_item": "NVIDIA-LSE-1", "checkpoint_role": "forward_save",
+            "lse_checkpoint": "saved", "shape": list(dims), "storage": storage,
+            "accum": "f32", "output": output_storage, "row_lse": "f32[B,Hq,Sq]",
+            "scale": scale, "causal": causal, "workspace_bytes": 0,
+            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        },
+    )
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
 
 

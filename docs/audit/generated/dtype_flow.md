@@ -19,7 +19,7 @@ packet to resolve the supported envelope.
 - Operators: **363**
 - TSOL operators: **51**
 - Operator/logical-dtype rows: **989**
-- Rows retaining at least one compiler/evidence gap: **392**
+- Rows retaining at least one compiler/evidence gap: **395**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states

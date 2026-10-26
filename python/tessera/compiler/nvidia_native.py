@@ -1142,9 +1142,7 @@ def package_native(
     resolved = options or {}
     if kind == "attention_backward_lse":
         return package_attention_backward_lse(module, pipeline_name=pipeline_name)
-    if kind == "attention_scaled_kv":
-        return package_attention_scaled_kv(module, pipeline_name=pipeline_name)
-    if kind == "attention_lse":
+    if kind in {"attention_scaled_kv", "attention_lse"}:
         return package_attention_lse(module, pipeline_name=pipeline_name)
     if kind == "attention_backward":
         return package_attention_backward(module, pipeline_name=pipeline_name)
@@ -2421,19 +2419,6 @@ def _attention_scaled_kv_contract(module: GraphIRModule):
 
 def supports_attention_scaled_kv(module: GraphIRModule) -> bool:
     return _attention_scaled_kv_contract(module) is not None
-
-
-def package_attention_scaled_kv(
-    module: GraphIRModule, *, pipeline_name: str
-) -> NVIDIANativePackage:
-    """Package Q, FP8 K/V codes and broadcast f32 scales through the fused checkpoint."""
-    if _attention_scaled_kv_contract(module) is None:
-        raise ValueError("SM120 scaled K/V requires dequantize_scaled(K), dequantize_scaled(V) "
-                         "feeding one saved-LSE flash_attn")
-    from .scheduled_checkpoint import lower_checkpoint_graph
-
-    return package_scheduled_checkpoint(
-        lower_checkpoint_graph(module, backward=False), pipeline_name=pipeline_name)
 
 
 def _attention_backward_lse_contract(
@@ -4413,10 +4398,15 @@ def package_attention_backward(
 def package_attention_lse(
     module: GraphIRModule, *, pipeline_name: str
 ) -> NVIDIANativePackage:
-    """Package typed Q/K/V -> O,f32 row_lse through native checkpoint IR."""
-    contract = _attention_lse_contract(module)
+    """Package typed Q/K/V -> O,f32 row_lse through native checkpoint IR.
+
+    Also packages the scaled FP8 K/V chain (dequantize_scaled K and V feeding
+    the saved-LSE flash_attn): the native importer fuses it, so it shares this
+    one packager (SM120-SAVED-LSE-SCALED-FP8-KV-20261025)."""
+    contract = _attention_lse_contract(module) or _attention_scaled_kv_contract(module)
     if contract is None:
-        raise ValueError("SM120 saved-LSE forward requires canonical Q and K/V storage and f32 LSE")
+        raise ValueError("SM120 saved-LSE forward requires canonical Q and K/V storage and f32 LSE, "
+                         "or dequantize_scaled K and V feeding one saved-LSE flash_attn")
     from .scheduled_checkpoint import lower_checkpoint_graph
 
     return package_scheduled_checkpoint(

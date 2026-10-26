@@ -5348,8 +5348,14 @@ def package_generated_attention_checkpoint_pair(
         raise ValueError("compact launch requires compact gradient outputs")
     backward = lower_generated_checkpoint(source, backward=True, prune_inactive=prune_inactive,
         compact_gradients=compact_gradients, compact_launch=compact_launch, compact_threads=compact_threads)
-    identity = _checkpoint_identity(forward.dims, forward.scale, forward.causal, bias=forward.bias, bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage)
-    if identity != _checkpoint_identity(backward.dims, backward.scale, backward.causal, bias=backward.bias, bias_shape=backward.bias_shape,shape_bounds=backward.shape_bounds, storage=backward.storage, output_storage=backward.output_storage):
+    # A mixed Q vs K/V generation seals the same K/V storage on both sides
+    # (SM120-SAVED-LSE-MIXED-BACKWARD-20261026).
+    if forward.kv_storage != backward.kv_storage or forward.kv_scale_shapes:
+        raise ValueError('generated checkpoint producer and consumer K/V storage disagree')
+    identity = _checkpoint_identity(forward.dims, forward.scale, forward.causal, bias=forward.bias, bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage,
+        kv_storage=forward.kv_storage)
+    if identity != _checkpoint_identity(backward.dims, backward.scale, backward.causal, bias=backward.bias, bias_shape=backward.bias_shape,shape_bounds=backward.shape_bounds, storage=backward.storage, output_storage=backward.output_storage,
+            kv_storage=backward.kv_storage):
         raise ValueError('generated checkpoint producer and consumer policies disagree')
     if forward.frontend_argument_indices != backward.frontend_argument_indices:
         raise ValueError("generated checkpoint frontend mappings disagree")

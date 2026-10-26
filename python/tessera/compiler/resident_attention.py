@@ -227,7 +227,14 @@ class ResidentAttentionTape:
         dtype_names={"f16":"fp16","bf16":"bf16","f32":"fp32"}
         self._input_dtype=dtype_names[forward_policy["storage"]]
         self._output_dtype=dtype_names[forward_policy["output"]]
-        self._saved_dtypes=(self._input_dtype,)*3+(self._output_dtype,"fp32")
+        # SM120-SAVED-LSE-MIXED-BACKWARD-20261026: K/V (and dK/dV) carry their
+        # own storage when the forward names one; Q, dQ and O follow Q's.
+        kv_storage=forward_policy.get("kv_storage",forward_policy["storage"])
+        if kv_storage not in dtype_names:
+            raise ValueError("resident attention capture admits f16/bf16/f32 K/V storage only")
+        self._kv_dtype=dtype_names[kv_storage]
+        self._role_dtypes=(self._input_dtype,self._kv_dtype,self._kv_dtype)
+        self._saved_dtypes=self._role_dtypes+(self._output_dtype,"fp32")
         self._has_bias = pair.forward.descriptor.provenance.get("bias", False)
         backward = getattr(pair, "backward", None)
         self._has_backward = backward is not None
@@ -310,7 +317,7 @@ class ResidentAttentionTape:
                 self._functions.append(function)
             inputs = (q,k,v) + ((bias,) if self._has_bias else ())
             input_shapes = self.shapes[:3] + ((self._bias_shape,) if self._has_bias else ())
-            input_dtypes=(self._input_dtype,)*3+(("fp32",) if self._has_bias else ())
+            input_dtypes=self._role_dtypes+(("fp32",) if self._has_bias else ())
             pointers = self._resident_group(inputs,input_shapes,dtypes=input_dtypes)
             self._saved = [self._allocate(shape,dtype) for shape,dtype in zip(self.shapes,self._saved_dtypes,strict=True)]
             for pointer, saved in zip(pointers[:3],self._saved[:3],strict=True):
@@ -529,7 +536,7 @@ class ResidentAttentionTape:
                 if self._has_bias_gradient:
                     b,hq,_,sq,sk,_,_ = self.dims
                     gradient_shapes = (*gradient_shapes, getattr(self, "_bias_shape", (b,hq,sq,sk)))
-                gradients = [self._allocate(gradient_shapes[i],self._input_dtype if i<3 else "fp32") for i in self._gradient_roles]
+                gradients = [self._allocate(gradient_shapes[i],self._role_dtypes[i] if i<3 else "fp32") for i in self._gradient_roles]
                 self._execute(True,[seeds[0],*self._saved[:4], *([self._bias] if self._has_bias else []), self._saved[4],*seeds[1:],*gradients])
             except BaseException:
                 self._release(start)
@@ -585,7 +592,7 @@ class ResidentAttentionTape:
             directions = (dq,dk,dv) + ((dbias,) if self._has_bias else ())
             shapes = self.shapes[:3] + ((self._bias_shape,) if self._has_bias else ())
             self._resident_group(directions,shapes,
-                dtypes=(self._input_dtype,)*3+(("fp32",) if self._has_bias else ()))
+                dtypes=self._role_dtypes+(("fp32",) if self._has_bias else ()))
             self.check(self.sync())  # The separate JVP binding consumes on its own stream.
             start = len(self.buffers)
             try:

@@ -1,0 +1,77 @@
+{
+ "commit": "147617b4353dc67f3b983b22ee3b71a252e059e3",
+ "worktree_dirty": false,
+ "device": "NVIDIA GeForce RTX 5070, 12.0",
+ "timing": "prepared reverse owner CUDA events (saved-LSE forward window, backward window); small shape 5 calls x 30 alternating rounds, large shape 1 call x 6 alternating rounds; median us",
+ "correctness": "fp64 reverse oracle on dQ/dK/dV before timing",
+ "medians_us": {
+  "(1, 2, 1, 3, 5, 4, 3)": {
+   "f16 homogeneous": {
+    "forward": 43.31,
+    "backward": 18.02
+   },
+   "f16 / bf16": {
+    "forward": 43.09,
+    "backward": 18.32
+   },
+   "bf16 homogeneous": {
+    "forward": 43.68,
+    "backward": 17.76
+   },
+   "bf16 / f16": {
+    "forward": 44.08,
+    "backward": 18.5
+   },
+   "f32 homogeneous": {
+    "forward": 44.0,
+    "backward": 8.88
+   },
+   "f32 / f16": {
+    "forward": 44.05,
+    "backward": 17.74
+   },
+   "f32 / bf16": {
+    "forward": 44.74,
+    "backward": 17.92
+   },
+   "f16 / f32": {
+    "forward": 43.22,
+    "backward": 18.03
+   }
+  },
+  "(1, 8, 2, 128, 512, 64, 64)": {
+   "f16 homogeneous": {
+    "forward": 6077.36,
+    "backward": 3571998.78
+   },
+   "f16 / bf16": {
+    "forward": 6109.09,
+    "backward": 3581886.6
+   },
+   "bf16 homogeneous": {
+    "forward": 6135.31,
+    "backward": 3580506.84
+   },
+   "bf16 / f16": {
+    "forward": 6163.01,
+    "backward": 3588059.81
+   },
+   "f32 homogeneous": {
+    "forward": 5848.18,
+    "backward": 16181.06
+   },
+   "f32 / f16": {
+    "forward": 5856.91,
+    "backward": 3427121.83
+   },
+   "f32 / bf16": {
+    "forward": 5852.38,
+    "backward": 3404553.71
+   },
+   "f16 / f32": {
+    "forward": 6036.86,
+    "backward": 3422569.82
+   }
+  }
+ }
+}

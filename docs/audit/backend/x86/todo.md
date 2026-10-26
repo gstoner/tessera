@@ -12479,3 +12479,12 @@ Synchronization key: SM120-SAVED-LSE-SCALED-FP8-KV-20261025.
 Not applicable to x86: `tessera.dequantize_scaled` executes the eager reference off SM120 and its x86 capability is `unsupported`; shared registration only, no x86 selector, ABI or result changes.
 
 Evidence: benchmarks/baselines/sm120_saved_lse_scaled_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+
+## SM120-SAVED-LSE-MIXED-BACKWARD-20261026 — mixed Q vs K/V saved-LSE reverse
+
+Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Synchronization key: SM120-SAVED-LSE-MIXED-BACKWARD-20261026.
+
+Not applicable to x86: shared AD-contract change only (opt-in, SM120-gated for non-f32 roles); no x86 selector, ABI or result changes.
+
+Evidence: benchmarks/baselines/sm120_saved_lse_mixed_backward_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md §"Mixed Q vs K/V storage (backward)".

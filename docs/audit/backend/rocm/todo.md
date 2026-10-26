@@ -19268,3 +19268,12 @@ Synchronization key: SM120-SAVED-LSE-SCALED-FP8-KV-20261025.
 Not applicable to rocm physical execution: `tessera.dequantize_scaled` is registered with an eager reference and `unsupported` ROCm capability; the fusion runs only in the SM120 checkpoint importer, and on ROCm targets the chain is refused at Graph->Schedule. Shared frontend registration only; no ROCm selector, ABI or result changes.
 
 Evidence: benchmarks/baselines/sm120_saved_lse_scaled_fp8_kv_20261025/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+
+## SM120-SAVED-LSE-MIXED-BACKWARD-20261026 — mixed Q vs K/V saved-LSE reverse
+
+Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Synchronization key: SM120-SAVED-LSE-MIXED-BACKWARD-20261026.
+
+Not applicable to rocm physical execution: the shared `denseAttentionAD` opt-in still requires the SM120 target whenever any role is non-f32, so a mixed reverse on gfx1151/gfx1201 is refused at Graph AD exactly as before; homogeneous f32 reverse contracts are byte-unchanged. Follow-up only if a ROCm saved-LSE reverse owner is built; no ROCm selector, ABI or result changes.
+
+Evidence: benchmarks/baselines/sm120_saved_lse_mixed_backward_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md §"Mixed Q vs K/V storage (backward)".

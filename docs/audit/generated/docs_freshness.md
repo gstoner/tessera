@@ -62,7 +62,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 100 | ✓ |
 | `SHAPE_SYSTEM.md` | Normative | 2026-10-24 | 2 | ✓ |
 | `SM120_ATTENTION_ROW_OWNER_CONTRACT.md` | - | 2026-10-17 | 9 | ✓ |
-| `SM120_SAVED_LSE_STORAGE_CONTRACT.md` | - | 2026-10-25 | 1 | ✓ |
+| `SM120_SAVED_LSE_STORAGE_CONTRACT.md` | - | 2026-10-26 | 0 | ✓ |
 | `SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md` | - | 2026-10-17 | 9 | ✓ |
 | `SM120_TYPED_ATTENTION_JVP_CONTRACT.md` | - | 2026-10-17 | 9 | ✓ |
 | `TARGET_IR_SPEC.md` | Normative | 2026-08-24 | 63 | ✓ |

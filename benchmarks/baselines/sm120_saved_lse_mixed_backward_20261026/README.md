@@ -34,6 +34,13 @@ reaches the retained owner through the new
   concrete frontend forbidden, compiler-free serialized replay, resident replay
   and a delayed resident producer against an fp64 reverse oracle, and the
   result dtype per role.
+- `tests/device/nvidia/test_saved_lse_mixed_backward_kernel.py`: **96 passed.**
+  The direct backward kernel with pruned, non-compact gradient outputs, so an
+  inactive dQ/dK/dV buffer is still present and zero-filled. The grid is six
+  mixed pairs × four `wrt` subsets × seed or not × two shapes, with guard bytes
+  around every buffer. Before `ce9a0adf9` the 48 cases where an inactive dK/dV's
+  width differs from Q's failed: the zero-fill used Q's storage (review finding
+  on #1015).
 - Attention VJP and saved-LSE device files: **923 passed, 10 skipped**. The 10
   are the proof-lane prepared-VJP tests, which pass 10/10 with
   `TESSERA_NVIDIA_DEVICE_PROOF=1`.

@@ -35825,7 +35825,13 @@ def _native_buffer_value(value: Any) -> tuple[Any, BufferArgument]:
                 "CUDA buffers need a non-null __cuda_array_interface__ data pointer",
             )
         import numpy as np
-        cuda_dtype = np.dtype(cuda_interface.get("typestr"))
+        typestr = cuda_interface.get("typestr")
+        owned_dtype = getattr(value, "dtype", None)
+        # ml_dtypes.float8_e5m2 reports the typestr "<f1", which NumPy cannot
+        # parse back (SM120-W11-FP8-RHS-20261026). A buffer whose own declared
+        # dtype produces exactly that typestr is described by that dtype.
+        cuda_dtype = (owned_dtype if isinstance(owned_dtype, np.dtype) and owned_dtype.str == typestr
+                      else np.dtype(typestr))
         # NumPy represents ml_dtypes.bfloat16 as opaque |V2 in the CUDA
         # array interface. Preserve the owning buffer's registered dtype name
         # when available; the typestring still supplies the physical itemsize.

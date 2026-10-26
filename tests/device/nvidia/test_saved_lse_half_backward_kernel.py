@@ -17,10 +17,10 @@ pytestmark = pytest.mark.hardware_nvidia
 
 
 class NativeKernel:
-    def __init__(self, source_ir, role):
+    def __init__(self, source_ir, role, options=""):
         tool = find_tessera_opt()
         assert tool is not None
-        graph = run_tessera_opt(tool, source_ir, "--tessera-autodiff-paired=checkpoint-product="+role)
+        graph = run_tessera_opt(tool, source_ir, "--tessera-autodiff-paired=checkpoint-product="+role+options)
         schedule = run_tessera_opt(tool, graph, "--tessera-graph-to-schedule")
         tile = run_tessera_opt(tool, schedule, "--tessera-schedule-to-tile")
         self.entry = re.search(r"llvm.func @([^ (]+)", tile)[1]

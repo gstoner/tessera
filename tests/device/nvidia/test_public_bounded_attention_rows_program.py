@@ -273,38 +273,51 @@ def test_bounded_64_thread_compact_geometry_has_public_and_resident_parity(stora
 
 
 # SM120-TYPED-REVERSE-ROW-PREPASS-20261026: mixed Q vs K/V storage through the
-# bounded (v4) row program -- public replay across runtime shapes and the
-# resident capture frame, whose K/V snapshots and dK/dV take kv_storage.
+# static (v3) row program -- compiler-free replay and the resident capture
+# frame, whose K/V snapshots and dK/dV take kv_storage. (The bounded forward
+# projection refuses mixed storage, so there is no mixed v4 program.)
 MIXED=[("f16","bf16"),("bf16","f16"),("f32","f16"),("f32","bf16"),("f16","f32")]
 
 
 @pytest.mark.parametrize("storage,kv_storage",MIXED)
-@pytest.mark.parametrize("bias_kind",["none","dense"])
-def test_bounded_mixed_kv_public_replay_and_resident_capture(storage,kv_storage,bias_kind,monkeypatch):
+@pytest.mark.parametrize("bias",[False,True])
+def test_static_mixed_kv_row_program_replay_and_resident_capture(storage,kv_storage,bias,monkeypatch):
     from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
     from benchmarks.nvidia.benchmark_jit_attention_vjp import download
     assert rt._nvidia_device_name()=="sm_120"
-    program,artifact,trace=make_program(storage,True,bias_kind,kv_storage=kv_storage)
+    sq,sk=3,5
+    active=tuple(reversed(range(3+int(bias))))
+    original=source(storage,bias=bias,saved=True,output="f32",dims=(1,2,1,sq,sk,4,3),kv_storage=kv_storage)
+    original=original.replace('tessera.autodiff = "reverse"',
+        'tessera.autodiff = "reverse", tessera.autodiff.wrt_indices = ['+', '.join(map(str,active))+']')
+    program=compile_attention_vjp_program(original,active,compiler=os.environ["TESSERA_OPT"],
+        compact_gradients=True,row_correction=True)
+    assert json.loads(program.to_json())["program"]["schema"]=="tessera.native_attention_vjp_program.v3"
     assert program.pair.backward.descriptor.provenance["kv_storage"]==kv_storage
-    def forbidden(*args,**kwargs):pytest.fail("bounded mixed replay reentered compiler")
+    artifact=rt.RuntimeArtifact.from_json(rt.RuntimeArtifact(graph_ir=original,target_ir=program.pair.backward.target_ir,
+        metadata=dict(target="nvidia_sm120",compiler_path="nvidia_sm120_attention_vjp_compiled",
+            execution_kind="native_gpu",execution_mode="cuda_runtime",executable=True,
+            arg_names=[f"primal_{i}" for i in range(3+int(bias))]+["cotangent","lse_cotangent"],
+            program_json=program.to_json(),program_digest=program.program_digest)).to_json())
+    def forbidden(*args,**kwargs):pytest.fail("mixed row replay reentered compiler")
     monkeypatch.setattr(subprocess,"run",forbidden)
     monkeypatch.setattr(subprocess,"Popen",forbidden)
     try:
+        values,expected=inputs(storage,True,"query" if bias else "none",sq,sk,seed=1026,kv_storage=kv_storage)
+        receipt=rt.launch(artifact,values)
+        assert receipt["ok"] and receipt["execution_kind"]=="native_gpu",receipt
+        for actual,role in zip(receipt["output"],program.active,strict=True):
+            assert actual.dtype==(DTYPES[storage] if role==0 else DTYPES[kv_storage] if role<3 else np.float32)
+            compare(actual,expected[role])
         with NvidiaDeviceSession() as session:
-            for index,(sq,sk) in enumerate((trace,(3,5),(9,11),(9,1))):
-                values,expected=inputs(storage,True,bias_kind,sq,sk,seed=1026+index,kv_storage=kv_storage)
-                receipt=rt.launch(artifact,values)
-                assert receipt["ok"] and receipt["execution_kind"]=="native_gpu",receipt
-                for actual,role in zip(receipt["output"],program.active,strict=True):
-                    assert actual.dtype==(DTYPES[storage] if role==0 else DTYPES[kv_storage] if role<3 else np.float32)
-                    compare(actual,expected[role])
-                resident=tuple(session.upload(value) for value in values[:-2])
-                with program.capture(*resident,asynchronous=True) as frame:
-                    frame.wait_on(session.stream)
-                    gradients=frame.backward(tuple(session.upload(value) for value in values[-2:]))
-                    frame.wait_on(session.stream)
-                    for actual,role in zip(gradients,program.active,strict=True):
-                        compare(download(session,actual),expected[role])
+            resident=tuple(session.upload(value) for value in values[:-2])
+            with program.capture(*resident,asynchronous=True) as frame:
+                frame.wait_on(session.stream)
+                gradients=frame.backward(tuple(session.upload(value) for value in values[-2:]))
+                frame.wait_on(session.stream)
+                for actual,role in zip(gradients,program.active,strict=True):
+                    held=download(session,actual)
+                    assert held.dtype==(DTYPES[storage] if role==0 else DTYPES[kv_storage] if role<3 else np.float32)
+                    compare(held,expected[role])
     finally:
         clear_prepared()
-

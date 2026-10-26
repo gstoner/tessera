@@ -6966,6 +6966,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_SOFTMAX_BF16_ABI,
         SM120_SOFTMAX_F32_ABI,
         SM120_ATTN_LSE_TYPED_ABIS,
+        SM120_ATTN_LSE_SCALED_KV_ABIS,
     )
     from tessera.compiler.nvidia_training import SM120_TRAINING_ABIS
     from tessera.compiler.nvidia_dynamic_smem import (
@@ -6977,7 +6978,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         target == "nvidia_sm120"
         and abi_id
         in (
-            {*SM120_ATTN_LSE_TYPED_ABIS,
+            {*SM120_ATTN_LSE_TYPED_ABIS, *SM120_ATTN_LSE_SCALED_KV_ABIS,
                 SM120_ATTN_F16_ABI,
                 SM120_ATTN_F16_RESULT_ABI,
                 SM120_ATTN_BF16_RESULT_ABI,

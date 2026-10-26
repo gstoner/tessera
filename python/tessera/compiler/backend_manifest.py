@@ -6632,6 +6632,19 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # ROCM-NVFP4-INGEST-1: the six-buffer descriptor converter is proved
     # specifically on gfx1201. A family row would transfer that proof to
     # gfx1151/CDNA. This does not promote general uint8 or other NVFP4 policies.
+    # SM120-SAVED-LSE-SCALED-FP8-KV-20261025: executes only fused into the
+    # saved-LSE checkpoint (dequantize_scaled(K), dequantize_scaled(V) feeding
+    # one flash_attn). A standalone dequantize_scaled has no SM120 kernel.
+    if op_name == "dequantize_scaled":
+        entries.append(BackendKernelEntry(
+            target="nvidia_sm120", status=_FUSED_KERNEL_STATUS,
+            dtypes=("fp8_e4m3", "fp8_e5m2", "fp32"),
+            feature_flags=("fused_saved_lse_scaled_kv",),
+            shape_envelope="static rank-four K/V codes; f32 scale axes 1 or the codes extent",
+            execute_compare_fixture="tests/device/nvidia/test_saved_lse_scaled_kv.py",
+            notes="Fused into tessera_attn.checkpoint_forward_scaled_kv: the kernel decodes each "
+                  "FP8 code exactly and multiplies by its broadcast f32 scale in registers.",
+        ))
     if op_name == "nvfp4_expand":
         entries.append(BackendKernelEntry(
             target="rocm_gfx1201", status=_DEVICE_VERIFIED_JIT_STATUS,

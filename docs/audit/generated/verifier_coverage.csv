@@ -207,6 +207,7 @@ src/compiler/ir/TesseraOps.td,PowerAttnOp,1,1,real
 src/compiler/ir/TesseraOps.td,QROp,1,1,real
 src/compiler/ir/TesseraOps.td,QuantizeFP4Op,1,1,real
 src/compiler/ir/TesseraOps.td,QuantizeFP8Op,1,1,real
+src/compiler/ir/TesseraOps.td,QuantizeScaledOp,1,1,real
 src/compiler/ir/TesseraOps.td,RFFTOp,1,1,real
 src/compiler/ir/TesseraOps.td,RLCISPOPolicyLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,RLGRPOPolicyLossOp,1,1,real

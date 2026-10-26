@@ -18,31 +18,31 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `Public Python API` | closed | 363 | 363 | 0 | public=363 | Keep this layer drift-gated through support_table.csv. |
-| `Frontend capture` | closed | 363 | 363 | 0 | public=363 | Keep this layer drift-gated through support_table.csv. |
-| `Graph IR registration` | closed | 363 | 363 | 0 | not_applicable=33, registered=330 | Keep this layer drift-gated through support_table.csv. |
-| `Schedule IR` | mixed | 360 | 363 | 3 | complete=358, not_applicable=2, planned=3 | Keep this layer drift-gated through support_table.csv. |
-| `Tile IR` | mixed | 338 | 363 | 25 | complete=4, fused=300, no_kernel_required=8, not_applicable=26, partial=25 | Close partial Tile IR rows or explicitly classify them as fused/not-applicable. |
-| `Target IR native/fused codegen` | mixed | 334 | 363 | 29 | device_verified_abi=26, device_verified_jit=201, fused=73, no_kernel_required=8, not_applicable=26, reference=29 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. |
-| `Runtime dispatch readiness` | mixed | 362 | 363 | 1 | artifact_only=1, fused=6, ready=356 | Keep this layer drift-gated through support_table.csv. |
-| `Benchmark evidence` | mixed | 108 | 363 | 255 | benchmarked=108, none=255 | Attach benchmarks to native/hardware-promoted rows first. |
+| `Public Python API` | closed | 364 | 364 | 0 | public=364 | Keep this layer drift-gated through support_table.csv. |
+| `Frontend capture` | closed | 364 | 364 | 0 | public=364 | Keep this layer drift-gated through support_table.csv. |
+| `Graph IR registration` | closed | 364 | 364 | 0 | not_applicable=33, registered=331 | Keep this layer drift-gated through support_table.csv. |
+| `Schedule IR` | mixed | 361 | 364 | 3 | complete=359, not_applicable=2, planned=3 | Keep this layer drift-gated through support_table.csv. |
+| `Tile IR` | mixed | 338 | 364 | 26 | complete=4, fused=300, no_kernel_required=8, not_applicable=26, partial=26 | Close partial Tile IR rows or explicitly classify them as fused/not-applicable. |
+| `Target IR native/fused codegen` | mixed | 334 | 364 | 30 | artifact_only=1, device_verified_abi=26, device_verified_jit=201, fused=73, no_kernel_required=8, not_applicable=26, reference=29 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. |
+| `Runtime dispatch readiness` | mixed | 362 | 364 | 2 | artifact_only=2, fused=6, ready=356 | Keep this layer drift-gated through support_table.csv. |
+| `Benchmark evidence` | mixed | 108 | 364 | 256 | benchmarked=108, none=256 | Attach benchmarks to native/hardware-promoted rows first. |
 
 ## Primitive Contract State
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `batching_rule` | mixed | 530 | 531 | 1 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
-| `transpose_rule` | mixed | 530 | 531 | 1 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
-| `sharding_rule` | mixed | 470 | 531 | 61 | primitive contract axis; open means partial or planned, not necessarily missing API support | Prioritize model-facing collectives, layout, memory, and optimizer rows. |
-| `lowering_rule` | mixed | 423 | 531 | 108 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
-| `backend_kernel` | mixed | 100 | 531 | 431 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. |
+| `batching_rule` | mixed | 531 | 532 | 1 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
+| `transpose_rule` | mixed | 531 | 532 | 1 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
+| `sharding_rule` | mixed | 471 | 532 | 61 | primitive contract axis; open means partial or planned, not necessarily missing API support | Prioritize model-facing collectives, layout, memory, and optimizer rows. |
+| `lowering_rule` | mixed | 424 | 532 | 108 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
+| `backend_kernel` | mixed | 100 | 532 | 432 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. |
 
 ## Compiler Integration Evidence
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `Verifier coverage` | closed | 301 | 301 | 0 | real=301 | No action unless this row reopens. |
-| `Direct test evidence` | mixed | 416 | 531 | 115 | covered_by_family=29, directly_tested=423, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
+| `Verifier coverage` | closed | 302 | 302 | 0 | real=302 | No action unless this row reopens. |
+| `Direct test evidence` | mixed | 417 | 532 | 115 | covered_by_family=29, directly_tested=424, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. |
 | `Runtime execution matrix` | closed | 295 | 295 | 0 | apple_cpu=2, apple_gpu=24, cpu=7, nvidia_sm120=64, rocm=96, rocm_gfx1151=3, rocm_gfx1201=12, x86=87 | Add rows only when a launch path actually executes. |
 | `Runtime ABI symbols` | mixed | 741 | 1072 | 331 | apple=723, nvidia=109, rocm=75, x86=165 | Reduce stub-only ABI rows where a backend claims native execution. |
 | `Audited repo surfaces` | mixed | 39 | 69 | 30 | archived=4, compile_only=20, runnable=39, runnable_optional=2, scaffold=4 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. |
@@ -51,26 +51,26 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `Portable CPU reference` | closed | 374 | 374 | 0 | manifest: exact_verified=0, implementation_present=0, reference=374, artifact_or_planned=0, other=0, missing_target_row=157; runtime_paths: executable=7/7 (cpu=7) | Keep portable reference execution distinct from native x86 proof. |
-| `x86 / AVX-512` | mixed | 294 | 354 | 60 | manifest: exact_verified=294, implementation_present=49, reference=11, artifact_or_planned=0, other=0, missing_target_row=177; runtime_paths: executable=87/87 (x86=87) | Promote implementation-only rows with exact Zen 5 execute-and-compare; keep AMX separately gated. |
-| `Apple CPU` | mixed | 403 | 412 | 9 | manifest: exact_verified=0, implementation_present=4, reference=403, artifact_or_planned=5, other=0, missing_target_row=119; runtime_paths: executable=2/2 (apple_cpu=2) | Exact-device verify implementation-only rows or retain them explicitly as reference execution. |
-| `Apple GPU` | mixed | 148 | 213 | 65 | manifest: exact_verified=148, implementation_present=52, reference=4, artifact_or_planned=9, other=0, missing_target_row=318; runtime_paths: executable=24/24 (apple_gpu=24) | Promote implementation/artifact rows only with exact-device execute-and-compare. |
-| `ROCm / gfx1151` | mixed | 346 | 362 | 16 | manifest: exact_verified=346, implementation_present=0, reference=2, artifact_or_planned=14, other=0, missing_target_row=169; runtime_paths: executable=96/96 (rocm=96) | Promote remaining reference rows only with exact gfx1151 execute-and-compare. |
-| `NVIDIA SM80` | open | 0 | 81 | 81 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=81, other=0, missing_target_row=450; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
-| `NVIDIA SM90` | open | 0 | 114 | 114 | manifest: exact_verified=0, implementation_present=0, reference=2, artifact_or_planned=112, other=0, missing_target_row=417; runtime_paths: executable=0/0 (no runtime rows) | Keep compile/artifact evidence separate from SM120 exact-device execution. |
-| `NVIDIA SM100` | open | 0 | 81 | 81 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=81, other=0, missing_target_row=450; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
-| `NVIDIA SM120` | mixed | 72 | 143 | 71 | manifest: exact_verified=72, implementation_present=0, reference=0, artifact_or_planned=71, other=0, missing_target_row=388; runtime_paths: executable=64/64 (nvidia_sm120=64) | Promote artifact rows with SM120 execute-and-compare evidence. |
+| `Portable CPU reference` | closed | 374 | 374 | 0 | manifest: exact_verified=0, implementation_present=0, reference=374, artifact_or_planned=0, other=0, missing_target_row=158; runtime_paths: executable=7/7 (cpu=7) | Keep portable reference execution distinct from native x86 proof. |
+| `x86 / AVX-512` | mixed | 294 | 354 | 60 | manifest: exact_verified=294, implementation_present=49, reference=11, artifact_or_planned=0, other=0, missing_target_row=178; runtime_paths: executable=87/87 (x86=87) | Promote implementation-only rows with exact Zen 5 execute-and-compare; keep AMX separately gated. |
+| `Apple CPU` | mixed | 403 | 413 | 10 | manifest: exact_verified=0, implementation_present=4, reference=403, artifact_or_planned=6, other=0, missing_target_row=119; runtime_paths: executable=2/2 (apple_cpu=2) | Exact-device verify implementation-only rows or retain them explicitly as reference execution. |
+| `Apple GPU` | mixed | 148 | 214 | 66 | manifest: exact_verified=148, implementation_present=52, reference=4, artifact_or_planned=10, other=0, missing_target_row=318; runtime_paths: executable=24/24 (apple_gpu=24) | Promote implementation/artifact rows only with exact-device execute-and-compare. |
+| `ROCm / gfx1151` | mixed | 346 | 363 | 17 | manifest: exact_verified=346, implementation_present=0, reference=2, artifact_or_planned=15, other=0, missing_target_row=169; runtime_paths: executable=96/96 (rocm=96) | Promote remaining reference rows only with exact gfx1151 execute-and-compare. |
+| `NVIDIA SM80` | open | 0 | 82 | 82 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=82, other=0, missing_target_row=450; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
+| `NVIDIA SM90` | open | 0 | 115 | 115 | manifest: exact_verified=0, implementation_present=0, reference=2, artifact_or_planned=113, other=0, missing_target_row=417; runtime_paths: executable=0/0 (no runtime rows) | Keep compile/artifact evidence separate from SM120 exact-device execution. |
+| `NVIDIA SM100` | open | 0 | 82 | 82 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=82, other=0, missing_target_row=450; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
+| `NVIDIA SM120` | mixed | 72 | 144 | 72 | manifest: exact_verified=72, implementation_present=0, reference=0, artifact_or_planned=72, other=0, missing_target_row=388; runtime_paths: executable=64/64 (nvidia_sm120=64) | Promote artifact rows with SM120 execute-and-compare evidence. |
 
 ## Open Work Summary
 
 | Item | Status | Open | Detail | Next | Source |
 |---|---|---:|---|---|---|
-| `backend_kernel` | mixed | 431 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. | `docs/audit/generated/s_series_status.md` |
-| `Direct test evidence` | mixed | 115 | covered_by_family=29, directly_tested=423, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. | `tessera.compiler.generated_docs:test_coverage (live renderer)` |
-| `ROCm target-map native promotion` | mixed | 58 | artifact_only=15, device_verified_abi=2, device_verified_jit=37, planned=4, ready=23, unsupported=16 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |
-| `CUDA target-map native promotion` | open | 46 | artifact_only=42, planned=4 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/nvidia_sm90_target_map.csv` |
+| `backend_kernel` | mixed | 432 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. | `docs/audit/generated/s_series_status.md` |
+| `Direct test evidence` | mixed | 115 | covered_by_family=29, directly_tested=424, hardware_gated=4, structural_only=75 | Convert structural_only and needs_direct_test rows into direct compare fixtures; keep hardware_gated tied to backend proof. | `tessera.compiler.generated_docs:test_coverage (live renderer)` |
+| `ROCm target-map native promotion` | mixed | 63 | artifact_only=15, device_verified_abi=2, device_verified_jit=37, planned=5, ready=23, unsupported=20 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |
+| `CUDA target-map native promotion` | open | 47 | artifact_only=42, planned=5 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/nvidia_sm90_target_map.csv` |
 | `Audited repo surfaces` | mixed | 30 | archived=4, compile_only=20, runnable=39, runnable_optional=2, scaffold=4 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. | `docs/audit/generated/surface_status.csv` |
-| `Target IR native/fused codegen` | mixed | 29 | device_verified_abi=26, device_verified_jit=201, fused=73, no_kernel_required=8, not_applicable=26, reference=29 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. | `docs/audit/generated/support_table.csv` |
+| `Target IR native/fused codegen` | mixed | 30 | artifact_only=1, device_verified_abi=26, device_verified_jit=201, fused=73, no_kernel_required=8, not_applicable=26, reference=29 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. | `docs/audit/generated/support_table.csv` |
 
 ## Dashboard Map
 

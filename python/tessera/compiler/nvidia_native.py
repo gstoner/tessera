@@ -4602,7 +4602,7 @@ def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NV
     names, dims, scale, causal = scheduled.names, scheduled.dims, scheduled.scale, scheduled.causal
     storage, output_storage = scheduled.storage, scheduled.output_storage
     # SM120-SAVED-LSE-MIXED-BACKWARD-20261026: K/V and dK/dV take kv_storage.
-    kv_storage = scheduled.key_value_storage
+    kv_storage = getattr(scheduled, "kv_storage", None) or storage
     typed = storage != "f32" or kv_storage != storage
     data_dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}[storage]
     kv_dtype = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}[kv_storage]
@@ -5350,12 +5350,13 @@ def package_generated_attention_checkpoint_pair(
         compact_gradients=compact_gradients, compact_launch=compact_launch, compact_threads=compact_threads)
     # A mixed Q vs K/V generation seals the same K/V storage on both sides
     # (SM120-SAVED-LSE-MIXED-BACKWARD-20261026).
-    if forward.kv_storage != backward.kv_storage or forward.kv_scale_shapes:
+    if (getattr(forward, "kv_storage", None) != getattr(backward, "kv_storage", None)
+            or getattr(forward, "kv_scale_shapes", ())):
         raise ValueError('generated checkpoint producer and consumer K/V storage disagree')
     identity = _checkpoint_identity(forward.dims, forward.scale, forward.causal, bias=forward.bias, bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds, storage=forward.storage, output_storage=forward.output_storage,
-        kv_storage=forward.kv_storage)
+        kv_storage=getattr(forward, "kv_storage", None))
     if identity != _checkpoint_identity(backward.dims, backward.scale, backward.causal, bias=backward.bias, bias_shape=backward.bias_shape,shape_bounds=backward.shape_bounds, storage=backward.storage, output_storage=backward.output_storage,
-            kv_storage=backward.kv_storage):
+            kv_storage=getattr(backward, "kv_storage", None)):
         raise ValueError('generated checkpoint producer and consumer policies disagree')
     if forward.frontend_argument_indices != backward.frontend_argument_indices:
         raise ValueError("generated checkpoint frontend mappings disagree")

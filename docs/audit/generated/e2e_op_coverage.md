@@ -26,8 +26,8 @@ each row into a single E2E tier.
 |---|---:|
 | ``complete`` | 299 |
 | ``runnable_reference`` | 29 |
-| ``artifact_only`` | 1 |
-| ``partial`` | 35 |
+| ``artifact_only`` | 0 |
+| ``partial`` | 36 |
 | ``planned`` | 0 |
 | **total** | **364** |
 
@@ -369,13 +369,7 @@ each row into a single E2E tier.
 | ``game_mex`` | segment_reduce | public | public | registered | partial | reference | ready | none |
 | ``game_coalition_marginal`` | spectral | public | public | registered | partial | reference | ready | none |
 
-## artifact_only (1)
-
-| Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
-|---|---|---|---|---|---|---|---|---|
-| ``quantize_scaled`` | quantize | public | public | registered | partial | artifact_only | artifact_only | none |
-
-## partial (35)
+## partial (36)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -400,6 +394,7 @@ each row into a single E2E tier.
 | ``soft_top_k`` | normalization | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``sparsemax`` | normalization | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``dequantize_scaled`` | quantize | public | public | registered | fused | device_verified_jit | artifact_only | none |
+| ``quantize_scaled`` | quantize | public | public | registered | fused | device_verified_jit | artifact_only | none |
 | ``segment_reduce`` | segment_reduce | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``cache_commit`` | state_update | public | public | registered | not_applicable | not_applicable | ready | none |
 | ``cache_rollback`` | state_update | public | public | registered | not_applicable | not_applicable | ready | none |

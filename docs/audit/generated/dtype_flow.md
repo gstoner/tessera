@@ -19,7 +19,7 @@ packet to resolve the supported envelope.
 - Operators: **364**
 - TSOL operators: **51**
 - Operator/logical-dtype rows: **994**
-- Rows retaining at least one compiler/evidence gap: **397**
+- Rows retaining at least one compiler/evidence gap: **392**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states
@@ -281,7 +281,6 @@ for the complete per-dtype and per-target matrix.
 | `quantize_fp6` | quantize | no | fp32,fp6_e2m3 | direct_test,physical,tile |
 | `quantize_fp8` | quantize | no | fp32,fp8_e4m3 | direct_test,physical,tile |
 | `quantize_nvfp4` | quantize | no | fp32,nvfp4 | direct_test,physical,tile |
-| `quantize_scaled` | quantize | no | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2 | direct_test,tile |
 | `dropout` | random_mask | yes | bf16,fp32 | direct_test,physical,tile |
 | `rng_normal` | random_source | yes | bf16,fp32 | direct_test,physical,tile |
 | `rng_philox_normal` | random_source | yes | bf16,fp32 | direct_test,physical,tile |

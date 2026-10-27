@@ -2575,11 +2575,25 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
     # tests/device/nvidia/test_saved_lse_scaled_kv.py on the RTX 5070.
     "dequantize_scaled": {
         "dtypes": ("fp8_e4m3", "fp8_e5m2", "fp32"),
-        "feature_flags": ("fused_saved_lse_scaled_kv", "fp8_decode_cvt_f16x2", "cuda"),
-        "shape_envelope": "static rank-four K/V codes; f32 scale axes 1 or the codes extent; "
-                          "only as the K and V producers of one saved-LSE flash_attn",
-        "notes": "Fused into tessera_attn.checkpoint_forward_scaled_kv: each FP8 code decodes "
-                 "exactly and multiplies by its broadcast f32 scale in registers, rounded once.",
+        "feature_flags": ("fused_saved_lse_scaled_kv", "fused_fp8_rhs_decode", "fp8_decode_cvt_f16x2", "cuda"),
+        "shape_envelope": "static rank-four K/V codes as the K and V producers of one saved-LSE "
+                          "flash_attn (f32 scale axes 1 or the codes extent); or static rank-two "
+                          "row-major codes as the B of one f16 matmul with a per-tensor scale",
+        "notes": "Fused into tessera_attn.checkpoint_forward_scaled_kv (decode and scale in "
+                 "registers, rounded once), or into the SM120 typed row-B matmul gather "
+                 "(SM120-W11-FP8-RHS-20261026: exact decode, scale applied once to the f32 "
+                 "accumulator).",
+    },
+    # SM120-W11-FP8-RHS-20261026: executes only fused into a native RMSNorm or
+    # LayerNorm store; proven by tests/device/nvidia/test_scaled_fp8_norm.py.
+    "quantize_scaled": {
+        "dtypes": ("fp16", "bf16", "fp32", "fp8_e4m3", "fp8_e5m2"),
+        "feature_flags": ("fused_norm_fp8_store", "fp8_encode_cvt_satfinite", "cuda"),
+        "shape_envelope": "static rank-two values as the only use of one RMSNorm/LayerNorm; "
+                          "per-tensor (1, 1) f32 scale",
+        "notes": "Fused into tile.norm_kernel: the norm value rounds to its declared storage, "
+                 "divides by the scale and converts with cvt.rn.satfinite; bit-exact against "
+                 "the reference.",
     },
     **{
         op: {
@@ -3451,6 +3465,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("conv2d", "nvidia_sm120"): "tests/device/nvidia/test_conv2d.py",
     ("flash_attn", "nvidia_sm120"): "tests/device/nvidia/test_flash_attention.py",
     ("dequantize_scaled", "nvidia_sm120"): "tests/device/nvidia/test_saved_lse_scaled_kv.py",
+    ("quantize_scaled", "nvidia_sm120"): "tests/device/nvidia/test_scaled_fp8_norm.py",
     ("dsa_block_sparse_attention", "nvidia_sm120"): "tests/device/nvidia/test_sparse_attention.py",
     ("mla_decode", "nvidia_sm120"): "tests/device/nvidia/test_mla_decode.py",
     ("mla_decode_fused", "nvidia_sm120"): "tests/device/nvidia/test_mla_decode.py",

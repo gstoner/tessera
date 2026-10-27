@@ -374,6 +374,8 @@ _KEYWORD_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     "tessera.nvfp4_expand": ("numeric_policy", "row_offsets"),
     "tessera.nvfp4_requantize": ("numeric_policy", "row_offsets"),
     "tessera.mxfp4_folded_storage": ("storage_contract",),
+    # SM120-W11-FP8-RHS-20261026: the FP8 result storage, a semantic key.
+    "tessera.quantize_scaled": ("format",),
     "tessera.es_low_rank_correction": ("out_dim", "rank", "sigma"),
     "tessera.attn_sliding_window": ("window_size",),
     "tessera.attn_top_k_blocks": ("top_k", "block_size"),

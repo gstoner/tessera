@@ -22,8 +22,8 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Frontend capture` | closed | 364 | 364 | 0 | public=364 | Keep this layer drift-gated through support_table.csv. |
 | `Graph IR registration` | closed | 364 | 364 | 0 | not_applicable=33, registered=331 | Keep this layer drift-gated through support_table.csv. |
 | `Schedule IR` | mixed | 361 | 364 | 3 | complete=359, not_applicable=2, planned=3 | Keep this layer drift-gated through support_table.csv. |
-| `Tile IR` | mixed | 338 | 364 | 26 | complete=4, fused=300, no_kernel_required=8, not_applicable=26, partial=26 | Close partial Tile IR rows or explicitly classify them as fused/not-applicable. |
-| `Target IR native/fused codegen` | mixed | 334 | 364 | 30 | artifact_only=1, device_verified_abi=26, device_verified_jit=201, fused=73, no_kernel_required=8, not_applicable=26, reference=29 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. |
+| `Tile IR` | mixed | 339 | 364 | 25 | complete=4, fused=301, no_kernel_required=8, not_applicable=26, partial=25 | Close partial Tile IR rows or explicitly classify them as fused/not-applicable. |
+| `Target IR native/fused codegen` | mixed | 335 | 364 | 29 | device_verified_abi=26, device_verified_jit=202, fused=73, no_kernel_required=8, not_applicable=26, reference=29 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. |
 | `Runtime dispatch readiness` | mixed | 362 | 364 | 2 | artifact_only=2, fused=6, ready=356 | Keep this layer drift-gated through support_table.csv. |
 | `Benchmark evidence` | mixed | 108 | 364 | 256 | benchmarked=108, none=256 | Attach benchmarks to native/hardware-promoted rows first. |
 
@@ -59,7 +59,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `NVIDIA SM80` | open | 0 | 82 | 82 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=82, other=0, missing_target_row=450; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
 | `NVIDIA SM90` | open | 0 | 115 | 115 | manifest: exact_verified=0, implementation_present=0, reference=2, artifact_or_planned=113, other=0, missing_target_row=417; runtime_paths: executable=0/0 (no runtime rows) | Keep compile/artifact evidence separate from SM120 exact-device execution. |
 | `NVIDIA SM100` | open | 0 | 82 | 82 | manifest: exact_verified=0, implementation_present=0, reference=0, artifact_or_planned=82, other=0, missing_target_row=450; runtime_paths: executable=0/0 (no runtime rows) | Retain as declared/open until architecture-owned execution evidence exists. |
-| `NVIDIA SM120` | mixed | 72 | 144 | 72 | manifest: exact_verified=72, implementation_present=0, reference=0, artifact_or_planned=72, other=0, missing_target_row=388; runtime_paths: executable=64/64 (nvidia_sm120=64) | Promote artifact rows with SM120 execute-and-compare evidence. |
+| `NVIDIA SM120` | mixed | 73 | 144 | 71 | manifest: exact_verified=73, implementation_present=0, reference=0, artifact_or_planned=71, other=0, missing_target_row=388; runtime_paths: executable=64/64 (nvidia_sm120=64) | Promote artifact rows with SM120 execute-and-compare evidence. |
 
 ## Open Work Summary
 
@@ -70,7 +70,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `ROCm target-map native promotion` | mixed | 63 | artifact_only=15, device_verified_abi=2, device_verified_jit=37, planned=5, ready=23, unsupported=20 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/rocm_target_map.csv` |
 | `CUDA target-map native promotion` | open | 47 | artifact_only=42, planned=5 | Promote artifact_only rows with hardware execute-and-compare or move them to an explicit hardware-gated bucket. | `docs/audit/generated/nvidia_sm90_target_map.csv` |
 | `Audited repo surfaces` | mixed | 30 | archived=4, compile_only=20, runnable=39, runnable_optional=2, scaffold=4 | Graduate compile_only/scaffold entries that exercise compiler pathways; archive dead surfaces. | `docs/audit/generated/surface_status.csv` |
-| `Target IR native/fused codegen` | mixed | 30 | artifact_only=1, device_verified_abi=26, device_verified_jit=201, fused=73, no_kernel_required=8, not_applicable=26, reference=29 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. | `docs/audit/generated/support_table.csv` |
+| `Target IR native/fused codegen` | mixed | 29 | device_verified_abi=26, device_verified_jit=202, fused=73, no_kernel_required=8, not_applicable=26, reference=29 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. | `docs/audit/generated/support_table.csv` |
 
 ## Dashboard Map
 

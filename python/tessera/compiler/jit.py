@@ -1131,6 +1131,10 @@ class JitFn:
                 native_ingest=self._try_rocm_nvfp4_program_call(args,kwargs)
                 if native_ingest is not _JIT_FALLBACK:
                     return native_ingest
+            if getattr(self,"_rocm_quantized_product_bounded_program",None) is not None:
+                bounded_quantized=self._try_rocm_quantized_product_call(args,kwargs)
+                if bounded_quantized is not _JIT_FALLBACK:
+                    return bounded_quantized
         except _DroppedCallTraceDecline:
             # A trace failed on a body the AST front end found incomplete; the
             # dropped-call guard before the AST lanes decides what runs.
@@ -2672,6 +2676,18 @@ class JitFn:
         bound=self._rocm_nvfp4_call_signature.bind(*args,**kwargs)
         bound.apply_defaults()
         ordered=tuple(bound.arguments[name] for name in self.arg_names)
+        bounded=getattr(self,"_rocm_quantized_product_bounded_program",None)
+        if bounded is not None:
+            # Explicit bounded compilation retained the verified capacity
+            # program; any 1 <= M <= bound binds it without retracing.
+            output,receipts=bounded.execute(ordered)
+            if len(receipts)!=len(bounded.native.native_stages) or not all(r.get("ok") and r.get("execution_kind")=="native_gpu" for r in receipts):
+                raise RuntimeError(f"bounded native quantized-product execution failed: {receipts}")
+            self._rocm_quantized_product_last_program=bounded
+            self._rocm_quantized_product_last_receipts=receipts
+            self._cached_artifact=None
+            self.last_fallback_reason=None
+            return output
         module,_=self._trace_frontend_capture(ordered,{})
         if not requests_quantized_product(module):
             raise ValueError("quantized-product source differs from its traced Graph")
@@ -2771,6 +2787,34 @@ class JitFn:
             self.frontend_authority="tracer"
             self.frontend_authority_error=None
             self._rocm_nvfp4_bounded_program=(program,runtime_artifact(program))
+        return program
+
+    def compile_native_quantized_program(self,*args,m_bound=None,**kwargs):
+        """Compile the authored quantized product/MLP; ``m_bound`` requests the bounded v5 MLP."""
+        from copy import deepcopy
+        from dataclasses import replace
+        from .rocm_quantized_product_frontend import package_traced_quantized_product,requests_quantized_product
+        if normalize_target_kind(self.target)!="rocm_gfx1201" or self.differentiation_request is not None:
+            raise ValueError("native quantized program requires primal exact gfx1201")
+        if m_bound is not None and (type(m_bound) is not int or m_bound<=0):
+            raise ValueError("native quantized row bound must be a positive integer")
+        bound=self._rocm_nvfp4_call_signature.bind(*args,**kwargs)
+        bound.apply_defaults()
+        ordered=tuple(bound.arguments[name] for name in self.arg_names)
+        module,_=self._trace_frontend_capture(ordered,{})
+        if not requests_quantized_product(module):
+            raise ValueError("native quantized program requires the authored quantizer/product Graph")
+        if m_bound is not None:
+            module.module_attrs["tessera.native.quantized_m_bound"]=f"{m_bound} : i64"
+        program=replace(package_traced_quantized_product(module),argument_names=tuple(self.arg_names))
+        program.validate()
+        if m_bound is not None:
+            if not program.bounded:
+                raise ValueError("native quantized row bound did not produce a bounded program")
+            self.graph_ir=deepcopy(module)
+            self.frontend_authority="tracer"
+            self.frontend_authority_error=None
+            self._rocm_quantized_product_bounded_program=program
         return program
 
     def native_nvfp4_packages(self):

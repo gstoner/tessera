@@ -16,6 +16,7 @@ _SCHEMA="tessera.rocm.quantized_product_frontend.v1"
 _EXPANDED_SCHEMA="tessera.rocm.quantized_product_frontend.v2"
 _ACTIVATED_SCHEMA="tessera.rocm.quantized_product_frontend.v3"
 _MLP_SCHEMA="tessera.rocm.quantized_product_frontend.v4"
+_BOUNDED_MLP_SCHEMA="tessera.rocm.quantized_product_frontend.v5"
 _OWNER_PID=os.getpid()
 
 
@@ -43,6 +44,10 @@ class TracedQuantizedProduct:
     def graph_ir(self):
         return self.native.graph_ir
 
+    @property
+    def bounded(self):
+        return bool(getattr(self.native,"bounded",False))
+
     def validate(self):
         self.native.validate()
         roles,_=_frame_shape(json.loads(self.native.program_json))
@@ -54,6 +59,8 @@ class TracedQuantizedProduct:
 
     def manifest(self):
         self.validate()
+        if self.bounded:
+            raise ValueError("bounded native quantized MLP has no portable record")
         return {"schema":_frontend_schema(self.native),"argument_names":list(self.argument_names),"native_program":self.native.to_manifest()}
 
     def execute(self,args):
@@ -93,6 +100,8 @@ def _source(module):
     old=source.module_attrs.get("tessera.native.quantized_product")
     if old not in (None,"unit"):
         raise ValueError("quantized-product source intent conflicts")
+    # A tessera.native.quantized_m_bound request passes through unchanged: the
+    # native export owns its admission (seven-member MLP, checked capacity).
     source.module_attrs["tessera.native.quantized_product"]="unit"
     return source.to_mlir(target="rocm_gfx1201",canonical=True)
 
@@ -119,20 +128,23 @@ def package_traced_quantized_product(module):
 
 def _frontend_schema(native):
     schema=json.loads(native.program_json)["schema"]
-    return dict(zip((f"tessera.native.quantized_product.v{i}" for i in (1,2,3,4)),
-        (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA,_MLP_SCHEMA),strict=True))[schema]
+    return dict(zip((f"tessera.native.quantized_product.v{i}" for i in (1,2,3,4,5)),
+        (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA,_MLP_SCHEMA,_BOUNDED_MLP_SCHEMA),strict=True))[schema]
 
 
 def _compiler_path(native):
     return {_SCHEMA:"canonical_rocm_quantized_product_program",
             _EXPANDED_SCHEMA:"canonical_rocm_quantized_nvfp4_product_program",
             _ACTIVATED_SCHEMA:"canonical_rocm_quantized_gate_up_program",
-            _MLP_SCHEMA:"canonical_rocm_quantized_mlp_program"}[_frontend_schema(native)]
+            _MLP_SCHEMA:"canonical_rocm_quantized_mlp_program",
+            _BOUNDED_MLP_SCHEMA:"canonical_rocm_quantized_bounded_mlp_program"}[_frontend_schema(native)]
 
 
 def runtime_artifact(program):
     from tessera.runtime import RuntimeArtifact
     program.validate()
+    if program.bounded:
+        raise ValueError("bounded native quantized MLP has no portable record")
     native=program.native
     return RuntimeArtifact(graph_ir=program.graph_ir,
         schedule_ir="\n".join(native.schedule_irs),

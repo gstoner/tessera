@@ -210,8 +210,8 @@ The compiler-facing table contains **364** callable/IR rows; the remaining **168
 | `frontend` | `public` 364 |
 | `graph_ir` | `registered` 331, `not_applicable` 33 |
 | `schedule_ir` | `not_applicable` 2, `complete` 359, `planned` 3 |
-| `tile_ir` | `not_applicable` 26, `complete` 4, `partial` 26, `fused` 300, `no_kernel_required` 8 |
-| `target_ir` | `not_applicable` 26, `fused` 73, `device_verified_abi` 26, `device_verified_jit` 201, `reference` 29, `artifact_only` 1, `no_kernel_required` 8 |
+| `tile_ir` | `not_applicable` 26, `complete` 4, `partial` 25, `fused` 301, `no_kernel_required` 8 |
+| `target_ir` | `not_applicable` 26, `fused` 73, `device_verified_abi` 26, `device_verified_jit` 202, `reference` 29, `no_kernel_required` 8 |
 | `runtime` | `fused` 6, `artifact_only` 2, `ready` 356 |
 | `bench` | `benchmarked` 108, `none` 256 |
 
@@ -223,7 +223,7 @@ Exact-target backend-manifest rows:
 | `apple_gpu` | 206 | `device_verified_abi` 10, `device_verified_jit` 139, `fused` 47, `artifact_only` 3, `reference` 2, `planned` 5 |
 | `cpu` | 375 | `reference` 375 |
 | `nvidia_sm100` | 81 | `artifact_only` 42, `planned` 39 |
-| `nvidia_sm120` | 143 | `device_verified_abi` 15, `device_verified_jit` 57, `artifact_only` 34, `planned` 37 |
+| `nvidia_sm120` | 143 | `device_verified_abi` 15, `device_verified_jit` 58, `artifact_only` 33, `planned` 37 |
 | `nvidia_sm80` | 81 | `artifact_only` 42, `planned` 39 |
 | `nvidia_sm90` | 105 | `artifact_only` 42, `planned` 63 |
 | `rocm` | 334 | `device_verified_abi` 3, `device_verified_jit` 316, `artifact_only` 1, `planned` 14 |
@@ -235,9 +235,9 @@ Current open queues derived from the same sources:
 
 | Queue | Count | Scope |
 |---|---:|---|
-| Tile IR partial | 26 | `adadelta`, `adagrad`, `binary_brier_loss`, `brier_loss`, `depth_attn`, `det`, `eigh`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue`, `inv`, `kron`, `logdet`, `matrix_power`, `norm`, `ntk_rope`, `ordinal_logistic_loss`, `quantize_scaled`, `rmsprop`, `shampoo`, `soft_binned_ece`, `solve`, `trace`, `vec` |
+| Tile IR partial | 25 | `adadelta`, `adagrad`, `binary_brier_loss`, `brier_loss`, `depth_attn`, `det`, `eigh`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue`, `inv`, `kron`, `logdet`, `matrix_power`, `norm`, `ntk_rope`, `ordinal_logistic_loss`, `rmsprop`, `shampoo`, `soft_binned_ece`, `solve`, `trace`, `vec` |
 | Backend contract planned | 9 | `broadcast_to_axis`, `collective_permute`, `named_sharding`, `partition_spec`, `pmax`, `pmean`, `pmin`, `psum`, `shard_map` |
-| Native/fused aggregate rows without benchmark inventory | 196 | See generated support table; this is an evidence queue, not proof of a missing kernel. |
+| Native/fused aggregate rows without benchmark inventory | 197 | See generated support table; this is an evidence queue, not proof of a missing kernel. |
 | VJP / JVP planned | 47 / 47 | Autodiff rules, not forward compiler execution. |
 | Sharding partial | 60 | Multi-device/domain proof. |
 

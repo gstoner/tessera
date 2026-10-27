@@ -660,13 +660,16 @@ def lower_scheduled_fp8_rhs_matmul(module: GraphIRModule, *, target: str) -> Sch
     if len(function.args) != 3 or len(function.body) != 2 or len(function.result_types) != 1:
         raise ValueError("scaled FP8 RHS matmul requires (lhs, codes, scale), dequantize then matmul")
     dequant, matmul = function.body
+    if not dequant.result or not matmul.result:
+        raise ValueError("scaled FP8 RHS matmul requires named dequantize and matmul results")
+    dequant_result, matmul_result = str(dequant.result), str(matmul.result)
     args = {arg.name: arg for arg in function.args}
     names = [operand.removeprefix("%") for operand in dequant.operands]
     if (dequant.op_name != "tessera.dequantize_scaled" or matmul.op_name != "tessera.matmul"
             or len(names) != 2 or any(name not in args for name in names)
-            or len(matmul.operands) != 2 or matmul.operands[1] != "%" + dequant.result
+            or len(matmul.operands) != 2 or matmul.operands[1] != "%" + dequant_result
             or matmul.operands[0].removeprefix("%") not in args
-            or function.return_values != ["%" + matmul.result] or dequant.kwargs):
+            or function.return_values != ["%" + matmul_result] or dequant.kwargs):
         raise ValueError("scaled FP8 RHS matmul must return matmul(lhs, dequantize_scaled(codes, scale))")
     codes, scale = (args[name] for name in names)
     lhs = args[matmul.operands[0].removeprefix("%")]
@@ -679,7 +682,7 @@ def lower_scheduled_fp8_rhs_matmul(module: GraphIRModule, *, target: str) -> Sch
     # The matmul-only contract (shapes, storage, output) with B typed as A.
     only = copy.deepcopy(module)
     fn = only.functions[0]
-    half_b = IRArg(dequant.result, tensor_ir_type(tuple(codes.ir_type.shape), lhs.ir_type.dtype))
+    half_b = IRArg(dequant_result, tensor_ir_type(tuple(codes.ir_type.shape), lhs.ir_type.dtype))
     fn.args = [lhs, half_b]
     fn.body = [copy.deepcopy(matmul)]
     fn.body[0].operand_types = [str(lhs.ir_type), str(half_b.ir_type)]
@@ -704,7 +707,7 @@ def lower_scheduled_fp8_rhs_matmul(module: GraphIRModule, *, target: str) -> Sch
     artifact = ScheduledMatmulArtifact(
         graph_ir=graph_ir, schedule_ir=schedule_ir, tile_ir=tile_ir,
         target=contract[0], architecture=contract[1], function_name=entries[0],
-        a_name=lhs.name, b_name=codes.name, output_name=matmul.result,
+        a_name=lhs.name, b_name=codes.name, output_name=matmul_result,
         m=contract[6], n=contract[7], k=contract[8],
         a_dtype=contract[9], b_dtype=contract[10], output_dtype=contract[11],
         storage=contract[12], accum=contract[13],

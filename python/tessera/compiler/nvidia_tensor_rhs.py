@@ -415,7 +415,7 @@ def rhs_program_manifest(program: NvidiaTracedRhsProgram) -> dict:
     import json
     validate_traced_program(program)
     edge=program.edge
-    fields=("source_name","edge_name","lhs_name","rhs_name","output_name","m","k","n","dtype")
+    fields: tuple[str, ...]=("source_name","edge_name","lhs_name","rhs_name","output_name","m","k","n","dtype")
     fp8=bool(edge.edge_storage)
     if fp8:
         fields+=("edge_storage","scale_name")

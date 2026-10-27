@@ -4100,6 +4100,8 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
         device_libraries=libraries,
         resource_record=ResourceRecord(provenance="scheduled Tile IR; ptxas --arch=sm_120a -v", metrics=metrics),
     )
+    buffers: tuple[BufferBinding, ...]
+    guarded: tuple[tuple[str, tuple[int, ...]], ...]
     if fp8_output:
         scale_shape = (1,) * len(shape)
         buffers = (BufferBinding(0, artifact.input_name, "input", artifact.dtype, len(shape), "row_major", 4 if storage == "f32" else 2),

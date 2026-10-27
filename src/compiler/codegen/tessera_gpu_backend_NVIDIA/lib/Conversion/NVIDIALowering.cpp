@@ -2396,12 +2396,23 @@ static LogicalResult materializeSm120NormKernel(
   bool cooperative = schedule && schedule.getValue() == "cooperative_128";
   if (schedule && schedule.getValue() != "serial" && !cooperative)
     return op->emitError("SM120 norm schedule must be serial|cooperative_128");
-  if (inputs.size() != 5 || !storage ||
+  // SM120-W11-FP8-RHS-20261026: a fused quantize_scaled store. The norm value
+  // first rounds to the Graph's declared norm storage (the unfused composition
+  // reads that rounded tensor), widens exactly, divides by the per-tensor f32
+  // scale with IEEE f32 division and converts with cvt.rn.satfinite to FP8.
+  auto fp8Output = op->getAttrOfType<StringAttr>("output_storage");
+  bool scaled = bool(fp8Output);
+  if (scaled && failed(kernel.verify())) return failure();
+  bool e5m2Output = scaled && fp8Output.getValue() == "fp8_e5m2";
+  Value scaleBase = scaled ? inputs[1] : Value();
+  SmallVector<Value> normalized{inputs[0]};
+  for (unsigned i = scaled ? 2 : 1; i < inputs.size(); ++i) normalized.push_back(inputs[i]);
+  if (normalized.size() != 5 || !storage ||
       (!f16Storage && !bf16Storage && storage.getValue() != "f32") ||
       !accum || accum.getValue() != "f32" || !kind ||
       (!layer && kind.getValue() != "rmsnorm") || !axis ||
       axis.getInt() != -1 || !affine || affine.getValue() ||
-      !inputs[4].getType().isF32()) {
+      !normalized[4].getType().isF32()) {
     op->emitError(
         "sm_120 norm_kernel requires f16/bf16/f32 storage, f32 accumulation, "
         "rmsnorm|layernorm, axis=-1, affine=false, and f32 epsilon");
@@ -2415,8 +2426,11 @@ static LogicalResult materializeSm120NormKernel(
                          ? Type(builder.getF16Type())
                          : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
   unsigned alignment = (f16Storage || bf16Storage) ? 2 : 4;
-  Value xBase = inputs[0], outBase = inputs[1];
-  Value rows = inputs[2], columns = inputs[3], epsilon = inputs[4];
+  Value xBase = normalized[0], outBase = normalized[1];
+  Value rows = normalized[2], columns = normalized[3], epsilon = normalized[4];
+  Value scale;
+  if (scaled)
+    scale = LLVM::LoadOp::create(builder, loc, f32, scaleBase, /*alignment=*/4);
   Value block = arith::ExtUIOp::create(
       builder, loc, i64, NVVM::BlockIdXOp::create(builder, loc, i32));
   Value thread = arith::ExtUIOp::create(
@@ -2457,6 +2471,22 @@ static LogicalResult materializeSm120NormKernel(
                        ? Value(LLVM::FPTruncOp::create(
                              builder, loc, storageType, value))
                        : value;
+    if (scaled) {
+      Value rounded = (f16Storage || bf16Storage)
+          ? Value(LLVM::FPExtOp::create(builder, loc, f32, stored)) : stored;
+      Value quotient = arith::DivFOp::create(builder, loc, rounded, scale);
+      Type fp8 = e5m2Output ? Type(builder.getType<Float8E5M2Type>())
+                            : Type(builder.getType<Float8E4M3FNType>());
+      // Both halves convert the same value, so either byte is the code.
+      Value pair = NVVM::ConvertF32x2ToF8x2Op::create(builder, loc, builder.getI16Type(),
+          quotient, quotient, NVVM::FPRoundingMode::RN, NVVM::SaturationMode::SATFINITE,
+          /*relu=*/false, fp8);
+      Value code = LLVM::TruncOp::create(builder, loc, builder.getI8Type(), pair);
+      Value ptr = LLVM::GEPOp::create(builder, loc, outBase.getType(), builder.getI8Type(),
+                                      outBase, ValueRange{linear});
+      LLVM::StoreOp::create(builder, loc, code, ptr, /*alignment=*/1);
+      return;
+    }
     Value ptr = LLVM::GEPOp::create(
         builder, loc, outBase.getType(), storageType, outBase,
         ValueRange{linear});
@@ -4256,6 +4286,26 @@ static LogicalResult materializeSm120GroupedGemmKernel(
   builder.setInsertionPointAfter(guarded); op->erase(); return success();
 }
 
+/// Exactly decode one FP8 code byte to `halfType` (f16 or bf16) through
+/// sm_120's cvt.rn.f16x2.{e4m3,e5m2}x2. Every E4M3FN and E5M2 value is an
+/// f16 value, and every f16 decoded from FP8 is also a bf16 value, so neither
+/// conversion rounds (SM120-W11-FP8-RHS-20261026).
+static Value decodeSm120Fp8(OpBuilder &builder, Location loc, Value byte,
+                            bool e5m2, Type halfType) {
+  Value wide = LLVM::ZExtOp::create(builder, loc, builder.getI16Type(), byte);
+  Value pair = LLVM::BitcastOp::create(builder, loc,
+      VectorType::get({2}, builder.getI8Type()), wide);
+  Type format = e5m2 ? Type(builder.getType<Float8E5M2Type>())
+                     : Type(builder.getType<Float8E4M3FNType>());
+  Value halves = NVVM::ConvertF8x2ToF16x2Op::create(
+      builder, loc, VectorType::get({2}, builder.getF16Type()), pair, format);
+  Value decoded = LLVM::ExtractElementOp::create(
+      builder, loc, halves, LLVM::ConstantOp::create(builder, loc, builder.getI32Type(), 0));
+  if (halfType.isF16()) return decoded;
+  Value f32 = LLVM::FPExtOp::create(builder, loc, builder.getF32Type(), decoded);
+  return LLVM::FPTruncOp::create(builder, loc, halfType, f32);
+}
+
 static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
     tessera::tile::FragmentPackOp pack, OpBuilder &builder, Value gid,
     Value tig) {
@@ -4306,6 +4356,15 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
   const bool rowMajorB = role.getValue() == "b" &&
       memory.getOrder() == "row_major" && pack.getTranspose() &&
       physical->packing == Sm120InputPacking::PairF16;
+  // SM120-W11-FP8-RHS-20261026: the row-major B gather may load FP8 codes.
+  auto decodeAttr = op->getAttrOfType<StringAttr>("decode");
+  if (op->hasAttr("decode") && (!decodeAttr || !rowMajorB ||
+      (decodeAttr.getValue() != "fp8_e4m3" && decodeAttr.getValue() != "fp8_e5m2"))) {
+    op->emitError("sm_120 FP8 B decode requires the transposed row-major half B gather");
+    return failure();
+  }
+  const bool decodeFp8 = bool(decodeAttr);
+  const bool decodeE5M2 = decodeFp8 && decodeAttr.getValue() == "fp8_e5m2";
   if ((role.getValue() != "a" && role.getValue() != "b") ||
       (memory.getOrder() != expectedOrder && !rowMajorB) ||
       (pack.getTranspose() && !rowMajorB) || memory.getSpace() == "lds" ||
@@ -4508,9 +4567,13 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
                   builder, loc, inBounds, elementLinear,
                   i64Constant(builder, loc, 0)))
             : elementLinear;
-        Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), inputTy,
+        Type storedTy = decodeFp8 ? Type(builder.getI8Type()) : inputTy;
+        Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), storedTy,
                                         base, ValueRange{safeLinear});
-        Value element = LLVM::LoadOp::create(builder, loc, inputTy, ptr, alignment);
+        Value element = LLVM::LoadOp::create(builder, loc, storedTy, ptr,
+                                             decodeFp8 ? 1u : alignment);
+        if (decodeFp8)
+          element = decodeSm120Fp8(builder, loc, element, decodeE5M2, inputTy);
         Value zeroElement = arith::ConstantOp::create(
             builder, loc, inputTy, builder.getZeroAttr(inputTy));
         if (haveBounds)
@@ -4638,7 +4701,12 @@ static LogicalResult materializeSm120AccumulatorStore(
   auto residualAttr = store->getAttrOfType<BoolAttr>("tile.residual");
   const bool hasResidual = residualAttr && residualAttr.getValue();
   const bool hasBias = epilogue && epilogue.getBias();
-  const size_t extra = size_t(hasBias) + size_t(hasResidual);
+  // SM120-W11-FP8-RHS-20261026: one trailing per-tensor f32 scale pointer
+  // multiplies the f32 accumulator once (never with a fused epilogue).
+  const bool hasOutputScale = store->hasAttr("tile.output_scale");
+  if (hasOutputScale && (epilogue || hasResidual || !isF32 || failed(store.verify())))
+    return op->emitError("sm_120 output scale requires an unfused f32 accumulator store");
+  const size_t extra = size_t(hasBias) + size_t(hasResidual) + size_t(hasOutputScale);
   if (store.getInputs().size() < extra) return failure();
   const size_t addressInputs = store.getInputs().size() - extra;
   if (epilogue && (!isF32 ||
@@ -4702,6 +4770,10 @@ static LogicalResult materializeSm120AccumulatorStore(
   }
   Type outputTy = epilogue && epilogue.getOutputType() == "f16"
       ? Type(builder.getF16Type()) : accumulatorTy;
+  Value outputScale = hasOutputScale
+      ? Value(LLVM::LoadOp::create(builder, loc, builder.getF32Type(),
+                                   store.getInputs().back(), /*alignment=*/4))
+      : Value();
   for (auto [index, coord] : llvm::enumerate(coords)) {
     Value row = addI64(builder, loc, rowOrigin, coord.first);
     Value col = addI64(builder, loc, colOrigin, coord.second);
@@ -4716,6 +4788,8 @@ static LogicalResult materializeSm120AccumulatorStore(
       // Loads belong inside the same logical M/N guard as the output store.
       // Padding lanes must not read bias/residual buffers past their extent.
       Value value = scalar;
+      if (hasOutputScale)
+        value = arith::MulFOp::create(builder, loc, value, outputScale);
       if (hasBias) {
         Value pointer = LLVM::GEPOp::create(builder, loc, biasBase.getType(),
             builder.getF32Type(), biasBase, ValueRange{col});

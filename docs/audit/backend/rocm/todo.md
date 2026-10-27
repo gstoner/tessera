@@ -19286,3 +19286,12 @@ Synchronization key: SM120-TYPED-REVERSE-ROW-PREPASS-20261026.
 Not applicable to rocm physical execution: the row-correction prepass, its Tile kernels and owner are SM120-only. The shared verifier relaxation (half Q or half K/V) is reached only through the SM120 paired reverse, so no ROCm selector, ABI or result changes. Follow-up only if a ROCm saved-LSE reverse owner is built; that owner should start from the once-per-row correction, not the inline form.
 
 Evidence: benchmarks/baselines/sm120_typed_reverse_row_prepass_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md §"Typed reverse row correction".
+
+## SM120-W11-FP8-RHS-20261026 — scaled FP8 RHS edge (W1.1)
+
+Owner: E2E-REAL-6 / W1.1.
+Synchronization key: SM120-W11-FP8-RHS-20261026.
+
+Not applicable to rocm physical execution: the fused FP8 norm store and FP8 row-B decode are SM120 schedule/Tile/NVVM paths and `quantize_scaled` is `unsupported` on ROCm. Shared changes (Graph op, the norm/matmul schedule admissions) are gated on the SM120 target; gfx1201's existing FP8 W8A8/MXFP8 contracts are untouched. Follow-up only if a ROCm resident RHS edge is built.
+
+Evidence: benchmarks/baselines/sm120_fp8_rhs_edge_20261026/README.md; contract docs/spec/SM120_FP8_RHS_EDGE_CONTRACT.md.

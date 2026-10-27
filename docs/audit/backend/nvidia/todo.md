@@ -16726,3 +16726,12 @@ The public SM120 attention reverse now selects the compiler's existing `row_corr
 
 Evidence: benchmarks/baselines/sm120_typed_reverse_row_prepass_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md §"Typed reverse row correction".
 
+## SM120-W11-FP8-RHS-20261026 — scaled FP8 RHS edge (W1.1)
+
+Owner: E2E-REAL-6 / W1.1.
+Synchronization key: SM120-W11-FP8-RHS-20261026.
+
+The RMSNorm/LayerNorm→matmul RHS edge gains scaled FP8 storage: `matmul(lhs, dequantize_scaled(quantize_scaled(rmsnorm(x), s, format), s))` lowers to a native producer that stores `satfinite(rn(round_to_storage(y)/s))` (`nvvm.convert.f32x2.to.f8x2`) and a native typed row-B consumer that decodes each code exactly to A's f16 in its gather and multiplies the per-tensor scale once into the f32 accumulator (a declared reassociation of the Graph's per-element product, admitted for f16 A only because the unscaled f32 accumulator cannot overflow there; bf16 A could, so a bf16 FP8 edge runs the eager composition). New Graph op `tessera.quantize_scaled` (required `format`; canonical NaN code 0x7F, matching cvt). Ordinary `@jit`, the v3 portable manifest and resident launches carry it; an E5M2 CUDA buffer is now described by its declared dtype (ml_dtypes' `<f1` typestr is unparsable). RTX 5070: 122 producer cases bit-exact against quantize_scaled of the native norm, 28 consumer cases bit-exact against the scaled half matmul of decoded codes (plus every finite code exact, the largest f16 x E5M2 magnitudes finite, bf16 A refused), 8 public JIT cases. Paired events: no latency win (edge 1.06x at M16, 0.98x at M256 versus the f16 edge; the typed row-B consumer is gather-bound), 2x edge storage reduction. Open: MXFP8 and MXFP4 RHS gates; per-row/block scales; FP8 LHS (`mma.sync` e4m3); dynamic shapes; fused epilogues. Pre-existing and unchanged here: the public half RHS JIT dispatch selects the generic tensor-program route (18 `test_rhs_jit_dispatch` failures on main).
+
+Evidence: benchmarks/baselines/sm120_fp8_rhs_edge_20261026/README.md; contract docs/spec/SM120_FP8_RHS_EDGE_CONTRACT.md.
+

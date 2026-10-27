@@ -12497,3 +12497,12 @@ Synchronization key: SM120-TYPED-REVERSE-ROW-PREPASS-20261026.
 Not applicable to x86: shared verifier/AD-export relaxation is SM120-gated; no x86 selector, ABI or result changes.
 
 Evidence: benchmarks/baselines/sm120_typed_reverse_row_prepass_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md §"Typed reverse row correction".
+
+## SM120-W11-FP8-RHS-20261026 — scaled FP8 RHS edge (W1.1)
+
+Owner: E2E-REAL-6 / W1.1.
+Synchronization key: SM120-W11-FP8-RHS-20261026.
+
+Not applicable to x86: Graph op registration only (`quantize_scaled` unsupported on x86); no x86 selector, ABI or result changes.
+
+Evidence: benchmarks/baselines/sm120_fp8_rhs_edge_20261026/README.md; contract docs/spec/SM120_FP8_RHS_EDGE_CONTRACT.md.

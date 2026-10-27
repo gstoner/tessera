@@ -320,6 +320,11 @@ struct MatmulSchedule {
   //: V_WMMA_F32_16X16X16_FP8_BF8 and its mirror, and the descriptor is where
   //: that pairing has to be expressible or nothing below it can select it.
   StringRef storageB;
+  //: SM120-W11-FP8-RHS-20261026: "per_tensor_f32" when B is the FP8 codes of
+  //: a dequantize_scaled. The codes decode exactly to A's half storage in the
+  //: B gather and the scale multiplies the f32 accumulator once. Empty
+  //: otherwise.
+  StringRef rhsScale;
   //: The block-scale contract, when the Graph op carried one. `scaleBlockK`
   //: is the contraction extent sharing a scale (0 = unscaled) and
   //: `scaleFormat` its element form. The Schedule is where this has to live:
@@ -906,7 +911,12 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   auto scalarElement = [](Type type) {
     return type.isF32() || type.isF16() || type.isBF16();
   };
-  if (scalarTarget && !scaledMatmul &&
+  // SM120-W11-FP8-RHS-20261026: an f32 B that is dequantize_scaled(FP8, s)
+  // is the scaled FP8 RHS contract below, not a mixed scalar FMA product.
+  Operation *rhsProducer = op->getOperand(1).getDefiningOp();
+  const bool scaledFp8Rhs = rhsProducer &&
+      rhsProducer->getName().getStringRef() == "tessera.dequantize_scaled";
+  if (scalarTarget && !scaledMatmul && !scaledFp8Rhs &&
       (lhs.getElementType().isF32() || rhs.getElementType().isF32()) &&
       scalarElement(lhs.getElementType()) && scalarElement(rhs.getElementType()) &&
       scalarElement(out.getElementType())) {
@@ -1198,6 +1208,47 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       (scaledMatmul && (op->getNumOperands() != 4 || schedule.bias ||
                         schedule.residual || schedule.activation != "none")))
     return failure();
+  // SM120-W11-FP8-RHS-20261026: matmul(A, dequantize_scaled(Bq, s)) with a
+  // half A, FP8 codes Bq and a per-tensor f32 scale s, all entry arguments.
+  if (nvidia_sm120) {
+    Operation *dequant = op->getOperand(1).getDefiningOp();
+    if (dequant && dequant->getName().getStringRef() == "tessera.dequantize_scaled") {
+      auto codes = dyn_cast<RankedTensorType>(dequant->getOperand(0).getType());
+      auto scale = dyn_cast<RankedTensorType>(dequant->getOperand(1).getType());
+      if (!codes || !scale || codes.getEncoding() || scale.getEncoding() ||
+          !isa<BlockArgument>(dequant->getOperand(0)) ||
+          !isa<BlockArgument>(dequant->getOperand(1)) ||
+          !dequant->getResult(0).hasOneUse() || scaledMatmul ||
+          scale.getRank() != 2 || !scale.getElementType().isF32() ||
+          llvm::any_of(scale.getShape(), [](int64_t d) { return d != 1; }) ||
+          codes.getShape() != rhs.getShape() ||
+          // f16 A only: factoring the scale out of the K sum is safe when the
+          // unscaled f32 accumulator cannot overflow. |a * code| <= 65504 *
+          // 57344 (largest f16 times largest E5M2 code), so even K = 2^31
+          // keeps |sum| below 8.1e18. A bf16 A spans the f32 range and could
+          // overflow where the Graph's per-element product is finite.
+          !lhsElement.isF16() || !outElement.isF32() ||
+          schedule.bias || schedule.residual || schedule.activation != "none" ||
+          schedule.dynamicM || schedule.dynamicN || schedule.dynamicK ||
+          !(isa<Float8E4M3FNType>(codes.getElementType()) ||
+            isa<Float8E5M2Type>(codes.getElementType())))
+        return failure();
+      schedule.storage = "f16";
+      schedule.storageB = isa<Float8E4M3FNType>(codes.getElementType()) ? "e4m3" : "e5m2";
+      schedule.rhsScale = "per_tensor_f32";
+      schedule.accum = "f32";
+      schedule.output = "f32";
+      schedule.tileM = 16;
+      schedule.tileN = 8;
+      schedule.tileK = 16;
+      schedule.macroTileM = 128;
+      schedule.macroTileN = 128;
+      schedule.warps = 1;
+      if (schedule.arch.empty())
+        schedule.arch = "sm_120";
+      return schedule;
+    }
+  }
   unsigned epilogueOperand = 2;
   if (schedule.bias) {
     auto bias = dyn_cast<RankedTensorType>(
@@ -1752,6 +1803,11 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
     }
     schedule->bLayout = order.getValue();
   }
+  // The FP8 RHS decode lives in the row-major B gather only.
+  if (!schedule->rhsScale.empty() && schedule->bLayout != "row_major") {
+    op->emitError("SM120 scaled FP8 RHS requires rhs_storage_order = \"row_major\"");
+    return failure();
+  }
   auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
   if (!policy)
     return schedule;
@@ -1843,6 +1899,8 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
     contract += (Twine(";staging=") + schedule.staging).str();
   if (schedule.bLayout != "col_major")
     contract += (Twine(";b_storage_layout=") + schedule.bLayout).str();
+  if (!schedule.rhsScale.empty())
+    contract += (Twine(";b_scale=") + schedule.rhsScale).str();
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
 }
@@ -1870,7 +1928,23 @@ struct SemanticKernelSchedule {
   int64_t axisExtent = 1;
   int64_t inner = 1;
   int64_t workgroupSize = 1;
+  // SM120-W11-FP8-RHS-20261026: a norm whose only use is quantize_scaled with
+  // a per-tensor f32 scale stores FP8 codes. Empty means the input storage.
+  StringRef outputStorage;
 };
+
+/// The tessera.quantize_scaled consuming a norm result, seen directly at
+/// Graph->Schedule or through its schedule.norm annotation at Schedule->Tile.
+static Operation *normQuantizeUser(Operation *norm) {
+  Value value = norm->getResult(0);
+  if (value.hasOneUse()) {
+    Operation *user = *value.getUsers().begin();
+    if (user->getName().getStringRef() == "schedule.norm") value = user->getResult(0);
+  }
+  for (Operation *user : value.getUsers())
+    if (user->getName().getStringRef() == "tessera.quantize_scaled") return user;
+  return nullptr;
+}
 
 static StringRef storageName(Type type) {
   if (type.isF16()) return "f16";
@@ -2060,6 +2134,23 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
           (accum.getValue() != "fp32" && accum.getValue() != "f32"))
         return failure();
     }
+    if (Operation *quantize = normQuantizeUser(op)) {
+      // The fused FP8 store owns the norm's only use: the per-tensor scale is
+      // a direct entry argument and the codes keep the norm's shape.
+      auto scale = dyn_cast<RankedTensorType>(quantize->getOperand(1).getType());
+      auto codes = dyn_cast<RankedTensorType>(quantize->getResult(0).getType());
+      auto format = quantize->getAttrOfType<StringAttr>("format");
+      if (!nvidia || requested || shaped || schedule.rowBound ||
+          !op->getResult(0).hasOneUse() || !scale || !codes || !format ||
+          !scale.getElementType().isF32() || scale.getRank() != input.getRank() ||
+          llvm::any_of(scale.getShape(), [](int64_t d) { return d != 1; }) ||
+          codes.getShape() != input.getShape() || codes.getEncoding() || scale.getEncoding() ||
+          !isa<BlockArgument>(quantize->getOperand(1)) ||
+          (format.getValue() == "fp8_e4m3" ? !isa<Float8E4M3FNType>(codes.getElementType())
+           : format.getValue() == "fp8_e5m2" ? !isa<Float8E5M2Type>(codes.getElementType()) : true))
+        return failure();
+      schedule.outputStorage = format.getValue();
+    }
     schedule.epsilon = static_cast<float>(eps ? eps.getValueAsDouble() :
         opName == "tessera.rmsnorm_safe" ? 1e-6 : 1e-5);
     if (!std::isfinite(schedule.epsilon) || schedule.epsilon <= 0.0) return failure();
@@ -2209,6 +2300,8 @@ static std::string semanticKernelDigest(const SemanticKernelSchedule &schedule) 
     contract += schedule.storage == "f16" ? ";zero_mode=positive" : ";zero_mode=preserve";
   if (schedule.family == "norm") {
     contract += ";epsilon_bits=" + Twine(llvm::APFloat(static_cast<float>(schedule.epsilon)).bitcastToAPInt().getZExtValue()).str();
+    if (!schedule.outputStorage.empty())
+      contract += (Twine(";output_storage=") + schedule.outputStorage + ";scale=per_tensor_f32").str();
   }
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
@@ -3981,6 +4074,8 @@ struct GraphToSchedulePass
                          builder.getI64IntegerAttr(selected->pipelineDepth));
       state.addAttribute("storage", builder.getStringAttr(selected->storage));
       state.addAttribute("storage_b", builder.getStringAttr(selected->storageB));
+      if (!selected->rhsScale.empty())
+        state.addAttribute("b_scale", builder.getStringAttr(selected->rhsScale));
       state.addAttribute("block_k", builder.getI64IntegerAttr(selected->blockK));
       // Stated only when a split exists, so unsplit schedule IR is unchanged.
       if (selected->splitK > 1) {
@@ -4131,6 +4226,10 @@ struct GraphToSchedulePass
         state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
         state.addAttribute("kind", builder.getStringAttr(selected->kind));
         state.addAttribute("epsilon", builder.getF32FloatAttr(selected->epsilon));
+        if (!selected->outputStorage.empty()) {
+          state.addAttribute("output_storage", builder.getStringAttr(selected->outputStorage));
+          state.addAttribute("scale", builder.getStringAttr("per_tensor_f32"));
+        }
         tessera::addBoundedQueryNormShape(state,builder,selected->queryShape);
       } else if (selected->family == "softmax") {
         if (selected->reductionSchedule != "serial")
@@ -5194,6 +5293,10 @@ struct ScheduleToTilePass
           scheduled.getPipelineDepthAttr().getInt() != selected->pipelineDepth ||
           scheduled.getStorage() != selected->storage ||
           scheduled.getStorageB() != selected->storageB ||
+          (scheduled->getAttrOfType<StringAttr>("b_scale")
+               ? scheduled->getAttrOfType<StringAttr>("b_scale").getValue()
+               : StringRef()) != selected->rhsScale ||
+          (scheduled->hasAttr("b_scale") && !scheduled->getAttrOfType<StringAttr>("b_scale")) ||
           scheduled.getBlockK() != selected->blockK ||
           scheduled.getSplitK() != selected->splitK ||
           scheduled.getSplitKReduction() != selected->splitKReduction ||
@@ -5401,9 +5504,16 @@ struct ScheduleToTilePass
                Twine(selected->residual) +
                (selected->output == "f16" ? "_outf16" : ""))
                   .str();
+        const bool scaledRhs = !selected->rhsScale.empty();
+        if (scaledRhs && (!typedSm120Producer || useMacroSm120Producer || dynamicSm120 ||
+                          fusedEpilogue || selected->output != "f32")) {
+          scheduled.emitError("SM120 scaled FP8 RHS requires the static unfused typed producer");
+          return signalPassFailure();
+        }
         std::string kernelName =
             (graphFunction.getName() + epilogueSuffix +
              (dynamicSm120 && selected->bLayout == "row_major" ? "_row_rhs" : "") +
+             (scaledRhs ? (Twine("_rhs_fp8_") + selected->storageB + "_scaled").str() : std::string()) +
              (macroKernelGeometry ? "_macro_kernel" : "_kernel"))
                 .str();
         if (selected->scalarFma)
@@ -5419,6 +5529,7 @@ struct ScheduleToTilePass
         auto pointerType = LLVM::LLVMPointerType::get(&getContext());
         auto i64 = builder.getI64Type();
         SmallVector<Type> kernelInputs{pointerType, pointerType};
+        if (scaledRhs) kernelInputs.push_back(pointerType);  // A, B codes, scale
         const bool nvfp4 = selected->storage == "nvfp4";
         if (nvfp4) kernelInputs.append({pointerType, pointerType});
         if (selected->bias)
@@ -5547,10 +5658,11 @@ struct ScheduleToTilePass
           // through bounded pointer-backed views and typed fragment carries.
           // Macro CTA schedules use their separate shared-panel producer.
           auto tileType = tile::TileValueType::get(&getContext());
+          // A decoded FP8 B reaches the MMA in A's half storage.
           auto typedMma = tile::TileMmaDescAttr::get(
               &getContext(), "mma_sync", selected->tileM, selected->tileN,
               selected->tileK, selected->storage,
-            selected->storageB.empty() ? selected->storage : selected->storageB,
+            selected->storageB.empty() || scaledRhs ? selected->storage : selected->storageB,
               selected->accum, "row_major", "col_major",
             // ROCM-MACRO-K-TILE-1: kBlocks = blockK / instruction K. The
             // schedule states the K block; this is where it becomes the
@@ -5648,12 +5760,15 @@ struct ScheduleToTilePass
             state.addAttribute("role", kernelBuilder.getStringAttr(role)); state.addAttribute("mma", typedMma);
             if (role == "b" && selected->bLayout == "row_major")
               state.addAttribute("transpose", kernelBuilder.getUnitAttr());
+            if (role == "b" && scaledRhs)
+              state.addAttribute("decode", kernelBuilder.getStringAttr(
+                  (Twine("fp8_") + selected->storageB).str()));
             return kernelBuilder.create(state)->getResult(0);
           };
           OperationState zeroState(loc, "tile.fragment_zero"); zeroState.addTypes(cType);
           zeroState.addAttribute("role", kernelBuilder.getStringAttr("acc")); zeroState.addAttribute("mma", typedMma);
           Value c = kernelBuilder.create(zeroState)->getResult(0);
-          unsigned dIndex = 2 + unsigned(selected->bias) +
+          unsigned dIndex = 2 + unsigned(scaledRhs) + unsigned(selected->bias) +
                             unsigned(selected->residual);
           Value runtimeM = entry->getArgument(dIndex + 1);
           Value runtimeN = entry->getArgument(dIndex + 2);
@@ -5750,6 +5865,10 @@ struct ScheduleToTilePass
               storeState.addAttribute("tile.epilogue_order",
                   kernelBuilder.getStringAttr("matmul_bias_activation_residual"));
             }
+          }
+          if (scaledRhs) {
+            storeState.addOperands(entry->getArgument(2));
+            storeState.addAttribute("tile.output_scale", kernelBuilder.getStringAttr(selected->rhsScale));
           }
           storeState.addAttribute("tile.layout", bLayout); storeState.addAttribute("tile.memory", dMemory);
           kernelBuilder.create(storeState);
@@ -6229,6 +6348,8 @@ struct ScheduleToTilePass
         if (failed(queryShape)) return signalPassFailure();
         altered = altered || attrString("kind") != selected->kind ||
                   attrString("schedule") != selected->reductionSchedule ||
+                  attrString("output_storage") != selected->outputStorage ||
+                  attrString("scale") != (selected->outputStorage.empty() ? "" : "per_tensor_f32") ||
                   !eps || eps.getValueAsDouble() != selected->epsilon ||
                   queryShape->bounded != selected->queryShape.bounded ||
                   queryShape->sequenceBound != selected->queryShape.sequenceBound ||
@@ -6265,12 +6386,24 @@ struct ScheduleToTilePass
 
       if (selected->target == "nvidia_sm120") {
         auto function = graph->getParentOfType<func::FuncOp>();
+        // SM120-W11-FP8-RHS-20261026: a scaled FP8 norm also owns its
+        // quantize_scaled and the per-tensor scale argument.
+        Operation *quantize = isNorm && !selected->outputStorage.empty()
+            ? normQuantizeUser(graph) : nullptr;
+        bool scaledNorm = quantize != nullptr;
+        if (isNorm && !selected->outputStorage.empty() &&
+            (!quantize || quantize->getOperand(0) != scheduled->getResult(0) ||
+             mod->hasAttr("tessera.native.tensor_program_member"))) {
+          scheduled->emitError("NVIDIA scaled FP8 norm requires its retained quantize_scaled store");
+          return signalPassFailure();
+        }
         if (!function || !llvm::hasSingleElement(function.getBody()) ||
-            function.getNumArguments() != (isBinary ? 2u : 1u) ||
+            function.getNumArguments() != (isBinary || scaledNorm ? 2u : 1u) ||
             function.getNumResults() != 1 ||
-            function.getBody().front().getOperations().size() != 4 ||
+            function.getBody().front().getOperations().size() != (scaledNorm ? 5u : 4u) ||
             graph->getOperand(0) != function.getArgument(0) ||
-            (isBinary && graph->getOperand(1) != function.getArgument(1))) {
+            (isBinary && graph->getOperand(1) != function.getArgument(1)) ||
+            (scaledNorm && quantize->getOperand(1) != function.getArgument(1))) {
           scheduled->emitError(isBinary ?
               "NVIDIA scheduled binary kernel requires its isolated two-input source function" :
               "NVIDIA scheduled kernel requires one isolated unary function");
@@ -6278,14 +6411,14 @@ struct ScheduleToTilePass
         }
         auto ret = dyn_cast<func::ReturnOp>(function.getBody().front().back());
         if (!ret || ret.getNumOperands() != 1 ||
-            ret.getOperand(0) != scheduled->getResult(0)) {
+            ret.getOperand(0) != (scaledNorm ? quantize->getResult(0) : scheduled->getResult(0))) {
           scheduled->emitError("NVIDIA scheduled kernel must be the function result");
           return signalPassFailure();
         }
         // Preserve the established runtime launch symbols and serial schedule.
         std::string name = isBinary ?
             (Twine("tessera_tile_binary_add_") + selected->storage + "_" +
-             hash.getValue().take_front(10)).str() : isActivation ? (Twine("tessera_tile_activation_relu_") + selected->storage + (selected->reductionSchedule == "flat_128" ? "_flat_128_" : "_") + hash.getValue().take_front(10)).str() : isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + (selected->reductionSchedule == "serial" ? "_" : "_cooperative_128_") + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage +
+             hash.getValue().take_front(10)).str() : isActivation ? (Twine("tessera_tile_activation_relu_") + selected->storage + (selected->reductionSchedule == "flat_128" ? "_flat_128_" : "_") + hash.getValue().take_front(10)).str() : isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + (scaledNorm ? (Twine("_to_") + selected->outputStorage).str() : std::string()) + (selected->reductionSchedule == "serial" ? "_" : "_cooperative_128_") + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage +
             (selected->reductionSchedule == "serial" ? "" : "_cooperative_128")).str() :
             (Twine("tessera_tile_reduce_") + selected->kind + "_" + selected->storage + "_" + selected->reductionSchedule).str();
         if (SymbolTable::lookupSymbolIn(mod, name)) {
@@ -6295,8 +6428,9 @@ struct ScheduleToTilePass
         Location loc = scheduled->getLoc();
         auto ptr = LLVM::LLVMPointerType::get(&getContext());
         auto i64 = builder.getI64Type();
-        SmallVector<Type> inputs = isBinary ? SmallVector<Type>{ptr, ptr, ptr, i64} :
+        SmallVector<Type> inputs = isBinary || scaledNorm ? SmallVector<Type>{ptr, ptr, ptr, i64} :
                                                 SmallVector<Type>{ptr, ptr, i64, i64};
+        if (scaledNorm) inputs.push_back(i64);  // x, scale, codes, rows, columns
         if (!isBinary && !isActivation && !isSoftmax && !isNorm) inputs.push_back(i64);
         auto type = LLVM::LLVMFunctionType::get(
             LLVM::LLVMVoidType::get(&getContext()), inputs, false);
@@ -6372,6 +6506,10 @@ struct ScheduleToTilePass
           state.addAttribute("kind", scheduled->getAttr("kind"));
           state.addAttribute("affine", kb.getBoolAttr(false));
           state.addAttribute("tessera.norm_epsilon", kb.getF32FloatAttr(selected->epsilon));
+          if (scaledNorm) {
+            state.addAttribute("output_storage", kb.getStringAttr(selected->outputStorage));
+            state.addAttribute("scale", kb.getStringAttr("per_tensor_f32"));
+          }
           tessera::addBoundedQueryNormShape(state,kb,selected->queryShape);
         } else if (isSoftmax) {
           if (scheduled->hasAttr("schedule"))

@@ -230,6 +230,11 @@ class ScheduledMatmulArtifact:
     split_k: int = 1
     split_k_reduction: str = ""
     b_layout: str = "col_major"
+    #: SM120-W11-FP8-RHS-20261026: B is the FP8 codes (``fp8_e4m3`` or
+    #: ``fp8_e5m2``) of ``dequantize_scaled(codes, scale)`` with a per-tensor
+    #: f32 ``scale_name``. Empty for every other artifact.
+    b_codes_dtype: str = ""
+    scale_name: str = ""
 
     @property
     def graph_digest(self) -> str:
@@ -632,6 +637,87 @@ def lower_scheduled_matmul(
         dynamic_k=dynamic_k,
         split_k=split_k,
         split_k_reduction=split_k_reduction,
+    )
+    artifact.validate()
+    return artifact
+
+
+def lower_scheduled_fp8_rhs_matmul(module: GraphIRModule, *, target: str) -> ScheduledMatmulArtifact:
+    """Lower ``matmul(a, dequantize_scaled(b_codes, scale))`` to one native kernel.
+
+    SM120-W11-FP8-RHS-20261026. A is f16 [M, K]; B is row-major FP8
+    codes [K, N] decoded exactly to A's storage in the B gather; the
+    per-tensor f32 scale multiplies the f32 accumulator once. That factors the
+    Graph's per-element ``code * scale`` out of the K sum: a reassociation
+    within the f32 accumulation tolerance, not bit-identical to it. It is
+    admitted only for f16 A: |a * code| <= 65504 * 57344, so the unscaled f32
+    accumulator cannot overflow for any K the ABI admits; a bf16 A spans the
+    f32 range and could overflow where the Graph's result is finite.
+    """
+    from .graph_ir import IRArg, tensor_ir_type
+    if target != "nvidia_sm120":
+        raise ValueError("scaled FP8 RHS matmul is an SM120 native contract")
+    if len(module.functions) != 1:
+        raise ValueError("scaled FP8 RHS matmul requires one Graph function")
+    function = module.functions[0]
+    if len(function.args) != 3 or len(function.body) != 2 or len(function.result_types) != 1:
+        raise ValueError("scaled FP8 RHS matmul requires (lhs, codes, scale), dequantize then matmul")
+    dequant, matmul = function.body
+    if not dequant.result or not matmul.result:
+        raise ValueError("scaled FP8 RHS matmul requires named dequantize and matmul results")
+    dequant_result, matmul_result = str(dequant.result), str(matmul.result)
+    args = {arg.name: arg for arg in function.args}
+    names = [operand.removeprefix("%") for operand in dequant.operands]
+    if (dequant.op_name != "tessera.dequantize_scaled" or matmul.op_name != "tessera.matmul"
+            or len(names) != 2 or any(name not in args for name in names)
+            or len(matmul.operands) != 2 or matmul.operands[1] != "%" + dequant_result
+            or matmul.operands[0].removeprefix("%") not in args
+            or function.return_values != ["%" + matmul_result] or dequant.kwargs):
+        raise ValueError("scaled FP8 RHS matmul must return matmul(lhs, dequantize_scaled(codes, scale))")
+    codes, scale = (args[name] for name in names)
+    lhs = args[matmul.operands[0].removeprefix("%")]
+    if (codes.ir_type.dtype not in ("fp8_e4m3", "fp8_e5m2") or len(codes.ir_type.shape) != 2
+            or scale.ir_type.dtype != "fp32" or tuple(scale.ir_type.shape) != ("1", "1")
+            or lhs.ir_type.dtype != "fp16"
+            or matmul.kwargs.get("rhs_storage_order") != "row_major"
+            or set(matmul.kwargs) - {"rhs_storage_order", "output_dtype"}):
+        raise ValueError("scaled FP8 RHS matmul requires an f16 lhs (the factored scale is overflow-safe "
+                         "only for f16), row-major FP8 codes and a per-tensor f32 scale")
+    # The matmul-only contract (shapes, storage, output) with B typed as A.
+    only = copy.deepcopy(module)
+    fn = only.functions[0]
+    half_b = IRArg(dequant_result, tensor_ir_type(tuple(codes.ir_type.shape), lhs.ir_type.dtype))
+    fn.args = [lhs, half_b]
+    fn.body = [copy.deepcopy(matmul)]
+    fn.body[0].operand_types = [str(lhs.ir_type), str(half_b.ir_type)]
+    contract = _graph_contract(only, target)
+    if contract[11] != "fp32" or contract[16] or contract[17] or contract[18] != "none" or any(contract[19:22]):
+        raise ValueError("scaled FP8 RHS matmul requires a static unfused fp32-output matmul")
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("scaled FP8 RHS matmul lowering requires production tessera-opt")
+    graph_ir = _canonical_matmul_graph_ir(module, target, contract)
+    schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+    rows = re.findall(r"(?m)^\s*%[^=]+ = schedule\.matmul[^\n]+", schedule_ir)
+    storage_b = codes.ir_type.dtype.removeprefix("fp8_")
+    if (len(rows) != 1 or 'b_scale = "per_tensor_f32"' not in rows[0]
+            or f'storage_b = "{storage_b}"' not in rows[0] or 'b_layout = "row_major"' not in rows[0]):
+        raise RuntimeError("scaled FP8 RHS matmul needs one fused Schedule decision")
+    tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
+    hashes = _HASH_RE.findall(tile_ir)
+    entries = re.findall(r'\bllvm.func @(\w+)\(', tile_ir)
+    if len(hashes) != 1 or len(entries) != 1 or not entries[0].endswith(f"_rhs_fp8_{storage_b}_scaled_kernel"):
+        raise RuntimeError("scaled FP8 RHS matmul lowering needs one native entry and digest")
+    artifact = ScheduledMatmulArtifact(
+        graph_ir=graph_ir, schedule_ir=schedule_ir, tile_ir=tile_ir,
+        target=contract[0], architecture=contract[1], function_name=entries[0],
+        a_name=lhs.name, b_name=codes.name, output_name=matmul_result,
+        m=contract[6], n=contract[7], k=contract[8],
+        a_dtype=contract[9], b_dtype=contract[10], output_dtype=contract[11],
+        storage=contract[12], accum=contract[13],
+        macro_tile_m=contract[14], macro_tile_n=contract[15],
+        schedule_digest=hashes[0], b_layout="row_major",
+        b_codes_dtype=codes.ir_type.dtype, scale_name=scale.name,
     )
     artifact.validate()
     return artifact
@@ -1084,6 +1170,47 @@ def run_tessera_opt(tool: Path, source: str, option: str) -> str:
 
 def digest_text(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+def verify_fp8_rhs_projection(artifact: ScheduledMatmulArtifact) -> None:
+    """Replay and project a scaled FP8 RHS matmul (SM120-W11-FP8-RHS-20261026).
+
+    The fused Graph holds dequantize_scaled then matmul, so the operand roles
+    are read from both ops: A is the matmul LHS, the codes and the scale are
+    the dequantize_scaled operands. Every other field comes from the native
+    Schedule record, as in :func:`verify_matmul_projection`.
+    """
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("FP8 RHS projection requires native Schedule replay")
+    if run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
+        raise ValueError("FP8 RHS Tile product disagrees with native Schedule replay")
+    parent = run_tessera_opt(tool, artifact.schedule_ir, "--canonicalize")
+    records = re.findall(r" = schedule.matmul %\w+ \{([^{}]*)\}", parent)
+    keys = re.findall(r'shape_key = "M=(\d+);N=(\d+);K=(\d+);dtype=(\w+)"', parent)
+    arguments = dict(re.findall(r"(%[A-Za-z0-9_]+): (tensor<[^>]+>)", " ".join(
+        re.findall(r"func.func @\w+\(([^\n]*)\) ->", parent))))
+    dequant = re.findall(r"= tessera\.dequantize_scaled (%\w+), (%\w+)", parent)
+    matmul = re.findall(r"= tessera\.matmul (%\w+), %\w+", parent)
+    if len(records) != 1 or len(keys) != 1 or len(dequant) != 1 or len(matmul) != 1 or len(arguments) != 3:
+        raise ValueError("FP8 RHS projection requires one native fused product")
+    attrs = records[0]
+    fp8 = artifact.b_codes_dtype
+    element = {"fp8_e4m3": "f8E4M3FN", "fp8_e5m2": "f8E5M2"}.get(fp8)
+    m, n, k = (int(x) for x in keys[0][:3])
+    storage = keys[0][3]
+    codes, scale = dequant[0]
+    expected = {matmul[0]: f"tensor<{m}x{k}x{storage}>", codes: f"tensor<{k}x{n}x{element}>",
+                scale: "tensor<1x1xf32>"}
+    for field in (f'storage = "{storage}"', f'storage_b = "{fp8.removeprefix("fp8_")}"',
+                  'b_scale = "per_tensor_f32"', 'b_layout = "row_major"', 'output = "f32"',
+                  'accum = "f32"', 'bias = false', 'residual = false', 'activation = "none"'):
+        if field not in attrs:
+            raise ValueError("FP8 RHS native Schedule disagrees on " + field)
+    entries = re.findall(r"llvm.func @(\w+)\(", artifact.tile_ir)
+    if (element is None or arguments != expected or (m, n, k) != (artifact.m, artifact.n, artifact.k)
+            or storage != artifact.storage or entries != [artifact.function_name]):
+        raise ValueError("FP8 RHS native roles, shapes or entry disagree with the artifact")
 
 
 def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:

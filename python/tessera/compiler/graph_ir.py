@@ -374,6 +374,8 @@ _KEYWORD_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     "tessera.nvfp4_expand": ("numeric_policy", "row_offsets"),
     "tessera.nvfp4_requantize": ("numeric_policy", "row_offsets"),
     "tessera.mxfp4_folded_storage": ("storage_contract",),
+    # SM120-W11-FP8-RHS-20261026: the FP8 result storage, a semantic key.
+    "tessera.quantize_scaled": ("format",),
     "tessera.es_low_rank_correction": ("out_dim", "rank", "sigma"),
     "tessera.attn_sliding_window": ("window_size",),
     "tessera.attn_top_k_blocks": ("top_k", "block_size"),
@@ -2903,6 +2905,17 @@ def _shape_dequantize_scaled(operand_types: List[IRType], attrs: Optional[Dict[s
     return tensor_ir_type(codes.shape, "fp32", layout=codes.layout)
 
 
+def _shape_quantize_scaled(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    """The values' shape and layout with the FP8 storage named by ``format``
+    (SM120-W11-FP8-RHS-20261026). ``format`` is a semantic key: it is
+    required, never defaulted."""
+    values = operand_types[0]
+    storage = (attrs or {}).get("format")
+    if storage not in ("fp8_e4m3", "fp8_e5m2"):
+        raise ValueError("quantize_scaled requires format='fp8_e4m3' or 'fp8_e5m2'")
+    return tensor_ir_type(values.shape, storage, layout=values.layout)
+
+
 def _shape_attention_value_width(operand_types: List[IRType],
                                  attrs: Optional[Dict[str, Any]] = None):
     q = operand_types[0]
@@ -4648,6 +4661,7 @@ _SHAPE_RULES = {
     "nvfp4_expand": _shape_nvfp4_expand,
     "same_as_first": _shape_same_as_first,
     "dequantize_scaled": _shape_dequantize_scaled,
+    "quantize_scaled": _shape_quantize_scaled,
     "nvfp4_requantize": _shape_nvfp4_requantize,
     "mxfp4_folded_storage": _shape_mxfp4_folded_storage,
     "scaled_matmul": _shape_scaled_matmul,

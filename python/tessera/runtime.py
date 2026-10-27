@@ -3213,6 +3213,8 @@ def _submit_nvidia_sm120_native(
         SM120_NORM_F16_ABI,
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
+        SM120_NORM_SCALED_FP8_ABIS,
+        SM120_ROW_B_FP8_SCALED_ABIS,
         SM120_TF32_ABI,
         SM120_SOFTMAX_F16_ABI,
         SM120_SOFTMAX_BF16_ABI,
@@ -3308,7 +3310,7 @@ def _submit_nvidia_sm120_native(
         SM120_MOE_DISPATCH_F32_ABI,
         SM120_MOE_COMBINE_F32_ABI,
         SM120_GROUPED_GEMM_F32_ABI,
-    } | set(SM120_EPILOGUE_ABIS) | set(SM120_REDUCED_OUTPUT_ABIS) | set(SM120_MOE_ABIS) | set(SM120_TRAINING_ABIS) | {
+    } | set(SM120_EPILOGUE_ABIS) | set(SM120_REDUCED_OUTPUT_ABIS) | set(SM120_MOE_ABIS) | set(SM120_TRAINING_ABIS) | set(SM120_NORM_SCALED_FP8_ABIS) | set(SM120_ROW_B_FP8_SCALED_ABIS) | {
         SM120_DYNAMIC_SMEM_ABI,
         SM120_DYNAMIC_EXPR_SMEM_ABI,
     }:
@@ -3410,6 +3412,8 @@ def _submit_nvidia_sm120_native(
         is_matmul = (
             entry.startswith("nvidia_sm120_scheduled_matmul_")
             and len(raw) == 3 + int(bool(epilogue.get("bias"))) + int(bool(epilogue.get("residual")))
+            # SM120-W11-FP8-RHS-20261026: the per-tensor scale is a fourth buffer.
+            + int(descriptor.abi_id in SM120_ROW_B_FP8_SCALED_ABIS)
         )
         is_native_attention = descriptor.abi_id in {
             SM120_ATTN_F32_ABI, SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI,
@@ -3952,6 +3956,14 @@ def _submit_nvidia_sm120_native(
             or int(cast(int, descriptor.provenance.get("scale_bytes", -1))) != scale_bytes
         ):
             raise RuntimeError("SM120 packed decode byte extents disagree with physical view")
+    elif descriptor.abi_id in SM120_NORM_SCALED_FP8_ABIS:
+        # SM120-W11-FP8-RHS-20261026: norm source, per-tensor f32 scale, FP8 codes.
+        x, scale, output = raw
+        rows, columns = (int(cast(int, scalars[name])) for name in ("Rows", "Columns"))
+        if (x.size != rows * columns or tuple(output.shape) != tuple(x.shape)
+                or scale.size != 1 or scale.ndim != x.ndim):
+            raise RuntimeError("SM120 scaled FP8 norm X/scale/O shapes disagree with Rows/Columns scalars")
+        dimensions = (rows, columns)
     elif descriptor.abi_id in unary_abis:
         x, output = raw
         if descriptor.abi_id in softmax_abis:
@@ -4039,6 +4051,12 @@ def _submit_nvidia_sm120_native(
         a, b, d = raw
         if tuple(a.shape) != (m, k) or tuple(b.shape) != (k, n) or tuple(d.shape) != (m, n):
             raise RuntimeError("SM120 A/B/D shapes disagree with M/N/K descriptor scalars")
+    elif descriptor.abi_id in SM120_ROW_B_FP8_SCALED_ABIS:
+        # SM120-W11-FP8-RHS-20261026: half A, FP8 B codes, per-tensor scale, D.
+        a, b, scale, d = raw
+        if (tuple(a.shape) != (m, k) or tuple(b.shape) != (k, n) or scale.size != 1
+                or tuple(d.shape) != (m, n)):
+            raise RuntimeError("SM120 scaled FP8 RHS A/B/scale/D shapes disagree with M/N/K scalars")
     elif descriptor.abi_id == SM120_INT4_ABI:
         a, b, d = raw
         packed_k = (k + 1) // 2
@@ -4149,6 +4167,7 @@ def _submit_nvidia_sm120_native(
     return (
         output
         if descriptor.abi_id in unary_abis | attention_abis | attention_backward_abis | moe_abis | training_abis
+        or descriptor.abi_id in SM120_NORM_SCALED_FP8_ABIS
         or descriptor.abi_id
         in {
             SM120_PAGED_KV_F32_ABI,
@@ -6961,6 +6980,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_NORM_F16_ABI,
         SM120_NORM_BF16_ABI,
         SM120_NORM_F32_ABI,
+        SM120_NORM_SCALED_FP8_ABIS,
+        SM120_ROW_B_FP8_SCALED_ABIS,
         SM120_TF32_ABI,
         SM120_SOFTMAX_F16_ABI,
         SM120_SOFTMAX_BF16_ABI,
@@ -7045,6 +7066,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_MOE_COMBINE_F32_ABI,
                 SM120_GROUPED_GEMM_F32_ABI,
             }
+            | set(SM120_NORM_SCALED_FP8_ABIS)
+            | set(SM120_ROW_B_FP8_SCALED_ABIS)
             | set(SM120_EPILOGUE_ABIS)
             | set(SM120_REDUCED_OUTPUT_ABIS)
             | set(SM120_MOE_ABIS)
@@ -35802,7 +35825,13 @@ def _native_buffer_value(value: Any) -> tuple[Any, BufferArgument]:
                 "CUDA buffers need a non-null __cuda_array_interface__ data pointer",
             )
         import numpy as np
-        cuda_dtype = np.dtype(cuda_interface.get("typestr"))
+        typestr = cuda_interface.get("typestr")
+        owned_dtype = getattr(value, "dtype", None)
+        # ml_dtypes.float8_e5m2 reports the typestr "<f1", which NumPy cannot
+        # parse back (SM120-W11-FP8-RHS-20261026). A buffer whose own declared
+        # dtype produces exactly that typestr is described by that dtype.
+        cuda_dtype = (owned_dtype if isinstance(owned_dtype, np.dtype) and owned_dtype.str == typestr
+                      else np.dtype(typestr))
         # NumPy represents ml_dtypes.bfloat16 as opaque |V2 in the CUDA
         # array interface. Preserve the owning buffer's registered dtype name
         # when available; the typestring still supplies the physical itemsize.

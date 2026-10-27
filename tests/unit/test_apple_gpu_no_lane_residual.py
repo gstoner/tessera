@@ -160,6 +160,10 @@ _NO_LANE_BARE: frozenset[str] = frozenset(
         # Executes natively only fused into the SM120 saved-LSE checkpoint;
         # Apple runs the reference. Added with the op, not after.
         "dequantize_scaled",
+        # SM120-W11-FP8-RHS-20261026: values / broadcast scale to FP8 codes.
+        # Executes natively only fused into the SM120 FP8 RHS edge; Apple
+        # runs the reference. Added with the op, not after.
+        "quantize_scaled",
     }
 )
 

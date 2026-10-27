@@ -297,6 +297,24 @@ LogicalResult MatmulOp::verify() {
       !fp8W8A8Bf16 && !scalarFma &&
       !(getOutput() == "i32" && getStorage() == "int4" && getAccum() == "int32"))
     return emitOpError("requires f32/f16 output, x86 f64 storage/accum/output, int4 with i32 accumulation/output, or ROCm int8/int4 with i32 accumulation/output");
+  // SM120-W11-FP8-RHS-20261026: FP8 B codes decoded to A's half storage,
+  // with a per-tensor f32 scale on the accumulator.
+  if (Attribute rawScale = getOperation()->getAttr("b_scale")) {
+    auto scale = dyn_cast<StringAttr>(rawScale);
+    // f16 A only: the reassociated scale is overflow-safe for f16 operands.
+    if (!scale || scale.getValue() != "per_tensor_f32" || getArch() != "sm_120" ||
+        getStorage() != "f16" ||
+        (getStorageB() != "e4m3" && getStorageB() != "e5m2") ||
+        getBLayout() != "row_major" || getOutput() != "f32" || getAccum() != "f32" ||
+        getBias() || getResidual() || getActivation() != "none" ||
+        getTileM() != 16 || getTileN() != 8 || getTileK() != 16)
+      return emitOpError("scaled FP8 RHS requires SM120 f16 A, e4m3|e5m2 row-major B, f32 output and a per_tensor_f32 scale");
+  } else if (!scalarFma && getArch() == "sm_120" && (getStorage() == "f16" || getStorage() == "bf16") &&
+             (getStorageB() == "e4m3" || getStorageB() == "e5m2")) {
+    // The scalar FMA contract mixes f16/bf16 with f32 legitimately; an FP8 B
+    // beside a half A exists only under the b_scale contract.
+    return emitOpError("SM120 half matmul admits an FP8 B storage only with its b_scale contract");
+  }
   const bool rowMajorSm120B = getBLayout() == "row_major" &&
       getArch() == "sm_120" && (getStorage() == "f16" || getStorage() == "bf16") &&
       getTileM() == 16 && getTileN() == 8 && getTileK() == 16 &&
@@ -473,6 +491,15 @@ LogicalResult NormOp::verify() {
     return emitOpError("requires SM120, Zen 5, or the bounded gfx1201 RMSNorm row contract with positive finite f32 epsilon");
   if (getSchedule() != "serial" && (!sm120 || getSchedule() != "cooperative_128"))
     return emitOpError("norm cooperative_128 schedule requires SM120");
+  // SM120-W11-FP8-RHS-20261026: a fused quantize_scaled store names its FP8
+  // storage and the per-tensor f32 scale together, on SM120 only.
+  auto output = getOperation()->getAttrOfType<StringAttr>("output_storage");
+  auto scale = getOperation()->getAttrOfType<StringAttr>("scale");
+  if (getOperation()->hasAttr("output_storage") || getOperation()->hasAttr("scale")) {
+    if (!sm120 || !output || !scale || scale.getValue() != "per_tensor_f32" ||
+        (output.getValue() != "fp8_e4m3" && output.getValue() != "fp8_e5m2"))
+      return emitOpError("scaled norm output requires SM120 fp8_e4m3|fp8_e5m2 with a per_tensor_f32 scale");
+  }
   return success();
 }
 

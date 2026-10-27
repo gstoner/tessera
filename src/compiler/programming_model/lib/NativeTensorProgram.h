@@ -102,6 +102,12 @@ inline mlir::LogicalResult outline(mlir::ModuleOp module, bool &selected,
   });
   if (hasMatmul && product->getName().getStringRef() != "tessera.matmul")
     return success();
+  // SM120-W11-FP8-RHS-20261026: matmul(A, dequantize_scaled(Bq, s)) is one
+  // scheduled matmul whose B gather decodes the codes; it is not a DAG.
+  if (operations.size() == 2 && product->getNumOperands() == 2)
+    if (Operation *rhs = product->getOperand(1).getDefiningOp())
+      if (rhs->getName().getStringRef() == "tessera.dequantize_scaled")
+        return success();
   // Claim only the semantic families this native owner can lower. Other
   // source-program families retain their registered consumers.
   if (!hasMatmul && !llvm::all_of(operations, [](Operation *op) {

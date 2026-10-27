@@ -16,9 +16,9 @@ a bounded uint8/int8 x86 package does not promote unsigned frontend storage.
 Use the canonical dtype vocabulary, serialized artifact and owning-device
 packet to resolve the supported envelope.
 
-- Operators: **363**
+- Operators: **364**
 - TSOL operators: **51**
-- Operator/logical-dtype rows: **989**
+- Operator/logical-dtype rows: **994**
 - Rows retaining at least one compiler/evidence gap: **392**
 
 The CSV companion is the canonical normalized matrix: one row per

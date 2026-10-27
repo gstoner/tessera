@@ -2238,6 +2238,23 @@ dequantize_scaled producers feeding the K and V of one saved-LSE flash_attn
 fuse into a single native checkpoint that decodes and scales in registers
 (SM120-SAVED-LSE-SCALED-FP8-KV-20261025); other uses execute the reference.
 
+### quantize_scaled
+
+tessera.ops.quantize_scaled(values, scale, *, format) is the inverse storage
+map of dequantize_scaled. values are float16, bfloat16 or float32; scale is
+float32 with the same rank, each axis 1 (broadcast) or the values' extent.
+Each value widens exactly to float32 and is divided by its scale with IEEE
+round-to-nearest, ties-to-even. The quotient is then rounded to format,
+which is required and is fp8_e4m3 (E4M3FN) or fp8_e5m2, again with ties to
+even and finite saturation: out-of-range values and infinities become the
+signed largest finite code (448 or 57344), and every NaN becomes the canonical
+code 0x7F (positive, all exponent and mantissa bits set). The result is FP8
+storage codes. dequantize_scaled(quantize_scaled(dequantize_scaled(c, s), s,
+format=...), s) reproduces every finite code c exactly. On SM120, an RMSNorm
+whose only use is quantize_scaled, feeding the row-major B of one matmul
+through dequantize_scaled with the same scale, fuses into the native FP8 RHS
+edge (SM120-W11-FP8-RHS-20261026); other uses execute the reference.
+
 ### nvfp4_expand
 
 tessera.ops.nvfp4_expand(codes, scales, projection_globals, *, row_offsets,

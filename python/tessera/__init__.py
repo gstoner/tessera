@@ -3829,6 +3829,44 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             raise ValueError("dequantize_scaled scale axes must each be 1 or the codes extent")
         return codes.astype(np.float32) * scale
 
+    def quantize_scaled(values, scale, *, format):
+        """f32(value) / scale, saturated and rounded once to FP8 storage codes.
+
+        The inverse storage map of :func:`dequantize_scaled`. ``values`` are
+        f16/bf16/f32; ``scale`` is f32 with the same rank, each axis 1 or the
+        values' extent. Each quotient is the IEEE f32 division (round to
+        nearest, ties to even), then rounds to ``format`` (``"fp8_e4m3"`` or
+        ``"fp8_e5m2"``, required) with ties to even and finite saturation:
+        out-of-range values and infinities become the signed largest finite
+        code, and every NaN becomes the canonical code 0x7F.
+        SM120-W11-FP8-RHS-20261026.
+        """
+        from .dtype import canonicalize_dtype
+        import ml_dtypes
+        values = getattr(values, "_data", values)
+        scale = getattr(scale, "_data", scale)
+        values, scale = np.asarray(values), np.asarray(scale)
+        if format not in ("fp8_e4m3", "fp8_e5m2"):
+            raise ValueError("quantize_scaled requires format='fp8_e4m3' or 'fp8_e5m2'")
+        if canonicalize_dtype(str(values.dtype), allow_planned_gated=True) not in {"fp16", "bf16", "fp32"}:
+            raise ValueError("quantize_scaled requires f16, bf16 or f32 values")
+        if scale.dtype != np.float32:
+            raise ValueError("quantize_scaled requires an f32 scale")
+        if scale.ndim != values.ndim or any(
+                extent not in (1, logical) for extent, logical in zip(scale.shape, values.shape)):
+            raise ValueError("quantize_scaled scale axes must each be 1 or the values extent")
+        target = np.dtype(ml_dtypes.float8_e4m3fn if format == "fp8_e4m3" else ml_dtypes.float8_e5m2)
+        largest = np.float32(ml_dtypes.finfo(target).max)
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            quotient = values.astype(np.float32) / scale
+        # Saturate before the cast: the native cast maps out-of-range finite
+        # values to NaN (E4M3FN) or infinity (E5M2); NaN passes through clip.
+        codes = np.clip(quotient, -largest, largest).astype(target)
+        # Every NaN becomes the canonical code 0x7F in both formats (what
+        # cvt.rn.satfinite produces); the cast alone would pick 0x7E for E5M2.
+        codes.view(np.uint8)[np.isnan(quotient)] = 0x7F
+        return codes
+
     def nvfp4_expand(codes, scales, projection_globals, *, row_offsets, numeric_policy):
         """Expand E2M1 codes exactly; round the projection scale product once."""
         from .compiler.nvfp4_expansion import reference_nvfp4_expand
@@ -5187,6 +5225,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "quantize_nvfp4": quantize_nvfp4,
         "nvfp4_expand": nvfp4_expand,
         "dequantize_scaled": dequantize_scaled,
+        "quantize_scaled": quantize_scaled,
         "nvfp4_requantize": nvfp4_requantize,
         "mxfp4_folded_storage": mxfp4_folded_storage,
         "scaled_matmul": scaled_matmul,
@@ -5838,6 +5877,7 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         quantize_nvfp4=quantize_nvfp4,
         nvfp4_expand=nvfp4_expand,
         dequantize_scaled=dequantize_scaled,
+        quantize_scaled=quantize_scaled,
         nvfp4_requantize=nvfp4_requantize,
         mxfp4_folded_storage=mxfp4_folded_storage,
         scaled_matmul=scaled_matmul,

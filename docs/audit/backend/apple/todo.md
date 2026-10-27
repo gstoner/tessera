@@ -16094,3 +16094,12 @@ Synchronization key: SM120-TYPED-REVERSE-ROW-PREPASS-20261026.
 Not applicable to apple: the row-correction policy and the mixed K/V row path are SM120 native owners only. The shared Graph verifier and AD export still require the SM120 target for a non-f32 role, so no Apple selector, ABI or result changes.
 
 Evidence: benchmarks/baselines/sm120_typed_reverse_row_prepass_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md §"Typed reverse row correction".
+
+## SM120-W11-FP8-RHS-20261026 — scaled FP8 RHS edge (W1.1)
+
+Owner: E2E-REAL-6 / W1.1.
+Synchronization key: SM120-W11-FP8-RHS-20261026.
+
+Not applicable to apple: `tessera.quantize_scaled` executes the eager reference off SM120 and its Apple capability is `unsupported` (Apple no-lane golden updated with the op); the fused norm store, FP8 B decode and ABIs are SM120-only. No Apple selector, ABI or result changes.
+
+Evidence: benchmarks/baselines/sm120_fp8_rhs_edge_20261026/README.md; contract docs/spec/SM120_FP8_RHS_EDGE_CONTRACT.md.

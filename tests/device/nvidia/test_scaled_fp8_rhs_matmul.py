@@ -50,7 +50,7 @@ def launch(package, arguments):
     assert receipt.get("ok") is True and receipt.get("execution_kind") == "native_gpu", receipt
 
 
-@pytest.mark.parametrize("storage", ["fp16", "bf16"])
+@pytest.mark.parametrize("storage", ["fp16"])
 @pytest.mark.parametrize("fmt", ["fp8_e4m3", "fp8_e5m2"])
 @pytest.mark.parametrize("shape", [(16, 16, 8), (37, 40, 29), (128, 256, 96), (1, 2048, 256)])
 @pytest.mark.parametrize("scale", [1.0, 0.0625, 3.3e-3])
@@ -98,3 +98,36 @@ def test_every_finite_code_decodes_exactly(fmt):
     launch(package, {"a": np.eye(k, dtype=np.float16), "bq": codes, "s": np.ones((1, 1), np.float32),
                      "d": out, "M": k, "N": n, "K": k})
     np.testing.assert_array_equal(out, codes.astype(np.float32))
+
+
+def test_largest_f16_and_e5m2_magnitudes_stay_finite():
+    """The factored scale is admitted because the unscaled f32 accumulator
+    cannot overflow for f16 A: here every term is 65504 * 57344 over K = 2048."""
+    if rt._nvidia_device_name() != "sm_120":
+        pytest.skip("owning RTX5070/SM120 required")
+    m, k, n = 16, 2048, 8
+    fused, plain = modules("fp16", "fp8_e5m2", m, k, n)
+    package = package_scheduled_matmul(lower_scheduled_fp8_rhs_matmul(fused, target="nvidia_sm120"),
+                                       pipeline_name=PIPELINE)
+    baseline = package_scheduled_matmul(lower_scheduled_matmul(plain, target="nvidia_sm120"),
+                                        pipeline_name=PIPELINE)
+    a = np.full((m, k), 65504, np.float16)
+    codes = np.full((k, n), 57344, DTYPES["fp8_e5m2"])
+    s = np.full((1, 1), 2.0 ** -20, np.float32)
+    out = np.empty((m, n), np.float32)
+    launch(package, {"a": a, "bq": codes, "s": s, "d": out, "M": m, "N": n, "K": k})
+    unscaled = np.empty((m, n), np.float32)
+    launch(baseline, {"a": a, "b": codes.astype(np.float32).astype(np.float16), "d": unscaled,
+                      "M": m, "N": n, "K": k})
+    assert np.isfinite(out).all() and np.isfinite(unscaled).all()
+    np.testing.assert_array_equal(out, unscaled * np.float32(2.0 ** -20))
+    np.testing.assert_allclose(out, 65504.0 * 57344.0 * k * 2.0 ** -20, rtol=1e-6)
+
+
+def test_bf16_lhs_is_refused():
+    """bf16 spans the f32 range: 2**120 x 448 would overflow the unscaled
+    accumulator where the Graph's per-element product stays finite."""
+    fused, _ = modules("bf16", "fp8_e4m3", 16, 16, 8)
+    with pytest.raises(ValueError, match="f16 lhs"):
+        lower_scheduled_fp8_rhs_matmul(fused, target="nvidia_sm120")
+

@@ -645,11 +645,14 @@ def lower_scheduled_matmul(
 def lower_scheduled_fp8_rhs_matmul(module: GraphIRModule, *, target: str) -> ScheduledMatmulArtifact:
     """Lower ``matmul(a, dequantize_scaled(b_codes, scale))`` to one native kernel.
 
-    SM120-W11-FP8-RHS-20261026. A is f16/bf16 [M, K]; B is row-major FP8
+    SM120-W11-FP8-RHS-20261026. A is f16 [M, K]; B is row-major FP8
     codes [K, N] decoded exactly to A's storage in the B gather; the
     per-tensor f32 scale multiplies the f32 accumulator once. That factors the
     Graph's per-element ``code * scale`` out of the K sum: a reassociation
-    within the f32 accumulation tolerance, not bit-identical to it.
+    within the f32 accumulation tolerance, not bit-identical to it. It is
+    admitted only for f16 A: |a * code| <= 65504 * 57344, so the unscaled f32
+    accumulator cannot overflow for any K the ABI admits; a bf16 A spans the
+    f32 range and could overflow where the Graph's result is finite.
     """
     from .graph_ir import IRArg, tensor_ir_type
     if target != "nvidia_sm120":
@@ -675,10 +678,11 @@ def lower_scheduled_fp8_rhs_matmul(module: GraphIRModule, *, target: str) -> Sch
     lhs = args[matmul.operands[0].removeprefix("%")]
     if (codes.ir_type.dtype not in ("fp8_e4m3", "fp8_e5m2") or len(codes.ir_type.shape) != 2
             or scale.ir_type.dtype != "fp32" or tuple(scale.ir_type.shape) != ("1", "1")
-            or lhs.ir_type.dtype not in ("fp16", "bf16")
+            or lhs.ir_type.dtype != "fp16"
             or matmul.kwargs.get("rhs_storage_order") != "row_major"
             or set(matmul.kwargs) - {"rhs_storage_order", "output_dtype"}):
-        raise ValueError("scaled FP8 RHS matmul requires half lhs, row-major FP8 codes and a per-tensor f32 scale")
+        raise ValueError("scaled FP8 RHS matmul requires an f16 lhs (the factored scale is overflow-safe "
+                         "only for f16), row-major FP8 codes and a per-tensor f32 scale")
     # The matmul-only contract (shapes, storage, output) with B typed as A.
     only = copy.deepcopy(module)
     fn = only.functions[0]

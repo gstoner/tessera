@@ -301,13 +301,14 @@ LogicalResult MatmulOp::verify() {
   // with a per-tensor f32 scale on the accumulator.
   if (Attribute rawScale = getOperation()->getAttr("b_scale")) {
     auto scale = dyn_cast<StringAttr>(rawScale);
+    // f16 A only: the reassociated scale is overflow-safe for f16 operands.
     if (!scale || scale.getValue() != "per_tensor_f32" || getArch() != "sm_120" ||
-        (getStorage() != "f16" && getStorage() != "bf16") ||
+        getStorage() != "f16" ||
         (getStorageB() != "e4m3" && getStorageB() != "e5m2") ||
         getBLayout() != "row_major" || getOutput() != "f32" || getAccum() != "f32" ||
         getBias() || getResidual() || getActivation() != "none" ||
         getTileM() != 16 || getTileN() != 8 || getTileK() != 16)
-      return emitOpError("scaled FP8 RHS requires SM120 half A, e4m3|e5m2 row-major B, f32 output and a per_tensor_f32 scale");
+      return emitOpError("scaled FP8 RHS requires SM120 f16 A, e4m3|e5m2 row-major B, f32 output and a per_tensor_f32 scale");
   } else if (!scalarFma && getArch() == "sm_120" && (getStorage() == "f16" || getStorage() == "bf16") &&
              (getStorageB() == "e4m3" || getStorageB() == "e5m2")) {
     // The scalar FMA contract mixes f16/bf16 with f32 legitimately; an FP8 B

@@ -81,7 +81,7 @@ def test_fused_norm_refuses_non_per_tensor_scale_or_a_second_use(compiler, edits
     fails(compiler, norm_graph(**edits), "--tessera-graph-to-schedule", "semantic-kernel contract")
 
 
-@pytest.mark.parametrize("storage", ["f16", "bf16"])
+@pytest.mark.parametrize("storage", ["f16"])
 @pytest.mark.parametrize("fmt", sorted(FP8))
 def test_fused_matmul_schedules_fp8_b_with_a_per_tensor_scale(compiler, storage, fmt):
     schedule = run_tessera_opt(compiler, matmul_graph(storage, fmt), "--tessera-graph-to-schedule")
@@ -96,7 +96,9 @@ def test_fused_matmul_requires_row_major_b(compiler):
     fails(compiler, matmul_graph(order="col_major"), "--tessera-graph-to-schedule", "row_major")
 
 
-@pytest.mark.parametrize("edits", [{"scale": "1x48"}, {"scale": "64x1"}, {"storage": "f32"}])
+# bf16 A is refused: the factored scale is overflow-safe only for f16 A
+# (Codex review on #1017: bf16 2**120 x E4M3 448 overflows before the scale).
+@pytest.mark.parametrize("edits", [{"scale": "1x48"}, {"scale": "64x1"}, {"storage": "f32"}, {"storage": "bf16"}])
 def test_fused_matmul_refuses_other_scales_and_storage(compiler, edits):
     fails(compiler, matmul_graph(**edits), "--tessera-graph-to-schedule", "E2E-REAL-2 Graph->Schedule")
 

@@ -1222,13 +1222,18 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
           scale.getRank() != 2 || !scale.getElementType().isF32() ||
           llvm::any_of(scale.getShape(), [](int64_t d) { return d != 1; }) ||
           codes.getShape() != rhs.getShape() ||
-          !(lhsElement.isF16() || lhsElement.isBF16()) || !outElement.isF32() ||
+          // f16 A only: factoring the scale out of the K sum is safe when the
+          // unscaled f32 accumulator cannot overflow. |a * code| <= 65504 *
+          // 57344 (largest f16 times largest E5M2 code), so even K = 2^31
+          // keeps |sum| below 8.1e18. A bf16 A spans the f32 range and could
+          // overflow where the Graph's per-element product is finite.
+          !lhsElement.isF16() || !outElement.isF32() ||
           schedule.bias || schedule.residual || schedule.activation != "none" ||
           schedule.dynamicM || schedule.dynamicN || schedule.dynamicK ||
           !(isa<Float8E4M3FNType>(codes.getElementType()) ||
             isa<Float8E5M2Type>(codes.getElementType())))
         return failure();
-      schedule.storage = lhsElement.isBF16() ? "bf16" : "f16";
+      schedule.storage = "f16";
       schedule.storageB = isa<Float8E4M3FNType>(codes.getElementType()) ? "e4m3" : "e5m2";
       schedule.rhsScale = "per_tensor_f32";
       schedule.accum = "f32";

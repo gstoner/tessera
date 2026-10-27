@@ -3083,6 +3083,11 @@ class JitFn:
             return _JIT_FALLBACK
         function = module.functions[0]
         if len(function.body) == 4:
+            # SM120-W11-FP8-RHS-20261026: the fused FP8 consumer admits f16
+            # only (its factored scale is overflow-safe for f16); a bf16 FP8
+            # edge runs the eager reference composition.
+            if any(str(value.dtype) == "bfloat16" for value in ordered):
+                return _JIT_FALLBACK
             norm, quantize, dequant, consumer = function.body
             if (norm.op_name not in {"tessera.rmsnorm", "tessera.layer_norm"}
                     or quantize.op_name != "tessera.quantize_scaled"

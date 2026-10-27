@@ -31,7 +31,7 @@ def call(function, a, x, s):
 
 
 @pytest.mark.parametrize("function", [fp8_e4m3_rhs, fp8_e5m2_rhs])
-@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+@pytest.mark.parametrize("dtype", ["fp16"])
 @pytest.mark.parametrize("shape", [(16, 16, 8), (17, 35, 19), (64, 256, 64)])
 def test_ordinary_jit_fp8_rhs_native_cached_and_portable(function, dtype, shape, monkeypatch):
     storage = np.dtype(np.float16 if dtype == "fp16" else ml_dtypes.bfloat16)
@@ -88,3 +88,19 @@ def test_fp8_rhs_scale_must_be_the_shared_f32_per_tensor_scale():
     from tessera._jit_boundary import TesseraJitError
     with pytest.raises((ValueError, TesseraJitError), match="f32 scale"):
         fp8_e4m3_rhs(a, x, np.ones((1, 1), np.float16))
+
+
+def test_bf16_fp8_edge_runs_the_eager_composition():
+    """The fused FP8 consumer admits f16 only (its factored scale is
+    overflow-safe for f16); a bf16 FP8 edge falls back to the reference."""
+    rng = np.random.default_rng(3)
+    a = (rng.normal(size=(16, 32)) * .2).astype(ml_dtypes.bfloat16)
+    x = (rng.normal(size=(32, 8)) * .2).astype(ml_dtypes.bfloat16)
+    s = np.full((1, 1), 0.0625, np.float32)
+    actual = fp8_e4m3_rhs(a, x, s)
+    assert fp8_e4m3_rhs.execution_kind != "native_gpu"
+    assert fp8_e4m3_rhs.native_rhs_packages() == ()
+    codes = ts.ops.quantize_scaled(ts.ops.rmsnorm(x, eps=1e-5), s, format="fp8_e4m3")
+    expected = ts.ops.matmul(a, ts.ops.dequantize_scaled(codes, s), output_dtype="fp32")
+    np.testing.assert_allclose(np.asarray(actual, np.float64), np.asarray(expected, np.float64), rtol=1e-5, atol=1e-6)
+

@@ -308,9 +308,11 @@ LogicalResult MatmulOp::verify() {
         getBias() || getResidual() || getActivation() != "none" ||
         getTileM() != 16 || getTileN() != 8 || getTileK() != 16)
       return emitOpError("scaled FP8 RHS requires SM120 half A, e4m3|e5m2 row-major B, f32 output and a per_tensor_f32 scale");
-  } else if (getArch() == "sm_120" && (getStorage() == "f16" || getStorage() == "bf16") &&
-             !getStorageB().empty() && getStorageB() != getStorage()) {
-    return emitOpError("SM120 half matmul admits a distinct B storage only with its b_scale contract");
+  } else if (!scalarFma && getArch() == "sm_120" && (getStorage() == "f16" || getStorage() == "bf16") &&
+             (getStorageB() == "e4m3" || getStorageB() == "e5m2")) {
+    // The scalar FMA contract mixes f16/bf16 with f32 legitimately; an FP8 B
+    // beside a half A exists only under the b_scale contract.
+    return emitOpError("SM120 half matmul admits an FP8 B storage only with its b_scale contract");
   }
   const bool rowMajorSm120B = getBLayout() == "row_major" &&
       getArch() == "sm_120" && (getStorage() == "f16" || getStorage() == "bf16") &&

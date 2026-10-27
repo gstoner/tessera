@@ -19304,3 +19304,12 @@ Synchronization key: GFX1201-NVFP4-BOUNDED-MLP-20261027.
 Landed on gfx1201 only, proven on Tajasarus with assertions-ON LLVM/MLIR 23.1.1. `tessera.native.quantized_m_bound` retypes the MLP's row-local slice to capacity and exports `tessera.native.quantized_product.v5`. One native owner serves any active M through the additive row frame `tessera_rocm_program_prepare_multi_output_row_frame`, with both weight expansions resident. Products use arbitrary-M images. The bounded outputs are bitwise equal to the static capacity program's rows and to static programs compiled at each M, and the owner runs at 0.997–1.032× them (diagnostic HIP events). No gfx1151 evidence: the owner frame is architecture-neutral, but the bounded products and MLP are gfx1201-only, and the generic `rocm` name inherits nothing. Open: public `@jit` admission of the bound, a portable bounded record, dynamic K/N.
 
 Evidence: benchmarks/baselines/gfx1201_bounded_quantized_mlp_20261027/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-row v5 MLP".
+
+## GFX1201-PUBLIC-QUANTIZED-ROW-BOUND-20261027 — public row-bound compile for the quantized MLP
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-PUBLIC-QUANTIZED-ROW-BOUND-20261027.
+
+Landed on gfx1201 only, proven on Tajasarus with assertions-ON LLVM/MLIR 23.1.1. `function.compile_native_quantized_program(*example_inputs, m_bound=B)` compiles the seven-member MLP into the bounded v5 program once; later public calls at `1 <= M <= B` bind it without retracing or compiling and are bitwise equal to the static capacity rows. No portable record (`runtime_artifact()` refuses); each call still prepares the owner. No gfx1151 evidence, and the generic `rocm` name inherits nothing. Open: owner retention across public calls, public bounded timing, a portable bounded record, dynamic K/N.
+
+Evidence: tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Public row-bound compile".

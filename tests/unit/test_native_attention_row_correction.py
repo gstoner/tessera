@@ -48,8 +48,8 @@ def test_row_correction_retains_typed_inputs_and_f32_rows(storage, wide_output, 
 
 
 @pytest.mark.parametrize('old,new,message', [
-    ('tensor<1x2x129x8xf16>', 'tensor<1x2x129x8xbf16>', 'homogeneous half'),
-    ('tensor<1x4x7x6xf16>', 'tensor<1x4x7x6xbf16>', 'matching half or f32 dO'),
+    ('tensor<1x2x129x8xf16>', 'tensor<1x2x129x8xbf16>', 'one shared K/V storage'),
+    ('tensor<1x4x7x6xf16>', 'tensor<1x4x7x6xbf16>', 'matching or f32 dO'),
     ('tensor<1x4x7xf32>', 'tensor<1x4x7xf16>', 'LSE, seed or result shapes'),
     ('tensor<1x4x1x129xf32>', 'tensor<1x4x2x129xf32>', 'bias axes'),
     ('tensor<1x4x1x129xf32>', 'tensor<1x4x1x129xf16>', 'bias requires rank-four f32'),
@@ -66,6 +66,23 @@ def test_row_correction_retains_typed_inputs_and_f32_rows(storage, wide_output, 
 def test_row_correction_rejects_inconsistent_physical_or_numeric_contract(old, new, message):
     with pytest.raises(RuntimeError, match=message):
         verify(correction_graph().replace(old, new))
+
+
+# SM120-TYPED-REVERSE-ROW-PREPASS-20261026: K/V may share a storage distinct
+# from Q's, provided one of the two is half; homogeneous f32 stays refused.
+@pytest.mark.parametrize('q,kv', [('f16', 'bf16'), ('f32', 'f16'), ('f32', 'bf16'), ('bf16', 'f32')])
+def test_row_correction_admits_a_shared_distinct_kv_storage(q, kv):
+    text = correction_graph(q, q).replace(
+        f'tensor<1x2x129x8x{q}>', f'tensor<1x2x129x8x{kv}>').replace(
+        f'tensor<1x2x129x6x{q}>', f'tensor<1x2x129x6x{kv}>')
+    result = verify(text)
+    assert f'tensor<1x2x129x8x{kv}>' in result and f'tensor<1x2x129x6x{kv}>' in result
+    assert f'tensor<1x4x7x8x{q}>' in result
+
+
+def test_row_correction_still_refuses_homogeneous_f32():
+    with pytest.raises(RuntimeError, match='half Q or K/V'):
+        verify(correction_graph('f32', 'f32'))
 
 
 def test_row_correction_result_must_be_f32_even_with_valid_lse_and_seed():

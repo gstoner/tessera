@@ -86,20 +86,55 @@ gradient stores narrow.
 - **Pair checks:** the forward and backward of a checkpoint pair must agree on
   `kv_storage`. The scheduled and generated pair packagers refuse a mismatch,
   and refuse a scaled K/V forward outright.
-- **Typed ABI:** a mixed backward uses the typed backward ABI and the VJP
-  program schema v2, even when Q is FP32. Descriptor K/V/dK/dV bindings carry
-  the K/V dtype.
+- **Typed ABI:** a mixed backward uses the typed backward ABI, even when Q is
+  FP32. Descriptor K/V/dK/dV bindings carry the K/V dtype. Under the inline
+  row policy it is VJP program schema v2. The default policy runs it on the
+  row-correction prepass (schema v3; see "Typed reverse row correction").
 - **Retained owner:** `prepareAttentionVjp` sizes each role from its own
   storage and keeps `kvStorage` in its state. The new
   `tessera_nvidia_attention_vjp_prepare_typed_kv` entry reaches it, and
   `tessera_nvidia_attention_vjp_prepare_typed` remains its homogeneous wrapper.
-  External-row and source-program owners refuse a mixed K/V.
+  The original-source program owner refuses a mixed K/V. The external-row owner
+  admits it since SM120-TYPED-REVERSE-ROW-PREPASS-20261026 (next section).
 
 **Not admitted:**
 - FP8 or scaled K/V in any reverse (FP8 is forward-only);
 - K and V in different storages, or a dK/dV whose storage differs from K/V's;
 - original-source reverse, JVP or projection over a mixed forward;
 - any non-SM120 target.
+
+## Typed reverse row correction
+
+Synchronization key: SM120-TYPED-REVERSE-ROW-PREPASS-20261026.
+
+With a half saved output, the reverse never feeds the rounded O into the row
+correction. It recomputes sum(P·dP) in f32 (`probability_dot_v_f32_v1`). Where
+that recomputation runs is selected per call:
+
+- **`prepass`:** the compiler's `row_correction` product computes the
+  correction once per row into an f32 [B, Hq, Sq] buffer. The `backward_rows`
+  consumer then reads it as an external input (`row_correction_usage =
+  "external_input_v1"`). The VJP program is schema v3, or v4 with bounded
+  sequences.
+- **`inline`:** the backward kernel recomputes the correction itself. With a
+  half saved output it does so for every dQ/dK/dV element. With f32 storage it
+  uses the O(Dv) dot(dO, O).
+
+`TESSERA_NVIDIA_ATTENTION_ROW_CORRECTION` defaults to `auto`. That selects
+`prepass` whenever Q or the shared K/V storage is f16/bf16, and `inline`
+otherwise. The selection reads the traced Graph IR's `flash_attn` operand
+types, and an unreadable signature is an error. `inline` and `prepass` remain
+explicit overrides. A forced `prepass` that the compiler cannot admit, such as
+homogeneous f32, still fails at the row-correction export.
+
+The row path admits the same storage pairs as the inline reverse: K and V share
+one f16/bf16/f32 storage, Q may use another, and at least one is half.
+`kv_storage` enters the row contract, its identity, both entry names
+(`tessera_tile_attention_row_correction_b<b>_s<s>_<q>_kv_<kv>_out_<o>_<digest>`
+and the compact `backward_rows` entry) and both Tile kernels, but only when it
+differs from Q. Homogeneous row contracts are therefore unchanged. The
+retained owner is `tessera_nvidia_attention_vjp_rows_prepare_kv`, and
+`tessera_nvidia_attention_vjp_rows_prepare` remains its homogeneous wrapper.
 
 ## Unscaled FP8 K/V storage (forward)
 

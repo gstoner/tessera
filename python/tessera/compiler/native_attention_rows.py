@@ -134,13 +134,20 @@ def _facts(c, backward, runtime_dims=None):
     if c.get("bias") is True: common.add("bias_shape")
     if "shape_bounds" in c or "shape_policy" in c: common |= {"shape_bounds", "shape_policy"}
     if backward: common |= {"bias_gradient", "gradient_output", "gradient_launch", "row_correction_usage"}
+    # SM120-TYPED-REVERSE-ROW-PREPASS-20261026: present only when K/V storage
+    # differs from Q.
+    if "kv_storage" in c: common.add("kv_storage")
     if set(c) != common:
         raise ValueError("row native policy fields disagree")
     for key in ("bias", "causal", "lse_cotangent"):
         if type(c[key]) is not bool: raise ValueError("row native boolean policy disagrees")
     if (c["family"] != ("attention_backward_rows" if backward else "attention_row_correction") or
             c["target"] != "nvidia_sm120" or c["arch"] != "sm_120" or
-            c["storage"] not in ("f16", "bf16") or c["output_storage"] not in (c["storage"], "f32") or
+            c["storage"] not in ("f16", "bf16", "f32") or
+            c.get("kv_storage", c["storage"]) not in ("f16", "bf16", "f32") or
+            ("kv_storage" in c and c["kv_storage"] == c["storage"]) or
+            "f16" not in (c["storage"], c.get("kv_storage")) and "bf16" not in (c["storage"], c.get("kv_storage")) or
+            c["output_storage"] not in (c["storage"], "f32") or
             c["accum"] != "f32" or c["row_storage"] != "f32" or
             c["mask_alignment"] != "end_aligned_v1" or c["row_correction"] != "probability_dot_v_f32_v1"):
         raise ValueError("row native storage/numerical policy disagrees")
@@ -174,7 +181,8 @@ def _facts(c, backward, runtime_dims=None):
     q, k, v, out, row = (b,hq,sq,d), (b,hkv,sk,d), (b,hkv,sk,dv), (b,hq,sq,dv), (b,hq,sq)
     shapes: list[tuple[int, ...]] = [out,q,k,v]
     names = ["dO","q","k","v"]
-    storages = [c["output_storage"]] + [c["storage"]]*3
+    kv_storage = c.get("kv_storage", c["storage"])
+    storages = [c["output_storage"], c["storage"], kv_storage, kv_storage]
     bias_shape = c.get("bias_shape", [])
     if c["bias"]:
         if not isinstance(bias_shape, list) or len(bias_shape) != 4:
@@ -194,7 +202,7 @@ def _facts(c, backward, runtime_dims=None):
         roles = tuple(i for i,x in enumerate(activity) if x)
         output_names = [result_names[i] for i in roles]
         output_shapes = [result_shapes[i] for i in roles]
-        output_storages = [c["storage"] if i < 3 else "f32" for i in roles]
+        output_storages = [c["storage"] if i == 0 else kv_storage if i < 3 else "f32" for i in roles]
     else:
         if c["lse_cotangent"]:
             shapes.append(row); names.append("row_seed"); storages.append("f32")
@@ -209,13 +217,14 @@ def _facts(c, backward, runtime_dims=None):
 
 
 def _entry(c, digest, backward):
+    kv = f'_kv_{c["kv_storage"]}' if "kv_storage" in c else ""
     if not backward:
         return (f'tessera_tile_attention_row_correction_b{int(c["bias"])}_s{int(c["lse_cotangent"])}_'
-                f'{c["storage"]}_out_{c["output_storage"]}_{digest[:10]}')
+                f'{c["storage"]}{kv}_out_{c["output_storage"]}_{digest[:10]}')
     mask = sum(1 << i for i,x in enumerate(c["gradient_activity"]) if x)
     return (f'tessera_tile_attention_backward_rows_compact_m{mask}_b{int(c["bias"])}_g{int(c["bias"])}_'
             f'l{int(c["gradient_launch"] == "logical_v1")}_t{c["block_threads"]}_'
-            f'{c["storage"]}_out_{c["output_storage"]}_{digest[:10]}' +
+            f'{c["storage"]}{kv}_out_{c["output_storage"]}_{digest[:10]}' +
             ('_cotangent_' if c["lse_cotangent"] else ''))
 
 
@@ -256,7 +265,8 @@ def _descriptor(image, c, tile, target, backward):
     threads = c["block_threads"]
     if count > (2**31-1)*threads: raise ValueError("row launch grid exceeds native capacity")
     identity = _checkpoint_identity(tuple(c["shape"]),c["scale"],c["causal"],bias=c["bias"],
-        bias_shape=tuple(c.get("bias_shape",())),shape_bounds=tuple(c.get("shape_bounds",())),storage=c["storage"],output_storage=c["output_storage"])
+        bias_shape=tuple(c.get("bias_shape",())),shape_bounds=tuple(c.get("shape_bounds",())),storage=c["storage"],output_storage=c["output_storage"],
+        kv_storage=c.get("kv_storage"))
     return LaunchDescriptor(image_digest=image.image_digest,entry_symbol=_entry(c,digest,backward),
         abi_id=BACKWARD_ROWS_ABI if backward else ROW_ABI,buffers=buffers,
         scalars=tuple(ScalarArgument(len(buffers)+i,name,"int64") for i,name in enumerate(_SCALARS)),
@@ -269,6 +279,7 @@ def _descriptor(image, c, tile, target, backward):
             gradient_activity=c["gradient_activity"],physical_gradient_roles=list(roles),bias=c["bias"],
             bias_gradient=c["bias"] if backward else False,lse_cotangent=c["lse_cotangent"],
             storage=c["storage"],output=c["output_storage"],shape=c["shape"],scale=c["scale"],causal=c["causal"],
+            **({"kv_storage": c["kv_storage"]} if "kv_storage" in c else {}),
             **({"shape_bounds": list(bounds), "shape_policy": c["shape_policy"]} if bounds else {}),
             bias_shape=c.get("bias_shape",[]),checkpoint_role="backward_rows_load" if backward else "row_correction_save"))
 
@@ -380,6 +391,8 @@ def validate_program(program, *, runtime_dims=None):
         raise ValueError("row program forward/consumer sequence capacity differs")
     b,hq,hkv,sq,sk,d,dv=c["shape"]
     physical_bias=list(f.get("bias_shape",())) or ([b,hq,sq,sk] if c["bias"] else [])
+    if f.get("kv_storage")!=c.get("kv_storage"):
+        raise ValueError("row program forward/consumer policy differs: kv_storage")
     for key,value in (("shape",list(f["shape"])),("storage",storage),("output_storage",output),
                       ("bias",f["bias"]),("causal",f["causal"]),("bias_shape",physical_bias),
                       ("frontend_argument_indices",list(program.input_indices))):
@@ -403,7 +416,8 @@ def validate_program(program, *, runtime_dims=None):
             if key not in ("family","arguments","results","block_threads") and _canonical(producer[key])!=_canonical(c.get(key)):
                 raise ValueError("row program producer/consumer policy differs: "+key)
     identity=_checkpoint_identity(tuple(c["shape"]),c["scale"],c["causal"],bias=c["bias"],
-        bias_shape=tuple(c.get("bias_shape",())),shape_bounds=tuple(c.get("shape_bounds",())),storage=storage,output_storage=output)
+        bias_shape=tuple(c.get("bias_shape",())),shape_bounds=tuple(c.get("shape_bounds",())),storage=storage,output_storage=output,
+        kv_storage=c.get("kv_storage"))
     if program.pair.contract_digest!=identity or f["checkpoint_contract"]!=identity:
         raise ValueError("row program checkpoint identity differs")
     from .attention_shape_contract import attention_dimensions
@@ -423,7 +437,8 @@ def compile_program(source, active, *, threads=128, launch="packed_v1"):
     physical=tuple(mapping.index(x) for x in active)
     correction=None if set(physical)=={2} else package_member(source,backward=False)
     identity=_checkpoint_identity(tuple(c["shape"]),c["scale"],c["causal"],bias=c["bias"],
-        bias_shape=tuple(c.get("bias_shape",())),shape_bounds=tuple(c.get("shape_bounds",())),storage=c["storage"],output_storage=c["output_storage"])
+        bias_shape=tuple(c.get("bias_shape",())),shape_bounds=tuple(c.get("shape_bounds",())),storage=c["storage"],output_storage=c["output_storage"],
+        kv_storage=c.get("kv_storage"))
     result=NativeAttentionRowsProgram(AttentionCheckpointPair(forward,backward,identity),correction,physical,mapping)
     validate_program(result)
     return result

@@ -80,7 +80,7 @@ class NativeAttentionJVPProgram:
             frame._jvp_binding=generate_tensor_binding(self.tangent,signature)
             frame._jvp_saved_lse = self.saved_lse
             shapes=(*frame.shapes[:3], *((frame._bias_shape,) if biased else ()))
-            zeros={i:_Buffer(frame,shapes[i],frame._input_dtype if i<3 else "fp32")
+            zeros={i:_Buffer(frame,shapes[i],frame._role_dtypes[i] if i<3 else "fp32")
                    for i in range(count) if i not in self.active}
             # Inactive loads are removed by native lowering. Distinct allocated
             # placeholders preserve the no-alias argument ABI.

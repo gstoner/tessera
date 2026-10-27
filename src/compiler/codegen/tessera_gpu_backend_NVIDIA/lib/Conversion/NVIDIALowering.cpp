@@ -2988,8 +2988,16 @@ static LogicalResult materializeSm120AttentionRowCorrectionKernel(
   bool seeded = op->getAttrOfType<BoolAttr>("lse_cotangent").getValue();
   bool causal = op->getAttrOfType<BoolAttr>("causal").getValue();
   bool wide = op->getAttrOfType<StringAttr>("output_storage").getValue() == "f32";
-  Type half = op->getAttrOfType<StringAttr>("storage").getValue() == "f16"
-      ? Type(builder.getF16Type()) : Type(builder.getBF16Type());
+  auto elementType = [&](StringRef name) -> Type {
+    return name == "f16" ? Type(builder.getF16Type())
+         : name == "bf16" ? Type(builder.getBF16Type()) : Type(f32);
+  };
+  // SM120-TYPED-REVERSE-ROW-PREPASS-20261026: Q (and a non-wide dO) use Q's
+  // storage; K/V use kv_storage when present.
+  StringRef queryName = op->getAttrOfType<StringAttr>("storage").getValue();
+  auto keyValueAttr = op->getAttrOfType<StringAttr>("kv_storage");
+  Type queryType = elementType(queryName);
+  Type keyValueType = elementType(keyValueAttr ? keyValueAttr.getValue() : queryName);
   unsigned lse = 4 + unsigned(bias);
   unsigned output = lse + 1 + unsigned(seeded);
   unsigned dims = output + 1;
@@ -3000,8 +3008,9 @@ static LogicalResult materializeSm120AttentionRowCorrectionKernel(
       op->getAttrOfType<FloatAttr>("scale").getValue());
   Value log2e = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.4426950408889634f));
   auto load = [&](unsigned role, Value index) -> Value {
-    bool fp32 = role >= 4 || (role == 0 && wide);
-    Type type = fp32 ? Type(f32) : half;
+    Type type = role >= 4 || (role == 0 && wide) ? Type(f32)
+              : role == 2 || role == 3 ? keyValueType : queryType;
+    bool fp32 = type.isF32();
     Value ptr = LLVM::GEPOp::create(builder, loc, in[role].getType(), type,
         in[role], ValueRange{index});
     Value value = LLVM::LoadOp::create(builder, loc, type, ptr, fp32 ? 4 : 2);
@@ -3146,7 +3155,7 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   // own f16/bf16/f32 storage. The typed saved-output path applies whenever
   // either storage is half.
   auto kvStorageAttr = op->getAttrOfType<StringAttr>("kv_storage");
-  if (op->hasAttr("kv_storage") && (externalRows || !kvStorageAttr || !storage ||
+  if (op->hasAttr("kv_storage") && (!kvStorageAttr || !storage ||
       kvStorageAttr.getValue() == storage.getValue() ||
       (kvStorageAttr.getValue() != "f16" && kvStorageAttr.getValue() != "bf16" &&
        kvStorageAttr.getValue() != "f32")))

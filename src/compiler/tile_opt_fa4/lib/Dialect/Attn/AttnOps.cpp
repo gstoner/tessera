@@ -751,11 +751,16 @@ static mlir::LogicalResult verifyCheckpointRowProduct(mlir::Operation *op, bool 
   auto dout = types[0], q = types[1], k = types[2], v = types[3];
   if (dout.getRank() != 4 || q.getRank() != 4 || k.getRank() != 4 || v.getRank() != 4)
     return op->emitOpError("row correction dO/Q/K/V must have rank four");
+  // SM120-TYPED-REVERSE-ROW-PREPASS-20261026: K and V share one storage,
+  // which may differ from Q's; at least one of the two is half.
   Type storage = q.getElementType();
-  if ((!storage.isF16() && !storage.isBF16()) || k.getElementType() != storage ||
-      v.getElementType() != storage ||
+  Type keyValue = k.getElementType();
+  auto supported = [](Type type) { return type.isF16() || type.isBF16() || type.isF32(); };
+  auto half = [](Type type) { return type.isF16() || type.isBF16(); };
+  if (!supported(storage) || !supported(keyValue) || v.getElementType() != keyValue ||
+      (!half(storage) && !half(keyValue)) ||
       (dout.getElementType() != storage && !dout.getElementType().isF32()))
-    return op->emitOpError("row correction requires homogeneous half Q/K/V and matching half or f32 dO");
+    return op->emitOpError("row correction requires half Q or K/V, one shared K/V storage and matching or f32 dO");
   int64_t b = q.getDimSize(0), hq = q.getDimSize(1), sq = q.getDimSize(2), d = q.getDimSize(3);
   int64_t hkv = k.getDimSize(1), sk = k.getDimSize(2), dv = v.getDimSize(3);
   SmallVector<int64_t> symbolic{b,hq,hkv,sq,sk,d,dv};
@@ -773,8 +778,8 @@ static mlir::LogicalResult verifyCheckpointRowProduct(mlir::Operation *op, bool 
     return RankedTensorType::get(shape, element);
   };
   auto row = tensor({b, hq, sq}, Float32Type::get(op->getContext()));
-  if (hq % hkv || k != tensor({b, hkv, sk, d}, storage) ||
-      v != tensor({b, hkv, sk, dv}, storage) ||
+  if (hq % hkv || k != tensor({b, hkv, sk, d}, keyValue) ||
+      v != tensor({b, hkv, sk, dv}, keyValue) ||
       dout != tensor({b, hq, sq, dv}, dout.getElementType()) ||
       types[4 + unsigned(bias)] != row ||
       (!backward && op->getResult(0).getType() != row) ||

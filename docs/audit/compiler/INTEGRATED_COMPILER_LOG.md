@@ -14232,3 +14232,13 @@ Remaining: exact-head CI/review; the once-per-row correction for the typed rever
 Evidence: benchmarks/baselines/sm120_saved_lse_mixed_backward_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
 <!-- entry-fields:end -->
 
+
+### 2026-10-26 — SM120 typed reverse computes its row correction once per row
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-TYPED-REVERSE-ROW-PREPASS-20261026.
+Outcome: the public SM120 attention reverse selects the compiler's existing row-correction prepass by default whenever Q or the shared K/V storage is half. The prepass computes the f32 correction sum(P*dP) once per row and the `backward_rows` consumer reads it, instead of every dQ/dK/dV element recomputing it. The row path also gained mixed K/V storage, carried only when distinct so homogeneous row contracts are unchanged. RTX 5070, paired against inline controls in the same rounds at 1x8x2x128x512x64x64: about 202x faster (f16 3565 ms -> 17.6 ms), every typed arm within 1.08x of the f32 kernel. The tiny-shape cost is one extra launch (about 2 us). 601 typed/row device tests and 276 assertions-ON contract tests pass. All four backend queues assessed.
+Remaining: exact-head CI/review; bounded mixed K/V (refused by the bounded forward projection); FP8/scaled K/V reverse; source reverse/JVP over mixed storage; W1.1 FP8 RHS and GFX1201 NVFP4 five-slice obligations.
+Evidence: benchmarks/baselines/sm120_typed_reverse_row_prepass_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md.
+<!-- entry-fields:end -->
+

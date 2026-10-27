@@ -2772,18 +2772,21 @@ class JitFn:
         from .rocm_nvfp4_program import package_traced_resident
         if normalize_target_kind(self.target)!="rocm_gfx1201" or self.differentiation_request is not None:
             raise ValueError("native checkpoint program requires primal exact gfx1201")
+        if m_bound is not None and (type(m_bound) is not int or m_bound<=0):
+            raise ValueError("native NVFP4 row bound must be a positive integer")
         bound=self._rocm_nvfp4_call_signature.bind(*args,**kwargs)
         bound.apply_defaults()
         ordered=tuple(bound.arguments[name] for name in self.arg_names)
         module,_=self._trace_frontend_capture(ordered,{})
         if m_bound is not None:
-            if type(m_bound) is not int or m_bound<=0:
-                raise ValueError("native NVFP4 row bound must be a positive integer")
+            # The capture is the cached specialization; the request belongs to
+            # this compile only, accepted or refused.
+            module=deepcopy(module)
             module.module_attrs["tessera.native.nvfp4_m_bound"]=f"{m_bound} : i64"
         program=replace(package_traced_resident(module),argument_names=tuple(self.arg_names))
         if m_bound is not None:
             from .rocm_nvfp4_program import runtime_artifact
-            self.graph_ir=deepcopy(module)
+            self.graph_ir=module
             self.frontend_authority="tracer"
             self.frontend_authority_error=None
             self._rocm_nvfp4_bounded_program=(program,runtime_artifact(program))

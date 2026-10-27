@@ -334,7 +334,8 @@ def CheckpointRowCorrectionOp : Op<Tessera_Attn_Dialect, "checkpoint_row_correct
     accumulate sum_k P_k * dot(dO,V_k) in ascending key order in f32, then
     subtract dLSE when present. P uses saved natural-log LSE, f32 scaled
     scores, optional physical broadcast bias and end-aligned causal masking.
-    Q/K/V use homogeneous f16 or bf16 storage; dO may use that storage or f32.
+    K and V share one f16/bf16/f32 storage, Q may use a different one, and at
+    least one of the two is half; dO uses Q's storage or f32.
     Saved rounded O is deliberately not an input. This initial contract has
     static positive shapes with no dropout, windowing or softcap.
   }];
@@ -355,7 +356,8 @@ def CheckpointBackwardRowsOp : Op<Tessera_Attn_Dialect, "checkpoint_backward_row
     again. dQ/dK/dV match Q/K/V storage and dBias matches physical FP32 bias.
     Both residual rows use FP32[B,Hq,Sq]. Rounded saved O is not an input.
     lse_cotangent records the source derivative policy for producer linkage.
-    This private initial contract is static compact half QKV, half/F32 dO,
+    This private contract is static compact QKV with half Q or half K/V
+    (K and V share a storage), dO in Q's storage or F32,
     end-aligned causal or noncausal attention without dropout/window/softcap.
   }];
   let arguments = (ins Variadic<AnyRankedTensor>:$inputs,

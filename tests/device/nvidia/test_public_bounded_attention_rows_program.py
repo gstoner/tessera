@@ -16,12 +16,12 @@ from tests.unit.test_saved_lse_half_backward import source
 pytestmark=pytest.mark.hardware_nvidia
 
 
-def make_program(storage,wide,bias_kind,active=None,threads=128,launch="packed_v1"):
+def make_program(storage,wide,bias_kind,active=None,threads=128,launch="packed_v1",kv_storage=None):
     trace_sq,trace_sk=(1,4) if bias_kind=="query" else (3,1) if bias_kind=="key" else (3,4)
     biased=bias_kind!="none"
     active=active or tuple(reversed(range(3+int(biased))))
     original=source(storage,bias=biased,saved=True,output="f32" if wide else storage,
-        dims=(1,2,1,trace_sq,trace_sk,4,3))
+        dims=(1,2,1,trace_sq,trace_sk,4,3),kv_storage=kv_storage)
     if bias_kind in ("key","dense"):
         physical=f"1x2x{trace_sq}x{1 if bias_kind=='key' else trace_sk}"
         original=original.replace(f"tensor<1x2x1x{trace_sk}xf32>",f"tensor<{physical}xf32>")
@@ -40,13 +40,17 @@ def make_program(storage,wide,bias_kind,active=None,threads=128,launch="packed_v
     return program,rt.RuntimeArtifact.from_json(artifact.to_json()),(trace_sq,trace_sk)
 
 
-def inputs(storage,wide,bias_kind,sq,sk,seed=975):
+DTYPES={"f16":np.dtype(np.float16),"bf16":np.dtype(ml_dtypes.bfloat16),"f32":np.dtype(np.float32)}
+
+
+def inputs(storage,wide,bias_kind,sq,sk,seed=975,kv_storage=None):
     rng=np.random.default_rng(seed)
-    dtype=np.dtype(np.float16 if storage=="f16" else ml_dtypes.bfloat16)
+    dtype=DTYPES[storage]
+    kv_dtype=DTYPES[kv_storage or storage]
     out_dtype=np.dtype(np.float32) if wide else dtype
     q=rng.normal(0,.3,(1,2,sq,4)).astype(dtype)
-    k=rng.normal(0,.3,(1,1,sk,4)).astype(dtype)
-    v=rng.normal(0,.3,(1,1,sk,3)).astype(dtype)
+    k=rng.normal(0,.3,(1,1,sk,4)).astype(kv_dtype)
+    v=rng.normal(0,.3,(1,1,sk,3)).astype(kv_dtype)
     do=rng.normal(0,.2,(1,2,sq,3)).astype(out_dtype)
     bias_shape={"query":(1,2,1,sk),"key":(1,2,sq,1),"dense":(1,2,sq,sk)}.get(bias_kind)
     bias=rng.normal(0,.1,bias_shape).astype(np.float32) if bias_shape else None
@@ -266,3 +270,54 @@ def test_bounded_64_thread_compact_geometry_has_public_and_resident_parity(stora
                 for value,control in zip(outputs,receipt["output"],strict=True):
                     np.testing.assert_array_equal(download(session,value),control)
     finally:clear_prepared()
+
+
+# SM120-TYPED-REVERSE-ROW-PREPASS-20261026: mixed Q vs K/V storage through the
+# static (v3) row program -- compiler-free replay and the resident capture
+# frame, whose K/V snapshots and dK/dV take kv_storage. (The bounded forward
+# projection refuses mixed storage, so there is no mixed v4 program.)
+MIXED=[("f16","bf16"),("bf16","f16"),("f32","f16"),("f32","bf16"),("f16","f32")]
+
+
+@pytest.mark.parametrize("storage,kv_storage",MIXED)
+@pytest.mark.parametrize("bias",[False,True])
+def test_static_mixed_kv_row_program_replay_and_resident_capture(storage,kv_storage,bias,monkeypatch):
+    from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
+    from benchmarks.nvidia.benchmark_jit_attention_vjp import download
+    assert rt._nvidia_device_name()=="sm_120"
+    sq,sk=3,5
+    active=tuple(reversed(range(3+int(bias))))
+    original=source(storage,bias=bias,saved=True,output="f32",dims=(1,2,1,sq,sk,4,3),kv_storage=kv_storage)
+    original=original.replace('tessera.autodiff = "reverse"',
+        'tessera.autodiff = "reverse", tessera.autodiff.wrt_indices = ['+', '.join(map(str,active))+']')
+    program=compile_attention_vjp_program(original,active,compiler=os.environ["TESSERA_OPT"],
+        compact_gradients=True,row_correction=True)
+    assert json.loads(program.to_json())["program"]["schema"]=="tessera.native_attention_vjp_program.v3"
+    assert program.pair.backward.descriptor.provenance["kv_storage"]==kv_storage
+    artifact=rt.RuntimeArtifact.from_json(rt.RuntimeArtifact(graph_ir=original,target_ir=program.pair.backward.target_ir,
+        metadata=dict(target="nvidia_sm120",compiler_path="nvidia_sm120_attention_vjp_compiled",
+            execution_kind="native_gpu",execution_mode="cuda_runtime",executable=True,
+            arg_names=[f"primal_{i}" for i in range(3+int(bias))]+["cotangent","lse_cotangent"],
+            program_json=program.to_json(),program_digest=program.program_digest)).to_json())
+    def forbidden(*args,**kwargs):pytest.fail("mixed row replay reentered compiler")
+    monkeypatch.setattr(subprocess,"run",forbidden)
+    monkeypatch.setattr(subprocess,"Popen",forbidden)
+    try:
+        values,expected=inputs(storage,True,"query" if bias else "none",sq,sk,seed=1026,kv_storage=kv_storage)
+        receipt=rt.launch(artifact,values)
+        assert receipt["ok"] and receipt["execution_kind"]=="native_gpu",receipt
+        for actual,role in zip(receipt["output"],program.active,strict=True):
+            assert actual.dtype==(DTYPES[storage] if role==0 else DTYPES[kv_storage] if role<3 else np.float32)
+            compare(actual,expected[role])
+        with NvidiaDeviceSession() as session:
+            resident=tuple(session.upload(value) for value in values[:-2])
+            with program.capture(*resident,asynchronous=True) as frame:
+                frame.wait_on(session.stream)
+                gradients=frame.backward(tuple(session.upload(value) for value in values[-2:]))
+                frame.wait_on(session.stream)
+                for actual,role in zip(gradients,program.active,strict=True):
+                    held=download(session,actual)
+                    assert held.dtype==(DTYPES[storage] if role==0 else DTYPES[kv_storage] if role<3 else np.float32)
+                    compare(held,expected[role])
+    finally:
+        clear_prepared()

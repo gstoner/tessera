@@ -89,6 +89,8 @@ is 8.9 µs.
 
 No route or default promotion follows.
 
+**Update 2026-10-26:** SM120-TYPED-REVERSE-ROW-PREPASS-20261026 closes this defect: the reverse now computes the correction once per row by default (`benchmarks/baselines/sm120_typed_reverse_row_prepass_20261026/`).
+
 ## Not covered
 
 FP8 or scaled K/V reverse; original-source reverse, JVP and projection over a

@@ -2098,7 +2098,11 @@ private:
     bool seeded = seedAttr && seedAttr.getValue();
     bool bias = backward->getNumOperands() == 7 + unsigned(seeded);
     auto query = mlir::dyn_cast<mlir::RankedTensorType>(backward->getOperand(1).getType());
-    if (!query || (!query.getElementType().isF16() && !query.getElementType().isBF16()) ||
+    auto keyOperand = mlir::dyn_cast<mlir::RankedTensorType>(backward->getOperand(2).getType());
+    auto halfType = [](mlir::Type type) { return type.isF16() || type.isBF16(); };
+    // SM120-TYPED-REVERSE-ROW-PREPASS-20261026: half Q or half (shared) K/V.
+    if (!query || !keyOperand ||
+        (!halfType(query.getElementType()) && !halfType(keyOperand.getElementType())) ||
         llvm::any_of(backward->getOperandTypes(), [](mlir::Type type) {
           auto tensor = mlir::dyn_cast<mlir::RankedTensorType>(type);
           return !tensor || tensor.getEncoding() ||

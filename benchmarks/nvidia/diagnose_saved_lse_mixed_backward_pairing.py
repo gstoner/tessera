@@ -3,13 +3,15 @@
 SM120-SAVED-LSE-MIXED-BACKWARD-20261026. Every arm, homogeneous controls
 included, is compiled by the public JIT (``autodiff="reverse"``), checked
 against the fp64 reverse oracle, and then executed through the same prepared
-reverse owner the public call uses. The owner's two CUDA-event windows are
-recorded per call: the saved-LSE forward and the backward kernel. Arms
+reverse owner the public call uses. The owner's CUDA-event windows are
+recorded per call: the saved-LSE forward, the row-correction producer (row
+programs only) and the backward kernel. Arms
 alternate ABAB/BABA. CUDA events alone are diagnostic on sm_120, never a
 promotion witness.
 """
 import argparse
 import json
+import os
 import pathlib
 import statistics
 import subprocess
@@ -39,16 +41,20 @@ def dt(name):
     return np.dtype(ml_dtypes.bfloat16 if name == "bfloat16" else name)
 
 
-#: (label, Q storage, K/V storage).
+#: (label, Q storage, K/V storage, row-correction policy). "auto" is the
+#: default selection; the two "inline" arms force the per-element correction
+#: as before/after controls inside the same interleaved rounds.
 ARMS = [
-    ("f16 homogeneous", "float16", "float16"),
-    ("f16 / bf16", "float16", "bfloat16"),
-    ("bf16 homogeneous", "bfloat16", "bfloat16"),
-    ("bf16 / f16", "bfloat16", "float16"),
-    ("f32 homogeneous", "float32", "float32"),
-    ("f32 / f16", "float32", "float16"),
-    ("f32 / bf16", "float32", "bfloat16"),
-    ("f16 / f32", "float16", "float32"),
+    ("f16 homogeneous", "float16", "float16", "auto"),
+    ("f16 / bf16", "float16", "bfloat16", "auto"),
+    ("bf16 homogeneous", "bfloat16", "bfloat16", "auto"),
+    ("bf16 / f16", "bfloat16", "float16", "auto"),
+    ("f32 homogeneous", "float32", "float32", "auto"),
+    ("f32 / f16", "float32", "float16", "auto"),
+    ("f32 / bf16", "float32", "bfloat16", "auto"),
+    ("f16 / f32", "float16", "float32", "auto"),
+    ("f16 homogeneous, inline", "float16", "float16", "inline"),
+    ("f32 / f16, inline", "float32", "float16", "inline"),
 ]
 
 
@@ -68,7 +74,8 @@ for shape, rounds, reps in SHAPES:
             "v": rng.normal(0, .3, (b, hkv, sk, dv))}
     do_base = rng.normal(0, .2, (b, hq, sq, dv))
     arms, functions = {}, []
-    for label, q_name, kv_name in ARMS:
+    for label, q_name, kv_name, policy in ARMS:
+        os.environ["TESSERA_NVIDIA_ATTENTION_ROW_CORRECTION"] = policy
         values = {"q": base["q"].astype(dt(q_name)), "k": base["k"].astype(dt(kv_name)),
                   "v": base["v"].astype(dt(kv_name))}
         do = do_base.astype(dt(q_name))
@@ -83,7 +90,7 @@ for shape, rounds, reps in SHAPES:
         metadata = fn.native_backward_runtime_artifact().metadata
         inputs = tuple(np.ascontiguousarray(x) for x in (*(values[n] for n in fn.arg_names), do))
         arms[label] = (metadata, inputs)
-    samples = {label: {"forward": [], "backward": []} for label in arms}
+    samples = {label: {"forward": [], "row_producer": [], "backward": [], "reverse_total": []} for label in arms}
     for round_ in range(rounds):
         order = list(arms) if round_ % 2 == 0 else list(arms)[::-1]
         for label in order:
@@ -91,9 +98,16 @@ for shape, rounds, reps in SHAPES:
             owner = owner_for(metadata, inputs)
             for _ in range(reps):
                 owner.invoke(metadata, inputs)
-                forward, backward = owner.last_device_ms[:2]
-                samples[label]["forward"].append(forward * 1000)
+                times = owner.last_device_ms
+                # Row programs (SM120-TYPED-REVERSE-ROW-PREPASS-20261026) report
+                # forward, row producer, backward and the whole device window;
+                # the inline reverse reports forward and backward.
+                row = times[1] if owner.row_program else 0.0
+                backward = times[2] if owner.row_program else times[1]
+                samples[label]["forward"].append(times[0] * 1000)
+                samples[label]["row_producer"].append(row * 1000)
                 samples[label]["backward"].append(backward * 1000)
+                samples[label]["reverse_total"].append((row + backward) * 1000)
     out[str(shape)] = {label: {window: round(statistics.median(s), 2) for window, s in windows.items()}
                        for label, windows in samples.items()}
     for fn in functions:
@@ -103,7 +117,8 @@ status = subprocess.check_output(["git", "status", "--porcelain"], text=True).st
 gpu = subprocess.check_output(["/usr/lib/wsl/lib/nvidia-smi", "--query-gpu=name,compute_cap",
                                "--format=csv,noheader"], text=True).strip()
 args.output.write_text(json.dumps({"commit": commit, "worktree_dirty": bool(status), "device": gpu,
-    "timing": ("prepared reverse owner CUDA events (saved-LSE forward window, backward window); "
+    "timing": ("prepared reverse owner CUDA events: saved-LSE forward, row-correction producer (row programs; 0 inline), "
+               "backward kernel, and reverse_total = producer + backward; "
                f"small shape {args.reps} calls x {args.rounds} alternating rounds, large shape "
                f"1 call x {args.large_rounds} alternating rounds; median us"),
     "correctness": "fp64 reverse oracle on dQ/dK/dV before timing",

@@ -102,6 +102,10 @@ attentionRowCorrectionContract(Operation *graph) {
     fields.set("shape_policy",b.getStringAttr("bounded_sequences_v1"));
   }
   fields.set("storage", b.getStringAttr(checkpointStorageSpelling(q.getElementType())));
+  // SM120-TYPED-REVERSE-ROW-PREPASS-20261026: K/V storage is named only when
+  // it differs from Q, so every homogeneous row contract is unchanged.
+  if (k.getElementType() != q.getElementType())
+    fields.set("kv_storage", b.getStringAttr(checkpointStorageSpelling(k.getElementType())));
   fields.set("output_storage", b.getStringAttr(checkpointStorageSpelling(dout.getElementType())));
   fields.set("row_storage", b.getStringAttr("f32"));
   fields.set("accum", b.getStringAttr("f32"));
@@ -245,11 +249,13 @@ static LogicalResult lowerNativeRowCorrections(ModuleOp mod, bool &selected) {
     SmallVector<Type> types(graph->getNumOperands() + outputs, ptr);
     types.append(7, b.getI64Type());
     std::string entry = std::string(c->backward ? "tessera_tile_attention_backward_rows_" : "tessera_tile_attention_row_correction_") + c->hash.substr(0, 10);
+    std::string kvToken;
+    if (auto kv = c->contract.getAs<StringAttr>("kv_storage")) kvToken = ("_kv_" + kv.getValue()).str();
     if (!c->backward) {
       entry = (Twine("tessera_tile_attention_row_correction_b") +
           Twine(unsigned(cast<BoolAttr>(c->contract.get("bias")).getValue())) + "_s" +
           Twine(unsigned(cast<BoolAttr>(c->contract.get("lse_cotangent")).getValue())) + "_" +
-          cast<StringAttr>(c->contract.get("storage")).getValue() + "_out_" +
+          cast<StringAttr>(c->contract.get("storage")).getValue() + kvToken + "_out_" +
           cast<StringAttr>(c->contract.get("output_storage")).getValue() + "_" + c->hash.substr(0,10)).str();
     } else if (c->contract.get("gradient_output")) {
       unsigned mask = 0;
@@ -260,7 +266,7 @@ static LogicalResult lowerNativeRowCorrections(ModuleOp mod, bool &selected) {
           "_b" + Twine(bias) + "_g" + Twine(bias) + "_l" +
           Twine(unsigned(cast<StringAttr>(c->contract.get("gradient_launch")).getValue() == "logical_v1")) +
           "_t" + Twine(cast<IntegerAttr>(c->contract.get("block_threads")).getInt()) + "_" +
-          cast<StringAttr>(c->contract.get("storage")).getValue() + "_out_" +
+          cast<StringAttr>(c->contract.get("storage")).getValue() + kvToken + "_out_" +
           cast<StringAttr>(c->contract.get("output_storage")).getValue() + "_" + c->hash.substr(0,10)).str();
       if (cast<BoolAttr>(c->contract.get("lse_cotangent")).getValue()) entry += "_cotangent_";
     }
@@ -274,7 +280,7 @@ static LogicalResult lowerNativeRowCorrections(ModuleOp mod, bool &selected) {
     auto *block = fn.addEntryBlock(b); b.setInsertionPointToStart(block);
     OperationState kernel(graph->getLoc(), c->backward ? "tile.attention_backward_rows_kernel" : "tile.attention_row_correction_kernel");
     kernel.addOperands(block->getArguments());
-    for (StringRef name : {"shape", "shape_bounds", "shape_policy", "storage", "output_storage", "row_storage", "accum",
+    for (StringRef name : {"shape", "shape_bounds", "shape_policy", "storage", "kv_storage", "output_storage", "row_storage", "accum",
                           "row_correction", "scale", "causal", "bias", "lse_cotangent",
                           "row_bytes", "block_threads", "bias_shape", "bias_gradient",
                           "gradient_activity", "gradient_output", "gradient_launch", "row_correction_usage"})

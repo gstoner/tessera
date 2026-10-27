@@ -19278,6 +19278,15 @@ Not applicable to rocm physical execution: the shared `denseAttentionAD` opt-in 
 
 Evidence: benchmarks/baselines/sm120_saved_lse_mixed_backward_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md §"Mixed Q vs K/V storage (backward)".
 
+## SM120-TYPED-REVERSE-ROW-PREPASS-20261026 — once-per-row correction for the typed reverse
+
+Owner: E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Synchronization key: SM120-TYPED-REVERSE-ROW-PREPASS-20261026.
+
+Not applicable to rocm physical execution: the row-correction prepass, its Tile kernels and owner are SM120-only. The shared verifier relaxation (half Q or half K/V) is reached only through the SM120 paired reverse, so no ROCm selector, ABI or result changes. Follow-up only if a ROCm saved-LSE reverse owner is built; that owner should start from the once-per-row correction, not the inline form.
+
+Evidence: benchmarks/baselines/sm120_typed_reverse_row_prepass_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md §"Typed reverse row correction".
+
 ## SM120-W11-FP8-RHS-20261026 — scaled FP8 RHS edge (W1.1)
 
 Owner: E2E-REAL-6 / W1.1.

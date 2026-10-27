@@ -38,14 +38,17 @@ out = ts.ops.matmul(lhs, ts.ops.dequantize_scaled(codes, scale), output_dtype="f
   and f32 sources × E4M3/E5M2 × RMSNorm/LayerNorm × serial/cooperative schedule
   × five scales (incl. saturating ones), with guard bytes around the codes.
   Saturation and NaN rows are checked too.
-- `tests/device/nvidia/test_scaled_fp8_rhs_matmul.py`: **50 passed.** The fused
+- `tests/device/nvidia/test_scaled_fp8_rhs_matmul.py`: **28 passed.** The fused
   matmul is bit-identical to f32(native half matmul of the decoded codes × s)
-  for f16/bf16 A × E4M3/E5M2 × four shapes (incl. ragged 37×40×29 and
-  1×2048×256) × three scales. It is within 1e-5·(|A|·|B|) of the fp64 Graph
+  for f16 A × E4M3/E5M2 × four shapes (incl. ragged 37×40×29 and
+  1×2048×256) × three scales. A case with the largest f16 and E5M2 magnitudes
+  over K = 2048 stays finite and exact, and a bf16 A is refused, because the
+  factored scale is overflow-safe only for f16 (Codex review on #1017). It is within 1e-5·(|A|·|B|) of the fp64 Graph
   composition. With A = I, every finite code of both formats decodes exactly.
-- `tests/device/nvidia/test_rhs_fp8_jit_dispatch.py`: **13 passed.** These run
-  the ordinary `@jit` call over both formats, both storages, three shapes and
-  permuted frontend argument order. They check native receipts for both
+- `tests/device/nvidia/test_rhs_fp8_jit_dispatch.py`: **8 passed.** These run
+  the ordinary `@jit` call over both formats, three f16 shapes and permuted
+  frontend argument order. A bf16 FP8 edge falls back to the eager
+  composition. They check native receipts for both
   packages; the result against the program's own edge codes (1e-5 bound);
   ≥ 99.5% code agreement with the eager composition (rounding ties may move
   with the norm's f32 reduction order); portable manifest replay; and a warm

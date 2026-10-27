@@ -22,7 +22,8 @@ codes = ts.ops.quantize_scaled(ts.ops.rmsnorm(source), scale, format="fp8_e4m3")
 out = ts.ops.matmul(lhs, ts.ops.dequantize_scaled(codes, scale), output_dtype="fp32")
 ```
 
-- `source` and `lhs` are f16 or bf16 of the same storage.
+- `source` and `lhs` are f16 for the native edge. A bf16 FP8 edge runs the
+  eager reference composition (see the consumer's overflow condition below).
 - `scale` is a `(1, 1)` f32 per-tensor scale. Both sides bind the same argument.
 - `format` is `fp8_e4m3` or `fp8_e5m2` and is required; it is never defaulted.
 
@@ -64,7 +65,7 @@ norm's output.
 ## Consumer: FP8 row-major B decode
 
 `matmul(A, dequantize_scaled(Bq, s))` lowers to the typed m16n8k16 producer
-under these conditions: A is f16/bf16 `[M, K]`, `Bq` is row-major FP8
+under these conditions: A is f16 `[M, K]`, `Bq` is row-major FP8
 `[K, N]`, `s` is per-tensor f32, the shapes are static, and the output is
 unfused f32.
 
@@ -78,7 +79,7 @@ unfused f32.
   and refuse composition with a fused epilogue.
 - **Gather:** the row-major-B gather loads one code byte per element and
   decodes it exactly with `cvt.rn.f16x2.{e4m3,e5m2}x2`. Every FP8 value is an
-  f16 value and also a bf16 value, so the conversion to bf16 is exact too.
+  f16 value.
 - **Scale:** the f32 accumulator is multiplied by `s` once, before the store.
 - **ABI:** A, B codes, scale, D, M, N, K. The ABI id is
   `tessera.nvidia.matmul.a_row_bcodes_scale_d_m_n_k.<storage>_<fp8>.v1` and the
@@ -90,6 +91,15 @@ unfused f32.
 and stays within the f32 accumulation tolerance, but it is not bit-identical to
 the Graph. It is bit-identical to the native half matmul of the decoded codes
 multiplied by `s`, and the device tests hold it to that.
+
+**Why f16 A only.** Factoring the scale out is safe only if the unscaled f32
+accumulator cannot overflow where the Graph's result is finite. For f16 A,
+every term satisfies |a · code| ≤ 65504 · 57344 ≈ 3.76·10⁹, so even K = 2³¹
+keeps the sum below 8.1·10¹⁸, far under the f32 maximum. bf16 spans the f32
+range: A = 2¹²⁰ against E4M3 code 448 overflows before a 2⁻¹⁰ scale could
+bring it back, even though the Graph result 7·2¹²⁰ is finite. The Schedule,
+the Python lowering and `@jit` therefore admit only f16 A. A bf16 FP8 edge
+runs the eager composition. (Codex review on #1017.)
 
 ## Edge program
 
@@ -107,6 +117,7 @@ ml_dtypes E5M2, whose `<f1` NumPy cannot parse.
 
 ## Not admitted
 
+- bf16 A in the fused consumer (see above);
 - per-row, per-column or block scales;
 - dynamic or bounded shapes;
 - fused bias, activation or residual, and f16 output;

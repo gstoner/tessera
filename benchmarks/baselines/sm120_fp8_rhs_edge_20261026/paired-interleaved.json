@@ -1,0 +1,44 @@
+{
+ "commit": "3dc6d3fc37b705cbd1581ac2fcdc13da8cbc5d22",
+ "worktree_dirty": false,
+ "device": "NVIDIA GeForce RTX 5070, 12.0",
+ "timing": "session CUDA events around 20 resident stream launches after 2 warmup; 12 alternating rounds; median us per launch (includes host enqueue gaps)",
+ "correctness": "fp64 bound 1e-5 * |A| @ |decode(edge)| on every arm before timing",
+ "shape_order": "(M, K, N): lhs MxK f16, normalized source KxN, output MxN f32",
+ "medians_us": {
+  "(16, 4096, 4096)": {
+   "f16 edge": {
+    "producer": 192.13,
+    "consumer": 207.95,
+    "edge": 409.04
+   },
+   "fp8_e4m3 edge": {
+    "producer": 206.93,
+    "consumer": 227.24,
+    "edge": 432.1
+   },
+   "fp8_e5m2 edge": {
+    "producer": 204.72,
+    "consumer": 221.75,
+    "edge": 439.58
+   }
+  },
+  "(256, 4096, 4096)": {
+   "f16 edge": {
+    "producer": 202.57,
+    "consumer": 1250.35,
+    "edge": 1348.85
+   },
+   "fp8_e4m3 edge": {
+    "producer": 219.36,
+    "consumer": 1246.6,
+    "edge": 1325.76
+   },
+   "fp8_e5m2 edge": {
+    "producer": 219.9,
+    "consumer": 1246.56,
+    "edge": 1326.02
+   }
+  }
+ }
+}

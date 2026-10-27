@@ -19277,3 +19277,12 @@ Synchronization key: SM120-SAVED-LSE-MIXED-BACKWARD-20261026.
 Not applicable to rocm physical execution: the shared `denseAttentionAD` opt-in still requires the SM120 target whenever any role is non-f32, so a mixed reverse on gfx1151/gfx1201 is refused at Graph AD exactly as before; homogeneous f32 reverse contracts are byte-unchanged. Follow-up only if a ROCm saved-LSE reverse owner is built; no ROCm selector, ABI or result changes.
 
 Evidence: benchmarks/baselines/sm120_saved_lse_mixed_backward_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md §"Mixed Q vs K/V storage (backward)".
+
+## SM120-W11-FP8-RHS-20261026 — scaled FP8 RHS edge (W1.1)
+
+Owner: E2E-REAL-6 / W1.1.
+Synchronization key: SM120-W11-FP8-RHS-20261026.
+
+Not applicable to rocm physical execution: the fused FP8 norm store and FP8 row-B decode are SM120 schedule/Tile/NVVM paths and `quantize_scaled` is `unsupported` on ROCm. Shared changes (Graph op, the norm/matmul schedule admissions) are gated on the SM120 target; gfx1201's existing FP8 W8A8/MXFP8 contracts are untouched. Follow-up only if a ROCm resident RHS edge is built.
+
+Evidence: benchmarks/baselines/sm120_fp8_rhs_edge_20261026/README.md; contract docs/spec/SM120_FP8_RHS_EDGE_CONTRACT.md.

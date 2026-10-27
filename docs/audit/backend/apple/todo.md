@@ -16085,3 +16085,12 @@ Synchronization key: SM120-SAVED-LSE-MIXED-BACKWARD-20261026.
 Not applicable to apple: the mixed K/V admission is an opt-in on the shared `denseAttentionAD` contract that only `FlashAttnOp::buildAdjoint` and `AutodiffPairedPass` pass, and a non-f32 role still requires the SM120 native target, so an Apple-target mixed reverse is refused at the same point as before. No Apple selector, ABI or result changes.
 
 Evidence: benchmarks/baselines/sm120_saved_lse_mixed_backward_20261026/README.md; contract docs/spec/SM120_SAVED_LSE_STORAGE_CONTRACT.md §"Mixed Q vs K/V storage (backward)".
+
+## SM120-W11-FP8-RHS-20261026 — scaled FP8 RHS edge (W1.1)
+
+Owner: E2E-REAL-6 / W1.1.
+Synchronization key: SM120-W11-FP8-RHS-20261026.
+
+Not applicable to apple: `tessera.quantize_scaled` executes the eager reference off SM120 and its Apple capability is `unsupported` (Apple no-lane golden updated with the op); the fused norm store, FP8 B decode and ABIs are SM120-only. No Apple selector, ABI or result changes.
+
+Evidence: benchmarks/baselines/sm120_fp8_rhs_edge_20261026/README.md; contract docs/spec/SM120_FP8_RHS_EDGE_CONTRACT.md.

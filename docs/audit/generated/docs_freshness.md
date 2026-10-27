@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-26**.
 
 ## Headline
 
-- **189** docs catalogued across the canonical doc tree.
-- **188** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **71** updated within the last 30 days.
+- **190** docs catalogued across the canonical doc tree.
+- **189** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **72** updated within the last 30 days.
 - **51** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -62,6 +62,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 100 | ✓ |
 | `SHAPE_SYSTEM.md` | Normative | 2026-10-24 | 2 | ✓ |
 | `SM120_ATTENTION_ROW_OWNER_CONTRACT.md` | - | 2026-10-17 | 9 | ✓ |
+| `SM120_FP8_RHS_EDGE_CONTRACT.md` | - | 2026-10-26 | 0 | ✓ |
 | `SM120_SAVED_LSE_STORAGE_CONTRACT.md` | - | 2026-10-26 | 0 | ✓ |
 | `SM120_TYPED_ATTENTION_BACKWARD_CONTRACT.md` | - | 2026-10-17 | 9 | ✓ |
 | `SM120_TYPED_ATTENTION_JVP_CONTRACT.md` | - | 2026-10-17 | 9 | ✓ |

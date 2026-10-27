@@ -14251,3 +14251,11 @@ Remaining: exact-head CI/review; MXFP8 and MXFP4 RHS gates; per-row/block scales
 Evidence: benchmarks/baselines/sm120_fp8_rhs_edge_20261026/README.md; contract docs/spec/SM120_FP8_RHS_EDGE_CONTRACT.md.
 <!-- entry-fields:end -->
 
+### 2026-10-27 — GFX1201 seven-member quantized MLP runs at a bounded active M
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync GFX1201-NVFP4-BOUNDED-MLP-20261027.
+Outcome: the NVFP4 gate/up → SiLU-mul → down program is compiled once at capacity and launched at any active M from one native owner. A module row bound retypes the activation's row-local forward slice before the unchanged static admission; schema v5 adds the row frame and the original request. The new owner frame scales one scalar and one grid axis per row step and derives the row closure from the SSA plan; the v1 single-consumer ABI is one entry of it. Product images guard arbitrary M. On gfx1201 the bounded outputs are bitwise equal to the static capacity rows and to static programs compiled at each M; activation-only updates keep both expanded weights resident; seven tampered frames are refused. The bounded owner runs at 0.997–1.032× static owners (diagnostic events). The 204-test owner regression set, source-reverse proof and assertions-ON lit pass. Sibling queues are recorded as not applicable.
+Remaining: exact-head CI/review; public `@jit` admission of the bound; a portable bounded record; dynamic K/N; gfx1151.
+Evidence: benchmarks/baselines/gfx1201_bounded_quantized_mlp_20261027/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-row v5 MLP".
+<!-- entry-fields:end -->

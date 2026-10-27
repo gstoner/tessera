@@ -2805,13 +2805,16 @@ class JitFn:
         if not requests_quantized_product(module):
             raise ValueError("native quantized program requires the authored quantizer/product Graph")
         if m_bound is not None:
+            # The capture is the cached specialization; the request belongs to
+            # this compile only, accepted or refused.
+            module=deepcopy(module)
             module.module_attrs["tessera.native.quantized_m_bound"]=f"{m_bound} : i64"
         program=replace(package_traced_quantized_product(module),argument_names=tuple(self.arg_names))
         program.validate()
         if m_bound is not None:
             if not program.bounded:
                 raise ValueError("native quantized row bound did not produce a bounded program")
-            self.graph_ir=deepcopy(module)
+            self.graph_ir=module
             self.frontend_authority="tracer"
             self.frontend_authority_error=None
             self._rocm_quantized_product_bounded_program=program

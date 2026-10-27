@@ -71,3 +71,20 @@ def test_non_gfx1201_target_is_refused(monkeypatch):
     monkeypatch.setattr(fn, "target", "rocm_gfx1151")
     with pytest.raises(ValueError, match="gfx1201"):
         fn.compile_native_quantized_program(*roots, m_bound=8)
+
+
+def _cached_bounds(fn):
+    return [m.module_attrs.get("tessera.native.quantized_m_bound")
+            for m in fn._traced_frontend_specializations.values()]
+
+
+def test_bound_request_never_reaches_the_cached_trace(rocm_image_toolchain):
+    fn, roots = public()
+    with pytest.raises(RuntimeError, match="exceed their checked capacity"):
+        fn.compile_native_quantized_program(*roots, m_bound=2)
+    assert _cached_bounds(fn) == [None]
+    bounded = fn.compile_native_quantized_program(*roots, m_bound=8)
+    assert bounded.bounded and _cached_bounds(fn) == [None]
+    static = fn.compile_native_quantized_program(*roots)
+    assert not static.bounded
+    assert static.manifest()["schema"] == "tessera.rocm.quantized_product_frontend.v4"

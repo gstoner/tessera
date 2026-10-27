@@ -50,7 +50,9 @@ struct Program {
   std::vector<hipEvent_t> events;
   std::vector<hipGraph_t> graphs;
   std::vector<hipGraphExec_t> graphExecutables;
-  TesseraRocmProgramRows rows{};
+  // One internal frame for both row ABIs: v1 is a single consumer entry.
+  int64_t capacityRows = 0;
+  std::vector<TesseraRocmProgramRowStep> rowSteps;
   int64_t activeRows = 0;
   std::vector<uint64_t> rowBytes;
   uint64_t generation = 0;
@@ -152,26 +154,32 @@ uint64_t activeBytes(const Program &p, uint32_t slot, int64_t rows) {
   return !p.rowBytes.empty() && p.rowBytes[slot]
       ? uint64_t(rows) * p.rowBytes[slot] : p.contract[slot].bytes;
 }
+// Admission proved every product below fits at capacity; rows <= capacity.
 void applyRows(Program &p, int64_t rows) {
-  if (!p.rows.capacity_m) return;
+  if (!p.capacityRows) return;
   p.activeRows = rows;
-  auto &stage = p.stages[p.rows.consumer_step];
-  stage.scalars[p.rows.m_scalar] = rows;
-  stage.geometry[p.rows.grid_axis] =
-      unsigned(rows / p.rows.tile_m + (rows % p.rows.tile_m != 0));
-  for (uint32_t i = 0; i < stage.inputs.size() + stage.outputs.size(); ++i) {
-    uint32_t slot = i < stage.inputs.size() ? stage.inputs[i]
-        : stage.outputs[i - stage.inputs.size()];
-    stage.refs[i].elements = int64_t(activeBytes(p, slot, rows) /
-        (p.contract[slot].bytes / p.contract[slot].elements));
+  for (const auto &row : p.rowSteps) {
+    auto &stage = p.stages[row.step];
+    stage.scalars[row.scalar] = rows * row.scalar_per_row;
+    uint64_t work = uint64_t(rows) * uint64_t(row.grid_per_row);
+    stage.geometry[row.grid_axis] =
+        unsigned(work / row.grid_tile + (work % row.grid_tile != 0));
+    for (uint32_t i = 0; i < stage.inputs.size() + stage.outputs.size(); ++i) {
+      uint32_t slot = i < stage.inputs.size() ? stage.inputs[i]
+          : stage.outputs[i - stage.inputs.size()];
+      stage.refs[i].elements = int64_t(activeBytes(p, slot, rows) /
+          (p.contract[slot].bytes / p.contract[slot].elements));
+    }
   }
 }
 template<class Step>
 bool validRows(const TesseraRocmProgramRows *rows, int64_t active,
                uint32_t arguments, uint32_t buffers,
                const TesseraRocmProgramBuffer *contract,
-               uint32_t steps, const Step *plan, std::vector<uint64_t> &strides) {
+               uint32_t steps, const Step *plan, std::vector<uint64_t> &strides,
+               std::vector<TesseraRocmProgramRowStep> &rowSteps) {
   strides.assign(buffers, 0);
+  rowSteps.clear();
   if (!rows) return active == 0;
   if (rows->capacity_m < 1 || active < 1 || active > rows->capacity_m ||
       rows->slot_count != 3 ||
@@ -232,7 +240,66 @@ bool validRows(const TesseraRocmProgramRows *rows, int64_t active,
   uint64_t itemBytes = out.bytes / out.elements;
   if ((itemBytes != 2 && itemBytes != 4) || rows->row_bytes[2] % itemBytes ||
       rows->row_bytes[2] / itemBytes != uint64_t(consumer.scalars[1])) return false;
-  return inputs == 2 && outputs == 1;
+  if (inputs != 2 || outputs != 1) return false;
+  rowSteps.push_back({rows->consumer_step, rows->m_scalar, 1, rows->grid_axis,
+                      rows->tile_m, 1});
+  return true;
+}
+// Generic frame admission. Labels are checked against the SSA plan: the row
+// closure is derived from slot use, never trusted from the step list alone.
+template<class Step>
+bool validRowFrame(const TesseraRocmProgramRowFrame *frame, int64_t active,
+                   uint32_t arguments, uint32_t buffers,
+                   const TesseraRocmProgramBuffer *contract,
+                   uint32_t steps, const Step *plan, std::vector<uint64_t> &strides,
+                   std::vector<TesseraRocmProgramRowStep> &rowSteps) {
+  strides.assign(buffers, 0);
+  rowSteps.clear();
+  if (!frame || !frame->slots || !frame->row_bytes || !frame->steps ||
+      frame->capacity_m < 1 || active < 1 || active > frame->capacity_m ||
+      !frame->slot_count || frame->slot_count > 32 || frame->slot_count > buffers ||
+      !frame->step_count || frame->step_count > 16 || frame->step_count > steps)
+    return false;
+  const uint64_t capacity = uint64_t(frame->capacity_m);
+  uint32_t rowArguments = 0;
+  for (uint32_t i = 0; i < frame->slot_count; ++i) {
+    uint32_t slot = frame->slots[i];
+    if (slot >= buffers || strides[slot] || !frame->row_bytes[i]) return false;
+    const auto &b = contract[slot];
+    if (b.bytes % capacity || b.elements % capacity ||
+        frame->row_bytes[i] != b.bytes / capacity) return false;
+    strides[slot] = frame->row_bytes[i];
+    rowArguments += slot < arguments;
+  }
+  if (!rowArguments) return false;
+  std::vector<int> entry(steps, -1);
+  for (uint32_t i = 0; i < frame->step_count; ++i) {
+    const auto &row = frame->steps[i];
+    if (row.step >= steps || entry[row.step] >= 0) return false;
+    const auto &s = plan[row.step];
+    if (row.scalar >= s.scalar_count || row.scalar_per_row < 1 ||
+        frame->capacity_m > INT64_MAX / row.scalar_per_row ||
+        s.scalars[row.scalar] != frame->capacity_m * row.scalar_per_row ||
+        row.grid_axis > 2 || !row.grid_tile || row.grid_per_row < 1 ||
+        capacity > uint64_t(INT64_MAX) / uint64_t(row.grid_per_row)) return false;
+    uint64_t work = capacity * uint64_t(row.grid_per_row);
+    uint64_t grid = work / row.grid_tile + (work % row.grid_tile != 0);
+    if (grid > 2147483647U || s.geometry[row.grid_axis] != grid) return false;
+    entry[row.step] = int(i);
+  }
+  for (uint32_t i = 0; i < steps; ++i) {
+    const auto &s = plan[i];
+    bool touches = false, invariantOutput = false;
+    for (uint32_t j = 0; j < s.input_count; ++j) touches |= strides[s.inputs[j]] != 0;
+    for (uint32_t j = 0; j < outputCount(s); ++j) {
+      bool row = strides[outputSlot(s, j)] != 0;
+      touches |= row; invariantOutput |= !row;
+    }
+    // A row step may read invariant weights but publishes only row storage.
+    if (touches != (entry[i] >= 0) || (touches && invariantOutput)) return false;
+  }
+  for (uint32_t i = 0; i < frame->step_count; ++i) rowSteps.push_back(frame->steps[i]);
+  return true;
 }
 bool inputContract(const Program &p, const void *const *inputs,
                    const uint64_t *bytes) {
@@ -281,7 +348,8 @@ static int prepareProgram(
     const TesseraRocmProgramBuffer *contract, uint32_t steps,
     const Step *plan, const void *const *inputs,
     const uint64_t *inputBytes, uint64_t *handle,
-    const TesseraRocmProgramRows *rowPolicy = nullptr, int64_t activeRows = 0) try {
+    const TesseraRocmProgramRows *rowPolicy = nullptr, int64_t activeRows = 0,
+    const TesseraRocmProgramRowFrame *rowFrame = nullptr) try {
   if (handle) *handle = 0;
   if (!handle || !architecture || !contract || !plan || !inputs || !inputBytes ||
       !arguments || arguments > 128 || !steps || steps > 128 ||
@@ -338,13 +406,19 @@ static int prepareProgram(
     if (contract[i].last_read != reads[i]) return 1;
   }
   std::vector<uint64_t> rowStrides;
-  if (!validRows(rowPolicy, activeRows, arguments, buffers, contract,
-                 steps, plan, rowStrides)) return 1;
+  std::vector<TesseraRocmProgramRowStep> rowSteps;
+  if (rowPolicy && rowFrame) return 1;
+  if (rowFrame ? !validRowFrame(rowFrame, activeRows, arguments, buffers, contract,
+                                steps, plan, rowStrides, rowSteps)
+               : !validRows(rowPolicy, activeRows, arguments, buffers, contract,
+                            steps, plan, rowStrides, rowSteps)) return 1;
   for (uint32_t i = 0; i < arguments; ++i)
     if (inputBytes[i] != (rowStrides[i] ? uint64_t(activeRows) * rowStrides[i]
                                       : contract[i].bytes)) return 1;
   auto p = std::make_unique<Program>();
-  if (rowPolicy) p->rows = *rowPolicy;
+  if (rowPolicy) p->capacityRows = rowPolicy->capacity_m;
+  if (rowFrame) p->capacityRows = rowFrame->capacity_m;
+  p->rowSteps = std::move(rowSteps);
   p->activeRows = activeRows;
   p->rowBytes = std::move(rowStrides);
   p->arguments = arguments;
@@ -380,16 +454,20 @@ static int prepareProgram(
       std::getenv("TESSERA_ROCM_PROGRAM_PINNED"));
   p->cacheKey = programKey(arch, arguments, buffers, contract, steps, plan);
   keyValue(p->cacheKey, p->pinned);
-  const bool bounded = rowPolicy != nullptr;
+  const bool bounded = p->capacityRows != 0;
   keyValue(p->cacheKey, bounded);
   if (bounded) {
-    keyValue(p->cacheKey, p->rows.capacity_m);
-    keyValue(p->cacheKey, p->rows.slot_count);
-    for (uint32_t i = 0; i < p->rows.slot_count; ++i) {
-      keyValue(p->cacheKey, p->rows.slots[i]); keyValue(p->cacheKey, p->rows.row_bytes[i]);
+    // Both row ABIs key the derived frame: capacity, every row stride and
+    // every row-scaled launch field. Equal frames share one owner.
+    keyValue(p->cacheKey, p->capacityRows);
+    for (uint32_t i = 0; i < buffers; ++i) keyValue(p->cacheKey, p->rowBytes[i]);
+    uint64_t count = p->rowSteps.size();
+    keyValue(p->cacheKey, count);
+    for (const auto &row : p->rowSteps) {
+      keyValue(p->cacheKey, row.step); keyValue(p->cacheKey, row.scalar);
+      keyValue(p->cacheKey, row.scalar_per_row); keyValue(p->cacheKey, row.grid_axis);
+      keyValue(p->cacheKey, row.grid_tile); keyValue(p->cacheKey, row.grid_per_row);
     }
-    keyValue(p->cacheKey, p->rows.consumer_step); keyValue(p->cacheKey, p->rows.m_scalar);
-    keyValue(p->cacheKey, p->rows.grid_axis); keyValue(p->cacheKey, p->rows.tile_m);
   }
   p->pinnedReadbackBytes = outputTotal;
   // Budget both pinned slabs and pageable snapshots/readback capacity.
@@ -554,6 +632,17 @@ extern "C" int tessera_rocm_program_prepare_multi_output_rows(
                         plan, inputs, inputBytes, handle, rows, activeRows);
 }
 
+extern "C" int tessera_rocm_program_prepare_multi_output_row_frame(
+    const char *architecture, uint32_t arguments, uint32_t buffers,
+    const TesseraRocmProgramBuffer *contract, uint32_t steps,
+    const TesseraRocmProgramMultiOutputStep *plan, const void *const *inputs,
+    const uint64_t *inputBytes, const TesseraRocmProgramRowFrame *frame,
+    int64_t activeRows, uint64_t *handle) {
+  if (!frame) { if (handle) *handle = 0; return 1; }
+  return prepareProgram(architecture, arguments, buffers, contract, steps,
+                        plan, inputs, inputBytes, handle, nullptr, activeRows, frame);
+}
+
 extern "C" int tessera_rocm_program_update(
     uint64_t handle, const void *const *inputs, const uint64_t *bytes) try {
   if (getpid() != process) return 2;
@@ -578,8 +667,8 @@ static int updateSlots(
   if (!identity(p)) return 2;
   if (p.poisoned || !p.ready) return 10;
   if (count > p.arguments) return 1;
-  if (requestedRows && (!p.rows.capacity_m || requestedRows < 1 ||
-                        requestedRows > p.rows.capacity_m)) return 1;
+  if (requestedRows && (!p.capacityRows || requestedRows < 1 ||
+                        requestedRows > p.capacityRows)) return 1;
   int64_t nextRows = requestedRows ? requestedRows : p.activeRows;
   std::vector<unsigned char> changed(p.contract.size(), 0);
   for (uint32_t i = 0; i < count; ++i) {
@@ -591,6 +680,11 @@ static int updateSlots(
     for (uint32_t slot = 0; slot < p.arguments; ++slot)
       if (p.rowBytes[slot] && !changed[slot]) return 1;
   auto initialized = p.initialized;
+  // Private row slots were produced for the previous active span; a row
+  // change invalidates them even where no updated root reaches them.
+  if (nextRows != p.activeRows)
+    for (uint32_t slot = p.arguments; slot < p.contract.size(); ++slot)
+      if (p.rowBytes[slot]) { changed[slot] = 1; initialized[slot] = 0; }
   for (auto &stage : p.stages) {
     bool invalid = false;
     for (auto slot : stage.inputs) invalid |= changed[slot] != 0;
@@ -655,9 +749,9 @@ extern "C" int tessera_rocm_program_rows_info(
   auto it = pool.programs.find(handle); if (it == pool.programs.end()) return 1;
   auto &p = *it->second;
   if (!identity(p)) return 2;
-  if (!p.rows.capacity_m) return 1;
+  if (!p.capacityRows) return 1;
   if (p.poisoned) return 10;
-  *capacity = p.rows.capacity_m; *active = p.activeRows;
+  *capacity = p.capacityRows; *active = p.activeRows;
   *bytes = p.allocationBytes; *count = p.buffers.size();
   return 0;
 } catch (...) { return 12; }

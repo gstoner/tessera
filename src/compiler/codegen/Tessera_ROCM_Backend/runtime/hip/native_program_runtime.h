@@ -78,7 +78,35 @@ int tessera_rocm_program_prepare_multi_output_rows(
     const TesseraRocmProgramMultiOutputStep *, const void *const *,
     const uint64_t *, const TesseraRocmProgramRows *, int64_t active_m,
     uint64_t *handle);
+// Additive multi-step row frame. Every prepared scalar, grid and byte span is
+// the capacity value. A row step scales one scalar to active_m*scalar_per_row
+// and one grid axis to ceil(active_m*grid_per_row/grid_tile). The runtime
+// derives the row closure from the SSA plan: a step is a row step exactly when
+// it reads or writes a row slot, and every output of a row step is a row slot.
+// Invariant steps (weight expansion) therefore never observe active_m.
+typedef struct {
+  uint32_t step;
+  uint32_t scalar;
+  int64_t scalar_per_row;
+  uint32_t grid_axis;
+  uint32_t grid_tile;
+  int64_t grid_per_row;
+} TesseraRocmProgramRowStep;
+typedef struct {
+  int64_t capacity_m;
+  uint32_t slot_count; // 1..32 distinct slots, at least one original argument.
+  uint32_t step_count; // 1..16 distinct row steps.
+  const uint32_t *slots;
+  const uint64_t *row_bytes;
+  const TesseraRocmProgramRowStep *steps;
+} TesseraRocmProgramRowFrame;
+int tessera_rocm_program_prepare_multi_output_row_frame(
+    const char *, uint32_t, uint32_t, const TesseraRocmProgramBuffer *, uint32_t,
+    const TesseraRocmProgramMultiOutputStep *, const void *const *,
+    const uint64_t *, const TesseraRocmProgramRowFrame *, int64_t active_m,
+    uint64_t *handle);
 // Row changes require all row-dependent input slots in this atomic update.
+// A row change invalidates every private row slot and its SSA dependents.
 int tessera_rocm_program_update_rows(
     uint64_t handle, int64_t active_m, uint32_t count, const uint32_t *slots,
     const void *const *inputs, const uint64_t *bytes);

@@ -40,7 +40,9 @@ static mlir::LogicalResult outlineNativeQuantizedMembers(
     mlir::ModuleOp module, mlir::func::FuncOp root,
     llvm::ArrayRef<llvm::SmallVector<mlir::Operation *>> groups,
     llvm::SmallVectorImpl<mlir::OwningOpRef<mlir::ModuleOp>> &projections,
-    llvm::StringRef schema, llvm::ArrayRef<llvm::StringRef> subprograms = {}) {
+    llvm::StringRef schema, llvm::ArrayRef<llvm::StringRef> subprograms = {},
+    llvm::function_ref<mlir::LogicalResult(llvm::json::Object &,
+        const llvm::DenseMap<mlir::Value,int64_t> &)> extend = nullptr) {
   using namespace mlir;
   auto refuse = [&]() -> LogicalResult {
     return module.emitError("native quantized member interfaces and SSA lifetimes must match their certified projections");
@@ -144,6 +146,7 @@ static mlir::LogicalResult outlineNativeQuantizedMembers(
     for (auto value:subprograms) regions.push_back(value);
     plan["subprograms"]=std::move(regions);
   }
+  if (extend && failed(extend(plan,ids))) return failure();
   std::string json;llvm::raw_string_ostream os(json);os<<llvm::json::Value(std::move(plan));os.flush();
   module->setAttr("tessera.native.quantized_product_json",b.getStringAttr(llvm::encodeBase64(json)));
   module->setAttr("tessera.native.quantized_product_members",b.getArrayAttr(symbols));
@@ -198,6 +201,112 @@ static mlir::LogicalResult emitNativeQuantizedGateUpProgram(mlir::ModuleOp modul
       "tessera.native.quantized_product.v3");
 }
 
+// Capacity retyping for the admitted seven-member MLP. Every operation in the
+// activation's forward slice is row-local: K16 row blocks, an axis-1 reduce,
+// elementwise math, column slices of the gate/up parent and row-major scaled
+// products. Running that program at capacity R and keeping its first m rows is
+// the program at m rows, which is the claim the bounded owner relies on. Each
+// leading dimension in the slice is a multiple of m and scales by R/m; any
+// other operation, a row-axis reduce/slice, or a shared constant refuses.
+static mlir::LogicalResult retypeQuantizedMLPRows(
+    mlir::ModuleOp module, mlir::func::FuncOp root, mlir::Value activation,
+    int64_t rows, int64_t capacity, llvm::DenseSet<mlir::Value> &rowValues) {
+  using namespace mlir;
+  auto refuse = [&]() -> LogicalResult {
+    return module.emitError("quantized bounded rows require row-local MLP SSA with row-multiple leading dimensions");
+  };
+  auto scaled = [&](int64_t dim, int64_t &out) {
+    if (dim <= 0 || dim % rows || dim / rows > INT64_MAX / capacity) return false;
+    out = dim / rows * capacity; return true;
+  };
+  auto scaledType = [&](Type type) -> RankedTensorType {
+    auto tensor = dyn_cast<RankedTensorType>(type);
+    if (!tensor || !tensor.hasStaticShape() || tensor.getEncoding() || !tensor.getRank())
+      return {};
+    SmallVector<int64_t> shape(tensor.getShape());
+    if (!scaled(shape[0], shape[0])) return {};
+    return RankedTensorType::get(shape, tensor.getElementType());
+  };
+  auto scaledArray = [&](Operation *op, StringRef key) -> LogicalResult {
+    auto array = op->getAttrOfType<ArrayAttr>(key);
+    if (!array || array.empty()) return failure();
+    SmallVector<Attribute> values(array.begin(), array.end());
+    auto first = dyn_cast<IntegerAttr>(values[0]);
+    int64_t next = 0;
+    if (!first || !scaled(first.getInt(), next)) return failure();
+    values[0] = IntegerAttr::get(first.getType(), next);
+    op->setAttr(key, ArrayAttr::get(op->getContext(), values));
+    return success();
+  };
+  rowValues.insert(activation);
+  SmallVector<Operation *> slice;
+  for (Operation &op : root.getBody().front().without_terminator())
+    if (llvm::any_of(op.getOperands(), [&](Value v) { return rowValues.contains(v); })) {
+      slice.push_back(&op);
+      for (Value result : op.getResults()) rowValues.insert(result);
+    }
+  llvm::SetVector<Operation *> constants;
+  for (Operation *op : slice) {
+    StringRef name = op->getName().getStringRef();
+    if (name != "tessera.reshape" && name != "tessera.cast" && name != "tessera.absolute" &&
+        name != "tessera.reduce" && name != "tessera.div" && name != "tessera.maximum" &&
+        name != "tessera.expand" && name != "tessera.scaled_matmul" &&
+        name != "tessera.slice" && name != "tessera.silu_mul") return refuse();
+    if (name == "tessera.reduce") {
+      auto axis = op->getAttrOfType<IntegerAttr>("axis");
+      if (!axis || axis.getInt() == 0) return refuse();
+    }
+    if (name == "tessera.slice") {
+      auto start = op->getAttrOfType<ArrayAttr>("start_indices");
+      if (!start || start.empty() || !isa<IntegerAttr>(start[0]) ||
+          cast<IntegerAttr>(start[0]).getInt() != 0) return refuse();
+    }
+    for (Value operand : op->getOperands()) {
+      if (rowValues.contains(operand)) continue;
+      auto constant = operand.getDefiningOp<arith::ConstantOp>();
+      if (!constant) continue;  // Invariant weights stay at their static shape.
+      auto dense = dyn_cast<DenseElementsAttr>(constant.getValue());
+      if (!dense || !dense.isSplat() ||
+          llvm::any_of(constant->getUsers(), [&](Operation *user) {
+            return !llvm::is_contained(slice, user); })) return refuse();
+      constants.insert(constant);
+    }
+  }
+  for (Operation *op : constants) {
+    auto constant = cast<arith::ConstantOp>(op);
+    auto type = scaledType(constant.getType());
+    if (!type) return refuse();
+    // Retyped in place: the caller's matched operation list stays valid.
+    auto dense = cast<DenseElementsAttr>(constant.getValue());
+    constant.setValueAttr(DenseElementsAttr::get(type, dense.getSplatValue<Attribute>()));
+    constant.getResult().setType(type);
+  }
+  auto argument = cast<BlockArgument>(activation);
+  auto argumentType = scaledType(argument.getType());
+  if (!argumentType) return refuse();
+  argument.setType(argumentType);
+  for (Operation *op : slice) {
+    StringRef name = op->getName().getStringRef();
+    if ((name == "tessera.reshape" || name == "tessera.expand") && failed(scaledArray(op, "shape")))
+      return refuse();
+    if (name == "tessera.slice" && failed(scaledArray(op, "slice_sizes"))) return refuse();
+    for (Value result : op->getResults()) {
+      auto type = scaledType(result.getType());
+      if (!type) return refuse();
+      result.setType(type);
+    }
+  }
+  auto ret = cast<func::ReturnOp>(root.getBody().front().back());
+  SmallVector<Type> inputs, results;
+  for (Value value : root.getArguments()) inputs.push_back(value.getType());
+  for (Value value : ret.getOperands()) {
+    if (!rowValues.contains(value)) return refuse();
+    results.push_back(value.getType());
+  }
+  root.setFunctionType(FunctionType::get(module.getContext(), inputs, results));
+  return verify(module);
+}
+
 static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) {
   using namespace mlir;
   auto refuse = [&]() -> LogicalResult {
@@ -207,6 +316,30 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
   SmallVector<Operation *> ops;
   for (Operation &op:root.getBody().front().without_terminator()) ops.push_back(&op);
   auto ret=dyn_cast<func::ReturnOp>(root.getBody().front().back());
+  // A bounded request retypes the whole row path to its capacity before the
+  // ordinary static admission runs; the gate/down validators then certify the
+  // capacity program and never see the request.
+  constexpr StringLiteral rowBoundKey = "tessera.native.quantized_m_bound";
+  bool boundedRows = module->hasAttr(rowBoundKey);
+  int64_t activeRows = 0, rowBound = 0;
+  std::string originalIR;
+  llvm::DenseSet<Value> rowValues;
+  if (boundedRows) {
+    auto bound = module->getAttrOfType<IntegerAttr>(rowBoundKey);
+    auto activation = ops.empty() || ops[0]->getNumOperands() != 1 ? Value{} : ops[0]->getOperand(0);
+    auto type = activation ? dyn_cast<RankedTensorType>(activation.getType()) : RankedTensorType{};
+    if (!bound || !bound.getType().isInteger(64) || !type || type.getRank() != 2 ||
+        !type.hasStaticShape() || !isa<BlockArgument>(activation))
+      return module.emitError("quantized bounded rows require a static rank-2 activation and an i64 bound");
+    activeRows = type.getDimSize(0); rowBound = bound.getInt();
+    if (activeRows <= 0 || rowBound < activeRows)
+      return module.emitError("quantized bounded rows exceed their checked capacity");
+    llvm::raw_string_ostream originalStream(originalIR);
+    module.print(originalStream); originalStream.flush();
+    module->removeAttr(rowBoundKey);
+    if (failed(retypeQuantizedMLPRows(module, root, activation, activeRows, rowBound, rowValues)))
+      return failure();
+  }
   if (root.getNumArguments()!=7 || (ops.size()!=37 && ops.size()!=38) || !ret ||
       ops[0]->getNumOperands()!=1 || ops[13]->getNumOperands()!=3 ||
       ops[21]->getNumResults()!=1 || ops[22]->getNumOperands()!=1 ||
@@ -242,8 +375,40 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
   SmallVector<llvm::StringRef> subprograms{
       gate.get()->getAttrOfType<StringAttr>("tessera.native.quantized_product_json").getValue(),
       down.get()->getAttrOfType<StringAttr>("tessera.native.quantized_product_json").getValue()};
+  if (!boundedRows)
+    return outlineNativeQuantizedMembers(module,root,groups,projections,
+        "tessera.native.quantized_product.v4",subprograms);
+  // v5 is v4 at capacity plus the declared row frame. v4 is never repurposed.
+  auto frame = [&](llvm::json::Object &plan, const llvm::DenseMap<Value,int64_t> &ids) -> LogicalResult {
+    SmallVector<std::pair<int64_t,Value>> slots;
+    for (auto &[value,id] : ids)
+      if (rowValues.contains(value)) slots.push_back({id,value});
+    llvm::sort(slots, [](auto &a, auto &b) { return a.first < b.first; });
+    llvm::json::Array slotJSON, strideJSON, stepJSON;
+    for (auto &[id,value] : slots) {
+      auto type = cast<RankedTensorType>(value.getType());
+      int64_t bytes = type.getNumElements() * (type.getElementType().getIntOrFloatBitWidth() / 8);
+      if (bytes % rowBound) return module.emitError("quantized bounded row slot is not row-major");
+      slotJSON.push_back(id); strideJSON.push_back(bytes / rowBound);
+    }
+    auto *steps = plan.getArray("steps");
+    for (auto &step : *steps) {
+      auto *object = step.getAsObject();
+      bool touches = false;
+      for (auto key : {"inputs","outputs"})
+        for (auto &id : *object->getArray(key))
+          touches |= llvm::any_of(slots, [&](auto &slot) { return slot.first == *id.getAsInteger(); });
+      if (touches) stepJSON.push_back(*object->getInteger("step"));
+    }
+    plan["active_m"] = activeRows;
+    plan["m_bound"] = rowBound;
+    plan["original_graph_ir"] = originalIR + "\n";
+    plan["row_frame"] = llvm::json::Object{{"slots",std::move(slotJSON)},
+        {"row_strides_bytes",std::move(strideJSON)},{"row_steps",std::move(stepJSON)}};
+    return success();
+  };
   return outlineNativeQuantizedMembers(module,root,groups,projections,
-      "tessera.native.quantized_product.v4",subprograms);
+      "tessera.native.quantized_product.v5",subprograms,frame);
 }
 
 } // namespace tessera

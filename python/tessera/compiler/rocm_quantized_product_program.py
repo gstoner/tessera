@@ -30,6 +30,8 @@ _EXPANDED_SCHEMA = "tessera.native.quantized_product.v2"
 _ACTIVATED_SCHEMA = "tessera.native.quantized_product.v3"
 _NATIVE_SCHEMAS = (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA)
 _PACKAGE_SCHEMAS = tuple(f"tessera.rocm.quantized_product_package.v{i}" for i in (1,2,3))
+# v4 is the static seven-member MLP; v5 is that MLP at capacity with a row frame.
+_MLP_SCHEMAS = ("tessera.native.quantized_product.v4","tessera.native.quantized_product.v5")
 
 
 def _digest(text):
@@ -42,13 +44,13 @@ def _export(tool, source):
     if len(encoded) != 1:
         raise ValueError("requires one native quantized-product SSA record")
     plan = json.loads(base64.b64decode(encoded[0],validate=True))
-    if not isinstance(plan,dict) or plan.get("schema") not in (*_NATIVE_SCHEMAS,"tessera.native.quantized_product.v4"):
+    if not isinstance(plan,dict) or plan.get("schema") not in (*_NATIVE_SCHEMAS,*_MLP_SCHEMAS):
         raise ValueError("native quantized-product schema differs")
     return plan
 
 
 def _frame_shape(plan):
-    if isinstance(plan,dict) and plan.get("schema")=="tessera.native.quantized_product.v4":
+    if isinstance(plan,dict) and plan.get("schema") in _MLP_SCHEMAS:
         from .rocm_quantized_mlp_program import _frame as mlp_frame
         roles,shape,_=mlp_frame(plan)
         return roles,shape
@@ -152,6 +154,9 @@ class NativeQuantizedProductProgram:
     expansion: NVFP4ExpansionPackage | None = None
     activation_recipe: ParentViewRecipe | None = None
     activation: ROCMNativePackage | None = None
+    # A bounded MLP component's product image guards arbitrary M. Its checked
+    # static Target remains the witness; the image is its shape-free projection.
+    arbitrary_m: bool = False
 
     def _identity(self):
         parts = [self.program_json,self.graph_ir,self.quantizer_recipe.graph_ir,
@@ -165,6 +170,8 @@ class NativeQuantizedProductProgram:
         for native in self.native_stages:
             parts.extend([native.tile_ir,native.target_ir,
                           native.image.image_digest,native.descriptor.descriptor_digest])
+        if self.arbitrary_m:
+            parts.append("arbitrary_m")
         return _digest(json.dumps(parts,separators=(",",":")))
 
     @property
@@ -240,9 +247,22 @@ class NativeQuantizedProductProgram:
                     raise ValueError("native quantized-product activation/shared buffer interface differs")
         native = self.product
         native.descriptor.validate_image(native.image)
-        if native.target_ir != self.checked_product_target_ir:
+        if type(self.arbitrary_m) is not bool:
+            raise ValueError("native quantized-product arbitrary-M policy differs")
+        checked = check_blockscale_target_ir(shape,native.tile_ir,self.checked_product_target_ir)
+        if self.arbitrary_m:
+            from .rocm_native import _shape_free_target_ir
+            projection=_shape_free_target_ir(self.checked_product_target_ir,
+                family="scaled_matmul" if checked["staging"]=="global" else "scaled_matmul_lds",
+                directive="tessera_rocm.scaled_wmma_gemm",
+                runtime_k=bool(native.descriptor.provenance.get("lds_runtime_k")),arbitrary_m=True)
+            if (native.target_ir != projection
+                    or native.descriptor.provenance.get("arbitrary_m") is not True
+                    or native.descriptor.provenance.get("lds_whole_m") is not False):
+                raise ValueError("native quantized-product arbitrary-M image differs from its checked Target")
+        elif (native.target_ir != self.checked_product_target_ir
+                or native.descriptor.provenance.get("arbitrary_m") is not False):
             raise ValueError("native quantized-product checked Target differs from image-bound Target")
-        checked = check_blockscale_target_ir(shape,native.tile_ir,native.target_ir)
         descriptor = native.descriptor
         if (native.image.target != "rocm_gfx1201" or native.image.architecture != "gfx1201"
                 or native.image.binary_format != "hsaco" or native.image.pipeline_name != "tessera-rocm-executable"
@@ -260,6 +280,10 @@ class NativeQuantizedProductProgram:
     def to_manifest(self):
         from .rocm_nvfp4_resident import _portable_stage
         self.validate()
+        if self.arbitrary_m:
+            # No portable record carries the arbitrary-M witness yet; refusing
+            # keeps a replayed record from silently becoming a static image.
+            raise ValueError("bounded quantized-product components have no portable record")
         stages = [_portable_stage(self.quantizer_recipe.graph_ir,self.quantizer_recipe.schedule_ir,self.quantizer)]
         if self.expansion is not None:
             stages.append(_portable_stage(self.expansion.graph_ir,self.expansion.schedule_ir,self.expansion.native))
@@ -313,12 +337,16 @@ class NativeQuantizedProductProgram:
         return PreparedQuantizedProductProgram(self,inputs,runtime_library=runtime_library)
 
 
-def package_quantized_product_graph(graph_ir):
+def package_quantized_product_graph(graph_ir,*,arbitrary_m=False):
+    if type(arbitrary_m) is not bool:
+        raise ValueError("native quantized-product arbitrary-M policy must be a bool")
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("native quantized product requires matching tessera-opt")
     plan = _export(tool,graph_ir)
-    if plan["schema"]=="tessera.native.quantized_product.v4":
+    if plan["schema"] in _MLP_SCHEMAS:
+        if arbitrary_m:
+            raise ValueError("a bounded MLP derives its component policy from its own frame")
         from .rocm_quantized_mlp_program import package_quantized_mlp_plan
         return package_quantized_mlp_plan(plan,tool)
     _,shape = _frame_shape(plan)
@@ -335,7 +363,16 @@ def package_quantized_product_graph(graph_ir):
     verify_blockscale_schedule(shape,schedule)
     tile = run_tessera_opt(tool,schedule,"--tessera-schedule-to-tile")
     recipe = BlockScaleProgram(shape,"quantized_product",child,schedule,tile)
-    product = package_blockscale(recipe,pipeline_name="tessera-rocm-executable",project_image_identity=False)
+    product = package_blockscale(recipe,pipeline_name="tessera-rocm-executable",
+                                 project_image_identity=arbitrary_m,arbitrary_m=arbitrary_m)
+    checked_target = product.target_ir
+    if arbitrary_m:
+        # The image is the shape-free projection; retain the static checked
+        # Target separately, as the bounded NVFP4 consumer does.
+        from .rocm_native import _run_opt
+        from .rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel, ROCMOutputLevel
+        config = ROCMExecutablePipeline(family="matmul", arch="gfx1201", input_level=ROCMInputLevel.TILE)
+        checked_target = _run_opt(tool, tile, config.pass_pipeline(output=ROCMOutputLevel.TARGET))
     activation_recipe,activation=None,None
     if activated:
         graph=plan["member_graphs"][3]
@@ -344,7 +381,7 @@ def package_quantized_product_graph(graph_ir):
         activation_recipe=ParentViewRecipe(graph,schedule,tile)
         activation=package_parent_view_recipe(activation_recipe,pipeline_name="tessera-rocm-executable")
     program = NativeQuantizedProductProgram(json.dumps(plan,sort_keys=True),plan["source_graph_ir"],
-        quantizer_recipe,quantizer,recipe,product,product.target_ir,"",expansion,activation_recipe,activation)
+        quantizer_recipe,quantizer,recipe,product,checked_target,"",expansion,activation_recipe,activation,arbitrary_m)
     program = replace(program,binding_digest=program._identity())
     program.validate()
     return program

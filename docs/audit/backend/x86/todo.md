@@ -12506,3 +12506,12 @@ Synchronization key: SM120-W11-FP8-RHS-20261026.
 Not applicable to x86: Graph op registration only (`quantize_scaled` unsupported on x86); no x86 selector, ABI or result changes.
 
 Evidence: benchmarks/baselines/sm120_fp8_rhs_edge_20261026/README.md; contract docs/spec/SM120_FP8_RHS_EDGE_CONTRACT.md.
+
+## GFX1201-NVFP4-BOUNDED-MLP-20261027 — bounded-row seven-member quantized MLP
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-NVFP4-BOUNDED-MLP-20261027.
+
+Not applicable to x86: the quantized MLP is admitted only for `rocm_gfx1201`, and the row frame is a HIP owner ABI. No x86 selector, ABI or result changes.
+
+Evidence: benchmarks/baselines/gfx1201_bounded_quantized_mlp_20261027/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-row v5 MLP".

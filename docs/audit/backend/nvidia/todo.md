@@ -16735,3 +16735,11 @@ The RMSNorm/LayerNorm→matmul RHS edge gains scaled FP8 storage: `matmul(lhs, d
 
 Evidence: benchmarks/baselines/sm120_fp8_rhs_edge_20261026/README.md; contract docs/spec/SM120_FP8_RHS_EDGE_CONTRACT.md.
 
+## GFX1201-NVFP4-BOUNDED-MLP-20261027 — bounded-row seven-member quantized MLP
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-NVFP4-BOUNDED-MLP-20261027.
+
+Not applicable to nvidia: the quantized MLP, its v5 export and the row-frame owner are gfx1201 ROCm paths. The shared change is a compiler export that requires `tessera.target = rocm_gfx1201`. No NVIDIA selector, ABI or result changes. The SM120 NVFP4 tensor modules have their own bounded-row owner and are untouched.
+
+Evidence: benchmarks/baselines/gfx1201_bounded_quantized_mlp_20261027/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-row v5 MLP".

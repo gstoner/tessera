@@ -324,6 +324,88 @@ FP64-reference disagreements. This is a named static public profile, not
 checkpoint/model-quality, dynamic, encoded-AD or sibling physical closure.
 Evidence: benchmarks/baselines/rocm_quantized_mlp_20261017/README.md.
 
+### Bounded-row v5 MLP (GFX1201-NVFP4-BOUNDED-MLP-20261027)
+
+The module attribute `tessera.native.quantized_m_bound = R : i64` asks for
+the seven-member MLP at capacity `R` rows. It is admitted only for the
+complete MLP; a bound on any smaller quantized program is refused instead of
+being dropped. The original activation must be a static rank-2 argument with
+`m <= R` rows.
+
+**Capacity retyping.** Before the ordinary static admission, the compiler
+retypes the activation's forward slice to capacity. Every leading dimension in
+the slice must be a multiple of `m` and scales by `R/m`. That covers flattened
+K16 blocks (`m*K/16`), the reshape/expand `shape` and slice `slice_sizes`
+attributes, and the row-shaped splat constants. The retyper admits only
+row-local operations: reshape, cast, absolute, the axis-1 reduce, div,
+maximum, expand, column slices starting at row 0, scaled_matmul and
+silu_mul. Anything else is refused before any type changes, as is a constant
+shared outside the slice. The retyped program is then certified by the
+unchanged v3/v2 gate and down validators. The program at capacity, restricted
+to its first `m` rows, is therefore the program at `m` rows.
+
+**Schema v5.** v5 is v4 at capacity plus:
+
+- `active_m` and `m_bound`;
+- `original_graph_ir`, the request that replays to the identical plan;
+- `row_frame`, with `slots`, `row_strides_bytes` and `row_steps`.
+
+v4 is never repurposed. The row slots are:
+
+- the activation;
+- first Q/SA (7/8);
+- the BF16 parent (11);
+- the activation (12);
+- second Q/SA (13/14);
+- the output (17).
+
+The row steps are 0, 2, 3, 4 and 6. Both weight expansions (steps 1 and 5) and
+their B/SB planes stay invariant. Python re-derives the frame from the buffers
+and refuses any difference. Bounded components compile arbitrary-M product
+images, and the static checked Target remains the witness, checked as its
+shape-free projection. A bounded program has no portable record yet, so
+`to_manifest` refuses it.
+
+**Owner frame.** `tessera_rocm_program_prepare_multi_output_row_frame` takes
+capacity values. Each row step scales one scalar to `active_m * per_row` and
+one grid axis to `ceil(active_m * grid_per_row / tile)`:
+
+| Member | Scaled scalar | Grid axis |
+|---|---|---|
+| Quantizer | `Groups` (flat over 256 lanes) | x |
+| Scaled product | `M` | y, over macro-tile rows |
+| SiLU-mul | element count | x |
+
+The owner never trusts the step list. A step is a row step exactly when it
+reads or writes a row slot, and a row step publishes only row storage. Any
+other frame is refused before HIP is touched.
+
+A row change is atomic:
+
+- the update must include every row-dependent root;
+- it invalidates every private row slot and its dependents;
+- it leaves the expanded weights resident.
+
+The original single-consumer `TesseraRocmProgramRows` ABI is one entry of the
+same internal frame.
+
+**Evidence on RX9070XT/gfx1201 (Tajasarus, assertions-ON LLVM/MLIR 23.1.1):**
+
+- At three shapes and several active M per capacity, bounded outputs are
+  bitwise equal to the static capacity program's first rows. They also pass
+  the independent staged chain at the active shape.
+- Activation-only updates run the two quantizers, both products and SiLU-mul
+  without re-expanding weights.
+- Seven tampered frames are refused.
+
+In paired interleaved HIP-event windows at H/K/N = 128/12288/256 with capacity
+256, the bounded owner runs at 0.997–1.032× a static owner compiled at each
+M, and is bitwise equal to it. An activation update costs 0.19–0.49 ms of host
+time, against about 0.9 s to compile each static M. These timings are
+diagnostic. Not covered: public JIT admission of the bound, a portable bounded
+record, dynamic K/N, and sibling backends.
+Evidence: benchmarks/baselines/gfx1201_bounded_quantized_mlp_20261027/README.md.
+
 
 ## Quantized package certificate and ABI reuse
 

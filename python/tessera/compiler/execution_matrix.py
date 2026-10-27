@@ -3804,6 +3804,17 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "and one checked C++ HIP owner. Wider/dynamic/AD and model quality require separate proof.",
         numerical_fixture="tests/device/rocm/test_native_quantized_mlp_program.py",
         evidence_target="rocm_gfx1201",proof_build=".build-bf16",device_proof="device_verified_jit"),
+    ("rocm_gfx1201", "canonical_rocm_quantized_bounded_mlp_program"): ExecutionRow(
+        target="rocm_gfx1201",compiler_path="canonical_rocm_quantized_bounded_mlp_program",
+        execution_kind="native_gpu",executable=True,executor_id="rocm_quantized_product_program",
+        runtime_status="success",execution_mode="hip_runtime",owns_stream=True,
+        reason="The named seven-member quantized MLP compiled once by the explicit public "
+               "compile_native_quantized_program(..., m_bound=B) request (schema v5); later public "
+               "calls at 1 <= M <= B bind the capacity program without retracing or compiling, "
+               "bitwise equal to the static capacity program's first rows. No portable record; "
+               "fixed N/K; AD and model quality require separate proof.",
+        numerical_fixture="tests/device/rocm/test_public_quantized_mlp_row_bound_device.py",
+        evidence_target="rocm_gfx1201",proof_build=".build-bf16",device_proof="device_verified_jit"),
     ("rocm_gfx1201", "canonical_rocm_quantized_gate_up_program"): ExecutionRow(
         target="rocm_gfx1201",compiler_path="canonical_rocm_quantized_gate_up_program",
         execution_kind="native_gpu",executable=True,executor_id="rocm_quantized_product_program",

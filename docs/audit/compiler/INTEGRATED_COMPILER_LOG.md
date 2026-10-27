@@ -14254,8 +14254,17 @@ Evidence: benchmarks/baselines/sm120_fp8_rhs_edge_20261026/README.md; contract d
 ### 2026-10-27 — GFX1201 seven-member quantized MLP runs at a bounded active M
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: pending; sync GFX1201-NVFP4-BOUNDED-MLP-20261027.
+PRs: #1018; sync GFX1201-NVFP4-BOUNDED-MLP-20261027.
 Outcome: the NVFP4 gate/up → SiLU-mul → down program is compiled once at capacity and launched at any active M from one native owner. A module row bound retypes the activation's row-local forward slice before the unchanged static admission; schema v5 adds the row frame and the original request. The new owner frame scales one scalar and one grid axis per row step and derives the row closure from the SSA plan; the v1 single-consumer ABI is one entry of it. Product images guard arbitrary M. On gfx1201 the bounded outputs are bitwise equal to the static capacity rows and to static programs compiled at each M; activation-only updates keep both expanded weights resident; seven tampered frames are refused. The bounded owner runs at 0.997–1.032× static owners (diagnostic events). The 204-test owner regression set, source-reverse proof and assertions-ON lit pass. Sibling queues are recorded as not applicable.
-Remaining: exact-head CI/review; public `@jit` admission of the bound; a portable bounded record; dynamic K/N; gfx1151.
+Remaining: a portable bounded record; dynamic K/N; gfx1151. (Public `@jit` admission: 2026-10-27 public row-bound entry below.)
 Evidence: benchmarks/baselines/gfx1201_bounded_quantized_mlp_20261027/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-row v5 MLP".
+<!-- entry-fields:end -->
+
+### 2026-10-27 — Public row-bound compile for the gfx1201 quantized MLP
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync GFX1201-PUBLIC-QUANTIZED-ROW-BOUND-20261027.
+Outcome: `function.compile_native_quantized_program(*example_inputs, m_bound=B)` compiles the authored seven-member MLP into the bounded v5 program once, mirroring `compile_native_nvfp4_program(..., m_bound=B)`. Later public calls at `1 <= M <= B` bind the retained program without retracing, compiling or running the authored body (frontend record v5, compiler path `canonical_rocm_quantized_bounded_mlp_program`, new execution-matrix row). The native export stays the only bound admission; a bound below the example rows or on a smaller program returns its diagnostic. A bounded call has no portable record, so `runtime_artifact()` refuses. On gfx1201, with the compiler, tracer and authored body patched to fail, public outputs at three shapes and several M are bitwise equal to the static capacity rows and, for M <= 64, pass the independent staged chain. The quantized/NVFP4/gate-up/block-quant device set (179) and the quantized/NVFP4/JIT unit set (2743) pass. Sibling queues are recorded as not applicable.
+Remaining: exact-head CI/review; retaining the prepared owner across public calls; public bounded timing; a portable bounded record; dynamic K/N; gfx1151.
+Evidence: tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Public row-bound compile".
 <!-- entry-fields:end -->

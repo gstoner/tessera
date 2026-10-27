@@ -402,9 +402,55 @@ In paired interleaved HIP-event windows at H/K/N = 128/12288/256 with capacity
 256, the bounded owner runs at 0.997–1.032× a static owner compiled at each
 M, and is bitwise equal to it. An activation update costs 0.19–0.49 ms of host
 time, against about 0.9 s to compile each static M. These timings are
-diagnostic. Not covered: public JIT admission of the bound, a portable bounded
-record, dynamic K/N, and sibling backends.
+diagnostic. Not covered: a portable bounded record, dynamic K/N, and sibling
+backends. Public JIT admission landed separately; see the next section.
 Evidence: benchmarks/baselines/gfx1201_bounded_quantized_mlp_20261027/README.md.
+
+### Public row-bound compile (GFX1201-PUBLIC-QUANTIZED-ROW-BOUND-20261027)
+
+For the authored seven-member function decorated with
+`@jit(target="rocm_gfx1201")`, the public request is
+`function.compile_native_quantized_program(*example_inputs, m_bound=B)`. It
+mirrors `compile_native_nvfp4_program(..., m_bound=B)`:
+
+- It traces the example call once, sets
+  `tessera.native.quantized_m_bound = B : i64` on that Graph and packages the
+  v5 program. The frontend does not pre-check the bound; the native export
+  owns admission. A bound below the example rows, or a bound on any smaller
+  quantized program, comes back as the export's diagnostic.
+- A malformed `m_bound` (not a positive `int`; `bool` is refused) is refused
+  before tracing.
+- The function retains the verified program. Every later ordinary call at
+  `1 <= M <= B` binds it without retracing, compiling or running the authored
+  Python body. Each call prepares the capacity owner at the active M, launches
+  the seven members, reads `[M, N]` and closes the owner.
+- N, K and every weight-root shape stay fixed; a different weight or
+  activation width is refused by the existing expansion and storage checks.
+  An M above B is refused by the owner's capacity check.
+- The frontend record is `tessera.rocm.quantized_product_frontend.v5` and the
+  compiler path is `canonical_rocm_quantized_bounded_mlp_program`.
+  `compile_report()` names that path. `runtime_artifact()` and `manifest()`
+  refuse with "no portable record", because the v5 native program has none.
+- Without `m_bound`, the call returns the static v4 program and changes no
+  dispatch state; ordinary calls keep retracing per M as before.
+
+**Evidence on RX9070XT/gfx1201 (Tajasarus, assertions-ON LLVM/MLIR 23.1.1):**
+`tests/device/rocm/test_public_quantized_mlp_row_bound_device.py` covers
+H/K/N = 32/48/19 (B = 8; M = 3, 8, 1, 5), 16/16/1 (B = 1) and 128/12288/256
+(B = 256; M = 37, 256, 1). Replay runs with `subprocess.run`, the tracer and
+the authored body all patched to fail. Every public output is bitwise equal
+to the static capacity program's first rows over padded roots, and for
+M <= 64 it also passes the independent staged chain at the active shape.
+
+Not covered:
+
+- retaining the prepared owner across public calls (each call prepares at
+  capacity; resident weights are reachable only through the package owner's
+  `update_activations`);
+- timing of the public bounded call;
+- a portable bounded record;
+- dynamic K/N;
+- gfx1151 and sibling backends.
 
 
 ## Quantized package certificate and ABI reuse

@@ -16743,3 +16743,12 @@ Synchronization key: GFX1201-NVFP4-BOUNDED-MLP-20261027.
 Not applicable to nvidia: the quantized MLP, its v5 export and the row-frame owner are gfx1201 ROCm paths. The shared change is a compiler export that requires `tessera.target = rocm_gfx1201`. No NVIDIA selector, ABI or result changes. The SM120 NVFP4 tensor modules have their own bounded-row owner and are untouched.
 
 Evidence: benchmarks/baselines/gfx1201_bounded_quantized_mlp_20261027/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-row v5 MLP".
+
+## GFX1201-PUBLIC-QUANTIZED-ROW-BOUND-20261027 — public row-bound compile for the quantized MLP
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-PUBLIC-QUANTIZED-ROW-BOUND-20261027.
+
+Not applicable to NVIDIA: the public row-bound compile admits only the `rocm_gfx1201` quantized MLP. No NVIDIA selector, ABI or result changes; the SM120 tensor programs keep their own `row_bound` route.
+
+Evidence: tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Public row-bound compile".

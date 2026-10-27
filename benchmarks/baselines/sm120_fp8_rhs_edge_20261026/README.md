@@ -63,8 +63,15 @@ out = ts.ops.matmul(lhs, ts.ops.dequantize_scaled(codes, scale), output_dtype="f
   without `b_scale`.
   - After the fix, 66 of the 67 entries new against the previous sweep pass;
     the 67th fails in both main baselines.
-  - The setup errors in that sweep were concurrency pressure; the affected
-    files were rerun at `-n 4` (see the PR).
+  - The setup errors in that sweep are the harness's own `nvidia-smi` probe
+    (`tests/conftest.py`) timing out after 5 s under load, before any test
+    body runs. The 42 affected files were rerun at `-n 4` on this branch and
+    on `main`: the branch had 135 errors and `main` had 280.
+  - The only branch-only *failures* in that A/B were six
+    `test_public_jit_resident_roots_order_pending_writes` /
+    `test_single_sided_public_resident_chain_and_raw_rhs` cases. They fail
+    serially on current `main` (`53b0a677f`) too, with variants flipping
+    between runs.
   - Lit on this host: `tests/tessera-ir` 441 passed / 124 unsupported / 0 failed;
     `check-tessera-nvidia` 72 passed.
 

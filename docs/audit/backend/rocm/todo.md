@@ -19322,3 +19322,12 @@ Synchronization key: GFX1201-NVFP4-BOUND-TRACE-COPY-20261028.
 Fixed on gfx1201 (Tajasarus). `compile_native_nvfp4_program(..., m_bound=B)` no longer writes its bound onto the cached frontend trace. Before, a refused bound made the next ordinary call for the same roots fail, and an accepted bound leaked into later unbounded compiles. A malformed bound is now refused before tracing. Regression tests fail on the unfixed code.
 
 Evidence: tests/unit/test_nvfp4_bound_trace_copy.py; tests/device/rocm/test_nvfp4_bounded_rows.py.
+
+## GFX1201-PUBLIC-BOUNDED-CALL-TIMING-20261028 — public bounded quantized MLP call timing
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-PUBLIC-BOUNDED-CALL-TIMING-20261028.
+
+Measured on gfx1201 only (Tajasarus), diagnostic host wall on WSL2. At H/K/N 128/12288/256 with capacity 256 the public bounded call is 0.61–0.81× a public static call compiled at that M. The static call retraces and renders canonical MLIR for its cache key on every call. A held owner would cut the bounded call to 16–23% of its cost, because per-call owner construction dominates. Outputs are bitwise equal across arms. No gfx1151 evidence. Open: owner retention across public calls; the static path's per-call retrace cost.
+
+Evidence: benchmarks/baselines/gfx1201_public_bounded_call_20261028/README.md.

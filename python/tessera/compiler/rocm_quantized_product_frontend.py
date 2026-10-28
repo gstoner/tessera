@@ -119,18 +119,31 @@ class RetainedBoundedOwner:
         self._lock=threading.Lock()
 
     @staticmethod
-    def _snapshot(values):
+    def _checked(value):
+        """The caller's array, its backing span proven before any byte is read.
+
+        A held snapshot certifies only the allocation it was taken from; a
+        replacement view (``as_strided``) must pass the same span admission the
+        native upload applies, or reading it could leave its allocation.
+        """
+        from .paged_host_span import checked_host_span
+        array=np.asarray(value)
+        checked_host_span(array,label="quantized weight",min_rank=1)
+        return array
+
+    @classmethod
+    def _snapshot(cls,values):
         snapshot=[]
         for value in values:
-            array=np.asarray(value)
+            array=cls._checked(value)
             snapshot.append((array.dtype,array.shape,np.ascontiguousarray(array).view(np.uint8).copy()))
         return snapshot
 
     def _same_weights(self,values):
         if self._weights is None:
             return False
-        for value,(dtype,shape,held) in zip(values,self._weights,strict=True):
-            array=np.asarray(value)
+        arrays=[self._checked(value) for value in values]
+        for array,(dtype,shape,held) in zip(arrays,self._weights,strict=True):
             if array.dtype!=dtype or array.shape!=shape:
                 return False
             if not np.array_equal(np.ascontiguousarray(array).view(np.uint8),held):

@@ -205,3 +205,53 @@ def test_loc_path_is_memoized_per_working_directory(tmp_path, monkeypatch):
     assert graph_ir._loc_path("tessera/compiler/graph_ir.py") == "python/tessera/compiler/graph_ir.py"
     monkeypatch.chdir(repo)
     assert graph_ir._loc_path("tessera/compiler/graph_ir.py") == "tessera/compiler/graph_ir.py"
+
+
+def test_forged_weight_view_is_refused_before_its_bytes_are_read():
+    """Codex #1022 P1: a held snapshot certifies only its own allocation."""
+    program = FakeProgram()
+    owner = RetainedBoundedOwner(program)
+    values = roots(3)
+    owner.execute(values)
+    backing = np.zeros(2, np.uint8)
+    forged = np.lib.stride_tricks.as_strided(backing, shape=(3, 2), strides=(2, 1))
+    with pytest.raises(ValueError):
+        owner.execute([values[0], forged, *values[2:]])
+    # Refused before any native write: the owner and its snapshot stay.
+    owner.execute(values)
+    assert program.log == ["prepare", "activations"]
+
+
+def test_bounded_recompile_releases_the_superseded_program(monkeypatch):
+    """Codex #1022 P2: a replaced owner's finalizer must not pin its program."""
+    import dataclasses
+    import gc
+
+    @dataclasses.dataclass(eq=False)
+    class Packaged(FakeProgram):
+        argument_names: tuple = ()
+
+        def __post_init__(self):
+            FakeProgram.__init__(self)
+
+    class Module:
+        def __init__(self):
+            self.module_attrs = {}
+
+    fn = ts.jit(lambda x: x)
+    monkeypatch.setattr(fn, "target", "rocm_gfx1201")
+    monkeypatch.setattr(fn, "_trace_frontend_capture", lambda ordered, kw: (Module(), None))
+    monkeypatch.setattr(frontend, "requests_quantized_product", lambda module: True)
+    monkeypatch.setattr(frontend, "package_traced_quantized_product", lambda module: Packaged())
+    first = fn.compile_native_quantized_program(np.zeros((1, 4), np.float32), m_bound=4)
+    first_owner = fn._rocm_quantized_product_bounded_owner
+    first_owner.execute(roots(1))
+    alive = weakref.ref(first)
+    del first
+    second = fn.compile_native_quantized_program(np.zeros((1, 4), np.float32), m_bound=4)
+    assert first_owner._owner is None  # closed on replacement
+    del first_owner
+    gc.collect()
+    assert alive() is None
+    assert fn._rocm_quantized_product_bounded_program is second
+    assert fn._rocm_quantized_product_bounded_finalizer.alive

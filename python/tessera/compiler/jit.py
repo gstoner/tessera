@@ -2824,12 +2824,15 @@ class JitFn:
             import weakref
             from .rocm_quantized_product_frontend import RetainedBoundedOwner
             owner=RetainedBoundedOwner(program)
-            previous=getattr(self,"_rocm_quantized_product_bounded_owner",None)
+            # Calling the previous finalizer closes its owner and detaches it,
+            # so a recompile releases the superseded program, not only its
+            # device memory.
+            previous=getattr(self,"_rocm_quantized_product_bounded_finalizer",None)
             if previous is not None:
-                previous.close()
+                previous()
             self._rocm_quantized_product_bounded_program=program
             self._rocm_quantized_product_bounded_owner=owner
-            weakref.finalize(self,owner.close)
+            self._rocm_quantized_product_bounded_finalizer=weakref.finalize(self,owner.close)
         return program
 
     def native_nvfp4_packages(self):

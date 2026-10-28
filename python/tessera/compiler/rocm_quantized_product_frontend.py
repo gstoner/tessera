@@ -6,6 +6,9 @@ from functools import lru_cache
 import inspect
 import json
 import os
+import threading
+
+import numpy as np
 
 from .rocm_block_quant_native import _NAMES
 from .rocm_quantized_product_program import NativeQuantizedProductProgram,package_quantized_product_graph,_export,_frame_shape
@@ -63,11 +66,10 @@ class TracedQuantizedProduct:
             raise ValueError("bounded native quantized MLP has no portable record")
         return {"schema":_frontend_schema(self.native),"argument_names":list(self.argument_names),"native_program":self.native.to_manifest()}
 
-    def execute(self,args):
+    def _bind(self,args):
         from tessera import runtime as rt
         if rt._rocm_live_arch()!="gfx1201":
             raise RuntimeError("native quantized product requires owning gfx1201")
-        self.validate()
         signature=inspect.Signature([inspect.Parameter(name,inspect.Parameter.POSITIONAL_OR_KEYWORD) for name in self.argument_names])
         if isinstance(args,dict):
             bound=signature.bind(**args)
@@ -75,17 +77,104 @@ class TracedQuantizedProduct:
             bound=signature.bind(*args)
         else:
             raise TypeError("native quantized product requires its tensor bindings")
-        values=[bound.arguments[name] for name in self.argument_names]
         lib=rt._load_rocm_native_movement_runtime()
         if lib is None:
             raise RuntimeError("native quantized product requires multi-output HIP provider")
+        return [bound.arguments[name] for name in self.argument_names],lib
+
+    def receipts(self):
+        return tuple({"ok":True,"execution_kind":"native_gpu","abi_id":p.descriptor.abi_id,
+                      "image_digest":p.image.image_digest,"descriptor_digest":p.descriptor.descriptor_digest,
+                      "native_call_binding":"native_cpp_multi_output"} for p in self.native.native_stages)
+
+    def execute(self,args):
+        self.validate()
+        values,lib=self._bind(args)
         with self.native.prepare(values,runtime_library=lib._name) as owner:
             generation,_=owner.invoke()
             output,=owner.read(generation)
-        receipts=tuple({"ok":True,"execution_kind":"native_gpu","abi_id":p.descriptor.abi_id,
-                        "image_digest":p.image.image_digest,"descriptor_digest":p.descriptor.descriptor_digest,
-                        "native_call_binding":"native_cpp_multi_output"} for p in self.native.native_stages)
-        return output,receipts
+        return output,self.receipts()
+
+
+class RetainedBoundedOwner:
+    """One prepared bounded-MLP owner reused across public calls.
+
+    A call whose six weight roots are byte-identical to the ones the owner last
+    admitted replaces only the activation rows; the expanded weights stay
+    resident. Any other weight set takes the owner's full validated update.
+    A failed update or launch closes the owner, so the next call prepares a
+    fresh one; the owner never crosses fork.
+    """
+
+    def __init__(self,program):
+        if not program.bounded:
+            raise ValueError("only a bounded native quantized MLP retains its owner")
+        program.validate()
+        self.program=program
+        self._receipts=program.receipts()
+        self._owner=None
+        self._weights=None
+        self._pid=os.getpid()
+        self._lock=threading.Lock()
+
+    @staticmethod
+    def _snapshot(values):
+        snapshot=[]
+        for value in values:
+            array=np.asarray(value)
+            snapshot.append((array.dtype,array.shape,np.ascontiguousarray(array).view(np.uint8).copy()))
+        return snapshot
+
+    def _same_weights(self,values):
+        if self._weights is None:
+            return False
+        for value,(dtype,shape,held) in zip(values,self._weights,strict=True):
+            array=np.asarray(value)
+            if array.dtype!=dtype or array.shape!=shape:
+                return False
+            if not np.array_equal(np.ascontiguousarray(array).view(np.uint8),held):
+                return False
+        return True
+
+    def execute(self,args):
+        if os.getpid()!=self._pid:
+            raise RuntimeError("native quantized-product retention cannot cross fork")
+        values,lib=self.program._bind(args)
+        with self._lock:
+            try:
+                if self._owner is None:
+                    self._owner=self.program.native.prepare(values,runtime_library=lib._name)
+                    self._weights=self._snapshot(values[1:])
+                elif self._same_weights(values[1:]):
+                    # Validates the activation before any native state changes.
+                    self._owner.update_activations(values[0])
+                else:
+                    self._weights=None
+                    self._owner.update(values)
+                    self._weights=self._snapshot(values[1:])
+                generation,_=self._owner.invoke()
+                output,=self._owner.read(generation)
+            except ValueError:
+                # Admission refusals leave the native owner unchanged unless
+                # a full update was attempted; that owner is not trusted again.
+                if self._weights is None:
+                    self._close_locked()
+                raise
+            except Exception:
+                self._close_locked()
+                raise
+        return output,self._receipts
+
+    def _close_locked(self):
+        owner,self._owner,self._weights=self._owner,None,None
+        if owner is not None:
+            owner.close()
+
+    def close(self):
+        if os.getpid()!=self._pid:
+            return
+        with self._lock:
+            self._close_locked()
 
 
 def _source(module):

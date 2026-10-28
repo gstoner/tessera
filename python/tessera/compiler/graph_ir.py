@@ -23,8 +23,10 @@ Reference: CLAUDE.md §Four-Layer IR Stack — Graph IR
 from __future__ import annotations
 import ast
 import copy
+import functools
 import inspect
 import json
+import os
 import re
 from pathlib import Path
 import textwrap
@@ -790,7 +792,16 @@ def _loc_path(filename: str) -> str:
     would make the same program hash differently on every checkout location.
     A repo-relative path is still a real, resolvable location (Decision #13)
     and is host-independent; a file outside the repo keeps its absolute path
-    because nothing shorter would still be true."""
+    because nothing shorter would still be true.
+
+    Every op of every canonical render names its file here, so resolution is
+    memoized; a relative name is keyed with the working directory it was
+    resolved against."""
+    return _resolved_loc_path(filename, "" if os.path.isabs(filename) else os.getcwd())
+
+
+@functools.lru_cache(maxsize=4096)
+def _resolved_loc_path(filename: str, cwd: str) -> str:
     try:
         return Path(filename).resolve().relative_to(_REPO_ROOT).as_posix()
     except (ValueError, OSError):

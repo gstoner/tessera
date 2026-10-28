@@ -77,3 +77,43 @@ def test_public_bound_refuses_changed_weight_shapes():
     roots[0] = inputs(3, 32, 64, 19)[0]
     with pytest.raises(ValueError, match="storage/shape"):
         fn(*roots)
+
+
+def test_public_bound_retains_one_owner_across_calls(monkeypatch):
+    """GFX1201-PUBLIC-QUANTIZED-CALL-OVERHEAD-20261028: one prepare serves every call.
+
+    Byte-identical weights replace only the activation rows; new or in-place
+    mutated weights take the owner's full update. Every output stays bitwise
+    equal to the static capacity rows of the roots it was given.
+    """
+    from tessera.compiler.rocm_quantized_mlp_program import NativeQuantizedMLPProgram
+    lib = provider()
+    h, k, n, bound = 32, 48, 19, 8
+    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(3, h, k, n))
+    public = fn.compile_native_quantized_program(*inputs(3, h, k, n), m_bound=bound).native
+    capacity = package_quantized_product_graph(source(bound, h, k, n))
+    prepares = []
+    original = NativeQuantizedMLPProgram.prepare
+
+    def counted(self, values, *, runtime_library):
+        if self is public:
+            prepares.append(values[0].shape[0])
+        return original(self, values, runtime_library=runtime_library)
+    monkeypatch.setattr(NativeQuantizedMLPProgram, "prepare", counted)
+
+    def check(roots, seed):
+        expected = static_rows(capacity, roots, bound, lib, seed=seed)
+        np.testing.assert_array_equal(fn(*roots).view(np.uint16), expected.view(np.uint16))
+
+    weights = inputs(3, h, k, n, seed=40)[1:]
+    for index, m in enumerate((3, 8, 1, 5)):
+        check([inputs(m, h, k, n, seed=50 + index)[0], *weights], 950 + index)
+    with pytest.raises(ValueError, match="capacity"):
+        fn(*inputs(bound + 1, h, k, n, seed=17))
+    check(inputs(4, h, k, n, seed=61), 961)                        # new weight set
+    mutated = inputs(4, h, k, n, seed=61)
+    mutated[1][0, 0] ^= 0x11                                         # mutate in place
+    check(mutated, 962)
+    check([inputs(2, h, k, n, seed=63)[0], *mutated[1:]], 963)       # held again
+    # The capacity-bound refusal and both weight refreshes reused the owner.
+    assert prepares == [3]

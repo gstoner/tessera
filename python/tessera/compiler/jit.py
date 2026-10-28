@@ -2679,8 +2679,9 @@ class JitFn:
         bounded=getattr(self,"_rocm_quantized_product_bounded_program",None)
         if bounded is not None:
             # Explicit bounded compilation retained the verified capacity
-            # program; any 1 <= M <= bound binds it without retracing.
-            output,receipts=bounded.execute(ordered)
+            # program and its prepared owner; any 1 <= M <= bound binds them
+            # without retracing or re-preparing.
+            output,receipts=self._rocm_quantized_product_bounded_owner.execute(ordered)
             if len(receipts)!=len(bounded.native.native_stages) or not all(r.get("ok") and r.get("execution_kind")=="native_gpu" for r in receipts):
                 raise RuntimeError(f"bounded native quantized-product execution failed: {receipts}")
             self._rocm_quantized_product_last_program=bounded
@@ -2820,7 +2821,15 @@ class JitFn:
             self.graph_ir=module
             self.frontend_authority="tracer"
             self.frontend_authority_error=None
+            import weakref
+            from .rocm_quantized_product_frontend import RetainedBoundedOwner
+            owner=RetainedBoundedOwner(program)
+            previous=getattr(self,"_rocm_quantized_product_bounded_owner",None)
+            if previous is not None:
+                previous.close()
             self._rocm_quantized_product_bounded_program=program
+            self._rocm_quantized_product_bounded_owner=owner
+            weakref.finalize(self,owner.close)
         return program
 
     def native_nvfp4_packages(self):

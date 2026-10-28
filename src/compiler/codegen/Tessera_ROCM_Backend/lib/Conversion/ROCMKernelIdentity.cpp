@@ -27,7 +27,7 @@ struct ProjectROCMKernelIdentityPass
                             llvm::cl::desc("Audited native package family"),
                             llvm::cl::init("")};
   Option<bool> runtimeK{*this, "runtime-k",
-                        llvm::cl::desc("Project LDS W8A8 or folded K to its checked runtime group loop"),
+                        llvm::cl::desc("Project LDS W8A8, folded or NVFP4 expansion K to its checked runtime group loop"),
                         llvm::cl::init(false)};
   Option<bool> arbitraryM{*this, "arbitrary-m",
       llvm::cl::desc("Guard arbitrary positive runtime M in scaled matrix images"),
@@ -57,9 +57,11 @@ struct ProjectROCMKernelIdentityPass
       .Case("scalar_matmul", "tessera_rocm.scalar_matmul")
       .Case("scaled_matmul", "tessera_rocm.scaled_wmma_gemm")
       .Case("scaled_matmul_lds", "tessera_rocm.scaled_wmma_gemm")
-      .Case("folded_matmul", "tessera_rocm.scaled_wmma_gemm").Default("");
-    if (runtimeK && family != "scaled_matmul_lds" && family != "folded_matmul") {
-      module.emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: runtime-K image projection requires the LDS W8A8 or folded family");
+      .Case("folded_matmul", "tessera_rocm.scaled_wmma_gemm")
+      .Case("nvfp4_expand", "tessera_rocm.nvfp4_expand").Default("");
+    if (runtimeK && family != "scaled_matmul_lds" && family != "folded_matmul" &&
+        family != "nvfp4_expand") {
+      module.emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: runtime-K image projection requires the LDS W8A8, folded or NVFP4 expansion family");
       return signalPassFailure();
     }
     if (arbitraryM && family != "scaled_matmul" &&
@@ -241,6 +243,15 @@ struct ProjectROCMKernelIdentityPass
       }
     }
 
+    // NVFP4 expansion identity is only its runtime-K projection: N and the
+    // projection row boundaries stay static; the verified op owns them.
+    if (family == "nvfp4_expand") {
+      auto k = kernel->getAttrOfType<IntegerAttr>("k");
+      if (!runtimeK || kernel->hasAttr("runtime_k") || !k || k.getInt() <= 0) {
+        kernel->emitError("NVFP4 expansion image identity requires a static verified expansion and runtime-k");
+        return signalPassFailure();
+      }
+    }
     bool mathRecipe = family == "scalar_unary" || family == "scalar_binary" || family == "scan";
     if (mathRecipe) {
       auto c = kernel->getAttrOfType<DictionaryAttr>("native_math_contract");
@@ -383,6 +394,11 @@ struct ProjectROCMKernelIdentityPass
           copy->setAttr("macro_k", builder.getI64IntegerAttr(0));
         }
       }
+    }
+    if (family == "nvfp4_expand") {
+      OpBuilder builder(&getContext());
+      copy->setAttr("runtime_k", builder.getUnitAttr());
+      copy->setAttr("k", builder.getI64IntegerAttr(0));
     }
     if (family == "folded_matmul" && copy->hasAttr("a_row_stride")) {
       OpBuilder builder(&getContext());

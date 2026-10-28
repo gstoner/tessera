@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import re
+from typing import Any
 
 from .native_artifact import LaunchGeometry, ScalarArgument
 from .quantized_binding_cache import memoized_validation,memoized_binding
@@ -291,7 +292,7 @@ class NativeQuantizedProductProgram:
         if self.activation is not None and self.activation_recipe is not None:
             stages.append(_portable_stage(self.activation_recipe.graph_ir,self.activation_recipe.schedule_ir,self.activation))
         version=3 if self.activation is not None else 2 if self.expansion is not None else 1
-        record={"schema":_PACKAGE_SCHEMAS[version-1],
+        record: dict[str,Any]={"schema":_PACKAGE_SCHEMAS[version-1],
                 "program_json":self.program_json,"graph_ir":self.graph_ir,
                 "checked_product_target_ir":self.checked_product_target_ir,
                 "binding_digest":self.binding_digest,

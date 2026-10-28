@@ -62,8 +62,6 @@ class TracedQuantizedProduct:
 
     def manifest(self):
         self.validate()
-        if self.bounded:
-            raise ValueError("bounded native quantized MLP has no portable record")
         return {"schema":_frontend_schema(self.native),"argument_names":list(self.argument_names),"native_program":self.native.to_manifest()}
 
     def _bind(self,args):
@@ -244,8 +242,6 @@ def _compiler_path(native):
 def runtime_artifact(program):
     from tessera.runtime import RuntimeArtifact
     program.validate()
-    if program.bounded:
-        raise ValueError("bounded native quantized MLP has no portable record")
     native=program.native
     return RuntimeArtifact(graph_ir=program.graph_ir,
         schedule_ir="\n".join(native.schedule_irs),
@@ -260,7 +256,8 @@ def runtime_artifact(program):
 def _resolve(record,graph,names):
     value=json.loads(record)
     if (not isinstance(value,dict) or set(value)!={"schema","argument_names","native_program"}
-            or value["schema"] not in (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA,_MLP_SCHEMA) or not isinstance(value["argument_names"],list)):
+            or value["schema"] not in (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA,_MLP_SCHEMA,_BOUNDED_MLP_SCHEMA)
+            or not isinstance(value["argument_names"],list)):
         raise ValueError("native quantized-product frontend manifest differs")
     program=TracedQuantizedProduct(NativeQuantizedProductProgram.from_manifest(value["native_program"]),tuple(value["argument_names"]))
     program.validate()

@@ -18,6 +18,7 @@ from .rocm_quantized_product_program import NativeQuantizedProductProgram,Prepar
 _SCHEMA='tessera.native.quantized_product.v4'
 _BOUNDED_SCHEMA='tessera.native.quantized_product.v5'
 _PACKAGE='tessera.rocm.quantized_product_package.v4'
+_BOUNDED_PACKAGE='tessera.rocm.quantized_product_package.v5'
 _PLAN_KEYS={'schema','source_graph_ir','member_graphs','buffers','steps','output','subprograms'}
 _BOUNDED_KEYS=_PLAN_KEYS|{'active_m','m_bound','original_graph_ir','row_frame'}
 #: Original activation, gate quantizer pair, gate/up parent, activation, down
@@ -159,25 +160,39 @@ class NativeQuantizedMLPProgram:
 
     def to_manifest(self):
         self.validate()
-        if self.bounded:
-            raise ValueError('bounded native quantized MLP has no portable record')
-        return {'schema':_PACKAGE,'program_json':self.program_json,'graph_ir':self.graph_ir,
-                'gate':self.gate.to_manifest(),'down':self.down.to_manifest(),'binding_digest':self.binding_digest}
+        bounded=self.bounded
+        # A bounded record carries the v5 plan (row frame, capacity and the
+        # original request) and both arbitrary-M products; the two schemas are
+        # bound to each other on replay.
+        return {'schema':_BOUNDED_PACKAGE if bounded else _PACKAGE,
+                'program_json':self.program_json,'graph_ir':self.graph_ir,
+                'gate':self.gate.to_manifest(_bounded_member=bounded),
+                'down':self.down.to_manifest(_bounded_member=bounded),'binding_digest':self.binding_digest}
 
     @classmethod
     def from_manifest(cls,record):
         if (not isinstance(record,dict) or set(record)!={'schema','program_json','graph_ir','gate','down','binding_digest'}
-                or record['schema']!=_PACKAGE
+                or record['schema'] not in (_PACKAGE,_BOUNDED_PACKAGE)
                 or any(not isinstance(record[k],str) for k in ('program_json','graph_ir','binding_digest'))):
             raise ValueError('native quantized MLP portable record differs')
+        bounded=record['schema']==_BOUNDED_PACKAGE
+        try:
+            plan_schema=json.loads(record['program_json']).get('schema')
+        except (ValueError,AttributeError) as exc:
+            raise ValueError('native quantized MLP portable record differs') from exc
+        if plan_schema!=(_BOUNDED_SCHEMA if bounded else _SCHEMA):
+            raise ValueError('native quantized MLP portable schema/frame differs')
         # Exact component schemas prevent recursive full-program manifests.
         if (not isinstance(record['gate'],dict) or not isinstance(record['down'],dict)
                 or record['gate'].get('schema')!='tessera.rocm.quantized_product_package.v3'
                 or record['down'].get('schema')!='tessera.rocm.quantized_product_package.v2'):
             raise ValueError('native quantized MLP portable component schemas differ')
         program=cls(record['program_json'],record['graph_ir'],
-            NativeQuantizedProductProgram.from_manifest(record['gate']),
-            NativeQuantizedProductProgram.from_manifest(record['down']),record['binding_digest'])
+            NativeQuantizedProductProgram.from_manifest(record['gate'],_bounded_member=bounded),
+            NativeQuantizedProductProgram.from_manifest(record['down'],_bounded_member=bounded),
+            record['binding_digest'])
+        # validate() re-derives the row frame and requires both products'
+        # arbitrary-M policy to match the plan.
         program.validate()
         return program
 

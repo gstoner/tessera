@@ -2565,6 +2565,13 @@ so requires the matching `tessera-opt`. Contract:
 `docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md` §"Public row-bound compile",
 §"Retained public owner" and §"Portable bounded record".
 
+Adding `k_bound=KB` (a positive multiple of 16) also bounds the gate
+contraction: the call returns the v6 program, and later calls accept any
+`1 <= M <= m_bound` and any K16-multiple `K <= KB`, with the gate weights
+shaped at that K. Without `m_bound`, the traced M is the row capacity. One
+retained owner serves every such call; a K change takes the full update.
+H and N stay fixed. Contract: §"Bounded-contraction v6 MLP".
+
 Native session leaf diagnostics follow the actual converter/storage edges:
 convert()/run_conversion_graph() produce packed/exponent/statistic receipts;
 store()/run_storage_graph() require conversion and produce fragment/plane

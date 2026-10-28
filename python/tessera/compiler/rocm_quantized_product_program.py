@@ -21,7 +21,7 @@ from .rocm_block_quant_native import BlockQuantRecipe, lower_block_quant_text, p
 from .rocm_fp8_blockscale import BlockScaleProgram, BlockScaleShape, PACKAGE_ABIS, check_blockscale_target_ir, package_blockscale, verify_blockscale_schedule
 from .rocm_native import ROCMNativePackage, _directive_symbol
 from .rocm_nvfp4_expansion_program import _MultiOutputStep
-from .rocm_nvfp4_expand_native import NVFP4ExpansionPackage, package_nvfp4_expansion, _contract as _expansion_contract
+from .rocm_nvfp4_expand_native import NVFP4ExpansionPackage, package_nvfp4_expansion
 from .rocm_parent_view_native import ParentViewRecipe,package_parent_view_recipe,validate_parent_view_runtime_artifact,_frame as _parent_view_frame
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
@@ -32,7 +32,7 @@ _ACTIVATED_SCHEMA = "tessera.native.quantized_product.v3"
 _NATIVE_SCHEMAS = (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA)
 _PACKAGE_SCHEMAS = tuple(f"tessera.rocm.quantized_product_package.v{i}" for i in (1,2,3))
 # v4 is the static seven-member MLP; v5 is that MLP at capacity with a row frame.
-_MLP_SCHEMAS = ("tessera.native.quantized_product.v4","tessera.native.quantized_product.v5")
+_MLP_SCHEMAS = tuple(f"tessera.native.quantized_product.v{i}" for i in (4,5,6))
 
 
 def _digest(text):
@@ -158,6 +158,9 @@ class NativeQuantizedProductProgram:
     # A bounded MLP component's product image guards arbitrary M. Its checked
     # static Target remains the witness; the image is its shape-free projection.
     arbitrary_m: bool = False
+    # A K-bounded MLP's gate component also expands its weights through the
+    # runtime-K image and contracts through a shape-free (global) product.
+    runtime_k: bool = False
 
     def _identity(self):
         parts = [self.program_json,self.graph_ir,self.quantizer_recipe.graph_ir,
@@ -173,6 +176,8 @@ class NativeQuantizedProductProgram:
                           native.image.image_digest,native.descriptor.descriptor_digest])
         if self.arbitrary_m:
             parts.append("arbitrary_m")
+        if self.runtime_k:
+            parts.append("runtime_k")
         return _digest(json.dumps(parts,separators=(",",":")))
 
     @property
@@ -206,7 +211,7 @@ class NativeQuantizedProductProgram:
         if self.expansion is not None:
             self.expansion.validate()
             members.append(self.expansion.graph_ir)
-            _,n,k,offsets,_,_ = _expansion_contract(self.expansion.native.tile_ir,self.expansion.native.target_ir)
+            _,n,k,offsets,_,_ = self.expansion.contract()
             shapes = ([n,k//2],[n,k//16],[len(offsets)-1],[n,k],[k//16,n])
             storages = (plan["buffers"][roles[1]]["storage"],"f8E4M3FN","f64","f8E4M3FN","f32")
             widths = (1,1,8,1,4)
@@ -248,8 +253,10 @@ class NativeQuantizedProductProgram:
                     raise ValueError("native quantized-product activation/shared buffer interface differs")
         native = self.product
         native.descriptor.validate_image(native.image)
-        if type(self.arbitrary_m) is not bool:
+        if type(self.arbitrary_m) is not bool or type(self.runtime_k) is not bool:
             raise ValueError("native quantized-product arbitrary-M policy differs")
+        if self.runtime_k != (self.expansion is not None and self.expansion.runtime_k):
+            raise ValueError("native quantized-product runtime-K expansion policy differs")
         checked = check_blockscale_target_ir(shape,native.tile_ir,self.checked_product_target_ir)
         if self.arbitrary_m:
             from .rocm_native import _shape_free_target_ir
@@ -264,6 +271,10 @@ class NativeQuantizedProductProgram:
         elif (native.target_ir != self.checked_product_target_ir
                 or native.descriptor.provenance.get("arbitrary_m") is not False):
             raise ValueError("native quantized-product checked Target differs from image-bound Target")
+        if self.runtime_k and (not self.arbitrary_m or checked["staging"] != "global"
+                               or native.descriptor.provenance.get("runtime_shape_image") is not True):
+            # Only the global-staged image reads K entirely at launch.
+            raise ValueError("native quantized-product runtime K requires the shape-free global-staged product")
         descriptor = native.descriptor
         if (native.image.target != "rocm_gfx1201" or native.image.architecture != "gfx1201"
                 or native.image.binary_format != "hsaco" or native.image.pipeline_name != "tessera-rocm-executable"
@@ -301,12 +312,14 @@ class NativeQuantizedProductProgram:
             # The flag is a claim only; replay re-derives the shape-free
             # projection from the checked static Target before accepting it.
             record["arbitrary_m"]=True
+        if self.runtime_k:
+            record["runtime_k"]=True
         return record
 
     @classmethod
     def from_manifest(cls,record,*,_bounded_member=False):
-        if isinstance(record,dict) and record.get("schema") in ("tessera.rocm.quantized_product_package.v4",
-                                                                 "tessera.rocm.quantized_product_package.v5"):
+        if isinstance(record,dict) and record.get("schema") in tuple(
+                f"tessera.rocm.quantized_product_package.v{i}" for i in (4,5,6)):
             if _bounded_member:
                 raise ValueError("native quantized MLP portable component schemas differ")
             from .rocm_quantized_mlp_program import NativeQuantizedMLPProgram
@@ -314,9 +327,13 @@ class NativeQuantizedProductProgram:
         from .native_artifact import NativeImageArtifact,LaunchDescriptor
         keys={"schema","program_json","graph_ir","checked_product_target_ir","binding_digest","stages"}
         arbitrary_m=isinstance(record,dict) and "arbitrary_m" in record
+        runtime_k=isinstance(record,dict) and "runtime_k" in record
         if arbitrary_m and (not _bounded_member or record["arbitrary_m"] is not True):
             raise ValueError("native quantized-product portable arbitrary-M claim differs")
-        if (not isinstance(record,dict) or set(record)!=(keys|{"arbitrary_m"} if arbitrary_m else keys)
+        if runtime_k and (not arbitrary_m or record["runtime_k"] is not True):
+            raise ValueError("native quantized-product portable runtime-K claim differs")
+        claims=({"arbitrary_m"} if arbitrary_m else set())|({"runtime_k"} if runtime_k else set())
+        if (not isinstance(record,dict) or set(record)!=keys|claims
                 or record["schema"] not in _PACKAGE_SCHEMAS
                 or any(not isinstance(record[key],str) for key in ("program_json","graph_ir","checked_product_target_ir","binding_digest"))
                 or not isinstance(record["stages"],list) or len(record["stages"])!=_PACKAGE_SCHEMAS.index(record["schema"])+2):
@@ -343,7 +360,7 @@ class NativeQuantizedProductProgram:
             BlockQuantRecipe(first[0],first[1],first[2].tile_ir),first[2],
             BlockScaleProgram(shape,"quantized_product",second[0],second[1],second[2].tile_ir),second[2],
             record["checked_product_target_ir"],record["binding_digest"],expansion,activation_recipe,activation,
-            arbitrary_m=arbitrary_m)
+            arbitrary_m=arbitrary_m,runtime_k=runtime_k)
         program.validate()
         return program
 
@@ -351,15 +368,17 @@ class NativeQuantizedProductProgram:
         return PreparedQuantizedProductProgram(self,inputs,runtime_library=runtime_library)
 
 
-def package_quantized_product_graph(graph_ir,*,arbitrary_m=False):
-    if type(arbitrary_m) is not bool:
+def package_quantized_product_graph(graph_ir,*,arbitrary_m=False,runtime_k=False):
+    if type(arbitrary_m) is not bool or type(runtime_k) is not bool:
         raise ValueError("native quantized-product arbitrary-M policy must be a bool")
+    if runtime_k and not arbitrary_m:
+        raise ValueError("native quantized-product runtime K requires arbitrary M")
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("native quantized product requires matching tessera-opt")
     plan = _export(tool,graph_ir)
     if plan["schema"] in _MLP_SCHEMAS:
-        if arbitrary_m:
+        if arbitrary_m or runtime_k:
             raise ValueError("a bounded MLP derives its component policy from its own frame")
         from .rocm_quantized_mlp_program import package_quantized_mlp_plan
         return package_quantized_mlp_plan(plan,tool)
@@ -371,7 +390,9 @@ def package_quantized_product_graph(graph_ir,*,arbitrary_m=False):
     quantizer = package_block_quant_recipe(quantizer_recipe)
     expanded=plan["schema"] in (_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA)
     activated=plan["schema"]==_ACTIVATED_SCHEMA
-    expansion = package_nvfp4_expansion(plan["member_graphs"][1]) if expanded else None
+    if runtime_k and not expanded:
+        raise ValueError("native quantized-product runtime K requires its NVFP4 expansion")
+    expansion = package_nvfp4_expansion(plan["member_graphs"][1],runtime_k=runtime_k) if expanded else None
     child = plan["member_graphs"][2 if expanded else 1]
     schedule = run_tessera_opt(tool,child,"--tessera-graph-to-schedule")
     verify_blockscale_schedule(shape,schedule)
@@ -395,7 +416,7 @@ def package_quantized_product_graph(graph_ir,*,arbitrary_m=False):
         activation_recipe=ParentViewRecipe(graph,schedule,tile)
         activation=package_parent_view_recipe(activation_recipe,pipeline_name="tessera-rocm-executable")
     program = NativeQuantizedProductProgram(json.dumps(plan,sort_keys=True),plan["source_graph_ir"],
-        quantizer_recipe,quantizer,recipe,product,checked_target,"",expansion,activation_recipe,activation,arbitrary_m)
+        quantizer_recipe,quantizer,recipe,product,checked_target,"",expansion,activation_recipe,activation,arbitrary_m,runtime_k)
     program = replace(program,binding_digest=program._identity())
     program.validate()
     return program
@@ -433,7 +454,9 @@ class PreparedQuantizedProductProgram(PreparedScaledProgram):
                 grid,workgroup=p.descriptor.geometry.grid,p.descriptor.geometry.workgroup
                 if grid is None or workgroup is None:
                     raise ValueError("native quantized-product expansion geometry differs")
-                scalars,geometry=(),[*grid,*workgroup]
+                # The runtime-K image binds its capacity K16 group count.
+                scalars=[package.expansion.contract()[2]//16] if package.expansion.runtime_k else []
+                geometry=[*grid,*workgroup]
             elif package.activation is not None and i==len(native)-1:
                 _,member=_parent_view_frame(p.target_ir)
                 scalars,geometry=member["scalars"],member["geometry"]
@@ -458,7 +481,7 @@ class PreparedQuantizedProductProgram(PreparedScaledProgram):
             roles,_=_frame_shape(json.loads(self.package.program_json))
             if len(inputs)!=len(roles):
                 raise ValueError("native quantized-product expansion requires four roots")
-            _,_,_,offsets,_,_=_expansion_contract(self.package.expansion.native.tile_ir,self.package.expansion.native.target_ir)
+            _,_,_,offsets,_,_=self.package.expansion.contract()
             checked_expansion_inputs(*(inputs[i] for i in roles[1:]),row_offsets=offsets,numeric_policy=nvfp4_expansion_policy(),_scale_bounds=self._nvfp4_scale_bounds())
         return super()._inputs(inputs)
 

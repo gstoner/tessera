@@ -3816,6 +3816,20 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "execution. Fixed N/K; AD and model quality require separate proof.",
         numerical_fixture="tests/device/rocm/test_public_quantized_mlp_row_bound_device.py",
         evidence_target="rocm_gfx1201",proof_build=".build-bf16",device_proof="device_verified_jit"),
+    ("rocm_gfx1201", "canonical_rocm_quantized_k_bounded_mlp_program"): ExecutionRow(
+        target="rocm_gfx1201",compiler_path="canonical_rocm_quantized_k_bounded_mlp_program",
+        execution_kind="native_gpu",executable=True,executor_id="rocm_quantized_product_program",
+        runtime_status="success",execution_mode="hip_runtime",owns_stream=True,
+        reason="The named seven-member quantized MLP compiled once by the explicit public "
+               "compile_native_quantized_program(..., m_bound=MB, k_bound=KB) request (schema v6): "
+               "a runtime-K gate NVFP4 expansion image, the shape-free gate product and a two-variable "
+               "(M, K/16) HIP shape frame. Later public calls at 1 <= M <= MB and K16-multiple K <= KB "
+               "bind one retained owner without retracing, compiling or re-preparing, bitwise equal to "
+               "the static program compiled at that (M, K). The portable v6 record re-derives the "
+               "contraction frame and every shape-free image. Fixed H/N; AD and model quality require "
+               "separate proof.",
+        numerical_fixture="tests/device/rocm/test_public_quantized_mlp_k_bound_device.py",
+        evidence_target="rocm_gfx1201",proof_build=".build-bf16",device_proof="device_verified_jit"),
     ("rocm_gfx1201", "canonical_rocm_quantized_gate_up_program"): ExecutionRow(
         target="rocm_gfx1201",compiler_path="canonical_rocm_quantized_gate_up_program",
         execution_kind="native_gpu",executable=True,executor_id="rocm_quantized_product_program",

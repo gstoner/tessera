@@ -131,9 +131,9 @@ def _set_plan(key, value):
 @pytest.mark.parametrize("edit,message", [
     # The package schema and the plan schema are bound to each other.
     (lambda r: r.update(schema="tessera.rocm.quantized_product_package.v4"), "schema/frame differs"),
-    # A missing claim replays the shape-free image as if it were static.
-    (lambda r: r["gate"].pop("arbitrary_m"), "checked Target differs"),
-    (lambda r: r["down"].pop("arbitrary_m"), "checked Target differs"),
+    # A dropped claim breaks the component's binding digest, which covers it.
+    (lambda r: r["gate"].pop("arbitrary_m"), "member binding differs"),
+    (lambda r: r["down"].pop("arbitrary_m"), "member binding differs"),
     (lambda r: r["gate"].update(arbitrary_m=False), "arbitrary-M claim differs"),
     (lambda r: r["gate"].update(arbitrary_m=1), "arbitrary-M claim differs"),
     # The row frame is re-derived, so capacity and rows cannot be restated.
@@ -162,3 +162,18 @@ def test_static_record_cannot_carry_arbitrary_m_products(rocm_image_toolchain):
     static["gate"]["arbitrary_m"] = True
     with pytest.raises(ValueError, match="arbitrary-M claim differs"):
         NativeQuantizedProductProgram.from_manifest(static)
+
+
+@pytest.mark.parametrize("member", ["gate", "down"])
+def test_rehashed_static_claim_on_a_shape_free_image_is_refused(rocm_image_toolchain, member):
+    """A forger who also recomputes the digest still meets the image check:
+    a static claim requires the image to be the checked static Target."""
+    import dataclasses
+    from tessera.compiler.rocm_quantized_product_program import NativeQuantizedProductProgram
+    fn, roots = public()
+    _, record = _bounded_record(fn, roots)
+    replay = NativeQuantizedProductProgram.from_manifest(json.loads(json.dumps(record["native_program"])))
+    component = dataclasses.replace(getattr(replay, member), arbitrary_m=False)
+    component = dataclasses.replace(component, binding_digest=component._identity())
+    with pytest.raises(ValueError, match="checked Target differs"):
+        component.validate()

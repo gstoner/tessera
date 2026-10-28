@@ -1,0 +1,233 @@
+{
+ "sync_key": "GFX1201-PUBLIC-BOUNDED-CALL-TIMING-20261028",
+ "commit": "a94c0062c1c1486351fefe60ad0349373b2f3a3f",
+ "worktree_dirty": false,
+ "recorder_sha256": "ad30bd71701acb02c488f3b8916b0f8d40f70b4f66b61970fdf266f785b35840",
+ "compiler_sha256": "ef8f8b2c3e1a3eff5c378b97a566eed36f1ea1a65a186f92e0484026d4bac0bf",
+ "provider_sha256": "1f80bfafcb35930add5527a4678cad85cd78a111abe378d41e904d3c6258698e",
+ "device": "gfx1201 (RX 9070 XT, Tajasarus, WSL2)",
+ "shape_hkn": [
+  128,
+  12288,
+  256
+ ],
+ "capacity_m": 256,
+ "bounded_compile_s": 1.48,
+ "bounded_allocation_bytes": 24656462,
+ "bounded_allocation_count": 18,
+ "timing": "host wall per call, windows of 10 calls, 12 rounds with the arm order rotated and reversed each round; median ms. public_bounded = public @jit call through the bounded program (prepares its owner every call); public_static = public @jit call compiled at that M; prepared_bounded = one held owner, activation-only update + invoke + readback. Diagnostic, not a promotion.",
+ "rows": {
+  "1": {
+   "public_bounded_ms": 3.695,
+   "public_static_ms": 5.887,
+   "prepared_bounded_ms": 0.79,
+   "public_bounded_over_static": 0.628,
+   "prepared_over_public_bounded": 0.214,
+   "bitwise_equal_static_at_m": true,
+   "static_cold_first_call_s": 1.09,
+   "samples_ms": {
+    "public_bounded": [
+     3.622,
+     3.711,
+     3.67,
+     3.65,
+     3.68,
+     3.674,
+     4.234,
+     3.967,
+     3.739,
+     3.668,
+     4.222,
+     3.965
+    ],
+    "public_static": [
+     5.763,
+     6.797,
+     5.021,
+     6.012,
+     5.646,
+     6.036,
+     5.0,
+     6.037,
+     5.603,
+     6.714,
+     5.009,
+     6.155
+    ],
+    "prepared_bounded": [
+     0.756,
+     0.765,
+     0.791,
+     0.746,
+     0.796,
+     0.803,
+     0.792,
+     0.755,
+     0.796,
+     0.75,
+     0.789,
+     0.821
+    ]
+   }
+  },
+  "16": {
+   "public_bounded_ms": 3.464,
+   "public_static_ms": 4.753,
+   "prepared_bounded_ms": 0.545,
+   "public_bounded_over_static": 0.729,
+   "prepared_over_public_bounded": 0.157,
+   "bitwise_equal_static_at_m": true,
+   "static_cold_first_call_s": 1.07,
+   "samples_ms": {
+    "public_bounded": [
+     4.3,
+     4.12,
+     3.491,
+     3.762,
+     3.968,
+     3.952,
+     3.438,
+     3.408,
+     3.422,
+     3.423,
+     3.408,
+     3.409
+    ],
+    "public_static": [
+     5.662,
+     4.746,
+     5.19,
+     4.913,
+     4.738,
+     4.76,
+     4.888,
+     4.906,
+     4.709,
+     4.682,
+     4.649,
+     4.746
+    ],
+    "prepared_bounded": [
+     0.553,
+     0.577,
+     0.538,
+     0.503,
+     0.559,
+     0.504,
+     0.56,
+     0.512,
+     0.553,
+     0.522,
+     0.56,
+     0.518
+    ]
+   }
+  },
+  "64": {
+   "public_bounded_ms": 3.907,
+   "public_static_ms": 4.809,
+   "prepared_bounded_ms": 0.639,
+   "public_bounded_over_static": 0.812,
+   "prepared_over_public_bounded": 0.164,
+   "bitwise_equal_static_at_m": true,
+   "static_cold_first_call_s": 1.05,
+   "samples_ms": {
+    "public_bounded": [
+     3.526,
+     3.903,
+     3.49,
+     3.419,
+     3.459,
+     3.478,
+     3.985,
+     4.109,
+     4.059,
+     4.028,
+     3.912,
+     4.039
+    ],
+    "public_static": [
+     6.557,
+     4.813,
+     4.748,
+     4.74,
+     4.85,
+     5.56,
+     4.817,
+     4.805,
+     4.772,
+     4.773,
+     4.974,
+     4.745
+    ],
+    "prepared_bounded": [
+     0.642,
+     0.67,
+     0.655,
+     0.6,
+     0.647,
+     0.612,
+     0.658,
+     0.605,
+     0.654,
+     0.615,
+     0.636,
+     0.606
+    ]
+   }
+  },
+  "256": {
+   "public_bounded_ms": 3.77,
+   "public_static_ms": 6.218,
+   "prepared_bounded_ms": 0.88,
+   "public_bounded_over_static": 0.606,
+   "prepared_over_public_bounded": 0.233,
+   "bitwise_equal_static_at_m": true,
+   "static_cold_first_call_s": 0.81,
+   "samples_ms": {
+    "public_bounded": [
+     3.769,
+     3.82,
+     4.313,
+     4.384,
+     3.772,
+     3.776,
+     3.713,
+     3.735,
+     3.776,
+     3.703,
+     3.74,
+     3.757
+    ],
+    "public_static": [
+     6.246,
+     6.296,
+     6.343,
+     4.987,
+     6.977,
+     5.057,
+     6.941,
+     5.022,
+     6.874,
+     4.987,
+     6.19,
+     5.664
+    ],
+    "prepared_bounded": [
+     0.859,
+     0.927,
+     0.925,
+     0.857,
+     0.874,
+     0.873,
+     0.886,
+     0.873,
+     0.902,
+     0.887,
+     0.872,
+     0.89
+    ]
+   }
+  }
+ }
+}

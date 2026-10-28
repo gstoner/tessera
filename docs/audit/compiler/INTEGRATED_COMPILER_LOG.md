@@ -14272,8 +14272,17 @@ Evidence: tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; contr
 ### 2026-10-28 — NVFP4 row-bound request no longer poisons the cached trace
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: pending; sync GFX1201-NVFP4-BOUND-TRACE-COPY-20261028.
+PRs: #1020; sync GFX1201-NVFP4-BOUND-TRACE-COPY-20261028.
 Outcome: `compile_native_nvfp4_program(..., m_bound=B)` wrote `tessera.native.nvfp4_m_bound` onto the module `_trace_frontend_capture` returns, which is the cached specialization itself. A refused bound therefore stayed on the trace, and on gfx1201 the next ordinary call for the same roots compiled it and failed with the capacity error. An accepted bound leaked the same way into later unbounded compiles. The request now goes on a copy, and a malformed bound is refused before tracing. This is the defect the #1019 review found in its copy of this pattern. New unit and device tests fail on the unfixed code and pass on gfx1201. The NVFP4/quantized device set (176) and the NVFP4/quantized/JIT unit set (2750) pass. NVIDIA, Apple and x86 are not applicable (gfx1201-only entry point).
 Remaining: exact-head CI/review.
 Evidence: tests/unit/test_nvfp4_bound_trace_copy.py; tests/device/rocm/test_nvfp4_bounded_rows.py::test_refused_bound_leaves_the_ordinary_call_static.
+<!-- entry-fields:end -->
+
+### 2026-10-28 — Public bounded quantized MLP call timing on gfx1201
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1021; sync GFX1201-PUBLIC-BOUNDED-CALL-TIMING-20261028.
+Outcome: a paired, interleaved recorder times the public bounded call against public static calls compiled at each M, and against the same bounded program held in one prepared owner. All arms are host wall per call at H/K/N 128/12288/256 with capacity 256. On gfx1201 (Tajasarus, clean `a94c0062c`), the public bounded call took 3.46–3.91 ms and public static 4.75–6.22 ms (0.61–0.81× static). The distributions do not overlap at any M. A held owner took 0.55–0.88 ms, 16–23% of the public bounded call. Outputs are bitwise equal across all three arms. cProfile at M=16: execution costs about the same in both public arms. Static adds a retrace plus canonical `to_mlir` and verify every call to build its cache key, mostly spent resolving source-location paths. Inside execution, per-call owner construction dominates. Diagnostic host wall on WSL2; promotes nothing. NVIDIA, Apple and x86 are not applicable (gfx1201-only entry point).
+Remaining: exact-head CI/review; retaining the prepared owner across public calls (the measured 4–6× headroom); the static public call's per-call retrace and location-path cost; a portable bounded record; dynamic K/N; gfx1151.
+Evidence: benchmarks/baselines/gfx1201_public_bounded_call_20261028/README.md; recorder benchmarks/rocm/benchmark_public_bounded_quantized_mlp.py.
 <!-- entry-fields:end -->

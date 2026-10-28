@@ -19340,3 +19340,12 @@ Synchronization key: GFX1201-PUBLIC-QUANTIZED-CALL-OVERHEAD-20261028.
 Landed on gfx1201 only (Tajasarus). A bounded public `@jit` quantized MLP call keeps one prepared capacity owner across calls. Byte-identical weights take an activation-only row update; other weights take the full validated update. Admission refusals keep the owner and native failures close it. Public bounded calls: 3.46–3.91 → 0.67–1.03 ms (diagnostic WSL2 host wall). One prepare is proven across held weights, a refusal, a new weight set and an in-place mutation, all bitwise equal to the static capacity rows. No gfx1151 evidence. Open: static-program owner retention; the static path's remaining per-call canonical render. `graph_ir._loc_path` now memoizes path resolution, which changes no rendered `loc` text, so canonical Graph IR and its content hashes are unchanged for every target.
 
 Evidence: benchmarks/baselines/gfx1201_public_quantized_call_overhead_20261028/README.md.
+
+## GFX1201-PORTABLE-BOUNDED-QUANTIZED-RECORD-20261028 — portable record for the bounded quantized MLP
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-PORTABLE-BOUNDED-QUANTIZED-RECORD-20261028.
+
+Landed on gfx1201 only (Tajasarus). The bounded v5 quantized MLP serializes as package v5. Its shape-free product components carry an explicit `arbitrary_m` claim that replay never trusts: replay re-derives each image from the checked static Target through the matching `tessera-opt`, and re-derives the row frame. A fresh-process `rt.launch` replay at four M values is bitwise equal to the public calls; a compiler-free process refuses. No gfx1151 evidence, and the generic `rocm` name inherits nothing. Open: compiler-free bounded replay; dynamic K/N.
+
+Evidence: tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Portable bounded record".

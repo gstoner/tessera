@@ -363,8 +363,8 @@ The row steps are 0, 2, 3, 4 and 6. Both weight expansions (steps 1 and 5) and
 their B/SB planes stay invariant. Python re-derives the frame from the buffers
 and refuses any difference. Bounded components compile arbitrary-M product
 images, and the static checked Target remains the witness, checked as its
-shape-free projection. A bounded program has no portable record yet, so
-`to_manifest` refuses it.
+shape-free projection. Its portable record is the v5 package (see
+"Portable bounded record" below).
 
 **Owner frame.** `tessera_rocm_program_prepare_multi_output_row_frame` takes
 capacity values. Each row step scales one scalar to `active_m * per_row` and
@@ -402,8 +402,9 @@ In paired interleaved HIP-event windows at H/K/N = 128/12288/256 with capacity
 256, the bounded owner runs at 0.997–1.032× a static owner compiled at each
 M, and is bitwise equal to it. An activation update costs 0.19–0.49 ms of host
 time, against about 0.9 s to compile each static M. These timings are
-diagnostic. Not covered: a portable bounded record, dynamic K/N, and sibling
-backends. Public JIT admission landed separately; see the next section.
+diagnostic. Not covered: dynamic K/N and sibling backends. Public JIT
+admission, owner retention and the portable record landed separately; see the
+following sections.
 Evidence: benchmarks/baselines/gfx1201_bounded_quantized_mlp_20261027/README.md.
 
 ### Public row-bound compile (GFX1201-PUBLIC-QUANTIZED-ROW-BOUND-20261027)
@@ -432,7 +433,7 @@ mirrors `compile_native_nvfp4_program(..., m_bound=B)`:
 - The frontend record is `tessera.rocm.quantized_product_frontend.v5` and the
   compiler path is `canonical_rocm_quantized_bounded_mlp_program`.
   `compile_report()` names that path. `runtime_artifact()` and `manifest()`
-  refuse with "no portable record", because the v5 native program has none.
+  return the v5 portable record (see "Portable bounded record").
 - Without `m_bound`, the call returns the static v4 program and changes no
   dispatch state; ordinary calls keep retracing per M as before.
 
@@ -444,9 +445,9 @@ the authored body all patched to fail. Every public output is bitwise equal
 to the static capacity program's first rows over padded roots, and for
 M <= 64 it also passes the independent staged chain at the active shape.
 
-Not covered: a portable bounded record; dynamic K/N; gfx1151 and sibling
-backends. Owner retention and public timing landed separately; see the next
-section.
+Not covered: dynamic K/N; gfx1151 and sibling backends. Owner retention,
+public timing and the portable record landed separately; see the following
+sections.
 
 ### Retained public owner (GFX1201-PUBLIC-QUANTIZED-CALL-OVERHEAD-20261028)
 
@@ -505,9 +506,66 @@ Not covered:
 - retaining a static program's owner (each static public call still prepares
   one, now its largest cost);
 - the remaining per-call canonical render that keys the static program cache;
-- a portable bounded record;
 - dynamic K/N;
 - gfx1151 and sibling backends.
+
+### Portable bounded record (GFX1201-PORTABLE-BOUNDED-QUANTIZED-RECORD-20261028)
+
+**Native package.** A bounded v5 program serializes as
+`tessera.rocm.quantized_product_package.v5`. Its fields are the same as the
+static v4 package: `program_json` (here the v5 plan with `active_m`,
+`m_bound`, `row_frame` and `original_graph_ir`), `graph_ir`, `gate`, `down`
+and `binding_digest`. The frontend record is
+`tessera.rocm.quantized_product_frontend.v5`, and `runtime_artifact()` names
+compiler path `canonical_rocm_quantized_bounded_mlp_program`, so the runtime
+launches it through the existing `rocm_quantized_product_program` executor.
+
+**Component claim.** Each component record keeps its v3/v2 schema and adds
+`"arbitrary_m": true` when its product image is shape-free. The claim proves
+nothing by itself:
+
+- **Admission:** it is admitted only inside a v5 MLP record. A standalone
+  component record carrying it, a static v4 record carrying it, and any value
+  other than `true` are refused ("arbitrary-M claim differs").
+  `to_manifest()` on a bounded component alone is refused ("no standalone
+  portable record").
+- **Digest:** the component's binding digest covers the flag, so dropping it
+  is refused ("member binding differs").
+- **Image:** even with a recomputed digest, a static claim on a shape-free
+  image is refused ("checked Target differs"), because a static component's
+  image must be its checked static Target.
+
+**Replay.** Replay binds the package schema to the plan schema in both
+directions (v4 ↔ static plan, v5 ↔ bounded plan). It then runs the program's
+`validate()`, which:
+
+- re-derives the row frame from the buffers;
+- requires both products' arbitrary-M policy to match the plan;
+- re-derives each shape-free product image from the recorded checked static
+  Target through `tessera-rocm-project-kernel-identity`.
+
+A restated `m_bound` or `active_m` is refused by the row-frame re-derivation.
+
+**Compiler requirement.** The image re-derivation runs the matching
+`tessera-opt`. A bounded record therefore replays only where that compiler is
+present; a compiler-free process refuses ("tessera-opt is required for ROCm
+kernel identity") instead of trusting the recorded projection. The static v4
+record has no such requirement, because a static image is checked against its
+Target by comparison alone.
+
+**Evidence on RX9070XT/gfx1201 (Tajasarus, assertions-ON LLVM/MLIR 23.1.1):**
+
+- **Fresh-process replay.**
+  `test_bounded_artifact_replays_in_a_fresh_process` serializes the public
+  bounded artifact, launches it through `rt.launch` in a new process at
+  M = 3, 8, 1 and 5, and gets outputs bitwise equal to the public calls.
+- **Compiler-free refusal.** The same replay with `TESSERA_OPT` and `PATH`
+  pointed at nothing refuses at every M and writes no output.
+- **Package round trip.** The capacity package round-trips with an
+  unchanged binding digest at all three shapes.
+- **Tamper tests.** `tests/unit/test_public_quantized_mlp_row_bound.py`
+  covers the round trip, nine tampered records and the static/standalone
+  refusals: 22 passed on gfx1201.
 
 
 ## Quantized package certificate and ABI reuse

@@ -102,8 +102,9 @@ class RetainedBoundedOwner:
     A call whose six weight roots are byte-identical to the ones the owner last
     admitted replaces only the activation rows; the expanded weights stay
     resident. Any other weight set takes the owner's full validated update.
-    A failed update or launch closes the owner, so the next call prepares a
-    fresh one; the owner never crosses fork.
+    An admission refusal (``ValueError``, raised before any native write) keeps
+    the owner; a native failure closes it, so the next call prepares a fresh
+    one. The owner never crosses fork.
     """
 
     def __init__(self,program):
@@ -149,18 +150,16 @@ class RetainedBoundedOwner:
                     # Validates the activation before any native state changes.
                     self._owner.update_activations(values[0])
                 else:
-                    self._weights=None
                     self._owner.update(values)
                     self._weights=self._snapshot(values[1:])
                 generation,_=self._owner.invoke()
                 output,=self._owner.read(generation)
             except ValueError:
-                # Admission refusals leave the native owner unchanged unless
-                # a full update was attempted; that owner is not trusted again.
-                if self._weights is None:
-                    self._close_locked()
+                # Admission refusals are raised before any native write, so the
+                # resident rows and weights still match the held snapshot.
                 raise
             except Exception:
+                # A native failure may have written part of the owner.
                 self._close_locked()
                 raise
         return output,self._receipts

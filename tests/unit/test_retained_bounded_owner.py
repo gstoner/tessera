@@ -115,29 +115,32 @@ def test_changed_or_mutated_weights_take_the_full_update():
     assert program.log == ["prepare", "update", "activations", "update", "update"]
 
 
-def test_activation_refusal_keeps_the_owner():
+@pytest.mark.parametrize("stage", ["fail_update_activations", "fail_update"])
+def test_admission_refusal_keeps_the_owner_and_its_snapshot(stage):
     program = FakeProgram()
     owner = RetainedBoundedOwner(program)
     values = roots(3)
     owner.execute(values)
-    program.native.owners[0].fail_update_activations = ValueError("active M exceeds its capacity")
+    setattr(program.native.owners[0], stage, ValueError("active M exceeds its capacity"))
+    refused = values if stage == "fail_update_activations" else roots(3, seed=9)
     with pytest.raises(ValueError, match="capacity"):
-        owner.execute(values)
-    program.native.owners[0].fail_update_activations = None
+        owner.execute(refused)
+    setattr(program.native.owners[0], stage, None)
+    # The held weights are still resident: the original set needs no upload.
     owner.execute(values)
     assert program.log == ["prepare", "activations"]
 
 
-@pytest.mark.parametrize("stage,error", [("fail_update", ValueError("projection boundaries")),
-                                         ("fail_invoke", RuntimeError("native status 7"))])
-def test_failed_update_or_launch_drops_the_owner(stage, error):
+@pytest.mark.parametrize("stage", ["fail_update_activations", "fail_update", "fail_invoke"])
+def test_native_failure_drops_the_owner(stage):
+    error = RuntimeError("native scaled HIP program status 7")
     program = FakeProgram()
     owner = RetainedBoundedOwner(program)
     values = roots(3)
     owner.execute(values)
     setattr(program.native.owners[0], stage, error)
     changed = roots(3, seed=9) if stage == "fail_update" else values
-    with pytest.raises(type(error)):
+    with pytest.raises(RuntimeError, match="status 7"):
         owner.execute(changed)
     assert program.native.owners[0].closed
     owner.execute(values)

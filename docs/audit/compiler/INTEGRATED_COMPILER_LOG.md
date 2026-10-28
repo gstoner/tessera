@@ -14286,3 +14286,12 @@ Outcome: a paired, interleaved recorder times the public bounded call against pu
 Remaining: exact-head CI/review; retaining the prepared owner across public calls (the measured 4–6× headroom); the static public call's per-call retrace and location-path cost; a portable bounded record; dynamic K/N; gfx1151.
 Evidence: benchmarks/baselines/gfx1201_public_bounded_call_20261028/README.md; recorder benchmarks/rocm/benchmark_public_bounded_quantized_mlp.py.
 <!-- entry-fields:end -->
+
+### 2026-10-28 — Public quantized MLP calls keep their bounded owner and stop re-resolving loc paths
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync GFX1201-PUBLIC-QUANTIZED-CALL-OVERHEAD-20261028.
+Outcome: the explicit bounded compile now gives the function one `RetainedBoundedOwner`. The first public call prepares the capacity owner and snapshots the six weight roots' bytes. Later calls with byte-identical weights replace only the activation rows; any other weight set, including an in-place mutation, takes the owner's full validated update. Admission refusals (raised before any native write) keep the owner, native failures close it, the owner never crosses fork, and a recompile or collection releases it. Separately, `graph_ir._loc_path` memoizes the path resolution every canonical render did per op, keyed by the working directory for relative names. On gfx1201 a device test shows one prepare across held weights, a capacity refusal, a new weight set and an in-place mutation, each bitwise equal to the static capacity rows. The #1021 recorder, re-run unchanged on a clean `33f6a2374`, puts the public bounded call at 0.67–1.03 ms (from 3.46–3.91), about 0.13 ms above a held-owner control that did not move. Public static medians fell 16–33% (two separate runs, not paired). Profile: bounded `prepare` gone; static canonical render 3.6 → 1.5 ms. The quantized/NVFP4 device set (181) passes; the unit subset's 209 failing IDs are identical at `origin/main`. NVIDIA, Apple and x86 are not applicable (gfx1201-only entry point; the loc memo changes no rendered text).
+Remaining: exact-head CI/review; retaining a static program's owner (now its largest per-call cost); the static path's remaining per-call canonical render; a portable bounded record; dynamic K/N; gfx1151.
+Evidence: benchmarks/baselines/gfx1201_public_quantized_call_overhead_20261028/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Retained public owner".
+<!-- entry-fields:end -->

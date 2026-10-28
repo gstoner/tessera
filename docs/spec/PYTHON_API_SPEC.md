@@ -2556,10 +2556,13 @@ NVFP4 expansions, BF16 parent store, SiLU-mul and a down projection),
 `function.compile_native_quantized_program(*example_inputs, m_bound=B)` requests
 the bounded `tessera.native.quantized_product.v5` program. Later ordinary calls
 accept `1 <= active_M <= B` with fixed N/K and weight shapes, and run without
-retracing or recompiling. Without `m_bound` it returns the static v4 program.
-A bounded program has no portable record, so `runtime_artifact()` refuses after
-a bounded call. Contract: `docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md`
-§"Public row-bound compile".
+retracing or recompiling. The function keeps one prepared device owner for
+those calls: byte-identical weight roots replace only the activation rows, and
+changed weights take a full validated update. Without `m_bound` it returns the
+static v4 program. A bounded program has no portable record, so
+`runtime_artifact()` refuses after a bounded call. Contract:
+`docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md` §"Public row-bound compile"
+and §"Retained public owner".
 
 Native session leaf diagnostics follow the actual converter/storage edges:
 convert()/run_conversion_graph() produce packed/exponent/statistic receipts;

@@ -16770,3 +16770,12 @@ Synchronization key: GFX1201-PUBLIC-BOUNDED-CALL-TIMING-20261028.
 Not applicable to NVIDIA: the measured call is the `rocm_gfx1201` quantized MLP only. No NVIDIA selector, ABI or result changes.
 
 Evidence: benchmarks/baselines/gfx1201_public_bounded_call_20261028/README.md.
+
+## GFX1201-PUBLIC-QUANTIZED-CALL-OVERHEAD-20261028 — retained bounded owner and memoized loc paths
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-PUBLIC-QUANTIZED-CALL-OVERHEAD-20261028.
+
+Not applicable to NVIDIA: the retained owner serves only the `rocm_gfx1201` bounded quantized MLP. `graph_ir._loc_path` now memoizes path resolution, which changes no rendered `loc` text, so canonical Graph IR and its content hashes are unchanged for every target.
+
+Evidence: benchmarks/baselines/gfx1201_public_quantized_call_overhead_20261028/README.md.

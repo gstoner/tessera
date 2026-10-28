@@ -422,8 +422,10 @@ mirrors `compile_native_nvfp4_program(..., m_bound=B)`:
   before tracing.
 - The function retains the verified program. Every later ordinary call at
   `1 <= M <= B` binds it without retracing, compiling or running the authored
-  Python body. Each call prepares the capacity owner at the active M, launches
-  the seven members, reads `[M, N]` and closes the owner.
+  Python body. Since GFX1201-PUBLIC-QUANTIZED-CALL-OVERHEAD-20261028 the
+  function also retains one prepared capacity owner (see "Retained public
+  owner" below); each call updates it, launches the seven members and reads
+  `[M, N]`.
 - N, K and every weight-root shape stay fixed; a different weight or
   activation width is refused by the existing expansion and storage checks.
   An M above B is refused by the owner's capacity check.
@@ -442,12 +444,67 @@ the authored body all patched to fail. Every public output is bitwise equal
 to the static capacity program's first rows over padded roots, and for
 M <= 64 it also passes the independent staged chain at the active shape.
 
+Not covered: a portable bounded record; dynamic K/N; gfx1151 and sibling
+backends. Owner retention and public timing landed separately; see the next
+section.
+
+### Retained public owner (GFX1201-PUBLIC-QUANTIZED-CALL-OVERHEAD-20261028)
+
+The explicit bounded compile creates one `RetainedBoundedOwner`
+(`rocm_quantized_product_frontend.py`). It closes any owner a previous bounded
+compile of the same function left, and a finalizer releases the owner's device
+memory when the function is collected. The first public call prepares the
+capacity owner and snapshots the bytes, dtype and shape of the six weight
+roots. Later calls are serialized by a lock and take one of two paths:
+
+- **Byte-identical weights.** Weight roots equal to the snapshot (equal bytes
+  in a fresh array count) replace only the activation rows through
+  `update_activations`; both expanded weights stay resident. The weights
+  already passed the expansion checks when they were admitted, and the
+  activation path keeps its own storage/shape check.
+- **Any other weights.** A new or in-place mutated weight set takes the
+  owner's full validated `update` of all seven roots, then the snapshot is
+  replaced.
+
+Failure policy:
+
+- An admission refusal (`ValueError`, raised before any native write) keeps
+  the owner and its snapshot. Examples are an M above capacity, a changed
+  weight shape, or a changed activation width.
+- A native failure (`RuntimeError` from the HIP status) closes the owner, and
+  the next call prepares a fresh one.
+- The owner never crosses fork: a child call refuses, and a child `close`
+  never touches the parent's handle.
+
+Separately, `graph_ir._loc_path` memoizes the source-location path resolution
+every canonical render performs per op. It is keyed by the filename, plus the
+working directory for a relative name. This cuts the canonical cache-key
+render the static public quantized call does on every call.
+
+**Evidence on RX9070XT/gfx1201 (Tajasarus):**
+
+- **Device test.** `test_public_bound_retains_one_owner_across_calls` makes
+  one prepare across these calls:
+  - M = 3, 8, 1, 5 on held weights;
+  - a capacity refusal;
+  - a new weight set;
+  - an in-place weight mutation;
+  - a return to held weights.
+
+  Each output is bitwise equal to the static capacity rows of the roots it
+  was given.
+- **Timing.** The #1021 recorder, re-run, puts the public bounded call at
+  0.67–1.03 ms against 3.46–3.91 ms before, about 0.13 ms above a held-owner
+  control that did not move. The public static call went from 4.75–6.22 ms to
+  3.88–4.32 ms. These are diagnostic WSL2 host-wall figures.
+
+Evidence: benchmarks/baselines/gfx1201_public_quantized_call_overhead_20261028/README.md.
+
 Not covered:
 
-- retaining the prepared owner across public calls (each call prepares at
-  capacity; resident weights are reachable only through the package owner's
-  `update_activations`);
-- timing of the public bounded call;
+- retaining a static program's owner (each static public call still prepares
+  one, now its largest cost);
+- the remaining per-call canonical render that keys the static program cache;
 - a portable bounded record;
 - dynamic K/N;
 - gfx1151 and sibling backends.

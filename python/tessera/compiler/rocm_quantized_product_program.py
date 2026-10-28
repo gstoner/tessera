@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import re
+from typing import Any
 
 from .native_artifact import LaunchGeometry, ScalarArgument
 from .quantized_binding_cache import memoized_validation,memoized_binding
@@ -277,13 +278,13 @@ class NativeQuantizedProductProgram:
                 or descriptor.provenance["workgroup"] != [32*checked["warps"],1,1]):
             raise ValueError("native quantized-product consumer ABI/geometry differs")
 
-    def to_manifest(self):
+    def to_manifest(self,*,_bounded_member=False):
         from .rocm_nvfp4_resident import _portable_stage
         self.validate()
-        if self.arbitrary_m:
-            # No portable record carries the arbitrary-M witness yet; refusing
-            # keeps a replayed record from silently becoming a static image.
-            raise ValueError("bounded quantized-product components have no portable record")
+        if self.arbitrary_m and not _bounded_member:
+            # A shape-free product image is portable only inside the bounded
+            # MLP record whose row frame admits it; alone it has no row policy.
+            raise ValueError("bounded quantized-product components have no standalone portable record")
         stages = [_portable_stage(self.quantizer_recipe.graph_ir,self.quantizer_recipe.schedule_ir,self.quantizer)]
         if self.expansion is not None:
             stages.append(_portable_stage(self.expansion.graph_ir,self.expansion.schedule_ir,self.expansion.native))
@@ -291,19 +292,31 @@ class NativeQuantizedProductProgram:
         if self.activation is not None and self.activation_recipe is not None:
             stages.append(_portable_stage(self.activation_recipe.graph_ir,self.activation_recipe.schedule_ir,self.activation))
         version=3 if self.activation is not None else 2 if self.expansion is not None else 1
-        return {"schema":_PACKAGE_SCHEMAS[version-1],
+        record: dict[str,Any]={"schema":_PACKAGE_SCHEMAS[version-1],
                 "program_json":self.program_json,"graph_ir":self.graph_ir,
                 "checked_product_target_ir":self.checked_product_target_ir,
                 "binding_digest":self.binding_digest,
                 "stages":stages}
+        if self.arbitrary_m:
+            # The flag is a claim only; replay re-derives the shape-free
+            # projection from the checked static Target before accepting it.
+            record["arbitrary_m"]=True
+        return record
 
     @classmethod
-    def from_manifest(cls,record):
-        if isinstance(record,dict) and record.get("schema")=="tessera.rocm.quantized_product_package.v4":
+    def from_manifest(cls,record,*,_bounded_member=False):
+        if isinstance(record,dict) and record.get("schema") in ("tessera.rocm.quantized_product_package.v4",
+                                                                 "tessera.rocm.quantized_product_package.v5"):
+            if _bounded_member:
+                raise ValueError("native quantized MLP portable component schemas differ")
             from .rocm_quantized_mlp_program import NativeQuantizedMLPProgram
             return NativeQuantizedMLPProgram.from_manifest(record)
         from .native_artifact import NativeImageArtifact,LaunchDescriptor
-        if (not isinstance(record,dict) or set(record)!={"schema","program_json","graph_ir","checked_product_target_ir","binding_digest","stages"}
+        keys={"schema","program_json","graph_ir","checked_product_target_ir","binding_digest","stages"}
+        arbitrary_m=isinstance(record,dict) and "arbitrary_m" in record
+        if arbitrary_m and (not _bounded_member or record["arbitrary_m"] is not True):
+            raise ValueError("native quantized-product portable arbitrary-M claim differs")
+        if (not isinstance(record,dict) or set(record)!=(keys|{"arbitrary_m"} if arbitrary_m else keys)
                 or record["schema"] not in _PACKAGE_SCHEMAS
                 or any(not isinstance(record[key],str) for key in ("program_json","graph_ir","checked_product_target_ir","binding_digest"))
                 or not isinstance(record["stages"],list) or len(record["stages"])!=_PACKAGE_SCHEMAS.index(record["schema"])+2):
@@ -329,7 +342,8 @@ class NativeQuantizedProductProgram:
         program=cls(record["program_json"],record["graph_ir"],
             BlockQuantRecipe(first[0],first[1],first[2].tile_ir),first[2],
             BlockScaleProgram(shape,"quantized_product",second[0],second[1],second[2].tile_ir),second[2],
-            record["checked_product_target_ir"],record["binding_digest"],expansion,activation_recipe,activation)
+            record["checked_product_target_ir"],record["binding_digest"],expansion,activation_recipe,activation,
+            arbitrary_m=arbitrary_m)
         program.validate()
         return program
 

@@ -64,8 +64,11 @@ def test_bounded_mlp_matches_capacity_static_rows_bitwise(dims, bound, actives):
     h, k, n = dims
     package = bounded(actives[0], h, k, n, bound)
     assert package.bounded and package.gate.arbitrary_m and package.down.arbitrary_m
-    with pytest.raises(ValueError, match="no portable record"):
-        package.to_manifest()
+    # GFX1201-PORTABLE-BOUNDED-QUANTIZED-RECORD-20261028: the v5 record replays
+    # both arbitrary-M products and the row frame.
+    replay = type(package).from_manifest(json.loads(json.dumps(package.to_manifest())))
+    assert replay.bounded and replay.gate.arbitrary_m and replay.down.arbitrary_m
+    assert replay.binding_digest == package.binding_digest
     capacity = package_quantized_product_graph(source(bound, h, k, n))
     first = inputs(actives[0], h, k, n)
     with package.prepare(first, runtime_library=lib) as owner:

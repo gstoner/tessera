@@ -2559,10 +2559,11 @@ accept `1 <= active_M <= B` with fixed N/K and weight shapes, and run without
 retracing or recompiling. The function keeps one prepared device owner for
 those calls: byte-identical weight roots replace only the activation rows, and
 changed weights take a full validated update. Without `m_bound` it returns the
-static v4 program. A bounded program has no portable record, so
-`runtime_artifact()` refuses after a bounded call. Contract:
-`docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md` §"Public row-bound compile"
-and §"Retained public owner".
+static v4 program. After a bounded call `runtime_artifact()` returns the
+portable v5 record; replaying it re-derives the arbitrary-M product images and
+so requires the matching `tessera-opt`. Contract:
+`docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md` §"Public row-bound compile",
+§"Retained public owner" and §"Portable bounded record".
 
 Native session leaf diagnostics follow the actual converter/storage edges:
 convert()/run_conversion_graph() produce packed/exponent/statistic receipts;

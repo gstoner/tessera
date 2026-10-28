@@ -27,9 +27,7 @@ def test_explicit_bound_compiles_the_bounded_v5_program(rocm_image_toolchain):
     assert _compiler_path(program.native) == "canonical_rocm_quantized_bounded_mlp_program"
     assert fn._rocm_quantized_product_bounded_program is program
     assert "tessera.native.quantized_m_bound" in fn.graph_ir.module_attrs
-    for refuse in (program.manifest, lambda: runtime_artifact(program)):
-        with pytest.raises(ValueError, match="no portable record"):
-            refuse()
+    assert program.manifest()["schema"] == "tessera.rocm.quantized_product_frontend.v5"
 
 
 def test_unbounded_compile_keeps_the_static_v4_program(rocm_image_toolchain):
@@ -88,3 +86,94 @@ def test_bound_request_never_reaches_the_cached_trace(rocm_image_toolchain):
     static = fn.compile_native_quantized_program(*roots)
     assert not static.bounded
     assert static.manifest()["schema"] == "tessera.rocm.quantized_product_frontend.v4"
+
+
+def _bounded_record(fn, roots):
+    program = fn.compile_native_quantized_program(*roots, m_bound=8)
+    return program, program.manifest()
+
+
+def test_bounded_record_round_trips_with_both_arbitrary_m_products(rocm_image_toolchain):
+    """GFX1201-PORTABLE-BOUNDED-QUANTIZED-RECORD-20261028."""
+    from tessera.compiler.rocm_quantized_product_frontend import _resolve
+    from tessera.compiler.rocm_quantized_product_program import NativeQuantizedProductProgram
+    from tessera.runtime import RuntimeArtifact
+    fn, roots = public()
+    program, record = _bounded_record(fn, roots)
+    native = record["native_program"]
+    assert native["schema"] == "tessera.rocm.quantized_product_package.v5"
+    assert native["gate"]["arbitrary_m"] is True and native["down"]["arbitrary_m"] is True
+    replay = NativeQuantizedProductProgram.from_manifest(json.loads(json.dumps(native)))
+    assert replay.bounded and replay.gate.arbitrary_m and replay.down.arbitrary_m
+    assert replay.binding_digest == program.native.binding_digest
+    assert replay.program_json == program.native.program_json
+    artifact = RuntimeArtifact.from_json(runtime_artifact(program).to_json())
+    assert artifact.metadata["compiler_path"] == "canonical_rocm_quantized_bounded_mlp_program"
+    resolved = _resolve(json.dumps(artifact.metadata["native_program"], sort_keys=True, allow_nan=False),
+                        artifact.graph_ir, json.dumps(artifact.metadata["arg_names"]))
+    assert resolved.bounded and resolved.native.binding_digest == program.native.binding_digest
+
+
+def _tampered(record, edit):
+    copy = json.loads(json.dumps(record["native_program"]))
+    edit(copy)
+    return copy
+
+
+def _set_plan(key, value):
+    def edit(record):
+        plan = json.loads(record["program_json"])
+        plan[key] = value
+        record["program_json"] = json.dumps(plan, sort_keys=True)
+    return edit
+
+
+@pytest.mark.parametrize("edit,message", [
+    # The package schema and the plan schema are bound to each other.
+    (lambda r: r.update(schema="tessera.rocm.quantized_product_package.v4"), "schema/frame differs"),
+    # A dropped claim breaks the component's binding digest, which covers it.
+    (lambda r: r["gate"].pop("arbitrary_m"), "member binding differs"),
+    (lambda r: r["down"].pop("arbitrary_m"), "member binding differs"),
+    (lambda r: r["gate"].update(arbitrary_m=False), "arbitrary-M claim differs"),
+    (lambda r: r["gate"].update(arbitrary_m=1), "arbitrary-M claim differs"),
+    # The row frame is re-derived, so capacity and rows cannot be restated.
+    (_set_plan("m_bound", 16), "row slot capacity differs"),
+    (_set_plan("active_m", 9), "bounded rows differ"),
+])
+def test_tampered_bounded_record_is_refused(rocm_image_toolchain, edit, message):
+    from tessera.compiler.rocm_quantized_product_program import NativeQuantizedProductProgram
+    fn, roots = public()
+    _, record = _bounded_record(fn, roots)
+    with pytest.raises(ValueError, match=message):
+        NativeQuantizedProductProgram.from_manifest(_tampered(record, edit))
+
+
+def test_static_record_cannot_carry_arbitrary_m_products(rocm_image_toolchain):
+    from tessera.compiler.rocm_quantized_product_program import NativeQuantizedProductProgram
+    fn, roots = public()
+    program, record = _bounded_record(fn, roots)
+    gate = record["native_program"]["gate"]
+    # Alone, a shape-free product image has no row policy.
+    with pytest.raises(ValueError, match="arbitrary-M claim differs"):
+        NativeQuantizedProductProgram.from_manifest(json.loads(json.dumps(gate)))
+    with pytest.raises(ValueError, match="no standalone portable record"):
+        program.native.gate.to_manifest()
+    static = public()[0].compile_native_quantized_program(*roots).manifest()["native_program"]
+    static["gate"]["arbitrary_m"] = True
+    with pytest.raises(ValueError, match="arbitrary-M claim differs"):
+        NativeQuantizedProductProgram.from_manifest(static)
+
+
+@pytest.mark.parametrize("member", ["gate", "down"])
+def test_rehashed_static_claim_on_a_shape_free_image_is_refused(rocm_image_toolchain, member):
+    """A forger who also recomputes the digest still meets the image check:
+    a static claim requires the image to be the checked static Target."""
+    import dataclasses
+    from tessera.compiler.rocm_quantized_product_program import NativeQuantizedProductProgram
+    fn, roots = public()
+    _, record = _bounded_record(fn, roots)
+    replay = NativeQuantizedProductProgram.from_manifest(json.loads(json.dumps(record["native_program"])))
+    component = dataclasses.replace(getattr(replay, member), arbitrary_m=False)
+    component = dataclasses.replace(component, binding_digest=component._identity())
+    with pytest.raises(ValueError, match="checked Target differs"):
+        component.validate()

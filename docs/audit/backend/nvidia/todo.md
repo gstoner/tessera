@@ -16779,3 +16779,12 @@ Synchronization key: GFX1201-PUBLIC-QUANTIZED-CALL-OVERHEAD-20261028.
 Not applicable to NVIDIA: the retained owner serves only the `rocm_gfx1201` bounded quantized MLP. `graph_ir._loc_path` now memoizes path resolution, which changes no rendered `loc` text, so canonical Graph IR and its content hashes are unchanged for every target.
 
 Evidence: benchmarks/baselines/gfx1201_public_quantized_call_overhead_20261028/README.md.
+
+## GFX1201-PORTABLE-BOUNDED-QUANTIZED-RECORD-20261028 — portable record for the bounded quantized MLP
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-PORTABLE-BOUNDED-QUANTIZED-RECORD-20261028.
+
+Not applicable to NVIDIA: the record admits only the `rocm_gfx1201` bounded quantized MLP. No NVIDIA selector, ABI or result changes.
+
+Evidence: tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Portable bounded record".

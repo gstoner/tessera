@@ -19313,3 +19313,12 @@ Synchronization key: GFX1201-PUBLIC-QUANTIZED-ROW-BOUND-20261027.
 Landed on gfx1201 only, proven on Tajasarus with assertions-ON LLVM/MLIR 23.1.1. `function.compile_native_quantized_program(*example_inputs, m_bound=B)` compiles the seven-member MLP into the bounded v5 program once; later public calls at `1 <= M <= B` bind it without retracing or compiling and are bitwise equal to the static capacity rows. No portable record (`runtime_artifact()` refuses); each call still prepares the owner. No gfx1151 evidence, and the generic `rocm` name inherits nothing. Open: owner retention across public calls, public bounded timing, a portable bounded record, dynamic K/N.
 
 Evidence: tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Public row-bound compile".
+
+## GFX1201-NVFP4-BOUND-TRACE-COPY-20261028 — NVFP4 row-bound request kept off the cached trace
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-NVFP4-BOUND-TRACE-COPY-20261028.
+
+Fixed on gfx1201 (Tajasarus). `compile_native_nvfp4_program(..., m_bound=B)` no longer writes its bound onto the cached frontend trace. Before, a refused bound made the next ordinary call for the same roots fail, and an accepted bound leaked into later unbounded compiles. A malformed bound is now refused before tracing. Regression tests fail on the unfixed code.
+
+Evidence: tests/unit/test_nvfp4_bound_trace_copy.py; tests/device/rocm/test_nvfp4_bounded_rows.py.

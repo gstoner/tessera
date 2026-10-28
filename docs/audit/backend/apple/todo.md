@@ -16121,3 +16121,12 @@ Synchronization key: GFX1201-PUBLIC-QUANTIZED-ROW-BOUND-20261027.
 Not applicable to Apple: the public row-bound compile admits only the `rocm_gfx1201` quantized MLP. No Apple selector, ABI or result changes.
 
 Evidence: tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Public row-bound compile".
+
+## GFX1201-NVFP4-BOUND-TRACE-COPY-20261028 — NVFP4 row-bound request kept off the cached trace
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-NVFP4-BOUND-TRACE-COPY-20261028.
+
+Not applicable to Apple: `compile_native_nvfp4_program` admits only `rocm_gfx1201`.
+
+Evidence: tests/unit/test_nvfp4_bound_trace_copy.py; tests/device/rocm/test_nvfp4_bounded_rows.py.

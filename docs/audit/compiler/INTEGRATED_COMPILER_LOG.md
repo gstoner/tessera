@@ -14263,8 +14263,17 @@ Evidence: benchmarks/baselines/gfx1201_bounded_quantized_mlp_20261027/README.md;
 ### 2026-10-27 — Public row-bound compile for the gfx1201 quantized MLP
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: pending; sync GFX1201-PUBLIC-QUANTIZED-ROW-BOUND-20261027.
+PRs: #1019; sync GFX1201-PUBLIC-QUANTIZED-ROW-BOUND-20261027.
 Outcome: `function.compile_native_quantized_program(*example_inputs, m_bound=B)` compiles the authored seven-member MLP into the bounded v5 program once, mirroring `compile_native_nvfp4_program(..., m_bound=B)`. Later public calls at `1 <= M <= B` bind the retained program without retracing, compiling or running the authored body (frontend record v5, compiler path `canonical_rocm_quantized_bounded_mlp_program`, new execution-matrix row). The native export stays the only bound admission; a bound below the example rows or on a smaller program returns its diagnostic. A bounded call has no portable record, so `runtime_artifact()` refuses. On gfx1201, with the compiler, tracer and authored body patched to fail, public outputs at three shapes and several M are bitwise equal to the static capacity rows and, for M <= 64, pass the independent staged chain. The quantized/NVFP4/gate-up/block-quant device set (179) and the quantized/NVFP4/JIT unit set (2743) pass. Sibling queues are recorded as not applicable.
 Remaining: exact-head CI/review; retaining the prepared owner across public calls; public bounded timing; a portable bounded record; dynamic K/N; gfx1151.
 Evidence: tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Public row-bound compile".
+<!-- entry-fields:end -->
+
+### 2026-10-28 — NVFP4 row-bound request no longer poisons the cached trace
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync GFX1201-NVFP4-BOUND-TRACE-COPY-20261028.
+Outcome: `compile_native_nvfp4_program(..., m_bound=B)` wrote `tessera.native.nvfp4_m_bound` onto the module `_trace_frontend_capture` returns, which is the cached specialization itself. A refused bound therefore stayed on the trace, and on gfx1201 the next ordinary call for the same roots compiled it and failed with the capacity error. An accepted bound leaked the same way into later unbounded compiles. The request now goes on a copy, and a malformed bound is refused before tracing. This is the defect the #1019 review found in its copy of this pattern. New unit and device tests fail on the unfixed code and pass on gfx1201. The NVFP4/quantized device set (176) and the NVFP4/quantized/JIT unit set (2750) pass. NVIDIA, Apple and x86 are not applicable (gfx1201-only entry point).
+Remaining: exact-head CI/review.
+Evidence: tests/unit/test_nvfp4_bound_trace_copy.py; tests/device/rocm/test_nvfp4_bounded_rows.py::test_refused_bound_leaves_the_ordinary_call_static.
 <!-- entry-fields:end -->

@@ -110,3 +110,15 @@ def test_leaf_producer_readiness_and_independent_numerical_receipts(bound,captur
             stats=session.frame_stats()
             assert stats["allocation_bytes"]==initial["allocation_bytes"]
             assert stats["allocation_count"]==11
+
+
+def test_refused_bound_leaves_the_ordinary_call_static():
+    # GFX1201-NVFP4-BOUND-TRACE-COPY-20261028: a refused bound used to stay on
+    # the cached trace, so the next ordinary call compiled it and failed.
+    args,_,_,_,expected=inputs_and_oracle(17,32,64)
+    function=make_function(32,64)
+    with pytest.raises(RuntimeError,match="exceed their checked storage capacity"):
+        function.compile_native_nvfp4_program(*args,m_bound=16)
+    actual=function(*args)
+    np.testing.assert_allclose(actual.astype("f4"),expected,rtol=.008,atol=.015625)
+    assert function._rocm_nvfp4_last_program.native.consumer.m==17

@@ -400,6 +400,68 @@ static mlir::LogicalResult retypeQuantizedMLPContraction(
   return verify(module);
 }
 
+// Capacity retyping of the down projection's output columns. N reaches only
+// the down tail: the single-projection expansion's packed [N,H/2] and scale
+// [N,H/16] weight planes, its row boundaries [0,N], its [N,H] values and
+// [H/16,N] scale plane, and the down product's [M,N] result and the casts
+// after it. Each such extent scales to the capacity exactly; anything else
+// refuses, and the ordinary static admission certifies the capacity program.
+static mlir::LogicalResult retypeQuantizedMLPColumns(
+    mlir::ModuleOp module, mlir::func::FuncOp root,
+    llvm::ArrayRef<mlir::Operation *> ops, int64_t n, int64_t capacity,
+    llvm::DenseSet<mlir::Value> &columnValues) {
+  using namespace mlir;
+  auto refuse = [&]() -> LogicalResult {
+    return module.emitError("quantized bounded N requires the single-projection down expansion, product and output SSA");
+  };
+  auto retype = [&](Value value, unsigned axis) -> LogicalResult {
+    auto type = dyn_cast<RankedTensorType>(value.getType());
+    if (!type || type.getRank() != 2 || !type.hasStaticShape() || type.getEncoding() ||
+        type.getDimSize(axis) != n)
+      return failure();
+    SmallVector<int64_t> shape(type.getShape());
+    shape[axis] = capacity;
+    value.setType(RankedTensorType::get(shape, type.getElementType()));
+    columnValues.insert(value);
+    return success();
+  };
+  if (ops.size() < 37) return refuse();
+  Operation *expand = ops[35], *product = ops[36];
+  auto offsets = expand->getAttrOfType<ArrayAttr>("row_offsets");
+  if (expand->getName().getStringRef() != "tessera.nvfp4_expand" ||
+      product->getName().getStringRef() != "tessera.scaled_matmul" ||
+      expand->getNumOperands() != 3 || expand->getNumResults() != 2 ||
+      product->getNumOperands() != 4 || product->getNumResults() != 1 ||
+      product->getOperand(1) != expand->getResult(0) ||
+      product->getOperand(3) != expand->getResult(1) ||
+      !offsets || offsets.size() != 2 || !isa<IntegerAttr>(offsets[0]) ||
+      !isa<IntegerAttr>(offsets[1]) || cast<IntegerAttr>(offsets[0]).getInt() != 0 ||
+      cast<IntegerAttr>(offsets[1]).getInt() != n) return refuse();
+  auto packed = dyn_cast<BlockArgument>(expand->getOperand(0));
+  auto scales = dyn_cast<BlockArgument>(expand->getOperand(1));
+  if (!packed || !scales || failed(retype(packed, 0)) || failed(retype(scales, 0)) ||
+      failed(retype(expand->getResult(0), 0)) || failed(retype(expand->getResult(1), 1)) ||
+      failed(retype(product->getResult(0), 1))) return refuse();
+  auto element = cast<IntegerAttr>(offsets[1]).getType();
+  expand->setAttr("row_offsets", ArrayAttr::get(module.getContext(),
+      {offsets[0], IntegerAttr::get(element, capacity)}));
+  // The output stores after the product are elementwise casts of [M,N].
+  for (Operation *op : ArrayRef<Operation *>(ops).drop_front(37)) {
+    if (op->getName().getStringRef() != "tessera.cast" || op->getNumResults() != 1 ||
+        op->getNumOperands() != 1 || !columnValues.contains(op->getOperand(0)) ||
+        failed(retype(op->getResult(0), 1))) return refuse();
+  }
+  auto ret = cast<func::ReturnOp>(root.getBody().front().back());
+  SmallVector<Type> inputs, results;
+  for (Value value : root.getArguments()) inputs.push_back(value.getType());
+  for (Value value : ret.getOperands()) {
+    if (!columnValues.contains(value)) return refuse();
+    results.push_back(value.getType());
+  }
+  root.setFunctionType(FunctionType::get(module.getContext(), inputs, results));
+  return verify(module);
+}
+
 static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) {
   using namespace mlir;
   auto refuse = [&]() -> LogicalResult {
@@ -414,14 +476,29 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
   // capacity program and never see the request.
   constexpr StringLiteral rowBoundKey = "tessera.native.quantized_m_bound";
   constexpr StringLiteral contractionBoundKey = "tessera.native.quantized_k_bound";
+  constexpr StringLiteral columnBoundKey = "tessera.native.quantized_n_bound";
   bool boundedRows = module->hasAttr(rowBoundKey);
   bool boundedK = module->hasAttr(contractionBoundKey);
-  int64_t activeRows = 0, rowBound = 0, activeK = 0, kBound = 0;
+  bool boundedN = module->hasAttr(columnBoundKey);
+  int64_t activeRows = 0, rowBound = 0, activeK = 0, kBound = 0, activeN = 0, nBound = 0;
   std::string originalIR;
-  llvm::DenseSet<Value> rowValues, contractionValues;
-  // A K bound is a refinement of the row frame; it never travels alone.
+  llvm::DenseSet<Value> rowValues, contractionValues, columnValues;
+  // K and N bounds refine the row frame; neither travels alone.
   if (boundedK && !boundedRows)
     return module.emitError("quantized bounded K requires an M bound");
+  if (boundedN && !boundedRows)
+    return module.emitError("quantized bounded N requires an M bound");
+  if (boundedN) {
+    auto bound = module->getAttrOfType<IntegerAttr>(columnBoundKey);
+    auto type = root.getNumResults() == 1
+        ? dyn_cast<RankedTensorType>(root.getResultTypes()[0]) : RankedTensorType{};
+    if (!bound || !bound.getType().isInteger(64) || !type || type.getRank() != 2 ||
+        !type.hasStaticShape())
+      return module.emitError("quantized bounded N requires a static rank-2 output and an i64 bound");
+    activeN = type.getDimSize(1); nBound = bound.getInt();
+    if (activeN <= 0 || nBound < activeN)
+      return module.emitError("quantized bounded N exceeds its checked column capacity");
+  }
   if (boundedK) {
     auto bound = module->getAttrOfType<IntegerAttr>(contractionBoundKey);
     auto activation = ops.size() < 15 || ops[0]->getNumOperands() != 1 ? Value{} : ops[0]->getOperand(0);
@@ -447,10 +524,14 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
     module.print(originalStream); originalStream.flush();
     module->removeAttr(rowBoundKey);
     module->removeAttr(contractionBoundKey);
+    module->removeAttr(columnBoundKey);
     if (failed(retypeQuantizedMLPRows(module, root, activation, activeRows, rowBound, rowValues)))
       return failure();
     if (boundedK && failed(retypeQuantizedMLPContraction(
             module, root, ops, activeK, kBound, contractionValues)))
+      return failure();
+    if (boundedN && failed(retypeQuantizedMLPColumns(
+            module, root, ops, activeN, nBound, columnValues)))
       return failure();
   }
   if (root.getNumArguments()!=7 || (ops.size()!=37 && ops.size()!=38) || !ret ||
@@ -545,9 +626,18 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
       plan["k_bound"] = kBound;
       plan["k_frame"] = llvm::json::Object{{"slots",std::move(kSlots)},{"k_steps",std::move(kSteps)}};
     }
+    if (boundedN) {
+      // v7 adds the down projection's output-column frame (with or without K).
+      llvm::json::Array nSlots, nSteps;
+      frameOf(columnValues, ids, plan, nSlots, nSteps);
+      plan["active_n"] = activeN;
+      plan["n_bound"] = nBound;
+      plan["n_frame"] = llvm::json::Object{{"slots",std::move(nSlots)},{"n_steps",std::move(nSteps)}};
+    }
     return success();
   };
   return outlineNativeQuantizedMembers(module,root,groups,projections,
+      boundedN ? "tessera.native.quantized_product.v7" :
       boundedK ? "tessera.native.quantized_product.v6" : "tessera.native.quantized_product.v5",
       subprograms,frame);
 }

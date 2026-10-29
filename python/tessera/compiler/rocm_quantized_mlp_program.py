@@ -19,14 +19,22 @@ _SCHEMA='tessera.native.quantized_product.v4'
 _BOUNDED_SCHEMA='tessera.native.quantized_product.v5'
 #: v5 at capacity K plus the contraction frame (GFX1201-BOUNDED-QUANTIZED-K-20261028).
 _K_BOUNDED_SCHEMA='tessera.native.quantized_product.v6'
+#: v5 at capacity N plus the down projection's column frame, with or without
+#: the contraction frame (GFX1201-BOUNDED-QUANTIZED-N-20261029).
+_N_BOUNDED_SCHEMA='tessera.native.quantized_product.v7'
 _PACKAGE='tessera.rocm.quantized_product_package.v4'
 _BOUNDED_PACKAGE='tessera.rocm.quantized_product_package.v5'
 _K_BOUNDED_PACKAGE='tessera.rocm.quantized_product_package.v6'
+_N_BOUNDED_PACKAGE='tessera.rocm.quantized_product_package.v7'
 _PLAN_KEYS={'schema','source_graph_ir','member_graphs','buffers','steps','output','subprograms'}
 _BOUNDED_KEYS=_PLAN_KEYS|{'active_m','m_bound','original_graph_ir','row_frame'}
-_K_BOUNDED_KEYS=_BOUNDED_KEYS|{'active_k','k_bound','k_frame'}
-_SCHEMA_KEYS={_SCHEMA:_PLAN_KEYS,_BOUNDED_SCHEMA:_BOUNDED_KEYS,_K_BOUNDED_SCHEMA:_K_BOUNDED_KEYS}
-_PACKAGES={_SCHEMA:_PACKAGE,_BOUNDED_SCHEMA:_BOUNDED_PACKAGE,_K_BOUNDED_SCHEMA:_K_BOUNDED_PACKAGE}
+_K_KEYS={'active_k','k_bound','k_frame'}
+_N_KEYS={'active_n','n_bound','n_frame'}
+_K_BOUNDED_KEYS=_BOUNDED_KEYS|_K_KEYS
+_SCHEMA_KEYS={_SCHEMA:(_PLAN_KEYS,),_BOUNDED_SCHEMA:(_BOUNDED_KEYS,),_K_BOUNDED_SCHEMA:(_K_BOUNDED_KEYS,),
+              _N_BOUNDED_SCHEMA:(_BOUNDED_KEYS|_N_KEYS,_K_BOUNDED_KEYS|_N_KEYS)}
+_PACKAGES={_SCHEMA:_PACKAGE,_BOUNDED_SCHEMA:_BOUNDED_PACKAGE,_K_BOUNDED_SCHEMA:_K_BOUNDED_PACKAGE,
+           _N_BOUNDED_SCHEMA:_N_BOUNDED_PACKAGE}
 #: Original activation, gate quantizer pair, gate/up parent, activation, down
 #: quantizer pair and returned output vary with M; both weight expansions and
 #: their products' B operands never do.
@@ -41,6 +49,19 @@ _K_ROLE_AXES=((0,1,1),(1,1,2),(2,1,16))       # activation, packed, block scales
 _K_SLOT_AXES=((7,1,1),(8,1,16),(9,1,1),(10,0,16))
 
 
+#: N reaches the single-projection down weight planes, the down expansion and
+#: the output: (slot role, axis); every N extent is the output width itself.
+_N_STEPS=[5,6]
+_N_ROLE_AXES=((4,0),(5,0))                      # down packed, down block scales
+_N_SLOT_AXES=((15,0),(16,1),(17,1))
+
+
+def _n_axes(roles):
+    axes={roles[role]:(axis,1) for role,axis in _N_ROLE_AXES}
+    axes.update({slot:(axis,1) for slot,axis in _N_SLOT_AXES})
+    return axes
+
+
 def _k_axes(roles):
     axes={roles[role]:(axis,divisor) for role,axis,divisor in _K_ROLE_AXES}
     axes.update({slot:(axis,divisor) for slot,axis,divisor in _K_SLOT_AXES})
@@ -49,7 +70,7 @@ def _k_axes(roles):
 
 def _components(plan):
     if (not isinstance(plan,dict) or plan.get('schema') not in _SCHEMA_KEYS
-            or set(plan)!=_SCHEMA_KEYS[plan['schema']]
+            or set(plan) not in _SCHEMA_KEYS[plan['schema']]
             or not isinstance(plan['subprograms'],list) or len(plan['subprograms'])!=2
             or not all(isinstance(v,str) for v in plan['subprograms'])):
         raise ValueError('native quantized MLP component encoding differs')
@@ -115,8 +136,10 @@ def _frame(plan):
             raise ValueError('native quantized MLP buffer storage/lifetime differs')
     if plan['schema']!=_SCHEMA:
         _row_frame(plan,roles)
-    if plan['schema']==_K_BOUNDED_SCHEMA:
+    if 'k_frame' in plan:
         _k_frame(plan,roles)
+    if 'n_frame' in plan:
+        _n_frame(plan,roles)
     return roles,shape,(gm,dm)
 
 
@@ -154,6 +177,20 @@ def _k_frame(plan,roles):
     return active,bound,axes
 
 
+def _n_frame(plan,roles):
+    """Re-derive the exported v7 column frame; return (active, capacity, axes)."""
+    active,bound=plan['active_n'],plan['n_bound']
+    if type(active) is not int or type(bound) is not int or not 0<active<=bound:
+        raise ValueError('native quantized MLP bounded N differs')
+    axes=_n_axes(roles)
+    for slot,(axis,_) in axes.items():
+        if plan['buffers'][slot]['shape'][axis]!=bound:
+            raise ValueError('native quantized MLP column slot capacity differs')
+    if plan['n_frame']!={'slots':sorted(axes),'n_steps':_N_STEPS}:
+        raise ValueError('native quantized MLP exported column frame differs')
+    return active,bound,axes
+
+
 @dataclass(frozen=True)
 class NativeQuantizedMLPProgram:
     program_json: str
@@ -168,11 +205,15 @@ class NativeQuantizedMLPProgram:
 
     @property
     def bounded(self):
-        return json.loads(self.program_json)['schema'] in (_BOUNDED_SCHEMA,_K_BOUNDED_SCHEMA)
+        return json.loads(self.program_json)['schema']!=_SCHEMA
 
     @property
     def k_bounded(self):
-        return json.loads(self.program_json)['schema']==_K_BOUNDED_SCHEMA
+        return 'k_frame' in json.loads(self.program_json)
+
+    @property
+    def n_bounded(self):
+        return 'n_frame' in json.loads(self.program_json)
 
     @property
     def schedule_irs(self):
@@ -198,8 +239,11 @@ class NativeQuantizedMLPProgram:
         if self.gate.arbitrary_m is not bounded or self.down.arbitrary_m is not bounded:
             raise ValueError('native quantized MLP product row policy differs from its frame')
         # Only the gate contracts the bounded K; the down projection never sees it.
-        if self.gate.runtime_k is not (plan['schema']==_K_BOUNDED_SCHEMA) or self.down.runtime_k:
+        if self.gate.runtime_k is not ('k_frame' in plan) or self.down.runtime_k:
             raise ValueError('native quantized MLP contraction policy differs from its frame')
+        # Only the down projection carries the bounded output columns.
+        if self.down.runtime_n is not ('n_frame' in plan) or self.gate.runtime_n:
+            raise ValueError('native quantized MLP column policy differs from its frame')
 
     def to_manifest(self):
         self.validate()
@@ -254,8 +298,9 @@ def package_quantized_mlp_plan(plan,tool):
     gate,down=_components(plan)
     program=NativeQuantizedMLPProgram(json.dumps(plan,sort_keys=True),plan['source_graph_ir'],
         package_quantized_product_graph(gate['source_graph_ir'],arbitrary_m=bounded,
-                                        runtime_k=plan['schema']==_K_BOUNDED_SCHEMA),
-        package_quantized_product_graph(down['source_graph_ir'],arbitrary_m=bounded),'')
+                                        runtime_k='k_frame' in plan),
+        package_quantized_product_graph(down['source_graph_ir'],arbitrary_m=bounded,
+                                        runtime_n='n_frame' in plan),'')
     program=replace(program,binding_digest=program._identity())
     program.validate()
     return program
@@ -317,6 +362,27 @@ def _row_step(index,step,capacity,macro_m):
     return _RowStep(index,0,per_row,0,256,per_row)
 
 
+class _AxisFrame(C.Structure):
+    _fields_=[('capacity_m',C.c_int64),('capacity_g',C.c_int64),('capacity_n',C.c_int64),
+              ('slot_count',C.c_uint32),('step_count',C.c_uint32),('slots',C.POINTER(C.c_uint32)),
+              ('unit_bytes',C.POINTER(C.c_uint64)),('powers',C.POINTER(C.c_uint32)),
+              ('steps',C.POINTER(_ShapeStep))]
+
+
+def _column_steps(steps,capacity_n,down_groups,macro_n):
+    """Every N-dependent launch field of the N-bounded MLP.
+
+    The runtime-N down expansion takes N on its flat grid of N*G_down lanes; the
+    down product takes N (index 1) with grid x over macro-tile columns."""
+    e,d=steps[5],steps[6]
+    if (e.scalar_count!=1 or e.scalars[0]!=capacity_n or e.geometry[3]!=256
+            or e.geometry[0]!=(capacity_n*down_groups+255)//256
+            or d.scalar_count!=3 or d.scalars[1]!=capacity_n or macro_n<=0
+            or d.geometry[0]!=(capacity_n+macro_n-1)//macro_n):
+        raise ValueError('native quantized MLP column launch fields differ from their capacity')
+    return [_ShapeStep(5,0,1,4,0,256,down_groups),_ShapeStep(6,1,1,4,0,macro_n,1)]
+
+
 class PreparedQuantizedMLPProgram(PreparedScaledProgram):
     package: NativeQuantizedMLPProgram
     _prepare_symbol='tessera_rocm_program_prepare_multi_output'
@@ -328,7 +394,8 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
             raise RuntimeError('native quantized MLP requires owning gfx1201')
         plan=json.loads(package.program_json)
         self._bounded=plan['schema']!=_SCHEMA
-        self._k_bounded=plan['schema']==_K_BOUNDED_SCHEMA
+        self._k_bounded='k_frame' in plan
+        self._n_bounded='n_frame' in plan
         if self._bounded:
             roles,_,_=_frame(plan)
             self._active_m,self._capacity_m,self._row_slots,self._row_bytes=_row_frame(plan,roles)
@@ -338,12 +405,15 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
         if self._k_bounded:
             self._active_k,self._capacity_k,self._k_axes=_k_frame(plan,roles)
             self._prepare_symbol='tessera_rocm_program_prepare_multi_output_shape_frame'
+        if self._n_bounded:
+            self._active_n,self._capacity_n,self._n_axes=_n_frame(plan,roles)
+            self._prepare_symbol='tessera_rocm_program_prepare_multi_output_axis_frame'
         super().__init__(package,inputs,runtime_library=runtime_library)
 
     def _prepare_tail(self):
         if not self._bounded:
             return (),()
-        if self._k_bounded:
+        if self._k_bounded or self._n_bounded:
             return self._shape_tail()
         if not hasattr(self,'_frame_struct'):
             steps=self._binding.steps
@@ -361,51 +431,73 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
         return (C.POINTER(_RowFrame),C.c_int64),(C.byref(self._frame_struct),self._active_m)
 
     def _shape_tail(self):
+        """The K (v6) shape frame, or the (M, K?, N) axis frame of v7."""
+        capacity_g=self._capacity_k//16 if self._k_bounded else 0
+        capacity_n=self._capacity_n if self._n_bounded else 0
         if not hasattr(self,'_shape_struct'):
-            capacity_g=self._capacity_k//16
             rows=set(self._row_slots)
-            slots=sorted(rows|set(self._k_axes))
+            k_slots=set(self._k_axes) if self._k_bounded else set()
+            n_slots=set(self._n_axes) if self._n_bounded else set()
+            slots=sorted(rows|k_slots|n_slots)
             storage=self._binding.storage
-            powers=[(1 if slot in rows else 0)|(2 if slot in self._k_axes else 0) for slot in slots]
+            powers=[(1 if slot in rows else 0)|(2 if slot in k_slots else 0)|(4 if slot in n_slots else 0)
+                    for slot in slots]
             units=[]
             for slot,power in zip(slots,powers,strict=True):
-                scale=(self._capacity_m if power&1 else 1)*(capacity_g if power&2 else 1)
+                scale=((self._capacity_m if power&1 else 1)*(capacity_g if power&2 else 1)
+                       *(capacity_n if power&4 else 1))
                 if storage[slot].bytes%scale:
                     raise ValueError('native quantized MLP frame slot is not a capacity monomial')
                 units.append(storage[slot].bytes//scale)
             stages=self.package.native_stages
-            entries=_shape_steps(self._binding.steps,self._capacity_m,capacity_g,
-                stages[2].descriptor.provenance.get('macro_tile',(0,))[0],storage[9].shape[0])
+            steps=self._binding.steps
+            if self._k_bounded:
+                entries=_shape_steps(steps,self._capacity_m,capacity_g,
+                    stages[2].descriptor.provenance.get('macro_tile',(0,))[0],storage[9].shape[0])
+            else:
+                entries=[]
             for i in _ROW_STEPS:
-                if i in (0,2):
+                if self._k_bounded and i in (0,2):
                     continue
-                # The tail members are the v5 row entries: power M only.
-                row=_row_step(i,self._binding.steps[i],self._capacity_m,
+                # Every other row member is its v5 row entry: power M only.
+                row=_row_step(i,steps[i],self._capacity_m,
                               stages[i].descriptor.provenance.get('macro_tile',(0,))[0])
                 entries.append(_ShapeStep(row.step,row.scalar,row.scalar_per_row,1,
                                           row.grid_axis,row.grid_tile,row.grid_per_row))
+            if self._n_bounded:
+                entries+=_column_steps(steps,capacity_n,storage[16].shape[0],
+                                       stages[6].descriptor.provenance.get('macro_tile',(0,0))[1])
             self._shape_arrays=((C.c_uint32*len(slots))(*slots),(C.c_uint64*len(units))(*units),
                                 (C.c_uint32*len(powers))(*powers),(_ShapeStep*len(entries))(*entries))
             a,b,c,d=self._shape_arrays
-            self._shape_struct=_ShapeFrame(self._capacity_m,capacity_g,len(slots),len(entries),
-                C.cast(a,C.POINTER(C.c_uint32)),C.cast(b,C.POINTER(C.c_uint64)),
-                C.cast(c,C.POINTER(C.c_uint32)),C.cast(d,C.POINTER(_ShapeStep)))
+            pointers=(len(slots),len(entries),C.cast(a,C.POINTER(C.c_uint32)),C.cast(b,C.POINTER(C.c_uint64)),
+                      C.cast(c,C.POINTER(C.c_uint32)),C.cast(d,C.POINTER(_ShapeStep)))
+            self._shape_struct=(_AxisFrame(self._capacity_m,capacity_g,capacity_n,*pointers)
+                                if self._n_bounded else _ShapeFrame(self._capacity_m,capacity_g,*pointers))
+        active_g=self._active_k//16 if self._k_bounded else 1
+        if self._n_bounded:
+            return ((C.POINTER(_AxisFrame),C.c_int64,C.c_int64,C.c_int64),
+                    (C.byref(self._shape_struct),self._active_m,active_g,self._active_n))
         return ((C.POINTER(_ShapeFrame),C.c_int64,C.c_int64),
-                (C.byref(self._shape_struct),self._active_m,self._active_k//16))
+                (C.byref(self._shape_struct),self._active_m,active_g))
 
-    def _storage(self,active_m,active_k=None):
+    def _storage(self,active_m,active_k=None,active_n=None):
         if not self._bounded:
             return self._binding.storage
         result=list(self._binding.storage)
         for slot,stride in zip(self._row_slots,self._row_bytes,strict=True):
             spec=result[slot]
             result[slot]=_StorageSpec((active_m,*spec.shape[1:]),spec.storage,stride*active_m,spec.numpy_dtype)
+        variables=[]
         if self._k_bounded:
-            active_k=self._active_k if active_k is None else active_k
-            for slot,(axis,divisor) in self._k_axes.items():
+            variables.append((self._k_axes,self._active_k if active_k is None else active_k))
+        if self._n_bounded:
+            variables.append((self._n_axes,self._active_n if active_n is None else active_n))
+        for axes,active in variables:
+            for slot,(axis,divisor) in axes.items():
                 spec=result[slot]
                 shape=list(spec.shape)
-                shape[axis]=active_k//divisor
+                shape[axis]=active//divisor
                 item=self._binding.storage[slot].bytes//math.prod(self._binding.storage[slot].shape)
                 result[slot]=_StorageSpec(tuple(shape),spec.storage,math.prod(shape)*item,spec.numpy_dtype)
         return tuple(result)
@@ -421,6 +513,14 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
 
     def _input_k(self,activation):
         return np.shape(activation)[1] if self._k_bounded else None
+
+    def _input_n(self,inputs):
+        if not self._n_bounded:
+            return None
+        shape=np.shape(inputs[self._roles[4]])
+        if len(shape)!=2 or not 0<shape[0]<=self._capacity_n:
+            raise ValueError('native quantized MLP active N exceeds its column capacity')
+        return shape[0]
 
     @property
     def active_m(self):
@@ -454,58 +554,67 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
         roles,_,_=_frame(json.loads(self.package.program_json))
         if len(inputs)!=7:
             raise ValueError('native quantized MLP requires seven roots')
+        active_n=self._input_n(inputs)
         for component,slots in ((self.package.gate,roles[1:4]),(self.package.down,roles[4:])):
             if component.expansion is None:
                 raise ValueError('native quantized MLP requires both expansions')
             _,_,_,offsets,_,_=component.expansion.contract()
+            if component is self.package.down and active_n is not None:
+                # The single down projection spans the active columns.
+                offsets=(0,active_n)
             checked_expansion_inputs(*(inputs[i] for i in slots),row_offsets=offsets,numeric_policy=nvfp4_expansion_policy(),_scale_bounds=self._nvfp4_scale_bounds())
         if not self._bounded:
             return super()._inputs(inputs)
         active_m=self._input_m(inputs[roles[0]])
         active_k=self._input_k(inputs[roles[0]])
-        arrays=self._inputs_for_storage(inputs,self._storage(active_m,active_k))
+        arrays=self._inputs_for_storage(inputs,self._storage(active_m,active_k,active_n))
         self._active_m=active_m
         if self._k_bounded:
             self._active_k=active_k
+        if self._n_bounded:
+            self._active_n=active_n
         return arrays
 
-    def _update_shape(self,active_m,active_k,slots,arrays):
-        update=self.lib.tessera_rocm_program_update_shape
-        update.argtypes=[C.c_uint64,C.c_int64,C.c_int64,C.c_uint32,C.POINTER(C.c_uint32),
-                         C.POINTER(C.c_void_p),C.POINTER(C.c_uint64)]
-        update.restype=C.c_int
+    def _update_frame(self,slots,arrays):
+        """Atomic native update at the (already admitted) active extents."""
         count=len(slots)
-        _status(update(self.handle,active_m,active_k//16,count,(C.c_uint32*count)(*slots),
-                       (C.c_void_p*count)(*[a.ctypes.data for a in arrays]),
-                       (C.c_uint64*count)(*[a.nbytes for a in arrays])))
-        self._active_m,self._active_k=active_m,active_k
+        args=((C.c_uint32*count)(*slots),(C.c_void_p*count)(*[a.ctypes.data for a in arrays]),
+              (C.c_uint64*count)(*[a.nbytes for a in arrays]))
+        tail: list[Any]=[C.c_uint32,C.POINTER(C.c_uint32),C.POINTER(C.c_void_p),C.POINTER(C.c_uint64)]
+        extents: tuple[int,...]
+        if self._n_bounded:
+            update=self.lib.tessera_rocm_program_update_axes
+            extents=(self._active_m,self._active_k//16 if self._k_bounded else 0,self._active_n)
+        elif self._k_bounded:
+            update=self.lib.tessera_rocm_program_update_shape
+            extents=(self._active_m,self._active_k//16)
+        else:
+            update=self.lib.tessera_rocm_program_update_rows
+            extents=(self._active_m,)
+        update.argtypes=[C.c_uint64,*[C.c_int64]*len(extents),*tail]
+        update.restype=C.c_int
+        _status(update(self.handle,*extents,count,*args))
 
-    def _update_rows(self,active_m,slots,arrays):
-        update=self.lib.tessera_rocm_program_update_rows
-        update.argtypes=[C.c_uint64,C.c_int64,C.c_uint32,C.POINTER(C.c_uint32),
-                         C.POINTER(C.c_void_p),C.POINTER(C.c_uint64)]
-        update.restype=C.c_int
-        count=len(slots)
-        _status(update(self.handle,active_m,count,(C.c_uint32*count)(*slots),
-                       (C.c_void_p*count)(*[a.ctypes.data for a in arrays]),
-                       (C.c_uint64*count)(*[a.nbytes for a in arrays])))
-        self._active_m=active_m
+    def _extents(self):
+        return (self._active_m,getattr(self,'_active_k',None),getattr(self,'_active_n',None))
+
+    def _restore(self,extents):
+        self._active_m=extents[0]
+        if self._k_bounded:
+            self._active_k=extents[1]
+        if self._n_bounded:
+            self._active_n=extents[2]
 
     def update(self,inputs):
         if not self._bounded:
             return super().update(inputs)
-        # Validates against the requested M (and K) before any native state changes.
-        previous=self._active_m,getattr(self,'_active_k',None)
+        # Validates against the requested extents before any native state changes.
+        previous=self._extents()
         try:
             arrays,_,_=self._inputs(inputs)
-            if self._k_bounded:
-                self._update_shape(self._active_m,self._active_k,tuple(range(7)),arrays)
-            else:
-                self._update_rows(self._active_m,tuple(range(7)),arrays)
+            self._update_frame(tuple(range(7)),arrays)
         except Exception:
-            self._active_m=previous[0]
-            if self._k_bounded:
-                self._active_k=previous[1]
+            self._restore(previous)
             raise
 
     def update_activations(self,activation):
@@ -521,16 +630,25 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
         array=np.asarray(activation)
         if array.dtype!=contract.numpy_dtype or array.shape!=contract.shape or array.nbytes!=contract.bytes:
             raise ValueError('native quantized MLP activation storage/shape differs')
-        if self._k_bounded:
-            self._update_shape(active_m,self._active_k,(self._x_slot,),(pack_host_view(self.lib,array),))
-        else:
-            self._update_rows(active_m,(self._x_slot,),(pack_host_view(self.lib,array),))
+        previous=self._extents()
+        self._active_m=active_m
+        try:
+            self._update_frame((self._x_slot,),(pack_host_view(self.lib,array),))
+        except Exception:
+            self._restore(previous)
+            raise
 
     @property
     def active_k(self):
         if not self._k_bounded:
             raise ValueError('native quantized MLP has no bounded contraction frame')
         return self._active_k
+
+    @property
+    def active_n(self):
+        if not self._n_bounded:
+            raise ValueError('native quantized MLP has no bounded column frame')
+        return self._active_n
 
     def shape_info(self):
         """(capacity M, capacity K, active M, active K, allocation bytes, buffers)."""
@@ -543,6 +661,21 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
         size,count=C.c_uint64(),C.c_uint64()
         _status(info(self.handle,C.byref(cm),C.byref(cg),C.byref(am),C.byref(ag),C.byref(size),C.byref(count)))
         return cm.value,16*cg.value,am.value,16*ag.value,size.value,count.value
+
+    def axes_info(self):
+        """((capacity M, K, N), (active M, K, N), allocation bytes, buffers); an unframed K reads 0."""
+        if not self._n_bounded:
+            raise ValueError('native quantized MLP has no bounded column frame')
+        info=self.lib.tessera_rocm_program_axes_info
+        info.argtypes=[C.c_uint64,C.POINTER(C.c_int64),C.POINTER(C.c_int64),
+                       C.POINTER(C.c_uint64),C.POINTER(C.c_uint64)]
+        info.restype=C.c_int
+        capacity,active=(C.c_int64*3)(),(C.c_int64*3)()
+        size,count=C.c_uint64(),C.c_uint64()
+        _status(info(self.handle,capacity,active,C.byref(size),C.byref(count)))
+        framed_k=capacity[1]!=0
+        return ((capacity[0],16*capacity[1],capacity[2]),
+                (active[0],16*active[1] if framed_k else 0,active[2]),size.value,count.value)
 
     def rows_info(self):
         if not self._bounded:

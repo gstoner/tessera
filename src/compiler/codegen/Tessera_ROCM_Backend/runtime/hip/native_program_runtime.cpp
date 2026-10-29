@@ -51,13 +51,14 @@ struct Program {
   std::vector<hipGraph_t> graphs;
   std::vector<hipGraphExec_t> graphExecutables;
   // One internal frame for every bounded ABI. A frame quantity is
-  // coef * M^a * G^b, a,b in {0,1}: M is rows and G is K16 groups. Both row
-  // ABIs are the G-free case (capacityG == 0, activeG == 1).
-  int64_t capacityRows = 0, capacityG = 0;
+  // coef * M^a * G^b * N^c, a,b,c in {0,1}: M is rows, G is K16 groups and N
+  // is output columns. A variable an ABI does not carry has capacity 0 and
+  // active 1: both row ABIs are the G- and N-free case, the shape frame N-free.
+  int64_t capacityRows = 0, capacityG = 0, capacityN = 0;
   std::vector<TesseraRocmProgramShapeStep> frameSteps;
-  int64_t activeRows = 0, activeG = 1;
-  std::vector<uint64_t> unitBytes;   // bytes at M = G = 1; 0 outside the frame
-  std::vector<uint8_t> slotPowers;   // bit 0: M, bit 1: G
+  int64_t activeRows = 0, activeG = 1, activeN = 1;
+  std::vector<uint64_t> unitBytes;   // bytes at M = G = N = 1; 0 outside the frame
+  std::vector<uint8_t> slotPowers;   // bit 0: M, bit 1: G, bit 2: N
   uint64_t generation = 0;
   bool poisoned = true, ready = false, output = false;
 };
@@ -154,23 +155,25 @@ int clean(Program &p) {
   return 0;
 }
 // Admission proved every quantity fits at capacity; active <= capacity.
-uint64_t monomial(uint32_t powers, int64_t rows, int64_t groups) {
-  return ((powers & 1) ? uint64_t(rows) : 1) * ((powers & 2) ? uint64_t(groups) : 1);
+uint64_t monomial(uint32_t powers, int64_t rows, int64_t groups, int64_t columns = 1) {
+  return ((powers & 1) ? uint64_t(rows) : 1) * ((powers & 2) ? uint64_t(groups) : 1) *
+         ((powers & 4) ? uint64_t(columns) : 1);
 }
-uint64_t activeBytes(const Program &p, uint32_t slot, int64_t rows, int64_t groups) {
+uint64_t activeBytes(const Program &p, uint32_t slot, int64_t rows, int64_t groups,
+                     int64_t columns) {
   return !p.unitBytes.empty() && p.unitBytes[slot]
-      ? p.unitBytes[slot] * monomial(p.slotPowers[slot], rows, groups)
+      ? p.unitBytes[slot] * monomial(p.slotPowers[slot], rows, groups, columns)
       : p.contract[slot].bytes;
 }
 uint64_t activeBytes(const Program &p, uint32_t slot) {
-  return activeBytes(p, slot, p.activeRows, p.activeG);
+  return activeBytes(p, slot, p.activeRows, p.activeG, p.activeN);
 }
-void applyFrame(Program &p, int64_t rows, int64_t groups) {
+void applyFrame(Program &p, int64_t rows, int64_t groups, int64_t columns) {
   if (!p.capacityRows) return;
-  p.activeRows = rows; p.activeG = groups;
+  p.activeRows = rows; p.activeG = groups; p.activeN = columns;
   for (const auto &entry : p.frameSteps) {
     auto &stage = p.stages[entry.step];
-    uint64_t scale = monomial(entry.powers, rows, groups);
+    uint64_t scale = monomial(entry.powers, rows, groups, columns);
     stage.scalars[entry.scalar] = int64_t(scale) * entry.scalar_coef;
     if (entry.grid_axis < 3) {
       uint64_t work = scale * uint64_t(entry.grid_coef);
@@ -180,7 +183,7 @@ void applyFrame(Program &p, int64_t rows, int64_t groups) {
     for (uint32_t i = 0; i < stage.inputs.size() + stage.outputs.size(); ++i) {
       uint32_t slot = i < stage.inputs.size() ? stage.inputs[i]
           : stage.outputs[i - stage.inputs.size()];
-      stage.refs[i].elements = int64_t(activeBytes(p, slot, rows, groups) /
+      stage.refs[i].elements = int64_t(activeBytes(p, slot, rows, groups, columns) /
           (p.contract[slot].bytes / p.contract[slot].elements));
     }
   }
@@ -314,31 +317,41 @@ bool validRowFrame(const TesseraRocmProgramRowFrame *frame, int64_t active,
   for (uint32_t i = 0; i < frame->step_count; ++i) rowSteps.push_back(frame->steps[i]);
   return true;
 }
-// Two-variable frame admission. Every capacity value must equal its declared
-// monomial at (capacity_m, capacity_g); the frame closure is derived from SSA
-// slot use exactly as for the row frame. One entry scales one scalar (and at
-// most one grid axis); a step may carry several entries, never two for the
-// same scalar or grid axis.
-bool checkedMonomial(uint32_t powers, int64_t coef, int64_t rows, int64_t groups,
+// Multi-variable frame admission. Every capacity value must equal its
+// declared monomial at the capacities; a power on a variable the frame does
+// not carry (capacity 0) refuses. The frame closure is derived from SSA slot
+// use exactly as for the row frame. One entry scales one scalar (and at most
+// one grid axis); a step may carry several entries, never two for the same
+// scalar or grid axis.
+bool checkedMonomial(uint32_t powers, int64_t coef, const TesseraRocmProgramAxisFrame &f,
                      uint64_t &out) {
-  if (coef < 1 || !powers || powers > 3) return false;
-  uint64_t scale = monomial(powers, rows, groups);
-  if ((powers == 3 && uint64_t(rows) > uint64_t(INT64_MAX) / uint64_t(groups)) ||
-      scale > uint64_t(INT64_MAX) / uint64_t(coef)) return false;
-  out = scale * uint64_t(coef);
+  if (coef < 1 || !powers || powers > 7) return false;
+  const int64_t extents[3] = {f.capacity_m, f.capacity_g, f.capacity_n};
+  uint64_t value = uint64_t(coef);
+  for (unsigned axis = 0; axis < 3; ++axis) {
+    if (!(powers & (1u << axis))) continue;
+    if (extents[axis] < 1 || value > uint64_t(INT64_MAX) / uint64_t(extents[axis])) return false;
+    value *= uint64_t(extents[axis]);
+  }
+  out = value;
   return true;
 }
 template<class Step>
-bool validShapeFrame(const TesseraRocmProgramShapeFrame *frame, int64_t rows,
-                     int64_t groups, uint32_t arguments, uint32_t buffers,
+bool validShapeFrame(const TesseraRocmProgramAxisFrame *frame, int64_t rows,
+                     int64_t groups, int64_t columns, uint32_t arguments, uint32_t buffers,
                      const TesseraRocmProgramBuffer *contract, uint32_t steps,
                      const Step *plan, std::vector<uint64_t> &units,
                      std::vector<uint8_t> &powers,
                      std::vector<TesseraRocmProgramShapeStep> &entries) {
   units.assign(buffers, 0); powers.assign(buffers, 0); entries.clear();
+  // M is always framed; G and N are framed exactly when their capacity is set.
+  auto inRange = [](int64_t active, int64_t capacity) {
+    return capacity ? active >= 1 && active <= capacity : active == 1;
+  };
   if (!frame || !frame->slots || !frame->unit_bytes || !frame->powers || !frame->steps ||
-      frame->capacity_m < 1 || frame->capacity_g < 1 ||
-      rows < 1 || rows > frame->capacity_m || groups < 1 || groups > frame->capacity_g ||
+      frame->capacity_m < 1 || frame->capacity_g < 0 || frame->capacity_n < 0 ||
+      rows < 1 || rows > frame->capacity_m || !inRange(groups, frame->capacity_g) ||
+      !inRange(columns, frame->capacity_n) ||
       !frame->slot_count || frame->slot_count > 32 || frame->slot_count > buffers ||
       !frame->step_count || frame->step_count > 32) return false;
   uint32_t frameArguments = 0;
@@ -346,7 +359,7 @@ bool validShapeFrame(const TesseraRocmProgramShapeFrame *frame, int64_t rows,
     uint32_t slot = frame->slots[i], power = frame->powers[i];
     uint64_t unit = frame->unit_bytes[i], bytes = 0;
     if (slot >= buffers || units[slot] || !unit || unit > uint64_t(INT64_MAX) ||
-        !checkedMonomial(power, int64_t(unit), frame->capacity_m, frame->capacity_g, bytes))
+        !checkedMonomial(power, int64_t(unit), *frame, bytes))
       return false;
     const auto &b = contract[slot];
     uint64_t item = b.bytes / b.elements;
@@ -362,12 +375,12 @@ bool validShapeFrame(const TesseraRocmProgramShapeFrame *frame, int64_t rows,
     const auto &s = plan[e.step];
     uint64_t value = 0;
     if (e.scalar >= s.scalar_count ||
-        !checkedMonomial(e.powers, e.scalar_coef, frame->capacity_m, frame->capacity_g, value) ||
+        !checkedMonomial(e.powers, e.scalar_coef, *frame, value) ||
         uint64_t(s.scalars[e.scalar]) != value || e.grid_axis > 3) return false;
     if (e.grid_axis < 3) {
       uint64_t work = 0;
       if (!e.grid_tile ||
-          !checkedMonomial(e.powers, e.grid_coef, frame->capacity_m, frame->capacity_g, work))
+          !checkedMonomial(e.powers, e.grid_coef, *frame, work))
         return false;
       uint64_t grid = work / e.grid_tile + (work % e.grid_tile != 0);
       if (grid > 2147483647U || s.geometry[e.grid_axis] != grid) return false;
@@ -442,8 +455,8 @@ static int prepareProgram(
     const uint64_t *inputBytes, uint64_t *handle,
     const TesseraRocmProgramRows *rowPolicy = nullptr, int64_t activeRows = 0,
     const TesseraRocmProgramRowFrame *rowFrame = nullptr,
-    const TesseraRocmProgramShapeFrame *shapeFrame = nullptr,
-    int64_t activeG = 1) try {
+    const TesseraRocmProgramAxisFrame *shapeFrame = nullptr,
+    int64_t activeG = 1, int64_t activeN = 1) try {
   if (handle) *handle = 0;
   if (!handle || !architecture || !contract || !plan || !inputs || !inputBytes ||
       !arguments || arguments > 128 || !steps || steps > 128 ||
@@ -505,12 +518,12 @@ static int prepareProgram(
   if (int(rowPolicy != nullptr) + int(rowFrame != nullptr) + int(shapeFrame != nullptr) > 1)
     return 1;
   if (shapeFrame) {
-    if (!validShapeFrame(shapeFrame, activeRows, activeG, arguments, buffers, contract,
+    if (!validShapeFrame(shapeFrame, activeRows, activeG, activeN, arguments, buffers, contract,
                          steps, plan, units, powers, entries)) return 1;
   } else {
     // Both row ABIs are the G-free case of the shape frame.
     std::vector<TesseraRocmProgramRowStep> rowSteps;
-    if (activeG != 1) return 1;
+    if (activeG != 1 || activeN != 1) return 1;
     if (rowFrame ? !validRowFrame(rowFrame, activeRows, arguments, buffers, contract,
                                   steps, plan, units, rowSteps)
                  : !validRows(rowPolicy, activeRows, arguments, buffers, contract,
@@ -522,7 +535,7 @@ static int prepareProgram(
                          row.grid_axis, row.grid_tile, row.grid_per_row});
   }
   for (uint32_t i = 0; i < arguments; ++i)
-    if (inputBytes[i] != (units[i] ? units[i] * monomial(powers[i], activeRows, activeG)
+    if (inputBytes[i] != (units[i] ? units[i] * monomial(powers[i], activeRows, activeG, activeN)
                                    : contract[i].bytes)) return 1;
   auto p = std::make_unique<Program>();
   if (rowPolicy) p->capacityRows = rowPolicy->capacity_m;
@@ -530,10 +543,12 @@ static int prepareProgram(
   if (shapeFrame) {
     p->capacityRows = shapeFrame->capacity_m;
     p->capacityG = shapeFrame->capacity_g;
+    p->capacityN = shapeFrame->capacity_n;
   }
   p->frameSteps = std::move(entries);
   p->activeRows = activeRows;
   p->activeG = activeG;
+  p->activeN = activeN;
   p->unitBytes = std::move(units);
   p->slotPowers = std::move(powers);
   p->arguments = arguments;
@@ -575,6 +590,7 @@ static int prepareProgram(
     // Every bounded ABI keys the derived frame: capacities, every unit span
     // and its powers, and every scaled launch field. Equal frames share one owner.
     keyValue(p->cacheKey, p->capacityRows); keyValue(p->cacheKey, p->capacityG);
+    keyValue(p->cacheKey, p->capacityN);
     for (uint32_t i = 0; i < buffers; ++i) {
       keyValue(p->cacheKey, p->unitBytes[i]); keyValue(p->cacheKey, p->slotPowers[i]);
     }
@@ -603,7 +619,7 @@ static int prepareProgram(
       ++pool.hits;
       auto &owned = *pool.programs.at(id);
       // An upload failure quarantines this active owner until explicit close.
-      applyFrame(owned, activeRows, activeG);
+      applyFrame(owned, activeRows, activeG, activeN);
       return upload(owned, inputs, inputBytes);
     }
   }
@@ -646,7 +662,7 @@ static int prepareProgram(
     }
     for (uint32_t j = 0; j < plan[i].scalar_count; ++j) s.argv[arg++] = &s.scalars[j];
   }
-  applyFrame(owned, activeRows, activeG);
+  applyFrame(owned, activeRows, activeG, activeN);
   int rc = upload(owned, inputs, inputBytes);
   if (rc) return rc;
   owned.poisoned = false;
@@ -767,10 +783,26 @@ extern "C" int tessera_rocm_program_prepare_multi_output_shape_frame(
     const TesseraRocmProgramMultiOutputStep *plan, const void *const *inputs,
     const uint64_t *inputBytes, const TesseraRocmProgramShapeFrame *frame,
     int64_t activeRows, int64_t activeG, uint64_t *handle) {
-  if (!frame || activeG < 1) { if (handle) *handle = 0; return 1; }
+  if (!frame || activeG < 1 || frame->capacity_g < 1) { if (handle) *handle = 0; return 1; }
+  // The two-variable shape frame is the N-free axis frame.
+  const TesseraRocmProgramAxisFrame axes{frame->capacity_m, frame->capacity_g, 0,
+      frame->slot_count, frame->step_count, frame->slots, frame->unit_bytes,
+      frame->powers, frame->steps};
   return prepareProgram(architecture, arguments, buffers, contract, steps,
                         plan, inputs, inputBytes, handle, nullptr, activeRows,
-                        nullptr, frame, activeG);
+                        nullptr, &axes, activeG);
+}
+
+extern "C" int tessera_rocm_program_prepare_multi_output_axis_frame(
+    const char *architecture, uint32_t arguments, uint32_t buffers,
+    const TesseraRocmProgramBuffer *contract, uint32_t steps,
+    const TesseraRocmProgramMultiOutputStep *plan, const void *const *inputs,
+    const uint64_t *inputBytes, const TesseraRocmProgramAxisFrame *frame,
+    int64_t activeRows, int64_t activeG, int64_t activeN, uint64_t *handle) {
+  if (!frame || activeG < 1 || activeN < 1) { if (handle) *handle = 0; return 1; }
+  return prepareProgram(architecture, arguments, buffers, contract, steps,
+                        plan, inputs, inputBytes, handle, nullptr, activeRows,
+                        nullptr, frame, activeG, activeN);
 }
 
 extern "C" int tessera_rocm_program_update(
@@ -789,7 +821,7 @@ extern "C" int tessera_rocm_program_update(
 static int updateSlots(
     uint64_t handle, uint32_t count, const uint32_t *slots,
     const void *const *inputs, const uint64_t *bytes, int64_t requestedRows,
-    int64_t requestedG) try {
+    int64_t requestedG, int64_t requestedN) try {
   if (!count || !slots || !inputs || !bytes) return 1;
   if (getpid() != process) return 2;
   auto &pool = state(); std::lock_guard<std::mutex> guard(pool.mutex);
@@ -802,17 +834,21 @@ static int updateSlots(
                         requestedRows > p.capacityRows)) return 1;
   if (requestedG && (!p.capacityG || requestedG < 1 || requestedG > p.capacityG))
     return 1;
+  if (requestedN && (!p.capacityN || requestedN < 1 || requestedN > p.capacityN))
+    return 1;
   int64_t nextRows = requestedRows ? requestedRows : p.activeRows;
   int64_t nextG = requestedG ? requestedG : p.activeG;
+  int64_t nextN = requestedN ? requestedN : p.activeN;
   std::vector<unsigned char> changed(p.contract.size(), 0);
   for (uint32_t i = 0; i < count; ++i) {
     if (slots[i] >= p.arguments || changed[slots[i]] ||
-        !inputs[i] || bytes[i] != activeBytes(p, slots[i], nextRows, nextG)) return 1;
+        !inputs[i] || bytes[i] != activeBytes(p, slots[i], nextRows, nextG, nextN)) return 1;
     changed[slots[i]] = 1;
   }
   // A variable change needs every original slot that depends on it.
   const uint8_t moved = uint8_t((nextRows != p.activeRows ? 1 : 0) |
-                                (nextG != p.activeG ? 2 : 0));
+                                (nextG != p.activeG ? 2 : 0) |
+                                (nextN != p.activeN ? 4 : 0));
   if (moved)
     for (uint32_t slot = 0; slot < p.arguments; ++slot)
       if (p.unitBytes[slot] && (p.slotPowers[slot] & moved) && !changed[slot]) return 1;
@@ -844,7 +880,7 @@ static int updateSlots(
       if (hipGraphDestroy(p.graphs.back()) != hipSuccess) return 9;
       p.graphs.pop_back();
     }
-    applyFrame(p, nextRows, nextG);
+    applyFrame(p, nextRows, nextG, nextN);
   }
   for (uint32_t i = 0; i < count; ++i) {
     auto slot = slots[i];
@@ -871,20 +907,43 @@ static int updateSlots(
 extern "C" int tessera_rocm_program_update_slots(
     uint64_t handle, uint32_t count, const uint32_t *slots,
     const void *const *inputs, const uint64_t *bytes) {
-  return updateSlots(handle, count, slots, inputs, bytes, 0, 0);
+  return updateSlots(handle, count, slots, inputs, bytes, 0, 0, 0);
 }
 extern "C" int tessera_rocm_program_update_rows(
     uint64_t handle, int64_t rows, uint32_t count, const uint32_t *slots,
     const void *const *inputs, const uint64_t *bytes) {
   if (rows < 1) return 1;
-  return updateSlots(handle, count, slots, inputs, bytes, rows, 0);
+  return updateSlots(handle, count, slots, inputs, bytes, rows, 0, 0);
 }
 extern "C" int tessera_rocm_program_update_shape(
     uint64_t handle, int64_t rows, int64_t groups, uint32_t count,
     const uint32_t *slots, const void *const *inputs, const uint64_t *bytes) {
   if (rows < 1 || groups < 1) return 1;
-  return updateSlots(handle, count, slots, inputs, bytes, rows, groups);
+  return updateSlots(handle, count, slots, inputs, bytes, rows, groups, 0);
 }
+extern "C" int tessera_rocm_program_update_axes(
+    uint64_t handle, int64_t rows, int64_t groups, int64_t columns, uint32_t count,
+    const uint32_t *slots, const void *const *inputs, const uint64_t *bytes) {
+  if (rows < 1 || groups < 0 || columns < 0) return 1;
+  // Zero keeps a variable at its active extent (it may be absent).
+  return updateSlots(handle, count, slots, inputs, bytes, rows, groups, columns);
+}
+extern "C" int tessera_rocm_program_axes_info(
+    uint64_t handle, int64_t *capacity, int64_t *active, uint64_t *bytes,
+    uint64_t *count) try {
+  if (!capacity || !active || !bytes || !count) return 1;
+  if (getpid() != process) return 2;
+  auto &pool = state(); std::lock_guard<std::mutex> guard(pool.mutex);
+  auto it = pool.programs.find(handle); if (it == pool.programs.end()) return 1;
+  auto &p = *it->second;
+  if (!identity(p)) return 2;
+  if (!p.capacityRows) return 1;
+  if (p.poisoned) return 10;
+  capacity[0] = p.capacityRows; capacity[1] = p.capacityG; capacity[2] = p.capacityN;
+  active[0] = p.activeRows; active[1] = p.activeG; active[2] = p.activeN;
+  *bytes = p.allocationBytes; *count = p.buffers.size();
+  return 0;
+} catch (...) { return 12; }
 extern "C" int tessera_rocm_program_shape_info(
     uint64_t handle, int64_t *capacityM, int64_t *capacityG, int64_t *activeM,
     int64_t *activeG, uint64_t *bytes, uint64_t *count) try {

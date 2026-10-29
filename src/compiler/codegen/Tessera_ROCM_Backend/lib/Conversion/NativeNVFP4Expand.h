@@ -4,6 +4,8 @@
 // A runtime-K image takes the K16 group count as an i64 scalar and launches
 // a (groups/256, N) grid: grid y is the row, so no lane divides by the
 // runtime extent. Every address is the static kernel's at that K.
+// A runtime-N image (one projection) keeps the flat grid and static K16 group
+// count, so its row/group split divides by a constant; N is one i64 scalar.
 static mlir::LogicalResult emitNativeNVFP4Expand(mlir::ModuleOp module,
                                                 mlir::Operation *op) {
   using namespace mlir;
@@ -13,8 +15,10 @@ static mlir::LogicalResult emitNativeNVFP4Expand(mlir::ModuleOp module,
   int64_t n = op->getAttrOfType<IntegerAttr>("n").getInt();
   int64_t k = op->getAttrOfType<IntegerAttr>("k").getInt();
   const bool runtimeK = op->hasAttr("runtime_k");
-  if (runtimeK != (k == 0))
-    return op->emitError("NVFP4 expansion K must be static or the runtime-K image identity");
+  const bool runtimeN = op->hasAttr("runtime_n");
+  if (runtimeK != (k == 0) || runtimeN != (n == 0) || (runtimeK && runtimeN) ||
+      (runtimeN && op->getAttrOfType<ArrayAttr>("row_offsets").size() != 2))
+    return op->emitError("NVFP4 expansion extents must be static or one runtime image identity");
   int64_t groups = k / 16;
   auto offsets = op->getAttrOfType<ArrayAttr>("row_offsets");
   std::string name = op->getAttrOfType<StringAttr>("name").getValue().str();
@@ -27,7 +31,7 @@ static mlir::LogicalResult emitNativeNVFP4Expand(mlir::ModuleOp module,
   auto doubles = MemRefType::get({ShapedType::kDynamic},b.getF64Type());
   auto floats = MemRefType::get({ShapedType::kDynamic},b.getF32Type());
   SmallVector<Type> arguments{bytes,bytes,doubles,bytes,floats};
-  if (runtimeK) arguments.push_back(b.getI64Type());
+  if (runtimeK || runtimeN) arguments.push_back(b.getI64Type());
   auto f = b.create<gpu::GPUFuncOp>(l,name,b.getFunctionType(arguments,{}));
   f.setKernelAttr(b.getUnitAttr());
   f->setAttr("gpu.known_block_size",b.getDenseI32ArrayAttr({256,1,1}));
@@ -54,6 +58,11 @@ static mlir::LogicalResult emitNativeNVFP4Expand(mlir::ModuleOp module,
     active = b.create<arith::AndIOp>(l,
         b.create<arith::CmpIOp>(l,arith::CmpIPredicate::ult,group,count),
         b.create<arith::CmpIOp>(l,arith::CmpIPredicate::ult,row,ci(n)));
+  } else if (runtimeN) {
+    index = lane;
+    Value rows = b.create<arith::IndexCastOp>(l,b.getIndexType(),f.getArgument(5));
+    active = b.create<arith::CmpIOp>(l,arith::CmpIPredicate::ult,index,
+        b.create<arith::MulIOp>(l,rows,ci(groups)));
   } else {
     index = lane;
     active = b.create<arith::CmpIOp>(
@@ -98,8 +107,10 @@ static mlir::LogicalResult emitNativeNVFP4Expand(mlir::ModuleOp module,
   Value signedScale = choose(negative,b.create<arith::NegFOp>(l,magnitude),magnitude);
   Value product = b.create<arith::MulFOp>(l,signedScale,global);
   Value rounded = b.create<arith::TruncFOp>(l,b.getF32Type(),product);
+  Value columns = runtimeN
+      ? Value(b.create<arith::IndexCastOp>(l,b.getIndexType(),f.getArgument(5))) : ci(n);
   Value scaleIndex = b.create<arith::AddIOp>(
-      l,b.create<arith::MulIOp>(l,group,ci(n)),row);
+      l,b.create<arith::MulIOp>(l,group,columns),row);
   b.create<memref::StoreOp>(l,rounded,f.getArgument(4),ValueRange{scaleIndex});
   Value packedBase = b.create<arith::MulIOp>(l,index,ci(8));
   Value valueBase = b.create<arith::MulIOp>(l,index,ci(16));

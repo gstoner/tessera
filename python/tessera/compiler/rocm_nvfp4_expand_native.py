@@ -25,6 +25,9 @@ NVFP4_EXPAND_ABI = "tessera.rocm.nvfp4_expand.five_memrefs.static.v1"
 #: i64 scalar and the grid is (groups/256, N). Its descriptor binds the
 #: capacity shape; a shape frame scales the scalar and grid x below it.
 NVFP4_EXPAND_RUNTIME_K_ABI = "tessera.rocm.nvfp4_expand.five_memrefs.runtime_k.v1"
+#: Single-projection image whose N is one i64 scalar on the flat grid; K stays
+#: static, so the row/group split divides by a constant.
+NVFP4_EXPAND_RUNTIME_N_ABI = "tessera.rocm.nvfp4_expand.five_memrefs.runtime_n.v1"
 _DIRECTIVE = "tessera_rocm.nvfp4_expand"
 _checked_targets: dict[str, str] = {}
 
@@ -54,21 +57,24 @@ def _contract(tile, target):
 
 
 def _descriptor(image, info, graph_digest, schedule_ir_digest, tile_ir_digest, *, runtime_k=False,
-                entry=None):
+                runtime_n=False, entry=None):
     from .native_artifact import ScalarArgument
     names, n, k, offsets, digest, static_entry = info
     shapes = ((n, k // 2), (n, k // 16), (len(offsets) - 1,), (n, k), (k // 16, n))
     dtypes = ("uint8", "fp8_e4m3", "fp64", "fp8_e4m3", "fp32")
     groups = k // 16
-    extra = {"runtime_k": True} if runtime_k else {}
+    extra = {"runtime_k": True} if runtime_k else {"runtime_n": True} if runtime_n else {}
+    abi = (NVFP4_EXPAND_RUNTIME_K_ABI if runtime_k else NVFP4_EXPAND_RUNTIME_N_ABI if runtime_n
+           else NVFP4_EXPAND_ABI)
     return LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=entry or static_entry,
-        abi_id=NVFP4_EXPAND_RUNTIME_K_ABI if runtime_k else NVFP4_EXPAND_ABI,
+        abi_id=abi,
         buffers=tuple(BufferBinding(
             i, name, "input" if i < 3 else "output", dtypes[i], len(shapes[i]),
             "row_major", 8 if i == 2 else 4 if i == 4 else 1)
             for i, name in enumerate(names)),
-        scalars=(ScalarArgument(5, "groups", "int64"),) if runtime_k else (),
+        scalars=((ScalarArgument(5, "groups", "int64"),) if runtime_k else
+                 (ScalarArgument(5, "n", "int64"),) if runtime_n else ()),
         shape_guards=tuple(ShapeGuard(name, axis, "eq", dim)
                            for name, shape in zip(names, shapes)
                            for axis, dim in enumerate(shape)),
@@ -116,12 +122,18 @@ class NVFP4ExpansionPackage:
     def runtime_k(self):
         return self.native.descriptor.abi_id == NVFP4_EXPAND_RUNTIME_K_ABI
 
+    @property
+    def runtime_n(self):
+        return self.native.descriptor.abi_id == NVFP4_EXPAND_RUNTIME_N_ABI
+
     def contract(self):
         """(names, n, k, offsets, digest, entry) of the checked static expansion.
 
-        A runtime-K image records K as zero; its contract is the static Target
-        it projects, which is re-derived from the Tile and never trusted."""
-        target = _checked_target(self.native.tile_ir) if self.runtime_k else self.native.target_ir
+        A runtime-K (or runtime-N) image records that extent as zero; its
+        contract is the static Target it projects, which is re-derived from the
+        Tile and never trusted."""
+        target = (_checked_target(self.native.tile_ir) if self.runtime_k or self.runtime_n
+                  else self.native.target_ir)
         return _contract(self.native.tile_ir, target)
 
     def validate(self):
@@ -130,34 +142,37 @@ class NVFP4ExpansionPackage:
         desc.validate_image(image)
         if (image.target != "rocm_gfx1201" or image.architecture != "gfx1201"
                 or image.binary_format != "hsaco"
-                or desc.abi_id not in (NVFP4_EXPAND_ABI, NVFP4_EXPAND_RUNTIME_K_ABI)
+                or desc.abi_id not in (NVFP4_EXPAND_ABI, NVFP4_EXPAND_RUNTIME_K_ABI,
+                                       NVFP4_EXPAND_RUNTIME_N_ABI)
                 or image.target_ir_digest != _digest(native.target_ir)):
             raise ValueError("NVFP4 expansion native image/ABI/Target contract differs")
         info = self.contract()
         if re.findall(r'\bhash = "([0-9a-f]{64})"', self.schedule_ir) != [info[-2]]:
             raise ValueError("NVFP4 expansion Schedule record digest differs")
         entry = None
-        if self.runtime_k:
+        if self.runtime_k or self.runtime_n:
             from .rocm_native import _directive_symbol, _shape_free_target_ir
             projection = _shape_free_target_ir(_checked_target(native.tile_ir), family="nvfp4_expand",
-                                               directive=_DIRECTIVE, runtime_k=True)
+                                               directive=_DIRECTIVE, runtime_k=self.runtime_k,
+                                               runtime_n=self.runtime_n)
             if native.target_ir != projection:
-                raise ValueError("runtime-K NVFP4 expansion image differs from its checked Target")
+                raise ValueError("runtime-extent NVFP4 expansion image differs from its checked Target")
             entry = _directive_symbol(projection, _DIRECTIVE)
         expected = _descriptor(image, info, _digest(self.graph_ir), _digest(self.schedule_ir), _digest(native.tile_ir),
-                               runtime_k=self.runtime_k, entry=entry)
+                               runtime_k=self.runtime_k, runtime_n=self.runtime_n, entry=entry)
         if desc != expected:
             raise ValueError("NVFP4 expansion descriptor differs from native contract")
 
 
-def package_nvfp4_expansion(graph: str | GraphIRModule, *, runtime_k: bool = False):
+def package_nvfp4_expansion(graph: str | GraphIRModule, *, runtime_k: bool = False,
+                            runtime_n: bool = False):
     """Package the native expansion; ``runtime_k`` images its K-free projection.
 
     The runtime-K image is compiled from the identity projection of the
     checked static Target, so its kernel takes the K16 group count at launch
     while its descriptor still binds the compiled (capacity) shape."""
-    if type(runtime_k) is not bool:
-        raise ValueError("NVFP4 expansion runtime_k must be a bool")
+    if type(runtime_k) is not bool or type(runtime_n) is not bool or (runtime_k and runtime_n):
+        raise ValueError("NVFP4 expansion takes at most one runtime extent, as a bool")
     source = graph if isinstance(graph, str) else graph.to_mlir(
         target="rocm_gfx1201", canonical=True)
     tool = find_tessera_opt()
@@ -166,17 +181,20 @@ def package_nvfp4_expansion(graph: str | GraphIRModule, *, runtime_k: bool = Fal
     schedule = run_tessera_opt(tool, source, "--tessera-graph-to-schedule")
     tile = run_tessera_opt(tool, schedule, "--tessera-schedule-to-tile")
     entry = None
-    if runtime_k:
+    if runtime_k or runtime_n:
         from .rocm_native import _directive_symbol, _shape_free_target_ir
         from .rocm_pipeline import ROCMInputLevel
         checked = _checked_target(tile)
         info = _contract(tile, checked)
-        projection = _shape_free_target_ir(checked, family="nvfp4_expand", directive=_DIRECTIVE, runtime_k=True)
+        if runtime_n and len(info[3]) != 2:
+            raise ValueError("runtime-N NVFP4 expansion requires one projection")
+        projection = _shape_free_target_ir(checked, family="nvfp4_expand", directive=_DIRECTIVE,
+                                           runtime_k=runtime_k, runtime_n=runtime_n)
         target, backend, binary, compiler, toolchain, libraries, state = _compile_native_tile_ir(
             projection, directive=_DIRECTIVE, family="quant_fp", architecture="gfx1201",
             input_level=ROCMInputLevel.DIRECTIVE)
         if target != projection:
-            raise ValueError("runtime-K NVFP4 expansion Target changed during compilation")
+            raise ValueError("runtime-extent NVFP4 expansion Target changed during compilation")
         entry = _directive_symbol(projection, _DIRECTIVE)
     else:
         target, backend, binary, compiler, toolchain, libraries, state = _compile_native_tile_ir(
@@ -187,10 +205,11 @@ def package_nvfp4_expansion(graph: str | GraphIRModule, *, runtime_k: bool = Fal
         compiler_fingerprint=compiler, toolchain_fingerprint=toolchain,
         target_ir_digest=_digest(target), binary_format="hsaco", payload=binary,
         entry_points=(NativeEntryPoint(entry or info[-1],
-                                       NVFP4_EXPAND_RUNTIME_K_ABI if runtime_k else NVFP4_EXPAND_ABI),),
+                                       NVFP4_EXPAND_RUNTIME_K_ABI if runtime_k else
+                                       NVFP4_EXPAND_RUNTIME_N_ABI if runtime_n else NVFP4_EXPAND_ABI),),
         device_libraries=libraries, compile_state=state)
     desc = _descriptor(image, info, _digest(source), _digest(schedule), _digest(tile),
-                       runtime_k=runtime_k, entry=entry)
+                       runtime_k=runtime_k, runtime_n=runtime_n, entry=entry)
     package = NVFP4ExpansionPackage(
         source, schedule, ROCMNativePackage(tile, target, backend, image, desc))
     package.validate()

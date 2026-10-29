@@ -1497,15 +1497,18 @@ _shape_free_targets: dict[str, str] = {}
 
 
 def _shape_free_target_ir(target_ir: str, *, family: str, directive: str,
-                          runtime_k: bool = False, arbitrary_m: bool = False) -> str:
+                          runtime_k: bool = False, arbitrary_m: bool = False,
+                          runtime_n: bool = False) -> str:
     """Invoke the verified native MLIR physical image identity projection."""
     if _SHAPE_FREE_DIRECTIVES.get(family) != directive:
         raise ValueError("ROCm kernel identity family/directive mismatch")
     if not isinstance(runtime_k, bool) or (runtime_k and family not in {
             "scaled_matmul_lds", "folded_matmul", "nvfp4_expand"}):
         raise ValueError("runtime_k projection requires the LDS W8A8, folded or NVFP4 expansion family and a bool")
-    if family == "nvfp4_expand" and not runtime_k:
-        raise ValueError("NVFP4 expansion image identity is only its runtime-K projection")
+    if not isinstance(runtime_n, bool) or (runtime_n and family != "nvfp4_expand"):
+        raise ValueError("runtime_n projection requires the NVFP4 expansion family and a bool")
+    if family == "nvfp4_expand" and runtime_k == runtime_n:
+        raise ValueError("NVFP4 expansion image identity is only its runtime-K or runtime-N projection")
     if not isinstance(arbitrary_m, bool) or (arbitrary_m and family not in {
             "scaled_matmul", "scaled_matmul_lds", "folded_matmul"}):
         raise ValueError("arbitrary_m projection requires a scaled matrix family and a bool")
@@ -1516,6 +1519,7 @@ def _shape_free_target_ir(target_ir: str, *, family: str, directive: str,
         tool, target_ir,
         f"builtin.module(tessera-rocm-project-kernel-identity{{family={family}"
         + (" runtime-k=true" if runtime_k else "")
+        + (" runtime-n=true" if runtime_n else "")
         + (" arbitrary-m=true" if arbitrary_m else "") + "})",
     )
 

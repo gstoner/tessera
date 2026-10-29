@@ -136,6 +136,35 @@ int tessera_rocm_program_prepare_multi_output_shape_frame(
     const TesseraRocmProgramMultiOutputStep *, const void *const *,
     const uint64_t *, const TesseraRocmProgramShapeFrame *, int64_t active_m,
     int64_t active_g, uint64_t *handle);
+// Additive three-variable axis frame: the shape frame plus N output columns
+// (powers bit 2). A variable with capacity 0 is not framed and its active
+// extent must be 1; a power on it refuses. M is always framed.
+typedef struct {
+  int64_t capacity_m;
+  int64_t capacity_g;
+  int64_t capacity_n;
+  uint32_t slot_count;
+  uint32_t step_count;
+  const uint32_t *slots;
+  const uint64_t *unit_bytes; // bytes at M = G = N = 1
+  const uint32_t *powers;
+  const TesseraRocmProgramShapeStep *steps;
+} TesseraRocmProgramAxisFrame;
+int tessera_rocm_program_prepare_multi_output_axis_frame(
+    const char *, uint32_t, uint32_t, const TesseraRocmProgramBuffer *, uint32_t,
+    const TesseraRocmProgramMultiOutputStep *, const void *const *,
+    const uint64_t *, const TesseraRocmProgramAxisFrame *, int64_t active_m,
+    int64_t active_g, int64_t active_n, uint64_t *handle);
+// A zero extent keeps that variable at its active value.
+int tessera_rocm_program_update_axes(
+    uint64_t handle, int64_t active_m, int64_t active_g, int64_t active_n,
+    uint32_t count, const uint32_t *slots, const void *const *inputs,
+    const uint64_t *bytes);
+// capacity/active: three extents each (M, G, N); an absent variable reports
+// capacity 0 and active 1.
+int tessera_rocm_program_axes_info(
+    uint64_t handle, int64_t *capacity, int64_t *active,
+    uint64_t *allocation_bytes, uint64_t *allocation_count);
 // A change of M or G requires every original slot depending on it in this
 // atomic update and invalidates every private slot depending on it.
 int tessera_rocm_program_update_shape(

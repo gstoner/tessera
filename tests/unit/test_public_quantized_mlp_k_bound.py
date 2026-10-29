@@ -203,7 +203,7 @@ def test_kernel_identity_projects_only_a_static_expansion(rocm_image_toolchain):
     with pytest.raises(ValueError, match="only its runtime-K or runtime-N projection"):
         _shape_free_target_ir(checked, family="nvfp4_expand", directive="tessera_rocm.nvfp4_expand")
     # The projection is not idempotent by design: a runtime-K image has no static K.
-    with pytest.raises(RuntimeError, match="static verified expansion and runtime-k"):
+    with pytest.raises(RuntimeError, match="static verified expansion and exactly one of runtime-k"):
         _shape_free_target_ir(package.native.target_ir, family="nvfp4_expand",
                               directive="tessera_rocm.nvfp4_expand", runtime_k=True)
     # The verifier refuses a runtime-K directive that still records a K.

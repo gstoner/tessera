@@ -33,7 +33,7 @@ struct Program {
   std::vector<void *> buffers;
   std::vector<uint64_t> unitBytes;
   std::vector<uint8_t> slotPowers;
-  int64_t activeRows=0,activeG=1;
+  int64_t activeRows=0,activeG=1,activeN=1;
   bool poisoned=false,output=true,pinned=false;
   uint64_t generation=3,pinnedReadbackBytes=48;
   std::vector<unsigned char> readback;

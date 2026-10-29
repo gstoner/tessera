@@ -688,8 +688,102 @@ projections, so it requires the matching `tessera-opt`.
   per (M, K). Evidence:
   `benchmarks/baselines/gfx1201_k_bounded_quantized_mlp_20261028/README.md`.
 
-Not covered: dynamic H or N, an LDS-staged capacity gate product, AD, model
-quality and gfx1151.
+Not covered: dynamic H, an LDS-staged capacity gate product, AD, model
+quality and gfx1151. Dynamic N landed next (§"Bounded-column v7 MLP").
+
+### Bounded-column v7 MLP (GFX1201-BOUNDED-QUANTIZED-N-20261029)
+
+**Request.** `tessera.native.quantized_n_bound = NB : i64` asks for the
+seven-member MLP with the down projection's output columns at capacity `NB`.
+Like the K bound, it refines the row frame: the export refuses it without
+`tessera.native.quantized_m_bound` ("bounded N requires an M bound") and on
+any smaller program, and the traced N must satisfy `N <= NB` ("exceeds its
+checked column capacity"). It combines with a K bound in one program.
+Publicly, `compile_native_quantized_program(..., n_bound=NB)` sets it; an
+`n_bound` without `m_bound` keeps the traced M as the row capacity.
+
+**Column retyping.** N reaches only the down tail, and only a
+single-projection down expansion (row boundaries `[0, N]`) is admitted.
+The retype scales to capacity:
+
+- the down weights' packed `[N, H/2]` and scale `[N, H/16]` planes;
+- the expansion's row boundaries `[0, N]`;
+- its `[N, H]` values and `[H/16, N]` scale plane;
+- the down product's `[M, N]` result and the casts after it.
+
+Anything else refuses. The unchanged v2 validator then certifies the
+capacity down projection.
+
+**Schema v7.** v7 is v5 at capacity N plus:
+
+- `active_n` and `n_bound`;
+- `n_frame`, with `slots` (both down weight planes, expanded B/SB 15/16 and
+  the output 17) and `n_steps` (5, 6).
+
+A K bound adds the v6 contraction keys to the same plan. Python re-derives
+both frames from the buffers ("column slot capacity differs", "bounded N
+differs", "column frame differs").
+
+**Shape-free members.** Under v7 the down component carries `runtime_n`.
+
+- **Down expansion.** It compiles
+  `tessera.rocm.nvfp4_expand.five_memrefs.runtime_n.v1`, the identity
+  projection with `family=nvfp4_expand runtime-n=true`. The projection
+  records `n = 0` and keeps the checked `[0, N]` boundary. The kernel takes
+  N as one i64 scalar on the flat `N*G/256` grid; K stays static, so the
+  row/group split divides by a constant.
+- **Exclusivity.** runtime-K and runtime-N are exclusive per image. The
+  verifier refuses a runtime-N directive that still records an N, or one
+  with more than one projection.
+- **Down product.** It must be the global-staged shape-free image, as for
+  the gate product under K.
+
+**Owner axis frame.** `tessera_rocm_program_prepare_multi_output_axis_frame`
+adds N output columns (power bit 2) to the shape frame:
+
+- A variable with capacity 0 is unframed. Its active extent must be 1, and
+  any power on it refuses. The two-variable shape frame is now the N-free
+  axis frame.
+- `tessera_rocm_program_update_axes(handle, M, G, N, ...)` is atomic. An N
+  change must include both down weight planes and invalidates every private
+  N slot. A zero extent keeps that variable.
+- `tessera_rocm_program_axes_info` reports all three extents.
+
+| Member | Scaled scalar | Grid axis |
+|---|---|---|
+| Down runtime-N expansion | `n = N` | x, over `N * H/16` lanes |
+| Down product | `N` (index 1) | x, over macro-tile columns |
+
+The row and contraction entries are unchanged.
+
+**Portable record.** A v7 program serializes as
+`tessera.rocm.quantized_product_package.v7`, with frontend record v7 and
+compiler path `canonical_rocm_quantized_n_bounded_mlp_program`. The down
+component adds `"runtime_n": true` under the same rules as `runtime_k`.
+
+**Evidence on RX9070XT/gfx1201 (Tajasarus, assertions-ON LLVM/MLIR 23.1.1):**
+
+- **Public replay.** `tests/device/rocm/test_public_quantized_mlp_n_bound_device.py`
+  runs three bound sets: N only at H = 32, K and N at H = 32, and K and N at
+  H = 128 with bounds (64, 12288, 512). Public calls across fourteen
+  (M, K, N) shapes, from N = 1 to capacity, are bitwise equal to the static
+  v4 program compiled at each exact shape. The H = 32 shapes also match the
+  independent staged chain.
+  - Every shape reuses the one retained owner, and refusals keep it.
+  - HIP refuses an N change missing a weight plane, N beyond capacity, a G
+    on an unframed K, and three tampered frames.
+  - The serialized K+N artifact replays bitwise in a fresh process; a
+    compiler-free process refuses.
+- **Unit tests.** `tests/unit/test_public_quantized_mlp_n_bound.py`: 26
+  passed on gfx1201.
+- **Device time (diagnostic).** At H = 128 with bounds (256, 12288, 512), the
+  bounded owner runs at 1.020–1.033× the static program at each of five
+  shapes, bitwise equal to it. The cost is the shape-free gate product
+  (about +3%); the runtime-N members are within noise. Evidence:
+  `benchmarks/baselines/gfx1201_n_bounded_quantized_mlp_20261029/README.md`.
+
+Not covered: dynamic H, a multi-projection N, an LDS-staged capacity
+product, AD, model quality and gfx1151.
 
 
 ## Quantized package certificate and ABI reuse

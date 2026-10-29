@@ -12569,3 +12569,12 @@ Synchronization key: GFX1201-BOUNDED-QUANTIZED-K-20261028.
 Not applicable to x86: the v6 program, the runtime-K NVFP4 expansion image and the HIP shape frame are `rocm_gfx1201` only. No x86 selector, ABI or result changes.
 
 Evidence: tests/device/rocm/test_public_quantized_mlp_k_bound_device.py; benchmarks/baselines/gfx1201_k_bounded_quantized_mlp_20261028/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-contraction v6 MLP".
+
+## GFX1201-BOUNDED-QUANTIZED-N-20261029 — bounded N for the gfx1201 quantized MLP
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-BOUNDED-QUANTIZED-N-20261029.
+
+Not applicable to x86: the v7 program, the runtime-N NVFP4 expansion image and the HIP axis frame are `rocm_gfx1201` only. No x86 selector, ABI or result changes.
+
+Evidence: tests/device/rocm/test_public_quantized_mlp_n_bound_device.py; benchmarks/baselines/gfx1201_n_bounded_quantized_mlp_20261029/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-column v7 MLP".

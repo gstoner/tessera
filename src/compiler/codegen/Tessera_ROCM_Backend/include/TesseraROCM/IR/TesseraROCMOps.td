@@ -1702,9 +1702,15 @@ def ROCM_NVFP4RequantizeOp : TesseraROCM_Op<"nvfp4_requantize"> {
 
 def ROCM_NVFP4ExpandOp : TesseraROCM_Op<"nvfp4_expand"> {
   let summary = "Native exact E2M1 expansion with f64-to-f32 K16 scale rounding";
+  let description = [{
+    `runtime_k` is the shape-free image identity of a verified static
+    expansion: `k` is recorded as zero and the kernel takes its K16 group
+    count as one i64 scalar. N and the projection row boundaries stay
+    static. Only the kernel identity projection produces it.
+  }];
   let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$n, I64Attr:$k,
       I64ArrayAttr:$row_offsets, ROCM_NVFP4IngestPolicyAttr:$numeric_policy,
-      StrAttr:$schedule_hash);
+      StrAttr:$schedule_hash, UnitAttr:$runtime_k);
   let assemblyFormat = "attr-dict";
   let hasVerifier = 1;
 }

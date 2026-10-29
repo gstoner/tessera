@@ -16,8 +16,8 @@ def library(tmp_path_factory):
     source=(root/"src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp").read_text()
     begin=source.index('extern "C" int tessera_rocm_program_read(')
     end=source.index('extern "C" int tessera_rocm_program_close(',begin)
-    helper_begin=source.index('uint64_t activeBytes(')
-    helper_end=source.index('void applyRows(',helper_begin)
+    helper_begin=source.index('uint64_t monomial(')
+    helper_end=source.index('void applyFrame(',helper_begin)
     prefix=r'''
 #include <cstdint>
 #include <cstring>
@@ -31,8 +31,9 @@ struct Contract { uint64_t bytes; uint32_t ownership; };
 struct Program {
   std::vector<Contract> contract;
   std::vector<void *> buffers;
-  std::vector<uint64_t> rowBytes;
-  int64_t activeRows=0;
+  std::vector<uint64_t> unitBytes;
+  std::vector<uint8_t> slotPowers;
+  int64_t activeRows=0,activeG=1;
   bool poisoned=false,output=true,pinned=false;
   uint64_t generation=3,pinnedReadbackBytes=48;
   std::vector<unsigned char> readback;
@@ -75,7 +76,8 @@ extern "C" void setup_rows(int pinned,int64_t active){
   setup(pinned);
   auto &p=*pool.programs.at(7);
   p.activeRows=active;
-  p.rowBytes={0,4,4,4};
+  p.unitBytes={0,4,4,4};
+  p.slotPowers={0,1,1,1};
 }
 extern "C" void fail(int copy,int sync){failCopy=copy;failSync=sync;}
 extern "C" void identity_failure(){sameIdentity=false;}

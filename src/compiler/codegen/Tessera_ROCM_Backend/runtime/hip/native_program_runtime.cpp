@@ -50,11 +50,14 @@ struct Program {
   std::vector<hipEvent_t> events;
   std::vector<hipGraph_t> graphs;
   std::vector<hipGraphExec_t> graphExecutables;
-  // One internal frame for both row ABIs: v1 is a single consumer entry.
-  int64_t capacityRows = 0;
-  std::vector<TesseraRocmProgramRowStep> rowSteps;
-  int64_t activeRows = 0;
-  std::vector<uint64_t> rowBytes;
+  // One internal frame for every bounded ABI. A frame quantity is
+  // coef * M^a * G^b, a,b in {0,1}: M is rows and G is K16 groups. Both row
+  // ABIs are the G-free case (capacityG == 0, activeG == 1).
+  int64_t capacityRows = 0, capacityG = 0;
+  std::vector<TesseraRocmProgramShapeStep> frameSteps;
+  int64_t activeRows = 0, activeG = 1;
+  std::vector<uint64_t> unitBytes;   // bytes at M = G = 1; 0 outside the frame
+  std::vector<uint8_t> slotPowers;   // bit 0: M, bit 1: G
   uint64_t generation = 0;
   bool poisoned = true, ready = false, output = false;
 };
@@ -150,24 +153,34 @@ int clean(Program &p) {
   p.stream = nullptr;
   return 0;
 }
-uint64_t activeBytes(const Program &p, uint32_t slot, int64_t rows) {
-  return !p.rowBytes.empty() && p.rowBytes[slot]
-      ? uint64_t(rows) * p.rowBytes[slot] : p.contract[slot].bytes;
+// Admission proved every quantity fits at capacity; active <= capacity.
+uint64_t monomial(uint32_t powers, int64_t rows, int64_t groups) {
+  return ((powers & 1) ? uint64_t(rows) : 1) * ((powers & 2) ? uint64_t(groups) : 1);
 }
-// Admission proved every product below fits at capacity; rows <= capacity.
-void applyRows(Program &p, int64_t rows) {
+uint64_t activeBytes(const Program &p, uint32_t slot, int64_t rows, int64_t groups) {
+  return !p.unitBytes.empty() && p.unitBytes[slot]
+      ? p.unitBytes[slot] * monomial(p.slotPowers[slot], rows, groups)
+      : p.contract[slot].bytes;
+}
+uint64_t activeBytes(const Program &p, uint32_t slot) {
+  return activeBytes(p, slot, p.activeRows, p.activeG);
+}
+void applyFrame(Program &p, int64_t rows, int64_t groups) {
   if (!p.capacityRows) return;
-  p.activeRows = rows;
-  for (const auto &row : p.rowSteps) {
-    auto &stage = p.stages[row.step];
-    stage.scalars[row.scalar] = rows * row.scalar_per_row;
-    uint64_t work = uint64_t(rows) * uint64_t(row.grid_per_row);
-    stage.geometry[row.grid_axis] =
-        unsigned(work / row.grid_tile + (work % row.grid_tile != 0));
+  p.activeRows = rows; p.activeG = groups;
+  for (const auto &entry : p.frameSteps) {
+    auto &stage = p.stages[entry.step];
+    uint64_t scale = monomial(entry.powers, rows, groups);
+    stage.scalars[entry.scalar] = int64_t(scale) * entry.scalar_coef;
+    if (entry.grid_axis < 3) {
+      uint64_t work = scale * uint64_t(entry.grid_coef);
+      stage.geometry[entry.grid_axis] =
+          unsigned(work / entry.grid_tile + (work % entry.grid_tile != 0));
+    }
     for (uint32_t i = 0; i < stage.inputs.size() + stage.outputs.size(); ++i) {
       uint32_t slot = i < stage.inputs.size() ? stage.inputs[i]
           : stage.outputs[i - stage.inputs.size()];
-      stage.refs[i].elements = int64_t(activeBytes(p, slot, rows) /
+      stage.refs[i].elements = int64_t(activeBytes(p, slot, rows, groups) /
           (p.contract[slot].bytes / p.contract[slot].elements));
     }
   }
@@ -301,11 +314,90 @@ bool validRowFrame(const TesseraRocmProgramRowFrame *frame, int64_t active,
   for (uint32_t i = 0; i < frame->step_count; ++i) rowSteps.push_back(frame->steps[i]);
   return true;
 }
+// Two-variable frame admission. Every capacity value must equal its declared
+// monomial at (capacity_m, capacity_g); the frame closure is derived from SSA
+// slot use exactly as for the row frame. One entry scales one scalar (and at
+// most one grid axis); a step may carry several entries, never two for the
+// same scalar or grid axis.
+bool checkedMonomial(uint32_t powers, int64_t coef, int64_t rows, int64_t groups,
+                     uint64_t &out) {
+  if (coef < 1 || !powers || powers > 3) return false;
+  uint64_t scale = monomial(powers, rows, groups);
+  if ((powers == 3 && uint64_t(rows) > uint64_t(INT64_MAX) / uint64_t(groups)) ||
+      scale > uint64_t(INT64_MAX) / uint64_t(coef)) return false;
+  out = scale * uint64_t(coef);
+  return true;
+}
+template<class Step>
+bool validShapeFrame(const TesseraRocmProgramShapeFrame *frame, int64_t rows,
+                     int64_t groups, uint32_t arguments, uint32_t buffers,
+                     const TesseraRocmProgramBuffer *contract, uint32_t steps,
+                     const Step *plan, std::vector<uint64_t> &units,
+                     std::vector<uint8_t> &powers,
+                     std::vector<TesseraRocmProgramShapeStep> &entries) {
+  units.assign(buffers, 0); powers.assign(buffers, 0); entries.clear();
+  if (!frame || !frame->slots || !frame->unit_bytes || !frame->powers || !frame->steps ||
+      frame->capacity_m < 1 || frame->capacity_g < 1 ||
+      rows < 1 || rows > frame->capacity_m || groups < 1 || groups > frame->capacity_g ||
+      !frame->slot_count || frame->slot_count > 32 || frame->slot_count > buffers ||
+      !frame->step_count || frame->step_count > 32) return false;
+  uint32_t frameArguments = 0;
+  for (uint32_t i = 0; i < frame->slot_count; ++i) {
+    uint32_t slot = frame->slots[i], power = frame->powers[i];
+    uint64_t unit = frame->unit_bytes[i], bytes = 0;
+    if (slot >= buffers || units[slot] || !unit || unit > uint64_t(INT64_MAX) ||
+        !checkedMonomial(power, int64_t(unit), frame->capacity_m, frame->capacity_g, bytes))
+      return false;
+    const auto &b = contract[slot];
+    uint64_t item = b.bytes / b.elements;
+    if (b.bytes != bytes || unit % item) return false;
+    units[slot] = unit; powers[slot] = uint8_t(power);
+    frameArguments += slot < arguments;
+  }
+  if (!frameArguments) return false;
+  std::vector<unsigned char> covered(steps, 0);
+  for (uint32_t i = 0; i < frame->step_count; ++i) {
+    const auto &e = frame->steps[i];
+    if (e.step >= steps) return false;
+    const auto &s = plan[e.step];
+    uint64_t value = 0;
+    if (e.scalar >= s.scalar_count ||
+        !checkedMonomial(e.powers, e.scalar_coef, frame->capacity_m, frame->capacity_g, value) ||
+        uint64_t(s.scalars[e.scalar]) != value || e.grid_axis > 3) return false;
+    if (e.grid_axis < 3) {
+      uint64_t work = 0;
+      if (!e.grid_tile ||
+          !checkedMonomial(e.powers, e.grid_coef, frame->capacity_m, frame->capacity_g, work))
+        return false;
+      uint64_t grid = work / e.grid_tile + (work % e.grid_tile != 0);
+      if (grid > 2147483647U || s.geometry[e.grid_axis] != grid) return false;
+    } else if (e.grid_tile || e.grid_coef) return false;
+    for (uint32_t j = 0; j < i; ++j) {
+      const auto &o = frame->steps[j];
+      if (o.step == e.step && (o.scalar == e.scalar ||
+          (e.grid_axis < 3 && o.grid_axis == e.grid_axis))) return false;
+    }
+    covered[e.step] = 1;
+    entries.push_back(e);
+  }
+  for (uint32_t i = 0; i < steps; ++i) {
+    const auto &s = plan[i];
+    bool touches = false, invariantOutput = false;
+    for (uint32_t j = 0; j < s.input_count; ++j) touches |= units[s.inputs[j]] != 0;
+    for (uint32_t j = 0; j < outputCount(s); ++j) {
+      bool framed = units[outputSlot(s, j)] != 0;
+      touches |= framed; invariantOutput |= !framed;
+    }
+    // A frame step may read invariant storage but publishes only frame storage.
+    if (touches != (covered[i] != 0) || (touches && invariantOutput)) return false;
+  }
+  return true;
+}
 bool inputContract(const Program &p, const void *const *inputs,
                    const uint64_t *bytes) {
   if (!inputs || !bytes) return false;
   for (uint32_t i = 0; i < p.arguments; ++i)
-    if (!inputs[i] || bytes[i] != activeBytes(p, i, p.activeRows)) return false;
+    if (!inputs[i] || bytes[i] != activeBytes(p, i)) return false;
   return true;
 }
 int upload(Program &p, const void *const *inputs, const uint64_t *bytes) {
@@ -349,7 +441,9 @@ static int prepareProgram(
     const Step *plan, const void *const *inputs,
     const uint64_t *inputBytes, uint64_t *handle,
     const TesseraRocmProgramRows *rowPolicy = nullptr, int64_t activeRows = 0,
-    const TesseraRocmProgramRowFrame *rowFrame = nullptr) try {
+    const TesseraRocmProgramRowFrame *rowFrame = nullptr,
+    const TesseraRocmProgramShapeFrame *shapeFrame = nullptr,
+    int64_t activeG = 1) try {
   if (handle) *handle = 0;
   if (!handle || !architecture || !contract || !plan || !inputs || !inputBytes ||
       !arguments || arguments > 128 || !steps || steps > 128 ||
@@ -405,22 +499,43 @@ static int prepareProgram(
     if (contract[i].ownership == 2) reads[i] = steps;
     if (contract[i].last_read != reads[i]) return 1;
   }
-  std::vector<uint64_t> rowStrides;
-  std::vector<TesseraRocmProgramRowStep> rowSteps;
-  if (rowPolicy && rowFrame) return 1;
-  if (rowFrame ? !validRowFrame(rowFrame, activeRows, arguments, buffers, contract,
-                                steps, plan, rowStrides, rowSteps)
-               : !validRows(rowPolicy, activeRows, arguments, buffers, contract,
-                            steps, plan, rowStrides, rowSteps)) return 1;
+  std::vector<uint64_t> units;
+  std::vector<uint8_t> powers;
+  std::vector<TesseraRocmProgramShapeStep> entries;
+  if (int(rowPolicy != nullptr) + int(rowFrame != nullptr) + int(shapeFrame != nullptr) > 1)
+    return 1;
+  if (shapeFrame) {
+    if (!validShapeFrame(shapeFrame, activeRows, activeG, arguments, buffers, contract,
+                         steps, plan, units, powers, entries)) return 1;
+  } else {
+    // Both row ABIs are the G-free case of the shape frame.
+    std::vector<TesseraRocmProgramRowStep> rowSteps;
+    if (activeG != 1) return 1;
+    if (rowFrame ? !validRowFrame(rowFrame, activeRows, arguments, buffers, contract,
+                                  steps, plan, units, rowSteps)
+                 : !validRows(rowPolicy, activeRows, arguments, buffers, contract,
+                              steps, plan, units, rowSteps)) return 1;
+    powers.assign(buffers, 0);
+    for (uint32_t i = 0; i < buffers; ++i) powers[i] = units[i] ? 1 : 0;
+    for (const auto &row : rowSteps)
+      entries.push_back({row.step, row.scalar, row.scalar_per_row, 1,
+                         row.grid_axis, row.grid_tile, row.grid_per_row});
+  }
   for (uint32_t i = 0; i < arguments; ++i)
-    if (inputBytes[i] != (rowStrides[i] ? uint64_t(activeRows) * rowStrides[i]
-                                      : contract[i].bytes)) return 1;
+    if (inputBytes[i] != (units[i] ? units[i] * monomial(powers[i], activeRows, activeG)
+                                   : contract[i].bytes)) return 1;
   auto p = std::make_unique<Program>();
   if (rowPolicy) p->capacityRows = rowPolicy->capacity_m;
   if (rowFrame) p->capacityRows = rowFrame->capacity_m;
-  p->rowSteps = std::move(rowSteps);
+  if (shapeFrame) {
+    p->capacityRows = shapeFrame->capacity_m;
+    p->capacityG = shapeFrame->capacity_g;
+  }
+  p->frameSteps = std::move(entries);
   p->activeRows = activeRows;
-  p->rowBytes = std::move(rowStrides);
+  p->activeG = activeG;
+  p->unitBytes = std::move(units);
+  p->slotPowers = std::move(powers);
   p->arguments = arguments;
   p->contract.assign(contract, contract + buffers);
   p->buffers.resize(buffers, nullptr);
@@ -457,16 +572,19 @@ static int prepareProgram(
   const bool bounded = p->capacityRows != 0;
   keyValue(p->cacheKey, bounded);
   if (bounded) {
-    // Both row ABIs key the derived frame: capacity, every row stride and
-    // every row-scaled launch field. Equal frames share one owner.
-    keyValue(p->cacheKey, p->capacityRows);
-    for (uint32_t i = 0; i < buffers; ++i) keyValue(p->cacheKey, p->rowBytes[i]);
-    uint64_t count = p->rowSteps.size();
+    // Every bounded ABI keys the derived frame: capacities, every unit span
+    // and its powers, and every scaled launch field. Equal frames share one owner.
+    keyValue(p->cacheKey, p->capacityRows); keyValue(p->cacheKey, p->capacityG);
+    for (uint32_t i = 0; i < buffers; ++i) {
+      keyValue(p->cacheKey, p->unitBytes[i]); keyValue(p->cacheKey, p->slotPowers[i]);
+    }
+    uint64_t count = p->frameSteps.size();
     keyValue(p->cacheKey, count);
-    for (const auto &row : p->rowSteps) {
-      keyValue(p->cacheKey, row.step); keyValue(p->cacheKey, row.scalar);
-      keyValue(p->cacheKey, row.scalar_per_row); keyValue(p->cacheKey, row.grid_axis);
-      keyValue(p->cacheKey, row.grid_tile); keyValue(p->cacheKey, row.grid_per_row);
+    for (const auto &e : p->frameSteps) {
+      keyValue(p->cacheKey, e.step); keyValue(p->cacheKey, e.scalar);
+      keyValue(p->cacheKey, e.scalar_coef); keyValue(p->cacheKey, e.powers);
+      keyValue(p->cacheKey, e.grid_axis); keyValue(p->cacheKey, e.grid_tile);
+      keyValue(p->cacheKey, e.grid_coef);
     }
   }
   p->pinnedReadbackBytes = outputTotal;
@@ -485,7 +603,7 @@ static int prepareProgram(
       ++pool.hits;
       auto &owned = *pool.programs.at(id);
       // An upload failure quarantines this active owner until explicit close.
-      applyRows(owned, activeRows);
+      applyFrame(owned, activeRows, activeG);
       return upload(owned, inputs, inputBytes);
     }
   }
@@ -528,7 +646,7 @@ static int prepareProgram(
     }
     for (uint32_t j = 0; j < plan[i].scalar_count; ++j) s.argv[arg++] = &s.scalars[j];
   }
-  applyRows(owned, activeRows);
+  applyFrame(owned, activeRows, activeG);
   int rc = upload(owned, inputs, inputBytes);
   if (rc) return rc;
   owned.poisoned = false;
@@ -643,6 +761,18 @@ extern "C" int tessera_rocm_program_prepare_multi_output_row_frame(
                         plan, inputs, inputBytes, handle, nullptr, activeRows, frame);
 }
 
+extern "C" int tessera_rocm_program_prepare_multi_output_shape_frame(
+    const char *architecture, uint32_t arguments, uint32_t buffers,
+    const TesseraRocmProgramBuffer *contract, uint32_t steps,
+    const TesseraRocmProgramMultiOutputStep *plan, const void *const *inputs,
+    const uint64_t *inputBytes, const TesseraRocmProgramShapeFrame *frame,
+    int64_t activeRows, int64_t activeG, uint64_t *handle) {
+  if (!frame || activeG < 1) { if (handle) *handle = 0; return 1; }
+  return prepareProgram(architecture, arguments, buffers, contract, steps,
+                        plan, inputs, inputBytes, handle, nullptr, activeRows,
+                        nullptr, frame, activeG);
+}
+
 extern "C" int tessera_rocm_program_update(
     uint64_t handle, const void *const *inputs, const uint64_t *bytes) try {
   if (getpid() != process) return 2;
@@ -658,7 +788,8 @@ extern "C" int tessera_rocm_program_update(
 // transitive dependent result. Complete admission precedes any state change.
 static int updateSlots(
     uint64_t handle, uint32_t count, const uint32_t *slots,
-    const void *const *inputs, const uint64_t *bytes, int64_t requestedRows) try {
+    const void *const *inputs, const uint64_t *bytes, int64_t requestedRows,
+    int64_t requestedG) try {
   if (!count || !slots || !inputs || !bytes) return 1;
   if (getpid() != process) return 2;
   auto &pool = state(); std::lock_guard<std::mutex> guard(pool.mutex);
@@ -669,22 +800,30 @@ static int updateSlots(
   if (count > p.arguments) return 1;
   if (requestedRows && (!p.capacityRows || requestedRows < 1 ||
                         requestedRows > p.capacityRows)) return 1;
+  if (requestedG && (!p.capacityG || requestedG < 1 || requestedG > p.capacityG))
+    return 1;
   int64_t nextRows = requestedRows ? requestedRows : p.activeRows;
+  int64_t nextG = requestedG ? requestedG : p.activeG;
   std::vector<unsigned char> changed(p.contract.size(), 0);
   for (uint32_t i = 0; i < count; ++i) {
     if (slots[i] >= p.arguments || changed[slots[i]] ||
-        !inputs[i] || bytes[i] != activeBytes(p, slots[i], nextRows)) return 1;
+        !inputs[i] || bytes[i] != activeBytes(p, slots[i], nextRows, nextG)) return 1;
     changed[slots[i]] = 1;
   }
-  if (nextRows != p.activeRows)
+  // A variable change needs every original slot that depends on it.
+  const uint8_t moved = uint8_t((nextRows != p.activeRows ? 1 : 0) |
+                                (nextG != p.activeG ? 2 : 0));
+  if (moved)
     for (uint32_t slot = 0; slot < p.arguments; ++slot)
-      if (p.rowBytes[slot] && !changed[slot]) return 1;
+      if (p.unitBytes[slot] && (p.slotPowers[slot] & moved) && !changed[slot]) return 1;
   auto initialized = p.initialized;
-  // Private row slots were produced for the previous active span; a row
+  // Private frame slots were produced for the previous active extents; a
   // change invalidates them even where no updated root reaches them.
-  if (nextRows != p.activeRows)
+  if (moved)
     for (uint32_t slot = p.arguments; slot < p.contract.size(); ++slot)
-      if (p.rowBytes[slot]) { changed[slot] = 1; initialized[slot] = 0; }
+      if (p.unitBytes[slot] && (p.slotPowers[slot] & moved)) {
+        changed[slot] = 1; initialized[slot] = 0;
+      }
   for (auto &stage : p.stages) {
     bool invalid = false;
     for (auto slot : stage.inputs) invalid |= changed[slot] != 0;
@@ -696,7 +835,7 @@ static int updateSlots(
   }
   if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
   p.poisoned = true; p.ready = false; p.output = false;
-  if (nextRows != p.activeRows) {
+  if (moved) {
     while (!p.graphExecutables.empty()) {
       if (hipGraphExecDestroy(p.graphExecutables.back()) != hipSuccess) return 9;
       p.graphExecutables.pop_back();
@@ -705,7 +844,7 @@ static int updateSlots(
       if (hipGraphDestroy(p.graphs.back()) != hipSuccess) return 9;
       p.graphs.pop_back();
     }
-    applyRows(p, nextRows);
+    applyFrame(p, nextRows, nextG);
   }
   for (uint32_t i = 0; i < count; ++i) {
     auto slot = slots[i];
@@ -732,14 +871,36 @@ static int updateSlots(
 extern "C" int tessera_rocm_program_update_slots(
     uint64_t handle, uint32_t count, const uint32_t *slots,
     const void *const *inputs, const uint64_t *bytes) {
-  return updateSlots(handle, count, slots, inputs, bytes, 0);
+  return updateSlots(handle, count, slots, inputs, bytes, 0, 0);
 }
 extern "C" int tessera_rocm_program_update_rows(
     uint64_t handle, int64_t rows, uint32_t count, const uint32_t *slots,
     const void *const *inputs, const uint64_t *bytes) {
   if (rows < 1) return 1;
-  return updateSlots(handle, count, slots, inputs, bytes, rows);
+  return updateSlots(handle, count, slots, inputs, bytes, rows, 0);
 }
+extern "C" int tessera_rocm_program_update_shape(
+    uint64_t handle, int64_t rows, int64_t groups, uint32_t count,
+    const uint32_t *slots, const void *const *inputs, const uint64_t *bytes) {
+  if (rows < 1 || groups < 1) return 1;
+  return updateSlots(handle, count, slots, inputs, bytes, rows, groups);
+}
+extern "C" int tessera_rocm_program_shape_info(
+    uint64_t handle, int64_t *capacityM, int64_t *capacityG, int64_t *activeM,
+    int64_t *activeG, uint64_t *bytes, uint64_t *count) try {
+  if (!capacityM || !capacityG || !activeM || !activeG || !bytes || !count) return 1;
+  if (getpid() != process) return 2;
+  auto &pool = state(); std::lock_guard<std::mutex> guard(pool.mutex);
+  auto it = pool.programs.find(handle); if (it == pool.programs.end()) return 1;
+  auto &p = *it->second;
+  if (!identity(p)) return 2;
+  if (!p.capacityG) return 1;
+  if (p.poisoned) return 10;
+  *capacityM = p.capacityRows; *capacityG = p.capacityG;
+  *activeM = p.activeRows; *activeG = p.activeG;
+  *bytes = p.allocationBytes; *count = p.buffers.size();
+  return 0;
+} catch (...) { return 12; }
 extern "C" int tessera_rocm_program_rows_info(
     uint64_t handle, int64_t *capacity, int64_t *active,
     uint64_t *bytes, uint64_t *count) try {
@@ -897,7 +1058,7 @@ extern "C" int tessera_rocm_program_read(
   auto &p = *it->second;
   if (!identity(p)) return 2;
   if (slot >= p.contract.size() || p.contract[slot].ownership != 2 ||
-      bytes != activeBytes(p, slot, p.activeRows)) return 1;
+      bytes != activeBytes(p, slot)) return 1;
   if (p.poisoned || !p.output || !generation || generation != p.generation) return 10;
   if (!p.pinned) p.readback.resize(bytes);
   if (p.pinned && bytes > p.pinnedReadbackBytes) return 1;
@@ -929,7 +1090,7 @@ extern "C" int tessera_rocm_program_read_many(
   for (uint32_t i = 0; i < count; ++i) {
     if (!outputs[i] || slots[i] >= p.contract.size() ||
         p.contract[slots[i]].ownership != 2 ||
-        bytes[i] != activeBytes(p, slots[i], p.activeRows) ||
+        bytes[i] != activeBytes(p, slots[i]) ||
         total > p.pinnedReadbackBytes ||
         bytes[i] > p.pinnedReadbackBytes - total) return 1;
     uintptr_t begin = reinterpret_cast<uintptr_t>(outputs[i]);

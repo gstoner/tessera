@@ -16788,3 +16788,12 @@ Synchronization key: GFX1201-PORTABLE-BOUNDED-QUANTIZED-RECORD-20261028.
 Not applicable to NVIDIA: the record admits only the `rocm_gfx1201` bounded quantized MLP. No NVIDIA selector, ABI or result changes.
 
 Evidence: tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Portable bounded record".
+
+## GFX1201-BOUNDED-QUANTIZED-K-20261028 — bounded K for the gfx1201 quantized MLP
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-BOUNDED-QUANTIZED-K-20261028.
+
+Not applicable to NVIDIA: the v6 program, the runtime-K NVFP4 expansion image and the HIP shape frame are `rocm_gfx1201` only. No NVIDIA selector, ABI or result changes.
+
+Evidence: tests/device/rocm/test_public_quantized_mlp_k_bound_device.py; benchmarks/baselines/gfx1201_k_bounded_quantized_mlp_20261028/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-contraction v6 MLP".

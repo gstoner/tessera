@@ -137,8 +137,11 @@ mlir::LogicalResult NVFP4ExpandOp::verify() {
   if (failed(mlir::tessera_contract::verifyNVFP4ExpandPolicy(
         getOperation(),getNumericPolicy())) ||
       failed(mlir::tessera_contract::verifyNVFP4ExpandExtents(
-        getOperation(),getN(),getK(),getRowOffsets())))
+        getOperation(),getN(),getRuntimeK() ? 16 : getK(),getRowOffsets())))
     return mlir::failure();
+  // A runtime-K image records no static K; its N16 extents are checked above.
+  if (getRuntimeK() && getK() != 0)
+    return emitOpError("runtime-K NVFP4 expansion records K as zero");
   if (getScheduleHash().size() != 64 || getName().empty())
     return emitOpError("NVFP4 expansion requires a hashed Schedule and entry symbol");
   return mlir::success();

@@ -567,6 +567,130 @@ Target by comparison alone.
   covers the round trip, nine tampered records and the static/standalone
   refusals: 22 passed on gfx1201.
 
+### Bounded-contraction v6 MLP (GFX1201-BOUNDED-QUANTIZED-K-20261028)
+
+**Request.** `tessera.native.quantized_k_bound = KB : i64` asks for the
+seven-member MLP with the gate contraction at capacity `KB`. It refines the
+row frame and never travels alone: the export refuses it without
+`tessera.native.quantized_m_bound` ("bounded K requires an M bound"), and on
+any smaller quantized program. The traced activation's `K` and `KB` must both
+be multiples of 16 with `K <= KB` ("exceeds its checked K16 capacity").
+Publicly, `function.compile_native_quantized_program(*example_inputs,
+m_bound=MB, k_bound=KB)` sets both attributes. A `k_bound` alone keeps the
+traced M as the row capacity, and a malformed `k_bound` is refused before
+tracing.
+
+**Contraction retyping.** After the row retype, the compiler retypes the gate
+contraction axis to capacity. K reaches exactly:
+
+- the activation `[M, K]`;
+- the gate quantizer: flattened K16 blocks `[G, 16]` / `[G, 1]` with
+  `G = M*K/16`, and its `[M, K]` codes and `[M, K/16]` scales;
+- the gate weights' packed `[N, K/2]` and scale `[N, K/16]` planes;
+- the gate expansion's `[N, K]` values and `[K/16, N]` scale plane.
+
+Each such extent scales by `KB/K` exactly, and the reshape/expand `shape`
+attributes follow their result types. Any other shape, operation or shared
+constant refuses. The gate product contracts K away, so nothing after it
+changes. The capacity program is then certified by the unchanged v3/v2
+validators.
+
+**Schema v6.** v6 is v5 at capacity K plus:
+
+- `active_k` and `k_bound`;
+- `k_frame`, with `slots` (activation, both gate weight planes, Q/SA 7/8,
+  expanded B/SB 9/10) and `k_steps` (0, 1, 2).
+
+Python re-derives the contraction frame from the buffers and refuses any
+difference ("contraction slot capacity differs", "bounded K differs",
+"contraction frame differs").
+
+**Shape-free members.** Under v6 the gate component carries `runtime_k`:
+
+- **Gate expansion.** It compiles the runtime-K image
+  `tessera.rocm.nvfp4_expand.five_memrefs.runtime_k.v1`: the kernel-identity
+  projection (`family=nvfp4_expand runtime-k=true`) of the checked static
+  expansion Target. The projection records `k = 0` and the `runtime_k` unit
+  attribute; the verifier refuses a runtime-K directive that still records
+  a K. The kernel takes the K16 group count as one i64 scalar on a
+  `(groups/256, N)` grid. Grid y is the row, so no lane divides by the
+  runtime extent, and every address equals the static kernel's at that K.
+  Validation re-derives the checked Target from the Tile through the
+  matching `tessera-opt`, and the image must equal its projection.
+- **Gate product.** It must be the global-staged shape-free image, which
+  reads M, N and K at launch. An LDS-staged capacity schedule refuses rather
+  than assuming a runtime-K body.
+
+The down component has no `runtime_k`: its contraction is H.
+
+**Owner shape frame.** `tessera_rocm_program_prepare_multi_output_shape_frame`
+generalizes the row frame to two variables, M rows and G = K/16 groups:
+
+- Every frame byte span, scaled scalar and scaled grid field is
+  `coef * M^a * G^b` with `a, b` in {0, 1}. Each value is checked equal to
+  that monomial at capacity before HIP is touched.
+- The frame closure is derived from SSA slot use exactly as for the row
+  frame. A step that touches a frame slot must carry an entry and publish
+  only frame storage, and no two entries scale the same scalar or grid axis.
+- Both row ABIs are now the G-free case of this one internal frame.
+- `tessera_rocm_program_update_shape(handle, M, G, ...)` is atomic. A change
+  of either variable must include every original slot depending on it, and
+  invalidates every private slot depending on it.
+
+The MLP entries are:
+
+| Member | Scaled scalar | Grid axis |
+|---|---|---|
+| Gate quantizer | `Groups = M*G` | x, over 256 lanes |
+| Gate runtime-K expansion | `groups = G` | x, over 256 lanes (y = N rows) |
+| Gate product | `M`; `K = 16*G` | y, over macro-tile rows (for M) |
+| SiLU-mul, down quantizer, down product | row entries as in v5 | as in v5 |
+
+**Updates.** `update()` takes all seven roots at any `(M, K)` inside the
+bounds. `update_activations()` keeps the resident expanded weights, so it
+refuses an activation whose K differs from theirs before any native write.
+The public retained owner keeps its v5 policy: a K change has new weight
+shapes, so it is a full update.
+
+**Portable record.** A v6 program serializes as
+`tessera.rocm.quantized_product_package.v6`, with frontend record v6 and
+compiler path `canonical_rocm_quantized_k_bounded_mlp_program`. The gate
+component adds `"runtime_k": true` beside `"arbitrary_m": true`, under the
+same rules: admitted only with `arbitrary_m`, covered by the binding digest,
+and never trusted. Replay re-derives the runtime-K expansion and both product
+projections, so it requires the matching `tessera-opt`.
+
+**Evidence on RX9070XT/gfx1201 (Tajasarus, assertions-ON LLVM/MLIR 23.1.1):**
+
+- **Public replay.** `tests/device/rocm/test_public_quantized_mlp_k_bound_device.py`
+  runs one compile per shape: H/N = 32/19 with bounds (8, 96), and H/N =
+  128/256 with bounds (64, 12288). Public calls across six and four (M, K)
+  pairs, from K = 16 to the capacity, are bitwise equal to the static v4
+  program compiled at each exact (M, K). The small shape also matches the
+  independent staged chain. Every K change reuses the one retained owner
+  with no prepare, retrace or compile, and refusals keep it.
+- **Activation updates.** An activation-only update at the resident K is
+  bitwise equal; a K mismatch refuses and leaves the owner usable.
+- **Native refusals.** HIP refuses a K change missing a weight slot, G
+  beyond capacity, mismatched spans, and four tampered frames (unit bytes, a
+  K coefficient, a missing expansion entry, a capacity grid).
+- **Fresh-process replay.** The serialized artifact launches at four (M, K)
+  in a new process, bitwise equal to the public calls; a compiler-free
+  process refuses.
+- **Unit tests.** `tests/unit/test_public_quantized_mlp_k_bound.py`: 25
+  passed.
+- **Device time (diagnostic).** In paired interleaved HIP-event windows at
+  H/N = 128/256 with bounds (256, 12288), the K-bounded owner runs at
+  1.004–1.032× the static program compiled at each of five (M, K), bitwise
+  equal to it. Per-member windows put the cost in the shape-free gate
+  product (about +4%, same physical route as the static image); the runtime-K
+  expansion is within 1–3%. One bounded compile replaces a 0.6–1.0 s compile
+  per (M, K). Evidence:
+  `benchmarks/baselines/gfx1201_k_bounded_quantized_mlp_20261028/README.md`.
+
+Not covered: dynamic H or N, an LDS-staged capacity gate product, AD, model
+quality and gfx1151.
+
 
 ## Quantized package certificate and ABI reuse
 

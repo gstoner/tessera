@@ -307,6 +307,99 @@ static mlir::LogicalResult retypeQuantizedMLPRows(
   return verify(module);
 }
 
+// Capacity retyping of the gate contraction axis. K reaches exactly the
+// activation, the gate quantizer (flattened K16 blocks [G,16]/[G,1] whose G is
+// M*K/16, and its [M,K] codes / [M,K/16] scales), the gate weights' packed
+// [N,K/2] and scale [N,K/16] planes and the expansion's [N,K] values /
+// [K/16,N] scale plane. The scaled product contracts it away. Each such
+// extent scales by kCap/k exactly; anything else refuses, and the ordinary
+// static admission then certifies the capacity program.
+static mlir::LogicalResult retypeQuantizedMLPContraction(
+    mlir::ModuleOp module, mlir::func::FuncOp root,
+    llvm::ArrayRef<mlir::Operation *> ops, int64_t k, int64_t capacity,
+    llvm::DenseSet<mlir::Value> &contractionValues) {
+  using namespace mlir;
+  auto refuse = [&]() -> LogicalResult {
+    return module.emitError("quantized bounded K requires the gate quantizer, expansion and product contraction SSA");
+  };
+  auto scaledDim = [&](int64_t dim, int64_t &out) {
+    if (dim <= 0 || dim > INT64_MAX / capacity || (dim * capacity) % k) return false;
+    out = dim * capacity / k; return true;
+  };
+  auto retype = [&](Value value, unsigned axis) -> LogicalResult {
+    auto type = dyn_cast<RankedTensorType>(value.getType());
+    if (!type || type.getRank() != 2 || !type.hasStaticShape() || type.getEncoding())
+      return failure();
+    SmallVector<int64_t> shape(type.getShape());
+    if (!scaledDim(shape[axis], shape[axis])) return failure();
+    value.setType(RankedTensorType::get(shape, type.getElementType()));
+    contractionValues.insert(value);
+    return success();
+  };
+  auto shapeAttr = [&](Operation *op) {
+    auto type = cast<RankedTensorType>(op->getResult(0).getType());
+    auto old = op->getAttrOfType<ArrayAttr>("shape");
+    if (!old || old.size() != 2 || !isa<IntegerAttr>(old[0])) return failure();
+    auto element = cast<IntegerAttr>(old[0]).getType();
+    op->setAttr("shape", ArrayAttr::get(op->getContext(),
+        {IntegerAttr::get(element, type.getDimSize(0)), IntegerAttr::get(element, type.getDimSize(1))}));
+    return success();
+  };
+  Operation *expand = ops[13], *product = ops[14];
+  if (expand->getName().getStringRef() != "tessera.nvfp4_expand" ||
+      product->getName().getStringRef() != "tessera.scaled_matmul" ||
+      expand->getNumOperands() != 3 || expand->getNumResults() != 2 ||
+      product->getNumOperands() != 4 ||
+      product->getOperand(1) != expand->getResult(0) ||
+      product->getOperand(3) != expand->getResult(1)) return refuse();
+  Value codes = product->getOperand(0), scales = product->getOperand(2);
+  auto activation = dyn_cast<BlockArgument>(ops[0]->getOperand(0));
+  if (!activation || failed(retype(activation, 1))) return refuse();
+  for (Operation *op : ArrayRef<Operation *>(ops).take_front(13)) {
+    StringRef name = op->getName().getStringRef();
+    if (op->getNumResults() != 1) return refuse();
+    Value result = op->getResult(0);
+    if (auto constant = dyn_cast<arith::ConstantOp>(op)) {
+      auto dense = dyn_cast<DenseElementsAttr>(constant.getValue());
+      if (!dense || !dense.isSplat() || failed(retype(result, 0)) ||
+          llvm::any_of(result.getUsers(), [&](Operation *user) {
+            return !llvm::is_contained(ops.take_front(13), user); })) return refuse();
+      constant.setValueAttr(DenseElementsAttr::get(
+          cast<ShapedType>(result.getType()), dense.getSplatValue<Attribute>()));
+      continue;
+    }
+    // Contraction-axis outputs feed the product; the K16 block chain is [G,c].
+    bool rowMajor = result == codes || result == scales;
+    if (!rowMajor) {
+      auto type = dyn_cast<RankedTensorType>(result.getType());
+      if (!type || type.getRank() != 2 ||
+          (type.getDimSize(1) != 16 && type.getDimSize(1) != 1)) return refuse();
+    }
+    if (failed(retype(result, rowMajor ? 1 : 0))) return refuse();
+    if ((name == "tessera.reshape" || name == "tessera.expand") && failed(shapeAttr(op)))
+      return refuse();
+    if (name == "tessera.reduce") {
+      auto axis = op->getAttrOfType<IntegerAttr>("axis");
+      if (!axis || axis.getInt() != 1) return refuse();
+    } else if (name != "tessera.reshape" && name != "tessera.cast" &&
+               name != "tessera.absolute" && name != "tessera.div" &&
+               name != "tessera.maximum" && name != "tessera.expand") return refuse();
+  }
+  if (!contractionValues.contains(codes) || !contractionValues.contains(scales))
+    return refuse();
+  auto packed = dyn_cast<BlockArgument>(expand->getOperand(0));
+  auto blockScales = dyn_cast<BlockArgument>(expand->getOperand(1));
+  if (!packed || !blockScales || failed(retype(packed, 1)) ||
+      failed(retype(blockScales, 1)) || failed(retype(expand->getResult(0), 1)) ||
+      failed(retype(expand->getResult(1), 0))) return refuse();
+  auto ret = cast<func::ReturnOp>(root.getBody().front().back());
+  SmallVector<Type> inputs, results;
+  for (Value value : root.getArguments()) inputs.push_back(value.getType());
+  for (Value value : ret.getOperands()) results.push_back(value.getType());
+  root.setFunctionType(FunctionType::get(module.getContext(), inputs, results));
+  return verify(module);
+}
+
 static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) {
   using namespace mlir;
   auto refuse = [&]() -> LogicalResult {
@@ -320,10 +413,26 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
   // ordinary static admission runs; the gate/down validators then certify the
   // capacity program and never see the request.
   constexpr StringLiteral rowBoundKey = "tessera.native.quantized_m_bound";
+  constexpr StringLiteral contractionBoundKey = "tessera.native.quantized_k_bound";
   bool boundedRows = module->hasAttr(rowBoundKey);
-  int64_t activeRows = 0, rowBound = 0;
+  bool boundedK = module->hasAttr(contractionBoundKey);
+  int64_t activeRows = 0, rowBound = 0, activeK = 0, kBound = 0;
   std::string originalIR;
-  llvm::DenseSet<Value> rowValues;
+  llvm::DenseSet<Value> rowValues, contractionValues;
+  // A K bound is a refinement of the row frame; it never travels alone.
+  if (boundedK && !boundedRows)
+    return module.emitError("quantized bounded K requires an M bound");
+  if (boundedK) {
+    auto bound = module->getAttrOfType<IntegerAttr>(contractionBoundKey);
+    auto activation = ops.size() < 15 || ops[0]->getNumOperands() != 1 ? Value{} : ops[0]->getOperand(0);
+    auto type = activation ? dyn_cast<RankedTensorType>(activation.getType()) : RankedTensorType{};
+    if (!bound || !bound.getType().isInteger(64) || !type || type.getRank() != 2 ||
+        !type.hasStaticShape())
+      return module.emitError("quantized bounded K requires a static rank-2 activation and an i64 bound");
+    activeK = type.getDimSize(1); kBound = bound.getInt();
+    if (activeK <= 0 || activeK % 16 || kBound < activeK || kBound % 16)
+      return module.emitError("quantized bounded K exceeds its checked K16 capacity");
+  }
   if (boundedRows) {
     auto bound = module->getAttrOfType<IntegerAttr>(rowBoundKey);
     auto activation = ops.empty() || ops[0]->getNumOperands() != 1 ? Value{} : ops[0]->getOperand(0);
@@ -337,7 +446,11 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
     llvm::raw_string_ostream originalStream(originalIR);
     module.print(originalStream); originalStream.flush();
     module->removeAttr(rowBoundKey);
+    module->removeAttr(contractionBoundKey);
     if (failed(retypeQuantizedMLPRows(module, root, activation, activeRows, rowBound, rowValues)))
+      return failure();
+    if (boundedK && failed(retypeQuantizedMLPContraction(
+            module, root, ops, activeK, kBound, contractionValues)))
       return failure();
   }
   if (root.getNumArguments()!=7 || (ops.size()!=37 && ops.size()!=38) || !ret ||
@@ -378,6 +491,24 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
   if (!boundedRows)
     return outlineNativeQuantizedMembers(module,root,groups,projections,
         "tessera.native.quantized_product.v4",subprograms);
+  // Slots and steps a frame variable reaches, derived from SSA ids.
+  auto frameOf = [](const llvm::DenseSet<Value> &variable,
+                    const llvm::DenseMap<Value,int64_t> &ids, llvm::json::Object &plan,
+                    llvm::json::Array &slotJSON, llvm::json::Array &stepJSON) {
+    SmallVector<int64_t> slots;
+    for (auto &[value,id] : ids)
+      if (variable.contains(value)) slots.push_back(id);
+    llvm::sort(slots);
+    for (int64_t id : slots) slotJSON.push_back(id);
+    for (auto &step : *plan.getArray("steps")) {
+      auto *object = step.getAsObject();
+      bool touches = false;
+      for (auto key : {"inputs","outputs"})
+        for (auto &id : *object->getArray(key))
+          touches |= llvm::is_contained(slots, *id.getAsInteger());
+      if (touches) stepJSON.push_back(*object->getInteger("step"));
+    }
+  };
   // v5 is v4 at capacity plus the declared row frame. v4 is never repurposed.
   auto frame = [&](llvm::json::Object &plan, const llvm::DenseMap<Value,int64_t> &ids) -> LogicalResult {
     SmallVector<std::pair<int64_t,Value>> slots;
@@ -405,10 +536,20 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
     plan["original_graph_ir"] = originalIR + "\n";
     plan["row_frame"] = llvm::json::Object{{"slots",std::move(slotJSON)},
         {"row_strides_bytes",std::move(strideJSON)},{"row_steps",std::move(stepJSON)}};
+    if (boundedK) {
+      // v6 is v5 at capacity K plus the contraction frame. Its K16 group
+      // count is the second frame variable of the shape-frame owner.
+      llvm::json::Array kSlots, kSteps;
+      frameOf(contractionValues, ids, plan, kSlots, kSteps);
+      plan["active_k"] = activeK;
+      plan["k_bound"] = kBound;
+      plan["k_frame"] = llvm::json::Object{{"slots",std::move(kSlots)},{"k_steps",std::move(kSteps)}};
+    }
     return success();
   };
   return outlineNativeQuantizedMembers(module,root,groups,projections,
-      "tessera.native.quantized_product.v5",subprograms,frame);
+      boundedK ? "tessera.native.quantized_product.v6" : "tessera.native.quantized_product.v5",
+      subprograms,frame);
 }
 
 } // namespace tessera

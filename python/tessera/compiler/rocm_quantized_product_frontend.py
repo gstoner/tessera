@@ -20,6 +20,8 @@ _EXPANDED_SCHEMA="tessera.rocm.quantized_product_frontend.v2"
 _ACTIVATED_SCHEMA="tessera.rocm.quantized_product_frontend.v3"
 _MLP_SCHEMA="tessera.rocm.quantized_product_frontend.v4"
 _BOUNDED_MLP_SCHEMA="tessera.rocm.quantized_product_frontend.v5"
+_K_BOUNDED_MLP_SCHEMA="tessera.rocm.quantized_product_frontend.v6"
+_FRONTEND_SCHEMAS=(_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA,_MLP_SCHEMA,_BOUNDED_MLP_SCHEMA,_K_BOUNDED_MLP_SCHEMA)
 _OWNER_PID=os.getpid()
 
 
@@ -199,8 +201,8 @@ def _source(module):
     old=source.module_attrs.get("tessera.native.quantized_product")
     if old not in (None,"unit"):
         raise ValueError("quantized-product source intent conflicts")
-    # A tessera.native.quantized_m_bound request passes through unchanged: the
-    # native export owns its admission (seven-member MLP, checked capacity).
+    # tessera.native.quantized_{m,k}_bound requests pass through unchanged: the
+    # native export owns their admission (seven-member MLP, checked capacity).
     source.module_attrs["tessera.native.quantized_product"]="unit"
     return source.to_mlir(target="rocm_gfx1201",canonical=True)
 
@@ -227,8 +229,8 @@ def package_traced_quantized_product(module):
 
 def _frontend_schema(native):
     schema=json.loads(native.program_json)["schema"]
-    return dict(zip((f"tessera.native.quantized_product.v{i}" for i in (1,2,3,4,5)),
-        (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA,_MLP_SCHEMA,_BOUNDED_MLP_SCHEMA),strict=True))[schema]
+    return dict(zip((f"tessera.native.quantized_product.v{i}" for i in range(1,7)),
+        _FRONTEND_SCHEMAS,strict=True))[schema]
 
 
 def _compiler_path(native):
@@ -236,7 +238,8 @@ def _compiler_path(native):
             _EXPANDED_SCHEMA:"canonical_rocm_quantized_nvfp4_product_program",
             _ACTIVATED_SCHEMA:"canonical_rocm_quantized_gate_up_program",
             _MLP_SCHEMA:"canonical_rocm_quantized_mlp_program",
-            _BOUNDED_MLP_SCHEMA:"canonical_rocm_quantized_bounded_mlp_program"}[_frontend_schema(native)]
+            _BOUNDED_MLP_SCHEMA:"canonical_rocm_quantized_bounded_mlp_program",
+            _K_BOUNDED_MLP_SCHEMA:"canonical_rocm_quantized_k_bounded_mlp_program"}[_frontend_schema(native)]
 
 
 def runtime_artifact(program):
@@ -256,7 +259,7 @@ def runtime_artifact(program):
 def _resolve(record,graph,names):
     value=json.loads(record)
     if (not isinstance(value,dict) or set(value)!={"schema","argument_names","native_program"}
-            or value["schema"] not in (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA,_MLP_SCHEMA,_BOUNDED_MLP_SCHEMA)
+            or value["schema"] not in _FRONTEND_SCHEMAS
             or not isinstance(value["argument_names"],list)):
         raise ValueError("native quantized-product frontend manifest differs")
     program=TracedQuantizedProduct(NativeQuantizedProductProgram.from_manifest(value["native_program"]),tuple(value["argument_names"]))

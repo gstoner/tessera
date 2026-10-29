@@ -105,6 +105,45 @@ int tessera_rocm_program_prepare_multi_output_row_frame(
     const TesseraRocmProgramMultiOutputStep *, const void *const *,
     const uint64_t *, const TesseraRocmProgramRowFrame *, int64_t active_m,
     uint64_t *handle);
+// Additive two-variable shape frame over M rows and G K16 groups. Every
+// frame byte span, scaled scalar and scaled grid field is coef * M^a * G^b
+// with a,b in {0,1} (powers bit 0: M, bit 1: G; never zero). Every prepared
+// value is the capacity value. An entry scales one scalar and, when
+// grid_axis < 3, one grid axis to ceil(coef_grid * M^a * G^b / grid_tile);
+// grid_axis == 3 scales no grid field and then grid_tile and grid_coef are 0.
+// The frame closure is derived from the SSA plan as for the row frame.
+typedef struct {
+  uint32_t step;
+  uint32_t scalar;
+  int64_t scalar_coef;
+  uint32_t powers;
+  uint32_t grid_axis;
+  uint32_t grid_tile;
+  int64_t grid_coef;
+} TesseraRocmProgramShapeStep;
+typedef struct {
+  int64_t capacity_m;
+  int64_t capacity_g;
+  uint32_t slot_count; // 1..32 distinct slots, at least one original argument.
+  uint32_t step_count; // 1..32 entries.
+  const uint32_t *slots;
+  const uint64_t *unit_bytes; // bytes at M = G = 1
+  const uint32_t *powers;
+  const TesseraRocmProgramShapeStep *steps;
+} TesseraRocmProgramShapeFrame;
+int tessera_rocm_program_prepare_multi_output_shape_frame(
+    const char *, uint32_t, uint32_t, const TesseraRocmProgramBuffer *, uint32_t,
+    const TesseraRocmProgramMultiOutputStep *, const void *const *,
+    const uint64_t *, const TesseraRocmProgramShapeFrame *, int64_t active_m,
+    int64_t active_g, uint64_t *handle);
+// A change of M or G requires every original slot depending on it in this
+// atomic update and invalidates every private slot depending on it.
+int tessera_rocm_program_update_shape(
+    uint64_t handle, int64_t active_m, int64_t active_g, uint32_t count,
+    const uint32_t *slots, const void *const *inputs, const uint64_t *bytes);
+int tessera_rocm_program_shape_info(
+    uint64_t handle, int64_t *capacity_m, int64_t *capacity_g, int64_t *active_m,
+    int64_t *active_g, uint64_t *allocation_bytes, uint64_t *allocation_count);
 // Row changes require all row-dependent input slots in this atomic update.
 // A row change invalidates every private row slot and its SSA dependents.
 int tessera_rocm_program_update_rows(

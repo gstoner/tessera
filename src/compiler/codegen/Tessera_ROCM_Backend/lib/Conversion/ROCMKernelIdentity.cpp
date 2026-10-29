@@ -29,6 +29,9 @@ struct ProjectROCMKernelIdentityPass
   Option<bool> runtimeK{*this, "runtime-k",
                         llvm::cl::desc("Project LDS W8A8, folded or NVFP4 expansion K to its checked runtime group loop"),
                         llvm::cl::init(false)};
+  Option<bool> runtimeN{*this, "runtime-n",
+      llvm::cl::desc("Project a single-projection NVFP4 expansion's N to a runtime scalar"),
+      llvm::cl::init(false)};
   Option<bool> arbitraryM{*this, "arbitrary-m",
       llvm::cl::desc("Guard arbitrary positive runtime M in scaled matrix images"),
       llvm::cl::init(false)};
@@ -245,10 +248,18 @@ struct ProjectROCMKernelIdentityPass
 
     // NVFP4 expansion identity is only its runtime-K projection: N and the
     // projection row boundaries stay static; the verified op owns them.
+    if (runtimeN && family != "nvfp4_expand") {
+      module.emitError("runtime-N image projection requires the NVFP4 expansion family");
+      return signalPassFailure();
+    }
     if (family == "nvfp4_expand") {
       auto k = kernel->getAttrOfType<IntegerAttr>("k");
-      if (!runtimeK || kernel->hasAttr("runtime_k") || !k || k.getInt() <= 0) {
-        kernel->emitError("NVFP4 expansion image identity requires a static verified expansion and runtime-k");
+      auto n = kernel->getAttrOfType<IntegerAttr>("n");
+      auto offsets = kernel->getAttrOfType<ArrayAttr>("row_offsets");
+      if (runtimeK == runtimeN || kernel->hasAttr("runtime_k") || kernel->hasAttr("runtime_n") ||
+          !k || k.getInt() <= 0 || !n || n.getInt() <= 0 ||
+          (runtimeN && (!offsets || offsets.size() != 2))) {
+        kernel->emitError("NVFP4 expansion image identity requires a static verified expansion and exactly one of runtime-k or single-projection runtime-n");
         return signalPassFailure();
       }
     }
@@ -397,8 +408,9 @@ struct ProjectROCMKernelIdentityPass
     }
     if (family == "nvfp4_expand") {
       OpBuilder builder(&getContext());
-      copy->setAttr("runtime_k", builder.getUnitAttr());
-      copy->setAttr("k", builder.getI64IntegerAttr(0));
+      StringRef axis = runtimeK ? "k" : "n";
+      copy->setAttr(runtimeK ? "runtime_k" : "runtime_n", builder.getUnitAttr());
+      copy->setAttr(axis, builder.getI64IntegerAttr(0));
     }
     if (family == "folded_matmul" && copy->hasAttr("a_row_stride")) {
       OpBuilder builder(&getContext());

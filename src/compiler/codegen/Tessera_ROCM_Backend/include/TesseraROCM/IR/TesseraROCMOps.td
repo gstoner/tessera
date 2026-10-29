@@ -1707,10 +1707,15 @@ def ROCM_NVFP4ExpandOp : TesseraROCM_Op<"nvfp4_expand"> {
     expansion: `k` is recorded as zero and the kernel takes its K16 group
     count as one i64 scalar. N and the projection row boundaries stay
     static. Only the kernel identity projection produces it.
+
+    `runtime_n` is the analogous identity for a single-projection expansion
+    (row boundaries `[0, N]`): `n` is recorded as zero, the boundaries keep
+    the checked capacity, and the kernel takes N as one i64 scalar on the
+    flat grid. K stays static; the two are never combined.
   }];
   let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$n, I64Attr:$k,
       I64ArrayAttr:$row_offsets, ROCM_NVFP4IngestPolicyAttr:$numeric_policy,
-      StrAttr:$schedule_hash, UnitAttr:$runtime_k);
+      StrAttr:$schedule_hash, UnitAttr:$runtime_k, UnitAttr:$runtime_n);
   let assemblyFormat = "attr-dict";
   let hasVerifier = 1;
 }

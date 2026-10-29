@@ -134,10 +134,21 @@ mlir::LogicalResult StructuredReductionOp::verify() {
 mlir::LogicalResult NVFP4ExpandOp::verify() {
   if (getArch() != "gfx1201")
     return emitOpError("NVFP4 expansion currently requires gfx1201");
+  if (getRuntimeK() && getRuntimeN())
+    return emitOpError("NVFP4 expansion is runtime-K or runtime-N, not both");
+  // A runtime-N image keeps its checked single-projection capacity boundary.
+  auto offsets = getRowOffsets();
+  int64_t staticN = getN();
+  if (getRuntimeN()) {
+    auto last = offsets.size() == 2 ? dyn_cast<IntegerAttr>(offsets[1]) : IntegerAttr();
+    if (!last || getN() != 0)
+      return emitOpError("runtime-N NVFP4 expansion records N as zero over one projection");
+    staticN = last.getInt();
+  }
   if (failed(mlir::tessera_contract::verifyNVFP4ExpandPolicy(
         getOperation(),getNumericPolicy())) ||
       failed(mlir::tessera_contract::verifyNVFP4ExpandExtents(
-        getOperation(),getN(),getRuntimeK() ? 16 : getK(),getRowOffsets())))
+        getOperation(),staticN,getRuntimeK() ? 16 : getK(),offsets)))
     return mlir::failure();
   // A runtime-K image records no static K; its N16 extents are checked above.
   if (getRuntimeK() && getK() != 0)

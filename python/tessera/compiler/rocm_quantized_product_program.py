@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import ctypes as C
+import functools
 from dataclasses import dataclass, replace
 import hashlib
 import json
@@ -142,6 +143,148 @@ def _frame_shape(plan):
     return roles,BlockScaleShape(m,n,k,16,1,"nk",out)
 
 
+def _vary(shape, runtime_k, runtime_n, expansion):
+    """The product extent that varies at launch, as (dim, unit, capacity in units).
+
+    K varies in K16 groups; a gate/up product's N is its P projections of an
+    H16-multiple width (N = 16*P*Hg); a single projection's N varies by one."""
+    if runtime_k and runtime_n:
+        raise ValueError("native quantized-product varies at most one of K and N")
+    if runtime_k:
+        return ("k", 16, shape.k // 16)
+    if runtime_n:
+        projections = len(expansion.contract()[3]) - 1
+        unit = 16 * projections if projections > 1 else 1
+        return ("n", unit, shape.n // unit)
+    return None
+
+
+@functools.lru_cache(maxsize=32)
+def _variant_boxes(shape, vary):
+    """Maximal (M range x varying-extent range) boxes where the static rule
+    takes an LDS panel, as (min_m, max_m, min_x, max_x); x is in ``vary``
+    units and (0, 0) when nothing but M varies.
+
+    A shape-free product runs every admitted extent; its base image is the
+    register panel, and each box gets the LDS image the static rule selects
+    inside it (GFX1201-BOUNDED-PER-M-PANEL-20261030). Register panels are not
+    split further: 16 vs 32 rows measured mixed across the 32-row band."""
+    from .rocm_fp8_blockscale import blockscale_panel_oracle
+    dim, unit, cap = vary if vary is not None else ("", 1, 0)
+    # x = 0 stands for "M only" (no varying extent).
+    xs: list[int] = list(range(1, cap + 1)) if dim else [0]
+
+    def signature(m):
+        intervals: list[list[Any]] = []
+        for x in xs:
+            panel = blockscale_panel_oracle(shape, min_m=m, at_n=unit * x if dim == "n" else None,
+                                            at_k=unit * x if dim == "k" else None)
+            if panel.staging != "lds":
+                continue
+            if intervals and intervals[-1][2] == panel and intervals[-1][1] == x - 1:
+                intervals[-1][1] = x
+            else:
+                intervals.append([x, x, panel])
+        return tuple((lo, hi, panel) for lo, hi, panel in intervals)
+
+    boxes: list[tuple[int, int, int, int]] = []
+    previous: tuple | None = None
+    first = 1
+    for m in range(1, shape.m + 2):
+        current = signature(m) if m <= shape.m else None
+        if current != previous:
+            if previous:
+                boxes += [(first, m - 1, lo, hi) for lo, hi, _ in previous]
+            previous, first = current, m
+    if len(boxes) > 8:
+        raise ValueError("native quantized-product LDS panel boxes exceed eight variants")
+    return tuple(boxes)
+
+
+def _variant_at(vary, x) -> tuple[int | None, int | None]:
+    """The (at_n, at_k) evaluation point of a variant whose box starts at x."""
+    if vary is None:
+        return None, None
+    dim, unit, _ = vary
+    return (unit * x, None) if dim == "n" else (None, unit * x)
+
+
+@dataclass(frozen=True)
+class ProductVariant:
+    """An LDS product image for active M in [min_m, max_m] (and, when the
+    product varies K or N, that extent in [min_x, max_x] units)."""
+    min_m: int
+    max_m: int
+    min_x: int
+    max_x: int
+    recipe: BlockScaleProgram
+    native: ROCMNativePackage
+    checked_target_ir: str
+
+
+def _compile_product(tool, shape, child, *, arbitrary_m, arbitrary_n=False, runtime_k=False):
+    """Graph -> Schedule -> Tile -> image for one product member Graph."""
+    schedule = run_tessera_opt(tool,child,"--tessera-graph-to-schedule")
+    tile = run_tessera_opt(tool,schedule,"--tessera-schedule-to-tile")
+    recipe = BlockScaleProgram(shape,"quantized_product",child,schedule,tile)
+    product = package_blockscale(recipe,pipeline_name="tessera-rocm-executable",
+                                 project_image_identity=arbitrary_m,arbitrary_m=arbitrary_m,
+                                 arbitrary_n=arbitrary_n,lds_runtime_k=runtime_k)
+    checked_target = product.target_ir
+    if arbitrary_m:
+        # The image is the shape-free projection; retain the static checked
+        # Target separately, as the bounded NVFP4 consumer does.
+        from .rocm_native import _run_opt
+        from .rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel, ROCMOutputLevel
+        config = ROCMExecutablePipeline(family="matmul", arch="gfx1201", input_level=ROCMInputLevel.TILE)
+        checked_target = _run_opt(tool, tile, config.pass_pipeline(output=ROCMOutputLevel.TARGET))
+    return recipe, product, checked_target, schedule
+
+
+def _check_product_image(shape, native, checked_target_ir, arbitrary_m, arbitrary_n=False, runtime_k=False):
+    """Validate one product image against its checked Target and the consumer ABI.
+
+    ``arbitrary_n``: an LDS image whose N varies at launch masks its column
+    edge; the claim must match the image and is re-derived, never read."""
+    native.descriptor.validate_image(native.image)
+    checked = check_blockscale_target_ir(shape,native.tile_ir,checked_target_ir)
+    lds = checked["staging"] == "lds"
+    if native.descriptor.provenance.get("arbitrary_n", False) is not (arbitrary_n and lds):
+        raise ValueError("native quantized-product arbitrary-N image policy differs")
+    # An LDS image takes K at launch only when the product's K varies: the
+    # runtime-K loop costs about 3% on gfx1201 where K is fixed.
+    if bool(native.descriptor.provenance.get("lds_runtime_k")) is not (runtime_k and lds and arbitrary_m):
+        raise ValueError("native quantized-product runtime-K image policy differs")
+    if arbitrary_m:
+        from .rocm_native import _shape_free_target_ir
+        projection=_shape_free_target_ir(checked_target_ir,
+            family="scaled_matmul" if checked["staging"]=="global" else "scaled_matmul_lds",
+            directive="tessera_rocm.scaled_wmma_gemm",
+            runtime_k=bool(native.descriptor.provenance.get("lds_runtime_k")),arbitrary_m=True,
+            arbitrary_n=arbitrary_n and lds)
+        if (native.target_ir != projection
+                or native.descriptor.provenance.get("arbitrary_m") is not True
+                or native.descriptor.provenance.get("lds_whole_m") is not False):
+            raise ValueError("native quantized-product arbitrary-M image differs from its checked Target")
+    elif (native.target_ir != checked_target_ir
+            or native.descriptor.provenance.get("arbitrary_m") is not False):
+        raise ValueError("native quantized-product checked Target differs from image-bound Target")
+    descriptor = native.descriptor
+    if (native.image.target != "rocm_gfx1201" or native.image.architecture != "gfx1201"
+            or native.image.binary_format != "hsaco" or native.image.pipeline_name != "tessera-rocm-executable"
+            or native.image.target_ir_digest != _digest(native.target_ir)
+            or descriptor.abi_id != PACKAGE_ABIS[("nk",shape.output)]
+            or descriptor.entry_symbol != _directive_symbol(native.target_ir,"tessera_rocm.scaled_wmma_gemm")
+            or descriptor.geometry != LaunchGeometry(policy="rocm_wmma_macro_tile_grid")
+            or descriptor.scalars != tuple(ScalarArgument(i+5,name,"int64") for i,name in enumerate(("M","N","K")))
+            or descriptor.provenance["shape"] != [shape.m,shape.n,shape.k]
+            or descriptor.provenance["scale_k"] != 16 or descriptor.provenance["scale_n"] != 1
+            or descriptor.provenance["macro_tile"] != [checked["block_m"],checked["block_n"]]
+            or descriptor.provenance["workgroup"] != [32*checked["warps"],1,1]):
+        raise ValueError("native quantized-product consumer ABI/geometry differs")
+    return checked
+
+
 @dataclass(frozen=True)
 class NativeQuantizedProductProgram:
     program_json: str
@@ -163,6 +306,8 @@ class NativeQuantizedProductProgram:
     runtime_k: bool = False
     # An N-bounded MLP's down component expands through the runtime-N image.
     runtime_n: bool = False
+    # Per-active-M LDS images of a shape-free product (ascending, disjoint).
+    variants: tuple[ProductVariant, ...] = ()
 
     def _identity(self):
         parts = [self.program_json,self.graph_ir,self.quantizer_recipe.graph_ir,
@@ -182,6 +327,10 @@ class NativeQuantizedProductProgram:
             parts.append("runtime_k")
         if self.runtime_n:
             parts.append("runtime_n")
+        for v in self.variants:
+            parts.extend([str(v.min_m),str(v.max_m),str(v.min_x),str(v.max_x),v.recipe.graph_ir,v.recipe.schedule_ir,v.recipe.tile_ir,
+                          v.checked_target_ir,v.native.tile_ir,v.native.target_ir,
+                          v.native.image.image_digest,v.native.descriptor.descriptor_digest])
         return _digest(json.dumps(parts,separators=(",",":")))
 
     @property
@@ -228,7 +377,8 @@ class NativeQuantizedProductProgram:
         if self.arbitrary_m:
             # The shape-free product's member requests the panel for M >= 1.
             product_index=2 if self.expansion is not None else 1
-            expected[product_index]=admitted_rows_graph(expected[product_index])
+            expected[product_index]=admitted_rows_graph(
+                expected[product_index],global_staging=self.runtime_k or self.runtime_n)
         if self.activation_recipe is not None:
             members.append(self.activation_recipe.graph_ir)
             if self.runtime_n:
@@ -276,38 +426,33 @@ class NativeQuantizedProductProgram:
             raise ValueError("native quantized-product runtime-K expansion policy differs")
         if self.runtime_n != (self.expansion is not None and self.expansion.runtime_n):
             raise ValueError("native quantized-product runtime-N expansion policy differs")
-        checked = check_blockscale_target_ir(shape,native.tile_ir,self.checked_product_target_ir)
-        if self.arbitrary_m:
-            from .rocm_native import _shape_free_target_ir
-            projection=_shape_free_target_ir(self.checked_product_target_ir,
-                family="scaled_matmul" if checked["staging"]=="global" else "scaled_matmul_lds",
-                directive="tessera_rocm.scaled_wmma_gemm",
-                runtime_k=bool(native.descriptor.provenance.get("lds_runtime_k")),arbitrary_m=True)
-            if (native.target_ir != projection
-                    or native.descriptor.provenance.get("arbitrary_m") is not True
-                    or native.descriptor.provenance.get("lds_whole_m") is not False):
-                raise ValueError("native quantized-product arbitrary-M image differs from its checked Target")
-        elif (native.target_ir != self.checked_product_target_ir
-                or native.descriptor.provenance.get("arbitrary_m") is not False):
-            raise ValueError("native quantized-product checked Target differs from image-bound Target")
+        checked = _check_product_image(shape,native,self.checked_product_target_ir,self.arbitrary_m,
+                                       runtime_k=self.runtime_k)
         if (self.runtime_k or self.runtime_n) and (
                 not self.arbitrary_m or checked["staging"] != "global"
                 or native.descriptor.provenance.get("runtime_shape_image") is not True):
             # Only the global-staged image reads M, N and K entirely at launch.
             raise ValueError("native quantized-product runtime K/N requires the shape-free global-staged product")
-        descriptor = native.descriptor
-        if (native.image.target != "rocm_gfx1201" or native.image.architecture != "gfx1201"
-                or native.image.binary_format != "hsaco" or native.image.pipeline_name != "tessera-rocm-executable"
-                or native.image.target_ir_digest != _digest(native.target_ir)
-                or descriptor.abi_id != PACKAGE_ABIS[("nk",shape.output)]
-                or descriptor.entry_symbol != _directive_symbol(native.target_ir,"tessera_rocm.scaled_wmma_gemm")
-                or descriptor.geometry != LaunchGeometry(policy="rocm_wmma_macro_tile_grid")
-                or descriptor.scalars != tuple(ScalarArgument(i+5,name,"int64") for i,name in enumerate(("M","N","K")))
-                or descriptor.provenance["shape"] != [shape.m,shape.n,shape.k]
-                or descriptor.provenance["scale_k"] != 16 or descriptor.provenance["scale_n"] != 1
-                or descriptor.provenance["macro_tile"] != [checked["block_m"],checked["block_n"]]
-                or descriptor.provenance["workgroup"] != [32*checked["warps"],1,1]):
-            raise ValueError("native quantized-product consumer ABI/geometry differs")
+        # A shape-free M-only product carries exactly the LDS variants the static
+        # rule implies over [1, capacity]; each is its own checked projection.
+        vary = _vary(shape,self.runtime_k,self.runtime_n,self.expansion)
+        boxes = _variant_boxes(shape,vary) if self.arbitrary_m else ()
+        if tuple((v.min_m,v.max_m,v.min_x,v.max_x) for v in self.variants) != boxes:
+            raise ValueError("native quantized-product per-M variant ranges differ from the static rule")
+        member = plan["member_graphs"][2 if self.expansion is not None else 1]
+        from .rocm_fp8_blockscale import blockscale_panel_oracle
+        for v in self.variants:
+            at_n, at_k = _variant_at(vary,v.min_x)
+            panel = blockscale_panel_oracle(shape, min_m=v.min_m, at_n=at_n, at_k=at_k)
+            if (not isinstance(v,ProductVariant) or v.recipe.shape != shape
+                    or v.recipe.graph_ir != admitted_rows_graph(member,min_m=v.min_m,at_n=at_n,at_k=at_k)
+                    or v.native.tile_ir != v.recipe.tile_ir):
+                raise ValueError("native quantized-product per-M variant Graph differs")
+            got = _check_product_image(shape,v.native,v.checked_target_ir,True,arbitrary_n=self.runtime_n,
+                                       runtime_k=self.runtime_k)
+            if (got["staging"],got["block_m"],got["block_n"],got["warps"]) != (
+                    panel.staging,panel.macro_tile_m,panel.macro_tile_n,panel.warps):
+                raise ValueError("native quantized-product per-M variant panel differs from the static rule")
 
     def to_manifest(self,*,_bounded_member=False):
         from .rocm_nvfp4_resident import _portable_stage
@@ -336,6 +481,13 @@ class NativeQuantizedProductProgram:
             record["runtime_k"]=True
         if self.runtime_n:
             record["runtime_n"]=True
+        if self.variants:
+            # Each variant replays exactly as the base product: its checked
+            # static Target is retained and its image re-derived from it.
+            record["variants"]=[{"min_m":v.min_m,"max_m":v.max_m,"min_x":v.min_x,"max_x":v.max_x,
+                                 "checked_product_target_ir":v.checked_target_ir,
+                                 "stage":_portable_stage(v.recipe.graph_ir,v.recipe.schedule_ir,v.native)}
+                                for v in self.variants]
         return record
 
     @classmethod
@@ -357,8 +509,11 @@ class NativeQuantizedProductProgram:
             raise ValueError("native quantized-product portable runtime-K claim differs")
         if runtime_n and (not arbitrary_m or record["runtime_n"] is not True):
             raise ValueError("native quantized-product portable runtime-N claim differs")
+        has_variants=isinstance(record,dict) and "variants" in record
+        if has_variants and (not arbitrary_m or not isinstance(record["variants"],list) or not record["variants"]):
+            raise ValueError("native quantized-product portable per-M variants differ")
         claims=(({"arbitrary_m"} if arbitrary_m else set())|({"runtime_k"} if runtime_k else set())
-                |({"runtime_n"} if runtime_n else set()))
+                |({"runtime_n"} if runtime_n else set())|({"variants"} if has_variants else set()))
         if (not isinstance(record,dict) or set(record)!=keys|claims
                 or record["schema"] not in _PACKAGE_SCHEMAS
                 or any(not isinstance(record[key],str) for key in ("program_json","graph_ir","checked_product_target_ir","binding_digest"))
@@ -382,11 +537,26 @@ class NativeQuantizedProductProgram:
         expansion=NVFP4ExpansionPackage(*stages[1]) if expanded else None
         activation_recipe=ParentViewRecipe(stages[3][0],stages[3][1],stages[3][2].tile_ir) if activated else None
         activation=stages[3][2] if activated else None
+        variants=[]
+        for entry in record.get("variants",()):
+            stage=entry.get("stage") if isinstance(entry,dict) else None
+            if (not isinstance(entry,dict) or set(entry)!={"min_m","max_m","min_x","max_x","checked_product_target_ir","stage"}
+                    or any(type(entry[key]) is not int for key in ("min_m","max_m","min_x","max_x"))
+                    or not isinstance(entry["checked_product_target_ir"],str)
+                    or not isinstance(stage,dict)
+                    or set(stage)!={"graph_ir","schedule_ir","tile_ir","target_ir","image","descriptor"}
+                    or any(not isinstance(stage[key],str) for key in ("graph_ir","schedule_ir","tile_ir","target_ir"))):
+                raise ValueError("native quantized-product portable per-M variants differ")
+            v_native=ROCMNativePackage(stage["tile_ir"],stage["target_ir"],"",
+                NativeImageArtifact.from_dict(stage["image"]),LaunchDescriptor.from_dict(stage["descriptor"]))
+            variants.append(ProductVariant(entry["min_m"],entry["max_m"],entry["min_x"],entry["max_x"],
+                BlockScaleProgram(shape,"quantized_product",stage["graph_ir"],stage["schedule_ir"],stage["tile_ir"]),
+                v_native,entry["checked_product_target_ir"]))
         program=cls(record["program_json"],record["graph_ir"],
             BlockQuantRecipe(first[0],first[1],first[2].tile_ir),first[2],
             BlockScaleProgram(shape,"quantized_product",second[0],second[1],second[2].tile_ir),second[2],
             record["checked_product_target_ir"],record["binding_digest"],expansion,activation_recipe,activation,
-            arbitrary_m=arbitrary_m,runtime_k=runtime_k,runtime_n=runtime_n)
+            arbitrary_m=arbitrary_m,runtime_k=runtime_k,runtime_n=runtime_n,variants=tuple(variants))
         program.validate()
         return program
 
@@ -423,21 +593,26 @@ def package_quantized_product_graph(graph_ir,*,arbitrary_m=False,runtime_k=False
     child = plan["member_graphs"][2 if expanded else 1]
     if arbitrary_m:
         # The shape-free image runs every M down to 1; its panel is chosen there.
-        child = admitted_rows_graph(child)
-    schedule = run_tessera_opt(tool,child,"--tessera-graph-to-schedule")
-    verify_blockscale_schedule(shape,schedule,min_m=1 if arbitrary_m else None)
-    tile = run_tessera_opt(tool,schedule,"--tessera-schedule-to-tile")
-    recipe = BlockScaleProgram(shape,"quantized_product",child,schedule,tile)
-    product = package_blockscale(recipe,pipeline_name="tessera-rocm-executable",
-                                 project_image_identity=arbitrary_m,arbitrary_m=arbitrary_m)
-    checked_target = product.target_ir
+        # A runtime-K/N image exists only as the global-staged body.
+        child = admitted_rows_graph(child,global_staging=runtime_k or runtime_n)
+    recipe, product, checked_target, schedule = _compile_product(tool, shape, child, arbitrary_m=arbitrary_m)
+    verify_blockscale_schedule(shape,schedule,min_m=1 if arbitrary_m else None,
+                               staging="global" if runtime_k or runtime_n else None)
+    variants: tuple[ProductVariant, ...] = ()
     if arbitrary_m:
-        # The image is the shape-free projection; retain the static checked
-        # Target separately, as the bounded NVFP4 consumer does.
-        from .rocm_native import _run_opt
-        from .rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel, ROCMOutputLevel
-        config = ROCMExecutablePipeline(family="matmul", arch="gfx1201", input_level=ROCMInputLevel.TILE)
-        checked_target = _run_opt(tool, tile, config.pass_pipeline(output=ROCMOutputLevel.TARGET))
+        # One LDS image per range where the static rule takes an LDS panel;
+        # a runtime-N product's LDS images mask their column edge.
+        member = plan["member_graphs"][2 if expanded else 1]
+        vary = _vary(shape, runtime_k, runtime_n, expansion)
+        built = []
+        for lo, hi, x_lo, x_hi in _variant_boxes(shape, vary):
+            at_n, at_k = _variant_at(vary, x_lo)
+            v_recipe, v_product, v_checked, v_schedule = _compile_product(
+                tool, shape, admitted_rows_graph(member, min_m=lo, at_n=at_n, at_k=at_k), arbitrary_m=True,
+                arbitrary_n=runtime_n, runtime_k=runtime_k)
+            verify_blockscale_schedule(shape, v_schedule, min_m=lo, at_n=at_n, at_k=at_k)
+            built.append(ProductVariant(lo, hi, x_lo, x_hi, v_recipe, v_product, v_checked))
+        variants = tuple(built)
     activation_recipe,activation=None,None
     if activated:
         graph=plan["member_graphs"][3]
@@ -448,7 +623,7 @@ def package_quantized_product_graph(graph_ir,*,arbitrary_m=False,runtime_k=False
         activation_recipe=ParentViewRecipe(graph,schedule,tile)
         activation=package_parent_view_recipe(activation_recipe,pipeline_name="tessera-rocm-executable")
     program = NativeQuantizedProductProgram(json.dumps(plan,sort_keys=True),plan["source_graph_ir"],
-        quantizer_recipe,quantizer,recipe,product,checked_target,"",expansion,activation_recipe,activation,arbitrary_m,runtime_k,runtime_n)
+        quantizer_recipe,quantizer,recipe,product,checked_target,"",expansion,activation_recipe,activation,arbitrary_m,runtime_k,runtime_n,variants)
     program = replace(program,binding_digest=program._identity())
     program.validate()
     return program

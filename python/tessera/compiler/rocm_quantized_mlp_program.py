@@ -427,6 +427,18 @@ def _column_steps(steps,capacity_n,down_groups,macro_n):
     return [_ShapeStep(5,0,1,4,0,256,down_groups),_ShapeStep(6,1,1,4,0,macro_n,1)]
 
 
+class _StepVariant(C.Structure):
+    _fields_=[('step',C.c_uint32),('min_rows',C.c_int64),('max_rows',C.c_int64),
+              ('axis',C.c_uint32),('min_axis',C.c_int64),('max_axis',C.c_int64),
+              ('image',C.c_void_p),('image_bytes',C.c_uint64),('entry',C.c_char_p),
+              ('geometry',C.c_uint32*6),('entry_count',C.c_uint32),
+              ('entries',C.POINTER(_ShapeStep))]
+
+
+#: MLP steps of the gate and down products (the steps that carry per-M variants).
+_PRODUCT_STEPS=(2,6)
+
+
 def _hidden_steps(steps,capacity_m,capacity_hg,gate_groups,macro_n):
     """Every H-dependent launch field of the H-bounded MLP (variable H/16).
 
@@ -465,6 +477,15 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
         self._k_bounded='k_frame' in plan
         self._n_bounded='n_frame' in plan
         self._h_bounded='h_frame' in plan
+        # GFX1201-BOUNDED-PER-M-PANEL-20261030: each product's LDS images for
+        # the active-M ranges where the static rule takes an LDS panel.
+        # A variant's box spans M and, where the product varies one, the frame
+        # variable of that extent: the gate's K is G, its 2H columns are H; the
+        # down projection's K is H and its columns are N.
+        axes={2:1 if package.gate.runtime_k else 3 if package.gate.runtime_n else 4,
+              6:3 if package.down.runtime_k else 2 if package.down.runtime_n else 4}
+        self._variants=tuple((step,axes[step],v) for step,component in zip(_PRODUCT_STEPS,(package.gate,package.down))
+                             for v in component.variants)
         if self._bounded:
             roles,_,_=_frame(plan)
             self._active_m,self._capacity_m,self._row_slots,self._row_bytes=_row_frame(plan,roles)
@@ -480,12 +501,14 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
         if self._h_bounded:
             self._active_h,self._capacity_h,self._h_axes=_h_frame(plan,roles)
             self._prepare_symbol='tessera_rocm_program_prepare_multi_output_axis_frame'
+        if self._variants:
+            self._prepare_symbol='tessera_rocm_program_prepare_multi_output_axis_frame_variants'
         super().__init__(package,inputs,runtime_library=runtime_library)
 
     def _prepare_tail(self):
         if not self._bounded:
             return (),()
-        if self._k_bounded or self._n_bounded or self._h_bounded:
+        if self._k_bounded or self._n_bounded or self._h_bounded or self._variants:
             return self._shape_tail()
         if not hasattr(self,'_frame_struct'):
             steps=self._binding.steps
@@ -507,7 +530,7 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
         capacity_g=self._capacity_k//16 if self._k_bounded else 0
         capacity_n=self._capacity_n if self._n_bounded else 0
         capacity_h=self._capacity_h//16 if self._h_bounded else 0
-        axis_frame=self._n_bounded or self._h_bounded
+        axis_frame=self._n_bounded or self._h_bounded or bool(self._variants)
         if not hasattr(self,'_shape_struct'):
             rows=set(self._row_slots)
             k_slots=set(self._k_axes) if self._k_bounded else set()
@@ -555,14 +578,53 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
                       C.cast(c,C.POINTER(C.c_uint32)),C.cast(d,C.POINTER(_ShapeStep)))
             self._shape_struct=(_AxisFrame(self._capacity_m,capacity_g,capacity_n,capacity_h,*pointers)
                                 if axis_frame else _ShapeFrame(self._capacity_m,capacity_g,*pointers))
+            self._variant_struct=self._variant_array(entries) if self._variants else None
         active_g=self._active_k//16 if self._k_bounded else 1
         if axis_frame:
-            return ((C.POINTER(_AxisFrame),C.c_int64,C.c_int64,C.c_int64,C.c_int64),
-                    (C.byref(self._shape_struct),self._active_m,active_g,
-                     self._active_n if self._n_bounded else 1,
-                     self._active_h//16 if self._h_bounded else 1))
+            types: tuple[Any,...]=(C.POINTER(_AxisFrame),C.c_int64,C.c_int64,C.c_int64,C.c_int64)
+            values: tuple[Any,...]=(C.byref(self._shape_struct),self._active_m,active_g,
+                                    self._active_n if self._n_bounded else 1,
+                                    self._active_h//16 if self._h_bounded else 1)
+            if self._variants:
+                assert self._variant_struct is not None
+                types+=(C.POINTER(_StepVariant),C.c_uint32)
+                values+=(C.cast(self._variant_struct,C.POINTER(_StepVariant)),len(self._variants))
+            return types,values
         return ((C.POINTER(_ShapeFrame),C.c_int64,C.c_int64),
                 (C.byref(self._shape_struct),self._active_m,active_g))
+
+    def _variant_array(self,entries):
+        """Each variant's image, capacity geometry and that step's frame entries
+        with the variant's macro tile in their grid fields."""
+        steps=self._binding.steps
+        self._variant_blobs=[]
+        rows=[]
+        for step,axis,v in self._variants:
+            descriptor=v.native.descriptor
+            bm,bn=descriptor.provenance["macro_tile"]
+            m,n=steps[step].scalars[0],steps[step].scalars[1]
+            geometry=((n+bn-1)//bn,(m+bm-1)//bm,1,*descriptor.provenance["workgroup"])
+            mapped=[_ShapeStep(e.step,e.scalar,e.scalar_coef,e.powers,e.grid_axis,
+                               bm if e.grid_axis==1 else bn if e.grid_axis==0 else 0,
+                               e.grid_coef)
+                    for e in entries if e.step==step]
+            blob=C.create_string_buffer(v.native.image.payload,len(v.native.image.payload))
+            entry=descriptor.entry_symbol.encode()
+            array=(_ShapeStep*len(mapped))(*mapped)
+            self._variant_blobs.append((blob,entry,array))
+            rows.append(_StepVariant(step,v.min_m,v.max_m,axis,v.min_x,v.max_x,C.cast(blob,C.c_void_p),
+                                     len(v.native.image.payload),entry,(C.c_uint32*6)(*geometry),
+                                     len(mapped),C.cast(array,C.POINTER(_ShapeStep))))
+        return (_StepVariant*len(rows))(*rows)
+
+    def variant_info(self):
+        """The image variant each of the seven steps runs at the active extents (0 = base)."""
+        info=self.lib.tessera_rocm_program_variant_info
+        info.argtypes=[C.c_uint64,C.c_uint32,C.POINTER(C.c_uint32)]
+        info.restype=C.c_int
+        selected=(C.c_uint32*7)()
+        _status(info(self.handle,7,selected))
+        return tuple(selected)
 
     def _storage(self,active_m,active_k=None,active_n=None,active_h=None):
         if not self._bounded:

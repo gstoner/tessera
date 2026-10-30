@@ -86,6 +86,12 @@ def main():
             or program.native.n_bounded != (nb is not None)):
         raise SystemExit("explicit bounds did not produce the requested bounded program")
     roots = {mk: inputs(*mk, seed=1500 + i) for i, mk in enumerate(shapes)}
+    # On gfx1201 the first owner a process prepares ran ~17% slower for its
+    # whole life at large shapes (GFX1201-BOUNDED-PER-M-PANEL-20261030); a kept,
+    # never-timed warm-up owner takes that slot so neither arm is penalized.
+    warm = package_quantized_product_graph(source(*shapes[0])).prepare(
+        roots[shapes[0]], runtime_library=lib._name)
+    warm.invoke()
     bounded = program.native.prepare(roots[shapes[0]], runtime_library=lib._name)
     static, static_compile_s = {}, {}
     for mk in shapes:
@@ -125,6 +131,7 @@ def main():
     bounded.close()
     for owner in static.values():
         owner.close()
+    warm.close()
 
     rows = {}
     for mk in shapes:
@@ -147,7 +154,7 @@ def main():
         "device": "gfx1201 (RX 9070 XT, Tajasarus, WSL2)",
         **({"kn": list(args.kn), "bounds_mh": [mb, kb]} if hidden else {"hn": [h, n]}),
         **({} if hidden else {"bounds_mk": [mb, kb]} if nb is None else {"bounds_mkn": [mb, kb, nb]}),
-        "bounded_compile_s": round(compile_s, 2),
+        "bounded_compile_s": round(compile_s, 2), "warm_up_owner": True,
         "bounded_allocation_bytes": info[0], "bounded_allocation_count": info[1],
         "timing": (f"HIP-event device ms per program invocation, windows of {args.repeats} invocations, "
                    f"{args.rounds} rounds, arm and (M, K) order alternated each round; median. bounded = "

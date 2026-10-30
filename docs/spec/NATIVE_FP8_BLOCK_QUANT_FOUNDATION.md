@@ -876,6 +876,84 @@ Measured on gfx1201: the 32-row panel chosen at capacity 256 × 1024 cost
 measured 0.78–1.33× of 32 for static programs, so a capacity in that band
 can cost up to about 1.33× at its large end.
 
+**Global staging for runtime-shape products
+(GFX1201-BOUNDED-GLOBAL-PANEL-20261030).** A runtime-K/N/H product exists
+only as the global-staged shape-free image, so a bounded program whose
+capacity reached an LDS gate panel used to refuse ("requires the shape-free
+global-staged product"). Its product member now also carries
+`tessera.rocm.blockscale_staging = "global"`. The selector then skips every
+LDS rule and takes the register panel at the admitted minimum, and the
+oracle (`staging="global"`) mirrors it. Any other value is refused. M-only
+(v5) bounded products keep their LDS panels. Measured at H-bound capacity
+(256, 2048), K/N 4096/256: 1.0–1.12× static at four shapes, but 2.75× at
+256 × 2048, where the `[16, 32]` gate product takes 4.2× static's LDS
+`[128, 128]`. Evidence:
+`benchmarks/baselines/gfx1201_bounded_global_panel_20261030/README.md`.
+Per-extent product images (below) replace that trade.
+
+**Per-extent product images (GFX1201-BOUNDED-PER-M-PANEL-20261030).** One
+image cannot serve a wide admitted range: an LDS capacity panel cost 2.1–2.9×
+at small M, and the small-M register panel cost about 4× at capacity. Every
+bounded (shape-free) product now carries a base image plus one LDS
+**variant** per box where the static rule takes an LDS panel:
+
+- **The base image** is the register panel for M >= 1 (the global shape-free
+  image for a runtime-K/N/H product).
+- **A box** is an M range and, when the product varies an extent, a range of
+  that extent in frame units. The gate's K varies as G = K/16 and its N = 2H
+  as H/16; the down projection's K varies as H/16 and its N as N. Boxes are
+  derived by scanning the panel oracle over (M, that extent) and keeping the
+  maximal rectangles of one LDS panel. At most eight are allowed.
+  Register panels are not split.
+- **Each variant** is compiled with its panel evaluated at the box's corner:
+  `tessera.rocm.blockscale_min_m` plus `tessera.rocm.blockscale_at_n` or
+  `_at_k` (i64 within the extent; K a whole scale group). With them set, the
+  native selector evaluates every panel rule at that point, and the oracle
+  mirrors it; the selector remains the authority.
+- **A variant whose N varies at launch** is projected with the new identity
+  option `arbitrary-n` (LDS family only). It records `whole_n = false`, so
+  the LDS body masks its column edge. Its provenance records
+  `"arbitrary_n": true` only when set, so existing descriptors keep their
+  digests. LDS images already take K at launch (`lds_runtime_k`).
+- **Validation.** The product validator re-derives the boxes, each variant's
+  request Graph, its panel and its arbitrary-N claim. The portable record
+  carries each variant's box, checked static Target and stage. Replay
+  re-derives every image.
+
+**Owner.** `tessera_rocm_program_prepare_multi_output_axis_frame_variants`
+takes the axis frame plus `TesseraRocmProgramStepVariant` rows, each with:
+
+- `step`, `[min_rows, max_rows]`, `axis` (1 G, 2 N, 3 H, 4 none) and
+  `[min_axis, max_axis]`;
+- the image and entry, and its capacity geometry;
+- its frame entries: the step's base entries in order on (scalar, coef,
+  powers), with only the grid fields changed.
+
+Admission checks each variant against the frame and requires one shared axis
+per step and non-overlapping boxes. The variants key the owner cache.
+`applyFrame` selects each stage's image for the active extents, and
+`tessera_rocm_program_variant_info` reports the selection. An M-only bounded
+program with variants takes the axis frame, as its N-, G- and H-free case.
+
+An LDS variant takes K at launch (`lds_runtime_k`) only where its product's
+K varies (the K-bounded gate, the H-bounded down projection). Its validator
+refuses any other runtime-K claim, because the runtime-K loop measured about
+3% where K is fixed.
+
+Measured on gfx1201 (diagnostic HIP events, behind a kept warm-up owner):
+- **M-only program** (capacity 256, H 2048): 0.96–1.01× static from M = 16
+  to 256.
+- **H-bound program** (capacity (256, 2048)): 0.998–1.08× across six shapes,
+  against 2.75× at its corner with the global base alone.
+
+All outputs are bitwise equal. Reading M and N at launch and masking them
+cost nothing measurable.
+
+A first run without a warm-up owner showed 10–15% at the capacity corner.
+That was mostly an artifact: the first owner a process prepares ran about
+17% slower for its whole life, and that owner was the bounded one. Evidence:
+`benchmarks/baselines/gfx1201_bounded_per_m_panel_20261030/README.md`.
+
 **Owner axis frame.** The axis frame gains a fourth variable: H16 groups
 (power bit 3, `capacity_h`). `prepare_multi_output_axis_frame`,
 `update_axes` and `axes_info` take and report four extents (M, G, N, H);
@@ -926,6 +1004,25 @@ Not covered: H combined with a K or N bound, selecting among measured
 product images per active shape, an LDS-staged capacity product, AD, model
 quality and gfx1151.
 
+
+### gfx1151 (GFX1151-QUANTIZED-MLP-20261030)
+
+**The FP8 program is excluded on gfx1151 by ISA.** RDNA 3.5 has WMMA for
+F16, BF16, IU8 and IU4 but no FP8/BF8 form:
+`docs/reference/isa/rdna/cross_version/instruction_matrix.md` lists
+`V_WMMA_F32_16X16X16_FP8_FP8` and its siblings for RDNA4 only. Both scaled
+products of this MLP are FP8 × FP8 WMMA, so no member set above runs there.
+Every entry point refuses a non-gfx1201 target or live device by name:
+`compile_native_quantized_program` ("requires primal exact gfx1201") and the
+prepared owners ("requires owning gfx1201"). No gfx1201 result in this
+section transfers to gfx1151, and the generic `rocm` name inherits nothing.
+
+A gfx1151 program would keep the FP8 E4M3 storage contract and decode each
+operand exactly to F16 for `V_WMMA_F32_16X16X16_F16` with fp32 accumulation.
+That is a separate lowering with its own tolerance-bounded evidence: gfx1151
+WMMA rounding already differs from gfx1201 at about 1e-6 (see
+`tests/device/rocm/test_bounded_fragment_pack.py`), so bitwise parity with
+gfx1201 is not expected. It is open work, not a claim here.
 
 ## Quantized package certificate and ABI reuse
 

@@ -250,3 +250,59 @@ def test_native_schedule_refuses_an_out_of_range_admitted_minimum(rocm_image_too
     marked = product.replace("module attributes {", f"module attributes {{tessera.rocm.blockscale_min_m = {value}, ", 1)
     with pytest.raises(RuntimeError, match="blockscale_min_m must be an i64 in"):
         run_tessera_opt(tool, marked, "--tessera-graph-to-schedule")
+
+
+@pytest.mark.parametrize("bounds,traced", [
+    ({"m_bound": 256, "h_bound": 2048}, (16, 512, 4096, 256)),
+    ({"m_bound": 256, "k_bound": 8192}, (16, 2048, 4096, 256)),
+])
+def test_runtime_shape_products_request_the_global_panel(rocm_image_toolchain, bounds, traced):
+    """GFX1201-BOUNDED-GLOBAL-PANEL-20261030: at capacity 256 x 4096 the static
+    rule takes an LDS gate panel, which no runtime-K/N image has; the request
+    selects the global register panel instead of refusing the program."""
+    from tessera.compiler.rocm_quantized_product_program import package_quantized_product_graph
+    from tests.unit.test_native_quantized_mlp_program import source
+    fn = ts.jit(target="rocm_gfx1201")(make_mlp(*traced))
+    native = fn.compile_native_quantized_program(*inputs(*traced), **bounds).native
+    gate = native.gate.product
+    assert gate.descriptor.provenance["macro_tile"] == [16, 32]
+    assert gate.descriptor.provenance["runtime_shape_image"] is True
+    assert 'tessera.rocm.blockscale_staging = "global"' in native.gate.product_recipe.graph_ir
+    static = package_quantized_product_graph(source(256, 2048, 4096, 256))
+    assert static.native_stages[2].descriptor.provenance["macro_tile"] == [128, 128]
+
+
+def test_m_only_bounded_products_keep_lds_as_per_m_variants(rocm_image_toolchain):
+    """An M-only product has no runtime-shape image, so it keeps the LDS panels:
+    as per-M variants over the register base (GFX1201-BOUNDED-PER-M-PANEL-20261030)."""
+    fn, roots = public(256, 2048, 4096, 256)
+    native = fn.compile_native_quantized_program(*roots, m_bound=256).native
+    assert native.gate.product.descriptor.provenance["macro_tile"] == [16, 32]
+    assert native.gate.variants[-1].native.descriptor.provenance["macro_tile"] == [128, 128]
+    assert "blockscale_staging" not in native.gate.product_recipe.graph_ir
+
+
+def test_global_staging_oracle_and_request():
+    from tessera.compiler.rocm_fp8_blockscale import (
+        BlockScalePanel, BlockScaleShape, admitted_rows_graph, blockscale_panel_oracle)
+    shape = BlockScaleShape(256, 4096, 4096, 16, 1, "nk")
+    assert blockscale_panel_oracle(shape) == BlockScalePanel("lds", 128, 128, 8)
+    assert blockscale_panel_oracle(shape, min_m=1, staging="global") == BlockScalePanel("global", 16, 32, 1)
+    with pytest.raises(ValueError, match="only"):
+        blockscale_panel_oracle(shape, staging="lds")
+    text = 'module attributes {tessera.target = "rocm"} {}'
+    assert 'blockscale_staging = "global", ' in admitted_rows_graph(text, global_staging=True)
+    with pytest.raises(ValueError, match="admitted-rows request"):
+        admitted_rows_graph(admitted_rows_graph(text, global_staging=True), global_staging=True)
+
+
+@pytest.mark.parametrize("value", ['"lds"', "1 : i64"])
+def test_native_schedule_refuses_another_staging_request(rocm_image_toolchain, value):
+    from tessera.compiler.rocm_quantized_product_program import _export
+    from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
+    from tests.unit.test_native_quantized_mlp_program import source
+    tool = find_tessera_opt()
+    product = _export(tool, source(256, 512, 4096, 256))["member_graphs"][2]
+    marked = product.replace("module attributes {", f"module attributes {{tessera.rocm.blockscale_staging = {value}, ", 1)
+    with pytest.raises(RuntimeError, match="blockscale_staging must be the string"):
+        run_tessera_opt(tool, marked, "--tessera-graph-to-schedule")

@@ -19376,3 +19376,31 @@ Synchronization key: GFX1201-BOUNDED-QUANTIZED-H-20261029.
 Landed on gfx1201 only (Tajasarus). `compile_native_quantized_program(..., m_bound=MB, h_bound=HB)` compiles one v8 program for every `1 <= M <= MB` and every H16-multiple `H <= HB`. It adds a native hidden-width retype across every member but the gate quantizer, a runtime-N NVFP4 expansion image for equally spaced multi-projection boundaries (the gate/up planes), a runtime-width BF16 SiLU parent view (declared `runtime_width` UnitAttr, the width as a fifth body argument), and a fourth HIP axis-frame variable (H/16). Public calls across nine (M, H) shapes at two bound sets are bitwise equal to the static program at each exact shape, through one retained owner. The first timing run was 1.2–3.9× static at four of five shapes because the capacity schedule picked a `[32, 32]` gate-product panel; every shape-free product now requests its register panel for M >= 1 (`tessera.rocm.blockscale_min_m`), and the re-run is 0.98–1.05× static at all five (diagnostic HIP events). No gfx1151 evidence, and the generic `rocm` name inherits nothing. Open: selecting among measured product images per active shape, H combined with a K or N bound (the gate/up expansion would need runtime K and N in one image), an LDS-staged capacity product, gfx1151.
 
 Evidence: tests/device/rocm/test_public_quantized_mlp_h_bound_device.py; benchmarks/baselines/gfx1201_h_bounded_quantized_mlp_20261029/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
+
+## GFX1201-BOUNDED-GLOBAL-PANEL-20261030 — global gate panel for large-capacity bounded quantized MLPs
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-BOUNDED-GLOBAL-PANEL-20261030.
+
+Landed on gfx1201 only (Tajasarus). Runtime-K/N/H bounded products request `tessera.rocm.blockscale_staging = "global"`, so a capacity that reached an LDS gate panel compiles with the register panel instead of refusing; M-only bounded products keep LDS. K- and H-bounded programs at capacity 256 × 4096 are bitwise equal to static at every tested shape. Diagnostic time is 1.0–1.12× static at four shapes but 2.75× at 256 × 2048 (the `[16, 32]` gate product takes 4.2× static LDS). Open: per-active-M product image selection (landed next, GFX1201-BOUNDED-PER-M-PANEL-20261030); gfx1151.
+
+Evidence: benchmarks/baselines/gfx1201_bounded_global_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
+
+## GFX1201-BOUNDED-PER-M-PANEL-20261030 — per-extent product images for bounded quantized MLPs
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-BOUNDED-PER-M-PANEL-20261030.
+
+Landed on gfx1201 only (Tajasarus). A bounded product carries a register/global base image plus one LDS image per (M × varying-extent) box where the static rule takes an LDS panel; the HIP owner selects per active extents (`..._axis_frame_variants`, `variant_info`), and runtime-N variants mask their column edge (`arbitrary-n`). LDS variants take K at launch only where K varies. Behind a kept warm-up owner the M-only program runs at 0.96–1.01× static across M = 16..256, and the H-bound program at 0.998–1.08× (2.75× at its corner before), all bitwise equal. Measurement note: the first owner a gfx1201 process prepares ran about 17% slower for its whole life at large shapes; bounded recorders now keep a warm-up owner first. No gfx1151 evidence. Open: the cause of that first-owner slowdown; gfx1151.
+
+Evidence: tests/device/rocm/test_quantized_mlp_per_m_panels_device.py; benchmarks/baselines/gfx1201_bounded_per_m_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
+
+## GFX1151-QUANTIZED-MLP-20261030 — gfx1151 and the native quantized MLP
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1151-QUANTIZED-MLP-20261030.
+
+ISA exclusion, recorded: the seven-member quantized MLP (static and every bounded v5–v8 form) multiplies FP8 × FP8 through WMMA, and gfx1151 (RDNA 3.5) has no FP8/BF8 WMMA — the RDNA ISA matrix lists those opcodes for RDNA4 only. Every entry point refuses a non-gfx1201 target or device by name. No gfx1201 evidence transfers. Open: an F16-decode gfx1151 lowering (E4M3 decoded exactly to F16, `V_WMMA_F32_16X16X16_F16`, fp32 accumulation), tolerance-bounded against the staged oracle; it needs Princess-Luna (WSL2 was not answering ssh on 2026-10-30).
+
+Evidence: docs/reference/isa/rdna/cross_version/instruction_matrix.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
+

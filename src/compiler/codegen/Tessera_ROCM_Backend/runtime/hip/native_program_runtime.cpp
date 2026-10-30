@@ -20,9 +20,25 @@ extern "C" int tessera_rocm_image_release(void *);
 namespace {
 const pid_t process = getpid();
 struct Memref { void *allocated, *aligned; int64_t offset, elements, stride; };
+//: A per-active-M image variant of one stage (above its base image).
+struct StageVariant {
+  int64_t minRows = 0, maxRows = 0;
+  uint32_t axis = 4;  // 1 G, 2 N, 3 H; 4 = M only
+  int64_t minAxis = 0, maxAxis = 0;
+  void *lease = nullptr;
+  hipFunction_t function{};
+  std::array<unsigned, 6> geometry{};
+  std::vector<TesseraRocmProgramShapeStep> entries;  // in base entry order
+};
 struct Stage {
   void *lease = nullptr;
   hipFunction_t function{};
+  // Variant selection: the base image and capacity geometry, the variants
+  // and the one selected for the active M (0 = base).
+  hipFunction_t baseFunction{};
+  std::array<unsigned, 6> baseGeometry{};
+  std::vector<StageVariant> variants;
+  uint32_t selected = 0;
   std::array<Memref, 7> refs{};
   std::array<int64_t, 8> scalars{};
   std::array<void *, 43> argv{};
@@ -60,6 +76,7 @@ struct Program {
   int64_t activeRows = 0, activeG = 1, activeN = 1, activeH = 1;
   std::vector<uint64_t> unitBytes;   // bytes at M = G = N = H = 1; 0 outside the frame
   std::vector<uint8_t> slotPowers;   // bit 0: M, bit 1: G, bit 2: N, bit 3: H
+  std::vector<uint32_t> entryOrdinal; // each frame entry's index among its step's entries
   uint64_t generation = 0;
   bool poisoned = true, ready = false, output = false;
 };
@@ -150,6 +167,10 @@ int clean(Program &p) {
   for (auto &stage : p.stages) {
     if (stage.lease && tessera_rocm_image_release(stage.lease)) return 8;
     stage.lease = nullptr;
+    for (auto &variant : stage.variants) {
+      if (variant.lease && tessera_rocm_image_release(variant.lease)) return 8;
+      variant.lease = nullptr;
+    }
   }
   if (p.stream && hipStreamDestroy(p.stream) != hipSuccess) return 9;
   p.stream = nullptr;
@@ -173,8 +194,28 @@ uint64_t activeBytes(const Program &p, uint32_t slot) {
 void applyFrame(Program &p, int64_t rows, int64_t groups, int64_t columns, int64_t hidden) {
   if (!p.capacityRows) return;
   p.activeRows = rows; p.activeG = groups; p.activeN = columns; p.activeH = hidden;
-  for (const auto &entry : p.frameSteps) {
-    auto &stage = p.stages[entry.step];
+  // Select each variant stage's image for the active M first; its capacity
+  // geometry is the base the scaled entries below overwrite.
+  for (auto &stage : p.stages) {
+    if (stage.variants.empty()) continue;
+    uint32_t chosen = 0;
+    const int64_t extents[4] = {rows, groups, columns, hidden};
+    for (uint32_t v = 0; v < stage.variants.size(); ++v) {
+      const auto &variant = stage.variants[v];
+      if (rows >= variant.minRows && rows <= variant.maxRows &&
+          (variant.axis == 4 || (extents[variant.axis] >= variant.minAxis &&
+                                 extents[variant.axis] <= variant.maxAxis)))
+        chosen = v + 1;
+    }
+    stage.selected = chosen;
+    stage.function = chosen ? stage.variants[chosen - 1].function : stage.baseFunction;
+    stage.geometry = chosen ? stage.variants[chosen - 1].geometry : stage.baseGeometry;
+  }
+  for (size_t index = 0; index < p.frameSteps.size(); ++index) {
+    auto &stage = p.stages[p.frameSteps[index].step];
+    const auto &entry = stage.selected
+        ? stage.variants[stage.selected - 1].entries[p.entryOrdinal[index]]
+        : p.frameSteps[index];
     uint64_t scale = monomial(entry.powers, rows, groups, columns, hidden);
     stage.scalars[entry.scalar] = int64_t(scale) * entry.scalar_coef;
     if (entry.grid_axis < 3) {
@@ -410,6 +451,64 @@ bool validShapeFrame(const TesseraRocmProgramAxisFrame *frame, int64_t rows,
   }
   return true;
 }
+// Variant admission: every variant names a framed step, a valid image and
+// capacity geometry, and frame entries equal to that step's base entries in
+// order on (scalar, scalar_coef, powers) whose grid fields reproduce its own
+// geometry at capacity. Variants are sorted by step; a step's variants share
+// one axis and their (rows x axis) boxes never overlap.
+bool validVariants(const TesseraRocmProgramAxisFrame &frame, uint32_t steps,
+                   const std::vector<TesseraRocmProgramShapeStep> &entries,
+                   const TesseraRocmProgramStepVariant *variants, uint32_t count) {
+  if (!count) return true;
+  if (!variants || count > 32) return false;
+  for (uint32_t i = 0; i < count; ++i) {
+    const auto &v = variants[i];
+    const int64_t capacities[4] = {frame.capacity_m, frame.capacity_g, frame.capacity_n,
+                                   frame.capacity_h};
+    if (v.step >= steps || v.min_rows < 1 || v.max_rows < v.min_rows ||
+        v.max_rows > frame.capacity_m || v.axis < 1 || v.axis > 4 ||
+        (v.axis < 4 ? (!capacities[v.axis] || v.min_axis < 1 || v.max_axis < v.min_axis ||
+                       v.max_axis > capacities[v.axis])
+                    : (v.min_axis || v.max_axis)) ||
+        !v.image || v.image_bytes < 4 || v.image_bytes > (uint64_t(1) << 28) ||
+        std::memcmp(v.image, "\177ELF", 4) || !v.entry || !*v.entry ||
+        !v.entries || !v.entry_count || v.entry_count > 8) return false;
+    if (i && variants[i - 1].step > v.step) return false;
+    for (uint32_t j = 0; j < i; ++j) {
+      const auto &o = variants[j];
+      if (o.step != v.step) continue;
+      if (o.axis != v.axis) return false;
+      const bool rows = o.min_rows <= v.max_rows && v.min_rows <= o.max_rows;
+      const bool axis = v.axis == 4 || (o.min_axis <= v.max_axis && v.min_axis <= o.max_axis);
+      if (rows && axis) return false;
+    }
+    uint64_t block = 1;
+    for (uint32_t j = 0; j < 6; ++j) {
+      if (!v.geometry[j] || v.geometry[j] > 2147483647U) return false;
+      if (j >= 3) {
+        if (v.geometry[j] > 1024 || block > 1024 / v.geometry[j]) return false;
+        block *= v.geometry[j];
+      }
+    }
+    std::vector<const TesseraRocmProgramShapeStep *> base;
+    for (const auto &e : entries) if (e.step == v.step) base.push_back(&e);
+    if (base.size() != v.entry_count) return false;
+    for (uint32_t k = 0; k < v.entry_count; ++k) {
+      const auto &e = v.entries[k];
+      if (e.step != v.step || e.scalar != base[k]->scalar ||
+          e.scalar_coef != base[k]->scalar_coef || e.powers != base[k]->powers ||
+          e.grid_axis > 3) return false;
+      if (e.grid_axis < 3) {
+        uint64_t work = 0;
+        if (!e.grid_tile || !checkedMonomial(e.powers, e.grid_coef, frame, work)) return false;
+        if (v.geometry[e.grid_axis] != work / e.grid_tile + (work % e.grid_tile != 0)) return false;
+        for (uint32_t j = 0; j < k; ++j)
+          if (v.entries[j].grid_axis == e.grid_axis) return false;
+      } else if (e.grid_tile || e.grid_coef) return false;
+    }
+  }
+  return true;
+}
 bool inputContract(const Program &p, const void *const *inputs,
                    const uint64_t *bytes) {
   if (!inputs || !bytes) return false;
@@ -460,7 +559,8 @@ static int prepareProgram(
     const TesseraRocmProgramRows *rowPolicy = nullptr, int64_t activeRows = 0,
     const TesseraRocmProgramRowFrame *rowFrame = nullptr,
     const TesseraRocmProgramAxisFrame *shapeFrame = nullptr,
-    int64_t activeG = 1, int64_t activeN = 1, int64_t activeH = 1) try {
+    int64_t activeG = 1, int64_t activeN = 1, int64_t activeH = 1,
+    const TesseraRocmProgramStepVariant *variants = nullptr, uint32_t variantCount = 0) try {
   if (handle) *handle = 0;
   if (!handle || !architecture || !contract || !plan || !inputs || !inputBytes ||
       !arguments || arguments > 128 || !steps || steps > 128 ||
@@ -523,11 +623,12 @@ static int prepareProgram(
     return 1;
   if (shapeFrame) {
     if (!validShapeFrame(shapeFrame, activeRows, activeG, activeN, activeH, arguments, buffers, contract,
-                         steps, plan, units, powers, entries)) return 1;
+                         steps, plan, units, powers, entries) ||
+        !validVariants(*shapeFrame, steps, entries, variants, variantCount)) return 1;
   } else {
     // Both row ABIs are the G-free case of the shape frame.
     std::vector<TesseraRocmProgramRowStep> rowSteps;
-    if (activeG != 1 || activeN != 1 || activeH != 1) return 1;
+    if (activeG != 1 || activeN != 1 || activeH != 1 || variantCount) return 1;
     if (rowFrame ? !validRowFrame(rowFrame, activeRows, arguments, buffers, contract,
                                   steps, plan, units, rowSteps)
                  : !validRows(rowPolicy, activeRows, arguments, buffers, contract,
@@ -551,6 +652,10 @@ static int prepareProgram(
     p->capacityH = shapeFrame->capacity_h;
   }
   p->frameSteps = std::move(entries);
+  p->entryOrdinal.resize(p->frameSteps.size());
+  for (size_t i = 0; i < p->frameSteps.size(); ++i)
+    for (size_t j = 0; j < i; ++j)
+      p->entryOrdinal[i] += p->frameSteps[j].step == p->frameSteps[i].step;
   p->activeRows = activeRows;
   p->activeG = activeG;
   p->activeN = activeN;
@@ -608,6 +713,24 @@ static int prepareProgram(
       keyValue(p->cacheKey, e.grid_axis); keyValue(p->cacheKey, e.grid_tile);
       keyValue(p->cacheKey, e.grid_coef);
     }
+    // Variant images and their selection key the owner exactly like base images.
+    keyValue(p->cacheKey, variantCount);
+    for (uint32_t i = 0; i < variantCount; ++i) {
+      const auto &v = variants[i];
+      keyValue(p->cacheKey, v.step); keyValue(p->cacheKey, v.min_rows);
+      keyValue(p->cacheKey, v.max_rows); keyValue(p->cacheKey, v.axis);
+      keyValue(p->cacheKey, v.min_axis); keyValue(p->cacheKey, v.max_axis);
+      keyValue(p->cacheKey, v.image_bytes);
+      p->cacheKey.append(static_cast<const char *>(v.image), v.image_bytes);
+      size_t length = std::strlen(v.entry); keyValue(p->cacheKey, length);
+      p->cacheKey.append(v.entry, length);
+      for (unsigned j = 0; j < 6; ++j) keyValue(p->cacheKey, v.geometry[j]);
+      for (uint32_t k = 0; k < v.entry_count; ++k) {
+        const auto &e = v.entries[k];
+        keyValue(p->cacheKey, e.grid_axis); keyValue(p->cacheKey, e.grid_tile);
+        keyValue(p->cacheKey, e.grid_coef);
+      }
+    }
   }
   p->pinnedReadbackBytes = outputTotal;
   // Budget both pinned slabs and pageable snapshots/readback capacity.
@@ -642,7 +765,25 @@ static int prepareProgram(
          plan[i].entry, &s.lease, &module, &function, &hit)) return 3;
     s.function = static_cast<hipFunction_t>(function);
     std::copy_n(plan[i].geometry, 6, s.geometry.begin());
+    s.baseFunction = s.function;
+    s.baseGeometry = s.geometry;
     std::copy_n(plan[i].scalars, plan[i].scalar_count, s.scalars.begin());
+  }
+  for (uint32_t i = 0; i < variantCount; ++i) {
+    const auto &v = variants[i];
+    StageVariant variant;
+    void *module = nullptr, *function = nullptr; int hit = 0;
+    if (tessera_rocm_image_acquire(v.image, v.image_bytes, v.entry, &variant.lease,
+                                   &module, &function, &hit)) return 3;
+    variant.minRows = v.min_rows;
+    variant.maxRows = v.max_rows;
+    variant.axis = v.axis;
+    variant.minAxis = v.min_axis;
+    variant.maxAxis = v.max_axis;
+    variant.function = static_cast<hipFunction_t>(function);
+    std::copy_n(v.geometry, 6, variant.geometry.begin());
+    variant.entries.assign(v.entries, v.entries + v.entry_count);
+    owned.stages[v.step].variants.push_back(std::move(variant));
   }
   for (uint32_t i = 0; i < buffers; ++i)
     if (hipMalloc(&owned.buffers[i], contract[i].bytes) != hipSuccess) return 4;
@@ -811,6 +952,37 @@ extern "C" int tessera_rocm_program_prepare_multi_output_axis_frame(
                         plan, inputs, inputBytes, handle, nullptr, activeRows,
                         nullptr, frame, activeG, activeN, activeH);
 }
+
+extern "C" int tessera_rocm_program_prepare_multi_output_axis_frame_variants(
+    const char *architecture, uint32_t arguments, uint32_t buffers,
+    const TesseraRocmProgramBuffer *contract, uint32_t steps,
+    const TesseraRocmProgramMultiOutputStep *plan, const void *const *inputs,
+    const uint64_t *inputBytes, const TesseraRocmProgramAxisFrame *frame,
+    int64_t activeRows, int64_t activeG, int64_t activeN, int64_t activeH,
+    const TesseraRocmProgramStepVariant *variants, uint32_t variantCount,
+    uint64_t *handle) {
+  if (!frame || activeG < 1 || activeN < 1 || activeH < 1 || !variants || !variantCount) {
+    if (handle) *handle = 0;
+    return 1;
+  }
+  return prepareProgram(architecture, arguments, buffers, contract, steps,
+                        plan, inputs, inputBytes, handle, nullptr, activeRows,
+                        nullptr, frame, activeG, activeN, activeH, variants, variantCount);
+}
+
+extern "C" int tessera_rocm_program_variant_info(uint64_t handle, uint32_t count,
+                                                 uint32_t *selected) try {
+  if (!selected) return 1;
+  if (getpid() != process) return 2;
+  auto &pool = state(); std::lock_guard<std::mutex> guard(pool.mutex);
+  auto it = pool.programs.find(handle); if (it == pool.programs.end()) return 1;
+  auto &p = *it->second;
+  if (!identity(p)) return 2;
+  if (p.poisoned) return 10;
+  if (count != p.stages.size()) return 1;
+  for (uint32_t i = 0; i < count; ++i) selected[i] = p.stages[i].selected;
+  return 0;
+} catch (...) { return 12; }
 
 extern "C" int tessera_rocm_program_update(
     uint64_t handle, const void *const *inputs, const uint64_t *bytes) try {

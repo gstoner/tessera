@@ -35,6 +35,9 @@ struct ProjectROCMKernelIdentityPass
   Option<bool> arbitraryM{*this, "arbitrary-m",
       llvm::cl::desc("Guard arbitrary positive runtime M in scaled matrix images"),
       llvm::cl::init(false)};
+  Option<bool> arbitraryN{*this, "arbitrary-n",
+      llvm::cl::desc("Guard arbitrary positive runtime N (ragged column tiles) in an LDS W8A8 image"),
+      llvm::cl::init(false)};
   Option<bool> primalProfile{*this, "primal-profile",
       llvm::cl::desc("Use the measured gfx1201 scaled-primal image policy"),
       llvm::cl::init(false)};
@@ -70,6 +73,12 @@ struct ProjectROCMKernelIdentityPass
     if (arbitraryM && family != "scaled_matmul" &&
         family != "scaled_matmul_lds" && family != "folded_matmul") {
       module.emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: arbitrary-M projection requires a scaled matrix family");
+      return signalPassFailure();
+    }
+    // An N that varies at launch may end mid-tile: the LDS body then masks
+    // its column edge (whole_n = false), as arbitrary M masks rows.
+    if (arbitraryN && family != "scaled_matmul_lds") {
+      module.emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: arbitrary-N projection requires the LDS W8A8 family");
       return signalPassFailure();
     }
     if (directive.empty()) {
@@ -398,7 +407,8 @@ struct ProjectROCMKernelIdentityPass
             axis == "m" ? "block_m" : "block_n");
         copy->setAttr(axis == "m" ? "whole_m" : "whole_n",
                       builder.getBoolAttr(extent.getInt() % block.getInt() == 0 &&
-                                          !(axis == "m" && arbitraryM)));
+                                          !(axis == "m" && arbitraryM) &&
+                                          !(axis == "n" && arbitraryN)));
         copy->setAttr(axis, builder.getI64IntegerAttr(0));
       }
       if (runtimeK) {

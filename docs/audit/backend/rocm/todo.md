@@ -19394,3 +19394,13 @@ Synchronization key: GFX1201-BOUNDED-PER-M-PANEL-20261030.
 Landed on gfx1201 only (Tajasarus). A bounded product carries a register/global base image plus one LDS image per (M × varying-extent) box where the static rule takes an LDS panel; the HIP owner selects per active extents (`..._axis_frame_variants`, `variant_info`), and runtime-N variants mask their column edge (`arbitrary-n`). LDS variants take K at launch only where K varies. Behind a kept warm-up owner the M-only program runs at 0.96–1.01× static across M = 16..256, and the H-bound program at 0.998–1.08× (2.75× at its corner before), all bitwise equal. Measurement note: the first owner a gfx1201 process prepares ran about 17% slower for its whole life at large shapes; bounded recorders now keep a warm-up owner first. No gfx1151 evidence. Open: the cause of that first-owner slowdown; gfx1151.
 
 Evidence: tests/device/rocm/test_quantized_mlp_per_m_panels_device.py; benchmarks/baselines/gfx1201_bounded_per_m_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
+
+## GFX1151-QUANTIZED-MLP-20261030 — gfx1151 and the native quantized MLP
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1151-QUANTIZED-MLP-20261030.
+
+ISA exclusion, recorded: the seven-member quantized MLP (static and every bounded v5–v8 form) multiplies FP8 × FP8 through WMMA, and gfx1151 (RDNA 3.5) has no FP8/BF8 WMMA — the RDNA ISA matrix lists those opcodes for RDNA4 only. Every entry point refuses a non-gfx1201 target or device by name. No gfx1201 evidence transfers. Open: an F16-decode gfx1151 lowering (E4M3 decoded exactly to F16, `V_WMMA_F32_16X16X16_F16`, fp32 accumulation), tolerance-bounded against the staged oracle; it needs Princess-Luna (WSL2 was not answering ssh on 2026-10-30).
+
+Evidence: docs/reference/isa/rdna/cross_version/instruction_matrix.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
+

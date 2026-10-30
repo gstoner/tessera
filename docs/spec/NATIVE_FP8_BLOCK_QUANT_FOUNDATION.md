@@ -1005,6 +1005,25 @@ product images per active shape, an LDS-staged capacity product, AD, model
 quality and gfx1151.
 
 
+### gfx1151 (GFX1151-QUANTIZED-MLP-20261030)
+
+**The FP8 program is excluded on gfx1151 by ISA.** RDNA 3.5 has WMMA for
+F16, BF16, IU8 and IU4 but no FP8/BF8 form:
+`docs/reference/isa/rdna/cross_version/instruction_matrix.md` lists
+`V_WMMA_F32_16X16X16_FP8_FP8` and its siblings for RDNA4 only. Both scaled
+products of this MLP are FP8 × FP8 WMMA, so no member set above runs there.
+Every entry point refuses a non-gfx1201 target or live device by name:
+`compile_native_quantized_program` ("requires primal exact gfx1201") and the
+prepared owners ("requires owning gfx1201"). No gfx1201 result in this
+section transfers to gfx1151, and the generic `rocm` name inherits nothing.
+
+A gfx1151 program would keep the FP8 E4M3 storage contract and decode each
+operand exactly to F16 for `V_WMMA_F32_16X16X16_F16` with fp32 accumulation.
+That is a separate lowering with its own tolerance-bounded evidence: gfx1151
+WMMA rounding already differs from gfx1201 at about 1e-6 (see
+`tests/device/rocm/test_bounded_fragment_pack.py`), so bitwise parity with
+gfx1201 is not expected. It is open work, not a claim here.
+
 ## Quantized package certificate and ABI reuse
 
 `TESSERA_ROCM_PROGRAM_BINDING_CACHE=1` (the existing default) also enables

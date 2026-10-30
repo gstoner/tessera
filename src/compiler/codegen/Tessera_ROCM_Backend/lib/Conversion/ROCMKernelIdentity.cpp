@@ -256,10 +256,16 @@ struct ProjectROCMKernelIdentityPass
       auto k = kernel->getAttrOfType<IntegerAttr>("k");
       auto n = kernel->getAttrOfType<IntegerAttr>("n");
       auto offsets = kernel->getAttrOfType<ArrayAttr>("row_offsets");
+      // Runtime-N derives every boundary from N, so they must be equally spaced.
+      bool spaced = offsets && offsets.size() >= 2 && n && n.getInt() > 0 &&
+                    n.getInt() % int64_t(offsets.size() - 1) == 0;
+      for (unsigned p = 0; spaced && p < offsets.size(); ++p) {
+        auto offset = dyn_cast<IntegerAttr>(offsets[p]);
+        spaced = offset && offset.getInt() == int64_t(p) * (n.getInt() / int64_t(offsets.size() - 1));
+      }
       if (runtimeK == runtimeN || kernel->hasAttr("runtime_k") || kernel->hasAttr("runtime_n") ||
-          !k || k.getInt() <= 0 || !n || n.getInt() <= 0 ||
-          (runtimeN && (!offsets || offsets.size() != 2))) {
-        kernel->emitError("NVFP4 expansion image identity requires a static verified expansion and exactly one of runtime-k or single-projection runtime-n");
+          !k || k.getInt() <= 0 || !n || n.getInt() <= 0 || (runtimeN && !spaced)) {
+        kernel->emitError("NVFP4 expansion image identity requires a static verified expansion and exactly one of runtime-k or equally spaced runtime-n");
         return signalPassFailure();
       }
     }

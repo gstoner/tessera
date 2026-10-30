@@ -18,11 +18,11 @@ from .native_artifact import LaunchGeometry, ScalarArgument
 from .quantized_binding_cache import memoized_validation,memoized_binding
 from .native_scaled_program import PreparedScaledProgram, _BoundScaledABI, _Buffer, _StorageSpec, _storage_numpy_dtype
 from .rocm_block_quant_native import BlockQuantRecipe, lower_block_quant_text, package_block_quant_recipe, validate_block_quant_runtime_artifact, _frame
-from .rocm_fp8_blockscale import BlockScaleProgram, BlockScaleShape, PACKAGE_ABIS, check_blockscale_target_ir, package_blockscale, verify_blockscale_schedule
+from .rocm_fp8_blockscale import BlockScaleProgram, BlockScaleShape, PACKAGE_ABIS, admitted_rows_graph, check_blockscale_target_ir, package_blockscale, verify_blockscale_schedule
 from .rocm_native import ROCMNativePackage, _directive_symbol
 from .rocm_nvfp4_expansion_program import _MultiOutputStep
 from .rocm_nvfp4_expand_native import NVFP4ExpansionPackage, package_nvfp4_expansion
-from .rocm_parent_view_native import ParentViewRecipe,package_parent_view_recipe,validate_parent_view_runtime_artifact,_frame as _parent_view_frame
+from .rocm_parent_view_native import ParentViewRecipe,package_parent_view_recipe,validate_parent_view_runtime_artifact,_frame as _parent_view_frame,runtime_width_graph,runtime_width_profile
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
 _OPTION = "--tessera-autodiff-forward=export-scaled-primal=true"
@@ -32,7 +32,7 @@ _ACTIVATED_SCHEMA = "tessera.native.quantized_product.v3"
 _NATIVE_SCHEMAS = (_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA)
 _PACKAGE_SCHEMAS = tuple(f"tessera.rocm.quantized_product_package.v{i}" for i in (1,2,3))
 # v4 is the static seven-member MLP; v5 is that MLP at capacity with a row frame.
-_MLP_SCHEMAS = tuple(f"tessera.native.quantized_product.v{i}" for i in (4,5,6,7))
+_MLP_SCHEMAS = tuple(f"tessera.native.quantized_product.v{i}" for i in (4,5,6,7,8))
 
 
 def _digest(text):
@@ -224,10 +224,19 @@ class NativeQuantizedProductProgram:
                 if row["shape"]!=dims or row["storage"]!=storage or row["bytes"]!=math.prod(dims)*width:
                     raise ValueError("native quantized-product expansion/shared buffer interface differs")
         members.append(self.product_recipe.graph_ir)
+        expected=list(plan["member_graphs"])
+        if self.arbitrary_m:
+            # The shape-free product's member requests the panel for M >= 1.
+            product_index=2 if self.expansion is not None else 1
+            expected[product_index]=admitted_rows_graph(expected[product_index])
         if self.activation_recipe is not None:
             members.append(self.activation_recipe.graph_ir)
+            if self.runtime_n:
+                # A runtime-N gate/up product's SiLU reads the runtime half width:
+                # its member is the plan's Graph with the runtime-width request.
+                expected[-1]=runtime_width_graph(expected[-1])
         if (plan["source_graph_ir"] != self.graph_ir
-                or plan["member_graphs"] != members
+                or expected != members
                 or self.product_recipe.shape != shape
                 or self.quantizer.tile_ir != self.quantizer_recipe.tile_ir
                 or self.product.tile_ir != self.product_recipe.tile_ir):
@@ -252,6 +261,9 @@ class NativeQuantizedProductProgram:
                 graph_ir=self.activation_recipe.graph_ir,schedule_ir=self.activation_recipe.schedule_ir,
                 tile_ir=act.tile_ir,target_ir=act.target_ir,native_image=act.image,
                 launch_descriptor=act.descriptor,metadata={"target":"rocm_gfx1201"}))
+            _,act_member=_parent_view_frame(act.target_ir)
+            if runtime_width_profile(act_member)!=self.runtime_n:
+                raise ValueError("native quantized-product activation width policy differs from its expansion")
             for local,shared in zip(json.loads(bound.program_json)["buffers"],(plan["buffers"][8],plan["buffers"][9]),strict=True):
                 if any(local[key]!=shared[key] for key in ("shape","storage","bytes")):
                     raise ValueError("native quantized-product activation/shared buffer interface differs")
@@ -329,7 +341,7 @@ class NativeQuantizedProductProgram:
     @classmethod
     def from_manifest(cls,record,*,_bounded_member=False):
         if isinstance(record,dict) and record.get("schema") in tuple(
-                f"tessera.rocm.quantized_product_package.v{i}" for i in (4,5,6,7)):
+                f"tessera.rocm.quantized_product_package.v{i}" for i in (4,5,6,7,8)):
             if _bounded_member:
                 raise ValueError("native quantized MLP portable component schemas differ")
             from .rocm_quantized_mlp_program import NativeQuantizedMLPProgram
@@ -409,8 +421,11 @@ def package_quantized_product_graph(graph_ir,*,arbitrary_m=False,runtime_k=False
     expansion = (package_nvfp4_expansion(plan["member_graphs"][1],runtime_k=runtime_k,runtime_n=runtime_n)
                  if expanded else None)
     child = plan["member_graphs"][2 if expanded else 1]
+    if arbitrary_m:
+        # The shape-free image runs every M down to 1; its panel is chosen there.
+        child = admitted_rows_graph(child)
     schedule = run_tessera_opt(tool,child,"--tessera-graph-to-schedule")
-    verify_blockscale_schedule(shape,schedule)
+    verify_blockscale_schedule(shape,schedule,min_m=1 if arbitrary_m else None)
     tile = run_tessera_opt(tool,schedule,"--tessera-schedule-to-tile")
     recipe = BlockScaleProgram(shape,"quantized_product",child,schedule,tile)
     product = package_blockscale(recipe,pipeline_name="tessera-rocm-executable",
@@ -426,6 +441,8 @@ def package_quantized_product_graph(graph_ir,*,arbitrary_m=False,runtime_k=False
     activation_recipe,activation=None,None
     if activated:
         graph=plan["member_graphs"][3]
+        if runtime_n:
+            graph=runtime_width_graph(graph)
         schedule=run_tessera_opt(tool,graph,"--tessera-graph-to-schedule")
         tile=run_tessera_opt(tool,schedule,"--tessera-schedule-to-tile")
         activation_recipe=ParentViewRecipe(graph,schedule,tile)

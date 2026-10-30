@@ -36,7 +36,12 @@ inline mlir::LogicalResult materializeGateUpViews(mlir::ModuleOp module) {
   b.setInsertionPointToStart(&gpuModule.getBodyRegion().front());
   auto storage = carrier->getAttrOfType<TypeAttr>("storage").getValue();
   auto memref = MemRefType::get({ShapedType::kDynamic},storage);
-  auto function = gpu::GPUFuncOp::create(b,loc,name,b.getFunctionType({memref,memref,b.getI64Type()},{}));
+  // A runtime-width view takes (parent, out, count, width); the static view
+  // compiles its checked width in.
+  const bool runtimeWidth = carrier->hasAttr("runtime_width");
+  SmallVector<Type> arguments{memref,memref,b.getI64Type()};
+  if (runtimeWidth) arguments.push_back(b.getI64Type());
+  auto function = gpu::GPUFuncOp::create(b,loc,name,b.getFunctionType(arguments,{}));
   function.setKernel(true);
   b.setInsertionPointToStart(&function.getBody().front());
   auto c = [&](int64_t v) -> Value { return arith::ConstantIntOp::create(b,loc,v,64); };
@@ -46,10 +51,16 @@ inline mlir::LogicalResult materializeGateUpViews(mlir::ModuleOp module) {
   Value threads = wide(gpu::BlockDimOp::create(b,loc,gpu::Dimension::x));
   Value gid = arith::AddIOp::create(b,loc,arith::MulIOp::create(b,loc,bid,threads),tid);
   Value count = function.getArgument(2), zero = c(0), one = c(1), two = c(2);
-  Value width = c(columns);
+  Value width = runtimeWidth ? function.getArgument(3) : c(columns);
   auto compare = [&](arith::CmpIPredicate p,Value a,Value z) -> Value { return arith::CmpIOp::create(b,loc,p,a,z); };
   Value valid = compare(arith::CmpIPredicate::sgt,count,zero);
   auto require = [&](Value test) { valid = arith::AndIOp::create(b,loc,valid,test); };
+  // A runtime width is positive and within the checked capacity; the count
+  // check below then bounds rows = count/width.
+  if (runtimeWidth) {
+    require(compare(arith::CmpIPredicate::sgt,width,zero));
+    require(compare(arith::CmpIPredicate::sle,width,c(columns)));
+  }
   require(compare(arith::CmpIPredicate::ule,count,c(INT64_MAX/8)));
   require(compare(arith::CmpIPredicate::eq,arith::RemUIOp::create(b,loc,count,width),zero));
   require(compare(arith::CmpIPredicate::ule,arith::DivUIOp::create(b,loc,count,width),c(INT32_MAX)));
@@ -69,6 +80,7 @@ inline mlir::LogicalResult materializeGateUpViews(mlir::ModuleOp module) {
   IRMapping mapping;
   mapping.map(body.getArgument(0),pointers[0]); mapping.map(body.getArgument(1),pointers[1]);
   mapping.map(body.getArgument(2),gid); mapping.map(body.getArgument(3),count);
+  if (runtimeWidth) mapping.map(body.getArgument(4),width);
   for (Operation &op : body.getBody().front().without_terminator()) b.clone(op,mapping);
   b.setInsertionPointToEnd(&function.getBody().front()); gpu::ReturnOp::create(b,loc);
   if (failed(exportParentViewProgram(module,carrier))) return failure();

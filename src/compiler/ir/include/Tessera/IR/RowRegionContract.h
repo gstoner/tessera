@@ -36,6 +36,11 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
   auto columns = op->getAttrOfType<IntegerAttr>("columns");
   auto storage = op->getAttrOfType<TypeAttr>("storage");
   auto threads = op->getAttrOfType<IntegerAttr>("workgroup_size");
+  // A runtime-width body (schema 3 only) reads its width from a fifth i64.
+  auto widthAttr = op->getAttr("runtime_width");
+  const bool runtimeWidth = bool(widthAttr);
+  if (widthAttr && (!isa<UnitAttr>(widthAttr) || !schema || schema.getInt() != 3))
+    return op->emitOpError("runtime-width parent view requires the schema-3 BF16 profile");
   auto hex = [](Attribute a) {
     auto s = dyn_cast_or_null<StringAttr>(a);
     return s && s.getValue().size() == 64 && llvm::all_of(s.getValue(), [](char c) {
@@ -58,9 +63,10 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
   auto fn = dyn_cast<LLVM::LLVMFuncOp>(op->getRegion(0).front().front());
   auto ptr = LLVM::LLVMPointerType::get(op->getContext());
   if (!fn || fn.getName() != name.getValue() || !fn.getBody().hasOneBlock() ||
-      fn.getNumArguments() != 4 || fn.getArgument(0).getType() != ptr ||
+      fn.getNumArguments() != (runtimeWidth ? 5u : 4u) || fn.getArgument(0).getType() != ptr ||
       fn.getArgument(1).getType() != ptr || !fn.getArgument(2).getType().isInteger(64) ||
       !fn.getArgument(3).getType().isInteger(64) ||
+      (runtimeWidth && !fn.getArgument(4).getType().isInteger(64)) ||
       !isa<LLVM::LLVMVoidType>(fn.getFunctionType().getReturnType()) ||
       fn->hasAttr("nvvm.kernel") || fn->hasAttr("rocdl.kernel") || fn->hasAttr("passthrough") ||
       digest(fn) != cast<StringAttr>(op->getAttr("body_hash")).getValue())

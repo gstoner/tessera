@@ -2793,15 +2793,16 @@ class JitFn:
             self._rocm_nvfp4_bounded_program=(program,runtime_artifact(program))
         return program
 
-    def compile_native_quantized_program(self,*args,m_bound=None,k_bound=None,n_bound=None,**kwargs):
+    def compile_native_quantized_program(self,*args,m_bound=None,k_bound=None,n_bound=None,h_bound=None,**kwargs):
         """Compile the authored quantized product/MLP.
 
         ``m_bound`` requests the bounded-row v5 MLP. ``k_bound`` additionally
         bounds the gate contraction (v6): one program then serves every
         1 <= M <= m_bound and every K16 multiple K <= k_bound. ``n_bound``
         bounds the down projection's output columns (v7, with or without
-        ``k_bound``). A ``k_bound`` or ``n_bound`` without ``m_bound`` keeps the
-        traced M as the row capacity."""
+        ``k_bound``). ``h_bound`` bounds the hidden width H, a multiple of 16
+        (v8; not combined with ``k_bound`` or ``n_bound``). A K, N or H bound
+        without ``m_bound`` keeps the traced M as the row capacity."""
         from copy import deepcopy
         from dataclasses import replace
         from .rocm_quantized_product_frontend import package_traced_quantized_product,requests_quantized_product
@@ -2813,14 +2814,18 @@ class JitFn:
             raise ValueError("native quantized contraction bound must be a positive multiple of 16")
         if n_bound is not None and (type(n_bound) is not int or n_bound<=0):
             raise ValueError("native quantized column bound must be a positive integer")
+        if h_bound is not None and (type(h_bound) is not int or h_bound<=0 or h_bound%16):
+            raise ValueError("native quantized hidden bound must be a positive multiple of 16")
+        if h_bound is not None and (k_bound is not None or n_bound is not None):
+            raise ValueError("native quantized hidden bound does not compose with a K or N bound")
         bound=self._rocm_nvfp4_call_signature.bind(*args,**kwargs)
         bound.apply_defaults()
         ordered=tuple(bound.arguments[name] for name in self.arg_names)
         module,_=self._trace_frontend_capture(ordered,{})
         if not requests_quantized_product(module):
             raise ValueError("native quantized program requires the authored quantizer/product Graph")
-        if (k_bound is not None or n_bound is not None) and m_bound is None:
-            # K and N bounds refine the row frame; the traced M is its capacity.
+        if (k_bound is not None or n_bound is not None or h_bound is not None) and m_bound is None:
+            # K, N and H bounds refine the row frame; the traced M is its capacity.
             import numpy as np
             m_bound=int(np.shape(ordered[0])[0]) if len(np.shape(ordered[0]))==2 else None
             if m_bound is None or m_bound<=0:
@@ -2834,12 +2839,15 @@ class JitFn:
                 module.module_attrs["tessera.native.quantized_k_bound"]=f"{k_bound} : i64"
             if n_bound is not None:
                 module.module_attrs["tessera.native.quantized_n_bound"]=f"{n_bound} : i64"
+            if h_bound is not None:
+                module.module_attrs["tessera.native.quantized_h_bound"]=f"{h_bound} : i64"
         program=replace(package_traced_quantized_product(module),argument_names=tuple(self.arg_names))
         program.validate()
         if m_bound is not None:
             if (not program.bounded
                     or (k_bound is not None)!=bool(getattr(program.native,"k_bounded",False))
-                    or (n_bound is not None)!=bool(getattr(program.native,"n_bounded",False))):
+                    or (n_bound is not None)!=bool(getattr(program.native,"n_bounded",False))
+                    or (h_bound is not None)!=bool(getattr(program.native,"h_bounded",False))):
                 raise ValueError("native quantized row bound did not produce a bounded program")
             self.graph_ir=module
             self.frontend_authority="tracer"

@@ -166,8 +166,9 @@ def test_static_record_cannot_carry_arbitrary_m_products(rocm_image_toolchain):
 
 @pytest.mark.parametrize("member", ["gate", "down"])
 def test_rehashed_static_claim_on_a_shape_free_image_is_refused(rocm_image_toolchain, member):
-    """A forger who also recomputes the digest still meets the image check:
-    a static claim requires the image to be the checked static Target."""
+    """A forger who also recomputes the digest still meets the member checks:
+    a static claim requires the unmarked product Graph (a shape-free member
+    requests the admitted-rows panel) and the checked static Target image."""
     import dataclasses
     from tessera.compiler.rocm_quantized_product_program import NativeQuantizedProductProgram
     fn, roots = public()
@@ -175,5 +176,5 @@ def test_rehashed_static_claim_on_a_shape_free_image_is_refused(rocm_image_toolc
     replay = NativeQuantizedProductProgram.from_manifest(json.loads(json.dumps(record["native_program"])))
     component = dataclasses.replace(getattr(replay, member), arbitrary_m=False)
     component = dataclasses.replace(component, binding_digest=component._identity())
-    with pytest.raises(ValueError, match="checked Target differs"):
+    with pytest.raises(ValueError, match="projected Graph differs|checked Target differs"):
         component.validate()

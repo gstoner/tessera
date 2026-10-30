@@ -103,19 +103,19 @@ def test_activation_only_update_keeps_the_resident_columns():
         assert out.shape == (4, 33)
         np.testing.assert_array_equal(out.view(np.uint16),
                                       static_at(4, h, 48, 33, [x, *roots[1:]], lib).view(np.uint16))
-        assert owner.axes_info()[:2] == ((8, 0, 40), (4, 0, 33))
+        assert owner.axes_info()[:2] == ((8, 0, 40, 0), (4, 0, 33, 0))
     finally:
         owner.close()
 
 
-def _raw_update(owner, m, g, n, slots, arrays):
+def _raw_update(owner, m, g, n, slots, arrays, h=0):
     import ctypes as C
     update = owner.lib.tessera_rocm_program_update_axes
-    update.argtypes = [C.c_uint64, C.c_int64, C.c_int64, C.c_int64, C.c_uint32, C.POINTER(C.c_uint32),
-                       C.POINTER(C.c_void_p), C.POINTER(C.c_uint64)]
+    update.argtypes = [C.c_uint64, C.c_int64, C.c_int64, C.c_int64, C.c_int64, C.c_uint32,
+                       C.POINTER(C.c_uint32), C.POINTER(C.c_void_p), C.POINTER(C.c_uint64)]
     update.restype = C.c_int
     count = len(slots)
-    return update(owner.handle, m, g, n, count, (C.c_uint32*count)(*slots),
+    return update(owner.handle, m, g, n, h, count, (C.c_uint32*count)(*slots),
                   (C.c_void_p*count)(*[a.ctypes.data for a in arrays]),
                   (C.c_uint64*count)(*[a.nbytes for a in arrays]))
 
@@ -131,7 +131,7 @@ def test_native_axis_update_admission():
         # N beyond capacity; and K is not framed here, so any G is refused.
         assert _raw_update(owner, 3, 0, 41, (4, 5), (roots[4], roots[5])) == 1
         assert _raw_update(owner, 3, 2, 19, (0,), (roots[0],)) == 1
-        assert owner.axes_info()[1] == (3, 0, 19)
+        assert owner.axes_info()[1] == (3, 0, 19, 0)
         generation, _ = owner.invoke()
         assert owner.read(generation)[0].shape == (3, 19)
     finally:

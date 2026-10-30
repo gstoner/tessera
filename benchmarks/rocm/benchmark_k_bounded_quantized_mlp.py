@@ -1,12 +1,14 @@
-"""Diagnostic: K/N-bounded quantized MLP owner vs a static owner at each shape.
+"""Diagnostic: K/N/H-bounded quantized MLP owner vs a static owner at each shape.
 
-GFX1201-BOUNDED-QUANTIZED-K-20261028 / GFX1201-BOUNDED-QUANTIZED-N-20261029.
+GFX1201-BOUNDED-QUANTIZED-K-20261028 / -N-20261029 / -H-20261029.
 One program is compiled with ``compile_native_quantized_program(...,
 m_bound=MB, k_bound=KB[, n_bound=NB])`` and held in one prepared owner; each
 active (M, K[, N]) takes that owner's full update (new weights at that shape).
 The control at each shape is the static v4 program compiled at exactly that
 shape, in its own owner. ``--n-bound`` selects the v7 program; actives are
-then ``MxKxN``.
+then ``MxKxN``. ``--h-bound HB`` selects the v8 program instead
+(``m_bound=MB, h_bound=HB`` with ``--bounds MB HB``); ``--kn`` fixes K and N
+and actives are ``MxH``.
 
 Both arms are HIP-event device time per program invocation, in windows of
 ``--repeats`` invocations, interleaved and order-alternated every round.
@@ -42,6 +44,9 @@ def main():
     parser.add_argument("--actives", type=_pairs, nargs="+",
                         default=[(16, 4096), (16, 12288), (64, 8192), (256, 4096), (256, 12288)])
     parser.add_argument("--n-bound", type=int, default=None)
+    parser.add_argument("--h-bound", action="store_true",
+                        help="bound H instead of K: --bounds is (MB, HB), actives MxH at --kn")
+    parser.add_argument("--kn", type=int, nargs=2, default=(4096, 256), metavar=("K", "N"))
     parser.add_argument("--sync-key", default="GFX1201-BOUNDED-QUANTIZED-K-20261028")
     parser.add_argument("--rounds", type=int, default=9)
     parser.add_argument("--repeats", type=int, default=50)
@@ -49,32 +54,43 @@ def main():
     h, n = args.hn
     mb, kb = args.bounds
     nb = args.n_bound
+    hidden = args.h_bound
+    if hidden and nb is not None:
+        parser.error("--h-bound does not compose with --n-bound")
     width = 2 if nb is None else 3
     if any(len(a) != width for a in args.actives):
-        parser.error(f"actives are {'MxK' if nb is None else 'MxKxN'}")
+        parser.error(f"actives are {'MxH' if hidden else 'MxK' if nb is None else 'MxKxN'}")
     if any(a[0] > mb or a[1] > kb or a[1] % 16 or (nb is not None and a[2] > nb) for a in args.actives):
-        parser.error("every active shape must fit the bounds with K a multiple of 16")
-    shapes = [a if nb is not None else (*a, n) for a in args.actives]
+        parser.error("every active shape must fit the bounds with K (or H) a multiple of 16")
+    # Every shape is (M, H, K, N).
+    if hidden:
+        shapes = [(a[0], a[1], *args.kn) for a in args.actives]
+    else:
+        shapes = [(a[0], h, a[1], a[2] if nb is not None else n) for a in args.actives]
     if rt._rocm_live_arch() != "gfx1201":
         raise SystemExit("requires owning gfx1201")
     lib = rt._load_rocm_native_movement_runtime()
     if lib is None:
         raise SystemExit("native ROCm movement runtime unavailable")
 
-    m0, k0, n0 = shapes[0]
-    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(m0, h, k0, n0))
-    bounds = {"m_bound": mb, "k_bound": kb, **({} if nb is None else {"n_bound": nb})}
+    m0, h0, k0, n0 = shapes[0]
+    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(m0, h0, k0, n0))
+    if hidden:
+        bounds = {"m_bound": mb, "h_bound": kb}
+    else:
+        bounds = {"m_bound": mb, "k_bound": kb, **({} if nb is None else {"n_bound": nb})}
     start = time.perf_counter()
-    program = fn.compile_native_quantized_program(*inputs(m0, h, k0, n0), **bounds)
+    program = fn.compile_native_quantized_program(*inputs(m0, h0, k0, n0), **bounds)
     compile_s = time.perf_counter() - start
-    if not program.native.k_bounded or program.native.n_bounded != (nb is not None):
+    if (program.native.h_bounded != hidden or program.native.k_bounded == hidden
+            or program.native.n_bounded != (nb is not None)):
         raise SystemExit("explicit bounds did not produce the requested bounded program")
-    roots = {mk: inputs(mk[0], h, mk[1], mk[2], seed=1500 + i) for i, mk in enumerate(shapes)}
+    roots = {mk: inputs(*mk, seed=1500 + i) for i, mk in enumerate(shapes)}
     bounded = program.native.prepare(roots[shapes[0]], runtime_library=lib._name)
     static, static_compile_s = {}, {}
     for mk in shapes:
         start = time.perf_counter()
-        package = package_quantized_product_graph(source(mk[0], h, mk[1], mk[2]))
+        package = package_quantized_product_graph(source(*mk))
         static_compile_s[mk] = time.perf_counter() - start
         static[mk] = package.prepare(roots[mk], runtime_library=lib._name)
 
@@ -91,7 +107,7 @@ def main():
         want = static[mk].read(generation)[0]
         equal[mk] = bool(np.array_equal(got.view(np.uint16), want.view(np.uint16)))
         if not equal[mk]:
-            raise SystemExit(f"bounded and static outputs differ at (M, K) = {mk}")
+            raise SystemExit(f"bounded and static outputs differ at (M, H, K, N) = {mk}")
 
     samples = {mk: {"bounded": [], "static": []} for mk in shapes}
     for round_ in range(args.rounds):
@@ -105,7 +121,7 @@ def main():
                 else:
                     _, elapsed = static[mk].invoke(repeats=args.repeats, timed=True)
                 samples[mk][arm].append(elapsed)
-    info = bounded.axes_info()[2:] if nb is not None else bounded.shape_info()[4:]
+    info = bounded.axes_info()[2:] if nb is not None or hidden else bounded.shape_info()[4:]
     bounded.close()
     for owner in static.values():
         owner.close()
@@ -114,7 +130,8 @@ def main():
     for mk in shapes:
         b = statistics.median(samples[mk]["bounded"])
         s = statistics.median(samples[mk]["static"])
-        rows["x".join(str(v) for v in (mk if nb is not None else mk[:2]))] = {
+        key = (mk[0], mk[1]) if hidden else (mk[0], mk[2], mk[3]) if nb is not None else (mk[0], mk[2])
+        rows["x".join(str(v) for v in key)] = {
             "bounded_ms": round(b, 4), "static_ms": round(s, 4), "bounded_over_static": round(b / s, 3),
             "bounded_range_ms": [round(min(samples[mk]["bounded"]), 4), round(max(samples[mk]["bounded"]), 4)],
             "static_range_ms": [round(min(samples[mk]["static"]), 4), round(max(samples[mk]["static"]), 4)],
@@ -127,8 +144,9 @@ def main():
         "recorder_sha256": hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
         "compiler_sha256": hashlib.sha256(pathlib.Path(os.environ["TESSERA_OPT"]).read_bytes()).hexdigest(),
         "provider_sha256": hashlib.sha256(pathlib.Path(lib._name).read_bytes()).hexdigest(),
-        "device": "gfx1201 (RX 9070 XT, Tajasarus, WSL2)", "hn": [h, n],
-        **({"bounds_mk": [mb, kb]} if nb is None else {"bounds_mkn": [mb, kb, nb]}),
+        "device": "gfx1201 (RX 9070 XT, Tajasarus, WSL2)",
+        **({"kn": list(args.kn), "bounds_mh": [mb, kb]} if hidden else {"hn": [h, n]}),
+        **({} if hidden else {"bounds_mk": [mb, kb]} if nb is None else {"bounds_mkn": [mb, kb, nb]}),
         "bounded_compile_s": round(compile_s, 2),
         "bounded_allocation_bytes": info[0], "bounded_allocation_count": info[1],
         "timing": (f"HIP-event device ms per program invocation, windows of {args.repeats} invocations, "

@@ -782,8 +782,149 @@ component adds `"runtime_n": true` under the same rules as `runtime_k`.
   (about +3%); the runtime-N members are within noise. Evidence:
   `benchmarks/baselines/gfx1201_n_bounded_quantized_mlp_20261029/README.md`.
 
-Not covered: dynamic H, a multi-projection N, an LDS-staged capacity
-product, AD, model quality and gfx1151.
+Not covered: dynamic H (landed next, §"Bounded-hidden v8 MLP"), a
+multi-projection N, an LDS-staged capacity product, AD, model quality and
+gfx1151.
+
+### Bounded-hidden v8 MLP (GFX1201-BOUNDED-QUANTIZED-H-20261029)
+
+**Request.** `tessera.native.quantized_h_bound = HB : i64` asks for the
+seven-member MLP with the hidden width H at capacity `HB`, a multiple of 16.
+Like the K and N bounds, it refines the row frame: the export refuses it
+without `tessera.native.quantized_m_bound` ("bounded H requires an M bound")
+and on any smaller program. The traced H, read from the gate/up projection
+boundaries `[0, H, 2H]`, must be a multiple of 16 with `H <= HB` ("exceeds
+its checked H16 capacity"). It does not combine with a K or N bound ("does
+not compose with a K or N bound"): the gate/up expansion would then need
+runtime K and runtime N in one image. Publicly,
+`compile_native_quantized_program(..., h_bound=HB)` sets it; an `h_bound`
+without `m_bound` keeps the traced M as the row capacity, and `h_bound`
+with `k_bound` or `n_bound` is refused before tracing.
+
+**Hidden retyping.** H reaches every member except the gate quantizer. The
+retype scales to capacity, by `HB/H` exactly:
+
+- the gate/up weights' packed `[2H, K/2]` and scale `[2H, K/16]` planes, the
+  equally spaced boundaries `[0, H, 2H]`, and the expansion's `[2H, K]`
+  values and `[K/16, 2H]` scale plane;
+- the gate product's `[M, 2H]` result and its BF16 parent cast;
+- both `[M, H]` halves (the second's origin `H` too), their casts, the
+  `silu_mul` and its BF16 cast;
+- the whole down quantizer: the flattened `[G, 16]`/`[G, 1]` K16 blocks with
+  `G = M*H/16` (including both splat constants), the `[M, H]` codes and the
+  `[M, H/16]` scales;
+- the down weights' packed `[N, H/2]` and scale `[N, H/16]` planes, and the
+  down expansion's `[N, H]` values and `[H/16, N]` scale plane.
+
+The down product contracts H away; its `[M, N]` result does not change.
+Anything else refuses, and the unchanged v3/v2 validators then certify the
+capacity program.
+
+**Schema v8.** v8 is v5 at capacity H plus:
+
+- `active_h` and `h_bound`;
+- `h_frame`, with `slots` (both gate/up and both down weight planes, the
+  expanded B/SB 9/10 and 15/16, the parent 11, the SiLU output 12 and the
+  down quantizer pair 13/14) and `h_steps` (1–6).
+
+Python re-derives the frame from the buffers ("hidden slot capacity
+differs", "bounded H differs", "hidden frame differs").
+
+**Shape-free members.** Under v8 the gate component carries `runtime_n`
+(its N is 2H) and the down component carries `runtime_k` (its K is H).
+
+- **Gate/up expansion.** It compiles the runtime-N image
+  `tessera.rocm.nvfp4_expand.five_memrefs.runtime_n.v1`, now admitted for
+  any number P of **equally spaced** projections. The verifier and the
+  identity projection require the checked boundaries to be `p * N/P`; the
+  kernel then derives each runtime boundary as `p * (N/P)` from its one N
+  scalar. A single projection (P = 1) is unchanged. Unequal boundaries
+  refuse ("records N as zero over equally spaced projections").
+- **SiLU parent view.** A runtime-N gate/up product's activation member is
+  the plan's Graph with the module marker
+  `tessera.native.gate_up_runtime_width`. The native Schedule then emits the
+  BF16 body with its output width as a fifth i64 argument: the row split,
+  the parent width `2W` and the second half's origin all read it. The Tile
+  and Target carriers record the declared `runtime_width` UnitAttr (schema 3
+  only), and `columns` stays the checked capacity, which the body never
+  reads. The materializer guards `0 < W <= columns` and `count % W == 0`.
+  The member exports profile `gfx1201_parent_view_bf16_f32_runtime_width_v1`
+  with ABI `tessera.rocm.parent_view.parent_o_n_width.bf16_f32.v1` and
+  scalars `[M*W, W]` at capacity. It launches only inside its bounded MLP
+  owner; the standalone parent-view submit refuses it. The product validator
+  binds the profile to the component's `runtime_n` claim.
+- **Down expansion.** The existing runtime-K image, with `groups = H/16`.
+- **Both products.** Each must be the global-staged shape-free image.
+
+**Admitted-rows panel (every bounded program).** A shape-free
+(arbitrary-M) product image runs every M down to 1, so its W8A8 register
+panel is chosen at that end of the range, not at capacity. The product
+member Graph carries `tessera.rocm.blockscale_min_m = 1 : i64`; the native
+selector (`selectFp8W8A8BlockScalePanel`) and its Python oracle
+(`blockscale_panel_oracle(..., min_m=)`) then evaluate the 32-row
+register-panel rule at the admitted minimum. The selector refuses a value
+outside `[1, M]` or not i64 (`ROCM_FP8_BLOCKSCALE_CONTRACT`). The LDS rules
+are unchanged, and so is every static program. The product validator
+expects the request on exactly the shape-free members, so the v5, v6 and v7
+bounded programs carry it too. Their panels change only where the capacity
+reaches the 32-row band (M and N multiples of 32 with at least 256 32×32
+tiles). A bounded record serialized before this change no longer replays;
+recompile it.
+
+Measured on gfx1201: the 32-row panel chosen at capacity 256 × 1024 cost
+4.2–4.6× the 16-row panel at M = 16. Across the 32-row band, 16 rows
+measured 0.78–1.33× of 32 for static programs, so a capacity in that band
+can cost up to about 1.33× at its large end.
+
+**Owner axis frame.** The axis frame gains a fourth variable: H16 groups
+(power bit 3, `capacity_h`). `prepare_multi_output_axis_frame`,
+`update_axes` and `axes_info` take and report four extents (M, G, N, H);
+an unframed variable still has capacity 0 and refuses any power on it. An
+H change must include all four H-dependent weight planes and invalidates
+every private H slot.
+
+| Member | Scaled scalar | Grid axis |
+|---|---|---|
+| Gate/up runtime-N expansion | `n = 2H` | x, over `2H * K/16` lanes |
+| Gate product | `N = 2H` (index 1) | x, over macro-tile columns |
+| Runtime-width SiLU | `M*H` and `W = H` | x, over `M*H` lanes |
+| Down quantizer | `M*H/16` groups | x |
+| Down runtime-K expansion | `groups = H/16` | x |
+| Down product | `K = H` (index 2) | none |
+
+The gate quantizer's and both products' row entries are unchanged.
+
+**Portable record.** A v8 program serializes as
+`tessera.rocm.quantized_product_package.v8`, with frontend record v8 and
+compiler path `canonical_rocm_quantized_h_bounded_mlp_program`. The gate
+component carries `"runtime_n": true` and the down component
+`"runtime_k": true`, under the existing claim rules.
+
+**Evidence on RX9070XT/gfx1201 (Tajasarus, assertions-ON LLVM/MLIR 23.1.1):**
+
+- **Public replay.** `tests/device/rocm/test_public_quantized_mlp_h_bound_device.py`
+  runs two bound sets: H/K/N 32/48/19 with bounds (8, 64), and 128/4096/256
+  with bounds (64, 512). Public calls across nine (M, H) shapes, from H = 16
+  to capacity, are bitwise equal to the static v4 program compiled at each
+  exact shape. The small shapes also match the independent staged chain.
+  - Every shape reuses the one retained owner, and refusals keep it.
+  - An activation-only update keeps the resident hidden width.
+  - HIP refuses an H change missing weight planes, H beyond capacity, an N
+    on an unframed axis, and three tampered frames.
+  - The serialized artifact replays bitwise in a fresh process.
+- **Unit tests.** `tests/unit/test_public_quantized_mlp_h_bound.py`: 36
+  passed on gfx1201.
+- **Device time (diagnostic).** At K/N 4096/256 with bounds (256, 512), the
+  bounded owner runs at 0.98–1.05× static at five shapes, bitwise equal at
+  all five. Before the admitted-rows panel it ran at 1.2–3.9× at four of
+  them: the capacity schedule had picked a `[32, 32]` gate-product panel
+  where static small-M programs pick `[16, 32]`. The H members themselves add
+  at most about 1 µs. Evidence:
+  `benchmarks/baselines/gfx1201_h_bounded_quantized_mlp_20261029/README.md`.
+
+Not covered: H combined with a K or N bound, selecting among measured
+product images per active shape, an LDS-staged capacity product, AD, model
+quality and gfx1151.
 
 
 ## Quantized package certificate and ABI reuse

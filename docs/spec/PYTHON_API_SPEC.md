@@ -2578,6 +2578,13 @@ any `1 <= N <= NB` with the down weights and the output shaped at that N.
 Without `m_bound`, the traced M is the row capacity. Contract:
 §"Bounded-column v7 MLP".
 
+Adding `h_bound=HB` (a positive multiple of 16) bounds the hidden width: the
+call returns the v8 program, and later calls accept any H16-multiple
+`H <= HB` with the gate/up weights shaped at 2H and the down weights at that
+H. It does not combine with `k_bound` or `n_bound` (refused before tracing).
+Without `m_bound`, the traced M is the row capacity. Contract:
+§"Bounded-hidden v8 MLP".
+
 Native session leaf diagnostics follow the actual converter/storage edges:
 convert()/run_conversion_graph() produce packed/exponent/statistic receipts;
 store()/run_storage_graph() require conversion and produce fragment/plane

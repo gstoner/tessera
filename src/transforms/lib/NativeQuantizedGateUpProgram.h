@@ -462,6 +462,151 @@ static mlir::LogicalResult retypeQuantizedMLPColumns(
   return verify(module);
 }
 
+// Capacity retyping of the hidden width H. H reaches the gate/up expansion
+// (its packed [2H,K/2] and scale [2H,K/16] weight planes, its equally spaced
+// row boundaries [0,H,2H], its [2H,K] values and [K/16,2H] scale plane), the
+// gate product's [M,2H] parent and its cast, both [M,H] halves (the second's
+// origin is H), the SiLU chain, the whole down quantizer ([G,16]/[G,1] K16
+// blocks with G = M*H/16, [M,H] codes, [M,H/16] scales) and the down
+// expansion's packed [N,H/2] and scale [N,H/16] planes, [N,H] values and
+// [H/16,N] scale plane. The down product contracts it away. Every such
+// extent scales by hCap/h exactly; anything else refuses, and the ordinary
+// static admission certifies the capacity program.
+static mlir::LogicalResult retypeQuantizedMLPHidden(
+    mlir::ModuleOp module, mlir::func::FuncOp root,
+    llvm::ArrayRef<mlir::Operation *> ops, int64_t h, int64_t capacity,
+    llvm::DenseSet<mlir::Value> &hiddenValues) {
+  using namespace mlir;
+  auto refuse = [&]() -> LogicalResult {
+    return module.emitError("quantized bounded H requires the gate/up expansion, SiLU, down quantizer and down expansion hidden-width SSA");
+  };
+  auto scaledDim = [&](int64_t dim, int64_t &out) {
+    if (dim <= 0 || dim > INT64_MAX / capacity || (dim * capacity) % h) return false;
+    out = dim * capacity / h; return true;
+  };
+  auto retype = [&](Value value, unsigned axis) -> LogicalResult {
+    auto type = dyn_cast<RankedTensorType>(value.getType());
+    if (!type || type.getRank() != 2 || !type.hasStaticShape() || type.getEncoding())
+      return failure();
+    SmallVector<int64_t> shape(type.getShape());
+    if (!scaledDim(shape[axis], shape[axis])) return failure();
+    value.setType(RankedTensorType::get(shape, type.getElementType()));
+    hiddenValues.insert(value);
+    return success();
+  };
+  auto scaledArray = [&](Operation *op, StringRef key, unsigned axis) -> LogicalResult {
+    auto array = op->getAttrOfType<ArrayAttr>(key);
+    if (!array || array.size() != 2 || !isa<IntegerAttr>(array[axis])) return failure();
+    SmallVector<Attribute> values(array.begin(), array.end());
+    auto old = cast<IntegerAttr>(values[axis]);
+    int64_t next = 0;
+    if (!scaledDim(old.getInt(), next)) return failure();
+    values[axis] = IntegerAttr::get(old.getType(), next);
+    op->setAttr(key, ArrayAttr::get(op->getContext(), values));
+    return success();
+  };
+  auto shapeAttr = [&](Operation *op) {
+    auto type = cast<RankedTensorType>(op->getResult(0).getType());
+    auto old = op->getAttrOfType<ArrayAttr>("shape");
+    if (!old || old.size() != 2 || !isa<IntegerAttr>(old[0])) return failure();
+    auto element = cast<IntegerAttr>(old[0]).getType();
+    op->setAttr("shape", ArrayAttr::get(op->getContext(),
+        {IntegerAttr::get(element, type.getDimSize(0)), IntegerAttr::get(element, type.getDimSize(1))}));
+    return success();
+  };
+  if (ops.size() < 37) return refuse();
+  Operation *gateExpand = ops[13], *gateProduct = ops[14], *downExpand = ops[35];
+  auto offsets = gateExpand->getAttrOfType<ArrayAttr>("row_offsets");
+  auto integer = [](Attribute a, int64_t v) {
+    auto i = dyn_cast<IntegerAttr>(a); return i && i.getInt() == v;
+  };
+  if (gateExpand->getName().getStringRef() != "tessera.nvfp4_expand" ||
+      gateProduct->getName().getStringRef() != "tessera.scaled_matmul" ||
+      downExpand->getName().getStringRef() != "tessera.nvfp4_expand" ||
+      gateExpand->getNumResults() != 2 || downExpand->getNumResults() != 2 ||
+      gateProduct->getOperand(1) != gateExpand->getResult(0) ||
+      gateProduct->getOperand(3) != gateExpand->getResult(1) ||
+      !offsets || offsets.size() != 3 || !integer(offsets[0], 0) ||
+      !integer(offsets[1], h) || !integer(offsets[2], 2 * h)) return refuse();
+  // Gate/up expansion and product: 2H rows of B, 2H columns of the parent.
+  auto packed = dyn_cast<BlockArgument>(gateExpand->getOperand(0));
+  auto blockScales = dyn_cast<BlockArgument>(gateExpand->getOperand(1));
+  if (!packed || !blockScales || failed(retype(packed, 0)) || failed(retype(blockScales, 0)) ||
+      failed(retype(gateExpand->getResult(0), 0)) || failed(retype(gateExpand->getResult(1), 1)) ||
+      failed(retype(gateProduct->getResult(0), 1))) return refuse();
+  auto element = cast<IntegerAttr>(offsets[1]).getType();
+  gateExpand->setAttr("row_offsets", ArrayAttr::get(module.getContext(),
+      {offsets[0], IntegerAttr::get(element, capacity), IntegerAttr::get(element, 2 * capacity)}));
+  // ops[15..21]: parent cast, the two halves, their casts, silu_mul, cast.
+  for (Operation *op : ArrayRef<Operation *>(ops).slice(15, 7)) {
+    StringRef name = op->getName().getStringRef();
+    if (op->getNumResults() != 1 || op->getNumOperands() < 1 ||
+        !hiddenValues.contains(op->getOperand(0)) || failed(retype(op->getResult(0), 1)))
+      return refuse();
+    if (name == "tessera.slice") {
+      auto start = op->getAttrOfType<ArrayAttr>("start_indices");
+      if (!start || start.size() != 2 || !integer(start[0], 0) ||
+          (!integer(start[1], 0) && !integer(start[1], h)) ||
+          failed(scaledArray(op, "slice_sizes", 1)) ||
+          (integer(start[1], h) && failed(scaledArray(op, "start_indices", 1))))
+        return refuse();
+    } else if (name == "tessera.silu_mul") {
+      if (op->getNumOperands() != 2 || !hiddenValues.contains(op->getOperand(1))) return refuse();
+    } else if (name != "tessera.cast") return refuse();
+  }
+  // ops[22..34]: the down quantizer. Its K16 block chain is [G,c] (axis 0);
+  // codes and scales feed the down product row-major (axis 1).
+  Operation *downProduct = ops[36];
+  if (downProduct->getName().getStringRef() != "tessera.scaled_matmul" ||
+      downProduct->getNumOperands() != 4 ||
+      downProduct->getOperand(1) != downExpand->getResult(0) ||
+      downProduct->getOperand(3) != downExpand->getResult(1)) return refuse();
+  Value codes = downProduct->getOperand(0), scales = downProduct->getOperand(2);
+  ArrayRef<Operation *> quantizer = ArrayRef<Operation *>(ops).slice(22, 13);
+  for (Operation *op : quantizer) {
+    StringRef name = op->getName().getStringRef();
+    if (op->getNumResults() != 1) return refuse();
+    Value result = op->getResult(0);
+    if (auto constant = dyn_cast<arith::ConstantOp>(op)) {
+      auto dense = dyn_cast<DenseElementsAttr>(constant.getValue());
+      if (!dense || !dense.isSplat() || failed(retype(result, 0)) ||
+          llvm::any_of(result.getUsers(), [&](Operation *user) {
+            return !llvm::is_contained(quantizer, user); })) return refuse();
+      constant.setValueAttr(DenseElementsAttr::get(
+          cast<ShapedType>(result.getType()), dense.getSplatValue<Attribute>()));
+      continue;
+    }
+    bool rowMajor = result == codes || result == scales;
+    if (!rowMajor) {
+      auto type = dyn_cast<RankedTensorType>(result.getType());
+      if (!type || type.getRank() != 2 ||
+          (type.getDimSize(1) != 16 && type.getDimSize(1) != 1)) return refuse();
+    }
+    if (failed(retype(result, rowMajor ? 1 : 0))) return refuse();
+    if ((name == "tessera.reshape" || name == "tessera.expand") && failed(shapeAttr(op)))
+      return refuse();
+    if (name == "tessera.reduce") {
+      auto axis = op->getAttrOfType<IntegerAttr>("axis");
+      if (!axis || axis.getInt() != 1) return refuse();
+    } else if (name != "tessera.reshape" && name != "tessera.cast" &&
+               name != "tessera.absolute" && name != "tessera.div" &&
+               name != "tessera.maximum" && name != "tessera.expand") return refuse();
+  }
+  if (!hiddenValues.contains(codes) || !hiddenValues.contains(scales)) return refuse();
+  // Down expansion: H is its contraction axis.
+  auto downPacked = dyn_cast<BlockArgument>(downExpand->getOperand(0));
+  auto downScales = dyn_cast<BlockArgument>(downExpand->getOperand(1));
+  if (!downPacked || !downScales || failed(retype(downPacked, 1)) ||
+      failed(retype(downScales, 1)) || failed(retype(downExpand->getResult(0), 1)) ||
+      failed(retype(downExpand->getResult(1), 0))) return refuse();
+  auto ret = cast<func::ReturnOp>(root.getBody().front().back());
+  SmallVector<Type> inputs, results;
+  for (Value value : root.getArguments()) inputs.push_back(value.getType());
+  for (Value value : ret.getOperands()) results.push_back(value.getType());
+  root.setFunctionType(FunctionType::get(module.getContext(), inputs, results));
+  return verify(module);
+}
+
 static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) {
   using namespace mlir;
   auto refuse = [&]() -> LogicalResult {
@@ -477,17 +622,36 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
   constexpr StringLiteral rowBoundKey = "tessera.native.quantized_m_bound";
   constexpr StringLiteral contractionBoundKey = "tessera.native.quantized_k_bound";
   constexpr StringLiteral columnBoundKey = "tessera.native.quantized_n_bound";
+  constexpr StringLiteral hiddenBoundKey = "tessera.native.quantized_h_bound";
   bool boundedRows = module->hasAttr(rowBoundKey);
   bool boundedK = module->hasAttr(contractionBoundKey);
   bool boundedN = module->hasAttr(columnBoundKey);
+  bool boundedH = module->hasAttr(hiddenBoundKey);
   int64_t activeRows = 0, rowBound = 0, activeK = 0, kBound = 0, activeN = 0, nBound = 0;
+  int64_t activeH = 0, hBound = 0;
   std::string originalIR;
-  llvm::DenseSet<Value> rowValues, contractionValues, columnValues;
-  // K and N bounds refine the row frame; neither travels alone.
+  llvm::DenseSet<Value> rowValues, contractionValues, columnValues, hiddenValues;
+  // K, N and H bounds refine the row frame; none travels alone.
   if (boundedK && !boundedRows)
     return module.emitError("quantized bounded K requires an M bound");
   if (boundedN && !boundedRows)
     return module.emitError("quantized bounded N requires an M bound");
+  if (boundedH && !boundedRows)
+    return module.emitError("quantized bounded H requires an M bound");
+  // A runtime H expands the gate/up weights through the runtime-N image, which
+  // is never also runtime-K; the down expansion is runtime-K, never also N.
+  if (boundedH && (boundedK || boundedN))
+    return module.emitError("quantized bounded H does not compose with a K or N bound");
+  if (boundedH) {
+    auto bound = module->getAttrOfType<IntegerAttr>(hiddenBoundKey);
+    auto offsets = ops.size() < 37 ? ArrayAttr{} : ops[13]->getAttrOfType<ArrayAttr>("row_offsets");
+    auto half = offsets && offsets.size() == 3 ? dyn_cast<IntegerAttr>(offsets[1]) : IntegerAttr{};
+    if (!bound || !bound.getType().isInteger(64) || !half)
+      return module.emitError("quantized bounded H requires the gate/up projection boundaries and an i64 bound");
+    activeH = half.getInt(); hBound = bound.getInt();
+    if (activeH <= 0 || activeH % 16 || hBound < activeH || hBound % 16)
+      return module.emitError("quantized bounded H exceeds its checked H16 capacity");
+  }
   if (boundedN) {
     auto bound = module->getAttrOfType<IntegerAttr>(columnBoundKey);
     auto type = root.getNumResults() == 1
@@ -525,6 +689,7 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
     module->removeAttr(rowBoundKey);
     module->removeAttr(contractionBoundKey);
     module->removeAttr(columnBoundKey);
+    module->removeAttr(hiddenBoundKey);
     if (failed(retypeQuantizedMLPRows(module, root, activation, activeRows, rowBound, rowValues)))
       return failure();
     if (boundedK && failed(retypeQuantizedMLPContraction(
@@ -532,6 +697,9 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
       return failure();
     if (boundedN && failed(retypeQuantizedMLPColumns(
             module, root, ops, activeN, nBound, columnValues)))
+      return failure();
+    if (boundedH && failed(retypeQuantizedMLPHidden(
+            module, root, ops, activeH, hBound, hiddenValues)))
       return failure();
   }
   if (root.getNumArguments()!=7 || (ops.size()!=37 && ops.size()!=38) || !ret ||
@@ -634,9 +802,18 @@ static mlir::LogicalResult emitNativeQuantizedMLPProgram(mlir::ModuleOp module) 
       plan["n_bound"] = nBound;
       plan["n_frame"] = llvm::json::Object{{"slots",std::move(nSlots)},{"n_steps",std::move(nSteps)}};
     }
+    if (boundedH) {
+      // v8 adds the hidden-width frame; its variable is the H16 group count.
+      llvm::json::Array hSlots, hSteps;
+      frameOf(hiddenValues, ids, plan, hSlots, hSteps);
+      plan["active_h"] = activeH;
+      plan["h_bound"] = hBound;
+      plan["h_frame"] = llvm::json::Object{{"slots",std::move(hSlots)},{"h_steps",std::move(hSteps)}};
+    }
     return success();
   };
   return outlineNativeQuantizedMembers(module,root,groups,projections,
+      boundedH ? "tessera.native.quantized_product.v8" :
       boundedN ? "tessera.native.quantized_product.v7" :
       boundedK ? "tessera.native.quantized_product.v6" : "tessera.native.quantized_product.v5",
       subprograms,frame);

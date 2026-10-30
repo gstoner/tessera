@@ -22,8 +22,9 @@ _MLP_SCHEMA="tessera.rocm.quantized_product_frontend.v4"
 _BOUNDED_MLP_SCHEMA="tessera.rocm.quantized_product_frontend.v5"
 _K_BOUNDED_MLP_SCHEMA="tessera.rocm.quantized_product_frontend.v6"
 _N_BOUNDED_MLP_SCHEMA="tessera.rocm.quantized_product_frontend.v7"
+_H_BOUNDED_MLP_SCHEMA="tessera.rocm.quantized_product_frontend.v8"
 _FRONTEND_SCHEMAS=(_SCHEMA,_EXPANDED_SCHEMA,_ACTIVATED_SCHEMA,_MLP_SCHEMA,_BOUNDED_MLP_SCHEMA,
-                   _K_BOUNDED_MLP_SCHEMA,_N_BOUNDED_MLP_SCHEMA)
+                   _K_BOUNDED_MLP_SCHEMA,_N_BOUNDED_MLP_SCHEMA,_H_BOUNDED_MLP_SCHEMA)
 _OWNER_PID=os.getpid()
 
 
@@ -231,7 +232,7 @@ def package_traced_quantized_product(module):
 
 def _frontend_schema(native):
     schema=json.loads(native.program_json)["schema"]
-    return dict(zip((f"tessera.native.quantized_product.v{i}" for i in range(1,8)),
+    return dict(zip((f"tessera.native.quantized_product.v{i}" for i in range(1,9)),
         _FRONTEND_SCHEMAS,strict=True))[schema]
 
 
@@ -242,7 +243,8 @@ def _compiler_path(native):
             _MLP_SCHEMA:"canonical_rocm_quantized_mlp_program",
             _BOUNDED_MLP_SCHEMA:"canonical_rocm_quantized_bounded_mlp_program",
             _K_BOUNDED_MLP_SCHEMA:"canonical_rocm_quantized_k_bounded_mlp_program",
-            _N_BOUNDED_MLP_SCHEMA:"canonical_rocm_quantized_n_bounded_mlp_program"}[_frontend_schema(native)]
+            _N_BOUNDED_MLP_SCHEMA:"canonical_rocm_quantized_n_bounded_mlp_program",
+            _H_BOUNDED_MLP_SCHEMA:"canonical_rocm_quantized_h_bounded_mlp_program"}[_frontend_schema(native)]
 
 
 def runtime_artifact(program):

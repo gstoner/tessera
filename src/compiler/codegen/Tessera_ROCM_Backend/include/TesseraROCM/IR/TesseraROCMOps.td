@@ -1708,10 +1708,12 @@ def ROCM_NVFP4ExpandOp : TesseraROCM_Op<"nvfp4_expand"> {
     count as one i64 scalar. N and the projection row boundaries stay
     static. Only the kernel identity projection produces it.
 
-    `runtime_n` is the analogous identity for a single-projection expansion
-    (row boundaries `[0, N]`): `n` is recorded as zero, the boundaries keep
-    the checked capacity, and the kernel takes N as one i64 scalar on the
-    flat grid. K stays static; the two are never combined.
+    `runtime_n` is the analogous identity for an expansion whose P
+    projection row boundaries are equally spaced (`[0, N/P, ..., N]`, P = 1
+    for a single projection): `n` is recorded as zero, the boundaries keep the
+    checked capacity, and the kernel takes N as one i64 scalar on the flat
+    grid and derives the runtime boundaries as p*N/P. K stays static; the two
+    are never combined.
   }];
   let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$n, I64Attr:$k,
       I64ArrayAttr:$row_offsets, ROCM_NVFP4IngestPolicyAttr:$numeric_policy,
@@ -1743,10 +1745,14 @@ def ROCM_StructuredReductionOp : TesseraROCM_Op<"structured_reduction",
 def ROCM_RowRegionKernelOp : TesseraROCM_Op<"row_region_kernel",
     [SingleBlock, NoTerminator, SymbolTable, RecursiveMemoryEffects]> {
   let summary = "Sealed gfx1201 parent-view scalar SSA body";
+  let description = [{
+    `runtime_width` is the schema-3 parent view whose sealed body takes its
+    output width as a fifth i64 argument; `columns` stays the checked capacity.
+  }];
   let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$rows,
       I64Attr:$columns, TypeAttr:$storage, I64Attr:$workgroup_size,
       I64Attr:$schema, StrAttr:$source_hash, StrAttr:$artifact_hash,
-      StrAttr:$body_hash, StrAttr:$tile_body_hash);
+      StrAttr:$body_hash, StrAttr:$tile_body_hash, UnitAttr:$runtime_width);
   let regions = (region AnyRegion:$body);
   let assemblyFormat = "attr-dict-with-keyword $body";
   let hasVerifier = 1;

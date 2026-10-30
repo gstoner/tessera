@@ -114,7 +114,7 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
 inline mlir::LogicalResult verifyBlockQuantKernel(mlir::Operation *op) {
   using namespace mlir;
   bool target=op->getName().getStringRef()=="tessera_rocm.row_region_kernel";
-  auto fail=[&]() { return op->emitOpError("requires the sealed gfx1201 schema-4 typed K16 quantizer"); };
+  auto fail=[&]() { return op->emitOpError("requires the sealed gfx1201/gfx1151 schema-4 typed K16 quantizer"); };
   auto arch=op->getAttrOfType<StringAttr>("arch");
   auto name=op->getAttrOfType<StringAttr>("name");
   auto rows=op->getAttrOfType<IntegerAttr>("rows");
@@ -127,7 +127,8 @@ inline mlir::LogicalResult verifyBlockQuantKernel(mlir::Operation *op) {
     });
   };
   if ((!target && op->getName().getStringRef()!="tile.row_region_kernel") ||
-      !arch || arch.getValue()!="gfx1201" || !name || name.getValue().empty() ||
+      !arch || (arch.getValue()!="gfx1201" && arch.getValue()!="gfx1151") ||
+      !name || name.getValue().empty() ||
       op->getAttrOfType<TypeAttr>("storage")!=TypeAttr::get(BFloat16Type::get(op->getContext())) ||
       !rows || rows.getInt()<=0 || rows.getInt()>INT32_MAX ||
       !columns || columns.getInt()<=0 || columns.getInt()>INT32_MAX || columns.getInt()%16 ||

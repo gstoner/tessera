@@ -7,6 +7,7 @@ import ctypes as C
 from dataclasses import dataclass
 import hashlib
 import json
+import re
 
 from .graph_ir import GraphIRModule
 from .native_artifact import (
@@ -22,6 +23,22 @@ from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
 BLOCK_QUANT_ABI = "tessera.rocm.block_quant.x_q_s_groups.bf16_e4m3_f32.v1"
 _TARGET = "rocm_gfx1201"
+#: Exact targets and their architectures. gfx1151 (RDNA 3.5) has no FP8
+#: convert; its E4M3 encode is the software lowering proven bit-identical to
+#: RDNA4's instruction (GFX1151-QUANTIZED-MLP-20261030).
+_ARCHES = {"rocm_gfx1201": "gfx1201", "rocm_gfx1151": "gfx1151"}
+
+
+def _profile(arch):
+    return f"{arch}_block_quant_bf16_e4m3_f32_k16_v1"
+
+
+def _graph_arch(graph_ir):
+    """The architecture a recipe's original Graph names (``tessera.arch``)."""
+    found = re.findall(r'tessera\.arch = "(gfx\d+)"', graph_ir)
+    if len(set(found)) != 1 or found[0] not in _ARCHES.values():
+        raise ValueError("block quantization Graph names no admitted architecture")
+    return found[0]
 _NAMES = ["tessera.reshape", "tessera.cast", "tessera.absolute", "tessera.reduce",
           "tessera.div", "tessera.maximum", "tessera.expand", "tessera.div",
           "tessera.cast", "tessera.reshape", "tessera.reshape"]
@@ -84,10 +101,10 @@ def lower_block_quant_text(graph: str) -> BlockQuantRecipe:
 
 
 def _block_quant_source(module: GraphIRModule, target: str) -> str:
-    if target != _TARGET or not requests_block_quant(module):
-        raise ValueError("block quantization requires its original compact BF16 gfx1201 source")
+    if target not in _ARCHES or not requests_block_quant(module):
+        raise ValueError("block quantization requires its original compact BF16 gfx1201 or gfx1151 source")
     source = deepcopy(module)
-    for key,value in (("tessera.target",_TARGET),("tessera.arch","gfx1201")):
+    for key,value in (("tessera.target",target),("tessera.arch",_ARCHES[target])):
         old = source.module_attrs.get(key)
         if old is not None and json.loads(old) != value:
             raise ValueError("block quantization source target conflicts")
@@ -117,8 +134,8 @@ def _validate_frame(program,member):
     if (program.get("schema") != 1 or program.get("kind") != "block_quant"
             or program.get("argument_count") != 1 or program.get("outputs") != [1,2]
             or member.get("schema") != 1 or member.get("step") != 0
-            or member.get("architecture") != "gfx1201"
-            or member.get("profile") != "gfx1201_block_quant_bf16_e4m3_f32_k16_v1"
+            or member.get("architecture") not in _ARCHES.values()
+            or member.get("profile") != _profile(member.get("architecture"))
             or member.get("abi") != "flattened_rank1_memref_then_i64"
             or member.get("inputs") != [0] or member.get("outputs") != [1,2]):
         raise ValueError("block quantization native profile differs")
@@ -195,12 +212,13 @@ def package_block_quant_recipe(recipe: BlockQuantRecipe,*,pipeline_name="tessera
     if pipeline_name != "tessera-rocm-executable":
         raise ValueError("block quantization image producer differs")
     recipe.validate()
+    arch = _graph_arch(recipe.graph_ir)
     target,backend,payload,compiler,toolchain,libraries,state = _compile_native_tile_ir(
-        recipe.tile_ir,directive="tessera_rocm.row_region_kernel",family="block_quant",architecture="gfx1201")
+        recipe.tile_ir,directive="tessera_rocm.row_region_kernel",family="block_quant",architecture=arch)
     program,member = _frame(target)
-    if _frame(backend) != (program,member):
+    if _frame(backend) != (program,member) or member["architecture"] != arch:
         raise ValueError("block quantization binary frame differs from native Target")
-    image = NativeImageArtifact(target=_TARGET,architecture="gfx1201",pipeline_name=pipeline_name,
+    image = NativeImageArtifact(target="rocm_"+arch,architecture=arch,pipeline_name=pipeline_name,
         compiler_fingerprint=compiler,toolchain_fingerprint=toolchain,
         target_ir_digest=hashlib.sha256(target.encode()).hexdigest(),binary_format="hsaco",payload=payload,
         entry_points=(NativeEntryPoint(member["entry"],BLOCK_QUANT_ABI),),compile_state=state,device_libraries=libraries)
@@ -245,7 +263,8 @@ class PreparedBlockQuantProgram(PreparedScaledProgram):
 def validate_block_quant_runtime_artifact(artifact):
     image,desc = artifact.native_image,artifact.launch_descriptor
     program,member = _frame(artifact.target_ir)
-    if (image.target != _TARGET or image.architecture != "gfx1201" or image.binary_format != "hsaco"
+    arch = member["architecture"]
+    if (image.target != "rocm_"+arch or image.architecture != arch or image.binary_format != "hsaco"
             or image.pipeline_name != "tessera-rocm-executable"
             or image.target_ir_digest != hashlib.sha256(artifact.target_ir.encode()).hexdigest()
             or image.entry_points != (NativeEntryPoint(member["entry"],BLOCK_QUANT_ABI),)
@@ -261,13 +280,14 @@ def submit_block_quant(image,descriptor,buffers,scalars,stream):
     import numpy as np
     import ml_dtypes
     from tessera import runtime as rt
-    if (stream not in (None,0) or rt._rocm_live_arch() != "gfx1201"
-            or image.target != _TARGET or image.architecture != "gfx1201"
-            or image.binary_format != "hsaco" or image.pipeline_name != "tessera-rocm-executable"):
-        raise ValueError("block quantization requires owning gfx1201 and its owned completion stream")
     info = descriptor.provenance["native_block_quant"]
     program,member = json.loads(info["program_json"]),json.loads(info["member_json"])
     _validate_frame(program,member)
+    arch = member["architecture"]
+    if (stream not in (None,0) or rt._rocm_live_arch() != arch
+            or image.target != "rocm_"+arch or image.architecture != arch
+            or image.binary_format != "hsaco" or image.pipeline_name != "tessera-rocm-executable"):
+        raise ValueError("block quantization requires its owning architecture and its owned completion stream")
     if (set(buffers) != set(member["bindings"]) or set(scalars) != {"Groups"}
             or type(scalars["Groups"]) is not int or [scalars["Groups"]] != member["scalars"]):
         raise ValueError("block quantization invocation roles/count differ")

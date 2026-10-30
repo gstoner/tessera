@@ -69,7 +69,8 @@ def test_quant_schedule_accepts_equivalent_negative_last_axis():
 
 @pytest.mark.usefixtures("production_compiler")
 def test_quant_schedule_refuses_a_consistent_sibling_target():
-    graph = source().replace("rocm_gfx1201","rocm_gfx1151").replace('"gfx1201"','"gfx1151"')
+    # gfx1151 is admitted (GFX1151-QUANTIZED-MLP-20261030); CDNA is not.
+    graph = source().replace("rocm_gfx1201","rocm_gfx942").replace('"gfx1201"','"gfx942"')
     run_tessera_opt(find_tessera_opt(),graph,"--verify-each")
     with pytest.raises(RuntimeError,match="native K16 quantization"):
         run_tessera_opt(find_tessera_opt(),graph,"--tessera-graph-to-schedule")

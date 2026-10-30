@@ -298,7 +298,8 @@ static Value softwareE4M3(OpBuilder &b, Location loc, Value value) {
 // The standard GPU converter stores Float8 as i8, but does not legalize a
 // scalar arith.truncf into that storage. Keep the numerical cast in native
 // IR: the RDNA4 RNE instruction on the owning exact target, the bit-exact
-// software encode on every other architecture (or when `software` is forced).
+// software encode on admitted gfx1151 (or when `software` is forced). Any
+// other architecture keeps the cast: lowering is never an admission.
 static LogicalResult lowerScalarE4M3Casts(ModuleOp module, bool forceSoftware) {
   auto authored = module->getAttrOfType<StringAttr>("tessera.arch");
   auto selected = module->getAttrOfType<StringAttr>("tessera.pipeline.arch");
@@ -307,7 +308,8 @@ static LogicalResult lowerScalarE4M3Casts(ModuleOp module, bool forceSoftware) {
   // Executable pipelines own their target. Standalone legalization retains
   // the explicitly authored architecture when no pipeline has selected one.
   auto arch = selected ? selected : authored;
-  if (!arch) return success();
+  if (!arch || (arch.getValue() != "gfx1201" && arch.getValue() != "gfx1151" && !forceSoftware))
+    return success();
   const bool hardware = arch.getValue() == "gfx1201" && !forceSoftware;
   SmallVector<arith::TruncFOp> casts;
   module.walk([&](arith::TruncFOp op) {
@@ -341,7 +343,7 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
   LoweringPass() = default;
   LoweringPass(const LoweringPass &other) : PassWrapper(other) {}
   Option<std::string> e4m3Encode{*this, "e4m3-encode",
-      llvm::cl::desc("f32->E4M3FN cast: auto (RDNA4 instruction on gfx1201, software elsewhere) or software"),
+      llvm::cl::desc("f32->E4M3FN cast: auto (RDNA4 instruction on gfx1201, software on gfx1151) or software"),
       llvm::cl::init("auto")};
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<LLVM::LLVMDialect, ROCDL::ROCDLDialect, gpu::GPUDialect, memref::MemRefDialect,

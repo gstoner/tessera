@@ -174,13 +174,14 @@ class ProductVariant:
     checked_target_ir: str
 
 
-def _compile_product(tool, shape, child, *, arbitrary_m):
+def _compile_product(tool, shape, child, *, arbitrary_m, arbitrary_n=False):
     """Graph -> Schedule -> Tile -> image for one product member Graph."""
     schedule = run_tessera_opt(tool,child,"--tessera-graph-to-schedule")
     tile = run_tessera_opt(tool,schedule,"--tessera-schedule-to-tile")
     recipe = BlockScaleProgram(shape,"quantized_product",child,schedule,tile)
     product = package_blockscale(recipe,pipeline_name="tessera-rocm-executable",
-                                 project_image_identity=arbitrary_m,arbitrary_m=arbitrary_m)
+                                 project_image_identity=arbitrary_m,arbitrary_m=arbitrary_m,
+                                 arbitrary_n=arbitrary_n)
     checked_target = product.target_ir
     if arbitrary_m:
         # The image is the shape-free projection; retain the static checked
@@ -192,16 +193,23 @@ def _compile_product(tool, shape, child, *, arbitrary_m):
     return recipe, product, checked_target, schedule
 
 
-def _check_product_image(shape, native, checked_target_ir, arbitrary_m):
-    """Validate one product image against its checked Target and the consumer ABI."""
+def _check_product_image(shape, native, checked_target_ir, arbitrary_m, arbitrary_n=False):
+    """Validate one product image against its checked Target and the consumer ABI.
+
+    ``arbitrary_n``: an LDS image whose N varies at launch masks its column
+    edge; the claim must match the image and is re-derived, never read."""
     native.descriptor.validate_image(native.image)
     checked = check_blockscale_target_ir(shape,native.tile_ir,checked_target_ir)
+    lds = checked["staging"] == "lds"
+    if native.descriptor.provenance.get("arbitrary_n", False) is not (arbitrary_n and lds):
+        raise ValueError("native quantized-product arbitrary-N image policy differs")
     if arbitrary_m:
         from .rocm_native import _shape_free_target_ir
         projection=_shape_free_target_ir(checked_target_ir,
             family="scaled_matmul" if checked["staging"]=="global" else "scaled_matmul_lds",
             directive="tessera_rocm.scaled_wmma_gemm",
-            runtime_k=bool(native.descriptor.provenance.get("lds_runtime_k")),arbitrary_m=True)
+            runtime_k=bool(native.descriptor.provenance.get("lds_runtime_k")),arbitrary_m=True,
+            arbitrary_n=arbitrary_n and lds)
         if (native.target_ir != projection
                 or native.descriptor.provenance.get("arbitrary_m") is not True
                 or native.descriptor.provenance.get("lds_whole_m") is not False):
@@ -374,8 +382,7 @@ class NativeQuantizedProductProgram:
             raise ValueError("native quantized-product runtime K/N requires the shape-free global-staged product")
         # A shape-free M-only product carries exactly the LDS variants the static
         # rule implies over [1, capacity]; each is its own checked projection.
-        ranges = (_variant_ranges(shape) if self.arbitrary_m and not (self.runtime_k or self.runtime_n)
-                  else ())
+        ranges = _variant_ranges(shape) if self.arbitrary_m else ()
         if tuple((v.min_m,v.max_m) for v in self.variants) != ranges:
             raise ValueError("native quantized-product per-M variant ranges differ from the static rule")
         member = plan["member_graphs"][2 if self.expansion is not None else 1]
@@ -386,7 +393,7 @@ class NativeQuantizedProductProgram:
                     or v.recipe.graph_ir != admitted_rows_graph(member,min_m=v.min_m)
                     or v.native.tile_ir != v.recipe.tile_ir):
                 raise ValueError("native quantized-product per-M variant Graph differs")
-            got = _check_product_image(shape,v.native,v.checked_target_ir,True)
+            got = _check_product_image(shape,v.native,v.checked_target_ir,True,arbitrary_n=self.runtime_n)
             if (got["staging"],got["block_m"],got["block_n"],got["warps"]) != (
                     panel.staging,panel.macro_tile_m,panel.macro_tile_n,panel.warps):
                 raise ValueError("native quantized-product per-M variant panel differs from the static rule")
@@ -536,13 +543,14 @@ def package_quantized_product_graph(graph_ir,*,arbitrary_m=False,runtime_k=False
     verify_blockscale_schedule(shape,schedule,min_m=1 if arbitrary_m else None,
                                staging="global" if runtime_k or runtime_n else None)
     variants: tuple[ProductVariant, ...] = ()
-    if arbitrary_m and not (runtime_k or runtime_n):
-        # One LDS image per range where the static rule takes an LDS panel.
+    if arbitrary_m:
+        # One LDS image per range where the static rule takes an LDS panel;
+        # a runtime-N product's LDS images mask their column edge.
         member = plan["member_graphs"][2 if expanded else 1]
         built = []
         for lo, hi in _variant_ranges(shape):
             v_recipe, v_product, v_checked, v_schedule = _compile_product(
-                tool, shape, admitted_rows_graph(member, min_m=lo), arbitrary_m=True)
+                tool, shape, admitted_rows_graph(member, min_m=lo), arbitrary_m=True, arbitrary_n=runtime_n)
             verify_blockscale_schedule(shape, v_schedule, min_m=lo)
             built.append(ProductVariant(lo, hi, v_recipe, v_product, v_checked))
         variants = tuple(built)

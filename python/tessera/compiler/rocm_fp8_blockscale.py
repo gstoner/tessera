@@ -467,7 +467,7 @@ def package_blockscale(
     scale_group_panels: int = -1, blockscale_stage_k: int = -1,
     blockscale_lds_pad_bytes: int = -1, blockscale_prefetch: int = -1,
     project_image_identity: bool = True, lds_runtime_k: bool = True,
-    scale_format: str = "fp32", arbitrary_m: bool = False,
+    scale_format: str = "fp32", arbitrary_m: bool = False, arbitrary_n: bool = False,
 ) -> ROCMNativePackage:
     """Compile the Tile program to a gfx1201 HSACO and bind its launch ABI.
 
@@ -479,6 +479,8 @@ def package_blockscale(
     for ``blockscale_prefetch``, the carrier's pipeline depth)."""
     if type(arbitrary_m) is not bool or (arbitrary_m and not project_image_identity):
         raise ValueError("arbitrary_m requires a bool and projected image identity")
+    if type(arbitrary_n) is not bool or (arbitrary_n and not arbitrary_m):
+        raise ValueError("arbitrary_n requires a bool and an arbitrary-M image")
     if not isinstance(lds_runtime_k, bool):
         raise ValueError("lds_runtime_k must be a bool")
     if not isinstance(project_image_identity, bool):
@@ -501,6 +503,7 @@ def package_blockscale(
         blockscale_prefetch=int(blockscale_prefetch))
     target_key = hashlib.sha256("\x1f".join(
         ("rocm.w8a8.native_target.v3", str(project_image_identity), str(lds_runtime_k), str(arbitrary_m),
+         str(arbitrary_n),
          program.tile_ir, _tool_digest(tool))
         + config.cache_key()).encode()).hexdigest()
     cached_target = _blockscale_target_cache.get(target_key)
@@ -513,7 +516,7 @@ def package_blockscale(
         image_target = (_shape_free_target_ir(
             checked_target, family="scaled_matmul" if runtime_shape else "scaled_matmul_lds",
             directive=_DIRECTIVE, runtime_k=bool(runtime_mn and lds_runtime_k),
-            arbitrary_m=arbitrary_m)
+            arbitrary_m=arbitrary_m, arbitrary_n=bool(runtime_mn and arbitrary_n))
             if project_image_identity else checked_target)
         if len(_blockscale_target_cache) >= 128:
             _blockscale_target_cache.pop(next(iter(_blockscale_target_cache)))
@@ -587,7 +590,9 @@ def package_blockscale(
             "lds_runtime_k": runtime_mn and lds_runtime_k,
             "arbitrary_m": arbitrary_m,
             "lds_whole_m": runtime_mn and not arbitrary_m and shape.m % checked["block_m"] == 0,
-            "lds_whole_n": runtime_mn and shape.n % checked["block_n"] == 0,
+            "lds_whole_n": runtime_mn and shape.n % checked["block_n"] == 0 and not arbitrary_n,
+            # Recorded only when set, so every existing descriptor keeps its digest.
+            **({"arbitrary_n": True} if runtime_mn and arbitrary_n else {}),
             "physical_contract": contract,
             "materializer": "generate-wmma-gemm-kernel",
             "b_layout": shape.weight_layout,

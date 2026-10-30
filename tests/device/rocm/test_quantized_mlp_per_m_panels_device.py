@@ -89,3 +89,21 @@ def test_native_variant_admission_refuses_tampered_variants(tamper, monkeypatch)
     monkeypatch.setattr(module.PreparedQuantizedMLPProgram, "_variant_array", array)
     with pytest.raises(RuntimeError, match="status 1"):
         native.prepare(inputs(256, H, K, N), runtime_library=lib)
+
+
+def test_h_bounded_owner_runs_masked_column_lds_variants():
+    """A runtime-N gate product's LDS variants run an N that ends mid-tile."""
+    lib = provider()
+    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(16, 512, K, N))
+    native = fn.compile_native_quantized_program(*inputs(16, 512, K, N), m_bound=256, h_bound=2048).native
+    owner = native.prepare(inputs(16, 512, K, N), runtime_library=lib)
+    try:
+        for index, (m, h, image) in enumerate(((200, 1008, 2), (100, 1040, 1), (16, 2048, 0), (256, 2048, 2))):
+            roots = inputs(m, h, K, N, seed=2000 + index)
+            owner.update(roots)
+            generation, _ = owner.invoke()
+            assert owner.variant_info()[2] == image, (m, h)
+            np.testing.assert_array_equal(owner.read(generation)[0].view(np.uint16),
+                                          static_at(m, h, K, N, roots, lib).view(np.uint16))
+    finally:
+        owner.close()

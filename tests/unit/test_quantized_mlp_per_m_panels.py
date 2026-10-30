@@ -33,10 +33,26 @@ def test_m_only_bounded_product_carries_the_static_rules_lds_ranges(rocm_image_t
     assert down.variants == ()
 
 
-def test_runtime_shape_products_have_no_variants(rocm_image_toolchain):
+def test_runtime_n_product_variants_mask_their_column_edge(rocm_image_toolchain):
+    """An H-bounded gate product keeps its global base image and takes the same
+    LDS ranges, each projected for an N that varies at launch (whole_n false)."""
     fn = ts.jit(target="rocm_gfx1201")(make_mlp(16, 512, 4096, 256))
     native = fn.compile_native_quantized_program(*inputs(16, 512, 4096, 256), m_bound=256, h_bound=2048).native
-    assert native.gate.variants == () and native.down.variants == ()
+    gate = native.gate
+    assert gate.product.descriptor.provenance["runtime_shape_image"] is True
+    assert [(v.min_m, v.max_m) for v in gate.variants] == [(97, 128), (129, 256)]
+    for v in gate.variants:
+        provenance = v.native.descriptor.provenance
+        assert provenance["arbitrary_n"] is True and provenance["lds_whole_n"] is False
+        assert "whole_n = false" in v.native.target_ir
+    assert native.down.variants == ()
+
+
+def test_arbitrary_n_requires_the_lds_family():
+    from tessera.compiler.rocm_native import _shape_free_target_ir
+    with pytest.raises(ValueError, match="arbitrary_n projection requires the LDS W8A8 family"):
+        _shape_free_target_ir("", family="scaled_matmul", directive="tessera_rocm.scaled_wmma_gemm",
+                              arbitrary_m=True, arbitrary_n=True)
 
 
 def test_variant_record_round_trips_and_tampering_is_refused(rocm_image_toolchain):

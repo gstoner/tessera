@@ -4,8 +4,9 @@
 // A runtime-K image takes the K16 group count as an i64 scalar and launches
 // a (groups/256, N) grid: grid y is the row, so no lane divides by the
 // runtime extent. Every address is the static kernel's at that K.
-// A runtime-N image (one projection) keeps the flat grid and static K16 group
-// count, so its row/group split divides by a constant; N is one i64 scalar.
+// A runtime-N image keeps the flat grid and static K16 group count, so its
+// row/group split divides by a constant; N is one i64 scalar. Its P projection
+// boundaries are equally spaced and derived at launch as p*(N/P).
 static mlir::LogicalResult emitNativeNVFP4Expand(mlir::ModuleOp module,
                                                 mlir::Operation *op) {
   using namespace mlir;
@@ -17,7 +18,7 @@ static mlir::LogicalResult emitNativeNVFP4Expand(mlir::ModuleOp module,
   const bool runtimeK = op->hasAttr("runtime_k");
   const bool runtimeN = op->hasAttr("runtime_n");
   if (runtimeK != (k == 0) || runtimeN != (n == 0) || (runtimeK && runtimeN) ||
-      (runtimeN && op->getAttrOfType<ArrayAttr>("row_offsets").size() != 2))
+      (runtimeN && op->getAttrOfType<ArrayAttr>("row_offsets").size() < 2))
     return op->emitError("NVFP4 expansion extents must be static or one runtime image identity");
   int64_t groups = k / 16;
   auto offsets = op->getAttrOfType<ArrayAttr>("row_offsets");
@@ -80,9 +81,17 @@ static mlir::LogicalResult emitNativeNVFP4Expand(mlir::ModuleOp module,
     group = b.create<arith::RemUIOp>(l,index,ci(groups));
   }
   Value projection = ci(0);
+  // The verifier proved a runtime-N image's boundaries equally spaced.
+  Value width = runtimeN && offsets.size() > 2
+      ? Value(b.create<arith::DivUIOp>(l,
+            b.create<arith::IndexCastOp>(l,b.getIndexType(),f.getArgument(5)),
+            ci(int64_t(offsets.size()) - 1))) : Value();
   for (unsigned p=1; p+1<offsets.size(); ++p) {
+    Value boundary = runtimeN
+        ? Value(b.create<arith::MulIOp>(l,width,ci(p)))
+        : ci(cast<IntegerAttr>(offsets[p]).getInt());
     Value after = b.create<arith::CmpIOp>(
-        l,arith::CmpIPredicate::uge,row,ci(cast<IntegerAttr>(offsets[p]).getInt()));
+        l,arith::CmpIPredicate::uge,row,boundary);
     projection = choose(after,ci(p),projection);
   }
   Value global = b.create<memref::LoadOp>(l,f.getArgument(2),ValueRange{projection});

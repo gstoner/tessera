@@ -186,8 +186,11 @@ def package_nvfp4_expansion(graph: str | GraphIRModule, *, runtime_k: bool = Fal
         from .rocm_pipeline import ROCMInputLevel
         checked = _checked_target(tile)
         info = _contract(tile, checked)
-        if runtime_n and len(info[3]) != 2:
-            raise ValueError("runtime-N NVFP4 expansion requires one projection")
+        projections = len(info[3]) - 1
+        if runtime_n and (info[1] % projections or list(info[3]) != [
+                p * (info[1] // projections) for p in range(projections + 1)]):
+            # The image derives each runtime boundary as p*N/P from its N scalar.
+            raise ValueError("runtime-N NVFP4 expansion requires equally spaced projections")
         projection = _shape_free_target_ir(checked, family="nvfp4_expand", directive=_DIRECTIVE,
                                            runtime_k=runtime_k, runtime_n=runtime_n)
         target, backend, binary, compiler, toolchain, libraries, state = _compile_native_tile_ir(

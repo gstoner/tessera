@@ -179,9 +179,10 @@ def test_runtime_n_expansion_is_the_projection_of_its_checked_target(rocm_image_
         other.validate()
 
 
-def test_runtime_n_requires_one_projection(rocm_image_toolchain):
-    with pytest.raises(ValueError, match="requires one projection"):
-        _expansion(64, 32, [0, 32, 64], runtime_n=True)
+def test_runtime_n_requires_equally_spaced_projections(rocm_image_toolchain):
+    # The image derives every runtime boundary as p*N/P from its one N scalar.
+    with pytest.raises(ValueError, match="equally spaced projections"):
+        _expansion(64, 32, [0, 16, 64], runtime_n=True)
     with pytest.raises(ValueError, match="at most one runtime extent"):
         _expansion(40, 32, [0, 40], runtime_n=True, runtime_k=True)
 
@@ -197,6 +198,6 @@ def test_kernel_identity_runtime_n_refusals(rocm_image_toolchain):
     with pytest.raises(ValueError, match="NVFP4 expansion family"):
         _shape_free_target_ir(checked, family="scaled_matmul", directive="tessera_rocm.scaled_wmma_gemm",
                               runtime_n=True)
-    with pytest.raises(RuntimeError, match="records N as zero over one projection"):
+    with pytest.raises(RuntimeError, match="records N as zero over equally spaced projections"):
         _shape_free_target_ir(package.native.target_ir.replace("n = 0 : i64", "n = 40 : i64"),
                               family="nvfp4_expand", directive="tessera_rocm.nvfp4_expand", runtime_k=True)

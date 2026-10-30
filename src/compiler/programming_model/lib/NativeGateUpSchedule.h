@@ -120,7 +120,14 @@ inline FailureOr<Source> validateSource(ModuleOp source) {
   if (origins[0] == origins[1]) return failure();
   return Source{graph,inputType,outputType,ret,inputOrder};
 }
+// The bounded-hidden-width request: the body takes its output width as a
+// fifth i64 argument instead of the source constant. Only the BF16 profile.
+inline bool runtimeWidth(Operation *op) {
+  auto module = isa<ModuleOp>(op) ? cast<ModuleOp>(op) : op->getParentOfType<ModuleOp>();
+  return module && module->hasAttr("tessera.native.gate_up_runtime_width");
+}
 inline FailureOr<ModuleOp> buildScalarModule(ModuleOp source) {
+  const bool dynamicWidth = runtimeWidth(source);
   auto validated = validateSource(source);
   if (failed(validated)) return failure();
   auto graph = validated->graph;
@@ -132,15 +139,20 @@ inline FailureOr<ModuleOp> buildScalarModule(ModuleOp source) {
   ModuleOp output = ModuleOp::create(loc);
   b.setInsertionPointToEnd(output.getBody());
   auto ptr = LLVM::LLVMPointerType::get(source.getContext());
+  SmallVector<Type> arguments{ptr, ptr, b.getI64Type(), b.getI64Type()};
+  if (dynamicWidth) arguments.push_back(b.getI64Type());
   auto functionType = LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(source.getContext()),
-      {ptr, ptr, b.getI64Type(), b.getI64Type()}, false);
+      arguments, false);
   auto fn = LLVM::LLVMFuncOp::create(b, loc, "gate_up_scalar", functionType);
   Block *entry = fn.addEntryBlock(b); b.setInsertionPointToStart(entry);
   auto c = [&](int64_t value) -> Value { return arith::ConstantIntOp::create(b, loc, value, 64); };
-  Value columns = c(outputType.getDimSize(1));
+  // The gate/up split is the parent's two halves (validateSource), so the
+  // parent width is twice the output width in both profiles.
+  Value columns = dynamicWidth ? Value(entry->getArgument(4)) : c(outputType.getDimSize(1));
   Value elements = entry->getArgument(3);
   Value rows = arith::DivUIOp::create(b, loc, elements, columns);
-  Value inputRows = rows, inputColumns = c(inputType.getDimSize(1));
+  Value inputRows = rows, inputColumns = dynamicWidth
+      ? Value(arith::MulIOp::create(b, loc, columns, c(2))) : c(inputType.getDimSize(1));
   auto readType = tile::BufferViewType::get(source.getContext(), inputType.getElementType(), "read", inputOrder);
   auto writeType = tile::BufferViewType::get(source.getContext(), outputType.getElementType(), "write", "row_major");
   Value parent = tile::BufferViewOp::create(b, loc, readType, entry->getArgument(0), inputRows, inputColumns, inputOrder == "row_major" ? inputColumns : inputRows);
@@ -166,7 +178,11 @@ inline FailureOr<ModuleOp> buildScalarModule(ModuleOp source) {
     if (name == "tessera.slice" || name == "tessera.dynamic_slice") {
       auto bounds = tessera::slice_contract::staticBounds(op);
       if (!bounds || bounds->offsets.size() != 2) return failure();
-      return scalar(op->getOperand(0), offset(r, bounds->offsets[0]), offset(col, bounds->offsets[1]));
+      // validateSource admitted only the two halves: origin 0 or the output
+      // width, which a runtime-width body reads from its width argument.
+      Value shifted = dynamicWidth && bounds->offsets[1]
+          ? Value(arith::AddIOp::create(b, loc, col, columns)) : offset(col, bounds->offsets[1]);
+      return scalar(op->getOperand(0), offset(r, bounds->offsets[0]), shifted);
     }
     if (name == "tessera.cast") {
       auto operand = scalar(op->getOperand(0), r, col);
@@ -205,6 +221,7 @@ inline FailureOr<func::FuncOp> graphRoot(ModuleOp module) {
   for (NamedAttribute attr : module->getAttrs()) {
     StringRef n = attr.getName().strref();
     if (n != "tessera.native.gate_up_view" && n != "tessera.target" && n != "tessera.arch" &&
+        n != "tessera.native.gate_up_runtime_width" &&
         n != "tessera.ir.version" && n != "tessera.frontend.authority" &&
         n != "tessera.launch_bindings") return reject();
   }
@@ -214,6 +231,8 @@ inline FailureOr<func::FuncOp> graphRoot(ModuleOp module) {
         cast<StringAttr>(names[0]).getValue().empty() || cast<StringAttr>(names[1]).getValue().empty() ||
         names[0] == names[1]) return reject();
   }
+  if (auto width = module->getAttr("tessera.native.gate_up_runtime_width");
+      width && !isa<UnitAttr>(width)) return reject();
   if (auto version = module->getAttr("tessera.ir.version")) {
     auto text = dyn_cast<StringAttr>(version);
     if (!text || text.getValue() != "1.0") return reject();
@@ -234,7 +253,8 @@ inline bool bf16Profile(func::FuncOp fn) {
 inline std::string artifactHash(func::FuncOp fn) {
   std::string text = sourceHash(fn) + (bf16Profile(fn)
       ? ";gate_up_view_schema=3;flat_gid;threads=256;parent=1;output=1;bf16_f32_compute"
-      : ";gate_up_view_schema=2;flat_gid;threads=256;parent=1;output=1;f32");
+      : ";gate_up_view_schema=2;flat_gid;threads=256;parent=1;output=1;f32") +
+      (runtimeWidth(fn) ? ";runtime_width" : "");
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(text)), true);
 }
 inline DictionaryAttr artifactAttributes(func::FuncOp fn) {
@@ -243,7 +263,7 @@ inline DictionaryAttr artifactAttributes(func::FuncOp fn) {
   return b.getDictionaryAttr({
     b.getNamedAttr("hash", b.getStringAttr(artifactHash(fn))),
     b.getNamedAttr("arch", b.getStringAttr("gfx1201")),
-    b.getNamedAttr("shape_key", b.getStringAttr("family=gate_up_view;rows=" + std::to_string(shape[0]) + ";columns=" + std::to_string(shape[1]) + (bf16Profile(fn) ? ";storage=bf16" : ";storage=f32"))),
+    b.getNamedAttr("shape_key", b.getStringAttr("family=gate_up_view;rows=" + std::to_string(shape[0]) + ";columns=" + std::to_string(shape[1]) + (bf16Profile(fn) ? ";storage=bf16" : ";storage=f32") + (runtimeWidth(fn) ? ";width=runtime" : ""))),
     b.getNamedAttr("numeric_policy", b.getStringAttr(bf16Profile(fn) ? "bf16_load;explicit_fp32;source_order_silu_mul;bf16_rne_store" : "explicit_fp32;source_order_silu_mul")),
     b.getNamedAttr("tile", b.getDictionaryAttr({
       b.getNamedAttr("source_hash", b.getStringAttr(sourceHash(fn))),
@@ -260,6 +280,8 @@ inline LogicalResult schedule(ModuleOp module, bool &selected) {
     return module.emitError("gate/up view Schedule requires one unscheduled original Graph");
   if (failed(validateSource(module)))
     return module.emitError("gate/up view source is outside the native parent-view profile");
+  if (runtimeWidth(module) && !bf16Profile(*root))
+    return module.emitError("runtime-width gate/up view requires the BF16 parent-view profile");
   OpBuilder b(module.getContext()); b.setInsertionPointToEnd(module.getBody());
   OperationState state(root->getLoc(), "schedule.artifact");
   state.addAttributes(artifactAttributes(*root).getValue()); b.create(state);
@@ -299,6 +321,7 @@ inline LogicalResult lower(ModuleOp module, bool &selected) {
   state.addAttribute("source_hash", b.getStringAttr(sourceHash(*root)));
   state.addAttribute("artifact_hash", b.getStringAttr(artifactHash(*root)));
   state.addAttribute("body_hash", b.getStringAttr(row_region::digest(fn)));
+  if (runtimeWidth(module)) state.addAttribute("runtime_width", b.getUnitAttr());
   state.addRegion(); Operation *carrier = b.create(state);
   carrier->getRegion(0).push_back(new Block);
   fn->moveBefore(&carrier->getRegion(0).front(),carrier->getRegion(0).front().end());

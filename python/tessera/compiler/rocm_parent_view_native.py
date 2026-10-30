@@ -21,11 +21,32 @@ from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
 PARENT_VIEW_ABI = "tessera.rocm.parent_view.parent_o_n.f32.v1"
 PARENT_VIEW_BF16_ABI = "tessera.rocm.parent_view.parent_o_n.bf16_f32.v1"
-PARENT_VIEW_ABIS = frozenset({PARENT_VIEW_ABI, PARENT_VIEW_BF16_ABI})
+#: The bounded-hidden-width member: the body takes (count, width) at launch.
+PARENT_VIEW_BF16_RUNTIME_WIDTH_ABI = "tessera.rocm.parent_view.parent_o_n_width.bf16_f32.v1"
+PARENT_VIEW_ABIS = frozenset({PARENT_VIEW_ABI, PARENT_VIEW_BF16_ABI, PARENT_VIEW_BF16_RUNTIME_WIDTH_ABI})
+_RUNTIME_WIDTH_PROFILE = "gfx1201_parent_view_bf16_f32_runtime_width_v1"
 _PROFILES = {
     "gfx1201_parent_view_f32_v1": ("f32", "fp32", 4, PARENT_VIEW_ABI),
     "gfx1201_parent_view_bf16_f32_v1": ("bf16", "bf16", 2, PARENT_VIEW_BF16_ABI),
+    _RUNTIME_WIDTH_PROFILE: ("bf16", "bf16", 2, PARENT_VIEW_BF16_RUNTIME_WIDTH_ABI),
 }
+_RUNTIME_WIDTH_MARKER = "tessera.native.gate_up_runtime_width"
+
+
+def runtime_width_graph(graph_ir: str) -> str:
+    """The parent-view member Graph requesting the runtime-width body.
+
+    The marker is the one module attribute the native Schedule reads to emit
+    the width as a launch scalar; the source program is otherwise unchanged."""
+    marker = "tessera.native.gate_up_view"
+    if (not isinstance(graph_ir, str) or graph_ir.count(marker) != 1
+            or _RUNTIME_WIDTH_MARKER in graph_ir):
+        raise ValueError("runtime-width parent view requires one unmarked native gate/up Graph")
+    return graph_ir.replace(marker, f"{_RUNTIME_WIDTH_MARKER}, {marker}", 1)
+
+
+def runtime_width_profile(member: dict) -> bool:
+    return member.get("profile") == _RUNTIME_WIDTH_PROFILE
 _TARGET = "rocm_gfx1201"
 
 
@@ -124,7 +145,8 @@ def _validate_frame(program: dict, member: dict) -> None:
             or member.get("schema") != 1 or member.get("step") != 0
             or member.get("architecture") != "gfx1201"
             or member.get("profile") not in _PROFILES
-            or member.get("abi") != "flattened_rank1_memref_then_i64"
+            or member.get("abi") != ("flattened_rank1_memref_then_i64x2" if runtime_width_profile(member)
+                                     else "flattened_rank1_memref_then_i64")
             or member.get("inputs") != [0] or member.get("output") != 1):
         raise ValueError("parent-view native frame profile differs")
     shape = member.get("output_shape")
@@ -137,7 +159,7 @@ def _validate_frame(program: dict, member: dict) -> None:
     rows, width = shape
     count = rows * width
     if (count > 2**31 // 12 or member.get("parent_shape") != [rows, 2*width]
-            or member.get("scalars") != [count]
+            or member.get("scalars") != ([count, width] if runtime_width_profile(member) else [count])
             or member.get("geometry") != [(count+255)//256, 1, 1, 256, 1, 1]):
         raise ValueError("parent-view capacity/count/geometry differs")
     storage, _, element_bytes, _ = _PROFILES[member["profile"]]
@@ -194,7 +216,8 @@ def _descriptor(image: NativeImageArtifact, program: dict, member: dict, lineage
         image_digest=image.image_digest, entry_symbol=member["entry"], abi_id=abi,
         buffers=tuple(BufferBinding(i, name, "input" if i == 0 else "output", dtype, 2,
                                     "row_major", element_bytes) for i, name in enumerate(names)),
-        scalars=(ScalarArgument(2, "N", "int64"),),
+        scalars=((ScalarArgument(2, "N", "int64"), ScalarArgument(3, "width", "int64"))
+                 if runtime_width_profile(member) else (ScalarArgument(2, "N", "int64"),)),
         shape_guards=tuple(ShapeGuard(name, axis, "eq", extent)
             for name, row in zip(names, program["buffers"], strict=True)
             for axis, extent in enumerate(row["shape"])),
@@ -255,6 +278,9 @@ def submit_parent_view(image, descriptor, buffers, scalars, stream):
     info = descriptor.provenance["native_parent_view"]
     program, member = json.loads(info["program_json"]), json.loads(info["member_json"])
     _validate_frame(program, member)
+    if runtime_width_profile(member):
+        # Its width is a frame variable of the bounded MLP owner, never a standalone launch.
+        raise ValueError("runtime-width parent view launches only inside its bounded MLP program")
     if (set(buffers) != set(member["bindings"]) or set(scalars) != {"N"}
             or type(scalars["N"]) is not int or [scalars["N"]] != member["scalars"]):
         raise ValueError("parent-view invocation bindings/count differ")

@@ -12,6 +12,8 @@ inline mlir::LogicalResult exportParentViewProgram(mlir::ModuleOp module, mlir::
   int64_t columns = carrier->getAttrOfType<IntegerAttr>("columns").getInt();
   int64_t elements = rows * columns;
   bool bf16 = carrier->getAttrOfType<TypeAttr>("storage").getValue().isBF16();
+  // The runtime-width member binds (count, width) at its checked capacity.
+  bool runtimeWidth = carrier->hasAttr("runtime_width");
   const char *storage = bf16 ? "bf16" : "f32";
   int64_t elementBytes = bf16 ? 2 : 4;
   auto original = module->getAttrOfType<StringAttr>("tessera.rocm.parent_view_source");
@@ -47,14 +49,16 @@ inline mlir::LogicalResult exportParentViewProgram(mlir::ModuleOp module, mlir::
     for (auto name : bindings) names.push_back(cast<StringAttr>(name).getValue().str());
   } else { names.push_back("parent"); names.push_back("out"); }
   llvm::json::Object manifest{
-    {"schema",1},{"profile",bf16 ? "gfx1201_parent_view_bf16_f32_v1" : "gfx1201_parent_view_f32_v1"},{"architecture","gfx1201"},
-    {"entry",name.str()},{"abi","flattened_rank1_memref_then_i64"},
+    {"schema",1},{"profile",runtimeWidth ? "gfx1201_parent_view_bf16_f32_runtime_width_v1" :
+                            bf16 ? "gfx1201_parent_view_bf16_f32_v1" : "gfx1201_parent_view_f32_v1"},
+    {"architecture","gfx1201"},
+    {"entry",name.str()},{"abi",runtimeWidth ? "flattened_rank1_memref_then_i64x2" : "flattened_rank1_memref_then_i64"},
     {"step",0},{"inputs",llvm::json::Array{0}},{"output",1},
     {"bindings",std::move(names)},
     {"program_base64",llvm::encodeBase64(programText)},
     {"parent_shape",llvm::json::Array{rows,2*columns}},
     {"output_shape",llvm::json::Array{rows,columns}},
-    {"scalars",llvm::json::Array{elements}},
+    {"scalars",runtimeWidth ? llvm::json::Array{elements,columns} : llvm::json::Array{elements}},
     {"geometry",llvm::json::Array{(elements+255)/256,1,1,256,1,1}},
     {"source_hash",carrier->getAttrOfType<StringAttr>("source_hash").getValue().str()},
     {"artifact_hash",carrier->getAttrOfType<StringAttr>("artifact_hash").getValue().str()},

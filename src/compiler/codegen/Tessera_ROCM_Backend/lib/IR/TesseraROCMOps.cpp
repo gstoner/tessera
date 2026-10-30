@@ -136,13 +136,21 @@ mlir::LogicalResult NVFP4ExpandOp::verify() {
     return emitOpError("NVFP4 expansion currently requires gfx1201");
   if (getRuntimeK() && getRuntimeN())
     return emitOpError("NVFP4 expansion is runtime-K or runtime-N, not both");
-  // A runtime-N image keeps its checked single-projection capacity boundary.
+  // A runtime-N image keeps its checked capacity boundaries. With P
+  // projections they are equally spaced, so the kernel derives each runtime
+  // boundary as p*N/P from the one N scalar.
   auto offsets = getRowOffsets();
   int64_t staticN = getN();
   if (getRuntimeN()) {
-    auto last = offsets.size() == 2 ? dyn_cast<IntegerAttr>(offsets[1]) : IntegerAttr();
-    if (!last || getN() != 0)
-      return emitOpError("runtime-N NVFP4 expansion records N as zero over one projection");
+    auto last = offsets.size() >= 2 ? dyn_cast<IntegerAttr>(offsets[offsets.size() - 1]) : IntegerAttr();
+    int64_t projections = int64_t(offsets.size()) - 1;
+    bool spaced = last && last.getInt() % projections == 0;
+    for (int64_t p = 0; spaced && p <= projections; ++p) {
+      auto offset = dyn_cast<IntegerAttr>(offsets[p]);
+      spaced = offset && offset.getInt() == p * (last.getInt() / projections);
+    }
+    if (!spaced || getN() != 0)
+      return emitOpError("runtime-N NVFP4 expansion records N as zero over equally spaced projections");
     staticN = last.getInt();
   }
   if (failed(mlir::tessera_contract::verifyNVFP4ExpandPolicy(

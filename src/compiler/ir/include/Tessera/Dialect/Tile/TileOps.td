@@ -1684,10 +1684,14 @@ def Tile_RowRegionKernelOp : Tile_Op<"row_region_kernel",
     allocation capacity and row_multiple is its fixed logical B*H prefix;
     runtime rows are positive, capacity-bounded and divisible by that prefix.
     Existing static row profiles retain their exact-row semantics.
+    `runtime_width` marks the schema-3 gfx1201 parent view whose body takes
+    the output width as a fifth i64 argument (bounded hidden width); its
+    `columns` is the checked capacity, which the body never reads.
   }];
   let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$rows,
       I64Attr:$columns, TypeAttr:$storage, I64Attr:$workgroup_size,
-      I64Attr:$schema, OptionalAttr<I64Attr>:$row_multiple, StrAttr:$source_hash, StrAttr:$artifact_hash, StrAttr:$body_hash);
+      I64Attr:$schema, OptionalAttr<I64Attr>:$row_multiple, StrAttr:$source_hash, StrAttr:$artifact_hash, StrAttr:$body_hash,
+      UnitAttr:$runtime_width);
   let regions = (region AnyRegion:$body);
   let assemblyFormat = "attr-dict-with-keyword $body";
   let hasVerifier = 1;

@@ -199,7 +199,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Named v3 gate/up: native MLIR composes four members through an explicit BF16 parent store and SiLU activation. Eleven new owning device cases plus eleven legacy controls pass; three packets separate device and public timings. Full down projection, model quality and wider integration remain open.
 - Named v4 public MLP: original quantizer/gate-up/activation/down Graph executes through seven native members and checked resident buffers. Eight owning cases and separated timing packets pass; checkpoint/model quality, host dispatch cost and wider integration remain open.
 - Quantized host binding reuse: content-certified validation and ABI memoization pass thirty owning v1-v4 cases and image-identical final-source public timing improves 2.43-2.97x. Runtime input/readiness checks remain per call; broader/model-quality closure remains open.
-- Latest: [2026-10-29 — Bounded H for the gfx1201 quantized MLP](INTEGRATED_COMPILER_LOG.md#2026-10-29--bounded-h-for-the-gfx1201-quantized-mlp)
+- Latest: [2026-10-30 — Large-capacity K/N/H-bounded quantized MLPs compile with the global gate panel](INTEGRATED_COMPILER_LOG.md#2026-10-30--large-capacity-knh-bounded-quantized-mlps-compile-with-the-global-gate-panel)
 
 ### ROCM-SPLIT-K-1
 

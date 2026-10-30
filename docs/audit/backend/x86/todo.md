@@ -12587,3 +12587,12 @@ Synchronization key: GFX1201-BOUNDED-QUANTIZED-H-20261029.
 Not applicable to x86: the v8 program, the multi-projection runtime-N NVFP4 expansion image, the runtime-width parent view and the four-variable HIP axis frame are `rocm_gfx1201` only. No x86 selector, ABI or result changes.
 
 Evidence: tests/device/rocm/test_public_quantized_mlp_h_bound_device.py; benchmarks/baselines/gfx1201_h_bounded_quantized_mlp_20261029/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
+
+## GFX1201-BOUNDED-GLOBAL-PANEL-20261030 — global gate panel for large-capacity bounded quantized MLPs
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-BOUNDED-GLOBAL-PANEL-20261030.
+
+Not applicable to x86: the staging request is read only by the gfx1201 W8A8 panel selector, for `rocm_gfx1201` bounded programs. No x86 selector, ABI or result changes.
+
+Evidence: benchmarks/baselines/gfx1201_bounded_global_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".

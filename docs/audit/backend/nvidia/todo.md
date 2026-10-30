@@ -16815,3 +16815,12 @@ Synchronization key: GFX1201-BOUNDED-QUANTIZED-H-20261029.
 Not applicable to NVIDIA results: the v8 program and its members are `rocm_gfx1201` only. One shared declaration changes: `tile.row_region_kernel` gains an optional `runtime_width` UnitAttr, produced only by the gfx1201 schema-3 parent-view Schedule and refused by the shared contract on any other schema. The NVIDIA row-region lowering never reads it, and no SM120 profile changes. `tessera-nvidia-opt` builds with it in Tajasarus's assertions-ON `build-assertions-nvidia` tree; no SM120 device run was made for this change, and none claims parity.
 
 Evidence: tests/device/rocm/test_public_quantized_mlp_h_bound_device.py; benchmarks/baselines/gfx1201_h_bounded_quantized_mlp_20261029/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
+
+## GFX1201-BOUNDED-GLOBAL-PANEL-20261030 — global gate panel for large-capacity bounded quantized MLPs
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-BOUNDED-GLOBAL-PANEL-20261030.
+
+Not applicable to NVIDIA: the staging request is read only by the gfx1201 W8A8 panel selector, for `rocm_gfx1201` bounded programs. No NVIDIA selector, ABI or result changes.
+
+Evidence: benchmarks/baselines/gfx1201_bounded_global_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".

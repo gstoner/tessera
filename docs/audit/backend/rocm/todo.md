@@ -19376,3 +19376,12 @@ Synchronization key: GFX1201-BOUNDED-QUANTIZED-H-20261029.
 Landed on gfx1201 only (Tajasarus). `compile_native_quantized_program(..., m_bound=MB, h_bound=HB)` compiles one v8 program for every `1 <= M <= MB` and every H16-multiple `H <= HB`. It adds a native hidden-width retype across every member but the gate quantizer, a runtime-N NVFP4 expansion image for equally spaced multi-projection boundaries (the gate/up planes), a runtime-width BF16 SiLU parent view (declared `runtime_width` UnitAttr, the width as a fifth body argument), and a fourth HIP axis-frame variable (H/16). Public calls across nine (M, H) shapes at two bound sets are bitwise equal to the static program at each exact shape, through one retained owner. The first timing run was 1.2–3.9× static at four of five shapes because the capacity schedule picked a `[32, 32]` gate-product panel; every shape-free product now requests its register panel for M >= 1 (`tessera.rocm.blockscale_min_m`), and the re-run is 0.98–1.05× static at all five (diagnostic HIP events). No gfx1151 evidence, and the generic `rocm` name inherits nothing. Open: selecting among measured product images per active shape, H combined with a K or N bound (the gate/up expansion would need runtime K and N in one image), an LDS-staged capacity product, gfx1151.
 
 Evidence: tests/device/rocm/test_public_quantized_mlp_h_bound_device.py; benchmarks/baselines/gfx1201_h_bounded_quantized_mlp_20261029/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
+
+## GFX1201-BOUNDED-GLOBAL-PANEL-20261030 — global gate panel for large-capacity bounded quantized MLPs
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-BOUNDED-GLOBAL-PANEL-20261030.
+
+Landed on gfx1201 only (Tajasarus). Runtime-K/N/H bounded products request `tessera.rocm.blockscale_staging = "global"`, so a capacity that reached an LDS gate panel compiles with the register panel instead of refusing; M-only bounded products keep LDS. K- and H-bounded programs at capacity 256 × 4096 are bitwise equal to static at every tested shape. Diagnostic time is 1.0–1.12× static at four shapes but 2.75× at 256 × 2048 (the `[16, 32]` gate product takes 4.2× static LDS). Open: per-active-M product image selection; gfx1151.
+
+Evidence: benchmarks/baselines/gfx1201_bounded_global_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".

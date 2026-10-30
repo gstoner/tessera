@@ -14331,3 +14331,12 @@ Outcome: `compile_native_quantized_program(..., m_bound=MB, h_bound=HB)` now com
 Remaining: exact-head CI/review; selecting among measured product images per active shape; H combined with K or N (runtime K and N in one expansion image); an LDS-staged capacity product; compiler-free bounded replay; gfx1151.
 Evidence: tests/device/rocm/test_public_quantized_mlp_h_bound_device.py; tests/unit/test_public_quantized_mlp_h_bound.py; benchmarks/baselines/gfx1201_h_bounded_quantized_mlp_20261029/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
 <!-- entry-fields:end -->
+
+### 2026-10-30 — Large-capacity K/N/H-bounded quantized MLPs compile with the global gate panel
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync GFX1201-BOUNDED-GLOBAL-PANEL-20261030.
+Outcome: a K-, N- or H-bounded program whose capacity reached an LDS gate panel (for example M = 256, gate N = 4096) used to refuse, because a runtime-K/N product exists only as the global-staged shape-free image. The product member now requests `tessera.rocm.blockscale_staging = "global"`; the native selector and its Python oracle then skip every LDS rule and take the register panel at the admitted minimum M. M-only bounded products keep their LDS panels, and any other staging value is refused. On gfx1201, K-bounded (H 2048, bounds (256, 8192)) and H-bounded (bounds (256, 2048)) programs at that capacity are bitwise equal to the static program at every tested shape through one owner (304 device tests pass). Diagnostic device time for the H program is 1.0–1.12× static at four shapes but 2.75× at 256 × 2048, where the `[16, 32]` gate product takes 4.2× static's LDS `[128, 128]`. NVIDIA, Apple and x86 are not applicable (gfx1201-only programs).
+Remaining: exact-head CI/review; per-active-M product image selection (the 2.75× corner, and the M-only program's LDS panel at small M, 2.1–2.9×); gfx1151.
+Evidence: tests/device/rocm/test_public_quantized_mlp_h_bound_device.py; tests/device/rocm/test_public_quantized_mlp_k_bound_device.py; tests/unit/test_public_quantized_mlp_h_bound.py; benchmarks/baselines/gfx1201_bounded_global_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
+<!-- entry-fields:end -->

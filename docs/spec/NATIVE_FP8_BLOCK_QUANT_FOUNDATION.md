@@ -876,6 +876,21 @@ Measured on gfx1201: the 32-row panel chosen at capacity 256 × 1024 cost
 measured 0.78–1.33× of 32 for static programs, so a capacity in that band
 can cost up to about 1.33× at its large end.
 
+**Global staging for runtime-shape products
+(GFX1201-BOUNDED-GLOBAL-PANEL-20261030).** A runtime-K/N/H product exists
+only as the global-staged shape-free image, so a bounded program whose
+capacity reached an LDS gate panel used to refuse ("requires the shape-free
+global-staged product"). Its product member now also carries
+`tessera.rocm.blockscale_staging = "global"`. The selector then skips every
+LDS rule and takes the register panel at the admitted minimum, and the
+oracle (`staging="global"`) mirrors it. Any other value is refused. M-only
+(v5) bounded products keep their LDS panels. Measured at H-bound capacity
+(256, 2048), K/N 4096/256: 1.0–1.12× static at four shapes, but 2.75× at
+256 × 2048, where the `[16, 32]` gate product takes 4.2× static's LDS
+`[128, 128]`. Evidence:
+`benchmarks/baselines/gfx1201_bounded_global_panel_20261030/README.md`.
+Per-active-M product images are the open fix.
+
 **Owner axis frame.** The axis frame gains a fourth variable: H16 groups
 (power bit 3, `capacity_h`). `prepare_multi_output_axis_frame`,
 `update_axes` and `axes_info` take and report four extents (M, G, N, H);

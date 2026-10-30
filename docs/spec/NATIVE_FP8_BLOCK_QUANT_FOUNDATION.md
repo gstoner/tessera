@@ -1024,6 +1024,35 @@ WMMA rounding already differs from gfx1201 at about 1e-6 (see
 `tests/device/rocm/test_bounded_fragment_pack.py`), so bitwise parity with
 gfx1201 is not expected. It is open work, not a claim here.
 
+**Slice 1: software E4M3 encode and the scalar members.** RDNA 3.5 also
+has no FP8 convert (`V_CVT_PK_FP8_F32` is RDNA4-only). The changes:
+
+- **The encode.** `lower-tessera-target-to-rocdl` lowers a gfx1151 `f32 ->
+  f8E4M3FN` cast to an integer-only encode. It has the instruction's
+  recorded semantics:
+  - round to nearest even;
+  - any NaN encodes as `0xFF`;
+  - `|x| > 464` and ±inf encode as `sign|0x7F` (no saturation);
+  - subnormals land on the 2⁻⁹ grid;
+  - f32 denormals become signed zero.
+
+  `e4m3-encode=software` forces it on gfx1201. Every other architecture
+  keeps its cast, so lowering is never an admission.
+- **Bit-identity.** On gfx1201 hardware, the software image and the
+  instruction agree on all 2³² f32 bit patterns
+  (`tests/device/rocm/test_e4m3_software_encode.py`).
+- **Members admitted.** The K16 quantizer, the NVFP4 expansion and the SiLU
+  parent view admit a matching gfx1151 target/arch pair at every compiler
+  gate: Graph contract, Schedule identity, Tile and Target carriers,
+  verifiers, exported profiles and the TileToROCM row/expansion gates.
+  NVFP4 requantization stays gfx1201. gfx1201 identities are unchanged, and
+  the pipeline arch must equal the kernel's.
+- **Compile-only on gfx1151.** All three members lower without an FP8
+  instruction and serialize as gfx1151 HSACOs. No gfx1151 execution is
+  claimed. Executable packaging stays gated by device-proven family
+  promotion, and nothing submits or consumes a gfx1151 member image.
+  Evidence: `tests/unit/test_gfx1151_quantized_scalar_members.py`.
+
 ## Quantized package certificate and ABI reuse
 
 `TESSERA_ROCM_PROGRAM_BINDING_CACHE=1` (the existing default) also enables

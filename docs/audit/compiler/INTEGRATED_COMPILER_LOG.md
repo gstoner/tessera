@@ -14349,3 +14349,12 @@ Outcome: a bounded product now carries a register (or global shape-free) base im
 Remaining: exact-head CI/review; the cause of the first-owner slowdown (measured, not explained); gfx1151.
 Evidence: tests/device/rocm/test_quantized_mlp_per_m_panels_device.py; tests/unit/test_quantized_mlp_per_m_panels.py; benchmarks/baselines/gfx1201_bounded_per_m_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
 <!-- entry-fields:end -->
+
+### 2026-10-30 — gfx1151 slice 1: software E4M3 encode and the scalar quantized-MLP members
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1028; sync GFX1151-QUANTIZED-MLP-20261030.
+Outcome: RDNA 3.5 has neither FP8 WMMA nor FP8 convert, so the FP8 quantized MLP stays excluded on gfx1151 (#1027). This slice admits its three scalar members there at the compiler boundary. `lower-tessera-target-to-rocdl` lowers gfx1151 `f32 -> f8E4M3FN` casts to an integer-only encode with the recorded semantics of RDNA4's `V_CVT_PK_FP8_F32` (RNE; NaN -> 0xFF; |x| > 464 and inf -> sign|0x7F with no saturation; 2^-9 subnormals; f32 denormals -> signed zero), forcible on gfx1201 with `e4m3-encode=software`; other architectures keep their casts. On gfx1201 hardware the software image and the instruction agree on all 2^32 f32 bit patterns, with a canary fill and known encodings proving the sweep ran. The K16 quantizer, NVFP4 expansion (not requantization) and SiLU parent view now admit a matching gfx1151 target/arch pair through Graph, Schedule, Tile, Target and their exported profiles, with every gfx1201 identity unchanged. All three compile to gfx1151 HSACOs; executable packaging stays gated by device-proven family promotion, and nothing submits or consumes a gfx1151 member image. No gfx1151 device result: Princess-Luna (WSL2) was not answering ssh. On gfx1201 the quantized/NVFP4/K16/parent-view device set passes (242) and the related unit set passes (3659; the one failure is an NVIDIA-lowering test on a ROCm-only compiler). NVIDIA, Apple and x86 are not applicable.
+Remaining: exact-head CI/review; slice 2, the F16-decode scaled product (E4M3 decoded exactly to f16, `V_WMMA_F32_16X16X16_F16`, fp32 K16 partials); slice 3, packaging/frontend for `rocm_gfx1151`; slice 4, device proof on Princess-Luna.
+Evidence: tests/device/rocm/test_e4m3_software_encode.py; tests/unit/test_gfx1151_quantized_scalar_members.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
+<!-- entry-fields:end -->

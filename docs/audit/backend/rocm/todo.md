@@ -19402,5 +19402,7 @@ Synchronization key: GFX1151-QUANTIZED-MLP-20261030.
 
 ISA exclusion, recorded: the seven-member quantized MLP (static and every bounded v5–v8 form) multiplies FP8 × FP8 through WMMA, and gfx1151 (RDNA 3.5) has no FP8/BF8 WMMA — the RDNA ISA matrix lists those opcodes for RDNA4 only. Every entry point refuses a non-gfx1201 target or device by name. No gfx1201 evidence transfers. Open: an F16-decode gfx1151 lowering (E4M3 decoded exactly to F16, `V_WMMA_F32_16X16X16_F16`, fp32 accumulation), tolerance-bounded against the staged oracle; it needs Princess-Luna (WSL2 was not answering ssh on 2026-10-30).
 
-Evidence: docs/reference/isa/rdna/cross_version/instruction_matrix.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
+Slice 1 (#1028), compile-only on gfx1151: the software E4M3 encode (bit-identical to `V_CVT_PK_FP8_F32` on all 2^32 f32 inputs, proven on gfx1201 hardware) and the K16 quantizer, NVFP4 expansion and SiLU parent view admitted at every compiler gate for gfx1151, each serializing a gfx1151 HSACO. No gfx1151 execution; executable packaging stays gated by device-proven promotion. Next: the F16-decode scaled product, then packaging/frontend, then Princess-Luna device proof.
+
+Evidence: docs/reference/isa/rdna/cross_version/instruction_matrix.md; tests/device/rocm/test_e4m3_software_encode.py; tests/unit/test_gfx1151_quantized_scalar_members.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
 

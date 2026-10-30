@@ -18,7 +18,7 @@ from .native_artifact import LaunchGeometry, ScalarArgument
 from .quantized_binding_cache import memoized_validation,memoized_binding
 from .native_scaled_program import PreparedScaledProgram, _BoundScaledABI, _Buffer, _StorageSpec, _storage_numpy_dtype
 from .rocm_block_quant_native import BlockQuantRecipe, lower_block_quant_text, package_block_quant_recipe, validate_block_quant_runtime_artifact, _frame
-from .rocm_fp8_blockscale import BlockScaleProgram, BlockScaleShape, PACKAGE_ABIS, check_blockscale_target_ir, package_blockscale, verify_blockscale_schedule
+from .rocm_fp8_blockscale import BlockScaleProgram, BlockScaleShape, PACKAGE_ABIS, admitted_rows_graph, check_blockscale_target_ir, package_blockscale, verify_blockscale_schedule
 from .rocm_native import ROCMNativePackage, _directive_symbol
 from .rocm_nvfp4_expansion_program import _MultiOutputStep
 from .rocm_nvfp4_expand_native import NVFP4ExpansionPackage, package_nvfp4_expansion
@@ -225,6 +225,10 @@ class NativeQuantizedProductProgram:
                     raise ValueError("native quantized-product expansion/shared buffer interface differs")
         members.append(self.product_recipe.graph_ir)
         expected=list(plan["member_graphs"])
+        if self.arbitrary_m:
+            # The shape-free product's member requests the panel for M >= 1.
+            product_index=2 if self.expansion is not None else 1
+            expected[product_index]=admitted_rows_graph(expected[product_index])
         if self.activation_recipe is not None:
             members.append(self.activation_recipe.graph_ir)
             if self.runtime_n:
@@ -417,8 +421,11 @@ def package_quantized_product_graph(graph_ir,*,arbitrary_m=False,runtime_k=False
     expansion = (package_nvfp4_expansion(plan["member_graphs"][1],runtime_k=runtime_k,runtime_n=runtime_n)
                  if expanded else None)
     child = plan["member_graphs"][2 if expanded else 1]
+    if arbitrary_m:
+        # The shape-free image runs every M down to 1; its panel is chosen there.
+        child = admitted_rows_graph(child)
     schedule = run_tessera_opt(tool,child,"--tessera-graph-to-schedule")
-    verify_blockscale_schedule(shape,schedule)
+    verify_blockscale_schedule(shape,schedule,min_m=1 if arbitrary_m else None)
     tile = run_tessera_opt(tool,schedule,"--tessera-schedule-to-tile")
     recipe = BlockScaleProgram(shape,"quantized_product",child,schedule,tile)
     product = package_blockscale(recipe,pipeline_name="tessera-rocm-executable",

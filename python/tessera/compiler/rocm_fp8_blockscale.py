@@ -172,7 +172,8 @@ class BlockScalePanel:
     warps: int
 
 
-def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201") -> BlockScalePanel:
+def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201",
+                            min_m: int | None = None) -> BlockScalePanel:
     """The Python oracle of `selectFp8W8A8BlockScalePanel` (PMPasses.cpp).
 
     It exists to be DIFFERENTIAL, not to decide anything: the C++ Schedule is
@@ -181,6 +182,8 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201") ->
     split-K rule has (`verify_matmul_projection`). The occupancy denominator
     is `rocm_target.compute_units`, the table the C++ `measuredComputeUnits`
     mirrors; an arch absent there keeps the register panel on both sides.
+    ``min_m`` mirrors ``tessera.rocm.blockscale_min_m``: an arbitrary-M image
+    chooses its register panel at the smallest M it admits.
     """
     try:
         units = compute_units(AMDArch[f"GFX_{arch.removeprefix('gfx')}"])
@@ -224,8 +227,9 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201") ->
             and (tiles(128, 128) >= units or tiles(128, 64) >= units)):
         wide = tiles(128, 128) >= units
         return BlockScalePanel("lds", 128, 128 if wide else 64, 8)
-    full = (shape.m % 32 == 0 and shape.n % 32 == 0
-            and (shape.m // 32) * (shape.n // 32) >= 256)
+    rows = shape.m if min_m is None else min(shape.m, min_m)
+    full = (rows % 32 == 0 and shape.n % 32 == 0
+            and (rows // 32) * (shape.n // 32) >= 256)
     return BlockScalePanel("global", 32 if full else 16, 32 if shape.n % 32 == 0 else 16, 1)
 
 
@@ -239,7 +243,8 @@ def schedule_blockscale_panel(schedule_ir: str) -> BlockScalePanel:
         _int_attr(record, "warps"))
 
 
-def verify_blockscale_schedule(shape: BlockScaleShape, schedule_ir: str) -> BlockScalePanel:
+def verify_blockscale_schedule(shape: BlockScaleShape, schedule_ir: str, *,
+                               min_m: int | None = None) -> BlockScalePanel:
     """Refuse a Schedule whose W8A8 panel the Python oracle does not reproduce.
 
     The differential half of Decision #31 for this rule: the CU count, the
@@ -248,13 +253,28 @@ def verify_blockscale_schedule(shape: BlockScaleShape, schedule_ir: str) -> Bloc
     native = schedule_blockscale_panel(schedule_ir)
     arch = re.search(r'(?<![\w.])arch\s*=\s*"(\w+)"',
                      _one_line(schedule_ir, "schedule.matmul", "schedule.matmul record"))
-    oracle = blockscale_panel_oracle(shape, arch=arch.group(1) if arch else "")
+    oracle = blockscale_panel_oracle(shape, arch=arch.group(1) if arch else "", min_m=min_m)
     if native != oracle:
         raise ValueError(
             f"W8A8 panel oracle disagrees with the native Schedule for "
             f"{shape.m}x{shape.n}x{shape.k} ({shape.weight_layout}): Schedule "
             f"{native}, oracle {oracle}")
     return native
+
+
+_MIN_M_ATTR = "tessera.rocm.blockscale_min_m"
+
+
+def admitted_rows_graph(graph_ir: str, min_m: int = 1) -> str:
+    """The product Graph requesting a register panel chosen for M >= ``min_m``.
+
+    An arbitrary-M image runs every M down to that minimum; the attribute is
+    the one module key the native panel selector reads for it."""
+    head = "module attributes {"
+    if (not isinstance(graph_ir, str) or graph_ir.count(head) != 1 or _MIN_M_ATTR in graph_ir
+            or type(min_m) is not int or min_m < 1):
+        raise ValueError("an admitted-rows request needs one unmarked attributed product module and min_m >= 1")
+    return graph_ir.replace(head, f"{head}{_MIN_M_ATTR} = {min_m} : i64, ", 1)
 
 
 def lower_blockscale(

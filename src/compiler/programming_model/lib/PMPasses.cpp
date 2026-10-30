@@ -366,6 +366,11 @@ struct MatmulSchedule {
   //: have asked for the LDS body (empty otherwise). Not part of the digest;
   //: Graph->Schedule turns it into ROCM_FP8_BLOCKSCALE_LDS_NOT_APPLIED.
   std::string panelFallback;
+  //: GFX1201-BOUNDED-QUANTIZED-H-20261029: the smallest M a shape-free
+  //: (arbitrary-M) image will run, from `tessera.rocm.blockscale_min_m`;
+  //: 0 means the exact M. A performance key: it selects the W8A8 register
+  //: panel for the admitted range, never a numeric result.
+  int64_t admittedMinM = 0;
   StringRef accum;
   int64_t m;
   int64_t n;
@@ -802,8 +807,15 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
     return;
   }
   constexpr int64_t kMinFullPanelTiles = 256;
-  const bool full = schedule.m % 32 == 0 && schedule.n % 32 == 0 &&
-                    (schedule.m / 32) * (schedule.n / 32) >= kMinFullPanelTiles;
+  // An arbitrary-M image runs every M down to its admitted minimum, so the
+  // register panel is chosen at that end of the range. A 32-row panel picked
+  // at capacity cost 4.2-4.6x the 16-row one at M = 16 (K16 scales, Tajasarus,
+  // benchmarks/baselines/gfx1201_h_bounded_quantized_mlp_20261029/); at the
+  // capacity end 16 rows measured 0.78-1.33x of 32 across that band.
+  const int64_t rows = schedule.admittedMinM ? std::min(schedule.m, schedule.admittedMinM)
+                                              : schedule.m;
+  const bool full = rows % 32 == 0 && schedule.n % 32 == 0 &&
+                    (rows / 32) * (schedule.n / 32) >= kMinFullPanelTiles;
   schedule.macroTileM = full ? 32 : 16;
   schedule.macroTileN = schedule.n % 32 == 0 ? 32 : 16;
 }
@@ -1630,6 +1642,17 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
           if (choice == "lds_k64" || measuredK64) schedule.blockK = 64;
         }
       } else {
+        auto module = op->getParentOfType<ModuleOp>();
+        if (auto raw = module->getAttr("tessera.rocm.blockscale_min_m")) {
+          auto minM = dyn_cast<IntegerAttr>(raw);
+          if (!minM || !minM.getType().isInteger(64) || minM.getInt() < 1 ||
+              minM.getInt() > schedule.m) {
+            op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: tessera.rocm.blockscale_min_m "
+                          "must be an i64 in [1, M]");
+            return failure();
+          }
+          schedule.admittedMinM = minM.getInt();
+        }
         selectFp8W8A8BlockScalePanel(schedule);
       }
       if (schedule.typedTransposeA || schedule.k % schedule.scaleBlockK != 0) {

@@ -210,3 +210,43 @@ def test_runtime_width_marker_is_a_single_request():
     for bad in (marked, "module {}", text.replace("}", ", tessera.native.gate_up_view}", 1)):
         with pytest.raises(ValueError, match="one unmarked native gate/up Graph"):
             runtime_width_graph(bad)
+
+
+def test_shape_free_product_panel_is_chosen_for_the_admitted_rows(rocm_image_toolchain):
+    """At capacity 256 x 2*512 the static rule takes the 32-row panel; a
+    shape-free product runs M down to 1 and takes the 16-row panel."""
+    from tessera.compiler.rocm_quantized_product_program import package_quantized_product_graph
+    from tests.unit.test_native_quantized_mlp_program import source
+    fn, roots = public(16, 128, 4096, 256)
+    bounded = fn.compile_native_quantized_program(*roots, m_bound=256, h_bound=512).native
+    static = package_quantized_product_graph(source(256, 512, 4096, 256))
+    tile = lambda program: program.native_stages[2].descriptor.provenance["macro_tile"]
+    assert tile(static) == [32, 32] and tile(bounded) == [16, 32]
+    assert "tessera.rocm.blockscale_min_m = 1 : i64" in bounded.gate.product_recipe.graph_ir
+    assert "blockscale_min_m" not in static.gate.product_recipe.graph_ir
+
+
+def test_admitted_rows_oracle_and_request():
+    from tessera.compiler.rocm_fp8_blockscale import (
+        BlockScalePanel, BlockScaleShape, admitted_rows_graph, blockscale_panel_oracle)
+    shape = BlockScaleShape(256, 1024, 4096, 16, 1, "nk")
+    assert blockscale_panel_oracle(shape) == BlockScalePanel("global", 32, 32, 1)
+    assert blockscale_panel_oracle(shape, min_m=1) == BlockScalePanel("global", 16, 32, 1)
+    assert blockscale_panel_oracle(shape, min_m=256) == BlockScalePanel("global", 32, 32, 1)
+    text = 'module attributes {tessera.target = "rocm"} {}'
+    assert admitted_rows_graph(text).startswith("module attributes {tessera.rocm.blockscale_min_m = 1 : i64, ")
+    for bad, min_m in ((admitted_rows_graph(text), 1), ("module {}", 1), (text, 0), (text, True)):
+        with pytest.raises(ValueError, match="admitted-rows request"):
+            admitted_rows_graph(bad, min_m)
+
+
+@pytest.mark.parametrize("value", ["0 : i64", "300 : i64", "1 : i32", '"1"'])
+def test_native_schedule_refuses_an_out_of_range_admitted_minimum(rocm_image_toolchain, value):
+    from tessera.compiler.rocm_quantized_product_program import _export
+    from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
+    from tests.unit.test_native_quantized_mlp_program import source
+    tool = find_tessera_opt()
+    product = _export(tool, source(256, 512, 4096, 256))["member_graphs"][2]
+    marked = product.replace("module attributes {", f"module attributes {{tessera.rocm.blockscale_min_m = {value}, ", 1)
+    with pytest.raises(RuntimeError, match="blockscale_min_m must be an i64 in"):
+        run_tessera_opt(tool, marked, "--tessera-graph-to-schedule")

@@ -1,0 +1,81 @@
+{
+ "unit": "median us per gate-product invocation",
+ "rows": [
+  {
+   "m_bound": 16,
+   "bounded_tile": [
+    16,
+    32
+   ],
+   "static_tile": [
+    16,
+    32
+   ],
+   "active": [
+    16,
+    128
+   ],
+   "bounded_us": 60.65,
+   "static_us": 60.41,
+   "ratio": 1.0,
+   "bitwise_equal": true
+  },
+  {
+   "m_bound": 16,
+   "bounded_tile": [
+    16,
+    32
+   ],
+   "static_tile": [
+    16,
+    32
+   ],
+   "active": [
+    16,
+    512
+   ],
+   "bounded_us": 43.38,
+   "static_us": 41.98,
+   "ratio": 1.03,
+   "bitwise_equal": true
+  },
+  {
+   "m_bound": 256,
+   "bounded_tile": [
+    32,
+    32
+   ],
+   "static_tile": [
+    16,
+    32
+   ],
+   "active": [
+    16,
+    128
+   ],
+   "bounded_us": 275.68,
+   "static_us": 60.48,
+   "ratio": 4.56,
+   "bitwise_equal": true
+  },
+  {
+   "m_bound": 256,
+   "bounded_tile": [
+    32,
+    32
+   ],
+   "static_tile": [
+    16,
+    32
+   ],
+   "active": [
+    16,
+    512
+   ],
+   "bounded_us": 264.38,
+   "static_us": 61.89,
+   "ratio": 4.27,
+   "bitwise_equal": true
+  }
+ ]
+}

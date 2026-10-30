@@ -41,7 +41,8 @@ static mlir::LogicalResult emitNativeQuantizedProductProgram(mlir::ModuleOp modu
         name != "tessera.native.quantized_product" && name != "tessera.ir.version" &&
         name != "tessera.frontend.authority" && name != "tessera.native.quantized_m_bound" &&
         name != "tessera.native.quantized_k_bound" &&
-        name != "tessera.native.quantized_n_bound") return refuse();
+        name != "tessera.native.quantized_n_bound" &&
+        name != "tessera.native.quantized_h_bound") return refuse();
   }
   auto roots = module.getOps<func::FuncOp>();
   if (llvm::range_size(roots) != 1) return refuse();
@@ -57,7 +58,8 @@ static mlir::LogicalResult emitNativeQuantizedProductProgram(mlir::ModuleOp modu
   // drop the request and export a static frame in its place.
   if (module->hasAttr("tessera.native.quantized_m_bound") ||
       module->hasAttr("tessera.native.quantized_k_bound") ||
-      module->hasAttr("tessera.native.quantized_n_bound"))
+      module->hasAttr("tessera.native.quantized_n_bound") ||
+      module->hasAttr("tessera.native.quantized_h_bound"))
     return module.emitError("quantized bounded rows require the complete seven-member MLP");
   if (ops.size()==22) return emitNativeQuantizedGateUpProgram(module);
   bool expansion = (ops.size() == 15 || ops.size() == 16) &&

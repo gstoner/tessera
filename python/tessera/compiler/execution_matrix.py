@@ -3844,6 +3844,21 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "AD and model quality require separate proof.",
         numerical_fixture="tests/device/rocm/test_public_quantized_mlp_n_bound_device.py",
         evidence_target="rocm_gfx1201",proof_build=".build-bf16",device_proof="device_verified_jit"),
+    ("rocm_gfx1201", "canonical_rocm_quantized_h_bounded_mlp_program"): ExecutionRow(
+        target="rocm_gfx1201",compiler_path="canonical_rocm_quantized_h_bounded_mlp_program",
+        execution_kind="native_gpu",executable=True,executor_id="rocm_quantized_product_program",
+        runtime_status="success",execution_mode="hip_runtime",owns_stream=True,
+        reason="The named seven-member quantized MLP compiled once by the explicit public "
+               "compile_native_quantized_program(..., m_bound=MB, h_bound=HB) request (schema v8): a "
+               "two-projection runtime-N gate/up NVFP4 expansion image, the shape-free gate product, a "
+               "runtime-width SiLU parent view, a runtime-K down expansion, the shape-free down product "
+               "and a four-variable (M, K/16, N, H/16) HIP axis frame. Later public calls at "
+               "1 <= M <= MB and every H16 multiple H <= HB bind one retained owner without retracing, "
+               "compiling or re-preparing, bitwise equal to the static program compiled at that shape. "
+               "The portable v8 record re-derives every frame and shape-free image. Not combined with a "
+               "K or N bound; AD and model quality require separate proof.",
+        numerical_fixture="tests/device/rocm/test_public_quantized_mlp_h_bound_device.py",
+        evidence_target="rocm_gfx1201",proof_build=".build-bf16",device_proof="device_verified_jit"),
     ("rocm_gfx1201", "canonical_rocm_quantized_gate_up_program"): ExecutionRow(
         target="rocm_gfx1201",compiler_path="canonical_rocm_quantized_gate_up_program",
         execution_kind="native_gpu",executable=True,executor_id="rocm_quantized_product_program",

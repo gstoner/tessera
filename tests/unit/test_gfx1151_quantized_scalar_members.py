@@ -87,3 +87,66 @@ def test_gfx1151_executable_package_waits_for_device_promotion(rocm_image_toolch
     recipe = lower_block_quant_text(source())
     with pytest.raises(ValueError, match="no promoted family plugins for gfx1151"):
         package_block_quant_recipe(recipe)
+
+
+def _expansion_source(n=64, k=32, offsets=(0, 32, 64), target="rocm_gfx1151"):
+    """The gfx1201 Graph retargeted at the module boundary: the Python Graph
+    legality registry declares no gfx1151 capability for the expansion yet
+    (that is the frontend slice, after device proof)."""
+    from tessera.compiler.nvfp4_expansion import nvfp4_expansion_policy
+    from tessera.compiler.rocm_nvfp4_expand_native import build_nvfp4_expansion_graph
+    text = build_nvfp4_expansion_graph(n, k, list(offsets), numeric_policy=nvfp4_expansion_policy()
+                                       ).to_mlir(target="rocm_gfx1201", canonical=True)
+    if target == "rocm_gfx1201":
+        return text
+    assert text.count('"rocm_gfx1201"') == 1 and text.count('tessera.arch = "gfx1201"') == 1
+    return text.replace('"rocm_gfx1201"', '"rocm_gfx1151"').replace(
+        'tessera.arch = "gfx1201"', 'tessera.arch = "gfx1151"')
+
+
+@pytest.mark.usefixtures("production_compiler")
+def test_gfx1151_expansion_lowers_and_serializes(compiler_toolchain):
+    """The expansion is integer/f64 code: gfx1151 lowers it to a gfx1151 HSACO."""
+    tool = find_tessera_opt()
+    tile = run_tessera_opt(tool, _expansion_source(),
+        "--pass-pipeline=builtin.module(tessera-graph-to-schedule,tessera-schedule-to-tile)")
+    target = run_tessera_opt(tool, tile, "--lower-tile-to-rocm=arch=gfx1151")
+    assert 'tessera_rocm.nvfp4_expand' in target and 'arch = "gfx1151"' in target
+    gpu = run_tessera_opt(tool, target, "--generate-rocm-fpquant-kernel")
+    assert "gpu.func" in gpu and "rocdl.cvt" not in gpu
+    pipeline = ("builtin.module(gpu.module(convert-scf-to-cf,"
+        "convert-gpu-to-rocdl{chipset=gfx1151},reconcile-unrealized-casts),"
+        "rocdl-attach-target{chip=gfx1151},gpu-module-to-binary)")
+    result = subprocess.run([str(compiler_toolchain.require_mlir_opt()), f"--pass-pipeline={pipeline}"],
+                            input=gpu, text=True, capture_output=True, check=False)
+    assert result.returncode == 0, result.stderr
+    from tessera.compiler.rocm_native import _extract_hsaco
+    assert _extract_hsaco(result.stdout).startswith(b"\x7fELF")
+
+
+@pytest.mark.usefixtures("production_compiler")
+def test_expansion_contract_carries_its_architecture():
+    tool = find_tessera_opt()
+    pipeline = "--pass-pipeline=builtin.module(tessera-graph-to-schedule)"
+    a = run_tessera_opt(tool, _expansion_source(), pipeline)
+    b = run_tessera_opt(tool, _expansion_source(target="rocm_gfx1201"), pipeline)
+    assert 'arch = "gfx1151"' in a and 'arch = "gfx1201"' in b
+    hash_of = lambda text: text.split('hash = "')[1].split('"')[0]
+    assert hash_of(a) != hash_of(b)
+    # A gfx1201 contract never lowers on a gfx1151 pipeline.
+    tile = run_tessera_opt(tool, b, "--tessera-schedule-to-tile")
+    with pytest.raises(RuntimeError, match="its own contract architecture"):
+        run_tessera_opt(tool, tile, "--lower-tile-to-rocm=arch=gfx1151")
+
+
+def test_gfx1151_expansion_packages_but_cannot_launch(rocm_image_toolchain):
+    """The quant_fp family is promoted on gfx1151 for other kernels, so the
+    expansion packages a gfx1151-bound image; nothing launches it there yet."""
+    from tessera.compiler.rocm_nvfp4_expand_native import package_nvfp4_expansion, submit_nvfp4_expansion
+    package = package_nvfp4_expansion(_expansion_source())
+    image = package.native.image
+    assert image.target == "rocm_gfx1151" and image.architecture == "gfx1151"
+    assert image.payload.startswith(b"\x7fELF")
+    package.validate()
+    with pytest.raises(ValueError, match="exact gfx1201 HSACO ABI"):
+        submit_nvfp4_expansion(image, package.native.descriptor, {}, {}, None)

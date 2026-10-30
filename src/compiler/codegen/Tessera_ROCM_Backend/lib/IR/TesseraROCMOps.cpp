@@ -132,8 +132,8 @@ mlir::LogicalResult StructuredReductionOp::verify() {
 }
 
 mlir::LogicalResult NVFP4ExpandOp::verify() {
-  if (getArch() != "gfx1201")
-    return emitOpError("NVFP4 expansion currently requires gfx1201");
+  if (getArch() != "gfx1201" && getArch() != "gfx1151")
+    return emitOpError("NVFP4 expansion requires gfx1201 or gfx1151");
   if (getRuntimeK() && getRuntimeN())
     return emitOpError("NVFP4 expansion is runtime-K or runtime-N, not both");
   // A runtime-N image keeps its checked capacity boundaries. With P

@@ -3019,12 +3019,13 @@ struct LowerTileToROCMPass
       expandKernels.push_back(op);
     });
     for (auto kernel : expandKernels) {
-      if (arch != "gfx1201") {
-        kernel.emitError("NVFP4 expansion is currently gfx1201 only");
+      auto contract = kernel.getContract();
+      auto owner = contract.getAs<StringAttr>("arch");
+      if ((arch != "gfx1201" && arch != "gfx1151") || !owner || owner.getValue() != arch) {
+        kernel.emitError("NVFP4 expansion is gfx1201 or gfx1151 only, for its own contract architecture");
         return signalPassFailure();
       }
       auto fn = kernel->getParentOfType<func::FuncOp>();
-      auto contract = kernel.getContract();
       OpBuilder b(getOperation().getContext());
       b.setInsertionPointToEnd(getOperation().getBody());
       OperationState state(kernel.getLoc(),"tessera_rocm.nvfp4_expand");

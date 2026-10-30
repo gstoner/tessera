@@ -11,8 +11,9 @@ static mlir::LogicalResult emitNativeNVFP4Expand(mlir::ModuleOp module,
                                                 mlir::Operation *op) {
   using namespace mlir;
   auto arch = module->getAttrOfType<StringAttr>("tessera.arch");
-  if (!arch || arch.getValue() != "gfx1201")
-    return op->emitError("native NVFP4 expansion requires an exact gfx1201 module");
+  if (!arch || (arch.getValue() != "gfx1201" && arch.getValue() != "gfx1151") ||
+      op->getAttrOfType<StringAttr>("arch").getValue() != arch.getValue())
+    return op->emitError("native NVFP4 expansion requires an exact gfx1201 or gfx1151 module");
   int64_t n = op->getAttrOfType<IntegerAttr>("n").getInt();
   int64_t k = op->getAttrOfType<IntegerAttr>("k").getInt();
   const bool runtimeK = op->hasAttr("runtime_k");

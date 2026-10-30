@@ -95,6 +95,19 @@ def _descriptor(image, info, graph_digest, schedule_ir_digest, tile_ir_digest, *
         })
 
 
+#: Exact architectures. The expansion is integer/f64 code; gfx1151 admits it
+#: (GFX1151-QUANTIZED-MLP-20261030) without executable promotion.
+_ARCHES = ("gfx1201", "gfx1151")
+
+
+def _ir_arch(text):
+    """The one architecture a Graph/Tile module names (``tessera.arch``)."""
+    found = set(re.findall(r'tessera\.arch = "(gfx\d+)"', text))
+    if len(found) != 1 or next(iter(found)) not in _ARCHES:
+        raise ValueError("NVFP4 expansion IR names no admitted architecture")
+    return next(iter(found))
+
+
 def _checked_target(tile):
     """Re-derive the static Target a runtime-K image is the projection of."""
     from .rocm_native import _run_opt
@@ -104,7 +117,7 @@ def _checked_target(tile):
         tool = find_tessera_opt()
         if tool is None:
             raise RuntimeError("runtime-K NVFP4 expansion requires matching tessera-opt to re-derive its Target")
-        config = ROCMExecutablePipeline(family="quant_fp", arch="gfx1201", input_level=ROCMInputLevel.TILE)
+        config = ROCMExecutablePipeline(family="quant_fp", arch=_ir_arch(tile), input_level=ROCMInputLevel.TILE)
         cached = _run_opt(tool, tile, config.pass_pipeline(output=ROCMOutputLevel.TARGET))
         if len(_checked_targets) >= 64:
             _checked_targets.pop(next(iter(_checked_targets)))
@@ -140,7 +153,8 @@ class NVFP4ExpansionPackage:
         native = self.native
         image, desc = native.image, native.descriptor
         desc.validate_image(image)
-        if (image.target != "rocm_gfx1201" or image.architecture != "gfx1201"
+        arch = _ir_arch(native.tile_ir)
+        if (image.target != "rocm_" + arch or image.architecture != arch
                 or image.binary_format != "hsaco"
                 or desc.abi_id not in (NVFP4_EXPAND_ABI, NVFP4_EXPAND_RUNTIME_K_ABI,
                                        NVFP4_EXPAND_RUNTIME_N_ABI)
@@ -174,12 +188,13 @@ def package_nvfp4_expansion(graph: str | GraphIRModule, *, runtime_k: bool = Fal
     if type(runtime_k) is not bool or type(runtime_n) is not bool or (runtime_k and runtime_n):
         raise ValueError("NVFP4 expansion takes at most one runtime extent, as a bool")
     source = graph if isinstance(graph, str) else graph.to_mlir(
-        target="rocm_gfx1201", canonical=True)
+        target=json.loads(graph.module_attrs.get("tessera.target", '"rocm_gfx1201"')), canonical=True)
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("NVFP4 expansion requires matching tessera-opt")
     schedule = run_tessera_opt(tool, source, "--tessera-graph-to-schedule")
     tile = run_tessera_opt(tool, schedule, "--tessera-schedule-to-tile")
+    arch = _ir_arch(tile)
     entry = None
     if runtime_k or runtime_n:
         from .rocm_native import _directive_symbol, _shape_free_target_ir
@@ -194,17 +209,17 @@ def package_nvfp4_expansion(graph: str | GraphIRModule, *, runtime_k: bool = Fal
         projection = _shape_free_target_ir(checked, family="nvfp4_expand", directive=_DIRECTIVE,
                                            runtime_k=runtime_k, runtime_n=runtime_n)
         target, backend, binary, compiler, toolchain, libraries, state = _compile_native_tile_ir(
-            projection, directive=_DIRECTIVE, family="quant_fp", architecture="gfx1201",
+            projection, directive=_DIRECTIVE, family="quant_fp", architecture=arch,
             input_level=ROCMInputLevel.DIRECTIVE)
         if target != projection:
             raise ValueError("runtime-extent NVFP4 expansion Target changed during compilation")
         entry = _directive_symbol(projection, _DIRECTIVE)
     else:
         target, backend, binary, compiler, toolchain, libraries, state = _compile_native_tile_ir(
-            tile, directive=_DIRECTIVE, family="quant_fp", architecture="gfx1201")
+            tile, directive=_DIRECTIVE, family="quant_fp", architecture=arch)
         info = _contract(tile, target)
     image = NativeImageArtifact(
-        target="rocm_gfx1201", architecture="gfx1201", pipeline_name="tessera-rocm-executable",
+        target="rocm_" + arch, architecture=arch, pipeline_name="tessera-rocm-executable",
         compiler_fingerprint=compiler, toolchain_fingerprint=toolchain,
         target_ir_digest=_digest(target), binary_format="hsaco", payload=binary,
         entry_points=(NativeEntryPoint(entry or info[-1],
@@ -237,7 +252,7 @@ def execute_nvfp4_expansion(package, codes, scales, projection_globals, *, event
                            event_samples=event_samples)
 
 
-def build_nvfp4_expansion_graph(n: int, k: int, row_offsets, *, numeric_policy):
+def build_nvfp4_expansion_graph(n: int, k: int, row_offsets, *, numeric_policy, target="rocm_gfx1201"):
     """Build typed semantic Graph IR using the catalog's multi-result inference."""
     from .graph_ir import (
         GraphIRFunction,IRArg,IROp,tensor_ir_type,_infer_result_types)
@@ -267,8 +282,10 @@ def build_nvfp4_expansion_graph(n: int, k: int, row_offsets, *, numeric_policy):
         return_values=["%values","%scale_plane"],
         fn_attrs={"tessera.bindings":json.dumps(
             ["codes","scales","globals","values","scale_plane"])})
+    if target not in ("rocm_" + a for a in _ARCHES):
+        raise ValueError("NVFP4 expansion Graph target must be rocm_gfx1201 or rocm_gfx1151")
     return GraphIRModule([fn],module_attrs={
-        "tessera.target":json.dumps("rocm_gfx1201"),"tessera.arch":json.dumps("gfx1201")})
+        "tessera.target":json.dumps(target),"tessera.arch":json.dumps(target.removeprefix("rocm_"))})
 
 
 def supports_nvfp4_expansion(module):

@@ -6,6 +6,8 @@
 
 `paired.json` was produced by `benchmarks/rocm/benchmark_k_bounded_quantized_mlp.py --h-bound --bounds 256 512 --kn 4096 256` at commit `ec797f262` on a clean worktree. It records the recorder, compiler and HIP provider hashes. `members.json` and `tile_check.json` come from the two diagnostic scripts in this directory, run at the same commit.
 
+**Recorded by:** `benchmarks/rocm/benchmark_k_bounded_quantized_mlp.py` (`paired.json`), `member_attribution.py` (`members.json`) and `tile_check.py` (`tile_check.json`).
+
 ## What was measured
 
 One v8 program compiled with `compile_native_quantized_program(..., m_bound=256, h_bound=512)` at K = 4096 and N = 256, held in one prepared owner. For each active (M, H), that owner takes a full update to new weights at that H. The control is the static v4 program compiled at exactly that (M, H), in its own owner.

@@ -157,6 +157,38 @@ int tessera_rocm_program_prepare_multi_output_axis_frame(
     const TesseraRocmProgramMultiOutputStep *, const void *const *,
     const uint64_t *, const TesseraRocmProgramAxisFrame *, int64_t active_m,
     int64_t active_g, int64_t active_n, int64_t active_h, uint64_t *handle);
+// Per-active-extent image variants of one axis-frame step. A variant
+// replaces the step's image, entry, capacity geometry and frame entries for
+// every active M in [min_rows, max_rows] whose frame variable `axis`
+// (1 G, 2 N, 3 H; 4 = none) is in [min_axis, max_axis]; the base image runs
+// everywhere else. Its scalars are the base step's; its entries match the
+// base step's entries in order on (scalar, scalar_coef, powers) and may differ
+// only in their grid fields. A step's variants share one axis, lie inside the
+// capacities, are sorted by step and never overlap.
+typedef struct {
+  uint32_t step;
+  int64_t min_rows;
+  int64_t max_rows;
+  uint32_t axis;
+  int64_t min_axis;
+  int64_t max_axis;
+  const void *image;
+  uint64_t image_bytes;
+  const char *entry;
+  uint32_t geometry[6];
+  uint32_t entry_count;
+  const TesseraRocmProgramShapeStep *entries;
+} TesseraRocmProgramStepVariant;
+int tessera_rocm_program_prepare_multi_output_axis_frame_variants(
+    const char *, uint32_t, uint32_t, const TesseraRocmProgramBuffer *, uint32_t,
+    const TesseraRocmProgramMultiOutputStep *, const void *const *,
+    const uint64_t *, const TesseraRocmProgramAxisFrame *, int64_t active_m,
+    int64_t active_g, int64_t active_n, int64_t active_h,
+    const TesseraRocmProgramStepVariant *variants, uint32_t variant_count,
+    uint64_t *handle);
+// The image variant each step runs at the active extents (0 = base).
+int tessera_rocm_program_variant_info(uint64_t handle, uint32_t step_count,
+                                      uint32_t *selected);
 // A zero extent keeps that variable at its active value.
 int tessera_rocm_program_update_axes(
     uint64_t handle, int64_t active_m, int64_t active_g, int64_t active_n,

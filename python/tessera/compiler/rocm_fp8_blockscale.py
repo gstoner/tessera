@@ -23,7 +23,7 @@ Scale layouts (both row-major, fp32):
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import re
 from pathlib import Path
@@ -173,7 +173,8 @@ class BlockScalePanel:
 
 
 def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201",
-                            min_m: int | None = None) -> BlockScalePanel:
+                            min_m: int | None = None, staging: str | None = None,
+                            at_n: int | None = None, at_k: int | None = None) -> BlockScalePanel:
     """The Python oracle of `selectFp8W8A8BlockScalePanel` (PMPasses.cpp).
 
     It exists to be DIFFERENTIAL, not to decide anything: the C++ Schedule is
@@ -183,7 +184,8 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201",
     is `rocm_target.compute_units`, the table the C++ `measuredComputeUnits`
     mirrors; an arch absent there keeps the register panel on both sides.
     ``min_m`` mirrors ``tessera.rocm.blockscale_min_m``: an arbitrary-M image
-    chooses its register panel at the smallest M it admits.
+    chooses its register panel at the smallest M it admits. ``staging="global"``
+    mirrors ``tessera.rocm.blockscale_staging``: every LDS rule is skipped.
     """
     try:
         units = compute_units(AMDArch[f"GFX_{arch.removeprefix('gfx')}"])
@@ -192,6 +194,17 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201",
 
     def tiles(tm: int, tn: int) -> int:
         return -(-shape.m // tm) * -(-shape.n // tn)
+
+    if staging not in (None, "global"):
+        raise ValueError("the W8A8 staging request is only \"global\"")
+    if staging == "global":
+        return _register_panel(shape, min_m)
+    if min_m is not None or at_n is not None or at_k is not None:
+        # A shape-free image (or per-extent variant) takes the panel at its
+        # requested (M, N, K): `tessera.rocm.blockscale_{min_m,at_n,at_k}`.
+        return blockscale_panel_oracle(replace(
+            shape, m=shape.m if min_m is None else min(shape.m, min_m),
+            n=shape.n if at_n is None else at_n, k=shape.k if at_k is None else at_k), arch=arch)
 
     # Differential mirror only: native Schedule selects the measured KN
     # physical route; the Python frontend does not choose a backend schedule.
@@ -227,6 +240,11 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201",
             and (tiles(128, 128) >= units or tiles(128, 64) >= units)):
         wide = tiles(128, 128) >= units
         return BlockScalePanel("lds", 128, 128 if wide else 64, 8)
+    return _register_panel(shape, min_m)
+
+
+def _register_panel(shape: BlockScaleShape, min_m: int | None) -> BlockScalePanel:
+    """Mirror of `selectFp8W8A8RegisterPanel`: the panel chosen at the admitted minimum M."""
     rows = shape.m if min_m is None else min(shape.m, min_m)
     full = (rows % 32 == 0 and shape.n % 32 == 0
             and (rows // 32) * (shape.n // 32) >= 256)
@@ -244,7 +262,8 @@ def schedule_blockscale_panel(schedule_ir: str) -> BlockScalePanel:
 
 
 def verify_blockscale_schedule(shape: BlockScaleShape, schedule_ir: str, *,
-                               min_m: int | None = None) -> BlockScalePanel:
+                               min_m: int | None = None, staging: str | None = None,
+                               at_n: int | None = None, at_k: int | None = None) -> BlockScalePanel:
     """Refuse a Schedule whose W8A8 panel the Python oracle does not reproduce.
 
     The differential half of Decision #31 for this rule: the CU count, the
@@ -253,7 +272,8 @@ def verify_blockscale_schedule(shape: BlockScaleShape, schedule_ir: str, *,
     native = schedule_blockscale_panel(schedule_ir)
     arch = re.search(r'(?<![\w.])arch\s*=\s*"(\w+)"',
                      _one_line(schedule_ir, "schedule.matmul", "schedule.matmul record"))
-    oracle = blockscale_panel_oracle(shape, arch=arch.group(1) if arch else "", min_m=min_m)
+    oracle = blockscale_panel_oracle(shape, arch=arch.group(1) if arch else "", min_m=min_m,
+                                     staging=staging, at_n=at_n, at_k=at_k)
     if native != oracle:
         raise ValueError(
             f"W8A8 panel oracle disagrees with the native Schedule for "
@@ -265,16 +285,28 @@ def verify_blockscale_schedule(shape: BlockScaleShape, schedule_ir: str, *,
 _MIN_M_ATTR = "tessera.rocm.blockscale_min_m"
 
 
-def admitted_rows_graph(graph_ir: str, min_m: int = 1) -> str:
+_STAGING_ATTR = "tessera.rocm.blockscale_staging"
+
+
+def admitted_rows_graph(graph_ir: str, min_m: int = 1, *, global_staging: bool = False,
+                        at_n: int | None = None, at_k: int | None = None) -> str:
     """The product Graph requesting a register panel chosen for M >= ``min_m``.
 
     An arbitrary-M image runs every M down to that minimum; the attribute is
-    the one module key the native panel selector reads for it."""
+    the one module key the native panel selector reads for it.
+    ``global_staging`` also requests the global-staged body (no LDS rule):
+    a runtime-K/N/H image exists only in that form."""
     head = "module attributes {"
     if (not isinstance(graph_ir, str) or graph_ir.count(head) != 1 or _MIN_M_ATTR in graph_ir
-            or type(min_m) is not int or min_m < 1):
+            or _STAGING_ATTR in graph_ir or type(min_m) is not int or min_m < 1
+            or type(global_staging) is not bool
+            or any(v is not None and (type(v) is not int or v < 1) for v in (at_n, at_k))
+            or "tessera.rocm.blockscale_at_" in graph_ir):
         raise ValueError("an admitted-rows request needs one unmarked attributed product module and min_m >= 1")
-    return graph_ir.replace(head, f"{head}{_MIN_M_ATTR} = {min_m} : i64, ", 1)
+    staging = f'{_STAGING_ATTR} = "global", ' if global_staging else ""
+    at = "".join(f"tessera.rocm.blockscale_at_{axis} = {v} : i64, "
+                 for axis, v in (("k", at_k), ("n", at_n)) if v is not None)
+    return graph_ir.replace(head, f"{head}{at}{_MIN_M_ATTR} = {min_m} : i64, {staging}", 1)
 
 
 def lower_blockscale(
@@ -445,7 +477,7 @@ def package_blockscale(
     scale_group_panels: int = -1, blockscale_stage_k: int = -1,
     blockscale_lds_pad_bytes: int = -1, blockscale_prefetch: int = -1,
     project_image_identity: bool = True, lds_runtime_k: bool = True,
-    scale_format: str = "fp32", arbitrary_m: bool = False,
+    scale_format: str = "fp32", arbitrary_m: bool = False, arbitrary_n: bool = False,
 ) -> ROCMNativePackage:
     """Compile the Tile program to a gfx1201 HSACO and bind its launch ABI.
 
@@ -457,6 +489,8 @@ def package_blockscale(
     for ``blockscale_prefetch``, the carrier's pipeline depth)."""
     if type(arbitrary_m) is not bool or (arbitrary_m and not project_image_identity):
         raise ValueError("arbitrary_m requires a bool and projected image identity")
+    if type(arbitrary_n) is not bool or (arbitrary_n and not arbitrary_m):
+        raise ValueError("arbitrary_n requires a bool and an arbitrary-M image")
     if not isinstance(lds_runtime_k, bool):
         raise ValueError("lds_runtime_k must be a bool")
     if not isinstance(project_image_identity, bool):
@@ -479,6 +513,7 @@ def package_blockscale(
         blockscale_prefetch=int(blockscale_prefetch))
     target_key = hashlib.sha256("\x1f".join(
         ("rocm.w8a8.native_target.v3", str(project_image_identity), str(lds_runtime_k), str(arbitrary_m),
+         str(arbitrary_n),
          program.tile_ir, _tool_digest(tool))
         + config.cache_key()).encode()).hexdigest()
     cached_target = _blockscale_target_cache.get(target_key)
@@ -491,7 +526,7 @@ def package_blockscale(
         image_target = (_shape_free_target_ir(
             checked_target, family="scaled_matmul" if runtime_shape else "scaled_matmul_lds",
             directive=_DIRECTIVE, runtime_k=bool(runtime_mn and lds_runtime_k),
-            arbitrary_m=arbitrary_m)
+            arbitrary_m=arbitrary_m, arbitrary_n=bool(runtime_mn and arbitrary_n))
             if project_image_identity else checked_target)
         if len(_blockscale_target_cache) >= 128:
             _blockscale_target_cache.pop(next(iter(_blockscale_target_cache)))
@@ -565,7 +600,9 @@ def package_blockscale(
             "lds_runtime_k": runtime_mn and lds_runtime_k,
             "arbitrary_m": arbitrary_m,
             "lds_whole_m": runtime_mn and not arbitrary_m and shape.m % checked["block_m"] == 0,
-            "lds_whole_n": runtime_mn and shape.n % checked["block_n"] == 0,
+            "lds_whole_n": runtime_mn and shape.n % checked["block_n"] == 0 and not arbitrary_n,
+            # Recorded only when set, so every existing descriptor keeps its digest.
+            **({"arbitrary_n": True} if runtime_mn and arbitrary_n else {}),
             "physical_contract": contract,
             "materializer": "generate-wmma-gemm-kernel",
             "b_layout": shape.weight_layout,

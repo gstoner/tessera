@@ -1,0 +1,142 @@
+{
+ "sync_key": "GFX1201-BOUNDED-PER-M-PANEL-20261030",
+ "commit": "39a4b1ee34612ecf04dfaf12ff38e5a29d611559",
+ "worktree_dirty": false,
+ "compiler_sha256": "9e82ad4681c543dbd164cba0fa788b99c8de5395f9b9a8a39b1bdb8d83fa3c85",
+ "provider_sha256": "5bebbfb74f798038f6697dfd8631fcc576491f566d0af1d1cd928acc15dff2e5",
+ "device": "gfx1201 (RX 9070 XT, Tajasarus, WSL2)",
+ "hkn": [
+  2048,
+  4096,
+  256
+ ],
+ "m_bound": 256,
+ "gate_variants": [
+  [
+   97,
+   128,
+   [
+    128,
+    64
+   ]
+  ],
+  [
+   129,
+   256,
+   [
+    128,
+    128
+   ]
+  ]
+ ],
+ "rows": {
+  "16": {
+   "gate_image": 0,
+   "static_gate_tile": [
+    16,
+    32
+   ],
+   "whole_ms": {
+    "bounded": 0.1892,
+    "static": 0.1872
+   },
+   "whole_ratio": 1.011,
+   "gate_us": {
+    "bounded": 43.4,
+    "static": 42.6
+   },
+   "gate_ratio": 1.02,
+   "bitwise_equal": true
+  },
+  "64": {
+   "gate_image": 0,
+   "static_gate_tile": [
+    32,
+    32
+   ],
+   "whole_ms": {
+    "bounded": 0.2017,
+    "static": 0.2082
+   },
+   "whole_ratio": 0.969,
+   "gate_us": {
+    "bounded": 53.7,
+    "static": 62.0
+   },
+   "gate_ratio": 0.866,
+   "bitwise_equal": true
+  },
+  "100": {
+   "gate_image": 1,
+   "static_gate_tile": [
+    128,
+    64
+   ],
+   "whole_ms": {
+    "bounded": 0.3069,
+    "static": 0.3064
+   },
+   "whole_ratio": 1.002,
+   "gate_us": {
+    "bounded": 129.0,
+    "static": 128.5
+   },
+   "gate_ratio": 1.003,
+   "bitwise_equal": true
+  },
+  "128": {
+   "gate_image": 1,
+   "static_gate_tile": [
+    128,
+    64
+   ],
+   "whole_ms": {
+    "bounded": 0.2819,
+    "static": 0.2791
+   },
+   "whole_ratio": 1.01,
+   "gate_us": {
+    "bounded": 128.8,
+    "static": 126.9
+   },
+   "gate_ratio": 1.015,
+   "bitwise_equal": true
+  },
+  "200": {
+   "gate_image": 2,
+   "static_gate_tile": [
+    128,
+    128
+   ],
+   "whole_ms": {
+    "bounded": 0.3878,
+    "static": 0.376
+   },
+   "whole_ratio": 1.032,
+   "gate_us": {
+    "bounded": 193.2,
+    "static": 181.9
+   },
+   "gate_ratio": 1.062,
+   "bitwise_equal": true
+  },
+  "256": {
+   "gate_image": 2,
+   "static_gate_tile": [
+    128,
+    128
+   ],
+   "whole_ms": {
+    "bounded": 0.41,
+    "static": 0.3719
+   },
+   "whole_ratio": 1.102,
+   "gate_us": {
+    "bounded": 241.7,
+    "static": 205.1
+   },
+   "gate_ratio": 1.179,
+   "bitwise_equal": true
+  }
+ }
+}

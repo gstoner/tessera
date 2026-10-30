@@ -155,12 +155,12 @@ def test_runtime_k_claim_requires_its_expansion_image(rocm_image_toolchain):
     gate = _k_bounded(fn, roots).native.gate
     forged = dataclasses.replace(gate, runtime_k=False)
     forged = dataclasses.replace(forged, binding_digest=forged._identity())
-    with pytest.raises(ValueError, match="runtime-K expansion policy differs"):
+    with pytest.raises(ValueError, match="runtime-K expansion policy differs|projected Graph differs"):
         forged.validate()
     static = public()[0].compile_native_quantized_program(*roots, m_bound=8).native.gate
     forged = dataclasses.replace(static, runtime_k=True)
     forged = dataclasses.replace(forged, binding_digest=forged._identity())
-    with pytest.raises(ValueError, match="runtime-K expansion policy differs"):
+    with pytest.raises(ValueError, match="runtime-K expansion policy differs|projected Graph differs"):
         forged.validate()
 
 

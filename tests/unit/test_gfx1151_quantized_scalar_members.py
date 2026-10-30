@@ -150,3 +150,48 @@ def test_gfx1151_expansion_packages_but_cannot_launch(rocm_image_toolchain):
     package.validate()
     with pytest.raises(ValueError, match="exact gfx1201 HSACO ABI"):
         submit_nvfp4_expansion(image, package.native.descriptor, {}, {}, None)
+
+
+def _parent_view_source(m=3, width=17):
+    from tests.unit.test_native_gate_up_view_schedule import source as gate_up_source
+    text = gate_up_source(m, width)
+    assert text.count('tessera.arch = "gfx1201"') == 1
+    return text.replace('tessera.arch = "gfx1201"', 'tessera.arch = "gfx1151"')
+
+
+@pytest.mark.usefixtures("production_compiler")
+def test_gfx1151_parent_view_lowers_and_serializes(compiler_toolchain):
+    import base64
+    import re
+    tool = find_tessera_opt()
+    tile = run_tessera_opt(tool, _parent_view_source(),
+        "--pass-pipeline=builtin.module(tessera-graph-to-schedule,tessera-schedule-to-tile)")
+    assert 'arch = "gfx1151"' in tile
+    target = run_tessera_opt(tool, tile, "--lower-tile-to-rocm=arch=gfx1151")
+    gpu = run_tessera_opt(tool, target, "--lower-tessera-target-to-rocdl")
+    raw = re.search(r'tessera.rocm.parent_view_member_json = "([A-Za-z0-9+/=]+)"', gpu).group(1)
+    info = json.loads(base64.b64decode(raw))
+    assert info["architecture"] == "gfx1151" and info["profile"] == "gfx1151_parent_view_f32_v1"
+    pipeline = ("builtin.module(gpu.module(convert-scf-to-cf,"
+        "convert-gpu-to-rocdl{chipset=gfx1151},reconcile-unrealized-casts),"
+        "rocdl-attach-target{chip=gfx1151},gpu-module-to-binary)")
+    result = subprocess.run([str(compiler_toolchain.require_mlir_opt()), f"--pass-pipeline={pipeline}"],
+                            input=gpu, text=True, capture_output=True, check=False)
+    assert result.returncode == 0, result.stderr
+    from tessera.compiler.rocm_native import _extract_hsaco
+    assert _extract_hsaco(result.stdout).startswith(b"\x7fELF")
+
+
+@pytest.mark.usefixtures("production_compiler")
+def test_parent_view_identities_differ_by_architecture_and_gfx1201_is_unchanged():
+    from tests.unit.test_native_gate_up_view_schedule import source as gate_up_source
+    tool = find_tessera_opt()
+    pipeline = "--pass-pipeline=builtin.module(tessera-graph-to-schedule)"
+    a = run_tessera_opt(tool, _parent_view_source(), pipeline)
+    b = run_tessera_opt(tool, gate_up_source(), pipeline)
+    hash_of = lambda text: text.split('hash = "')[1].split('"')[0]
+    assert hash_of(a) != hash_of(b)
+    # A gfx1201 parent view never lowers on a gfx1151 pipeline.
+    tile = run_tessera_opt(tool, b, "--tessera-schedule-to-tile")
+    with pytest.raises(RuntimeError, match="isolated gfx1201 or gfx1151"):
+        run_tessera_opt(tool, tile, "--lower-tile-to-rocm=arch=gfx1151")

@@ -2906,11 +2906,10 @@ struct LowerTileToROCMPass
     if (!viewKernels.empty()) {
       if (viewKernels.size() != 1 || getOperation().getBody()->getOperations().size() != 1 ||
           viewKernels.front().getArch() != arch ||
-          !((arch == "gfx1201" &&
-             (viewKernels.front().getSchema() == 2 || viewKernels.front().getSchema() == 3)) ||
-            ((arch == "gfx1151" || arch == "gfx1201") &&
-             (viewKernels.front().getSchema() == 4 || viewKernels.front().getSchema() == 7)))) {
-        getOperation().emitError("ROCm native row lowering requires an isolated gfx1201 schema-2/3 or gfx1151/gfx1201 schema-4/7 profile");
+          !((arch == "gfx1151" || arch == "gfx1201") &&
+            (viewKernels.front().getSchema() == 2 || viewKernels.front().getSchema() == 3 ||
+             viewKernels.front().getSchema() == 4 || viewKernels.front().getSchema() == 7))) {
+        getOperation().emitError("ROCm native row lowering requires an isolated gfx1201 or gfx1151 schema-2/3/4/7 profile");
         return signalPassFailure();
       }
       auto kernel = viewKernels.front();

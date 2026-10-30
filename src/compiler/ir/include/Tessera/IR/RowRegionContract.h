@@ -48,7 +48,8 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
     });
   };
   if ((!target && opName != "tile.row_region_kernel") ||
-      !arch || arch.getValue() != "gfx1201" || !schema || (schema.getInt() != 2 && schema.getInt() != 3) ||
+      !arch || (arch.getValue() != "gfx1201" && arch.getValue() != "gfx1151") ||
+      !schema || (schema.getInt() != 2 && schema.getInt() != 3) ||
       !name || name.getValue().empty() || !rows || rows.getInt() <= 0 || rows.getInt() > INT32_MAX ||
       !columns || columns.getInt() <= 0 || columns.getInt() > INT32_MAX / 2 ||
       rows.getInt() > INT64_MAX / 8 / columns.getInt() ||
@@ -59,7 +60,7 @@ inline mlir::LogicalResult verifyGateUpKernel(mlir::Operation *op) {
       op->getNumRegions() != 1 || !op->getRegion(0).hasOneBlock() ||
       op->getRegion(0).front().getNumArguments() != 0 ||
       op->getRegion(0).front().getOperations().size() != 1)
-    return op->emitOpError("requires the sealed gfx1201 schema-2 FP32 or schema-3 BF16 parent-view profile");
+    return op->emitOpError("requires the sealed gfx1201/gfx1151 schema-2 FP32 or schema-3 BF16 parent-view profile");
   auto fn = dyn_cast<LLVM::LLVMFuncOp>(op->getRegion(0).front().front());
   auto ptr = LLVM::LLVMPointerType::get(op->getContext());
   if (!fn || fn.getName() != name.getValue() || !fn.getBody().hasOneBlock() ||

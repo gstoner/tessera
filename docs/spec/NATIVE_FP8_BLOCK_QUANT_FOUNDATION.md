@@ -856,6 +856,26 @@ differs", "bounded H differs", "hidden frame differs").
 - **Down expansion.** The existing runtime-K image, with `groups = H/16`.
 - **Both products.** Each must be the global-staged shape-free image.
 
+**Admitted-rows panel (every bounded program).** A shape-free
+(arbitrary-M) product image runs every M down to 1, so its W8A8 register
+panel is chosen at that end of the range, not at capacity. The product
+member Graph carries `tessera.rocm.blockscale_min_m = 1 : i64`; the native
+selector (`selectFp8W8A8BlockScalePanel`) and its Python oracle
+(`blockscale_panel_oracle(..., min_m=)`) then evaluate the 32-row
+register-panel rule at the admitted minimum. The selector refuses a value
+outside `[1, M]` or not i64 (`ROCM_FP8_BLOCKSCALE_CONTRACT`). The LDS rules
+are unchanged, and so is every static program. The product validator
+expects the request on exactly the shape-free members, so the v5, v6 and v7
+bounded programs carry it too. Their panels change only where the capacity
+reaches the 32-row band (M and N multiples of 32 with at least 256 32×32
+tiles). A bounded record serialized before this change no longer replays;
+recompile it.
+
+Measured on gfx1201: the 32-row panel chosen at capacity 256 × 1024 cost
+4.2–4.6× the 16-row panel at M = 16. Across the 32-row band, 16 rows
+measured 0.78–1.33× of 32 for static programs, so a capacity in that band
+can cost up to about 1.33× at its large end.
+
 **Owner axis frame.** The axis frame gains a fourth variable: H16 groups
 (power bit 3, `capacity_h`). `prepare_multi_output_axis_frame`,
 `update_axes` and `axes_info` take and report four extents (M, G, N, H);
@@ -892,20 +912,19 @@ component carries `"runtime_n": true` and the down component
   - HIP refuses an H change missing weight planes, H beyond capacity, an N
     on an unframed axis, and three tampered frames.
   - The serialized artifact replays bitwise in a fresh process.
-- **Unit tests.** `tests/unit/test_public_quantized_mlp_h_bound.py`: 30
+- **Unit tests.** `tests/unit/test_public_quantized_mlp_h_bound.py`: 36
   passed on gfx1201.
 - **Device time (diagnostic).** At K/N 4096/256 with bounds (256, 512), the
-  bounded owner runs at 1.014× static at 256 × 512 but 1.2–3.9× at the four
-  other shapes, bitwise equal at all five. Almost all of it is the gate
-  product: the capacity schedule picks a `[32, 32]` tile, while static
-  programs at small M pick `[16, 32]`. Compiled with row capacity 16, the
-  same program gets `[16, 32]` and its gate product runs at 1.00–1.03× static
-  at M = 16. The H members themselves add at most about 1 µs. Evidence:
+  bounded owner runs at 0.98–1.05× static at five shapes, bitwise equal at
+  all five. Before the admitted-rows panel it ran at 1.2–3.9× at four of
+  them: the capacity schedule had picked a `[32, 32]` gate-product panel
+  where static small-M programs pick `[16, 32]`. The H members themselves add
+  at most about 1 µs. Evidence:
   `benchmarks/baselines/gfx1201_h_bounded_quantized_mlp_20261029/README.md`.
 
-Not covered: H combined with a K or N bound, a capacity product tile chosen
-for the admitted range (or selected per active shape), an LDS-staged
-capacity product, AD, model quality and gfx1151.
+Not covered: H combined with a K or N bound, selecting among measured
+product images per active shape, an LDS-staged capacity product, AD, model
+quality and gfx1151.
 
 
 ## Quantized package certificate and ABI reuse

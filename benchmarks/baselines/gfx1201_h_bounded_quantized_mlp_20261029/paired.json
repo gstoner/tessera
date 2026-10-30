@@ -1,0 +1,218 @@
+{
+ "sync_key": "GFX1201-BOUNDED-QUANTIZED-H-20261029",
+ "commit": "932ac0420f7acb8b74a631ffcaf97f74ae1b76ab",
+ "worktree_dirty": false,
+ "recorder_sha256": "638a3c82dfc23018756771af62539d45bab95ffcc2c23920e3c6c122e26ff4dd",
+ "compiler_sha256": "8ebd92f2e6725629b95f78e492517efbb3d709a32058c52918eb48c5cf919774",
+ "provider_sha256": "8f26674f11dd3eddbe6b421eee5e44469890a78c1337fac78e49b0cd0cae74f4",
+ "device": "gfx1201 (RX 9070 XT, Tajasarus, WSL2)",
+ "kn": [
+  4096,
+  256
+ ],
+ "bounds_mh": [
+  256,
+  512
+ ],
+ "bounded_compile_s": 1.15,
+ "bounded_allocation_bytes": 17085570,
+ "bounded_allocation_count": 18,
+ "timing": "HIP-event device ms per program invocation, windows of 50 invocations, 9 rounds, arm and (M, K) order alternated each round; median. bounded = one bounded owner updated to each shape; static = the v4 program compiled at that shape. Diagnostic, not a promotion.",
+ "rows": {
+  "16x128": {
+   "bounded_ms": 0.0652,
+   "static_ms": 0.0624,
+   "bounded_over_static": 1.045,
+   "bounded_range_ms": [
+    0.0645,
+    0.1729
+   ],
+   "static_range_ms": [
+    0.0612,
+    0.0855
+   ],
+   "bitwise_equal": true,
+   "static_compile_s": 1.01,
+   "samples_ms": {
+    "bounded": [
+     0.1729,
+     0.0645,
+     0.0651,
+     0.0651,
+     0.0649,
+     0.0652,
+     0.0654,
+     0.0652,
+     0.0653
+    ],
+    "static": [
+     0.0855,
+     0.0625,
+     0.0624,
+     0.0614,
+     0.0632,
+     0.0624,
+     0.062,
+     0.0612,
+     0.0617
+    ]
+   }
+  },
+  "16x512": {
+   "bounded_ms": 0.0891,
+   "static_ms": 0.0862,
+   "bounded_over_static": 1.035,
+   "bounded_range_ms": [
+    0.0883,
+    0.0938
+   ],
+   "static_range_ms": [
+    0.0853,
+    0.0874
+   ],
+   "bitwise_equal": true,
+   "static_compile_s": 0.94,
+   "samples_ms": {
+    "bounded": [
+     0.0938,
+     0.0893,
+     0.0891,
+     0.089,
+     0.0891,
+     0.0883,
+     0.0898,
+     0.0891,
+     0.0894
+    ],
+    "static": [
+     0.0862,
+     0.0855,
+     0.0856,
+     0.0868,
+     0.087,
+     0.0866,
+     0.0874,
+     0.0853,
+     0.0861
+    ]
+   }
+  },
+  "64x256": {
+   "bounded_ms": 0.0741,
+   "static_ms": 0.0712,
+   "bounded_over_static": 1.04,
+   "bounded_range_ms": [
+    0.0738,
+    0.0771
+   ],
+   "static_range_ms": [
+    0.0704,
+    0.0721
+   ],
+   "bitwise_equal": true,
+   "static_compile_s": 1.01,
+   "samples_ms": {
+    "bounded": [
+     0.0741,
+     0.0741,
+     0.0741,
+     0.0743,
+     0.0741,
+     0.0752,
+     0.0771,
+     0.0738,
+     0.0743
+    ],
+    "static": [
+     0.0708,
+     0.0714,
+     0.0713,
+     0.0705,
+     0.0712,
+     0.0704,
+     0.0721,
+     0.0705,
+     0.0716
+    ]
+   }
+  },
+  "256x128": {
+   "bounded_ms": 0.0784,
+   "static_ms": 0.0766,
+   "bounded_over_static": 1.023,
+   "bounded_range_ms": [
+    0.078,
+    0.0793
+   ],
+   "static_range_ms": [
+    0.0757,
+    0.0775
+   ],
+   "bitwise_equal": true,
+   "static_compile_s": 0.92,
+   "samples_ms": {
+    "bounded": [
+     0.0791,
+     0.0783,
+     0.0784,
+     0.0782,
+     0.0783,
+     0.0793,
+     0.079,
+     0.078,
+     0.0791
+    ],
+    "static": [
+     0.0765,
+     0.076,
+     0.077,
+     0.0766,
+     0.0775,
+     0.0757,
+     0.0774,
+     0.0759,
+     0.0768
+    ]
+   }
+  },
+  "256x512": {
+   "bounded_ms": 0.1234,
+   "static_ms": 0.1257,
+   "bounded_over_static": 0.982,
+   "bounded_range_ms": [
+    0.1209,
+    0.1252
+   ],
+   "static_range_ms": [
+    0.1246,
+    0.1268
+   ],
+   "bitwise_equal": true,
+   "static_compile_s": 0.95,
+   "samples_ms": {
+    "bounded": [
+     0.1235,
+     0.1209,
+     0.125,
+     0.1234,
+     0.1252,
+     0.1223,
+     0.123,
+     0.1216,
+     0.1252
+    ],
+    "static": [
+     0.1247,
+     0.125,
+     0.1263,
+     0.1257,
+     0.1257,
+     0.1254,
+     0.1264,
+     0.1246,
+     0.1268
+    ]
+   }
+  }
+ }
+}

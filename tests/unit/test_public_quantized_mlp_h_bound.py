@@ -272,10 +272,13 @@ def test_runtime_shape_products_request_the_global_panel(rocm_image_toolchain, b
     assert static.native_stages[2].descriptor.provenance["macro_tile"] == [128, 128]
 
 
-def test_m_only_bounded_products_keep_their_lds_panel(rocm_image_toolchain):
+def test_m_only_bounded_products_keep_lds_as_per_m_variants(rocm_image_toolchain):
+    """An M-only product has no runtime-shape image, so it keeps the LDS panels:
+    as per-M variants over the register base (GFX1201-BOUNDED-PER-M-PANEL-20261030)."""
     fn, roots = public(256, 2048, 4096, 256)
     native = fn.compile_native_quantized_program(*roots, m_bound=256).native
-    assert native.gate.product.descriptor.provenance["macro_tile"] == [128, 128]
+    assert native.gate.product.descriptor.provenance["macro_tile"] == [16, 32]
+    assert native.gate.variants[-1].native.descriptor.provenance["macro_tile"] == [128, 128]
     assert "blockscale_staging" not in native.gate.product_recipe.graph_ir
 
 

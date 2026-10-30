@@ -23,7 +23,7 @@ Scale layouts (both row-major, fp32):
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import re
 from pathlib import Path
@@ -198,6 +198,9 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201",
         raise ValueError("the W8A8 staging request is only \"global\"")
     if staging == "global":
         return _register_panel(shape, min_m)
+    if min_m is not None:
+        # A shape-free image admitting M >= min_m takes the panel at min_m.
+        return blockscale_panel_oracle(replace(shape, m=min(shape.m, min_m)), arch=arch)
 
     # Differential mirror only: native Schedule selects the measured KN
     # physical route; the Python frontend does not choose a backend schedule.

@@ -697,9 +697,27 @@ static std::optional<int64_t> measuredComputeUnits(StringRef arch) {
 
 static void selectFp8W8A8RegisterPanel(MatmulSchedule &schedule);
 
+static void selectFp8W8A8BlockScalePanelAt(MatmulSchedule &schedule);
+
 static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
   // A shape-free runtime-K/N/H image exists only as the global-staged body.
   if (schedule.requireGlobalStaging) return selectFp8W8A8RegisterPanel(schedule);
+  if (!schedule.admittedMinM) return selectFp8W8A8BlockScalePanelAt(schedule);
+  // An arbitrary-M image (or per-M variant) admitting M >= admittedMinM takes
+  // the panel the static rule selects at that M; only the panel fields leave.
+  MatmulSchedule at = schedule;
+  at.m = std::min(schedule.m, schedule.admittedMinM);
+  at.admittedMinM = 0;
+  selectFp8W8A8BlockScalePanelAt(at);
+  schedule.staging = at.staging;
+  schedule.warps = at.warps;
+  schedule.pipelineDepth = at.pipelineDepth;
+  schedule.macroTileM = at.macroTileM;
+  schedule.macroTileN = at.macroTileN;
+  schedule.panelFallback = at.panelFallback;
+}
+
+static void selectFp8W8A8BlockScalePanelAt(MatmulSchedule &schedule) {
   std::optional<int64_t> computeUnits = measuredComputeUnits(schedule.arch);
   auto tiles = [&](int64_t tm, int64_t tn) {
     return ((schedule.m + tm - 1) / tm) * ((schedule.n + tn - 1) / tn);

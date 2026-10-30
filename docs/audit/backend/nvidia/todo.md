@@ -16824,3 +16824,12 @@ Synchronization key: GFX1201-BOUNDED-GLOBAL-PANEL-20261030.
 Not applicable to NVIDIA: the staging request is read only by the gfx1201 W8A8 panel selector, for `rocm_gfx1201` bounded programs. No NVIDIA selector, ABI or result changes.
 
 Evidence: benchmarks/baselines/gfx1201_bounded_global_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
+
+## GFX1201-BOUNDED-PER-M-PANEL-20261030 — per-extent product images for bounded quantized MLPs
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-BOUNDED-PER-M-PANEL-20261030.
+
+Not applicable to NVIDIA: the per-extent product images, the `arbitrary-n` identity option and the variant owner ABI are `rocm_gfx1201` only. No NVIDIA selector, ABI or result changes.
+
+Evidence: tests/device/rocm/test_quantized_mlp_per_m_panels_device.py; benchmarks/baselines/gfx1201_bounded_per_m_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".

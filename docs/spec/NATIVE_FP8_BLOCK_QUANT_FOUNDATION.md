@@ -889,7 +889,59 @@ oracle (`staging="global"`) mirrors it. Any other value is refused. M-only
 256 × 2048, where the `[16, 32]` gate product takes 4.2× static's LDS
 `[128, 128]`. Evidence:
 `benchmarks/baselines/gfx1201_bounded_global_panel_20261030/README.md`.
-Per-active-M product images are the open fix.
+Per-extent product images (below) replace that trade.
+
+**Per-extent product images (GFX1201-BOUNDED-PER-M-PANEL-20261030).** One
+image cannot serve a wide admitted range: an LDS capacity panel cost 2.1–2.9×
+at small M, and the small-M register panel cost about 4× at capacity. Every
+bounded (shape-free) product now carries a base image plus one LDS
+**variant** per box where the static rule takes an LDS panel:
+
+- **The base image** is the register panel for M >= 1 (the global shape-free
+  image for a runtime-K/N/H product).
+- **A box** is an M range and, when the product varies an extent, a range of
+  that extent in frame units. The gate's K varies as G = K/16 and its N = 2H
+  as H/16; the down projection's K varies as H/16 and its N as N. Boxes are
+  derived by scanning the panel oracle over (M, that extent) and keeping the
+  maximal rectangles of one LDS panel. At most eight are allowed.
+  Register panels are not split.
+- **Each variant** is compiled with its panel evaluated at the box's corner:
+  `tessera.rocm.blockscale_min_m` plus `tessera.rocm.blockscale_at_n` or
+  `_at_k` (i64 within the extent; K a whole scale group). With them set, the
+  native selector evaluates every panel rule at that point, and the oracle
+  mirrors it; the selector remains the authority.
+- **A variant whose N varies at launch** is projected with the new identity
+  option `arbitrary-n` (LDS family only). It records `whole_n = false`, so
+  the LDS body masks its column edge. Its provenance records
+  `"arbitrary_n": true` only when set, so existing descriptors keep their
+  digests. LDS images already take K at launch (`lds_runtime_k`).
+- **Validation.** The product validator re-derives the boxes, each variant's
+  request Graph, its panel and its arbitrary-N claim. The portable record
+  carries each variant's box, checked static Target and stage. Replay
+  re-derives every image.
+
+**Owner.** `tessera_rocm_program_prepare_multi_output_axis_frame_variants`
+takes the axis frame plus `TesseraRocmProgramStepVariant` rows, each with:
+
+- `step`, `[min_rows, max_rows]`, `axis` (1 G, 2 N, 3 H, 4 none) and
+  `[min_axis, max_axis]`;
+- the image and entry, and its capacity geometry;
+- its frame entries: the step's base entries in order on (scalar, coef,
+  powers), with only the grid fields changed.
+
+Admission checks each variant against the frame and requires one shared axis
+per step and non-overlapping boxes. The variants key the owner cache.
+`applyFrame` selects each stage's image for the active extents, and
+`tessera_rocm_program_variant_info` reports the selection. An M-only bounded
+program with variants takes the axis frame, as its N-, G- and H-free case.
+
+Measured on gfx1201 (diagnostic HIP events): the M-only program (capacity
+256, H 2048) runs at 0.97–1.10× static from M = 16 to 256. The H-bound
+program (capacity (256, 2048)) runs at 0.998–1.15× across six shapes,
+against 2.75× at its corner with the global base alone. All outputs are
+bitwise equal. The remaining 10–15% at the capacity corner is the
+shape-free LDS image's masking against static's whole-tile image. Evidence:
+`benchmarks/baselines/gfx1201_bounded_per_m_panel_20261030/README.md`.
 
 **Owner axis frame.** The axis frame gains a fourth variable: H16 groups
 (power bit 3, `capacity_h`). `prepare_multi_output_axis_frame`,

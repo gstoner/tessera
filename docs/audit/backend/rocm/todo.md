@@ -19382,6 +19382,15 @@ Evidence: tests/device/rocm/test_public_quantized_mlp_h_bound_device.py; benchma
 Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
 Synchronization key: GFX1201-BOUNDED-GLOBAL-PANEL-20261030.
 
-Landed on gfx1201 only (Tajasarus). Runtime-K/N/H bounded products request `tessera.rocm.blockscale_staging = "global"`, so a capacity that reached an LDS gate panel compiles with the register panel instead of refusing; M-only bounded products keep LDS. K- and H-bounded programs at capacity 256 × 4096 are bitwise equal to static at every tested shape. Diagnostic time is 1.0–1.12× static at four shapes but 2.75× at 256 × 2048 (the `[16, 32]` gate product takes 4.2× static LDS). Open: per-active-M product image selection; gfx1151.
+Landed on gfx1201 only (Tajasarus). Runtime-K/N/H bounded products request `tessera.rocm.blockscale_staging = "global"`, so a capacity that reached an LDS gate panel compiles with the register panel instead of refusing; M-only bounded products keep LDS. K- and H-bounded programs at capacity 256 × 4096 are bitwise equal to static at every tested shape. Diagnostic time is 1.0–1.12× static at four shapes but 2.75× at 256 × 2048 (the `[16, 32]` gate product takes 4.2× static LDS). Open: per-active-M product image selection (landed next, GFX1201-BOUNDED-PER-M-PANEL-20261030); gfx1151.
 
 Evidence: benchmarks/baselines/gfx1201_bounded_global_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
+
+## GFX1201-BOUNDED-PER-M-PANEL-20261030 — per-extent product images for bounded quantized MLPs
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1201-BOUNDED-PER-M-PANEL-20261030.
+
+Landed on gfx1201 only (Tajasarus). A bounded product carries a register/global base image plus one LDS image per (M × varying-extent) box where the static rule takes an LDS panel; the HIP owner selects per active extents (`..._axis_frame_variants`, `variant_info`), and runtime-N variants mask their column edge (`arbitrary-n`). The M-only program runs at 0.97–1.10× static across M = 16..256, and the H-bound program at 0.998–1.15× (2.75× at its corner before), all bitwise equal. No gfx1151 evidence. Open: the 10–15% the shape-free LDS image costs at the capacity corner; gfx1151.
+
+Evidence: tests/device/rocm/test_quantized_mlp_per_m_panels_device.py; benchmarks/baselines/gfx1201_bounded_per_m_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".

@@ -23,7 +23,10 @@ pytestmark = [pytest.mark.hardware_rocm, pytest.mark.compiler_rocm, pytest.mark.
 
 # (H, N), traced (M, K), (MB, KB), active (M, K) sequence.
 SHAPES = [((32, 19), (3, 48), (8, 96), ((3, 48), (8, 96), (1, 16), (5, 80), (8, 48), (2, 96))),
-          ((128, 256), (37, 4096), (64, 12288), ((37, 4096), (64, 12288), (1, 16), (16, 8192)))]
+          ((128, 256), (37, 4096), (64, 12288), ((37, 4096), (64, 12288), (1, 16), (16, 8192))),
+          # GFX1201-BOUNDED-GLOBAL-PANEL-20261030: a capacity whose static rule
+          # takes an LDS gate panel (256 x 4096); the runtime-K image is global.
+          ((2048, 256), (16, 4096), (256, 8192), ((16, 4096), (256, 8192), (100, 1024)))]
 
 
 def static_at(m, h, k, n, roots, lib):

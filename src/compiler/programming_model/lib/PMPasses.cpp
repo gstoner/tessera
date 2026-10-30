@@ -371,6 +371,10 @@ struct MatmulSchedule {
   //: 0 means the exact M. A performance key: it selects the W8A8 register
   //: panel for the admitted range, never a numeric result.
   int64_t admittedMinM = 0;
+  //: `tessera.rocm.blockscale_staging = "global"`: the image must be the
+  //: global-staged (register-panel) body, as every runtime-K/N/H product of a
+  //: bounded program is. The LDS rules are skipped; a performance key.
+  bool requireGlobalStaging = false;
   StringRef accum;
   int64_t m;
   int64_t n;
@@ -691,7 +695,11 @@ static std::optional<int64_t> measuredComputeUnits(StringRef arch) {
   return std::nullopt;
 }
 
+static void selectFp8W8A8RegisterPanel(MatmulSchedule &schedule);
+
 static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
+  // A shape-free runtime-K/N/H image exists only as the global-staged body.
+  if (schedule.requireGlobalStaging) return selectFp8W8A8RegisterPanel(schedule);
   std::optional<int64_t> computeUnits = measuredComputeUnits(schedule.arch);
   auto tiles = [&](int64_t tm, int64_t tn) {
     return ((schedule.m + tm - 1) / tm) * ((schedule.n + tn - 1) / tn);
@@ -806,6 +814,10 @@ static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
     schedule.macroTileN = wide ? 128 : 64;
     return;
   }
+  selectFp8W8A8RegisterPanel(schedule);
+}
+
+static void selectFp8W8A8RegisterPanel(MatmulSchedule &schedule) {
   constexpr int64_t kMinFullPanelTiles = 256;
   // An arbitrary-M image runs every M down to its admitted minimum, so the
   // register panel is chosen at that end of the range. A 32-row panel picked
@@ -1652,6 +1664,15 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
             return failure();
           }
           schedule.admittedMinM = minM.getInt();
+        }
+        if (auto raw = module->getAttr("tessera.rocm.blockscale_staging")) {
+          auto staging = dyn_cast<StringAttr>(raw);
+          if (!staging || staging.getValue() != "global") {
+            op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: tessera.rocm.blockscale_staging "
+                          "must be the string \"global\"");
+            return failure();
+          }
+          schedule.requireGlobalStaging = true;
         }
         selectFp8W8A8BlockScalePanel(schedule);
       }

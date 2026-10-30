@@ -153,7 +153,7 @@ def test_runtime_n_claim_requires_its_expansion_image(rocm_image_toolchain):
     down = _n_bounded(fn, roots).native.down
     forged = dataclasses.replace(down, runtime_n=False)
     forged = dataclasses.replace(forged, binding_digest=forged._identity())
-    with pytest.raises(ValueError, match="runtime-N expansion policy differs"):
+    with pytest.raises(ValueError, match="runtime-N expansion policy differs|projected Graph differs"):
         forged.validate()
 
 

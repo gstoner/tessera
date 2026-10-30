@@ -29,6 +29,10 @@ SHAPES = [
      ((3, 32), (8, 64), (1, 16), (5, 48), (2, 32))),
     ((37, 128, 4096, 256), {"m_bound": 64, "h_bound": 512},
      ((37, 128), (64, 512), (1, 16), (16, 304))),
+    # GFX1201-BOUNDED-GLOBAL-PANEL-20261030: a capacity whose static rule takes
+    # an LDS gate panel (256 x 4096); the runtime-N/H image is global.
+    ((16, 512, 4096, 256), {"m_bound": 256, "h_bound": 2048},
+     ((16, 512), (256, 2048), (100, 1024))),
 ]
 
 

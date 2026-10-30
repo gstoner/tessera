@@ -222,14 +222,14 @@ class ProductVariant:
     checked_target_ir: str
 
 
-def _compile_product(tool, shape, child, *, arbitrary_m, arbitrary_n=False):
+def _compile_product(tool, shape, child, *, arbitrary_m, arbitrary_n=False, runtime_k=False):
     """Graph -> Schedule -> Tile -> image for one product member Graph."""
     schedule = run_tessera_opt(tool,child,"--tessera-graph-to-schedule")
     tile = run_tessera_opt(tool,schedule,"--tessera-schedule-to-tile")
     recipe = BlockScaleProgram(shape,"quantized_product",child,schedule,tile)
     product = package_blockscale(recipe,pipeline_name="tessera-rocm-executable",
                                  project_image_identity=arbitrary_m,arbitrary_m=arbitrary_m,
-                                 arbitrary_n=arbitrary_n)
+                                 arbitrary_n=arbitrary_n,lds_runtime_k=runtime_k)
     checked_target = product.target_ir
     if arbitrary_m:
         # The image is the shape-free projection; retain the static checked
@@ -241,7 +241,7 @@ def _compile_product(tool, shape, child, *, arbitrary_m, arbitrary_n=False):
     return recipe, product, checked_target, schedule
 
 
-def _check_product_image(shape, native, checked_target_ir, arbitrary_m, arbitrary_n=False):
+def _check_product_image(shape, native, checked_target_ir, arbitrary_m, arbitrary_n=False, runtime_k=False):
     """Validate one product image against its checked Target and the consumer ABI.
 
     ``arbitrary_n``: an LDS image whose N varies at launch masks its column
@@ -251,6 +251,10 @@ def _check_product_image(shape, native, checked_target_ir, arbitrary_m, arbitrar
     lds = checked["staging"] == "lds"
     if native.descriptor.provenance.get("arbitrary_n", False) is not (arbitrary_n and lds):
         raise ValueError("native quantized-product arbitrary-N image policy differs")
+    # An LDS image takes K at launch only when the product's K varies: the
+    # runtime-K loop costs about 3% on gfx1201 where K is fixed.
+    if bool(native.descriptor.provenance.get("lds_runtime_k")) is not (runtime_k and lds and arbitrary_m):
+        raise ValueError("native quantized-product runtime-K image policy differs")
     if arbitrary_m:
         from .rocm_native import _shape_free_target_ir
         projection=_shape_free_target_ir(checked_target_ir,
@@ -422,7 +426,8 @@ class NativeQuantizedProductProgram:
             raise ValueError("native quantized-product runtime-K expansion policy differs")
         if self.runtime_n != (self.expansion is not None and self.expansion.runtime_n):
             raise ValueError("native quantized-product runtime-N expansion policy differs")
-        checked = _check_product_image(shape,native,self.checked_product_target_ir,self.arbitrary_m)
+        checked = _check_product_image(shape,native,self.checked_product_target_ir,self.arbitrary_m,
+                                       runtime_k=self.runtime_k)
         if (self.runtime_k or self.runtime_n) and (
                 not self.arbitrary_m or checked["staging"] != "global"
                 or native.descriptor.provenance.get("runtime_shape_image") is not True):
@@ -443,7 +448,8 @@ class NativeQuantizedProductProgram:
                     or v.recipe.graph_ir != admitted_rows_graph(member,min_m=v.min_m,at_n=at_n,at_k=at_k)
                     or v.native.tile_ir != v.recipe.tile_ir):
                 raise ValueError("native quantized-product per-M variant Graph differs")
-            got = _check_product_image(shape,v.native,v.checked_target_ir,True,arbitrary_n=self.runtime_n)
+            got = _check_product_image(shape,v.native,v.checked_target_ir,True,arbitrary_n=self.runtime_n,
+                                       runtime_k=self.runtime_k)
             if (got["staging"],got["block_m"],got["block_n"],got["warps"]) != (
                     panel.staging,panel.macro_tile_m,panel.macro_tile_n,panel.warps):
                 raise ValueError("native quantized-product per-M variant panel differs from the static rule")
@@ -603,7 +609,7 @@ def package_quantized_product_graph(graph_ir,*,arbitrary_m=False,runtime_k=False
             at_n, at_k = _variant_at(vary, x_lo)
             v_recipe, v_product, v_checked, v_schedule = _compile_product(
                 tool, shape, admitted_rows_graph(member, min_m=lo, at_n=at_n, at_k=at_k), arbitrary_m=True,
-                arbitrary_n=runtime_n)
+                arbitrary_n=runtime_n, runtime_k=runtime_k)
             verify_blockscale_schedule(shape, v_schedule, min_m=lo, at_n=at_n, at_k=at_k)
             built.append(ProductVariant(lo, hi, x_lo, x_hi, v_recipe, v_product, v_checked))
         variants = tuple(built)

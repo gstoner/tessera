@@ -98,3 +98,30 @@ def test_rehashed_variant_panel_forgery_is_refused(rocm_image_toolchain):
     forged = dataclasses.replace(forged, binding_digest=forged._identity())
     with pytest.raises(ValueError, match="variant Graph differs|variant panel differs|differs"):
         forged.validate()
+
+
+@pytest.mark.parametrize("bounds,traced,runtime_k", [
+    ({"m_bound": 256}, (256, 2048, 4096, 256), False),
+    ({"m_bound": 256, "h_bound": 2048}, (16, 512, 4096, 256), False),
+    ({"m_bound": 256, "k_bound": 8192}, (16, 2048, 4096, 256), True),
+])
+def test_lds_variants_take_k_at_launch_only_when_it_varies(rocm_image_toolchain, bounds, traced, runtime_k):
+    """The runtime-K loop cost ~3% where K is fixed (paired gfx1201 windows)."""
+    fn = ts.jit(target="rocm_gfx1201")(make_mlp(*traced))
+    gate = fn.compile_native_quantized_program(*inputs(*traced), **bounds).native.gate
+    assert gate.variants
+    assert {v.native.descriptor.provenance["lds_runtime_k"] for v in gate.variants} == {runtime_k}
+
+
+def test_runtime_k_claim_on_an_lds_variant_is_refused(rocm_image_toolchain):
+    import dataclasses
+    from tessera.compiler.rocm_fp8_blockscale import package_blockscale
+    _, program = _program()
+    gate = program.native.gate
+    v = gate.variants[0]
+    forged_native = package_blockscale(v.recipe, pipeline_name="tessera-rocm-executable",
+                                       project_image_identity=True, arbitrary_m=True, lds_runtime_k=True)
+    forged = dataclasses.replace(gate, variants=(dataclasses.replace(v, native=forged_native), *gate.variants[1:]))
+    forged = dataclasses.replace(forged, binding_digest=forged._identity())
+    with pytest.raises(ValueError, match="runtime-K image policy differs"):
+        forged.validate()

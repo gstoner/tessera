@@ -254,10 +254,52 @@ bool lowerRealMFMA(Operation *op, PatternRewriter &rewriter) {
   return false;
 }
 
+// Software f32 -> E4M3FN with the exact semantics of RDNA4 V_CVT_PK_FP8_F32
+// (recorded on gfx1201, GFX1151-QUANTIZED-MLP-20261030): round to nearest
+// even; any NaN -> 0xFF; |x| > 464 (incl. inf) -> sign|0x7F (no saturation);
+// subnormals on the 2^-9 grid; f32 denormals -> signed zero. Integer-only,
+// so it needs no FP8 instruction and no math lowering (RDNA3.5 has neither).
+static Value softwareE4M3(OpBuilder &b, Location loc, Value value) {
+  auto c = [&](int64_t v) -> Value { return arith::ConstantIntOp::create(b, loc, v, 32); };
+  using P = arith::CmpIPredicate;
+  Value bits = arith::BitcastOp::create(b, loc, b.getI32Type(), value);
+  Value sign = arith::AndIOp::create(b, loc,
+      arith::ShRUIOp::create(b, loc, bits, c(24)), c(0x80));
+  Value mag = arith::AndIOp::create(b, loc, bits, c(0x7fffffff));
+  // Normal E4M3 (|x| >= 2^-6): RNE at mantissa bit 20, rebias 127 -> 7.
+  Value odd = arith::AndIOp::create(b, loc, arith::ShRUIOp::create(b, loc, mag, c(20)), c(1));
+  Value normal = arith::SubIOp::create(b, loc, arith::ShRUIOp::create(b, loc,
+      arith::AddIOp::create(b, loc, arith::AddIOp::create(b, loc, mag, c(0x7ffff)), odd), c(20)),
+      c(960));
+  // Subnormal E4M3 (|x| < 2^-6): q = RNE(m * 2^(e - 141)), m the 24-bit significand.
+  Value exponent = arith::ShRUIOp::create(b, loc, mag, c(23));
+  Value significand = arith::OrIOp::create(b, loc,
+      arith::AndIOp::create(b, loc, mag, c(0x7fffff)), c(0x800000));
+  Value shift = arith::SubIOp::create(b, loc, c(141), exponent);
+  Value inRange = arith::CmpIOp::create(b, loc, P::ult, shift, c(25));  // else q = 0
+  Value safe = arith::SelectOp::create(b, loc, inRange, shift, c(24));
+  Value half = arith::SubIOp::create(b, loc,
+      arith::ShLIOp::create(b, loc, c(1), arith::SubIOp::create(b, loc, safe, c(1))), c(1));
+  Value qOdd = arith::AndIOp::create(b, loc, arith::ShRUIOp::create(b, loc, significand, safe), c(1));
+  Value q = arith::ShRUIOp::create(b, loc, arith::AddIOp::create(b, loc,
+      arith::AddIOp::create(b, loc, significand, half), qOdd), safe);
+  Value subnormal = arith::SelectOp::create(b, loc, inRange, q, c(0));
+  Value code = arith::SelectOp::create(b, loc,
+      arith::CmpIOp::create(b, loc, P::ult, mag, c(0x3c800000)), subnormal, normal);
+  code = arith::SelectOp::create(b, loc,
+      arith::CmpIOp::create(b, loc, P::ugt, mag, c(0x43e80000)), c(0x7f), code);
+  code = arith::OrIOp::create(b, loc, sign, code);
+  code = arith::SelectOp::create(b, loc,
+      arith::CmpIOp::create(b, loc, P::ugt, mag, c(0x7f800000)), c(0xff), code);
+  Value byte = arith::TruncIOp::create(b, loc, b.getI8Type(), code);
+  return arith::BitcastOp::create(b, loc, Float8E4M3FNType::get(b.getContext()), byte);
+}
+
 // The standard GPU converter stores Float8 as i8, but does not legalize a
 // scalar arith.truncf into that storage. Keep the numerical cast in native
-// IR and select the RDNA4 RNE instruction only on the owning exact target.
-static LogicalResult lowerScalarE4M3Casts(ModuleOp module) {
+// IR: the RDNA4 RNE instruction on the owning exact target, the bit-exact
+// software encode on every other architecture (or when `software` is forced).
+static LogicalResult lowerScalarE4M3Casts(ModuleOp module, bool forceSoftware) {
   auto authored = module->getAttrOfType<StringAttr>("tessera.arch");
   auto selected = module->getAttrOfType<StringAttr>("tessera.pipeline.arch");
   if (selected && authored && selected.getValue() != authored.getValue())
@@ -265,7 +307,8 @@ static LogicalResult lowerScalarE4M3Casts(ModuleOp module) {
   // Executable pipelines own their target. Standalone legalization retains
   // the explicitly authored architecture when no pipeline has selected one.
   auto arch = selected ? selected : authored;
-  if (!arch || arch.getValue() != "gfx1201") return success();
+  if (!arch) return success();
+  const bool hardware = arch.getValue() == "gfx1201" && !forceSoftware;
   SmallVector<arith::TruncFOp> casts;
   module.walk([&](arith::TruncFOp op) {
     if (op->getParentOfType<gpu::GPUModuleOp>() &&
@@ -278,6 +321,11 @@ static LogicalResult lowerScalarE4M3Casts(ModuleOp module) {
   for (auto op : casts) {
     OpBuilder b(op);
     auto loc = op.getLoc();
+    if (!hardware) {
+      op.replaceAllUsesWith(softwareE4M3(b, loc, op.getIn()));
+      op.erase();
+      continue;
+    }
     Value zero = arith::ConstantIntOp::create(b, loc, 0, 32);
     Value packed = ROCDL::CvtPkFp8F32Op::create(
         b, loc, b.getI32Type(), op.getIn(), op.getIn(), zero, false);
@@ -290,6 +338,11 @@ static LogicalResult lowerScalarE4M3Casts(ModuleOp module) {
 }
 
 struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
+  LoweringPass() = default;
+  LoweringPass(const LoweringPass &other) : PassWrapper(other) {}
+  Option<std::string> e4m3Encode{*this, "e4m3-encode",
+      llvm::cl::desc("f32->E4M3FN cast: auto (RDNA4 instruction on gfx1201, software elsewhere) or software"),
+      llvm::cl::init("auto")};
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<LLVM::LLVMDialect, ROCDL::ROCDLDialect, gpu::GPUDialect, memref::MemRefDialect,
                     math::MathDialect, arith::ArithDialect, scf::SCFDialect>();
@@ -306,7 +359,11 @@ struct LoweringPass : PassWrapper<LoweringPass, OperationPass<ModuleOp>> {
   void runOnOperation() override {
     ModuleOp module = getOperation();
     if (failed(materializeGateUpViews(module))) return signalPassFailure();
-    if (failed(lowerScalarE4M3Casts(module))) return signalPassFailure();
+    if (e4m3Encode != "auto" && e4m3Encode != "software") {
+      module.emitError("lower-tessera-target-to-rocdl: e4m3-encode must be auto or software");
+      return signalPassFailure();
+    }
+    if (failed(lowerScalarE4M3Casts(module, e4m3Encode == "software"))) return signalPassFailure();
     SmallVector<Operation *> waitOps;
     SmallVector<Operation *> rocmOps;
 

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import base64
 import ctypes as C
+import functools
 from dataclasses import dataclass, replace
 import hashlib
 import json
@@ -142,33 +143,80 @@ def _frame_shape(plan):
     return roles,BlockScaleShape(m,n,k,16,1,"nk",out)
 
 
-def _variant_ranges(shape):
-    """Maximal M ranges in [1, capacity] where the static rule takes an LDS panel.
+def _vary(shape, runtime_k, runtime_n, expansion):
+    """The product extent that varies at launch, as (dim, unit, capacity in units).
 
-    A shape-free product runs every M; its base image is the register panel
-    for M >= 1, and each range gets the LDS image the static rule selects
-    there (GFX1201-BOUNDED-PER-M-PANEL-20261030). Register panels are not
+    K varies in K16 groups; a gate/up product's N is its P projections of an
+    H16-multiple width (N = 16*P*Hg); a single projection's N varies by one."""
+    if runtime_k and runtime_n:
+        raise ValueError("native quantized-product varies at most one of K and N")
+    if runtime_k:
+        return ("k", 16, shape.k // 16)
+    if runtime_n:
+        projections = len(expansion.contract()[3]) - 1
+        unit = 16 * projections if projections > 1 else 1
+        return ("n", unit, shape.n // unit)
+    return None
+
+
+@functools.lru_cache(maxsize=32)
+def _variant_boxes(shape, vary):
+    """Maximal (M range x varying-extent range) boxes where the static rule
+    takes an LDS panel, as (min_m, max_m, min_x, max_x); x is in ``vary``
+    units and (0, 0) when nothing but M varies.
+
+    A shape-free product runs every admitted extent; its base image is the
+    register panel, and each box gets the LDS image the static rule selects
+    inside it (GFX1201-BOUNDED-PER-M-PANEL-20261030). Register panels are not
     split further: 16 vs 32 rows measured mixed across the 32-row band."""
     from .rocm_fp8_blockscale import blockscale_panel_oracle
-    ranges: list[list[Any]] = []
-    for m in range(1, shape.m + 1):
-        panel = blockscale_panel_oracle(shape, min_m=m)
-        if panel.staging != "lds":
-            continue
-        if ranges and ranges[-1][2] == panel and ranges[-1][1] == m - 1:
-            ranges[-1][1] = m
-        else:
-            ranges.append([m, m, panel])
-    if len(ranges) > 8:
-        raise ValueError("native quantized-product LDS panel ranges exceed eight variants")
-    return tuple((lo, hi) for lo, hi, _ in ranges)
+    dim, unit, cap = vary if vary is not None else ("", 1, 0)
+    # x = 0 stands for "M only" (no varying extent).
+    xs: list[int] = list(range(1, cap + 1)) if dim else [0]
+
+    def signature(m):
+        intervals: list[list[Any]] = []
+        for x in xs:
+            panel = blockscale_panel_oracle(shape, min_m=m, at_n=unit * x if dim == "n" else None,
+                                            at_k=unit * x if dim == "k" else None)
+            if panel.staging != "lds":
+                continue
+            if intervals and intervals[-1][2] == panel and intervals[-1][1] == x - 1:
+                intervals[-1][1] = x
+            else:
+                intervals.append([x, x, panel])
+        return tuple((lo, hi, panel) for lo, hi, panel in intervals)
+
+    boxes: list[tuple[int, int, int, int]] = []
+    previous: tuple | None = None
+    first = 1
+    for m in range(1, shape.m + 2):
+        current = signature(m) if m <= shape.m else None
+        if current != previous:
+            if previous:
+                boxes += [(first, m - 1, lo, hi) for lo, hi, _ in previous]
+            previous, first = current, m
+    if len(boxes) > 8:
+        raise ValueError("native quantized-product LDS panel boxes exceed eight variants")
+    return tuple(boxes)
+
+
+def _variant_at(vary, x) -> tuple[int | None, int | None]:
+    """The (at_n, at_k) evaluation point of a variant whose box starts at x."""
+    if vary is None:
+        return None, None
+    dim, unit, _ = vary
+    return (unit * x, None) if dim == "n" else (None, unit * x)
 
 
 @dataclass(frozen=True)
 class ProductVariant:
-    """An LDS product image for active M in [min_m, max_m] of a shape-free product."""
+    """An LDS product image for active M in [min_m, max_m] (and, when the
+    product varies K or N, that extent in [min_x, max_x] units)."""
     min_m: int
     max_m: int
+    min_x: int
+    max_x: int
     recipe: BlockScaleProgram
     native: ROCMNativePackage
     checked_target_ir: str
@@ -276,7 +324,7 @@ class NativeQuantizedProductProgram:
         if self.runtime_n:
             parts.append("runtime_n")
         for v in self.variants:
-            parts.extend([str(v.min_m),str(v.max_m),v.recipe.graph_ir,v.recipe.schedule_ir,v.recipe.tile_ir,
+            parts.extend([str(v.min_m),str(v.max_m),str(v.min_x),str(v.max_x),v.recipe.graph_ir,v.recipe.schedule_ir,v.recipe.tile_ir,
                           v.checked_target_ir,v.native.tile_ir,v.native.target_ir,
                           v.native.image.image_digest,v.native.descriptor.descriptor_digest])
         return _digest(json.dumps(parts,separators=(",",":")))
@@ -382,15 +430,17 @@ class NativeQuantizedProductProgram:
             raise ValueError("native quantized-product runtime K/N requires the shape-free global-staged product")
         # A shape-free M-only product carries exactly the LDS variants the static
         # rule implies over [1, capacity]; each is its own checked projection.
-        ranges = _variant_ranges(shape) if self.arbitrary_m else ()
-        if tuple((v.min_m,v.max_m) for v in self.variants) != ranges:
+        vary = _vary(shape,self.runtime_k,self.runtime_n,self.expansion)
+        boxes = _variant_boxes(shape,vary) if self.arbitrary_m else ()
+        if tuple((v.min_m,v.max_m,v.min_x,v.max_x) for v in self.variants) != boxes:
             raise ValueError("native quantized-product per-M variant ranges differ from the static rule")
         member = plan["member_graphs"][2 if self.expansion is not None else 1]
         from .rocm_fp8_blockscale import blockscale_panel_oracle
         for v in self.variants:
-            panel = blockscale_panel_oracle(shape, min_m=v.min_m)
+            at_n, at_k = _variant_at(vary,v.min_x)
+            panel = blockscale_panel_oracle(shape, min_m=v.min_m, at_n=at_n, at_k=at_k)
             if (not isinstance(v,ProductVariant) or v.recipe.shape != shape
-                    or v.recipe.graph_ir != admitted_rows_graph(member,min_m=v.min_m)
+                    or v.recipe.graph_ir != admitted_rows_graph(member,min_m=v.min_m,at_n=at_n,at_k=at_k)
                     or v.native.tile_ir != v.recipe.tile_ir):
                 raise ValueError("native quantized-product per-M variant Graph differs")
             got = _check_product_image(shape,v.native,v.checked_target_ir,True,arbitrary_n=self.runtime_n)
@@ -428,7 +478,7 @@ class NativeQuantizedProductProgram:
         if self.variants:
             # Each variant replays exactly as the base product: its checked
             # static Target is retained and its image re-derived from it.
-            record["variants"]=[{"min_m":v.min_m,"max_m":v.max_m,
+            record["variants"]=[{"min_m":v.min_m,"max_m":v.max_m,"min_x":v.min_x,"max_x":v.max_x,
                                  "checked_product_target_ir":v.checked_target_ir,
                                  "stage":_portable_stage(v.recipe.graph_ir,v.recipe.schedule_ir,v.native)}
                                 for v in self.variants]
@@ -484,8 +534,8 @@ class NativeQuantizedProductProgram:
         variants=[]
         for entry in record.get("variants",()):
             stage=entry.get("stage") if isinstance(entry,dict) else None
-            if (not isinstance(entry,dict) or set(entry)!={"min_m","max_m","checked_product_target_ir","stage"}
-                    or type(entry["min_m"]) is not int or type(entry["max_m"]) is not int
+            if (not isinstance(entry,dict) or set(entry)!={"min_m","max_m","min_x","max_x","checked_product_target_ir","stage"}
+                    or any(type(entry[key]) is not int for key in ("min_m","max_m","min_x","max_x"))
                     or not isinstance(entry["checked_product_target_ir"],str)
                     or not isinstance(stage,dict)
                     or set(stage)!={"graph_ir","schedule_ir","tile_ir","target_ir","image","descriptor"}
@@ -493,7 +543,7 @@ class NativeQuantizedProductProgram:
                 raise ValueError("native quantized-product portable per-M variants differ")
             v_native=ROCMNativePackage(stage["tile_ir"],stage["target_ir"],"",
                 NativeImageArtifact.from_dict(stage["image"]),LaunchDescriptor.from_dict(stage["descriptor"]))
-            variants.append(ProductVariant(entry["min_m"],entry["max_m"],
+            variants.append(ProductVariant(entry["min_m"],entry["max_m"],entry["min_x"],entry["max_x"],
                 BlockScaleProgram(shape,"quantized_product",stage["graph_ir"],stage["schedule_ir"],stage["tile_ir"]),
                 v_native,entry["checked_product_target_ir"]))
         program=cls(record["program_json"],record["graph_ir"],
@@ -547,12 +597,15 @@ def package_quantized_product_graph(graph_ir,*,arbitrary_m=False,runtime_k=False
         # One LDS image per range where the static rule takes an LDS panel;
         # a runtime-N product's LDS images mask their column edge.
         member = plan["member_graphs"][2 if expanded else 1]
+        vary = _vary(shape, runtime_k, runtime_n, expansion)
         built = []
-        for lo, hi in _variant_ranges(shape):
+        for lo, hi, x_lo, x_hi in _variant_boxes(shape, vary):
+            at_n, at_k = _variant_at(vary, x_lo)
             v_recipe, v_product, v_checked, v_schedule = _compile_product(
-                tool, shape, admitted_rows_graph(member, min_m=lo), arbitrary_m=True, arbitrary_n=runtime_n)
-            verify_blockscale_schedule(shape, v_schedule, min_m=lo)
-            built.append(ProductVariant(lo, hi, v_recipe, v_product, v_checked))
+                tool, shape, admitted_rows_graph(member, min_m=lo, at_n=at_n, at_k=at_k), arbitrary_m=True,
+                arbitrary_n=runtime_n)
+            verify_blockscale_schedule(shape, v_schedule, min_m=lo, at_n=at_n, at_k=at_k)
+            built.append(ProductVariant(lo, hi, x_lo, x_hi, v_recipe, v_product, v_checked))
         variants = tuple(built)
     activation_recipe,activation=None,None
     if activated:

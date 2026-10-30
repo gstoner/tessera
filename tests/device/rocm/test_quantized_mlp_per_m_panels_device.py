@@ -98,7 +98,10 @@ def test_h_bounded_owner_runs_masked_column_lds_variants():
     native = fn.compile_native_quantized_program(*inputs(16, 512, K, N), m_bound=256, h_bound=2048).native
     owner = native.prepare(inputs(16, 512, K, N), runtime_library=lib)
     try:
-        for index, (m, h, image) in enumerate(((200, 1008, 2), (100, 1040, 1), (16, 2048, 0), (256, 2048, 2))):
+        # Boxes over (M, H/16): 1 = 97..127 x 32..128, 3 = 129..256 x 63..124,
+        # 4 = 129..256 x 125..128; 256 x 512 (N = 1024) stays on the base image.
+        for index, (m, h, image) in enumerate(((200, 1008, 3), (100, 1040, 1), (16, 2048, 0),
+                                               (256, 2048, 4), (256, 512, 0))):
             roots = inputs(m, h, K, N, seed=2000 + index)
             owner.update(roots)
             generation, _ = owner.invoke()

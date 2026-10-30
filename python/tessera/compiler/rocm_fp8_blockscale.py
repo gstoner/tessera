@@ -173,7 +173,8 @@ class BlockScalePanel:
 
 
 def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201",
-                            min_m: int | None = None, staging: str | None = None) -> BlockScalePanel:
+                            min_m: int | None = None, staging: str | None = None,
+                            at_n: int | None = None, at_k: int | None = None) -> BlockScalePanel:
     """The Python oracle of `selectFp8W8A8BlockScalePanel` (PMPasses.cpp).
 
     It exists to be DIFFERENTIAL, not to decide anything: the C++ Schedule is
@@ -198,9 +199,12 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201",
         raise ValueError("the W8A8 staging request is only \"global\"")
     if staging == "global":
         return _register_panel(shape, min_m)
-    if min_m is not None:
-        # A shape-free image admitting M >= min_m takes the panel at min_m.
-        return blockscale_panel_oracle(replace(shape, m=min(shape.m, min_m)), arch=arch)
+    if min_m is not None or at_n is not None or at_k is not None:
+        # A shape-free image (or per-extent variant) takes the panel at its
+        # requested (M, N, K): `tessera.rocm.blockscale_{min_m,at_n,at_k}`.
+        return blockscale_panel_oracle(replace(
+            shape, m=shape.m if min_m is None else min(shape.m, min_m),
+            n=shape.n if at_n is None else at_n, k=shape.k if at_k is None else at_k), arch=arch)
 
     # Differential mirror only: native Schedule selects the measured KN
     # physical route; the Python frontend does not choose a backend schedule.
@@ -258,7 +262,8 @@ def schedule_blockscale_panel(schedule_ir: str) -> BlockScalePanel:
 
 
 def verify_blockscale_schedule(shape: BlockScaleShape, schedule_ir: str, *,
-                               min_m: int | None = None, staging: str | None = None) -> BlockScalePanel:
+                               min_m: int | None = None, staging: str | None = None,
+                               at_n: int | None = None, at_k: int | None = None) -> BlockScalePanel:
     """Refuse a Schedule whose W8A8 panel the Python oracle does not reproduce.
 
     The differential half of Decision #31 for this rule: the CU count, the
@@ -268,7 +273,7 @@ def verify_blockscale_schedule(shape: BlockScaleShape, schedule_ir: str, *,
     arch = re.search(r'(?<![\w.])arch\s*=\s*"(\w+)"',
                      _one_line(schedule_ir, "schedule.matmul", "schedule.matmul record"))
     oracle = blockscale_panel_oracle(shape, arch=arch.group(1) if arch else "", min_m=min_m,
-                                     staging=staging)
+                                     staging=staging, at_n=at_n, at_k=at_k)
     if native != oracle:
         raise ValueError(
             f"W8A8 panel oracle disagrees with the native Schedule for "
@@ -283,7 +288,8 @@ _MIN_M_ATTR = "tessera.rocm.blockscale_min_m"
 _STAGING_ATTR = "tessera.rocm.blockscale_staging"
 
 
-def admitted_rows_graph(graph_ir: str, min_m: int = 1, *, global_staging: bool = False) -> str:
+def admitted_rows_graph(graph_ir: str, min_m: int = 1, *, global_staging: bool = False,
+                        at_n: int | None = None, at_k: int | None = None) -> str:
     """The product Graph requesting a register panel chosen for M >= ``min_m``.
 
     An arbitrary-M image runs every M down to that minimum; the attribute is
@@ -293,10 +299,14 @@ def admitted_rows_graph(graph_ir: str, min_m: int = 1, *, global_staging: bool =
     head = "module attributes {"
     if (not isinstance(graph_ir, str) or graph_ir.count(head) != 1 or _MIN_M_ATTR in graph_ir
             or _STAGING_ATTR in graph_ir or type(min_m) is not int or min_m < 1
-            or type(global_staging) is not bool):
+            or type(global_staging) is not bool
+            or any(v is not None and (type(v) is not int or v < 1) for v in (at_n, at_k))
+            or "tessera.rocm.blockscale_at_" in graph_ir):
         raise ValueError("an admitted-rows request needs one unmarked attributed product module and min_m >= 1")
     staging = f'{_STAGING_ATTR} = "global", ' if global_staging else ""
-    return graph_ir.replace(head, f"{head}{_MIN_M_ATTR} = {min_m} : i64, {staging}", 1)
+    at = "".join(f"tessera.rocm.blockscale_at_{axis} = {v} : i64, "
+                 for axis, v in (("k", at_k), ("n", at_n)) if v is not None)
+    return graph_ir.replace(head, f"{head}{at}{_MIN_M_ATTR} = {min_m} : i64, {staging}", 1)
 
 
 def lower_blockscale(

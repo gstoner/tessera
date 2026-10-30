@@ -429,6 +429,7 @@ def _column_steps(steps,capacity_n,down_groups,macro_n):
 
 class _StepVariant(C.Structure):
     _fields_=[('step',C.c_uint32),('min_rows',C.c_int64),('max_rows',C.c_int64),
+              ('axis',C.c_uint32),('min_axis',C.c_int64),('max_axis',C.c_int64),
               ('image',C.c_void_p),('image_bytes',C.c_uint64),('entry',C.c_char_p),
               ('geometry',C.c_uint32*6),('entry_count',C.c_uint32),
               ('entries',C.POINTER(_ShapeStep))]
@@ -478,7 +479,12 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
         self._h_bounded='h_frame' in plan
         # GFX1201-BOUNDED-PER-M-PANEL-20261030: each product's LDS images for
         # the active-M ranges where the static rule takes an LDS panel.
-        self._variants=tuple((step,v) for step,component in zip(_PRODUCT_STEPS,(package.gate,package.down))
+        # A variant's box spans M and, where the product varies one, the frame
+        # variable of that extent: the gate's K is G, its 2H columns are H; the
+        # down projection's K is H and its columns are N.
+        axes={2:1 if package.gate.runtime_k else 3 if package.gate.runtime_n else 4,
+              6:3 if package.down.runtime_k else 2 if package.down.runtime_n else 4}
+        self._variants=tuple((step,axes[step],v) for step,component in zip(_PRODUCT_STEPS,(package.gate,package.down))
                              for v in component.variants)
         if self._bounded:
             roles,_,_=_frame(plan)
@@ -593,7 +599,7 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
         steps=self._binding.steps
         self._variant_blobs=[]
         rows=[]
-        for step,v in self._variants:
+        for step,axis,v in self._variants:
             descriptor=v.native.descriptor
             bm,bn=descriptor.provenance["macro_tile"]
             m,n=steps[step].scalars[0],steps[step].scalars[1]
@@ -606,7 +612,7 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
             entry=descriptor.entry_symbol.encode()
             array=(_ShapeStep*len(mapped))(*mapped)
             self._variant_blobs.append((blob,entry,array))
-            rows.append(_StepVariant(step,v.min_m,v.max_m,C.cast(blob,C.c_void_p),
+            rows.append(_StepVariant(step,v.min_m,v.max_m,axis,v.min_x,v.max_x,C.cast(blob,C.c_void_p),
                                      len(v.native.image.payload),entry,(C.c_uint32*6)(*geometry),
                                      len(mapped),C.cast(array,C.POINTER(_ShapeStep))))
         return (_StepVariant*len(rows))(*rows)

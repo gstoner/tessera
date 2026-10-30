@@ -24,7 +24,7 @@ def test_m_only_bounded_product_carries_the_static_rules_lds_ranges(rocm_image_t
     # Base: the register panel for M >= 1; variants: the LDS panels the static
     # rule takes on 97..128 (128x64) and 129..256 (128x128) at gate N = 4096.
     assert gate.product.descriptor.provenance["macro_tile"] == [16, 32]
-    assert [(v.min_m, v.max_m) for v in gate.variants] == [(97, 128), (129, 256)]
+    assert [(v.min_m, v.max_m, v.min_x, v.max_x) for v in gate.variants] == [(97, 128, 0, 0), (129, 256, 0, 0)]
     assert [v.native.descriptor.provenance["macro_tile"] for v in gate.variants] == [[128, 64], [128, 128]]
     for v in gate.variants:
         assert v.native.descriptor.provenance["arbitrary_m"] is True
@@ -40,7 +40,11 @@ def test_runtime_n_product_variants_mask_their_column_edge(rocm_image_toolchain)
     native = fn.compile_native_quantized_program(*inputs(16, 512, 4096, 256), m_bound=256, h_bound=2048).native
     gate = native.gate
     assert gate.product.descriptor.provenance["runtime_shape_image"] is True
-    assert [(v.min_m, v.max_m) for v in gate.variants] == [(97, 128), (129, 256)]
+    # Boxes over (M, Hg): the static rule's LDS panels depend on the active N = 32*Hg too.
+    assert [(v.min_m, v.max_m, v.min_x, v.max_x) for v in gate.variants] == [
+        (97, 127, 32, 128), (128, 128, 127, 128), (129, 256, 63, 124), (129, 256, 125, 128)]
+    assert [v.native.descriptor.provenance["macro_tile"] for v in gate.variants] == [
+        [128, 64], [128, 64], [128, 64], [128, 128]]
     for v in gate.variants:
         provenance = v.native.descriptor.provenance
         assert provenance["arbitrary_n"] is True and provenance["lds_whole_n"] is False

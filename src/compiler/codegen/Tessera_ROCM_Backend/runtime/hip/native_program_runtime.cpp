@@ -23,6 +23,8 @@ struct Memref { void *allocated, *aligned; int64_t offset, elements, stride; };
 //: A per-active-M image variant of one stage (above its base image).
 struct StageVariant {
   int64_t minRows = 0, maxRows = 0;
+  uint32_t axis = 4;  // 1 G, 2 N, 3 H; 4 = M only
+  int64_t minAxis = 0, maxAxis = 0;
   void *lease = nullptr;
   hipFunction_t function{};
   std::array<unsigned, 6> geometry{};
@@ -197,8 +199,14 @@ void applyFrame(Program &p, int64_t rows, int64_t groups, int64_t columns, int64
   for (auto &stage : p.stages) {
     if (stage.variants.empty()) continue;
     uint32_t chosen = 0;
-    for (uint32_t v = 0; v < stage.variants.size(); ++v)
-      if (rows >= stage.variants[v].minRows && rows <= stage.variants[v].maxRows) chosen = v + 1;
+    const int64_t extents[4] = {rows, groups, columns, hidden};
+    for (uint32_t v = 0; v < stage.variants.size(); ++v) {
+      const auto &variant = stage.variants[v];
+      if (rows >= variant.minRows && rows <= variant.maxRows &&
+          (variant.axis == 4 || (extents[variant.axis] >= variant.minAxis &&
+                                 extents[variant.axis] <= variant.maxAxis)))
+        chosen = v + 1;
+    }
     stage.selected = chosen;
     stage.function = chosen ? stage.variants[chosen - 1].function : stage.baseFunction;
     stage.geometry = chosen ? stage.variants[chosen - 1].geometry : stage.baseGeometry;
@@ -446,7 +454,8 @@ bool validShapeFrame(const TesseraRocmProgramAxisFrame *frame, int64_t rows,
 // Variant admission: every variant names a framed step, a valid image and
 // capacity geometry, and frame entries equal to that step's base entries in
 // order on (scalar, scalar_coef, powers) whose grid fields reproduce its own
-// geometry at capacity. Ranges are sorted by step and disjoint within one.
+// geometry at capacity. Variants are sorted by step; a step's variants share
+// one axis and their (rows x axis) boxes never overlap.
 bool validVariants(const TesseraRocmProgramAxisFrame &frame, uint32_t steps,
                    const std::vector<TesseraRocmProgramShapeStep> &entries,
                    const TesseraRocmProgramStepVariant *variants, uint32_t count) {
@@ -454,14 +463,25 @@ bool validVariants(const TesseraRocmProgramAxisFrame &frame, uint32_t steps,
   if (!variants || count > 32) return false;
   for (uint32_t i = 0; i < count; ++i) {
     const auto &v = variants[i];
+    const int64_t capacities[4] = {frame.capacity_m, frame.capacity_g, frame.capacity_n,
+                                   frame.capacity_h};
     if (v.step >= steps || v.min_rows < 1 || v.max_rows < v.min_rows ||
-        v.max_rows > frame.capacity_m ||
+        v.max_rows > frame.capacity_m || v.axis < 1 || v.axis > 4 ||
+        (v.axis < 4 ? (!capacities[v.axis] || v.min_axis < 1 || v.max_axis < v.min_axis ||
+                       v.max_axis > capacities[v.axis])
+                    : (v.min_axis || v.max_axis)) ||
         !v.image || v.image_bytes < 4 || v.image_bytes > (uint64_t(1) << 28) ||
         std::memcmp(v.image, "\177ELF", 4) || !v.entry || !*v.entry ||
         !v.entries || !v.entry_count || v.entry_count > 8) return false;
-    if (i && (variants[i - 1].step > v.step ||
-              (variants[i - 1].step == v.step && variants[i - 1].max_rows >= v.min_rows)))
-      return false;
+    if (i && variants[i - 1].step > v.step) return false;
+    for (uint32_t j = 0; j < i; ++j) {
+      const auto &o = variants[j];
+      if (o.step != v.step) continue;
+      if (o.axis != v.axis) return false;
+      const bool rows = o.min_rows <= v.max_rows && v.min_rows <= o.max_rows;
+      const bool axis = v.axis == 4 || (o.min_axis <= v.max_axis && v.min_axis <= o.max_axis);
+      if (rows && axis) return false;
+    }
     uint64_t block = 1;
     for (uint32_t j = 0; j < 6; ++j) {
       if (!v.geometry[j] || v.geometry[j] > 2147483647U) return false;
@@ -698,7 +718,8 @@ static int prepareProgram(
     for (uint32_t i = 0; i < variantCount; ++i) {
       const auto &v = variants[i];
       keyValue(p->cacheKey, v.step); keyValue(p->cacheKey, v.min_rows);
-      keyValue(p->cacheKey, v.max_rows);
+      keyValue(p->cacheKey, v.max_rows); keyValue(p->cacheKey, v.axis);
+      keyValue(p->cacheKey, v.min_axis); keyValue(p->cacheKey, v.max_axis);
       keyValue(p->cacheKey, v.image_bytes);
       p->cacheKey.append(static_cast<const char *>(v.image), v.image_bytes);
       size_t length = std::strlen(v.entry); keyValue(p->cacheKey, length);
@@ -756,6 +777,9 @@ static int prepareProgram(
                                    &module, &function, &hit)) return 3;
     variant.minRows = v.min_rows;
     variant.maxRows = v.max_rows;
+    variant.axis = v.axis;
+    variant.minAxis = v.min_axis;
+    variant.maxAxis = v.max_axis;
     variant.function = static_cast<hipFunction_t>(function);
     std::copy_n(v.geometry, 6, variant.geometry.begin());
     variant.entries.assign(v.entries, v.entries + v.entry_count);

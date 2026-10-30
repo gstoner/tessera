@@ -935,12 +935,23 @@ per step and non-overlapping boxes. The variants key the owner cache.
 `tessera_rocm_program_variant_info` reports the selection. An M-only bounded
 program with variants takes the axis frame, as its N-, G- and H-free case.
 
-Measured on gfx1201 (diagnostic HIP events): the M-only program (capacity
-256, H 2048) runs at 0.97–1.10× static from M = 16 to 256. The H-bound
-program (capacity (256, 2048)) runs at 0.998–1.15× across six shapes,
-against 2.75× at its corner with the global base alone. All outputs are
-bitwise equal. The remaining 10–15% at the capacity corner is the
-shape-free LDS image's masking against static's whole-tile image. Evidence:
+An LDS variant takes K at launch (`lds_runtime_k`) only where its product's
+K varies (the K-bounded gate, the H-bounded down projection). Its validator
+refuses any other runtime-K claim, because the runtime-K loop measured about
+3% where K is fixed.
+
+Measured on gfx1201 (diagnostic HIP events, behind a kept warm-up owner):
+- **M-only program** (capacity 256, H 2048): 0.96–1.01× static from M = 16
+  to 256.
+- **H-bound program** (capacity (256, 2048)): 0.998–1.08× across six shapes,
+  against 2.75× at its corner with the global base alone.
+
+All outputs are bitwise equal. Reading M and N at launch and masking them
+cost nothing measurable.
+
+A first run without a warm-up owner showed 10–15% at the capacity corner.
+That was mostly an artifact: the first owner a process prepares ran about
+17% slower for its whole life, and that owner was the bounded one. Evidence:
 `benchmarks/baselines/gfx1201_bounded_per_m_panel_20261030/README.md`.
 
 **Owner axis frame.** The axis frame gains a fourth variable: H16 groups

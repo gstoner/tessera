@@ -1078,6 +1078,53 @@ partials.
   can differ from gfx1201. No gfx1151 numerical result is claimed until a
   device run.
 
+**Slice 3: packaging and the public frontend.** A quantized program's
+architecture is the one its source Graph names (`tessera.arch`, a semantic
+key read by `rocm_fp8_blockscale.module_arch`, never defaulted). The program
+export, every member packager, the image and member-architecture checks, the
+LDS variant boxes, the portable record and the public frontend all take it
+from there.
+
+- **The export.** The resident-product exporter admits exactly
+  `(rocm_gfx1201, gfx1201)` and `(rocm_gfx1151, gfx1151)`. Owned members
+  (quantizer, expansion) keep the program target, and the product member is
+  generic ROCm with the program's arch. The gate/up composition validates
+  its tail through the NVFP4 program check with gfx1151 admitted for that
+  composition only, so the standalone NVFP4 program stays gfx1201-only.
+  Every static and bounded frame (v4–v8) exports on gfx1151.
+- **The product images.** On gfx1151 every product image, static and each
+  bounded frame's shape-free global image, is the one-wave register panel.
+  No LDS variant box exists, because the panel oracle takes the register
+  panel there. A directive-level matmul on gfx1151 defaults to the untyped
+  body, so the block-scale packager sets the pipeline option
+  `typed-directive=true`. The option is carried in the pipeline string only
+  when set, so no existing pipeline string or cache key changes.
+- **The frontend.** `rocm_gfx1151` admits the authored MLP at decoration, and
+  the admission is scoped to that program, not to the registry. The Graph
+  verifier admits its fp32 casts, fp8_e4m3 reshapes, E4M3 scaled product and
+  NVFP4 expansion only inside a module that is exactly the quantized program
+  on the exact `rocm_gfx1151` target. The capability rows are unchanged, so
+  a standalone expansion or product stays refused on gfx1151 and can never
+  reach an eager oracle. The generic `rocm` name inherits nothing, and E4M3
+  is not a gfx1151 storage dtype.
+- **The promotion line.** The quantizer and SiLU members are
+  architecture-owned families. Neither promotion mirror promotes them on
+  gfx1151: not Python `promoted_families`, and not the C++
+  `declare-rocm-pipeline-contract`. A gfx1151 program therefore packages up to
+  its quantizer and refuses there by name:
+  - `compile_native_quantized_program` raises the packager's refusal;
+  - a public call raises `CAPABILITY_NOT_READY` with the unpromoted members
+    named. It is a `ValueError`, or `TesseraNativeRequiredError` under
+    `native_required`. The authored program has no eager form for its
+    storage roots, so nothing falls back.
+  
+  Promoting both members, in both mirrors, is slice 4, with Princess-Luna
+  device evidence.
+- **Evidence (compile-only).** `tests/unit/test_gfx1151_quantized_program_packaging.py`
+  covers the exports and the refused pairs. It also checks that the product
+  images disassemble to `v_wmma_f32_16x16x16_f16` only for every frame, that
+  the expansion images package for every frame, and the refusals.
+
 ## Quantized package certificate and ABI reuse
 
 `TESSERA_ROCM_PROGRAM_BINDING_CACHE=1` (the existing default) also enables

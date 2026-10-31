@@ -16210,4 +16210,6 @@ Synchronization key: GFX1151-QUANTIZED-MLP-20261030.
 
 Not applicable to Apple: the software E4M3 encode is selected only for `gfx1151` (or forced on `gfx1201`) in the ROCm Target-to-ROCDL lowering, and the admitted members are ROCm gfx1151/gfx1201 kernels. No Apple selector, ABI or result changes.
 
-Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
+
+Slice 3 (#1028) is not applicable to Apple either. The new `typed-directive` executable-pipeline option, the architecture-threaded quantized packagers and the composed-tail NVFP4 admission are ROCm-only. The frontend admission is a Graph-verifier exemption scoped to the quantized program on the exact `rocm_gfx1151` target; no capability row or dashboard changes. No Apple selector, ABI or result changes.
+Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".

@@ -184,7 +184,7 @@ static FailureOr<Value> materializeFragmentPack(
     elementTy = builder.getIntegerType(8);
   else if (inputDType == "bf16")
     elementTy = builder.getBF16Type();
-  else if (inputDType == "e4m3" || inputDType == "fp8")
+  else if (inputDType == "e4m3" || inputDType == "fp8" || inputDType == "e4m3_f16")
     elementTy = Float8E4M3FNType::get(builder.getContext());
   else if (inputDType == "e5m2" || inputDType == "bf8")
     elementTy = Float8E5M2Type::get(builder.getContext());
@@ -513,6 +513,53 @@ static FailureOr<Value> materializeFragmentPack(
   } else {
     fragment = vector::LoadOp::create(builder, loc, vectorTy, base,
                                       ValueRange{linear});
+  }
+  if (physical.decodeE4M3ToF16) {
+    // Exact OCP E4M3 -> f16 in integer arithmetic (gfx11 lowers no FP8 ext):
+    // normal (e >= 1): f16 = s<<15 | (e + 8)<<10 | m<<7; subnormal m*2^-9 is
+    // renormalized (p = floor(log2 m): f16 exp p + 6, mantissa (m - 2^p) <<
+    // (10 - p)); +/-0 stays signed zero; NaN (e = 15, m = 7) -> f16 quiet NaN.
+    auto lanes = physical.inputElementsPerLane;
+    Type i32 = builder.getIntegerType(32);
+    auto i32v = VectorType::get({lanes}, i32);
+    auto splat = [&](int64_t v) -> Value {
+      return arith::ConstantOp::create(builder, loc, i32v,
+          DenseElementsAttr::get(i32v, builder.getI32IntegerAttr(int32_t(v))));
+    };
+    using P = arith::CmpIPredicate;
+    Value bytes = vector::BitCastOp::create(builder, loc,
+        VectorType::get({lanes}, builder.getIntegerType(8)), fragment);
+    Value b = arith::ExtUIOp::create(builder, loc, i32v, bytes);
+    Value sign = arith::ShLIOp::create(builder, loc,
+        arith::AndIOp::create(builder, loc, arith::ShRUIOp::create(builder, loc, b, splat(7)), splat(1)),
+        splat(15));
+    Value e = arith::AndIOp::create(builder, loc, arith::ShRUIOp::create(builder, loc, b, splat(3)), splat(15));
+    Value m = arith::AndIOp::create(builder, loc, b, splat(7));
+    Value normal = arith::OrIOp::create(builder, loc,
+        arith::ShLIOp::create(builder, loc, arith::AddIOp::create(builder, loc, e, splat(8)), splat(10)),
+        arith::ShLIOp::create(builder, loc, m, splat(7)));
+    Value ge4 = arith::CmpIOp::create(builder, loc, P::uge, m, splat(4));
+    Value ge2 = arith::CmpIOp::create(builder, loc, P::uge, m, splat(2));
+    Value p = arith::SelectOp::create(builder, loc, ge4, splat(2),
+        arith::SelectOp::create(builder, loc, ge2, splat(1), splat(0)));
+    Value lead = arith::ShLIOp::create(builder, loc, splat(1), p);
+    Value subnormal = arith::OrIOp::create(builder, loc,
+        arith::ShLIOp::create(builder, loc, arith::AddIOp::create(builder, loc, p, splat(6)), splat(10)),
+        arith::ShLIOp::create(builder, loc, arith::SubIOp::create(builder, loc, m, lead),
+                              arith::SubIOp::create(builder, loc, splat(10), p)));
+    Value zeroE = arith::CmpIOp::create(builder, loc, P::eq, e, splat(0));
+    Value zeroM = arith::CmpIOp::create(builder, loc, P::eq, m, splat(0));
+    Value magnitude = arith::SelectOp::create(builder, loc, zeroE,
+        arith::SelectOp::create(builder, loc, zeroM, splat(0), subnormal), normal);
+    Value nan = arith::AndIOp::create(builder, loc,
+        arith::CmpIOp::create(builder, loc, P::eq, e, splat(15)),
+        arith::CmpIOp::create(builder, loc, P::eq, m, splat(7)));
+    magnitude = arith::SelectOp::create(builder, loc, nan, splat(0x7e00), magnitude);
+    Value bits = arith::OrIOp::create(builder, loc, sign, magnitude);
+    Value narrow = arith::TruncIOp::create(builder, loc,
+        VectorType::get({lanes}, builder.getIntegerType(16)), bits);
+    return Value(vector::BitCastOp::create(builder, loc,
+        VectorType::get({lanes}, builder.getF16Type()), narrow));
   }
   bool packToI32 = physical.inputFormat ==
                        tessera_rocm::FragmentRegisterFormat::SOAInt ||
@@ -859,7 +906,7 @@ static Type inputElementType(MLIRContext *ctx, StringRef elem) {
     return BFloat16Type::get(ctx);
   if (elem == "f16")
     return Float16Type::get(ctx);
-  if (elem == "e4m3" || elem == "fp8")
+  if (elem == "e4m3" || elem == "fp8" || elem == "e4m3_f16")
     return Float8E4M3FNType::get(ctx);
   if (elem == "e5m2" || elem == "bf8")
     return Float8E5M2Type::get(ctx);
@@ -878,6 +925,8 @@ static Type inputElementType(MLIRContext *ctx, StringRef elem) {
 static Type packedFragmentType(
     MLIRContext *ctx, StringRef elem,
     const tessera_rocm::FragmentLayoutDescriptor &physical) {
+  if (physical.decodeE4M3ToF16)
+    return VectorType::get({physical.inputElementsPerLane}, Float16Type::get(ctx));
   if (physical.inputFormat == tessera_rocm::FragmentRegisterFormat::SOAInt ||
       elem == "int8" || elem == "int4")
     return VectorType::get({physical.inputRegistersPerLane},
@@ -1535,8 +1584,12 @@ struct ConvertMMA : public OpConversionPattern<tessera::tile::MMAOp> {
         "shape", rewriter.getStringAttr(("m16n16k" + Twine(aTy.getK())).str()));
     state.addAttribute("accum",
                        rewriter.getStringAttr(accTy.getAcc()));
-    state.addAttribute("input_dtype", rewriter.getStringAttr(aTy.getElem()));
-    state.addAttribute("input_b_dtype", rewriter.getStringAttr(bTy.getElem()));
+    // A decoded E4M3 pair runs the F16 instruction on f16 registers.
+    const bool decoded = physical->decodeE4M3ToF16;
+    state.addAttribute("input_dtype", rewriter.getStringAttr(decoded ? StringRef("f16") : aTy.getElem()));
+    state.addAttribute("input_b_dtype", rewriter.getStringAttr(decoded ? StringRef("f16") : bTy.getElem()));
+    if (decoded)
+      state.addAttribute("decoded_from", rewriter.getStringAttr("e4m3"));
     for (StringRef name : {"signed_a", "signed_b"}) {
       if (Attribute attr = op->getAttr(name)) {
         if (!integer || !isa<BoolAttr>(attr))
@@ -4088,7 +4141,13 @@ struct LowerTileToROCMPass
         }
         if (!desc || !partial || !combine || !scheduleScope ||
             !crossStepMotion || !epilogue || !parent ||
-            op->getNumOperands() != (pitchedFolded ? 10u : 8u) || arch != "gfx1201" ||
+            op->getNumOperands() != (pitchedFolded ? 10u : 8u) ||
+            // gfx1151 admits only the fp32-scaled E4M3 pair, decoded to F16
+            // WMMA by its fragment layout (GFX1151-QUANTIZED-MLP-20261030).
+            (arch != "gfx1201" &&
+             !(arch == "gfx1151" && !packedMxfp4 && !foldedFamily &&
+               desc.getScaleFormat() == "fp32" && desc.getAType() == "e4m3" &&
+               desc.getBType() == "e4m3")) ||
             desc.getFamily() != "wmma" || desc.getM() != 16 ||
             desc.getN() != 16 || desc.getK() != 16 ||
             desc.getAccType() != "f32" || desc.getScaleBlockK() <= 0 ||

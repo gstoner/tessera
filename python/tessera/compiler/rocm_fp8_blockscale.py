@@ -197,7 +197,9 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201",
 
     if staging not in (None, "global"):
         raise ValueError("the W8A8 staging request is only \"global\"")
-    if staging == "global":
+    if staging == "global" or arch == "gfx1151":
+        # gfx1151's decoded-F16 product has only the register panel
+        # (GFX1151-QUANTIZED-MLP-20261030).
         return _register_panel(shape, min_m)
     if min_m is not None or at_n is not None or at_k is not None:
         # A shape-free image (or per-extent variant) takes the panel at its

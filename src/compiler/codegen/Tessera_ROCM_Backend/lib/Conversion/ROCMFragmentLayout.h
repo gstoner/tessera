@@ -43,6 +43,11 @@ struct FragmentLayoutDescriptor {
   int64_t inputLaneReplication;
   llvm::StringRef intrinsicABI;
   bool materializationReady;
+  /// RDNA 3.5 has no FP8 WMMA (GFX1151-QUANTIZED-MLP-20261030): an OCP E4M3
+  /// pair is loaded as bytes, decoded exactly to f16 in registers and run on
+  /// the F16 instruction. Every E4M3 value is exactly representable in f16 and
+  /// every E4M3 x E4M3 product in f32, so only accumulation order can differ.
+  bool decodeE4M3ToF16 = false;
 
   bool usesGfx11AccumulatorMap() const {
     return accumulatorFormat == FragmentRegisterFormat::WMMAAccGFX11;
@@ -74,7 +79,8 @@ inline bool isAnyOf(llvm::StringRef value,
 inline int64_t dtypeBits(llvm::StringRef dtype) {
   if (isAnyOf(dtype, {"f16", "bf16"}))
     return 16;
-  if (isAnyOf(dtype, {"int8", "e4m3", "e5m2", "fp8", "bf8"}))
+  // "e4m3_f16": E4M3 storage decoded to F16 registers (gfx1151 only).
+  if (isAnyOf(dtype, {"int8", "e4m3", "e5m2", "fp8", "bf8", "e4m3_f16"}))
     return 8;
   if (isAnyOf(dtype, {"int4", "fp4"}))
     return 4;
@@ -186,6 +192,22 @@ resolveFragmentLayout(tessera::tile::TileMmaDescAttr desc,
             abi,
             ready};
   };
+
+  // Only an explicit "e4m3_f16" request decodes: a plain e4m3 pair names an
+  // FP8 matrix form, which RDNA 3.5 does not have.
+  if (arch == "gfx1151" && dtype == "e4m3_f16" &&
+      desc.getBType() == "e4m3_f16" && desc.getK() == 16 &&
+      (desc.getFamily() == "auto" || desc.getFamily() == "wmma")) {
+    // Decoded to the F16 register format: 16 f16 per lane, 8 registers.
+    FragmentLayoutDescriptor decoded =
+        make(FragmentFamily::RDNA3WMMA, "rdna3_wmma", "wmma",
+             "V_WMMA_F32_16X16X16_F16", 32, 16,
+             FragmentRegisterFormat::WMMAInputGFX11,
+             FragmentRegisterFormat::WMMAAccGFX11, 2, "abc_3arg_gfx11");
+    decoded.inputRegistersPerLane = 8;
+    decoded.decodeE4M3ToF16 = true;
+    return decoded;
+  }
 
   if (arch == "gfx1100" || arch == "gfx1151") {
     if (desc.getK() != 16 ||

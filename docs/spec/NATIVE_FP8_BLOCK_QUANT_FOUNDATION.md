@@ -1053,6 +1053,31 @@ has no FP8 convert (`V_CVT_PK_FP8_F32` is RDNA4-only). The changes:
   promotion, and nothing submits or consumes a gfx1151 member image.
   Evidence: `tests/unit/test_gfx1151_quantized_scalar_members.py`.
 
+**Slice 2: the decoded-F16 scaled product.** The K16 fp32-block-scaled
+E4M3 × E4M3 product compiles for gfx1151 by decoding each fragment exactly
+to f16 and running `V_WMMA_F32_16X16X16_F16` with fp32 scale-group
+partials.
+
+- **The request.** The WMMA generator names its fragments `e4m3_f16` (E4M3
+  storage, F16 registers) only for a gfx1151 scaled E4M3 kernel. The
+  fragment layout resolves `e4m3_f16` only on gfx1151, and a plain `e4m3`
+  pair stays refused there.
+- **The decode.** `materializeFragmentPack` decodes in integer arithmetic:
+  a normal value is `s<<15 | (e+8)<<10 | m<<7`, subnormals are
+  renormalized, and NaN becomes an f16 quiet NaN. The typed WMMA records
+  `input_dtype = "f16"` and `decoded_from = "e4m3"`.
+- **The schedule.** Schedule admits the gfx1151 pair only in the
+  fp32-scaled form, on the one-wave register panel (there is no LDS body),
+  with an explicit `wmma` descriptor. The store-fusion, Schedule-verifier
+  and TileToROCM gates admit exactly that form, and the panel oracle
+  mirrors it. E5M2, MXFP8 and unscaled FP8 stay refused.
+- **Evidence (compile-only).** The gfx1151 HSACO's disassembly holds only
+  `v_wmma_f32_16x16x16_f16`, with no FP8 or BF8 instruction
+  (`tests/unit/test_gfx1151_decoded_fp8_product.py`). Every E4M3 value is
+  exact in f16 and every product exact in f32, so only accumulation order
+  can differ from gfx1201. No gfx1151 numerical result is claimed until a
+  device run.
+
 ## Quantized package certificate and ABI reuse
 
 `TESSERA_ROCM_PROGRAM_BINDING_CACHE=1` (the existing default) also enables

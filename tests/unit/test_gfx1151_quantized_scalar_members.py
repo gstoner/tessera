@@ -91,8 +91,8 @@ def test_gfx1151_executable_package_waits_for_device_promotion(rocm_image_toolch
 
 def _expansion_source(n=64, k=32, offsets=(0, 32, 64), target="rocm_gfx1151"):
     """The gfx1201 Graph retargeted at the module boundary: the Python Graph
-    legality registry declares no gfx1151 capability for the expansion yet
-    (that is the frontend slice, after device proof)."""
+    legality registry declares no gfx1151 capability for a standalone
+    expansion; only the whole quantized MLP is admitted there (slice 3)."""
     from tessera.compiler.nvfp4_expansion import nvfp4_expansion_policy
     from tessera.compiler.rocm_nvfp4_expand_native import build_nvfp4_expansion_graph
     text = build_nvfp4_expansion_graph(n, k, list(offsets), numeric_policy=nvfp4_expansion_policy()

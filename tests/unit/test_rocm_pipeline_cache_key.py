@@ -80,6 +80,8 @@ _FIELD_ALTERNATIVES: dict[str, tuple[dict[str, object], object]] = {
     "tile_q": ({}, 128),
     "tile_kv": ({}, 128),
     "depth_cooperative": ({"family": "depth_attention"}, True),
+    # GFX1151-QUANTIZED-MLP-20261030: a directive-level matmul request only.
+    "typed_directive": ({"input_level": ROCMInputLevel.DIRECTIVE}, True),
 }
 
 

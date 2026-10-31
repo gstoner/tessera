@@ -66,7 +66,11 @@ static mlir::LogicalResult verifyNativeFP32ToBF16Store(
   return success();
 }
 
-static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
+// `composedGfx1151`: only the quantized gate/up program, composing its own
+// tail, admits gfx1151 (GFX1151-QUANTIZED-MLP-20261030); the standalone NVFP4
+// program stays gfx1201-only.
+static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module,
+                                                  bool composedGfx1151 = false) {
   using namespace mlir;
   if (failed(verify(module))) return failure();
   if (module->hasAttr("tessera.native.nvfp4_program"))
@@ -76,8 +80,11 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
   SmallVector<func::FuncOp> roots;
   for (auto fn : module.getOps<func::FuncOp>())
     if (!fn.isDeclaration()) roots.push_back(fn);
-  if (!target || target.getValue() != "rocm_gfx1201" || !arch ||
-      arch.getValue() != "gfx1201" || roots.size() != 1 ||
+  bool gfx1201 = target && arch && target.getValue() == "rocm_gfx1201" &&
+                 arch.getValue() == "gfx1201";
+  bool gfx1151 = composedGfx1151 && target && arch &&
+                 target.getValue() == "rocm_gfx1151" && arch.getValue() == "gfx1151";
+  if (!(gfx1201 || gfx1151) || roots.size() != 1 ||
       !roots[0].getBody().hasOneBlock())
     return module.emitError("NVFP4 native program requires one gfx1201 Graph root");
   auto root = roots[0];

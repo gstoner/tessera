@@ -14,8 +14,9 @@ static mlir::OwningOpRef<mlir::ModuleOp> cloneQuantizedValidationRegion(
   OpBuilder b(source.getContext());
   if (quantized) copy->setAttrs(source->getAttrs());
   else {
-    copy->setAttr("tessera.target", b.getStringAttr("rocm_gfx1201"));
-    copy->setAttr("tessera.arch", b.getStringAttr("gfx1201"));
+    // The validation region keeps the program's exact target and architecture.
+    copy->setAttr("tessera.target", source->getAttr("tessera.target"));
+    copy->setAttr("tessera.arch", source->getAttr("tessera.arch"));
   }
   SmallVector<Type> ins, outs;
   for (Value value : inputs) ins.push_back(value.getType());
@@ -178,7 +179,7 @@ static mlir::LogicalResult emitNativeQuantizedGateUpProgram(mlir::ModuleOp modul
       ArrayRef<Operation *>(ops).drop_front(13),tailInputs,tailOutputs,false);
   // The existing native v5 validator owns explicit BF16 store semantics,
   // view aliasing, SiLU operand orientation and the activation store.
-  if (failed(emitNativeNVFP4Program(tail.get()))) return failure();
+  if (failed(emitNativeNVFP4Program(tail.get(), /*composedGfx1151=*/true))) return failure();
   auto tailPlan=tail.get()->getAttrOfType<DictionaryAttr>("tessera.native.nvfp4_program");
   auto tailMembers=tailPlan ? tailPlan.getAs<ArrayAttr>("members") : ArrayAttr{};
   if (!tailMembers || tailMembers.size()!=3) return refuse();

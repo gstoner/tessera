@@ -272,8 +272,16 @@ class ROCMExecutablePipeline:
     tile_q: int = 64
     tile_kv: int = 64
     depth_cooperative: bool = False
+    #: A directive-level matmul takes the typed Tile producer even where the
+    #: architecture's directive default is the untyped body: gfx1151's
+    #: decoded-F16 W8A8 product exists only on the typed route
+    #: (GFX1151-QUANTIZED-MLP-20261030). Carried only when set.
+    typed_directive: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.typed_directive) is not bool or (self.typed_directive and (
+                self.family != "matmul" or self.input_level is not ROCMInputLevel.DIRECTIVE)):
+            raise ValueError("typed_directive is a directive-level matmul request")
         if type(self.depth_cooperative) is not bool or (self.depth_cooperative and self.family!='depth_attention'):
             raise ValueError('cooperative depth reduction requires the depth_attention family')
         if self.family not in FAMILY_PLUGINS:
@@ -306,7 +314,8 @@ class ROCMExecutablePipeline:
             if self.family in ARCHITECTURE_OWNED_FAMILIES:
                 raise ValueError(
                     f"ROCm executable pipeline has no promoted family plugins for {self.arch}; "
-                    f"{self.family} requires its owning gfx1201 physical profile")
+                    f"{self.family} is an architecture-owned physical profile with no "
+                    f"exact-device promotion on {self.arch}")
             if self.family in RDNA4_ONLY_FAMILIES:
                 raise ValueError(
                     f"ROCm executable pipeline has no promoted family plugins for {self.arch}; "
@@ -383,6 +392,7 @@ class ROCMExecutablePipeline:
             f"tile-q={self.tile_q} tile-kv={self.tile_kv}"
         )
         if self.depth_cooperative:options += " depth-cooperative=true"
+        if self.typed_directive:options += " typed-directive=true"
         return f"builtin.module(tessera-rocm-executable{{{options}}})"
 
     def cache_key(self) -> tuple[str, ...]:

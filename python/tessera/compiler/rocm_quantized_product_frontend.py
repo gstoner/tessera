@@ -71,8 +71,8 @@ class TracedQuantizedProduct:
 
     def _bind(self,args):
         from tessera import runtime as rt
-        if rt._rocm_live_arch()!="gfx1201":
-            raise RuntimeError("native quantized product requires owning gfx1201")
+        if rt._rocm_live_arch()!=self.native.arch:
+            raise RuntimeError(f"native quantized product requires owning {self.native.arch}")
         signature=inspect.Signature([inspect.Parameter(name,inspect.Parameter.POSITIONAL_OR_KEYWORD) for name in self.argument_names])
         if isinstance(args,dict):
             bound=signature.bind(**args)
@@ -192,11 +192,19 @@ class RetainedBoundedOwner:
             self._close_locked()
 
 
-def _source(module):
+#: The exact targets that own a native quantized program: gfx1201, and gfx1151's
+#: compile-only decoded-F16 program (GFX1151-QUANTIZED-MLP-20261030), whose
+#: executable images still wait on exact-device family promotion.
+QUANTIZED_PRODUCT_TARGETS=("rocm_gfx1201","rocm_gfx1151")
+
+
+def _source(module,target="rocm_gfx1201"):
+    if target not in QUANTIZED_PRODUCT_TARGETS:
+        raise ValueError(f"native quantized product requires one of {QUANTIZED_PRODUCT_TARGETS}")
     if not requests_quantized_product(module):
         raise ValueError("requires the original typed quantizer/product Graph")
     source=deepcopy(module)
-    for key,value in (("tessera.target","rocm_gfx1201"),("tessera.arch","gfx1201")):
+    for key,value in (("tessera.target",target),("tessera.arch",target.removeprefix("rocm_"))):
         old=source.module_attrs.get(key)
         if old is not None and json.loads(old)!=value:
             raise ValueError("quantized-product source target conflicts")
@@ -207,24 +215,24 @@ def _source(module):
     # tessera.native.quantized_{m,k,n}_bound requests pass through unchanged: the
     # native export owns their admission (seven-member MLP, checked capacity).
     source.module_attrs["tessera.native.quantized_product"]="unit"
-    return source.to_mlir(target="rocm_gfx1201",canonical=True)
+    return source.to_mlir(target=target,canonical=True)
 
 
-def supports_quantized_product(module):
+def supports_quantized_product(module,target="rocm_gfx1201"):
     if not requests_quantized_product(module):
         return False
     tool=find_tessera_opt()
     if tool is None:
         return False
     try:
-        _export(tool,_source(module))
+        _export(tool,_source(module,target))
     except (RuntimeError,ValueError):
         return False
     return True
 
 
-def package_traced_quantized_product(module):
-    native=package_quantized_product_graph(_source(module))
+def package_traced_quantized_product(module,target="rocm_gfx1201"):
+    native=package_quantized_product_graph(_source(module,target))
     program=TracedQuantizedProduct(native,tuple(arg.name for arg in module.functions[0].args))
     program.validate()
     return program
@@ -255,7 +263,7 @@ def runtime_artifact(program):
         schedule_ir="\n".join(native.schedule_irs),
         tile_ir="\n".join(p.tile_ir for p in native.native_stages),
         target_ir="\n".join(p.target_ir for p in native.native_stages),
-        metadata={"target":"rocm_gfx1201","compiler_path":_compiler_path(native),
+        metadata={"target":"rocm_"+native.arch,"compiler_path":_compiler_path(native),
                   "execution_kind":"native_gpu","runtime_status":"ready","executable":True,
                   "native_graph_verified":True,"arg_names":list(program.argument_names),"native_program":program.manifest()})
 
@@ -282,10 +290,12 @@ def execute_artifact(artifact,args):
     if os.getpid()!=_OWNER_PID:
         raise RuntimeError("native quantized-product retention cannot cross fork")
     metadata=artifact.metadata or {}
-    if metadata.get("target")!="rocm_gfx1201":
+    if metadata.get("target") not in QUANTIZED_PRODUCT_TARGETS:
         raise ValueError("native quantized-product parent target differs")
     program=_resolve(json.dumps(metadata.get("native_program"),sort_keys=True,allow_nan=False),
                      artifact.graph_ir,json.dumps(metadata.get("arg_names")))
+    if metadata["target"]!="rocm_"+program.native.arch:
+        raise ValueError("native quantized-product parent target differs from its source Graph")
     native=program.native
     if metadata.get("compiler_path")!=_compiler_path(native):
         raise ValueError("native quantized-product parent compiler path differs")

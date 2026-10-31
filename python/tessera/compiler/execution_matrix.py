@@ -20,7 +20,7 @@ humans; a drift test fails if anything diverges.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace as _replace_row
 from pathlib import Path
 from typing import Callable, Mapping, Optional
 
@@ -4706,6 +4706,22 @@ for _movement_target in ("rocm_gfx1151", "rocm_gfx1201"):
         numerical_fixture="tests/unit/test_rocm_movement_compiler_spine.py",
         proof_build="llvm23.1.1+owning-rocm-movement-20261005",
     )
+
+# The seven-member quantized MLP on gfx1151 (GFX1151-QUANTIZED-MLP-20261030
+# slice 4): the same static and bounded programs, with the E4M3 product
+# decoded to F16 WMMA (RDNA 3.5 has no FP8 WMMA). Proved by the same fixtures
+# run on Princess-Luna, never by the gfx1201 rows; the per-M LDS product images,
+# the gate/up and product-only programs and the standalone NVFP4 program stay
+# gfx1201-only.
+for _quantized_path in (
+        "canonical_rocm_quantized_mlp_program", "canonical_rocm_quantized_bounded_mlp_program",
+        "canonical_rocm_quantized_k_bounded_mlp_program", "canonical_rocm_quantized_n_bounded_mlp_program",
+        "canonical_rocm_quantized_h_bounded_mlp_program"):
+    _gfx1201_row = _MATRIX[("rocm_gfx1201", _quantized_path)]
+    _MATRIX[("rocm_gfx1151", _quantized_path)] = _replace_row(
+        _gfx1201_row, target="rocm_gfx1151", evidence_target="rocm_gfx1151", proof_build="llvm23.1.1+princess-luna-build",
+        reason=_gfx1201_row.reason + " gfx1151: the E4M3 product decodes exactly to F16 WMMA, so "
+               "only accumulation order differs from gfx1201; checked by the staged tolerance certificate.")
 
 # Named parent-view public JIT and compiler-free replay are owning-device verified.
 _MATRIX[("rocm_gfx1201", "rocm_parent_view_native_descriptor")] = ExecutionRow(

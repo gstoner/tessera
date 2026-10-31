@@ -1,4 +1,4 @@
-"""Owning gfx1201 replay of the hidden-width-bounded native quantized MLP.
+"""Owning gfx1201/gfx1151 replay of the hidden-width-bounded native quantized MLP.
 
 GFX1201-BOUNDED-QUANTIZED-H-20261029. One explicit
 ``compile_native_quantized_program(..., m_bound=MB, h_bound=HB)`` call; every
@@ -15,10 +15,9 @@ import pytest
 import tessera as ts
 from benchmarks.rocm.benchmark_public_quantized_mlp import inputs, make_mlp
 from benchmarks.rocm.quantized_mlp_reference import assert_compiled_chain
-from tests.device.rocm.test_native_quantized_mlp_bounded_rows import provider
+from tests.device.rocm.test_native_quantized_mlp_bounded_rows import owning_target, provider, source
 from tests.device.rocm.test_public_quantized_mlp_k_bound_device import _REPLAY, static_at
 from tests.device.rocm.test_public_quantized_mlp_n_bound_device import _raw_update
-from tests.unit.test_native_quantized_mlp_program import source
 from tessera.compiler.rocm_quantized_product_program import package_quantized_product_graph
 
 pytestmark = [pytest.mark.hardware_rocm, pytest.mark.compiler_rocm, pytest.mark.compiler_route]
@@ -43,7 +42,7 @@ def test_public_h_bound_matches_static_programs_with_one_prepare(traced, bounds,
     from tessera.compiler.rocm_quantized_mlp_program import NativeQuantizedMLPProgram
     lib = provider()
     m0, h0, k, n = traced
-    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(m0, h0, k, n))
+    fn = ts.jit(target=owning_target(), native_required=True)(make_mlp(m0, h0, k, n))
     program = fn.compile_native_quantized_program(*inputs(m0, h0, k, n), **bounds)
     assert program.native.h_bounded
     public = program.native
@@ -76,7 +75,7 @@ def test_public_h_bound_matches_static_programs_with_one_prepare(traced, bounds,
             assert_compiled_chain(package_quantized_product_graph(source(m, h, k, n)), roots, actual, lib)
     assert prepares == [(2 * actives[0][1], k // 2)]
     report = fn.compile_report()
-    assert report.target_decision["rocm_gfx1201"].startswith(
+    assert report.target_decision[owning_target()].startswith(
         "canonical_rocm_quantized_h_bounded_mlp_program; 7 ordered native packages")
     m, _ = actives[0]
     with pytest.raises(ValueError, match="H16 capacity"):
@@ -88,7 +87,7 @@ def test_public_h_bound_matches_static_programs_with_one_prepare(traced, bounds,
 
 
 def _owner(lib):
-    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(3, 32, 48, 19))
+    fn = ts.jit(target=owning_target(), native_required=True)(make_mlp(3, 32, 48, 19))
     program = fn.compile_native_quantized_program(*inputs(3, 32, 48, 19), m_bound=8, h_bound=64).native
     return program, program.prepare(inputs(3, 32, 48, 19), runtime_library=lib)
 
@@ -163,7 +162,7 @@ def test_h_bounded_artifact_replays_in_a_fresh_process(tmp_path):
     import sys
     from tests.device.rocm.test_public_quantized_mlp_row_bound_device import _save_roots
     provider()
-    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(3, 32, 48, 19))
+    fn = ts.jit(target=owning_target(), native_required=True)(make_mlp(3, 32, 48, 19))
     fn.compile_native_quantized_program(*inputs(3, 32, 48, 19), m_bound=8, h_bound=64)
     expected = {}
     for index, (m, h) in enumerate(((3, 32), (8, 64), (1, 16), (5, 48))):

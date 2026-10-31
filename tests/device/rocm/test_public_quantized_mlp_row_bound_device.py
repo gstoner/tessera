@@ -1,4 +1,4 @@
-"""Owning gfx1201 public replay of the bounded-row native quantized MLP.
+"""Owning gfx1201/gfx1151 public replay of the bounded-row native quantized MLP.
 
 GFX1201-PUBLIC-QUANTIZED-ROW-BOUND-20261027. One explicit
 ``compile_native_quantized_program(..., m_bound=B)`` call; every later public
@@ -12,9 +12,8 @@ import pytest
 import tessera as ts
 from benchmarks.rocm.benchmark_public_quantized_mlp import inputs, make_mlp
 from benchmarks.rocm.quantized_mlp_reference import assert_compiled_chain
-from tests.device.rocm.test_native_quantized_mlp_bounded_rows import provider, static_rows
+from tests.device.rocm.test_native_quantized_mlp_bounded_rows import owning_target, provider, source, static_rows
 from tessera.compiler.rocm_quantized_product_program import package_quantized_product_graph
-from tests.unit.test_native_quantized_mlp_program import source
 
 pytestmark = [pytest.mark.hardware_rocm, pytest.mark.compiler_rocm, pytest.mark.compiler_route]
 
@@ -27,7 +26,7 @@ SHAPES = [((32, 48, 19), 8, (3, 8, 1, 5)),
 def test_public_bound_replays_every_active_m_without_compiling(dims, bound, actives, monkeypatch):
     lib = provider()
     h, k, n = dims
-    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(actives[0], h, k, n))
+    fn = ts.jit(target=owning_target(), native_required=True)(make_mlp(actives[0], h, k, n))
     program = fn.compile_native_quantized_program(*inputs(actives[0], h, k, n), m_bound=bound)
     assert program.bounded
     capacity = package_quantized_product_graph(source(bound, h, k, n))
@@ -58,7 +57,7 @@ def test_public_bound_replays_every_active_m_without_compiling(dims, bound, acti
             assert_compiled_chain(oracles[m], roots, actual, lib)
     assert program.native.binding_digest == digest
     report = fn.compile_report()
-    assert report.target_decision["rocm_gfx1201"].startswith(
+    assert report.target_decision[owning_target()].startswith(
         "canonical_rocm_quantized_bounded_mlp_program; 7 ordered native packages")
     assert fn.runtime_artifact().metadata["compiler_path"] == "canonical_rocm_quantized_bounded_mlp_program"
     with pytest.raises(ValueError, match="capacity"):
@@ -67,7 +66,7 @@ def test_public_bound_replays_every_active_m_without_compiling(dims, bound, acti
 
 def test_public_bound_refuses_changed_weight_shapes():
     provider()
-    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(3, 32, 48, 19))
+    fn = ts.jit(target=owning_target(), native_required=True)(make_mlp(3, 32, 48, 19))
     fn.compile_native_quantized_program(*inputs(3, 32, 48, 19), m_bound=8)
     # The bound rebinds rows only: N, K and the weight roots stay fixed.
     with pytest.raises(ValueError, match="projection boundaries"):
@@ -88,7 +87,7 @@ def test_public_bound_retains_one_owner_across_calls(monkeypatch):
     from tessera.compiler.rocm_quantized_mlp_program import NativeQuantizedMLPProgram
     lib = provider()
     h, k, n, bound = 32, 48, 19, 8
-    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(3, h, k, n))
+    fn = ts.jit(target=owning_target(), native_required=True)(make_mlp(3, h, k, n))
     public = fn.compile_native_quantized_program(*inputs(3, h, k, n), m_bound=bound).native
     capacity = package_quantized_product_graph(source(bound, h, k, n))
     prepares = []
@@ -158,7 +157,7 @@ def test_bounded_artifact_replays_in_a_fresh_process(tmp_path):
     import sys
     provider()
     h, k, n, bound = 32, 48, 19, 8
-    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(3, h, k, n))
+    fn = ts.jit(target=owning_target(), native_required=True)(make_mlp(3, h, k, n))
     fn.compile_native_quantized_program(*inputs(3, h, k, n), m_bound=bound)
     expected = {}
     for index, m in enumerate((3, 8, 1, 5)):

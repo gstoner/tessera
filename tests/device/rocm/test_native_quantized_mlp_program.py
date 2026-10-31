@@ -1,4 +1,4 @@
-"""Owning gfx1201 execution of the complete native seven-member MLP."""
+"""Owning gfx1201/gfx1151 execution of the complete native seven-member MLP."""
 import json
 import ml_dtypes
 import numpy as np
@@ -8,18 +8,13 @@ from benchmarks.rocm.quantized_mlp_reference import assert_compiled_chain
 from tessera import runtime as rt
 from tessera.compiler.rocm_quantized_product_program import package_quantized_product_graph
 from tessera.compiler.rocm_quantized_mlp_program import NativeQuantizedMLPProgram
-from tests.unit.test_native_quantized_mlp_program import source
+from tests.device.rocm.test_native_quantized_mlp_bounded_rows import owning_target, provider, source
 
 pytestmark=[pytest.mark.hardware_rocm,pytest.mark.compiler_rocm,pytest.mark.compiler_route]
 
 
 
 
-def provider():
-    assert rt._rocm_live_arch()=='gfx1201'
-    lib=rt._load_rocm_native_movement_runtime()
-    assert lib is not None
-    return lib._name
 
 
 @pytest.mark.parametrize('shape',[(1,16,16,1),(3,32,48,19),(256,128,12288,256)])
@@ -62,7 +57,7 @@ def test_public_mlp_has_seven_native_receipts_and_no_eager_math(shape,monkeypatc
     import tessera as ts
     from benchmarks.rocm.benchmark_public_quantized_mlp import make_mlp
     lib=provider();m,h,k,n=shape;roots=inputs(*shape)
-    fn=ts.jit(target='rocm_gfx1201',native_required=True)(make_mlp(m,h,k,n))
+    fn=ts.jit(target=owning_target(),native_required=True)(make_mlp(m,h,k,n))
     from tessera.compiler import nvfp4_expansion
     with monkeypatch.context() as patch:
         def forbidden(*a,**kw):raise AssertionError('public MLP executed eager numerical work')
@@ -74,7 +69,7 @@ def test_public_mlp_has_seven_native_receipts_and_no_eager_math(shape,monkeypatc
     program=fn._rocm_quantized_product_last_program.native
     assert_compiled_chain(program,roots,first,lib)
     report=fn.compile_report()
-    assert '7 ordered native packages' in report.target_decision['rocm_gfx1201']
+    assert '7 ordered native packages' in report.target_decision[owning_target()]
     assert all(len(report.ir_hashes[key])==64 for key in ('graph_ir','schedule_ir','tile_ir','target_ir'))
     artifact=fn.runtime_artifact()
     assert artifact.metadata['compiler_path']=='canonical_rocm_quantized_mlp_program'
@@ -95,7 +90,7 @@ def test_public_mlp_fresh_process_replay_without_compiler(tmp_path):
     import tessera as ts
     from benchmarks.rocm.benchmark_public_quantized_mlp import make_mlp
     provider();roots=inputs(3,32,48,19)
-    fn=ts.jit(target='rocm_gfx1201',native_required=True)(make_mlp())
+    fn=ts.jit(target=owning_target(),native_required=True)(make_mlp())
     expected=fn(*roots)
     (tmp_path/'artifact.json').write_text(fn.runtime_artifact().to_json())
     np.savez(tmp_path/'roots.npz',x=roots[0].astype(np.float32),packed=roots[1],scales=roots[2].view(np.uint8),globals_=roots[3],
@@ -122,7 +117,7 @@ def test_nested_mlp_inspection_metadata_cannot_poison_warm_program(monkeypatch):
     import tessera as ts
     from benchmarks.rocm.benchmark_public_quantized_mlp import make_mlp
     lib=provider();roots=inputs(3,32,48,19)
-    fn=ts.jit(target='rocm_gfx1201',native_required=True)(make_mlp())
+    fn=ts.jit(target=owning_target(),native_required=True)(make_mlp())
     fn(*roots);artifact=fn.runtime_artifact()
     artifact.metadata['native_program']['native_program']['gate']['stages'][3]['descriptor']['provenance']['native_parent_view']['member_json']='{}'
     result=rt.launch(artifact,roots)

@@ -218,8 +218,9 @@ struct DeclareROCMPipelineContractPass
         if (op.getName().getStringRef()!="tile.row_region_kernel" || !schema || schema.getInt()!=4) valid=false;
         ++count;
       }
-      if (arch!="gfx1201" || input!="tile" || count!=1 || !valid) {
-        getOperation().emitError("block_quant requires owning gfx1201 native Graph -> Schedule -> Tile schema 4");
+      // gfx1151 promoted on Princess-Luna device proof (quantized MLP slice 4).
+      if ((arch!="gfx1201" && arch!="gfx1151") || input!="tile" || count!=1 || !valid) {
+        getOperation().emitError("block_quant requires owning gfx1201/gfx1151 native Graph -> Schedule -> Tile schema 4");
         return signalPassFailure();
       }
     }
@@ -237,8 +238,8 @@ struct DeclareROCMPipelineContractPass
         return signalPassFailure();
       }
     }
-    if (family == "parent_view" && (input == "graph" || arch != "gfx1201")) {
-      getOperation().emitError("parent_view requires owning gfx1201 native Graph -> Schedule -> Tile entry");
+    if (family == "parent_view" && (input == "graph" || (arch != "gfx1201" && arch != "gfx1151"))) {
+      getOperation().emitError("parent_view requires owning gfx1201/gfx1151 native Graph -> Schedule -> Tile entry");
       return signalPassFailure();
     }
     if ((family == "matmul" || family == "scalar_matmul") && input == "graph") {

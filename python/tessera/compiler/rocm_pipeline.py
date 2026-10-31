@@ -125,7 +125,12 @@ def promoted_families(arch: str) -> frozenset[str]:
     does not exist here" as "this proof is broken".
     """
     if arch == "gfx1151":
-        return (frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES - ARCHITECTURE_OWNED_FAMILIES) | {"source_reverse_row"}
+        # Every architecture-owned profile now has its gfx1151 form:
+        # source_reverse_row from the start, and the K16 quantizer and SiLU
+        # parent view on Princess-Luna device proof of the quantized MLP
+        # (GFX1151-QUANTIZED-MLP-20261030 slice 4). The C++ pass
+        # (`Passes.cpp`, declare-rocm-pipeline-contract) mirrors this.
+        return frozenset(FAMILY_PLUGINS) - RDNA4_ONLY_FAMILIES
     if arch == "gfx1201":
         return _GFX1201_PROMOTED_FAMILIES
     return frozenset()
@@ -147,8 +152,8 @@ FAMILY_PLUGINS: dict[str, ROCMFamilyPlugin] = {
     )
     for family in (
         "source_reverse_row",  # owning gfx1151/gfx1201 sealed source-AD row
-        "block_quant",  # gfx1201 schema-4 source-derived K16 quantizer
-        "parent_view",  # gfx1201 schema-2 source-preserving native region
+        "block_quant",  # gfx1201/gfx1151 schema-4 source-derived K16 quantizer
+        "parent_view",  # gfx1201/gfx1151 schema-2 source-preserving native region
         "sparse_matmul_2to4",  # RDNA4-only (SWMMAC); see RDNA4_ONLY_FAMILIES
         "attention",
         "attention_backward",

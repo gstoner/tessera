@@ -1,13 +1,14 @@
-"""gfx1151 packaging and frontend of the native quantized MLP (compile-only).
+"""gfx1151 packaging and frontend of the native quantized MLP (host-free).
 
-GFX1151-QUANTIZED-MLP-20261030, slice 3. The program's architecture is the one
-its source Graph names: the C++ export, every packager, the image checks, the
-LDS variant boxes, the portable record and the public frontend take it from
-there. The quantizer and SiLU members are architecture-owned families with no
-gfx1151 exact-device promotion, in both promotion mirrors (Python
-``promoted_families`` and the C++ pipeline contract), so a gfx1151 program
-packages up to that line and refuses there by name. These tests stop at
-gfx1151 HSACOs and refusals; no gfx1151 execution is claimed.
+GFX1151-QUANTIZED-MLP-20261030, slices 3-4. The program's architecture is the
+one its source Graph names: the C++ export, every packager, the image checks,
+the LDS variant boxes, the portable record and the public frontend take it from
+there. Slice 4 promoted the quantizer and SiLU members on gfx1151 in both
+promotion mirrors (Python ``promoted_families`` and the C++ pipeline contract)
+on Princess-Luna device proof. These tests stop at gfx1151 HSACOs and
+refusals; the execution proof is the owning-device fixtures under
+``tests/device/rocm/`` (``test_native_quantized_mlp_program.py`` and the bounded
+``test_public_quantized_mlp_*_bound_device.py``), run on gfx1151.
 """
 import re
 
@@ -130,19 +131,31 @@ def test_gfx1151_expansion_images_package_for_every_frame(rocm_image_toolchain, 
 
 
 @pytest.mark.parametrize("schema", ["v4", "v5"])
-def test_gfx1151_program_refuses_at_the_unpromoted_quantizer(rocm_image_toolchain, schema):
+def test_gfx1151_program_packages_every_member(rocm_image_toolchain, schema):
     from tessera.compiler.rocm_quantized_product_program import package_quantized_product_graph
-    with pytest.raises(ValueError, match="block_quant is an architecture-owned physical profile "
-                                         "with no exact-device promotion on gfx1151"):
-        package_quantized_product_graph(_mlp(schema))
+    package = package_quantized_product_graph(_mlp(schema))
+    assert package.arch == "gfx1151"
+    assert package.gate.product.image.target == "rocm_gfx1151"
 
 
-def test_architecture_owned_families_stay_unpromoted_on_gfx1151():
-    """Promotion is slice 4's device evidence, in both mirrors at once."""
-    from tessera.compiler.rocm_pipeline import ARCHITECTURE_OWNED_FAMILIES, promoted_families
+def _unpromote(monkeypatch):
+    """Withdraw the gfx1151 member promotion, as for a target without device proof."""
+    from tessera.compiler import rocm_pipeline
+    promoted = rocm_pipeline.promoted_families
+    monkeypatch.setattr(rocm_pipeline, "promoted_families",
+                        lambda arch: promoted(arch) - ({"block_quant", "parent_view"} if arch == "gfx1151" else set()))
+
+
+def test_architecture_owned_families_are_promoted_on_both_owning_arches():
+    """Slice 4: promoted on Princess-Luna device proof, in both mirrors at once.
+    They stay architecture-owned, so no other arch and no generic lane inherits them."""
+    from tessera.compiler.rocm_pipeline import ARCHITECTURE_OWNED_FAMILIES, generic_lane_families, promoted_families
     assert {"block_quant", "parent_view"} <= ARCHITECTURE_OWNED_FAMILIES
-    assert not {"block_quant", "parent_view"} & promoted_families("gfx1151")
-    assert {"block_quant", "parent_view", "matmul", "quant_fp"} <= promoted_families("gfx1201")
+    assert not {"block_quant", "parent_view"} & generic_lane_families()
+    for arch in ("gfx1151", "gfx1201"):
+        assert {"block_quant", "parent_view", "matmul", "quant_fp"} <= promoted_families(arch)
+    for arch in ("gfx1200", "gfx1250"):
+        assert not {"block_quant", "parent_view"} & promoted_families(arch)
 
 
 def test_typed_directive_is_a_directive_level_matmul_request():
@@ -205,10 +218,12 @@ def test_gfx1151_public_mlp_decorates():
     assert requests_quantized_product(fn.graph_ir)
 
 
-def test_gfx1151_public_call_refuses_with_its_reason():
+def test_unpromoted_member_public_call_refuses_with_its_reason(monkeypatch):
     """No fallback computes the program (it has no eager form for its BF16
-    roots), so the public call refuses by name instead of falling through."""
+    roots), so a target missing a member promotion refuses by name instead of
+    falling through."""
     from tessera.compiler.fallback import FallbackReason
+    _unpromote(monkeypatch)
     fn, roots = _public()
     with pytest.raises(ValueError, match=r"members \['block_quant', 'parent_view'\] have no "
                                          r"exact-device promotion on rocm_gfx1151"):
@@ -217,15 +232,17 @@ def test_gfx1151_public_call_refuses_with_its_reason():
     assert getattr(fn, "_rocm_quantized_product_last_program", None) is None
 
 
-def test_gfx1151_native_required_call_raises_the_promotion_gap():
+def test_unpromoted_member_native_required_call_raises_the_promotion_gap(monkeypatch):
     from tessera.compiler.fallback import TesseraNativeRequiredError
+    _unpromote(monkeypatch)
     fn, roots = _public(native_required=True)
     with pytest.raises(TesseraNativeRequiredError, match=r"\['block_quant', 'parent_view'\]"):
         fn(*roots)
 
 
 @pytest.mark.parametrize("bound", [None, 8])
-def test_gfx1151_explicit_compile_reports_the_refusal(rocm_image_toolchain, bound):
+def test_unpromoted_member_explicit_compile_reports_the_refusal(rocm_image_toolchain, bound, monkeypatch):
+    _unpromote(monkeypatch)
     fn, roots = _public()
     with pytest.raises(ValueError, match="no exact-device promotion on gfx1151"):
         fn.compile_native_quantized_program(*roots, m_bound=bound)

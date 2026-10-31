@@ -22,12 +22,22 @@ def test_scalar_fp32_to_e4m3_reaches_real_rocdl_storage_conversion():
 
 
 @pytest.mark.usefixtures("production_compiler")
-@pytest.mark.parametrize("arch", ["gfx1151", "gfx1200"])
+@pytest.mark.parametrize("arch", ["gfx1200", "gfx942"])
 def test_scalar_e4m3_conversion_does_not_transfer_architecture_admission(arch):
     output = run_tessera_opt(find_tessera_opt(), source(arch),
                             "--lower-tessera-target-to-rocdl")
     assert "rocdl.cvt.pk.fp8.f32" not in output
     assert "arith.truncf" in output
+
+
+@pytest.mark.usefixtures("production_compiler")
+def test_gfx1151_scalar_e4m3_conversion_is_the_software_encode():
+    """GFX1151-QUANTIZED-MLP-20261030: RDNA 3.5 has no FP8 convert; the
+    integer encode is bit-identical to RDNA4's instruction on every f32."""
+    output = run_tessera_opt(find_tessera_opt(), source("gfx1151"),
+                            "--lower-tessera-target-to-rocdl")
+    assert "rocdl.cvt.pk.fp8.f32" not in output and "arith.truncf" not in output
+    assert "arith.shrui" in output and "arith.select" in output
 
 
 @pytest.mark.usefixtures("production_compiler")

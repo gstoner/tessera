@@ -25,10 +25,14 @@ PARENT_VIEW_BF16_ABI = "tessera.rocm.parent_view.parent_o_n.bf16_f32.v1"
 PARENT_VIEW_BF16_RUNTIME_WIDTH_ABI = "tessera.rocm.parent_view.parent_o_n_width.bf16_f32.v1"
 PARENT_VIEW_ABIS = frozenset({PARENT_VIEW_ABI, PARENT_VIEW_BF16_ABI, PARENT_VIEW_BF16_RUNTIME_WIDTH_ABI})
 _RUNTIME_WIDTH_PROFILE = "gfx1201_parent_view_bf16_f32_runtime_width_v1"
+#: Profiles name their architecture: gfx1201, or gfx1151 (scalar code,
+#: GFX1151-QUANTIZED-MLP-20261030); the launch ABI is the same.
+_ARCHES = ("gfx1201", "gfx1151")
 _PROFILES = {
-    "gfx1201_parent_view_f32_v1": ("f32", "fp32", 4, PARENT_VIEW_ABI),
-    "gfx1201_parent_view_bf16_f32_v1": ("bf16", "bf16", 2, PARENT_VIEW_BF16_ABI),
-    _RUNTIME_WIDTH_PROFILE: ("bf16", "bf16", 2, PARENT_VIEW_BF16_RUNTIME_WIDTH_ABI),
+    f"{arch}{suffix}": spec for arch in _ARCHES for suffix, spec in (
+        ("_parent_view_f32_v1", ("f32", "fp32", 4, PARENT_VIEW_ABI)),
+        ("_parent_view_bf16_f32_v1", ("bf16", "bf16", 2, PARENT_VIEW_BF16_ABI)),
+        ("_parent_view_bf16_f32_runtime_width_v1", ("bf16", "bf16", 2, PARENT_VIEW_BF16_RUNTIME_WIDTH_ABI)))
 }
 _RUNTIME_WIDTH_MARKER = "tessera.native.gate_up_runtime_width"
 
@@ -46,7 +50,7 @@ def runtime_width_graph(graph_ir: str) -> str:
 
 
 def runtime_width_profile(member: dict) -> bool:
-    return member.get("profile") == _RUNTIME_WIDTH_PROFILE
+    return str(member.get("profile", "")).endswith("_parent_view_bf16_f32_runtime_width_v1")
 _TARGET = "rocm_gfx1201"
 
 
@@ -109,7 +113,7 @@ class ParentViewRecipe:
         tool = find_tessera_opt()
         if tool is None:
             raise RuntimeError("native parent-view construction requires matching tessera-opt")
-        if self.target != _TARGET:
+        if self.target not in ("rocm_" + arch for arch in _ARCHES):
             raise ValueError("parent-view recipe architecture differs")
         schedule = run(tool, self.graph_ir, "--tessera-graph-to-schedule", execute=run_tessera_opt)
         if schedule != self.schedule_ir:
@@ -143,8 +147,9 @@ def _validate_frame(program: dict, member: dict) -> None:
     if (program.get("schema") != 1 or program.get("kind") != "parent_view"
             or program.get("argument_count") != 1 or program.get("outputs") != [1]
             or member.get("schema") != 1 or member.get("step") != 0
-            or member.get("architecture") != "gfx1201"
+            or member.get("architecture") not in _ARCHES
             or member.get("profile") not in _PROFILES
+            or not member["profile"].startswith(member["architecture"] + "_")
             or member.get("abi") != ("flattened_rank1_memref_then_i64x2" if runtime_width_profile(member)
                                      else "flattened_rank1_memref_then_i64")
             or member.get("inputs") != [0] or member.get("output") != 1):
@@ -237,12 +242,15 @@ def package_parent_view_recipe(recipe: ParentViewRecipe, *, pipeline_name: str):
     from .rocm_native import ROCMNativePackage, _compile_native_tile_ir
     recipe.validate()
     target, backend, payload, compiler, toolchain, libraries, state = _compile_native_tile_ir(
-        recipe.tile_ir, directive="tessera_rocm.row_region_kernel", family="parent_view", architecture="gfx1201")
+        recipe.tile_ir, directive="tessera_rocm.row_region_kernel", family="parent_view",
+        architecture=recipe.target.removeprefix("rocm_"))
     program, member = _frame(target)
     # The binary-side native exporter must reproduce the Target frame exactly.
     if _frame(backend) != (program, member):
         raise ValueError("parent-view binary frame differs from native Target export")
-    image = NativeImageArtifact(target=_TARGET, architecture="gfx1201", pipeline_name=pipeline_name,
+    if member["architecture"] != recipe.target.removeprefix("rocm_"):
+        raise ValueError("parent-view member architecture differs from its recipe target")
+    image = NativeImageArtifact(target=recipe.target, architecture=member["architecture"], pipeline_name=pipeline_name,
         compiler_fingerprint=compiler, toolchain_fingerprint=toolchain,
         target_ir_digest=hashlib.sha256(target.encode()).hexdigest(), binary_format="hsaco",
         payload=payload, entry_points=(NativeEntryPoint(member["entry"], _PROFILES[member["profile"]][3]),),
@@ -258,7 +266,8 @@ def validate_parent_view_runtime_artifact(artifact) -> ParentViewProgram:
     program, member = _frame(artifact.target_ir)
     lineage = {key+"_digest": hashlib.sha256(text.encode()).hexdigest() for key, text in
                (("graph", artifact.graph_ir), ("schedule_ir", artifact.schedule_ir), ("tile_ir", artifact.tile_ir))}
-    if (image.target != _TARGET or image.architecture != "gfx1201" or image.binary_format != "hsaco"
+    if (image.target != "rocm_" + member["architecture"] or image.architecture != member["architecture"]
+            or image.binary_format != "hsaco"
             or image.pipeline_name != "tessera-rocm-executable"
             or image.target_ir_digest != hashlib.sha256(artifact.target_ir.encode()).hexdigest()
             or image.entry_points != (NativeEntryPoint(member["entry"], _PROFILES[member["profile"]][3]),)

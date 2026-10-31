@@ -1024,6 +1024,107 @@ WMMA rounding already differs from gfx1201 at about 1e-6 (see
 `tests/device/rocm/test_bounded_fragment_pack.py`), so bitwise parity with
 gfx1201 is not expected. It is open work, not a claim here.
 
+**Slice 1: software E4M3 encode and the scalar members.** RDNA 3.5 also
+has no FP8 convert (`V_CVT_PK_FP8_F32` is RDNA4-only). The changes:
+
+- **The encode.** `lower-tessera-target-to-rocdl` lowers a gfx1151 `f32 ->
+  f8E4M3FN` cast to an integer-only encode. It has the instruction's
+  recorded semantics:
+  - round to nearest even;
+  - any NaN encodes as `0xFF`;
+  - `|x| > 464` and ±inf encode as `sign|0x7F` (no saturation);
+  - subnormals land on the 2⁻⁹ grid;
+  - f32 denormals become signed zero.
+
+  `e4m3-encode=software` forces it on gfx1201. Every other architecture
+  keeps its cast, so lowering is never an admission.
+- **Bit-identity.** On gfx1201 hardware, the software image and the
+  instruction agree on all 2³² f32 bit patterns
+  (`tests/device/rocm/test_e4m3_software_encode.py`).
+- **Members admitted.** The K16 quantizer, the NVFP4 expansion and the SiLU
+  parent view admit a matching gfx1151 target/arch pair at every compiler
+  gate: Graph contract, Schedule identity, Tile and Target carriers,
+  verifiers, exported profiles and the TileToROCM row/expansion gates.
+  NVFP4 requantization stays gfx1201. gfx1201 identities are unchanged, and
+  the pipeline arch must equal the kernel's.
+- **Compile-only on gfx1151.** All three members lower without an FP8
+  instruction and serialize as gfx1151 HSACOs. No gfx1151 execution is
+  claimed. Executable packaging stays gated by device-proven family
+  promotion, and nothing submits or consumes a gfx1151 member image.
+  Evidence: `tests/unit/test_gfx1151_quantized_scalar_members.py`.
+
+**Slice 2: the decoded-F16 scaled product.** The K16 fp32-block-scaled
+E4M3 × E4M3 product compiles for gfx1151 by decoding each fragment exactly
+to f16 and running `V_WMMA_F32_16X16X16_F16` with fp32 scale-group
+partials.
+
+- **The request.** The WMMA generator names its fragments `e4m3_f16` (E4M3
+  storage, F16 registers) only for a gfx1151 scaled E4M3 kernel. The
+  fragment layout resolves `e4m3_f16` only on gfx1151, and a plain `e4m3`
+  pair stays refused there.
+- **The decode.** `materializeFragmentPack` decodes in integer arithmetic:
+  a normal value is `s<<15 | (e+8)<<10 | m<<7`, subnormals are
+  renormalized, and NaN becomes an f16 quiet NaN. The typed WMMA records
+  `input_dtype = "f16"` and `decoded_from = "e4m3"`.
+- **The schedule.** Schedule admits the gfx1151 pair only in the
+  fp32-scaled form, on the one-wave register panel (there is no LDS body),
+  with an explicit `wmma` descriptor. The store-fusion, Schedule-verifier
+  and TileToROCM gates admit exactly that form, and the panel oracle
+  mirrors it. E5M2, MXFP8 and unscaled FP8 stay refused.
+- **Evidence (compile-only).** The gfx1151 HSACO's disassembly holds only
+  `v_wmma_f32_16x16x16_f16`, with no FP8 or BF8 instruction
+  (`tests/unit/test_gfx1151_decoded_fp8_product.py`). Every E4M3 value is
+  exact in f16 and every product exact in f32, so only accumulation order
+  can differ from gfx1201. No gfx1151 numerical result is claimed until a
+  device run.
+
+**Slice 3: packaging and the public frontend.** A quantized program's
+architecture is the one its source Graph names (`tessera.arch`, a semantic
+key read by `rocm_fp8_blockscale.module_arch`, never defaulted). The program
+export, every member packager, the image and member-architecture checks, the
+LDS variant boxes, the portable record and the public frontend all take it
+from there.
+
+- **The export.** The resident-product exporter admits exactly
+  `(rocm_gfx1201, gfx1201)` and `(rocm_gfx1151, gfx1151)`. Owned members
+  (quantizer, expansion) keep the program target, and the product member is
+  generic ROCm with the program's arch. The gate/up composition validates
+  its tail through the NVFP4 program check with gfx1151 admitted for that
+  composition only, so the standalone NVFP4 program stays gfx1201-only.
+  Every static and bounded frame (v4–v8) exports on gfx1151.
+- **The product images.** On gfx1151 every product image, static and each
+  bounded frame's shape-free global image, is the one-wave register panel.
+  No LDS variant box exists, because the panel oracle takes the register
+  panel there. A directive-level matmul on gfx1151 defaults to the untyped
+  body, so the block-scale packager sets the pipeline option
+  `typed-directive=true`. The option is carried in the pipeline string only
+  when set, so no existing pipeline string or cache key changes.
+- **The frontend.** `rocm_gfx1151` admits the authored MLP at decoration, and
+  the admission is scoped to that program, not to the registry. The Graph
+  verifier admits its fp32 casts, fp8_e4m3 reshapes, E4M3 scaled product and
+  NVFP4 expansion only inside a module that is exactly the quantized program
+  on the exact `rocm_gfx1151` target. The capability rows are unchanged, so
+  a standalone expansion or product stays refused on gfx1151 and can never
+  reach an eager oracle. The generic `rocm` name inherits nothing, and E4M3
+  is not a gfx1151 storage dtype.
+- **The promotion line.** The quantizer and SiLU members are
+  architecture-owned families. Neither promotion mirror promotes them on
+  gfx1151: not Python `promoted_families`, and not the C++
+  `declare-rocm-pipeline-contract`. A gfx1151 program therefore packages up to
+  its quantizer and refuses there by name:
+  - `compile_native_quantized_program` raises the packager's refusal;
+  - a public call raises `CAPABILITY_NOT_READY` with the unpromoted members
+    named. It is a `ValueError`, or `TesseraNativeRequiredError` under
+    `native_required`. The authored program has no eager form for its
+    storage roots, so nothing falls back.
+  
+  Promoting both members, in both mirrors, is slice 4, with Princess-Luna
+  device evidence.
+- **Evidence (compile-only).** `tests/unit/test_gfx1151_quantized_program_packaging.py`
+  covers the exports and the refused pairs. It also checks that the product
+  images disassemble to `v_wmma_f32_16x16x16_f16` only for every frame, that
+  the expansion images package for every frame, and the refusals.
+
 ## Quantized package certificate and ABI reuse
 
 `TESSERA_ROCM_PROGRAM_BINDING_CACHE=1` (the existing default) also enables

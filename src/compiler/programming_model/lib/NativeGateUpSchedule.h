@@ -216,7 +216,7 @@ inline FailureOr<func::FuncOp> graphRoot(ModuleOp module) {
   auto target = module->getAttrOfType<StringAttr>("tessera.target");
   auto arch = module->getAttrOfType<StringAttr>("tessera.arch");
   if (!isa<UnitAttr>(marker) || !target || target.getValue() != "rocm" ||
-      !arch || arch.getValue() != "gfx1201" ||
+      !arch || (arch.getValue() != "gfx1201" && arch.getValue() != "gfx1151") ||
       llvm::range_size(module.getOps<func::FuncOp>()) != 1) return reject();
   for (NamedAttribute attr : module->getAttrs()) {
     StringRef n = attr.getName().strref();
@@ -247,6 +247,14 @@ inline FailureOr<func::FuncOp> graphRoot(ModuleOp module) {
   return fn;
 }
 inline std::string sourceHash(func::FuncOp fn) { return row_region::sourceDigest(fn); }
+// The owning architecture: gfx1201, or gfx1151 (GFX1151-QUANTIZED-MLP-20261030;
+// the parent view is scalar code). Only a gfx1151 identity names it, so every
+// gfx1201 artifact hash is unchanged.
+inline std::string archOf(Operation *op) {
+  auto module = isa<ModuleOp>(op) ? cast<ModuleOp>(op) : op->getParentOfType<ModuleOp>();
+  auto arch = module ? module->getAttrOfType<StringAttr>("tessera.arch") : StringAttr();
+  return arch && arch.getValue() == "gfx1151" ? "gfx1151" : "gfx1201";
+}
 inline bool bf16Profile(func::FuncOp fn) {
   return cast<RankedTensorType>(fn.getResultTypes()[0]).getElementType().isBF16();
 }
@@ -254,7 +262,7 @@ inline std::string artifactHash(func::FuncOp fn) {
   std::string text = sourceHash(fn) + (bf16Profile(fn)
       ? ";gate_up_view_schema=3;flat_gid;threads=256;parent=1;output=1;bf16_f32_compute"
       : ";gate_up_view_schema=2;flat_gid;threads=256;parent=1;output=1;f32") +
-      (runtimeWidth(fn) ? ";runtime_width" : "");
+      (runtimeWidth(fn) ? ";runtime_width" : "") + (archOf(fn) == "gfx1151" ? ";gfx1151" : "");
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(text)), true);
 }
 inline DictionaryAttr artifactAttributes(func::FuncOp fn) {
@@ -262,7 +270,7 @@ inline DictionaryAttr artifactAttributes(func::FuncOp fn) {
   auto shape = cast<RankedTensorType>(fn.getResultTypes()[0]).getShape();
   return b.getDictionaryAttr({
     b.getNamedAttr("hash", b.getStringAttr(artifactHash(fn))),
-    b.getNamedAttr("arch", b.getStringAttr("gfx1201")),
+    b.getNamedAttr("arch", b.getStringAttr(archOf(fn))),
     b.getNamedAttr("shape_key", b.getStringAttr("family=gate_up_view;rows=" + std::to_string(shape[0]) + ";columns=" + std::to_string(shape[1]) + (bf16Profile(fn) ? ";storage=bf16" : ";storage=f32") + (runtimeWidth(fn) ? ";width=runtime" : ""))),
     b.getNamedAttr("numeric_policy", b.getStringAttr(bf16Profile(fn) ? "bf16_load;explicit_fp32;source_order_silu_mul;bf16_rne_store" : "explicit_fp32;source_order_silu_mul")),
     b.getNamedAttr("tile", b.getDictionaryAttr({
@@ -312,7 +320,7 @@ inline LogicalResult lower(ModuleOp module, bool &selected) {
   auto type = cast<RankedTensorType>(root->getResultTypes()[0]);
   OpBuilder b(artifact); OperationState state(root->getLoc(), "tile.row_region_kernel");
   state.addAttribute("name", b.getStringAttr(fn.getName()));
-  state.addAttribute("arch", b.getStringAttr("gfx1201"));
+  state.addAttribute("arch", b.getStringAttr(archOf(*root)));
   state.addAttribute("rows", b.getI64IntegerAttr(type.getDimSize(0)));
   state.addAttribute("columns", b.getI64IntegerAttr(type.getDimSize(1)));
   state.addAttribute("storage", TypeAttr::get(type.getElementType()));

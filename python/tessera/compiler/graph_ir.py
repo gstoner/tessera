@@ -1564,11 +1564,12 @@ class GraphIRVerifier:
                     code="GRAPH_IR_MESH_RANK",
                 ))
         seen = set()
+        admitted = _program_admitted_ops(module, target)
         for fn in module.functions:
             if fn.name in seen:
                 diagnostics.append(GraphIRDiagnostic("error", f"duplicate function {fn.name!r}", code="GRAPH_IR_DUP_FUNC"))
             seen.add(fn.name)
-            diagnostics.extend(self.verify_function(fn, target=target).diagnostics)
+            diagnostics.extend(self.verify_function(fn, target=target, program_admitted_ops=admitted).diagnostics)
         return GraphIRVerificationResult(tuple(diagnostics))
 
     def verify_function(
@@ -1576,6 +1577,7 @@ class GraphIRVerifier:
         fn: GraphIRFunction,
         *,
         target: object = "cpu",
+        program_admitted_ops: frozenset[str] = frozenset(),
     ) -> GraphIRVerificationResult:
         diagnostics: List[GraphIRDiagnostic] = []
         arg_names = set()
@@ -1664,7 +1666,8 @@ class GraphIRVerifier:
                     span=op.source_span,
                     code="GRAPH_IR_SSA_VALUE_IN_ATTRIBUTE",
                 ))
-            self._verify_op_types(op, value_types, diagnostics, target=target)
+            self._verify_op_types(op, value_types, diagnostics, target=target,
+                                  program_admitted_ops=program_admitted_ops)
         if control_stack:
             diagnostics.append(GraphIRDiagnostic(
                 "error",
@@ -1745,6 +1748,7 @@ class GraphIRVerifier:
         diagnostics: List[GraphIRDiagnostic],
         *,
         target: object = "cpu",
+        program_admitted_ops: frozenset[str] = frozenset(),
     ) -> None:
         operand_contracts = [
             _tensor_contract_for(value_types.get(operand))
@@ -1765,6 +1769,9 @@ class GraphIRVerifier:
                 "LEGALITY_FLASH_ATTN_RANK",
             }:
                 continue
+            if diag.code == "LEGALITY_TARGET_CAPABILITY" and op.op_name in program_admitted_ops:
+                # The capability belongs to the whole native program, not the op.
+                continue
             code = "GRAPH_IR_MATMUL_SHAPE" if diag.code == "LEGALITY_MATMUL_K_MISMATCH" else diag.code
             diagnostics.append(GraphIRDiagnostic(
                 diag.severity,
@@ -1772,6 +1779,29 @@ class GraphIRVerifier:
                 span=op.source_span,
                 code=code,
             ))
+
+
+#: Ops a named native program admits on a target whose capability registry does
+#: not admit them alone. gfx1151's quantized MLP (GFX1151-QUANTIZED-MLP-20261030)
+#: is compile-only there: its fp32 casts and fp8 reshapes are Graph storage, its
+#: E4M3 product is decoded to F16 WMMA and its NVFP4 expansion is scalar code.
+#: The same ops outside that program stay refused, so nothing evaluates them
+#: eagerly under a gfx1151 target.
+_GFX1151_QUANTIZED_PROGRAM_OPS = frozenset({
+    "tessera.cast", "tessera.reshape", "tessera.scaled_matmul", "tessera.nvfp4_expand"})
+
+
+def _program_admitted_ops(module: "GraphIRModule", target: object) -> frozenset[str]:
+    from .capabilities import normalize_target
+    try:
+        exact = normalize_target(target)
+    except (KeyError, ValueError):
+        return frozenset()
+    # The exact chip only: the generic "rocm" name inherits no program.
+    if exact != "rocm_gfx1151":
+        return frozenset()
+    from .rocm_quantized_product_frontend import requests_quantized_product
+    return _GFX1151_QUANTIZED_PROGRAM_OPS if requests_quantized_product(module) else frozenset()
 
 
 def _tensor_contract_for(ir_type: Optional[IRType]) -> TensorContract:

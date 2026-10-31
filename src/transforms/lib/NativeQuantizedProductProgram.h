@@ -32,8 +32,11 @@ static mlir::LogicalResult emitNativeQuantizedProductProgram(mlir::ModuleOp modu
   if (failed(verify(module))) return failure();
   auto target = module->getAttrOfType<StringAttr>("tessera.target");
   auto arch = module->getAttrOfType<StringAttr>("tessera.arch");
-  if (!target || target.getValue() != "rocm_gfx1201" || !arch ||
-      arch.getValue() != "gfx1201" ||
+  // gfx1201, or gfx1151's decoded-F16 program (GFX1151-QUANTIZED-MLP-20261030);
+  // the target names its architecture, and no other pair is admitted.
+  if (!target || !arch ||
+      !((target.getValue() == "rocm_gfx1201" && arch.getValue() == "gfx1201") ||
+        (target.getValue() == "rocm_gfx1151" && arch.getValue() == "gfx1151")) ||
       !isa<UnitAttr>(module->getAttr("tessera.native.quantized_product"))) return refuse();
   for (auto attr : module->getAttrs()) {
     auto name = attr.getName().getValue();
@@ -254,11 +257,13 @@ static mlir::LogicalResult projectNativeQuantizedProductMember(mlir::ModuleOp mo
     module.getBody()->clear();module->setAttrs(projection);module.getBody()->push_back(child);
     return success();
   }
-  auto arch=module->getAttr("tessera.arch"); OpBuilder b(module.getContext());
+  auto arch=module->getAttr("tessera.arch");
+  auto target=module->getAttr("tessera.target"); OpBuilder b(module.getContext());
   module.getBody()->clear(); module->setAttrs(b.getDictionaryAttr({}));
   bool expansion = child.getBody().front().front().getName().getStringRef() ==
                    "tessera.nvfp4_expand";
-  module->setAttr("tessera.target",b.getStringAttr(index==0 || expansion ? "rocm_gfx1201":"rocm"));
+  // Owned members keep the exact program target; the product is generic ROCm.
+  module->setAttr("tessera.target",index==0 || expansion ? target : b.getStringAttr("rocm"));
   module->setAttr("tessera.arch",arch);
   if (index==0) module->setAttr("tessera.native.block_quant",b.getUnitAttr());
   module.getBody()->push_back(child);

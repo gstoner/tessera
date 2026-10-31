@@ -231,8 +231,12 @@ LogicalResult MatmulOp::verify() {
   if (getScaleN() < 0 || (getScaleN() > 0) != fp8W8A8)
     return emitOpError("scale_n is stated exactly for the gfx1201 W8A8 "
                        "block-scale contract");
+  // gfx1151 runs only the fp32-scaled form, decoded to F16 WMMA on the
+  // one-wave register panel (GFX1151-QUANTIZED-MLP-20261030).
+  const bool gfx1151Decoded = getArch() == "gfx1151" && !mxfp8 &&
+      getStaging() == "global" && getWarps() == 1;
   if (fp8W8A8 &&
-      (getArch() != "gfx1201" || getStorage() != "e4m3" ||
+      ((getArch() != "gfx1201" && !gfx1151Decoded) || getStorage() != "e4m3" ||
        getStorageB() != "e4m3" || getScaleK() <= 0 ||
        getScaleFormat() != (mxfp8 ? "e8m0" : "fp32") || getAccum() != "f32" ||
        (getOutput() != "f32" && getOutput() != "bf16") || getBias() ||

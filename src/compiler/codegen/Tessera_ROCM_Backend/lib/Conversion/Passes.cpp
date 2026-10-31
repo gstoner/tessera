@@ -140,6 +140,11 @@ struct ROCMExecutablePipelineOptions
   Option<int> ldsWavesN{*this, "lds-waves-n",
                         llvm::cl::desc("LDS-staged matmul: waves along N"),
                         llvm::cl::init(2)};
+  Option<bool> typedDirective{*this, "typed-directive",
+      llvm::cl::desc("a directive-level matmul materializes through the typed "
+                     "Tile producer on every architecture (the gfx1151 "
+                     "decoded-F16 W8A8 product exists only there)"),
+      llvm::cl::init(false)};
   Option<bool> depthCooperative{*this, "depth-cooperative",
       llvm::cl::desc("experimental depth-attention cooperative width reduction"),
       llvm::cl::init(false)};
@@ -657,7 +662,8 @@ static void buildROCMExecutablePipeline(
   if (matmulPlugin && output == "binary") {
     const bool typedMatmul =
         input == "tile" || (input == "directive" &&
-                            (arch == "gfx1201" || opts.staging == "lds"));
+                            (arch == "gfx1201" || opts.staging == "lds" ||
+                             opts.typedDirective));
     // LDS always uses the existing typed Tile producer, including projected
     // portable-ABI Target directives. The generator checks portableABI before
     // constructing that body; raw nonportable directives remain invalid.

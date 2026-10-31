@@ -703,8 +703,10 @@ static void selectFp8W8A8RegisterPanel(MatmulSchedule &schedule);
 static void selectFp8W8A8BlockScalePanelAt(MatmulSchedule &schedule);
 
 static void selectFp8W8A8BlockScalePanel(MatmulSchedule &schedule) {
-  // A shape-free runtime-K/N/H image exists only as the global-staged body.
-  if (schedule.requireGlobalStaging) return selectFp8W8A8RegisterPanel(schedule);
+  // A shape-free runtime-K/N/H image exists only as the global-staged body,
+  // and gfx1151's decoded-F16 product has no LDS body at all.
+  if (schedule.requireGlobalStaging || schedule.arch == "gfx1151")
+    return selectFp8W8A8RegisterPanel(schedule);
   if (!schedule.admittedMinM && !schedule.selectAtN && !schedule.selectAtK)
     return selectFp8W8A8BlockScalePanelAt(schedule);
   // An arbitrary-M image (or a per-extent variant) takes the panel the static
@@ -1575,7 +1577,15 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   }
   // A and B may name different FP8 storages: RDNA4 has the mixed pairs and
   // `resolveFragmentLayout` selects them from the descriptor's two types.
-  if (schedule.target == "rocm" && schedule.arch == "gfx1201" &&
+  // GFX1151-QUANTIZED-MLP-20261030: RDNA 3.5 has no FP8 WMMA; its only FP8
+  // form is the E4M3 x E4M3 fp32-block-scaled product, which decodes each
+  // fragment exactly to f16 for V_WMMA_F32_16X16X16_F16.
+  const bool gfx1151DecodedFp8 =
+      (schedule.target == "rocm_gfx1151" || schedule.target == "rocm") &&
+      schedule.arch == "gfx1151" && scaledMatmul &&
+      isa<Float8E4M3FNType>(lhsElement) && isa<Float8E4M3FNType>(rhsElement) &&
+      schedule.scaleFormat == kFp8W8A8BlockScaleFormat;
+  if (((schedule.target == "rocm" && schedule.arch == "gfx1201") || gfx1151DecodedFp8) &&
       isa<Float8E4M3FNType, Float8E5M2Type>(lhsElement) &&
       isa<Float8E4M3FNType, Float8E5M2Type>(rhsElement) &&
       // ROCM-FP8-BLOCKSCALE-1 may also store its fp32 accumulator as bf16
@@ -6129,7 +6139,11 @@ struct ScheduleToTilePass
       Value n = extentI64(selected->dynamicN, runtimeNIndex, selected->n);
       Value k = extentI64(selected->dynamicK, runtimeKIndex, selected->k);
 
-      StringRef family = selected->target == "rocm" ? "wmma" : "auto";
+      // gfx1151's decoded-FP8 scaled product names its WMMA family too: the
+      // scaled-WMMA directive admits only an explicit "wmma" descriptor.
+      const bool gfx1151ScaledFp8 = selected->arch == "gfx1151" &&
+          selected->scaleBlockK > 0 && selected->storage == "e4m3";
+      StringRef family = selected->target == "rocm" || gfx1151ScaledFp8 ? "wmma" : "auto";
       auto mma = tile::TileMmaDescAttr::get(
           &getContext(), family, selected->tileM, selected->tileN,
           selected->tileK, selected->storage == "u8" ? "u8" : selected->storage,

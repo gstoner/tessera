@@ -4,11 +4,15 @@
 #include "mlir/IR/Verifier.h"
 #include <array>
 #include <climits>
+#include <string>
 
 namespace tessera::block_quant {
 struct Profile {
   mlir::func::FuncOp graph;
   int64_t rows, columns, groups;
+  //: gfx1201, or gfx1151 (GFX1151-QUANTIZED-MLP-20261030): RDNA 3.5 encodes
+  //: E4M3 in software, bit-identical to RDNA4's V_CVT_PK_FP8_F32.
+  std::string arch = "gfx1201";
 };
 
 inline mlir::FailureOr<Profile> inspect(mlir::ModuleOp module) {
@@ -19,9 +23,10 @@ inline mlir::FailureOr<Profile> inspect(mlir::ModuleOp module) {
   };
   auto target = module->getAttrOfType<StringAttr>("tessera.target");
   auto arch = module->getAttrOfType<StringAttr>("tessera.arch");
-  if (!isa<UnitAttr>(module->getAttr("tessera.native.block_quant")) ||
-      !target || target.getValue() != "rocm_gfx1201" ||
-      !arch || arch.getValue() != "gfx1201" || failed(verify(module)))
+  if (!isa<UnitAttr>(module->getAttr("tessera.native.block_quant")) || !target || !arch ||
+      !((target.getValue() == "rocm_gfx1201" && arch.getValue() == "gfx1201") ||
+        (target.getValue() == "rocm_gfx1151" && arch.getValue() == "gfx1151")) ||
+      failed(verify(module)))
     return refuse();
   for (auto attr : module->getAttrs()) {
     StringRef key = attr.getName().getValue();
@@ -125,7 +130,7 @@ inline mlir::FailureOr<Profile> inspect(mlir::ModuleOp module) {
   if (!ret || ret.getNumOperands()!=2 ||
       ret.getOperand(0)!=ops[11]->getResult(0) || ret.getOperand(1)!=ops[12]->getResult(0))
     return refuse();
-  return Profile{fn,m,k,groups};
+  return Profile{fn,m,k,groups,arch.getValue().str()};
 }
 
 }

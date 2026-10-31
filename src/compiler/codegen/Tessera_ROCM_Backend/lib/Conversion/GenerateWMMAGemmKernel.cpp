@@ -490,7 +490,8 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   auto tileValueTy = tessera::tile::TileValueType::get(ctx);
   StringRef fragmentElem = T.store.isF16()                 ? "f16"
                            : T.store.isBF16()                ? "bf16"
-                           : isa<Float8E4M3FNType>(T.store)  ? "e4m3"
+                           : isa<Float8E4M3FNType>(T.store)
+                               ? (gpuFunc->hasAttr("tessera.rocm.decode_e4m3_f16") ? "e4m3_f16" : "e4m3")
                            : isa<Float8E5M2Type>(T.store)    ? "e5m2"
                            : T.pack == 1                     ? "int8"
                                                              : "int4";
@@ -1409,7 +1410,8 @@ void emitTypedLdsBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   auto tileValueTy = tessera::tile::TileValueType::get(ctx);
   StringRef fragmentElem = T.store.isF16()                 ? "f16"
                            : T.store.isBF16()                ? "bf16"
-                           : isa<Float8E4M3FNType>(T.store)  ? "e4m3"
+                           : isa<Float8E4M3FNType>(T.store)
+                               ? (gpuFunc->hasAttr("tessera.rocm.decode_e4m3_f16") ? "e4m3_f16" : "e4m3")
                            : isa<Float8E5M2Type>(T.store)    ? "e5m2"
                            : T.pack == 1                     ? "int8"
                                                              : "int4";
@@ -4380,6 +4382,12 @@ struct GenerateWMMAGemmKernelPass
         if (auto a = moduleOp->getAttrOfType<StringAttr>("tessera.arch"))
           requestArch = a.getValue();
       const bool gfx11Request = requestArch.starts_with("gfx11");
+      // RDNA 3.5 has no FP8 WMMA: its scaled E4M3 fragments are requested as
+      // "e4m3_f16" (E4M3 storage decoded exactly to F16 registers), which the
+      // typed fragment lowering resolves only on gfx1151
+      // (GFX1151-QUANTIZED-MLP-20261030). A plain "e4m3" stays refused there.
+      if (requestArch == "gfx1151" && request.scaleK > 0 && isa<Float8E4M3FNType>(T.store))
+        gpuFunc->setAttr("tessera.rocm.decode_e4m3_f16", b.getUnitAttr());
       // The stamp claims THIS body is gfx1151's measured 2x4 register panel,
       // and TileToROCM pins anything carrying it to that chip AND checks its
       // exact view/pack/mma/unpack/store topology. An LDS-staged body, or a

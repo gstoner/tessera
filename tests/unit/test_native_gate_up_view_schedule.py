@@ -93,7 +93,8 @@ def test_row_count_changes_source_witness_but_reuses_physical_body():
 @pytest.mark.parametrize("change", [
     lambda text: text.replace("tessera.ir.version = \"1.0\"", "tessera.ir.version = \"2.0\""),
     lambda text: text.replace("tessera.structured_cfg.blocks = 2", "tessera.structured_cfg.blocks = 2, tessera.structured_cfg.execution = \"bounded_state_machine_v1\""),
-    lambda text: text.replace('tessera.arch = "gfx1201"', 'tessera.arch = "gfx1151"'),
+    # gfx1151 is admitted (GFX1151-QUANTIZED-MLP-20261030); CDNA is not.
+    lambda text: text.replace('tessera.arch = "gfx1201"', 'tessera.arch = "gfx942"'),
     lambda text: text.replace('tessera.target = "rocm"', 'tessera.target = "nvidia_sm120"'),
     lambda text: text.replace("start_indices = [0, 17]", "start_indices = [0, 0]"),
     lambda text: text.replace("tessera.effect_kind = \"pure\"", "numeric_policy = \"approximate\""),

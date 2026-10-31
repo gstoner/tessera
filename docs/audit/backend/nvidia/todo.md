@@ -16833,3 +16833,14 @@ Synchronization key: GFX1201-BOUNDED-PER-M-PANEL-20261030.
 Not applicable to NVIDIA: the per-extent product images, the `arbitrary-n` identity option and the variant owner ABI are `rocm_gfx1201` only. No NVIDIA selector, ABI or result changes.
 
 Evidence: tests/device/rocm/test_quantized_mlp_per_m_panels_device.py; benchmarks/baselines/gfx1201_bounded_per_m_panel_20261030/README.md; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"Bounded-hidden v8 MLP".
+
+## GFX1151-QUANTIZED-MLP-20261030 — gfx1151 and the native quantized MLP
+
+Owner: [ROCM-NVFP4-INGEST-1](../../compiler/INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1).
+Synchronization key: GFX1151-QUANTIZED-MLP-20261030.
+
+Not applicable to NVIDIA: the software E4M3 encode is selected only for `gfx1151` (or forced on `gfx1201`) in the ROCm Target-to-ROCDL lowering, and the admitted members are ROCm gfx1151/gfx1201 kernels. No NVIDIA selector, ABI or result changes.
+
+
+Slice 3 (#1028) is not applicable to NVIDIA either. The new `typed-directive` executable-pipeline option, the architecture-threaded quantized packagers and the composed-tail NVFP4 admission are ROCm-only. The frontend admission is a Graph-verifier exemption scoped to the quantized program on the exact `rocm_gfx1151` target; no capability row or dashboard changes. No NVIDIA selector, ABI or result changes.
+Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".

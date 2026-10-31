@@ -16,8 +16,11 @@ static mlir::LogicalResult fuseNativeFP8StoreCast(mlir::ModuleOp module) {
   SmallVector<func::FuncOp> roots;
   for (auto fn : module.getOps<func::FuncOp>())
     if (!fn.isDeclaration()) roots.push_back(fn);
-  if (!isa<UnitAttr>(module->getAttr(key)) || !target ||
-      target.getValue() != "rocm_gfx1201" || !arch || arch.getValue() != "gfx1201" ||
+  // gfx1151 runs the same product on decoded F16 WMMA
+  // (GFX1151-QUANTIZED-MLP-20261030); the store epilogue is unchanged.
+  if (!isa<UnitAttr>(module->getAttr(key)) || !target || !arch ||
+      !((target.getValue() == "rocm_gfx1201" && arch.getValue() == "gfx1201") ||
+        (target.getValue() == "rocm_gfx1151" && arch.getValue() == "gfx1151")) ||
       roots.size() != 1 || !roots[0].getBody().hasOneBlock())
     return refuse();
   auto fn = roots[0];

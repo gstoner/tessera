@@ -62,12 +62,13 @@ def test_bound_on_the_gate_up_program_is_refused(rocm_image_toolchain):
         fn.compile_native_quantized_program(*gate_inputs(3, 32, 48), m_bound=8)
 
 
-def test_non_gfx1201_target_is_refused(monkeypatch):
+def test_non_owning_target_is_refused(monkeypatch):
     # Other targets already refuse this Graph at decoration; the compile
-    # entry point still refuses on its own.
+    # entry point still refuses on its own. gfx1151 is admitted here and
+    # refuses at its unpromoted members (test_gfx1151_quantized_program_packaging).
     fn, roots = public()
-    monkeypatch.setattr(fn, "target", "rocm_gfx1151")
-    with pytest.raises(ValueError, match="gfx1201"):
+    monkeypatch.setattr(fn, "target", "rocm_gfx1200")
+    with pytest.raises(ValueError, match="gfx1201 or gfx1151"):
         fn.compile_native_quantized_program(*roots, m_bound=8)
 
 

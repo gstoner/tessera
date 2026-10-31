@@ -2666,12 +2666,35 @@ class JitFn:
         self.last_fallback_reason=None
         return receipt["output"]
 
+    def _quantized_program_unpromoted(self,target):
+        """The architecture-owned families a quantized program needs that ``target``
+        has no exact-device proof for (GFX1151-QUANTIZED-MLP-20261030: gfx1151
+        compiles the program but its quantizer and SiLU members wait on device
+        promotion)."""
+        from .rocm_pipeline import promoted_families
+        return sorted({"block_quant","parent_view"}-promoted_families(target.removeprefix("rocm_")))
+
     def _try_rocm_quantized_product_call(self,args,kwargs):
-        if normalize_target_kind(self.target)!="rocm_gfx1201" or self.differentiation_request is not None:
+        from .rocm_quantized_product_frontend import QUANTIZED_PRODUCT_TARGETS
+        target=normalize_target_kind(self.target)
+        if target not in QUANTIZED_PRODUCT_TARGETS or self.differentiation_request is not None:
             return _JIT_FALLBACK
         from .rocm_quantized_product_frontend import requests_quantized_product,supports_quantized_product,package_traced_quantized_product
         if not requests_quantized_product(self.graph_ir):
             return _JIT_FALLBACK
+        unpromoted=self._quantized_program_unpromoted(target)
+        if unpromoted:
+            # The program compiles here, but an unpromoted member has no
+            # executable image. No fallback computes it: the authored program
+            # has no eager form for its storage roots, so refuse by name.
+            self.last_fallback_reason=FallbackReason.CAPABILITY_NOT_READY
+            detail=(f"native quantized program members {unpromoted} have no exact-device "
+                    f"promotion on {target}; the program is compile-only there")
+            if self.native_required:
+                raise TesseraNativeRequiredError(
+                    FallbackReason.CAPABILITY_NOT_READY,target=target,
+                    op_name=getattr(self._fn,"__name__",""),detail=detail)
+            raise ValueError(detail)
         import hashlib
         bound=self._rocm_nvfp4_call_signature.bind(*args,**kwargs)
         bound.apply_defaults()
@@ -2692,13 +2715,13 @@ class JitFn:
         module,_=self._trace_frontend_capture(ordered,{})
         if not requests_quantized_product(module):
             raise ValueError("quantized-product source differs from its traced Graph")
-        key=hashlib.sha256(module.to_mlir(target="rocm_gfx1201",canonical=True).encode()).hexdigest()
+        key=hashlib.sha256(module.to_mlir(target=target,canonical=True).encode()).hexdigest()
         program=self._rocm_quantized_product_cache.get(key)
         if program is None:
-            if not supports_quantized_product(module):
+            if not supports_quantized_product(module,target):
                 return _JIT_FALLBACK
             from dataclasses import replace
-            program=replace(package_traced_quantized_product(module),argument_names=tuple(self.arg_names))
+            program=replace(package_traced_quantized_product(module,target),argument_names=tuple(self.arg_names))
             program.validate()
             self._rocm_quantized_product_cache[key]=program
             if len(self._rocm_quantized_product_cache)>24:
@@ -2805,9 +2828,10 @@ class JitFn:
         without ``m_bound`` keeps the traced M as the row capacity."""
         from copy import deepcopy
         from dataclasses import replace
-        from .rocm_quantized_product_frontend import package_traced_quantized_product,requests_quantized_product
-        if normalize_target_kind(self.target)!="rocm_gfx1201" or self.differentiation_request is not None:
-            raise ValueError("native quantized program requires primal exact gfx1201")
+        from .rocm_quantized_product_frontend import QUANTIZED_PRODUCT_TARGETS,package_traced_quantized_product,requests_quantized_product
+        target=normalize_target_kind(self.target)
+        if target not in QUANTIZED_PRODUCT_TARGETS or self.differentiation_request is not None:
+            raise ValueError("native quantized program requires a primal exact gfx1201 or gfx1151 target")
         if m_bound is not None and (type(m_bound) is not int or m_bound<=0):
             raise ValueError("native quantized row bound must be a positive integer")
         if k_bound is not None and (type(k_bound) is not int or k_bound<=0 or k_bound%16):
@@ -2841,7 +2865,7 @@ class JitFn:
                 module.module_attrs["tessera.native.quantized_n_bound"]=f"{n_bound} : i64"
             if h_bound is not None:
                 module.module_attrs["tessera.native.quantized_h_bound"]=f"{h_bound} : i64"
-        program=replace(package_traced_quantized_product(module),argument_names=tuple(self.arg_names))
+        program=replace(package_traced_quantized_product(module,target),argument_names=tuple(self.arg_names))
         program.validate()
         if m_bound is not None:
             if (not program.bounded
@@ -4426,7 +4450,7 @@ class JitFn:
             import hashlib
             quant_native=quantized_program.native
             from .rocm_quantized_product_frontend import _compiler_path
-            target_decision["rocm_gfx1201"]=f"{_compiler_path(quant_native)}; {len(quant_native.native_stages)} ordered native packages"
+            target_decision["rocm_"+quant_native.arch]=f"{_compiler_path(quant_native)}; {len(quant_native.native_stages)} ordered native packages"
             plan_hash=quant_native.binding_digest
             ir_hashes["graph_ir"]=hashlib.sha256(quantized_program.graph_ir.encode()).hexdigest()
             ir_hashes["schedule_ir"]=hashlib.sha256("\n".join(quant_native.schedule_irs).encode()).hexdigest()

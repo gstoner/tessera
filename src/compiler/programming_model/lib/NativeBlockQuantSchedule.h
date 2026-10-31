@@ -106,11 +106,11 @@ inline mlir::DictionaryAttr artifactAttributes(Profile p) {
   using namespace mlir;
   Builder b(p.graph.getContext());
   auto source = row_region::sourceDigest(p.graph);
-  auto identity = source + ";gfx1201;native_block_quant_schema=4;K16;bf16_e4m3_f32;RNE;threads=256";
+  auto identity = source + ";" + p.arch + ";native_block_quant_schema=4;K16;bf16_e4m3_f32;RNE;threads=256";
   auto hash = llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(identity)),true);
   return b.getDictionaryAttr({
     b.getNamedAttr("hash",b.getStringAttr(hash)),
-    b.getNamedAttr("arch",b.getStringAttr("gfx1201")),
+    b.getNamedAttr("arch",b.getStringAttr(p.arch)),
     b.getNamedAttr("shape_key",b.getStringAttr("family=native_block_quant;rows="+
       std::to_string(p.rows)+";columns="+std::to_string(p.columns)+";groups="+std::to_string(p.groups))),
     b.getNamedAttr("numeric_policy",b.getStringAttr("explicit_fp32;K16_maxabs;floor_min_normal;RNE_e4m3;propagate_NaN")),
@@ -159,7 +159,7 @@ inline mlir::LogicalResult lower(mlir::ModuleOp module,bool &selected) {
   OpBuilder b(artifact);
   OperationState state(profile->graph.getLoc(),"tile.row_region_kernel");
   state.addAttribute("name",b.getStringAttr(fn.getName()));
-  state.addAttribute("arch",b.getStringAttr("gfx1201"));
+  state.addAttribute("arch",b.getStringAttr(profile->arch));
   state.addAttribute("schema",b.getI64IntegerAttr(4));
   state.addAttribute("storage",TypeAttr::get(b.getBF16Type()));
   state.addAttribute("rows",b.getI64IntegerAttr(profile->rows));

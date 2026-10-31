@@ -50,8 +50,10 @@ inline mlir::LogicalResult exportBlockQuantProgram(mlir::ModuleOp module,mlir::O
       bindings.push_back(name.getValue().str());
     }
   } else bindings=llvm::json::Array{"input","codes","scales"};
-  llvm::json::Object member{{"schema",1},{"profile","gfx1201_block_quant_bf16_e4m3_f32_k16_v1"},
-    {"architecture","gfx1201"},{"entry",name.str()},
+  // The profile names its architecture: gfx1151 encodes E4M3 in software.
+  std::string arch=carrier->getAttrOfType<StringAttr>("arch").getValue().str();
+  llvm::json::Object member{{"schema",1},{"profile",arch+"_block_quant_bf16_e4m3_f32_k16_v1"},
+    {"architecture",arch},{"entry",name.str()},
     {"abi","flattened_rank1_memref_then_i64"},{"step",0},
     {"inputs",llvm::json::Array{0}},{"outputs",llvm::json::Array{1,2}},
     {"bindings",std::move(bindings)},

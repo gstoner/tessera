@@ -172,6 +172,24 @@ class BlockScalePanel:
     warps: int
 
 
+#: Architectures the K16/W8A8 block-scale packager binds: gfx1201 (FP8 WMMA)
+#: and gfx1151 (decoded-F16 WMMA, GFX1151-QUANTIZED-MLP-20261030).
+BLOCKSCALE_ARCHES = ("gfx1201", "gfx1151")
+
+
+def module_arch(text: str) -> str:
+    """The admitted ``tessera.arch`` of the first module in ``text``.
+
+    The architecture is a semantic key (Decision #21a): a module that names
+    none, or names one the packager does not bind, is refused, never defaulted."""
+    import re
+    head = next((line for line in text.splitlines() if line.lstrip().startswith("module")), "")
+    found = re.findall(r'tessera\.arch = "([^"]+)"', head)
+    if len(found) != 1 or found[0] not in BLOCKSCALE_ARCHES:
+        raise ValueError(f"block-scale module names no admitted architecture {BLOCKSCALE_ARCHES}")
+    return found[0]
+
+
 def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201",
                             min_m: int | None = None, staging: str | None = None,
                             at_n: int | None = None, at_k: int | None = None) -> BlockScalePanel:
@@ -197,7 +215,9 @@ def blockscale_panel_oracle(shape: BlockScaleShape, *, arch: str = "gfx1201",
 
     if staging not in (None, "global"):
         raise ValueError("the W8A8 staging request is only \"global\"")
-    if staging == "global":
+    if staging == "global" or arch == "gfx1151":
+        # gfx1151's decoded-F16 product has only the register panel
+        # (GFX1151-QUANTIZED-MLP-20261030).
         return _register_panel(shape, min_m)
     if min_m is not None or at_n is not None or at_k is not None:
         # A shape-free image (or per-extent variant) takes the panel at its
@@ -479,7 +499,8 @@ def package_blockscale(
     project_image_identity: bool = True, lds_runtime_k: bool = True,
     scale_format: str = "fp32", arbitrary_m: bool = False, arbitrary_n: bool = False,
 ) -> ROCMNativePackage:
-    """Compile the Tile program to a gfx1201 HSACO and bind its launch ABI.
+    """Compile the Tile program to an HSACO for its module's architecture and
+    bind its launch ABI (gfx1201, or gfx1151's decoded-F16 product).
 
     ``k_unroll`` (whole scale groups per loop iteration) and
     ``scale_group_panels`` (panels per inner step of one group) are
@@ -496,6 +517,7 @@ def package_blockscale(
     if not isinstance(project_image_identity, bool):
         raise ValueError("project_image_identity must be a bool")
     shape = program.shape
+    arch = module_arch(program.tile_ir)
     contract, package_abi = _scale_profile(shape, scale_format)
     scale_dtype, scale_bytes = ("uint8", 1) if scale_format == "e8m0" else ("fp32", 4)
     _, out_dtype, out_bytes = OUTPUT_STORAGES[shape.output]
@@ -506,7 +528,7 @@ def package_blockscale(
     if tool is None:
         raise RuntimeError("tessera-opt is required for W8A8 native packaging")
     config = ROCMExecutablePipeline(
-        family="matmul", arch="gfx1201", input_level=ROCMInputLevel.TILE,
+        family="matmul", arch=arch, input_level=ROCMInputLevel.TILE,
         k_unroll=int(k_unroll), scale_group_panels=int(scale_group_panels),
         blockscale_stage_k=int(blockscale_stage_k),
         blockscale_lds_pad_bytes=int(blockscale_lds_pad_bytes),
@@ -538,21 +560,23 @@ def package_blockscale(
         runtime_mn = project_image_identity and checked["staging"] == "lds"
     target_ir, backend_ir, payload, compiler_fp, toolchain_fp, libraries, compile_state = (
         _compile_native_tile_ir(
-            image_target, directive=_DIRECTIVE, family="matmul", architecture="gfx1201",
+            image_target, directive=_DIRECTIVE, family="matmul", architecture=arch,
             input_level=ROCMInputLevel.DIRECTIVE,
             staging="register", k_unroll=int(k_unroll),
             scale_group_panels=int(scale_group_panels),
             blockscale_stage_k=int(blockscale_stage_k),
             blockscale_lds_pad_bytes=int(blockscale_lds_pad_bytes),
             blockscale_prefetch=int(blockscale_prefetch),
+            # gfx1201's directive default is already the typed producer.
+            typed_directive=arch == "gfx1151",
         )
     )
     if not project_image_identity:
         check_blockscale_target_ir(shape, program.tile_ir, target_ir, scale_format=scale_format)
     entry = _directive_symbol(target_ir, _DIRECTIVE)
     image = NativeImageArtifact(
-        target="rocm_gfx1201",
-        architecture="gfx1201",
+        target="rocm_" + arch,
+        architecture=arch,
         pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp,
         toolchain_fingerprint=toolchain_fp,
@@ -614,11 +638,11 @@ def package_blockscale(
             "blockscale_lds_pad_bytes": int(blockscale_lds_pad_bytes),
             "blockscale_prefetch": int(blockscale_prefetch),
             "physical_route": (
-                (f"gfx1201_lds_wmma_blockscale_{shape.weight_layout}_"
+                (f"{arch}_lds_wmma_blockscale_{shape.weight_layout}_"
                  f"{checked['block_m']}x{checked['block_n']}_w{checked['warps']}"
                  f"_d{checked['pipeline_depth']}_k{checked['macro_k']}")
                 if checked["staging"] == "lds" else
-                (f"gfx1201_register_wmma_blockscale_{shape.weight_layout}_"
+                (f"{arch}_register_wmma_blockscale_{shape.weight_layout}_"
                  f"{checked['block_m'] // 16}x"
                  f"{checked['block_n'] // 16}_k{checked['macro_k']}"
                  + (f"_u{k_unroll}" if k_unroll > 1 else ""))),

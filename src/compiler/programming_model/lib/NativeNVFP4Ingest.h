@@ -10,7 +10,10 @@ static FailureOr<DictionaryAttr> nativeNVFP4Contract(Operation *graph) {
   if (!fn || !fn.getBody().hasOneBlock() || fn.getNumArguments() != 3 ||
       fn.getNumResults() != results || graph->getNumOperands() != 3 ||
       graph->getNumResults() != results || !target || !arch ||
-      target.getValue() != "rocm_gfx1201" || arch.getValue() != "gfx1201" ||
+      !((target.getValue() == "rocm_gfx1201" && arch.getValue() == "gfx1201") ||
+        // The expansion is integer/f64 code: gfx1151 admits it
+        // (GFX1151-QUANTIZED-MLP-20261030); requantization stays gfx1201.
+        (expand && target.getValue() == "rocm_gfx1151" && arch.getValue() == "gfx1151")) ||
       graph->getResultTypes() != fn.getResultTypes())
     return graph->emitError("NVFP4 ingest needs an isolated gfx1201 checkpoint entry"), failure();
   for (unsigned i = 0; i < 3; ++i) {
@@ -65,7 +68,7 @@ static LogicalResult scheduleNativeNVFP4Ingest(ModuleOp mod) {
     auto hash = b.getStringAttr(mlir::tessera_contract::nvfp4ContractHash(*c));
     graph->setAttr("schedule.artifact_hash",hash);
     OperationState state(graph->getLoc(),"schedule.artifact");
-    state.addAttribute("hash",hash);state.addAttribute("arch",b.getStringAttr("gfx1201"));
+    state.addAttribute("hash",hash);state.addAttribute("arch",c->getAs<StringAttr>("arch"));
     state.addAttribute("shape_key",b.getStringAttr(
         graph->getName().getStringRef() == "tessera.nvfp4_expand"
           ? "family=nvfp4_expand" : "family=nvfp4_requantize"));
@@ -91,7 +94,7 @@ static LogicalResult lowerNativeNVFP4Ingest(ModuleOp mod) {
     auto c = nativeNVFP4Contract(graph);if (failed(c)) return failure();
     auto ret = dyn_cast<func::ReturnOp>(fn.getBody().front().back());
     if (!ret || ret.getOperands() != graph->getResults() ||
-        record.getArch() != "gfx1201" ||
+        record.getArch() != c->getAs<StringAttr>("arch").getValue() ||
         record->getAttr("contract") != *c ||
         record.getHash() != mlir::tessera_contract::nvfp4ContractHash(*c) ||
         graph->getAttr("schedule.artifact_hash") != record->getAttr("hash"))

@@ -1562,6 +1562,7 @@ def _compile_native_tile_ir(
     blockscale_stage_k: int = -1,
     blockscale_lds_pad_bytes: int = -1,
     blockscale_prefetch: int = -1,
+    typed_directive: bool = False,
 ) -> tuple[
     str,
     str,
@@ -1608,6 +1609,7 @@ def _compile_native_tile_ir(
         blockscale_lds_pad_bytes=int(blockscale_lds_pad_bytes),
         blockscale_prefetch=int(blockscale_prefetch),
         depth_cooperative=depth_cooperative,
+        typed_directive=typed_directive,
     )
     key = _native_cache_key(
         config,

@@ -260,6 +260,11 @@ class NativeQuantizedMLPProgram:
     def schedule_irs(self):
         return self.gate.schedule_irs+self.down.schedule_irs
 
+    @property
+    def arch(self):
+        from .rocm_fp8_blockscale import module_arch
+        return module_arch(self.graph_ir)
+
     def _identity(self):
         return hashlib.sha256(json.dumps([self.program_json,self.graph_ir,
             self.gate.binding_digest,self.down.binding_digest],separators=(',',':')).encode()).hexdigest()
@@ -274,6 +279,8 @@ class NativeQuantizedMLPProgram:
                 or json.loads(self.gate.program_json)!=components[0]
                 or json.loads(self.down.program_json)!=components[1]):
             raise ValueError('native quantized MLP member binding differs')
+        if self.gate.arch!=self.arch or self.down.arch!=self.arch:
+            raise ValueError('native quantized MLP component architecture differs from its source Graph')
         # A bounded program launches both products below capacity, so both
         # images must guard arbitrary M; a static program must not claim it.
         bounded=plan['schema']!=_SCHEMA
@@ -470,8 +477,8 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
 
     def __init__(self,package,inputs,*,runtime_library):
         from tessera import runtime as rt
-        if rt._rocm_live_arch()!='gfx1201':
-            raise RuntimeError('native quantized MLP requires owning gfx1201')
+        if rt._rocm_live_arch()!=package.arch:
+            raise RuntimeError(f'native quantized MLP requires owning {package.arch}')
         plan=json.loads(package.program_json)
         self._bounded=plan['schema']!=_SCHEMA
         self._k_bounded='k_frame' in plan

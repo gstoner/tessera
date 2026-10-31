@@ -1145,7 +1145,7 @@ architecture-owned, so the generic compiled lane and every other arch
 - **Numerics.** Every E4M3 value is exact in f16 and every product exact in
   f32, so only accumulation order differs from gfx1201. The check is the
   staged tolerance certificate the gfx1201 program uses
-  (`benchmarks/rocm/quantized_mlp_reference.assert_compiled_chain`): parent
+  (`assert_compiled_chain` in `benchmarks/rocm/quantized_mlp_reference.py`): parent
   store, activation and down projection within rtol 2⁻⁶ / atol 2·10⁻⁵ of
   their independent references, and the full output inside the propagated
   bound. It is never a bitwise comparison with gfx1201 output.

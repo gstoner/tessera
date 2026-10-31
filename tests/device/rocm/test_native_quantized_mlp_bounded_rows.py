@@ -1,4 +1,4 @@
-"""Owning gfx1201 execution of the bounded-row native seven-member MLP.
+"""Owning gfx1201/gfx1151 execution of the bounded-row native seven-member MLP.
 
 GFX1201-NVFP4-BOUNDED-MLP-20261027. One owner holds capacity storage; every
 row-dependent member launches at the active M while both weight expansions
@@ -15,13 +15,39 @@ from tessera import runtime as rt
 from tessera.compiler.rocm_quantized_mlp_program import (
     PreparedQuantizedMLPProgram, _RowFrame, _RowStep)
 from tessera.compiler.rocm_quantized_product_program import package_quantized_product_graph
-from tests.unit.test_native_quantized_mlp_program import source
+from tests.unit.test_native_quantized_mlp_program import source as _gfx1201_source
 
 pytestmark = [pytest.mark.hardware_rocm, pytest.mark.compiler_rocm, pytest.mark.compiler_route]
 
+#: The architectures with exact-device proof of the quantized MLP. gfx1151 was
+#: promoted on Princess-Luna (GFX1151-QUANTIZED-MLP-20261030 slice 4); each
+#: host proves only its own architecture, and no result transfers between them.
+OWNING_ARCHES = ("gfx1201", "gfx1151")
+
+
+def owning_arch():
+    arch = rt._rocm_live_arch()
+    if arch not in OWNING_ARCHES:
+        pytest.skip(f"the quantized MLP proof needs an owning {'/'.join(OWNING_ARCHES)} device, not {arch}")
+    return arch
+
+
+def owning_target():
+    return "rocm_" + owning_arch()
+
+
+def source(m, h, k, n):
+    """The authored MLP Graph, on the live owning architecture."""
+    text, arch = _gfx1201_source(m, h, k, n), owning_arch()
+    if arch == "gfx1201":
+        return text
+    assert text.count('"rocm_gfx1201"') == 1 and text.count('tessera.arch = "gfx1201"') == 1
+    return text.replace('"rocm_gfx1201"', f'"rocm_{arch}"').replace(
+        'tessera.arch = "gfx1201"', f'tessera.arch = "{arch}"')
+
 
 def provider():
-    assert rt._rocm_live_arch() == "gfx1201"
+    owning_arch()
     lib = rt._load_rocm_native_movement_runtime()
     assert lib is not None
     return lib._name
@@ -166,7 +192,7 @@ def _tampered(package, lib, roots, mutate):
     arrays, addresses, sizes = owner._inputs(roots)
     prepare = owner.lib.tessera_rocm_program_prepare_multi_output_row_frame
     handle = C.c_uint64()
-    code = prepare(b"gfx1201", binding.argument_count, len(binding.storage), binding.buffers,
+    code = prepare(owning_arch().encode(), binding.argument_count, len(binding.storage), binding.buffers,
                    len(binding.steps), binding.steps, addresses, sizes, C.byref(mutated),
                    owner._active_m, C.byref(handle))
     if handle.value:

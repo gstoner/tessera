@@ -1125,6 +1125,40 @@ from there.
   images disassemble to `v_wmma_f32_16x16x16_f16` only for every frame, that
   the expansion images package for every frame, and the refusals.
 
+**Slice 4: promotion on gfx1151.** The K16 quantizer (`block_quant`) and SiLU
+parent view (`parent_view`) are promoted on gfx1151 in both mirrors at once:
+Python `promoted_families("gfx1151")` is now every registered family except
+the RDNA4-only SWMMAC family, and the C++ `declare-rocm-pipeline-contract`
+admits both families for gfx1151 as well as gfx1201. Both stay
+architecture-owned, so the generic compiled lane and every other arch
+(gfx1200, gfx1250) inherit nothing.
+
+- **The owner's architecture.** The C++ program owner refuses a live device
+  other than the architecture its caller names (status 2). The quantized
+  MLP and product owners now name the package's architecture instead of the
+  class default `gfx1201`.
+- **Replay rows.** The runtime execution matrix carries gfx1151 rows for the
+  static MLP and its four bounded paths (M, K, N and H). Each row is derived
+  from the gfx1201 row but has its own evidence target. The per-M LDS images,
+  the gate/up and product-only programs and the standalone NVFP4 program stay
+  gfx1201-only.
+- **Numerics.** Every E4M3 value is exact in f16 and every product exact in
+  f32, so only accumulation order differs from gfx1201. The check is the
+  staged tolerance certificate the gfx1201 program uses
+  (`assert_compiled_chain` in `benchmarks/rocm/quantized_mlp_reference.py`): parent
+  store, activation and down projection within rtol 2⁻⁶ / atol 2·10⁻⁵ of
+  their independent references, and the full output inside the propagated
+  bound. It is never a bitwise comparison with gfx1201 output.
+- **Evidence (Princess-Luna, gfx1151).** The owning-device fixtures are the
+  gfx1201 ones, now following the live owning architecture:
+  `tests/device/rocm/test_native_quantized_mlp_program.py`,
+  `test_native_quantized_mlp_bounded_rows.py` and the four
+  `test_public_quantized_mlp_{row,k,n,h}_bound_device.py`. On gfx1151 the
+  static program passes at four shapes up to 256 × 128 × 12288 × 256, and
+  each bounded program is bitwise equal to the static gfx1151 program at
+  every tested shape through one owner. They also refuse tampered frames
+  and replay in a fresh process without the compiler.
+
 ## Quantized package certificate and ABI reuse
 
 `TESSERA_ROCM_PROGRAM_BINDING_CACHE=1` (the existing default) also enables

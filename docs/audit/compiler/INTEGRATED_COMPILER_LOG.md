@@ -14370,3 +14370,21 @@ Slice 3 (same PR) adds packaging and the public frontend for `rocm_gfx1151`, com
 Remaining: exact-head CI/review; slice 4, which promotes both members in both mirrors on Princess-Luna device proof with tolerance-bounded numerics.
 Evidence: tests/device/rocm/test_e4m3_software_encode.py; tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
 <!-- entry-fields:end -->
+
+### 2026-10-31 — gfx1151 slice 4: the quantized MLP executes on gfx1151
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1029; sync GFX1151-QUANTIZED-MLP-20261030.
+Outcome: the seven-member native quantized MLP, static and M/K/N/H-bounded, now runs on gfx1151 (Princess-Luna), with the E4M3 product decoded to F16 WMMA.
+- **Promotion.** `block_quant` and `parent_view` join gfx1151 in both mirrors: Python `promoted_families` and the C++ `declare-rocm-pipeline-contract` (lit `executable_pipeline_architecture_owned.mlir`). Both stay architecture-owned, so no generic lane or other arch inherits them.
+- **The owner's architecture.** The C++ program owner refuses a live device other than the one its caller names. The quantized MLP and product owners passed the class default `gfx1201` (status 2 on gfx1151) and now pass the package's arch.
+- **Replay.** The runtime execution matrix gains `rocm_gfx1151` rows for the static and four bounded MLP paths. Each is derived from the gfx1201 row with its own evidence target.
+- **Fixtures.** The gfx1201 owning-device fixtures now follow the live owning arch, so each box proves its own chip with the same checks. Nothing transfers between them.
+- **Numerics.** Only accumulation order differs from gfx1201, so the check is the staged tolerance certificate, never bitwise equality with gfx1201. The max abs error against the independent reference is 0 at small shapes and 0.0625 at 256 × 128 × 12288 × 256 and 256 × 2048 × 4096 × 256, the same as gfx1201 at those shapes.
+- **Evidence (Princess-Luna).** All 56 MLP device tests pass; each bounded program is bitwise equal to the static gfx1151 program through one owner, refuses tampered frames and replays in a fresh process. `check-tessera-rocm` passes 85/85. The related unit set's one remaining failure, `test_gfx1151_compiler_owned_backward_program_executes_and_times` (NaN output), fails identically with the Python tree at `main`.
+- **Evidence (Tajasarus).** All 62 gfx1201 MLP device tests still pass.
+
+NVIDIA, Apple and x86 are not applicable.
+Remaining: exact-head CI/review. Still gfx1201-only: per-M LDS product images, the gate/up and product-only programs, the standalone NVFP4 program and the standalone public quantizer/expansion. Open: the gfx1151 attention-backward NaN.
+Evidence: tests/device/rocm/test_native_quantized_mlp_program.py; tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; tests/unit/test_gfx1151_quantized_program_packaging.py; src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/executable_pipeline_architecture_owned.mlir; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
+<!-- entry-fields:end -->

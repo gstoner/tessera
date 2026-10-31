@@ -12615,4 +12615,5 @@ Not applicable to x86: the software E4M3 encode is selected only for `gfx1151` (
 
 
 Slice 3 (#1028) is not applicable to x86 either. The new `typed-directive` executable-pipeline option, the architecture-threaded quantized packagers and the composed-tail NVFP4 admission are ROCm-only. The frontend admission is a Graph-verifier exemption scoped to the quantized program on the exact `rocm_gfx1151` target; no capability row or dashboard changes. No x86 selector, ABI or result changes.
+Slice 4 (gfx1151 promotion) is not applicable to x86: the promotion mirrors, the HIP owner's architecture argument and the new `rocm_gfx1151` execution-matrix rows are ROCm-only. No x86 selector, ABI or result changes.
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".

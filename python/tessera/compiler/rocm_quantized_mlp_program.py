@@ -479,6 +479,8 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
         from tessera import runtime as rt
         if rt._rocm_live_arch()!=package.arch:
             raise RuntimeError(f'native quantized MLP requires owning {package.arch}')
+        # The C++ owner refuses a live device other than the one named here.
+        self._architecture=package.arch.encode()
         plan=json.loads(package.program_json)
         self._bounded=plan['schema']!=_SCHEMA
         self._k_bounded='k_frame' in plan

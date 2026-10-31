@@ -80,13 +80,14 @@ def test_gfx1151_quantizer_serializes_as_a_gfx1151_hsaco(compiler_toolchain):
     assert payload.startswith(b"\x7fELF") and len(payload) > 1024
 
 
-def test_gfx1151_executable_package_waits_for_device_promotion(rocm_image_toolchain):
-    """The packager compiles for the Graph's architecture, but an executable
-    gfx1151 image needs that family promoted by exact-device proof first."""
+def test_gfx1151_executable_package_follows_device_promotion(rocm_image_toolchain):
+    """The packager compiles for the Graph's architecture; slice 4 promoted
+    ``block_quant`` on gfx1151 by exact-device proof, so the executable image
+    now packages there."""
     from tessera.compiler.rocm_block_quant_native import lower_block_quant_text, package_block_quant_recipe
-    recipe = lower_block_quant_text(source())
-    with pytest.raises(ValueError, match="no promoted family plugins for gfx1151"):
-        package_block_quant_recipe(recipe)
+    package = package_block_quant_recipe(lower_block_quant_text(source()))
+    assert (package.image.target, package.image.architecture) == ("rocm_gfx1151", "gfx1151")
+    assert package.image.payload.startswith(b"\x7fELF")
 
 
 def _expansion_source(n=64, k=32, offsets=(0, 32, 64), target="rocm_gfx1151"):

@@ -17,9 +17,10 @@ from tests.unit.test_native_k16_quant_graph import source
 
 
 def test_quantizer_family_is_named_and_architecture_owned():
-    assert "block_quant" in promoted_families("gfx1201")
+    # gfx1151 joined on Princess-Luna device proof (GFX1151-QUANTIZED-MLP-20261030 slice 4).
+    assert "block_quant" in promoted_families("gfx1201") and "block_quant" in promoted_families("gfx1151")
     assert "block_quant" not in generic_lane_families()
-    for arch in ("gfx1151","gfx1200","gfx1250"):
+    for arch in ("gfx1200","gfx1250"):
         assert "block_quant" not in promoted_families(arch)
         with pytest.raises(ValueError):
             ROCMExecutablePipeline(family="block_quant",arch=arch)

@@ -652,6 +652,8 @@ class PreparedQuantizedProductProgram(PreparedScaledProgram):
         from tessera import runtime as rt
         if rt._rocm_live_arch() != package.arch:
             raise RuntimeError(f"native quantized product requires owning {package.arch}")
+        # The C++ owner refuses a live device other than the one named here.
+        self._architecture = package.arch.encode()
         super().__init__(package,inputs,runtime_library=runtime_library)
 
     @memoized_binding

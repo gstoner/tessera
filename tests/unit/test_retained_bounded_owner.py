@@ -242,7 +242,7 @@ def test_bounded_recompile_releases_the_superseded_program(monkeypatch):
     monkeypatch.setattr(fn, "target", "rocm_gfx1201")
     monkeypatch.setattr(fn, "_trace_frontend_capture", lambda ordered, kw: (Module(), None))
     monkeypatch.setattr(frontend, "requests_quantized_product", lambda module: True)
-    monkeypatch.setattr(frontend, "package_traced_quantized_product", lambda module: Packaged())
+    monkeypatch.setattr(frontend, "package_traced_quantized_product", lambda module, target="rocm_gfx1201": Packaged())
     first = fn.compile_native_quantized_program(np.zeros((1, 4), np.float32), m_bound=4)
     first_owner = fn._rocm_quantized_product_bounded_owner
     first_owner.execute(roots(1))

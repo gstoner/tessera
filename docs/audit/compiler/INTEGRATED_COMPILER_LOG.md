@@ -14422,7 +14422,7 @@ Evidence: benchmarks/baselines/qwen3_native_mlp_perplexity_20261101/README.md, p
 ### 2026-11-01 — gfx1151 soft-cap attention backward NaN: tanh lowered to an intrinsic AMDGPU computes as 0
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: (pending); sync ROCM-MATH-OCML-20261101.
+PRs: #1032; sync ROCM-MATH-OCML-20261101.
 Outcome: the gfx1151 attention backward NaN recorded as open in slice 4 is fixed; the ROCm executable pipeline now lowers math to OCML however it is entered, and native packaging refuses a compile that reports an error.
 - **Symptom.** `test_gfx1151_compiler_owned_backward_program_executes_and_times` returned NaN in every dQ/dK/dV element. A per-stage trace showed the forward recompute writing O = 0 and the pre-pass writing LSE = NaN; toggling features isolated the logit soft-cap (any cap > 0; causal, window, GQA, bias, LSE mode and dtype were irrelevant).
 - **Cause.** The generated kernels are identical to the standalone lane's, but the image differs: from Graph input `convert-gpu-to-rocdl` lowered `math.tanh` to `llvm.intr.tanh`, from directive input (and from upstream `mlir-opt` on the same module) to `__ocml_tanh_f32`. LLVM 23.1.1 has no AMDGPU lowering for `llvm.tanh`: it printed `error: no libcall available for ftanh`, exited 0, and a single-op kernel returns 0 for every input on gfx1151 and gfx1201. Why the Graph entry selects the intrinsic is not established; the fix removes the dependence.

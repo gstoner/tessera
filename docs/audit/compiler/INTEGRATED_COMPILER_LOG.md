@@ -14392,7 +14392,7 @@ Evidence: tests/device/rocm/test_native_quantized_mlp_program.py; tests/device/r
 ### 2026-11-01 — Qwen3-8B quantized-MLP quality across every layer (stage 1)
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: pending; sync QWEN3-MLP-LAYER-QUALITY-20261101.
+PRs: #1030; sync QWEN3-MLP-LAYER-QUALITY-20261101.
 Outcome: the native quantized MLP's added loss stays small and flat across all 36 Qwen3-8B layers on real model inputs; almost all the error is the NVFP4 format itself.
 - **Inputs.** Teacher-forced BF16 MLP inputs of every layer of the pinned `Qwen/Qwen3-8B`, from upstream transformers on CPU in a separate reference venv (Torch never runs a Tessera package). 2,048 tokens per layer: four 512-token windows evenly spaced across the wikitext-2-raw-v1 test split. Two runs captured bitwise-identical inputs; every checkpoint shard was hashed against its content-addressed blob name.
 - **Arms.** The public seven-member native MLP on gfx1201 against two FP64 references: the BF16 weights, and the decoded shipped NVFP4 weights (both without activation quantization).

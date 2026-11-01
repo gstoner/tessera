@@ -126,6 +126,35 @@ def test_accumulator_matches_whole_array_relative_rms() -> None:
         acc.add(np.array([np.nan]), np.array([0.0]))
 
 
+def test_worker_frames_round_trip_and_refuse_truncation() -> None:
+    import io
+
+    from benchmarks.rocm import qwen3_native_mlp_worker as worker
+
+    stream = io.BytesIO()
+    worker.write_frame(stream, {"op": "mlp", "rows": 2}, b"\x01\x02\x03")
+    stream.seek(0)
+    header, payload = worker.read_frame(stream)
+    assert header == {"op": "mlp", "rows": 2, "nbytes": 3} and payload == b"\x01\x02\x03"
+    with pytest.raises(EOFError, match="pipe closed"):
+        worker.read_frame(io.BytesIO(stream.getvalue()[:-1]))
+    with pytest.raises(ValueError, match="multiple of"):
+        worker._rows(b"\0" * (worker.HIDDEN * 2), 1)
+
+
+def test_perplexity_verdict_applies_the_fixed_ratio() -> None:
+    from benchmarks.rocm.record_qwen3_native_mlp_perplexity import THRESHOLD_RATIO, verdict
+
+    assert THRESHOLD_RATIO == 1.5
+    passed = verdict({"bf16": 10.0, "shipped": 10.4, "native": 10.6})
+    assert passed["passed"] and passed["ratio"] == pytest.approx(1.5)
+    assert not verdict({"bf16": 10.0, "shipped": 10.4, "native": 10.61})["passed"]
+    undefined = verdict({"bf16": 10.0, "shipped": 9.9, "native": 10.0})
+    assert not undefined["passed"] and undefined["ratio"] is None
+    with pytest.raises(ValueError, match="finite"):
+        verdict({"bf16": float("nan"), "shipped": 1.0, "native": 1.0})
+
+
 def test_resume_refuses_changed_measurement_settings() -> None:
     from benchmarks.rocm.record_qwen3_mlp_layer_quality import resume_mismatches
 

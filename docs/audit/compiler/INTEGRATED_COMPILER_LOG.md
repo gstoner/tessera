@@ -14388,3 +14388,18 @@ NVIDIA, Apple and x86 are not applicable.
 Remaining: exact-head CI/review. Still gfx1201-only: per-M LDS product images, the gate/up and product-only programs, the standalone NVFP4 program and the standalone public quantizer/expansion. Open: the gfx1151 attention-backward NaN.
 Evidence: tests/device/rocm/test_native_quantized_mlp_program.py; tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; tests/unit/test_gfx1151_quantized_program_packaging.py; src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/executable_pipeline_architecture_owned.mlir; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
 <!-- entry-fields:end -->
+
+### 2026-11-01 — Qwen3-8B quantized-MLP quality across every layer (stage 1)
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync QWEN3-MLP-LAYER-QUALITY-20261101.
+Outcome: the native quantized MLP's added loss stays small and flat across all 36 Qwen3-8B layers on real model inputs; almost all the error is the NVFP4 format itself.
+- **Inputs.** Teacher-forced BF16 MLP inputs of every layer of the pinned `Qwen/Qwen3-8B`, from upstream transformers on CPU in a separate reference venv (Torch never runs a Tessera package). 2,048 tokens per layer: four 512-token windows evenly spaced across the wikitext-2-raw-v1 test split. Two runs captured bitwise-identical inputs; every checkpoint shard was hashed against its content-addressed blob name.
+- **Arms.** The public seven-member native MLP on gfx1201 against two FP64 references: the BF16 weights, and the decoded shipped NVFP4 weights (both without activation quantization).
+- **Result.** The format alone is 3.17–14.36% from BF16 (median 12.63%); the native MLP is 3.25–14.60% (median 12.85%). Native ÷ format error is 1.000–1.025 in every layer, with no growth with depth; against the shipped weights the native MLP is 0.09–2.90% off, the cost of its E4M3 activation quantization. A 33% layer-35 smoke result on 16 tokens did not hold over 2,048 (12.73% format, 12.78% native).
+- **Correctness.** All 576 outputs are finite. The staged tolerance certificate ran on each layer's first chunk (36 certified, 540 scored without it), because it costs about 80 s a chunk against 1–3 s for the call and both references.
+
+NVIDIA, Apple and x86 are not applicable.
+Remaining: stage 2 (end-to-end perplexity with the native MLP in every layer, and the acceptance threshold set before measuring), the direct and ingested MXFP4 arms, and gfx1151 (no evidence transfers). No model-accuracy or promotion claim.
+Evidence: benchmarks/baselines/qwen3_mlp_layer_quality_20261101/README.md, capture.json, quality.json, run.txt; benchmarks/rocm/record_qwen3_mlp_layer_quality.py; tests/unit/test_qwen3_mlp_quality_harness.py.
+<!-- entry-fields:end -->

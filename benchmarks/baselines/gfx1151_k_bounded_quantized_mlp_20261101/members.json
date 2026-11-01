@@ -1,0 +1,89 @@
+{
+ "sync_key": "GFX1151-BOUNDED-QUANTIZED-K-20261101",
+ "architecture": "gfx1151",
+ "device": "gfx1151 (Radeon 8060S, Strix Halo, Princess-Luna, WSL2)",
+ "device_lock": {
+  "path": "/tmp/tessera-gfx1151-device.lock",
+  "held": true
+ },
+ "warm_up_owner": true,
+ "bounds": {
+  "m_bound": 256,
+  "k_bound": 12288
+ },
+ "members": [
+  "gate quantizer",
+  "gate/up expansion",
+  "gate product",
+  "SiLU",
+  "down quantizer",
+  "down expansion",
+  "down product"
+ ],
+ "route": "authored Graph SSA -> seven native partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> one checked multi-output HIP owner",
+ "latency_source": "hip_event_member_range_window",
+ "timing_source": "hip_event_member_range_window",
+ "unit": "median us per member invocation",
+ "timing": "each member alone through invoke_range, HIP-event windows of 200 invocations, 7 rounds with arm order alternating; median. Diagnostic, not a promotion.",
+ "gate_product_macro_tile": [
+  16,
+  32
+ ],
+ "rows": {
+  "16x128x12288x256": {
+   "bitwise_equal": true,
+   "static_gate_product_macro_tile": [
+    16,
+    32
+   ],
+   "bounded": [
+    6.01,
+    61.21,
+    929.85,
+    1.7,
+    3.81,
+    2.51,
+    16.02
+   ],
+   "static": [
+    5.96,
+    61.5,
+    930.21,
+    1.63,
+    3.84,
+    2.41,
+    16.29
+   ]
+  },
+  "64x128x8192x256": {
+   "bitwise_equal": true,
+   "static_gate_product_macro_tile": [
+    16,
+    32
+   ],
+   "bounded": [
+    12.71,
+    39.81,
+    622.12,
+    1.66,
+    3.79,
+    2.42,
+    15.92
+   ],
+   "static": [
+    12.8,
+    39.78,
+    621.66,
+    1.63,
+    3.85,
+    2.38,
+    16.24
+   ]
+  }
+ },
+ "commit": "070f445d78944e1b4be9e9422afa4fd8f1a81bcc",
+ "worktree_dirty": false,
+ "recorder_sha256": "6c779160f03bb95658b13ea5ae8e1e5829a94c1239bb4e3533ca84d9f0f2d5a4",
+ "compiler_sha256": "844416584b106d0828c6bb8473adba0faf27d8a942d40bf8e945567e23aa4651",
+ "provider_sha256": "c5f71f7684f6563c790c53376de13139ae6b5ebe61492563d3b7961fd5dfd3bf"
+}

@@ -124,6 +124,14 @@ def measure_layer(fn, rt, lib, layer: int, cache_root: Path, capture_dir: Path, 
             "checkpoint_source": loaded["source"], "elapsed_s": round(time.perf_counter() - started, 1)}
 
 
+def resume_mismatches(existing: dict, identity: dict) -> list[str]:
+    """Name every measurement setting a resumed record does not share."""
+    changed = [key for key, value in identity.items() if existing.get(key) != value]
+    changed += [f"layer {item['layer']} rows/chunk" for item in existing.get("layers", [])
+                if item.get("rows") != identity["rows_per_layer"] or item.get("chunk_rows") != identity["shape_mhkn"][0]]
+    return changed
+
+
 def record(cache_root: Path, capture_dir: Path, output: Path, layers: list[int], rows: int, chunk: int) -> dict:
     import tessera as ts
     from tessera import runtime as rt
@@ -141,20 +149,24 @@ def record(cache_root: Path, capture_dir: Path, output: Path, layers: list[int],
     h, k, n = gate.packed_codes.shape[0], gate.packed_codes.shape[1] * 2, down.packed_codes.shape[0]
     fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(chunk, h, k, n))
     output.parent.mkdir(parents=True, exist_ok=True)
-    result = json.loads(output.read_text()) if output.exists() else {
-        "schema": SCHEMA, "architecture": "gfx1201", "device_uuid": uuid, "device_name": name,
-        "host": socket.gethostname(),
-        "source_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+    identity = {
+        "schema": SCHEMA, "architecture": "gfx1201", "device_uuid": uuid,
         "recorder_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         "compiler_sha256": hashlib.sha256(Path(os.environ["TESSERA_OPT"]).read_bytes()).hexdigest(),
         "provider_sha256": hashlib.sha256(Path(lib._name).read_bytes()).hexdigest(),
         "capture_sha256": hashlib.sha256((capture_dir / "capture.json").read_bytes()).hexdigest(),
-        "corpus": metadata["corpus"], "shape_mhkn": [chunk, h, k, n],
+        "shape_mhkn": [chunk, h, k, n], "rows_per_layer": rows}
+    result = json.loads(output.read_text()) if output.exists() else {
+        **identity, "device_name": name, "host": socket.gethostname(),
+        "source_revision": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+        "corpus": metadata["corpus"],
         "route": "authored Graph SSA -> seven native partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> one checked multi-output HIP owner",
         "reference_policy": "FP64 products; FP32 then BF16 parent/down stores; FP32 SiLU and BF16 activation; no activation quantization",
         "model_quality_acceptance": False, "layers": []}
-    if result["capture_sha256"] != hashlib.sha256((capture_dir / "capture.json").read_bytes()).hexdigest():
-        raise RuntimeError("resumed record belongs to a different capture")
+    changed = resume_mismatches(result, identity)
+    if changed:
+        raise RuntimeError(f"resumed record was measured under different settings: {', '.join(changed)}; "
+                           "use a new output path")
     done = {item["layer"] for item in result["layers"]}
     for layer in layers:
         if layer in done:

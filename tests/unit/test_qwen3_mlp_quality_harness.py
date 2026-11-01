@@ -124,3 +124,14 @@ def test_accumulator_matches_whole_array_relative_rms() -> None:
     assert acc.result()["relative_rms_error"] == pytest.approx(expected, rel=1e-12)
     with pytest.raises(ValueError, match="non-finite"):
         acc.add(np.array([np.nan]), np.array([0.0]))
+
+
+def test_resume_refuses_changed_measurement_settings() -> None:
+    from benchmarks.rocm.record_qwen3_mlp_layer_quality import resume_mismatches
+
+    identity = {"compiler_sha256": "a", "shape_mhkn": [128, 8, 4, 4], "rows_per_layer": 2048}
+    existing = {**identity, "layers": [{"layer": 0, "rows": 2048, "chunk_rows": 128}]}
+    assert resume_mismatches(existing, identity) == []
+    smoke = {**existing, "rows_per_layer": 128, "layers": [{"layer": 0, "rows": 128, "chunk_rows": 128}]}
+    assert resume_mismatches(smoke, identity) == ["rows_per_layer", "layer 0 rows/chunk"]
+    assert resume_mismatches({**existing, "compiler_sha256": "b"}, identity) == ["compiler_sha256"]

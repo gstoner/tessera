@@ -1,0 +1,40 @@
+{"layer": 0, "elapsed_s": 88.2, "native_vs_bf16_weights": 0.07086, "native_vs_shipped_nvfp4": 0.01082, "shipped_nvfp4_vs_bf16_weights": 0.07005}
+{"layer": 1, "elapsed_s": 86.7, "native_vs_bf16_weights": 0.10625, "native_vs_shipped_nvfp4": 0.01016, "shipped_nvfp4_vs_bf16_weights": 0.10606}
+/home/angstorms/programming/tessera/benchmarks/rocm/benchmark_public_quantized_gate_up.py:57: RuntimeWarning: overflow encountered in exp
+  return (gate/(np.float32(1)+np.exp(-gate))*up).astype(ml_dtypes.bfloat16)
+/home/angstorms/programming/tessera/benchmarks/rocm/quantized_mlp_reference.py:58: RuntimeWarning: overflow encountered in exp
+  activation_at_parent=(gate/(np.float32(1)+np.exp(-gate))*up).astype(ml_dtypes.bfloat16)
+{"layer": 2, "elapsed_s": 84.5, "native_vs_bf16_weights": 0.14319, "native_vs_shipped_nvfp4": 0.01253, "shipped_nvfp4_vs_bf16_weights": 0.14261}
+{"layer": 3, "elapsed_s": 83.9, "native_vs_bf16_weights": 0.13917, "native_vs_shipped_nvfp4": 0.01309, "shipped_nvfp4_vs_bf16_weights": 0.13862}
+{"layer": 4, "elapsed_s": 88.9, "native_vs_bf16_weights": 0.12613, "native_vs_shipped_nvfp4": 0.01486, "shipped_nvfp4_vs_bf16_weights": 0.1254}
+{"layer": 5, "elapsed_s": 88.7, "native_vs_bf16_weights": 0.12468, "native_vs_shipped_nvfp4": 0.0205, "shipped_nvfp4_vs_bf16_weights": 0.12313}
+{"layer": 6, "elapsed_s": 82.4, "native_vs_bf16_weights": 0.03746, "native_vs_shipped_nvfp4": 0.00087, "shipped_nvfp4_vs_bf16_weights": 0.03745}
+{"layer": 7, "elapsed_s": 92.5, "native_vs_bf16_weights": 0.14596, "native_vs_shipped_nvfp4": 0.02679, "shipped_nvfp4_vs_bf16_weights": 0.14362}
+{"layer": 8, "elapsed_s": 86.9, "native_vs_bf16_weights": 0.13134, "native_vs_shipped_nvfp4": 0.02747, "shipped_nvfp4_vs_bf16_weights": 0.12855}
+{"layer": 9, "elapsed_s": 82.8, "native_vs_bf16_weights": 0.12878, "native_vs_shipped_nvfp4": 0.02715, "shipped_nvfp4_vs_bf16_weights": 0.12601}
+{"layer": 10, "elapsed_s": 84.5, "native_vs_bf16_weights": 0.12676, "native_vs_shipped_nvfp4": 0.02687, "shipped_nvfp4_vs_bf16_weights": 0.12397}
+{"layer": 11, "elapsed_s": 84.4, "native_vs_bf16_weights": 0.12947, "native_vs_shipped_nvfp4": 0.02754, "shipped_nvfp4_vs_bf16_weights": 0.12664}
+{"layer": 12, "elapsed_s": 94.0, "native_vs_bf16_weights": 0.1307, "native_vs_shipped_nvfp4": 0.02772, "shipped_nvfp4_vs_bf16_weights": 0.12785}
+{"layer": 13, "elapsed_s": 83.8, "native_vs_bf16_weights": 0.134, "native_vs_shipped_nvfp4": 0.02861, "shipped_nvfp4_vs_bf16_weights": 0.13101}
+{"layer": 14, "elapsed_s": 91.6, "native_vs_bf16_weights": 0.13392, "native_vs_shipped_nvfp4": 0.02853, "shipped_nvfp4_vs_bf16_weights": 0.13097}
+{"layer": 15, "elapsed_s": 83.8, "native_vs_bf16_weights": 0.13482, "native_vs_shipped_nvfp4": 0.02874, "shipped_nvfp4_vs_bf16_weights": 0.13185}
+{"layer": 16, "elapsed_s": 92.0, "native_vs_bf16_weights": 0.03254, "native_vs_shipped_nvfp4": 0.00351, "shipped_nvfp4_vs_bf16_weights": 0.03175}
+{"layer": 17, "elapsed_s": 92.0, "native_vs_bf16_weights": 0.1366, "native_vs_shipped_nvfp4": 0.02899, "shipped_nvfp4_vs_bf16_weights": 0.13361}
+{"layer": 18, "elapsed_s": 90.7, "native_vs_bf16_weights": 0.13383, "native_vs_shipped_nvfp4": 0.02789, "shipped_nvfp4_vs_bf16_weights": 0.13103}
+{"layer": 19, "elapsed_s": 85.4, "native_vs_bf16_weights": 0.13181, "native_vs_shipped_nvfp4": 0.02729, "shipped_nvfp4_vs_bf16_weights": 0.12909}
+{"layer": 20, "elapsed_s": 84.2, "native_vs_bf16_weights": 0.13701, "native_vs_shipped_nvfp4": 0.02814, "shipped_nvfp4_vs_bf16_weights": 0.13422}
+{"layer": 21, "elapsed_s": 84.3, "native_vs_bf16_weights": 0.13604, "native_vs_shipped_nvfp4": 0.02741, "shipped_nvfp4_vs_bf16_weights": 0.1334}
+{"layer": 22, "elapsed_s": 86.1, "native_vs_bf16_weights": 0.12822, "native_vs_shipped_nvfp4": 0.02457, "shipped_nvfp4_vs_bf16_weights": 0.12597}
+{"layer": 23, "elapsed_s": 86.0, "native_vs_bf16_weights": 0.12364, "native_vs_shipped_nvfp4": 0.02277, "shipped_nvfp4_vs_bf16_weights": 0.12162}
+{"layer": 24, "elapsed_s": 91.9, "native_vs_bf16_weights": 0.11808, "native_vs_shipped_nvfp4": 0.02093, "shipped_nvfp4_vs_bf16_weights": 0.11635}
+{"layer": 25, "elapsed_s": 89.2, "native_vs_bf16_weights": 0.12337, "native_vs_shipped_nvfp4": 0.02169, "shipped_nvfp4_vs_bf16_weights": 0.12157}
+{"layer": 26, "elapsed_s": 90.3, "native_vs_bf16_weights": 0.12374, "native_vs_shipped_nvfp4": 0.02204, "shipped_nvfp4_vs_bf16_weights": 0.12188}
+{"layer": 27, "elapsed_s": 85.4, "native_vs_bf16_weights": 0.12647, "native_vs_shipped_nvfp4": 0.02203, "shipped_nvfp4_vs_bf16_weights": 0.12463}
+{"layer": 28, "elapsed_s": 92.7, "native_vs_bf16_weights": 0.12635, "native_vs_shipped_nvfp4": 0.0226, "shipped_nvfp4_vs_bf16_weights": 0.12443}
+{"layer": 29, "elapsed_s": 83.8, "native_vs_bf16_weights": 0.11847, "native_vs_shipped_nvfp4": 0.01989, "shipped_nvfp4_vs_bf16_weights": 0.1169}
+{"layer": 30, "elapsed_s": 90.3, "native_vs_bf16_weights": 0.12238, "native_vs_shipped_nvfp4": 0.0216, "shipped_nvfp4_vs_bf16_weights": 0.12056}
+{"layer": 31, "elapsed_s": 89.5, "native_vs_bf16_weights": 0.13024, "native_vs_shipped_nvfp4": 0.02323, "shipped_nvfp4_vs_bf16_weights": 0.1283}
+{"layer": 32, "elapsed_s": 92.3, "native_vs_bf16_weights": 0.13723, "native_vs_shipped_nvfp4": 0.02529, "shipped_nvfp4_vs_bf16_weights": 0.135}
+{"layer": 33, "elapsed_s": 91.3, "native_vs_bf16_weights": 0.13336, "native_vs_shipped_nvfp4": 0.02461, "shipped_nvfp4_vs_bf16_weights": 0.1312}
+{"layer": 34, "elapsed_s": 94.7, "native_vs_bf16_weights": 0.06082, "native_vs_shipped_nvfp4": 0.01087, "shipped_nvfp4_vs_bf16_weights": 0.05988}
+{"layer": 35, "elapsed_s": 92.4, "native_vs_bf16_weights": 0.12783, "native_vs_shipped_nvfp4": 0.01111, "shipped_nvfp4_vs_bf16_weights": 0.1273}

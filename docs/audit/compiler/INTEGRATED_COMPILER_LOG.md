@@ -14388,3 +14388,33 @@ NVIDIA, Apple and x86 are not applicable.
 Remaining: exact-head CI/review. Still gfx1201-only: per-M LDS product images, the gate/up and product-only programs, the standalone NVFP4 program and the standalone public quantizer/expansion. Open: the gfx1151 attention-backward NaN.
 Evidence: tests/device/rocm/test_native_quantized_mlp_program.py; tests/device/rocm/test_public_quantized_mlp_row_bound_device.py; tests/unit/test_gfx1151_quantized_program_packaging.py; src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/executable_pipeline_architecture_owned.mlir; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
 <!-- entry-fields:end -->
+
+### 2026-11-01 — Qwen3-8B quantized-MLP quality across every layer (stage 1)
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1030; sync QWEN3-MLP-LAYER-QUALITY-20261101.
+Outcome: the native quantized MLP's added loss stays small and flat across all 36 Qwen3-8B layers on real model inputs; almost all the error is the NVFP4 format itself.
+- **Inputs.** Teacher-forced BF16 MLP inputs of every layer of the pinned `Qwen/Qwen3-8B`, from upstream transformers on CPU in a separate reference venv (Torch never runs a Tessera package). 2,048 tokens per layer: four 512-token windows evenly spaced across the wikitext-2-raw-v1 test split. Two runs captured bitwise-identical inputs; every checkpoint shard was hashed against its content-addressed blob name.
+- **Arms.** The public seven-member native MLP on gfx1201 against two FP64 references: the BF16 weights, and the decoded shipped NVFP4 weights (both without activation quantization).
+- **Result.** The format alone is 3.17–14.36% from BF16 (median 12.63%); the native MLP is 3.25–14.60% (median 12.85%). Native ÷ format error is 1.000–1.025 in every layer, with no growth with depth; against the shipped weights the native MLP is 0.09–2.90% off, the cost of its E4M3 activation quantization. A 33% layer-35 smoke result on 16 tokens did not hold over 2,048 (12.73% format, 12.78% native).
+- **Correctness.** All 576 outputs are finite. The staged tolerance certificate ran on each layer's first chunk (36 certified, 540 scored without it), because it costs about 80 s a chunk against 1–3 s for the call and both references.
+
+NVIDIA, Apple and x86 are not applicable.
+Remaining: stage 2 (end-to-end perplexity with the native MLP in every layer, and the acceptance threshold set before measuring), the direct and ingested MXFP4 arms, and gfx1151 (no evidence transfers). No model-accuracy or promotion claim.
+Evidence: benchmarks/baselines/qwen3_mlp_layer_quality_20261101/README.md, capture.json, quality.json, run.txt; benchmarks/rocm/record_qwen3_mlp_layer_quality.py; tests/unit/test_qwen3_mlp_quality_harness.py.
+<!-- entry-fields:end -->
+
+### 2026-11-01 — Qwen3-8B perplexity with the native quantized MLP in every layer (stage 2)
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1030; sync QWEN3-NATIVE-MLP-PERPLEXITY-20261101.
+Outcome: with the native gfx1201 MLP in all 36 layers, Qwen3-8B perplexity rises by 1.008× what the shipped NVFP4 weights alone cost; the pre-registered gate (≤ 1.5×) passes.
+- **Rule first.** The acceptance rule was committed (`39b048f27`) before the full run: Δ(shipped) > 0 and Δ(native) ≤ 1.5 × Δ(shipped), Δ = ppl − ppl(BF16), with finite outputs and the staged certificate on each layer's first native chunk.
+- **Setup.** Pinned `Qwen/Qwen3-8B` in upstream transformers on CPU (separate reference venv), 16 evenly spaced 512-token windows of the wikitext-2-raw-v1 test split (8,176 scored tokens). Three arms each carry their own residual stream: BF16 Torch MLPs; the shipped NVFP4 weights at FP64 with no activation quantization; the native seven-member MLP. The latter two run in a Tessera worker over a framed pipe, so Torch and Tessera never share a process (Decision #23). Layers run layer-major; the BF16 arm reproduces the stock model's logits bitwise for every window.
+- **Result.** Perplexity 12.376 (BF16), 12.688 (shipped), 12.691 (native): Δ 0.312 vs 0.314, ratio 1.008, window-bootstrap 95% interval 0.86–1.15. The native − shipped token NLL difference is +0.0002 (window SE 0.0017). MLP-input drift from BF16 peaks at layer 18 (21.8% shipped, 22.3% native); native stays 1.004–1.029× the shipped drift at every layer.
+- **Correctness.** 2,304 native chunks, all finite; all 36 per-layer certificates passed on the native arm's own drifted inputs.
+
+NVIDIA, Apple and x86 are not applicable.
+Remaining: the checkpoint's W4A4 deployment recipe, quantized attention and `lm_head`, downstream task accuracy, the direct and ingested MXFP4 arms, gfx1151 (no evidence transfers), and any default or selector promotion.
+Evidence: benchmarks/baselines/qwen3_native_mlp_perplexity_20261101/README.md, perplexity.json, token_nll.npz, run.txt; benchmarks/rocm/record_qwen3_native_mlp_perplexity.py; benchmarks/rocm/qwen3_native_mlp_worker.py; tests/unit/test_qwen3_mlp_quality_harness.py.
+<!-- entry-fields:end -->

@@ -16844,4 +16844,8 @@ Not applicable to NVIDIA: the software E4M3 encode is selected only for `gfx1151
 
 Slice 3 (#1028) is not applicable to NVIDIA either. The new `typed-directive` executable-pipeline option, the architecture-threaded quantized packagers and the composed-tail NVFP4 admission are ROCm-only. The frontend admission is a Graph-verifier exemption scoped to the quantized program on the exact `rocm_gfx1151` target; no capability row or dashboard changes. No NVIDIA selector, ABI or result changes.
 Slice 4 (gfx1151 promotion) is not applicable to NVIDIA: the promotion mirrors, the HIP owner's architecture argument and the new `rocm_gfx1151` execution-matrix rows are ROCm-only. No NVIDIA selector, ABI or result changes.
+
+Model-quality stage 1 (QWEN3-MLP-LAYER-QUALITY-20261101) is not applicable to NVIDIA: it scores the ROCm native quantized MLP on gfx1201 against FP64 references. The capture and reference scripts are host-free, but no NVIDIA route consumes them, and no NVIDIA selector, ABI or result changes.
+
+Model-quality stage 2 (QWEN3-NATIVE-MLP-PERPLEXITY-20261101) is not applicable to NVIDIA: it substitutes the ROCm native quantized MLP into Qwen3-8B on gfx1201 and measures perplexity. The Torch driver and worker are not a NVIDIA route, and no NVIDIA selector, ABI or result changes.
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".

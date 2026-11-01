@@ -1,0 +1,450 @@
+{
+  "schema": "tessera.checkpoint.qwen3_all_layer_mlp_inputs.v1",
+  "capture_kind": "pinned_bf16_model_all_layer_mlp_inputs",
+  "capture_boundary": "upstream_decoder_mlp_forward_pre_hook",
+  "reference_execution": "torch_cpu_bfloat16_eager_teacher_forced",
+  "storage": "bf16 bit patterns as little-endian uint16 .npy, rows = sequence-major tokens",
+  "repo": "Qwen/Qwen3-8B",
+  "revision": "b968826d9c46dd6066d109eabc6255188de91218",
+  "bf16_index_sha256": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc",
+  "bf16_shard_sha256": {
+    "model-00001-of-00005.safetensors": "31d6a825ae35f11fb85b195b4c42c146c051e446433125a215336abdf95cbf5f",
+    "model-00002-of-00005.safetensors": "5991236cea6fe21f3d43cab0f0e84448734fbbe0789816202989f2ddc9d18282",
+    "model-00003-of-00005.safetensors": "c5185c4794be2d8a9784d5753c9922db38df478ce11f9ed0b415b7304d896836",
+    "model-00004-of-00005.safetensors": "b5ee7de71fbf17db3d5704e0c8f2bc7d005ca9e1d7ca2aeb19827b0cfcaa917a",
+    "model-00005-of-00005.safetensors": "20c2d6366ab85c90786ccdd829cd2b9e7d30ef3b2ebbb998280e7e4014b542ff"
+  },
+  "config_sha256": "f7c4eadfbbf522470667b797a3c89be2524832d2d599797248dc304fff447c30",
+  "tokenizer_sha256": "aeb13307a71acd8fe81861d94ad54ab689df773318809eed3cbe794b4492dae4",
+  "corpus": {
+    "repo": "Salesforce/wikitext",
+    "revision": "b08601e04326c79dfdd32d625aee71d232d685c3",
+    "file": "wikitext-2-raw-v1/test-00000-of-00001.parquet",
+    "parquet_sha256": "5f1bea067869d04849c0f975a2b29c4ff47d867f484f5010ea5e861eab246d91",
+    "text_sha256": "bbf94c53a05abe9ee670d3b6343608095822c85e26de37c70b24fc571964574a",
+    "total_tokens": 298938,
+    "window_starts": [
+      0,
+      74734,
+      149468,
+      224202
+    ],
+    "window_length": 512
+  },
+  "token_ids_sha256": "c6f0108e0ccf95b6edfded8507bb282a3c01207e15cdcfad119158ad57d8c359",
+  "batch_sequence_shape": [
+    4,
+    512
+  ],
+  "layers": [
+    {
+      "layer": 0,
+      "file": "layer_00.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "b6b10d59dc4f018c36dce88be88a7a46abb6b32c988e95cd497f3f109f3eb1ed",
+      "rms": 0.06581808052476332,
+      "max_abs": 1.6171875
+    },
+    {
+      "layer": 1,
+      "file": "layer_01.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "e35a6027e13f4b869d51eac0b72c77fcf70ba5028b6d29f671c012e8aecaaf37",
+      "rms": 0.8999539439500547,
+      "max_abs": 51.0
+    },
+    {
+      "layer": 2,
+      "file": "layer_02.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "5a512b6c5722877318a92fc6c171ee0d5502226488148cfd3e2fa7f35d7397d1",
+      "rms": 1.476526291833085,
+      "max_abs": 80.0
+    },
+    {
+      "layer": 3,
+      "file": "layer_03.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "2a78482361c332750c08633145f3e502fb0c1ac4655a8d1cee8844aace6e2408",
+      "rms": 1.098920105850951,
+      "max_abs": 65.5
+    },
+    {
+      "layer": 4,
+      "file": "layer_04.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "f9bf6527c18210d917af941afc706bea12e3e73943e1e7d4179cb7af3627a995",
+      "rms": 0.7287255093770633,
+      "max_abs": 43.25
+    },
+    {
+      "layer": 5,
+      "file": "layer_05.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "ed2fa3a0377bb28e9afb263b7b78b5fbce1e5a9a87434af6b6a3a1efd575530c",
+      "rms": 0.40287232533429884,
+      "max_abs": 22.0
+    },
+    {
+      "layer": 6,
+      "file": "layer_06.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "763ff87951aa668b101a0d01d586cb7328f794c5cb3bc4f810933caafaf07310",
+      "rms": 0.4628900257045262,
+      "max_abs": 205.0
+    },
+    {
+      "layer": 7,
+      "file": "layer_07.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "a731a15d372f97d50a101ff4726bff2c436bc28cc9989d3f64991e4135c02b16",
+      "rms": 0.46808498525196607,
+      "max_abs": 38.0
+    },
+    {
+      "layer": 8,
+      "file": "layer_08.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "62b1bb2522a0750c6f31e27378416aa9df646364dcc6edfcda9f145e6525ce92",
+      "rms": 0.2323933231385118,
+      "max_abs": 7.1875
+    },
+    {
+      "layer": 9,
+      "file": "layer_09.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "bf1bcd33cde6d54e686e0d625d765dc006463846164178face3084556f86d8ec",
+      "rms": 0.27252111996573763,
+      "max_abs": 8.3125
+    },
+    {
+      "layer": 10,
+      "file": "layer_10.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "137fe0d1546a36ad5724317a8d03f7ac09dd0caead5f15961b5897ca5423e670",
+      "rms": 0.2661788776938822,
+      "max_abs": 8.5
+    },
+    {
+      "layer": 11,
+      "file": "layer_11.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "b0fdbd8d6c5cd67eaad94ecfbb87d49a82236b378bad9eae6e205cd3cb2c1354",
+      "rms": 0.25917667608420564,
+      "max_abs": 8.5625
+    },
+    {
+      "layer": 12,
+      "file": "layer_12.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "914aa7e766065c3e033b5a79c9910199cf05d3de18238c51fb9b7261b201cbbe",
+      "rms": 0.2583100877077581,
+      "max_abs": 9.375
+    },
+    {
+      "layer": 13,
+      "file": "layer_13.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "caacfc40a30983780d181f1473dec0b5e0526c2d27635b109c16cd96b6408e7b",
+      "rms": 0.2601490358687997,
+      "max_abs": 11.0
+    },
+    {
+      "layer": 14,
+      "file": "layer_14.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "57b13f4c7613963e4c0d47b784e94431defed06a767813fa6b5eb5e09edb9165",
+      "rms": 0.26480153068964474,
+      "max_abs": 13.3125
+    },
+    {
+      "layer": 15,
+      "file": "layer_15.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "c748f56428cf4152d1fedaf7dc21d681b6347ad9061f3c644702e1b88d200ee7",
+      "rms": 0.2644526756918388,
+      "max_abs": 14.75
+    },
+    {
+      "layer": 16,
+      "file": "layer_16.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "f5b90a5c92302655de4b14fc8903d63003834911221751688ad865bc17f0cc8f",
+      "rms": 0.2714623720308774,
+      "max_abs": 34.0
+    },
+    {
+      "layer": 17,
+      "file": "layer_17.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "eef1e815e5c05524aa2c0789d26c79862d74b465212494be3db01d5b83f69c81",
+      "rms": 0.26560474530365596,
+      "max_abs": 11.375
+    },
+    {
+      "layer": 18,
+      "file": "layer_18.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "f37f9292beecae101dc77803266e6efed8c0ca9d6a200ba42b119e3b30532492",
+      "rms": 0.27513082678289463,
+      "max_abs": 10.875
+    },
+    {
+      "layer": 19,
+      "file": "layer_19.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "18b16a8fe8c5568436cc7bb04aa6c646923bd5b4f5e6560ceebf3deb42404522",
+      "rms": 0.2889215333826027,
+      "max_abs": 10.625
+    },
+    {
+      "layer": 20,
+      "file": "layer_20.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "14bef58198a4e4760efde29156c9684ec4405ea8f766af187bd61a5f2d8a95f3",
+      "rms": 0.29923384669507425,
+      "max_abs": 11.375
+    },
+    {
+      "layer": 21,
+      "file": "layer_21.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "7dc4eec8cc4e1624c66eb7be4461b1fa2e7fa564f45aed10ed1b11a100f81d5a",
+      "rms": 0.3283435233764943,
+      "max_abs": 10.1875
+    },
+    {
+      "layer": 22,
+      "file": "layer_22.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "e72cc1ae06b73e28196469494643555f3f540714bc2f1a66e1eb80fd71e598af",
+      "rms": 0.3565802590638628,
+      "max_abs": 10.25
+    },
+    {
+      "layer": 23,
+      "file": "layer_23.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "239fb8b5d6aee65a4fb3c2a01e404e13fa22c34807234de5d5041d2e917a8c7a",
+      "rms": 0.38737421019715884,
+      "max_abs": 12.1875
+    },
+    {
+      "layer": 24,
+      "file": "layer_24.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "856a62a03904b27472cdcb70dacb7f8bb186a5964872f044cf8a065164a1ddfc",
+      "rms": 0.42259577656878455,
+      "max_abs": 14.3125
+    },
+    {
+      "layer": 25,
+      "file": "layer_25.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "8a18d3a6983e7daad362e4c195bce46bb7a236fd538e355c8772b43fa362f692",
+      "rms": 0.45042503922933763,
+      "max_abs": 14.25
+    },
+    {
+      "layer": 26,
+      "file": "layer_26.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "078734888c819c47f0a86481fcc24582df9d703340f76880677a2f47355043be",
+      "rms": 0.49857030759062476,
+      "max_abs": 16.75
+    },
+    {
+      "layer": 27,
+      "file": "layer_27.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "d41d411d7bd0e0efdaa95b1a9ea06c05500bcbebcb476e2220ef7a746318a74e",
+      "rms": 0.5332909721982733,
+      "max_abs": 18.25
+    },
+    {
+      "layer": 28,
+      "file": "layer_28.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "6c2d0d542838a86f6e30a5b8ab920b9143052136d0c02176046f78bdcb2b1c00",
+      "rms": 0.5722742009406879,
+      "max_abs": 19.25
+    },
+    {
+      "layer": 29,
+      "file": "layer_29.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "2c616aa01e397f6ea3234c6c0d09561bdc7e57f07b3690d982d65a94837d2ea7",
+      "rms": 0.621364995924696,
+      "max_abs": 21.25
+    },
+    {
+      "layer": 30,
+      "file": "layer_30.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "97d74248f582749ffe77b4133bc728d8fe54f5c8b53aa47778ec0bc094644007",
+      "rms": 0.6544470472698432,
+      "max_abs": 19.875
+    },
+    {
+      "layer": 31,
+      "file": "layer_31.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "55076898fcc495874255f73d12f8b5ed9caf9df40b038e208b8a6505d9994c12",
+      "rms": 0.6719815817761532,
+      "max_abs": 17.375
+    },
+    {
+      "layer": 32,
+      "file": "layer_32.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "ae1f5fae7981466d979967fcc789a4bab0d094838360596e3e32e69cc332b377",
+      "rms": 0.7014807584171998,
+      "max_abs": 16.375
+    },
+    {
+      "layer": 33,
+      "file": "layer_33.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "383db1209021f807d872c59d76251501bedfc0644cdfff984f744430de78d1b8",
+      "rms": 0.7383052361167037,
+      "max_abs": 27.125
+    },
+    {
+      "layer": 34,
+      "file": "layer_34.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "2d855a44ad4b0adfdaf3b4a4b1a327355251d67452fc79742be646fc51892393",
+      "rms": 0.8469403933368196,
+      "max_abs": 85.5
+    },
+    {
+      "layer": 35,
+      "file": "layer_35.npy",
+      "shape": [
+        2048,
+        4096
+      ],
+      "bf16_bits_sha256": "f2126b01c0cab0d3499a1c12cc6601a70eb48ca2145f2718ff285fa6f939695d",
+      "rms": 1.1755759229155938,
+      "max_abs": 272.0
+    }
+  ],
+  "repeat_bitwise_equal": true,
+  "threads": 16,
+  "host": "tajasarus",
+  "versions": {
+    "torch": "2.14.1+cpu",
+    "transformers": "4.57.1",
+    "tokenizers": "0.22.2",
+    "numpy": "2.5.4"
+  },
+  "capture_source_sha256": "70726ccdb8303af5512269d85f48f5cb8927d8865d9996a57be2fc16759f40bb",
+  "reader_source_sha256": "39013d34911cb2a2c195200d49c1c66d42a3e676d721da8ad5a828480b264be7",
+  "model_quality_acceptance": false,
+  "scope": "Teacher-forced per-layer MLP inputs; stage 1 input only, not end-to-end model accuracy"
+}

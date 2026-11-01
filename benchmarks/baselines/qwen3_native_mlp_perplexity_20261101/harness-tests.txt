@@ -1,0 +1,11 @@
+tests/unit/test_qwen3_mlp_quality_harness.py::test_local_snapshot_reads_verified_tensor PASSED [ 10%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_local_snapshot_refuses_tampered_blob PASSED [ 20%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_unpinned_revision_is_refused PASSED [ 30%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_load_layer_mlp_checks_nvfp4_contract PASSED [ 40%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_capture_layer_round_trips_bf16_bits PASSED [ 50%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_capture_layer_refuses_changed_bits PASSED [ 60%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_accumulator_matches_whole_array_relative_rms PASSED [ 70%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_worker_frames_round_trip_and_refuse_truncation PASSED [ 80%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_perplexity_verdict_applies_the_fixed_ratio PASSED [ 90%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_resume_refuses_changed_measurement_settings PASSED [100%]
+============================== 10 passed in 0.36s ==============================

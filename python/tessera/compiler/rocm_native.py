@@ -599,6 +599,12 @@ def _run_opt(tool: Path, source: str, pipeline: str) -> str:
         raise RuntimeError(
             "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
         )
+    # LLVM codegen can report an error and still exit 0: "no libcall available
+    # for ftanh" left every gfx1151 soft-cap kernel computing tanh as 0
+    # (2026-11-01). A successful compile prints no error diagnostic.
+    errors = [line.strip() for line in result.stderr.splitlines() if "error:" in line]
+    if errors:
+        raise RuntimeError("ROCm native packaging reported errors despite exit 0: " + "; ".join(errors[:5]))
     return result.stdout
 
 

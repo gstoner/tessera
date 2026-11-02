@@ -14418,3 +14418,19 @@ NVIDIA, Apple and x86 are not applicable.
 Remaining: the checkpoint's W4A4 deployment recipe, quantized attention and `lm_head`, downstream task accuracy, the direct and ingested MXFP4 arms, gfx1151 (no evidence transfers), and any default or selector promotion.
 Evidence: benchmarks/baselines/qwen3_native_mlp_perplexity_20261101/README.md, perplexity.json, token_nll.npz, run.txt; benchmarks/rocm/record_qwen3_native_mlp_perplexity.py; benchmarks/rocm/qwen3_native_mlp_worker.py; tests/unit/test_qwen3_mlp_quality_harness.py.
 <!-- entry-fields:end -->
+
+### 2026-11-01 — gfx1151 soft-cap attention backward NaN: tanh lowered to an intrinsic AMDGPU computes as 0
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1032; sync ROCM-MATH-OCML-20261101.
+Outcome: the gfx1151 attention backward NaN recorded as open in slice 4 is fixed; the ROCm executable pipeline now lowers math to OCML however it is entered, and native packaging refuses a compile that reports an error.
+- **Symptom.** `test_gfx1151_compiler_owned_backward_program_executes_and_times` returned NaN in every dQ/dK/dV element. A per-stage trace showed the forward recompute writing O = 0 and the pre-pass writing LSE = NaN; toggling features isolated the logit soft-cap (any cap > 0; causal, window, GQA, bias, LSE mode and dtype were irrelevant).
+- **Cause.** The generated kernels are identical to the standalone lane's, but the image differs: from Graph input `convert-gpu-to-rocdl` lowered `math.tanh` to `llvm.intr.tanh`, from directive input (and from upstream `mlir-opt` on the same module) to `__ocml_tanh_f32`. LLVM 23.1.1 has no AMDGPU lowering for `llvm.tanh`: it printed `error: no libcall available for ftanh`, exited 0, and a single-op kernel returns 0 for every input on gfx1151 and gfx1201. Why the Graph entry selects the intrinsic is not established; the fix removes the dependence.
+- **Fix.** `convert-math-to-rocdl` runs before `convert-gpu-to-rocdl` (on a probe module it makes the same per-op choices: tanh/erf/exp2/rsqrt/f16 exp to OCML, f32 exp/log/sqrt intrinsics). `rocm_native._run_opt` raises on any `error:` line even when tessera-opt exits 0.
+- **Evidence.** Princess-Luna (gfx1151): the failing test and a 6-shape × LSE × dtype probe matrix are finite and within 1.4e-3 (bf16) of the reference; the regression fixture fails on main and passes with the fix; a ROCm/attention unit sweep (fixed vs main, same host) differs only by the fixed test. Tajasarus (gfx1201, assertions-ON LLVM): `tests/tessera-ir` and `check-tessera-rocm` (85/85) pass; the unit sweep's only new failures came from worktree configuration (no NVIDIA/x86 tools, spectral library path) and the spectral ones pass with the library found.
+
+NVIDIA, Apple and x86 are not applicable.
+- **Survey.** Every `*-opt` subprocess in the full non-slow unit suite on unfixed main was logged when it exited 0 but printed `error:` (35,385 passed tests on Princess-Luna, 34,973 on Tajasarus). Both boxes logged only the gfx1151 Graph-input attention-backward compile (`no libcall available for ftanh`); the fixed tree logged none. This covers the routes the unit suite exercises and the failure mode that prints a backend error; an intrinsic that miscompiles silently would not appear.
+Remaining: gfx1201 device proof for any soft-cap Graph route (Graph-route attention backward is gated to gfx1151). No performance claim.
+Evidence: tests/tessera-ir/phase3/streaming_attention_backward_rocm_softcap_ocml.mlir; tests/unit/test_rocm_native_run_opt_diagnostics.py; tests/unit/test_rocm_attention_backward_program_native.py; src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp.
+<!-- entry-fields:end -->

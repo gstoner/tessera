@@ -14469,7 +14469,7 @@ Evidence: benchmarks/baselines/qwen3_native_mlp_perplexity_gfx1151_20261102/READ
 ### 2026-11-02 — Native MXFP4 MLP on gfx1201 matches its weight-only reference
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: stacked on #1033; sync ROCM-MXFP4-NATIVE-MLP-20261102.
+PRs: #1034 (stacked on #1033); sync ROCM-MXFP4-NATIVE-MLP-20261102.
 Outcome: the FP4 weight expansion accepts an MXFP4 source, so the public seven-member W4A8 MLP executes MXFP4 weights on gfx1201; its Qwen3-8B perplexity matches the weight-only MXFP4 reference (ratio 0.997, gate passes).
 - **Compiler.** The expansion's numeric policy admits `mxfp4_e2m1_e8m0_k32`: E8M0 bytes [N, K/32], each decoded to 2^(e−127) × projection global, rounded once to f32 and written to both K16 groups, so every member downstream is the accepted NVFP4 program unchanged. Graph, Schedule (`scale_storage = "e8m0_bits"`), Tile and ROCm Target verifiers check the policy, the byte scale type and K32; the boundary refuses code 255. Static gfx1201 images only: runtime-K/N and bounded admission refuse an MXFP4 source. The op keeps its `nvfp4_expand` name (naming debt).
 - **Rule first.** `d7ad606b2` recorded the rule in the plan before the run: Δ(native_mxfp4) ≤ 1.5 × Δ(mxfp4_direct), Δ(mxfp4_direct) > 0, every output finite, certificates on every layer; Δ/Δ(shipped) reported only.

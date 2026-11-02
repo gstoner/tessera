@@ -54,18 +54,28 @@ inline LogicalResult verifyNVFP4Extents(Operation *op, int64_t n, int64_t k,
   return success();
 }
 
-// Codes are exact; the scale product is rounded once from f64 to f32.
+// Codes are exact; the scale product is rounded once from f64 to f32. The
+// source is NVFP4 (E4M3 per K16) or, since ROCM-MXFP4-NATIVE-MLP-20261102,
+// MXFP4 (E8M0 per K32, written to both K16 groups of its block). Both share
+// the destination contract; `source_format` and `source_scale_application`
+// are the semantic keys that select between them, and must agree.
+inline bool isMXFP4ExpandPolicy(DictionaryAttr policy) {
+  auto source = policy ? policy.getAs<StringAttr>("source_format") : StringAttr();
+  return source && source.getValue() == "mxfp4_e2m1_e8m0_k32";
+}
 inline LogicalResult verifyNVFP4ExpandPolicy(Operation *op, DictionaryAttr policy) {
+  if (!policy || policy.size() != 7)
+    return op->emitError("NVFP4 expansion requires its complete explicit numeric policy");
+  const bool mx = isMXFP4ExpandPolicy(policy);
   const std::pair<StringRef,StringRef> fields[] = {
     {"execution_mode","source_preserving_expansion"},
-    {"source_format","nvfp4_e2m1_e4m3_k16"},
+    {"source_format",mx ? "mxfp4_e2m1_e8m0_k32" : "nvfp4_e2m1_e4m3_k16"},
     {"destination_format","fp8_e4m3_k16_f32_scales"},
-    {"source_scale_application","projection_global_times_e4m3"},
+    {"source_scale_application",
+     mx ? "projection_global_times_e8m0" : "projection_global_times_e4m3"},
     {"destination_code_selection","exact_e2m1_signed_zero"},
     {"destination_scale_order","k_group_n"},
     {"scale_rounding","f64_product_to_f32_rne"}};
-  if (!policy || policy.size() != 7)
-    return op->emitError("NVFP4 expansion requires its complete explicit numeric policy");
   for (auto [key,value] : fields) {
     auto attr = policy.getAs<StringAttr>(key);
     if (!attr || attr.getValue() != value)
@@ -74,10 +84,12 @@ inline LogicalResult verifyNVFP4ExpandPolicy(Operation *op, DictionaryAttr polic
   return success();
 }
 inline LogicalResult verifyNVFP4ExpandExtents(Operation *op, int64_t n,
-                                             int64_t k, ArrayAttr offsets) {
-  if (n <= 0 || k <= 0 || k % 16 ||
+                                             int64_t k, ArrayAttr offsets,
+                                             bool mx = false) {
+  if (n <= 0 || k <= 0 || k % (mx ? 32 : 16) ||
       n > std::numeric_limits<int64_t>::max() / k)
-    return op->emitError("NVFP4 expansion requires representable positive N/K16 extents");
+    return op->emitError(mx ? "MXFP4 expansion requires representable positive N/K32 extents"
+                            : "NVFP4 expansion requires representable positive N/K16 extents");
   if (!offsets || offsets.size() < 2)
     return op->emitError("NVFP4 expansion requires complete projection row boundaries");
   int64_t previous = -1;

@@ -5,8 +5,8 @@ This module is a benchmark/test oracle, never a production execution route.
 import ml_dtypes
 import numpy as np
 from tessera import runtime as rt
-from tessera.compiler.nvfp4_expansion import reference_nvfp4_expand,nvfp4_expansion_policy
-from benchmarks.rocm.benchmark_public_quantized_gate_up import oracle as gate_oracle
+from tessera.compiler.nvfp4_expansion import reference_nvfp4_expand
+from benchmarks.rocm.benchmark_public_quantized_gate_up import expansion_policy_for,oracle as gate_oracle
 
 
 def _parent_product(package,q,b,sa,sb,shape):
@@ -25,7 +25,7 @@ def down_reference(roots,activation):
     blocks=activation.astype(np.float32).reshape(m,h//16,16)
     sa=np.maximum(np.max(np.abs(blocks),axis=-1)/np.float32(448),np.finfo(np.float32).tiny)
     q=(blocks/sa[...,None]).astype(ml_dtypes.float8_e4m3fn).astype(np.float64)
-    b,sb=reference_nvfp4_expand(*roots[4:],row_offsets=[0,n],numeric_policy=nvfp4_expansion_policy())
+    b,sb=reference_nvfp4_expand(*roots[4:],row_offsets=[0,n],numeric_policy=expansion_policy_for(roots[5]))
     quantized=q*sa.astype(np.float64)[...,None]
     weights=b.astype(np.float64).reshape(n,h//16,16)*sb.astype(np.float64).T[...,None]
     return np.einsum('mgj,ngj->mn',quantized,weights),quantized,weights
@@ -48,7 +48,7 @@ def assert_compiled_chain(package,roots,actual,lib):
     blocks=x.astype(np.float32).reshape(m,k//16,16)
     sa=np.maximum(np.max(np.abs(blocks),axis=-1)/np.float32(448),np.finfo(np.float32).tiny)
     q=(blocks/sa[...,None]).astype(ml_dtypes.float8_e4m3fn).reshape(m,k)
-    b,sb=reference_nvfp4_expand(packed,weight_scales,globals_,row_offsets=[0,h,2*h],numeric_policy=nvfp4_expansion_policy())
+    b,sb=reference_nvfp4_expand(packed,weight_scales,globals_,row_offsets=[0,h,2*h],numeric_policy=expansion_policy_for(weight_scales))
     parent_reference=np.einsum('mgj,ngj,mg,gn->mn',q.astype(np.float64).reshape(m,k//16,16),
         b.astype(np.float64).reshape(2*h,k//16,16),sa.astype(np.float64),sb.astype(np.float64))
     parent=_parent_product(package.gate.product,q,b,sa,sb,package.gate.product_recipe.shape).astype(np.float32)

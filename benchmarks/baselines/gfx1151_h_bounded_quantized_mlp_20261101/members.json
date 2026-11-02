@@ -1,0 +1,114 @@
+{
+ "sync_key": "GFX1151-BOUNDED-QUANTIZED-H-20261101",
+ "architecture": "gfx1151",
+ "device": "gfx1151 (Radeon 8060S, Strix Halo, Princess-Luna, WSL2)",
+ "device_lock": {
+  "path": "/tmp/tessera-gfx1151-device.lock",
+  "held": true
+ },
+ "warm_up_owner": true,
+ "bounds": {
+  "m_bound": 256,
+  "h_bound": 512
+ },
+ "members": [
+  "gate quantizer",
+  "gate/up expansion",
+  "gate product",
+  "SiLU",
+  "down quantizer",
+  "down expansion",
+  "down product"
+ ],
+ "route": "authored Graph SSA -> seven native partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> one checked multi-output HIP owner",
+ "latency_source": "hip_event_member_range_window",
+ "timing_source": "hip_event_member_range_window",
+ "unit": "median us per member invocation",
+ "timing": "each member alone through invoke_range, HIP-event windows of 200 invocations, 7 rounds with arm order alternating; median. Diagnostic, not a promotion.",
+ "gate_product_macro_tile": [
+  16,
+  32
+ ],
+ "rows": {
+  "16x128x4096x256": {
+   "bitwise_equal": true,
+   "static_gate_product_macro_tile": [
+    16,
+    32
+   ],
+   "bounded": [
+    4.15,
+    21.24,
+    314.21,
+    2.3,
+    3.81,
+    3.61,
+    15.93
+   ],
+   "static": [
+    3.97,
+    20.09,
+    314.1,
+    1.57,
+    3.77,
+    2.33,
+    16.21
+   ]
+  },
+  "16x512x4096x256": {
+   "bitwise_equal": true,
+   "static_gate_product_macro_tile": [
+    16,
+    32
+   ],
+   "bounded": [
+    4.16,
+    73.52,
+    316.32,
+    2.43,
+    3.82,
+    4.43,
+    44.76
+   ],
+   "static": [
+    3.99,
+    72.66,
+    314.95,
+    1.6,
+    3.77,
+    3.63,
+    44.79
+   ]
+  },
+  "256x512x4096x256": {
+   "bitwise_equal": true,
+   "static_gate_product_macro_tile": [
+    32,
+    32
+   ],
+   "bounded": [
+    25.24,
+    73.83,
+    1030.36,
+    6.3,
+    5.22,
+    4.7,
+    57.9
+   ],
+   "static": [
+    25.55,
+    73.52,
+    915.37,
+    3.84,
+    5.15,
+    3.78,
+    53.68
+   ]
+  }
+ },
+ "commit": "070f445d78944e1b4be9e9422afa4fd8f1a81bcc",
+ "worktree_dirty": false,
+ "recorder_sha256": "6c779160f03bb95658b13ea5ae8e1e5829a94c1239bb4e3533ca84d9f0f2d5a4",
+ "compiler_sha256": "844416584b106d0828c6bb8473adba0faf27d8a942d40bf8e945567e23aa4651",
+ "provider_sha256": "c5f71f7684f6563c790c53376de13139ae6b5ebe61492563d3b7961fd5dfd3bf"
+}

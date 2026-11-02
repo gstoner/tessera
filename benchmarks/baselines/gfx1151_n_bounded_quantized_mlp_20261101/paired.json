@@ -1,0 +1,228 @@
+{
+ "sync_key": "GFX1151-BOUNDED-QUANTIZED-N-20261101",
+ "commit": "070f445d78944e1b4be9e9422afa4fd8f1a81bcc",
+ "worktree_dirty": false,
+ "recorder_sha256": "cd9b7a08b3563daa62e17be25a72762b2f7fb525d1c97bfe82e743659eba9f35",
+ "compiler_sha256": "844416584b106d0828c6bb8473adba0faf27d8a942d40bf8e945567e23aa4651",
+ "provider_sha256": "c5f71f7684f6563c790c53376de13139ae6b5ebe61492563d3b7961fd5dfd3bf",
+ "architecture": "gfx1151",
+ "device": "gfx1151 (Radeon 8060S, Strix Halo, Princess-Luna, WSL2)",
+ "device_lock": {
+  "path": "/tmp/tessera-gfx1151-device.lock",
+  "held": true
+ },
+ "route": "authored Graph SSA -> seven native partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> one checked multi-output HIP owner",
+ "latency_source": "hip_event_owner_window",
+ "timing_source": "hip_event_owner_window",
+ "hn": [
+  128,
+  256
+ ],
+ "bounds_mkn": [
+  256,
+  12288,
+  512
+ ],
+ "bounded_compile_s": 2.16,
+ "warm_up_owner": true,
+ "bounded_allocation_bytes": 25010906,
+ "bounded_allocation_count": 18,
+ "timing": "HIP-event device ms per program invocation, windows of 50 invocations, 9 rounds, arm and (M, K) order alternated each round; median. bounded = one bounded owner updated to each shape; static = the v4 program compiled at that shape. Diagnostic, not a promotion.",
+ "rows": {
+  "16x4096x256": {
+   "bounded_ms": 0.3563,
+   "static_ms": 0.3573,
+   "bounded_over_static": 0.997,
+   "bounded_range_ms": [
+    0.3552,
+    0.3621
+   ],
+   "static_range_ms": [
+    0.3563,
+    0.3624
+   ],
+   "bitwise_equal": true,
+   "static_compile_s": 0.55,
+   "samples_ms": {
+    "bounded": [
+     0.3556,
+     0.3621,
+     0.3613,
+     0.3564,
+     0.3565,
+     0.3563,
+     0.3552,
+     0.3554,
+     0.3555
+    ],
+    "static": [
+     0.3617,
+     0.3624,
+     0.3618,
+     0.3573,
+     0.357,
+     0.3588,
+     0.3572,
+     0.3563,
+     0.3569
+    ]
+   }
+  },
+  "16x4096x512": {
+   "bounded_ms": 0.3557,
+   "static_ms": 0.3572,
+   "bounded_over_static": 0.996,
+   "bounded_range_ms": [
+    0.3552,
+    0.3617
+   ],
+   "static_range_ms": [
+    0.356,
+    0.3612
+   ],
+   "bitwise_equal": true,
+   "static_compile_s": 0.95,
+   "samples_ms": {
+    "bounded": [
+     0.3608,
+     0.3617,
+     0.3556,
+     0.358,
+     0.3557,
+     0.3552,
+     0.3562,
+     0.3557,
+     0.3553
+    ],
+    "static": [
+     0.3612,
+     0.3603,
+     0.3572,
+     0.3574,
+     0.3568,
+     0.3562,
+     0.3572,
+     0.356,
+     0.3568
+    ]
+   }
+  },
+  "64x8192x384": {
+   "bounded_ms": 0.6875,
+   "static_ms": 0.6929,
+   "bounded_over_static": 0.992,
+   "bounded_range_ms": [
+    0.6861,
+    0.6977
+   ],
+   "static_range_ms": [
+    0.6926,
+    0.7033
+   ],
+   "bitwise_equal": true,
+   "static_compile_s": 1.92,
+   "samples_ms": {
+    "bounded": [
+     0.6977,
+     0.6867,
+     0.6877,
+     0.6863,
+     0.6877,
+     0.6918,
+     0.6872,
+     0.6861,
+     0.6875
+    ],
+    "static": [
+     0.7005,
+     0.6929,
+     0.6926,
+     0.6926,
+     0.6928,
+     0.7033,
+     0.6941,
+     0.6928,
+     0.6963
+    ]
+   }
+  },
+  "256x12288x128": {
+   "bounded_ms": 1.5078,
+   "static_ms": 1.3672,
+   "bounded_over_static": 1.103,
+   "bounded_range_ms": [
+    1.4523,
+    1.5616
+   ],
+   "static_range_ms": [
+    1.3229,
+    1.5087
+   ],
+   "bitwise_equal": true,
+   "static_compile_s": 1.81,
+   "samples_ms": {
+    "bounded": [
+     1.5616,
+     1.4601,
+     1.4523,
+     1.5078,
+     1.5554,
+     1.5583,
+     1.4966,
+     1.5386,
+     1.4838
+    ],
+    "static": [
+     1.5087,
+     1.3345,
+     1.3373,
+     1.3229,
+     1.3747,
+     1.4316,
+     1.3672,
+     1.3353,
+     1.4087
+    ]
+   }
+  },
+  "256x12288x512": {
+   "bounded_ms": 1.475,
+   "static_ms": 1.349,
+   "bounded_over_static": 1.093,
+   "bounded_range_ms": [
+    1.4575,
+    1.5269
+   ],
+   "static_range_ms": [
+    1.3337,
+    1.4684
+   ],
+   "bitwise_equal": true,
+   "static_compile_s": 0.88,
+   "samples_ms": {
+    "bounded": [
+     1.4715,
+     1.4908,
+     1.488,
+     1.5049,
+     1.4575,
+     1.4705,
+     1.475,
+     1.4657,
+     1.5269
+    ],
+    "static": [
+     1.346,
+     1.349,
+     1.3414,
+     1.4396,
+     1.4684,
+     1.4523,
+     1.3337,
+     1.3481,
+     1.4378
+    ]
+   }
+  }
+ }
+}

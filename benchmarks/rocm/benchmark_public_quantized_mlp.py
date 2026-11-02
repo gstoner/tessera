@@ -64,27 +64,24 @@ def inputs(m,width,k,n,seed=731):
 
 
 def run(m,h,k,n,output_dir,repeats,*, supplied_roots=None, source_metadata=None,
-        quality_references=None, windows=7, member_repeats=128, event_repeats=50):
+        quality_references=None, windows=7, member_repeats=128, event_repeats=50,
+        warm_up_owner=False, device_lock=None):
     import hashlib
     import json
     import os
     from pathlib import Path
-    import re
     from statistics import median
     import subprocess
     import time
     from tessera import runtime as rt
+    from benchmarks.rocm import quantized_mlp_arch as owning
     from benchmarks.rocm.quantized_mlp_reference import assert_compiled_chain
     if any(type(v) is not int or v <= 0 for v in (m,h,k,n,repeats,windows,member_repeats,event_repeats)):
         raise ValueError('positive shapes and timing counts required')
-    if rt._rocm_live_arch()!='gfx1201':
-        raise RuntimeError('requires owning gfx1201')
-    info=subprocess.check_output(['/opt/rocm/bin/rocminfo'],text=True)
-    identity=re.search(r'Name:\s+gfx1201\s+Uuid:\s+(GPU-\S+)\s+Marketing Name:\s+([^\n]+)',info)
-    if identity is None:
-        raise RuntimeError('owning device identity unavailable')
+    arch=owning.owning_arch()
+    device_uuid,device_name=owning.identity(arch)
     roots=inputs(m,h,k,n) if supplied_roots is None else supplied_roots
-    fn=ts.jit(target='rocm_gfx1201',native_required=True)(make_mlp(m,h,k,n))
+    fn=ts.jit(target=owning.target(arch),native_required=True)(make_mlp(m,h,k,n))
     start=time.perf_counter();first=fn(*roots);cold=(time.perf_counter()-start)*1000
     artifact=fn.runtime_artifact()
     if fn.execution_kind!='native_gpu' or artifact.metadata['compiler_path']!='canonical_rocm_quantized_mlp_program':
@@ -105,14 +102,16 @@ def run(m,h,k,n,output_dir,repeats,*, supplied_roots=None, source_metadata=None,
     if len(receipts)!=7:
         raise RuntimeError('missing native member receipts')
     record={'shape_mhkn':[m,h,k,n],'architecture':rt._rocm_live_arch(),
-        'device_uuid':identity[1],'device_name':identity[2].strip(),
+        'device_uuid':device_uuid,'device_name':device_name,
         'source_revision':subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),
         'recorder_sha256':hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         'reference_sha256':hashlib.sha256(Path(__file__).with_name('quantized_mlp_reference.py').read_bytes()).hexdigest(),
         'compiler_sha256':hashlib.sha256(Path(os.environ['TESSERA_OPT']).read_bytes()).hexdigest(),
         'provider_sha256':hashlib.sha256(Path(lib._name).read_bytes()).hexdigest(),
         'correctness':'per_stage_and_propagation_passed_before_timing','numerical_certificate':certificate,
-        'route':'authored Graph SSA -> seven native partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> one checked multi-output HIP owner',
+        'route':owning.ROUTE,'device':owning.device(arch),'device_lock':device_lock,'warm_up_owner':warm_up_owner,
+        'timing_source':{'public_warm':owning.HOST_WALL_TIMING,'prepared_invoke_read':owning.HOST_WALL_TIMING,
+            'ordinary_program_event':owning.HIP_EVENT_TIMING,'captured_members':'hip_event_graph_member_window'},
         'native_schema':json.loads(program.program_json)['schema'],'binding_digest':program.binding_digest,
         'checkpoint_source':source_metadata,'quality_characterization':quality,'model_quality_acceptance':False,
         'timing_counts':{'windows':windows,'member_repeats':member_repeats,'event_repeats':event_repeats,'public_repeats':repeats},
@@ -162,7 +161,25 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output-dir',type=Path,required=True)
     parser.add_argument('--repeats',type=int,default=5)
+    parser.add_argument('--device-lock',default=None,help='flock path held around this run; recorded and checked')
+    parser.add_argument('--no-warm-up-owner',dest='warm_up_owner',action='store_false')
     args=parser.parse_args()
     if not 1<=args.repeats<=1024:parser.error('repeats must be between 1 and 1024')
+    from benchmarks.rocm import quantized_mlp_arch as owning
+    from tessera import runtime as rt
+    from tessera.compiler.rocm_quantized_product_program import package_quantized_product_graph
+    arch=owning.owning_arch()
+    lock=owning.device_lock(args.device_lock)
+    warm=None
+    if args.warm_up_owner:
+        # A kept, never-timed first owner (GFX1201-BOUNDED-PER-M-PANEL-20261030).
+        library=rt._load_rocm_native_movement_runtime()
+        if library is None:
+            raise SystemExit('native ROCm movement runtime unavailable')
+        warm=package_quantized_product_graph(owning.source(1,16,16,1,arch)).prepare(
+            inputs(1,16,16,1),runtime_library=library._name)
+        warm.invoke()
     for shape in ((1,16,16,1),(3,32,48,19),(256,128,12288,256)):
-        run(*shape,args.output_dir,args.repeats)
+        run(*shape,args.output_dir,args.repeats,warm_up_owner=args.warm_up_owner,device_lock=lock)
+    if warm is not None:
+        warm.close()

@@ -14,6 +14,10 @@ Both arms are HIP-event device time per program invocation, in windows of
 ``--repeats`` invocations, interleaved and order-alternated every round.
 Outputs are compared bitwise before timing. HIP events on WSL2 are not an
 admitted kernel-side witness; this packet is diagnostic and promotes nothing.
+
+The recorder runs on the live owning architecture (gfx1201 or gfx1151,
+``quantized_mlp_arch``) and labels the packet with it; ``--device-lock``
+records and checks the shared device lock held around the run.
 """
 import argparse
 import hashlib
@@ -26,10 +30,10 @@ import time
 
 import numpy as np
 import tessera as ts
+from benchmarks.rocm import quantized_mlp_arch as owning
 from benchmarks.rocm.benchmark_public_quantized_mlp import inputs, make_mlp
 from tessera import runtime as rt
 from tessera.compiler.rocm_quantized_product_program import package_quantized_product_graph
-from tests.unit.test_native_quantized_mlp_program import source
 
 
 def _pairs(text):
@@ -47,7 +51,7 @@ def main():
     parser.add_argument("--h-bound", action="store_true",
                         help="bound H instead of K: --bounds is (MB, HB), actives MxH at --kn")
     parser.add_argument("--kn", type=int, nargs=2, default=(4096, 256), metavar=("K", "N"))
-    parser.add_argument("--sync-key", default="GFX1201-BOUNDED-QUANTIZED-K-20261028")
+    owning.add_arch_arguments(parser, "GFX1201-BOUNDED-QUANTIZED-K-20261028")
     parser.add_argument("--rounds", type=int, default=9)
     parser.add_argument("--repeats", type=int, default=50)
     args = parser.parse_args()
@@ -67,14 +71,19 @@ def main():
         shapes = [(a[0], a[1], *args.kn) for a in args.actives]
     else:
         shapes = [(a[0], h, a[1], a[2] if nb is not None else n) for a in args.actives]
-    if rt._rocm_live_arch() != "gfx1201":
-        raise SystemExit("requires owning gfx1201")
+    arch = owning.owning_arch()
+    owning.check_sync_key(args.sync_key, arch)
+    lock = owning.device_lock(args.device_lock)
+
+    def source(m, h, k, n):
+        return owning.source(m, h, k, n, arch)
+
     lib = rt._load_rocm_native_movement_runtime()
     if lib is None:
         raise SystemExit("native ROCm movement runtime unavailable")
 
     m0, h0, k0, n0 = shapes[0]
-    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(m0, h0, k0, n0))
+    fn = ts.jit(target=owning.target(arch), native_required=True)(make_mlp(m0, h0, k0, n0))
     if hidden:
         bounds = {"m_bound": mb, "h_bound": kb}
     else:
@@ -151,7 +160,9 @@ def main():
         "recorder_sha256": hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
         "compiler_sha256": hashlib.sha256(pathlib.Path(os.environ["TESSERA_OPT"]).read_bytes()).hexdigest(),
         "provider_sha256": hashlib.sha256(pathlib.Path(lib._name).read_bytes()).hexdigest(),
-        "device": "gfx1201 (RX 9070 XT, Tajasarus, WSL2)",
+        "architecture": arch, "device": owning.device(arch), "device_lock": lock,
+        "route": owning.ROUTE, "latency_source": owning.HIP_EVENT_TIMING,
+        "timing_source": owning.HIP_EVENT_TIMING,
         **({"kn": list(args.kn), "bounds_mh": [mb, kb]} if hidden else {"hn": [h, n]}),
         **({} if hidden else {"bounds_mk": [mb, kb]} if nb is None else {"bounds_mkn": [mb, kb, nb]}),
         "bounded_compile_s": round(compile_s, 2), "warm_up_owner": True,

@@ -10,6 +10,11 @@ cost if it retained its owner across calls instead of preparing one per call.
 All three arms are host wall time per call, measured in windows of ``--calls``
 calls, with the arm order rotated every round. Outputs are compared bitwise
 before timing. Host wall on WSL2 is diagnostic only; it promotes nothing.
+
+The recorder runs on the live owning architecture (gfx1201 or gfx1151,
+``quantized_mlp_arch``) and labels the packet with it. A kept, never-timed
+warm-up owner is prepared first (GFX1201-BOUNDED-PER-M-PANEL-20261030);
+``--no-warm-up-owner`` reproduces the original gfx1201 recording.
 """
 import argparse
 import hashlib
@@ -22,8 +27,10 @@ import time
 
 import numpy as np
 import tessera as ts
+from benchmarks.rocm import quantized_mlp_arch as owning
 from benchmarks.rocm.benchmark_public_quantized_mlp import inputs, make_mlp
 from tessera import runtime as rt
+from tessera.compiler.rocm_quantized_product_program import package_quantized_product_graph
 
 ARMS = ("public_bounded", "public_static", "prepared_bounded")
 
@@ -36,6 +43,8 @@ def main():
     parser.add_argument("--actives", type=int, nargs="+", default=(1, 16, 64, 256))
     parser.add_argument("--rounds", type=int, default=12)
     parser.add_argument("--calls", type=int, default=10)
+    parser.add_argument("--no-warm-up-owner", dest="warm_up_owner", action="store_false")
+    owning.add_arch_arguments(parser, "GFX1201-PUBLIC-BOUNDED-CALL-TIMING-20261028")
     args = parser.parse_args()
     h, k, n = args.shape
     bound = args.capacity
@@ -43,8 +52,9 @@ def main():
         parser.error("positive shapes and counts required")
     if any(m > bound for m in args.actives):
         parser.error("every active M must fit the capacity")
-    if rt._rocm_live_arch() != "gfx1201":
-        raise SystemExit("requires owning gfx1201")
+    arch = owning.owning_arch()
+    owning.check_sync_key(args.sync_key, arch)
+    lock = owning.device_lock(args.device_lock)
     lib = rt._load_rocm_native_movement_runtime()
     if lib is None:
         raise SystemExit("native ROCm movement runtime unavailable")
@@ -53,7 +63,13 @@ def main():
     for m in args.actives:
         roots[m][1:] = roots[args.actives[0]][1:]  # one weight set; activations vary
 
-    bounded_fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(args.actives[0], h, k, n))
+    warm = None
+    if args.warm_up_owner:
+        warm = package_quantized_product_graph(owning.source(args.actives[0], h, k, n, arch)).prepare(
+            roots[args.actives[0]], runtime_library=lib._name)
+        warm.invoke()
+
+    bounded_fn = ts.jit(target=owning.target(arch), native_required=True)(make_mlp(args.actives[0], h, k, n))
     start = time.perf_counter()
     program = bounded_fn.compile_native_quantized_program(*roots[args.actives[0]], m_bound=bound)
     bounded_compile_s = time.perf_counter() - start
@@ -62,7 +78,7 @@ def main():
 
     static_fn, static_cold_s = {}, {}
     for m in args.actives:
-        fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(m, h, k, n))
+        fn = ts.jit(target=owning.target(arch), native_required=True)(make_mlp(m, h, k, n))
         start = time.perf_counter()
         fn(*roots[m])
         static_cold_s[m] = time.perf_counter() - start
@@ -110,6 +126,8 @@ def main():
                 samples[m][arm].append((time.perf_counter() - start) * 1000 / args.calls)
     allocation_bytes, allocation_count = owner.rows_info()[2:4]
     owner.close()
+    if warm is not None:
+        warm.close()
 
     rows = {}
     for m in args.actives:
@@ -123,11 +141,14 @@ def main():
     commit = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     dirty = bool(subprocess.check_output(["git", "status", "--porcelain"], text=True).strip())
     record = {
-        "sync_key": "GFX1201-PUBLIC-BOUNDED-CALL-TIMING-20261028", "commit": commit, "worktree_dirty": dirty,
+        "sync_key": args.sync_key, "commit": commit, "worktree_dirty": dirty,
         "recorder_sha256": hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
         "compiler_sha256": hashlib.sha256(pathlib.Path(os.environ["TESSERA_OPT"]).read_bytes()).hexdigest(),
         "provider_sha256": hashlib.sha256(pathlib.Path(lib._name).read_bytes()).hexdigest(),
-        "device": "gfx1201 (RX 9070 XT, Tajasarus, WSL2)", "shape_hkn": [h, k, n], "capacity_m": bound,
+        "architecture": arch, "device": owning.device(arch), "device_lock": lock,
+        "warm_up_owner": args.warm_up_owner, "route": owning.ROUTE,
+        "latency_source": owning.HOST_WALL_TIMING, "timing_source": owning.HOST_WALL_TIMING,
+        "shape_hkn": [h, k, n], "capacity_m": bound,
         "bounded_compile_s": round(bounded_compile_s, 2),
         "bounded_allocation_bytes": allocation_bytes, "bounded_allocation_count": allocation_count,
         "timing": (f"host wall per call, windows of {args.calls} calls, {args.rounds} rounds with the arm "

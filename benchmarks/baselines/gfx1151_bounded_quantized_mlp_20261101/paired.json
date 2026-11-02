@@ -1,0 +1,63 @@
+{
+ "sync_key": "GFX1151-NVFP4-BOUNDED-MLP-20261101",
+ "commit": "070f445d78944e1b4be9e9422afa4fd8f1a81bcc",
+ "worktree_dirty": false,
+ "recorder_sha256": "d3cdc3e8c38cb144952ee819046ab0cd745a9e14334ad1d2b4c69f2c94524f0c",
+ "compiler_sha256": "844416584b106d0828c6bb8473adba0faf27d8a942d40bf8e945567e23aa4651",
+ "provider_sha256": "c5f71f7684f6563c790c53376de13139ae6b5ebe61492563d3b7961fd5dfd3bf",
+ "architecture": "gfx1151",
+ "device": "gfx1151 (Radeon 8060S, Strix Halo, Princess-Luna, WSL2)",
+ "device_lock": {
+  "path": "/tmp/tessera-gfx1151-device.lock",
+  "held": true
+ },
+ "warm_up_owner": true,
+ "route": "authored Graph SSA -> seven native partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> one checked multi-output HIP owner",
+ "latency_source": "hip_event_owner_window",
+ "timing_source": "hip_event_owner_window",
+ "activation_update_timing_source": "host_wall_perf_counter",
+ "shape_hkn": [
+  128,
+  12288,
+  256
+ ],
+ "capacity_m": 256,
+ "bounded_compile_s": 2.12,
+ "bounded_allocation_bytes": 24670096,
+ "bounded_allocation_count": 18,
+ "timing": "native owner HIP event window per program invocation averaged over 50 repeats; 12 alternating rounds; median us. Activation update is host wall time of the bounded owner's activation-only row update. Diagnostic, not a promotion.",
+ "rows": {
+  "1": {
+   "bounded_us": 905.31,
+   "static_us": 821.88,
+   "bounded_over_static": 1.102,
+   "bitwise_equal_static_at_m": true,
+   "activation_update_ms": 0.283,
+   "static_compile_s": 0.55
+  },
+  "16": {
+   "bounded_us": 1020.74,
+   "static_us": 1021.08,
+   "bounded_over_static": 1.0,
+   "bitwise_equal_static_at_m": true,
+   "activation_update_ms": 1.379,
+   "static_compile_s": 1.56
+  },
+  "64": {
+   "bounded_us": 1035.78,
+   "static_us": 1034.4,
+   "bounded_over_static": 1.001,
+   "bitwise_equal_static_at_m": true,
+   "activation_update_ms": 1.407,
+   "static_compile_s": 1.55
+  },
+  "256": {
+   "bounded_us": 1471.91,
+   "static_us": 1338.45,
+   "bounded_over_static": 1.1,
+   "bitwise_equal_static_at_m": true,
+   "activation_update_ms": 2.354,
+   "static_compile_s": 1.2
+  }
+ }
+}

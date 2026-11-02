@@ -14434,3 +14434,19 @@ NVIDIA, Apple and x86 are not applicable.
 Remaining: gfx1201 device proof for any soft-cap Graph route (Graph-route attention backward is gated to gfx1151). No performance claim.
 Evidence: tests/tessera-ir/phase3/streaming_attention_backward_rocm_softcap_ocml.mlir; tests/unit/test_rocm_native_run_opt_diagnostics.py; tests/unit/test_rocm_attention_backward_program_native.py; src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp.
 <!-- entry-fields:end -->
+
+### 2026-11-01 — gfx1151 quantized MLP timing packets
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1031; sync GFX1151-QUANTIZED-MLP-TIMING-20261101.
+Outcome: gfx1151 (Princess-Luna) has its own timing packets for the static and M/K/N/H-bounded native quantized MLP and the public call. Every number is gfx1151-only and diagnostic, and none is compared with gfx1201.
+- **Recorders follow the live arch.** The five quantized MLP recorders take the owning arch from the live device (`benchmarks/rocm/quantized_mlp_arch.py`), retarget the Graph source to it, refuse a sync key that names the other chip, keep a never-timed warm-up owner first, and stamp `route`, `latency_source` and `timing_source`. `--device-lock` checks that the shared `flock` is held before timing. New `attribute_bounded_quantized_mlp_members.py` generalizes gfx1201's packet-local per-member attribution. Unit: `tests/unit/test_quantized_mlp_arch_recorders.py` (13 passed, Mac).
+- **Static (HIP-event owner window).** 27.3 / 31.4 / 1318.6 µs at the three certificate shapes. At 256 × 128 × 12288 × 256 the F16-decode gate product is 1.04 ms of that. The certificate passes before timing; max abs error is 0.0625 with 13 outputs outside the flat gate, kept as recorded.
+- **Bounded vs static.** Within 2% at M = 16 and 64 for every bound; the rows packet's 1.10× at M = 1 is median-only and unattributed. At M = 256 the K- and H-bounded windows are all slower than every static window (4–10%), and the N-bounded medians are 9–10% higher with overlapping windows. Member attribution puts it in the gate product. At 256 × 512 the static program takes a `[32, 32]` panel the bounded `[16, 32]` owner lacks (915 against 1030 µs), and a same-panel cost remains at 256 × 12288 × 128 (+9.7%), mechanism not established. gfx1201's small-M capacity-tile cost does not occur, because the bounded owner takes `[16, 32]` at capacity.
+- **Public call (host wall).** Public bounded 1.60–4.49 ms, 0.22–0.33 ms above a held owner; public static 7.86–11.96 ms.
+- **Host and lock.** Ran unsandboxed on Princess-Luna under `flock /tmp/tessera-gfx1151-device.lock`, which each JSON records as held. Commits `e94fd72a6` (static) and `070f445d7` (bounded and public; it adds the rows recorder's output-directory creation), on clean worktrees. Profiler counters are unverified (no `/dev/kfd`).
+
+NVIDIA, Apple and x86 are not applicable.
+Remaining: whether a capacity-chosen `[32, 32]` bounded image recovers the large-M gate-product cost on gfx1151; the same-panel M = 256 cost's mechanism. No promotion.
+Evidence: benchmarks/baselines/gfx1151_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_bounded_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_k_bounded_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_n_bounded_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_h_bounded_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_public_quantized_call_overhead_20261101/README.md; benchmarks/rocm/quantized_mlp_arch.py; tests/unit/test_quantized_mlp_arch_recorders.py.
+<!-- entry-fields:end -->

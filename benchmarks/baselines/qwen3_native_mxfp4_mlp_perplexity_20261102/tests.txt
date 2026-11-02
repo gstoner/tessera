@@ -1,0 +1,44 @@
+host=tajasarus rev=d7ad606b2 chip=gfx1201
+============================= test session starts ==============================
+platform linux -- Python 3.14.4, pytest-9.1.1, pluggy-1.6.0 -- /home/angstorms/programming/tessera/.venv/bin/python
+hypothesis profile 'default'
+rootdir: /home/angstorms/programming/tessera-mx
+configfile: pyproject.toml
+plugins: xdist-3.8.0, cov-7.1.0, hypothesis-6.168.0, timeout-2.4.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 30 items
+
+tests/device/rocm/test_native_mxfp4_mlp.py::test_public_mxfp4_mlp_executes_and_certifies[shape0] PASSED [  3%]
+tests/device/rocm/test_native_mxfp4_mlp.py::test_public_mxfp4_mlp_executes_and_certifies[shape1] PASSED [  6%]
+tests/device/rocm/test_native_mxfp4_mlp.py::test_public_mxfp4_mlp_executes_and_certifies[shape2] PASSED [ 10%]
+tests/device/rocm/test_native_mxfp4_mlp.py::test_mxfp4_expansion_image_is_bitwise_the_reference[64-64-offsets0] PASSED [ 13%]
+tests/device/rocm/test_native_mxfp4_mlp.py::test_mxfp4_expansion_image_is_bitwise_the_reference[256-4096-offsets1] PASSED [ 16%]
+tests/device/rocm/test_native_mxfp4_mlp.py::test_mxfp4_mlp_refuses_reserved_exponent_before_launch PASSED [ 20%]
+tests/unit/test_mxfp4_native_mlp.py::test_policies_name_their_source_and_scale_group PASSED [ 23%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_reference_expansion_is_the_exact_decode[globals_0] PASSED [ 26%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_reference_expansion_is_the_exact_decode[globals_1] PASSED [ 30%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_boundary_refuses_reserved_code_shape_and_range PASSED [ 33%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_graph_requires_k32_and_byte_scales PASSED [ 36%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_graph_verifier_fails_closed[mutation0-E8M0 bytes] PASSED [ 40%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_graph_verifier_fails_closed[mutation1-conflicting numeric policy field] PASSED [ 43%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_schedule_records_e8m0_scale_storage PASSED [ 46%]
+tests/unit/test_mxfp4_native_mlp.py::test_public_mxfp4_mlp_packages_two_mxfp4_expansions PASSED [ 50%]
+tests/unit/test_mxfp4_native_mlp.py::test_bounded_mxfp4_mlp_is_refused PASSED [ 53%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_local_snapshot_reads_verified_tensor PASSED [ 56%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_local_snapshot_refuses_tampered_blob PASSED [ 60%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_unpinned_revision_is_refused PASSED [ 63%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_load_layer_mlp_checks_nvfp4_contract PASSED [ 66%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_capture_layer_round_trips_bf16_bits PASSED [ 70%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_capture_layer_refuses_changed_bits PASSED [ 73%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_accumulator_matches_whole_array_relative_rms PASSED [ 76%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_worker_frames_round_trip_and_refuse_truncation PASSED [ 80%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_perplexity_verdict_applies_the_fixed_ratio PASSED [ 83%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_resume_refuses_changed_measurement_settings PASSED [ 86%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_perplexity_arms_and_candidate_verdicts PASSED [ 90%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_weight_only_arms_decode_their_own_formats PASSED [ 93%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_native_mxfp4_is_gated_against_its_own_weights PASSED [ 96%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_native_mxfp4_roots_carry_exactly_the_direct_weights PASSED [100%]
+
+============================= 30 passed in 13.97s ==============================

@@ -217,3 +217,36 @@ def test_weight_only_arms_decode_their_own_formats() -> None:
     assert mx.MXFP4_GROUP_K == 32
     with pytest.raises(ValueError, match="weight-only arm"):
         worker.decode_arm("native", loaded)
+
+
+def test_native_mxfp4_is_gated_against_its_own_weights() -> None:
+    from benchmarks.rocm.record_qwen3_native_mlp_perplexity import parse_arms, verdict
+
+    assert parse_arms("native_mxfp4,mxfp4_direct") == ("bf16", "shipped", "native_mxfp4", "mxfp4_direct")
+    with pytest.raises(ValueError, match="mxfp4_direct, which must run too"):
+        parse_arms("native_mxfp4")
+    ppl = {"bf16": 10.0, "shipped": 10.2, "mxfp4_direct": 10.4, "native_mxfp4": 10.6}
+    passed = verdict(ppl, arm="native_mxfp4")
+    assert passed["reference"] == "mxfp4_direct" and passed["ratio"] == pytest.approx(1.5) and passed["passed"]
+    # Against shipped the same arm would fail: the reference is what the gate measures.
+    assert not verdict(ppl, arm="native_mxfp4", reference="shipped")["passed"]
+    assert not verdict({**ppl, "native_mxfp4": 10.61}, arm="native_mxfp4")["passed"]
+
+
+def test_native_mxfp4_roots_carry_exactly_the_direct_weights() -> None:
+    from benchmarks.rocm import qwen3_native_mlp_worker as worker
+    from tessera.compiler.nvfp4_expansion import mxfp4_expansion_policy, reference_nvfp4_expand
+
+    rng = np.random.default_rng(4)
+    bf16 = [rng.standard_normal(shape).astype(ml_dtypes.bfloat16) for shape in ((64, 96), (64, 96), (96, 64))]
+    loaded = {"bf16": bf16}
+    direct = worker.decode_arm("mxfp4_direct", loaded)
+    roots = worker.native_mxfp4_roots(loaded)
+    assert loaded["mxfp4_direct"] is worker.direct_mxfp4(loaded)  # one shared quantization
+    for (packed, scales, globals_), offsets, expected in (
+            (roots[:3], [0, 64, 128], np.concatenate(direct[:2])), (roots[3:], [0, 96], direct[2])):
+        assert scales.dtype == np.uint8 and np.array_equal(globals_, np.ones(len(offsets) - 1))
+        values, plane = reference_nvfp4_expand(packed, scales, globals_, row_offsets=offsets,
+                                               numeric_policy=mxfp4_expansion_policy())
+        decoded = values.astype(np.float64) * np.repeat(plane.T.astype(np.float64), 16, axis=1)
+        np.testing.assert_array_equal(decoded, expected)

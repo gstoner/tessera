@@ -1289,11 +1289,12 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
 # to KNOWN_EXECUTORS, (3) adding an ExecutionRow here. `launch()` picks it up
 # automatically; the dashboard regenerates; the drift test enforces it.
 
-#: gfx1201 only: the static MLP's weight expansion also reads MXFP4. The
-#: gfx1151 rows derived below strip it, since that source has no gfx1151 proof.
+#: The static MLP's weight expansion also reads MXFP4, proven on each owning
+#: architecture by the same device fixture run on that box (gfx1201 on
+#: Tajasarus, gfx1151 on Princess-Luna); the gfx1151 row derived below keeps it.
 _MXFP4_MLP_SOURCE_NOTE = (
     " The weight expansion also admits an MXFP4 source (E8M0 per K32, static images only; "
-    "ROCM-MXFP4-NATIVE-MLP-20261102, tests/device/rocm/test_native_mxfp4_mlp.py).")
+    "ROCM-MXFP4-NATIVE-MLP-20261102 and -GFX1151-20261102, tests/device/rocm/test_native_mxfp4_mlp.py).")
 _MATRIX: dict[tuple[str, str], ExecutionRow] = {
     ("cpu", "cpu_ebm_langevin_llvm_jit"): ExecutionRow(
         target="cpu", compiler_path="cpu_ebm_langevin_llvm_jit",
@@ -4727,7 +4728,7 @@ for _quantized_path in (
     _gfx1201_row = _MATRIX[("rocm_gfx1201", _quantized_path)]
     _MATRIX[("rocm_gfx1151", _quantized_path)] = _replace_row(
         _gfx1201_row, target="rocm_gfx1151", evidence_target="rocm_gfx1151", proof_build="llvm23.1.1+princess-luna-build",
-        reason=_gfx1201_row.reason.replace(_MXFP4_MLP_SOURCE_NOTE, "") + " gfx1151: the E4M3 product decodes exactly to F16 WMMA, so "
+        reason=_gfx1201_row.reason + " gfx1151: the E4M3 product decodes exactly to F16 WMMA, so "
                "only accumulation order differs from gfx1201; checked by the staged tolerance certificate.")
 
 # Named parent-view public JIT and compiler-free replay are owning-device verified.

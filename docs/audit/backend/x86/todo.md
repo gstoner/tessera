@@ -12626,4 +12626,6 @@ Attention-backward NaN fix (ROCM-MATH-OCML-20261101) is not applicable to x86: i
 Model-quality stage 2 gfx1151 and MXFP4 arms (QWEN3-NATIVE-MLP-PERPLEXITY-GFX1151-20261102, QWEN3-MXFP4-PERPLEXITY-20261102) are not applicable to x86: they run the ROCm native quantized MLP on gfx1151 and weight-only MXFP4 host references through the Qwen3-8B perplexity harness. No x86 selector, ABI or result changes.
 
 Native MXFP4 MLP (ROCM-MXFP4-NATIVE-MLP-20261102) is not applicable to x86: it adds an MXFP4 source to the ROCm native FP4 weight expansion, static gfx1201 images only. No x86 selector, ABI or result changes.
+
+Native MXFP4 MLP on gfx1151 (ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102) is not applicable to x86: it runs the ROCm MXFP4 expansion on gfx1151 and makes the shared ROCm FP4 storage launcher check the image's own architecture. No x86 selector, ABI or result changes.
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".

@@ -1,0 +1,415 @@
+{
+ "sync_key": "GFX1151-QUANTIZED-MLP-PROBES-20261102",
+ "mode": "panel",
+ "architecture": "gfx1151",
+ "device": "gfx1151 (Radeon 8060S, Strix Halo, Princess-Luna, WSL2)",
+ "device_lock": {
+  "path": "/tmp/tessera-gfx1151-device.lock",
+  "held": true
+ },
+ "warm_up_owner": true,
+ "force_min_m": 256,
+ "members": [
+  "gate quantizer",
+  "gate/up expansion",
+  "gate product",
+  "SiLU",
+  "down quantizer",
+  "down expansion",
+  "down product"
+ ],
+ "route": "authored Graph SSA -> seven native partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> one checked multi-output HIP owner",
+ "latency_source": "hip_event_member_range_window",
+ "timing_source": {
+  "member": "hip_event_member_range_window",
+  "program": "hip_event_owner_window"
+ },
+ "unit": "us per invocation; median, min, max and every window",
+ "timing": "HIP-event windows of 200 invocations, 9 rounds, arm order alternating each round. Diagnostic, not a promotion.",
+ "rows": {
+  "16x512x4096x256": {
+   "static_gate_tile": [
+    16,
+    32
+   ],
+   "bitwise_equal": true,
+   "bounded": {
+    "2": {
+     "median": 350.48,
+     "min": 350.24,
+     "max": 350.69,
+     "samples": [
+      350.243,
+      350.694,
+      350.638,
+      350.327,
+      350.293,
+      350.613,
+      350.426,
+      350.481,
+      350.491
+     ]
+    },
+    "program": {
+     "median": 482.73,
+     "min": 482.24,
+     "max": 484.83,
+     "samples": [
+      484.831,
+      484.396,
+      482.729,
+      482.632,
+      483.803,
+      483.237,
+      482.661,
+      482.426,
+      482.244
+     ]
+    }
+   },
+   "static": {
+    "2": {
+     "median": 316.51,
+     "min": 316.33,
+     "max": 316.83,
+     "samples": [
+      316.329,
+      316.79,
+      316.559,
+      316.43,
+      316.442,
+      316.528,
+      316.828,
+      316.444,
+      316.507
+     ]
+    },
+    "program": {
+     "median": 446.64,
+     "min": 445.29,
+     "max": 447.49,
+     "samples": [
+      447.49,
+      446.467,
+      446.638,
+      446.659,
+      446.373,
+      447.085,
+      446.646,
+      446.532,
+      445.294
+     ]
+    }
+   }
+  },
+  "64x512x4096x256": {
+   "static_gate_tile": [
+    16,
+    32
+   ],
+   "bitwise_equal": true,
+   "bounded": {
+    "2": {
+     "median": 541.65,
+     "min": 526.91,
+     "max": 542.95,
+     "samples": [
+      531.147,
+      542.939,
+      541.654,
+      542.082,
+      541.721,
+      526.911,
+      539.824,
+      541.636,
+      542.952
+     ]
+    },
+    "program": {
+     "median": 677.16,
+     "min": 676.29,
+     "max": 679.61,
+     "samples": [
+      679.611,
+      678.148,
+      677.166,
+      677.164,
+      676.885,
+      677.178,
+      676.382,
+      676.286,
+      676.78
+     ]
+    }
+   },
+   "static": {
+    "2": {
+     "median": 409.31,
+     "min": 396.39,
+     "max": 432.66,
+     "samples": [
+      410.813,
+      414.933,
+      398.787,
+      396.388,
+      406.56,
+      432.663,
+      399.982,
+      409.314,
+      412.559
+     ]
+    },
+    "program": {
+     "median": 543.3,
+     "min": 541.94,
+     "max": 547.22,
+     "samples": [
+      542.434,
+      544.661,
+      543.3,
+      543.224,
+      544.86,
+      541.94,
+      542.856,
+      547.222,
+      544.569
+     ]
+    }
+   }
+  },
+  "256x512x4096x256": {
+   "static_gate_tile": [
+    32,
+    32
+   ],
+   "bitwise_equal": true,
+   "bounded": {
+    "2": {
+     "median": 924.22,
+     "min": 911.97,
+     "max": 961.86,
+     "samples": [
+      911.973,
+      923.044,
+      961.86,
+      914.815,
+      922.003,
+      924.217,
+      924.941,
+      929.136,
+      924.735
+     ]
+    },
+    "program": {
+     "median": 1134.08,
+     "min": 1082.01,
+     "max": 1150.12,
+     "samples": [
+      1087.578,
+      1150.123,
+      1082.008,
+      1124.742,
+      1134.076,
+      1136.531,
+      1134.362,
+      1138.317,
+      1133.9
+     ]
+    }
+   },
+   "static": {
+    "2": {
+     "median": 921.13,
+     "min": 899.68,
+     "max": 933.55,
+     "samples": [
+      921.129,
+      929.804,
+      899.679,
+      930.289,
+      918.243,
+      933.546,
+      920.838,
+      919.487,
+      923.14
+     ]
+    },
+    "program": {
+     "median": 1117.87,
+     "min": 1071.43,
+     "max": 1130.69,
+     "samples": [
+      1077.529,
+      1079.209,
+      1071.427,
+      1109.48,
+      1130.688,
+      1123.875,
+      1123.565,
+      1117.868,
+      1125.093
+     ]
+    }
+   }
+  },
+  "256x256x4096x256": {
+   "static_gate_tile": [
+    16,
+    32
+   ],
+   "bitwise_equal": true,
+   "bounded": {
+    "2": {
+     "median": 693.71,
+     "min": 683.96,
+     "max": 698.55,
+     "samples": [
+      698.551,
+      696.09,
+      690.106,
+      693.71,
+      683.957,
+      685.347,
+      688.31,
+      696.434,
+      696.697
+     ]
+    },
+    "program": {
+     "median": 799.65,
+     "min": 797.64,
+     "max": 801.64,
+     "samples": [
+      798.085,
+      799.887,
+      799.646,
+      797.642,
+      798.364,
+      800.955,
+      798.978,
+      800.243,
+      801.643
+     ]
+    }
+   },
+   "static": {
+    "2": {
+     "median": 536.37,
+     "min": 512.6,
+     "max": 569.87,
+     "samples": [
+      537.222,
+      536.371,
+      535.396,
+      538.668,
+      512.596,
+      560.754,
+      513.312,
+      569.869,
+      512.993
+     ]
+    },
+    "program": {
+     "median": 647.37,
+     "min": 616.07,
+     "max": 675.28,
+     "samples": [
+      636.129,
+      638.958,
+      643.741,
+      616.068,
+      647.366,
+      662.693,
+      668.555,
+      673.834,
+      675.283
+     ]
+    }
+   }
+  },
+  "256x128x4096x256": {
+   "static_gate_tile": [
+    16,
+    32
+   ],
+   "bitwise_equal": true,
+   "bounded": {
+    "2": {
+     "median": 535.97,
+     "min": 533.98,
+     "max": 537.71,
+     "samples": [
+      535.965,
+      536.14,
+      535.61,
+      536.352,
+      537.709,
+      534.871,
+      536.958,
+      533.975,
+      534.79
+     ]
+    },
+    "program": {
+     "median": 609.9,
+     "min": 609.38,
+     "max": 612.66,
+     "samples": [
+      612.661,
+      612.057,
+      609.384,
+      610.097,
+      609.904,
+      609.787,
+      610.394,
+      609.491,
+      609.456
+     ]
+    }
+   },
+   "static": {
+    "2": {
+     "median": 393.95,
+     "min": 373.33,
+     "max": 411.32,
+     "samples": [
+      393.95,
+      411.161,
+      411.318,
+      388.698,
+      373.326,
+      389.691,
+      408.574,
+      387.638,
+      396.491
+     ]
+    },
+    "program": {
+     "median": 469.59,
+     "min": 464.04,
+     "max": 473.82,
+     "samples": [
+      470.647,
+      469.586,
+      467.555,
+      466.568,
+      467.808,
+      473.821,
+      464.036,
+      471.033,
+      470.009
+     ]
+    }
+   }
+  }
+ },
+ "bounded_gate_tile": [
+  32,
+  32
+ ],
+ "commit": "a4cc3b8b78128c2e33564724cd66f53c112986cd",
+ "worktree_dirty": false,
+ "recorder_sha256": "66d961603131d85dd7bfe2dc39b24ca56fe0755332a61214f9f37d23576f7c4f",
+ "compiler_sha256": "36daa60d6425f04f7ee567668d4d8541ad80c8921700bfbdce87a1eaa4d94231",
+ "provider_sha256": "c5f71f7684f6563c790c53376de13139ae6b5ebe61492563d3b7961fd5dfd3bf"
+}

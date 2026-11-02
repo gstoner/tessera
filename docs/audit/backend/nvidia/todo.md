@@ -16850,4 +16850,6 @@ Model-quality stage 1 (QWEN3-MLP-LAYER-QUALITY-20261101) is not applicable to NV
 Model-quality stage 2 (QWEN3-NATIVE-MLP-PERPLEXITY-20261101) is not applicable to NVIDIA: it substitutes the ROCm native quantized MLP into Qwen3-8B on gfx1201 and measures perplexity. The Torch driver and worker are not a NVIDIA route, and no NVIDIA selector, ABI or result changes.
 
 Attention-backward NaN fix (ROCM-MATH-OCML-20261101) is not applicable to NVIDIA: it changes the ROCm executable pipeline's math lowering and ROCm native packaging only. No NVIDIA selector, ABI or result changes.
+
+Model-quality stage 2 gfx1151 and MXFP4 arms (QWEN3-NATIVE-MLP-PERPLEXITY-GFX1151-20261102, QWEN3-MXFP4-PERPLEXITY-20261102) are not applicable to NVIDIA: they run the ROCm native quantized MLP on gfx1151 and weight-only MXFP4 host references through the Qwen3-8B perplexity harness. No NVIDIA selector, ABI or result changes.
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".

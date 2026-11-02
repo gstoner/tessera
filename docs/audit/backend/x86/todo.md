@@ -12622,4 +12622,6 @@ Model-quality stage 1 (QWEN3-MLP-LAYER-QUALITY-20261101) is not applicable to x8
 Model-quality stage 2 (QWEN3-NATIVE-MLP-PERPLEXITY-20261101) is not applicable to x86: it substitutes the ROCm native quantized MLP into Qwen3-8B on gfx1201 and measures perplexity. The Torch driver and worker are not a x86 route, and no x86 selector, ABI or result changes.
 
 Attention-backward NaN fix (ROCM-MATH-OCML-20261101) is not applicable to x86: it changes the ROCm executable pipeline's math lowering and ROCm native packaging only. No x86 selector, ABI or result changes.
+
+Model-quality stage 2 gfx1151 and MXFP4 arms (QWEN3-NATIVE-MLP-PERPLEXITY-GFX1151-20261102, QWEN3-MXFP4-PERPLEXITY-20261102) are not applicable to x86: they run the ROCm native quantized MLP on gfx1151 and weight-only MXFP4 host references through the Qwen3-8B perplexity harness. No x86 selector, ABI or result changes.
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".

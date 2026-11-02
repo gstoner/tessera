@@ -93,6 +93,8 @@ add_mlir_library(TesseraROCMConversion
     # rewrite pattern sets directly.
     MLIRVectorTransforms
     MLIRGPUTransforms MLIRGPUToROCDLTransforms MLIRSCFToControlFlow
+    # The executable pipeline runs convert-math-to-rocdl itself (Passes.cpp).
+    MLIRMathToROCDL
     MLIRReconcileUnrealizedCasts
     # MLIRSCFTransforms carries populateSCFStructuralTypeConversionsAndLegality,
     # which TileToROCM.cpp uses to convert `scf.for` iter-arg types. It is

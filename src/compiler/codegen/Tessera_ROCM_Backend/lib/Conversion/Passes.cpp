@@ -706,6 +706,16 @@ static void buildROCMExecutablePipeline(
   pm.addNestedPass<gpu::GPUModuleOp>(
       std::make_unique<LowerVectorToVectorForROCDLPass>());
   pm.addNestedPass<gpu::GPUModuleOp>(createSCFToControlFlowPass());
+  // Math lowers to OCML before `convert-gpu-to-rocdl`, explicitly. Left to
+  // that pass, the choice between OCML and math-to-LLVM depends on how the
+  // pipeline was entered: the same gfx1151 attention Target IR lowered
+  // `math.tanh` to `__ocml_tanh_f32` from directive input and to
+  // `llvm.intr.tanh` from Graph input (measured 2026-11-01). On gfx1151 with
+  // LLVM 23.1.1 that intrinsic returns 0 for every input, so every soft-cap
+  // attention backward program produced NaN gradients.
+  ConvertMathToROCDLOptions mathConversion;
+  mathConversion.chipset = arch.str();
+  pm.addPass(createConvertMathToROCDL(mathConversion));
   ConvertGpuOpsToROCDLOpsOptions conversion;
   conversion.chipset = arch.str();
   pm.addNestedPass<gpu::GPUModuleOp>(createConvertGpuOpsToROCDLOps(conversion));

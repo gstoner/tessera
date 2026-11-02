@@ -16217,4 +16217,6 @@ Slice 4 (gfx1151 promotion) is not applicable to Apple: the promotion mirrors, t
 Model-quality stage 1 (QWEN3-MLP-LAYER-QUALITY-20261101) is not applicable to Apple: it scores the ROCm native quantized MLP on gfx1201 against FP64 references. The capture and reference scripts are host-free, but no Apple route consumes them, and no Apple selector, ABI or result changes.
 
 Model-quality stage 2 (QWEN3-NATIVE-MLP-PERPLEXITY-20261101) is not applicable to Apple: it substitutes the ROCm native quantized MLP into Qwen3-8B on gfx1201 and measures perplexity. The Torch driver and worker are not a Apple route, and no Apple selector, ABI or result changes.
+
+Attention-backward NaN fix (ROCM-MATH-OCML-20261101) is not applicable to Apple: it changes the ROCm executable pipeline's math lowering and ROCm native packaging only. No Apple selector, ABI or result changes.
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".

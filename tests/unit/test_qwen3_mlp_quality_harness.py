@@ -164,3 +164,56 @@ def test_resume_refuses_changed_measurement_settings() -> None:
     smoke = {**existing, "rows_per_layer": 128, "layers": [{"layer": 0, "rows": 128, "chunk_rows": 128}]}
     assert resume_mismatches(smoke, identity) == ["rows_per_layer", "layer 0 rows/chunk"]
     assert resume_mismatches({**existing, "compiler_sha256": "b"}, identity) == ["compiler_sha256"]
+
+
+def test_perplexity_arms_and_candidate_verdicts() -> None:
+    from benchmarks.rocm.record_qwen3_native_mlp_perplexity import parse_arms, verdict
+
+    assert parse_arms("native") == ("bf16", "shipped", "native")
+    assert parse_arms("mxfp4_direct,mxfp4_ingested") == ("bf16", "shipped", "mxfp4_direct", "mxfp4_ingested")
+    for bad in ("", "shipped", "native,native", "mxfp8"):
+        with pytest.raises(ValueError, match="candidate arms"):
+            parse_arms(bad)
+    ppl = {"bf16": 10.0, "shipped": 10.4, "mxfp4_direct": 10.6, "mxfp4_ingested": 11.0}
+    assert verdict(ppl, arm="mxfp4_direct")["passed"]
+    failed = verdict(ppl, arm="mxfp4_ingested")
+    assert not failed["passed"] and failed["ratio"] == pytest.approx(2.5) and failed["arm"] == "mxfp4_ingested"
+
+
+def _nvfp4_projection(rng: np.random.Generator, n: int, k: int):
+    from tessera.compiler import rocm_nvfp4_ingest as ingest
+
+    codes = rng.integers(0, 256, (n, k // 2), dtype=np.uint8)
+    scales = rng.uniform(0.25, 4.0, (n, k // 16)).astype(ml_dtypes.float8_e4m3fn)
+    return ingest.NVFP4Projection("p", codes, scales, 0.01)
+
+
+def test_weight_only_arms_decode_their_own_formats() -> None:
+    from benchmarks.rocm import qwen3_native_mlp_worker as worker
+    from benchmarks.rocm.benchmark_checkpoint_quantized_mlp import decode_projection
+    from tessera.compiler import rocm_mxfp4 as mx
+
+    rng = np.random.default_rng(0)
+    projections = [_nvfp4_projection(rng, 8, 64) for _ in range(3)]
+    originals = [decode_projection(p).astype(ml_dtypes.bfloat16) for p in projections]
+    loaded = {"projections": projections, "bf16": originals}
+    shipped = worker.decode_arm("shipped", loaded)
+    assert all(np.array_equal(a, decode_projection(p)) for a, p in zip(shipped, projections))
+
+    def rel(a, b):
+        b = np.asarray(b, np.float64)
+        return float(np.sqrt(((np.asarray(a, np.float64) - b) ** 2).sum() / (b ** 2).sum()))
+
+    magnitudes = {0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0}
+    for arm, reference in (("mxfp4_direct", originals), ("mxfp4_ingested", shipped)):
+        values = worker.decode_arm(arm, loaded)
+        assert [v.shape for v in values] == [(8, 64)] * 3
+        assert all(0 < rel(v, r) < 0.25 for v, r in zip(values, reference))
+        # Every value is an E2M1 magnitude times one power of two per 32-wide block.
+        blocks = values[0].reshape(8, 2, 32)
+        peak = np.abs(blocks).max(axis=-1, keepdims=True)
+        scale = np.exp2(np.ceil(np.log2(peak / 6)))
+        assert set(np.unique(np.abs(blocks / scale)).tolist()) <= magnitudes | {m / 2 for m in magnitudes}
+    assert mx.MXFP4_GROUP_K == 32
+    with pytest.raises(ValueError, match="weight-only arm"):
+        worker.decode_arm("native", loaded)

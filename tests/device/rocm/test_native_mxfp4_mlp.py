@@ -1,7 +1,9 @@
-"""Owning gfx1201 execution of the native MXFP4-weight seven-member MLP.
+"""Owning execution of the native MXFP4-weight seven-member MLP.
 
-ROCM-MXFP4-NATIVE-MLP-20261102. The weight expansion reads E8M0 K32 scales;
-everything after it is the accepted NVFP4 program's scaled FP8 MLP.
+ROCM-MXFP4-NATIVE-MLP-20261102 (gfx1201), ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102
+(gfx1151). The weight expansion reads E8M0 K32 scales; everything after it is
+the accepted NVFP4 program's scaled FP8 MLP on the live owning architecture.
+Each architecture's result is its own proof.
 """
 import ml_dtypes
 import numpy as np
@@ -17,17 +19,14 @@ from tests.device.rocm.test_native_quantized_mlp_bounded_rows import owning_targ
 pytestmark = [pytest.mark.hardware_rocm, pytest.mark.compiler_rocm, pytest.mark.compiler_route]
 
 
-def _require_gfx1201():
-    if owning_target() != "rocm_gfx1201":
-        pytest.skip("the MXFP4 MLP is proven on gfx1201 only")
 
 
 @pytest.mark.parametrize("shape", [(1, 32, 32, 1), (3, 32, 64, 19), (128, 128, 4096, 256)])
 def test_public_mxfp4_mlp_executes_and_certifies(shape):
-    _require_gfx1201()
+    target = owning_target()
     lib = provider()
     m, h, k, n = shape
-    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(m, h, k, n, source="mxfp4"))
+    fn = ts.jit(target=target, native_required=True)(make_mlp(m, h, k, n, source="mxfp4"))
     roots = mxfp4_inputs(m, h, k, n)
     before = [x.copy() for x in roots]
     result = np.asarray(fn(*roots))
@@ -50,8 +49,8 @@ def test_public_mxfp4_mlp_executes_and_certifies(shape):
 
 @pytest.mark.parametrize("n,k,offsets", [(64, 64, [0, 32, 64]), (256, 4096, [0, 128, 256])])
 def test_mxfp4_expansion_image_is_bitwise_the_reference(n, k, offsets):
-    _require_gfx1201()
-    fn = ts.jit(target="rocm_gfx1201", native_required=True)(
+    target = owning_target()
+    fn = ts.jit(target=target, native_required=True)(
         make_mlp(1, offsets[1], k, 32, source="mxfp4"))
     roots = mxfp4_inputs(1, offsets[1], k, 32)
     fn(*roots)
@@ -70,8 +69,8 @@ def test_mxfp4_expansion_image_is_bitwise_the_reference(n, k, offsets):
 
 
 def test_mxfp4_mlp_refuses_reserved_exponent_before_launch():
-    _require_gfx1201()
-    fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(3, 32, 64, 19, source="mxfp4"))
+    target = owning_target()
+    fn = ts.jit(target=target, native_required=True)(make_mlp(3, 32, 64, 19, source="mxfp4"))
     roots = mxfp4_inputs(3, 32, 64, 19)
     fn(*roots)
     roots[2] = roots[2].copy()

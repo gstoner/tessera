@@ -14484,7 +14484,7 @@ Evidence: benchmarks/baselines/qwen3_native_mxfp4_mlp_perplexity_20261102/README
 ### 2026-11-02 — Native MXFP4 MLP on gfx1151 matches its weight-only reference
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: pending (stacked on #1034); sync ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102.
+PRs: #1035 (stacked on #1034); sync ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102.
 Outcome: the public seven-member W4A8 MLP executes MXFP4 weights on gfx1151 too, on its own proof; its Qwen3-8B perplexity matches the weight-only MXFP4 reference (ratio 0.997, gate passes).
 - **Rule first.** `5028c314a` recorded the rule in the plan before any gfx1151 measurement: Δ(native_mxfp4) ≤ 1.5 × Δ(mxfp4_direct), Δ(mxfp4_direct) > 0, every output finite, certificates on every layer, and the gfx1151 MXFP4 device tests passing with none skipped; the gfx1201 result counts for nothing.
 - **Change.** No compiler change: the expansion emitter already accepted gfx1151 (E4M3 products decode to F16 WMMA). The worker and device tests follow the live owning architecture instead of refusing gfx1151 (`5028c314a`). The shared FP4 storage launcher `rocm_nvfp4_ingest_native._execute_arrays` required live gfx1201 whatever the image; it now requires the image's own architecture (`dbc469236`). Ingest and MXFP4-storage packages still validate gfx1201 images when packaged, so they stay gfx1201-only; a unit test checks a gfx1201 expansion is refused on a gfx1151 live device.

@@ -14454,7 +14454,7 @@ Evidence: benchmarks/baselines/gfx1151_quantized_mlp_20261101/README.md; benchma
 ### 2026-11-02 — Qwen3-8B perplexity: native MLP passes on gfx1151; MXFP4 weights fail
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: pending; sync QWEN3-NATIVE-MLP-PERPLEXITY-GFX1151-20261102, QWEN3-MXFP4-PERPLEXITY-20261102.
+PRs: #1033; sync QWEN3-NATIVE-MLP-PERPLEXITY-GFX1151-20261102, QWEN3-MXFP4-PERPLEXITY-20261102.
 Outcome: the stage 2 perplexity gate passes for the native MLP on gfx1151 (ratio 1.063) and fails for both weight-only MXFP4 arms (1.79 direct, 1.99 ingested); MXFP4's cost is mostly the format, not the ingest step.
 - **Rule first.** `3a96c891d` recorded the rule in the plan before either run: the stage 2 ratio, Δ(arm) ≤ 1.5 × Δ(shipped), for the gfx1151 native arm (with every-layer certificates) and separately for each MXFP4 arm; Δ(ingested)/Δ(direct) reported, not gated.
 - **Harness.** `--arms` selects candidates; the worker follows the live owning arch for `native` (`quantized_mlp_arch`) and opens no device for host-reference arms. `mxfp4_direct` quantizes each BF16 original once with the shared joint code/scale search; `mxfp4_ingested` requantizes each shipped NVFP4 projection on its own with `ingest_nvfp4_projections`; both decode exactly and run the shipped arm's FP64 `layer_reference` policy.

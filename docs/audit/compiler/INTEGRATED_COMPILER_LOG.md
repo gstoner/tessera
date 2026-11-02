@@ -14454,7 +14454,7 @@ Evidence: benchmarks/baselines/gfx1151_quantized_mlp_20261101/README.md; benchma
 ### 2026-11-02 — gfx1151 quantized MLP probes: capacity panel, same-panel cost, M = 1 rows
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
-PRs: pending; sync GFX1151-QUANTIZED-MLP-PROBES-20261102.
+PRs: #1036; sync GFX1151-QUANTIZED-MLP-PROBES-20261102.
 Outcome: the three open findings of the 2026-11-01 gfx1151 timing packets are probed on gfx1151. A capacity-chosen `[32, 32]` bounded panel is not a fix. The same-panel M = 256 cost coincides with a different register allocation and is not yet explained. The M = 1 rows gap is real and lies entirely in the gate product. Diagnostic only, gfx1151 only, never compared with gfx1201.
 - **Capacity panel.** A packet-local monkeypatch chose the H-bounded owner's register panels at capacity (`[32, 32]`). That recovers 256 × 512, the one shape where static takes `[32, 32]` (gate product 1.126 → 1.003 of static). It loses wherever static takes `[16, 32]`: 1.107 at M = 16 and 1.29–1.36 at 256 × 256 and 256 × 128. The register rule's `[32, 32]` threshold depends on the active extent, so one bounded image cannot match static across the range. The measured direction is per-extent register-panel variants, which gfx1151 does not build today (`ProductVariant`s are LDS-only). Not built here.
 - **Same-panel cost.** At 256 × 128 × 12288 × 256 the bounded and static gate products share `[16, 32]`, the kernel signature, the branch layout and the instruction mix. The bounded image allocates 181 VGPRs against 255 and has 19 full `vmcnt(0)` drains against 11, with no spills, scratch or LDS in either. These are static counts from the disassembly. A link between them and the ≈ 93 µs cost is not established.

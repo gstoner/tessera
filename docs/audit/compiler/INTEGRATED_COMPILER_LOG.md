@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-20
+last_updated: 2026-11-03
 audit_role: reference
 ---
 
@@ -14512,6 +14512,25 @@ Remaining: per-extent gfx1151 register-panel variants; isolating the bounded ima
 Evidence: benchmarks/baselines/gfx1151_quantized_mlp_probes_20261102/README.md; benchmarks/baselines/gfx1151_quantized_mlp_probes_20261102/probe.py; benchmarks/baselines/gfx1151_quantized_mlp_probes_20261102/device-tests.txt; tests/device/rocm/test_quantized_mlp_per_m_panels_device.py.
 <!-- entry-fields:end -->
 
+### 2026-11-03 — E2E-REAL-6: ROCm paged-KV packages its replayed Schedule artifact
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: branch `claude/e2e6-rocm-paged-kv-3a9afc`; sync E2E-REAL-6-rocm-paged-kv-2026-11-03.
+Outcome: `rocm_native.package_paged_kv_read` no longer authors any launch field from the Python Graph; `package_scheduled_paged_kv(artifact)` projects them from the replayed Tile `tessera.native_contract`, and the retired packager is a test-only #31(a) oracle.
+- **Before.** The kernel already came from native Graph -> Schedule -> Tile replay (`NativePagedKV.h`). `_paged_kv_contract(module)` still supplied buffers, ABI, scalars, shape guards, geometry and page layout, and `scheduled_paged_kv.py` imported it back from `rocm_native`.
+- **Projection.** `ScheduledPagedKVArtifact.native_contract()` parses the one `tessera.native_contract`, the one `llvm.func` and the one `tile.paged_kv_read_kernel`. It refuses a missing or extra contract field for the layout, a contract target/arch that disagrees with the Tile module, kernel `storage`/`table_storage`/`route`/`page_layout` or operand counts that disagree with the contract, and artifact `names`/`dims`/`page_layout`/`entry` that disagree with the text. Nine tamperings and three relabellings are refused before target compilation. Direct and strided layouts both project; nothing was left unprojected.
+- **Admission.** `scheduled_paged_kv.admit_paged_kv` owns the fall-through envelope (same refusals as before; an unknown page layout is now refused at admission instead of raising in packaging). The registered `tessera.paged_kv_read` verifier re-checks it during replay. `jit.py`, the driver and two benchmarks use the scheduled admission.
+- **Differential.** `tests/unit/test_rocm_paged_kv_migration.py` against `tests/_support/rocm_paged_kv_baseline.py`: 16 host-free envelope points (2 archs x 2 layouts x 4 extents) agree on ABI, entry, buffers, scalars, guards, geometry, ordering, provenance (plus one new `consumer` key) and Tile text. Device rows build the same image digest on both routes and compare output bytes with each other and with NumPy, including padded/permuted strided pages.
+- **gfx1151 (Princess-Luna, `a30b67729`, under the device lock).** Migration file 39 passed, 0 skipped (8 device rows). Paged/movement/spine/prune suites: 198 passed, 95 skipped (gfx1201 and other-arch gates), 1 failed: the alpha ratchet asking for a baseline regeneration after the gain, since regenerated.
+- **gfx1201 (Tajasarus, `a30b67729`, `TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1`).** Migration file 39 passed, 0 skipped (8 device rows). Same suites: 262 passed, 31 skipped, 1 failed (the same ratchet).
+- **Build.** No C++ change. Both boxes' `build/` trees compile main `b498bc6f0`, which has the same C++ as this branch: `ninja -n` has no work and `check-tessera-rocm` passes 85/85 on each.
+- **Dashboards.** `bootstrap_prune_gap` `rocm_gfx1151,paged_kv` moves from `gap` to `compiled` because `_FAMILY_TO_COMPILED` now declares `paged_kv -> scheduled_paged_kv.supports_scheduled_paged_kv` and `rocm_native.py` defines the consumer the classifier checks for. `alpha_scoreboard` and its ratchet move with it.
+
+NVIDIA: the same declared mapping also moves `nvidia_sm120,paged_kv` to `compiled`, because `nvidia_native.package_scheduled_paged_kv` (the driver's existing sm_120 consumer) already exists. No NVIDIA code changed and there is no new sm_120 evidence. Its descriptor is authored from artifact fields checked against the Tile text, not from the projection above, so follow-up required: adopt `native_contract()` there, on Super-Bear. Apple and x86 are not applicable (no paged-read route).
+Remaining: ROCm MoE dispatch and the forward-attention fallback; general paged layouts beyond positive element strides; the image cache is still keyed on shape-bound Tile text. No promotion.
+Evidence: python/tessera/compiler/scheduled_paged_kv.py; python/tessera/compiler/rocm_native.py; tests/_support/rocm_paged_kv_baseline.py; tests/unit/test_rocm_paged_kv_migration.py; docs/audit/generated/bootstrap_prune_gap.md
+<!-- entry-fields:end -->
+
 ### 2026-11-03 — sm_120 native FP4 weight expansion
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
@@ -14520,7 +14539,7 @@ Outcome: the FP4 weight expansion the ROCm quantized MLP uses now has its own sm
 - **Route.** The native Graph/Schedule contract admits `nvidia_sm120`/`sm_120` for `tessera.nvfp4_expand` only (requantization stays gfx1201). Schedule→Tile emits an isolated five-pointer `nvvm.kernel` `llvm.func` holding `tile.nvfp4_expand_kernel`, the paged-KV precedent; the Tile verifier accepts that form only for the sm_120 contract. `LowerTileToNVIDIA` materializes it with the ROCm emitter's arithmetic (one thread per K16 group, exact E2M1→E4M3 codes, f64 scale product rounded once to f32). llc emits `cvt.rn.f32.f64`; ptxas reports 18 registers and no spills. The launcher gains a five-buffer `tessera_nvfp4_expand_` entry. PTX goes through `_register_nvidia_ptx`, so its `.version` is the one the driver JIT accepts (llc writes 8.7).
 - **Proof.** `tests/device/nvidia/test_native_nvfp4_expand_sm120.py`: 6 passed, 0 skipped. NVFP4 and MXFP4 are each bitwise equal to `reference_nvfp4_expand` (values and scale-plane bits) at 7×32, 300×256 (projections 1/99/200 rows), 513×64 or 513×96, and 64×4096. Inputs include every E2M1 code, both signed zeros, E4M3 subnormal/zero/max scales and E8M0 codes 0/1/254. The multi-projection shapes produce f32-subnormal scales, so the equality also shows no flush to zero. Code 255 is refused before PTX registration. A gfx1201 Tile, or an sm_90 pipeline, is refused by the NVIDIA lowering with `NVIDIA_NVFP4_EXPAND_ARCH_MISMATCH` (registered). `launch()` resolves the artifact through the checked descriptor bridge.
 - **Public surface.** The `nvidia_sm120` capability for the op stays `unsupported`. An `artifact_only` row was tried and reverted, because it let `ts.jit(target="nvidia_sm120")` fall back to the eager oracle (caught by `test_unsupported_sibling_never_executes_eager_expansion`). The package builder waives only that one capability diagnostic; native verification owns admission. Manifest: `nvidia_sm120` `device_verified_abi`; execution matrix: `canonical_nvidia_nvfp4_expand` via `nvidia_native_descriptor`.
-- **Regression.** Super-Bear lit (`check-tessera-ir`, NVIDIA tree): 414 passed, 0 failed. Targeted sm_120 device A/B (12 files touching the descriptor bridge, `LowerTileToNVIDIA` and the PTX launcher): main b498bc6f0 14 failed / 946 passed / 2 skipped; the branch half is queued behind another session's device-lock sweep and is reported on the PR when it lands. Mac host-free selection: the 18 failing node IDs fail identically on `main` b498bc6f0.
+- **Regression.** Super-Bear lit (`check-tessera-ir`, NVIDIA tree): 414 passed, 0 failed. Targeted sm_120 device A/B (12 files touching the descriptor bridge, `LowerTileToNVIDIA` and the PTX launcher): main b498bc6f0 14 failed / 946 passed / 2 skipped; the branch gives the same 14 failed / 946 passed / 2 skipped, with the same failing node IDs (none new), reported per test on the PR. Mac host-free selection: the 18 failing node IDs fail identically on `main` b498bc6f0.
 - **Host and lock.** Device runs were unsandboxed on The-Super-Bear (RTX 5070, CUDA 13.4, driver 610.88) in a separate worktree with its own `build/` and `build-nvidia-cuda/`, under `flock /tmp/tessera-sm120-device.lock`.
 
 ROCm: the shared contract and Tile verifier gain an sm_120 branch; the gfx1201/gfx1151 paths are unchanged in text, but their device lanes were not re-run here. The ROCm-side refusal of an sm_120 Tile is the existing `TileToROCM` check, not exercised on a ROCm build. Apple and x86 are not applicable.

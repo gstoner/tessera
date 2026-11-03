@@ -14450,3 +14450,18 @@ NVIDIA, Apple and x86 are not applicable.
 Remaining: whether a capacity-chosen `[32, 32]` bounded image recovers the large-M gate-product cost on gfx1151; the same-panel M = 256 cost's mechanism. No promotion.
 Evidence: benchmarks/baselines/gfx1151_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_bounded_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_k_bounded_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_n_bounded_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_h_bounded_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_public_quantized_call_overhead_20261101/README.md; benchmarks/rocm/quantized_mlp_arch.py; tests/unit/test_quantized_mlp_arch_recorders.py.
 <!-- entry-fields:end -->
+
+### 2026-11-02 — Qwen3-8B perplexity: native MLP passes on gfx1151; MXFP4 weights fail
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1033; sync QWEN3-NATIVE-MLP-PERPLEXITY-GFX1151-20261102, QWEN3-MXFP4-PERPLEXITY-20261102.
+Outcome: the stage 2 perplexity gate passes for the native MLP on gfx1151 (ratio 1.063) and fails for both weight-only MXFP4 arms (1.79 direct, 1.99 ingested); MXFP4's cost is mostly the format, not the ingest step.
+- **Rule first.** `3a96c891d` recorded the rule in the plan before either run: the stage 2 ratio, Δ(arm) ≤ 1.5 × Δ(shipped), for the gfx1151 native arm (with every-layer certificates) and separately for each MXFP4 arm; Δ(ingested)/Δ(direct) reported, not gated.
+- **Harness.** `--arms` selects candidates; the worker follows the live owning arch for `native` (`quantized_mlp_arch`) and opens no device for host-reference arms. `mxfp4_direct` quantizes each BF16 original once with the shared joint code/scale search; `mxfp4_ingested` requantizes each shipped NVFP4 projection on its own with `ingest_nvfp4_projections`; both decode exactly and run the shipped arm's FP64 `layer_reference` policy.
+- **gfx1151 (Princess-Luna).** Perplexity 12.708 vs 12.376 (BF16) and 12.688 (shipped): ratio 1.063, window-bootstrap 95% interval 0.98–1.18; 2,304 native chunks finite, 36/36 certificates passed. `bf16` and `shipped` per-token NLL equal the gfx1201 run's bitwise; gfx1151 − gfx1201 native is +0.0013 ± 0.0014 mean token NLL.
+- **MXFP4 (Tajasarus, CPU only).** 12.934 direct (ratio 1.79, interval 1.07–3.27), 12.998 ingested (1.99, 1.25–3.31). Direct − shipped +0.0192 ± 0.0093; ingested − direct +0.0050 ± 0.0103, unresolved, despite weight relative RMS 14.7% vs 11.3% (shipped 9.5%). Baseline arms reproduce stage 2 bitwise.
+
+NVIDIA, Apple and x86 are not applicable.
+Remaining: native MXFP4 MLP execution and its activation recipe; a larger corpus for MXFP4's precise cost; W4A4, quantized attention and `lm_head`, downstream tasks. No promotion.
+Evidence: benchmarks/baselines/qwen3_native_mlp_perplexity_gfx1151_20261102/README.md, perplexity.json, token_nll.npz, run.txt; benchmarks/baselines/qwen3_mxfp4_perplexity_20261102/README.md, perplexity.json, token_nll.npz, run.txt; benchmarks/rocm/record_qwen3_native_mlp_perplexity.py; benchmarks/rocm/qwen3_native_mlp_worker.py; tests/unit/test_qwen3_mlp_quality_harness.py
+<!-- entry-fields:end -->

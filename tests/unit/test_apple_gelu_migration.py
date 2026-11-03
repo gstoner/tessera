@@ -18,6 +18,7 @@ float64 tanh-GELU oracle.
 
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import replace
 
@@ -31,6 +32,28 @@ from tests._support import apple_gelu_baseline as baseline
 
 PIPELINE = "tessera-lower-to-apple_gpu"
 _needs_compiler = pytest.mark.skipif(find_tessera_opt() is None, reason="requires production tessera-opt")
+
+
+@functools.lru_cache(maxsize=1)
+def _has_apple_gelu_pass() -> bool:
+    """The retired route's ``--tessera-gelu-to-apple_gpu`` lives in the Apple
+    backend, which hosts such as the Linux fleet boxes do not build."""
+    import subprocess
+
+    tool = find_tessera_opt()
+    if tool is None:
+        return False
+    try:
+        listing = subprocess.run([str(tool), "--help"], capture_output=True, text=True,
+                                 timeout=120).stdout
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return "--tessera-gelu-to-apple_gpu" in listing
+
+
+_needs_oracle = pytest.mark.skipif(
+    not _has_apple_gelu_pass(),
+    reason="the retired-route oracle needs --tessera-gelu-to-apple_gpu (Apple backend not built)")
 _ELEMENT = {"fp32": "f32", "fp16": "f16", "bf16": "bf16"}
 _SHAPES = [(1, 1), (5, 11), (3, 17), (64, 129)]
 
@@ -67,6 +90,7 @@ def fake_runtime(monkeypatch, tmp_path):
 @_needs_compiler
 @pytest.mark.parametrize("dtype", ["fp32", "fp16", "bf16"])
 @pytest.mark.parametrize("shape", _SHAPES)
+@_needs_oracle
 def test_compiled_route_reproduces_retired_descriptor(dtype, shape, fake_runtime):
     module = _module(shape, dtype)
     old = baseline.package_gelu(module, pipeline_name=PIPELINE)
@@ -123,7 +147,9 @@ def test_compiled_route_refuses_what_the_retired_route_refused(module, fake_runt
     assert not scheduled_kernel.supports_scheduled_kernel(module, target="apple_gpu")
     with pytest.raises(ValueError):
         apple_native.package_gelu(module, pipeline_name=PIPELINE)
-    with pytest.raises((ValueError, RuntimeError)):
+    if not _has_apple_gelu_pass():
+        pytest.skip("retired-route half needs --tessera-gelu-to-apple_gpu (Apple backend not built)")
+    with pytest.raises(ValueError):
         baseline.package_gelu(module, pipeline_name=PIPELINE)
 
 
@@ -139,6 +165,7 @@ def test_gelu_is_not_a_scheduled_activation_on_other_targets():
 
 
 @_needs_compiler
+@_needs_oracle
 def test_dynamic_gelu_keeps_its_route_and_static_cannot_reenter_it(fake_runtime):
     with pytest.raises(ValueError, match="dynamic rank-two contract"):
         apple_native.lower_gelu_artifact(_module((5, 11)))
@@ -275,6 +302,7 @@ def _tanh_gelu(x: np.ndarray) -> np.ndarray:
 @_needs_compiler
 @pytest.mark.parametrize("dtype,tolerance", [("fp32", 2e-5), ("fp16", 4e-3), ("bf16", 2e-2)])
 @pytest.mark.parametrize("shape", [(5, 11), (64, 129), (257, 1025)])
+@_needs_oracle
 def test_compiled_and_retired_images_agree_bit_for_bit_on_metal(dtype, tolerance, shape):
     from tests._support.apple import require_apple_chip_identity
 

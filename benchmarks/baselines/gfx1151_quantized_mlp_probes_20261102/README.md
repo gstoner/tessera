@@ -59,7 +59,9 @@ host gate. Because the refusal names a pinned arch rather than the host's,
 `tests/conftest.py` keeps it as a failure by design. So this file cannot be
 evaluated on gfx1151. The failures show a missing host gate in the test file,
 not a gfx1151 regression and not a gfx1201 result. The other six files (56
-tests) pass on gfx1151.
+tests) pass on gfx1151. The same PR gates the file on `TESSERA_GFX1201_DEVICE_PROOF=1`,
+the existing gfx1201 convention, and on Princess-Luna all six then skip. This log
+was recorded before that gate.
 
 ## Probe 1: a `[32, 32]` bounded panel chosen at capacity
 

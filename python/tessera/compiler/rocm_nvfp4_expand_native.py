@@ -313,10 +313,13 @@ def build_nvfp4_expansion_graph(n: int, k: int, row_offsets, *, numeric_policy, 
         return_values=["%values","%scale_plane"],
         fn_attrs={"tessera.bindings":json.dumps(
             ["codes","scales","globals","values","scale_plane"])})
-    if target not in ("rocm_" + a for a in _ARCHES):
-        raise ValueError("NVFP4 expansion Graph target must be rocm_gfx1201 or rocm_gfx1151")
+    # sm_120 lowers the same Graph through the NVIDIA route
+    # (SM120-FP4-EXPAND-NATIVE-20261103, nvidia_nvfp4_expand_native.py).
+    arches = {"rocm_" + a: a for a in _ARCHES} | {"nvidia_sm120": "sm_120"}
+    if target not in arches:
+        raise ValueError("NVFP4 expansion Graph target must be rocm_gfx1201, rocm_gfx1151 or nvidia_sm120")
     return GraphIRModule([fn],module_attrs={
-        "tessera.target":json.dumps(target),"tessera.arch":json.dumps(target.removeprefix("rocm_"))})
+        "tessera.target":json.dumps(target),"tessera.arch":json.dumps(arches[target])})
 
 
 def supports_nvfp4_expansion(module):

@@ -3411,6 +3411,23 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         sprint="TILE-LATENT-DEFECTS-2026-09-27",
     ),
     DiagnosticCode(
+        code="NVIDIA_NVFP4_EXPAND_ARCH_MISMATCH", pass_origin="LowerTileToNVIDIA",
+        severity="error",
+        summary=(
+            "A tile.nvfp4_expand_kernel reached the NVIDIA lowering with a "
+            "contract that names another architecture (for example a gfx1201 "
+            "or gfx1151 ROCm image), or the pass targets an SM other than "
+            "sm_120, the only NVIDIA architecture the FP4 expansion lowers on."
+        ),
+        fix_hint=(
+            "Build the expansion Graph with target nvidia_sm120 / arch sm_120 "
+            "and lower it with --tessera-lower-to-nvidia-sm120; a ROCm image "
+            "belongs to the ROCm executable pipeline."
+        ),
+        spec="docs/audit/backend/nvidia/todo.md SM120-FP4-EXPAND-NATIVE-20261103",
+        sprint="SM120-FP4-EXPAND-NATIVE-20261103",
+    ),
+    DiagnosticCode(
         code="NVIDIA_MARKER_RESULT_USED", pass_origin="LowerNVIDIAToNVVM",
         severity="error",
         summary=(

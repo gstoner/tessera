@@ -119,6 +119,9 @@ constexpr const char* kTileAttentionPrefix = "tessera_tile_attention_";
 constexpr const char* kTileAttentionBackwardPrefix =
     "tessera_tile_attention_backward_";
 constexpr const char* kTilePagedKV = "tessera_tile_paged_kv_read_f32_direct";
+// Compiler-owned static FP4 expansion image (SM120-FP4-EXPAND-NATIVE-20261103):
+// entry `tessera_nvfp4_expand_<schedule hash prefix>`.
+constexpr const char* kNvfp4ExpandPrefix = "tessera_nvfp4_expand_";
 constexpr const char* kTilePagedAttentionPrefix = "tessera_tile_paged_attention_f32_fused_";
 constexpr const char* kTileMoEDispatch = "tessera_tile_moe_dispatch_";
 constexpr const char* kTileMoECombine = "tessera_tile_moe_combine_";
@@ -1259,6 +1262,45 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
             rc = 3;
     }
     for (CUdeviceptr ptr : device) if (ptr) cuMemFree(ptr);
+    return rc;
+}
+
+// Five buffers: packed codes [N,K/2] u8, source scales [N,K/G] u8 (G = 16 for
+// E4M3, 32 for E8M0), projection globals [P] f64, E4M3 values [N,K] u8 and the
+// f32 scale plane [K/16,N]. dims = (N, K, G, P). The kernel's extents are
+// static; dims size the copies and the (N*K/16)/256 grid, which must match the
+// image (the Python boundary checks the descriptor before calling).
+int invokeNvfp4Expand(CUfunction fn, void** buffers, size_t nbuf,
+                      const int64_t* dims, size_t ndim) {
+    if (nbuf != 5 || ndim != 4) return 5;
+    const long long n = dims[0], k = dims[1], group = dims[2], projections = dims[3];
+    if (n <= 0 || k <= 0 || (group != 16 && group != 32) || k % group ||
+        projections <= 0 || projections > n ||
+        (size_t)n > SIZE_MAX / (size_t)k / sizeof(float))
+        return 5;
+    const size_t values = (size_t)n * (size_t)k;
+    const size_t groups = values / 16;
+    if (groups > (size_t)0x7fffffffU * 256) return 5;
+    const size_t sizes[5] = {values / 2, values / (size_t)group,
+                             (size_t)projections * sizeof(double), values,
+                             groups * sizeof(float)};
+    CUdeviceptr device[5] = {};
+    int rc = 0;
+    for (int i = 0; i < 5; ++i)
+        if (!cuOk(cuMemAlloc(&device[i], sizes[i]), "cuMemAlloc")) { rc = 3; break; }
+    for (int i = 0; !rc && i < 3; ++i)
+        if (!cuOk(cuMemcpyHtoD(device[i], buffers[i], sizes[i]), "cuMemcpyHtoD")) rc = 3;
+    if (!rc) {
+        void* args[] = {&device[0], &device[1], &device[2], &device[3], &device[4]};
+        if (!cuOk(cuLaunchKernel(fn, (unsigned)((groups + 255) / 256), 1, 1, 256, 1, 1,
+                                 0, 0, args, 0), "cuLaunchKernel(nvfp4 expand)") ||
+            !cuOk(cuCtxSynchronize(), "cuCtxSynchronize") ||
+            !cuOk(cuMemcpyDtoH(buffers[3], device[3], sizes[3]), "cuMemcpyDtoH") ||
+            !cuOk(cuMemcpyDtoH(buffers[4], device[4], sizes[4]), "cuMemcpyDtoH"))
+            rc = 3;
+    }
+    for (CUdeviceptr ptr : device)
+        if (ptr) cuMemFree(ptr);
     return rc;
 }
 
@@ -2889,6 +2931,9 @@ int invokeImpl(const char* kernel_name, void** buffers, size_t nbuf,
         return invokeAttention(fn, kernel_name, buffers, nbuf, dims, ndim);
     if (std::strcmp(kernel_name, kTilePagedKV) == 0)
         return invokePagedKV(fn, buffers, nbuf, dims, ndim);
+    if (std::strncmp(kernel_name, kNvfp4ExpandPrefix,
+                     std::strlen(kNvfp4ExpandPrefix)) == 0)
+        return invokeNvfp4Expand(fn, buffers, nbuf, dims, ndim);
     if (std::strncmp(kernel_name, kTilePagedAttentionPrefix,
                      std::strlen(kTilePagedAttentionPrefix)) == 0)
         return invokePagedAttention(fn, buffers, nbuf, dims, ndim);

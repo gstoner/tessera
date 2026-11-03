@@ -3668,11 +3668,15 @@ LogicalResult tessera::tile::NVFP4ExpandKernelOp::verify() {
       failed(mlir::tessera_contract::verifyNVFP4ExpandPolicy(getOperation(),policy)))
     return failure();
   // The expansion is integer/f64 code: gfx1151 admits it alongside gfx1201
-  // (GFX1151-QUANTIZED-MLP-20261030), always as a matching target/arch pair.
+  // (GFX1151-QUANTIZED-MLP-20261030), and sm_120 lowers it too
+  // (SM120-FP4-EXPAND-NATIVE-20261103), always as a matching target/arch pair.
   auto arch = c.getAs<StringAttr>("arch");
   auto target = c.getAs<StringAttr>("target");
-  if (!arch || !target || (arch.getValue() != "gfx1201" && arch.getValue() != "gfx1151") ||
-      target.getValue() != ("rocm_" + arch.getValue()).str())
+  const bool sm120 = arch && target && arch.getValue() == "sm_120" &&
+                     target.getValue() == "nvidia_sm120";
+  if (!arch || !target ||
+      (!sm120 && ((arch.getValue() != "gfx1201" && arch.getValue() != "gfx1151") ||
+                  target.getValue() != ("rocm_" + arch.getValue()).str())))
     return emitOpError("conversion memory/target contract changed");
   for (auto [key,value] : {
       std::pair<StringRef,StringRef>{"layout","row_major"},
@@ -3686,6 +3690,21 @@ LogicalResult tessera::tile::NVFP4ExpandKernelOp::verify() {
   if (!bindings || bindings.size() != 5 ||
       getArtifactHash() != mlir::tessera_contract::nvfp4ContractHash(c))
     return emitOpError("conversion contract hash or binding count changed");
+  if (sm120) {
+    // NVIDIA entry: an isolated nvvm.kernel llvm.func over five raw buffers.
+    auto kernel = (*this)->getParentOfType<LLVM::LLVMFuncOp>();
+    if (getInputs().size() != 5 || !kernel || !kernel->hasAttr("nvvm.kernel") ||
+        kernel.getNumArguments() != 5 || !kernel.getBody().hasOneBlock() ||
+        !isa<LLVM::LLVMVoidType>(kernel.getFunctionType().getReturnType()) ||
+        kernel.getBody().front().getOperations().size() != 2 ||
+        !isa<LLVM::ReturnOp>(kernel.getBody().front().back()))
+      return emitOpError("sm_120 expansion requires an isolated five-pointer nvvm.kernel entry");
+    for (unsigned i = 0; i < 5; ++i)
+      if (getInputs()[i] != kernel.getArgument(i) ||
+          !isa<LLVM::LLVMPointerType>(getInputs()[i].getType()))
+        return emitOpError("sm_120 expansion buffer lineage or pointer type changed");
+    return success();
+  }
   auto fn = (*this)->getParentOfType<func::FuncOp>();
   if (getInputs().size() != 5 || !fn || !fn.getBody().hasOneBlock() ||
       fn.getNumArguments() != 5 || fn.getNumResults() ||

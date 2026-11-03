@@ -211,7 +211,7 @@ The compiler-facing table contains **364** callable/IR rows; the remaining **168
 | `graph_ir` | `registered` 331, `not_applicable` 33 |
 | `schedule_ir` | `not_applicable` 2, `complete` 359, `planned` 3 |
 | `tile_ir` | `not_applicable` 26, `complete` 4, `partial` 25, `fused` 301, `no_kernel_required` 8 |
-| `target_ir` | `not_applicable` 26, `fused` 73, `device_verified_abi` 26, `device_verified_jit` 202, `reference` 29, `no_kernel_required` 8 |
+| `target_ir` | `not_applicable` 26, `fused` 73, `device_verified_abi` 27, `device_verified_jit` 201, `reference` 29, `no_kernel_required` 8 |
 | `runtime` | `fused` 6, `artifact_only` 2, `ready` 356 |
 | `bench` | `benchmarked` 108, `none` 256 |
 
@@ -223,7 +223,7 @@ Exact-target backend-manifest rows:
 | `apple_gpu` | 206 | `device_verified_abi` 10, `device_verified_jit` 139, `fused` 47, `artifact_only` 3, `reference` 2, `planned` 5 |
 | `cpu` | 375 | `reference` 375 |
 | `nvidia_sm100` | 81 | `artifact_only` 42, `planned` 39 |
-| `nvidia_sm120` | 143 | `device_verified_abi` 15, `device_verified_jit` 58, `artifact_only` 33, `planned` 37 |
+| `nvidia_sm120` | 143 | `device_verified_abi` 16, `device_verified_jit` 58, `artifact_only` 33, `planned` 36 |
 | `nvidia_sm80` | 81 | `artifact_only` 42, `planned` 39 |
 | `nvidia_sm90` | 105 | `artifact_only` 42, `planned` 63 |
 | `rocm` | 334 | `device_verified_abi` 3, `device_verified_jit` 316, `artifact_only` 1, `planned` 14 |

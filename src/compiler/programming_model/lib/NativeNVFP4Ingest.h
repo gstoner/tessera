@@ -13,7 +13,9 @@ static FailureOr<DictionaryAttr> nativeNVFP4Contract(Operation *graph) {
       !((target.getValue() == "rocm_gfx1201" && arch.getValue() == "gfx1201") ||
         // The expansion is integer/f64 code: gfx1151 admits it
         // (GFX1151-QUANTIZED-MLP-20261030); requantization stays gfx1201.
-        (expand && target.getValue() == "rocm_gfx1151" && arch.getValue() == "gfx1151")) ||
+        (expand && target.getValue() == "rocm_gfx1151" && arch.getValue() == "gfx1151") ||
+        // sm_120 lowers the expansion only (SM120-FP4-EXPAND-NATIVE-20261103).
+        (expand && target.getValue() == "nvidia_sm120" && arch.getValue() == "sm_120")) ||
       graph->getResultTypes() != fn.getResultTypes())
     return graph->emitError("NVFP4 ingest needs an isolated gfx1201 checkpoint entry"), failure();
   for (unsigned i = 0; i < 3; ++i) {
@@ -106,6 +108,22 @@ static LogicalResult lowerNativeNVFP4Ingest(ModuleOp mod) {
     std::string entry = (expand ? "tessera_nvfp4_expand_" : "tessera_nvfp4_ingest_")
         + record.getHash().take_front(16).str();
     if (SymbolTable::lookupSymbolIn(mod,entry)) return record.emitError("NVFP4 entry collision");
+    if (expand && c->getAs<StringAttr>("target").getValue() == "nvidia_sm120") {
+      // The NVIDIA Tile entry is an nvvm.kernel llvm.func over five raw
+      // buffers (the paged-KV precedent); LowerTileToNVIDIA materializes it.
+      SmallVector<Type> args(5, LLVM::LLVMPointerType::get(mod.getContext()));
+      auto kernel = LLVM::LLVMFuncOp::create(b,graph->getLoc(),entry,
+          LLVM::LLVMFunctionType::get(LLVM::LLVMVoidType::get(mod.getContext()),args,false));
+      kernel->setAttr("nvvm.kernel",b.getUnitAttr());
+      auto block = kernel.addEntryBlock(b);
+      b.setInsertionPointToStart(block);
+      OperationState tile(graph->getLoc(),"tile.nvfp4_expand_kernel");
+      tile.addOperands(block->getArguments());tile.addAttribute("contract",*c);
+      tile.addAttribute("artifact_hash",record->getAttr("hash"));b.create(tile);
+      LLVM::ReturnOp::create(b,graph->getLoc(),ValueRange{});
+      fn.erase();
+      continue;
+    }
     auto bytes = MemRefType::get({ShapedType::kDynamic},b.getI8Type());
     auto doubles = MemRefType::get({ShapedType::kDynamic},b.getF64Type());
     SmallVector<Type> types = expand

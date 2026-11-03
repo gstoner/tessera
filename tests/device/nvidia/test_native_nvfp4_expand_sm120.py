@@ -97,6 +97,9 @@ def test_expansion_is_bitwise_the_reference(source):
                                       err_msg=f"{source} values {n}x{k}")
         np.testing.assert_array_equal(plane.view(np.uint32), expected_plane.view(np.uint32),
                                       err_msg=f"{source} scale plane {n}x{k}")
+        if len(offsets) > 2:
+            # The equality above covers f32 subnormal scales: no flush to zero.
+            assert np.any((plane != 0) & (np.abs(plane) < np.finfo(np.float32).tiny))
         for a, b in zip((codes, np.asarray(scales), globals_), before, strict=True):
             np.testing.assert_array_equal(a.view(np.uint8), b.view(np.uint8))
 
@@ -156,12 +159,16 @@ def test_runtime_launch_resolves_the_matrix_row():
     package = native.package_sm120_nvfp4_expansion(
         _graph(native, n, k, offsets, mxfp4_expansion_policy()))
     codes, exponents, globals_ = _mxfp4_inputs(n, k, offsets, 77)
+    values = np.zeros((n, k), ml_dtypes.float8_e4m3fn)
+    plane = np.zeros((k // 16, n), np.float32)
     result = launch(native.expansion_runtime_artifact(package),
-                    {"codes": codes, "scales": exponents, "globals": globals_})
+                    {"codes": codes, "scales": exponents, "globals": globals_,
+                     "values": values, "scale_plane": plane})
     assert result["ok"] is True, result.get("reason")
     assert result["compiler_path"] == native.COMPILER_PATH
     assert result["execution_kind"] == "native_gpu"
     output = result["output"]
+    assert output["values"] is values and output["scale_plane"] is plane
     expected_values, expected_plane = reference_nvfp4_expand(
         codes, exponents, globals_, row_offsets=offsets, numeric_policy=mxfp4_expansion_policy())
     np.testing.assert_array_equal(output["values"].view(np.uint8), expected_values.view(np.uint8))

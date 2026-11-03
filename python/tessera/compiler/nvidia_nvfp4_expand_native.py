@@ -27,7 +27,7 @@ from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 NVFP4_EXPAND_SM120_ABI = "tessera.nvidia.sm120.nvfp4_expand.five_pointers.static.v1"
 #: Same image from an MXFP4 source: E8M0 bytes [N,K/32] in place of E4M3 [N,K/16].
 MXFP4_EXPAND_SM120_ABI = "tessera.nvidia.sm120.nvfp4_expand.five_pointers.mxfp4_static.v1"
-_ABIS = (NVFP4_EXPAND_SM120_ABI, MXFP4_EXPAND_SM120_ABI)
+SM120_NVFP4_EXPAND_ABIS = (NVFP4_EXPAND_SM120_ABI, MXFP4_EXPAND_SM120_ABI)
 _SOURCES = ("nvfp4_e2m1_e4m3_k16", "mxfp4_e2m1_e8m0_k32")
 _WORKGROUP = 256
 
@@ -48,8 +48,8 @@ def _contract(tile):
     if tile.count("tile.nvfp4_expand_kernel") != 1:
         raise ValueError("sm_120 FP4 expansion requires its isolated native producer")
     entry, arguments = _field(r"llvm\.func @(tessera_nvfp4_expand_[0-9a-f]{16})\(([^)]*)\)", tile)
-    if (_field(r'\barch = "([^"]+)"', tile) != "sm_120"
-            or _field(r'\btarget = "([^"]+)"', tile) != "nvidia_sm120"):
+    if (_field(r'(?<![\w.])arch = "([^"]+)"', tile) != "sm_120"
+            or _field(r'(?<![\w.])target = "([^"]+)"', tile) != "nvidia_sm120"):
         raise ValueError("sm_120 FP4 expansion Tile names another architecture")
     if ([a.split(":", 1)[-1].strip() for a in arguments.split(",")] != ["!llvm.ptr"] * 5
             or "nvvm.kernel" not in tile):
@@ -128,7 +128,7 @@ class SM120NVFP4ExpansionPackage:
         desc.validate_image(image)
         info = self.contract()
         if (image.target != "nvidia_sm120" or image.architecture != "sm_120a"
-                or image.binary_format != "ptx" or desc.abi_id not in _ABIS
+                or image.binary_format != "ptx" or desc.abi_id not in SM120_NVFP4_EXPAND_ABIS
                 or image.target_ir_digest != _digest(native.target_ir)
                 or self.mxfp4 != info[-1]
                 or "tile.nvfp4_expand_kernel" in native.target_ir
@@ -181,26 +181,23 @@ def package_sm120_nvfp4_expansion(graph: str | GraphIRModule):
     return package
 
 
-def execute_sm120_nvfp4_expansion(package, codes, scales, projection_globals):
-    """Run a checked package on this host's sm_120 device; returns (values, scale_plane)."""
+def _invoke(ptx, entry, n, k, offsets, mx, policy, codes, scales, projection_globals):
     import ml_dtypes
     import numpy as np
 
     from tessera import runtime
 
-    package.validate()
-    _, n, k, offsets, _, entry, mx = package.contract()
     # Checked before any device work: shape, finite scales, E8M0 code 255,
     # positive globals and representable rounded products.
     codes, scales, globals_, _ = checked_expansion_inputs(
-        codes, scales, projection_globals, row_offsets=offsets,
-        numeric_policy=package.numeric_policy())
+        codes, scales, projection_globals, row_offsets=offsets, numeric_policy=policy)
     if codes.shape != (n, k // 2):
         raise ValueError("sm_120 FP4 expansion inputs differ from compiled shape")
     lib = runtime._load_nvidia_ptx_launch()
     if lib is None:
         raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
-    if runtime._register_nvidia_ptx(lib, entry, package.native.backend_ir) != 0:
+    # Registration stamps the PTX .version this driver's JIT accepts.
+    if runtime._register_nvidia_ptx(lib, entry, ptx) != 0:
         raise RuntimeError(f"sm_120 FP4 expansion PTX registration failed for {entry}")
     inputs = [np.ascontiguousarray(codes),
               np.ascontiguousarray(scales).view(np.uint8),
@@ -214,6 +211,14 @@ def execute_sm120_nvfp4_expansion(package, codes, scales, projection_globals):
     if rc:
         raise RuntimeError(f"sm_120 FP4 expansion invoke returned {runtime._nvidia_ptx_failure(lib, rc)}")
     return values.view(ml_dtypes.float8_e4m3fn), plane
+
+
+def execute_sm120_nvfp4_expansion(package, codes, scales, projection_globals):
+    """Run a checked package on this host's sm_120 device; returns (values, scale_plane)."""
+    package.validate()
+    _, n, k, offsets, _, entry, mx = package.contract()
+    return _invoke(package.native.backend_ir, entry, n, k, offsets, mx, package.numeric_policy(),
+                   codes, scales, projection_globals)
 
 
 def build_sm120_nvfp4_expansion_graph(n, k, row_offsets, *, numeric_policy):
@@ -253,23 +258,47 @@ def package_from_runtime_artifact(artifact):
     return package
 
 
-def execute_runtime_artifact(artifact, args):
-    """Execution-matrix executor: named (or positional) codes/scales/globals."""
-    from tessera.runtime import NativeProgramExecution
+def validate_expansion_runtime_artifact(artifact):
+    """Descriptor-launch lineage hook: the full package must re-validate."""
+    package_from_runtime_artifact(artifact)
 
-    if (artifact.metadata or {}).get("target") != "nvidia_sm120":
-        raise ValueError("sm_120 FP4 expansion artifact requires the exact nvidia_sm120 target")
-    package = package_from_runtime_artifact(artifact)
-    names = package.contract()[0]
-    if isinstance(args, dict):
-        if set(args) != set(names[:3]):
-            raise ValueError("sm_120 FP4 expansion takes exactly its three named inputs")
-        inputs = [args[name] for name in names[:3]]
-    elif isinstance(args, (tuple, list)) and len(args) == 3:
-        inputs = list(args)
-    else:
-        raise ValueError("sm_120 FP4 expansion takes exactly its three inputs")
-    values, plane = execute_sm120_nvfp4_expansion(package, *inputs)
-    receipt = {"ok": True, "execution_kind": "native_gpu", "entry": package.contract()[5],
-               "abi_id": package.native.descriptor.abi_id}
-    return NativeProgramExecution({names[3]: values, names[4]: plane}, (receipt,))
+
+def submit_sm120_nvfp4_expansion(image, desc, buffers, scalars, stream):
+    """Checked descriptor-launch submit; writes the two caller-owned outputs.
+
+    Only the image and descriptor reach a submit, so the descriptor is rebuilt
+    from its provenance and the image's own entry and compared whole."""
+    import numpy as np
+
+    if scalars or stream is not None:
+        raise ValueError("sm_120 FP4 expansion has no scalars and completes on its own context")
+    desc.validate_image(image)
+    if (image.target != "nvidia_sm120" or image.architecture != "sm_120a"
+            or image.binary_format != "ptx" or desc.abi_id not in SM120_NVFP4_EXPAND_ABIS):
+        raise ValueError("sm_120 FP4 expansion requires its exact sm_120a PTX ABI")
+    info = desc.provenance
+    names = tuple(b.name for b in sorted(desc.buffers, key=lambda b: b.ordinal))
+    n, k = info["shape_nk"]
+    mx = desc.abi_id == MXFP4_EXPAND_SM120_ABI
+    contract = (names, n, k, tuple(info["row_offsets"]), info["schedule_digest"],
+                desc.entry_symbol, mx)
+    expected = _descriptor(image, contract, info["graph_digest"], info["schedule_ir_digest"],
+                           info["tile_ir_digest"])
+    if (desc != expected or set(buffers) != set(names)
+            or desc.entry_symbol != "tessera_nvfp4_expand_" + str(info["schedule_digest"])[:16]
+            or f".visible .entry {desc.entry_symbol}".encode() not in image.payload):
+        raise ValueError("sm_120 FP4 expansion descriptor/bindings differ from native ABI")
+    inputs = [np.asarray(buffers[name]) for name in names[:3]]
+    outputs = [np.asarray(buffers[name]) for name in names[3:]]
+    for output, shape, width in zip(outputs, ((n, k), (k // 16, n)), (1, 4)):
+        if (output.shape != shape or output.dtype.itemsize != width
+                or not output.flags.c_contiguous or not output.flags.writeable):
+            raise ValueError("sm_120 FP4 expansion output shape/storage/writeability differs from ABI")
+    for i, output in enumerate(outputs):
+        if any(np.shares_memory(output, other) for other in inputs + outputs[:i]):
+            raise ValueError("sm_120 FP4 expansion outputs must not alias inputs or one another")
+    values, plane = _invoke(image.payload.decode("ascii"), desc.entry_symbol, n, k, contract[3], mx,
+                            mxfp4_expansion_policy() if mx else nvfp4_expansion_policy(), *inputs)
+    for output, result in zip(outputs, (values, plane)):
+        output.view(np.uint8)[...] = result.view(np.uint8)
+    return {names[3]: buffers[names[3]], names[4]: buffers[names[4]]}

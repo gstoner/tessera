@@ -160,11 +160,6 @@ def _execute_rocm_nvfp4_program_artifact(artifact: Any, args: Any) -> NativeProg
     return NativeProgramExecution(output,receipts)
 
 
-def _execute_nvidia_nvfp4_expand_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
-    from .compiler.nvidia_nvfp4_expand_native import execute_runtime_artifact
-    return execute_runtime_artifact(artifact, args)
-
-
 def _execute_rocm_quantized_product_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
     from .compiler.rocm_quantized_product_frontend import execute_artifact
     return execute_artifact(artifact,args)
@@ -3148,6 +3143,10 @@ def _submit_nvidia_sm120_native(
 ) -> Any:
     """Submit a compiler-owned SM120 PTX image through the shipped bridge."""
     from tessera.compiler.nvidia_native import SM120_SCALAR_FMA_ABI
+    from tessera.compiler.nvidia_nvfp4_expand_native import (
+        SM120_NVFP4_EXPAND_ABIS, submit_sm120_nvfp4_expansion)
+    if descriptor.abi_id in SM120_NVFP4_EXPAND_ABIS:
+        return submit_sm120_nvfp4_expansion(image, descriptor, buffers, scalars, stream)
     if descriptor.abi_id == SM120_SCALAR_FMA_ABI:
         from tessera.compiler.prepared_nvidia_scalar_matmul import submit
         return submit(image, descriptor, buffers, scalars, stream)
@@ -6999,6 +6998,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_DYNAMIC_EXPR_SMEM_ABI,
         SM120_DYNAMIC_SMEM_ABI,
     )
+    from tessera.compiler.nvidia_nvfp4_expand_native import SM120_NVFP4_EXPAND_ABIS
 
     if (
         target == "nvidia_sm120"
@@ -7078,6 +7078,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             | set(SM120_MOE_ABIS)
             | set(SM120_TRAINING_ABIS)
             | {SM120_DYNAMIC_SMEM_ABI, SM120_DYNAMIC_EXPR_SMEM_ABI}
+            | set(SM120_NVFP4_EXPAND_ABIS)
         )
         and target not in _native_launchers
     ):
@@ -35728,7 +35729,7 @@ def _executor_table():
         "nvidia_lhs_program": _execute_nvidia_lhs_program_artifact,
     "nvidia_rhs_program": _execute_nvidia_rhs_program_artifact,
         "rocm_nvfp4_program": _execute_rocm_nvfp4_program_artifact,
-        "nvidia_nvfp4_expand": _execute_nvidia_nvfp4_expand_artifact,
+        "nvidia_native_descriptor": _execute_nvidia_native_descriptor,
         "rocm_quantized_product_program": _execute_rocm_quantized_product_artifact,
         "nvidia_mma": _execute_nvidia_mma_artifact,
     }
@@ -35955,6 +35956,17 @@ def _execute_rocm_native_descriptor(artifact: RuntimeArtifact, args: Any) -> Any
     return result["output"], "native_gpu"
 
 
+def _execute_nvidia_native_descriptor(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Execution-matrix adapter for the checked SM120 descriptor bridge."""
+    if (artifact.native_image is None or artifact.launch_descriptor is None
+            or artifact.native_image.target != "nvidia_sm120"):
+        raise ValueError("NVIDIA descriptor executor requires an exact sm_120 native image and descriptor")
+    result = _launch_native_descriptor(artifact, args, None, time.perf_counter_ns())
+    if not result.get("ok") or result.get("execution_kind") != "native_gpu":
+        raise RuntimeError(f"checked SM120 descriptor execution failed: {result}")
+    return result["output"], "native_gpu"
+
+
 def _launch_native_descriptor(
     artifact: RuntimeArtifact,
     args: Any,
@@ -35997,6 +36009,15 @@ def _launch_native_descriptor(
             except (ValueError,TypeError,KeyError,AttributeError) as exc:
                 raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
                     f"NVFP4 expansion artifact lineage differs: {exc}") from exc
+        from tessera.compiler.nvidia_nvfp4_expand_native import (
+            SM120_NVFP4_EXPAND_ABIS,
+            validate_expansion_runtime_artifact as validate_sm120_expansion_runtime_artifact)
+        if descriptor.abi_id in SM120_NVFP4_EXPAND_ABIS:
+            try:
+                validate_sm120_expansion_runtime_artifact(artifact)
+            except (ValueError,TypeError,KeyError,AttributeError,UnicodeDecodeError) as exc:
+                raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
+                    f"sm_120 FP4 expansion artifact lineage differs: {exc}") from exc
         from tessera.compiler.rocm_nvfp4_ingest_native import (
             NVFP4_INGEST_ABI,validate_ingest_runtime_artifact)
         if descriptor.abi_id == NVFP4_INGEST_ABI:

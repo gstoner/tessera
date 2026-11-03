@@ -1288,6 +1288,13 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
 # new backend executor means (1) adding the function in runtime.py, (2) adding it
 # to KNOWN_EXECUTORS, (3) adding an ExecutionRow here. `launch()` picks it up
 # automatically; the dashboard regenerates; the drift test enforces it.
+
+#: The static MLP's weight expansion also reads MXFP4, proven on each owning
+#: architecture by the same device fixture run on that box (gfx1201 on
+#: Tajasarus, gfx1151 on Princess-Luna); the gfx1151 row derived below keeps it.
+_MXFP4_MLP_SOURCE_NOTE = (
+    " The weight expansion also admits an MXFP4 source (E8M0 per K32, static images only; "
+    "ROCM-MXFP4-NATIVE-MLP-20261102 and -GFX1151-20261102, tests/device/rocm/test_native_mxfp4_mlp.py).")
 _MATRIX: dict[tuple[str, str], ExecutionRow] = {
     ("cpu", "cpu_ebm_langevin_llvm_jit"): ExecutionRow(
         target="cpu", compiler_path="cpu_ebm_langevin_llvm_jit",
@@ -3801,7 +3808,8 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         reason="Named static BF16 K16 quantizer, NVFP4 gate/up expansion and BF16 parent store, "
                "SiLU activation, second K16 quantizer and independent NVFP4 down projection with "
                "explicit BF16 output store through seven native Graph/Schedule/Tile/LLVM/HSACO members "
-               "and one checked C++ HIP owner. Wider/dynamic/AD and model quality require separate proof.",
+               "and one checked C++ HIP owner. Wider/dynamic/AD and model quality require separate proof."
+               + _MXFP4_MLP_SOURCE_NOTE,
         numerical_fixture="tests/device/rocm/test_native_quantized_mlp_program.py",
         evidence_target="rocm_gfx1201",proof_build=".build-bf16",device_proof="device_verified_jit"),
     ("rocm_gfx1201", "canonical_rocm_quantized_bounded_mlp_program"): ExecutionRow(

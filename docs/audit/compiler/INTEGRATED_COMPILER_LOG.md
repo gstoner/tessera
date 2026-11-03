@@ -14451,6 +14451,51 @@ Remaining: whether a capacity-chosen `[32, 32]` bounded image recovers the large
 Evidence: benchmarks/baselines/gfx1151_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_bounded_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_k_bounded_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_n_bounded_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_h_bounded_quantized_mlp_20261101/README.md; benchmarks/baselines/gfx1151_public_quantized_call_overhead_20261101/README.md; benchmarks/rocm/quantized_mlp_arch.py; tests/unit/test_quantized_mlp_arch_recorders.py.
 <!-- entry-fields:end -->
 
+### 2026-11-02 — Qwen3-8B perplexity: native MLP passes on gfx1151; MXFP4 weights fail
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1033; sync QWEN3-NATIVE-MLP-PERPLEXITY-GFX1151-20261102, QWEN3-MXFP4-PERPLEXITY-20261102.
+Outcome: the stage 2 perplexity gate passes for the native MLP on gfx1151 (ratio 1.063) and fails for both weight-only MXFP4 arms (1.79 direct, 1.99 ingested); MXFP4's cost is mostly the format, not the ingest step.
+- **Rule first.** `3a96c891d` recorded the rule in the plan before either run: the stage 2 ratio, Δ(arm) ≤ 1.5 × Δ(shipped), for the gfx1151 native arm (with every-layer certificates) and separately for each MXFP4 arm; Δ(ingested)/Δ(direct) reported, not gated.
+- **Harness.** `--arms` selects candidates; the worker follows the live owning arch for `native` (`quantized_mlp_arch`) and opens no device for host-reference arms. `mxfp4_direct` quantizes each BF16 original once with the shared joint code/scale search; `mxfp4_ingested` requantizes each shipped NVFP4 projection on its own with `ingest_nvfp4_projections`; both decode exactly and run the shipped arm's FP64 `layer_reference` policy.
+- **gfx1151 (Princess-Luna).** Perplexity 12.708 vs 12.376 (BF16) and 12.688 (shipped): ratio 1.063, window-bootstrap 95% interval 0.98–1.18; 2,304 native chunks finite, 36/36 certificates passed. `bf16` and `shipped` per-token NLL equal the gfx1201 run's bitwise; gfx1151 − gfx1201 native is +0.0013 ± 0.0014 mean token NLL.
+- **MXFP4 (Tajasarus, CPU only).** 12.934 direct (ratio 1.79, interval 1.07–3.27), 12.998 ingested (1.99, 1.25–3.31). Direct − shipped +0.0192 ± 0.0093; ingested − direct +0.0050 ± 0.0103, unresolved, despite weight relative RMS 14.7% vs 11.3% (shipped 9.5%). Baseline arms reproduce stage 2 bitwise.
+
+NVIDIA, Apple and x86 are not applicable.
+Remaining: native MXFP4 MLP execution and its activation recipe; a larger corpus for MXFP4's precise cost; W4A4, quantized attention and `lm_head`, downstream tasks. No promotion.
+Evidence: benchmarks/baselines/qwen3_native_mlp_perplexity_gfx1151_20261102/README.md, perplexity.json, token_nll.npz, run.txt; benchmarks/baselines/qwen3_mxfp4_perplexity_20261102/README.md, perplexity.json, token_nll.npz, run.txt; benchmarks/rocm/record_qwen3_native_mlp_perplexity.py; benchmarks/rocm/qwen3_native_mlp_worker.py; tests/unit/test_qwen3_mlp_quality_harness.py
+<!-- entry-fields:end -->
+
+### 2026-11-02 — Native MXFP4 MLP on gfx1201 matches its weight-only reference
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1034 (stacked on #1033); sync ROCM-MXFP4-NATIVE-MLP-20261102.
+Outcome: the FP4 weight expansion accepts an MXFP4 source, so the public seven-member W4A8 MLP executes MXFP4 weights on gfx1201; its Qwen3-8B perplexity matches the weight-only MXFP4 reference (ratio 0.997, gate passes).
+- **Compiler.** The expansion's numeric policy admits `mxfp4_e2m1_e8m0_k32`: E8M0 bytes [N, K/32], each decoded to 2^(e−127) × projection global, rounded once to f32 and written to both K16 groups, so every member downstream is the accepted NVFP4 program unchanged. Graph, Schedule (`scale_storage = "e8m0_bits"`), Tile and ROCm Target verifiers check the policy, the byte scale type and K32; the boundary refuses code 255. Static gfx1201 images only: runtime-K/N and bounded admission refuse an MXFP4 source. The op keeps its `nvfp4_expand` name (naming debt).
+- **Rule first.** `d7ad606b2` recorded the rule in the plan before the run: Δ(native_mxfp4) ≤ 1.5 × Δ(mxfp4_direct), Δ(mxfp4_direct) > 0, every output finite, certificates on every layer; Δ/Δ(shipped) reported only.
+- **gfx1201 (Tajasarus).** Perplexity 12.932 native vs 12.934 weight-only MXFP4, 12.688 shipped, 12.376 BF16. Ratio 0.997, window-bootstrap 95% interval 0.93–1.07; paired native − direct −0.0002 ± 0.0014 mean token NLL; 2,304 chunks finite; 36/36 certificates. Against shipped 1.78 (1.09–3.23). `bf16`, `shipped` and `mxfp4_direct` NLL equal the earlier MXFP4 packet's bitwise. The recorder's aggregate `model_quality_acceptance` is false only because it also ANDs the earlier `mxfp4_direct`-vs-shipped verdict, which is not this rule.
+- **Tests (Tajasarus).** Device: public MXFP4 MLP at three shapes up to 128×128×4096×256 certified, expansion image bitwise equal to the reference over every non-reserved exponent, code 255 refused. Host/packaging 10/10, harness tests pass; lit tessera-ir and `check-tessera-rocm` pass. The unit and device sweeps show the same 12 + 12 failures on main (ordering; a missing `TESSERA_ROCM_NATIVE_MOVEMENT_LIB`), none new.
+
+NVIDIA: follow-up required — sm_120 has no `nvfp4_expand` lowering, so an sm_120 port of the MLP would carry both sources, proven on Super-Bear. Apple and x86 are not applicable.
+Remaining: the gfx1151 MXFP4 source; an sm_120 port; bounded and runtime-extent images; renaming `nvfp4_expand` to name both sources; a checkpoint that ships MXFP4 weights; MXFP4's cost against NVFP4 on a larger corpus. No promotion.
+Evidence: benchmarks/baselines/qwen3_native_mxfp4_mlp_perplexity_20261102/README.md, perplexity.json, token_nll.npz, run.txt, tests.txt; python/tessera/compiler/nvfp4_expansion.py; python/tessera/compiler/rocm_nvfp4_expand_native.py; src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Expand.h; tests/unit/test_mxfp4_native_mlp.py; tests/device/rocm/test_native_mxfp4_mlp.py
+<!-- entry-fields:end -->
+
+### 2026-11-02 — Native MXFP4 MLP on gfx1151 matches its weight-only reference
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1035 (stacked on #1034); sync ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102.
+Outcome: the public seven-member W4A8 MLP executes MXFP4 weights on gfx1151 too, on its own proof; its Qwen3-8B perplexity matches the weight-only MXFP4 reference (ratio 0.997, gate passes).
+- **Rule first.** `5028c314a` recorded the rule in the plan before any gfx1151 measurement: Δ(native_mxfp4) ≤ 1.5 × Δ(mxfp4_direct), Δ(mxfp4_direct) > 0, every output finite, certificates on every layer, and the gfx1151 MXFP4 device tests passing with none skipped; the gfx1201 result counts for nothing.
+- **Change.** No compiler change: the expansion emitter already accepted gfx1151 (E4M3 products decode to F16 WMMA). The worker and device tests follow the live owning architecture instead of refusing gfx1151 (`5028c314a`). The shared FP4 storage launcher `rocm_nvfp4_ingest_native._execute_arrays` required live gfx1201 whatever the image; it now requires the image's own architecture (`dbc469236`). Ingest and MXFP4-storage packages still validate gfx1201 images when packaged, so they stay gfx1201-only; a unit test checks a gfx1201 expansion is refused on a gfx1151 live device.
+- **gfx1151 (Princess-Luna).** Perplexity 12.932 native vs 12.934 weight-only MXFP4, 12.688 shipped, 12.376 BF16. Ratio 0.997, window-bootstrap 95% interval 0.94–1.06; paired native − direct −0.0001 ± 0.0013 mean token NLL; 2,304 chunks finite; 36/36 certificates. `bf16`, `shipped` and `mxfp4_direct` NLL equal the gfx1201 packet's bitwise. gfx1151 − gfx1201 native +0.00004 ± 0.0012, reported only. The aggregate `model_quality_acceptance` is false for the same reason as on gfx1201 (it ANDs the earlier direct-vs-shipped verdict).
+- **Tests.** Princess-Luna at `dbc469236`: device (public MLP certified at three shapes, expansion image bitwise equal to the reference, code 255 refused), host/packaging and harness: 31 passed, none skipped. At `5028c314a` two device tests had failed on the launcher guard. Tajasarus at `dbc469236`: the gfx1201 unit+device sweep of the touched areas gives 371 passed / 3 failed against 370 / 3 at the parent; the 3 are the known ordering failures in `test_rocm_mxfp4_storage_native` (13/13 alone).
+
+NVIDIA: the follow-up recorded for ROCM-MXFP4-NATIVE-MLP-20261102 is unchanged (no sm_120 `nvfp4_expand` lowering). Apple and x86 are not applicable.
+Remaining: an sm_120 port; bounded and runtime-extent images; renaming `nvfp4_expand` to name both sources; a checkpoint that ships MXFP4 weights; MXFP4's cost against NVFP4 on a larger corpus. No promotion.
+Evidence: benchmarks/baselines/qwen3_native_mxfp4_mlp_perplexity_gfx1151_20261102/README.md, perplexity.json, token_nll.npz, run.txt, tests.txt; python/tessera/compiler/rocm_nvfp4_ingest_native.py; tests/device/rocm/test_native_mxfp4_mlp.py; tests/unit/test_mxfp4_native_mlp.py; benchmarks/rocm/qwen3_native_mlp_worker.py
+<!-- entry-fields:end -->
+
 ### 2026-11-02 — gfx1151 quantized MLP probes: capacity panel, same-panel cost, M = 1 rows
 
 Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)

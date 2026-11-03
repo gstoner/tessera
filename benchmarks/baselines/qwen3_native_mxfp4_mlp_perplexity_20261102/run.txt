@@ -1,0 +1,65 @@
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards: 100%|██████████| 5/5 [00:00<00:00, 220.79it/s]
+{"layer": 0, "elapsed_s": 553.4, "mlp_input_shipped_vs_bf16": 0.0, "mlp_input_native_mxfp4_vs_bf16": 0.0, "mlp_input_mxfp4_direct_vs_bf16": 0.0}
+{"layer": 1, "elapsed_s": 738.4, "mlp_input_shipped_vs_bf16": 0.01903, "mlp_input_native_mxfp4_vs_bf16": 0.0252, "mlp_input_mxfp4_direct_vs_bf16": 0.02503}
+/home/angstorms/programming/tessera-mx/benchmarks/rocm/benchmark_public_quantized_gate_up.py:63: RuntimeWarning: overflow encountered in exp
+  return (gate/(np.float32(1)+np.exp(-gate))*up).astype(ml_dtypes.bfloat16)
+/home/angstorms/programming/tessera-mx/benchmarks/rocm/quantized_mlp_reference.py:58: RuntimeWarning: overflow encountered in exp
+  activation_at_parent=(gate/(np.float32(1)+np.exp(-gate))*up).astype(ml_dtypes.bfloat16)
+{"layer": 2, "elapsed_s": 926.6, "mlp_input_shipped_vs_bf16": 0.02376, "mlp_input_native_mxfp4_vs_bf16": 0.03603, "mlp_input_mxfp4_direct_vs_bf16": 0.03596}
+{"layer": 3, "elapsed_s": 1113.0, "mlp_input_shipped_vs_bf16": 0.03256, "mlp_input_native_mxfp4_vs_bf16": 0.04425, "mlp_input_mxfp4_direct_vs_bf16": 0.04417}
+{"layer": 4, "elapsed_s": 1295.3, "mlp_input_shipped_vs_bf16": 0.04574, "mlp_input_native_mxfp4_vs_bf16": 0.06041, "mlp_input_mxfp4_direct_vs_bf16": 0.06029}
+{"layer": 5, "elapsed_s": 1471.2, "mlp_input_shipped_vs_bf16": 0.06542, "mlp_input_native_mxfp4_vs_bf16": 0.08501, "mlp_input_mxfp4_direct_vs_bf16": 0.08477}
+{"layer": 6, "elapsed_s": 1652.2, "mlp_input_shipped_vs_bf16": 0.06408, "mlp_input_native_mxfp4_vs_bf16": 0.08281, "mlp_input_mxfp4_direct_vs_bf16": 0.08239}
+{"layer": 7, "elapsed_s": 1846.6, "mlp_input_shipped_vs_bf16": 0.07627, "mlp_input_native_mxfp4_vs_bf16": 0.09892, "mlp_input_mxfp4_direct_vs_bf16": 0.09838}
+{"layer": 8, "elapsed_s": 2033.7, "mlp_input_shipped_vs_bf16": 0.15707, "mlp_input_native_mxfp4_vs_bf16": 0.20606, "mlp_input_mxfp4_direct_vs_bf16": 0.2048}
+{"layer": 9, "elapsed_s": 2210.1, "mlp_input_shipped_vs_bf16": 0.15844, "mlp_input_native_mxfp4_vs_bf16": 0.20516, "mlp_input_mxfp4_direct_vs_bf16": 0.20365}
+{"layer": 10, "elapsed_s": 2389.6, "mlp_input_shipped_vs_bf16": 0.16664, "mlp_input_native_mxfp4_vs_bf16": 0.21303, "mlp_input_mxfp4_direct_vs_bf16": 0.21118}
+{"layer": 11, "elapsed_s": 2571.7, "mlp_input_shipped_vs_bf16": 0.17329, "mlp_input_native_mxfp4_vs_bf16": 0.22065, "mlp_input_mxfp4_direct_vs_bf16": 0.21844}
+{"layer": 12, "elapsed_s": 2754.6, "mlp_input_shipped_vs_bf16": 0.17655, "mlp_input_native_mxfp4_vs_bf16": 0.22333, "mlp_input_mxfp4_direct_vs_bf16": 0.22093}
+{"layer": 13, "elapsed_s": 2937.3, "mlp_input_shipped_vs_bf16": 0.18173, "mlp_input_native_mxfp4_vs_bf16": 0.22938, "mlp_input_mxfp4_direct_vs_bf16": 0.22682}
+{"layer": 14, "elapsed_s": 3112.6, "mlp_input_shipped_vs_bf16": 0.18916, "mlp_input_native_mxfp4_vs_bf16": 0.23829, "mlp_input_mxfp4_direct_vs_bf16": 0.23547}
+{"layer": 15, "elapsed_s": 3295.4, "mlp_input_shipped_vs_bf16": 0.19727, "mlp_input_native_mxfp4_vs_bf16": 0.24851, "mlp_input_mxfp4_direct_vs_bf16": 0.24539}
+{"layer": 16, "elapsed_s": 3469.8, "mlp_input_shipped_vs_bf16": 0.20646, "mlp_input_native_mxfp4_vs_bf16": 0.26032, "mlp_input_mxfp4_direct_vs_bf16": 0.25662}
+{"layer": 17, "elapsed_s": 3669.1, "mlp_input_shipped_vs_bf16": 0.21144, "mlp_input_native_mxfp4_vs_bf16": 0.26507, "mlp_input_mxfp4_direct_vs_bf16": 0.26132}
+{"layer": 18, "elapsed_s": 3843.7, "mlp_input_shipped_vs_bf16": 0.21822, "mlp_input_native_mxfp4_vs_bf16": 0.27401, "mlp_input_mxfp4_direct_vs_bf16": 0.27011}
+{"layer": 19, "elapsed_s": 4020.1, "mlp_input_shipped_vs_bf16": 0.21283, "mlp_input_native_mxfp4_vs_bf16": 0.26769, "mlp_input_mxfp4_direct_vs_bf16": 0.26374}
+{"layer": 20, "elapsed_s": 4204.8, "mlp_input_shipped_vs_bf16": 0.2157, "mlp_input_native_mxfp4_vs_bf16": 0.27151, "mlp_input_mxfp4_direct_vs_bf16": 0.26756}
+{"layer": 21, "elapsed_s": 4386.7, "mlp_input_shipped_vs_bf16": 0.21381, "mlp_input_native_mxfp4_vs_bf16": 0.26953, "mlp_input_mxfp4_direct_vs_bf16": 0.26565}
+{"layer": 22, "elapsed_s": 4565.3, "mlp_input_shipped_vs_bf16": 0.19768, "mlp_input_native_mxfp4_vs_bf16": 0.24971, "mlp_input_mxfp4_direct_vs_bf16": 0.24608}
+{"layer": 23, "elapsed_s": 4740.1, "mlp_input_shipped_vs_bf16": 0.18957, "mlp_input_native_mxfp4_vs_bf16": 0.23906, "mlp_input_mxfp4_direct_vs_bf16": 0.23552}
+{"layer": 24, "elapsed_s": 4918.6, "mlp_input_shipped_vs_bf16": 0.18002, "mlp_input_native_mxfp4_vs_bf16": 0.22627, "mlp_input_mxfp4_direct_vs_bf16": 0.22287}
+{"layer": 25, "elapsed_s": 5094.9, "mlp_input_shipped_vs_bf16": 0.17591, "mlp_input_native_mxfp4_vs_bf16": 0.22078, "mlp_input_mxfp4_direct_vs_bf16": 0.21744}
+{"layer": 26, "elapsed_s": 5272.1, "mlp_input_shipped_vs_bf16": 0.17643, "mlp_input_native_mxfp4_vs_bf16": 0.22066, "mlp_input_mxfp4_direct_vs_bf16": 0.21744}
+{"layer": 27, "elapsed_s": 5473.8, "mlp_input_shipped_vs_bf16": 0.17399, "mlp_input_native_mxfp4_vs_bf16": 0.21664, "mlp_input_mxfp4_direct_vs_bf16": 0.21356}
+{"layer": 28, "elapsed_s": 5659.0, "mlp_input_shipped_vs_bf16": 0.1748, "mlp_input_native_mxfp4_vs_bf16": 0.21714, "mlp_input_mxfp4_direct_vs_bf16": 0.21402}
+{"layer": 29, "elapsed_s": 5839.9, "mlp_input_shipped_vs_bf16": 0.17757, "mlp_input_native_mxfp4_vs_bf16": 0.21934, "mlp_input_mxfp4_direct_vs_bf16": 0.21628}
+{"layer": 30, "elapsed_s": 6017.6, "mlp_input_shipped_vs_bf16": 0.17963, "mlp_input_native_mxfp4_vs_bf16": 0.22025, "mlp_input_mxfp4_direct_vs_bf16": 0.21726}
+{"layer": 31, "elapsed_s": 6197.4, "mlp_input_shipped_vs_bf16": 0.18559, "mlp_input_native_mxfp4_vs_bf16": 0.22627, "mlp_input_mxfp4_direct_vs_bf16": 0.22327}
+{"layer": 32, "elapsed_s": 6383.4, "mlp_input_shipped_vs_bf16": 0.19125, "mlp_input_native_mxfp4_vs_bf16": 0.23259, "mlp_input_mxfp4_direct_vs_bf16": 0.22958}
+{"layer": 33, "elapsed_s": 6566.6, "mlp_input_shipped_vs_bf16": 0.19516, "mlp_input_native_mxfp4_vs_bf16": 0.23691, "mlp_input_mxfp4_direct_vs_bf16": 0.23383}
+{"layer": 34, "elapsed_s": 6764.1, "mlp_input_shipped_vs_bf16": 0.18234, "mlp_input_native_mxfp4_vs_bf16": 0.22491, "mlp_input_mxfp4_direct_vs_bf16": 0.22075}
+{"layer": 35, "elapsed_s": 6948.2, "mlp_input_shipped_vs_bf16": 0.15835, "mlp_input_native_mxfp4_vs_bf16": 0.19512, "mlp_input_mxfp4_direct_vs_bf16": 0.19292}
+{"perplexity": {"bf16": 12.376330851856707, "shipped": 12.68814800394194, "native_mxfp4": 12.931879459629569, "mxfp4_direct": 12.933806723066846}, "verdicts": {"native_mxfp4": {"arm": "native_mxfp4", "reference": "mxfp4_direct", "delta_mxfp4_direct": 0.5574758712101389, "delta_native_mxfp4": 0.5555486077728613, "threshold_ratio": 1.5, "ratio": 0.9965428755990928, "passed": true, "reason": "delta(native_mxfp4) <= threshold_ratio * delta(mxfp4_direct)"}, "mxfp4_direct": {"arm": "mxfp4_direct", "reference": "shipped", "delta_shipped": 0.31181715208523286, "delta_mxfp4_direct": 0.5574758712101389, "threshold_ratio": 1.5, "ratio": 1.787829397716252, "passed": false, "reason": "delta(mxfp4_direct) <= threshold_ratio * delta(shipped)"}}, "diagnostics": {"delta_native_mxfp4_over_delta_shipped": 1.7816486490807482}}
+	Command being timed: "/home/angstorms/.venvs/tessera-qwen3-ref/bin/python benchmarks/rocm/record_qwen3_native_mlp_perplexity.py --corpus /home/angstorms/.cache/huggingface/hub/datasets--Salesforce--wikitext/snapshots/b08601e04326c79dfdd32d625aee71d232d685c3/wikitext-2-raw-v1/test-00000-of-00001.parquet --corpus-revision b08601e04326c79dfdd32d625aee71d232d685c3 --output /home/angstorms/qwen3_ppl_native_mxfp4_20261102 --worker-python /home/angstorms/programming/tessera/.venv/bin/python --arms native_mxfp4,mxfp4_direct"
+	User time (seconds): 61503.34
+	System time (seconds): 645.02
+	Percent of CPU this job got: 889%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:56:29
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 17807828
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 495
+	Minor (reclaiming a frame) page faults: 88943145
+	Voluntary context switches: 650750
+	Involuntary context switches: 2046711
+	Swaps: 0
+	File system inputs: 50863850
+	File system outputs: 1064
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

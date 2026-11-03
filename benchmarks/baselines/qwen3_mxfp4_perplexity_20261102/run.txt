@@ -1,0 +1,61 @@
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards: 100%|██████████| 5/5 [00:00<00:00, 317.11it/s]
+{"layer": 0, "elapsed_s": 180.8, "mlp_input_shipped_vs_bf16": 0.0, "mlp_input_mxfp4_direct_vs_bf16": 0.0, "mlp_input_mxfp4_ingested_vs_bf16": 0.0}
+{"layer": 1, "elapsed_s": 288.5, "mlp_input_shipped_vs_bf16": 0.01903, "mlp_input_mxfp4_direct_vs_bf16": 0.02503, "mlp_input_mxfp4_ingested_vs_bf16": 0.0313}
+{"layer": 2, "elapsed_s": 382.0, "mlp_input_shipped_vs_bf16": 0.02376, "mlp_input_mxfp4_direct_vs_bf16": 0.03596, "mlp_input_mxfp4_ingested_vs_bf16": 0.04138}
+{"layer": 3, "elapsed_s": 474.3, "mlp_input_shipped_vs_bf16": 0.03256, "mlp_input_mxfp4_direct_vs_bf16": 0.04417, "mlp_input_mxfp4_ingested_vs_bf16": 0.05202}
+{"layer": 4, "elapsed_s": 563.4, "mlp_input_shipped_vs_bf16": 0.04574, "mlp_input_mxfp4_direct_vs_bf16": 0.06029, "mlp_input_mxfp4_ingested_vs_bf16": 0.07131}
+{"layer": 5, "elapsed_s": 654.2, "mlp_input_shipped_vs_bf16": 0.06542, "mlp_input_mxfp4_direct_vs_bf16": 0.08477, "mlp_input_mxfp4_ingested_vs_bf16": 0.10412}
+{"layer": 6, "elapsed_s": 743.7, "mlp_input_shipped_vs_bf16": 0.06408, "mlp_input_mxfp4_direct_vs_bf16": 0.08239, "mlp_input_mxfp4_ingested_vs_bf16": 0.10088}
+{"layer": 7, "elapsed_s": 844.9, "mlp_input_shipped_vs_bf16": 0.07627, "mlp_input_mxfp4_direct_vs_bf16": 0.09838, "mlp_input_mxfp4_ingested_vs_bf16": 0.12111}
+{"layer": 8, "elapsed_s": 936.0, "mlp_input_shipped_vs_bf16": 0.15707, "mlp_input_mxfp4_direct_vs_bf16": 0.2048, "mlp_input_mxfp4_ingested_vs_bf16": 0.25109}
+{"layer": 9, "elapsed_s": 1026.5, "mlp_input_shipped_vs_bf16": 0.15844, "mlp_input_mxfp4_direct_vs_bf16": 0.20365, "mlp_input_mxfp4_ingested_vs_bf16": 0.2534}
+{"layer": 10, "elapsed_s": 1117.1, "mlp_input_shipped_vs_bf16": 0.16664, "mlp_input_mxfp4_direct_vs_bf16": 0.21118, "mlp_input_mxfp4_ingested_vs_bf16": 0.26593}
+{"layer": 11, "elapsed_s": 1209.4, "mlp_input_shipped_vs_bf16": 0.17329, "mlp_input_mxfp4_direct_vs_bf16": 0.21844, "mlp_input_mxfp4_ingested_vs_bf16": 0.27553}
+{"layer": 12, "elapsed_s": 1299.4, "mlp_input_shipped_vs_bf16": 0.17655, "mlp_input_mxfp4_direct_vs_bf16": 0.22093, "mlp_input_mxfp4_ingested_vs_bf16": 0.28015}
+{"layer": 13, "elapsed_s": 1389.5, "mlp_input_shipped_vs_bf16": 0.18173, "mlp_input_mxfp4_direct_vs_bf16": 0.22682, "mlp_input_mxfp4_ingested_vs_bf16": 0.28746}
+{"layer": 14, "elapsed_s": 1480.3, "mlp_input_shipped_vs_bf16": 0.18916, "mlp_input_mxfp4_direct_vs_bf16": 0.23547, "mlp_input_mxfp4_ingested_vs_bf16": 0.29795}
+{"layer": 15, "elapsed_s": 1571.7, "mlp_input_shipped_vs_bf16": 0.19727, "mlp_input_mxfp4_direct_vs_bf16": 0.24539, "mlp_input_mxfp4_ingested_vs_bf16": 0.31015}
+{"layer": 16, "elapsed_s": 1663.4, "mlp_input_shipped_vs_bf16": 0.20646, "mlp_input_mxfp4_direct_vs_bf16": 0.25662, "mlp_input_mxfp4_ingested_vs_bf16": 0.32246}
+{"layer": 17, "elapsed_s": 1774.5, "mlp_input_shipped_vs_bf16": 0.21144, "mlp_input_mxfp4_direct_vs_bf16": 0.26132, "mlp_input_mxfp4_ingested_vs_bf16": 0.328}
+{"layer": 18, "elapsed_s": 1866.9, "mlp_input_shipped_vs_bf16": 0.21822, "mlp_input_mxfp4_direct_vs_bf16": 0.27011, "mlp_input_mxfp4_ingested_vs_bf16": 0.33686}
+{"layer": 19, "elapsed_s": 1958.7, "mlp_input_shipped_vs_bf16": 0.21283, "mlp_input_mxfp4_direct_vs_bf16": 0.26374, "mlp_input_mxfp4_ingested_vs_bf16": 0.32706}
+{"layer": 20, "elapsed_s": 2050.9, "mlp_input_shipped_vs_bf16": 0.2157, "mlp_input_mxfp4_direct_vs_bf16": 0.26756, "mlp_input_mxfp4_ingested_vs_bf16": 0.33158}
+{"layer": 21, "elapsed_s": 2143.5, "mlp_input_shipped_vs_bf16": 0.21381, "mlp_input_mxfp4_direct_vs_bf16": 0.26565, "mlp_input_mxfp4_ingested_vs_bf16": 0.32663}
+{"layer": 22, "elapsed_s": 2236.4, "mlp_input_shipped_vs_bf16": 0.19768, "mlp_input_mxfp4_direct_vs_bf16": 0.24608, "mlp_input_mxfp4_ingested_vs_bf16": 0.30158}
+{"layer": 23, "elapsed_s": 2329.7, "mlp_input_shipped_vs_bf16": 0.18957, "mlp_input_mxfp4_direct_vs_bf16": 0.23552, "mlp_input_mxfp4_ingested_vs_bf16": 0.28797}
+{"layer": 24, "elapsed_s": 2422.2, "mlp_input_shipped_vs_bf16": 0.18002, "mlp_input_mxfp4_direct_vs_bf16": 0.22287, "mlp_input_mxfp4_ingested_vs_bf16": 0.27288}
+{"layer": 25, "elapsed_s": 2512.8, "mlp_input_shipped_vs_bf16": 0.17591, "mlp_input_mxfp4_direct_vs_bf16": 0.21744, "mlp_input_mxfp4_ingested_vs_bf16": 0.26603}
+{"layer": 26, "elapsed_s": 2603.2, "mlp_input_shipped_vs_bf16": 0.17643, "mlp_input_mxfp4_direct_vs_bf16": 0.21744, "mlp_input_mxfp4_ingested_vs_bf16": 0.2658}
+{"layer": 27, "elapsed_s": 2715.4, "mlp_input_shipped_vs_bf16": 0.17399, "mlp_input_mxfp4_direct_vs_bf16": 0.21356, "mlp_input_mxfp4_ingested_vs_bf16": 0.26216}
+{"layer": 28, "elapsed_s": 2804.9, "mlp_input_shipped_vs_bf16": 0.1748, "mlp_input_mxfp4_direct_vs_bf16": 0.21402, "mlp_input_mxfp4_ingested_vs_bf16": 0.26284}
+{"layer": 29, "elapsed_s": 2895.7, "mlp_input_shipped_vs_bf16": 0.17757, "mlp_input_mxfp4_direct_vs_bf16": 0.21628, "mlp_input_mxfp4_ingested_vs_bf16": 0.26641}
+{"layer": 30, "elapsed_s": 2986.8, "mlp_input_shipped_vs_bf16": 0.17963, "mlp_input_mxfp4_direct_vs_bf16": 0.21726, "mlp_input_mxfp4_ingested_vs_bf16": 0.26821}
+{"layer": 31, "elapsed_s": 3078.9, "mlp_input_shipped_vs_bf16": 0.18559, "mlp_input_mxfp4_direct_vs_bf16": 0.22327, "mlp_input_mxfp4_ingested_vs_bf16": 0.27617}
+{"layer": 32, "elapsed_s": 3170.4, "mlp_input_shipped_vs_bf16": 0.19125, "mlp_input_mxfp4_direct_vs_bf16": 0.22958, "mlp_input_mxfp4_ingested_vs_bf16": 0.28339}
+{"layer": 33, "elapsed_s": 3263.4, "mlp_input_shipped_vs_bf16": 0.19516, "mlp_input_mxfp4_direct_vs_bf16": 0.23383, "mlp_input_mxfp4_ingested_vs_bf16": 0.28869}
+{"layer": 34, "elapsed_s": 3367.0, "mlp_input_shipped_vs_bf16": 0.18234, "mlp_input_mxfp4_direct_vs_bf16": 0.22075, "mlp_input_mxfp4_ingested_vs_bf16": 0.27357}
+{"layer": 35, "elapsed_s": 3458.1, "mlp_input_shipped_vs_bf16": 0.15835, "mlp_input_mxfp4_direct_vs_bf16": 0.19292, "mlp_input_mxfp4_ingested_vs_bf16": 0.23836}
+{"perplexity": {"bf16": 12.376330851856707, "shipped": 12.68814800394194, "mxfp4_direct": 12.933806723066846, "mxfp4_ingested": 12.998154398318317}, "verdicts": {"mxfp4_direct": {"arm": "mxfp4_direct", "delta_shipped": 0.31181715208523286, "delta_mxfp4_direct": 0.5574758712101389, "threshold_ratio": 1.5, "ratio": 1.787829397716252, "passed": false, "reason": "delta(mxfp4_direct) <= threshold_ratio * delta(shipped)"}, "mxfp4_ingested": {"arm": "mxfp4_ingested", "delta_shipped": 0.31181715208523286, "delta_mxfp4_ingested": 0.6218235464616093, "threshold_ratio": 1.5, "ratio": 1.9941928861297487, "passed": false, "reason": "delta(mxfp4_ingested) <= threshold_ratio * delta(shipped)"}}, "diagnostics": {"delta_ingested_over_delta_direct": 1.115426834728807}}
+	Command being timed: "/home/angstorms/.venvs/tessera-qwen3-ref/bin/python benchmarks/rocm/record_qwen3_native_mlp_perplexity.py --corpus /home/angstorms/.cache/huggingface/hub/datasets--Salesforce--wikitext/snapshots/b08601e04326c79dfdd32d625aee71d232d685c3/wikitext-2-raw-v1/test-00000-of-00001.parquet --corpus-revision b08601e04326c79dfdd32d625aee71d232d685c3 --output /home/angstorms/qwen3_ppl_mxfp4_20261102 --worker-python /home/angstorms/programming/tessera/.venv/bin/python --arms mxfp4_direct,mxfp4_ingested"
+	User time (seconds): 25702.06
+	System time (seconds): 885.41
+	Percent of CPU this job got: 762%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 58:07.07
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 17848712
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 266
+	Minor (reclaiming a frame) page faults: 96013210
+	Voluntary context switches: 360245
+	Involuntary context switches: 692906
+	Swaps: 0
+	File system inputs: 18573912
+	File system outputs: 1008
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

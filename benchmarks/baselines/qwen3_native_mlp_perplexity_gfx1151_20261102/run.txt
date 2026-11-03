@@ -1,0 +1,61 @@
+Loading checkpoint shards:   0%|          | 0/5 [00:00<?, ?it/s]Loading checkpoint shards: 100%|██████████| 5/5 [00:00<00:00, 386.99it/s]
+{"layer": 0, "elapsed_s": 216.4, "mlp_input_shipped_vs_bf16": 0.0, "mlp_input_native_vs_bf16": 0.0}
+{"layer": 1, "elapsed_s": 356.7, "mlp_input_shipped_vs_bf16": 0.01903, "mlp_input_native_vs_bf16": 0.01922}
+{"layer": 2, "elapsed_s": 497.9, "mlp_input_shipped_vs_bf16": 0.02376, "mlp_input_native_vs_bf16": 0.0239}
+{"layer": 3, "elapsed_s": 643.0, "mlp_input_shipped_vs_bf16": 0.03256, "mlp_input_native_vs_bf16": 0.03269}
+{"layer": 4, "elapsed_s": 775.1, "mlp_input_shipped_vs_bf16": 0.04574, "mlp_input_native_vs_bf16": 0.04588}
+{"layer": 5, "elapsed_s": 919.2, "mlp_input_shipped_vs_bf16": 0.06542, "mlp_input_native_vs_bf16": 0.06571}
+{"layer": 6, "elapsed_s": 1054.1, "mlp_input_shipped_vs_bf16": 0.06408, "mlp_input_native_vs_bf16": 0.06446}
+{"layer": 7, "elapsed_s": 1199.4, "mlp_input_shipped_vs_bf16": 0.07627, "mlp_input_native_vs_bf16": 0.07698}
+{"layer": 8, "elapsed_s": 1339.5, "mlp_input_shipped_vs_bf16": 0.15707, "mlp_input_native_vs_bf16": 0.15868}
+{"layer": 9, "elapsed_s": 1484.3, "mlp_input_shipped_vs_bf16": 0.15844, "mlp_input_native_vs_bf16": 0.16033}
+{"layer": 10, "elapsed_s": 1620.8, "mlp_input_shipped_vs_bf16": 0.16664, "mlp_input_native_vs_bf16": 0.16888}
+{"layer": 11, "elapsed_s": 1766.2, "mlp_input_shipped_vs_bf16": 0.17329, "mlp_input_native_vs_bf16": 0.17591}
+{"layer": 12, "elapsed_s": 1904.1, "mlp_input_shipped_vs_bf16": 0.17655, "mlp_input_native_vs_bf16": 0.17937}
+{"layer": 13, "elapsed_s": 2047.6, "mlp_input_shipped_vs_bf16": 0.18173, "mlp_input_native_vs_bf16": 0.1847}
+{"layer": 14, "elapsed_s": 2188.5, "mlp_input_shipped_vs_bf16": 0.18916, "mlp_input_native_vs_bf16": 0.19234}
+{"layer": 15, "elapsed_s": 2332.4, "mlp_input_shipped_vs_bf16": 0.19727, "mlp_input_native_vs_bf16": 0.20058}
+{"layer": 16, "elapsed_s": 2471.1, "mlp_input_shipped_vs_bf16": 0.20646, "mlp_input_native_vs_bf16": 0.20974}
+{"layer": 17, "elapsed_s": 2613.7, "mlp_input_shipped_vs_bf16": 0.21144, "mlp_input_native_vs_bf16": 0.21464}
+{"layer": 18, "elapsed_s": 2761.1, "mlp_input_shipped_vs_bf16": 0.21822, "mlp_input_native_vs_bf16": 0.22154}
+{"layer": 19, "elapsed_s": 2913.1, "mlp_input_shipped_vs_bf16": 0.21283, "mlp_input_native_vs_bf16": 0.21611}
+{"layer": 20, "elapsed_s": 3052.0, "mlp_input_shipped_vs_bf16": 0.2157, "mlp_input_native_vs_bf16": 0.21908}
+{"layer": 21, "elapsed_s": 3200.2, "mlp_input_shipped_vs_bf16": 0.21381, "mlp_input_native_vs_bf16": 0.21708}
+{"layer": 22, "elapsed_s": 3338.4, "mlp_input_shipped_vs_bf16": 0.19768, "mlp_input_native_vs_bf16": 0.20065}
+{"layer": 23, "elapsed_s": 3490.0, "mlp_input_shipped_vs_bf16": 0.18957, "mlp_input_native_vs_bf16": 0.19221}
+{"layer": 24, "elapsed_s": 3627.4, "mlp_input_shipped_vs_bf16": 0.18002, "mlp_input_native_vs_bf16": 0.18237}
+{"layer": 25, "elapsed_s": 3766.6, "mlp_input_shipped_vs_bf16": 0.17591, "mlp_input_native_vs_bf16": 0.1782}
+{"layer": 26, "elapsed_s": 3902.4, "mlp_input_shipped_vs_bf16": 0.17643, "mlp_input_native_vs_bf16": 0.17865}
+{"layer": 27, "elapsed_s": 4042.3, "mlp_input_shipped_vs_bf16": 0.17399, "mlp_input_native_vs_bf16": 0.17616}
+{"layer": 28, "elapsed_s": 4183.9, "mlp_input_shipped_vs_bf16": 0.1748, "mlp_input_native_vs_bf16": 0.17702}
+{"layer": 29, "elapsed_s": 4325.3, "mlp_input_shipped_vs_bf16": 0.17757, "mlp_input_native_vs_bf16": 0.17981}
+{"layer": 30, "elapsed_s": 4459.8, "mlp_input_shipped_vs_bf16": 0.17963, "mlp_input_native_vs_bf16": 0.18175}
+{"layer": 31, "elapsed_s": 4598.3, "mlp_input_shipped_vs_bf16": 0.18559, "mlp_input_native_vs_bf16": 0.18784}
+{"layer": 32, "elapsed_s": 4731.9, "mlp_input_shipped_vs_bf16": 0.19125, "mlp_input_native_vs_bf16": 0.19361}
+{"layer": 33, "elapsed_s": 4885.2, "mlp_input_shipped_vs_bf16": 0.19516, "mlp_input_native_vs_bf16": 0.19761}
+{"layer": 34, "elapsed_s": 5024.2, "mlp_input_shipped_vs_bf16": 0.18234, "mlp_input_native_vs_bf16": 0.18469}
+{"layer": 35, "elapsed_s": 5158.1, "mlp_input_shipped_vs_bf16": 0.15835, "mlp_input_native_vs_bf16": 0.16033}
+{"perplexity": {"bf16": 12.376330851856707, "shipped": 12.68814800394194, "native": 12.707640062521115}, "verdicts": {"native": {"arm": "native", "delta_shipped": 0.31181715208523286, "delta_native": 0.33130921066440777, "threshold_ratio": 1.5, "ratio": 1.0625111814690902, "passed": true, "reason": "delta(native) <= threshold_ratio * delta(shipped)"}}, "diagnostics": {}}
+	Command being timed: "/home/gstoner/.venvs/tessera-qwen3-ref/bin/python benchmarks/rocm/record_qwen3_native_mlp_perplexity.py --corpus /home/gstoner/.cache/huggingface/hub/datasets--Salesforce--wikitext/snapshots/b08601e04326c79dfdd32d625aee71d232d685c3/wikitext-2-raw-v1/test-00000-of-00001.parquet --corpus-revision b08601e04326c79dfdd32d625aee71d232d685c3 --output /home/gstoner/qwen3_ppl_gfx1151_20261102 --worker-python /home/gstoner/programming/tessera/.venv/bin/python --arms native"
+	User time (seconds): 51984.11
+	System time (seconds): 523.18
+	Percent of CPU this job got: 1013%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:26:19
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 17124256
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 84440696
+	Voluntary context switches: 621626
+	Involuntary context switches: 843414
+	Swaps: 0
+	File system inputs: 2
+	File system outputs: 2040
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

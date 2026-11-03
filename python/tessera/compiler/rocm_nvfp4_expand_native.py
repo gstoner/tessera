@@ -15,7 +15,9 @@ from .native_artifact import (
     BufferBinding, LaunchDescriptor, LaunchGeometry, NativeEntryPoint,
     NativeImageArtifact, OrderingSemantics, ShapeGuard,
 )
-from .nvfp4_expansion import checked_expansion_inputs, nvfp4_expansion_policy
+from .nvfp4_expansion import (
+    checked_expansion_inputs, expansion_source, mxfp4_expansion_policy, nvfp4_expansion_policy,
+)
 from .rocm_native import ROCMNativePackage, _compile_native_tile_ir
 from .rocm_nvfp4_ingest_native import _execute_arrays, _required_field
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
@@ -28,12 +30,24 @@ NVFP4_EXPAND_RUNTIME_K_ABI = "tessera.rocm.nvfp4_expand.five_memrefs.runtime_k.v
 #: Single-projection image whose N is one i64 scalar on the flat grid; K stays
 #: static, so the row/group split divides by a constant.
 NVFP4_EXPAND_RUNTIME_N_ABI = "tessera.rocm.nvfp4_expand.five_memrefs.runtime_n.v1"
+#: Static image of the same expansion from an MXFP4 source: E8M0 bytes
+#: [N,K/32] in place of E4M3 [N,K/16] (ROCM-MXFP4-NATIVE-MLP-20261102). It has
+#: no runtime-extent image.
+MXFP4_EXPAND_ABI = "tessera.rocm.nvfp4_expand.five_memrefs.mxfp4_static.v1"
 _DIRECTIVE = "tessera_rocm.nvfp4_expand"
 _checked_targets: dict[str, str] = {}
 
 
 def _digest(text):
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _target_is_mxfp4(target):
+    """Whether a checked expansion Target names the MXFP4 source policy."""
+    sources = re.findall(r'source_format = "([a-z0-9_]+)"', target)
+    if len(sources) != 1 or sources[0] not in ("nvfp4_e2m1_e4m3_k16", "mxfp4_e2m1_e8m0_k32"):
+        raise ValueError("FP4 expansion Target names no single admitted source format")
+    return sources[0] == "mxfp4_e2m1_e8m0_k32"
 
 
 def _contract(tile, target):
@@ -48,7 +62,8 @@ def _contract(tile, target):
     entry = _required_field(r'name = "([^"]+)"', target)
     if (len(names) != 5 or len(set(names)) != 5
             or any(not isinstance(name, str) or not name for name in names)
-            or n <= 0 or k <= 0 or k % 16 or n > (2**63 - 1) // k
+            or n <= 0 or k <= 0 or k % (32 if _target_is_mxfp4(target) else 16)
+            or n > (2**63 - 1) // k
             or len(offsets) < 2 or offsets[0] != 0 or offsets[-1] != n
             or any(type(x) is not int for x in offsets)
             or any(a >= b for a, b in zip(offsets, offsets[1:]))):
@@ -57,15 +72,17 @@ def _contract(tile, target):
 
 
 def _descriptor(image, info, graph_digest, schedule_ir_digest, tile_ir_digest, *, runtime_k=False,
-                runtime_n=False, entry=None):
+                runtime_n=False, entry=None, mx=False):
     from .native_artifact import ScalarArgument
     names, n, k, offsets, digest, static_entry = info
-    shapes = ((n, k // 2), (n, k // 16), (len(offsets) - 1,), (n, k), (k // 16, n))
-    dtypes = ("uint8", "fp8_e4m3", "fp64", "fp8_e4m3", "fp32")
+    if mx and (runtime_k or runtime_n):
+        raise ValueError("MXFP4 expansion has no runtime-extent image")
+    shapes = ((n, k // 2), (n, k // 32) if mx else (n, k // 16), (len(offsets) - 1,), (n, k), (k // 16, n))
+    dtypes = ("uint8", "uint8" if mx else "fp8_e4m3", "fp64", "fp8_e4m3", "fp32")
     groups = k // 16
     extra = {"runtime_k": True} if runtime_k else {"runtime_n": True} if runtime_n else {}
     abi = (NVFP4_EXPAND_RUNTIME_K_ABI if runtime_k else NVFP4_EXPAND_RUNTIME_N_ABI if runtime_n
-           else NVFP4_EXPAND_ABI)
+           else MXFP4_EXPAND_ABI if mx else NVFP4_EXPAND_ABI)
     return LaunchDescriptor(
         image_digest=image.image_digest, entry_symbol=entry or static_entry,
         abi_id=abi,
@@ -86,7 +103,8 @@ def _descriptor(image, info, graph_digest, schedule_ir_digest, tile_ir_digest, *
         provenance={
             "work_item": "ROCM-NVFP4-INGEST-1",
             "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
-            "numeric_policy": nvfp4_expansion_policy(), "row_offsets": list(offsets),
+            "numeric_policy": mxfp4_expansion_policy() if mx else nvfp4_expansion_policy(),
+            "row_offsets": list(offsets),
             "shape_nk": [n, k], "schedule_digest": digest,
             "graph_digest": graph_digest, "schedule_ir_digest": schedule_ir_digest,
             "tile_ir_digest": tile_ir_digest,
@@ -139,6 +157,14 @@ class NVFP4ExpansionPackage:
     def runtime_n(self):
         return self.native.descriptor.abi_id == NVFP4_EXPAND_RUNTIME_N_ABI
 
+    @property
+    def mxfp4(self):
+        """Whether the checked source is MXFP4 (E8M0 K32 scales)."""
+        return self.native.descriptor.abi_id == MXFP4_EXPAND_ABI
+
+    def numeric_policy(self):
+        return mxfp4_expansion_policy() if self.mxfp4 else nvfp4_expansion_policy()
+
     def contract(self):
         """(names, n, k, offsets, digest, entry) of the checked static expansion.
 
@@ -157,8 +183,9 @@ class NVFP4ExpansionPackage:
         if (image.target != "rocm_" + arch or image.architecture != arch
                 or image.binary_format != "hsaco"
                 or desc.abi_id not in (NVFP4_EXPAND_ABI, NVFP4_EXPAND_RUNTIME_K_ABI,
-                                       NVFP4_EXPAND_RUNTIME_N_ABI)
-                or image.target_ir_digest != _digest(native.target_ir)):
+                                       NVFP4_EXPAND_RUNTIME_N_ABI, MXFP4_EXPAND_ABI)
+                or image.target_ir_digest != _digest(native.target_ir)
+                or self.mxfp4 != _target_is_mxfp4(native.target_ir)):
             raise ValueError("NVFP4 expansion native image/ABI/Target contract differs")
         info = self.contract()
         if re.findall(r'\bhash = "([0-9a-f]{64})"', self.schedule_ir) != [info[-2]]:
@@ -173,7 +200,8 @@ class NVFP4ExpansionPackage:
                 raise ValueError("runtime-extent NVFP4 expansion image differs from its checked Target")
             entry = _directive_symbol(projection, _DIRECTIVE)
         expected = _descriptor(image, info, _digest(self.graph_ir), _digest(self.schedule_ir), _digest(native.tile_ir),
-                               runtime_k=self.runtime_k, runtime_n=self.runtime_n, entry=entry)
+                               runtime_k=self.runtime_k, runtime_n=self.runtime_n, entry=entry,
+                               mx=self.mxfp4)
         if desc != expected:
             raise ValueError("NVFP4 expansion descriptor differs from native contract")
 
@@ -218,16 +246,20 @@ def package_nvfp4_expansion(graph: str | GraphIRModule, *, runtime_k: bool = Fal
         target, backend, binary, compiler, toolchain, libraries, state = _compile_native_tile_ir(
             tile, directive=_DIRECTIVE, family="quant_fp", architecture=arch)
         info = _contract(tile, target)
+    mx = _target_is_mxfp4(target)
+    if mx and (runtime_k or runtime_n):
+        raise ValueError("MXFP4 expansion has no runtime-extent image")
     image = NativeImageArtifact(
         target="rocm_" + arch, architecture=arch, pipeline_name="tessera-rocm-executable",
         compiler_fingerprint=compiler, toolchain_fingerprint=toolchain,
         target_ir_digest=_digest(target), binary_format="hsaco", payload=binary,
         entry_points=(NativeEntryPoint(entry or info[-1],
                                        NVFP4_EXPAND_RUNTIME_K_ABI if runtime_k else
-                                       NVFP4_EXPAND_RUNTIME_N_ABI if runtime_n else NVFP4_EXPAND_ABI),),
+                                       NVFP4_EXPAND_RUNTIME_N_ABI if runtime_n else
+                                       MXFP4_EXPAND_ABI if mx else NVFP4_EXPAND_ABI),),
         device_libraries=libraries, compile_state=state)
     desc = _descriptor(image, info, _digest(source), _digest(schedule), _digest(tile),
-                       runtime_k=runtime_k, runtime_n=runtime_n, entry=entry)
+                       runtime_k=runtime_k, runtime_n=runtime_n, entry=entry, mx=mx)
     package = NVFP4ExpansionPackage(
         source, schedule, ROCMNativePackage(tile, target, backend, image, desc))
     package.validate()
@@ -242,7 +274,7 @@ def execute_nvfp4_expansion(package, codes, scales, projection_globals, *, event
     _, n, k, offsets, _, _ = _contract(package.native.tile_ir, package.native.target_ir)
     codes, scales, globals_, _ = checked_expansion_inputs(
         codes, scales, projection_globals, row_offsets=offsets,
-        numeric_policy=nvfp4_expansion_policy())
+        numeric_policy=package.numeric_policy())
     if codes.shape != (n, k // 2):
         raise ValueError("NVFP4 expansion inputs differ from compiled shape")
     arrays = [np.ascontiguousarray(x) for x in (codes, scales, globals_)] + [
@@ -257,16 +289,15 @@ def build_nvfp4_expansion_graph(n: int, k: int, row_offsets, *, numeric_policy, 
     from .graph_ir import (
         GraphIRFunction,IRArg,IROp,tensor_ir_type,_infer_result_types)
     offsets=tuple(row_offsets)
-    if (type(n) is not int or type(k) is not int or n <= 0 or k <= 0 or k % 16
+    mx = expansion_source(numeric_policy) == "mxfp4"
+    if (type(n) is not int or type(k) is not int or n <= 0 or k <= 0 or k % (32 if mx else 16)
             or n > (2**63 - 1) // k
             or len(offsets)<2 or any(type(x) is not int for x in offsets)
             or offsets[0]!=0 or offsets[-1]!=n
             or any(a>=b for a,b in zip(offsets,offsets[1:]))):
         raise ValueError("NVFP4 Graph requires positive static N/K16 and ordered boundaries")
-    if numeric_policy != nvfp4_expansion_policy():
-        raise ValueError("NVFP4 Graph requires the explicit expansion policy")
     types=[tensor_ir_type((n,k//2),"uint8"),
-           tensor_ir_type((n,k//16),"fp8_e4m3"),
+           tensor_ir_type((n,k//32),"uint8") if mx else tensor_ir_type((n,k//16),"fp8_e4m3"),
            tensor_ir_type((len(offsets)-1,),"fp64")]
     attrs={"row_offsets":list(offsets),"numeric_policy":dict(numeric_policy)}
     results=_infer_result_types("tessera.nvfp4_expand",types,attrs)

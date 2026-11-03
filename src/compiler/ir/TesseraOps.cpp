@@ -6331,22 +6331,26 @@ LogicalResult tessera::NVFP4ExpandOp::verify() {
       return emitOpError("requires plain static checkpoint tensor results");
     outputs.push_back(type);
   }
+  // An MXFP4 source carries E8M0 exponent bytes, one per K32 block.
+  const bool mx = mlir::tessera_contract::isMXFP4ExpandPolicy(getNumericPolicy());
   if (inputs[0].getRank() != 2 || !inputs[0].getElementType().isInteger(8) ||
       inputs[1].getRank() != 2 ||
-      !isa<Float8E4M3FNType>(inputs[1].getElementType()) ||
+      !(mx ? inputs[1].getElementType().isInteger(8)
+           : isa<Float8E4M3FNType>(inputs[1].getElementType())) ||
       inputs[2].getRank() != 1 || !inputs[2].getElementType().isF64())
-    return emitOpError("requires packed byte [N,K/2], E4M3 [N,K/16], f64 projection globals");
+    return emitOpError(mx ? "requires packed byte [N,K/2], E8M0 bytes [N,K/32], f64 projection globals"
+                          : "requires packed byte [N,K/2], E4M3 [N,K/16], f64 projection globals");
   int64_t n = inputs[0].getDimSize(0), packedK = inputs[0].getDimSize(1);
   if (packedK <= 0 || packedK > std::numeric_limits<int64_t>::max()/2)
     return emitOpError("packed K is outside representable extents");
   int64_t k = packedK * 2;
   if (failed(mlir::tessera_contract::verifyNVFP4ExpandExtents(
-          getOperation(), n, k, getRowOffsets())))
+          getOperation(), n, k, getRowOffsets(), mx)))
     return failure();
   auto matches = [](RankedTensorType type, ArrayRef<int64_t> shape) {
     return type.getShape() == shape;
   };
-  if (!matches(inputs[1], {n,k/16}) ||
+  if (!matches(inputs[1], {n,k/(mx ? 32 : 16)}) ||
       inputs[2].getDimSize(0) != static_cast<int64_t>(getRowOffsets().size()-1) ||
       !matches(outputs[0], {n,k}) || !isa<Float8E4M3FNType>(outputs[0].getElementType()) ||
       !matches(outputs[1], {k/16,n}) || !outputs[1].getElementType().isF32())

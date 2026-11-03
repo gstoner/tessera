@@ -1,14 +1,29 @@
-"""Native MLP worker for the stage-2 Qwen3-8B perplexity gate (gfx1201).
+"""MLP worker for the stage-2 Qwen3-8B perplexity gate.
 
 Runs in the Tessera project environment and serves MLP calls to the Torch
 reference driver (``record_qwen3_native_mlp_perplexity``) over a framed pipe,
-so Torch and Tessera never share a process (Decision #23). Two MLP arms:
+so Torch and Tessera never share a process (Decision #23). MLP arms:
 
 * ``native``: the public seven-member quantized MLP
-  (``canonical_rocm_quantized_mlp_program``), in 128-row chunks; the staged
-  tolerance certificate runs on the first chunk of every certified layer;
+  (``canonical_rocm_quantized_mlp_program``) on the live owning ROCm
+  architecture (gfx1201 or gfx1151), in 128-row chunks; the staged tolerance
+  certificate runs on the first chunk of every certified layer;
 * ``shipped``: the decoded shipped NVFP4 weights under the stage-1 FP64
-  reference policy (``layer_reference``), no activation quantization.
+  reference policy (``layer_reference``), no activation quantization;
+* ``mxfp4_direct``: the BF16 originals quantized once to MXFP4 (E2M1, E8M0
+  per 32) with the shared joint code/scale search, same FP64 policy;
+* ``mxfp4_ingested``: the shipped NVFP4 weights requantized to MXFP4 by
+  ``ingest_nvfp4_projections`` (the program's one declared lossy step), same
+  FP64 policy;
+* ``native_mxfp4``: the same seven-member native MLP with an MXFP4 weight
+  source (ROCM-MXFP4-NATIVE-MLP-20261102), executing exactly the
+  ``mxfp4_direct`` codes and E8M0 exponents, with the per-16 E4M3 activation
+  quantizer; certified like ``native`` and, like it, run on the live owning
+  architecture (gfx1201 since 2026-11-02; gfx1151 under
+  ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102).
+
+The three weight-only arms are host references and need no device; the worker
+touches the GPU only when a native arm is among ``--arms``.
 
 Every output must be finite. Framing: a 4-byte little-endian header length,
 the JSON header, then ``header["nbytes"]`` payload bytes (BF16 bit patterns).
@@ -65,73 +80,151 @@ def _rows(payload: bytes, rows: int) -> np.ndarray:
     return np.frombuffer(payload, np.uint16).reshape(rows, HIDDEN).view(ml_dtypes.bfloat16)
 
 
-def serve(cache_root: Path, certify: str, inbound: BinaryIO, outbound: BinaryIO) -> None:
+#: Weight-only arms and how each decodes one layer's three projections.
+REFERENCE_ARMS = ("shipped", "mxfp4_direct", "mxfp4_ingested")
+NATIVE_ARMS = ("native", "native_mxfp4")
+ARMS = (*NATIVE_ARMS, *REFERENCE_ARMS)
+
+
+def direct_mxfp4(loaded: dict) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Each BF16 projection quantized once to MXFP4: (codes [N,K], E8M0 [K/32,N], exact).
+
+    Cached on ``loaded`` so the host reference and the native arm share one
+    quantization, and therefore exactly the same weights."""
+    from benchmarks.rocm.benchmark_rocm_nvfp4_checkpoint import _direct_bf16_to_mxfp4
+
+    if "mxfp4_direct" not in loaded:
+        loaded["mxfp4_direct"] = [_direct_bf16_to_mxfp4(np.asarray(w, np.float64)) for w in loaded["bf16"]]
+    return loaded["mxfp4_direct"]
+
+
+def native_mxfp4_roots(loaded: dict) -> list[np.ndarray]:
+    """The six MXFP4 weight roots of ``make_mlp(..., source="mxfp4")``: unit globals."""
+    from tessera.compiler import rocm_mxfp4 as mx
+
+    (gate, gate_e, _), (up, up_e, _), (down, down_e, _) = direct_mxfp4(loaded)
+    return [mx.pack_e2m1_codes(np.concatenate([gate, up])),
+            np.ascontiguousarray(np.concatenate([gate_e.T, up_e.T])), np.ones(2, np.float64),
+            mx.pack_e2m1_codes(down), np.ascontiguousarray(down_e.T), np.ones(1, np.float64)]
+
+
+def decode_arm(arm: str, loaded: dict) -> list[np.ndarray]:
+    """One layer's gate/up/down weights as ``arm`` stores them, decoded exactly."""
+    from tessera.compiler import rocm_mxfp4 as mx
+    from tessera.compiler import rocm_nvfp4_ingest as ingest
+
+    from benchmarks.rocm.benchmark_checkpoint_quantized_mlp import decode_projection
+
+    if arm == "shipped":
+        return [decode_projection(p) for p in loaded["projections"]]
+    if arm == "mxfp4_direct":
+        return [exact for _, _, exact in direct_mxfp4(loaded)]
+    if arm == "mxfp4_ingested":
+        # Each projection converts on its own so its source global scale stays its own.
+        out = []
+        for projection in loaded["projections"]:
+            converted = ingest.ingest_nvfp4_projections([projection])
+            out.append(mx.exact_weights(mx.unpack_e2m1_codes(converted.packed_codes),
+                                        converted.scale_exponents, dtype=np.float64))
+        return out
+    raise ValueError(f"unknown weight-only arm {arm!r}")
+
+
+def serve(cache_root: Path, certify: str, arms: tuple[str, ...], inbound: BinaryIO, outbound: BinaryIO) -> None:
     import ml_dtypes
     import tessera as ts
     from tessera import runtime as rt
 
     from benchmarks.rocm import qwen3_local_checkpoint as local
-    from benchmarks.rocm.benchmark_checkpoint_quantized_mlp import decode_projection, layer_reference
+    from benchmarks.rocm.benchmark_checkpoint_quantized_mlp import layer_reference
     from benchmarks.rocm.benchmark_public_quantized_mlp import make_mlp
     from benchmarks.rocm.quantized_mlp_reference import assert_compiled_chain
-    from benchmarks.rocm.record_qwen3_mlp_layer_quality import _device_identity
 
-    uuid, name = _device_identity(rt)
-    lib = rt._load_rocm_native_movement_runtime()
-    if lib is None:
-        raise RuntimeError("native ROCm movement runtime unavailable")
+    if not arms or len(set(arms)) != len(arms) or any(arm not in ARMS for arm in arms):
+        raise ValueError(f"arms must be distinct members of {ARMS}")
+    if any(arm in NATIVE_ARMS for arm in arms):
+        from benchmarks.rocm import quantized_mlp_arch as owning
+
+        arch = owning.owning_arch()
+        uuid, name = owning.identity(arch)
+        lib = rt._load_rocm_native_movement_runtime()
+        if lib is None:
+            raise RuntimeError("native ROCm movement runtime unavailable")
+        compiler_sha = hashlib.sha256(Path(os.environ["TESSERA_OPT"]).read_bytes()).hexdigest()
+        provider_sha = hashlib.sha256(Path(lib._name).read_bytes()).hexdigest()
+    else:
+        # Host references only: no device is opened, and none is claimed.
+        arch, uuid, name, lib, compiler_sha, provider_sha = "host_reference", None, None, None, None, None
     snapshots = (local.LocalSnapshot.open(cache_root, local.BF16_REPO),
                  local.LocalSnapshot.open(cache_root, local.NVFP4_REPO))
-    fn, layer, fixed, decoded, certified = None, None, None, None, False
-    certificates: dict[int, object] = {}
-    calls = {"native": 0, "shipped": 0}
+    fns: dict[str, object] = {}
+    roots: dict[str, list[np.ndarray]] = {}
+    layer = None
+    decoded: dict[str, list[np.ndarray]] = {}
+    certificates: dict[str, dict[int, object]] = {arm: {} for arm in arms if arm in NATIVE_ARMS}
+    calls = {arm: 0 for arm in arms}
     while True:
         header, payload = read_frame(inbound)
         op = header.get("op")
         if op == "hello":
             write_frame(outbound, {
-                "ok": True, "architecture": "gfx1201", "device_uuid": uuid, "device_name": name,
+                "ok": True, "architecture": arch, "device_uuid": uuid, "device_name": name, "arms": list(arms),
                 "worker_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                "compiler_sha256": hashlib.sha256(Path(os.environ["TESSERA_OPT"]).read_bytes()).hexdigest(),
-                "provider_sha256": hashlib.sha256(Path(lib._name).read_bytes()).hexdigest()})
+                "compiler_sha256": compiler_sha, "provider_sha256": provider_sha})
         elif op == "layer":
             layer = header["layer"]
             loaded = local.load_layer_mlp(cache_root, layer, bf16=snapshots[0], nvfp4=snapshots[1])
             gate, up, down = loaded["projections"]
-            fixed = [np.ascontiguousarray(np.concatenate([gate.packed_codes, up.packed_codes])),
-                     np.ascontiguousarray(np.concatenate([gate.e4m3_scales, up.e4m3_scales])),
-                     np.array([gate.global_scale, up.global_scale], np.float64),
-                     down.packed_codes, down.e4m3_scales, np.array([down.global_scale], np.float64)]
-            decoded = [decode_projection(p) for p in loaded["projections"]]
-            if fn is None:
-                h, k, n = gate.packed_codes.shape[0], gate.packed_codes.shape[1] * 2, down.packed_codes.shape[0]
-                if k != HIDDEN or n != HIDDEN:
-                    raise ValueError("checkpoint geometry differs from the worker's hidden size")
-                fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(CHUNK, h, k, n))
-            certified = certify == "none" or (certify == "first-layer" and bool(certificates))
-            write_frame(outbound, {"ok": True, "layer": layer, "source": loaded["source"]})
+            roots = {}
+            if "native" in arms:
+                roots["native"] = [np.ascontiguousarray(np.concatenate([gate.packed_codes, up.packed_codes])),
+                                   np.ascontiguousarray(np.concatenate([gate.e4m3_scales, up.e4m3_scales])),
+                                   np.array([gate.global_scale, up.global_scale], np.float64),
+                                   down.packed_codes, down.e4m3_scales, np.array([down.global_scale], np.float64)]
+            if "native_mxfp4" in arms:
+                roots["native_mxfp4"] = native_mxfp4_roots(loaded)
+            decoded = {arm: decode_arm(arm, loaded) for arm in arms if arm not in NATIVE_ARMS}
+            for arm in roots:
+                if arm not in fns:
+                    h, k, n = gate.packed_codes.shape[0], gate.packed_codes.shape[1] * 2, down.packed_codes.shape[0]
+                    if k != HIDDEN or n != HIDDEN:
+                        raise ValueError("checkpoint geometry differs from the worker's hidden size")
+                    source = "mxfp4" if arm == "native_mxfp4" else "nvfp4"
+                    fns[arm] = ts.jit(target=owning.target(arch), native_required=True)(
+                        make_mlp(CHUNK, h, k, n, source=source))
+            certified = {arm: certify == "none" or (certify == "first-layer" and bool(certificates[arm]))
+                         for arm in roots}
+            weight_error = {arm: [float(np.sqrt(((w - np.asarray(o, np.float64)) ** 2).sum()
+                                                / (np.asarray(o, np.float64) ** 2).sum()))
+                                  for w, o in zip(values, loaded["bf16"])]
+                            for arm, values in decoded.items()}
+            write_frame(outbound, {"ok": True, "layer": layer, "source": loaded["source"],
+                                   "weight_relative_rms_vs_bf16": weight_error})
         elif op == "mlp":
-            if fixed is None or header.get("layer") != layer:
+            if layer is None or header.get("layer") != layer:
                 raise RuntimeError("MLP call for a layer the worker has not loaded")
+            if header.get("arm") not in arms:
+                raise ValueError(f"arm {header.get('arm')!r} was not requested at startup")
             x = _rows(payload, header["rows"])
             out = np.empty_like(x)
             for start in range(0, x.shape[0], CHUNK):
                 chunk = np.ascontiguousarray(x[start:start + CHUNK])
-                if header["arm"] == "native":
-                    roots = [chunk, *fixed]
-                    result = fn(*roots)
+                arm = header["arm"]
+                if arm in NATIVE_ARMS:
+                    fn, call = fns[arm], [chunk, *roots[arm]]
+                    result = fn(*call)
                     artifact = fn.runtime_artifact()
+                    native = fn._rocm_quantized_product_last_program.native
                     if fn.execution_kind != "native_gpu" \
-                            or artifact.metadata["compiler_path"] != "canonical_rocm_quantized_mlp_program":
-                        raise RuntimeError("public call did not execute the seven-member native program")
-                    if not certified:
-                        certificates[layer] = assert_compiled_chain(
-                            fn._rocm_quantized_product_last_program.native, roots, result, lib._name)
-                        certified = True
-                elif header["arm"] == "shipped":
-                    result = layer_reference(chunk, *decoded)
+                            or artifact.metadata["compiler_path"] != "canonical_rocm_quantized_mlp_program" \
+                            or native.gate.expansion.mxfp4 != (arm == "native_mxfp4") \
+                            or native.down.expansion.mxfp4 != (arm == "native_mxfp4"):
+                        raise RuntimeError(f"public call did not execute the {arm} seven-member native program")
+                    if not certified[arm]:
+                        certificates[arm][layer] = assert_compiled_chain(native, call, result, lib._name)
+                        certified[arm] = True
                 else:
-                    raise ValueError(f"unknown MLP arm {header['arm']!r}")
+                    result = layer_reference(chunk, *decoded[header["arm"]])
                 result = np.asarray(result).astype(ml_dtypes.bfloat16)
                 if not np.isfinite(result.astype(np.float32)).all():
                     raise RuntimeError(f"layer {layer} {header['arm']} rows {start}.. produced non-finite output")
@@ -140,7 +233,8 @@ def serve(cache_root: Path, certify: str, inbound: BinaryIO, outbound: BinaryIO)
             write_frame(outbound, {"ok": True}, np.ascontiguousarray(out).view(np.uint16).tobytes())
         elif op == "close":
             write_frame(outbound, {"ok": True, "chunk_calls": calls, "certify": certify,
-                                   "certificates": {str(k): v for k, v in sorted(certificates.items())}})
+                                   "certificates": {arm: {str(k): v for k, v in sorted(per.items())}
+                                                    for arm, per in certificates.items()}})
             return
         else:
             raise ValueError(f"unknown worker op {op!r}")
@@ -150,8 +244,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cache-root", type=Path, default=Path.home() / ".cache/huggingface/hub")
     parser.add_argument("--certify", choices=("every-layer", "first-layer", "none"), default="every-layer")
+    parser.add_argument("--arms", default="native,shipped", help="comma-separated worker arms")
     args = parser.parse_args()
     # The pipe owns stdout; anything the stack prints goes to stderr instead.
     protocol_out = os.fdopen(os.dup(1), "wb")
     os.dup2(2, 1)
-    serve(args.cache_root, args.certify, sys.stdin.buffer, protocol_out)
+    serve(args.cache_root, args.certify, tuple(args.arms.split(",")), sys.stdin.buffer, protocol_out)

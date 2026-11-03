@@ -45,12 +45,18 @@ def inputs(m,width,k,seed=731):
             np.array([.0123456789,.007654321],np.float64)]
 
 
+def expansion_policy_for(scales):
+    """Oracle-only: E8M0 byte scales are the MXFP4 source, E4M3 the NVFP4 one."""
+    from tessera.compiler.nvfp4_expansion import mxfp4_expansion_policy
+    return mxfp4_expansion_policy() if np.asarray(scales).dtype==np.uint8 else nvfp4_expansion_policy()
+
+
 def oracle(values,reverse=False):
     x,packed,weight_scales,globals_=values;m,k=x.shape;width=packed.shape[0]//2
     blocks=x.astype(np.float32).reshape(m,k//16,16)
     sa=np.maximum(np.max(np.abs(blocks),axis=-1)/np.float32(448),np.finfo(np.float32).tiny)
     q=(blocks/sa[...,None]).astype(ml_dtypes.float8_e4m3fn).astype(np.float64)
-    b,sb=reference_nvfp4_expand(packed,weight_scales,globals_,row_offsets=[0,width,2*width],numeric_policy=nvfp4_expansion_policy())
+    b,sb=reference_nvfp4_expand(packed,weight_scales,globals_,row_offsets=[0,width,2*width],numeric_policy=expansion_policy_for(weight_scales))
     accum=np.einsum("mgj,ngj,mg,gn->mn",q,b.astype(np.float64).reshape(2*width,k//16,16),sa.astype(np.float64),sb.astype(np.float64))
     parent=accum.astype(np.float32).astype(ml_dtypes.bfloat16).astype(np.float32)
     gate,up=(parent[:,width:],parent[:,:width]) if reverse else (parent[:,:width],parent[:,width:])

@@ -153,10 +153,15 @@ mlir::LogicalResult NVFP4ExpandOp::verify() {
       return emitOpError("runtime-N NVFP4 expansion records N as zero over equally spaced projections");
     staticN = last.getInt();
   }
+  // MXFP4 sources have static images only: the runtime-extent identities
+  // index E4M3 K16 scales (ROCM-MXFP4-NATIVE-MLP-20261102).
+  const bool mx = mlir::tessera_contract::isMXFP4ExpandPolicy(getNumericPolicy());
+  if (mx && (getRuntimeK() || getRuntimeN()))
+    return emitOpError("MXFP4 expansion has no runtime-K or runtime-N image");
   if (failed(mlir::tessera_contract::verifyNVFP4ExpandPolicy(
         getOperation(),getNumericPolicy())) ||
       failed(mlir::tessera_contract::verifyNVFP4ExpandExtents(
-        getOperation(),staticN,getRuntimeK() ? 16 : getK(),offsets)))
+        getOperation(),staticN,getRuntimeK() ? 16 : getK(),offsets,mx)))
     return mlir::failure();
   // A runtime-K image records no static K; its N16 extents are checked above.
   if (getRuntimeK() && getK() != 0)

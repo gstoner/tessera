@@ -117,7 +117,12 @@ def _frame_shape(plan):
                 or type(global_shape[0]) is not int or not 0<global_shape[0]<=n):
             raise ValueError("native quantized-product expansion roots differ")
         specs[roles[1]] = ([n,k//2],code,-1,1)
-        specs[roles[2]] = ([n,k//16],"f8E4M3FN",-1,1)
+        # An MXFP4 source plane is E8M0 bytes, one per K32 block.
+        scale_storage = rows[roles[2]].get("storage")
+        if scale_storage in ("i8","ui8") and k%32 == 0:
+            specs[roles[2]] = ([n,k//32],scale_storage,-1,1)
+        else:
+            specs[roles[2]] = ([n,k//16],"f8E4M3FN",-1,1)
         specs[roles[3]] = (global_shape,"f64",-1,1)
         specs[4:] = [([m,k],"f8E4M3FN",0,2),([m,k//16],"f32",0,2),
                      ([n,k],"f8E4M3FN",1,2),([k//16,n],"f32",1,2),([m,n],out,2,3)]
@@ -371,8 +376,12 @@ class NativeQuantizedProductProgram:
             self.expansion.validate()
             members.append(self.expansion.graph_ir)
             _,n,k,offsets,_,_ = self.expansion.contract()
-            shapes = ([n,k//2],[n,k//16],[len(offsets)-1],[n,k],[k//16,n])
-            storages = (plan["buffers"][roles[1]]["storage"],"f8E4M3FN","f64","f8E4M3FN","f32")
+            mx = self.expansion.mxfp4
+            shapes = ([n,k//2],[n,k//32] if mx else [n,k//16],[len(offsets)-1],[n,k],[k//16,n])
+            storages = (plan["buffers"][roles[1]]["storage"],
+                        plan["buffers"][roles[2]]["storage"] if mx else "f8E4M3FN","f64","f8E4M3FN","f32")
+            if mx and storages[1] not in ("i8","ui8"):
+                raise ValueError("native quantized-product MXFP4 scale storage differs")
             widths = (1,1,8,1,4)
             for slot,dims,storage,width in zip((*roles[1:],6,7),shapes,storages,widths,strict=True):
                 row = plan["buffers"][slot]
@@ -703,12 +712,15 @@ class PreparedQuantizedProductProgram(PreparedScaledProgram):
 
     def _inputs(self,inputs):
         if self.package.expansion is not None:
-            from .nvfp4_expansion import checked_expansion_inputs,nvfp4_expansion_policy
+            from .nvfp4_expansion import checked_expansion_inputs
             roles,_=_frame_shape(json.loads(self.package.program_json))
             if len(inputs)!=len(roles):
                 raise ValueError("native quantized-product expansion requires four roots")
-            _,_,_,offsets,_,_=self.package.expansion.contract()
-            checked_expansion_inputs(*(inputs[i] for i in roles[1:]),row_offsets=offsets,numeric_policy=nvfp4_expansion_policy(),_scale_bounds=self._nvfp4_scale_bounds())
+            expansion=self.package.expansion
+            _,_,_,offsets,_,_=expansion.contract()
+            # The native byte scanner bounds E4M3 scales; MXFP4 takes the elementwise check.
+            checked_expansion_inputs(*(inputs[i] for i in roles[1:]),row_offsets=offsets,numeric_policy=expansion.numeric_policy(),
+                                     _scale_bounds=None if expansion.mxfp4 else self._nvfp4_scale_bounds())
         return super()._inputs(inputs)
 
     def invoke_range(self,first,count,repeats=1,*,timed=True):

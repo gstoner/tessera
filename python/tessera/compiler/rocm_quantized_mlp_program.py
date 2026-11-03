@@ -717,7 +717,7 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
             bindings[0].entries+bindings[1].entries,len(roles),contracts,(17,),())
 
     def _inputs(self,inputs):
-        from .nvfp4_expansion import checked_expansion_inputs,nvfp4_expansion_policy
+        from .nvfp4_expansion import checked_expansion_inputs
         roles,_,_=_frame(json.loads(self.package.program_json))
         if len(inputs)!=7:
             raise ValueError('native quantized MLP requires seven roots')
@@ -733,7 +733,9 @@ class PreparedQuantizedMLPProgram(PreparedScaledProgram):
             if component is self.package.gate and active_h is not None:
                 # The gate and up projections are the two active H halves.
                 offsets=(0,active_h,2*active_h)
-            checked_expansion_inputs(*(inputs[i] for i in slots),row_offsets=offsets,numeric_policy=nvfp4_expansion_policy(),_scale_bounds=self._nvfp4_scale_bounds())
+            expansion=component.expansion
+            checked_expansion_inputs(*(inputs[i] for i in slots),row_offsets=offsets,numeric_policy=expansion.numeric_policy(),
+                                     _scale_bounds=None if expansion.mxfp4 else self._nvfp4_scale_bounds())
         if not self._bounded:
             return super()._inputs(inputs)
         active_m=self._input_m(inputs[roles[0]])

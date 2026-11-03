@@ -16850,4 +16850,10 @@ Model-quality stage 1 (QWEN3-MLP-LAYER-QUALITY-20261101) is not applicable to NV
 Model-quality stage 2 (QWEN3-NATIVE-MLP-PERPLEXITY-20261101) is not applicable to NVIDIA: it substitutes the ROCm native quantized MLP into Qwen3-8B on gfx1201 and measures perplexity. The Torch driver and worker are not a NVIDIA route, and no NVIDIA selector, ABI or result changes.
 
 Attention-backward NaN fix (ROCM-MATH-OCML-20261101) is not applicable to NVIDIA: it changes the ROCm executable pipeline's math lowering and ROCm native packaging only. No NVIDIA selector, ABI or result changes.
+
+Model-quality stage 2 gfx1151 and MXFP4 arms (QWEN3-NATIVE-MLP-PERPLEXITY-GFX1151-20261102, QWEN3-MXFP4-PERPLEXITY-20261102) are not applicable to NVIDIA: they run the ROCm native quantized MLP on gfx1151 and weight-only MXFP4 host references through the Qwen3-8B perplexity harness. No NVIDIA selector, ABI or result changes.
+
+Native MXFP4 MLP (ROCM-MXFP4-NATIVE-MLP-20261102): **follow-up required on sm_120.** The ROCm FP4 weight expansion now accepts an MXFP4 source (E8M0 bytes per K32, decoded to 2^(e−127) × global and written to both K16 groups), and the gfx1201 seven-member MLP executes it at its weight-only quality. sm_120 has no lowering for the `nvfp4_expand` op at all (no NVIDIA consumer found in `python/tessera` or `src`), so the seven-member MLP itself is ROCm-only; an sm_120 port would carry both sources, with its device proof on Super-Bear. gfx1201 evidence does not transfer.
+
+Native MXFP4 MLP on gfx1151 (ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102): the follow-up recorded under ROCM-MXFP4-NATIVE-MLP-20261102 is unchanged. gfx1151 now executes the MXFP4 source too, on its own proof; sm_120 still has no `nvfp4_expand` lowering, and neither RDNA result transfers to it.
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".

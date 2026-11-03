@@ -30,6 +30,7 @@
 #include <limits>
 #include <cstdlib>
 #include "NativeNVFP4Ingest.h"
+#include "Tessera/IR/NVFP4IngestContract.h"
 #include "NativeNVFP4Expand.h"
 #include "NativeMXFP4Storage.h"
 

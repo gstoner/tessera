@@ -30,11 +30,11 @@ the bootstrap row can go.
 |   ·  of the bootstrap, other (wrapper / dispatcher) | 37 |
 | — typed scheduled-artifact inputs (consumption needs verification) | 15 |
 | — unclassified/raw inputs (not assumed compiled) | 18 |
-| Lines in those modules | 12592 |
+| Lines in those modules | 12684 |
 | Classified family/target candidates (shape admission not implied) | 57 |
 | — covered by a compiled route | 10 |
-| — packager lowers only through the generic Schedule→Tile route | 11 |
-| — **gap (no declared family route)** | 36 |
+| — packager lowers only through the generic Schedule→Tile route | 12 |
+| — **gap (no declared family route)** | 35 |
 | Packagers matching no family | 9 |
 
 Graph input alone does not prove reconstruction: wrappers may call the
@@ -49,7 +49,7 @@ exact artifacts before treating a row as a constructor deletion target.
 | `rocm_gfx1151` | `rocm_native.py` | 7 | 6 | 1 | 5 | 3527 |
 | `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1603 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 10 | 215 |
-| `apple_gpu` | `apple_native.py` | 11 | 4 | 1 | 19 | 1815 |
+| `apple_gpu` | `apple_native.py` | 11 | 4 | 1 | 19 | 1907 |
 
 ## Census limits
 
@@ -124,7 +124,7 @@ queues own.
 | `apple_gpu` | `softmax` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `apple_gpu` | `dynamic_softmax` | — | 🔴 **gap** |
 | `apple_gpu` | `transpose` | — | 🔴 **gap** |
-| `apple_gpu` | `gelu` | — | 🔴 **gap** |
+| `apple_gpu` | `gelu` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `apple_gpu` | `dynamic_gelu` | — | 🔴 **gap** |
 | `apple_gpu` | `dynamic_popcount` | — | 🔴 **gap** |
 | `apple_gpu` | `dynamic_count_nonzero` | — | 🔴 **gap** |

@@ -44,7 +44,7 @@ def verify_unary_projection(artifact, parent: str) -> None:
     name, input_dims, storage, output_dims, output_storage = functions[0]
     input_shape = tuple(int(d) for d in input_dims.split('x') if d)
     output_shape = tuple(int(d) for d in output_dims.split('x') if d)
-    ops = re.findall(r' = schedule\.(softmax|reduce|norm) %\w+ \{([^{}]*)\}', parent)
+    ops = re.findall(r' = schedule\.(softmax|reduce|norm|activation) %\w+ \{([^{}]*)\}', parent)
     if len(ops) != 1 or not input_shape:
         raise ValueError('Native unary descriptor requires one native unary schedule')
     family, attrs = ops[0]
@@ -61,6 +61,11 @@ def verify_unary_projection(artifact, parent: str) -> None:
     required = ['accum = "f32"', f'storage = "{storage}"', f'workgroup_size = {workgroup} : i64']
     if family == 'softmax':
         required += ['exp_mode = "accurate"', 'ftz = false']
+    elif family == 'activation':
+        # E2E-REAL-6 Apple GPU GELU (2026-11-03): the only activation a
+        # non-SM120 consumer projects is the apple7 tanh GELU.
+        required += ['arch = "apple7"', 'kind = "gelu"', 'approximation = "tanh"',
+                     'schedule = "serial"', 'nan_mode = "propagate"', 'zero_mode = "preserve"']
     if any(re.search(r'(?:^|, )' + re.escape(value) + r'(?:,|$)', attrs) is None
            for value in required):
         raise ValueError('Native unary native arithmetic policy is unsupported')
@@ -88,6 +93,12 @@ def verify_unary_projection(artifact, parent: str) -> None:
         expected.update(kind=kind[1], axis=-1, rows=math.prod(input_shape[:-1]),
                         columns=input_shape[-1], outer=1, axis_extent=1, inner=1,
                         epsilon=artifact.epsilon)
+    elif family == 'activation':
+        if ((artifact.target, artifact.architecture) != ('apple_gpu', 'apple7')
+                or axis != -1 or output_shape != input_shape or len(input_shape) != 2):
+            raise ValueError('Native activation projection requires the apple7 rank-two GELU')
+        expected.update(kind='gelu', axis=-1, rows=input_shape[0], columns=input_shape[1],
+                        outer=1, axis_extent=1, inner=1)
     elif family == 'softmax':
         if axis != -1 or output_shape != input_shape:
             raise ValueError('Native native softmax shape/axis is unsupported')

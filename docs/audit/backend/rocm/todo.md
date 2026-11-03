@@ -19445,3 +19445,6 @@ Evidence: docs/reference/isa/rdna/cross_version/instruction_matrix.md; tests/dev
 
 sm_120 FP4 weight expansion (SM120-FP4-EXPAND-NATIVE-20261103): **parity validated on sm_120 for the expansion only, follow-up recorded for ROCm review.** The native contract (`NativeNVFP4Ingest.h`) and the `tile.nvfp4_expand_kernel` verifier gain an `nvidia_sm120`/`sm_120` branch; the gfx1201/gfx1151 conditions and the ROCm emitter are unchanged, and the shared Graph builder now also accepts `nvidia_sm120`. ROCm device lanes were not re-run for this change. The ROCm lowering already refuses an sm_120 Tile ("NVFP4 expansion is gfx1201 or gfx1151 only"); that message is not a registered diagnostic and was not exercised here. sm_120 evidence does not transfer to either RDNA part, nor theirs to it.
 
+## `E2E-REAL-6-apple-gelu-2026-11-03`: sibling outcome — not applicable
+
+Apple GPU static GELU moved onto the shared semantic `activation` family (Apple queue, same key). ROCm admits no `tessera.gelu` in `getSemanticKernelSchedule` or `_graph_contract`. The shared `native_unary_contract` change adds an `activation` branch that requires `apple_gpu`/`apple7`, so gfx1151 and gfx1201 softmax, reduce and norm projections are unchanged. No ROCm selector, ABI or result changes.

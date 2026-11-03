@@ -2024,7 +2024,33 @@ struct SemanticKernelSchedule {
   // SM120-W11-FP8-RHS-20261026: a norm whose only use is quantize_scaled with
   // a per-tensor f32 scale stores FP8 codes. Empty means the input storage.
   StringRef outputStorage;
+  // E2E-REAL-6 Apple GPU GELU (2026-11-03): the activation's approximation.
+  // Empty for ReLU, which has none; "tanh" names the only GELU form the
+  // Apple MSL consumer computes, so an erf GELU can never share its digest.
+  StringRef approximation;
 };
+
+/// Signed-zero contract of a storage-preserving activation. ReLU's f16 path
+/// returns +0 for -0; GELU computes x * 0.5 * (1 + tanh(...)), which keeps the
+/// sign of a zero input in every storage.
+static StringRef activationZeroMode(StringRef kind, StringRef storage) {
+  return kind == "relu" && storage == "f16" ? "positive" : "preserve";
+}
+
+/// Whether `op` is the whole body of its function: one unary op over the sole
+/// argument whose single result is returned and has no other use.
+static bool isIsolatedUnaryResult(Operation *op) {
+  auto function = op->getParentOfType<func::FuncOp>();
+  if (!function || !llvm::hasSingleElement(function.getBody()) ||
+      function.getNumArguments() != 1 || function.getNumResults() != 1 ||
+      op->getNumOperands() != 1 || op->getNumResults() != 1 ||
+      op->getOperand(0) != function.getArgument(0) ||
+      !op->getResult(0).hasOneUse())
+    return false;
+  auto ret = dyn_cast<func::ReturnOp>(*op->getResult(0).getUsers().begin());
+  return ret && ret.getNumOperands() == 1 &&
+         function.getBody().front().getOperations().size() == 2;
+}
 
 /// The tessera.quantize_scaled consuming a norm result, seen directly at
 /// Graph->Schedule or through its schedule.norm annotation at Schedule->Tile.
@@ -2201,6 +2227,37 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     schedule.rows = rows;
     schedule.columns = inputCapacity[1];
     schedule.workgroupSize = 128;
+    return schedule;
+  }
+  if (opName == "tessera.gelu") {
+    // E2E-REAL-6 Apple GPU GELU (2026-11-03): the static rank-two envelope the
+    // retired Graph-owned `apple_native.package_gelu` served on the M1 Max.
+    // The consumer is the hand-written tanh-approximation MSL kernel behind
+    // `tessera_apple_gpu_gelu_{f32,f16,bf16}_status` (a declared Tier-3 runtime
+    // call, not a generated body). Any attribute beyond the pure effect --
+    // e.g. an erf/`approximate` request -- fails closed: the kernel computes
+    // one GELU, and a different one must not inherit its digest.
+    bool appleGelu = apple_gpu && schedule.arch == "apple7";
+    if (!appleGelu || input != output || input.getRank() != 2 ||
+        input.getEncoding() || schedule.rowBound || shaped || requested ||
+        (schedule.storage != "f16" && schedule.storage != "bf16" &&
+         schedule.storage != "f32") ||
+        !llvm::all_of(inputCapacity, [](int64_t d) { return d > 0; }))
+      return failure();
+    for (NamedAttribute attr : op->getAttrs()) {
+      if (attr.getName().getValue() == "schedule.artifact_hash") continue;
+      auto effect = dyn_cast<StringAttr>(attr.getValue());
+      if (attr.getName().getValue() != "tessera.effect_kind" ||
+          !effect || effect.getValue() != "pure") return failure();
+    }
+    // The runtime ABI takes one positive i32 element count.
+    if (inputCapacity[0] > INT32_MAX / inputCapacity[1]) return failure();
+    schedule.family = "activation";
+    schedule.kind = "gelu";
+    schedule.approximation = "tanh";
+    schedule.rows = inputCapacity[0];
+    schedule.columns = inputCapacity[1];
+    schedule.workgroupSize = 1;
     return schedule;
   }
   if (opName == "tessera.rmsnorm" || opName == "tessera.rmsnorm_safe" || opName == "tessera.layer_norm") {
@@ -2390,7 +2447,11 @@ static std::string semanticKernelDigest(const SemanticKernelSchedule &schedule) 
         std::to_string(schedule.queryShape.sequenceBound) + ";row_multiple=" +
         std::to_string(schedule.queryShape.rowMultiple);
   if (schedule.family == "activation")
-    contract += schedule.storage == "f16" ? ";zero_mode=positive" : ";zero_mode=preserve";
+    contract += (Twine(";zero_mode=") + activationZeroMode(schedule.kind, schedule.storage)).str();
+  // Only GELU names an approximation, so the established ReLU digests are
+  // byte-identical.
+  if (!schedule.approximation.empty())
+    contract += (Twine(";approximation=") + schedule.approximation).str();
   if (schedule.family == "norm") {
     contract += ";epsilon_bits=" + Twine(llvm::APFloat(static_cast<float>(schedule.epsilon)).bitcastToAPInt().getZExtValue()).str();
     if (!schedule.outputStorage.empty())
@@ -4268,7 +4329,12 @@ struct GraphToSchedulePass
       // preserve their existing route instead of claiming it by name alone.
       bool binary = name == "tessera.add" && target == "nvidia_sm120" &&
           mod->hasAttr("tessera.native.tensor_program_member");
-      if (binary || (name == "tessera.relu" && target == "nvidia_sm120") ||
+      // Apple GELU is claimed only as the isolated unary request the Apple
+      // native package lowers; a GELU inside any other Apple program keeps
+      // its existing route instead of being claimed by name alone.
+      bool appleGelu = name == "tessera.gelu" && target == "apple_gpu" &&
+          isIsolatedUnaryResult(op);
+      if (binary || appleGelu || (name == "tessera.relu" && target == "nvidia_sm120") ||
           name == "tessera.softmax" || name == "tessera.reduce" ||
           (norm && (target == "nvidia_sm120" ||
                     (target == "rocm" && architecture == "gfx1201" &&
@@ -4314,7 +4380,10 @@ struct GraphToSchedulePass
         state.addAttribute("kind", builder.getStringAttr(selected->kind));
         state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
         state.addAttribute("nan_mode", builder.getStringAttr("propagate"));
-        state.addAttribute("zero_mode", builder.getStringAttr(selected->storage == "f16" ? "positive" : "preserve"));
+        state.addAttribute("zero_mode", builder.getStringAttr(
+            activationZeroMode(selected->kind, selected->storage)));
+        if (!selected->approximation.empty())
+          state.addAttribute("approximation", builder.getStringAttr(selected->approximation));
       } else if (selected->family == "norm") {
         state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
         state.addAttribute("kind", builder.getStringAttr(selected->kind));
@@ -6436,9 +6505,10 @@ struct ScheduleToTilePass
                   attrString("schedule") != "flat_128" ||
                   attrString("nan_mode") != "propagate";
       } else if (isActivation) {
-        altered = altered || attrString("kind") != "relu" ||
+        altered = altered || attrString("kind") != selected->kind ||
                   attrString("schedule") != selected->reductionSchedule || attrString("nan_mode") != "propagate" ||
-                  attrString("zero_mode") != (selected->storage == "f16" ? "positive" : "preserve");
+                  attrString("zero_mode") != activationZeroMode(selected->kind, selected->storage) ||
+                  attrString("approximation") != selected->approximation;
       } else if (isNorm) {
         auto eps = scheduled->getAttrOfType<FloatAttr>("epsilon");
         auto queryShape = tessera::readBoundedQueryNormShape(scheduled,scheduled->getOperand(0).getType());
@@ -6653,8 +6723,20 @@ struct ScheduleToTilePass
 
       OperationState kernelState(
           loc, isNorm ? "tile.norm_kernel"
+                      : isActivation ? "tile.activation_kernel"
                       : isSoftmax ? "tile.softmax_kernel" : "tile.reduce_kernel");
-      if (isNorm) {
+      if (isActivation) {
+        // E2E-REAL-6 Apple GPU GELU: (x, o, rows, columns) with the kind,
+        // approximation and signed-zero contract the Schedule hashed.
+        Value rows = builder.create<arith::ConstantIntOp>(loc, selected->rows, 64);
+        Value columns =
+            builder.create<arith::ConstantIntOp>(loc, selected->columns, 64);
+        kernelState.addOperands({inputPointer, outputPointer, rows, columns});
+        for (StringRef key : {"storage", "accum", "axis", "kind", "schedule",
+                              "nan_mode", "zero_mode", "approximation"})
+          if (Attribute value = scheduled->getAttr(key))
+            kernelState.addAttribute(key, value);
+      } else if (isNorm) {
         // x86 (E2E-REAL-6): the unweighted row-normalization ABI takes
         // (x, o, rows, cols, eps) with the epsilon the Schedule hashed.
         Value rows = builder.create<arith::ConstantIntOp>(loc, selected->rows, 64);

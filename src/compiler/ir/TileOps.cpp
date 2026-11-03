@@ -2286,6 +2286,22 @@ LogicalResult ActivationKernelOp::verify() {
   auto arch = module ? module->getAttrOfType<StringAttr>("tessera.arch") : StringAttr{};
   auto axis = op->getAttrOfType<IntegerAttr>("axis");
   auto threads = op->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
+  bool narrowOrF32 = str("storage") == "f16" || str("storage") == "bf16" || str("storage") == "f32";
+  // E2E-REAL-6 Apple GPU GELU (2026-11-03): the apple7 tanh-approximation
+  // GELU consumed by the declared `tessera_apple_gpu_gelu_*_status` runtime
+  // call. The delegated MSL route owns its threadgroup, so the launch carries
+  // workgroup 1 exactly as the Apple softmax/reduce launches do.
+  if (arch && arch.getValue() == "apple7") {
+    if (!narrowOrF32 || str("accum") != "f32" || str("kind") != "gelu" ||
+        str("approximation") != "tanh" || str("schedule") != "serial" ||
+        str("nan_mode") != "propagate" || str("zero_mode") != "preserve" ||
+        !axis || axis.getInt() != -1 || !threads || threads.getInt() != 1)
+      return emitOpError("requires apple7 f16/bf16/f32 serial tanh GELU, workgroup 1, "
+                         "propagated NaNs and preserved signed zeros");
+    return success();
+  }
+  if (op->hasAttr("approximation"))
+    return emitOpError("approximation is an apple7 GELU attribute");
   if (!arch || arch.getValue() != "sm_120" ||
       (str("storage") != "f16" && str("storage") != "bf16" && str("storage") != "f32") ||
       str("accum") != "f32" || str("kind") != "relu" ||

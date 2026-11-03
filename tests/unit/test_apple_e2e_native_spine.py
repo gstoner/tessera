@@ -334,7 +334,8 @@ def test_apple_gpu_gelu_descriptor_execute_compare():
     )
     assert bundle.launch_descriptor is not None
     assert bundle.launch_descriptor.abi_id == "tessera.apple.gelu.x_o_elements.f32.v2"
-    assert bundle.launch_descriptor.provenance["work_item"] == "APPLE-NATIVE-E2E-2"
+    # E2E-REAL-6: static GELU is the native scheduled activation.
+    assert bundle.launch_descriptor.provenance["work_item"] == "E2E-REAL-6"
     artifact = RuntimeArtifact(
         metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
         target_ir=bundle.target_ir.text, native_image=bundle.native_image,
@@ -497,7 +498,11 @@ def test_apple_gpu_low_precision_gelu_static_and_dynamic_execute_compare(
         assert bundle.launch_descriptor.abi_id == abi
         assert bundle.launch_descriptor.provenance["storage"] == storage
         assert bundle.launch_descriptor.provenance["accumulation"] == "fp32"
-        assert 'cf.assert' in bundle.target_ir.text
+        if dynamic:
+            assert 'cf.assert' in bundle.target_ir.text
+        else:
+            # E2E-REAL-6: the scheduled activation names its runtime delegate.
+            assert 'implementation = "runtime_msl"' in bundle.target_ir.text
         artifact = RuntimeArtifact(
             metadata={"target": "apple_gpu", "compiler_path": "apple_native_descriptor"},
             target_ir=bundle.target_ir.text, native_image=bundle.native_image,

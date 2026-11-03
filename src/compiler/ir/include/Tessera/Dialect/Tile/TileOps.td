@@ -1053,7 +1053,7 @@ def Tile_ScanKernelOp : Tile_Op<"scan_kernel"> {
 }
 
 def Tile_ActivationKernelOp : Tile_Op<"activation_kernel"> {
-  let summary = "Storage-preserving SM120 row activation launch";
+  let summary = "Storage-preserving SM120 ReLU / apple7 GELU row activation launch";
   let arguments = (ins Variadic<AnyType>:$inputs);
   let results = (outs);
   let assemblyFormat = "$inputs attr-dict `:` type($inputs)";

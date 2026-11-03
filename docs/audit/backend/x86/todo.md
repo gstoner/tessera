@@ -12631,3 +12631,7 @@ Native MXFP4 MLP on gfx1151 (ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102) is not appl
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
 
 sm_120 FP4 weight expansion (SM120-FP4-EXPAND-NATIVE-20261103) is not applicable to x86: it adds an `nvidia_sm120` lowering of `nvfp4_expand` (Tile contract, `LowerTileToNVIDIA`, PTX launcher). No x86 selector, ABI or result changes.
+
+## `E2E-REAL-6-apple-gelu-2026-11-03`: sibling outcome — not applicable
+
+Apple GPU static GELU moved onto the shared semantic `activation` family (Apple queue, same key). x86 GELU keeps its own `native_x86_kernel` elementwise contract; the semantic activation contract refuses `tessera.gelu` on x86 (tested). No x86 selector, ABI or result changes.

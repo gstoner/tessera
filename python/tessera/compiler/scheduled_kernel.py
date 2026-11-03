@@ -98,7 +98,8 @@ class ScheduledKernelArtifact:
             raise ValueError(f"scheduled {self.family} artifact has incomplete Schedule digest identity")
         if self.tile_ir.count(tile_op) != 1:
             raise ValueError(f"scheduled {self.family} artifact requires exactly one Tile launch op")
-        if "tessera.softmax" in self.tile_ir or "tessera.reduce" in self.tile_ir or "schedule." in self.tile_ir:
+        if ("tessera.softmax" in self.tile_ir or "tessera.reduce" in self.tile_ir
+                or "tessera.gelu" in self.tile_ir or "schedule." in self.tile_ir):
             raise ValueError("scheduled semantic-kernel Tile artifact retains Graph or Schedule ops")
         if _HASH_RE.findall(self.tile_ir) != [self.schedule_digest]:
             raise ValueError("scheduled semantic-kernel Tile artifact has a stale schedule digest")
@@ -427,10 +428,10 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             raise ValueError("gfx1151 scheduled softmax requires f16/f32 storage preserved to the output")
         if not softmax_like and (dtype not in {"fp16", "bf16", "fp32"} or output_dtype != "fp32"):
             raise ValueError("gfx1151 scheduled reduction requires f16/bf16/f32 storage and f32 output")
-    elif target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name == "tessera.softmax") or (
+    elif target == "nvidia_sm120" or (target == "apple_gpu" and op.op_name in {"tessera.softmax", "tessera.gelu"}) or (
         target == "rocm_gfx1201" and op.op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe"}
     ):
-        expected_dtype = dtype if op.op_name in {"tessera.softmax", "tessera.softmax_safe", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm", "tessera.relu"} else "fp32"
+        expected_dtype = dtype if op.op_name in {"tessera.softmax", "tessera.softmax_safe", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm", "tessera.relu", "tessera.gelu"} else "fp32"
         if dtype not in {"fp16", "bf16", "fp32"} or output_dtype != expected_dtype:
             raise ValueError("NVIDIA scheduled unary storage contract is unsupported")
     elif dtype != "fp32" or output_dtype != "fp32":
@@ -460,6 +461,20 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
                 or function.return_values[0].removeprefix("%") != op.result.removeprefix("%")):
             raise ValueError("scheduled ReLU requires its returned SM120 rank-two storage-preserving result")
         family, kind, axis, keepdims = "activation", "relu", -1, False
+        rows, columns = input_shape
+        outer = axis_extent = inner = 1
+    elif op.op_name == "tessera.gelu":
+        # E2E-REAL-6 Apple GPU GELU (2026-11-03): the static rank-two
+        # tanh-approximation envelope the retired Graph-owned
+        # ``apple_native.package_gelu`` served. Any keyword (an erf request,
+        # a numeric policy) is a semantic the Apple kernel does not compute.
+        if (target != "apple_gpu" or len(function.args) != 1 or len(input_shape) != 2
+                or input_shape != output_shape or output_dtype != dtype or op.kwargs
+                or not op.result or len(function.return_values) != 1
+                or function.return_values[0].removeprefix("%") != op.result.removeprefix("%")
+                or math.prod(input_shape) > 2**31 - 1):
+            raise ValueError("scheduled GELU requires its returned Apple rank-two storage-preserving result")
+        family, kind, axis, keepdims = "activation", "gelu", -1, False
         rows, columns = input_shape
         outer = axis_extent = inner = 1
     elif op.op_name in {"tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"}:

@@ -1,9 +1,28 @@
 ---
-last_updated: 2026-10-21
+last_updated: 2026-11-03
 audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+## E2E-REAL-6-rocm-paged-kv-2026-11-03 — paged-KV packager consumes its Schedule artifact
+
+Owner: E2E-REAL-6 (ROCM-E2E-2 paged route); sync `E2E-REAL-6-rocm-paged-kv-2026-11-03`.
+
+- **Moved.** `package_paged_kv_read` lowers (or checks a supplied artifact
+  against this Graph and target) and hands the artifact to
+  `package_scheduled_paged_kv`, which projects every launch field from the
+  replayed Tile `tessera.native_contract`. Direct and strided layouts both
+  project. Admission is `scheduled_paged_kv.admit_paged_kv`;
+  `rocm_native._paged_kv_contract` is gone from production.
+- **Proof, gfx1151 (Princess-Luna).** `test_rocm_paged_kv_migration.py` with
+  `TESSERA_ROCM_MOVEMENT_DEVICE_PROOF=1`: 39 passed, 0 skipped; 8 device rows
+  match the retired image bit-for-bit and NumPy.
+- **Proof, gfx1201 (Tajasarus).** The same file: 39 passed, 0 skipped; 8
+  device rows. This is separate evidence and does not transfer to gfx1151.
+- **Gates.** `check-tessera-rocm` passes 85/85 on both boxes. There is no C++ change.
+- **Open.** MoE dispatch (gfx1151) and the forward-attention fallback remain
+  Graph-owned constructors.
+
 ## NATIVE-INDEPENDENT-SHAPE-20261021 — native execution proof
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

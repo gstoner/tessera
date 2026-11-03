@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-20
+last_updated: 2026-11-03
 audit_role: plan
 plan_state: open
 ---
@@ -329,6 +329,16 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 ## F2
 
 ### E2E-REAL-6
+
+- Current increment (2026-11-03, sync E2E-REAL-6-rocm-paged-kv-2026-11-03):
+  the ROCm paged-KV packager consumes its replayed Schedule artifact.
+  `package_scheduled_paged_kv` projects buffers, ABI, scalars, shape guards,
+  geometry and direct/strided layout from the native Tile contract, and a
+  tampered artifact fails before compilation. The Graph-authored packager is a
+  test-only #31(a) oracle: 8 device rows per host match it bit-for-bit, run
+  separately on gfx1151 and gfx1201. The prune row is now `compiled`. MoE
+  dispatch and the attention fallback stay Graph-owned.
+  [Log](INTEGRATED_COMPILER_LOG.md#2026-11-03--e2e-real-6-rocm-paged-kv-packages-its-replayed-schedule-artifact).
 
 - Current increment (2026-10-18, sync ROCM-SOURCE-PULLBACK-20261018):
   original FP16/BF16 RMSNorm/ReLU/matmul source VJP follows native paired AD,

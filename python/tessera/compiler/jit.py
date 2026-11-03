@@ -2147,7 +2147,7 @@ class JitFn:
         from .rocm_mxfp4_storage_native import supports_mxfp4_storage, MXFP4_STORAGE_ABI
         from .rocm_native import (
             requests_paged_kv_read, requests_moe_dispatch,
-            _paged_kv_contract, _moe_dispatch_contract,
+            _moe_dispatch_contract,
             GFX_PAGED_KV_F32_ABI, GFX_PAGED_KV_STRIDED_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
             GFX_SOFTMAX_F32_ABI, requests_softmax,
         )
@@ -2324,7 +2324,8 @@ class JitFn:
         movement_contract: tuple[str, str, str, tuple[int, ...]] | None
         if movement:
             if descriptor.abi_id in {GFX_PAGED_KV_F32_ABI, GFX_PAGED_KV_STRIDED_F32_ABI}:
-                movement_contract = _paged_kv_contract(module)
+                from .scheduled_paged_kv import admit_paged_kv
+                movement_contract = admit_paged_kv(module)
                 scalar_names = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
             elif descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI and target == "rocm_gfx1151":
                 movement_contract = _moe_dispatch_contract(module)

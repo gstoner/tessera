@@ -553,7 +553,7 @@ def compile_graph_module(
     scheduled_depth_attention_artifact = None
     scheduled_checkpoint_artifact = None
     scheduled_paged_kv_artifact = None
-    from .scheduled_paged_kv import ScheduledPagedKVArtifact
+    from .scheduled_paged_kv import ScheduledPagedKVArtifact, supports_scheduled_paged_kv
     from .scheduled_moe_dispatch import ScheduledMoeDispatchArtifact
     scheduled_rocm_movement_artifact: ScheduledPagedKVArtifact | ScheduledMoeDispatchArtifact | None = None
     scheduled_rocm_movement_kind = None
@@ -606,7 +606,7 @@ def compile_graph_module(
             projector=project_nvfp4_ingest_graph if supports_nvfp4_ingest(module) else project_mxfp4_storage_graph
             scheduled_checkpoint_storage_module=projector(module)
             graph_text=scheduled_checkpoint_storage_module.to_mlir(target=target_kind,canonical=True)
-        elif target_kind in {"rocm_gfx1151", "rocm_gfx1201"} and rocm_native.supports_paged_kv_read(module):
+        elif supports_scheduled_paged_kv(module, target=target_kind):
             from .scheduled_paged_kv import lower_scheduled_paged_kv_graph
             scheduled_rocm_movement_kind = "paged_kv"
             scheduled_rocm_movement_artifact = lower_scheduled_paged_kv_graph(module, target=target_kind)

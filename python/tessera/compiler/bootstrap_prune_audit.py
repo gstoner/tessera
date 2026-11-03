@@ -66,6 +66,9 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
         "scheduled_depth_attention",
         "supports_scheduled_depth_attention",
     ),
+    # A target counts only where its module defines package_scheduled_paged_kv,
+    # the consumer that packages the replayed artifact without Graph re-entry.
+    "paged_kv": ("scheduled_paged_kv", "supports_scheduled_paged_kv"),
 }
 
 #: The generic compiled fallback the driver tries last. It admits by op

@@ -37,6 +37,7 @@ from .scheduled_matmul import ScheduledMatmulArtifact
 from .scheduled_kernel import ScheduledKernelArtifact
 from .scheduled_attention import ScheduledAttentionArtifact
 from .scheduled_depth_attention import ScheduledDepthAttentionArtifact
+from .scheduled_paged_kv import ScheduledPagedKVArtifact
 from .rocm_pipeline import (
     ROCMExecutablePipeline,
     ROCMInputLevel,
@@ -1066,62 +1067,16 @@ def supports_reduction(module: GraphIRModule) -> bool:
     )
 
 
-def _paged_kv_contract(
-    module: GraphIRModule,
-) -> tuple[str, str, str, tuple[int, int, int, int, int, int, int]] | None:
-    if not requests_paged_kv_read(module):
-        return None
-    function = module.functions[0]
-    op = function.body[0]
-    if len(op.operands) != 2 or len(function.result_types) != 1:
-        return None
-    pages_name, table_name = (value.removeprefix("%") for value in op.operands)
-    args = {arg.name: arg for arg in function.args}
-    pages = args.get(pages_name)
-    table = args.get(table_name)
-    pages_shape = _shape(module, pages_name)
-    table_shape = _shape(module, table_name)
-    if (
-        pages is None
-        or table is None
-        or pages.ir_type.dtype != "fp32"
-        or table.ir_type.dtype != "int32"
-        or pages_shape is None
-        or len(pages_shape) != 4
-        or table_shape is None
-        or len(table_shape) != 1
-    ):
-        return None
-    physical_pages, page_size, heads, dim = pages_shape
-    logical_pages = table_shape[0]
-    start = op.kwargs.get("start")
-    end = op.kwargs.get("end")
-    if not isinstance(start, int) or isinstance(start, bool) or not isinstance(end, int) or isinstance(end, bool):
-        return None
-    tokens = end - start
-    result = function.result_types[0]
-    try:
-        result_shape = tuple(int(value) for value in result.shape)
-    except (TypeError, ValueError):
-        return None
-    if (
-        start < 0
-        or tokens <= 0
-        or end > logical_pages * page_size
-        or result.dtype != "fp32"
-        or result_shape != (tokens, heads, dim)
-    ):
-        return None
-    return (
-        pages_name,
-        table_name,
-        op.result or "output",
-        (physical_pages, logical_pages, page_size, heads, dim, start, tokens),
-    )
-
-
 def supports_paged_kv_read(module: GraphIRModule) -> bool:
-    return _paged_kv_contract(module) is not None
+    """A bounded paged read the native ROCm Schedule -> Tile route admits.
+
+    E2E-REAL-6 (2026-11-03): admission is the scheduled contract's
+    (``scheduled_paged_kv.admit_paged_kv``); the retired Graph-authored
+    packager survives only as ``tests/_support/rocm_paged_kv_baseline.py``.
+    """
+    from .scheduled_paged_kv import supports_scheduled_paged_kv
+
+    return supports_scheduled_paged_kv(module, target="rocm_gfx1151")
 
 
 def _moe_dispatch_contract(
@@ -2647,27 +2602,49 @@ def package_reduction(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
 
 
 def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architecture: str = "gfx1151", scheduled_artifact=None) -> ROCMNativePackage:
-    contract = _paged_kv_contract(module)
-    if contract is None:
+    """Lower ``module`` through the native paged Schedule and package that artifact.
+
+    E2E-REAL-6: no launch field is read from ``module``. A caller-supplied
+    artifact must be the native replay of this exact Graph and target.
+    """
+    from .scheduled_paged_kv import (
+        lower_scheduled_paged_kv_graph, project_scheduled_paged_kv_graph,
+        supports_scheduled_paged_kv,
+    )
+
+    target = f"rocm_{architecture}"
+    if not supports_scheduled_paged_kv(module, target=target):
         raise ValueError(
             "gfx1151 paged-KV packaging requires static f32 [P,PS,H,D] pages, "
             "rank-1 int32 page table, explicit valid start/end, and f32 output"
         )
-    pages_name, table_name, output_name, dims = contract
-    physical_pages, logical_pages, page_size, heads, dim, start, tokens = dims
-    from .scheduled_paged_kv import lower_scheduled_paged_kv_graph, project_scheduled_paged_kv_graph, paged_storage_layout
     if scheduled_artifact is None:
-        artifact = lower_scheduled_paged_kv_graph(module, target=f"rocm_{architecture}")
+        artifact = lower_scheduled_paged_kv_graph(module, target=target)
     else:
         artifact = scheduled_artifact
-        if artifact.graph_ir != project_scheduled_paged_kv_graph(module, target=f"rocm_{architecture}"):
+        if artifact.graph_ir != project_scheduled_paged_kv_graph(module, target=target):
             raise ValueError("paged Schedule artifact disagrees with the caller Graph or target")
-        artifact.validate()
-    layout = paged_storage_layout(module)
-    abi = GFX_PAGED_KV_STRIDED_F32_ABI if layout == "strided" else GFX_PAGED_KV_F32_ABI
+    return package_scheduled_paged_kv(artifact, pipeline_name=pipeline_name)
+
+
+def package_scheduled_paged_kv(artifact: ScheduledPagedKVArtifact, *, pipeline_name: str) -> ROCMNativePackage:
+    """Package a replayed paged-read artifact; every field is a Tile projection."""
+    artifact.validate()
+    contract = artifact.native_contract()
+    architecture = contract.architecture
+    if (contract.target not in {"rocm_gfx1151", "rocm_gfx1201"}
+            or contract.target != f"rocm_{architecture}"
+            or (contract.storage, contract.table_storage, contract.kernel_route) != ("f32", "i32", "direct")):
+        raise ValueError("ROCm paged read requires a gfx1151/gfx1201 f32/i32 direct native contract")
+    strided = contract.layout == "strided"
+    abi = GFX_PAGED_KV_STRIDED_F32_ABI if strided else GFX_PAGED_KV_F32_ABI
     scalar_names: tuple[str, ...] = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
-    if layout == "strided":
+    if strided:
         scalar_names += ("StrideP", "StridePage", "StrideH", "StrideD")
+    if len(scalar_names) != contract.scalar_count:
+        raise ValueError("paged native entry scalar count disagrees with its ABI")
+    pages_name, table_name, output_name = contract.names
+    physical_pages, logical_pages, page_size, heads, dim, _start, tokens = contract.dims
     tile_ir = artifact.tile_ir
     (
         target_ir,
@@ -2682,7 +2659,7 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
     # checked Schedule entry names the Tile wrapper, not the HSACO kernel.
     entry = _directive_symbol(target_ir, _SHAPE_FREE_DIRECTIVES["paged_kv"])
     image = NativeImageArtifact(
-        target=f"rocm_{architecture}",
+        target=contract.target,
         architecture=architecture,
         pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp,
@@ -2694,12 +2671,13 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
         compile_state=compile_state,
         device_libraries=device_libraries,
     )
+    policies = dict(contract.policies)
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
         abi_id=abi,
         buffers=(
-            BufferBinding(0, pages_name, "input", "fp32", 4, layout, 4),
+            BufferBinding(0, pages_name, "input", "fp32", 4, contract.layout, 4),
             BufferBinding(1, table_name, "input", "int32", 1, "row_major", 4),
             BufferBinding(2, output_name, "output", "fp32", 3, "row_major", 4),
         ),
@@ -2717,21 +2695,23 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
             ShapeGuard(output_name, 1, "eq", heads),
             ShapeGuard(output_name, 2, "eq", dim),
         ),
-        geometry=LaunchGeometry(policy=f"{architecture}_paged_kv_{'strided' if layout == 'strided' else 'direct'}_256"),
+        geometry=LaunchGeometry(policy=f"{architecture}_paged_kv_{'strided' if strided else 'direct'}_256"),
         ordering=OrderingSemantics(
             ordered_submission=True,
             residency="none",
             synchronization=("completion",),
         ),
         provenance={
-            "work_item": "E2E-REAL-6" if layout == "strided" else "ROCM-E2E-2",
-            "sync_key": "ROCM-STRIDED-PAGED-KV-20261008" if layout == "strided" else "E2E-SPINE-2026-07-18",
-            "route": "direct",
-            "shape": list(dims),
-            "storage": "f32",
-            "table_storage": "i32",
-            **({"page_layout": layout, "page_stride_policy": "positive_runtime_element_strides",
-                "source_extent_policy": "checked_physical_span"} if layout == "strided" else {}),
+            "work_item": "E2E-REAL-6" if strided else "ROCM-E2E-2",
+            "sync_key": "ROCM-STRIDED-PAGED-KV-20261008" if strided else "E2E-SPINE-2026-07-18",
+            "route": contract.kernel_route,
+            "consumer": "native_schedule_tile_projection",
+            "shape": list(contract.dims),
+            "storage": contract.storage,
+            "table_storage": contract.table_storage,
+            **({"page_layout": contract.layout,
+                "page_stride_policy": policies["page_stride_policy"],
+                "source_extent_policy": policies["source_extent_policy"]} if strided else {}),
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
             "schedule_digest": artifact.schedule_digest,
         },
@@ -3525,6 +3505,7 @@ __all__ = [
     "package_attention_backward",
     "package_reduction",
     "package_paged_kv_read",
+    "package_scheduled_paged_kv",
     "package_softmax",
     "requests_moe_dispatch",
     "requests_attention",

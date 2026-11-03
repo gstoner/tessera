@@ -143,3 +143,19 @@ def test_bounded_mxfp4_mlp_is_refused(rocm_image_toolchain):
     fn, roots = _public_mxfp4()
     with pytest.raises(Exception, match="quantized bounded|refuse|MXFP4"):
         fn.compile_native_quantized_program(*roots, m_bound=8, k_bound=128)
+
+
+@pytest.mark.compiler_route
+@pytest.mark.compiler_rocm
+def test_expansion_execution_requires_the_images_own_architecture(rocm_image_toolchain, monkeypatch):
+    from tessera import runtime as rt
+    from tessera.compiler.rocm_nvfp4_expand_native import (
+        build_nvfp4_expansion_graph, execute_nvfp4_expansion, package_nvfp4_expansion)
+    package = package_nvfp4_expansion(build_nvfp4_expansion_graph(
+        48, 64, [0, 24, 48], numeric_policy=mxfp4_expansion_policy()))
+    assert package.native.image.architecture == "gfx1201"
+    codes, exponents = _mx_weights()
+    monkeypatch.setattr(rt, "_rocm_live_arch", lambda: "gfx1151")
+    with pytest.raises(ValueError, match="requires live gfx1201, not gfx1151"):
+        execute_nvfp4_expansion(package, mx.pack_e2m1_codes(codes),
+                                np.ascontiguousarray(exponents.T), np.ones(2))

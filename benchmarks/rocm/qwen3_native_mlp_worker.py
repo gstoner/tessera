@@ -18,7 +18,9 @@ so Torch and Tessera never share a process (Decision #23). MLP arms:
 * ``native_mxfp4``: the same seven-member native MLP with an MXFP4 weight
   source (ROCM-MXFP4-NATIVE-MLP-20261102), executing exactly the
   ``mxfp4_direct`` codes and E8M0 exponents, with the per-16 E4M3 activation
-  quantizer; certified like ``native``.
+  quantizer; certified like ``native`` and, like it, run on the live owning
+  architecture (gfx1201 since 2026-11-02; gfx1151 under
+  ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102).
 
 The three weight-only arms are host references and need no device; the worker
 touches the GPU only when a native arm is among ``--arms``.
@@ -155,8 +157,6 @@ def serve(cache_root: Path, certify: str, arms: tuple[str, ...], inbound: Binary
         arch, uuid, name, lib, compiler_sha, provider_sha = "host_reference", None, None, None, None, None
     snapshots = (local.LocalSnapshot.open(cache_root, local.BF16_REPO),
                  local.LocalSnapshot.open(cache_root, local.NVFP4_REPO))
-    if "native_mxfp4" in arms and arch != "gfx1201":
-        raise ValueError("the native MXFP4 MLP is proven on gfx1201 only")
     fns: dict[str, object] = {}
     roots: dict[str, list[np.ndarray]] = {}
     layer = None

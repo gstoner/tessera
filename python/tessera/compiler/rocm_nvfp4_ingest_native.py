@@ -146,8 +146,11 @@ def _execute_arrays(image,desc,arrays,*,event_samples=None):
             int(array.ctypes.data & -array.ctypes.data))
         for name,dtype,array in zip(
             (b.name for b in sorted(desc.buffers,key=lambda b:b.ordinal)),dtype_names,arrays)}, {})
-    if rt._rocm_live_arch() != "gfx1201":
-        raise ValueError("NVFP4 ingest execution requires live gfx1201")
+    # The live device must be the image's own architecture: an ingest image is
+    # gfx1201-only, and an expansion image runs on the arch it was compiled for.
+    live = rt._rocm_live_arch()
+    if live != image.architecture:
+        raise ValueError(f"native FP4 storage execution requires live {image.architecture}, not {live}")
     hip = rt._load_hip_for_launch()
     if hip is None:
         raise RuntimeError("HIP runtime unavailable")

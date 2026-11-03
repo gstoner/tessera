@@ -1,0 +1,46 @@
+# host=Princess-Luna rev=dbc469236 TESSERA_ROCM_CHIP=gfx1151 live=gfx1151
+============================= test session starts ==============================
+platform linux -- Python 3.14.4, pytest-9.1.1, pluggy-1.6.0 -- /home/gstoner/programming/tessera/.venv/bin/python
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: /home/gstoner/programming/tessera-ppl
+configfile: pyproject.toml
+plugins: xdist-3.8.0, hypothesis-6.167.1, cov-7.1.0, timeout-2.4.0
+timeout: 300.0s
+timeout method: signal
+timeout func_only: False
+collecting ... collected 31 items
+
+tests/device/rocm/test_native_mxfp4_mlp.py::test_public_mxfp4_mlp_executes_and_certifies[shape0] PASSED [  3%]
+tests/device/rocm/test_native_mxfp4_mlp.py::test_public_mxfp4_mlp_executes_and_certifies[shape1] PASSED [  6%]
+tests/device/rocm/test_native_mxfp4_mlp.py::test_public_mxfp4_mlp_executes_and_certifies[shape2] PASSED [  9%]
+tests/device/rocm/test_native_mxfp4_mlp.py::test_mxfp4_expansion_image_is_bitwise_the_reference[64-64-offsets0] PASSED [ 12%]
+tests/device/rocm/test_native_mxfp4_mlp.py::test_mxfp4_expansion_image_is_bitwise_the_reference[256-4096-offsets1] PASSED [ 16%]
+tests/device/rocm/test_native_mxfp4_mlp.py::test_mxfp4_mlp_refuses_reserved_exponent_before_launch PASSED [ 19%]
+tests/unit/test_mxfp4_native_mlp.py::test_policies_name_their_source_and_scale_group PASSED [ 22%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_reference_expansion_is_the_exact_decode[globals_0] PASSED [ 25%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_reference_expansion_is_the_exact_decode[globals_1] PASSED [ 29%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_boundary_refuses_reserved_code_shape_and_range PASSED [ 32%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_graph_requires_k32_and_byte_scales PASSED [ 35%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_graph_verifier_fails_closed[mutation0-E8M0 bytes] PASSED [ 38%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_graph_verifier_fails_closed[mutation1-conflicting numeric policy field] PASSED [ 41%]
+tests/unit/test_mxfp4_native_mlp.py::test_mxfp4_schedule_records_e8m0_scale_storage PASSED [ 45%]
+tests/unit/test_mxfp4_native_mlp.py::test_public_mxfp4_mlp_packages_two_mxfp4_expansions PASSED [ 48%]
+tests/unit/test_mxfp4_native_mlp.py::test_bounded_mxfp4_mlp_is_refused PASSED [ 51%]
+tests/unit/test_mxfp4_native_mlp.py::test_expansion_execution_requires_the_images_own_architecture PASSED [ 54%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_local_snapshot_reads_verified_tensor PASSED [ 58%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_local_snapshot_refuses_tampered_blob PASSED [ 61%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_unpinned_revision_is_refused PASSED [ 64%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_load_layer_mlp_checks_nvfp4_contract PASSED [ 67%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_capture_layer_round_trips_bf16_bits PASSED [ 70%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_capture_layer_refuses_changed_bits PASSED [ 74%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_accumulator_matches_whole_array_relative_rms PASSED [ 77%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_worker_frames_round_trip_and_refuse_truncation PASSED [ 80%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_perplexity_verdict_applies_the_fixed_ratio PASSED [ 83%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_resume_refuses_changed_measurement_settings PASSED [ 87%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_perplexity_arms_and_candidate_verdicts PASSED [ 90%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_weight_only_arms_decode_their_own_formats PASSED [ 93%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_native_mxfp4_is_gated_against_its_own_weights PASSED [ 96%]
+tests/unit/test_qwen3_mlp_quality_harness.py::test_native_mxfp4_roots_carry_exactly_the_direct_weights PASSED [100%]
+
+============================= 31 passed in 18.75s ==============================

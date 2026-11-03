@@ -255,7 +255,9 @@ def test_gelu_native_status_boundary(dtype, dynamic, status, monkeypatch, tmp_pa
             runtime._submit_apple_gpu_native(package.image, package.descriptor, buffers, scalars, None)
 
 
-@pytest.mark.parametrize('dynamic', [False, True])
+# Static GELU left this artifact for the scheduled activation (E2E-REAL-6);
+# its tampering cases live in test_apple_gelu_migration.py.
+@pytest.mark.parametrize('dynamic', [True])
 @pytest.mark.parametrize('mutation', ['status', 'operand', 'target', 'shape'])
 def test_gelu_artifact_replays_native_parent(mutation, dynamic, monkeypatch, tmp_path):
     from dataclasses import replace

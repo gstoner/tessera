@@ -19424,3 +19424,7 @@ Native MXFP4 MLP on gfx1151 (ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102), under a ru
 
 Evidence: docs/reference/isa/rdna/cross_version/instruction_matrix.md; tests/device/rocm/test_e4m3_software_encode.py; tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; tests/device/rocm/test_native_quantized_mlp_program.py (run on gfx1151); src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/executable_pipeline_architecture_owned.mlir; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
 
+
+## `E2E-REAL-6-apple-gelu-2026-11-03`: sibling outcome — not applicable
+
+Apple GPU static GELU moved onto the shared semantic `activation` family (Apple queue, same key). ROCm admits no `tessera.gelu` in `getSemanticKernelSchedule` or `_graph_contract`. The shared `native_unary_contract` change adds an `activation` branch that requires `apple_gpu`/`apple7`, so gfx1151 and gfx1201 softmax, reduce and norm projections are unchanged. No ROCm selector, ABI or result changes.

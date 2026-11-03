@@ -1081,7 +1081,7 @@ def package_scheduled_kernel(
         or artifact.architecture != "apple7"
         or artifact.accum != "f32"
         or (artifact.dtype, artifact.storage) not in (("fp32", "f32"), ("fp16", "f16"), ("bf16", "bf16"))
-        or (artifact.family != "softmax" and artifact.storage != "f32")
+        or (artifact.family not in {"softmax", "activation"} and artifact.storage != "f32")
     ):
         raise ValueError(
             "Apple GPU scheduled kernel requires the f32 apple7 contract"
@@ -1089,9 +1089,11 @@ def package_scheduled_kernel(
     _verify_kernel_schedule_ancestry(artifact)
     if artifact.family == "reduce":
         return _package_scheduled_reduce(artifact, pipeline_name=pipeline_name)
+    if artifact.family == "activation":
+        return _package_scheduled_gelu(artifact, pipeline_name=pipeline_name)
     if artifact.family != "softmax":
         raise ValueError(
-            "Apple GPU scheduled kernel supports only softmax and reduce"
+            "Apple GPU scheduled kernel supports only softmax, reduce and GELU"
         )
     library = _runtime_library_path()
     if library is None:
@@ -1150,6 +1152,83 @@ def package_scheduled_kernel(
             "columns": columns,
             "storage": artifact.storage,
             "accum": "f32",
+            "schedule_digest": artifact.schedule_digest,
+            "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
+def _package_scheduled_gelu(
+    artifact: ScheduledKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Bind the replayed apple7 GELU activation to its runtime MSL ABI.
+
+    E2E-REAL-6 Apple GPU GELU (2026-11-03). Every descriptor field comes from
+    the artifact that ``_verify_kernel_schedule_ancestry`` just proved equal
+    to the native Schedule replay and its projection; nothing is read from a
+    Graph object. The consumer is the hand-written tanh-approximation kernel
+    behind ``tessera_apple_gpu_gelu_*_status`` -- a declared Decision #28
+    Tier-3 runtime delegate, so the Target IR names it as a ``kernel_call``
+    with ``implementation = "runtime_msl"`` and never as a generated body.
+    """
+    if artifact.kind != "gelu" or len(artifact.input_shape) != 2:
+        raise ValueError("Apple GPU scheduled activation supports only rank-two GELU")
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError(
+            "E2E-REAL-6 Apple GPU scheduled GELU requires a fresh Tessera "
+            "Apple GPU runtime dylib"
+        )
+    symbol, abi = _GELU_VARIANTS[artifact.dtype]
+    alignment = 4 if artifact.storage == "f32" else 2
+    target_ir = (
+        f'tessera_apple.gpu.kernel_call @{symbol} '
+        f'{{abi = "{abi}", storage = "{artifact.storage}", kind = "gelu", '
+        f'approximation = "tanh", implementation = "runtime_msl", '
+        f'schedule_hash = "{artifact.schedule_digest}", status = "executable"}}'
+    )
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
+        binary_format="shared_object", payload=payload,
+        entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    x, out = artifact.input_name, artifact.output_name
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=(
+            BufferBinding(0, x, "input", artifact.dtype, 2, "row_major", alignment),
+            BufferBinding(1, out, "output", artifact.dtype, 2, "row_major", alignment),
+        ),
+        shape_guards=tuple(
+            ShapeGuard(name, axis, "eq", extent)
+            for name, shape in ((x, artifact.input_shape), (out, artifact.output_shape))
+            for axis, extent in enumerate(shape)
+        ),
+        geometry=LaunchGeometry(policy="apple_msl_gelu"),
+        ordering=OrderingSemantics(
+            ordered_submission=True, residency="none", synchronization=("return",),
+        ),
+        provenance={
+            "work_item": "E2E-REAL-6",
+            "route": "apple_gelu_native_library",
+            "op_kind": "gelu",
+            "family": "activation",
+            "kind": "gelu",
+            "approximation": "tanh",
+            "synthesized": False,
+            "shape": list(artifact.input_shape),
+            "storage": artifact.dtype,
+            "dynamic_shape": False,
+            "scalar_contract": None,
+            "accumulation": "fp32",
             "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": artifact.tile_digest,
         },
@@ -1523,11 +1602,18 @@ class AppleGeluArtifact:
 
 
 def lower_gelu_artifact(module: GraphIRModule) -> AppleGeluArtifact:
+    """Lower the dynamic rank-two GELU through ``--tessera-gelu-to-apple_gpu``.
+
+    Static GELU is a native Schedule -> Tile activation (``package_gelu``);
+    its former Graph-owned route through this function is the test-only
+    Decision #31(a) oracle ``tests/_support/apple_gelu_baseline.py``.
+    """
     import copy
     from .scheduled_matmul import find_tessera_opt, run_tessera_opt
-    contract = _gelu_contract(module) or _dynamic_gelu_contract(module)
+    contract = _dynamic_gelu_contract(module)
     if contract is None:
-        raise ValueError("Apple GELU requires a rank-two contract")
+        raise ValueError("Apple GELU native artifact requires the dynamic rank-two contract; "
+                         "static GELU lowers through the scheduled activation route")
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("Apple GELU requires native lowering")
@@ -1540,8 +1626,12 @@ def lower_gelu_artifact(module: GraphIRModule) -> AppleGeluArtifact:
 
 
 def package_gelu(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
-    """Compatibility frontend; the native artifact owns GELU packaging."""
-    return package_gelu_artifact(lower_gelu_artifact(module), pipeline_name=pipeline_name)
+    """Compatibility frontend; the native scheduled activation owns static GELU."""
+    if _gelu_contract(module) is None:
+        raise ValueError("Apple GELU requires static rank-two storage-preserving semantics")
+    from .scheduled_kernel import lower_scheduled_kernel
+    return package_scheduled_kernel(
+        lower_scheduled_kernel(module, target='apple_gpu'), pipeline_name=pipeline_name)
 
 
 def package_gelu_artifact(artifact: AppleGeluArtifact, *, pipeline_name: str) -> AppleNativePackage:
@@ -1572,6 +1662,8 @@ def package_gelu_artifact(artifact: AppleGeluArtifact, *, pipeline_name: str) ->
         raise ValueError("Apple GELU native tensor/SSA contract disagrees")
     dtype = {'f32': 'fp32', 'f16': 'fp16', 'bf16': 'bf16'}[storage]
     dynamic = m == "?" or k == "?"
+    if not dynamic:
+        raise ValueError("Apple static GELU is packaged from its replayed Schedule artifact")
     shape = tuple(None if d == "?" else int(d) for d in (m, k))
     x, out = artifact.input_name, artifact.output_name
     if any(type(n) is not str or not n.isidentifier() for n in (x, out)) or x == out:

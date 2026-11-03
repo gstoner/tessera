@@ -26,7 +26,7 @@ met that bar, not an axis carrying no information.
 | — served by a **compiled** route on some target | 31 |
 | — **bootstrap only** (deleting the packager strands them) | 2 |
 | Families a backend classifies | 19 |
-| Families with a compiled route | 12 |
+| Families with a compiled route | 13 |
 
 **`❔ unclassified` is not `—`.** A dash means measured and nothing
 serves it; `unclassified` means this map cannot see that target's
@@ -96,6 +96,7 @@ raises rather than degrading quietly.
 | `cohort2` | ✅ | x86 | *benchmark cohort, not an op pattern* |
 | `depth_attention` | ✅ rocm_gfx1151 | — | `depth_attn` |
 | `elementwise` | ✅ | x86 | `add`, `sub`, `mul`, `div`, `exp`, `log`, `sqrt`, `rsqrt`, `tanh`, `sigmoid`, `gelu`, `silu`, `erf`, `sign`, `where`, `pow`, `maximum`, `minimum` |
+| `gelu` | ✅ | — | **apple_gpu**: `gelu` |
 | `int4_matmul` | — | nvidia_sm120 | `matmul` |
 | `matmul` | ✅ | nvidia_sm120, x86 | `matmul` |
 | `moe_dispatch` | — | rocm_gfx1151 | `moe_dispatch` |

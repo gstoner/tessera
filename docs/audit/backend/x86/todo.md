@@ -12629,3 +12629,8 @@ Native MXFP4 MLP (ROCM-MXFP4-NATIVE-MLP-20261102) is not applicable to x86: it a
 
 Native MXFP4 MLP on gfx1151 (ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102) is not applicable to x86: it runs the ROCm MXFP4 expansion on gfx1151 and makes the shared ROCm FP4 storage launcher check the image's own architecture. No x86 selector, ABI or result changes.
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
+
+
+## `E2E-REAL-6-apple-gelu-2026-11-03`: sibling outcome — not applicable
+
+Apple GPU static GELU moved onto the shared semantic `activation` family (Apple queue, same key). x86 GELU keeps its own `native_x86_kernel` elementwise contract; the semantic activation contract refuses `tessera.gelu` on x86 (tested). No x86 selector, ABI or result changes.

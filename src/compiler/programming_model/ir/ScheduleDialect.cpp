@@ -428,6 +428,24 @@ LogicalResult ActivationOp::verify() {
   auto shape = nativeShapeBounds(getOperation(), getSubject());
   if (failed(bound) || failed(shape)) return failure();
   bool bounded = *bound || !shape->empty();
+  bool elementMatches = type &&
+      (getStorage() == "f16" ? type.getElementType().isF16() :
+       getStorage() == "bf16" ? type.getElementType().isBF16() :
+       getStorage() == "f32" && type.getElementType().isF32());
+  if (getArch() == "apple7") {
+    // E2E-REAL-6 Apple GPU GELU: static, unbounded, tanh, workgroup 1.
+    if (!type || type.getRank() != 2 || bounded || !type.hasStaticShape() ||
+        type.getEncoding() || !elementMatches ||
+        !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0; }) ||
+        getWorkgroupSize() != 1 || getAccum() != "f32" || getKind() != "gelu" ||
+        getAxis() != -1 || getSchedule() != "serial" || getNanMode() != "propagate" ||
+        getZeroMode() != "preserve" || getApproximation() != std::optional<StringRef>("tanh"))
+      return emitOpError("requires static rank-two apple7 f16/bf16/f32 serial tanh GELU "
+                         "with workgroup 1, propagated NaNs and preserved signed zeros");
+    return success();
+  }
+  if (getApproximationAttr())
+    return emitOpError("approximation is an apple7 GELU attribute");
   if (!type || type.getRank() != 2 || (!bounded && !type.hasStaticShape()) || type.getEncoding() ||
       (!bounded && !llvm::all_of(type.getShape(), [](int64_t d) { return d > 0; })) ||
       getArch() != "sm_120" || getWorkgroupSize() != 128 ||

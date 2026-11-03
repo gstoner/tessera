@@ -16226,3 +16226,33 @@ Native MXFP4 MLP (ROCM-MXFP4-NATIVE-MLP-20261102) is not applicable to Apple: it
 
 Native MXFP4 MLP on gfx1151 (ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102) is not applicable to Apple: it runs the ROCm MXFP4 expansion on gfx1151 and makes the shared ROCm FP4 storage launcher check the image's own architecture. No Apple selector, ABI or result changes.
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
+
+
+## `E2E-REAL-6-apple-gelu-2026-11-03`: Apple GPU static GELU retires its Graph-owned constructor
+
+Owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+Synchronization key: `E2E-REAL-6-apple-gelu-2026-11-03`.
+
+Static rank-two f32/f16/bf16 GELU (`apple_gpu,gelu`) now lowers through native
+Graph→Schedule→Tile: `schedule.activation` and `tile.activation_kernel` with
+`kind = "gelu"`, `approximation = "tanh"`, workgroup 1. `package_gelu` packages
+the replayed `ScheduledKernelArtifact`. Every descriptor field (ABI, symbol,
+bindings, shape guards) is projected from native IR, and tampering with the
+artifact, Schedule or Tile text fails closed before the runtime is touched.
+The consumer is the hand-written tanh MSL kernel. The Target IR keeps it
+explicit as `kernel_call ... implementation = "runtime_msl"` (a Decision #28
+Tier-3 delegate, not a generated body). The ABI ids, symbols and runtime
+dispatch are unchanged, and `apple_gpu_runtime.mm` is untouched, so the sealed
+packet is not affected. The old route is the #31(a) oracle
+`tests/_support/apple_gelu_baseline.py`.
+
+Evidence (Mac M1 Max, macOS 27, unsandboxed Metal):
+`tests/unit/test_apple_gelu_migration.py` is 52 passed. That includes 9 Metal
+cases where both images agree bit-for-bit and match a float64 tanh-GELU
+oracle: f32/f16/bf16 at 5×11, 64×129 and 257×1025, with a signed zero and
+±12 saturation. Lit adds
+`phase8/apple_gelu_activation_{schedule_tile,invalid,verify_invalid}.mlir`.
+Open: dynamic GELU still lowers Graph → `--tessera-gelu-to-apple_gpu` →
+descriptor. Transpose, batched GEMM, the dynamic families, SVD and the value
+ABI also remain. The Mac LLVM is NDEBUG, so the new verifiers have not run
+under assertions (Tajasarus).

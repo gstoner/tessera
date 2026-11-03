@@ -133,11 +133,15 @@ def Schedule_SoftmaxOp : Op<ScheduleDialect, "softmax", [Pure]> {
 
 // W1.1: preserve a standalone activation store on a producer edge.
 def Schedule_ActivationOp : Op<ScheduleDialect, "activation", [Pure]> {
-  let summary = "Scheduled storage-preserving SM120 row activation";
+  let summary = "Scheduled storage-preserving SM120 ReLU / apple7 GELU row activation";
+  // `approximation` is required for, and only legal on, the apple7 GELU
+  // (E2E-REAL-6, 2026-11-03): it names the one GELU form the consumer
+  // computes, so an erf GELU cannot reuse a tanh schedule.
   let arguments = (ins AnyType:$subject, StrAttr:$artifact_hash,
                        StrAttr:$arch, StrAttr:$storage, StrAttr:$accum,
                        StrAttr:$kind, I64Attr:$axis, I64Attr:$workgroup_size,
                        StrAttr:$schedule, StrAttr:$nan_mode, StrAttr:$zero_mode,
+                       OptionalAttr<StrAttr>:$approximation,
                        OptionalAttr<I64Attr>:$row_bound,
                        OptionalAttr<I64ArrayAttr>:$shape_bounds);
   let results = (outs AnyType:$scheduled);

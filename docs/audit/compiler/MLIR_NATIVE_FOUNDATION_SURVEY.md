@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-11
+last_updated: 2026-11-03
 audit_role: reference
 ---
 
@@ -79,7 +79,7 @@ route fixtures and an inventory derived from those existing routes.
 | NVIDIA `package_native` | Softmax and reduction now enter native Schedule/Tile lowering, including narrow storage, min, keepdims and cooperative reduction. Their Graph constructors are deleted from production. Norm and forward attention now also consume native Schedule/Tile; their former constructors are test-only baselines. Recompute backward attention, fused paged attention and scaled/quantized matmul still reconstruct Tile. Saved-LSE pairs, signed INT4 and bounded paged reads now have native producers and replayed Schedule consumers. | F2-U1–U10 close the bounded unary migration with RTX differential proof. Aligned masks and paired-LSE validation landed in the next cut; native paired, signed-INT4 and bounded paged producers are implemented; reuse NVVM/PTX compilation and retain per-storage ABI gates. |
 | ROCm `rocm_native.package_native` | `package_paged_kv_read`, `package_attention`, `package_moe_dispatch` reconstruct Tile/Graph text. (`package_softmax` / `package_reduction` lower through the native Schedule contract since 2026-09-27; their constructors are a test-only oracle -- see the dated note below.) | Matmul, attention, depth-attention and generic semantic-kernel scheduled consumers already exist. Verify old/new envelope differences, extend missing paged-KV/MoE movement carriers, migrate one family, and delete its Graph constructor after equivalence. Reuse Target→ROCDL→HSACO. |
 | x86 `x86_native.package_native` | Direct baseline and AVX-512 softmax and rank-reducing or keepdims sum/mean/max now use replayed native Schedule/Tile with projected descriptor fields. Direct f32 matmul also replays its native Schedule and projects descriptor fields. Remaining non-f32 matmul/attention, cohort2, elementwise and delegated `x86_breadth.package_graph_breadth` classify Graph and construct lower-level calls/carriers. | Use existing scheduled matmul/attention/kernel consumers for covered shapes; move remaining pointwise/cohort/breadth contracts through canonical IR. For general compiled bodies, reuse `tessera-jit` LLVM lowering; keep native library calls explicit rather than relabeling them as generated bodies. |
-| Apple GPU `apple_native.package_native` | Batched GEMM, dynamic softmax and GELU, transpose, popcount/count-nonzero/topk, SVD and the value-ABI fallback read Graph operands/kwargs and construct descriptors. | Extend existing scheduled matmul/kernel/attention consumers. Migrate one value family to a verified native Target call with IR-derived ABI, then MSL body generation where appropriate. Keep MPS delegation explicitly represented in IR. |
+| Apple GPU `apple_native.package_native` | Batched GEMM, dynamic softmax and GELU, transpose, popcount/count-nonzero/topk, SVD and the value-ABI fallback read Graph operands/kwargs and construct descriptors. Static softmax and (since 2026-11-03) static rank-two GELU lower through native Schedule/Tile; GELU's former constructor is a test-only baseline. | Extend existing scheduled matmul/kernel/attention consumers. Migrate one value family to a verified native Target call with IR-derived ABI, then MSL body generation where appropriate. Keep MPS delegation explicitly represented in IR. |
 | Apple CPU `apple_cpu_native.package_native` | Reads the single Graph op, shapes, kwargs and dtype to synthesize a runtime-call record and package the prebuilt Accelerate/runtime image. | Add the typed call/ABI lowering from canonical IR; use the CPU LLVM path for general program bodies. This fifth package entry point must not disappear from a “four backend” inventory. |
 
 Source anchors are the corresponding `native_package_kind`, `package_native`
@@ -308,3 +308,26 @@ keeps its proved f32 rows. The constructors survive only in
 `tests/unit/test_rocm_unary_migration.py` (bit-exact on gfx1151). The route
 census differs from main only in these rows. Paged-KV, MoE dispatch and the
 forward-attention fallback remain the ROCm Graph-owned constructors.
+
+## Apple GPU GELU constructor retirement (2026-11-03)
+
+E2E-REAL-6, sync `E2E-REAL-6-apple-gelu-2026-11-03`: static rank-two f32/f16/bf16 GELU on `apple7`
+is a native scheduled activation. `getSemanticKernelSchedule` admits an
+isolated `tessera.gelu` as `schedule.activation {kind = "gelu",
+approximation = "tanh"}`, and Schedule→Tile emits `tile.activation_kernel`.
+The Schedule and Tile verifiers own the apple7 contract. Any GELU keyword,
+an erf request among them, fails closed.
+`apple_native.package_gelu` hands `lower_scheduled_kernel` to
+`package_scheduled_kernel`. That replays Schedule→Tile, and
+`native_unary_contract.verify_unary_projection` projects every descriptor
+field from the native IR. The consumer is the hand-written MSL kernel behind
+`tessera_apple_gpu_gelu_*_status`. The Target IR names it as a delegated
+`kernel_call` (`implementation = "runtime_msl"`), never as a generated body.
+The retired route (Graph → `--tessera-gelu-to-apple_gpu` → descriptor) is
+frozen in `tests/_support/apple_gelu_baseline.py` as the #31(a) oracle of
+`tests/unit/test_apple_gelu_migration.py`, which is bit-exact on the M1 Max.
+Dynamic GELU keeps that pass, and the production artifact path now refuses
+static shapes. The route census differs from main only in the `apple_gpu,gelu`
+row (`gap` → `generic_compiled`). Transpose, batched GEMM, the dynamic
+families, SVD and the value-ABI fallback remain the Apple GPU Graph-owned
+constructors.

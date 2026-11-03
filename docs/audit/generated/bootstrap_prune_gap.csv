@@ -41,7 +41,7 @@ apple_gpu,batched_gemm,—,gap
 apple_gpu,softmax,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 apple_gpu,dynamic_softmax,—,gap
 apple_gpu,transpose,—,gap
-apple_gpu,gelu,—,gap
+apple_gpu,gelu,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 apple_gpu,dynamic_gelu,—,gap
 apple_gpu,dynamic_popcount,—,gap
 apple_gpu,dynamic_count_nonzero,—,gap

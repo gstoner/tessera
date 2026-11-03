@@ -138,6 +138,11 @@ FAMILY_MEMBERS: Mapping[str, Mapping[str, tuple[str, ...]]] = {
     "depth_attention": {"*": ("depth_attn",)},
     "softmax": {"*": ("softmax",)},
     "activation": {"nvidia_sm120": ("relu",)},
+    # E2E-REAL-6 Apple GPU GELU (2026-11-03): `apple_native.package_gelu` now
+    # lowers only through the generic Schedule->Tile activation. Apple GPU is
+    # unclassifiable here, so this records membership without publishing a
+    # route claim the map cannot verify.
+    "gelu": {"apple_gpu": ("gelu",)},
     "norm": {"nvidia_sm120": ("layer_norm", "rmsnorm"),
              "x86": ("layer_norm", "rmsnorm"),
              "*": ("layer_norm", "rmsnorm")},

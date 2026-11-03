@@ -16857,3 +16857,8 @@ Native MXFP4 MLP (ROCM-MXFP4-NATIVE-MLP-20261102): **follow-up required on sm_12
 
 Native MXFP4 MLP on gfx1151 (ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102): the follow-up recorded under ROCM-MXFP4-NATIVE-MLP-20261102 is unchanged. gfx1151 now executes the MXFP4 source too, on its own proof; sm_120 still has no `nvfp4_expand` lowering, and neither RDNA result transfers to it.
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
+
+
+## `E2E-REAL-6-apple-gelu-2026-11-03`: sibling outcome — not applicable (ReLU contract byte-identical)
+
+Apple GPU static GELU moved onto the shared semantic `activation` family (Apple queue, same key). Shared code touched: `PMPasses.cpp` (`getSemanticKernelSchedule`, the activation digest and the Schedule→Tile policy check), the `schedule.activation` and `tile.activation_kernel` verifiers, and `native_unary_contract`. The sm_120 ReLU contract is unchanged. The digest adds an `approximation` field only for GELU, and an `approximation` attribute on an sm_120 activation is now refused. Mac host-free check: `--tessera-graph-to-schedule --tessera-schedule-to-tile` on f16/bf16/f32 sm_120 ReLU is byte-identical to main's `tessera-opt`. No sm_120 device run was made; a Super-Bear ReLU device sweep confirms it at the next NVIDIA sweep.

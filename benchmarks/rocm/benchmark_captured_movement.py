@@ -12,6 +12,7 @@ import numpy as np
 import tessera as ts
 from tessera import runtime as rt
 from tessera.compiler import rocm_native
+from tessera.compiler.scheduled_paged_kv import admit_paged_kv
 from benchmarks.rocm.benchmark_native_movement import device_identity
 from benchmarks.rocm.benchmark_rocm_e2e_movement import _ResidentDescriptor
 from tests.unit.test_public_movement_frontend import paged, dispatched, inputs
@@ -111,7 +112,7 @@ def record(hip,arch,family,large,repeats,directory):
     assert fn.execution_kind=="native_gpu"
     module,_=fn._trace_frontend_capture(args,{})
     artifact=fn.runtime_artifact()
-    contract=rocm_native._moe_dispatch_contract(module) if family=="dispatched" else rocm_native._paged_kv_contract(module)
+    contract=rocm_native._moe_dispatch_contract(module) if family=="dispatched" else admit_paged_kv(module)
     named=dict(zip((a.name for a in module.functions[0].args),args,strict=True))
     operands=tuple(named[n] for n in contract[:2])
     package=SimpleNamespace(image=artifact.native_image,descriptor=artifact.launch_descriptor)

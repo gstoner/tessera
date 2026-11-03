@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-11
+last_updated: 2026-11-03
 audit_role: reference
 ---
 
@@ -77,7 +77,7 @@ route fixtures and an inventory derived from those existing routes.
 |---|---|---|
 | NVIDIA `nvidia_native.package_scheduled_matmul(artifact)` | F1 removed the Graph argument and base-package compilation. The consumer validates artifact shape/ABI facts and compiles Tile once; the driver retains adjacent boundary lineage. | Keep the one-compile, no-Graph and tampering gates. Broader matmul storage and dynamic envelopes remain separately scoped. |
 | NVIDIA `package_native` | Softmax and reduction now enter native Schedule/Tile lowering, including narrow storage, min, keepdims and cooperative reduction. Their Graph constructors are deleted from production. Norm and forward attention now also consume native Schedule/Tile; their former constructors are test-only baselines. Recompute backward attention, fused paged attention and scaled/quantized matmul still reconstruct Tile. Saved-LSE pairs, signed INT4 and bounded paged reads now have native producers and replayed Schedule consumers. | F2-U1–U10 close the bounded unary migration with RTX differential proof. Aligned masks and paired-LSE validation landed in the next cut; native paired, signed-INT4 and bounded paged producers are implemented; reuse NVVM/PTX compilation and retain per-storage ABI gates. |
-| ROCm `rocm_native.package_native` | `package_paged_kv_read`, `package_attention`, `package_moe_dispatch` reconstruct Tile/Graph text. (`package_softmax` / `package_reduction` lower through the native Schedule contract since 2026-09-27; their constructors are a test-only oracle -- see the dated note below.) | Matmul, attention, depth-attention and generic semantic-kernel scheduled consumers already exist. Verify old/new envelope differences, extend missing paged-KV/MoE movement carriers, migrate one family, and delete its Graph constructor after equivalence. Reuse Target→ROCDL→HSACO. |
+| ROCm `rocm_native.package_native` | `package_attention`, `package_moe_dispatch` reconstruct Tile/Graph text. (`package_softmax` / `package_reduction` lower through the native Schedule contract since 2026-09-27, and `package_paged_kv_read` packages its replayed artifact through `package_scheduled_paged_kv` since 2026-11-03; their Graph-authored packagers are test-only oracles -- see the dated notes below.) | Matmul, attention, depth-attention and generic semantic-kernel scheduled consumers already exist. Verify old/new envelope differences, extend missing paged-KV/MoE movement carriers, migrate one family, and delete its Graph constructor after equivalence. Reuse Target→ROCDL→HSACO. |
 | x86 `x86_native.package_native` | Direct baseline and AVX-512 softmax and rank-reducing or keepdims sum/mean/max now use replayed native Schedule/Tile with projected descriptor fields. Direct f32 matmul also replays its native Schedule and projects descriptor fields. Remaining non-f32 matmul/attention, cohort2, elementwise and delegated `x86_breadth.package_graph_breadth` classify Graph and construct lower-level calls/carriers. | Use existing scheduled matmul/attention/kernel consumers for covered shapes; move remaining pointwise/cohort/breadth contracts through canonical IR. For general compiled bodies, reuse `tessera-jit` LLVM lowering; keep native library calls explicit rather than relabeling them as generated bodies. |
 | Apple GPU `apple_native.package_native` | Batched GEMM, dynamic softmax and GELU, transpose, popcount/count-nonzero/topk, SVD and the value-ABI fallback read Graph operands/kwargs and construct descriptors. | Extend existing scheduled matmul/kernel/attention consumers. Migrate one value family to a verified native Target call with IR-derived ABI, then MSL body generation where appropriate. Keep MPS delegation explicitly represented in IR. |
 | Apple CPU `apple_cpu_native.package_native` | Reads the single Graph op, shapes, kwargs and dtype to synthesize a runtime-call record and package the prebuilt Accelerate/runtime image. | Add the typed call/ABI lowering from canonical IR; use the CPU LLVM path for general program bodies. This fifth package entry point must not disappear from a “four backend” inventory. |
@@ -308,3 +308,24 @@ keeps its proved f32 rows. The constructors survive only in
 `tests/unit/test_rocm_unary_migration.py` (bit-exact on gfx1151). The route
 census differs from main only in these rows. Paged-KV, MoE dispatch and the
 forward-attention fallback remain the ROCm Graph-owned constructors.
+
+## ROCm paged-KV packager retirement (2026-11-03)
+
+E2E-REAL-6, sync `E2E-REAL-6-rocm-paged-kv-2026-11-03`: the ROCm paged read
+already took its kernel from the native Graph -> Schedule -> Tile replay, but
+`package_paged_kv_read` authored every launch field (buffers, ABI, scalar
+list, shape guards, geometry, page layout) from the Python Graph object, and
+`scheduled_paged_kv.py` called back into `rocm_native._paged_kv_contract`.
+`rocm_native.package_scheduled_paged_kv(artifact)` now projects all of them
+from the replayed Tile `tessera.native_contract` (`NativePagedKV.h`) through
+`ScheduledPagedKVArtifact.native_contract()`, which refuses a missing, extra
+or contradicting contract field, a kernel attribute or operand count that
+disagrees with it, and an artifact whose own fields were relabelled; a tampered
+artifact fails before target compilation. Both layouts (direct and strided)
+project. Admission moved to `scheduled_paged_kv.admit_paged_kv`. The retired
+packager survives only in `tests/_support/rocm_paged_kv_baseline.py`, the
+#31(a) oracle of `tests/unit/test_rocm_paged_kv_migration.py`: 16 envelope
+points agree field for field host-free, and 8 device rows per host build the
+same image digest and agree bit-for-bit with it and with NumPy, recorded
+separately on gfx1151 (Princess-Luna) and gfx1201 (Tajasarus). MoE dispatch
+and the forward-attention fallback remain the ROCm Graph-owned constructors.

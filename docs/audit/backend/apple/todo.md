@@ -16247,12 +16247,12 @@ packet is not affected. The old route is the #31(a) oracle
 `tests/_support/apple_gelu_baseline.py`.
 
 Evidence (Mac M1 Max, macOS 27, unsandboxed Metal):
-`tests/unit/test_apple_gelu_migration.py` is 52 passed. That includes 9 Metal
+`tests/unit/test_apple_gelu_migration.py` is 58 passed. That includes 9 Metal
 cases where both images agree bit-for-bit and match a float64 tanh-GELU
 oracle: f32/f16/bf16 at 5×11, 64×129 and 257×1025, with a signed zero and
 ±12 saturation. Lit adds
 `phase8/apple_gelu_activation_{schedule_tile,invalid,verify_invalid}.mlir`.
 Open: dynamic GELU still lowers Graph → `--tessera-gelu-to-apple_gpu` →
 descriptor. Transpose, batched GEMM, the dynamic families, SVD and the value
-ABI also remain. The Mac LLVM is NDEBUG, so the new verifiers have not run
-under assertions (Tajasarus).
+ABI also remain. Under the assertions-ON LLVM on Tajasarus, lit tessera-ir
+runs 497 passed / 0 failed, including the three GELU fixtures.

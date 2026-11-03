@@ -49,7 +49,10 @@ static FailureOr<DictionaryAttr> nativeNVFP4Contract(Operation *graph) {
       b.getNamedAttr("arch",arch),
       b.getNamedAttr("ownership",b.getStringAttr("private_outputs_distinct_readonly_inputs")),
       b.getNamedAttr("layout",b.getStringAttr("row_major")),
-      b.getNamedAttr("scale_storage",b.getStringAttr("e4m3_bits"))});
+      b.getNamedAttr("scale_storage",b.getStringAttr(
+          expand && mlir::tessera_contract::isMXFP4ExpandPolicy(
+              graph->getAttrOfType<DictionaryAttr>("numeric_policy"))
+            ? "e8m0_bits" : "e4m3_bits"))});
 }
 static LogicalResult scheduleNativeNVFP4Ingest(ModuleOp mod) {
   SmallVector<Operation *> graphs;

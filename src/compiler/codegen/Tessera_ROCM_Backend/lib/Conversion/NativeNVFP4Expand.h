@@ -21,6 +21,13 @@ static mlir::LogicalResult emitNativeNVFP4Expand(mlir::ModuleOp module,
   if (runtimeK != (k == 0) || runtimeN != (n == 0) || (runtimeK && runtimeN) ||
       (runtimeN && op->getAttrOfType<ArrayAttr>("row_offsets").size() < 2))
     return op->emitError("NVFP4 expansion extents must be static or one runtime image identity");
+  // An MXFP4 source (ROCM-MXFP4-NATIVE-MLP-20261102) is static only: its
+  // [N,K/32] E8M0 byte for K16 group g of a row sits at flat index/2, since
+  // the K16 group count is even.
+  const bool mx = mlir::tessera_contract::isMXFP4ExpandPolicy(
+      op->getAttrOfType<DictionaryAttr>("numeric_policy"));
+  if (mx && (runtimeK || runtimeN || k % 32))
+    return op->emitError("MXFP4 expansion requires a static K32 image");
   int64_t groups = k / 16;
   auto offsets = op->getAttrOfType<ArrayAttr>("row_offsets");
   std::string name = op->getAttrOfType<StringAttr>("name").getValue().str();
@@ -96,7 +103,8 @@ static mlir::LogicalResult emitNativeNVFP4Expand(mlir::ModuleOp module,
     projection = choose(after,ci(p),projection);
   }
   Value global = b.create<memref::LoadOp>(l,f.getArgument(2),ValueRange{projection});
-  Value raw = b.create<memref::LoadOp>(l,f.getArgument(1),ValueRange{index});
+  Value scaleSource = mx ? Value(b.create<arith::DivUIOp>(l,index,ci(2))) : index;
+  Value raw = b.create<memref::LoadOp>(l,f.getArgument(1),ValueRange{scaleSource});
   Value bits = b.create<arith::ExtUIOp>(l,b.getI32Type(),raw);
   Value exponent = b.create<arith::AndIOp>(
       l,b.create<arith::ShRUIOp>(l,bits,c32(3)),c32(15));
@@ -115,6 +123,13 @@ static mlir::LogicalResult emitNativeNVFP4Expand(mlir::ModuleOp module,
   Value negative = b.create<arith::CmpIOp>(
       l,arith::CmpIPredicate::ne,b.create<arith::AndIOp>(l,bits,c32(128)),c32(0));
   Value signedScale = choose(negative,b.create<arith::NegFOp>(l,magnitude),magnitude);
+  if (mx) {
+    // E8M0 code e is 2^(e-127): the f64 with biased exponent e + 1023 - 127.
+    // The launch boundary refuses the reserved code 255.
+    Value wide = b.create<arith::ExtUIOp>(l,b.getI64Type(),bits);
+    signedScale = b.create<arith::BitcastOp>(l,b.getF64Type(),
+        b.create<arith::ShLIOp>(l,b.create<arith::AddIOp>(l,wide,c64(896)),c64(52)));
+  }
   Value product = b.create<arith::MulFOp>(l,signedScale,global);
   Value rounded = b.create<arith::TruncFOp>(l,b.getF32Type(),product);
   Value columns = runtimeN

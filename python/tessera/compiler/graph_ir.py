@@ -4670,8 +4670,12 @@ def _shape_nvfp4_expand(operands, attrs):
         n, packed_k = map(int, operands[0].shape)
     except (ValueError, TypeError):
         raise ValueError("NVFP4 expansion requires static checkpoint extents") from None
-    if n <= 0 or packed_k <= 0 or packed_k % 8:
-        raise ValueError("NVFP4 expansion requires positive N/K16")
+    policy = attrs.get("numeric_policy") if isinstance(attrs, dict) else None
+    # An MXFP4 source covers K32 per scale; the destination is K16 either way.
+    group = 16 if isinstance(policy, dict) and policy.get("source_format") == "mxfp4_e2m1_e8m0_k32" else 8
+    if n <= 0 or packed_k <= 0 or packed_k % group:
+        raise ValueError("NVFP4 expansion requires positive N/K16" if group == 8
+                         else "MXFP4 expansion requires positive N/K32")
     return (tensor_ir_type((n, 2 * packed_k), "fp8_e4m3"),
             tensor_ir_type((packed_k // 8, n), "fp32"))
 

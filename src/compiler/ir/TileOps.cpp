@@ -3645,10 +3645,11 @@ LogicalResult tessera::tile::NVFP4RequantizeKernelOp::verify() {
 LogicalResult tessera::tile::NVFP4ExpandKernelOp::verify() {
   auto c = getContract();
   auto n = c.getAs<IntegerAttr>("n"), k = c.getAs<IntegerAttr>("k");
+  auto policy = c.getAs<DictionaryAttr>("numeric_policy");
+  const bool mx = mlir::tessera_contract::isMXFP4ExpandPolicy(policy);
   if (!n || !k || failed(mlir::tessera_contract::verifyNVFP4ExpandExtents(
-          getOperation(),n.getInt(),k.getInt(),c.getAs<ArrayAttr>("row_offsets"))) ||
-      failed(mlir::tessera_contract::verifyNVFP4ExpandPolicy(
-          getOperation(),c.getAs<DictionaryAttr>("numeric_policy"))))
+          getOperation(),n.getInt(),k.getInt(),c.getAs<ArrayAttr>("row_offsets"),mx)) ||
+      failed(mlir::tessera_contract::verifyNVFP4ExpandPolicy(getOperation(),policy)))
     return failure();
   // The expansion is integer/f64 code: gfx1151 admits it alongside gfx1201
   // (GFX1151-QUANTIZED-MLP-20261030), always as a matching target/arch pair.
@@ -3660,7 +3661,7 @@ LogicalResult tessera::tile::NVFP4ExpandKernelOp::verify() {
   for (auto [key,value] : {
       std::pair<StringRef,StringRef>{"layout","row_major"},
       {"ownership","private_outputs_distinct_readonly_inputs"},
-      {"scale_storage","e4m3_bits"}}) {
+      {"scale_storage",mx ? "e8m0_bits" : "e4m3_bits"}}) {
     auto attr = c.getAs<StringAttr>(key);
     if (!attr || attr.getValue() != value)
       return emitOpError("conversion memory/target contract changed");

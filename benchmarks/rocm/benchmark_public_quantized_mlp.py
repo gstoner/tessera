@@ -3,10 +3,18 @@ from __future__ import annotations
 import ml_dtypes
 import numpy as np
 import tessera as ts
-from tessera.compiler.nvfp4_expansion import nvfp4_expansion_policy
+from tessera.compiler.nvfp4_expansion import mxfp4_expansion_policy, nvfp4_expansion_policy
 
 
-def make_mlp(m=3,width=32,k=48,n=19):
+def make_mlp(m=3,width=32,k=48,n=19,*,source="nvfp4"):
+    """The authored seven-member W4A8 MLP; ``source`` names the weight format.
+
+    ``"mxfp4"`` (ROCM-MXFP4-NATIVE-MLP-20261102) passes E8M0 byte scales
+    [rows, K/32] and unit projection globals; activations keep the per-16
+    E4M3 quantizer either way."""
+    if source not in ("nvfp4","mxfp4"):
+        raise ValueError("quantized MLP weight source must be nvfp4 or mxfp4")
+    expansion_policy=nvfp4_expansion_policy() if source=="nvfp4" else mxfp4_expansion_policy()
     groups=m*k//16;down_groups=m*width//16
     divisor=np.full((groups,1),448,np.float32);divisor.flags.writeable=False
     floor=np.full((groups,1),np.finfo(np.float32).tiny,np.float32);floor.flags.writeable=False
@@ -24,7 +32,7 @@ def make_mlp(m=3,width=32,k=48,n=19):
         encoded=ts.ops.cast(normalized,'fp8_e4m3')
         codes=ts.ops.reshape(encoded,shape=(m,k))
         scales=ts.ops.reshape(scale,shape=(m,k//16))
-        b,sb=ts.ops.nvfp4_expand(packed,weight_scales,globals_,row_offsets=[0,width,2*width],numeric_policy=nvfp4_expansion_policy())
+        b,sb=ts.ops.nvfp4_expand(packed,weight_scales,globals_,row_offsets=[0,width,2*width],numeric_policy=expansion_policy)
         accumulator=ts.ops.scaled_matmul(codes,b,scales,sb,transposeB=True,
             scale_layout={'granularity':'block','block':[1,16],'format':'fp32'},
             numeric_policy={'accum':'fp32','execution_mode':'exact_per_block'})
@@ -46,7 +54,7 @@ def make_mlp(m=3,width=32,k=48,n=19):
         down_encoded=ts.ops.cast(down_normalized,'fp8_e4m3')
         down_codes=ts.ops.reshape(down_encoded,shape=(m,width))
         down_scales=ts.ops.reshape(down_scale,shape=(m,width//16))
-        down_b,down_sb=ts.ops.nvfp4_expand(down_packed,down_weight_scales,down_globals,row_offsets=[0,n],numeric_policy=nvfp4_expansion_policy())
+        down_b,down_sb=ts.ops.nvfp4_expand(down_packed,down_weight_scales,down_globals,row_offsets=[0,n],numeric_policy=expansion_policy)
         down_accumulator=ts.ops.scaled_matmul(down_codes,down_b,down_scales,down_sb,transposeB=True,
             scale_layout={'granularity':'block','block':[1,16],'format':'fp32'},
             numeric_policy={'accum':'fp32','execution_mode':'exact_per_block'})
@@ -61,6 +69,20 @@ def inputs(m,width,k,n,seed=731):
     return roots+[rng.integers(0,256,size=(n,width//2),dtype=np.uint8),
         rng.uniform(.125,2,size=(n,width//16)).astype(ml_dtypes.float8_e4m3fn),
         np.array([.0123456789],np.float64)]
+
+
+def mxfp4_inputs(m,width,k,n,seed=731):
+    """Roots for ``make_mlp(..., source="mxfp4")``: E8M0 byte scales and unit globals."""
+    if k%32 or width%32:
+        raise ValueError("MXFP4 roots require K and the hidden width divisible by 32")
+    rng=np.random.default_rng(seed)
+    return [rng.normal(size=(m,k)).astype(ml_dtypes.bfloat16),
+            rng.integers(0,256,size=(2*width,k//2),dtype=np.uint8),
+            rng.integers(119,124,size=(2*width,k//32),dtype=np.uint8),
+            np.ones(2,np.float64),
+            rng.integers(0,256,size=(n,width//2),dtype=np.uint8),
+            rng.integers(119,124,size=(n,width//32),dtype=np.uint8),
+            np.ones(1,np.float64)]
 
 
 def run(m,h,k,n,output_dir,repeats,*, supplied_roots=None, source_metadata=None,

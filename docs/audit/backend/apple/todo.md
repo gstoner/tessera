@@ -16221,4 +16221,6 @@ Model-quality stage 2 (QWEN3-NATIVE-MLP-PERPLEXITY-20261101) is not applicable t
 Attention-backward NaN fix (ROCM-MATH-OCML-20261101) is not applicable to Apple: it changes the ROCm executable pipeline's math lowering and ROCm native packaging only. No Apple selector, ABI or result changes.
 
 Model-quality stage 2 gfx1151 and MXFP4 arms (QWEN3-NATIVE-MLP-PERPLEXITY-GFX1151-20261102, QWEN3-MXFP4-PERPLEXITY-20261102) are not applicable to Apple: they run the ROCm native quantized MLP on gfx1151 and weight-only MXFP4 host references through the Qwen3-8B perplexity harness. No Apple selector, ABI or result changes.
+
+Native MXFP4 MLP (ROCM-MXFP4-NATIVE-MLP-20261102) is not applicable to Apple: it adds an MXFP4 source to the ROCm native FP4 weight expansion, static gfx1201 images only. No Apple selector, ABI or result changes.
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".

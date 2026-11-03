@@ -14465,3 +14465,18 @@ NVIDIA, Apple and x86 are not applicable.
 Remaining: native MXFP4 MLP execution and its activation recipe; a larger corpus for MXFP4's precise cost; W4A4, quantized attention and `lm_head`, downstream tasks. No promotion.
 Evidence: benchmarks/baselines/qwen3_native_mlp_perplexity_gfx1151_20261102/README.md, perplexity.json, token_nll.npz, run.txt; benchmarks/baselines/qwen3_mxfp4_perplexity_20261102/README.md, perplexity.json, token_nll.npz, run.txt; benchmarks/rocm/record_qwen3_native_mlp_perplexity.py; benchmarks/rocm/qwen3_native_mlp_worker.py; tests/unit/test_qwen3_mlp_quality_harness.py
 <!-- entry-fields:end -->
+
+### 2026-11-02 — Native MXFP4 MLP on gfx1201 matches its weight-only reference
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1034 (stacked on #1033); sync ROCM-MXFP4-NATIVE-MLP-20261102.
+Outcome: the FP4 weight expansion accepts an MXFP4 source, so the public seven-member W4A8 MLP executes MXFP4 weights on gfx1201; its Qwen3-8B perplexity matches the weight-only MXFP4 reference (ratio 0.997, gate passes).
+- **Compiler.** The expansion's numeric policy admits `mxfp4_e2m1_e8m0_k32`: E8M0 bytes [N, K/32], each decoded to 2^(e−127) × projection global, rounded once to f32 and written to both K16 groups, so every member downstream is the accepted NVFP4 program unchanged. Graph, Schedule (`scale_storage = "e8m0_bits"`), Tile and ROCm Target verifiers check the policy, the byte scale type and K32; the boundary refuses code 255. Static gfx1201 images only: runtime-K/N and bounded admission refuse an MXFP4 source. The op keeps its `nvfp4_expand` name (naming debt).
+- **Rule first.** `d7ad606b2` recorded the rule in the plan before the run: Δ(native_mxfp4) ≤ 1.5 × Δ(mxfp4_direct), Δ(mxfp4_direct) > 0, every output finite, certificates on every layer; Δ/Δ(shipped) reported only.
+- **gfx1201 (Tajasarus).** Perplexity 12.932 native vs 12.934 weight-only MXFP4, 12.688 shipped, 12.376 BF16. Ratio 0.997, window-bootstrap 95% interval 0.93–1.07; paired native − direct −0.0002 ± 0.0014 mean token NLL; 2,304 chunks finite; 36/36 certificates. Against shipped 1.78 (1.09–3.23). `bf16`, `shipped` and `mxfp4_direct` NLL equal the earlier MXFP4 packet's bitwise. The recorder's aggregate `model_quality_acceptance` is false only because it also ANDs the earlier `mxfp4_direct`-vs-shipped verdict, which is not this rule.
+- **Tests (Tajasarus).** Device: public MXFP4 MLP at three shapes up to 128×128×4096×256 certified, expansion image bitwise equal to the reference over every non-reserved exponent, code 255 refused. Host/packaging 10/10, harness tests pass; lit tessera-ir and `check-tessera-rocm` pass. The unit and device sweeps show the same 12 + 12 failures on main (ordering; a missing `TESSERA_ROCM_NATIVE_MOVEMENT_LIB`), none new.
+
+NVIDIA: follow-up required — sm_120 has no `nvfp4_expand` lowering, so an sm_120 port of the MLP would carry both sources, proven on Super-Bear. Apple and x86 are not applicable.
+Remaining: the gfx1151 MXFP4 source; an sm_120 port; bounded and runtime-extent images; renaming `nvfp4_expand` to name both sources; a checkpoint that ships MXFP4 weights; MXFP4's cost against NVFP4 on a larger corpus. No promotion.
+Evidence: benchmarks/baselines/qwen3_native_mxfp4_mlp_perplexity_20261102/README.md, perplexity.json, token_nll.npz, run.txt, tests.txt; python/tessera/compiler/nvfp4_expansion.py; python/tessera/compiler/rocm_nvfp4_expand_native.py; src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Expand.h; tests/unit/test_mxfp4_native_mlp.py; tests/device/rocm/test_native_mxfp4_mlp.py
+<!-- entry-fields:end -->

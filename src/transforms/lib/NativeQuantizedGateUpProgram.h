@@ -1,6 +1,7 @@
 // Compose verified quantizer and NVFP4 store/view regions from original SSA.
 #pragma once
 #include "mlir/IR/OwningOpRef.h"
+#include "Tessera/IR/NVFP4IngestContract.h"
 
 namespace tessera {
 static mlir::OwningOpRef<mlir::ModuleOp> cloneQuantizedValidationRegion(
@@ -308,6 +309,14 @@ static mlir::LogicalResult retypeQuantizedMLPRows(
   return verify(module);
 }
 
+// Every bounded capacity retyping below assumes the NVFP4 [N,K/16] E4M3
+// source plane and a runtime-extent expansion image. An MXFP4 source has
+// neither (ROCM-MXFP4-NATIVE-MLP-20261102), so bounded admission refuses it.
+static bool boundedRefusesMXFP4(mlir::Operation *expand) {
+  return mlir::tessera_contract::isMXFP4ExpandPolicy(
+      expand->getAttrOfType<mlir::DictionaryAttr>("numeric_policy"));
+}
+
 // Capacity retyping of the gate contraction axis. K reaches exactly the
 // activation, the gate quantizer (flattened K16 blocks [G,16]/[G,1] whose G is
 // M*K/16, and its [M,K] codes / [M,K/16] scales), the gate weights' packed
@@ -348,6 +357,7 @@ static mlir::LogicalResult retypeQuantizedMLPContraction(
   };
   Operation *expand = ops[13], *product = ops[14];
   if (expand->getName().getStringRef() != "tessera.nvfp4_expand" ||
+      boundedRefusesMXFP4(expand) ||
       product->getName().getStringRef() != "tessera.scaled_matmul" ||
       expand->getNumOperands() != 3 || expand->getNumResults() != 2 ||
       product->getNumOperands() != 4 ||
@@ -430,6 +440,7 @@ static mlir::LogicalResult retypeQuantizedMLPColumns(
   Operation *expand = ops[35], *product = ops[36];
   auto offsets = expand->getAttrOfType<ArrayAttr>("row_offsets");
   if (expand->getName().getStringRef() != "tessera.nvfp4_expand" ||
+      boundedRefusesMXFP4(expand) ||
       product->getName().getStringRef() != "tessera.scaled_matmul" ||
       expand->getNumOperands() != 3 || expand->getNumResults() != 2 ||
       product->getNumOperands() != 4 || product->getNumResults() != 1 ||
@@ -522,6 +533,7 @@ static mlir::LogicalResult retypeQuantizedMLPHidden(
     auto i = dyn_cast<IntegerAttr>(a); return i && i.getInt() == v;
   };
   if (gateExpand->getName().getStringRef() != "tessera.nvfp4_expand" ||
+      boundedRefusesMXFP4(gateExpand) || boundedRefusesMXFP4(downExpand) ||
       gateProduct->getName().getStringRef() != "tessera.scaled_matmul" ||
       downExpand->getName().getStringRef() != "tessera.nvfp4_expand" ||
       gateExpand->getNumResults() != 2 || downExpand->getNumResults() != 2 ||

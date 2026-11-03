@@ -132,7 +132,7 @@ def test_rocm_tile_is_refused_by_the_nvidia_lowering():
                                         target="rocm_gfx1201")
     tool = find_tessera_opt()
     tile = run_tessera_opt(tool, run_tessera_opt(
-        tool, graph.to_mlir(target="rocm_gfx1201", canonical=True),
+        tool, graph.to_mlir(verify=False, target="rocm_gfx1201", canonical=True),
         "--tessera-graph-to-schedule"), "--tessera-schedule-to-tile")
     assert "tile.nvfp4_expand_kernel" in tile and 'arch = "gfx1201"' in tile
     lowered = subprocess.run([str(_tool("tessera-nvidia-opt")), "--tessera-lower-to-nvidia-sm120"],

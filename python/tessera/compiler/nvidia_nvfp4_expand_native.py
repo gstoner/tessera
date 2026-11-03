@@ -152,7 +152,20 @@ def package_sm120_nvfp4_expansion(graph: str | GraphIRModule):
         if (json.loads(attrs.get("tessera.target", "null")) != "nvidia_sm120"
                 or json.loads(attrs.get("tessera.arch", "null")) != "sm_120"):
             raise ValueError("sm_120 FP4 expansion requires an nvidia_sm120 / sm_120 Graph")
-        source = graph.to_mlir(target="nvidia_sm120", canonical=True)
+        from .rocm_nvfp4_expand_native import supports_nvfp4_expansion
+
+        if not supports_nvfp4_expansion(graph):
+            raise ValueError("sm_120 FP4 expansion requires one isolated semantic Graph operation")
+        # The public capability row stays unsupported so @jit(target="nvidia_sm120")
+        # never reaches an eager oracle; this explicit package is the only
+        # route, and native verification below owns admission. Waive exactly
+        # that one capability diagnostic, keep every other one.
+        diagnostics = [d for d in graph.verify(target="nvidia_sm120").diagnostics
+                       if d.severity == "error" and d.code != "LEGALITY_TARGET_CAPABILITY"]
+        if diagnostics:
+            raise ValueError("sm_120 FP4 expansion Graph is invalid: "
+                             + "; ".join(d.message for d in diagnostics))
+        source = graph.to_mlir(verify=False, target="nvidia_sm120", canonical=True)
     elif isinstance(graph, str):
         source = graph
     else:

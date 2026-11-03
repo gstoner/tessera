@@ -1247,13 +1247,6 @@ def _with_nvfp4_ingest_state(target: TargetCapability) -> TargetCapability:
         "tessera.nvfp4_expand", "unsupported",
         dtypes=("uint8", "nvfp4", "fp8_e4m3", "fp32", "fp64"), ranks=(2,),
         reason="This sibling backend requires its own physical producer and device proof")
-    if target.name == "nvidia_sm120":
-        ops["tessera.nvfp4_expand"] = OpCapability(
-            "tessera.nvfp4_expand", "artifact_only",
-            dtypes=("uint8",), ranks=(2,),
-            reason="SM120 static NVFP4/MXFP4 expansion executes through its explicit native "
-                   "package and launch ABI (SM120-FP4-EXPAND-NATIVE-20261103); no public "
-                   "@jit route, runtime-extent image or quantized-MLP composition")
     ops["tessera.scaled_matmul"]=OpCapability(
         "tessera.scaled_matmul","artifact_only",dtypes=("uint8",),ranks=(2,),
         reason="Scaled Graph dialect is available; this public resident JIT profile requires "

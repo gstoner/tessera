@@ -27,12 +27,12 @@ def test_builder_names_the_sm120_target_pair():
     assert json.loads(graph.module_attrs["tessera.arch"]) == "sm_120"
 
 
-def test_capability_admits_the_artifact_only_on_sm120():
+def test_public_capability_stays_unsupported_on_sm120():
+    # Only the explicit package route admits the Graph; a ready/artifact row
+    # would let @jit(target="nvidia_sm120") fall back to the eager oracle.
     from tessera.compiler.capabilities import supports_op
 
-    sm120 = supports_op("nvidia_sm120", "tessera.nvfp4_expand", dtype="uint8", rank=2)
-    assert sm120.supported and sm120.runtime_status == "artifact_only"
-    assert "SM120-FP4-EXPAND-NATIVE-20261103" in sm120.reason
+    assert not supports_op("nvidia_sm120", "tessera.nvfp4_expand", dtype="uint8", rank=2).supported
 
 
 def test_execution_matrix_row_names_its_device_fixture():
@@ -54,7 +54,7 @@ def compiler():
 
 
 def _tile(compiler, graph, target="nvidia_sm120"):
-    source = graph.to_mlir(target=target, canonical=True)
+    source = graph.to_mlir(verify=False, target=target, canonical=True)
     return run_tessera_opt(compiler, run_tessera_opt(
         compiler, source, "--tessera-graph-to-schedule"), "--tessera-schedule-to-tile")
 
@@ -76,7 +76,7 @@ def test_schedule_to_tile_emits_the_nvvm_kernel_entry(compiler, policy):
 def test_graph_contract_refuses_a_mismatched_target_pair(compiler):
     graph = _graph()
     graph.module_attrs["tessera.arch"] = json.dumps("gfx1201")
-    source = graph.to_mlir(target="nvidia_sm120", canonical=True)
+    source = graph.to_mlir(verify=False, target="nvidia_sm120", canonical=True)
     result = subprocess.run([str(compiler), "--tessera-graph-to-schedule"], input=source,
                             capture_output=True, text=True)
     assert result.returncode != 0

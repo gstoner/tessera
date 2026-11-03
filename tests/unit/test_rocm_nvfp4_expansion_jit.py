@@ -196,6 +196,11 @@ def test_capability_proof_is_named_and_exact_architecture():
               if entry.status == "device_verified_jit"]
     assert len(proved) == 1 and proved[0].target == "rocm_gfx1201"
     assert proved[0].execute_compare_fixture == "tests/unit/test_rocm_nvfp4_expansion_jit.py"
+    # The sm_120 image carries its own ABI-level proof (SM120-FP4-EXPAND-NATIVE-20261103).
+    abi = [entry for entry in manifest_for("nvfp4_expand")
+           if entry.status == "device_verified_abi"]
+    assert [entry.target for entry in abi] == ["nvidia_sm120"]
+    assert abi[0].execute_compare_fixture == "tests/device/nvidia/test_native_nvfp4_expand_sm120.py"
 
 
 @pytest.mark.parametrize("target", ["rocm_gfx1151", "nvidia_sm120", "apple_gpu", "x86"])

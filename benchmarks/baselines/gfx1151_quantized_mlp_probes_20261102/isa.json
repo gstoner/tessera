@@ -1,0 +1,73 @@
+{
+ "sync_key": "GFX1151-QUANTIZED-MLP-PROBES-20261102",
+ "mode": "isa",
+ "architecture": "gfx1151",
+ "device": "gfx1151 (Radeon 8060S, Strix Halo, Princess-Luna, WSL2)",
+ "device_lock": null,
+ "warm_up_owner": false,
+ "force_min_m": null,
+ "members": [
+  "gate quantizer",
+  "gate/up expansion",
+  "gate product",
+  "SiLU",
+  "down quantizer",
+  "down expansion",
+  "down product"
+ ],
+ "route": "authored Graph SSA -> seven native partitions -> Schedule -> Tile -> ROCm Target -> LLVM/HSACO -> one checked multi-output HIP owner",
+ "latency_source": "hip_event_member_range_window",
+ "timing_source": {
+  "member": "hip_event_member_range_window",
+  "program": "hip_event_owner_window"
+ },
+ "unit": "us per invocation; median, min, max and every window",
+ "timing": "HIP-event windows of 200 invocations, 9 rounds, arm order alternating each round. Diagnostic, not a promotion.",
+ "rows": {
+  "rows_256x128x12288x256": {
+   "bounded": {
+    "macro_tile": [
+     16,
+     32
+    ],
+    "entry_symbol": "tessera_rocm_scaled_matmul_59c20050d7c39c34",
+    "hsaco_sha256": "5f812b5819345f6b2bc66e8b791c9eaf7728b4a794b22e4844002e0ccb0682d4",
+    "hsaco": "rows_256x128x12288x256_bounded_gate_product.hsaco"
+   },
+   "static": {
+    "macro_tile": [
+     16,
+     32
+    ],
+    "entry_symbol": "w8a8_blockscale",
+    "hsaco_sha256": "067b2a9f1dfbe20a002e5af3dd9f034786952c8f1d47bce06c19af0cbad94caa",
+    "hsaco": "rows_256x128x12288x256_static_gate_product.hsaco"
+   }
+  },
+  "n_256x128x12288x128": {
+   "bounded": {
+    "macro_tile": [
+     16,
+     32
+    ],
+    "entry_symbol": "tessera_rocm_scaled_matmul_a536b0ee4864860d",
+    "hsaco_sha256": "45f8034a2e5fd3863ccd12a883facb397cc3398c3a0297f7b04b935d8b5c5d53",
+    "hsaco": "n_256x128x12288x128_bounded_gate_product.hsaco"
+   },
+   "static": {
+    "macro_tile": [
+     16,
+     32
+    ],
+    "entry_symbol": "w8a8_blockscale",
+    "hsaco_sha256": "067b2a9f1dfbe20a002e5af3dd9f034786952c8f1d47bce06c19af0cbad94caa",
+    "hsaco": "n_256x128x12288x128_static_gate_product.hsaco"
+   }
+  }
+ },
+ "commit": "a4cc3b8b78128c2e33564724cd66f53c112986cd",
+ "worktree_dirty": false,
+ "recorder_sha256": "66d961603131d85dd7bfe2dc39b24ca56fe0755332a61214f9f37d23576f7c4f",
+ "compiler_sha256": "36daa60d6425f04f7ee567668d4d8541ad80c8921700bfbdce87a1eaa4d94231",
+ "provider_sha256": "c5f71f7684f6563c790c53376de13139ae6b5ebe61492563d3b7961fd5dfd3bf"
+}

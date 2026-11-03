@@ -6,6 +6,7 @@ LDS images on 97..128 and 129..256. One retained owner serves every M; each
 output is bitwise equal to the static program at that M, and the HIP owner
 reports the image it selected.
 """
+import os
 import subprocess
 
 import numpy as np
@@ -16,7 +17,10 @@ from benchmarks.rocm.benchmark_public_quantized_mlp import inputs, make_mlp
 from tests.device.rocm.test_native_quantized_mlp_bounded_rows import provider
 from tests.device.rocm.test_public_quantized_mlp_k_bound_device import static_at
 
-pytestmark = [pytest.mark.hardware_rocm, pytest.mark.compiler_rocm, pytest.mark.compiler_route]
+pytestmark = [pytest.mark.hardware_rocm, pytest.mark.compiler_rocm, pytest.mark.compiler_route,
+              # Per-M LDS images exist only on gfx1201; another ROCm host refuses the pinned target.
+              pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+                                 reason="owning gfx1201 required")]
 
 H, K, N = 2048, 4096, 256
 # Active M -> the gate image the owner must select (0 = base register panel).

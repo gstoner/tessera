@@ -14495,3 +14495,19 @@ NVIDIA: the follow-up recorded for ROCM-MXFP4-NATIVE-MLP-20261102 is unchanged (
 Remaining: an sm_120 port; bounded and runtime-extent images; renaming `nvfp4_expand` to name both sources; a checkpoint that ships MXFP4 weights; MXFP4's cost against NVFP4 on a larger corpus. No promotion.
 Evidence: benchmarks/baselines/qwen3_native_mxfp4_mlp_perplexity_gfx1151_20261102/README.md, perplexity.json, token_nll.npz, run.txt, tests.txt; python/tessera/compiler/rocm_nvfp4_ingest_native.py; tests/device/rocm/test_native_mxfp4_mlp.py; tests/unit/test_mxfp4_native_mlp.py; benchmarks/rocm/qwen3_native_mlp_worker.py
 <!-- entry-fields:end -->
+
+### 2026-11-02 — gfx1151 quantized MLP probes: capacity panel, same-panel cost, M = 1 rows
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: #1036; sync GFX1151-QUANTIZED-MLP-PROBES-20261102.
+Outcome: the three open findings of the 2026-11-01 gfx1151 timing packets are probed on gfx1151. A capacity-chosen `[32, 32]` bounded panel is not a fix. The same-panel M = 256 cost coincides with a different register allocation and is not yet explained. The M = 1 rows gap is real and lies entirely in the gate product. Diagnostic only, gfx1151 only, never compared with gfx1201.
+- **Capacity panel.** A packet-local monkeypatch chose the H-bounded owner's register panels at capacity (`[32, 32]`). That recovers 256 × 512, the one shape where static takes `[32, 32]` (gate product 1.126 → 1.003 of static). It loses wherever static takes `[16, 32]`: 1.107 at M = 16 and 1.29–1.36 at 256 × 256 and 256 × 128. The register rule's `[32, 32]` threshold depends on the active extent, so one bounded image cannot match static across the range. The measured direction is per-extent register-panel variants, which gfx1151 does not build today (`ProductVariant`s are LDS-only). Not built here.
+- **Same-panel cost.** At 256 × 128 × 12288 × 256 the bounded and static gate products share `[16, 32]`, the kernel signature, the branch layout and the instruction mix. The bounded image allocates 181 VGPRs against 255 and has 19 full `vmcnt(0)` drains against 11, with no spills, scratch or LDS in either. These are static counts from the disassembly. A link between them and the ≈ 93 µs cost is not established.
+- **M = 1 rows.** For M ≤ 8, bounded and static windows are disjoint (gate product 818 vs 737 µs), and the gate product carries ≥ 97% of the program gap. The gap is zero for M 16–64 and +93 µs at M 128 and 256.
+- **Device re-sweep on current main.** 56 passed, 6 failed. All six failures are in `test_quantized_mlp_per_m_panels_device.py`. It compiles for a pinned `rocm_gfx1201` (gfx1201's LDS per-M images) with no host gate, and is refused on gfx1151 by design. That is a test-gating gap, not a gfx1151 result. The file now skips unless `TESSERA_GFX1201_DEVICE_PROOF=1`, the existing gfx1201 convention; on Princess-Luna all six skip.
+- **Host and lock.** Ran unsandboxed on Princess-Luna at `a4cc3b8b7` on a clean tree, under `flock /tmp/tessera-gfx1151-device.lock`, which each timed JSON records as held. Every pair compared bitwise before timing, with a warm-up owner first and alternating arm order. Counters are unverified (no `/dev/kfd`).
+
+NVIDIA, Apple and x86 are not applicable.
+Remaining: per-extent gfx1151 register-panel variants; isolating the bounded image's register/drain difference. No promotion.
+Evidence: benchmarks/baselines/gfx1151_quantized_mlp_probes_20261102/README.md; benchmarks/baselines/gfx1151_quantized_mlp_probes_20261102/probe.py; benchmarks/baselines/gfx1151_quantized_mlp_probes_20261102/device-tests.txt; tests/device/rocm/test_quantized_mlp_per_m_panels_device.py.
+<!-- entry-fields:end -->

@@ -1,0 +1,212 @@
+........................................................FFFFFF           [100%]
+=================================== FAILURES ===================================
+_______________ test_one_owner_switches_gate_images_by_active_m ________________
+
+    def test_one_owner_switches_gate_images_by_active_m():
+        lib = provider()
+        fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(256, H, K, N))
+        native = fn.compile_native_quantized_program(*inputs(256, H, K, N), m_bound=256).native
+>       owner = native.prepare(inputs(256, H, K, N), runtime_library=lib)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/device/rocm/test_quantized_mlp_per_m_panels_device.py:30: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_quantized_mlp_program.py:338: in prepare
+    return PreparedQuantizedMLPProgram(self,inputs,runtime_library=runtime_library)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tessera.compiler.rocm_quantized_mlp_program.PreparedQuantizedMLPProgram object at 0x74ba4a04bd90>
+package = NativeQuantizedMLPProgram(program_json='{"active_m": 256, "buffers": [{"bytes": 2097152, "first_write": -1, "id": 0, "...alse, runtime_n=False, variants=()), binding_digest='8e7d670e681ac5d334f2ca5fb161d5f075490ce35aa8d200218675f10770ff2f')
+inputs = [array([[-0.0688477, 1.28906, -1.375, ..., -0.910156, -0.9375, 1.35938],
+       [0.9375, 0.917969, 0.259766, ..., 0.69...875],
+       [0.171875, 0.5625, 0.5625, ..., 1.75, 1.75, 0.4375]],
+      shape=(256, 128), dtype='float8_e4m3fn'), ...]
+runtime_library = '/home/gstoner/programming/tessera/build/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so'
+
+    def __init__(self,package,inputs,*,runtime_library):
+        from tessera import runtime as rt
+        if rt._rocm_live_arch()!=package.arch:
+>           raise RuntimeError(f'native quantized MLP requires owning {package.arch}')
+E           RuntimeError: native quantized MLP requires owning gfx1201
+
+python/tessera/compiler/rocm_quantized_mlp_program.py:481: RuntimeError
+______________ test_public_calls_bind_one_owner_across_the_ranges ______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x74ba21c36040>
+
+    def test_public_calls_bind_one_owner_across_the_ranges(monkeypatch):
+        from tessera.compiler.rocm_quantized_mlp_program import NativeQuantizedMLPProgram
+        lib = provider()
+        fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(256, H, K, N))
+        program = fn.compile_native_quantized_program(*inputs(256, H, K, N), m_bound=256)
+        prepares = []
+        original = NativeQuantizedMLPProgram.prepare
+    
+        def counted(self, values, *, runtime_library):
+            if self is program.native:
+                prepares.append(values[0].shape)
+            return original(self, values, runtime_library=runtime_library)
+        monkeypatch.setattr(NativeQuantizedMLPProgram, "prepare", counted)
+    
+        def forbidden(*a, **kw):
+            pytest.fail("compiler or tracer ran during bounded public replay")
+        roots = inputs(256, H, K, N, seed=1900)
+        for m in (256, 16, 100, 200):
+            x = inputs(m, H, K, N, seed=1900 + m)[0]
+            with monkeypatch.context() as patch:
+                patch.setattr(subprocess, "run", forbidden)
+                patch.setattr(fn, "_trace_frontend_capture", forbidden)
+>               actual = fn(x, *roots[1:])
+                         ^^^^^^^^^^^^^^^^^
+
+tests/device/rocm/test_quantized_mlp_per_m_panels_device.py:65: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1135: in __call__
+    bounded_quantized=self._try_rocm_quantized_product_call(args,kwargs)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:2707: in _try_rocm_quantized_product_call
+    output,receipts=self._rocm_quantized_product_bounded_owner.execute(ordered)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/rocm_quantized_product_frontend.py:159: in execute
+    values,lib=self.program._bind(args)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = TracedQuantizedProduct(native=NativeQuantizedMLPProgram(program_json='{"active_m": 256, "buffers": [{"bytes": 2097152,...2f'), argument_names=('x', 'packed', 'weight_scales', 'globals_', 'down_packed', 'down_weight_scales', 'down_globals'))
+args = (array([[-0.0761719, 0.0761719, -0.00854492, ..., -0.22168, 1.32812,
+        0.0576172],
+       [0.648438, -0.328125, ..., 0.875],
+       [1.375, 1.125, 1.375, ..., 1.875, 0.5625, 0.75]],
+      shape=(256, 128), dtype='float8_e4m3fn'), ...)
+
+    def _bind(self,args):
+        from tessera import runtime as rt
+        if rt._rocm_live_arch()!=self.native.arch:
+>           raise RuntimeError(f"native quantized product requires owning {self.native.arch}")
+E           RuntimeError: native quantized product requires owning gfx1201
+
+python/tessera/compiler/rocm_quantized_product_frontend.py:75: RuntimeError
+______ test_native_variant_admission_refuses_tampered_variants[grid_tile] ______
+
+tamper = 'grid_tile'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x74ba21d22660>
+
+    @pytest.mark.parametrize("tamper", ["grid_tile", "overlap", "unframed_step"])
+    def test_native_variant_admission_refuses_tampered_variants(tamper, monkeypatch):
+        from tessera.compiler import rocm_quantized_mlp_program as module
+        lib = provider()
+        fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(256, H, K, N))
+        native = fn.compile_native_quantized_program(*inputs(256, H, K, N), m_bound=256).native
+        original = module.PreparedQuantizedMLPProgram._variant_array
+    
+        def array(self, entries):
+            rows = original(self, entries)
+            if tamper == "grid_tile":
+                rows[0].entries[0].grid_tile = 16          # no longer reproduces its geometry
+            if tamper == "overlap":
+                rows[1].min_rows = rows[0].max_rows        # ranges must be disjoint
+            if tamper == "unframed_step":
+                rows[0].step = 5                           # entries name another step
+            return rows
+        monkeypatch.setattr(module.PreparedQuantizedMLPProgram, "_variant_array", array)
+>       with pytest.raises(RuntimeError, match="status 1"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'status 1'
+E         Actual message: 'native quantized MLP requires owning gfx1201'
+
+tests/device/rocm/test_quantized_mlp_per_m_panels_device.py:90: AssertionError
+_______ test_native_variant_admission_refuses_tampered_variants[overlap] _______
+
+tamper = 'overlap'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x74ba49f6e580>
+
+    @pytest.mark.parametrize("tamper", ["grid_tile", "overlap", "unframed_step"])
+    def test_native_variant_admission_refuses_tampered_variants(tamper, monkeypatch):
+        from tessera.compiler import rocm_quantized_mlp_program as module
+        lib = provider()
+        fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(256, H, K, N))
+        native = fn.compile_native_quantized_program(*inputs(256, H, K, N), m_bound=256).native
+        original = module.PreparedQuantizedMLPProgram._variant_array
+    
+        def array(self, entries):
+            rows = original(self, entries)
+            if tamper == "grid_tile":
+                rows[0].entries[0].grid_tile = 16          # no longer reproduces its geometry
+            if tamper == "overlap":
+                rows[1].min_rows = rows[0].max_rows        # ranges must be disjoint
+            if tamper == "unframed_step":
+                rows[0].step = 5                           # entries name another step
+            return rows
+        monkeypatch.setattr(module.PreparedQuantizedMLPProgram, "_variant_array", array)
+>       with pytest.raises(RuntimeError, match="status 1"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'status 1'
+E         Actual message: 'native quantized MLP requires owning gfx1201'
+
+tests/device/rocm/test_quantized_mlp_per_m_panels_device.py:90: AssertionError
+____ test_native_variant_admission_refuses_tampered_variants[unframed_step] ____
+
+tamper = 'unframed_step'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x74ba2223f9a0>
+
+    @pytest.mark.parametrize("tamper", ["grid_tile", "overlap", "unframed_step"])
+    def test_native_variant_admission_refuses_tampered_variants(tamper, monkeypatch):
+        from tessera.compiler import rocm_quantized_mlp_program as module
+        lib = provider()
+        fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(256, H, K, N))
+        native = fn.compile_native_quantized_program(*inputs(256, H, K, N), m_bound=256).native
+        original = module.PreparedQuantizedMLPProgram._variant_array
+    
+        def array(self, entries):
+            rows = original(self, entries)
+            if tamper == "grid_tile":
+                rows[0].entries[0].grid_tile = 16          # no longer reproduces its geometry
+            if tamper == "overlap":
+                rows[1].min_rows = rows[0].max_rows        # ranges must be disjoint
+            if tamper == "unframed_step":
+                rows[0].step = 5                           # entries name another step
+            return rows
+        monkeypatch.setattr(module.PreparedQuantizedMLPProgram, "_variant_array", array)
+>       with pytest.raises(RuntimeError, match="status 1"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'status 1'
+E         Actual message: 'native quantized MLP requires owning gfx1201'
+
+tests/device/rocm/test_quantized_mlp_per_m_panels_device.py:90: AssertionError
+_____________ test_h_bounded_owner_runs_masked_column_lds_variants _____________
+
+    def test_h_bounded_owner_runs_masked_column_lds_variants():
+        """A runtime-N gate product's LDS variants run an N that ends mid-tile."""
+        lib = provider()
+        fn = ts.jit(target="rocm_gfx1201", native_required=True)(make_mlp(16, 512, K, N))
+        native = fn.compile_native_quantized_program(*inputs(16, 512, K, N), m_bound=256, h_bound=2048).native
+>       owner = native.prepare(inputs(16, 512, K, N), runtime_library=lib)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/device/rocm/test_quantized_mlp_per_m_panels_device.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_quantized_mlp_program.py:338: in prepare
+    return PreparedQuantizedMLPProgram(self,inputs,runtime_library=runtime_library)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <tessera.compiler.rocm_quantized_mlp_program.PreparedQuantizedMLPProgram object at 0x74ba3815fc50>
+package = NativeQuantizedMLPProgram(program_json='{"active_h": 512, "active_m": 16, "buffers": [{"bytes": 2097152, "first_write"...True, runtime_n=False, variants=()), binding_digest='baeac98d7f6e952da5df634aae9fcd8afb988dd399fe732f34b396e32d819af6')
+inputs = [array([[-0.0688477, 1.28906, -1.375, ..., -0.910156, -0.9375, 1.35938],
+       [0.9375, 0.917969, 0.259766, ..., 0.69...75, 1.75, 1.125],
+       [1.5, 1.5, 0.625, ..., 0.140625, 1.5, 1]],
+      shape=(256, 32), dtype='float8_e4m3fn'), ...]
+runtime_library = '/home/gstoner/programming/tessera/build/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so'
+
+    def __init__(self,package,inputs,*,runtime_library):
+        from tessera import runtime as rt
+        if rt._rocm_live_arch()!=package.arch:
+>           raise RuntimeError(f'native quantized MLP requires owning {package.arch}')
+E           RuntimeError: native quantized MLP requires owning gfx1201
+
+python/tessera/compiler/rocm_quantized_mlp_program.py:481: RuntimeError
+6 failed, 56 passed in 250.00s (0:04:10)

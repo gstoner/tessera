@@ -14544,7 +14544,7 @@ Outcome: `apple_native.package_gelu` no longer reads the Python Graph object. St
 - **Assertions LLVM (Tajasarus, LLVM/MLIR 23.1.1 assertions ON, probe aborts as required).** A separate worktree with its own assertions tree runs lit tessera-ir at 497 passed / 72 unsupported / 0 failed, including the three GELU fixtures. The migration test runs 24 passed / 28 skipped there; the skips are the oracle halves, which need the Apple-backend pass that host does not build.
 - **Route map.** `primitive_route_map.compiled_route_families` counts a generic route only on a target the map can classify. Apple GPU is unclassifiable, so `gelu` gets no membership declaration that nothing would consume (#29), and `primitive_route_map.md` is unchanged from main.
 
-NVIDIA: not applicable (ReLU contract byte-identical; no sm_120 device run was made). ROCm and x86: not applicable.
+NVIDIA: not applicable (ReLU contract byte-identical). sm_120 device check on The-Super-Bear: 432 passed / 34 failed / 0 skipped; every ReLU and activation test passed, and all 34 failures also fail on main `b498bc6f0` the same day. ROCm and x86: not applicable.
 Remaining: dynamic GELU (still Graph → `--tessera-gelu-to-apple_gpu`); transpose, batched GEMM, the dynamic families, SVD and the value ABI. No promotion.
 Evidence: tests/unit/test_apple_gelu_migration.py; tests/_support/apple_gelu_baseline.py; tests/tessera-ir/phase8/apple_gelu_activation_schedule_tile.mlir; tests/tessera-ir/phase8/apple_gelu_activation_invalid.mlir; tests/tessera-ir/phase8/apple_gelu_activation_verify_invalid.mlir; src/compiler/programming_model/lib/PMPasses.cpp; docs/audit/generated/bootstrap_prune_gap.csv
 <!-- entry-fields:end -->

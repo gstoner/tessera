@@ -219,6 +219,9 @@ _NVIDIA_HARDWARE_VERIFIED_OPS = frozenset({
     "dropout",
     "fft", "ifft", "rfft", "irfft", "dct", "stft", "istft",
     "spectral_conv", "spectral_filter",
+    # SM120-FP4-EXPAND-NATIVE-20261103: compiler-owned PTX expansion, bitwise
+    # on the RTX 5070 (tests/device/nvidia/test_native_nvfp4_expand_sm120.py).
+    "nvfp4_expand",
 })
 
 

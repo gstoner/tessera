@@ -16226,3 +16226,5 @@ Native MXFP4 MLP (ROCM-MXFP4-NATIVE-MLP-20261102) is not applicable to Apple: it
 
 Native MXFP4 MLP on gfx1151 (ROCM-MXFP4-NATIVE-MLP-GFX1151-20261102) is not applicable to Apple: it runs the ROCm MXFP4 expansion on gfx1151 and makes the shared ROCm FP4 storage launcher check the image's own architecture. No Apple selector, ABI or result changes.
 Evidence: tests/unit/test_gfx1151_quantized_scalar_members.py; tests/unit/test_gfx1151_quantized_program_packaging.py; contract docs/spec/NATIVE_FP8_BLOCK_QUANT_FOUNDATION.md §"gfx1151".
+
+sm_120 FP4 weight expansion (SM120-FP4-EXPAND-NATIVE-20261103) is not applicable to Apple: it adds an `nvidia_sm120` lowering of `nvfp4_expand` (Tile contract, `LowerTileToNVIDIA`, PTX launcher). No Apple selector, ABI or result changes.

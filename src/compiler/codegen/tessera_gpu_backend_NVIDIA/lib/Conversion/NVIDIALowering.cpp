@@ -2,6 +2,7 @@
 #include "Tessera/IR/BoundedQueryNormContract.h"
 #include "Tessera/IR/TileBufferViewContract.h"
 #include "Tessera/IR/RowRegionContract.h"
+#include "Tessera/IR/NVFP4IngestContract.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "tessera/gpu/BackendRegistration.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
@@ -3844,6 +3845,146 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   return success();
 }
 
+// Source-preserving FP4 expansion (SM120-FP4-EXPAND-NATIVE-20261103). The
+// arithmetic mirrors the ROCm emitter (Tessera_ROCM_Backend NativeNVFP4Expand.h,
+// static image): one thread owns one K16 group of one row, writes its sixteen
+// exact E4M3 codes and the one f32 scale (source scale x projection global in
+// f64, rounded once). An MXFP4 source reads its E8M0 byte at index/2: the K16
+// group count is even. The checked launch boundary refuses non-finite or
+// negative E4M3 scales, E8M0 code 255 and unrepresentable products.
+static LogicalResult materializeSm120NVFP4ExpandKernel(
+    tessera::tile::NVFP4ExpandKernelOp kernel, OpBuilder &builder) {
+  Operation *op = kernel.getOperation();
+  DictionaryAttr contract = kernel.getContract();
+  auto arch = contract.getAs<StringAttr>("arch");
+  auto target = contract.getAs<StringAttr>("target");
+  if (!arch || arch.getValue() != "sm_120" || !target ||
+      target.getValue() != "nvidia_sm120")
+    return op->emitError("NVIDIA_NVFP4_EXPAND_ARCH_MISMATCH: expansion contract "
+                         "names architecture '")
+           << (arch ? arch.getValue() : StringRef("<none>"))
+           << "', not the sm_120 this lowering emits";
+  if (failed(kernel.verify())) return failure();
+  const bool mx = mlir::tessera_contract::isMXFP4ExpandPolicy(
+      contract.getAs<DictionaryAttr>("numeric_policy"));
+  const int64_t n = contract.getAs<IntegerAttr>("n").getInt();
+  const int64_t groups = contract.getAs<IntegerAttr>("k").getInt() / 16;
+  auto offsets = contract.getAs<ArrayAttr>("row_offsets");
+  ValueRange in = kernel.getInputs();
+  Location loc = op->getLoc();
+  Type i8 = builder.getI8Type(), i32 = builder.getI32Type();
+  Type i64 = builder.getI64Type(), f32 = builder.getF32Type();
+  Type f64 = builder.getF64Type();
+  auto c32 = [&](int64_t v) -> Value {
+    return arith::ConstantIntOp::create(builder, loc, v, 32);
+  };
+  auto choose = [&](Value p, Value a, Value b) -> Value {
+    return arith::SelectOp::create(builder, loc, p, a, b);
+  };
+  auto eq32 = [&](Value a, Value b) -> Value {
+    return arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::eq, a, b);
+  };
+  auto address = [&](unsigned buffer, Type element, Value index) -> Value {
+    return LLVM::GEPOp::create(builder, loc, in[buffer].getType(), element,
+                               in[buffer], ValueRange{index});
+  };
+  Value block = arith::ExtUIOp::create(
+      builder, loc, i64, NVVM::BlockIdXOp::create(builder, loc, i32));
+  Value thread = arith::ExtUIOp::create(
+      builder, loc, i64, NVVM::ThreadIdXOp::create(builder, loc, i32));
+  Value index = addI64(builder, loc,
+      mulI64(builder, loc, block, i64Constant(builder, loc, 256)), thread);
+  auto guarded = scf::IfOp::create(
+      builder, loc, lessI64(builder, loc, index, i64Constant(builder, loc, n * groups)),
+      false);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(guarded.thenBlock());
+    Value row = arith::DivUIOp::create(builder, loc, index,
+                                       i64Constant(builder, loc, groups));
+    Value group = arith::RemUIOp::create(builder, loc, index,
+                                         i64Constant(builder, loc, groups));
+    Value projection = i64Constant(builder, loc, 0);
+    for (unsigned p = 1; p + 1 < offsets.size(); ++p) {
+      Value after = arith::CmpIOp::create(
+          builder, loc, arith::CmpIPredicate::uge, row,
+          i64Constant(builder, loc, cast<IntegerAttr>(offsets[p]).getInt()));
+      projection = choose(after, i64Constant(builder, loc, p), projection);
+    }
+    Value global = LLVM::LoadOp::create(builder, loc, f64,
+                                        address(2, f64, projection), 8);
+    Value scaleSource = mx ? Value(arith::DivUIOp::create(
+                                 builder, loc, index, i64Constant(builder, loc, 2)))
+                           : index;
+    Value bits = arith::ExtUIOp::create(builder, loc, i32,
+        LLVM::LoadOp::create(builder, loc, i8, address(1, i8, scaleSource), 1));
+    Value scale;
+    if (mx) {
+      // E8M0 code e is 2^(e-127): the f64 with biased exponent e + 1023 - 127.
+      Value wide = arith::ExtUIOp::create(builder, loc, i64, bits);
+      scale = arith::BitcastOp::create(builder, loc, f64,
+          arith::ShLIOp::create(builder, loc,
+              addI64(builder, loc, wide, i64Constant(builder, loc, 896)),
+              i64Constant(builder, loc, 52)));
+    } else {
+      Value exponent = arith::AndIOp::create(builder, loc,
+          arith::ShRUIOp::create(builder, loc, bits, c32(3)), c32(15));
+      Value fraction = arith::AndIOp::create(builder, loc, bits, c32(7));
+      Value pow = arith::BitcastOp::create(builder, loc, f64,
+          arith::ShLIOp::create(builder, loc,
+              addI64(builder, loc, arith::ExtUIOp::create(builder, loc, i64, exponent),
+                     i64Constant(builder, loc, 1013)),
+              i64Constant(builder, loc, 52)));
+      Value normal = arith::MulFOp::create(builder, loc,
+          arith::UIToFPOp::create(builder, loc, f64,
+              arith::AddIOp::create(builder, loc, fraction, c32(8))), pow);
+      Value subnormal = arith::MulFOp::create(builder, loc,
+          arith::UIToFPOp::create(builder, loc, f64, fraction),
+          arith::ConstantFloatOp::create(builder, loc, cast<FloatType>(f64),
+                                         APFloat(0x1p-9)));
+      Value magnitude = choose(eq32(exponent, c32(0)), subnormal, normal);
+      Value negative = arith::CmpIOp::create(builder, loc,
+          arith::CmpIPredicate::ne,
+          arith::AndIOp::create(builder, loc, bits, c32(128)), c32(0));
+      scale = choose(negative, arith::NegFOp::create(builder, loc, magnitude),
+                     magnitude);
+    }
+    Value rounded = arith::TruncFOp::create(builder, loc, f32,
+        arith::MulFOp::create(builder, loc, scale, global));
+    Value scaleIndex = addI64(builder, loc,
+        mulI64(builder, loc, group, i64Constant(builder, loc, n)), row);
+    LLVM::StoreOp::create(builder, loc, rounded, address(4, f32, scaleIndex), 4);
+    Value packedBase = mulI64(builder, loc, index, i64Constant(builder, loc, 8));
+    Value valueBase = mulI64(builder, loc, index, i64Constant(builder, loc, 16));
+    for (int j = 0; j < 8; ++j) {
+      Value packed = arith::ExtUIOp::create(builder, loc, i32,
+          LLVM::LoadOp::create(builder, loc, i8,
+              address(0, i8, addI64(builder, loc, packedBase,
+                                    i64Constant(builder, loc, j))), 1));
+      for (int half = 0; half < 2; ++half) {
+        // Exact E2M1 value as E4M3 bits, low nibble first, both zeros kept.
+        Value code = arith::AndIOp::create(builder, loc,
+            arith::ShRUIOp::create(builder, loc, packed, c32(4 * half)), c32(15));
+        Value mag = arith::AndIOp::create(builder, loc, code, c32(7));
+        Value sign = arith::ShLIOp::create(builder, loc,
+            arith::AndIOp::create(builder, loc, code, c32(8)), c32(4));
+        Value expanded = arith::ShLIOp::create(builder, loc,
+            arith::AddIOp::create(builder, loc, mag, c32(12)), c32(2));
+        expanded = choose(eq32(mag, c32(1)), c32(48), expanded);
+        expanded = choose(eq32(mag, c32(0)), c32(0), expanded);
+        Value out = arith::TruncIOp::create(builder, loc, i8,
+            arith::OrIOp::create(builder, loc, expanded, sign));
+        LLVM::StoreOp::create(builder, loc, out,
+            address(3, i8, addI64(builder, loc, valueBase,
+                                  i64Constant(builder, loc, j * 2 + half))), 1);
+      }
+    }
+  }
+  builder.setInsertionPointAfter(guarded);
+  op->erase();
+  return success();
+}
+
 static LogicalResult materializeSm120PagedKVReadKernel(
     tessera::tile::PagedKVReadKernelOp kernel, OpBuilder &builder) {
   Operation *op = kernel.getOperation();
@@ -6059,6 +6200,7 @@ struct LowerTileToNVIDIAPass
           name == "tile.attention_backward_kernel" ||
           name == "tile.training_kernel" ||
           name == "tile.paged_kv_read_kernel" ||
+          name == "tile.nvfp4_expand_kernel" ||
           name == "tile.paged_attention_kernel" ||
           name == "tile.replay_ssm_decode_kernel" ||
           name == "tile.replay_ssm_flush_kernel" ||
@@ -6476,6 +6618,21 @@ struct LowerTileToNVIDIAPass
         continue;
       }
 
+      if (isTileOp(op, "tile.nvfp4_expand_kernel")) {
+        if (smVersion != kConsumerBlackwellSM) {
+          op->emitError("NVIDIA_NVFP4_EXPAND_ARCH_MISMATCH: FP4 expansion "
+                        "lowers on sm_120 only, not sm_")
+              << smVersion;
+          signalPassFailure();
+          return;
+        }
+        if (failed(materializeSm120NVFP4ExpandKernel(
+                cast<tessera::tile::NVFP4ExpandKernelOp>(op), builder))) {
+          signalPassFailure();
+          return;
+        }
+        continue;
+      }
       if (isTileOp(op, "tile.paged_kv_read_kernel")) {
         if (smVersion < kConsumerBlackwellSM ||
             failed(materializeSm120PagedKVReadKernel(

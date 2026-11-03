@@ -2460,6 +2460,19 @@ _ROCM_COMPILED: dict[str, dict[str, Any]] = {
 # listed as ``fp32``; fp8 e4m3/e5m2 are first-class storage dtypes here.
 # ─────────────────────────────────────────────────────────────────────────────
 _NVIDIA_HARDWARE_VERIFIED: dict[str, dict[str, Any]] = {
+    # SM120-FP4-EXPAND-NATIVE-20261103: the sm_120 image's own proof on the
+    # RTX 5070; the gfx1201 row does not transfer to it, nor it back.
+    "nvfp4_expand": {
+        "runtime_symbol": "tessera_nvfp4_expand_<schedule hash prefix> (libtessera_nvidia_ptx_launch.so)",
+        "dtypes": ("nvfp4", "fp8_e4m3", "fp32", "fp64"),
+        "feature_flags": ("source_preserving_expansion", "compiler_owned_ptx", "mxfp4_source"),
+        "shape_envelope": "static positive N/K16 (K32 for MXFP4); ordered projection boundaries",
+        "notes": (
+            "Native Graph/Schedule/Tile, LowerTileToNVIDIA, llc/ptxas PTX; NVFP4 and MXFP4 sources "
+            "bitwise against reference_nvfp4_expand on the RTX 5070. Explicit package/descriptor "
+            "launch only: no public @jit route, runtime-extent image or quantized-MLP composition."
+        ),
+    },
     "matmul": {
         "runtime_symbol": "tessera_nvidia_mma_gemm_bf16",
         "dtypes": ("bf16", "fp16", "fp32", "fp8_e4m3", "fp8_e5m2"),
@@ -2844,6 +2857,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
 
     ("mxfp4_folded_storage", "rocm_gfx1201"): "tests/unit/test_rocm_mxfp4_storage_native.py",
     ("nvfp4_expand", "rocm_gfx1201"): "tests/unit/test_rocm_nvfp4_expansion_jit.py",
+    ("nvfp4_expand", "nvidia_sm120"): "tests/device/nvidia/test_native_nvfp4_expand_sm120.py",
     ("nvfp4_requantize", "rocm_gfx1201"): "tests/unit/test_rocm_nvfp4_ingest_package.py",
     # The Philox Langevin MSL kernel vs the numpy Philox reference on Metal
     # (hardware_apple_gpu; surfaced when the op entered the catalog, ODS

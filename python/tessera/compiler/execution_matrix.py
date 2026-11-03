@@ -1161,6 +1161,7 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "native_tensor_program": "Compiler-owned static SM120 tensor controller and native members through one checked retained CUDA frame",
     "nvidia_lhs_program": "Checked native LHS normalization/softmax/ReLU producer members and complete matmul epilogue on one owned CUDA stream",
     "nvidia_rhs_program": "Checked native RMSNorm/LayerNorm RHS and typed matmul packages on one owned CUDA stream",
+    "nvidia_nvfp4_expand": "Checked native sm_120 FP4 (NVFP4/MXFP4) weight expansion PTX image on private CUDA buffers",
     "nvidia_mma":           "NVIDIA GPU (consumer Blackwell sm_120) warp-level "
                             "mma.sync GEMM via the shipped libtessera_nvidia_gemm.so "
                             "tessera_nvidia_mma_gemm_{f16,bf16,tf32} C ABI symbol "
@@ -4026,6 +4027,18 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         numerical_fixture="tests/device/nvidia/test_layernorm_rhs_jit.py",
         evidence_target="nvidia_sm120", proof_build=".build-sm120-w1-1",
         device_proof="device_verified_jit"),
+    ("nvidia_sm120", "canonical_nvidia_nvfp4_expand"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="canonical_nvidia_nvfp4_expand",
+        execution_kind="native_gpu", executable=True, executor_id="nvidia_nvfp4_expand",
+        runtime_status="success", execution_mode="cuda_runtime",
+        reason="Static FP4 weight expansion (NVFP4 E4M3-K16 or MXFP4 E8M0-K32 source -> exact E4M3 "
+               "codes + f32 K16 scale plane) through native Graph/Schedule/Tile, LowerTileToNVIDIA, "
+               "llc/ptxas PTX and checked private CUDA buffers; bitwise against "
+               "reference_nvfp4_expand (SM120-FP4-EXPAND-NATIVE-20261103). Expansion only: no "
+               "seven-member MLP, runtime-extent image or NVFP4 matmul is inferred.",
+        numerical_fixture="tests/device/nvidia/test_native_nvfp4_expand_sm120.py",
+        evidence_target="nvidia_sm120", proof_build="cuda13.4+sm120+RTX5070",
+        device_proof="device_verified_abi"),
     ("nvidia_sm120", "nvidia_mma"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_mma",
         execution_kind="native_gpu", executable=True,

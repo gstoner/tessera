@@ -223,3 +223,53 @@ def build_sm120_nvfp4_expansion_graph(n, k, row_offsets, *, numeric_policy):
     expansion_source(numeric_policy)
     return build_nvfp4_expansion_graph(n, k, row_offsets, numeric_policy=numeric_policy,
                                        target="nvidia_sm120")
+
+
+COMPILER_PATH = "canonical_nvidia_nvfp4_expand"
+
+
+def expansion_runtime_artifact(package):
+    """The launchable artifact of a checked package (execution-matrix row ``COMPILER_PATH``)."""
+    from tessera.runtime import RuntimeArtifact
+
+    package.validate()
+    return RuntimeArtifact(
+        graph_ir=package.graph_ir, schedule_ir=package.schedule_ir,
+        tile_ir=package.native.tile_ir, target_ir=package.native.target_ir,
+        native_image=package.native.image, launch_descriptor=package.native.descriptor,
+        metadata={"target": "nvidia_sm120", "compiler_path": COMPILER_PATH,
+                  "executable": True, "execution_kind": "native_gpu"})
+
+
+def package_from_runtime_artifact(artifact):
+    """Re-validate an artifact's package; serialized text is never trusted as is."""
+    image = artifact.native_image
+    if image is None or artifact.launch_descriptor is None or image.binary_format != "ptx":
+        raise ValueError("sm_120 FP4 expansion artifact carries no PTX image/descriptor")
+    package = SM120NVFP4ExpansionPackage(artifact.graph_ir, artifact.schedule_ir, NVIDIANativePackage(
+        artifact.tile_ir, artifact.target_ir, image.payload.decode("ascii"), image,
+        artifact.launch_descriptor))
+    package.validate()
+    return package
+
+
+def execute_runtime_artifact(artifact, args):
+    """Execution-matrix executor: named (or positional) codes/scales/globals."""
+    from tessera.runtime import NativeProgramExecution
+
+    if (artifact.metadata or {}).get("target") != "nvidia_sm120":
+        raise ValueError("sm_120 FP4 expansion artifact requires the exact nvidia_sm120 target")
+    package = package_from_runtime_artifact(artifact)
+    names = package.contract()[0]
+    if isinstance(args, dict):
+        if set(args) != set(names[:3]):
+            raise ValueError("sm_120 FP4 expansion takes exactly its three named inputs")
+        inputs = [args[name] for name in names[:3]]
+    elif isinstance(args, (tuple, list)) and len(args) == 3:
+        inputs = list(args)
+    else:
+        raise ValueError("sm_120 FP4 expansion takes exactly its three inputs")
+    values, plane = execute_sm120_nvfp4_expansion(package, *inputs)
+    receipt = {"ok": True, "execution_kind": "native_gpu", "entry": package.contract()[5],
+               "abi_id": package.native.descriptor.abi_id}
+    return NativeProgramExecution({names[3]: values, names[4]: plane}, (receipt,))

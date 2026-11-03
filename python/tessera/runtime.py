@@ -160,6 +160,11 @@ def _execute_rocm_nvfp4_program_artifact(artifact: Any, args: Any) -> NativeProg
     return NativeProgramExecution(output,receipts)
 
 
+def _execute_nvidia_nvfp4_expand_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
+    from .compiler.nvidia_nvfp4_expand_native import execute_runtime_artifact
+    return execute_runtime_artifact(artifact, args)
+
+
 def _execute_rocm_quantized_product_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
     from .compiler.rocm_quantized_product_frontend import execute_artifact
     return execute_artifact(artifact,args)
@@ -35723,6 +35728,7 @@ def _executor_table():
         "nvidia_lhs_program": _execute_nvidia_lhs_program_artifact,
     "nvidia_rhs_program": _execute_nvidia_rhs_program_artifact,
         "rocm_nvfp4_program": _execute_rocm_nvfp4_program_artifact,
+        "nvidia_nvfp4_expand": _execute_nvidia_nvfp4_expand_artifact,
         "rocm_quantized_product_program": _execute_rocm_quantized_product_artifact,
         "nvidia_mma": _execute_nvidia_mma_artifact,
     }

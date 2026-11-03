@@ -26,7 +26,7 @@ met that bar, not an axis carrying no information.
 | — served by a **compiled** route on some target | 31 |
 | — **bootstrap only** (deleting the packager strands them) | 2 |
 | Families a backend classifies | 19 |
-| Families with a compiled route | 12 |
+| Families with a compiled route | 13 |
 
 **`❔ unclassified` is not `—`.** A dash means measured and nothing
 serves it; `unclassified` means this map cannot see that target's
@@ -102,7 +102,7 @@ raises rather than degrading quietly.
 | `mx_matmul` | — | nvidia_sm120 | `matmul` |
 | `norm` | ✅ | nvidia_sm120 | *****: `layer_norm`, `rmsnorm`; **nvidia_sm120**: `layer_norm`, `rmsnorm`; **x86**: `layer_norm`, `rmsnorm` |
 | `nvfp4_matmul` | — | nvidia_sm120 | `matmul` |
-| `paged_kv` | — | nvidia_sm120, rocm_gfx1151 | `flash_attn` |
+| `paged_kv` | ✅ | nvidia_sm120, rocm_gfx1151 | `flash_attn` |
 | `reduction` | ✅ | nvidia_sm120, rocm_gfx1151, x86 | **nvidia_sm120**: `sum`, `mean`, `max`, `min`, `amax`, `amin`; **rocm_gfx1151**: `sum`, `mean`, `max`, `amax`; **x86**: `sum`, `mean`, `max`, `amax` |
 | `scalar_matmul` | ✅ nvidia_sm120 | nvidia_sm120 | **nvidia_sm120**: `matmul` |
 | `softmax` | ✅ | nvidia_sm120, rocm_gfx1151, x86 | `softmax` |

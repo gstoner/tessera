@@ -304,7 +304,7 @@ def lower_scheduled_paged_kv_graph(module, *, target: str) -> ScheduledPagedKVAr
     if layout not in _ENTRY_BY_LAYOUT or not isinstance(names, tuple) or not isinstance(dims, tuple):
         raise RuntimeError("paged lowering produced no supported page contract")
     artifact = ScheduledPagedKVArtifact(
-        graph, schedule, tile, hashes[0], names, dims,  # type: ignore[arg-type]
+        graph, schedule, tile, hashes[0], names, dims,
         entry=_ENTRY_BY_LAYOUT[str(layout)], page_layout=str(layout))
     artifact.validate()
     artifact.native_contract()

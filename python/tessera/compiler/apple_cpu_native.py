@@ -26,6 +26,7 @@ BNNS f16/bf16 matmul still packages here from Graph IR; it is owed.
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import os
 from dataclasses import dataclass
@@ -213,7 +214,27 @@ def native_package_available(module: GraphIRModule) -> bool:
     if scheduled_package_kind(module) is None:
         return True
     from .scheduled_matmul import find_tessera_opt
-    return find_tessera_opt() is not None
+    tool = find_tessera_opt()
+    return tool is not None and apple_cpu_value_lowering_available(str(tool))
+
+
+@functools.lru_cache(maxsize=None)
+def apple_cpu_value_lowering_available(tool: str) -> bool:
+    """Whether ``tool`` registers the Apple CPU value lowering.
+
+    A ``tessera-opt`` built without the Apple backend parses Graph IR but
+    cannot produce ``tessera_apple.cpu.call``, so a scheduled family is not
+    packageable with it. Probed once per binary rather than assumed.
+    """
+    from .scheduled_matmul import run_tessera_opt
+
+    probe = ('module {\n  func.func @f(%a: tensor<1x1xf32>) -> tensor<1x1xf32> {\n'
+             '    %0 = tile.cholesky %a {source = "tessera.cholesky"} : (tensor<1x1xf32>) -> tensor<1x1xf32>\n'
+             '    return %0 : tensor<1x1xf32>\n  }\n}\n')
+    try:
+        return "tessera_apple.cpu.call" in run_tessera_opt(Path(tool), probe, "--tile-to-apple_cpu=value=true")
+    except (OSError, RuntimeError):
+        return False
 
 
 def _verified_target_ir(op_text: str) -> str:

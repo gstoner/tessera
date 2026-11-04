@@ -2151,6 +2151,7 @@ class JitFn:
             GFX_SOFTMAX_F32_ABI, requests_softmax,
         )
         from .rocm_math_native import supports_math, requests_public_math, MATH_ABIS
+        from .scheduled_moe_dispatch import ROCM_MOE_DISPATCH_TARGETS
         from .rocm_parent_view_native import supports_parent_view, PARENT_VIEW_ABIS
         native_math = requests_public_math(self.graph_ir, target)
         block_quant = target == "rocm_gfx1201" and block_quant_request
@@ -2162,7 +2163,7 @@ class JitFn:
         softmax = (target.startswith("rocm_") or nvidia_softmax) and requests_softmax(self.graph_ir)
         movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)
                      and len(self.graph_ir.functions[0].body[0].operands) == 2)
-                    or (target == "rocm_gfx1151" and requests_moe_dispatch(self.graph_ir)))
+                    or (target in ROCM_MOE_DISPATCH_TARGETS and requests_moe_dispatch(self.graph_ir)))
         from .rocm_typed_scaled_native import requests_typed_scaled
         typed_scaled = target == "rocm_gfx1201" and requests_typed_scaled(self.graph_ir)
         checkpoint = target == "rocm_gfx1201" and (
@@ -2326,7 +2327,7 @@ class JitFn:
                 from .scheduled_paged_kv import admit_paged_kv
                 movement_contract = admit_paged_kv(module)
                 scalar_names = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
-            elif descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI and target == "rocm_gfx1151":
+            elif descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI and target in ROCM_MOE_DISPATCH_TARGETS:
                 from .scheduled_moe_dispatch import admit_moe_dispatch
                 movement_contract = admit_moe_dispatch(module)
                 scalar_names = ("T", "S", "H")

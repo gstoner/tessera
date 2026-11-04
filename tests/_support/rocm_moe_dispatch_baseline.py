@@ -130,7 +130,10 @@ def baseline_moe_dispatch(
             ShapeGuard(output_name, 0, "eq", slots),
             ShapeGuard(output_name, 1, "eq", hidden),
         ),
-        geometry=LaunchGeometry(policy="gfx1151_moe_dispatch_direct_256"),
+        # Frozen text was the literal gfx1151 policy; parameterised on the
+        # arch (2026-11-04) so the oracle can stand for gfx1201 too. At
+        # architecture="gfx1151" it is byte-identical to the frozen packager.
+        geometry=LaunchGeometry(policy=f"{architecture}_moe_dispatch_direct_256"),
         ordering=OrderingSemantics(
             ordered_submission=True,
             residency="none",

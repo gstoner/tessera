@@ -187,7 +187,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/rocm/ROCM_LANE_MAP.md` | - | 2026-09-26 | 39 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-28 | 99 | ✓ |
 | `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-09-05 | 60 | ✓ |
-| `backend/rocm/todo.md` | - | 2026-11-03 | 1 | ✓ |
+| `backend/rocm/todo.md` | - | 2026-11-04 | 0 | ✓ |
 | `backend/x86/todo.md` | - | 2026-10-21 | 14 | ✓ |
 | `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-09-22 | 43 | ✓ |
 | `compiler/ANN_CALCULUS_DESIGN_SPIKE.md` | - | 2026-09-04 | 61 | ✓ |
@@ -212,7 +212,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md` | - | 2026-09-06 | 59 | ✓ |
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-09-07 | 58 | ✓ |
 | `compiler/HEAP_BARRIER_ARCHITECTURE_REVIEW.md` | - | 2026-09-11 | 54 | ✓ |
-| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-11-03 | 1 | ✓ |
+| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-11-04 | 0 | ✓ |
 | `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-11-03 | 1 | ✓ |
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-09-23 | 42 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 94 | ✓ |

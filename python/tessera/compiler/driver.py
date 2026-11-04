@@ -1599,10 +1599,12 @@ def canonical_compile_options(
         from .rocm_parent_view_native import supports_parent_view
         from .scheduled_matmul import supports_scheduled_matmul
         from .rocm_block_quant_native import supports_block_quant
+        from .scheduled_moe_dispatch import supports_scheduled_moe_dispatch
         resolved["package_native"] = (
             supports_scheduled_matmul(module, target=target_kind) or
             supports_block_quant(module) or supports_parent_view(module) or supports_typed_scaled(module) or supports_nvfp4_expansion(module) or supports_nvfp4_ingest(module) or supports_mxfp4_storage(module)
             or supports_paged_kv_read(module) or supports_math(module)
+            or supports_scheduled_moe_dispatch(module, target=target_kind)
             or (requests_softmax(module) and supports_scheduled_kernel(module,target=target_kind))
         ) and native_packaging_available()
     if target_kind == "x86" and "package_native" not in resolved:

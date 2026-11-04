@@ -343,6 +343,17 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   UE8M0 K32 Schedule contract. RTX 5070 evidence only.
   [Log](INTEGRATED_COMPILER_LOG.md#2026-11-04--e2e-real-6-sm120-nvfp4-and-int4-matmul-packagers-consume-their-replayed-artifacts).
 
+- Current increment (2026-11-04, sync E2E-REAL-6-rocm-moe-gfx1201-2026-11-04):
+  gfx1201 joins the ROCm MoE-dispatch compiled route from 2026-11-03 (the same
+  native Schedule owner and Tile projection, with no second lowering path).
+  `NativeMoeDispatch.h` and four downstream gates had hard-coded gfx1151.
+  `ROCM_MOE_DISPATCH_TARGETS` is now derived from
+  `rocm_pipeline.promoted_families`, and every other arch fails closed. On
+  Tajasarus, 8 gfx1201 MoE device rows pass bit-for-bit (5 against the #31(a)
+  oracle and NumPy, plus spine, public JIT and prepared binding). On
+  Princess-Luna, the 8 gfx1151 rows are unchanged.
+  [Log](INTEGRATED_COMPILER_LOG.md#2026-11-04--e2e-real-6-gfx1201-joins-the-rocm-moe-dispatch-compiled-route).
+
 - Current increment (2026-11-03, sync E2E-REAL-6-sm120-attention-2026-11-03):
   the four sm_120 attention packagers (`attention_lse`, `attention_backward`,
   `attention_backward_lse`, `attention_scaled_kv`) consume their replayed

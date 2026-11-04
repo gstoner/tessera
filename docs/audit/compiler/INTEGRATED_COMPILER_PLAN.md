@@ -331,6 +331,17 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 ### E2E-REAL-6
 
+- Current increment (2026-11-04, sync E2E-REAL-6-rocm-moe-gfx1201-2026-11-04):
+  gfx1201 joins the ROCm MoE-dispatch compiled route from 2026-11-03 (the same
+  native Schedule owner and Tile projection, with no second lowering path).
+  `NativeMoeDispatch.h` and four downstream gates had hard-coded gfx1151.
+  `ROCM_MOE_DISPATCH_TARGETS` is now derived from
+  `rocm_pipeline.promoted_families`, and every other arch fails closed. On
+  Tajasarus, 8 gfx1201 MoE device rows pass bit-for-bit (5 against the #31(a)
+  oracle and NumPy, plus spine, public JIT and prepared binding). On
+  Princess-Luna, the 8 gfx1151 rows are unchanged.
+  [Log](INTEGRATED_COMPILER_LOG.md#2026-11-04--e2e-real-6-gfx1201-joins-the-rocm-moe-dispatch-compiled-route).
+
 - Current increment (2026-11-03, sync E2E-REAL-6-sm120-attention-2026-11-03):
   the four sm_120 attention packagers (`attention_lse`, `attention_backward`,
   `attention_backward_lse`, `attention_scaled_kv`) consume their replayed
@@ -511,7 +522,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 
 - Current slice (2026-09-30, sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30): The Graph-to-package contract composes bounded dynamic M/N/K on gfx1201 and sm_120. Exact-device fp16/bf16 parity, padded host ingress, allocation residency, and image reuse pass. Separate fp16 and bf16 event packets support stage attribution only; gfx1201 variation is high. Apple and x86 need independent resident consumers; wider physical layouts and remaining W1.1 producers stay open. [Evidence](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 
-- Latest: [2026-11-03 — E2E-REAL-6: SM120 attention packagers consume their replayed artifacts](INTEGRATED_COMPILER_LOG.md#2026-11-03--e2e-real-6-sm120-attention-packagers-consume-their-replayed-artifacts)
+- Latest: [2026-11-04 — E2E-REAL-6: gfx1201 joins the ROCm MoE dispatch compiled route](INTEGRATED_COMPILER_LOG.md#2026-11-04--e2e-real-6-gfx1201-joins-the-rocm-moe-dispatch-compiled-route)
 
 Current increment: checked rank-four broadcast saved-LSE packages and private tape execute on SM120; physical bias extents, deterministic reduction and saved-state pairing are bound through native Graph/Schedule/Tile and checked CUDA descriptors. [Evidence](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md). Broader W1.1, frontend/AD and sibling routes remain open.
 

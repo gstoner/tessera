@@ -1,9 +1,60 @@
 ---
-last_updated: 2026-11-03
+last_updated: 2026-11-04
 audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+## E2E-REAL-6-rocm-moe-gfx1201-2026-11-04 — gfx1201 joins the MoE dispatch compiled route
+
+Owner: E2E-REAL-6 (ROCM-E2E-2 token-gather route); sync `E2E-REAL-6-rocm-moe-gfx1201-2026-11-04`.
+Closes the "Open" item of the 2026-11-03 entry below.
+
+- **Why gfx1201 was refused.** The cause was a hard-coded arch admission, not a
+  kernel gap. The kernel is a scalar per-thread f32 gather with no WMMA
+  fragment, LDS or wave-size assumption, and its `moe_dispatch` family plugin
+  was already promoted on gfx1201 (`rocm_pipeline.promoted_families`,
+  `Passes.cpp`, 2026-09-17). Five layers named gfx1151 literally:
+  1. `NativeMoeDispatch.h`, the native Schedule owner;
+  2. `scheduled_moe_dispatch.ROCM_MOE_DISPATCH_TARGETS`, plus the packager,
+     JIT movement and prepared-movement checks that copied it;
+  3. the runtime's `_gfx1201_proved_scheduled_abis()`, so no exact-target
+     launcher registered;
+  4. the backend manifest, which had no `(moe_dispatch, rocm_gfx1201)` row, so
+     `canonical_compile` refused at `codegen`;
+  5. `native_movement_runtime.cpp` `preparedShape`, which pinned MoE to
+     gfx1151 below the prepare entry's own gfx1151/gfx1201 admission.
+  Each layer surfaced only on the device, one run at a time.
+- **Moved.** The owner admits the two exact target/arch pairs.
+  `ROCM_MOE_DISPATCH_TARGETS` is derived from `promoted_families` over every
+  `AMDArch`, and the Python gates read it. gfx1201 canonical options default
+  to the native package. One compiled route, no new lowering. gfx1200,
+  gfx1250, CDNA, the generic `rocm` name, and a mismatched target/arch all
+  fail closed. A lit negative covers them, and a host-free test replays every
+  `AMDArch` through the C++ owner and requires it to admit exactly the Python
+  set.
+- **Proof, gfx1201 (Tajasarus).** These ran with `TESSERA_ROCM_CHIP=gfx1201`,
+  `TESSERA_GFX1201_DEVICE_PROOF=1` and `TESSERA_ROCM_MOVEMENT_DEVICE_PROOF=1`.
+  8 MoE device rows pass:
+  - 5 `test_exact_device_moe_images_agree_bitwise` rows build the oracle's image
+    digest, and their output equals the oracle and NumPy bit-for-bit
+    (including -0.0 and an f32 subnormal);
+  - the canonical movement spine row;
+  - the public `@jit(target="rocm_gfx1201", native_required=True)` row
+    (NaN-payload/inf/-0 bits preserved, two specializations);
+  - the prepared C++ binding row (no Graph serialization, no allocation
+    growth, and the layout-mismatch refusal holds).
+- **gfx1151 (Princess-Luna).** The same 8 gfx1151 rows pass on main and on the
+  branch.
+- **Gates.** A junit A/B against main `f1c64009a` covered 18 files on each box.
+  It shows no regression. The only failure,
+  `test_rocm_fp8_target_identity::test_public_integer_matmul_keeps_its_existing_wrap_contract`,
+  also fails on main on both boxes. `check-tessera-rocm` and `check-tessera-ir`
+  results are recorded in the integrated log entry.
+- **Open.** None for this family's admission. A new arch joins only by
+  promotion in `rocm_pipeline` plus its own device rows. The C++ owner's pair
+  list must then move with it; the replay test fails otherwise. MoE transport
+  (`all_to_all`) stays gated.
+
 ## E2E-REAL-6-rocm-moe-dispatch-2026-11-03 — MoE dispatch packager consumes its Schedule artifact
 
 Owner: E2E-REAL-6 (ROCM-E2E-2 token-gather route); sync `E2E-REAL-6-rocm-moe-dispatch-2026-11-03`.
@@ -27,9 +78,9 @@ Owner: E2E-REAL-6 (ROCM-E2E-2 token-gather route); sync `E2E-REAL-6-rocm-moe-dis
   hollow-lane guard (exit 1), which is correct. The A/B sweep there shows no
   difference from main.
 - **Gates.** `check-tessera-rocm` passes 85/85 on both boxes. There is no C++ change.
-- **Open.** Widening `NativeMoeDispatch.h` to gfx1201 needs its own device
-  proof on Tajasarus. The forward-attention fallback is still a Graph-owned
-  constructor.
+- **Open.** ~~Widening `NativeMoeDispatch.h` to gfx1201 needs its own device
+  proof on Tajasarus.~~ Closed 2026-11-04 (entry above). The forward-attention
+  fallback is still a Graph-owned constructor.
 
 ## E2E-REAL-6-rocm-paged-kv-2026-11-03 — paged-KV packager consumes its Schedule artifact
 

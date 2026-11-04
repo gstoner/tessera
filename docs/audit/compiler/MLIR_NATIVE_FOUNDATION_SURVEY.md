@@ -380,6 +380,12 @@ only in `tests/_support/rocm_moe_dispatch_baseline.py`, the #31(a) oracle of
 
 The forward-attention fallback is now the only ROCm Graph-owned constructor.
 
+**gfx1201 admission (2026-11-04, sync `E2E-REAL-6-rocm-moe-gfx1201-2026-11-04`).**
+The same route now admits gfx1201. The native owner and every downstream gate
+read one proof table (`rocm_pipeline.promoted_families`), so there is no
+second lowering and no generic `rocm` fallback. On Tajasarus, 8 gfx1201 device
+rows pass bit-for-bit.
+
 ## Apple CPU matmul/gemm/softmax constructor retirement (2026-11-03)
 
 E2E-REAL-6, sync `E2E-REAL-6-apple-cpu-2026-11-03`: the fifth package entry

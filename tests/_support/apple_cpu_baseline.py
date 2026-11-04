@@ -9,6 +9,12 @@ Graph -> Schedule -> Tile boundaries and package the replayed artifact
 constructor, for exactly those families, so
 ``tests/unit/test_apple_cpu_scheduled_migration.py`` can prove the compiled
 route reproduces it. It is test-only: nothing under ``python/`` imports it.
+
+E2E-REAL-6 Apple CPU factorizations (2026-11-04) froze the same constructor
+for ``batched_gemm``, ``tri_solve``, ``cholesky``, ``cholesky_solve``, ``lu``,
+``qr`` and ``svd`` (multi-result included), now owned by
+``scheduled_apple_cpu_kernel``; ``tests/unit/test_apple_cpu_kernel_migration.py``
+is that differential.
 """
 
 from __future__ import annotations
@@ -26,6 +32,21 @@ _SYMBOLS = {
     "tessera.softmax": ("softmax", "tessera_apple_cpu_softmax_f32"),
     "tessera.matmul": ("matmul", "tessera_apple_cpu_gemm_f32"),
     "tessera.gemm": ("gemm", "tessera_apple_cpu_gemm_f32"),
+    "tessera.batched_gemm": ("batched_gemm", "tessera_apple_cpu_gemm_f32_batched"),
+    "tessera.cholesky": ("cholesky", "tessera_apple_cpu_cholesky_f32"),
+    "tessera.tri_solve": ("tri_solve", "tessera_apple_cpu_tri_solve_f32"),
+    "tessera.cholesky_solve": ("cholesky_solve", "tessera_apple_cpu_cholesky_solve_f32"),
+    "tessera.lu": ("lu", "tessera_apple_cpu_lu_f32"),
+    "tessera.qr": ("qr", "tessera_apple_cpu_qr_f32"),
+    "tessera.svd": ("svd", "tessera_apple_cpu_svd_f32"),
+}
+
+#: The retired classifier's tuple-result dtypes; every other family returns
+#: one fp32 result.
+_TUPLE_RESULT_DTYPES = {
+    "tessera.lu": ("fp32", "int32"),
+    "tessera.qr": ("fp32", "fp32"),
+    "tessera.svd": ("fp32", "fp32", "fp32"),
 }
 
 
@@ -48,16 +69,21 @@ def retired_contract(module: GraphIRModule) -> bool:
         return False
     if {args[n].ir_type.dtype for n in names} != {"fp32"}:
         return False
-    if (len(fn.result_types) != 1 or fn.result_types[0].dtype != "fp32"
-            or len(fn.return_values) != 1):
+    # The retired classifier checked only result dtypes and positive static
+    # extents for the batched-GEMM/LAPACK families -- no shape semantics and
+    # no keyword policy -- which the frozen predicate keeps.
+    expected = _TUPLE_RESULT_DTYPES.get(op.op_name, ("fp32",))
+    if (tuple(r.dtype for r in fn.result_types) != expected
+            or len(fn.return_values) != len(expected)):
         return False
     try:
         shapes = [tuple(int(v) for v in args[n].ir_type.shape) for n in names]
-        out = tuple(int(v) for v in fn.result_types[0].shape)
+        outs = [tuple(int(v) for v in r.shape) for r in fn.result_types]
     except (TypeError, ValueError):
         return False
-    if any(d <= 0 for s in [*shapes, out] for d in s):
+    if any(d <= 0 for s in [*shapes, *outs] for d in s):
         return False
+    out = outs[0]
     if op.op_name == "tessera.softmax":
         try:
             axis = int(op.kwargs.get("axis", -1))
@@ -68,7 +94,7 @@ def retired_contract(module: GraphIRModule) -> bool:
 
 
 def package(module: GraphIRModule, *, pipeline_name: str):
-    """The retired constructor body, verbatim for the f32 families."""
+    """The retired constructor body, verbatim for the fp32-input families."""
     if not retired_contract(module):
         raise ValueError("Apple CPU native packaging requires one static supported descriptor contract")
     fn, op = module.functions[0], module.functions[0].body[0]
@@ -99,8 +125,9 @@ def package(module: GraphIRModule, *, pipeline_name: str):
         for i, name in enumerate(names)
     )
     output_buffers = tuple(
-        BufferBinding(len(names) + index, name, "output", "fp32", len(output_shapes[index]), "row_major", 4)
-        for index, name in enumerate(output_names)
+        BufferBinding(len(names) + index, name, "output", str(result.dtype),
+                      len(output_shapes[index]), "row_major", 2 if result.dtype != "fp32" else 4)
+        for index, (name, result) in enumerate(zip(output_names, fn.result_types))
     )
     guards = tuple(
         ShapeGuard(name, axis, "eq", extent)

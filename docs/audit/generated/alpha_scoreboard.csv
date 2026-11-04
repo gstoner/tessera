@@ -6,7 +6,7 @@ mac_cpu,Mac M1 Max,arm64 CPU,norm,bypass,unmeasured,unrouted,partial,absent,no
 mac_cpu,Mac M1 Max,arm64 CPU,attention,bypass,unmeasured,unrouted,partial,absent,no
 mac_cpu,Mac M1 Max,arm64 CPU,paged_kv,bypass,unmeasured,unrouted,partial,absent,no
 mac_cpu,Mac M1 Max,arm64 CPU,moe,bypass,unmeasured,unrouted,partial,absent,no
-mac_cpu,Mac M1 Max,arm64 CPU,linalg,bypass,unmeasured,bypass,partial,packet_pending,no
+mac_cpu,Mac M1 Max,arm64 CPU,linalg,bypass,unmeasured,native,partial,packet_pending,no
 mac_cpu,Mac M1 Max,arm64 CPU,epilogue,bypass,unmeasured,unrouted,partial,absent,no
 mac_cpu,Mac M1 Max,arm64 CPU,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
 mac_cpu,Mac M1 Max,arm64 CPU,ppo,bypass,unmeasured,unrouted,partial,absent,no

@@ -16898,3 +16898,7 @@ Apple GPU static GELU moved onto the shared semantic `activation` family (Apple 
 ## `E2E-REAL-6-apple-cpu-2026-11-03`: sibling outcome — not applicable
 
 Apple CPU static f32 matmul/gemm/softmax moved onto the shared scheduled matmul and semantic-kernel contracts (Apple queue, same key). Shared code touched: `PMPasses.cpp` (`getInferredMatmulSchedule`, `getSemanticKernelSchedule`), the Python matmul/kernel Graph contracts, and the `apple_cpu` branch of driver option resolution. The new branches are reached only by the `apple_cpu` target string, so the sm_120 Schedule digests are unchanged, and no JIT dispatch or native-route code was touched. Not re-run on The-Super-Bear; no sm_120 claim.
+
+## `E2E-REAL-6-apple-cpu-factorizations-2026-11-04`: sibling outcome — not applicable
+
+Apple CPU `batched_gemm`, `tri_solve`, `cholesky`, `cholesky_solve`, `lu`, `qr` and `svd` moved onto a new native Graph→Schedule→Tile contract, `NativeAppleCPUKernel.h` (Apple queue, same key). Shared code touched: `PMPasses.cpp` calls `scheduleNativeAppleCPUKernel` / `lowerNativeAppleCPUKernel`, which claim a module only when `tessera.target = "apple_cpu"` and `tessera.launch_bindings` are both present and return early only after claiming it; every other module reaches the existing Schedule/Tile code unchanged. `TileToApple.cpp` (Apple backend only) and the Python `scheduled_apple_cpu_kernel` module do not touch an NVIDIA path. No sm_120 selector, ABI or result changes; sm_120 device lanes were not re-run.

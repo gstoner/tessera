@@ -392,9 +392,12 @@ def _tuple_value_module(op_name, input_shape, result_specs, *, kwargs=None):
         "tensor<" + "x".join(map(str, input_shape)) + "xf32>",
         tuple(map(str, input_shape)), "fp32",
     )
+    # The MLIR element spelling, not the dtype name: since E2E-REAL-6 the
+    # native contract prints this Graph IR, so its text must parse.
+    spelling = {"fp32": "f32", "int32": "i32"}
     result_types = [
         IRType(
-            "tensor<" + "x".join(map(str, shape)) + "x" + dtype + ">",
+            "tensor<" + "x".join(map(str, shape)) + "x" + spelling.get(dtype, dtype) + ">",
             tuple(map(str, shape)), dtype,
         )
         for _, shape, dtype in result_specs

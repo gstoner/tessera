@@ -14,9 +14,15 @@ boundaries (``scheduled_matmul`` / ``scheduled_kernel``) and
 Accelerate delegate through a verified ``tessera_apple.cpu.accelerate_gemm`` /
 ``vector_reduce`` Target IR op (Decision #28 Tier 3 behind a declared op, one
 lowering path per Decision #31). The retired Graph-owned constructor is the
-test-only oracle ``tests/_support/apple_cpu_baseline.py``. Batched GEMM, the
-BNNS f16/bf16 matmul and the LAPACK factorizations still package here from
-Graph IR; they are owed, not compiled.
+test-only oracle ``tests/_support/apple_cpu_baseline.py``.
+
+E2E-REAL-6 Apple CPU factorizations (2026-11-04): ``batched_gemm``,
+``tri_solve``, ``cholesky``, ``cholesky_solve``, ``lu``, ``qr`` and ``svd``
+follow. Their native owner is ``scheduled_apple_cpu_kernel`` (C++
+``NativeAppleCPUKernel.h``); ``package_scheduled_apple_cpu_kernel`` binds the
+replayed artifact to its Accelerate/LAPACK entry through the verified
+``tessera_apple.cpu.call`` the Apple CPU value lowering produced. Only the
+BNNS f16/bf16 matmul still packages here from Graph IR; it is owed.
 """
 from __future__ import annotations
 
@@ -33,6 +39,7 @@ from .native_artifact import (
 )
 
 if TYPE_CHECKING:
+    from .scheduled_apple_cpu_kernel import ScheduledAppleCPUKernelArtifact
     from .scheduled_kernel import ScheduledKernelArtifact
     from .scheduled_matmul import ScheduledMatmulArtifact
 
@@ -125,6 +132,12 @@ def native_package_kind(module: GraphIRModule) -> str | None:
     if len(module.functions) != 1 or len(module.functions[0].body) != 1:
         return None
     fn, op = module.functions[0], module.functions[0].body[0]
+    from .scheduled_apple_cpu_kernel import APPLE_CPU_KERNEL_OPS, supports_scheduled_apple_cpu_kernel
+    if op.op_name in APPLE_CPU_KERNEL_OPS and not supports_scheduled_apple_cpu_kernel(module):
+        # E2E-REAL-6: these families have one authority, the native contract;
+        # a request it refuses is not an Apple CPU descriptor request at all.
+        # What it admits also passes every check below (it is stricter).
+        return None
     names = tuple(value.removeprefix("%") for value in op.operands)
     args = {arg.name: arg for arg in fn.args}
     if not names or any(name not in args for name in names):
@@ -172,11 +185,14 @@ def supports_native_package(module: GraphIRModule) -> bool:
 def scheduled_package_kind(module: GraphIRModule) -> str | None:
     """The family whose request lowers through native Schedule/Tile, if any.
 
-    Only the static f32 ``matmul``/``gemm`` and rank-2 ``softmax`` envelopes;
-    every other classified request still packages from Graph IR (owed).
+    The static f32 ``matmul``/``gemm`` and rank-2 ``softmax`` envelopes and the
+    native batched-GEMM/LAPACK families; only the BNNS f16/bf16 matmul still
+    packages from Graph IR (owed).
     """
+    from .scheduled_apple_cpu_kernel import APPLE_CPU_KERNEL_OPS
+
     kind = native_package_kind(module)
-    if kind == "softmax":
+    if kind == "softmax" or (kind is not None and f"tessera.{kind}" in APPLE_CPU_KERNEL_OPS):
         return kind
     if kind in {"matmul", "gemm"}:
         fn = module.functions[0]
@@ -362,6 +378,55 @@ def package_scheduled_kernel(
     return AppleCPUNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
 
 
+def package_scheduled_apple_cpu_kernel(
+    artifact: ScheduledAppleCPUKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleCPUNativePackage:
+    """Bind a replayed Apple CPU batched-GEMM/LAPACK kernel to its C ABI entry.
+
+    E2E-REAL-6 Apple CPU factorizations (2026-11-04). Every descriptor field --
+    buffers, dtypes, shape guards, layout and the semantic flags the delegate
+    reads -- is projected from the contract
+    ``verify_apple_cpu_kernel_projection`` just proved equal to the native
+    replay of all three boundaries; nothing is read from a Graph object. The
+    consumer is a hand-written Accelerate/LAPACK wrapper in
+    ``apple_cpu_runtime.cpp``, a declared Decision #28 Tier-3 delegate reached
+    through the verified ``tessera_apple.cpu.call`` Target IR op.
+    """
+    from .scheduled_apple_cpu_kernel import verify_apple_cpu_kernel_projection
+
+    projection = verify_apple_cpu_kernel_projection(artifact)
+    kind, symbol = projection.kind, projection.symbol
+    abi = f"tessera.apple.cpu.value.{kind}.fp32.v1"
+    image = _runtime_image(artifact.target_ir, symbol, abi, pipeline_name=pipeline_name)
+    buffers = tuple(
+        BufferBinding(ordinal, name, "input" if ordinal < projection.inputs else "output",
+                      dtype, len(shape), "row_major", 4)
+        for ordinal, (name, shape, dtype) in enumerate(
+            zip(projection.bindings, projection.shapes, projection.dtypes))
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi, buffers=buffers,
+        shape_guards=tuple(ShapeGuard(name, axis, "eq", extent)
+                           for name, shape in zip(projection.bindings, projection.shapes)
+                           for axis, extent in enumerate(shape)),
+        geometry=LaunchGeometry(policy="apple_cpu_value_executor"),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
+        provenance={
+            "work_item": "E2E-REAL-6", "route": "apple_cpu_value_executor", "op_kind": kind,
+            "value_call": {"op": "tessera_apple.cpu.call", "op_kind": kind, "symbol": symbol,
+                           "status": "executable", **projection.semantics},
+            "result_count": len(projection.bindings) - projection.inputs,
+            "storage": "f32", "target_ir_op": "tessera_apple.cpu.call",
+            "delegate_abi": projection.abi, "abi_scalars": dict(projection.scalars),
+            "schedule_digest": projection.schedule_digest,
+            "tile_ir_digest": hashlib.sha256(artifact.tile_ir.encode()).hexdigest(),
+        },
+    )
+    return AppleCPUNativePackage(artifact.tile_ir, artifact.target_ir, artifact.target_ir, image, descriptor)
+
+
 def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleCPUNativePackage:
     kind = native_package_kind(module)
     if kind is None:
@@ -378,8 +443,12 @@ def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleCPUNati
         return package_scheduled_matmul(
             lower_scheduled_matmul(module, target="apple_cpu"), pipeline_name=pipeline_name,
             op_kind=scheduled)
-    # Owed families (batched GEMM, BNNS f16/bf16 matmul, LAPACK factorizations):
-    # still Graph-owned until they gain a native Schedule/Tile contract.
+    if scheduled is not None:
+        from .scheduled_apple_cpu_kernel import lower_scheduled_apple_cpu_kernel
+        return package_scheduled_apple_cpu_kernel(
+            lower_scheduled_apple_cpu_kernel(module), pipeline_name=pipeline_name)
+    # Owed family (BNNS f16/bf16 matmul): still Graph-owned until it gains a
+    # native Schedule/Tile contract.
     fn, op = module.functions[0], module.functions[0].body[0]
     names = tuple(value.removeprefix("%") for value in op.operands)
     args = {arg.name: arg for arg in fn.args}

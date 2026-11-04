@@ -17,7 +17,7 @@ MLIR passes. A cell is alpha-complete only when all five stages are
 |---|---|---|
 | `frontend` | AST: does `graph_ir._OpExtractor` still exist (E2E-REAL-6) | 0 |
 | `graph_opt` | not yet derivable per family — shown `unmeasured` | 0 |
-| `schedule_tile` | [`bootstrap_prune_gap`](bootstrap_prune_gap.md) family routes | 31 |
+| `schedule_tile` | [`bootstrap_prune_gap`](bootstrap_prune_gap.md) family routes | 32 |
 | `native_lowering` | [spine](compilation_spine_inventory.md) Level C for the lane target | 0 |
 | `execution` | [E2E fleet](e2e_fleet.md) release packet for the lane | 27 |
 
@@ -39,7 +39,7 @@ improvement fails until the baseline is tightened, so gains are locked.
 
 | Lane | Host | Device | Native stage-cells |
 |---|---|---|---|
-| `mac_cpu` | Mac M1 Max | arm64 CPU | 3 |
+| `mac_cpu` | Mac M1 Max | arm64 CPU | 4 |
 | `mac_gpu` | Mac M1 Max | Apple7 GPU | 3 |
 | `luna_cpu` | Princess-Luna | Zen 5 AVX-512 | 9 |
 | `luna_gpu` | Princess-Luna | gfx1151 | 9 |
@@ -64,7 +64,7 @@ Legend: ✅ native · 🔴 bypass · 🟡 partial / pending · ⬛ absent / unro
 | `mac_cpu` | `attention` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `mac_cpu` | `paged_kv` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `mac_cpu` | `moe` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
-| `mac_cpu` | `linalg` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | 🟡 packet_pending | — |
+| `mac_cpu` | `linalg` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | 🟡 packet_pending | — |
 | `mac_cpu` | `epilogue` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `mac_cpu` | `replay_ssm` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `mac_cpu` | `ppo` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |

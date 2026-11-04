@@ -191,9 +191,10 @@ def test_retired_softmax_axis_admission_was_wider_and_is_now_closed():
 
 @pytest.mark.parametrize("module", [
     _matmul(7, 9, 5, dtype="fp16"),
-    _module("tessera.batched_gemm", [(2, 7, 9), (2, 9, 5)], (2, 7, 5)),
-], ids=["bnns-f16", "batched"])
+], ids=["bnns-f16"])
 def test_owed_families_are_not_claimed_by_the_scheduled_route(module):
+    # Batched GEMM and the LAPACK families moved to their own native contract
+    # (2026-11-04, tests/unit/test_apple_cpu_kernel_migration.py).
     assert apple_cpu_native.native_package_kind(module) is not None
     assert apple_cpu_native.scheduled_package_kind(module) is None
 
@@ -344,9 +345,8 @@ def test_prune_census_sees_the_compiled_routes():
     assert rows[("apple_cpu", "matmul")] == "compiled"
     assert rows[("apple_cpu", "gemm")] == "compiled"
     assert rows[("apple_cpu", "softmax")] == "compiled"
-    # Owed, and the per-target gemm alias must not leak to another target.
-    for family in ("batched_gemm", "cholesky", "cholesky_solve", "lu", "qr", "svd", "tri_solve"):
-        assert rows[("apple_cpu", family)] == "gap", family
+    # The per-target gemm alias must not leak to another target. The other
+    # Apple CPU families are pinned by test_apple_cpu_kernel_migration.py.
     assert rows[("apple_gpu", "batched_gemm")] == "gap"
 
 

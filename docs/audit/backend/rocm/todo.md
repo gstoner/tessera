@@ -19475,3 +19475,7 @@ sm_120 FP4 weight expansion (SM120-FP4-EXPAND-NATIVE-20261103): **parity validat
 ## `E2E-REAL-6-apple-gelu-2026-11-03`: sibling outcome — not applicable
 
 Apple GPU static GELU moved onto the shared semantic `activation` family (Apple queue, same key). ROCm admits no `tessera.gelu` in `getSemanticKernelSchedule` or `_graph_contract`. The shared `native_unary_contract` change adds an `activation` branch that requires `apple_gpu`/`apple7`, so gfx1151 and gfx1201 softmax, reduce and norm projections are unchanged. No ROCm selector, ABI or result changes.
+
+## `E2E-REAL-6-apple-cpu-2026-11-03`: sibling outcome — not applicable
+
+Apple CPU static f32 matmul/gemm/softmax moved onto the shared scheduled matmul and semantic-kernel contracts (Apple queue, same key). The new `PMPasses.cpp` and Python contract branches are reached only by the `apple_cpu` target string; gfx1151 and gfx1201 Schedule decisions, digests and projections are unchanged. No ROCm selector, ABI or result changes; ROCm device lanes were not re-run.

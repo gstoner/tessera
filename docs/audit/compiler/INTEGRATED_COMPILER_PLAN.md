@@ -463,6 +463,8 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   [Evidence log](INTEGRATED_COMPILER_LOG.md#2026-10-01--five-compiler-slice-rechecks).
 
 
+- Current slice (2026-11-03, sync E2E-REAL-6-apple-cpu-2026-11-03): Apple CPU static f32 `matmul`/`gemm` and rank-two f32 `softmax` now lower through native Graph→Schedule→Tile (`apple_cpu`/`apple_silicon_cpu`), and their descriptors are projected from the replayed Schedule. Accelerate stays an explicit Tier-3 delegate behind the verified `tessera_apple.cpu.accelerate_gemm` / `vector_reduce` ops. The Graph-owned constructor is a test-only #31(a) oracle, bit-exact on the M1 Max; `bootstrap_prune_gap` moves `apple_cpu,{matmul,gemm,softmax}` to `compiled`. Batched GEMM, BNNS f16/bf16 matmul and the six LAPACK factorizations are owed. [Log](INTEGRATED_COMPILER_LOG.md#2026-11-03--e2e-real-6-apple-cpu-matmul-gemm-and-softmax-retire-their-graph-owned-constructor).
+
 - Current slice (2026-11-03, sync E2E-REAL-6-apple-gelu-2026-11-03): Apple GPU static rank-two f32/f16/bf16 GELU now lowers through native Graph→Schedule→Tile (`schedule.activation` / `tile.activation_kernel`, kind `gelu`, approximation `tanh`), and its descriptor/ABI is projected from the replayed Schedule. The runtime MSL kernel stays an explicit Tier-3 `kernel_call`. The Graph-owned constructor is a test-only #31(a) oracle, bit-exact on the M1 Max; `bootstrap_prune_gap` moves `apple_gpu,gelu` to `generic_compiled`. Dynamic GELU, transpose and the other Apple GPU families remain open. [Log](INTEGRATED_COMPILER_LOG.md#2026-11-03--e2e-real-6-apple-gpu-static-gelu-retires-its-graph-owned-constructor).
 
 - Current slice (2026-09-29, sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29): the public explicit-slopes ALiBi trace now infers f32 [H,S,S] from num_heads/seq_len rather than inheriting slopes[H]. Princess-Luna traces, packages, launches and matches NumPy through the checked AVX-512 ABI. Apple, ROCm and NVIDIA follow-ups remain target-owned.
@@ -498,7 +500,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 
 - Current slice (2026-09-30, sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30): The Graph-to-package contract composes bounded dynamic M/N/K on gfx1201 and sm_120. Exact-device fp16/bf16 parity, padded host ingress, allocation residency, and image reuse pass. Separate fp16 and bf16 event packets support stage attribution only; gfx1201 variation is high. Apple and x86 need independent resident consumers; wider physical layouts and remaining W1.1 producers stay open. [Evidence](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 
-- Latest: [2026-11-03 — E2E-REAL-6: ROCm MoE dispatch packages its replayed Schedule artifact](INTEGRATED_COMPILER_LOG.md#2026-11-03--e2e-real-6-rocm-moe-dispatch-packages-its-replayed-schedule-artifact)
+- Latest: [2026-11-03 — E2E-REAL-6: Apple CPU matmul, gemm and softmax retire their Graph-owned constructor](INTEGRATED_COMPILER_LOG.md#2026-11-03--e2e-real-6-apple-cpu-matmul-gemm-and-softmax-retire-their-graph-owned-constructor)
 
 Current increment: checked rank-four broadcast saved-LSE packages and private tape execute on SM120; physical bias extents, deterministic reduction and saved-state pairing are bound through native Graph/Schedule/Tile and checked CUDA descriptors. [Evidence](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md). Broader W1.1, frontend/AD and sibling routes remain open.
 

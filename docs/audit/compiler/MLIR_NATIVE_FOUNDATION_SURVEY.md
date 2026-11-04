@@ -80,7 +80,7 @@ route fixtures and an inventory derived from those existing routes.
 | ROCm `rocm_native.package_native` | `package_attention` reconstructs Tile/Graph text. (`package_softmax` / `package_reduction` lower through the native Schedule contract since 2026-09-27; `package_paged_kv_read` and `package_moe_dispatch` package their replayed artifacts through `package_scheduled_paged_kv` / `package_scheduled_moe_dispatch` since 2026-11-03; their Graph-authored packagers are test-only oracles -- see the dated notes below.) | Matmul, attention, depth-attention and generic semantic-kernel scheduled consumers already exist. Verify old/new envelope differences, extend missing paged-KV/MoE movement carriers, migrate one family, and delete its Graph constructor after equivalence. Reuse Target→ROCDL→HSACO. |
 | x86 `x86_native.package_native` | Direct baseline and AVX-512 softmax and rank-reducing or keepdims sum/mean/max now use replayed native Schedule/Tile with projected descriptor fields. Direct f32 matmul also replays its native Schedule and projects descriptor fields. Remaining non-f32 matmul/attention, cohort2, elementwise and delegated `x86_breadth.package_graph_breadth` classify Graph and construct lower-level calls/carriers. | Use existing scheduled matmul/attention/kernel consumers for covered shapes; move remaining pointwise/cohort/breadth contracts through canonical IR. For general compiled bodies, reuse `tessera-jit` LLVM lowering; keep native library calls explicit rather than relabeling them as generated bodies. |
 | Apple GPU `apple_native.package_native` | Batched GEMM, dynamic softmax and GELU, transpose, popcount/count-nonzero/topk, SVD and the value-ABI fallback read Graph operands/kwargs and construct descriptors. Static softmax and (since 2026-11-03) static rank-two GELU lower through native Schedule/Tile; GELU's former constructor is a test-only baseline. | Extend existing scheduled matmul/kernel/attention consumers. Migrate one value family to a verified native Target call with IR-derived ABI, then MSL body generation where appropriate. Keep MPS delegation explicitly represented in IR. |
-| Apple CPU `apple_cpu_native.package_native` | Reads the single Graph op, shapes, kwargs and dtype to synthesize a runtime-call record and package the prebuilt Accelerate/runtime image. | Add the typed call/ABI lowering from canonical IR; use the CPU LLVM path for general program bodies. This fifth package entry point must not disappear from a “four backend” inventory. |
+| Apple CPU `apple_cpu_native.package_native` | Batched GEMM, BNNS f16/bf16 matmul and the LAPACK factorizations read the single Graph op, shapes, kwargs and dtype to synthesize a runtime-call record and package the prebuilt Accelerate/runtime image. Static f32 matmul/gemm and rank-two f32 softmax lower through native Schedule/Tile since 2026-11-03; their former constructor is a test-only baseline. | Add the typed call/ABI lowering from canonical IR; use the CPU LLVM path for general program bodies. This fifth package entry point must not disappear from a “four backend” inventory. |
 
 Source anchors are the corresponding `native_package_kind`, `package_native`
 and `package_scheduled_*` symbols in `python/tessera/compiler/`, plus
@@ -380,3 +380,22 @@ only in `tests/_support/rocm_moe_dispatch_baseline.py`, the #31(a) oracle of
 - gfx1201: no device row, because the native owner admits gfx1151 only.
 
 The forward-attention fallback is now the only ROCm Graph-owned constructor.
+
+## Apple CPU matmul/gemm/softmax constructor retirement (2026-11-03)
+
+E2E-REAL-6, sync `E2E-REAL-6-apple-cpu-2026-11-03`: the fifth package entry
+point gains its first native Schedule/Tile families. `getInferredMatmulSchedule`
+admits f32 matmul on `apple_cpu` / `apple_silicon_cpu` and
+`getSemanticKernelSchedule` admits rank-two f32 last-axis softmax there; the
+shared `tile.matmul_kernel` / `tile.softmax_kernel` carry them. The
+`tessera.gemm` legacy alias is spelled `tessera.matmul` before the Schedule on
+that target alone. `apple_cpu_native.package_scheduled_{matmul,kernel}` replay
+Schedule→Tile, project the descriptor from native IR and bind the Accelerate
+delegate through the declared `tessera_apple.cpu.accelerate_gemm` /
+`vector_reduce` ops, verified by `tessera-opt` rather than written as opaque
+text. The retired constructor for those families is frozen in
+`tests/_support/apple_cpu_baseline.py` as the #31(a) oracle of
+`tests/unit/test_apple_cpu_scheduled_migration.py`, bit-exact on the M1 Max.
+The route census moves `apple_cpu,{matmul,gemm,softmax}` to `compiled`. Batched GEMM, BNNS f16/bf16 matmul
+and the six LAPACK factorizations remain the Apple CPU Graph-owned
+constructors.

@@ -16257,3 +16257,33 @@ Open: dynamic GELU still lowers Graph → `--tessera-gelu-to-apple_gpu` →
 descriptor. Transpose, batched GEMM, the dynamic families, SVD and the value
 ABI also remain. Under the assertions-ON LLVM on Tajasarus, lit tessera-ir
 runs 497 passed / 0 failed, including the three GELU fixtures.
+
+## `E2E-REAL-6-apple-cpu-2026-11-03`: Apple CPU matmul, gemm and softmax retire their Graph-owned constructor
+
+Owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+Synchronization key: `E2E-REAL-6-apple-cpu-2026-11-03`.
+
+Static f32 `matmul` / `gemm` (`apple_cpu,{matmul,gemm}`) and rank-two f32
+last-axis `softmax` (`apple_cpu,softmax`) now lower through native
+Graph→Schedule→Tile on `apple_cpu` / `apple_silicon_cpu`: `schedule.matmul` →
+`tile.matmul_kernel` and `schedule.softmax` → `tile.softmax_kernel`.
+`package_scheduled_matmul` / `package_scheduled_kernel` in
+`apple_cpu_native.py` replay the Schedule and project every descriptor field
+from native IR; tampering with the artifact, Schedule or Tile text fails closed
+before the runtime is touched. Accelerate (`tessera_apple_cpu_gemm_f32` over
+cblas_sgemm, `tessera_apple_cpu_softmax_f32`) stays a Decision #28 Tier-3
+delegate, reached through the existing declared
+`tessera_apple.cpu.accelerate_gemm` / `vector_reduce` ops, which the packager
+round-trips through the `tessera-opt` verifier. ABI ids, symbols, bindings and
+the runtime submitter are unchanged; `apple_cpu_runtime` sources are
+untouched. The old route is the #31(a) oracle
+`tests/_support/apple_cpu_baseline.py`.
+
+Evidence (Mac M1 Max, macOS 27.2, unsandboxed Accelerate):
+`tests/unit/test_apple_cpu_scheduled_migration.py` is 70 passed, including 10
+Accelerate cases where both images agree bit-for-bit and match a float64
+oracle. Lit adds `phase8/apple_cpu_scheduled_{schedule_tile,invalid}.mlir`.
+Owed: `batched_gemm` (no Apple batch Schedule contract), BNNS f16/bf16 matmul
+(f32-only Schedule branch; BNNS accumulator unstated), and the LAPACK
+factorizations `cholesky`, `cholesky_solve`, `lu`, `qr`, `svd`, `tri_solve`,
+which still package from Graph IR in `package_native`.

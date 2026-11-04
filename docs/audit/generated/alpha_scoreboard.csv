@@ -1,6 +1,6 @@
 lane,host,device,family,frontend,graph_opt,schedule_tile,native_lowering,execution,alpha_complete
-mac_cpu,Mac M1 Max,arm64 CPU,matmul,bypass,unmeasured,bypass,partial,native,no
-mac_cpu,Mac M1 Max,arm64 CPU,softmax,bypass,unmeasured,bypass,partial,absent,no
+mac_cpu,Mac M1 Max,arm64 CPU,matmul,bypass,unmeasured,native,partial,native,no
+mac_cpu,Mac M1 Max,arm64 CPU,softmax,bypass,unmeasured,native,partial,absent,no
 mac_cpu,Mac M1 Max,arm64 CPU,reduction,bypass,unmeasured,unrouted,partial,absent,no
 mac_cpu,Mac M1 Max,arm64 CPU,norm,bypass,unmeasured,unrouted,partial,absent,no
 mac_cpu,Mac M1 Max,arm64 CPU,attention,bypass,unmeasured,unrouted,partial,absent,no

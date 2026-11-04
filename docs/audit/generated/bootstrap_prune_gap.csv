@@ -30,11 +30,11 @@ x86,elementwise,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 apple_cpu,batched_gemm,—,gap
 apple_cpu,cholesky,—,gap
 apple_cpu,cholesky_solve,—,gap
-apple_cpu,gemm,—,gap
+apple_cpu,gemm,scheduled_matmul.supports_scheduled_matmul,compiled
 apple_cpu,lu,—,gap
-apple_cpu,matmul,—,gap
+apple_cpu,matmul,scheduled_matmul.supports_scheduled_matmul,compiled
 apple_cpu,qr,—,gap
-apple_cpu,softmax,—,gap
+apple_cpu,softmax,scheduled_kernel.supports_scheduled_kernel,compiled
 apple_cpu,svd,—,gap
 apple_cpu,tri_solve,—,gap
 apple_gpu,batched_gemm,—,gap

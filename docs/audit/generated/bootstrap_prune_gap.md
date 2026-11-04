@@ -30,7 +30,7 @@ the bootstrap row can go.
 |   ·  of the bootstrap, other (wrapper / dispatcher) | 39 |
 | — typed scheduled-artifact inputs (consumption needs verification) | 20 |
 | — unclassified/raw inputs (not assumed compiled) | 17 |
-| Lines in those modules | 12882 |
+| Lines in those modules | 12884 |
 | Classified family/target candidates (shape admission not implied) | 57 |
 | — covered by a compiled route | 18 |
 | — packager lowers only through the generic Schedule→Tile route | 12 |
@@ -46,7 +46,7 @@ exact artifacts before treating a row as a constructor deletion target.
 | Target | Module | Graph input | Typed artifact input | Unknown/raw input | Family candidates | Lines |
 |---|---|---|---|---|---|---|
 | `nvidia_sm120` | `nvidia_native.py` | 19 | 3 | 14 | 15 | 5412 |
-| `rocm_gfx1151` | `rocm_native.py` | 7 | 7 | 1 | 5 | 3523 |
+| `rocm_gfx1151` | `rocm_native.py` | 7 | 7 | 1 | 5 | 3525 |
 | `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1603 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 2 | 0 | 10 | 437 |
 | `apple_gpu` | `apple_native.py` | 11 | 4 | 1 | 19 | 1907 |

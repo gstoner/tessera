@@ -3,8 +3,29 @@ audit_role: plan
 plan_state: landing
 owner: NVIDIA backend
 target: nvidia_sm120
-last_updated: 2026-10-21
+last_updated: 2026-11-04
 ---
+## E2E-REAL-6-sm120-attention-2026-11-03 — attention packagers consume replayed artifacts
+
+Owner: E2E-REAL-6. Sync: E2E-REAL-6-sm120-attention-2026-11-03.
+
+- Done: `attention_lse`, `attention_backward_lse`, `attention_scaled_kv`
+  (via `package_scheduled_checkpoint`) and `attention_backward` (via the new
+  `package_scheduled_attention_recompute`) take a typed replayed artifact,
+  run `validate()` before compiling, and project buffers, ABI, scalars, shape
+  guards, geometry and layout from the native contract. `jit.py` reads the
+  saved-LSE and scaled-K/V launch scalars from the descriptor. The production
+  `emit_attention_backward_tile_ir` is deleted.
+- Oracle: `tests/_support/nvidia_attention_checkpoint_baseline.py` (#31(a)),
+  with descriptor-equality and tamper tests in
+  `tests/unit/test_nvidia_attention_checkpoint_migration.py` and the bitwise
+  RTX 5070 differential in
+  `tests/device/nvidia/test_attention_checkpoint_migration.py`.
+- Changed on the wire: the recompute entry symbol now comes from the native
+  contract (`_recompute_` prefix rather than `_deterministic_`), and provenance
+  records scale/softcap/dropout_p at f32. Launch fields are otherwise
+  identical. No performance claim.
+
 ## NATIVE-INDEPENDENT-SHAPE-20261021 — native execution proof
 
 Owner: W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

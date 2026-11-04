@@ -900,14 +900,10 @@ def compile_graph_module(
             nvidia_package = nvidia_native.package_scheduled_checkpoint(scheduled_checkpoint_artifact, pipeline_name=producer)
         elif scheduled_paged_kv_artifact is not None:
             nvidia_package = nvidia_native.package_scheduled_paged_kv(scheduled_paged_kv_artifact, pipeline_name=producer)
-        elif scheduled_matmul_artifact is not None and scheduled_matmul_artifact.storage == "nvfp4":
-            # The scale-bearing NVFP4 ABI has five buffers, unlike the ordinary
-            # A/B/D matmul ABI. Keep the original Graph scale/batch contract.
-            nvidia_package = nvidia_native.package_nvfp4_matmul(
-                module, pipeline_name=producer, scheduled_artifact=scheduled_matmul_artifact)
-            if nvidia_package.tile_ir != scheduled_matmul_artifact.tile_ir:
-                raise ValueError("NVFP4 package does not match the retained native Schedule/Tile product")
         elif scheduled_matmul_artifact is not None:
+            # NVFP4 and INT4 artifacts dispatch inside package_scheduled_matmul
+            # to consumers that project their scale/packing ABI from the
+            # replayed native Schedule (E2E-REAL-6, 2026-11-04).
             # Consume the shared Schedule -> launch-Tile artifact directly;
             # this keeps NVIDIA's physical lowering while removing the second
             # Graph-local schedule classification.

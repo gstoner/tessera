@@ -5,6 +5,40 @@ owner: NVIDIA backend
 target: nvidia_sm120
 last_updated: 2026-11-04
 ---
+## E2E-REAL-6-sm120-lowp-matmul-2026-11-04 — low-precision matmul packagers consume replayed artifacts
+
+Owner: E2E-REAL-6. Sync: E2E-REAL-6-sm120-lowp-matmul-2026-11-04.
+
+- Done: `nvfp4_matmul` and `int4_matmul`. Both already lowered Graph →
+  Schedule → Tile; the packagers still read scale operand names, logical
+  shapes, batch axes and transposes (NVFP4) or unchecked artifact labels
+  (INT4) from outside the native contract. The new
+  `package_scheduled_nvfp4_matmul(ScheduledMatmulArtifact)` and the hardened
+  `package_scheduled_int4_matmul` replay Graph → Schedule → Tile, bind host
+  aliases to the Schedule's positional operand roles, and project buffers,
+  ABI, scalars, shape guards, geometry, the K16 UE4M3 block-scale views
+  (NVFP4) and the packed int8 extents (`tessera.packed_shapes`, INT4) before
+  `_compile_tile_ir`. Storage, `scale_layout`, `scale_format`, `scale_k` and
+  `numeric_policy` are Decision #21a semantic keys: a conflicting value fails
+  closed, and `canonical_nvfp4_graph` now refuses a plain matmul whose
+  declared contract differs instead of overwriting it. `package_scheduled_matmul`
+  dispatches both by artifact storage; the driver's NVFP4-specific Graph branch
+  is deleted.
+- Oracle: `tests/_support/nvidia_lowp_matmul_baseline.py` (#31(a)), with
+  descriptor-equality and tamper tests in
+  `tests/unit/test_nvidia_lowp_matmul_migration.py` and the RTX 5070 bitwise
+  differential in `tests/device/nvidia/test_lowp_matmul_migration.py`.
+- Owed: `mx_matmul` (FP6 E2M3/E3M2 and MXFP4 with UE8M0 K32 scales).
+  `package_mx_matmul` still authors its Tile IR in Python
+  (`emit_mx_matmul_tile_ir`) because there is no native contract to replay:
+  the Graph spells FP6 as `!tessera.fp6_e2m3`/`!tessera.fp6_e3m2`, which no
+  dialect defines (MLIR's builtins are `f6E2M3FN`/`f6E3M2FN`), and
+  `getInferredMatmulSchedule` has no MX block-scale branch. Closing it needs a
+  C++ Schedule/Tile slice (Graph types, Schedule contract, Tile emission,
+  lit fixtures, an assertions-ON run on Tajasarus), not a Python cut.
+- Changed on the wire: nothing in the NVFP4 descriptor. INT4 now also requires
+  its retained Graph text (a discarded Graph is refused). No performance claim.
+
 ## E2E-REAL-6-sm120-attention-2026-11-03 — attention packagers consume replayed artifacts
 
 Owner: E2E-REAL-6. Sync: E2E-REAL-6-sm120-attention-2026-11-03.

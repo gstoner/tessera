@@ -32,9 +32,13 @@ def test_native_packed_state_consumes_serialized_schedule(kind, monkeypatch):
         "_compile_tile_ir",
         lambda text, entry: (calls.append(text) or text, "// PTX", {}, "compiler", "toolchain", (), "cold"),
     )
-    # Paged read now replays both native boundaries from the admitted Graph.
-    consumed = scheduled if kind == "paged" else replace(scheduled, graph_ir="discarded")
-    result = package(kind, consumed)
+    # Both consumers replay both native boundaries from the admitted Graph
+    # (INT4 since E2E-REAL-6, 2026-11-04: the Graph names the host aliases of
+    # the Schedule's positional roles), so a discarded Graph is refused.
+    with pytest.raises((ValueError, RuntimeError)):
+        package(kind, replace(scheduled, graph_ir="discarded"))
+    assert calls == []
+    result = package(kind, scheduled)
     assert calls == [scheduled.tile_ir]
     assert result.descriptor.provenance["schedule_digest"] == scheduled.schedule_digest
     assert not hasattr(native, "emit_int4_matmul_tile_ir")

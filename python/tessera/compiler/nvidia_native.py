@@ -3298,6 +3298,8 @@ def package_scheduled_matmul(
     """Compile the scheduled Tile artifact once and bind its launch contract."""
     if artifact.storage == "int4":
         return package_scheduled_int4_matmul(artifact, pipeline_name=pipeline_name)
+    if artifact.storage == "nvfp4":
+        return package_scheduled_nvfp4_matmul(artifact, pipeline_name=pipeline_name)
     if (artifact.target == "nvidia_sm120" and
             "fp32" in {artifact.a_dtype, artifact.b_dtype}):
         from .prepared_nvidia_scalar_matmul import package
@@ -3515,33 +3517,18 @@ def package_nvfp4_matmul(
     pipeline_name: str,
     scheduled_artifact: ScheduledMatmulArtifact | None = None,
 ) -> NVIDIANativePackage:
-    """Compile logical NVFP4 Graph through the canonical Schedule/Tile route."""
+    """Lower a logical NVFP4 Graph and package its replayed native artifact.
+
+    Graph admission decides only whether this route is tried; every launch
+    field comes from :func:`package_scheduled_nvfp4_matmul`. A caller-supplied
+    ``scheduled_artifact`` must be the lowering of this exact Graph.
+    """
     if not supports_nvfp4_matmul(module):
         raise ValueError("SM120 NVFP4 packaging requires one static rank-2 matmul with logical scale_a/scale_b views")
-    from .scheduled_matmul import (find_tessera_opt, lower_scheduled_matmul, run_tessera_opt,
-                                   _canonical_matmul_graph_ir, _graph_contract)
+    from .scheduled_matmul import (_canonical_matmul_graph_ir, _graph_contract,
+                                   canonical_nvfp4_graph, lower_scheduled_matmul)
 
-    # Give the scale operands first-class Graph semantics. Keep the caller-owned
-    # module intact because callers commonly reuse the source for oracle runs.
-    scheduled_module = copy.deepcopy(module)
-    fn = scheduled_module.functions[0]
-    op = fn.body[0]
-    expected_contract = {
-        "scale_layout": {"granularity": "block", "block": [1, 16], "format": "ue4m3"},
-        "numeric_policy": {"accum": "fp32", "execution_mode": "exact_per_block"},
-        "physical_contract": "nvidia_sm120_nvfp4_blockscale_v1",
-    }
-    if op.op_name == "tessera.scaled_matmul":
-        for name, expected in expected_contract.items():
-            if op.kwargs.get(name) != expected:
-                raise ValueError(
-                    f"NVFP4 scaled_matmul requires {name}={expected!r}"
-                )
-    elif op.op_name in {"tessera.matmul", "tessera.gemm"}:
-        op.op_name = "tessera.scaled_matmul"
-        op.kwargs.update(expected_contract)
-    else:
-        raise ValueError("NVFP4 packaging requires matmul, gemm, or scaled_matmul")
+    scheduled_module = canonical_nvfp4_graph(module)
     if scheduled_artifact is None:
         artifact = lower_scheduled_matmul(scheduled_module, target="nvidia_sm120")
     else:
@@ -3549,33 +3536,28 @@ def package_nvfp4_matmul(
         contract = _graph_contract(scheduled_module, "nvidia_sm120")
         if artifact.graph_ir != _canonical_matmul_graph_ir(scheduled_module, "nvidia_sm120", contract):
             raise ValueError("NVFP4 shared Schedule belongs to a different logical Graph")
-        artifact.validate()
-        if (artifact.a_name, artifact.b_name, artifact.output_name) != (
-                contract[3], contract[4], contract[5]):
-            raise ValueError("NVFP4 shared Schedule buffer roles differ from its logical Graph")
-    tool = find_tessera_opt()
-    if tool is None or run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
-        raise ValueError("NVFP4 Tile does not replay from its canonical Schedule")
-    if (artifact.target != "nvidia_sm120" or artifact.storage != "nvfp4"
-            or artifact.accum != "f32" or artifact.output_dtype != "fp32"
-            or artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k
-            or artifact.bias_name or artifact.residual_name or artifact.activation != "none"):
-        raise ValueError("unsupported scheduled SM120 NVFP4 package contract")
-    tile_ir = artifact.tile_ir
-    if ('physical_contract = "nvidia_sm120_nvfp4_blockscale_v1"' not in tile_ir
-            or "tessera.scale_vector_size = 16 : i64" not in tile_ir
-            or "tessera.storage_pack" not in tile_ir):
-        raise ValueError("NVFP4 Tile lost its packed K16 scale contract")
-    independent_rhs = op.kwargs.get("batching") == "independent_rhs"
-    shared_lhs = op.kwargs.get("batching") == "shared_lhs"
-    rhs_batched = independent_rhs or shared_lhs
-    batch_aware = rhs_batched or (op.kwargs.get("batching") == "shared_rhs_rows" and op.kwargs.get("transposeA", False))
+    return package_scheduled_nvfp4_matmul(artifact, pipeline_name=pipeline_name)
+
+
+def package_scheduled_nvfp4_matmul(
+    artifact: ScheduledMatmulArtifact, *, pipeline_name: str
+) -> NVIDIANativePackage:
+    """Package a replayed NVFP4 matmul; every launch field is a native projection.
+
+    E2E-REAL-6 (sync ``E2E-REAL-6-sm120-lowp-matmul-2026-11-04``):
+    ``verify_nvfp4_projection`` replays Graph -> Schedule -> Tile and reads
+    the operand roles, the K16 UE4M3 block-scale views, the batch axes and the
+    transposes from the native Schedule, so a relabelled or tampered artifact
+    fails before ``_compile_tile_ir``. The retired Graph-authored packager is
+    the test-only oracle ``tests/_support/nvidia_lowp_matmul_baseline.py``.
+    """
+    from .scheduled_matmul import verify_nvfp4_projection
+
+    artifact.validate()
+    projection = verify_nvfp4_projection(artifact)
+    tile_ir, entry = artifact.tile_ir, projection.entry
+    batch_aware = projection.batch_aware
     abi_id = SM120_NVFP4_BATCH_ABI if batch_aware else SM120_NVFP4_ABI
-    expected_entry = "tessera_tile_matmul_nvfp4_batched" if batch_aware else "tessera_tile_matmul_nvfp4"
-    entry_match = re.search(r"llvm.func @([A-Za-z0-9_]+)\(", tile_ir)
-    if entry_match is None or entry_match.group(1) != expected_entry:
-        raise ValueError("NVFP4 Schedule/Tile emitted an unexpected runtime entry")
-    entry = entry_match.group(1)
     (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
         tile_ir, entry
     )
@@ -3596,38 +3578,35 @@ def package_nvfp4_matmul(
             metrics=metrics,
         ),
     )
-    a_name, b_name = artifact.a_name, artifact.b_name
-    scale_a_name, scale_b_name = (value.removeprefix("%") for value in op.operands[2:4])
-    a_shape, b_shape = _shape(scheduled_module, a_name), _shape(scheduled_module, b_name)
-    assert a_shape is not None and b_shape is not None
-    ta, tb = (op.kwargs.get(name, False) for name in ("transposeA", "transposeB"))
-    m, n, k = artifact.m, artifact.n, artifact.k
-    batch_prefix = (b_shape[:-2] if shared_lhs else a_shape[:-2]) if op.kwargs.get("batching") in {"shared_rhs_rows", "independent_rhs", "shared_lhs"} else ()
+    m, n, k = projection.m, projection.n, projection.k
+    ta, tb = projection.transpose_a, projection.transpose_b
+    batch_prefix = projection.batch_prefix
     batch_count = math.prod(batch_prefix) if batch_prefix else 1
     batch_shape = (*batch_prefix, m // batch_count) if batch_prefix else None
-    output_name = artifact.output_name
     row_shape = batch_shape if batch_shape else (m,)
-    physical_a, physical_b = list(a_shape), list(b_shape)
+    a_name, b_name = projection.a_name, projection.b_name
+    scale_a_name, scale_b_name = projection.scale_a_name, projection.scale_b_name
+    output_name = projection.output_name
+    physical_a, physical_b = list(projection.a_shape), list(projection.b_shape)
     physical_a[-2 if ta else -1] = (k + 1) // 2
     physical_b[-1 if tb else -2] = (k + 1) // 2
-    scale_a_shape = _shape(scheduled_module, scale_a_name)
-    scale_b_shape = _shape(scheduled_module, scale_b_name)
-    assert scale_a_shape is not None and scale_b_shape is not None
     physical_shapes = {
         a_name: tuple(physical_a), b_name: tuple(physical_b),
-        scale_a_name: scale_a_shape,
-        scale_b_name: scale_b_shape,
+        scale_a_name: projection.scale_a_shape,
+        scale_b_name: projection.scale_b_shape,
         output_name: (*row_shape, n),
     }
+    a_rank, b_rank = len(projection.a_shape), len(projection.b_shape)
+    batching = projection.batching
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
         abi_id=abi_id,
         buffers=(
-            BufferBinding(0, a_name, "input", "uint8", len(a_shape), "row_major", 1),
-            BufferBinding(1, b_name, "input", "uint8", len(b_shape), "row_major", 1),
-            BufferBinding(2, scale_a_name, "input", "uint8", len(a_shape), "row_major", 1),
-            BufferBinding(3, scale_b_name, "input", "uint8", len(b_shape), "row_major", 1),
+            BufferBinding(0, a_name, "input", "uint8", a_rank, "row_major", 1),
+            BufferBinding(1, b_name, "input", "uint8", b_rank, "row_major", 1),
+            BufferBinding(2, scale_a_name, "input", "uint8", a_rank, "row_major", 1),
+            BufferBinding(3, scale_b_name, "input", "uint8", b_rank, "row_major", 1),
             BufferBinding(4, output_name, "output", "fp32", len(row_shape)+1, "row_major", 4),
         ),
         scalars=(
@@ -3651,9 +3630,9 @@ def package_nvfp4_matmul(
             "sync_key": "E2E-SPINE-2026-07-18",
             "schedule": "graph_schedule_tile_sm120_nvfp4_k16_m16n8k64",
             "shape": [m, n, k],
-            "batch_rows": [batch_count,batch_shape[-1]] if batch_shape else None,
+            "batch_rows": [batch_count, batch_shape[-1]] if batch_shape else None,
             "logical_batch_shape": list(batch_prefix),
-            "batching": "shared_lhs" if shared_lhs else ("independent_rhs" if independent_rhs else ("shared_rhs_rows" if batch_shape else None)),
+            "batching": batching if batch_shape else None,
             "transposeA": ta, "transposeB": tb,
             "scale_vector_size": 16,
             "storage_pack": {
@@ -3684,9 +3663,17 @@ def package_int4_matmul(
     return package_scheduled_int4_matmul(lower_scheduled_matmul(module, target="nvidia_sm120"), pipeline_name=pipeline_name)
 
 
-def package_scheduled_int4_matmul(artifact: Any, *, pipeline_name: str) -> NVIDIANativePackage:
-    """Consume native signed INT4 scheduling and its replayed physical packing."""
-    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+def package_scheduled_int4_matmul(artifact: ScheduledMatmulArtifact, *, pipeline_name: str) -> NVIDIANativePackage:
+    """Consume native signed INT4 scheduling and its replayed physical packing.
+
+    E2E-REAL-6 (sync ``E2E-REAL-6-sm120-lowp-matmul-2026-11-04``):
+    ``verify_int4_projection`` replays Graph -> Schedule -> Tile, binds the
+    host aliases to the native operand roles, and requires M/N/K, storage and
+    accumulator to equal the native Schedule's; the packed extents below are read from the Tile launch
+    op's ``tessera.packed_shapes``. A tampered artifact fails before
+    ``_compile_tile_ir``.
+    """
+    from .scheduled_matmul import find_tessera_opt, run_tessera_opt, verify_int4_projection
     artifact.validate()
     if (artifact.target, artifact.architecture, artifact.storage, artifact.accum,
             artifact.a_dtype, artifact.b_dtype, artifact.output_dtype) != (
@@ -3704,6 +3691,11 @@ def package_scheduled_int4_matmul(artifact: Any, *, pipeline_name: str) -> NVIDI
         raise ValueError("INT4 dimensions disagree with native schedule")
     if artifact.function_name != "tessera_tile_matmul_int4":
         raise ValueError("INT4 entry disagrees with runtime ABI")
+    verify_int4_projection(artifact)
+    packed = re.findall(r"tessera\.packed_shapes = array<i64: (\d+), (\d+), (\d+), (\d+)>", artifact.tile_ir)
+    if (len(packed) != 1 or tuple(map(int, packed[0])) != (m, (k + 1) // 2, (k + 1) // 2, n)
+            or 'signedness = "signed_twos_complement"' not in artifact.tile_ir):
+        raise ValueError("INT4 Tile lost its packed signed int8-container contract")
     entry, tile_ir = artifact.function_name, artifact.tile_ir
     (lowered, ptx, metrics, compiler_fp, toolchain_fp,
      device_libraries, compile_state) = _compile_tile_ir(tile_ir, entry)
@@ -5335,6 +5327,7 @@ __all__ = [
     "package_nvfp4_matmul",
     "package_int4_matmul",
     "package_scheduled_int4_matmul",
+    "package_scheduled_nvfp4_matmul",
     "package_cuda_intrinsic",
     "package_packed_decode",
     "package_paged_kv_read",

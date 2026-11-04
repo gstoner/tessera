@@ -71,6 +71,14 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
     "paged_kv": ("scheduled_paged_kv", "supports_scheduled_paged_kv"),
     # Likewise package_scheduled_moe_dispatch: the gfx1151 token gather.
     "moe_dispatch": ("scheduled_moe_dispatch", "supports_scheduled_moe_dispatch"),
+    # Saved-LSE checkpoints: the consumer is package_scheduled_checkpoint, which
+    # validates the replayed ScheduledCheckpointArtifact before compiling it.
+    "attention_lse": ("scheduled_checkpoint", "supports_scheduled_attention_lse"),
+    "attention_scaled_kv": ("scheduled_checkpoint", "supports_scheduled_attention_scaled_kv"),
+    "attention_backward_lse": (
+        "scheduled_checkpoint",
+        "supports_scheduled_attention_backward_lse",
+    ),
 }
 
 #: (target, family) -> route, for a family whose route is target-specific.
@@ -83,9 +91,16 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
 #: generic route from a ``package_softmax`` wrapper; Apple CPU reaches its
 #: ``package_scheduled_kernel`` consumer from ``package_native`` directly
 #: rather than adding a Graph-input constructor the alpha ratchet would count.
+#: SM120 ``attention_backward`` replays the original Graph through
+#: ``schedule.attention_backward_recompute`` (E2E-REAL-6, 2026-11-03); the x86
+#: row of the same family keeps its own route.
 _TARGET_FAMILY_TO_COMPILED: dict[tuple[str, str], tuple[str, str]] = {
     ("apple_cpu", "gemm"): ("scheduled_matmul", "supports_scheduled_matmul"),
     ("apple_cpu", "softmax"): ("scheduled_kernel", "supports_scheduled_kernel"),
+    ("nvidia_sm120", "attention_backward"): (
+        "scheduled_attention_recompute",
+        "supports_scheduled_attention_recompute",
+    ),
 }
 
 #: The generic compiled fallback the driver tries last. It admits by op

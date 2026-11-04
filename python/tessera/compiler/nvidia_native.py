@@ -42,6 +42,8 @@ from .nvidia_math_contract import CUDA_MATH_CONTRACT_VERSION
 
 if TYPE_CHECKING:
     from .scheduled_attention import ScheduledAttentionArtifact
+    from .scheduled_attention_recompute import ScheduledAttentionRecomputeArtifact
+    from .scheduled_checkpoint import ScheduledCheckpointArtifact
     from .scheduled_matmul import ScheduledMatmulArtifact
 
 
@@ -1866,47 +1868,6 @@ def emit_moe_tile_ir(*, entry: str, route: str, storage: str = "f32") -> str:
     return f'''module {{
   llvm.func @{entry}({signature}) attributes {{nvvm.kernel}} {{
     {body}
-    llvm.return
-  }}
-}}
-'''
-
-
-def emit_attention_backward_tile_ir(
-    *, entry: str, scale: float, causal: bool, storage: str = "f32", bias: bool = False,
-    window_left: int = -1, window_right: int = -1, softcap: float = 0.0,
-    dropout_p: float = 0.0, dropout_seed: int = 0,
-) -> str:
-    """Emit the deterministic f16/bf16/f32 reference VJP through Tile IR."""
-    if storage not in {"f16", "bf16", "f32"}:
-        raise ValueError(f"unsupported SM120 attention backward storage {storage!r}")
-    if not math.isfinite(scale) or scale <= 0.0:
-        raise ValueError("SM120 attention backward scale must be finite and positive")
-    if window_left < -1 or window_right < -1:
-        raise ValueError("SM120 attention backward windows must be >= -1")
-    if not math.isfinite(softcap) or softcap < 0.0:
-        raise ValueError("SM120 attention backward softcap must be finite and nonnegative")
-    if not math.isfinite(dropout_p) or not 0.0 <= dropout_p < 1.0:
-        raise ValueError("SM120 attention backward dropout_p must be in [0, 1)")
-    optional_arg = "%bias: !llvm.ptr, " if bias else ""
-    optional_operand = "%bias, " if bias else ""
-    return f'''module {{
-  llvm.func @{entry}(%do: !llvm.ptr, %q: !llvm.ptr, %key: !llvm.ptr,
-                     %v: !llvm.ptr, {optional_arg}%dq: !llvm.ptr,
-                     %dk: !llvm.ptr, %dv: !llvm.ptr, %b: i64, %hq: i64,
-                     %hkv: i64, %sq: i64, %sk: i64, %d: i64, %dv_dim: i64)
-      attributes {{nvvm.kernel}} {{
-    tile.attention_backward_kernel %do, %q, %key, %v, {optional_operand}%dq, %dk, %dv,
-        %b, %hq, %hkv, %sq, %sk, %d, %dv_dim {{
-      storage = "{storage}", accum = "f32", scale = {scale:.17e} : f32,
-      causal = {str(causal).lower()}, bias = {str(bias).lower()},
-      window_left = {window_left} : i64, window_right = {window_right} : i64,
-      softcap = {float(softcap)!r} : f32,
-      dropout_p = {float(dropout_p)!r} : f32, dropout_seed = {dropout_seed} : i64,
-      route = "deterministic_direct",
-      deterministic = true, workspace_bytes = 0 : i64,
-      workspace_owner = "output_element", lse_checkpoint = "recompute"
-    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, {"!llvm.ptr, " * (3 + int(bias))}i64, i64, i64, i64, i64, i64, i64
     llvm.return
   }}
 }}
@@ -4348,7 +4309,21 @@ def package_attention_backward(
         )
     from .scheduled_attention_recompute import lower_native_attention_recompute
 
-    artifact = lower_native_attention_recompute(module)
+    return package_scheduled_attention_recompute(
+        lower_native_attention_recompute(module), pipeline_name=pipeline_name)
+
+
+def package_scheduled_attention_recompute(
+    artifact: ScheduledAttentionRecomputeArtifact, *, pipeline_name: str
+) -> NVIDIANativePackage:
+    """Package a replayed recompute VJP; every launch field is a Tile projection.
+
+    E2E-REAL-6 (sync ``E2E-REAL-6-sm120-attention-2026-11-03``): ``validate``
+    replays Graph -> Schedule -> Tile and requires the artifact's fields to
+    equal the sealed ``tessera.native_contract``, so a relabelled or tampered
+    artifact fails here, before ``_compile_tile_ir``.
+    """
+    artifact.validate()
     storage_ir = artifact.storage
     storage = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}[storage_ir]
     names, dims = artifact.input_names[:4], artifact.dims
@@ -4801,8 +4776,13 @@ def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NV
         lse_cotangent_contract(descriptor)
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
 
-def package_scheduled_checkpoint(scheduled: Any, *, pipeline_name: str) -> NVIDIANativePackage:
-    """Consume a replay-verified native checkpoint without Graph reconstruction."""
+def package_scheduled_checkpoint(scheduled: ScheduledCheckpointArtifact, *, pipeline_name: str) -> NVIDIANativePackage:
+    """Consume a replay-verified native checkpoint without Graph reconstruction.
+
+    ``validate`` runs before any compilation: a tampered artifact (fields or
+    IR) fails here. Every launch field below is read from the artifact, whose
+    fields are the projection of the replayed ``tessera.native_contract``.
+    """
     scheduled.validate()
     package = _package_attention_backward_lse if scheduled.backward else _package_attention_lse
     return package(scheduled, pipeline_name=pipeline_name)
@@ -5321,7 +5301,6 @@ __all__ = [
     "SM120_SOFTMAX_BF16_ABI",
     "SM120_SOFTMAX_F32_ABI",
     "emit_f16_matmul_tile_ir",
-    "emit_attention_backward_tile_ir",
     "emit_f16_softmax_tile_ir",
     "emit_matmul_tile_ir",
     "emit_mx_matmul_tile_ir",
@@ -5338,6 +5317,7 @@ __all__ = [
     "package_bf16_softmax",
     "package_attention",
     "package_attention_backward",
+    "package_scheduled_attention_recompute",
     "package_scheduled_checkpoint",
     "AttentionCheckpointPair",
     "package_attention_checkpoint_pair",

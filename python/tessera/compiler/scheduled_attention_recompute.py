@@ -1,4 +1,12 @@
-"""Original NVIDIA recompute Graph lowered by native MLIR passes."""
+"""Original NVIDIA recompute Graph lowered by native MLIR passes.
+
+E2E-REAL-6 (sync ``E2E-REAL-6-sm120-attention-2026-11-03``): the SM120
+consumer ``nvidia_native.package_scheduled_attention_recompute`` reads every
+launch field from a validated :class:`ScheduledAttentionRecomputeArtifact`,
+whose fields are exactly the projection of the replayed Tile
+``tessera.native_contract``. The retired Python Tile constructor survives as
+the test-only oracle in ``tests/_support/nvidia_attention_baseline.py``.
+"""
 from __future__ import annotations
 
 import copy
@@ -61,7 +69,7 @@ def _native_fields(tile):
 
 
 @dataclass(frozen=True)
-class NativeAttentionRecomputeArtifact:
+class ScheduledAttentionRecomputeArtifact:
     graph_ir: str
     schedule_ir: str
     tile_ir: str
@@ -134,6 +142,13 @@ def lower_native_attention_recompute(module):
     graph = targeted.to_mlir(target="nvidia_sm120", canonical=True)
     schedule = run_tessera_opt(tool, graph, "--tessera-graph-to-schedule")
     tile = run_tessera_opt(tool, schedule, "--tessera-schedule-to-tile")
-    artifact = NativeAttentionRecomputeArtifact(graph, schedule, tile, **_native_fields(tile))
+    artifact = ScheduledAttentionRecomputeArtifact(graph, schedule, tile, **_native_fields(tile))
     artifact.validate()
     return artifact
+
+
+def supports_scheduled_attention_recompute(module, *, target: str = "nvidia_sm120") -> bool:
+    """Whether the SM120 recompute backward route admits ``module``."""
+    from .nvidia_native import supports_attention_backward
+
+    return target == "nvidia_sm120" and supports_attention_backward(module)

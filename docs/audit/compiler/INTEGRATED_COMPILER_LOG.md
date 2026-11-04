@@ -14602,3 +14602,30 @@ NVIDIA, ROCm and x86: not applicable (sibling notes in each queue). No sm_120 or
 Remaining: owed -- `apple_cpu,batched_gemm` (the Schedule has no Apple batch contract), the BNNS f16/bf16 matmul (the Schedule's Apple CPU branch is f32-only and BNNS's accumulator is unstated), and the LAPACK factorizations `cholesky`, `cholesky_solve`, `lu`, `qr`, `svd`, `tri_solve`. They still package from Graph IR in `package_native` and stay `gap` rows. No performance claim.
 Evidence: tests/unit/test_apple_cpu_scheduled_migration.py; tests/_support/apple_cpu_baseline.py; tests/tessera-ir/phase8/apple_cpu_scheduled_schedule_tile.mlir; tests/tessera-ir/phase8/apple_cpu_scheduled_invalid.mlir; src/compiler/programming_model/lib/PMPasses.cpp; docs/audit/generated/bootstrap_prune_gap.csv
 <!-- entry-fields:end -->
+
+### 2026-11-03 — E2E-REAL-6: SM120 attention packagers consume their replayed artifacts
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: branch `claude/e2e6-sm120-attention-034f5b`; sync E2E-REAL-6-sm120-attention-2026-11-03.
+Outcome: the four `nvidia_sm120` attention rows that were `gap` on `bootstrap_prune_gap` (`attention_lse`, `attention_backward`, `attention_backward_lse`, `attention_scaled_kv`) now package from a replayed native artifact. The Graph object no longer authors buffers, ABI, scalars, shape guards, geometry or layout. This follows the paged-KV pattern (#1037).
+- **Consumers.** `package_scheduled_checkpoint(ScheduledCheckpointArtifact)` (saved-LSE forward/backward, typed storage and scaled FP8 K/V) and the new `package_scheduled_attention_recompute(ScheduledAttentionRecomputeArtifact)` both call `validate()` first. That re-runs Graph→Schedule→Tile replay and requires every artifact field to match the Tile `tessera.native_contract`, so a tampered artifact is refused before any compile call. `package_attention_backward` is now admission → `lower_native_attention_recompute` → that consumer. The production Python Tile constructor `emit_attention_backward_tile_ir` is deleted. `jit.py` takes the saved-LSE and scaled-K/V launch scalars from `descriptor.provenance`, and keeps the Graph contract only as a cross-check. `NativeAttentionRecomputeArtifact` is renamed `ScheduledAttentionRecomputeArtifact`; nothing imported the old name.
+- **Prune audit.** `_FAMILY_TO_COMPILED` declares the three checkpoint families against `scheduled_checkpoint.supports_scheduled_attention_*`. A new `_TARGET_FAMILY_TO_COMPILED` keys `(nvidia_sm120, attention_backward)` to `scheduled_attention_recompute`, so x86 `attention_backward` is unchanged. Each predicate delegates to the existing `nvidia_native` admission and refuses other targets. Its effect on `primitive_route_map`: `dequantize_scaled` becomes compiled.
+- **Oracle (#31(a)).** `tests/_support/nvidia_attention_checkpoint_baseline.py` freezes the Graph-tuple checkpoint packagers, the 8eee7d584^ recompute packager, and a Graph-signature-only launch derivation for typed and scaled forwards (those never had a Graph packager). `test_nvidia_attention_checkpoint_migration.py` (91 unit cases) covers:
+  - descriptor equality over fwd/bwd × shapes × bias none/full/broadcast × permuted operands;
+  - recompute ABI/buffers/scalars/geometry/workspace/ordering/guards;
+  - typed and scaled forwards against the Graph-signature launch;
+  - consumers never re-entering Graph admission;
+  - tamper refusal (10 checkpoint × fwd/bwd, 9 recompute fields), with no compile call;
+  - predicate exclusivity.
+
+  Two wire facts changed and are pinned by these tests. The recompute entry prefix is `_recompute_`, not `_deterministic_`. Provenance records `scale`/`softcap`/`dropout_p` at f32, because the native contract stores f32. The tests compare those three at f32.
+- **Device (The-Super-Bear, RTX 5070, CUDA 13.4, driver 610.88).** Runs were unsandboxed, under `flock /tmp/tessera-sm120-device.lock`, in two detached worktrees (branch `3ae2c6512`, main `07bf5eb38`) symlinked to the shared `build/` and `build-nvidia-cuda/`. The change is Python-only, so both halves ran the same binaries.
+  - The new differential `test_attention_checkpoint_migration.py` plus the unit file: 112 passed, 0 skipped. The 21 device cases are bitwise-equal between the retired and native packages. They cover saved-LSE pairs over 3 shapes × 3 bias modes and recompute over fp16/bf16/fp32 × bias × advanced policy, and agree with NumPy references.
+  - Per-test junit A/B over 54 attention/LSE/checkpoint/recompute device files plus 19 unit files gave the same 3099 cases on each side with identical outcomes: 8 failed / 3039 passed / 52 skipped on both. The 8 failures (3 `test_compact_attention_gradients`, 1 `test_lse_cotangent_native`, 4 `test_scheduled_norm_attention`) fail on main identically.
+  - The 40 skips gated on `TESSERA_NVIDIA_DEVICE_PROOF=1` (prepared attention VJP/JVP, native JVP, stream isolation) were re-run with it set: 40 passed on both sides. The remaining 12 skips are Apple/x86/ROCm lanes this host cannot evaluate.
+- **Mac.** mypy clean; generated docs in sync; the plan check passes.
+
+ROCm, Apple, x86: not applicable (sm_120-only packagers; the x86 `attention_backward` prune row is unchanged).
+Remaining: the sm_120 Graph contract tuples still feed admission (`supports_attention_*`); forward-attention and other sm_120 families stay as recorded on the dashboard. No performance claim.
+Evidence: python/tessera/compiler/nvidia_native.py; python/tessera/compiler/scheduled_checkpoint.py; python/tessera/compiler/scheduled_attention_recompute.py; python/tessera/compiler/bootstrap_prune_audit.py; tests/_support/nvidia_attention_checkpoint_baseline.py; tests/unit/test_nvidia_attention_checkpoint_migration.py; tests/device/nvidia/test_attention_checkpoint_migration.py; docs/audit/generated/bootstrap_prune_gap.md
+<!-- entry-fields:end -->

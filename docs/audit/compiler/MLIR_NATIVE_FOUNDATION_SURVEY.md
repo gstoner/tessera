@@ -76,7 +76,7 @@ route fixtures and an inventory derived from those existing routes.
 | Route and current entry | What still comes from Python Graph state | Existing replacement / next migration |
 |---|---|---|
 | NVIDIA `nvidia_native.package_scheduled_matmul(artifact)` | F1 removed the Graph argument and base-package compilation. The consumer validates artifact shape/ABI facts and compiles Tile once; the driver retains adjacent boundary lineage. | Keep the one-compile, no-Graph and tampering gates. Broader matmul storage and dynamic envelopes remain separately scoped. |
-| NVIDIA `package_native` | Softmax and reduction now enter native Schedule/Tile lowering, including narrow storage, min, keepdims and cooperative reduction. Their Graph constructors are deleted from production. Norm and forward attention now also consume native Schedule/Tile; their former constructors are test-only baselines. Recompute backward attention, fused paged attention and scaled/quantized matmul still reconstruct Tile. Saved-LSE pairs, signed INT4 and bounded paged reads now have native producers and replayed Schedule consumers. | F2-U1–U10 close the bounded unary migration with RTX differential proof. Aligned masks and paired-LSE validation landed in the next cut; native paired, signed-INT4 and bounded paged producers are implemented; reuse NVVM/PTX compilation and retain per-storage ABI gates. |
+| NVIDIA `package_native` | Softmax and reduction now enter native Schedule/Tile lowering, including narrow storage, min, keepdims and cooperative reduction. Their Graph constructors are deleted from production. Norm and forward attention now also consume native Schedule/Tile; their former constructors are test-only baselines. Fused paged attention and scaled/quantized matmul still reconstruct Tile. Saved-LSE pairs (incl. typed and scaled FP8 K/V forwards), recompute backward attention, signed INT4 and bounded paged reads now have native producers and typed replayed-artifact consumers (`package_scheduled_checkpoint`, `package_scheduled_attention_recompute` since 2026-11-03). | F2-U1–U10 close the bounded unary migration with RTX differential proof. Aligned masks and paired-LSE validation landed in the next cut; native paired, signed-INT4 and bounded paged producers are implemented; reuse NVVM/PTX compilation and retain per-storage ABI gates. |
 | ROCm `rocm_native.package_native` | `package_attention` reconstructs Tile/Graph text. (`package_softmax` / `package_reduction` lower through the native Schedule contract since 2026-09-27; `package_paged_kv_read` and `package_moe_dispatch` package their replayed artifacts through `package_scheduled_paged_kv` / `package_scheduled_moe_dispatch` since 2026-11-03; their Graph-authored packagers are test-only oracles -- see the dated notes below.) | Matmul, attention, depth-attention and generic semantic-kernel scheduled consumers already exist. Verify old/new envelope differences, extend missing paged-KV/MoE movement carriers, migrate one family, and delete its Graph constructor after equivalence. Reuse Target→ROCDL→HSACO. |
 | x86 `x86_native.package_native` | Direct baseline and AVX-512 softmax and rank-reducing or keepdims sum/mean/max now use replayed native Schedule/Tile with projected descriptor fields. Direct f32 matmul also replays its native Schedule and projects descriptor fields. Remaining non-f32 matmul/attention, cohort2, elementwise and delegated `x86_breadth.package_graph_breadth` classify Graph and construct lower-level calls/carriers. | Use existing scheduled matmul/attention/kernel consumers for covered shapes; move remaining pointwise/cohort/breadth contracts through canonical IR. For general compiled bodies, reuse `tessera-jit` LLVM lowering; keep native library calls explicit rather than relabeling them as generated bodies. |
 | Apple GPU `apple_native.package_native` | Batched GEMM, dynamic softmax and GELU, transpose, popcount/count-nonzero/topk, SVD and the value-ABI fallback read Graph operands/kwargs and construct descriptors. Static softmax and (since 2026-11-03) static rank-two GELU lower through native Schedule/Tile; GELU's former constructor is a test-only baseline. | Extend existing scheduled matmul/kernel/attention consumers. Migrate one value family to a verified native Target call with IR-derived ABI, then MSL body generation where appropriate. Keep MPS delegation explicitly represented in IR. |
@@ -264,7 +264,6 @@ The remaining NVIDIA Graph-owned constructors are explicit next work:
 
 | Entry/family | Native contract still required |
 |---|---|
-| `package_attention_backward` | dQ/dK/dV result roles, mask alignment, workspace/reduction policy |
 | `package_matmul` and NVFP4/MX variants | Remaining dtype/layout/packing envelopes outside the scheduled consumer |
 | `package_paged_attention` | Page table, logical positions, ownership and bounds |
 | `package_replay_ssm_kernels` | Paired decode/flush state and ordered effects |
@@ -399,3 +398,29 @@ text. The retired constructor for those families is frozen in
 The route census moves `apple_cpu,{matmul,gemm,softmax}` to `compiled`. Batched GEMM, BNNS f16/bf16 matmul
 and the six LAPACK factorizations remain the Apple CPU Graph-owned
 constructors.
+
+## SM120 attention packager retirement (2026-11-03)
+
+E2E-REAL-6, sync `E2E-REAL-6-sm120-attention-2026-11-03`: the four SM120
+attention families -- saved-LSE forward (`attention_lse`), scaled FP8 K/V
+saved-LSE forward (`attention_scaled_kv`), saved-LSE backward
+(`attention_backward_lse`) and recompute backward (`attention_backward`) --
+already lowered their kernels through native Graph -> Schedule -> Tile. What
+remained Graph-side was narrower than the census implied: the recompute
+backward had no typed consumer, `package_scheduled_checkpoint` took `Any`, the
+public JIT bound saved-LSE and scaled-K/V launch scalars from the Graph
+admission tuple, and the retired Python Tile constructor
+`emit_attention_backward_tile_ir` was still exported from production. Now
+`package_scheduled_checkpoint(ScheduledCheckpointArtifact)` and
+`package_scheduled_attention_recompute(ScheduledAttentionRecomputeArtifact)`
+validate (replay plus field-by-field agreement with the sealed
+`tessera.native_contract`) before compilation, so a tampered artifact fails
+before `_compile_tile_ir`; the JIT reads scalars from the descriptor's native
+provenance and only cross-checks the Graph; and the constructor is deleted
+from production. Graph admission (`_attention_*_contract`) still decides
+whether the route is tried, wrapped by the `supports_scheduled_*` predicates
+the prune audit declares. The retired Graph-authored packagers survive in
+`tests/_support/nvidia_attention_checkpoint_baseline.py`, the #31(a) oracle of
+`tests/unit/test_nvidia_attention_checkpoint_migration.py` and the RTX 5070
+bitwise differential `tests/device/nvidia/test_attention_checkpoint_migration.py`.
+Fused paged attention, replay-SSM and MoE remain NVIDIA Graph-owned constructors.

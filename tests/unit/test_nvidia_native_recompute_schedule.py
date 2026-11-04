@@ -33,8 +33,8 @@ def test_recompute_native_ancestry_and_original_graph(dtype, bias, permuted, mon
     from tessera.compiler import nvidia_native as native
     module = recompute_module(dtype, bias, permuted)
     before = copy.deepcopy(module)
-    monkeypatch.setattr(native, "emit_attention_backward_tile_ir",
-                        lambda **kwargs: pytest.fail("legacy Python Tile constructor"))
+    # E2E-REAL-6: the Python Tile constructor left production (test-only oracle).
+    assert not hasattr(native, "emit_attention_backward_tile_ir")
     monkeypatch.setattr(native, "_compile_tile_ir",
                         lambda text, entry: (text, "// PTX", {}, "compiler", "toolchain", (), "cold"))
     package = native.package_attention_backward(module, pipeline_name="tessera-nvidia-pipeline-sm120")

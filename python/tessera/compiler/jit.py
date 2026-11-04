@@ -2458,7 +2458,10 @@ class JitFn:
                     or tuple(descriptor.provenance.get("shape", ())) != scaled_contract[1]
                     or tuple(descriptor.provenance.get("kv_scale_shapes", ())) != scaled_contract[4]):
                 raise ValueError("scaled K/V descriptor differs from its typed frontend contract")
-            scalars = dict(zip(scalar_names, (*scaled_contract[1], *bias_shape, *scaled_contract[4]), strict=True))
+            # E2E-REAL-6: launch scalars are the descriptor's native projection;
+            # the Graph admission above only cross-checks them.
+            scalars = dict(zip(scalar_names, (*descriptor.provenance["shape"], *bias_shape,
+                                              *descriptor.provenance["kv_scale_shapes"]), strict=True))
         elif attention:
             from .nvidia_native import (
                 _attention_contract, _attention_lse_contract, SM120_ATTN_LSE_ABIS,
@@ -2487,7 +2490,7 @@ class JitFn:
                     or any(item.dtype!="int64" for item in declared)
                     or tuple(descriptor.provenance.get("shape",()))!=attention_contract[1]):
                 raise ValueError("attention descriptor differs from its typed frontend contract")
-            scalars=dict(zip(scalar_names,(*attention_contract[1], *bias_shape),strict=True))
+            scalars=dict(zip(scalar_names,(*descriptor.provenance["shape"], *bias_shape),strict=True))
         elif descriptor.abi_id not in {NVFP4_EXPAND_ABI, NVFP4_INGEST_ABI, MXFP4_STORAGE_ABI} or descriptor.scalars:
             raise ValueError("checkpoint compilation did not produce its complete static ABI")
         bindings = sorted(descriptor.buffers, key=lambda item: item.ordinal)

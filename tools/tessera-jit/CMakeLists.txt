@@ -87,6 +87,8 @@ target_link_libraries(tessera_jit PRIVATE
   MLIRBufferizationTransforms
   MLIRBufferizationToMemRef
   MLIRControlFlowDialect
+  MLIRControlFlowTransforms
+  MLIRArithTransforms
   MLIRLLVMDialect
   # conversions used by the pipeline
   MLIRFuncToLLVM
@@ -129,6 +131,26 @@ target_link_libraries(tessera_jit PRIVATE
   $<TARGET_FILE:MLIRTargetLLVMIRTransforms>
   $<TARGET_FILE:MLIRLLVMIRTransforms>
 )
+
+# Bypassing those interfaces also drops their LLVM dependencies. A shared-libLLVM
+# toolchain (Homebrew, apt) exports just "LLVM;MLIR", already linked above, but a
+# static one (an assertions build with LLVM_LINK_LLVM_DYLIB=OFF) exports the
+# component archives -- OrcJIT, JITLink, the native target -- which nothing else
+# pulls in, so the link fails on LLVMInitializeX86Target and orc:: symbols. Link
+# only the LLVM* entries; the MLIR aggregate stays excluded.
+set(_tessera_jit_llvm_deps)
+foreach(_tessera_jit_archive IN ITEMS
+    MLIRExecutionEngine MLIRExecutionEngineUtils MLIRLLVMToLLVMIRTranslation
+    MLIRBuiltinToLLVMIRTranslation MLIRTargetLLVMIRExport
+    MLIRTargetLLVMIRTransforms MLIRLLVMIRTransforms)
+  get_target_property(_tessera_jit_deps ${_tessera_jit_archive} INTERFACE_LINK_LIBRARIES)
+  if(_tessera_jit_deps)
+    list(FILTER _tessera_jit_deps INCLUDE REGEX "^LLVM")
+    list(APPEND _tessera_jit_llvm_deps ${_tessera_jit_deps})
+  endif()
+endforeach()
+list(REMOVE_DUPLICATES _tessera_jit_llvm_deps)
+target_link_libraries(tessera_jit PRIVATE ${_tessera_jit_llvm_deps})
 
 target_include_directories(tessera_jit
   PRIVATE

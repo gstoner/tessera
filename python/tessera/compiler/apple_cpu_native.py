@@ -218,7 +218,7 @@ def native_package_available(module: GraphIRModule) -> bool:
     return tool is not None and apple_cpu_value_lowering_available(str(tool))
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def apple_cpu_value_lowering_available(tool: str) -> bool:
     """Whether ``tool`` registers the Apple CPU value lowering.
 

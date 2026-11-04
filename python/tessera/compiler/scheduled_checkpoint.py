@@ -1,4 +1,15 @@
-"""Native saved-LSE tensor contracts through Schedule and launch-level Tile IR."""
+"""Native saved-LSE tensor contracts through Schedule and launch-level Tile IR.
+
+E2E-REAL-6 (sync ``E2E-REAL-6-sm120-attention-2026-11-03``): the SM120
+consumer ``nvidia_native.package_scheduled_checkpoint`` reads every launch
+field from a validated :class:`ScheduledCheckpointArtifact`, whose fields
+:func:`_decode_checkpoint` projects from the replayed Tile
+``tessera.native_contract`` and :meth:`ScheduledCheckpointArtifact.validate`
+re-checks against it. Python Graph admission (the ``supports_scheduled_*``
+predicates below) only decides whether the route is tried; the retired
+Graph-authored packaging survives as the test-only oracle
+``tests/_support/nvidia_attention_checkpoint_baseline.py``.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +21,9 @@ import re
 import struct
 
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+
+#: The one target whose saved-LSE checkpoints have an owning native consumer.
+CHECKPOINT_TARGETS = frozenset({"nvidia_sm120"})
 
 
 @dataclass(frozen=True)
@@ -362,3 +376,24 @@ def _decode_checkpoint(graph, schedule, tile, *, backward,
         kv_scale_shapes=tuple(map(int, kv_scale_shapes[1].split(","))) if kv_scale_shapes else ())
     artifact.validate()
     return artifact
+
+
+def supports_scheduled_attention_lse(module, *, target: str = "nvidia_sm120") -> bool:
+    """Whether the saved-LSE forward checkpoint route admits ``module``."""
+    from .nvidia_native import supports_attention_lse
+
+    return target in CHECKPOINT_TARGETS and supports_attention_lse(module)
+
+
+def supports_scheduled_attention_scaled_kv(module, *, target: str = "nvidia_sm120") -> bool:
+    """Whether the scaled FP8 K/V saved-LSE forward route admits ``module``."""
+    from .nvidia_native import supports_attention_scaled_kv
+
+    return target in CHECKPOINT_TARGETS and supports_attention_scaled_kv(module)
+
+
+def supports_scheduled_attention_backward_lse(module, *, target: str = "nvidia_sm120") -> bool:
+    """Whether the saved-LSE backward checkpoint route admits ``module``."""
+    from .nvidia_native import supports_attention_backward_lse
+
+    return target in CHECKPOINT_TARGETS and supports_attention_backward_lse(module)

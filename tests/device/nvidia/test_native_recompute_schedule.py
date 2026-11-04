@@ -65,8 +65,8 @@ def _exercise(dtype, bias, permuted, advanced, monkeypatch, seed_override=None):
     from tessera.compiler import nvidia_native as native
     from tessera import runtime as rt
     assert rt._nvidia_device_name() == "sm_120"
-    monkeypatch.setattr(native, "emit_attention_backward_tile_ir",
-                        lambda **kwargs: pytest.fail("legacy Python Tile constructor"))
+    # E2E-REAL-6: the Python Tile constructor left production (test-only oracle).
+    assert not hasattr(native, "emit_attention_backward_tile_ir")
     module = recompute_module(dtype, bias, permuted)
     policy = dict(scale=.5, causal=True, window=(-1, -1), softcap=0.,
                   dropout=0., seed=0)

@@ -554,7 +554,7 @@ def compile_graph_module(
     scheduled_checkpoint_artifact = None
     scheduled_paged_kv_artifact = None
     from .scheduled_paged_kv import ScheduledPagedKVArtifact, supports_scheduled_paged_kv
-    from .scheduled_moe_dispatch import ScheduledMoeDispatchArtifact
+    from .scheduled_moe_dispatch import ScheduledMoeDispatchArtifact, supports_scheduled_moe_dispatch
     scheduled_rocm_movement_artifact: ScheduledPagedKVArtifact | ScheduledMoeDispatchArtifact | None = None
     scheduled_rocm_movement_kind = None
     scheduled_math_recipe = None
@@ -611,7 +611,7 @@ def compile_graph_module(
             scheduled_rocm_movement_kind = "paged_kv"
             scheduled_rocm_movement_artifact = lower_scheduled_paged_kv_graph(module, target=target_kind)
             graph_text = scheduled_rocm_movement_artifact.graph_ir
-        elif target_kind == "rocm_gfx1151" and rocm_native.supports_moe_dispatch(module):
+        elif supports_scheduled_moe_dispatch(module, target=target_kind):
             from .scheduled_moe_dispatch import lower_scheduled_moe_dispatch
             scheduled_rocm_movement_kind = "moe_dispatch"
             scheduled_rocm_movement_artifact = lower_scheduled_moe_dispatch(module, target=target_kind)
@@ -1640,11 +1640,10 @@ def canonical_compile_options(
             )
         )
     if target_kind == "apple_cpu" and "package_native" not in resolved:
-        from .apple_cpu_native import native_package_kind, tools_available
+        from .apple_cpu_native import native_package_available
 
-        resolved["package_native"] = (
-            apple_target_ir_mode != "value" and native_package_kind(module) is not None and tools_available()
-        )
+        # E2E-REAL-6 Apple CPU: a scheduled family also needs tessera-opt.
+        resolved["package_native"] = apple_target_ir_mode != "value" and native_package_available(module)
     return resolved
 
 

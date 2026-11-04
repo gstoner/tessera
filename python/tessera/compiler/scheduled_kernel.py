@@ -233,6 +233,8 @@ def lower_scheduled_kernel(
             # gfx1151 keepdims (E2E-REAL-6). Only a true value is spelled so the
             # established rank-reducing f32 Graph text is byte-identical.
             op.kwargs["keepdims"] = True
+    if contract[0] == "apple_cpu" and "axis" in op.kwargs:
+        op.kwargs = {**op.kwargs, "axis": -1}
     if contract[5] == "softmax" and contract[20] != "serial":
         op.kwargs = {**op.kwargs, "schedule": contract[20]}
     targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
@@ -450,6 +452,15 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         compiler_target, architecture, workgroup_size = "nvidia_sm120", "sm_120", 128
     elif target == "apple_gpu":
         compiler_target, architecture, workgroup_size = "apple_gpu", "apple7", 1
+    elif target == "apple_cpu":
+        # E2E-REAL-6 Apple CPU (2026-11-03): the static rank-2 f32 last-axis
+        # softmax the retired Graph-owned ``apple_cpu_native.package_native``
+        # served through ``tessera_apple_cpu_softmax_f32``. No other family.
+        # The C ABI takes int32 rows and columns.
+        if (op.op_name != "tessera.softmax" or len(input_shape) != 2
+                or max(input_shape) > 2**31 - 1):
+            raise ValueError("Apple CPU scheduled semantic kernel admits only rank-two softmax")
+        compiler_target, architecture, workgroup_size = "apple_cpu", "apple_silicon_cpu", 1
     else:
         raise ValueError("unsupported scheduled semantic-kernel target")
 
@@ -503,7 +514,12 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     elif op.op_name in {"tessera.softmax", "tessera.softmax_safe"}:
         if mode != "serial" and (target != "nvidia_sm120" or mode != "cooperative_128"):
             raise ValueError("softmax scheduling requires serial or SM120 cooperative_128")
-        if op.kwargs.get("axis", -1) != -1 or output_shape != input_shape:
+        # Apple CPU's retired contract spelled the rank-2 last axis either way
+        # (``axis % 2 == 1``); the Schedule names it -1 (``lower_scheduled_kernel``).
+        last_axes = (-1, len(input_shape) - 1) if target == "apple_cpu" else (-1,)
+        raw_softmax_axis = op.kwargs.get("axis", -1)
+        if (isinstance(raw_softmax_axis, bool) or raw_softmax_axis not in last_axes
+                or output_shape != input_shape):
             raise ValueError("scheduled softmax requires shape-preserving last-axis semantics")
         family, kind, axis, keepdims = "softmax", "softmax", -1, False
         rows, columns = math.prod(input_shape[:-1]), input_shape[-1]

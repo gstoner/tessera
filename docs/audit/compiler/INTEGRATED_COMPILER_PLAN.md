@@ -342,6 +342,17 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   RTX 5070. All four prune rows are now `compiled`; RTX 5070 evidence only.
   [Log](INTEGRATED_COMPILER_LOG.md#2026-11-03--e2e-real-6-sm120-attention-packagers-consume-their-replayed-artifacts).
 
+- Current increment (2026-11-03, sync E2E-REAL-6-rocm-moe-dispatch-2026-11-03):
+  the ROCm MoE-dispatch packager consumes its replayed Schedule artifact.
+  `package_scheduled_moe_dispatch` projects buffers, ABI, scalars, shape
+  guards, geometry and layout from the native Tile contract, and a tampered
+  artifact fails before compilation. The Graph-authored packager is a
+  test-only #31(a) oracle. On gfx1151 (Princess-Luna), 5 device rows match it
+  bit-for-bit. gfx1201 has no MoE device row because the native owner admits
+  gfx1151 only. The prune row is now `compiled`, and the attention fallback is
+  the last ROCm Graph-owned constructor.
+  [Log](INTEGRATED_COMPILER_LOG.md#2026-11-03--e2e-real-6-rocm-moe-dispatch-packages-its-replayed-schedule-artifact).
+
 - Current increment (2026-11-03, sync E2E-REAL-6-rocm-paged-kv-2026-11-03):
   the ROCm paged-KV packager consumes its replayed Schedule artifact.
   `package_scheduled_paged_kv` projects buffers, ABI, scalars, shape guards,
@@ -462,6 +473,8 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   and broader ROCm cache envelopes remain open.
   [Evidence log](INTEGRATED_COMPILER_LOG.md#2026-10-01--five-compiler-slice-rechecks).
 
+
+- Current slice (2026-11-03, sync E2E-REAL-6-apple-cpu-2026-11-03): Apple CPU static f32 `matmul`/`gemm` and rank-two f32 `softmax` now lower through native Graph→Schedule→Tile (`apple_cpu`/`apple_silicon_cpu`), and their descriptors are projected from the replayed Schedule. Accelerate stays an explicit Tier-3 delegate behind the verified `tessera_apple.cpu.accelerate_gemm` / `vector_reduce` ops. The Graph-owned constructor is a test-only #31(a) oracle, bit-exact on the M1 Max; `bootstrap_prune_gap` moves `apple_cpu,{matmul,gemm,softmax}` to `compiled`. Batched GEMM, BNNS f16/bf16 matmul and the six LAPACK factorizations are owed. [Log](INTEGRATED_COMPILER_LOG.md#2026-11-03--e2e-real-6-apple-cpu-matmul-gemm-and-softmax-retire-their-graph-owned-constructor).
 
 - Current slice (2026-11-03, sync E2E-REAL-6-apple-gelu-2026-11-03): Apple GPU static rank-two f32/f16/bf16 GELU now lowers through native Graph→Schedule→Tile (`schedule.activation` / `tile.activation_kernel`, kind `gelu`, approximation `tanh`), and its descriptor/ABI is projected from the replayed Schedule. The runtime MSL kernel stays an explicit Tier-3 `kernel_call`. The Graph-owned constructor is a test-only #31(a) oracle, bit-exact on the M1 Max; `bootstrap_prune_gap` moves `apple_gpu,gelu` to `generic_compiled`. Dynamic GELU, transpose and the other Apple GPU families remain open. [Log](INTEGRATED_COMPILER_LOG.md#2026-11-03--e2e-real-6-apple-gpu-static-gelu-retires-its-graph-owned-constructor).
 

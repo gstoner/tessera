@@ -18,7 +18,7 @@ rocm_gfx1151,softmax,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 rocm_gfx1151,reduction,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 rocm_gfx1151,paged_kv,scheduled_paged_kv.supports_scheduled_paged_kv,compiled
 rocm_gfx1151,attention,scheduled_attention.supports_scheduled_attention,compiled
-rocm_gfx1151,moe_dispatch,—,gap
+rocm_gfx1151,moe_dispatch,scheduled_moe_dispatch.supports_scheduled_moe_dispatch,compiled
 x86,softmax,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 x86,reduction,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 x86,matmul,scheduled_matmul.supports_scheduled_matmul,compiled
@@ -30,11 +30,11 @@ x86,elementwise,scheduled_kernel.supports_scheduled_kernel,generic_compiled
 apple_cpu,batched_gemm,—,gap
 apple_cpu,cholesky,—,gap
 apple_cpu,cholesky_solve,—,gap
-apple_cpu,gemm,—,gap
+apple_cpu,gemm,scheduled_matmul.supports_scheduled_matmul,compiled
 apple_cpu,lu,—,gap
-apple_cpu,matmul,—,gap
+apple_cpu,matmul,scheduled_matmul.supports_scheduled_matmul,compiled
 apple_cpu,qr,—,gap
-apple_cpu,softmax,—,gap
+apple_cpu,softmax,scheduled_kernel.supports_scheduled_kernel,compiled
 apple_cpu,svd,—,gap
 apple_cpu,tri_solve,—,gap
 apple_gpu,batched_gemm,—,gap

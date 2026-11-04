@@ -92,7 +92,7 @@ minimum,x86,compiled
 moe_dispatch,apple_cpu,unclassified
 moe_dispatch,apple_gpu,unclassified
 moe_dispatch,nvidia_sm120,none
-moe_dispatch,rocm_gfx1151,bootstrap
+moe_dispatch,rocm_gfx1151,compiled
 moe_dispatch,x86,none
 mul,apple_cpu,unclassified
 mul,apple_gpu,unclassified

@@ -526,6 +526,10 @@ def _canonical_matmul_graph_ir(module: GraphIRModule, target: str, contract: tup
     targeted = copy.deepcopy(module)
     targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
     targeted.module_attrs["tessera.arch"] = f'"{contract[1]}"'
+    if contract[0] == "apple_cpu" and targeted.functions[0].body[0].op_name == "tessera.gemm":
+        # The declared legacy alias (see ``_graph_contract``): the Schedule
+        # authority recognizes the canonical spelling only.
+        targeted.functions[0].body[0].op_name = "tessera.matmul"
     # The Tile kernel symbol is derived by the C++ passes from this function's
     # name, and the runtime dispatches scheduled sm_120 matmuls by name prefix,
     # so the prefix has to be applied HERE -- renaming only the Python-side
@@ -741,7 +745,12 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     int4_gemm = (op.op_name == "tessera.gemm" and target == "nvidia_sm120"
                  and len(function.args) == 2 and all(a.ir_type.dtype == "int4" for a in function.args))
     nvfp4_scaled = op.op_name == "tessera.scaled_matmul" and target == "nvidia_sm120"
-    if ((op.op_name != "tessera.matmul" and not int4_gemm and not nvfp4_scaled)
+    # E2E-REAL-6 Apple CPU (2026-11-03): ``tessera.gemm`` is the declared
+    # legacy Graph alias of ``tessera.matmul`` (op_catalog.LEGACY_GRAPH_OP_ALIASES)
+    # and the retired Apple CPU packager served both through one cblas_sgemm
+    # symbol. Only that target names the alias; the C++ Schedule sees matmul.
+    apple_cpu_gemm = op.op_name == "tessera.gemm" and target == "apple_cpu"
+    if ((op.op_name != "tessera.matmul" and not int4_gemm and not nvfp4_scaled and not apple_cpu_gemm)
             or not 2 <= len(op.operands) <= 4):
         raise ValueError("scheduled matmul requires one supported Graph matmul")
     transpose_a, transpose_b = (op.kwargs.get(name, False) for name in ("transposeA", "transposeB"))
@@ -1054,6 +1063,20 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         )
         # The eventual native entry is projected from Schedule-to-Tile
         # after lowering; the Graph contract has no physical symbol authority.
+    elif target == "apple_cpu" and (a_dtype, b_dtype, output_dtype) == ("fp32", "fp32", "fp32"):
+        # E2E-REAL-6 Apple CPU (2026-11-03): the static plain rank-2 f32
+        # envelope ``tessera_apple_cpu_gemm_f32`` (cblas_sgemm) executes. Its
+        # extents are C ``int``, and any keyword beyond the two false transpose
+        # flags is a semantic the delegate does not compute, so both fail
+        # closed. Accelerate owns its blocking: the 16x16 macro tile mirrors
+        # the C++ default and the package records it as a dropped decision.
+        if (len(op.operands) != 2 or len(function.args) != 2 or a_name == b_name
+                or set(op.kwargs) - {"transposeA", "transposeB"}
+                or max(m, n, k) > 2**31 - 1):
+            raise ValueError("Apple CPU scheduled matmul requires the plain static f32 cblas_sgemm contract")
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
+            "apple_cpu", "apple_silicon_cpu", "f32", "f32", 16, 16,
+        )
     elif target == "apple_gpu" and (a_dtype, b_dtype, output_dtype) == (
         "fp32",
         "fp32",

@@ -69,6 +69,8 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
     # A target counts only where its module defines package_scheduled_paged_kv,
     # the consumer that packages the replayed artifact without Graph re-entry.
     "paged_kv": ("scheduled_paged_kv", "supports_scheduled_paged_kv"),
+    # Likewise package_scheduled_moe_dispatch: the gfx1151 token gather.
+    "moe_dispatch": ("scheduled_moe_dispatch", "supports_scheduled_moe_dispatch"),
     # Saved-LSE checkpoints: the consumer is package_scheduled_checkpoint, which
     # validates the replayed ScheduledCheckpointArtifact before compiling it.
     "attention_lse": ("scheduled_checkpoint", "supports_scheduled_attention_lse"),
@@ -79,12 +81,22 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
     ),
 }
 
-#: (target, family) -> route, where a target lowers a family through a
-#: different scheduled producer than ``_FAMILY_TO_COMPILED`` names. Verified
-#: the same way; the target module must still define ``package_<module>``.
+#: (target, family) -> route, for a family whose route is target-specific.
+#: DECLARED and verified exactly like ``_FAMILY_TO_COMPILED``. A per-target
+#: entry exists because the family name alone would over-claim: ``gemm`` is
+#: the legacy Graph alias of ``tessera.matmul`` that only the Apple CPU
+#: scheduled-matmul contract accepts (E2E-REAL-6, 2026-11-03), so naming it
+#: globally would mark it compiled on any target with a matmul consumer.
+#: ``softmax`` is declared per target because elsewhere it is derived as a
+#: generic route from a ``package_softmax`` wrapper; Apple CPU reaches its
+#: ``package_scheduled_kernel`` consumer from ``package_native`` directly
+#: rather than adding a Graph-input constructor the alpha ratchet would count.
+#: SM120 ``attention_backward`` replays the original Graph through
+#: ``schedule.attention_backward_recompute`` (E2E-REAL-6, 2026-11-03); the x86
+#: row of the same family keeps its own route.
 _TARGET_FAMILY_TO_COMPILED: dict[tuple[str, str], tuple[str, str]] = {
-    # SM120 recompute backward replays the original Graph through
-    # schedule.attention_backward_recompute (E2E-REAL-6, 2026-11-03).
+    ("apple_cpu", "gemm"): ("scheduled_matmul", "supports_scheduled_matmul"),
+    ("apple_cpu", "softmax"): ("scheduled_kernel", "supports_scheduled_kernel"),
     ("nvidia_sm120", "attention_backward"): (
         "scheduled_attention_recompute",
         "supports_scheduled_attention_recompute",
@@ -420,12 +432,13 @@ def verify_declared_mapping() -> None:
     mainline compiler when it is not -- the single error that would make a
     prune silently lossy.
     """
-    declared = [*_FAMILY_TO_COMPILED.items(),
-                *((f"{target}:{family}", route)
-                  for (target, family), route in _TARGET_FAMILY_TO_COMPILED.items())]
     missing = [
         f"{family} -> {mod}.{pred}"
-        for family, (mod, pred) in declared
+        for family, (mod, pred) in _FAMILY_TO_COMPILED.items()
+        if not _predicate_exists(mod, pred)
+    ] + [
+        f"{target}:{family} -> {mod}.{pred}"
+        for (target, family), (mod, pred) in _TARGET_FAMILY_TO_COMPILED.items()
         if not _predicate_exists(mod, pred)
     ]
     generic_mod, generic_pred = _GENERIC_COMPILED
@@ -442,7 +455,7 @@ def verify_declared_mapping() -> None:
 
 def _target_family_route(target: str, family: str) -> tuple[str, str] | None:
     """A family mapping alone cannot establish a consumer on another target."""
-    route = _TARGET_FAMILY_TO_COMPILED.get((target, family), _FAMILY_TO_COMPILED.get(family))
+    route = _TARGET_FAMILY_TO_COMPILED.get((target, family)) or _FAMILY_TO_COMPILED.get(family)
     filename = dict(_BACKEND_MODULES).get(target)
     if route is None or filename is None:
         return None

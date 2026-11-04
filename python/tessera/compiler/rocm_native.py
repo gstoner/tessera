@@ -38,6 +38,7 @@ from .scheduled_kernel import ScheduledKernelArtifact
 from .scheduled_attention import ScheduledAttentionArtifact
 from .scheduled_depth_attention import ScheduledDepthAttentionArtifact
 from .scheduled_paged_kv import ScheduledPagedKVArtifact
+from .scheduled_moe_dispatch import ScheduledMoeDispatchArtifact
 from .rocm_pipeline import (
     ROCMExecutablePipeline,
     ROCMInputLevel,
@@ -1079,46 +1080,16 @@ def supports_paged_kv_read(module: GraphIRModule) -> bool:
     return supports_scheduled_paged_kv(module, target="rocm_gfx1151")
 
 
-def _moe_dispatch_contract(
-    module: GraphIRModule,
-) -> tuple[str, str, str, tuple[int, int, int]] | None:
-    if not requests_moe_dispatch(module):
-        return None
-    function = module.functions[0]
-    op = function.body[0]
-    if len(op.operands) != 2 or len(function.result_types) != 1:
-        return None
-    if op.kwargs.get("transport") is not None:
-        return None
-    x_name, token_name = (value.removeprefix("%") for value in op.operands)
-    args = {arg.name: arg for arg in function.args}
-    x, token = args.get(x_name), args.get(token_name)
-    x_shape, token_shape = _shape(module, x_name), _shape(module, token_name)
-    if (
-        x is None
-        or token is None
-        or x.ir_type.dtype != "fp32"
-        or token.ir_type.dtype != "int32"
-        or x_shape is None
-        or len(x_shape) != 2
-        or token_shape is None
-        or len(token_shape) != 1
-    ):
-        return None
-    tokens, hidden = x_shape
-    slots = token_shape[0]
-    result = function.result_types[0]
-    try:
-        result_shape = tuple(int(value) for value in result.shape)
-    except (TypeError, ValueError):
-        return None
-    if result.dtype != "fp32" or result_shape != (slots, hidden):
-        return None
-    return x_name, token_name, op.result or "output", (tokens, slots, hidden)
-
-
 def supports_moe_dispatch(module: GraphIRModule) -> bool:
-    return _moe_dispatch_contract(module) is not None
+    """A local MoE token gather the native gfx1151 Schedule -> Tile route admits.
+
+    E2E-REAL-6 (2026-11-03): admission is the scheduled contract's
+    (``scheduled_moe_dispatch.admit_moe_dispatch``); the retired Graph-authored
+    packager survives only as ``tests/_support/rocm_moe_dispatch_baseline.py``.
+    """
+    from .scheduled_moe_dispatch import supports_scheduled_moe_dispatch
+
+    return supports_scheduled_moe_dispatch(module, target="rocm_gfx1151")
 
 
 def _attention_contract(
@@ -3378,22 +3349,45 @@ def package_scheduled_attention_backward(
 
 
 def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architecture: str = "gfx1151", scheduled_artifact=None) -> ROCMNativePackage:
-    contract = _moe_dispatch_contract(module)
-    if contract is None:
+    """Lower ``module`` through the native MoE Schedule and package that artifact.
+
+    E2E-REAL-6: no launch field is read from ``module``. A caller-supplied
+    artifact must be the native replay of this exact Graph and target.
+    """
+    from .scheduled_moe_dispatch import (
+        lower_scheduled_moe_dispatch, project_scheduled_moe_dispatch_graph,
+        supports_scheduled_moe_dispatch,
+    )
+
+    target = f"rocm_{architecture}"
+    if not supports_scheduled_moe_dispatch(module, target=target):
         raise ValueError(
             "gfx1151 MoE dispatch packaging requires static f32 [T,H] input, "
             "rank-1 int32 token indices, and f32 [S,H] output"
         )
-    x_name, token_name, output_name, dims = contract
-    tokens, slots, hidden = dims
-    from .scheduled_moe_dispatch import lower_scheduled_moe_dispatch, project_scheduled_moe_dispatch_graph
     if scheduled_artifact is None:
-        artifact = lower_scheduled_moe_dispatch(module, target=f"rocm_{architecture}")
+        artifact = lower_scheduled_moe_dispatch(module, target=target)
     else:
         artifact = scheduled_artifact
-        if artifact.graph_ir != project_scheduled_moe_dispatch_graph(module, target=f"rocm_{architecture}"):
+        if artifact.graph_ir != project_scheduled_moe_dispatch_graph(module, target=target):
             raise ValueError("MoE Schedule artifact disagrees with the caller Graph or target")
-        artifact.validate()
+    return package_scheduled_moe_dispatch(artifact, pipeline_name=pipeline_name)
+
+
+def package_scheduled_moe_dispatch(artifact: ScheduledMoeDispatchArtifact, *, pipeline_name: str) -> ROCMNativePackage:
+    """Package a replayed MoE token-gather artifact; every field is a Tile projection."""
+    artifact.validate()
+    contract = artifact.native_contract()
+    architecture = contract.architecture
+    if (contract.target != "rocm_gfx1151" or contract.target != f"rocm_{architecture}"
+            or (contract.storage, contract.index_storage, contract.kernel_route, contract.layout)
+            != ("f32", "i32", "direct_gather", "row_major")):
+        raise ValueError("ROCm MoE dispatch requires a gfx1151 f32/i32 direct-gather native contract")
+    scalar_names = ("T", "S", "H")
+    if len(scalar_names) != contract.scalar_count:
+        raise ValueError("MoE native entry scalar count disagrees with its ABI")
+    x_name, token_name, output_name = contract.names
+    tokens, slots, hidden = contract.dims
     tile_ir = artifact.tile_ir
     (
         target_ir,
@@ -3406,7 +3400,7 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architect
     ) = _compile_moe_dispatch_tile_ir(tile_ir, architecture=architecture)
     entry = _directive_symbol(target_ir, _SHAPE_FREE_DIRECTIVES["moe_dispatch"])
     image = NativeImageArtifact(
-        target=f"rocm_{architecture}",
+        target=contract.target,
         architecture=architecture,
         pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp,
@@ -3423,11 +3417,11 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architect
         entry_symbol=entry,
         abi_id=GFX_MOE_DISPATCH_F32_ABI,
         buffers=(
-            BufferBinding(0, x_name, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(0, x_name, "input", "fp32", 2, contract.layout, 4),
             BufferBinding(1, token_name, "input", "int32", 1, "row_major", 4),
             BufferBinding(2, output_name, "output", "fp32", 2, "row_major", 4),
         ),
-        scalars=tuple(ScalarArgument(3 + index, name, "int64") for index, name in enumerate(("T", "S", "H"))),
+        scalars=tuple(ScalarArgument(3 + index, name, "int64") for index, name in enumerate(scalar_names)),
         shape_guards=(
             ShapeGuard(x_name, 0, "eq", tokens),
             ShapeGuard(x_name, 1, "eq", hidden),
@@ -3435,7 +3429,7 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architect
             ShapeGuard(output_name, 0, "eq", slots),
             ShapeGuard(output_name, 1, "eq", hidden),
         ),
-        geometry=LaunchGeometry(policy="gfx1151_moe_dispatch_direct_256"),
+        geometry=LaunchGeometry(policy=f"{architecture}_moe_dispatch_direct_256"),
         ordering=OrderingSemantics(
             ordered_submission=True,
             residency="none",
@@ -3444,11 +3438,12 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architect
         provenance={
             "work_item": "ROCM-E2E-2",
             "sync_key": "E2E-SPINE-2026-07-18",
-            "route": "direct_gather",
+            "route": contract.kernel_route,
+            "consumer": "native_schedule_tile_projection",
             "schedule_digest": artifact.schedule_digest,
-            "shape": list(dims),
-            "storage": "f32",
-            "index_storage": "i32",
+            "shape": list(contract.dims),
+            "storage": contract.storage,
+            "index_storage": contract.index_storage,
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )
@@ -3495,6 +3490,7 @@ __all__ = [
     "emit_moe_dispatch_tile_ir",
     "emit_paged_kv_read_tile_ir",
     "package_moe_dispatch",
+    "package_scheduled_moe_dispatch",
     "package_native",
     "package_scheduled_kernel",
     "package_scheduled_attention",

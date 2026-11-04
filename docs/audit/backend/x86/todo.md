@@ -12635,3 +12635,7 @@ sm_120 FP4 weight expansion (SM120-FP4-EXPAND-NATIVE-20261103) is not applicable
 ## `E2E-REAL-6-apple-gelu-2026-11-03`: sibling outcome — not applicable
 
 Apple GPU static GELU moved onto the shared semantic `activation` family (Apple queue, same key). x86 GELU keeps its own `native_x86_kernel` elementwise contract; the semantic activation contract refuses `tessera.gelu` on x86 (tested). No x86 selector, ABI or result changes.
+
+## `E2E-REAL-6-apple-cpu-2026-11-03`: sibling outcome — not applicable
+
+Apple CPU static f32 matmul/gemm/softmax moved onto the shared scheduled matmul and semantic-kernel contracts (Apple queue, same key). Shared code touched: `PMPasses.cpp` (`getInferredMatmulSchedule`, `getSemanticKernelSchedule`), `scheduled_matmul._graph_contract` and `scheduled_kernel._graph_contract`. Each new branch is reached only by `tessera.target = "apple_cpu"` with `tessera.arch = "apple_silicon_cpu"`; the `tessera.gemm` alias is admitted on `apple_cpu` alone (tested refused on x86). The x86 Schedule digests and descriptors are unchanged. No x86 selector, ABI or result changes.

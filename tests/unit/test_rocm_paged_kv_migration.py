@@ -235,8 +235,8 @@ def test_prune_dashboard_sees_the_rocm_consumer() -> None:
             for target, family, route, status in bootstrap_prune_audit.family_rows()}
     assert rows[("rocm_gfx1151", "paged_kv")] == (
         "scheduled_paged_kv.supports_scheduled_paged_kv", "compiled")
-    # MoE dispatch is a separate slice and is still Graph-owned.
-    assert rows[("rocm_gfx1151", "moe_dispatch")][1] == "gap"
+    # MoE dispatch landed as its own slice (test_rocm_moe_dispatch_migration.py).
+    assert rows[("rocm_gfx1151", "moe_dispatch")][1] == "compiled"
 
 
 # --- exact-device differential (each owning ROCm host separately) ------------------------------

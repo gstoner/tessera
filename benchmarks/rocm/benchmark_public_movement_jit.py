@@ -12,6 +12,7 @@ import numpy as np
 import tessera as ts
 from tessera import runtime as rt
 from tessera.compiler import rocm_native
+from tessera.compiler.scheduled_moe_dispatch import admit_moe_dispatch
 from tessera.compiler.scheduled_paged_kv import admit_paged_kv
 from tessera.compiler.emit.rocm_hip import run_paged_kv_cache_read_f32
 from benchmarks.rocm.benchmark_native_movement import device_identity
@@ -28,7 +29,7 @@ def record(arch, family, large, directory, repeats):
     np.testing.assert_array_equal(actual.view(np.uint32), expected.view(np.uint32))
     assert fn.execution_kind == "native_gpu" and fn.last_fallback_reason is None
     module, _ = fn._trace_frontend_capture(args, {})
-    contract = (rocm_native._moe_dispatch_contract(module) if family == "dispatched"
+    contract = (admit_moe_dispatch(module) if family == "dispatched"
                 else admit_paged_kv(module))
     names = ("T", "S", "H") if family == "dispatched" else (
         "P", "LP", "PageSize", "H", "D", "Start", "Tokens")

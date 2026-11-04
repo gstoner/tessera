@@ -1457,6 +1457,22 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       schedule.arch = "apple7";
     return schedule;
   }
+  // E2E-REAL-6 Apple CPU (2026-11-03): the static rank-2 f32 envelope the
+  // retired Graph-owned `apple_cpu_native.package_native` served for
+  // matmul/gemm. The consumer is Accelerate's cblas_sgemm behind
+  // `tessera_apple_cpu_gemm_f32`, a declared Decision #28 Tier-3 delegate
+  // reached through `tessera_apple.cpu.accelerate_gemm`; the library owns its
+  // own blocking, so the macro-tile below is a logical default the package
+  // records as a named dropped decision. The arch must be stated: no other
+  // Apple CPU storage or ISA level inherits this schedule.
+  bool apple_cpu =
+      schedule.target == "apple_cpu" && schedule.arch == "apple_silicon_cpu";
+  if (apple_cpu && lhsElement.isF32() && rhsElement.isF32() &&
+      outElement.isF32()) {
+    schedule.storage = "f32";
+    schedule.accum = "f32";
+    return schedule;
+  }
   if (apple_gpu && lhsElement.isF16() && rhsElement.isF16() &&
       outElement.isF32()) {
     // Apple7+ simdgroup_matrix GEMM: f16 storage, f32 accumulation.  Unlike the
@@ -2140,12 +2156,20 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
   // only below.  The launch tile does not prescribe a workgroup for Apple (the
   // delegated MSL route owns its threadgroup), so workgroupSize stays 1.
   bool apple_gpu = schedule.target == "apple_gpu";
+  // E2E-REAL-6 Apple CPU (2026-11-03): static f32 last-axis softmax only, the
+  // envelope the retired Graph-owned `apple_cpu_native.package_native` served
+  // through `tessera_apple_cpu_softmax_f32`. Admitted for softmax below and
+  // for no other semantic-kernel family.
+  bool apple_cpu =
+      schedule.target == "apple_cpu" && schedule.arch == "apple_silicon_cpu";
   bool nvidia = schedule.target == "nvidia_sm120" && schedule.arch == "sm_120";
   if ((schedule.rowBound || shaped) && !nvidia) return failure();
   if (requested && (!nvidia || (schedule.storage != "f16" && schedule.storage != "bf16")))
     return failure();
   if (nvidia) schedule.expMode = "approx_exp2";
-  if (!x86 && !rocm && !apple_gpu && !nvidia)
+  if (!x86 && !rocm && !apple_gpu && !apple_cpu && !nvidia)
+    return failure();
+  if (apple_cpu && op->getName().getStringRef() != "tessera.softmax")
     return failure();
 
   // Verified Graph passes state compact layout explicitly. Keep that source
@@ -2351,7 +2375,9 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
         (x86 && schedule.storage != "f32")
         || (nvidia && schedule.storage != "f16" && schedule.storage != "bf16" && schedule.storage != "f32") ||
         (rocm && schedule.storage != "f16" && schedule.storage != "f32") ||
-        (apple_gpu && schedule.storage != "f32" && schedule.storage != "f16" && schedule.storage != "bf16"))
+        (apple_gpu && schedule.storage != "f32" && schedule.storage != "f16" && schedule.storage != "bf16") ||
+        (apple_cpu && (schedule.storage != "f32" || input.getRank() != 2 ||
+                       !input.hasStaticShape())))
       return failure();
     schedule.family = "softmax";
     schedule.rows = 1;
@@ -4192,7 +4218,7 @@ struct GraphToSchedulePass
         op->emitError("E2E-REAL-2 Graph->Schedule requires static rank-2 "
                       "x86 f32/bf16->f32, ROCm f16->f32, gfx1151/gfx1201 or sm_120 "
                       "f32-operand scalar FMA, NVIDIA f16/bf16->f32 or signed int4->i32, "
-                      "or Apple-GPU f32->f32 "
+                      "or Apple-GPU/Apple-CPU f32->f32 "
                       "matmul with no transpose");
         return signalPassFailure();
       }

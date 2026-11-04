@@ -1004,7 +1004,8 @@ def test_apple_cpu_softmax_descriptor_execute_compare():
     )
     assert bundle.launch_descriptor is not None
     assert bundle.launch_descriptor.abi_id == "tessera.apple.cpu.value.softmax.fp32.v1"
-    assert bundle.launch_descriptor.provenance["work_item"] == "APPLE-NATIVE-E2E-2"
+    # E2E-REAL-6 (2026-11-03): packaged from the replayed native Schedule/Tile softmax.
+    assert bundle.launch_descriptor.provenance["work_item"] == "E2E-REAL-6"
     artifact = RuntimeArtifact(
         metadata={"target": "apple_cpu", "compiler_path": "apple_cpu_native_descriptor"},
         target_ir=bundle.target_ir.text, native_image=bundle.native_image,

@@ -4,6 +4,33 @@ audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+## E2E-REAL-6-rocm-moe-dispatch-2026-11-03 — MoE dispatch packager consumes its Schedule artifact
+
+Owner: E2E-REAL-6 (ROCM-E2E-2 token-gather route); sync `E2E-REAL-6-rocm-moe-dispatch-2026-11-03`.
+
+- **Moved.** `package_moe_dispatch` lowers (or checks a supplied artifact
+  against this Graph) and hands the artifact to
+  `package_scheduled_moe_dispatch`. That function projects every launch field
+  from the replayed Tile `tessera.native_contract` (`NativeMoeDispatch.h`).
+  Admission is `scheduled_moe_dispatch.admit_moe_dispatch`, and
+  `rocm_native._moe_dispatch_contract` is gone from production. This was the
+  last Graph-owned ROCm movement family.
+- **Proof, gfx1151 (Princess-Luna).** `test_rocm_moe_dispatch_migration.py`
+  with `TESSERA_ROCM_MOVEMENT_DEVICE_PROOF=1`: 31 passed, 0 skipped. Its 5
+  device rows build the retired image digest, and their output matches the
+  retired package and NumPy bit-for-bit, including -0.0 and an f32 subnormal.
+  The movement-spine `gfx1151-moe_dispatch` device row also passes on both
+  main and the branch.
+- **gfx1201 (Tajasarus): no MoE device proof, by design.** The native owner
+  admits gfx1151 only. The 26 host-free rows pass there, and the 5 gfx1151
+  device rows skip. Run alone, the file therefore trips the conftest
+  hollow-lane guard (exit 1), which is correct. The A/B sweep there shows no
+  difference from main.
+- **Gates.** `check-tessera-rocm` passes 85/85 on both boxes. There is no C++ change.
+- **Open.** Widening `NativeMoeDispatch.h` to gfx1201 needs its own device
+  proof on Tajasarus. The forward-attention fallback is still a Graph-owned
+  constructor.
+
 ## E2E-REAL-6-rocm-paged-kv-2026-11-03 — paged-KV packager consumes its Schedule artifact
 
 Owner: E2E-REAL-6 (ROCM-E2E-2 paged route); sync `E2E-REAL-6-rocm-paged-kv-2026-11-03`.

@@ -17,7 +17,7 @@ MLIR passes. A cell is alpha-complete only when all five stages are
 |---|---|---|
 | `frontend` | AST: does `graph_ir._OpExtractor` still exist (E2E-REAL-6) | 0 |
 | `graph_opt` | not yet derivable per family — shown `unmeasured` | 0 |
-| `schedule_tile` | [`bootstrap_prune_gap`](bootstrap_prune_gap.md) family routes | 29 |
+| `schedule_tile` | [`bootstrap_prune_gap`](bootstrap_prune_gap.md) family routes | 31 |
 | `native_lowering` | [spine](compilation_spine_inventory.md) Level C for the lane target | 0 |
 | `execution` | [E2E fleet](e2e_fleet.md) release packet for the lane | 27 |
 
@@ -42,11 +42,11 @@ improvement fails until the baseline is tightened, so gains are locked.
 | `mac_cpu` | Mac M1 Max | arm64 CPU | 3 |
 | `mac_gpu` | Mac M1 Max | Apple7 GPU | 3 |
 | `luna_cpu` | Princess-Luna | Zen 5 AVX-512 | 9 |
-| `luna_gpu` | Princess-Luna | gfx1151 | 8 |
+| `luna_gpu` | Princess-Luna | gfx1151 | 9 |
 | `bear_cpu` | The-Super-Bear | Zen 2 AVX2 | 6 |
 | `bear_gpu` | The-Super-Bear | sm_120 | 14 |
 | `taj_cpu` | Tajasarus | Zen 5 AVX-512 | 9 |
-| `taj_gpu` | Tajasarus | gfx1201 | 4 |
+| `taj_gpu` | Tajasarus | gfx1201 | 5 |
 
 Known limits: `taj_gpu` shares the ROCm route module with gfx1151, so
 its chip-specific state comes from the spine and fleet columns.
@@ -102,7 +102,7 @@ Legend: ✅ native · 🔴 bypass · 🟡 partial / pending · ⬛ absent / unro
 | `luna_gpu` | `norm` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `luna_gpu` | `attention` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ⬛ absent | — |
 | `luna_gpu` | `paged_kv` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
-| `luna_gpu` | `moe` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | ✅ native | — |
+| `luna_gpu` | `moe` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
 | `luna_gpu` | `linalg` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `luna_gpu` | `epilogue` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `luna_gpu` | `replay_ssm` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
@@ -154,7 +154,7 @@ Legend: ✅ native · 🔴 bypass · 🟡 partial / pending · ⬛ absent / unro
 | `taj_gpu` | `norm` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `taj_gpu` | `attention` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ⬛ absent | — |
 | `taj_gpu` | `paged_kv` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ⬛ absent | — |
-| `taj_gpu` | `moe` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | ⬛ absent | — |
+| `taj_gpu` | `moe` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ⬛ absent | — |
 | `taj_gpu` | `linalg` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `taj_gpu` | `epilogue` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `taj_gpu` | `replay_ssm` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |

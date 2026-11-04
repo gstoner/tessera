@@ -331,6 +331,17 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 ### E2E-REAL-6
 
+- Current increment (2026-11-03, sync E2E-REAL-6-rocm-moe-dispatch-2026-11-03):
+  the ROCm MoE-dispatch packager consumes its replayed Schedule artifact.
+  `package_scheduled_moe_dispatch` projects buffers, ABI, scalars, shape
+  guards, geometry and layout from the native Tile contract, and a tampered
+  artifact fails before compilation. The Graph-authored packager is a
+  test-only #31(a) oracle. On gfx1151 (Princess-Luna), 5 device rows match it
+  bit-for-bit. gfx1201 has no MoE device row because the native owner admits
+  gfx1151 only. The prune row is now `compiled`, and the attention fallback is
+  the last ROCm Graph-owned constructor.
+  [Log](INTEGRATED_COMPILER_LOG.md#2026-11-03--e2e-real-6-rocm-moe-dispatch-packages-its-replayed-schedule-artifact).
+
 - Current increment (2026-11-03, sync E2E-REAL-6-rocm-paged-kv-2026-11-03):
   the ROCm paged-KV packager consumes its replayed Schedule artifact.
   `package_scheduled_paged_kv` projects buffers, ABI, scalars, shape guards,

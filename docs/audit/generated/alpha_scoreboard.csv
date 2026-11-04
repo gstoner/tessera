@@ -44,7 +44,7 @@ luna_gpu,Princess-Luna,gfx1151,reduction,bypass,unmeasured,native,partial,native
 luna_gpu,Princess-Luna,gfx1151,norm,bypass,unmeasured,unrouted,partial,absent,no
 luna_gpu,Princess-Luna,gfx1151,attention,bypass,unmeasured,native,partial,absent,no
 luna_gpu,Princess-Luna,gfx1151,paged_kv,bypass,unmeasured,native,partial,native,no
-luna_gpu,Princess-Luna,gfx1151,moe,bypass,unmeasured,bypass,partial,native,no
+luna_gpu,Princess-Luna,gfx1151,moe,bypass,unmeasured,native,partial,native,no
 luna_gpu,Princess-Luna,gfx1151,linalg,bypass,unmeasured,unrouted,partial,absent,no
 luna_gpu,Princess-Luna,gfx1151,epilogue,bypass,unmeasured,unrouted,partial,absent,no
 luna_gpu,Princess-Luna,gfx1151,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
@@ -96,7 +96,7 @@ taj_gpu,Tajasarus,gfx1201,reduction,bypass,unmeasured,native,partial,absent,no
 taj_gpu,Tajasarus,gfx1201,norm,bypass,unmeasured,unrouted,partial,absent,no
 taj_gpu,Tajasarus,gfx1201,attention,bypass,unmeasured,native,partial,absent,no
 taj_gpu,Tajasarus,gfx1201,paged_kv,bypass,unmeasured,native,partial,absent,no
-taj_gpu,Tajasarus,gfx1201,moe,bypass,unmeasured,bypass,partial,absent,no
+taj_gpu,Tajasarus,gfx1201,moe,bypass,unmeasured,native,partial,absent,no
 taj_gpu,Tajasarus,gfx1201,linalg,bypass,unmeasured,unrouted,partial,absent,no
 taj_gpu,Tajasarus,gfx1201,epilogue,bypass,unmeasured,unrouted,partial,absent,no
 taj_gpu,Tajasarus,gfx1201,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no

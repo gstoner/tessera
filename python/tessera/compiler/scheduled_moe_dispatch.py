@@ -1,4 +1,4 @@
-"""Replay-checked native gfx1151 MoE token-gather Schedule contract.
+"""Replay-checked native ROCm (gfx1151, gfx1201) MoE token-gather Schedule contract.
 
 E2E-REAL-6 (sync ``E2E-REAL-6-rocm-moe-dispatch-2026-11-03``): the ROCm
 consumer reads every launch field from
@@ -19,9 +19,28 @@ from typing import NamedTuple, cast
 
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
-#: Targets whose MoE token gather has an owning native ROCm consumer. The
-#: native Schedule owner (``NativeMoeDispatch.h``) admits gfx1151 only.
-ROCM_MOE_DISPATCH_TARGETS = frozenset({"rocm_gfx1151"})
+
+def _proven_moe_dispatch_targets() -> frozenset[str]:
+    """The ``rocm_<arch>`` targets whose ``moe_dispatch`` family has device proof.
+
+    Derived from the executable pipeline's one fail-closed table
+    (``rocm_pipeline.promoted_families``) over every modelled AMD architecture,
+    so an arch without proof -- gfx1200, gfx1250, CDNA, the generic ``rocm``
+    name -- is never admitted (Decision #21a). The native Schedule owner
+    (``NativeMoeDispatch.h``) states the same set in C++; the migration tests
+    replay every architecture through it to keep the two in step.
+    """
+    from .rocm_pipeline import promoted_families
+    from .rocm_target import AMDArch, rocm_arch_string
+
+    return frozenset(
+        f"rocm_{name}" for name in (rocm_arch_string(arch) for arch in AMDArch)
+        if "moe_dispatch" in promoted_families(name))
+
+
+#: Targets whose MoE token gather has an owning native ROCm consumer
+#: (gfx1151 since ROCM-E2E-2; gfx1201 since E2E-REAL-6-rocm-moe-gfx1201-2026-11-04).
+ROCM_MOE_DISPATCH_TARGETS = _proven_moe_dispatch_targets()
 
 MOE_DISPATCH_ENTRY = "tessera_tile_moe_dispatch_f32_direct"
 _CONTRACT_KEYS = frozenset({"arch", "bindings", "layout", "route", "shape", "target"})
@@ -208,7 +227,9 @@ def supports_scheduled_moe_dispatch(module, *, target: str) -> bool:
 
 def project_scheduled_moe_dispatch_graph(module, *, target: str = "rocm_gfx1151") -> str:
     if target not in ROCM_MOE_DISPATCH_TARGETS:
-        raise ValueError("MoE token-gather Schedule only admits gfx1151")
+        raise ValueError(
+            "MoE token-gather Schedule admits only ROCm architectures with moe_dispatch "
+            f"device proof ({', '.join(sorted(ROCM_MOE_DISPATCH_TARGETS))}); got {target!r}")
     admission = admit_moe_dispatch(module)
     if admission is None:
         raise ValueError("MoE token gather needs static f32[T,H], i32[S] -> f32[S,H]")

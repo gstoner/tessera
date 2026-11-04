@@ -16,7 +16,8 @@ from tessera.compiler.scheduled_matmul import find_tessera_opt
 from tessera.compiler.scheduled_paged_kv import lower_scheduled_paged_kv_graph
 from tessera.compiler.scheduled_moe_dispatch import lower_scheduled_moe_dispatch
 
-CASES = (("gfx1151", "paged_kv"), ("gfx1201", "paged_kv"), ("gfx1151", "moe_dispatch"))
+CASES = (("gfx1151", "paged_kv"), ("gfx1201", "paged_kv"), ("gfx1151", "moe_dispatch"),
+         ("gfx1201", "moe_dispatch"))
 
 
 def case(arch, family):

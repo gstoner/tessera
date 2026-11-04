@@ -4735,6 +4735,8 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         rn.GFX_MATMUL_I8_I32_ABI, rn.GFX_MATMUL_I4_I32_ABI,
         rn.GFX_ATTN_F16_ABI, rn.GFX_ATTN_BF16_ABI, rn.GFX_DEPTH_ATTN_F32_ABI,
         rn.GFX_PAGED_KV_F32_ABI, rn.GFX_PAGED_KV_STRIDED_F32_ABI, rn.GFX_SPARSE_MATMUL_2TO4_ABI,
+        # MoE token gather: Tajasarus device rows (E2E-REAL-6-rocm-moe-gfx1201-2026-11-04).
+        rn.GFX_MOE_DISPATCH_F32_ABI,
         GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI,
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,

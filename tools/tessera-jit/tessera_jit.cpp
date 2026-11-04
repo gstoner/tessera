@@ -47,6 +47,8 @@
 #include "mlir/Transforms/Passes.h"  // createCanonicalizerPass / CSE
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SCF/Transforms/BufferizableOpInterfaceImpl.h"
+#include "mlir/Dialect/Arith/Transforms/BufferDeallocationOpInterfaceImpl.h"
+#include "mlir/Dialect/ControlFlow/Transforms/BufferDeallocationOpInterfaceImpl.h"
 #include "mlir/Dialect/SCF/Transforms/BufferDeallocationOpInterfaceImpl.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Tensor/Transforms/BufferizableOpInterfaceImpl.h"
@@ -992,6 +994,11 @@ void *tessera_jit_compile(const char *mlir_text) {
   linalg::registerBufferizableOpInterfaceExternalModels(registry);
   tensor::registerBufferizableOpInterfaceExternalModels(registry);
   scf::registerBufferizableOpInterfaceExternalModels(registry);
+  // Ownership-based deallocation queries BufferDeallocationOpInterface on
+  // every dialect that promises it (arith.select, cf branches, scf). An NDEBUG
+  // MLIR silently drops an unregistered promise; an assertions build aborts.
+  arith::registerBufferDeallocationOpInterfaceExternalModels(registry);
+  cf::registerBufferDeallocationOpInterfaceExternalModels(registry);
   scf::registerBufferDeallocationOpInterfaceExternalModels(registry);
   vector::registerBufferizableOpInterfaceExternalModels(registry);
   bufferization::func_ext::registerBufferizableOpInterfaceExternalModels(

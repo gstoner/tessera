@@ -331,6 +331,18 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 ### E2E-REAL-6
 
+- Current increment (2026-11-04, sync E2E-REAL-6-sm120-lowp-matmul-2026-11-04):
+  the sm_120 `nvfp4_matmul` and `int4_matmul` packagers consume their replayed
+  `ScheduledMatmulArtifact`. `package_scheduled_nvfp4_matmul` and the hardened
+  `package_scheduled_int4_matmul` replay Graph→Schedule→Tile, bind host
+  aliases to the Schedule's operand roles, and project every launch field
+  (K16 UE4M3 block-scale views, packed int8 extents) before compiling; scale
+  layout/format and storage fail closed. The Graph-authored NVFP4 packager is a
+  test-only #31(a) oracle, bitwise-equal on the RTX 5070. Both prune rows are
+  `compiled`. Owed: `mx_matmul`, which needs FP6/MXFP4 Graph types and a C++
+  UE8M0 K32 Schedule contract. RTX 5070 evidence only.
+  [Log](INTEGRATED_COMPILER_LOG.md#2026-11-04--e2e-real-6-sm120-nvfp4-and-int4-matmul-packagers-consume-their-replayed-artifacts).
+
 - Current increment (2026-11-03, sync E2E-REAL-6-sm120-attention-2026-11-03):
   the four sm_120 attention packagers (`attention_lse`, `attention_backward`,
   `attention_backward_lse`, `attention_scaled_kv`) consume their replayed
@@ -511,7 +523,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 
 - Current slice (2026-09-30, sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30): The Graph-to-package contract composes bounded dynamic M/N/K on gfx1201 and sm_120. Exact-device fp16/bf16 parity, padded host ingress, allocation residency, and image reuse pass. Separate fp16 and bf16 event packets support stage attribution only; gfx1201 variation is high. Apple and x86 need independent resident consumers; wider physical layouts and remaining W1.1 producers stay open. [Evidence](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 
-- Latest: [2026-11-03 — E2E-REAL-6: SM120 attention packagers consume their replayed artifacts](INTEGRATED_COMPILER_LOG.md#2026-11-03--e2e-real-6-sm120-attention-packagers-consume-their-replayed-artifacts)
+- Latest: [2026-11-04 — E2E-REAL-6: SM120 NVFP4 and INT4 matmul packagers consume their replayed artifacts](INTEGRATED_COMPILER_LOG.md#2026-11-04--e2e-real-6-sm120-nvfp4-and-int4-matmul-packagers-consume-their-replayed-artifacts)
 
 Current increment: checked rank-four broadcast saved-LSE packages and private tape execute on SM120; physical bias extents, deterministic reduction and saved-state pairing are bound through native Graph/Schedule/Tile and checked CUDA descriptors. [Evidence](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md). Broader W1.1, frontend/AD and sibling routes remain open.
 

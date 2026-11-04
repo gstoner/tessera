@@ -554,7 +554,7 @@ def compile_graph_module(
     scheduled_checkpoint_artifact = None
     scheduled_paged_kv_artifact = None
     from .scheduled_paged_kv import ScheduledPagedKVArtifact, supports_scheduled_paged_kv
-    from .scheduled_moe_dispatch import ScheduledMoeDispatchArtifact
+    from .scheduled_moe_dispatch import ScheduledMoeDispatchArtifact, supports_scheduled_moe_dispatch
     scheduled_rocm_movement_artifact: ScheduledPagedKVArtifact | ScheduledMoeDispatchArtifact | None = None
     scheduled_rocm_movement_kind = None
     scheduled_math_recipe = None
@@ -611,7 +611,7 @@ def compile_graph_module(
             scheduled_rocm_movement_kind = "paged_kv"
             scheduled_rocm_movement_artifact = lower_scheduled_paged_kv_graph(module, target=target_kind)
             graph_text = scheduled_rocm_movement_artifact.graph_ir
-        elif target_kind == "rocm_gfx1151" and rocm_native.supports_moe_dispatch(module):
+        elif supports_scheduled_moe_dispatch(module, target=target_kind):
             from .scheduled_moe_dispatch import lower_scheduled_moe_dispatch
             scheduled_rocm_movement_kind = "moe_dispatch"
             scheduled_rocm_movement_artifact = lower_scheduled_moe_dispatch(module, target=target_kind)

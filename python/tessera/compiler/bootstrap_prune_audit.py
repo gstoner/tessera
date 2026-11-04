@@ -69,6 +69,8 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
     # A target counts only where its module defines package_scheduled_paged_kv,
     # the consumer that packages the replayed artifact without Graph re-entry.
     "paged_kv": ("scheduled_paged_kv", "supports_scheduled_paged_kv"),
+    # Likewise package_scheduled_moe_dispatch: the gfx1151 token gather.
+    "moe_dispatch": ("scheduled_moe_dispatch", "supports_scheduled_moe_dispatch"),
 }
 
 #: The generic compiled fallback the driver tries last. It admits by op

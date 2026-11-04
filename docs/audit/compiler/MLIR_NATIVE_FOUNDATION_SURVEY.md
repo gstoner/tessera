@@ -77,7 +77,7 @@ route fixtures and an inventory derived from those existing routes.
 |---|---|---|
 | NVIDIA `nvidia_native.package_scheduled_matmul(artifact)` | F1 removed the Graph argument and base-package compilation. The consumer validates artifact shape/ABI facts and compiles Tile once; the driver retains adjacent boundary lineage. | Keep the one-compile, no-Graph and tampering gates. Broader matmul storage and dynamic envelopes remain separately scoped. |
 | NVIDIA `package_native` | Softmax and reduction now enter native Schedule/Tile lowering, including narrow storage, min, keepdims and cooperative reduction. Their Graph constructors are deleted from production. Norm and forward attention now also consume native Schedule/Tile; their former constructors are test-only baselines. Recompute backward attention, fused paged attention and scaled/quantized matmul still reconstruct Tile. Saved-LSE pairs, signed INT4 and bounded paged reads now have native producers and replayed Schedule consumers. | F2-U1–U10 close the bounded unary migration with RTX differential proof. Aligned masks and paired-LSE validation landed in the next cut; native paired, signed-INT4 and bounded paged producers are implemented; reuse NVVM/PTX compilation and retain per-storage ABI gates. |
-| ROCm `rocm_native.package_native` | `package_attention`, `package_moe_dispatch` reconstruct Tile/Graph text. (`package_softmax` / `package_reduction` lower through the native Schedule contract since 2026-09-27, and `package_paged_kv_read` packages its replayed artifact through `package_scheduled_paged_kv` since 2026-11-03; their Graph-authored packagers are test-only oracles -- see the dated notes below.) | Matmul, attention, depth-attention and generic semantic-kernel scheduled consumers already exist. Verify old/new envelope differences, extend missing paged-KV/MoE movement carriers, migrate one family, and delete its Graph constructor after equivalence. Reuse Target→ROCDL→HSACO. |
+| ROCm `rocm_native.package_native` | `package_attention` reconstructs Tile/Graph text. (`package_softmax` / `package_reduction` lower through the native Schedule contract since 2026-09-27; `package_paged_kv_read` and `package_moe_dispatch` package their replayed artifacts through `package_scheduled_paged_kv` / `package_scheduled_moe_dispatch` since 2026-11-03; their Graph-authored packagers are test-only oracles -- see the dated notes below.) | Matmul, attention, depth-attention and generic semantic-kernel scheduled consumers already exist. Verify old/new envelope differences, extend missing paged-KV/MoE movement carriers, migrate one family, and delete its Graph constructor after equivalence. Reuse Target→ROCDL→HSACO. |
 | x86 `x86_native.package_native` | Direct baseline and AVX-512 softmax and rank-reducing or keepdims sum/mean/max now use replayed native Schedule/Tile with projected descriptor fields. Direct f32 matmul also replays its native Schedule and projects descriptor fields. Remaining non-f32 matmul/attention, cohort2, elementwise and delegated `x86_breadth.package_graph_breadth` classify Graph and construct lower-level calls/carriers. | Use existing scheduled matmul/attention/kernel consumers for covered shapes; move remaining pointwise/cohort/breadth contracts through canonical IR. For general compiled bodies, reuse `tessera-jit` LLVM lowering; keep native library calls explicit rather than relabeling them as generated bodies. |
 | Apple GPU `apple_native.package_native` | Batched GEMM, dynamic softmax and GELU, transpose, popcount/count-nonzero/topk, SVD and the value-ABI fallback read Graph operands/kwargs and construct descriptors. Static softmax and (since 2026-11-03) static rank-two GELU lower through native Schedule/Tile; GELU's former constructor is a test-only baseline. | Extend existing scheduled matmul/kernel/attention consumers. Migrate one value family to a verified native Target call with IR-derived ABI, then MSL body generation where appropriate. Keep MPS delegation explicitly represented in IR. |
 | Apple CPU `apple_cpu_native.package_native` | Reads the single Graph op, shapes, kwargs and dtype to synthesize a runtime-call record and package the prebuilt Accelerate/runtime image. | Add the typed call/ABI lowering from canonical IR; use the CPU LLVM path for general program bodies. This fifth package entry point must not disappear from a “four backend” inventory. |
@@ -352,3 +352,31 @@ static shapes. The route census differs from main only in the `apple_gpu,gelu`
 row (`gap` → `generic_compiled`). Transpose, batched GEMM, the dynamic
 families, SVD and the value-ABI fallback remain the Apple GPU Graph-owned
 constructors.
+
+## ROCm MoE-dispatch packager retirement (2026-11-03)
+
+E2E-REAL-6, sync `E2E-REAL-6-rocm-moe-dispatch-2026-11-03`. The gfx1151 MoE
+token gather already took its kernel from the native Graph -> Schedule -> Tile
+replay (`NativeMoeDispatch.h`). `package_moe_dispatch` still authored every
+launch field from the Python Graph object, and `scheduled_moe_dispatch.py`
+called back into `rocm_native._moe_dispatch_contract`.
+`rocm_native.package_scheduled_moe_dispatch(artifact)` now projects all of
+them from the replayed Tile `tessera.native_contract` through
+`ScheduledMoeDispatchArtifact.native_contract()`. That projection refuses:
+
+- a missing, extra or contradicting contract field;
+- a target, route or layout outside gfx1151 / `direct_gather` / `row_major`;
+- a kernel storage, index storage or operand count that disagrees;
+- an artifact whose own names or dims were relabelled.
+
+A tampered artifact fails before target compilation. Admission moved to
+`scheduled_moe_dispatch.admit_moe_dispatch`. The retired packager survives
+only in `tests/_support/rocm_moe_dispatch_baseline.py`, the #31(a) oracle of
+`tests/unit/test_rocm_moe_dispatch_migration.py`:
+
+- Host-free: 10 envelope points agree field for field.
+- gfx1151 (Princess-Luna): 5 device rows build the same image digest and agree
+  bit-for-bit with the retired package and with NumPy.
+- gfx1201: no device row, because the native owner admits gfx1151 only.
+
+The forward-attention fallback is now the only ROCm Graph-owned constructor.

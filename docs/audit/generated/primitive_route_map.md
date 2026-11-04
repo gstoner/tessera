@@ -23,10 +23,10 @@ met that bar, not an axis carrying no information.
 | Metric | Count |
 |---|---:|
 | Primitives reached by any route | 33 |
-| — served by a **compiled** route on some target | 31 |
-| — **bootstrap only** (deleting the packager strands them) | 2 |
+| — served by a **compiled** route on some target | 32 |
+| — **bootstrap only** (deleting the packager strands them) | 1 |
 | Families a backend classifies | 19 |
-| Families with a compiled route | 13 |
+| Families with a compiled route | 14 |
 
 **`❔ unclassified` is not `—`.** A dash means measured and nothing
 serves it; `unclassified` means this map cannot see that target's
@@ -60,7 +60,7 @@ whole backend reads as unserved.
 | `mean` | ❔ unclassified | ❔ unclassified | ✅ compiled | ✅ compiled | ✅ compiled |
 | `min` | ❔ unclassified | ❔ unclassified | ✅ compiled | — | — |
 | `minimum` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
-| `moe_dispatch` | ❔ unclassified | ❔ unclassified | — | 🟡 bootstrap | — |
+| `moe_dispatch` | ❔ unclassified | ❔ unclassified | — | ✅ compiled | — |
 | `mul` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
 | `pow` | ❔ unclassified | ❔ unclassified | — | — | ✅ compiled |
 | `relu` | ❔ unclassified | ❔ unclassified | ✅ compiled | — | — |
@@ -98,7 +98,7 @@ raises rather than degrading quietly.
 | `elementwise` | ✅ | x86 | `add`, `sub`, `mul`, `div`, `exp`, `log`, `sqrt`, `rsqrt`, `tanh`, `sigmoid`, `gelu`, `silu`, `erf`, `sign`, `where`, `pow`, `maximum`, `minimum` |
 | `int4_matmul` | — | nvidia_sm120 | `matmul` |
 | `matmul` | ✅ | nvidia_sm120, x86 | `matmul` |
-| `moe_dispatch` | — | rocm_gfx1151 | `moe_dispatch` |
+| `moe_dispatch` | ✅ | rocm_gfx1151 | `moe_dispatch` |
 | `mx_matmul` | — | nvidia_sm120 | `matmul` |
 | `norm` | ✅ | nvidia_sm120 | *****: `layer_norm`, `rmsnorm`; **nvidia_sm120**: `layer_norm`, `rmsnorm`; **x86**: `layer_norm`, `rmsnorm` |
 | `nvfp4_matmul` | — | nvidia_sm120 | `matmul` |

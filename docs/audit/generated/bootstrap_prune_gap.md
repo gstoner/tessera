@@ -22,19 +22,19 @@ the bootstrap row can go.
 | Metric | Count |
 |---|---|
 | Backends with a bootstrap module | 5 |
-| `package_*` functions total | 78 |
+| `package_*` functions total | 79 |
 | — Graph-input boundaries (including scheduled wrappers) | 45 |
-|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 8 |
+|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 7 |
 |   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 0 |
 |   ·  of the bootstrap, both | 0 |
-|   ·  of the bootstrap, other (wrapper / dispatcher) | 37 |
-| — typed scheduled-artifact inputs (consumption needs verification) | 15 |
+|   ·  of the bootstrap, other (wrapper / dispatcher) | 38 |
+| — typed scheduled-artifact inputs (consumption needs verification) | 16 |
 | — unclassified/raw inputs (not assumed compiled) | 18 |
-| Lines in those modules | 12684 |
+| Lines in those modules | 12680 |
 | Classified family/target candidates (shape admission not implied) | 57 |
-| — covered by a compiled route | 10 |
+| — covered by a compiled route | 11 |
 | — packager lowers only through the generic Schedule→Tile route | 12 |
-| — **gap (no declared family route)** | 35 |
+| — **gap (no declared family route)** | 34 |
 | Packagers matching no family | 9 |
 
 Graph input alone does not prove reconstruction: wrappers may call the
@@ -46,7 +46,7 @@ exact artifacts before treating a row as a constructor deletion target.
 | Target | Module | Graph input | Typed artifact input | Unknown/raw input | Family candidates | Lines |
 |---|---|---|---|---|---|---|
 | `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 15 | 15 | 5432 |
-| `rocm_gfx1151` | `rocm_native.py` | 7 | 6 | 1 | 5 | 3527 |
+| `rocm_gfx1151` | `rocm_native.py` | 7 | 7 | 1 | 5 | 3523 |
 | `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1603 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 10 | 215 |
 | `apple_gpu` | `apple_native.py` | 11 | 4 | 1 | 19 | 1907 |
@@ -101,7 +101,7 @@ queues own.
 | `rocm_gfx1151` | `reduction` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `rocm_gfx1151` | `paged_kv` | `scheduled_paged_kv.supports_scheduled_paged_kv` | ✅ compiled |
 | `rocm_gfx1151` | `attention` | `scheduled_attention.supports_scheduled_attention` | ✅ compiled |
-| `rocm_gfx1151` | `moe_dispatch` | — | 🔴 **gap** |
+| `rocm_gfx1151` | `moe_dispatch` | `scheduled_moe_dispatch.supports_scheduled_moe_dispatch` | ✅ compiled |
 | `x86` | `softmax` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `x86` | `reduction` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `x86` | `matmul` | `scheduled_matmul.supports_scheduled_matmul` | ✅ compiled |

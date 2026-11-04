@@ -602,7 +602,7 @@ void emitAppleValueCall(OpBuilder &b, Operation *op,
         "entropy_coef", "has_mask", "has_ref_kl", "has_entropy", "axis",
         "reduction", "eta", "temperature", "noise_scale", "has_noise",
         "steps", "p", "q", "coefficient_layout", "has_signature",
-        "has_grade_mask"}) {
+        "has_grade_mask", "tessera.schedule_hash"}) {
     if (Attribute a = op->getAttr(name))
       st.addAttribute(name, a);
   }
@@ -621,14 +621,20 @@ struct LowerTileToAppleCPUPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTileToAppleCPUPass)
 
   LowerTileToAppleCPUPass() = default;
-  explicit LowerTileToAppleCPUPass(bool valueMode) : valueMode(valueMode) {}
+  explicit LowerTileToAppleCPUPass(bool value) { valueMode = value; }
   LowerTileToAppleCPUPass(const LowerTileToAppleCPUPass &other)
-      : PassWrapper(other), valueMode(other.valueMode) {}
+      : PassWrapper(other) {}
 
   // Apple Value Target IR sprint: artifact mode (default) emits metadata ops +
   // ub.poison husks; value mode emits value-producing tessera_apple.cpu.call
   // ops and replaces the Tile op directly (used by the `-full` pipeline).
-  bool valueMode = false;
+  // E2E-REAL-6 (2026-11-04): also a pass option, so the replayed Apple CPU
+  // Schedule/Tile artifact (NativeAppleCPUKernel.h) reaches the same value
+  // lowering standalone (`--tile-to-apple_cpu=value=true`).
+  Option<bool> valueMode{*this, "value",
+                         llvm::cl::desc("Emit value-producing "
+                                        "tessera_apple.cpu.call ops"),
+                         llvm::cl::init(false)};
 
   llvm::StringRef getArgument() const final {
     return "tile-to-apple_cpu";

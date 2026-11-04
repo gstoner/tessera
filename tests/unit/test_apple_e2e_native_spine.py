@@ -24,6 +24,13 @@ def _module(dtype: str = "fp32") -> GraphIRModule:
     )])
 
 
+def _apple_cpu_compiler_available() -> bool:
+    from tessera.compiler.apple_cpu_native import apple_cpu_value_lowering_available
+
+    tool = find_tessera_opt()
+    return tool is not None and apple_cpu_value_lowering_available(str(tool))
+
+
 def _softmax_module() -> GraphIRModule:
     x = IRType("tensor<3x7xf32>", ("3", "7"), "fp32")
     return GraphIRModule(functions=[GraphIRFunction(
@@ -121,7 +128,11 @@ def test_canonical_compile_promotes_only_descriptor_contracts(
     dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     dylib.write_bytes(b"apple-e2e-test-runtime")
     monkeypatch.setenv(runtime_var, str(dylib))
-    assert canonical_compile_options(_module(), target=target)["package_native"] is True
+    # Apple CPU batched GEMM lowers through native Schedule/Tile (E2E-REAL-6,
+    # 2026-11-04), so it is promoted only where the production compiler has the
+    # Apple CPU value lowering; elsewhere the honest answer is "not packageable".
+    expected = target == "apple_gpu" or _apple_cpu_compiler_available()
+    assert canonical_compile_options(_module(), target=target)["package_native"] is expected
     assert canonical_compile_options(
         _module(), target=target, options={"apple_target_ir_mode": "value"},
     )["package_native"] is False
@@ -163,6 +174,14 @@ def test_apple_package_trace_uses_backend_selected_kind(monkeypatch, tmp_path, t
     dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     dylib.write_bytes(b"apple-spine-test-runtime")
     monkeypatch.setenv(runtime_var, str(dylib))
+    if target == "apple_cpu" and not _apple_cpu_compiler_available():
+        # Without the production compiler an explicit request fails closed.
+        with pytest.raises(RuntimeError, match="tessera-opt"):
+            compile_graph_module(
+                _module(), source_origin="apple-spine-package-kind-test", target=target,
+                options={"package_native": True}, enable_tool_validation=False,
+            )
+        return
     bundle = compile_graph_module(
         _module(), source_origin="apple-spine-package-kind-test", target=target,
         options={"package_native": True}, enable_tool_validation=False,
@@ -392,9 +411,12 @@ def _tuple_value_module(op_name, input_shape, result_specs, *, kwargs=None):
         "tensor<" + "x".join(map(str, input_shape)) + "xf32>",
         tuple(map(str, input_shape)), "fp32",
     )
+    # The MLIR element spelling, not the dtype name: since E2E-REAL-6 the
+    # native contract prints this Graph IR, so its text must parse.
+    spelling = {"fp32": "f32", "int32": "i32"}
     result_types = [
         IRType(
-            "tensor<" + "x".join(map(str, shape)) + "x" + dtype + ">",
+            "tensor<" + "x".join(map(str, shape)) + "x" + spelling.get(dtype, dtype) + ">",
             tuple(map(str, shape)), dtype,
         )
         for _, shape, dtype in result_specs

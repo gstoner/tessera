@@ -97,6 +97,7 @@ namespace tessera {
 #include "NativeSSD.h"
 #include "NativeAbsolute.h"
 #include "NativeX86Kernel.h"
+#include "NativeAppleCPUKernel.h"
 #include "NativeROCMMath.h"
 #include "NativeResultPermutation.h"
 #include "NativeSparse.h"
@@ -4048,6 +4049,12 @@ struct GraphToSchedulePass
       return signalPassFailure();
     if (scaleTransposeSelected) return;
     OpBuilder builder(mod.getContext());
+    // E2E-REAL-6 Apple CPU batched GEMM + LAPACK families (2026-11-04): an
+    // opt-in module (launch bindings) owns its single operation outright.
+    bool appleCPUKernelSelected = false;
+    if (failed(scheduleNativeAppleCPUKernel(mod, appleCPUKernelSelected)))
+      return signalPassFailure();
+    if (appleCPUKernelSelected) return;
     if (failed(scheduleNativeAbsolute(mod))) return signalPassFailure();
     if (failed(scheduleNativeX86Kernel(mod))) return signalPassFailure();
     if (failed(scheduleNativeROCMMath(mod))) return signalPassFailure();
@@ -5222,6 +5229,10 @@ struct ScheduleToTilePass
       op->getResult(0).replaceAllUsesWith(lowered->getResult(0));
       op.erase();
     }
+    bool appleCPUKernelSelected = false;
+    if (failed(lowerNativeAppleCPUKernel(mod, appleCPUKernelSelected)))
+      return signalPassFailure();
+    if (appleCPUKernelSelected) return;
     if (failed(lowerNativeAbsolute(mod))) return signalPassFailure();
     if (failed(lowerNativeX86Kernel(mod))) return signalPassFailure();
     if (failed(lowerNativeROCMMath(mod))) return signalPassFailure();

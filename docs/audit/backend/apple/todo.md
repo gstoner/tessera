@@ -16287,3 +16287,31 @@ Owed: `batched_gemm` (no Apple batch Schedule contract), BNNS f16/bf16 matmul
 (f32-only Schedule branch; BNNS accumulator unstated), and the LAPACK
 factorizations `cholesky`, `cholesky_solve`, `lu`, `qr`, `svd`, `tri_solve`,
 which still package from Graph IR in `package_native`.
+
+## `E2E-REAL-6-apple-cpu-factorizations-2026-11-04`: Apple CPU batched GEMM and LAPACK factorizations retire their Graph-owned constructor
+
+Owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+Synchronization key: `E2E-REAL-6-apple-cpu-factorizations-2026-11-04`.
+
+`apple_cpu,{batched_gemm,tri_solve,cholesky,cholesky_solve,lu,qr,svd}` now
+lower through native Graph→Schedule→Tile (`NativeAppleCPUKernel.h`,
+`schedule.artifact` family `apple_cpu_kernel` → `tile.<kind>`) and the Apple CPU
+value lowering, which gained a `value` pass option and now carries
+`tessera.schedule_hash` onto `tessera_apple.cpu.call`.
+`package_scheduled_apple_cpu_kernel` replays every boundary and projects the
+descriptor; tampering with the artifact, Graph, Schedule, Tile or Target text
+fails closed before the runtime is touched. The Accelerate/LAPACK wrappers in
+`apple_cpu_runtime.cpp` stay Tier-3 delegates behind the declared op (no new
+op; runtime sources untouched). The old route is the #31(a) oracle
+`tests/_support/apple_cpu_baseline.py`.
+
+Named behaviour changes: `cholesky(lower=False)` (the ABI returned the lower
+factor), `full_matrices=True` qr/svd, wide QR, batched cholesky/tri_solve,
+rank-2/broadcast `batched_gemm` and shape-mismatched results are refused at
+compile time; LU int32 pivots bind at alignment 4 (was 2).
+
+Evidence (Mac M1 Max, macOS 27.2, unsandboxed Accelerate): the two migration
+test files are 158 passed, including 21 Accelerate cases bit-exact against the
+oracle and a float64 reconstruction check. Lit adds
+`phase8/apple_cpu_kernel_{schedule_tile,invalid}.mlir`. Owed: BNNS f16/bf16
+matmul, the last Apple CPU Graph-owned constructor.

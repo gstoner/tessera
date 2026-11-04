@@ -3362,7 +3362,7 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architect
     target = f"rocm_{architecture}"
     if not supports_scheduled_moe_dispatch(module, target=target):
         raise ValueError(
-            "gfx1151 MoE dispatch packaging requires static f32 [T,H] input, "
+            "MoE dispatch packaging requires a proven ROCm arch, static f32 [T,H] input, "
             "rank-1 int32 token indices, and f32 [S,H] output"
         )
     if scheduled_artifact is None:
@@ -3379,10 +3379,12 @@ def package_scheduled_moe_dispatch(artifact: ScheduledMoeDispatchArtifact, *, pi
     artifact.validate()
     contract = artifact.native_contract()
     architecture = contract.architecture
-    if (contract.target != "rocm_gfx1151" or contract.target != f"rocm_{architecture}"
+    from .scheduled_moe_dispatch import ROCM_MOE_DISPATCH_TARGETS
+
+    if (contract.target not in ROCM_MOE_DISPATCH_TARGETS or contract.target != f"rocm_{architecture}"
             or (contract.storage, contract.index_storage, contract.kernel_route, contract.layout)
             != ("f32", "i32", "direct_gather", "row_major")):
-        raise ValueError("ROCm MoE dispatch requires a gfx1151 f32/i32 direct-gather native contract")
+        raise ValueError("ROCm MoE dispatch requires a proven-arch f32/i32 direct-gather native contract")
     scalar_names = ("T", "S", "H")
     if len(scalar_names) != contract.scalar_count:
         raise ValueError("MoE native entry scalar count disagrees with its ABI")

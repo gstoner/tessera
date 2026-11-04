@@ -34,7 +34,9 @@ class PreparedMovementCall:
             raise ValueError("prepared movement needs its exact ROCm image target")
         strided = descriptor.abi_id == GFX_PAGED_KV_STRIDED_F32_ABI
         family = 2 if strided else 0 if descriptor.abi_id == GFX_PAGED_KV_F32_ABI else 1
-        if family == 1 and (descriptor.abi_id != GFX_MOE_DISPATCH_F32_ABI or arch != "gfx1151"):
+        from .scheduled_moe_dispatch import ROCM_MOE_DISPATCH_TARGETS
+        if family == 1 and (descriptor.abi_id != GFX_MOE_DISPATCH_F32_ABI
+                            or image.target not in ROCM_MOE_DISPATCH_TARGETS):
             raise ValueError("prepared movement has an unsupported ABI")
         stages = [compiled.bundle.graph, compiled.bundle.schedule, compiled.bundle.tile,
                   compiled.bundle.target_ir, compiled.bundle.backend]
@@ -55,7 +57,7 @@ class PreparedMovementCall:
             t, slots, h = dimensions
             shapes = ((t, h), (slots,), (slots, h))
             scalar_names = ("T", "S", "H")
-            policy = "gfx1151_moe_dispatch_direct_256"
+            policy = arch + "_moe_dispatch_direct_256"
         expected_buffers = tuple(BufferBinding(i, name, "output" if i == 2 else "input",
             "int32" if i == 1 else "fp32", len(shape), "strided" if strided and i == 0 else "row_major", 4)
             for i, (name, shape) in enumerate(zip(names, shapes, strict=True)))

@@ -1640,11 +1640,10 @@ def canonical_compile_options(
             )
         )
     if target_kind == "apple_cpu" and "package_native" not in resolved:
-        from .apple_cpu_native import native_package_kind, tools_available
+        from .apple_cpu_native import native_package_available
 
-        resolved["package_native"] = (
-            apple_target_ir_mode != "value" and native_package_kind(module) is not None and tools_available()
-        )
+        # E2E-REAL-6 Apple CPU: a scheduled family also needs tessera-opt.
+        resolved["package_native"] = apple_target_ir_mode != "value" and native_package_available(module)
     return resolved
 
 

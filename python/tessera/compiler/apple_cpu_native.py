@@ -5,6 +5,18 @@ the single-result families, with one explicit output binding per SSA result.
 That preserves the C ABI's result ordering without inventing a packed tuple
 buffer or routing a descriptor package back through a legacy artifact.  E2E-2
 extends the same static rank-2 contract to BNNS f16/bf16 matmul.
+
+E2E-REAL-6 Apple CPU (2026-11-03): the static f32 ``matmul`` / ``gemm`` and
+rank-2 ``softmax`` envelopes no longer build their descriptor from the Python
+Graph object. They lower through the native Graph -> Schedule -> Tile
+boundaries (``scheduled_matmul`` / ``scheduled_kernel``) and
+``package_scheduled_{matmul,kernel}`` binds the replayed artifact to the
+Accelerate delegate through a verified ``tessera_apple.cpu.accelerate_gemm`` /
+``vector_reduce`` Target IR op (Decision #28 Tier 3 behind a declared op, one
+lowering path per Decision #31). The retired Graph-owned constructor is the
+test-only oracle ``tests/_support/apple_cpu_baseline.py``. Batched GEMM, the
+BNNS f16/bf16 matmul and the LAPACK factorizations still package here from
+Graph IR; they are owed, not compiled.
 """
 from __future__ import annotations
 
@@ -12,13 +24,17 @@ import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from .graph_ir import GraphIRModule
 from .native_artifact import (
     BufferBinding, LaunchDescriptor, LaunchGeometry, NativeEntryPoint,
     NativeImageArtifact, OrderingSemantics, ShapeGuard,
 )
+
+if TYPE_CHECKING:
+    from .scheduled_kernel import ScheduledKernelArtifact
+    from .scheduled_matmul import ScheduledMatmulArtifact
 
 
 APPLE_CPU_DESCRIPTOR_STATES: dict[str, str] = {
@@ -142,7 +158,7 @@ def native_package_kind(module: GraphIRModule) -> str | None:
         except (TypeError, ValueError):
             return None
         if (len(names) != 1 or len(input_shapes[0]) != 2 or output_shapes != [input_shapes[0]]
-                or axis % 2 != 1):
+                or axis not in (-1, 1)):
             return None
     return op.op_name.removeprefix("tessera.")
 
@@ -153,9 +169,217 @@ def supports_native_package(module: GraphIRModule) -> bool:
     return native_package_kind(module) is not None
 
 
+def scheduled_package_kind(module: GraphIRModule) -> str | None:
+    """The family whose request lowers through native Schedule/Tile, if any.
+
+    Only the static f32 ``matmul``/``gemm`` and rank-2 ``softmax`` envelopes;
+    every other classified request still packages from Graph IR (owed).
+    """
+    kind = native_package_kind(module)
+    if kind == "softmax":
+        return kind
+    if kind in {"matmul", "gemm"}:
+        fn = module.functions[0]
+        if all(arg.ir_type.dtype == "fp32" for arg in fn.args):
+            return kind
+    return None
+
+
+def native_package_available(module: GraphIRModule) -> bool:
+    """Whether ``package_native`` can produce ``module``'s package on this host.
+
+    A scheduled family needs the production ``tessera-opt`` (with the Apple
+    dialect) as well as the runtime dylib; the Graph-owned families need only
+    the dylib.
+    """
+    if native_package_kind(module) is None or not tools_available():
+        return False
+    if scheduled_package_kind(module) is None:
+        return True
+    from .scheduled_matmul import find_tessera_opt
+    return find_tessera_opt() is not None
+
+
+def _verified_target_ir(op_text: str) -> str:
+    """Parse and verify one Apple CPU Target IR op with the production compiler.
+
+    The op must be a declared ``tessera_apple`` op the MLIR verifier accepts;
+    an unregistered spelling or a missing required attribute fails closed
+    before any image is built.
+    """
+    import re
+    from .scheduled_matmul import find_tessera_opt, run_tessera_opt
+
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("E2E-REAL-6 Apple CPU Target IR requires production tessera-opt")
+    module = 'module attributes {tessera.target = "apple_cpu"} {\n  ' + op_text + "\n}\n"
+    printed = run_tessera_opt(tool, module, "--verify-each")
+    name = op_text.split(" ", 1)[0]
+    if len(re.findall(r"(?m)^\s*" + re.escape(name) + r" \{", printed)) != 1:
+        raise ValueError(f"Apple CPU Target IR did not round-trip one {name}")
+    return op_text
+
+
+def _runtime_image(target_ir: str, symbol: str, abi: str, *, pipeline_name: str) -> NativeImageArtifact:
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError("E2E-REAL-6 Apple CPU scheduled packaging requires an Apple CPU runtime dylib")
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    return NativeImageArtifact(
+        target="apple_cpu", architecture="apple_silicon_cpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-cpu-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_cpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(), binary_format="shared_object",
+        payload=payload, entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+
+
+def package_scheduled_matmul(
+    artifact: ScheduledMatmulArtifact,
+    *,
+    pipeline_name: str,
+    op_kind: str = "matmul",
+) -> AppleCPUNativePackage:
+    """Bind a replayed Apple CPU Schedule/Tile matmul to Accelerate's cblas_sgemm.
+
+    E2E-REAL-6 Apple CPU (2026-11-03). Every descriptor field is projected from
+    the artifact ``verify_matmul_projection`` just proved equal to the native
+    Schedule replay; nothing is read from a Graph object. The consumer is the
+    hand-written ``tessera_apple_cpu_gemm_f32`` wrapper over cblas_sgemm, a
+    declared Decision #28 Tier-3 delegate reached through the verified
+    ``tessera_apple.cpu.accelerate_gemm`` Target IR op. Accelerate owns its
+    blocking, so the Schedule's macro tile is a named dropped decision.
+    """
+    artifact.validate()
+    from .scheduled_matmul import verify_matmul_projection
+    verify_matmul_projection(artifact)
+    if (
+        artifact.target != "apple_cpu"
+        or artifact.architecture != "apple_silicon_cpu"
+        or (artifact.a_dtype, artifact.b_dtype, artifact.output_dtype) != ("fp32", "fp32", "fp32")
+        or (artifact.storage, artifact.accum) != ("f32", "f32")
+        or artifact.bias_name is not None or artifact.residual_name is not None
+        or artifact.activation != "none" or artifact.split_k != 1
+        or artifact.b_layout != "col_major" or artifact.b_codes_dtype or artifact.scale_name
+        or artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k
+        or op_kind not in {"matmul", "gemm"}
+    ):
+        raise ValueError("Apple CPU scheduled matmul requires the static plain f32 cblas_sgemm contract")
+    symbol = "tessera_apple_cpu_gemm_f32"
+    abi = f"tessera.apple.cpu.value.{op_kind}.fp32.v1"
+    target_ir = _verified_target_ir(
+        f'tessera_apple.cpu.accelerate_gemm {{source = "tile.matmul_kernel", '
+        f'result = "{artifact.output_name}", ordinal = 0, framework = "Accelerate", '
+        f'abi = "cblas_sgemm", dtype = "f32", tessera.accum = "f32", '
+        f'tessera.symbol = "{symbol}", tessera.schedule_hash = "{artifact.schedule_digest}"}}'
+    )
+    image = _runtime_image(target_ir, symbol, abi, pipeline_name=pipeline_name)
+    a, b, out = artifact.a_name, artifact.b_name, artifact.output_name
+    shapes = ((a, (artifact.m, artifact.k)), (b, (artifact.k, artifact.n)), (out, (artifact.m, artifact.n)))
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=(
+            BufferBinding(0, a, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(1, b, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(2, out, "output", "fp32", 2, "row_major", 4),
+        ),
+        shape_guards=tuple(ShapeGuard(name, axis, "eq", extent)
+                           for name, shape in shapes for axis, extent in enumerate(shape)),
+        geometry=LaunchGeometry(policy="apple_cpu_value_executor"),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
+        provenance={
+            "work_item": "E2E-REAL-6", "route": "apple_cpu_value_executor", "op_kind": op_kind,
+            "value_call": {"op": "tessera_apple.cpu.call", "op_kind": op_kind, "symbol": symbol,
+                           "status": "executable"},
+            "result_count": 1, "shape": [artifact.m, artifact.n, artifact.k],
+            "storage": "f32", "accum": "f32", "target_ir_op": "tessera_apple.cpu.accelerate_gemm",
+            # Decisions the delegated Accelerate route does not materialize,
+            # named rather than lost (Decision #32).
+            "dropped_macro_tile": [artifact.macro_tile_m, artifact.macro_tile_n],
+            "dropped_reason": "delegated_to_accelerate_cblas_sgemm",
+            "schedule_digest": artifact.schedule_digest, "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return AppleCPUNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
+def package_scheduled_kernel(
+    artifact: ScheduledKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleCPUNativePackage:
+    """Bind a replayed Apple CPU Schedule/Tile softmax to its Accelerate ABI.
+
+    E2E-REAL-6 Apple CPU (2026-11-03). ``verify_unary_ancestry`` replays the
+    Schedule and projects every field below from native-printed IR. The
+    consumer is the hand-written ``tessera_apple_cpu_softmax_f32`` row softmax,
+    a Tier-3 delegate reached through the verified
+    ``tessera_apple.cpu.vector_reduce`` Target IR op.
+    """
+    artifact.validate()
+    from .native_unary_contract import verify_unary_ancestry
+    verify_unary_ancestry(artifact, target="apple_cpu", architecture="apple_silicon_cpu")
+    if (
+        artifact.family != "softmax" or artifact.kind != "softmax" or artifact.record
+        or artifact.dtype != "fp32" or (artifact.storage, artifact.accum) != ("f32", "f32")
+        or len(artifact.input_shape) != 2 or artifact.output_shape != artifact.input_shape
+        or artifact.axis != -1 or artifact.schedule != "serial" or artifact.workgroup_size != 1
+        or max(artifact.input_shape) > 2**31 - 1
+    ):
+        raise ValueError("Apple CPU scheduled kernel requires the static rank-two f32 softmax contract")
+    symbol = "tessera_apple_cpu_softmax_f32"
+    abi = "tessera.apple.cpu.value.softmax.fp32.v1"
+    target_ir = _verified_target_ir(
+        f'tessera_apple.cpu.vector_reduce {{source = "tile.softmax_kernel", '
+        f'result = "{artifact.output_name}", ordinal = 0, framework = "Accelerate", '
+        f'abi = "row_softmax_f32", dtype = "f32", tessera.accum = "f32", '
+        f'tessera.symbol = "{symbol}", tessera.schedule_hash = "{artifact.schedule_digest}"}}'
+    )
+    image = _runtime_image(target_ir, symbol, abi, pipeline_name=pipeline_name)
+    x, out = artifact.input_name, artifact.output_name
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=(
+            BufferBinding(0, x, "input", "fp32", 2, "row_major", 4),
+            BufferBinding(1, out, "output", "fp32", 2, "row_major", 4),
+        ),
+        shape_guards=tuple(ShapeGuard(name, axis, "eq", extent)
+                           for name, shape in ((x, artifact.input_shape), (out, artifact.output_shape))
+                           for axis, extent in enumerate(shape)),
+        geometry=LaunchGeometry(policy="apple_cpu_value_executor"),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
+        provenance={
+            "work_item": "E2E-REAL-6", "route": "apple_cpu_value_executor", "op_kind": "softmax",
+            "value_call": {"op": "tessera_apple.cpu.call", "op_kind": "softmax", "symbol": symbol,
+                           "status": "executable", "axis": -1},
+            "result_count": 1, "shape": list(artifact.input_shape), "storage": "f32", "accum": "f32",
+            "exp_mode": "accurate", "target_ir_op": "tessera_apple.cpu.vector_reduce",
+            "schedule_digest": artifact.schedule_digest, "tile_ir_digest": artifact.tile_digest,
+        },
+    )
+    return AppleCPUNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
 def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleCPUNativePackage:
-    if native_package_kind(module) is None:
+    kind = native_package_kind(module)
+    if kind is None:
         raise ValueError("Apple CPU native packaging requires one static supported descriptor contract")
+    scheduled = scheduled_package_kind(module)
+    if scheduled == "softmax":
+        from .scheduled_kernel import lower_scheduled_kernel
+        return package_scheduled_kernel(
+            lower_scheduled_kernel(module, target="apple_cpu"), pipeline_name=pipeline_name)
+    if scheduled in {"matmul", "gemm"}:
+        # ``tessera.gemm`` is matmul's legacy alias; it survives only as the
+        # descriptor's ABI label over the same ``tessera_apple_cpu_gemm_f32``.
+        from .scheduled_matmul import lower_scheduled_matmul
+        return package_scheduled_matmul(
+            lower_scheduled_matmul(module, target="apple_cpu"), pipeline_name=pipeline_name,
+            op_kind=scheduled)
+    # Owed families (batched GEMM, BNNS f16/bf16 matmul, LAPACK factorizations):
+    # still Graph-owned until they gain a native Schedule/Tile contract.
     fn, op = module.functions[0], module.functions[0].body[0]
     names = tuple(value.removeprefix("%") for value in op.operands)
     args = {arg.name: arg for arg in fn.args}
@@ -205,9 +429,7 @@ def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleCPUNati
         buffers=buffers, shape_guards=guards,
         geometry=LaunchGeometry(policy="apple_cpu_value_executor"),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
-        provenance={"work_item": ("APPLE-NATIVE-E2E-2"
-                                    if dtype != "fp32" or op.op_name == "tessera.softmax"
-                                    else "APPLE-CPU-E2E-1"),
+        provenance={"work_item": ("APPLE-NATIVE-E2E-2" if dtype != "fp32" else "APPLE-CPU-E2E-1"),
                     "route": "apple_cpu_value_executor", "op_kind": kind,
                     "value_call": call, "result_count": len(output_names)},
     )

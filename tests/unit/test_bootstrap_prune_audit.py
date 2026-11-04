@@ -67,7 +67,8 @@ def test_gap_rows_are_only_ever_families_with_no_declared_route():
             assert route == "scheduled_kernel.supports_scheduled_kernel"
         else:
             assert status == "compiled"
-            assert family in audit._FAMILY_TO_COMPILED
+            assert (family in audit._FAMILY_TO_COMPILED
+                    or (_target, family) in audit._TARGET_FAMILY_TO_COMPILED)
 
 
 def _generic_fixture(monkeypatch, tmp_path, body: str) -> bool:
@@ -440,7 +441,12 @@ def native_package_kind(module):
 
 
 def test_family_route_requires_consumer_on_that_target():
-    assert audit._target_family_route('apple_cpu', 'matmul') is None
+    # E2E-REAL-6 (2026-11-03): Apple CPU now has package_scheduled_matmul.
+    assert audit._target_family_route('apple_cpu', 'matmul') is not None
+    assert audit._target_family_route('apple_cpu', 'attention') is None
+    # The per-target gemm alias route names Apple CPU alone.
+    assert audit._target_family_route('apple_cpu', 'gemm') is not None
+    assert audit._target_family_route('apple_gpu', 'gemm') is None
     assert audit._target_family_route('apple_gpu', 'matmul') is not None
     assert audit._target_family_route('nvidia_sm120', 'depth_attention') is None
     assert audit._target_family_route('rocm_gfx1151', 'depth_attention') is not None

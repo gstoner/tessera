@@ -22,19 +22,19 @@ the bootstrap row can go.
 | Metric | Count |
 |---|---|
 | Backends with a bootstrap module | 5 |
-| `package_*` functions total | 78 |
+| `package_*` functions total | 80 |
 | — Graph-input boundaries (including scheduled wrappers) | 45 |
 |   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 8 |
 |   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 0 |
 |   ·  of the bootstrap, both | 0 |
 |   ·  of the bootstrap, other (wrapper / dispatcher) | 37 |
-| — typed scheduled-artifact inputs (consumption needs verification) | 15 |
+| — typed scheduled-artifact inputs (consumption needs verification) | 17 |
 | — unclassified/raw inputs (not assumed compiled) | 18 |
-| Lines in those modules | 12684 |
+| Lines in those modules | 12906 |
 | Classified family/target candidates (shape admission not implied) | 57 |
-| — covered by a compiled route | 10 |
+| — covered by a compiled route | 13 |
 | — packager lowers only through the generic Schedule→Tile route | 12 |
-| — **gap (no declared family route)** | 35 |
+| — **gap (no declared family route)** | 32 |
 | Packagers matching no family | 9 |
 
 Graph input alone does not prove reconstruction: wrappers may call the
@@ -48,7 +48,7 @@ exact artifacts before treating a row as a constructor deletion target.
 | `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 15 | 15 | 5432 |
 | `rocm_gfx1151` | `rocm_native.py` | 7 | 6 | 1 | 5 | 3527 |
 | `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1603 |
-| `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 10 | 215 |
+| `apple_cpu` | `apple_cpu_native.py` | 1 | 2 | 0 | 10 | 437 |
 | `apple_gpu` | `apple_native.py` | 11 | 4 | 1 | 19 | 1907 |
 
 ## Census limits
@@ -113,11 +113,11 @@ queues own.
 | `apple_cpu` | `batched_gemm` | — | 🔴 **gap** |
 | `apple_cpu` | `cholesky` | — | 🔴 **gap** |
 | `apple_cpu` | `cholesky_solve` | — | 🔴 **gap** |
-| `apple_cpu` | `gemm` | — | 🔴 **gap** |
+| `apple_cpu` | `gemm` | `scheduled_matmul.supports_scheduled_matmul` | ✅ compiled |
 | `apple_cpu` | `lu` | — | 🔴 **gap** |
-| `apple_cpu` | `matmul` | — | 🔴 **gap** |
+| `apple_cpu` | `matmul` | `scheduled_matmul.supports_scheduled_matmul` | ✅ compiled |
 | `apple_cpu` | `qr` | — | 🔴 **gap** |
-| `apple_cpu` | `softmax` | — | 🔴 **gap** |
+| `apple_cpu` | `softmax` | `scheduled_kernel.supports_scheduled_kernel` | ✅ compiled |
 | `apple_cpu` | `svd` | — | 🔴 **gap** |
 | `apple_cpu` | `tri_solve` | — | 🔴 **gap** |
 | `apple_gpu` | `batched_gemm` | — | 🔴 **gap** |

@@ -264,7 +264,7 @@ The remaining NVIDIA Graph-owned constructors are explicit next work:
 
 | Entry/family | Native contract still required |
 |---|---|
-| `package_matmul` and NVFP4/MX variants | Remaining dtype/layout/packing envelopes outside the scheduled consumer |
+| `package_matmul` and the MX variant | Remaining dtype/layout/packing envelopes outside the scheduled consumer; `package_mx_matmul` needs FP6/MXFP4 Graph types and a UE8M0 K32 Schedule contract (NVFP4 and INT4 moved to replayed consumers 2026-11-04) |
 | `package_paged_attention` | Page table, logical positions, ownership and bounds |
 | `package_replay_ssm_kernels` | Paired decode/flush state and ordered effects |
 | `package_moe_kernels` | Multi-entry routing, movement, capacities and workspace |
@@ -380,6 +380,12 @@ only in `tests/_support/rocm_moe_dispatch_baseline.py`, the #31(a) oracle of
 
 The forward-attention fallback is now the only ROCm Graph-owned constructor.
 
+**gfx1201 admission (2026-11-04, sync `E2E-REAL-6-rocm-moe-gfx1201-2026-11-04`).**
+The same route now admits gfx1201. The native owner and every downstream gate
+read one proof table (`rocm_pipeline.promoted_families`), so there is no
+second lowering and no generic `rocm` fallback. On Tajasarus, 8 gfx1201 device
+rows pass bit-for-bit.
+
 ## Apple CPU matmul/gemm/softmax constructor retirement (2026-11-03)
 
 E2E-REAL-6, sync `E2E-REAL-6-apple-cpu-2026-11-03`: the fifth package entry
@@ -424,6 +430,25 @@ the prune audit declares. The retired Graph-authored packagers survive in
 `tests/unit/test_nvidia_attention_checkpoint_migration.py` and the RTX 5070
 bitwise differential `tests/device/nvidia/test_attention_checkpoint_migration.py`.
 Fused paged attention, replay-SSM and MoE remain NVIDIA Graph-owned constructors.
+
+## SM120 low-precision matmul packager retirement (2026-11-04)
+
+E2E-REAL-6, sync `E2E-REAL-6-sm120-lowp-matmul-2026-11-04`: NVFP4 and signed
+INT4 matmuls already lowered through `lower_scheduled_matmul`, so the census
+`gap` was about packaging, not lowering. `package_nvfp4_matmul` re-read the
+caller's Graph for scale operand names, logical shapes, batch axes and
+transposes, and the driver called it with the Graph beside the artifact;
+`package_scheduled_int4_matmul` trusted the artifact's host labels. Now
+`scheduled_matmul.verify_nvfp4_projection` / `verify_int4_projection` replay
+both boundaries, bind host aliases to the Schedule's positional roles
+(`graph_host_aliases`), and project every launch field, including the K16
+UE4M3 scale views and packed int8 extents, before compilation;
+`package_scheduled_matmul` dispatches both. The retired Graph-authored NVFP4
+packager is frozen in `tests/_support/nvidia_lowp_matmul_baseline.py`, the
+#31(a) oracle of `tests/unit/test_nvidia_lowp_matmul_migration.py` and the RTX
+5070 bitwise differential `tests/device/nvidia/test_lowp_matmul_migration.py`.
+`mx_matmul` remains a Graph-owned constructor: its FP6 Graph types do not
+parse and the C++ Schedule has no MX block-scale contract.
 
 ## Apple CPU batched GEMM and LAPACK constructor retirement (2026-11-04)
 

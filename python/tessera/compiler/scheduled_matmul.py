@@ -1391,3 +1391,327 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
     names += [x for x in (artifact.bias_name, artifact.residual_name) if x is not None]
     if any(type(x) is not str or not x.isidentifier() for x in names) or len(set(names)) != len(names):
         raise ValueError('matmul host aliases must be distinct identifiers')
+
+
+# ---------------------------------------------------------------------------
+# E2E-REAL-6, SM120 low-precision matmuls (sync
+# ``E2E-REAL-6-sm120-lowp-matmul-2026-11-04``). NVFP4 and signed INT4 already
+# lowered Graph -> Schedule -> Tile through this module; what the packagers
+# still did was re-read the caller's Graph object for the scale operands,
+# batch axes and packed shapes. The projection below reads them from the
+# replayed native Schedule instead, so the SM120 consumers in
+# ``nvidia_native`` take a ScheduledMatmulArtifact and nothing else.
+# ---------------------------------------------------------------------------
+
+#: The one NVFP4 block-scale contract the SM120 kernel computes. Every key is
+#: semantic (Decision #21a): a missing or different value fails closed, both
+#: here and in the C++ Schedule (``getInferredMatmulSchedule``).
+NVFP4_PHYSICAL_CONTRACT = "nvidia_sm120_nvfp4_blockscale_v1"
+NVFP4_SCALE_LAYOUT = {"granularity": "block", "block": [1, 16], "format": "ue4m3"}
+NVFP4_NUMERIC_POLICY = {"accum": "fp32", "execution_mode": "exact_per_block"}
+_NVFP4_BATCHING = ("shared_rhs_rows", "independent_rhs", "shared_lhs")
+
+
+def canonical_nvfp4_graph(module: GraphIRModule) -> GraphIRModule:
+    """Spell a logical NVFP4 product as the scaled matmul the Schedule accepts.
+
+    A plain ``matmul``/``gemm`` over two ``nvfp4`` operands and two ``uint8``
+    scale views has exactly one meaning on SM120, so it is respelled as
+    ``tessera.scaled_matmul`` with that contract. A contract key that is
+    already present and differs is refused rather than overwritten: scale
+    layout and accumulation are semantic keys. The caller's module is never
+    mutated (callers reuse it for oracle runs).
+    """
+    if len(module.functions) != 1 or len(module.functions[0].body) != 1:
+        raise ValueError("NVFP4 packaging requires one Graph function with one operation")
+    canonical = copy.deepcopy(module)
+    op = canonical.functions[0].body[0]
+    expected = {
+        "scale_layout": NVFP4_SCALE_LAYOUT,
+        "numeric_policy": NVFP4_NUMERIC_POLICY,
+        "physical_contract": NVFP4_PHYSICAL_CONTRACT,
+    }
+    if op.op_name == "tessera.scaled_matmul":
+        for name, value in expected.items():
+            if op.kwargs.get(name) != value:
+                raise ValueError(f"NVFP4 scaled_matmul requires {name}={value!r}")
+    elif op.op_name in {"tessera.matmul", "tessera.gemm"}:
+        for name, value in expected.items():
+            if name in op.kwargs and op.kwargs[name] != value:
+                raise ValueError(f"NVFP4 matmul declares {name}={op.kwargs[name]!r}; "
+                                 f"the SM120 contract is {value!r}")
+        op.op_name = "tessera.scaled_matmul"
+        op.kwargs.update(copy.deepcopy(expected))
+    else:
+        raise ValueError("NVFP4 packaging requires matmul, gemm, or scaled_matmul")
+    return canonical
+
+
+def supports_scheduled_nvfp4_matmul(module: GraphIRModule, *, target: str = "nvidia_sm120") -> bool:
+    """Whether the SM120 NVFP4 route admits ``module`` (admission only)."""
+    from .nvidia_native import supports_nvfp4_matmul
+
+    if target != "nvidia_sm120" or not supports_nvfp4_matmul(module):
+        return False
+    try:
+        _graph_contract(canonical_nvfp4_graph(module), target)
+    except ValueError:
+        return False
+    return True
+
+
+def supports_scheduled_int4_matmul(module: GraphIRModule, *, target: str = "nvidia_sm120") -> bool:
+    """Whether the SM120 signed-INT4 route admits ``module`` (admission only)."""
+    from .nvidia_native import supports_int4_matmul
+
+    return (target == "nvidia_sm120" and supports_int4_matmul(module)
+            and supports_scheduled_matmul(module, target=target))
+
+
+@dataclass(frozen=True)
+class NVFP4Projection:
+    """Every NVFP4 launch field, read from the replayed native Schedule."""
+
+    a_name: str
+    b_name: str
+    scale_a_name: str
+    scale_b_name: str
+    output_name: str
+    #: Logical (stored) tensor extents, before any transpose.
+    a_shape: tuple[int, ...]
+    b_shape: tuple[int, ...]
+    scale_a_shape: tuple[int, ...]
+    scale_b_shape: tuple[int, ...]
+    output_shape: tuple[int, ...]
+    m: int
+    n: int
+    k: int
+    transpose_a: bool
+    transpose_b: bool
+    batching: str | None
+    batch_prefix: tuple[int, ...]
+    entry: str
+
+    @staticmethod
+    def kernel_is_batched(batching: str | None, transpose_a: bool) -> bool:
+        """Whether the kernel takes BatchRows/BatchCount (the batched entry)."""
+        return batching in {"independent_rhs", "shared_lhs"} or (
+            batching == "shared_rhs_rows" and transpose_a)
+
+    @property
+    def batch_aware(self) -> bool:
+        return self.kernel_is_batched(self.batching, self.transpose_a)
+
+
+def _balanced_attrs(text: str, start: int) -> str:
+    """The ``{...}`` attribute dictionary opening at ``text[start]``."""
+    if start >= len(text) or text[start] != "{":
+        raise ValueError("NVFP4 native op has no attribute dictionary")
+    depth = 0
+    for index in range(start, len(text)):
+        depth += {"{": 1, "}": -1}.get(text[index], 0)
+        if depth == 0:
+            return text[start + 1:index]
+    raise ValueError("NVFP4 native attribute dictionary is unterminated")
+
+
+def _nvfp4_tensor(text: str, elements: set[str]) -> tuple[tuple[int, ...], str]:
+    match = re.fullmatch(r"tensor<((?:[1-9][0-9]*x)+)(!tessera\.nvfp4|ui8|i8|f32)>", text)
+    if match is None or match[2] not in elements:
+        raise ValueError(f"NVFP4 native tensor contract is unsupported: {text}")
+    return tuple(int(d) for d in match[1].split("x")[:-1]), match[2]
+
+
+def graph_host_aliases(artifact: ScheduledMatmulArtifact, roles: tuple[str, ...],
+                       op_name: str) -> tuple[tuple[str, ...], str]:
+    """Host buffer names for the Schedule's positional operand ``roles``.
+
+    The Schedule names arguments ``%argN``; the retained Graph names them for
+    the host. Callers have already proved the Graph replays into this
+    Schedule, so argument N of each is the same tensor. A host binds buffers by
+    name, so an artifact whose name fields disagree with this mapping would
+    hand the caller's A to the kernel's B -- it is refused.
+    """
+    functions = re.findall(r"func\.func @\w+\(([^\n]*?)\) ->", artifact.graph_ir)
+    results = re.findall(r"%(\w+) = " + re.escape(op_name) + " ", artifact.graph_ir)
+    if len(functions) != 1 or len(results) != 1:
+        raise ValueError(f"retained Graph has no unique {op_name} product")
+    graph_names = re.findall(r"%(\w+): tensor<", functions[0])
+    if len(graph_names) != len(roles) or len(set(graph_names)) != len(roles):
+        raise ValueError("retained Graph does not name one distinct argument per operand role")
+    try:
+        names = tuple(graph_names[int(role.removeprefix("%arg"))] for role in roles)
+    except (ValueError, IndexError) as exc:
+        raise ValueError("native operand roles are not positional Schedule arguments") from exc
+    if any(not name.isidentifier() for name in (*names, results[0])) or results[0] in names:
+        raise ValueError("host aliases must be distinct identifiers")
+    return names, results[0]
+
+
+def verify_int4_projection(artifact: ScheduledMatmulArtifact) -> None:
+    """Replay a signed INT4 artifact and bind its host aliases to native roles.
+
+    :func:`verify_matmul_projection` proves Schedule -> Tile and every typed
+    field; this adds the Graph -> Schedule replay and the role binding, so the
+    artifact's ``a_name``/``b_name``/``output_name`` are the Graph aliases of
+    the Schedule's LHS, RHS and result rather than free labels.
+    """
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("INT4 projection requires native Schedule replay")
+    if run_tessera_opt(tool, artifact.graph_ir, "--tessera-graph-to-schedule") != artifact.schedule_ir:
+        raise ValueError("INT4 Schedule does not replay from its retained Graph")
+    verify_matmul_projection(artifact)
+    operands = re.findall(r"= tessera\.matmul (%arg\d+), (%arg\d+) ", artifact.schedule_ir)
+    if len(operands) != 1:
+        raise ValueError("INT4 native Schedule has no unique matmul product")
+    names, output = graph_host_aliases(artifact, operands[0], "tessera.matmul")
+    if (names, output) != ((artifact.a_name, artifact.b_name), artifact.output_name):
+        raise ValueError("INT4 host aliases disagree with the native operand roles")
+
+
+def verify_nvfp4_projection(artifact: ScheduledMatmulArtifact) -> NVFP4Projection:
+    """Replay an SM120 NVFP4 artifact and project its launch contract.
+
+    Both boundaries are replayed: Graph -> Schedule from the retained Graph
+    text and Schedule -> Tile from the Schedule, each of which must reproduce
+    the artifact's IR exactly. Every launch field is then read from the
+    canonicalized Schedule parent -- operand roles, logical shapes, scale
+    views, transpose and batch axes from the scheduled ``scaled_matmul``;
+    storage, scale block and format from ``schedule.matmul``; M/N/K from the
+    shape key -- and checked against the artifact's own fields and the Tile
+    launch op. Host buffer names are the Graph aliases of the Schedule's
+    positional arguments. A tampered artifact therefore fails here, before
+    any target compilation.
+    """
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("NVFP4 projection requires native Schedule replay")
+    if run_tessera_opt(tool, artifact.graph_ir, "--tessera-graph-to-schedule") != artifact.schedule_ir:
+        raise ValueError("NVFP4 Schedule does not replay from its retained Graph")
+    if run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
+        raise ValueError("NVFP4 Tile does not replay from its canonical Schedule")
+    parent = run_tessera_opt(tool, artifact.schedule_ir, "--canonicalize")
+    functions = re.findall(r"func\.func @\w+\(([^\n]*?)\) -> (tensor<[^>]+>)", parent)
+    products = list(re.finditer(
+        r"= tessera\.scaled_matmul (%\w+), (%\w+) scales\((%\w+), (%\w+)\) ", parent))
+    records = re.findall(r" = schedule\.matmul %\w+ \{([^{}]*)\}", parent)
+    keys = re.findall(r'shape_key = "M=(\d+);N=(\d+);K=(\d+);dtype=(\w+)"', parent)
+    if len(functions) != 1 or len(products) != 1 or len(records) != 1 or len(keys) != 1:
+        raise ValueError("NVFP4 projection requires one native scaled product")
+    argument_types = dict(re.findall(r"(%arg\d+): (tensor<[^>]+>)", functions[0][0]))
+    roles = products[0].groups()
+    if len(argument_types) != 4 or len(set(roles)) != 4 or set(roles) != set(argument_types):
+        raise ValueError("NVFP4 native operand roles do not bind the four arguments")
+    op_attrs = _balanced_attrs(parent, products[0].end())
+
+    def op_string(key: str) -> str | None:
+        found = re.findall(r'(?:^|, )' + key + r' = "(\w+)"(?:,|$)', op_attrs)
+        if len(found) > 1:
+            raise ValueError(f"NVFP4 native {key} is ambiguous")
+        return found[0] if found else None
+
+    def op_dict(key: str) -> dict[str, object]:
+        found = re.findall(r'(?:^|, )' + key + r' = \{([^{}]*)\}', op_attrs)
+        if len(found) != 1:
+            raise ValueError(f"NVFP4 native {key} is missing")
+        out: dict[str, object] = {}
+        for name, value in re.findall(r'(\w+) = ("\w+"|\[[^\]]*\])', found[0]):
+            out[name] = (value.strip('"') if value.startswith('"')
+                         else [int(x) for x in value.strip("[]").split(",")])
+        return out
+
+    def op_flag(key: str) -> bool:
+        found = re.findall(r'(?:^|, )' + key + r' = (true|false)(?:,|$)', op_attrs)
+        if len(found) > 1:
+            raise ValueError(f"NVFP4 native {key} is ambiguous")
+        return found == ["true"]
+
+    if op_string("physical_contract") != NVFP4_PHYSICAL_CONTRACT:
+        raise ValueError("NVFP4 native physical contract disagrees")
+    if op_dict("scale_layout") != NVFP4_SCALE_LAYOUT:
+        raise ValueError("NVFP4 native scale layout disagrees (Decision #21a semantic key)")
+    if op_dict("numeric_policy") != NVFP4_NUMERIC_POLICY:
+        raise ValueError("NVFP4 native numeric policy disagrees (Decision #21a semantic key)")
+    batching = op_string("batching")
+    if batching is not None and batching not in _NVFP4_BATCHING:
+        raise ValueError(f"NVFP4 native batching {batching!r} is unsupported")
+    transpose_a, transpose_b = op_flag("transposeA"), op_flag("transposeB")
+
+    record = records[0]
+    for field in ('storage = "nvfp4"', 'storage_b = "nvfp4"', 'scale_k = 16 : i64',
+                  'scale_format = "ue4m3"', f'physical_contract = "{NVFP4_PHYSICAL_CONTRACT}"',
+                  'accum = "f32"', 'output = "f32"', 'bias = false', 'residual = false',
+                  'activation = "none"'):
+        if not re.search(r"(?:^|, )" + re.escape(field) + r"(?:,|$)", record):
+            raise ValueError("NVFP4 native Schedule disagrees on " + field)
+    m, n, k = (int(x) for x in keys[0][:3])
+    if keys[0][3] != "nvfp4":
+        raise ValueError("NVFP4 native shape key names a different storage")
+    shapes = [_nvfp4_tensor(argument_types[r], {"!tessera.nvfp4"} if i < 2 else {"ui8", "i8"})[0]
+              for i, r in enumerate(roles)]
+    output_shape = _nvfp4_tensor(functions[0][1], {"f32"})[0]
+    a_shape, b_shape, scale_a_shape, scale_b_shape = shapes
+
+    names, output_name = graph_host_aliases(artifact, roles, "tessera.scaled_matmul")
+
+    # Logical geometry, from the projected shapes alone.
+    def oriented(shape: tuple[int, ...], flipped: bool) -> tuple[int, ...]:
+        return (*shape[:-2], shape[-1], shape[-2]) if flipped and len(shape) >= 2 else shape
+
+    la, lb = oriented(a_shape, transpose_a), oriented(b_shape, transpose_b)
+    if batching is None:
+        if any(len(s) != 2 for s in (a_shape, b_shape, scale_a_shape, scale_b_shape, output_shape)):
+            raise ValueError("unbatched NVFP4 requires rank-2 tensors")
+        prefix: tuple[int, ...] = ()
+        rows = la[0]
+    else:
+        shared_lhs = batching == "shared_lhs"
+        rhs_batched = batching != "shared_rhs_rows"
+        prefix = b_shape[:-2] if shared_lhs else a_shape[:-2]
+        if (not prefix or len(a_shape) != (2 if shared_lhs else len(prefix) + 2)
+                or len(b_shape) != (len(prefix) + 2 if rhs_batched else 2)
+                or (rhs_batched and b_shape[:-2] != prefix)
+                or output_shape[:-2] != prefix):
+            raise ValueError("NVFP4 native batch axes disagree across operands")
+        rows = la[-2]
+    batch_count = 1
+    for extent in prefix:
+        batch_count *= extent
+    scale_k = (k + 15) // 16
+    expected_scale_a = (rows, scale_k) if batching == "shared_lhs" else (*prefix, rows, scale_k)
+    expected_scale_b = ((*prefix, scale_k, n) if batching in {"independent_rhs", "shared_lhs"}
+                        else (scale_k, n))
+    if (la[-1] != k or lb[-2] != k or lb[-1] != n or output_shape[-2:] != (rows, n)
+            or batch_count * rows != m
+            or scale_a_shape != oriented(expected_scale_a, transpose_a)
+            or scale_b_shape != oriented(expected_scale_b, transpose_b)):
+        raise ValueError("NVFP4 native shapes do not form the block-scaled product")
+
+    entry = ("tessera_tile_matmul_nvfp4_batched"
+             if NVFP4Projection.kernel_is_batched(batching, transpose_a)
+             else "tessera_tile_matmul_nvfp4")
+    entries = re.findall(r"llvm\.func @(\w+)\(", artifact.tile_ir)
+    tile = artifact.tile_ir
+    if (entries != [entry] or tile.count("tile.matmul_kernel") != 1
+            or f'physical_contract = "{NVFP4_PHYSICAL_CONTRACT}"' not in tile
+            or "tessera.scale_vector_size = 16 : i64" not in tile
+            or 'a = "nvfp4", b = "nvfp4", acc = "f32"' not in tile
+            or not re.search(r'tessera\.storage_pack = #tile\.packed_format<logical = "nvfp4", '
+                             r'container = "int8", logical_bits = 4, elements_per_container = 2,', tile)):
+        raise ValueError("NVFP4 Tile lost its packed K16 scale contract or entry")
+    expected = dict(target="nvidia_sm120", architecture="sm_120", function_name=entry,
+                    a_name=names[0], b_name=names[1], output_name=output_name,
+                    m=m, n=n, k=k, a_dtype="nvfp4", b_dtype="nvfp4", output_dtype="fp32",
+                    storage="nvfp4", accum="f32", bias_name=None, residual_name=None,
+                    activation="none", dynamic_m=False, dynamic_n=False, dynamic_k=False,
+                    split_k=1, split_k_reduction="", b_codes_dtype="", scale_name="")
+    for key, value in expected.items():
+        if getattr(artifact, key) != value:
+            raise ValueError("NVFP4 artifact field disagrees with native IR: " + key)
+    return NVFP4Projection(
+        a_name=names[0], b_name=names[1], scale_a_name=names[2], scale_b_name=names[3],
+        output_name=output_name, a_shape=a_shape, b_shape=b_shape,
+        scale_a_shape=scale_a_shape, scale_b_shape=scale_b_shape, output_shape=output_shape,
+        m=m, n=n, k=k, transpose_a=transpose_a, transpose_b=transpose_b,
+        batching=batching, batch_prefix=prefix, entry=entry)

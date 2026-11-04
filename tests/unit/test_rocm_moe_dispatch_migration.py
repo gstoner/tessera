@@ -11,10 +11,12 @@ ABI, scalar list, shape guards, geometry -- from the Python Graph object.
 Host-free half: over the admitted envelope the projected descriptor equals the
 retired one field for field, refusals are unchanged, and a tampered artifact
 fails closed before target compilation. Device half
-(``TESSERA_ROCM_MOVEMENT_DEVICE_PROOF=1`` with ``TESSERA_ROCM_CHIP=gfx1151``
-on Princess-Luna): both packages build the same image and their outputs agree
-bit-for-bit and with a NumPy oracle. The native owner admits gfx1151 only, so
-gfx1201 has no device row here; its refusal is checked host-free.
+(``TESSERA_ROCM_MOVEMENT_DEVICE_PROOF=1`` with ``TESSERA_ROCM_CHIP`` set to the
+live arch: gfx1151 on Princess-Luna, gfx1201 on Tajasarus): both packages build
+the same image and their outputs agree bit-for-bit and with a NumPy oracle.
+The native owner admits exactly the archs whose ``moe_dispatch`` family is
+promoted (gfx1151, and gfx1201 since 2026-11-04); each arch's rows are proven
+on its own box, and evidence never transfers between them.
 """
 
 from __future__ import annotations
@@ -34,7 +36,8 @@ from tessera.compiler.scheduled_matmul import find_tessera_opt
 from tests._support import rocm_moe_dispatch_baseline as baseline
 
 PIPELINE = "tessera-lower-to-rocm"
-ARCH = "gfx1151"
+ARCHES = ("gfx1151", "gfx1201")
+ARCH = ARCHES[0]
 _needs_compiler = pytest.mark.skipif(find_tessera_opt() is None, reason="requires production tessera-opt")
 
 #: (tokens, slots, hidden): single slot, more slots than tokens (repeats),
@@ -51,7 +54,7 @@ def _recording_compile(calls: list[str]):
     return compile_
 
 
-def _assert_same_launch_contract(old, new) -> None:
+def _assert_same_launch_contract(old, new, arch=ARCH) -> None:
     for field in ("abi_id", "entry_symbol", "buffers", "scalars", "shape_guards", "geometry", "ordering"):
         assert getattr(old.descriptor, field) == getattr(new.descriptor, field), field
     # Every retired provenance key survives with the same value; the only new
@@ -59,7 +62,8 @@ def _assert_same_launch_contract(old, new) -> None:
     assert {k: v for k, v in new.descriptor.provenance.items() if k != "consumer"} == old.descriptor.provenance
     assert new.descriptor.provenance["consumer"] == "native_schedule_tile_projection"
     assert "consumer" not in old.descriptor.provenance
-    assert new.image.target == old.image.target == f"rocm_{ARCH}"
+    assert new.image.target == old.image.target == f"rocm_{arch}"
+    assert new.descriptor.geometry.policy == f"{arch}_moe_dispatch_direct_256"
     assert new.image.entry_points == old.image.entry_points
     assert new.tile_ir == old.tile_ir
 
@@ -72,19 +76,22 @@ def _swapped_operands(extent):
 
 
 @_needs_compiler
+@pytest.mark.parametrize("arch", ARCHES)
 @pytest.mark.parametrize("swapped", [False, True], ids=["x_first", "token_first"])
 @pytest.mark.parametrize("extent", EXTENTS)
-def test_projected_descriptor_reproduces_retired_contract(monkeypatch, extent, swapped) -> None:
+def test_projected_descriptor_reproduces_retired_contract(monkeypatch, extent, swapped, arch) -> None:
     calls: list[str] = []
     monkeypatch.setattr(rocm_native, "_compile_moe_dispatch_tile_ir", _recording_compile(calls))
     module = _swapped_operands(extent) if swapped else _moe_module(*extent)
-    assert scheduled_moe_dispatch.supports_scheduled_moe_dispatch(module, target=f"rocm_{ARCH}")
-    old = baseline.baseline_moe_dispatch(module, pipeline_name=PIPELINE, architecture=ARCH)
-    new = rocm_native.package_moe_dispatch(module, pipeline_name=PIPELINE, architecture=ARCH)
-    _assert_same_launch_contract(old, new)
+    assert scheduled_moe_dispatch.supports_scheduled_moe_dispatch(module, target=f"rocm_{arch}")
+    old = baseline.baseline_moe_dispatch(module, pipeline_name=PIPELINE, architecture=arch)
+    new = rocm_native.package_moe_dispatch(module, pipeline_name=PIPELINE, architecture=arch)
+    _assert_same_launch_contract(old, new, arch)
     assert calls[0] == calls[1]
-    contract = scheduled_moe_dispatch.lower_scheduled_moe_dispatch(module).native_contract()
-    assert contract.architecture == ARCH and contract.layout == "row_major"
+    contract = scheduled_moe_dispatch.lower_scheduled_moe_dispatch(
+        module, target=f"rocm_{arch}").native_contract()
+    assert contract.architecture == arch and contract.target == f"rocm_{arch}"
+    assert contract.layout == "row_major"
     assert contract.dims == baseline._moe_dispatch_contract(module)[3]
     assert contract.names == baseline._moe_dispatch_contract(module)[:3]
 
@@ -145,16 +152,65 @@ def test_retired_refusals_still_refuse(case) -> None:
         rocm_native.package_moe_dispatch(module, pipeline_name=PIPELINE, architecture=ARCH)
 
 
-def test_admission_is_gfx1151_only() -> None:
-    """The native owner admits gfx1151; other targets fall through, not raise."""
+#: Targets that must never be admitted: archs with no ``moe_dispatch`` proof,
+#: the generic ``rocm`` name, and other backends.
+UNPROVEN_TARGETS = ("rocm_gfx1200", "rocm_gfx1250", "rocm_gfx1100", "rocm_gfx942",
+                    "rocm", "nvidia_sm120", "apple_gpu")
+
+
+def test_admission_is_derived_from_the_promotion_table() -> None:
+    """Admission is exactly the archs whose ``moe_dispatch`` family is promoted."""
+    from tessera.compiler.rocm_pipeline import promoted_families
+    from tessera.compiler.rocm_target import AMDArch, rocm_arch_string
+
+    expected = {f"rocm_{rocm_arch_string(a)}" for a in AMDArch
+                if "moe_dispatch" in promoted_families(rocm_arch_string(a))}
+    assert scheduled_moe_dispatch.ROCM_MOE_DISPATCH_TARGETS == expected
+    assert expected == {f"rocm_{arch}" for arch in ARCHES}
+
+
+def test_unproven_targets_fall_through_or_refuse() -> None:
+    """Every other target falls through admission and refuses packaging."""
     module = _moe_module(*EXTENTS[1])
     assert baseline._moe_dispatch_contract(module) is not None
-    for target in ("rocm_gfx1201", "rocm", "nvidia_sm120", "apple_gpu"):
+    for arch in ARCHES:
+        assert scheduled_moe_dispatch.supports_scheduled_moe_dispatch(module, target=f"rocm_{arch}")
+    for target in UNPROVEN_TARGETS:
         assert not scheduled_moe_dispatch.supports_scheduled_moe_dispatch(module, target=target)
+        with pytest.raises(ValueError, match="admits only ROCm architectures"):
+            scheduled_moe_dispatch.project_scheduled_moe_dispatch_graph(module, target=target)
     with pytest.raises(ValueError, match="MoE dispatch packaging requires"):
-        rocm_native.package_moe_dispatch(module, pipeline_name=PIPELINE, architecture="gfx1201")
-    with pytest.raises(ValueError, match="only admits gfx1151"):
-        scheduled_moe_dispatch.project_scheduled_moe_dispatch_graph(module, target="rocm_gfx1201")
+        rocm_native.package_moe_dispatch(module, pipeline_name=PIPELINE, architecture="gfx1200")
+
+
+def _owner_graph(arch: str) -> str:
+    """The projected Graph for a proven arch, relabelled to ``arch``."""
+    text = scheduled_moe_dispatch.project_scheduled_moe_dispatch_graph(
+        _moe_module(*EXTENTS[1]), target="rocm_gfx1151")
+    assert text.count('"rocm_gfx1151"') == 1 and text.count('"gfx1151"') == 1
+    return text.replace('"rocm_gfx1151"', f'"rocm_{arch}"').replace('"gfx1151"', f'"{arch}"')
+
+
+@_needs_compiler
+def test_native_owner_admits_exactly_the_python_targets() -> None:
+    """``NativeMoeDispatch.h`` and ROCM_MOE_DISPATCH_TARGETS state one set.
+
+    Every modelled AMD arch is replayed through the C++ owner; it must lower
+    the proven archs and refuse every other one with its stable diagnostic.
+    """
+    from tessera.compiler.rocm_target import AMDArch, rocm_arch_string
+    from tessera.compiler.scheduled_matmul import run_tessera_opt
+
+    tool = find_tessera_opt()
+    for arch in sorted({rocm_arch_string(a) for a in AMDArch}):
+        graph = _owner_graph(arch)
+        admitted = f"rocm_{arch}" in scheduled_moe_dispatch.ROCM_MOE_DISPATCH_TARGETS
+        if admitted:
+            schedule = run_tessera_opt(tool, graph, "--tessera-graph-to-schedule")
+            assert "schedule.moe_dispatch" in schedule, arch
+        else:
+            with pytest.raises(RuntimeError, match="gfx1151 or gfx1201 Graph entry"):
+                run_tessera_opt(tool, graph, "--tessera-graph-to-schedule")
 
 
 def _tile_tamperings(artifact):
@@ -173,6 +229,10 @@ def _tile_tamperings(artifact):
                                              'index_storage = "i64", storage = "f32"'),
         "contract_arch": tile.replace('arch = "gfx1151", bindings', 'arch = "gfx1201", bindings'),
         "contract_target": tile.replace('target = "rocm_gfx1151"}', 'target = "rocm_gfx1201"}'),
+        "unproven_arch": tile.replace('arch = "gfx1151", bindings', 'arch = "gfx1200", bindings')
+                             .replace('target = "rocm_gfx1151"}', 'target = "rocm_gfx1200"}')
+                             .replace('tessera.target = "rocm_gfx1151"', 'tessera.target = "rocm_gfx1200"')
+                             .replace('tessera.arch = "gfx1151"', 'tessera.arch = "gfx1200"'),
         "module_target": tile.replace('tessera.target = "rocm_gfx1151"', 'tessera.target = "rocm_gfx1201"'),
         "entry": tile.replace("@tessera_tile_moe_dispatch_f32_direct", "@tessera_tile_moe_dispatch_f32_other"),
         "duplicate_kernel": tile.replace("    llvm.return", "    tile.moe_dispatch_kernel %arg0 {}\n    llvm.return"),
@@ -212,17 +272,28 @@ def test_relabelled_artifact_fields_fail_closed(monkeypatch) -> None:
 
 
 @_needs_compiler
-def test_supplied_artifact_must_be_this_graph(monkeypatch) -> None:
+def test_supplied_artifact_must_be_this_graph_and_target(monkeypatch) -> None:
     monkeypatch.setattr(rocm_native, "_compile_moe_dispatch_tile_ir", _recording_compile([]))
     module = _moe_module(*EXTENTS[1])
     other = scheduled_moe_dispatch.lower_scheduled_moe_dispatch(_moe_module(*EXTENTS[2]))
     with pytest.raises(ValueError, match="caller Graph or target"):
         rocm_native.package_moe_dispatch(module, pipeline_name=PIPELINE, architecture=ARCH,
                                          scheduled_artifact=other)
+    # A gfx1201 artifact never packages as gfx1151, and vice versa.
+    for built, asked in (("gfx1201", "gfx1151"), ("gfx1151", "gfx1201")):
+        artifact = scheduled_moe_dispatch.lower_scheduled_moe_dispatch(module, target=f"rocm_{built}")
+        with pytest.raises(ValueError, match="caller Graph or target"):
+            rocm_native.package_moe_dispatch(module, pipeline_name=PIPELINE, architecture=asked,
+                                             scheduled_artifact=artifact)
+    package = rocm_native.package_scheduled_moe_dispatch(
+        scheduled_moe_dispatch.lower_scheduled_moe_dispatch(module, target="rocm_gfx1201"),
+        pipeline_name=PIPELINE)
+    assert package.image.architecture == "gfx1201" and package.image.target == "rocm_gfx1201"
 
 
 @_needs_compiler
-def test_driver_packages_the_scheduled_artifact(monkeypatch) -> None:
+@pytest.mark.parametrize("arch", ARCHES)
+def test_driver_packages_the_scheduled_artifact(monkeypatch, arch) -> None:
     from tessera.compiler.driver import compile_graph_module
 
     monkeypatch.setattr(rocm_native, "_compile_moe_dispatch_tile_ir", _recording_compile([]))
@@ -232,10 +303,11 @@ def test_driver_packages_the_scheduled_artifact(monkeypatch) -> None:
 
     monkeypatch.setattr(rocm_native, "package_native", forbidden)
     bundle = compile_graph_module(_moe_module(*EXTENTS[1]), source_origin="unit",
-                                  target=f"rocm_{ARCH}", options={"package_native": True},
+                                  target=f"rocm_{arch}", options={"package_native": True},
                                   enable_tool_validation=False)
     assert bundle.orchestration_state == "launchable"
     assert bundle.launch_descriptor.abi_id == rocm_native.GFX_MOE_DISPATCH_F32_ABI
+    assert bundle.launch_descriptor.geometry.policy == f"{arch}_moe_dispatch_direct_256"
     assert bundle.launch_descriptor.provenance["consumer"] == "native_schedule_tile_projection"
 
 
@@ -248,12 +320,23 @@ def test_prune_dashboard_sees_the_rocm_consumer() -> None:
         "scheduled_moe_dispatch.supports_scheduled_moe_dispatch", "compiled")
 
 
-# --- exact-device differential (gfx1151 only: the native owner's one arch) ----------------------
+def test_gfx1201_canonical_options_default_to_the_native_package(monkeypatch) -> None:
+    from tessera.compiler.driver import canonical_compile_options
+
+    module = _moe_module(*EXTENTS[1])
+    monkeypatch.setattr(rocm_native, "native_packaging_available", lambda: True)
+    assert canonical_compile_options(module, target="rocm_gfx1201")["package_native"]
+    assert not canonical_compile_options(
+        module, target="rocm_gfx1201", options={"package_native": False})["package_native"]
+    monkeypatch.setattr(rocm_native, "native_packaging_available", lambda: False)
+    assert not canonical_compile_options(module, target="rocm_gfx1201")["package_native"]
+
+
+# --- exact-device differential (each owning ROCm host separately) ------------------------------
 
 _device = pytest.mark.skipif(
-    os.environ.get("TESSERA_ROCM_MOVEMENT_DEVICE_PROOF") != "1"
-    or os.environ.get("TESSERA_ROCM_CHIP") != ARCH,
-    reason="set TESSERA_ROCM_MOVEMENT_DEVICE_PROOF=1 and TESSERA_ROCM_CHIP=gfx1151 on Princess-Luna",
+    os.environ.get("TESSERA_ROCM_MOVEMENT_DEVICE_PROOF") != "1",
+    reason="set TESSERA_ROCM_MOVEMENT_DEVICE_PROOF=1 and TESSERA_ROCM_CHIP on the owning ROCm host",
 )
 
 
@@ -266,7 +349,7 @@ def _launch(package, x, token, out_shape):
     buffers = {descriptor.buffers[0].name: x, descriptor.buffers[1].name: token,
                descriptor.buffers[2].name: out}
     artifact = rt.RuntimeArtifact(graph_ir="graph", tile_ir=package.tile_ir, target_ir=package.target_ir,
-                                  metadata={"target": f"rocm_{ARCH}"}, native_image=package.image,
+                                  metadata={"target": package.image.target}, native_image=package.image,
                                   launch_descriptor=descriptor)
     result = rt.launch(artifact, {"buffers": buffers, "scalars": scalars})
     assert result["ok"] is True, result.get("reason")
@@ -280,11 +363,13 @@ def _launch(package, x, token, out_shape):
 def test_exact_device_moe_images_agree_bitwise(extent) -> None:
     from tessera import runtime as rt
 
-    assert rt._rocm_live_arch() == ARCH, "requires the exact owning device"
+    arch = os.environ.get("TESSERA_ROCM_CHIP")
+    assert arch in ARCHES and rt._rocm_live_arch() == arch, "requires the exact owning device"
     module = _moe_module(*extent)
-    old = baseline.baseline_moe_dispatch(module, pipeline_name=PIPELINE, architecture=ARCH)
-    new = rocm_native.package_moe_dispatch(module, pipeline_name=PIPELINE, architecture=ARCH)
+    old = baseline.baseline_moe_dispatch(module, pipeline_name=PIPELINE, architecture=arch)
+    new = rocm_native.package_moe_dispatch(module, pipeline_name=PIPELINE, architecture=arch)
     assert new.image.image_digest == old.image.image_digest
+    assert new.image.architecture == arch and new.image.target == f"rocm_{arch}"
     tokens, slots, hidden = extent
     rng = np.random.default_rng(1151 + tokens * 31 + slots)
     x = rng.standard_normal((tokens, hidden)).astype(np.float32)

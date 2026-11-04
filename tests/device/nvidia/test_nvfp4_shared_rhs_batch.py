@@ -23,12 +23,21 @@ def test_shared_rhs_nvfp4_batch_matches_independent_oracle(batch, rows, n, k, py
         calls.extend(value for value in args[2:] if isinstance(value, str))
         return native_run(*args, **kwargs)
     monkeypatch.setattr(scheduled_matmul, "run_tessera_opt", record_native_run)
+    lowerings = []
+    native_lower = scheduled_matmul.lower_scheduled_matmul
+    def record_lowering(*args, **kwargs):
+        lowerings.append(args)
+        return native_lower(*args, **kwargs)
+    monkeypatch.setattr(scheduled_matmul, "lower_scheduled_matmul", record_lowering)
     module = (frontend_batch_module if python_frontend else batch_module)(batch, rows, n, k)
     original = copy.deepcopy(module)
     bundle = compile_graph_module(module, source_origin="W1.1", target="nvidia_sm120",
                                  options={"package_native": True}, enable_tool_validation=False)
     assert module == original
-    assert calls.count("--tessera-graph-to-schedule") == 1
+    # One lowering; the second Graph->Schedule run is the consumer's replay
+    # check (verify_nvfp4_projection, E2E-REAL-6 2026-11-04), not a relowering.
+    assert len(lowerings) == 1
+    assert calls.count("--tessera-graph-to-schedule") == 2
     artifact = compile_result_from_bundle(bundle, module=module).to_runtime_artifact()
     descriptor = bundle.launch_descriptor
     assert descriptor is not None

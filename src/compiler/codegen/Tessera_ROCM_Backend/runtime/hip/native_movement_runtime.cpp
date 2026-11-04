@@ -461,7 +461,9 @@ bool preparedShape(PreparedMovement &call) {
         uint64_t(d[5])>capacity || d[6]<=0 ||
         uint64_t(d[6])>capacity-size_t(d[5])) return false;
   } else {
-    if (call.family!=1 || d.size()!=3 || call.architecture!="gfx1151") return false;
+    // MoE token gather: gfx1151 and gfx1201 (the archs the prepare entry
+    // admits) each own device proof since E2E-REAL-6-rocm-moe-gfx1201-2026-11-04.
+    if (call.family!=1 || d.size()!=3) return false;
     call.shapes={std::vector<int64_t>{d[0],d[2]},
                  std::vector<int64_t>{d[1]},
                  std::vector<int64_t>{d[1],d[2]}};

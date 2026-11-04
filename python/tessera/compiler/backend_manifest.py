@@ -2854,6 +2854,7 @@ _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
     ("moe_dispatch", "rocm_gfx1151"): "tests/unit/test_public_movement_frontend.py",
 
     ("kv_cache_read", "rocm_gfx1201"): "tests/unit/test_public_movement_frontend.py",
+    ("moe_dispatch", "rocm_gfx1201"): "tests/unit/test_public_movement_frontend.py",
 
     ("mxfp4_folded_storage", "rocm_gfx1201"): "tests/unit/test_rocm_mxfp4_storage_native.py",
     ("nvfp4_expand", "rocm_gfx1201"): "tests/unit/test_rocm_nvfp4_expansion_jit.py",
@@ -6976,6 +6977,17 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
                   "exact gfx1201 bitwise oracle. General layouts remain gated.",
             execute_compare_fixture="tests/unit/test_public_movement_frontend.py",
             shape_envelope="static PLHD f32 pages plus i32 logical-page table; explicit valid contiguous start/end",
+        ))
+    if op_name == "moe_dispatch":
+        # E2E-REAL-6-rocm-moe-gfx1201-2026-11-04: Tajasarus device rows, not
+        # transferred from gfx1151.
+        entries.append(BackendKernelEntry(
+            target="rocm_gfx1201", status=_DEVICE_VERIFIED_JIT_STATUS,
+            dtypes=("fp32",), feature_flags=("native_schedule", "movement", "hip"),
+            notes="Checked Graph/Schedule/Tile/ROCm Target/LLVM token-gather descriptor with "
+                  "native host staging; exact gfx1201 bitwise oracle. Transport remains gated.",
+            execute_compare_fixture="tests/unit/test_public_movement_frontend.py",
+            shape_envelope="static f32[T,H] plus i32[S] token-of-slot -> f32[S,H]",
         ))
     rocm_hv = _ROCM_HARDWARE_VERIFIED.get(op_name)
     if rocm_hv is not None:

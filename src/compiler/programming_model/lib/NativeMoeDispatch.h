@@ -1,4 +1,10 @@
-// Bounded gfx1151 token-gather Schedule owner. Included in namespace tessera.
+// Bounded ROCm token-gather Schedule owner. Included in namespace tessera.
+// Admits exactly the architectures whose `moe_dispatch` family plugin has
+// exact-device proof (rocm_pipeline.promoted_families / Passes.cpp): gfx1151
+// and gfx1201. Every other target fails closed; the generic `rocm` name
+// inherits nothing. scheduled_moe_dispatch.ROCM_MOE_DISPATCH_TARGETS is
+// derived from the same promotion table, and a host-free test replays every
+// AMDArch through this owner to keep the two in step.
 namespace {
 struct NativeMoeDispatch {
   func::FuncOp function;
@@ -14,13 +20,14 @@ static FailureOr<NativeMoeDispatch> moeDispatchContract(Operation *graph) {
   if (!fn || !llvm::hasSingleElement(fn.getBody()) || fn.getNumArguments() != 2 ||
       fn.getNumResults() != 1 || graph->getNumOperands() != 2 ||
       graph->getNumResults() != 1 || !target || !arch ||
-      target.getValue() != "rocm_gfx1151" || arch.getValue() != "gfx1151" ||
+      !((target.getValue() == "rocm_gfx1151" && arch.getValue() == "gfx1151") ||
+        (target.getValue() == "rocm_gfx1201" && arch.getValue() == "gfx1201")) ||
       !((graph->getOperand(0) == fn.getArgument(0) &&
          graph->getOperand(1) == fn.getArgument(1)) ||
         (graph->getOperand(0) == fn.getArgument(1) &&
          graph->getOperand(1) == fn.getArgument(0))) ||
       graph->getResultTypes() != fn.getResultTypes())
-    return graph->emitError("MoE token gather needs isolated gfx1151 Graph entry"), failure();
+    return graph->emitError("MoE token gather needs isolated gfx1151 or gfx1201 Graph entry"), failure();
   for (unsigned i = 0; i < fn.getNumArguments(); ++i)
     if (fn.getArgAttr(i, "tessera.layout"))
       return graph->emitError("MoE token gather does not accept layout overrides"), failure();

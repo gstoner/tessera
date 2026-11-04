@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-11-03
+last_updated: 2026-11-04
 audit_role: reference
 ---
 
@@ -14628,6 +14628,52 @@ Outcome: the four `nvidia_sm120` attention rows that were `gap` on `bootstrap_pr
 ROCm, Apple, x86: not applicable (sm_120-only packagers; the x86 `attention_backward` prune row is unchanged).
 Remaining: the sm_120 Graph contract tuples still feed admission (`supports_attention_*`); forward-attention and other sm_120 families stay as recorded on the dashboard. No performance claim.
 Evidence: python/tessera/compiler/nvidia_native.py; python/tessera/compiler/scheduled_checkpoint.py; python/tessera/compiler/scheduled_attention_recompute.py; python/tessera/compiler/bootstrap_prune_audit.py; tests/_support/nvidia_attention_checkpoint_baseline.py; tests/unit/test_nvidia_attention_checkpoint_migration.py; tests/device/nvidia/test_attention_checkpoint_migration.py; docs/audit/generated/bootstrap_prune_gap.md
+<!-- entry-fields:end -->
+
+### 2026-11-04 — E2E-REAL-6: gfx1201 joins the ROCm MoE dispatch compiled route
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: branch `claude/gfx1201-moe-dispatch-d1cf9f`; sync E2E-REAL-6-rocm-moe-gfx1201-2026-11-04.
+Outcome: gfx1201 is an admitted arch on the 2026-11-03 MoE-dispatch compiled route: the same `NativeMoeDispatch.h` owner, the same `package_scheduled_moe_dispatch` Tile projection, and no second lowering. Admission comes from the target's proof table, and every other arch fails closed.
+- **Diagnosis.** The refusal came from a hard-coded admission, not a kernel gap. The token gather is a scalar per-thread f32 kernel: it has no WMMA fragment and makes no LDS or wave-size assumption, and its `moe_dispatch` family plugin has been promoted on gfx1201 since 2026-09-17 (`rocm_pipeline.promoted_families`, `Passes.cpp`). Five layers spelled gfx1151 literally:
+  - the C++ Schedule owner;
+  - `ROCM_MOE_DISPATCH_TARGETS`, with its copies in the packager, the JIT movement path and prepared movement;
+  - the runtime's `_gfx1201_proved_scheduled_abis()`, so no launcher registered ("no exact-target launcher accepts 'hsaco'");
+  - the backend manifest, which had no `(moe_dispatch, rocm_gfx1201)` row, so `canonical_compile` refused at `codegen`;
+  - `native_movement_runtime.cpp` `preparedShape`, which returned rc=1 below the prepare entry's own gfx1151/gfx1201 check.
+  Device runs on Tajasarus surfaced layers 3–5 one at a time; host-free tests could not see them.
+- **Admission.** `ROCM_MOE_DISPATCH_TARGETS` is derived from `promoted_families` over every `AMDArch` (Decision #21a). The owner admits exactly the matching target/arch pairs. `test_native_owner_admits_exactly_the_python_targets` replays every `AMDArch` through the C++ owner and requires it to lower the Python set and refuse the rest. `rocm_moe_dispatch_unproven_arch_invalid.mlir` covers gfx1200, the generic `rocm` target, and a target/arch mismatch. The tampering set adds an unproven-arch relabel.
+- **Oracle.** `tests/_support/rocm_moe_dispatch_baseline.py` now writes the geometry policy as `{arch}_moe_dispatch_direct_256`, byte-identical to the frozen text at gfx1151. Host-free, 20 envelope points (5 extents × 2 argument orders × 2 archs) agree field for field.
+- **gfx1201 (Tajasarus, `391a795ee`; `TESSERA_ROCM_CHIP=gfx1201`, `TESSERA_GFX1201_DEVICE_PROOF=1`, `TESSERA_ROCM_MOVEMENT_DEVICE_PROOF=1`, worktree build).** 8 MoE device rows pass:
+  - 5 `test_exact_device_moe_images_agree_bitwise` rows. Each matches the oracle's image digest and is bitwise-equal to the oracle and to NumPy, including -0.0 and a subnormal.
+  - The canonical movement spine row.
+  - The public `@jit(target="rocm_gfx1201", native_required=True)` row, with NaN payloads, infinities and -0 preserved, and two specializations.
+  - The prepared C++ binding row: no Graph serialization and no allocation growth, and the compact-only layout refusal holds.
+  On main `f1c64009a` all eight are skips or absent. A junit A/B over 18 files gives branch 1115 passed / 63 skipped / 1 failed against main 1092 / 68 / 1. The one failure, `test_rocm_fp8_target_identity::test_public_integer_matmul_keeps_its_existing_wrap_contract`, fails on main too. `check-tessera-rocm` passes 85/85, and `check-tessera-ir` has 474 passed and 99 unsupported of 573.
+- **gfx1151 (Princess-Luna, `391a795ee`).** The same 8 gfx1151 MoE rows pass on main and on the branch. The A/B gives branch 1082 / 96 / 1 against main 1067 / 93 / 1, with the same pre-existing failure. The extra skips are the new gfx1201 rows. `check-tessera-rocm` passes 85/85, and `check-tessera-ir` has 540 passed and 33 unsupported of 573.
+- **Assertions (Tajasarus, LLVM/MLIR 23.1.1, `--assertion-mode ON`, worktree `build-assertions/`).** The three MoE lit fixtures pass (gfx1151, gfx1201 and the unproven-arch negative). So do 24 owner rows of the migration file (envelope, tampering, relabelling, supplied-artifact, and the every-`AMDArch` replay). The first lit attempt resolved `tessera-opt` through `env.sh`'s `TESSERA_OPT`, which points at the main checkout, and it failed with main's old diagnostic. The rerun with `TESSERA_OPT` pointed at the branch build passed. The `check-tessera-ir` run above used the branch binary, because the new gfx1201 fixture cannot pass on main's owner.
+- **Dashboards.** The manifest gains a `device_verified_jit` `(moe_dispatch, rocm_gfx1201)` row whose fixture is `test_public_movement_frontend.py`. `s_series_status`, `standalone_primitive_coverage`, `dtype_flow` and `bootstrap_prune_gap` (line counts) were regenerated.
+
+NVIDIA, Apple, x86: not applicable (no change to their MoE routes and no new evidence). gfx1201 evidence is Tajasarus only and transfers nowhere.
+Remaining: MoE `all_to_all` transport stays gated. A further arch joins only through `rocm_pipeline` promotion, its own device rows, and the owner's pair list, which the replay test pins. No promotion.
+Evidence: src/compiler/programming_model/lib/NativeMoeDispatch.h; python/tessera/compiler/scheduled_moe_dispatch.py; src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp; tests/unit/test_rocm_moe_dispatch_migration.py; tests/unit/test_public_movement_frontend.py; tests/tessera-ir/phase8/gfx1201_moe_dispatch_native.mlir; tests/tessera-ir/phase8/rocm_moe_dispatch_unproven_arch_invalid.mlir
+<!-- entry-fields:end -->
+
+### 2026-11-04 — E2E-REAL-6: SM120 NVFP4 and INT4 matmul packagers consume their replayed artifacts
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: branch `claude/e2e6-sm120-lowp-matmul-f670b6`; sync E2E-REAL-6-sm120-lowp-matmul-2026-11-04.
+Outcome: two of the three `nvidia_sm120` low-precision matmul rows that were `gap` on `bootstrap_prune_gap` (`nvfp4_matmul`, `int4_matmul`) now package from a replayed `ScheduledMatmulArtifact`; `mx_matmul` stays `gap` and is owed. Both families already lowered Graph→Schedule→Tile through `lower_scheduled_matmul`, so the gap was in packaging: the NVFP4 packager read scale operand names, logical shapes, batch axes and transposes from the caller's Graph (and the driver passed the Graph beside the artifact), and the INT4 consumer trusted the artifact's host labels.
+- **Consumers.** `scheduled_matmul.verify_nvfp4_projection` / `verify_int4_projection` replay both boundaries, bind host aliases to the Schedule's positional operand roles (`graph_host_aliases`), and read every launch field from the native Schedule: roles, shapes, the K16 UE4M3 scale views, batch axes and transposes (NVFP4), M/N/K and the Tile `tessera.packed_shapes` (INT4). The new `package_scheduled_nvfp4_matmul(ScheduledMatmulArtifact)` and the hardened `package_scheduled_int4_matmul` run that projection before `_compile_tile_ir`; `package_scheduled_matmul` dispatches both by storage, and the driver's NVFP4-specific Graph branch is deleted. `canonical_nvfp4_graph` refuses a plain matmul that declares a conflicting `scale_layout`/`numeric_policy`/`physical_contract`, where it used to overwrite it (Decision #21a).
+- **Prune audit.** `_TARGET_FAMILY_TO_COMPILED` keys `(nvidia_sm120, nvfp4_matmul)` and `(nvidia_sm120, int4_matmul)` to `scheduled_matmul.supports_scheduled_{nvfp4,int4}_matmul`, which delegate to the `nvidia_native` admission and refuse other targets.
+- **Oracle (#31(a)).** `tests/_support/nvidia_lowp_matmul_baseline.py` freezes the f1c64009a Graph-authored NVFP4 packager and a Graph-signature-only INT4 launch derivation. `test_nvidia_lowp_matmul_migration.py` (60 cases) covers descriptor/provenance/Tile equality over 4 shapes × plain/scaled × permuted args and 3 batching modes × 4 transpose pairs; no Graph re-entry; 15 NVFP4 and 7 INT4 tamper cases (relabelled fields, `scale_k`, `scale_format`, scale layout, storage, policy, Tile scale vector and packing, Graph text), each refused with no compile call; and semantic-key conflicts.
+- **Changed contract.** INT4 now requires its retained Graph text, like paged-KV; `test_scheduled_packed_state.py` asserts a discarded Graph is refused. NVFP4 and INT4 each run one extra Graph→Schedule replay per package; the device shared-RHS test now counts one lowering plus one replay.
+- **Device (The-Super-Bear, RTX 5070, CUDA 13.4, driver 610.88).** Unsandboxed, under `flock /tmp/tessera-sm120-device.lock`, in two worktrees (branch, main `f1c64009a`) symlinked to the shared `build/` and `build-nvidia-cuda/`; Python-only change, same binaries on both sides. The new `test_lowp_matmul_migration.py` device cases (6 NVFP4 bitwise retired-vs-native plus NumPy, 3 INT4 exact) pass. Per-test junit A/B over 122 NVFP4/INT4/MX/e2e-spine unit and device files: main 7689 cases (14 failed / 31 errors), branch 7760 = the same 7689 with identical outcomes plus 71 new cases, all passing. The first branch run showed 8 regressions in `test_nvfp4_shared_rhs_batch` (the graph-to-schedule call count); fixed as above and the full branch half re-run. The 14 failures and 31 errors (x86/ROCm lanes, sm_120 tf32) fail identically on main.
+- **Mac.** mypy clean on the changed modules; 299 passed / 48 skipped on the related unit files (skips are NVIDIA-dialect lanes the Mac build lacks); generated docs in sync.
+
+ROCm, Apple, x86: not applicable (sm_120-only packagers).
+Remaining: `mx_matmul` (FP6 E2M3/E3M2, MXFP4; UE8M0 K32 scales). `package_mx_matmul` still authors Tile IR in Python because the Graph spells FP6 as `!tessera.fp6_e*`, which no dialect defines, and `getInferredMatmulSchedule` has no MX contract; closing it is a C++ Schedule/Tile slice. No performance claim.
+Evidence: python/tessera/compiler/scheduled_matmul.py; python/tessera/compiler/nvidia_native.py; python/tessera/compiler/driver.py; python/tessera/compiler/bootstrap_prune_audit.py; tests/_support/nvidia_lowp_matmul_baseline.py; tests/unit/test_nvidia_lowp_matmul_migration.py; tests/device/nvidia/test_lowp_matmul_migration.py; docs/audit/generated/bootstrap_prune_gap.md
 <!-- entry-fields:end -->
 
 ### 2026-11-04 — E2E-REAL-6: Apple CPU batched GEMM and LAPACK factorizations retire their Graph-owned constructor

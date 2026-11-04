@@ -22,19 +22,19 @@ the bootstrap row can go.
 | Metric | Count |
 |---|---|
 | Backends with a bootstrap module | 5 |
-| `package_*` functions total | 83 |
+| `package_*` functions total | 84 |
 | — Graph-input boundaries (including scheduled wrappers) | 45 |
-|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 6 |
+|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 5 |
 |   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 0 |
 |   ·  of the bootstrap, both | 0 |
-|   ·  of the bootstrap, other (wrapper / dispatcher) | 39 |
-| — typed scheduled-artifact inputs (consumption needs verification) | 21 |
-| — unclassified/raw inputs (not assumed compiled) | 17 |
-| Lines in those modules | 12951 |
+|   ·  of the bootstrap, other (wrapper / dispatcher) | 40 |
+| — typed scheduled-artifact inputs (consumption needs verification) | 23 |
+| — unclassified/raw inputs (not assumed compiled) | 16 |
+| Lines in those modules | 12946 |
 | Classified family/target candidates (shape admission not implied) | 57 |
-| — covered by a compiled route | 25 |
+| — covered by a compiled route | 27 |
 | — packager lowers only through the generic Schedule→Tile route | 12 |
-| — **gap (no declared family route)** | 20 |
+| — **gap (no declared family route)** | 18 |
 | Packagers matching no family | 9 |
 
 Graph input alone does not prove reconstruction: wrappers may call the
@@ -45,8 +45,8 @@ exact artifacts before treating a row as a constructor deletion target.
 
 | Target | Module | Graph input | Typed artifact input | Unknown/raw input | Family candidates | Lines |
 |---|---|---|---|---|---|---|
-| `nvidia_sm120` | `nvidia_native.py` | 19 | 3 | 14 | 15 | 5412 |
-| `rocm_gfx1151` | `rocm_native.py` | 7 | 7 | 1 | 5 | 3523 |
+| `nvidia_sm120` | `nvidia_native.py` | 19 | 5 | 13 | 15 | 5405 |
+| `rocm_gfx1151` | `rocm_native.py` | 7 | 7 | 1 | 5 | 3525 |
 | `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1603 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 3 | 0 | 10 | 506 |
 | `apple_gpu` | `apple_native.py` | 11 | 4 | 1 | 19 | 1907 |
@@ -92,8 +92,8 @@ queues own.
 | `nvidia_sm120` | `activation` | `scheduled_kernel.supports_scheduled_kernel` | ✅ compiled |
 | `nvidia_sm120` | `norm` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `nvidia_sm120` | `reduction` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
-| `nvidia_sm120` | `nvfp4_matmul` | — | 🔴 **gap** |
-| `nvidia_sm120` | `int4_matmul` | — | 🔴 **gap** |
+| `nvidia_sm120` | `nvfp4_matmul` | `scheduled_matmul.supports_scheduled_nvfp4_matmul` | ✅ compiled |
+| `nvidia_sm120` | `int4_matmul` | `scheduled_matmul.supports_scheduled_int4_matmul` | ✅ compiled |
 | `nvidia_sm120` | `mx_matmul` | — | 🔴 **gap** |
 | `nvidia_sm120` | `scalar_matmul` | `scheduled_matmul.supports_scheduled_matmul` | ✅ compiled |
 | `nvidia_sm120` | `matmul` | `scheduled_matmul.supports_scheduled_matmul` | ✅ compiled |

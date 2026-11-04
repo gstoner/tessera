@@ -88,7 +88,7 @@ def test_dispatch_reference_rejects_invalid_slots_and_transport():
 @pytest.mark.hardware_rocm
 @pytest.mark.parametrize("arch,family", [
     ("gfx1151", "paged"), ("gfx1151", "paged_default"), ("gfx1151", "dispatched"),
-    ("gfx1201", "paged"), ("gfx1201", "paged_default"),
+    ("gfx1201", "paged"), ("gfx1201", "paged_default"), ("gfx1201", "dispatched"),
 ])
 def test_public_jit_movement_executes_and_specializes_on_owning_gpu(arch, family, monkeypatch):
     from tessera import runtime as rt
@@ -141,7 +141,7 @@ def test_public_jit_movement_executes_and_specializes_on_owning_gpu(arch, family
 @pytest.mark.hardware_rocm
 @pytest.mark.parametrize("arch,family", [
     ("gfx1151", "paged"), ("gfx1151", "paged_default"), ("gfx1151", "dispatched"),
-    ("gfx1201", "paged"), ("gfx1201", "paged_default"),
+    ("gfx1201", "paged"), ("gfx1201", "paged_default"), ("gfx1201", "dispatched"),
 ])
 def test_prepared_native_binding_avoids_serialization_and_checks_view_contract(arch, family, monkeypatch):
     from tessera import runtime as rt

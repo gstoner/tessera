@@ -134,9 +134,9 @@ def _int4_module(m: int, n: int, k: int) -> GraphIRModule:
 def _mx_module(m: int, n: int, k: int, storage: str) -> GraphIRModule:
     sk = (k + 31) // 32
     mlir_dtype = {
-        "fp6_e2m3": "!tessera.fp6_e2m3",
-        "fp6_e3m2": "!tessera.fp6_e3m2",
-        "fp4_e2m1": "!tessera.fp4_e2m1",
+        "fp6_e2m3": "f6E2M3FN",
+        "fp6_e3m2": "f6E3M2FN",
+        "fp4_e2m1": "f4E2M1FN",
     }[storage]
     a = IRType(f"tensor<{m}x{k}x{mlir_dtype}>", (str(m), str(k)), storage)
     b = IRType(f"tensor<{k}x{n}x{mlir_dtype}>", (str(k), str(n)), storage)

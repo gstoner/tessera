@@ -745,12 +745,17 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     int4_gemm = (op.op_name == "tessera.gemm" and target == "nvidia_sm120"
                  and len(function.args) == 2 and all(a.ir_type.dtype == "int4" for a in function.args))
     nvfp4_scaled = op.op_name == "tessera.scaled_matmul" and target == "nvidia_sm120"
+    # E2E-REAL-6 SM120 MX (2026-11-04): the OCP MX scaled product names its own
+    # physical contract; every NVFP4-only branch below excludes it.
+    mx_scaled = nvfp4_scaled and op.kwargs.get("physical_contract") == MX_PHYSICAL_CONTRACT
+    nvfp4_scaled = nvfp4_scaled and not mx_scaled
     # E2E-REAL-6 Apple CPU (2026-11-03): ``tessera.gemm`` is the declared
     # legacy Graph alias of ``tessera.matmul`` (op_catalog.LEGACY_GRAPH_OP_ALIASES)
     # and the retired Apple CPU packager served both through one cblas_sgemm
     # symbol. Only that target names the alias; the C++ Schedule sees matmul.
     apple_cpu_gemm = op.op_name == "tessera.gemm" and target == "apple_cpu"
-    if ((op.op_name != "tessera.matmul" and not int4_gemm and not nvfp4_scaled and not apple_cpu_gemm)
+    if ((op.op_name != "tessera.matmul" and not int4_gemm and not nvfp4_scaled and not mx_scaled
+            and not apple_cpu_gemm)
             or not 2 <= len(op.operands) <= 4):
         raise ValueError("scheduled matmul requires one supported Graph matmul")
     transpose_a, transpose_b = (op.kwargs.get(name, False) for name in ("transposeA", "transposeB"))
@@ -896,6 +901,26 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         expected_operands.extend((f"%{scale_a_name}", f"%{scale_b_name}"))
         bias_name = residual_name = None
         activation = "none"
+    if mx_scaled:
+        if (len(op.operands) != 4 or len(function.args) != 4 or batch_shape is not None
+                or "batching" in op.kwargs or dynamic
+                or op.kwargs.get("activation", "none") != "none"
+                or bias_value not in {None, False} or residual_value not in {None, False}
+                or a_dtype not in MX_STORAGES or b_dtype != a_dtype or output_dtype != "fp32"):
+            raise ValueError("MX Schedule requires static rank-2 FP6/MXFP4 Graph inputs of one dtype and f32 output")
+        scale_a_name, scale_b_name = (v.removeprefix("%") for v in op.operands[2:4])
+        scale_k = (k + 31) // 32
+        if (scale_a_name not in args or scale_b_name not in args
+                or tuple(args[scale_a_name].ir_type.shape) != (str(m), str(scale_k))
+                or tuple(args[scale_b_name].ir_type.shape) != (str(scale_k), str(n))
+                or args[scale_a_name].ir_type.dtype != "uint8"
+                or args[scale_b_name].ir_type.dtype != "uint8"
+                or op.kwargs.get("scale_layout") != MX_SCALE_LAYOUT
+                or op.kwargs.get("numeric_policy") != MX_NUMERIC_POLICY):
+            raise ValueError("MX Schedule scale operands/layout/numeric policy disagree")
+        expected_operands.extend((f"%{scale_a_name}", f"%{scale_b_name}"))
+        bias_name = residual_name = None
+        activation = "none"
     if bias_name is not None:
         expected_operands.append(f"%{bias_name}")
     if residual_name is not None:
@@ -1031,6 +1056,12 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "nvidia_sm120", "sm_120", "nvfp4", "f32", 16, 8)
         function_name = "tessera_tile_matmul_nvfp4"
+    elif mx_scaled:
+        assert a_dtype is not None  # admitted against MX_STORAGES above
+        mx_storage = MX_STORAGES[a_dtype][0]
+        compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
+            "nvidia_sm120", "sm_120", mx_storage, "f32", 16, 8)
+        function_name = f"tessera_tile_matmul_mx_{mx_storage}"
     elif target == "nvidia_sm120" and (a_dtype, b_dtype, output_dtype) == ("int4", "int4", "int32"):
         if not op.result or function.return_values != ["%" + op.result] or len(function.args) != 2:
             raise ValueError("INT4 native entry must return its matmul result with two inputs")
@@ -1603,29 +1634,8 @@ def verify_nvfp4_projection(artifact: ScheduledMatmulArtifact) -> NVFP4Projectio
     roles = products[0].groups()
     if len(argument_types) != 4 or len(set(roles)) != 4 or set(roles) != set(argument_types):
         raise ValueError("NVFP4 native operand roles do not bind the four arguments")
-    op_attrs = _balanced_attrs(parent, products[0].end())
-
-    def op_string(key: str) -> str | None:
-        found = re.findall(r'(?:^|, )' + key + r' = "(\w+)"(?:,|$)', op_attrs)
-        if len(found) > 1:
-            raise ValueError(f"NVFP4 native {key} is ambiguous")
-        return found[0] if found else None
-
-    def op_dict(key: str) -> dict[str, object]:
-        found = re.findall(r'(?:^|, )' + key + r' = \{([^{}]*)\}', op_attrs)
-        if len(found) != 1:
-            raise ValueError(f"NVFP4 native {key} is missing")
-        out: dict[str, object] = {}
-        for name, value in re.findall(r'(\w+) = ("\w+"|\[[^\]]*\])', found[0]):
-            out[name] = (value.strip('"') if value.startswith('"')
-                         else [int(x) for x in value.strip("[]").split(",")])
-        return out
-
-    def op_flag(key: str) -> bool:
-        found = re.findall(r'(?:^|, )' + key + r' = (true|false)(?:,|$)', op_attrs)
-        if len(found) > 1:
-            raise ValueError(f"NVFP4 native {key} is ambiguous")
-        return found == ["true"]
+    op_string, op_dict, op_flag = _scaled_op_readers(
+        _balanced_attrs(parent, products[0].end()), "NVFP4")
 
     if op_string("physical_contract") != NVFP4_PHYSICAL_CONTRACT:
         raise ValueError("NVFP4 native physical contract disagrees")
@@ -1715,3 +1725,226 @@ def verify_nvfp4_projection(artifact: ScheduledMatmulArtifact) -> NVFP4Projectio
         scale_a_shape=scale_a_shape, scale_b_shape=scale_b_shape, output_shape=output_shape,
         m=m, n=n, k=k, transpose_a=transpose_a, transpose_b=transpose_b,
         batching=batching, batch_prefix=prefix, entry=entry)
+
+
+# ---------------------------------------------------------------------------
+# E2E-REAL-6, SM120 OCP MX matmul (sync ``E2E-REAL-6-sm120-mx-matmul-2026-11-04``).
+# FP6 (E2M3/E3M2) and MXFP4 (E2M1) with one UE8M0 scale per 32 logical K
+# values. The C++ Graph verifier, ``getInferredMatmulSchedule`` and the
+# Schedule verifier own this contract under ``nvidia_sm120_mx_blockscale_v1``;
+# the projection below reads every launch field back from the replayed native
+# artifact so ``nvidia_native.package_scheduled_mx_matmul`` takes nothing else.
+# ---------------------------------------------------------------------------
+
+MX_PHYSICAL_CONTRACT = "nvidia_sm120_mx_blockscale_v1"
+MX_SCALE_LAYOUT = {"granularity": "block", "block": [1, 32], "format": "ue8m0"}
+MX_NUMERIC_POLICY = {"accum": "fp32", "execution_mode": "exact_per_block"}
+#: Logical Graph dtype -> (native Schedule storage, MLIR element, MMA K).
+MX_STORAGES = {
+    "fp6_e2m3": ("e2m3", "f6E2M3FN", 32),
+    "fp6_e3m2": ("e3m2", "f6E3M2FN", 32),
+    "fp4_e2m1": ("fp4_e2m1", "f4E2M1FN", 64),
+}
+
+
+def canonical_mx_graph(module: GraphIRModule) -> GraphIRModule:
+    """Spell a logical MX product as the scaled matmul the Schedule accepts.
+
+    A ``matmul``/``gemm`` over two FP6/MXFP4 operands and two ``uint8`` scale
+    views has one meaning on SM120 (UE8M0, K32), so it is respelled as
+    ``tessera.scaled_matmul`` with that contract; a contract key already
+    present with another value is refused, not overwritten (Decision #21a).
+    Tensor types are re-derived from each dtype, so a caller's historical
+    ``!tessera.fp4_e2m1`` text cannot reach the parser. The caller's module
+    is never mutated.
+    """
+    from .graph_ir import tensor_ir_type
+
+    if len(module.functions) != 1 or len(module.functions[0].body) != 1:
+        raise ValueError("MX packaging requires one Graph function with one operation")
+    canonical = copy.deepcopy(module)
+    function = canonical.functions[0]
+    op = function.body[0]
+    expected = {
+        "scale_layout": MX_SCALE_LAYOUT,
+        "numeric_policy": MX_NUMERIC_POLICY,
+        "physical_contract": MX_PHYSICAL_CONTRACT,
+    }
+    if op.op_name == "tessera.scaled_matmul":
+        for name, value in expected.items():
+            if op.kwargs.get(name) != value:
+                raise ValueError(f"MX scaled_matmul requires {name}={value!r}")
+    elif op.op_name in {"tessera.matmul", "tessera.gemm"}:
+        for name, value in expected.items():
+            if name in op.kwargs and op.kwargs[name] != value:
+                raise ValueError(f"MX matmul declares {name}={op.kwargs[name]!r}; "
+                                 f"the SM120 contract is {value!r}")
+        op.op_name = "tessera.scaled_matmul"
+        op.kwargs.update(copy.deepcopy(expected))
+    else:
+        raise ValueError("MX packaging requires matmul, gemm, or scaled_matmul")
+    for arg in function.args:
+        arg.ir_type = tensor_ir_type(tuple(arg.ir_type.shape), arg.ir_type.dtype)
+    function.result_types = [tensor_ir_type(tuple(t.shape), t.dtype) for t in function.result_types]
+    types = {f"%{arg.name}": str(arg.ir_type) for arg in function.args}
+    op.operand_types = [types.get(value, text) for value, text in zip(op.operands, op.operand_types)]
+    op.result_type = str(function.result_types[0])
+    return canonical
+
+
+def supports_scheduled_mx_matmul(module: GraphIRModule, *, target: str = "nvidia_sm120") -> bool:
+    """Whether the SM120 MX route admits ``module`` (admission only)."""
+    from .nvidia_native import supports_mx_matmul
+
+    if target != "nvidia_sm120" or not supports_mx_matmul(module):
+        return False
+    try:
+        _graph_contract(canonical_mx_graph(module), target)
+    except ValueError:
+        return False
+    return True
+
+
+@dataclass(frozen=True)
+class MXProjection:
+    """Every MX launch field, read from the replayed native Schedule."""
+
+    a_name: str
+    b_name: str
+    scale_a_name: str
+    scale_b_name: str
+    output_name: str
+    m: int
+    n: int
+    k: int
+    #: Logical Graph dtype (``fp6_e2m3`` / ``fp6_e3m2`` / ``fp4_e2m1``).
+    dtype: str
+    #: Native Schedule / Tile storage (``e2m3`` / ``e3m2`` / ``fp4_e2m1``).
+    storage: str
+    entry: str
+
+
+def _scaled_op_readers(op_attrs: str, label: str):
+    """Exact readers for one scaled op's attribute dictionary text."""
+
+    def string(key: str) -> str | None:
+        found = re.findall(r'(?:^|, )' + key + r' = "(\w+)"(?:,|$)', op_attrs)
+        if len(found) > 1:
+            raise ValueError(f"{label} native {key} is ambiguous")
+        return found[0] if found else None
+
+    def dictionary(key: str) -> dict[str, object]:
+        found = re.findall(r'(?:^|, )' + key + r' = \{([^{}]*)\}', op_attrs)
+        if len(found) != 1:
+            raise ValueError(f"{label} native {key} is missing")
+        out: dict[str, object] = {}
+        for name, value in re.findall(r'(\w+) = ("\w+"|\[[^\]]*\])', found[0]):
+            out[name] = (value.strip('"') if value.startswith('"')
+                         else [int(x) for x in value.strip("[]").split(",")])
+        return out
+
+    def flag(key: str) -> bool:
+        found = re.findall(r'(?:^|, )' + key + r' = (true|false)(?:,|$)', op_attrs)
+        if len(found) > 1:
+            raise ValueError(f"{label} native {key} is ambiguous")
+        return found == ["true"]
+
+    return string, dictionary, flag
+
+
+def verify_mx_projection(artifact: ScheduledMatmulArtifact) -> MXProjection:
+    """Replay an SM120 MX artifact and project its launch contract.
+
+    Both boundaries are replayed (Graph -> Schedule from the retained Graph
+    text, Schedule -> Tile from the Schedule) and must reproduce the
+    artifact's IR exactly. Operand roles, element types and scale extents come
+    from the canonicalized Schedule's ``scaled_matmul``; storage, scale block
+    and format from ``schedule.matmul``; M/N/K from its shape key. They are
+    checked against the artifact's own fields and the Tile launch op, and host
+    buffer names are the Graph aliases of the Schedule's positional arguments,
+    so a relabelled or tampered artifact fails here, before compilation.
+    """
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("MX projection requires native Schedule replay")
+    if run_tessera_opt(tool, artifact.graph_ir, "--tessera-graph-to-schedule") != artifact.schedule_ir:
+        raise ValueError("MX Schedule does not replay from its retained Graph")
+    if run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
+        raise ValueError("MX Tile does not replay from its canonical Schedule")
+    parent = run_tessera_opt(tool, artifact.schedule_ir, "--canonicalize")
+    functions = re.findall(r"func\.func @\w+\(([^\n]*?)\) -> (tensor<[^>]+>)", parent)
+    products = list(re.finditer(
+        r"= tessera\.scaled_matmul (%\w+), (%\w+) scales\((%\w+), (%\w+)\) ", parent))
+    records = re.findall(r" = schedule\.matmul %\w+ \{([^{}]*)\}", parent)
+    keys = re.findall(r'shape_key = "M=(\d+);N=(\d+);K=(\d+);dtype=(\w+)"', parent)
+    if len(functions) != 1 or len(products) != 1 or len(records) != 1 or len(keys) != 1:
+        raise ValueError("MX projection requires one native scaled product")
+    argument_types = dict(re.findall(r"(%arg\d+): (tensor<[^>]+>)", functions[0][0]))
+    roles = products[0].groups()
+    if len(argument_types) != 4 or len(set(roles)) != 4 or set(roles) != set(argument_types):
+        raise ValueError("MX native operand roles do not bind the four arguments")
+    string, dictionary, flag = _scaled_op_readers(_balanced_attrs(parent, products[0].end()), "MX")
+    if string("physical_contract") != MX_PHYSICAL_CONTRACT:
+        raise ValueError("MX native physical contract disagrees")
+    if dictionary("scale_layout") != MX_SCALE_LAYOUT:
+        raise ValueError("MX native scale layout disagrees (Decision #21a semantic key)")
+    if dictionary("numeric_policy") != MX_NUMERIC_POLICY:
+        raise ValueError("MX native numeric policy disagrees (Decision #21a semantic key)")
+    if string("batching") is not None or flag("transposeA") or flag("transposeB"):
+        raise ValueError("MX native product states a batch or transpose profile it has none of")
+
+    m, n, k = (int(x) for x in keys[0][:3])
+    storage = keys[0][3]
+    by_storage = {row[0]: (dtype, row[1], row[2]) for dtype, row in MX_STORAGES.items()}
+    if storage not in by_storage:
+        raise ValueError(f"MX native shape key names an unsupported storage {storage!r}")
+    dtype, element, fragment_k = by_storage[storage]
+    record = records[0]
+    for field in (f'storage = "{storage}"', f'storage_b = "{storage}"', 'scale_k = 32 : i64',
+                  'scale_format = "ue8m0"', f'physical_contract = "{MX_PHYSICAL_CONTRACT}"',
+                  'accum = "f32"', 'output = "f32"', 'bias = false', 'residual = false',
+                  'activation = "none"', f'tile_k = {fragment_k} : i64'):
+        if not re.search(r"(?:^|, )" + re.escape(field) + r"(?:,|$)", record):
+            raise ValueError("MX native Schedule disagrees on " + field)
+    # A macro K block or split is elided at its default; MX states neither.
+    if re.search(r"(?:^|, )(block_k|split_k|split_k_reduction) = ", record):
+        raise ValueError("MX native Schedule states a K block or split the contract has none of")
+    scale_k = (k + 31) // 32
+    expected_types = (f"tensor<{m}x{k}x{element}>", f"tensor<{k}x{n}x{element}>",
+                      f"tensor<{m}x{scale_k}x", f"tensor<{scale_k}x{n}x")
+    for index, (role, text) in enumerate(zip(roles, expected_types)):
+        actual = argument_types[role]
+        if (actual != text if index < 2 else
+                actual not in {text + "ui8>", text + "i8>"}):
+            raise ValueError(f"MX native operand {index} type {actual} is not the K32 block-scaled product")
+    if functions[0][1] != f"tensor<{m}x{n}xf32>":
+        raise ValueError("MX native result is not the f32 [M, N] product")
+
+    names, output_name = graph_host_aliases(artifact, roles, "tessera.scaled_matmul")
+    entry = f"tessera_tile_matmul_mx_{storage}"
+    fp4 = storage == "fp4_e2m1"
+    pack = (f'#tile.packed_format<logical = "{dtype}", container = "int8", '
+            f'logical_bits = {4 if fp4 else 6}, elements_per_container = {2 if fp4 else 1}, '
+            f'signedness = "format_defined", encoding = "{"e2m1" if fp4 else storage}", '
+            f'lane_order = "{"low_to_high" if fp4 else "scalar_lsb"}">')
+    tile = artifact.tile_ir
+    if (re.findall(r"llvm\.func @(\w+)\(", tile) != [entry] or tile.count("tile.matmul_kernel") != 1
+            or tile.count(f'physical_contract = "{MX_PHYSICAL_CONTRACT}"') != 1
+            or tile.count("tessera.scale_vector_size = 32 : i64") != 1
+            or tile.count('tessera.scale_format = "ue8m0"') != 1
+            or f'k = {fragment_k}, a = "{storage}", b = "{storage}", acc = "f32"' not in tile
+            or f"tessera.storage_pack = {pack}" not in tile):
+        raise ValueError("MX Tile lost its packed K32 UE8M0 scale contract or entry")
+    expected = dict(target="nvidia_sm120", architecture="sm_120", function_name=entry,
+                    a_name=names[0], b_name=names[1], output_name=output_name,
+                    m=m, n=n, k=k, a_dtype=dtype, b_dtype=dtype, output_dtype="fp32",
+                    storage=storage, accum="f32", bias_name=None, residual_name=None,
+                    activation="none", dynamic_m=False, dynamic_n=False, dynamic_k=False,
+                    split_k=1, split_k_reduction="", b_codes_dtype="", scale_name="",
+                    macro_tile_m=16, macro_tile_n=8)
+    for key, value in expected.items():
+        if getattr(artifact, key) != value:
+            raise ValueError("MX artifact field disagrees with native IR: " + key)
+    return MXProjection(
+        a_name=names[0], b_name=names[1], scale_a_name=names[2], scale_b_name=names[3],
+        output_name=output_name, m=m, n=n, k=k, dtype=dtype, storage=storage, entry=entry)

@@ -9,6 +9,9 @@ module {
       mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = 64, a = "fp4_e2m1", b = "fp4_e2m1", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
       epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">,
       warps = 1 : i64, staging = "global",
+      physical_contract = "nvidia_sm120_mx_blockscale_v1",
+      tessera.scale_vector_size = 32 : i64,
+      tessera.scale_format = "ue8m0",
       tessera.storage_packed = true,
       tessera.storage_container = "int8",
       tessera.storage_pack = #tile.packed_format<logical = "fp4_e2m1", container = "int8", logical_bits = 4, elements_per_container = 2, signedness = "format_defined", encoding = "e2m1", lane_order = "low_to_high">

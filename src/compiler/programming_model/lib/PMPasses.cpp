@@ -1205,6 +1205,9 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   };
   const bool nvidiaNvfp4 =
       schedule.physicalContract == "nvidia_sm120_nvfp4_blockscale_v1";
+  // E2E-REAL-6 SM120 MX (2026-11-04): OCP MX FP6/MXFP4 with UE8M0 K32 scales.
+  const bool nvidiaMx =
+      schedule.physicalContract == "nvidia_sm120_mx_blockscale_v1";
   const bool packedMxfp4 =
       schedule.physicalContract == "rocm_mxfp4_w4a8_exact_v1";
   const bool foldedMxfp4 =
@@ -1325,8 +1328,9 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     auto block = layout ? layout.getAs<ArrayAttr>("block") : ArrayAttr();
     auto format = layout ? layout.getAs<StringAttr>("format") : StringAttr();
     if (!block || block.size() != 2 || !format ||
-        (nvidiaNvfp4 && (layout.size() != 3 || !granularity ||
-                         granularity.getValue() != "block")))
+        ((nvidiaNvfp4 || nvidiaMx) &&
+         (layout.size() != 3 || !granularity ||
+          granularity.getValue() != "block")))
       return failure();
     auto blockK = dyn_cast<IntegerAttr>(block[1]);
     if (!blockK || blockK.getInt() <= 0)
@@ -1391,6 +1395,36 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
         rhsScale.getDimSize((rhsBatched ? logicalBatchPrefix.size() : 0) + (nvfp4TransposeB ? 1 : 0)) != (schedule.k / 16 + (schedule.k % 16 != 0)) ||
         rhsScale.getDimSize((rhsBatched ? logicalBatchPrefix.size() : 0) + (nvfp4TransposeB ? 0 : 1)) != schedule.n ||
         schedule.scaleBlockK != 16 || schedule.scaleFormat != "ue4m3" ||
+        !policy || policy.size() != 2 ||
+        !accum || accum.getValue() != "fp32" || !mode ||
+        mode.getValue() != "exact_per_block" ||
+        schedule.bias || schedule.residual || schedule.activation != "none")
+      return failure();
+  } else if (nvidiaMx) {
+    // One UE8M0 byte per 32 logical K values on each side. The Graph
+    // verifier states the same contract; the Schedule re-derives it because
+    // it is what selects the block-scale instruction (Decision #32).
+    auto lhsScale = dyn_cast<RankedTensorType>(op->getOperand(2).getType());
+    auto rhsScale = dyn_cast<RankedTensorType>(op->getOperand(3).getType());
+    auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+    auto accum = policy ? policy.getAs<StringAttr>("accum") : StringAttr();
+    auto mode = policy ? policy.getAs<StringAttr>("execution_mode") : StringAttr();
+    auto byteScale = [](RankedTensorType type) {
+      return type && type.getRank() == 2 &&
+             (type.getElementType().isUnsignedInteger(8) ||
+              type.getElementType().isSignlessInteger(8));
+    };
+    const int64_t scaleK = schedule.k / 32 + (schedule.k % 32 != 0);
+    if (!nvidia_sm120 || schedule.dynamicM || schedule.dynamicN ||
+        schedule.dynamicK || batchAttr || flag("transposeA") ||
+        flag("transposeB") ||
+        !isa<Float6E2M3FNType, Float6E3M2FNType, Float4E2M1FNType>(lhsElement) ||
+        lhsElement != rhsElement || !outElement.isF32() ||
+        lhs.getEncoding() || rhs.getEncoding() || out.getEncoding() ||
+        !byteScale(lhsScale) || !byteScale(rhsScale) ||
+        lhsScale.getShape() != ArrayRef<int64_t>({schedule.m, scaleK}) ||
+        rhsScale.getShape() != ArrayRef<int64_t>({scaleK, schedule.n}) ||
+        schedule.scaleBlockK != 32 || schedule.scaleFormat != "ue8m0" ||
         !policy || policy.size() != 2 ||
         !accum || accum.getValue() != "fp32" || !mode ||
         mode.getValue() != "exact_per_block" ||
@@ -1815,6 +1849,24 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     schedule.tileM = 16;
     schedule.tileN = 8;
     schedule.tileK = 64;
+    schedule.macroTileM = 16;
+    schedule.macroTileN = 8;
+    schedule.warps = 1;
+    if (schedule.arch.empty()) schedule.arch = "sm_120";
+    return schedule;
+  }
+  if (nvidiaMx) {
+    // FP6 rides one byte per value into m16n8k32 kind::mxf8f6f4 (scale_vec
+    // 1X); MXFP4 packs two values per byte into m16n8k64 kind::mxf4 (2X).
+    const bool fp4 = isa<Float4E2M1FNType>(lhsElement);
+    schedule.storage = fp4 ? "fp4_e2m1"
+                           : isa<Float6E2M3FNType>(lhsElement) ? "e2m3" : "e3m2";
+    schedule.storageB = schedule.storage;
+    schedule.accum = "f32";
+    schedule.output = "f32";
+    schedule.tileM = 16;
+    schedule.tileN = 8;
+    schedule.tileK = fp4 ? 64 : 32;
     schedule.macroTileM = 16;
     schedule.macroTileN = 8;
     schedule.warps = 1;
@@ -5730,6 +5782,11 @@ struct ScheduleToTilePass
         if (selected->storage == "int4") kernelName = "tessera_tile_matmul_int4";
         if (selected->storage == "nvfp4") kernelName = "tessera_tile_matmul_nvfp4";
         if (selected->independentBatchCount > 0) kernelName = "tessera_tile_matmul_nvfp4_batched";
+        // E2E-REAL-6 SM120 MX (2026-11-04): one runtime entry per OCP MX
+        // storage; the launch ABI is the NVFP4 five-buffer one.
+        const bool mxScaled =
+            selected->physicalContract == "nvidia_sm120_mx_blockscale_v1";
+        if (mxScaled) kernelName = ("tessera_tile_matmul_mx_" + selected->storage).str();
         if (SymbolTable::lookupSymbolIn(mod, kernelName)) {
           scheduled.emitError("SM120 scheduled matmul kernel symbol already exists");
           return signalPassFailure();
@@ -5740,7 +5797,7 @@ struct ScheduleToTilePass
         SmallVector<Type> kernelInputs{pointerType, pointerType};
         if (scaledRhs) kernelInputs.push_back(pointerType);  // A, B codes, scale
         const bool nvfp4 = selected->storage == "nvfp4";
-        if (nvfp4) kernelInputs.append({pointerType, pointerType});
+        if (nvfp4 || mxScaled) kernelInputs.append({pointerType, pointerType});
         if (selected->bias)
           kernelInputs.push_back(pointerType);
         if (selected->residual)
@@ -5802,8 +5859,8 @@ struct ScheduleToTilePass
             selected->blockK > 0 && selected->tileK > 0
                 ? std::max<int64_t>(selected->blockK / selected->tileK, 1)
                 : 1,
-            nvfp4 ? 0 : selected->scaleBlockK,
-            nvfp4 ? StringRef() : selected->scaleFormat);
+            nvfp4 || mxScaled ? 0 : selected->scaleBlockK,
+            nvfp4 || mxScaled ? StringRef() : selected->scaleFormat);
         auto epilogue = tile::TileEpilogueAttr::get(
             &getContext(), selected->bias, selected->activation,
             selected->output);
@@ -6105,6 +6162,32 @@ struct ScheduleToTilePass
           kernelState.addAttribute("physical_contract",
                                    kernelBuilder.getStringAttr(
                                        "nvidia_sm120_nvfp4_blockscale_v1"));
+        }
+        if (mxScaled) {
+          // FP6 occupies the low six bits of one byte; MXFP4 packs two E2M1
+          // values per byte, low nibble first. The scale block rides as the
+          // launch's own contract (the descriptor carries no scale fields,
+          // as for NVFP4), and the materializer refuses any other value.
+          const bool fp4 = selected->storage == "fp4_e2m1";
+          StringRef logical = fp4 ? "fp4_e2m1"
+                              : selected->storage == "e2m3" ? "fp6_e2m3" : "fp6_e3m2";
+          kernelState.addAttribute("tessera.storage_packed",
+                                   kernelBuilder.getBoolAttr(true));
+          kernelState.addAttribute("tessera.storage_container",
+                                   kernelBuilder.getStringAttr("int8"));
+          kernelState.addAttribute(
+              "tessera.storage_pack",
+              tile::TilePackedFormatAttr::get(
+                  &getContext(), logical, "int8", fp4 ? 4 : 6, fp4 ? 2 : 1,
+                  "format_defined", fp4 ? StringRef("e2m1") : selected->storage,
+                  fp4 ? "low_to_high" : "scalar_lsb"));
+          kernelState.addAttribute("tessera.scale_vector_size",
+                                   kernelBuilder.getI64IntegerAttr(32));
+          kernelState.addAttribute("tessera.scale_format",
+                                   kernelBuilder.getStringAttr("ue8m0"));
+          kernelState.addAttribute("physical_contract",
+                                   kernelBuilder.getStringAttr(
+                                       "nvidia_sm120_mx_blockscale_v1"));
         }
         if (selected->storage == "int4") {
           kernelState.addAttribute("tessera.storage_packed", kernelBuilder.getBoolAttr(true));

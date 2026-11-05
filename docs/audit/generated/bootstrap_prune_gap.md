@@ -22,19 +22,19 @@ the bootstrap row can go.
 | Metric | Count |
 |---|---|
 | Backends with a bootstrap module | 5 |
-| `package_*` functions total | 85 |
+| `package_*` functions total | 86 |
 | — Graph-input boundaries (including scheduled wrappers) | 45 |
-|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 5 |
+|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 4 |
 |   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 0 |
 |   ·  of the bootstrap, both | 0 |
-|   ·  of the bootstrap, other (wrapper / dispatcher) | 40 |
-| — typed scheduled-artifact inputs (consumption needs verification) | 24 |
+|   ·  of the bootstrap, other (wrapper / dispatcher) | 41 |
+| — typed scheduled-artifact inputs (consumption needs verification) | 25 |
 | — unclassified/raw inputs (not assumed compiled) | 16 |
-| Lines in those modules | 13066 |
+| Lines in those modules | 13051 |
 | Classified family/target candidates (shape admission not implied) | 57 |
-| — covered by a compiled route | 33 |
+| — covered by a compiled route | 34 |
 | — packager lowers only through the generic Schedule→Tile route | 12 |
-| — **gap (no declared family route)** | 12 |
+| — **gap (no declared family route)** | 11 |
 | Packagers matching no family | 9 |
 
 Graph input alone does not prove reconstruction: wrappers may call the
@@ -45,7 +45,7 @@ exact artifacts before treating a row as a constructor deletion target.
 
 | Target | Module | Graph input | Typed artifact input | Unknown/raw input | Family candidates | Lines |
 |---|---|---|---|---|---|---|
-| `nvidia_sm120` | `nvidia_native.py` | 19 | 5 | 13 | 15 | 5405 |
+| `nvidia_sm120` | `nvidia_native.py` | 19 | 6 | 13 | 15 | 5390 |
 | `rocm_gfx1151` | `rocm_native.py` | 7 | 7 | 1 | 5 | 3525 |
 | `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1603 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 3 | 0 | 10 | 527 |
@@ -94,7 +94,7 @@ queues own.
 | `nvidia_sm120` | `reduction` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
 | `nvidia_sm120` | `nvfp4_matmul` | `scheduled_matmul.supports_scheduled_nvfp4_matmul` | ✅ compiled |
 | `nvidia_sm120` | `int4_matmul` | `scheduled_matmul.supports_scheduled_int4_matmul` | ✅ compiled |
-| `nvidia_sm120` | `mx_matmul` | — | 🔴 **gap** |
+| `nvidia_sm120` | `mx_matmul` | `scheduled_matmul.supports_scheduled_mx_matmul` | ✅ compiled |
 | `nvidia_sm120` | `scalar_matmul` | `scheduled_matmul.supports_scheduled_matmul` | ✅ compiled |
 | `nvidia_sm120` | `matmul` | `scheduled_matmul.supports_scheduled_matmul` | ✅ compiled |
 | `rocm_gfx1151` | `softmax` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |

@@ -1902,9 +1902,12 @@ def verify_mx_projection(artifact: ScheduledMatmulArtifact) -> MXProjection:
     for field in (f'storage = "{storage}"', f'storage_b = "{storage}"', 'scale_k = 32 : i64',
                   'scale_format = "ue8m0"', f'physical_contract = "{MX_PHYSICAL_CONTRACT}"',
                   'accum = "f32"', 'output = "f32"', 'bias = false', 'residual = false',
-                  'activation = "none"', f'tile_k = {fragment_k} : i64', 'block_k = 0 : i64'):
+                  'activation = "none"', f'tile_k = {fragment_k} : i64'):
         if not re.search(r"(?:^|, )" + re.escape(field) + r"(?:,|$)", record):
             raise ValueError("MX native Schedule disagrees on " + field)
+    # A macro K block or split is elided at its default; MX states neither.
+    if re.search(r"(?:^|, )(block_k|split_k|split_k_reduction) = ", record):
+        raise ValueError("MX native Schedule states a K block or split the contract has none of")
     scale_k = (k + 31) // 32
     expected_types = (f"tensor<{m}x{k}x{element}>", f"tensor<{k}x{n}x{element}>",
                       f"tensor<{m}x{scale_k}x", f"tensor<{scale_k}x{n}x")

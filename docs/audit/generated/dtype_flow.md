@@ -18,8 +18,8 @@ packet to resolve the supported envelope.
 
 - Operators: **364**
 - TSOL operators: **51**
-- Operator/logical-dtype rows: **994**
-- Rows retaining at least one compiler/evidence gap: **392**
+- Operator/logical-dtype rows: **996**
+- Rows retaining at least one compiler/evidence gap: **394**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states
@@ -238,7 +238,7 @@ for the complete per-dtype and per-target matrix.
 | `matmul` | loop_nest | yes | bf16,fp16,fp32,fp4_e2m1,fp64,fp6_e2m3,fp6_e3m2,fp8_e4m3,fp8_e5m2,int32,int4,int8,nvfp4,uint8 | direct_test,physical,tile |
 | `moe_swiglu_block` | loop_nest | no | bf16,fp32 | direct_test,physical,tile |
 | `quantized_matmul` | loop_nest | no | bf16,fp16,fp32 | direct_test,physical,tile |
-| `scaled_matmul` | loop_nest | no | bf16,fp32,fp4_e2m1,fp8_e4m3,nvfp4,uint8 | direct_test,physical,tile |
+| `scaled_matmul` | loop_nest | no | bf16,fp32,fp4_e2m1,fp6_e2m3,fp6_e3m2,fp8_e4m3,nvfp4,uint8 | direct_test,physical,tile |
 | `tridiagonal_solve` | loop_nest | no | bf16,fp32 | direct_test,physical,tile |
 | `binary_brier_loss` | loss | no | bf16,fp32 | direct_test,physical,tile |
 | `brier_loss` | loss | no | bf16,fp32 | direct_test,physical,tile |

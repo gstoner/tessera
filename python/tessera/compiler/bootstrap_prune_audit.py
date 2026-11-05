@@ -98,6 +98,9 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
 #: which dispatches by artifact storage to consumers that project the block-
 #: scale or packed-int8 ABI from the replayed Schedule (E2E-REAL-6,
 #: 2026-11-04). Declared per target because each predicate admits SM120 only.
+#: SM120 ``mx_matmul`` (FP6/MXFP4, UE8M0 K32) joined them once the C++ Graph
+#: verifier and Schedule owned ``nvidia_sm120_mx_blockscale_v1`` (E2E-REAL-6,
+#: 2026-11-04).
 #: The Apple CPU batched-GEMM/LAPACK families (E2E-REAL-6, 2026-11-04) are
 #: per target because their contract (``NativeAppleCPUKernel.h``) claims only
 #: an ``apple_cpu`` module; ``apple_gpu`` keeps its own owed rows.
@@ -105,9 +108,16 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
 #: popcount, count_nonzero and top_k (E2E-REAL-6, 2026-11-04) reach
 #: ``package_scheduled_apple_gpu_descriptor`` through their contract
 #: (``NativeAppleGPUDescriptor.h``), which claims only an ``apple_gpu`` module.
+#: The Apple GPU PPO / EBM / Clifford value families (E2E-REAL-6, 2026-11-04)
+#: reach ``package_scheduled_apple_gpu_domain`` through the contract in
+#: ``NativeAppleGPUDomain.h``, which claims only an ``apple_gpu`` module.
+#: The Apple GPU linalg families (same date) reach
+#: ``package_scheduled_apple_gpu_kernel`` through ``NativeAppleGPUKernel.h``,
+#: which also claims only an ``apple_gpu`` module.
 _TARGET_FAMILY_TO_COMPILED: dict[tuple[str, str], tuple[str, str]] = {
     ("nvidia_sm120", "nvfp4_matmul"): ("scheduled_matmul", "supports_scheduled_nvfp4_matmul"),
     ("nvidia_sm120", "int4_matmul"): ("scheduled_matmul", "supports_scheduled_int4_matmul"),
+    ("nvidia_sm120", "mx_matmul"): ("scheduled_matmul", "supports_scheduled_mx_matmul"),
     ("apple_cpu", "gemm"): ("scheduled_matmul", "supports_scheduled_matmul"),
     ("apple_cpu", "softmax"): ("scheduled_kernel", "supports_scheduled_kernel"),
     **{("apple_cpu", family): ("scheduled_apple_cpu_kernel", "supports_scheduled_apple_cpu_kernel")
@@ -116,10 +126,16 @@ _TARGET_FAMILY_TO_COMPILED: dict[tuple[str, str], tuple[str, str]] = {
                                "supports_scheduled_apple_gpu_descriptor")
        for family in ("batched_gemm", "transpose", "dynamic_softmax", "dynamic_gelu",
                       "dynamic_popcount", "dynamic_count_nonzero", "dynamic_topk")},
+    **{("apple_gpu", family): ("scheduled_apple_gpu_kernel", "supports_scheduled_apple_gpu_kernel")
+       for family in ("svd", "value_cholesky", "value_cholesky_solve", "value_tri_solve")},
     ("nvidia_sm120", "attention_backward"): (
         "scheduled_attention_recompute",
         "supports_scheduled_attention_recompute",
     ),
+    **{("apple_gpu", family): ("scheduled_apple_gpu_domain", "supports_scheduled_apple_gpu_domain")
+       for family in ("value_rl_ppo_policy_loss", "value_ebm_energy_quadratic",
+                      "value_ebm_langevin_step", "value_ebm_refinement",
+                      "value_ebm_partition_exact", "value_clifford_geometric_product")},
 }
 
 #: The generic compiled fallback the driver tries last. It admits by op

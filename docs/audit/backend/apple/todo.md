@@ -16316,6 +16316,70 @@ oracle and a float64 reconstruction check. Lit adds
 `phase8/apple_cpu_kernel_{schedule_tile,invalid}.mlir`. Owed: BNNS f16/bf16
 matmul, the last Apple CPU Graph-owned constructor.
 
+## `E2E-REAL-6-apple-gpu-domain-2026-11-04`: Apple GPU PPO, EBM and Clifford value families retire their Graph-owned constructor
+
+Owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+Synchronization key: `E2E-REAL-6-apple-gpu-domain-2026-11-04`.
+
+`apple_gpu,value_{rl_ppo_policy_loss,ebm_energy_quadratic,ebm_langevin_step,ebm_refinement,ebm_partition_exact,clifford_geometric_product}`
+now lower through native Graph→Schedule→Tile (`NativeAppleGPUDomain.h`,
+`schedule.artifact` family `apple_gpu_domain` → `tile.<kind>`) and the Apple GPU
+value lowering, which gained a `value` pass option (`--tile-to-apple_gpu=value=true`).
+`package_scheduled_apple_gpu_domain` replays every boundary and projects the
+descriptor; tampering with the artifact, Graph, Schedule, Tile or Target text
+fails closed before the runtime is touched, and a `tessera-opt` without the
+lowering fails closed naming it. The MSL/MPSGraph wrappers in
+`apple_gpu_runtime.mm` stay Tier-3 delegates behind the declared op (no new
+op; runtime sources untouched). The old route is the #31(a) oracle
+`tests/_support/apple_gpu_domain_baseline.py`.
+
+Named behaviour changes: Langevin `temperature`, refinement
+`temperature`/`noise_scale`, a non-`logsumexp` partition reduction, Clifford
+`blade_major` layout or non-Euclidean signature, and PPO side-term
+coefficients without their tensor are refused at compile time (the delegates
+ignored them); PPO side tensors bind by ODS segment, so a lone `ref_logp` is no
+longer dispatched as a mask.
+
+Evidence: Mac M1 Max, Metal, unsandboxed: migration suite 91 passed (17 Metal bit-for-bit); lit 513 passed / 0 failed; `tests/unit/` A/B against main `4606fc710` has the identical 758 failing nodes (no new failures). Lit adds `phase8/apple_gpu_domain_{schedule_tile,invalid,tampered}.mlir`.
+Owed on Apple GPU: `batched_gemm`, `transpose`, the dynamic families, `svd` and
+the value linalg families (sibling sessions).
+
+## `E2E-REAL-6-apple-gpu-linalg-2026-11-04`: Apple GPU SVD and the value linalg families retire their Graph-owned constructors
+
+Owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+Synchronization key: `E2E-REAL-6-apple-gpu-linalg-2026-11-04`.
+
+`apple_gpu,{svd,value_cholesky,value_cholesky_solve,value_tri_solve}` now
+lower through native Graph→Schedule→Tile (`NativeAppleGPUKernel.h`,
+`schedule.artifact` family `apple_gpu_kernel` → `tile.<kind>`) and the Apple GPU
+value lowering, which gained a `value` pass option (`--tile-to-apple_gpu=value=true`)
+and a branch that lowers a Tile op carrying `tessera.apple_gpu_kernel_contract`
+to one verified `tessera_apple.gpu.kernel_call`. The lowering owns the
+(symbol, ABI) choice and refuses a contract naming another entry.
+`apple_native.package_scheduled_apple_gpu_kernel` replays every boundary and
+projects the descriptor; tampering with the artifact, Graph, Schedule, Tile or
+Target text fails closed before the runtime is touched. A host whose
+`tessera-opt` lacks the lowering is refused by name (the driver does not
+promote packaging there). The MSL/MPS entries in `apple_gpu_runtime.mm` stay
+Tier-3 delegates behind the declared op (runtime sources untouched). The old
+`package_svd` and the generic value branch for these three ops are the #31(a)
+oracle `tests/_support/apple_gpu_linalg_baseline.py`.
+
+The Graph verifiers of `tessera.svd` and `tessera.cholesky_solve` now admit a
+rank-3 batch (as `cholesky` and `tri_solve` already did); the retired route
+admitted batched SVD and batched Cholesky solve, so the compiled route had to be
+able to express them.
+
+Named behaviour changes: `cholesky(lower=False)` and `cholesky_solve(lower=False)`
+(the Metal kernels compute the lower factor and the executor ignored the flag),
+rank-4+ and non-square matrices, vector right-hand sides, rhs/batch/result
+shape mismatches, non-boolean flags and unknown keywords are refused at compile
+time.
+
+Evidence: see the log entry for this key. Owed: the other Apple GPU gap rows
+(batched GEMM, transpose, dynamic families, EBM/PPO/Clifford value families)
+belong to sibling sessions.
+
 ## `E2E-REAL-6-apple-gpu-descriptors-2026-11-04`: Apple GPU batched GEMM, transpose and the dynamic descriptor families retire their Graph-owned constructor
 
 Owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
@@ -16341,5 +16405,5 @@ a batch-1 GEMM's unread `broadcast_b` label is now `False`.
 Evidence (Mac M1 Max, macOS 27.2, unsandboxed Metal): the migration test plus
 the existing Apple spine/GELU/low-precision/ODS files are 295 passed, including
 17 Metal cases bit-exact against the oracle. Lit adds
-`phase8/apple_gpu_descriptor_{schedule_tile,invalid}.mlir`. Owed: Apple GPU
-`svd` and the `value_*` families.
+`phase8/apple_gpu_descriptor_{schedule_tile,invalid}.mlir`. With the domain and linalg
+slices (same date) this closes every Apple GPU gap row in the prune census.

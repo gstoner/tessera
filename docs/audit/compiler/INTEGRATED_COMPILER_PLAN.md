@@ -331,6 +331,18 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 ### E2E-REAL-6
 
+- Current increment (2026-11-04, sync E2E-REAL-6-sm120-mx-matmul-2026-11-04):
+  sm_120 `mx_matmul` (FP6 E2M3/E3M2, MXFP4; UE8M0 K32 scales) lowers
+  Graph→Schedule→Tile natively under the C++ contract
+  `nvidia_sm120_mx_blockscale_v1`. The Graph verifier, Schedule inference and
+  Schedule verifier own it, and Schedule→Tile emits the launch op. FP6 Graph
+  types are now MLIR builtins. `package_scheduled_mx_matmul` projects every
+  launch field from the replayed artifact. The Graph-authored packager is a
+  test-only #31(a) oracle with identical PTX and bitwise-equal output on the
+  RTX 5070. The prune row is `compiled`, and no `nvidia_sm120` family row is `gap`.
+  RTX 5070 evidence only.
+  [Log](INTEGRATED_COMPILER_LOG.md#2026-11-04--e2e-real-6-sm120-mx-matmul-lowers-natively-and-packages-its-replayed-artifact).
+
 - Current increment (2026-11-04, sync E2E-REAL-6-sm120-lowp-matmul-2026-11-04):
   the sm_120 `nvfp4_matmul` and `int4_matmul` packagers consume their replayed
   `ScheduledMatmulArtifact`. `package_scheduled_nvfp4_matmul` and the hardened
@@ -497,6 +509,8 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   [Evidence log](INTEGRATED_COMPILER_LOG.md#2026-10-01--five-compiler-slice-rechecks).
 
 
+- Current slice (2026-11-04, sync E2E-REAL-6-apple-gpu-domain-2026-11-04): Apple GPU `ppo_policy_loss`, the four EBM value kernels and the cl(3,0) Clifford geometric product now lower through the native contract `NativeAppleGPUDomain.h` (Graph→Schedule→Tile) and the existing Apple GPU value lowering (`tile-to-apple_gpu{value=true}` → verified `tessera_apple.gpu.kernel_call`); descriptors are projected from the replayed contract. The MSL/MPSGraph runtime kernels stay Tier-3 delegates; no new op. The Graph-owned branch is a test-only #31(a) oracle, bit-exact on the M1 Max; the native contract refuses semantics the delegates ignored (Langevin `temperature`, `blade_major` Clifford layout, …) and binds PPO side tensors by ODS segment. `bootstrap_prune_gap` moves the six `apple_gpu` value rows to `compiled`. [Log](INTEGRATED_COMPILER_LOG.md#2026-11-04--e2e-real-6-apple-gpu-ppo-ebm-and-clifford-value-families-retire-their-graph-owned-constructor).
+- Current slice (2026-11-04, sync E2E-REAL-6-apple-gpu-linalg-2026-11-04): Apple GPU reduced `svd`, `cholesky`, `tri_solve` and `cholesky_solve` now lower through the native contract `NativeAppleGPUKernel.h` (Graph→Schedule→Tile) and the Apple GPU value lowering (`tile-to-apple_gpu{value=true}` → verified `tessera_apple.gpu.kernel_call`); descriptors are projected from the replayed contract. The MSL/MPS entries stay Tier-3 delegates; no new op. The Graph-owned constructors are a test-only #31(a) oracle, bit-exact on the M1 Max GPU; the native contract refuses what the kernels do not compute (e.g. `cholesky(lower=False)`). The `svd`/`cholesky_solve` Graph verifiers admit a rank-3 batch. `bootstrap_prune_gap` moves the four `apple_gpu` rows to `compiled`. [Log](INTEGRATED_COMPILER_LOG.md#2026-11-04--e2e-real-6-apple-gpu-svd-and-value-linalg-retire-their-graph-owned-constructors).
 - Current slice (2026-11-04, sync E2E-REAL-6-apple-gpu-descriptors-2026-11-04): Apple GPU `batched_gemm`, `transpose` and the dynamic `softmax`, `gelu`, `popcount`, `count_nonzero` and `top_k` now lower through the native contract `NativeAppleGPUDescriptor.h` (Graph→Schedule→Tile) and the Apple GPU value lowering (`tile-to-apple_gpu{value=true}` → verified `tessera_apple.gpu.kernel_call`, runtime entry derived by the lowering); descriptors are projected from the replayed contract. The MPS/MPSGraph/MSL runtime entries stay Tier-3 delegates; no new Target op. `tessera.count_nonzero`/`tessera.top_k` are now registered Graph ops. The Graph-owned constructors are test-only #31(a) oracles, bit-exact on the M1 Max; `bootstrap_prune_gap` moves all seven `apple_gpu` rows to `compiled`. Apple GPU `svd`/`value_*` and sm_120 `mx_matmul` are owed. [Log](INTEGRATED_COMPILER_LOG.md#2026-11-04--e2e-real-6-apple-gpu-batched-gemm-transpose-and-the-dynamic-descriptor-families-retire-their-graph-owned-constructor).
 
 - Current slice (2026-11-04, sync E2E-REAL-6-apple-cpu-factorizations-2026-11-04): Apple CPU `batched_gemm`, `tri_solve`, `cholesky`, `cholesky_solve`, `lu`, `qr` and `svd` now lower through the native contract `NativeAppleCPUKernel.h` (Graph→Schedule→Tile) and the existing Apple CPU value lowering (`tile-to-apple_cpu{value=true}` → verified `tessera_apple.cpu.call`); descriptors are projected from the replayed contract. Accelerate/LAPACK stays a Tier-3 delegate; no new op. The Graph-owned constructor is a test-only #31(a) oracle, bit-exact on the M1 Max; the native contract refuses what the C ABI does not compute (e.g. `cholesky(lower=False)`). `bootstrap_prune_gap` moves all seven `apple_cpu` rows to `compiled`; only BNNS f16/bf16 matmul is still owed. [Log](INTEGRATED_COMPILER_LOG.md#2026-11-04--e2e-real-6-apple-cpu-batched-gemm-and-lapack-factorizations-retire-their-graph-owned-constructor).

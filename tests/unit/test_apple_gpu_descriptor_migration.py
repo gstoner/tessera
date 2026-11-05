@@ -308,10 +308,14 @@ def test_compiler_without_the_lowering_fails_closed(monkeypatch, fake_runtime, t
     assert not apple_native.native_package_available(module)
     with pytest.raises(RuntimeError, match="tessera-opt"):
         apple_native.package_native(module, pipeline_name=PIPELINE)
-    # A Graph-owned family that needs no compiler is unaffected.
+    # The sibling linalg route (NativeAppleGPUKernel.h) needs the same lowering.
     svd = _module("tessera.svd", [((5, 3), "fp32")],
                   [("u", (5, 3), "fp32"), ("s", (3,), "fp32"), ("vh", (3, 3), "fp32")])
-    assert apple_native.native_package_available(svd)
+    assert not apple_native.native_package_available(svd)
+    # A static softmax packages from the semantic kernel and needs no compiler.
+    softmax = _module("tessera.softmax", [((4, 8), "fp32")], [("y", (4, 8), "fp32")])
+    assert apple_native.native_package_kind(softmax) == "softmax"
+    assert apple_native.native_package_available(softmax)
 
 
 # ---------------------------------------------------------------------------

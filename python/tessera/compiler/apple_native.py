@@ -1,10 +1,21 @@
-"""Compiler-owned Apple GPU native-library descriptors for Apple E2E work."""
+"""Compiler-owned Apple GPU native-library descriptors for Apple E2E work.
+
+E2E-REAL-6 Apple GPU domain families (2026-11-04): ``ppo_policy_loss``, the
+four EBM value kernels and the cl(3,0) Clifford geometric product no longer
+package from Graph IR here. Their native owner is
+``scheduled_apple_gpu_domain`` (C++ ``NativeAppleGPUDomain.h``);
+``package_scheduled_apple_gpu_domain`` binds the replayed artifact to its MSL /
+MPSGraph entry through the verified ``tessera_apple.gpu.kernel_call`` the Apple
+GPU value lowering produced. The retired Graph-owned branch is the test-only
+oracle ``tests/_support/apple_gpu_domain_baseline.py``.
+"""
 from __future__ import annotations
 
 import hashlib
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .graph_ir import GraphIRModule
 from .native_artifact import (BufferBinding, LaunchDescriptor, LaunchGeometry,
@@ -15,6 +26,10 @@ from .scheduled_attention import ScheduledAttentionArtifact
 from .scheduled_attention_backward import ScheduledAttentionBackwardArtifact
 from .scheduled_kernel import ScheduledKernelArtifact
 from .scheduled_matmul import ScheduledMatmulArtifact
+
+if TYPE_CHECKING:
+    from .scheduled_apple_gpu_domain import ScheduledAppleGPUDomainArtifact
+    from .scheduled_apple_gpu_kernel import ScheduledAppleGPUKernelArtifact
 
 APPLE_BMM_F32_ABI = "tessera.apple.bmm.a_b_o_batch_m_n_k.f32.v1"
 APPLE_BMM_F32_SYMBOL = "tessera_apple_gpu_bmm_f32"
@@ -170,6 +185,42 @@ def _runtime_library_path() -> Path | None:
 
 def tools_available() -> bool:
     return _runtime_library_path() is not None
+
+
+def native_package_available(module: GraphIRModule) -> bool:
+    """Whether ``package_native`` can package ``module`` on this host.
+
+    The runtime dylib is always required. A descriptor, domain or linalg
+    family (``SCHEDULED_DESCRIPTOR_KINDS``, ``NATIVE_LINALG_KINDS``) that lowers through native Schedule/Tile also needs a ``tessera-opt`` that registers the Apple
+    GPU value lowering; without one the request is not packageable here, so
+    the driver does not claim it (an explicit ``package_native=True`` still
+    fails closed, naming ``tessera-opt``).
+    """
+    if not tools_available():
+        return False
+    kind = native_package_kind(module)
+    if kind in SCHEDULED_DESCRIPTOR_KINDS:
+        from .scheduled_apple_gpu_descriptor import compiler_available
+        return compiler_available()
+    if kind in NATIVE_LINALG_KINDS:
+        from .scheduled_apple_gpu_kernel import lowering_available as linalg_lowering_available
+        return linalg_lowering_available()
+    if _scheduled_domain_kind(module) is None:
+        return True
+    from .scheduled_apple_gpu_domain import lowering_available
+    return lowering_available()
+
+
+def _scheduled_domain_kind(module: GraphIRModule) -> str | None:
+    """The descriptor kind of a request the native domain contract owns."""
+    from .scheduled_apple_gpu_domain import APPLE_GPU_DOMAIN_OPS, supports_scheduled_apple_gpu_domain
+
+    if len(module.functions) != 1 or len(module.functions[0].body) != 1:
+        return None
+    op = module.functions[0].body[0]
+    if op.op_name not in APPLE_GPU_DOMAIN_OPS or not supports_scheduled_apple_gpu_domain(module):
+        return None
+    return "value_" + op.op_name.removeprefix("tessera.").replace(".", "_")
 
 def _contract(module: GraphIRModule):
     if len(module.functions) != 1 or len(module.functions[0].body) != 1:
@@ -465,6 +516,15 @@ def native_package_kind(module: GraphIRModule) -> str | None:
         # The Graph emitter's `permutation=` spelling, which the retired
         # predicate below does not read (it refused such a request).
         return "transpose"
+    if len(module.functions) == 1 and len(module.functions[0].body) == 1:
+        from .scheduled_apple_gpu_kernel import APPLE_GPU_KERNEL_OPS, supports_scheduled_apple_gpu_kernel
+        if (module.functions[0].body[0].op_name in APPLE_GPU_KERNEL_OPS
+                and not supports_scheduled_apple_gpu_kernel(module)):
+            # E2E-REAL-6: svd / cholesky / tri_solve / cholesky_solve have one
+            # authority, the native contract; a request it refuses is not an
+            # Apple GPU descriptor request at all. What it admits also passes
+            # the classification below (it is stricter).
+            return None
     if _contract(module) is not None:
         if not supports_scheduled_apple_gpu_descriptor(module):
             return None
@@ -490,6 +550,12 @@ def native_package_kind(module: GraphIRModule) -> str | None:
     if len(module.functions) != 1 or len(module.functions[0].body) != 1:
         return None
     fn, op = module.functions[0], module.functions[0].body[0]
+    from .scheduled_apple_gpu_domain import APPLE_GPU_DOMAIN_OPS
+    if op.op_name in APPLE_GPU_DOMAIN_OPS and _scheduled_domain_kind(module) is None:
+        # E2E-REAL-6: these families have one authority, the native contract;
+        # a request it refuses is not an Apple GPU descriptor request at all.
+        # What it admits also passes every check below (it is stricter).
+        return None
     if op.op_name in {
         "tessera.batched_gemm", "tessera.matmul", "tessera.gemm", "tessera.softmax",
         "tessera.transpose", "tessera.gelu", "tessera.popcount",
@@ -509,16 +575,12 @@ def supports_native_package(module: GraphIRModule) -> bool:
     return native_package_kind(module) is not None
 
 
-_VALUE_SYMBOLS = {
-    "tessera.rl.ppo_policy_loss": ("ppo_policy_loss", "tessera_apple_gpu_ppo_policy_loss_f32"),
-    "tessera.ebm.energy_quadratic": ("ebm_energy_quadratic", "tessera_apple_gpu_ebm_energy_quadratic_value_f32"),
-    "tessera.ebm.langevin_step": ("ebm_langevin_step", "tessera_apple_gpu_ebm_langevin_step_value_f32"),
-    "tessera.ebm.refinement": ("ebm_refinement", "tessera_apple_gpu_ebm_refinement_value_f32"),
-    "tessera.ebm.partition_exact": ("ebm_partition_exact", "tessera_apple_gpu_ebm_partition_exact_value_f32"),
-    "tessera.cholesky": ("cholesky", "tessera_apple_gpu_cholesky_f32"),
-    "tessera.tri_solve": ("tri_solve", "tessera_apple_gpu_tri_solve_f32"),
-    "tessera.cholesky_solve": ("cholesky_solve", "tessera_apple_gpu_solve_cholesky_f32"),
-    "tessera.clifford.geometric_product": ("clifford_geometric_product", "tessera_apple_gpu_clifford_geo_product_cl30_value_f32"),
+# The PPO, EBM and Clifford value families left this table for the native
+# domain contract (E2E-REAL-6, 2026-11-04; ``package_scheduled_apple_gpu_domain``),
+# and cholesky / tri_solve / cholesky_solve for the native linalg contract
+# (``package_scheduled_apple_gpu_kernel``, same date). No family is left on this
+# Graph-owned branch; a value kind with no entry fails closed below.
+_VALUE_SYMBOLS: dict[str, tuple[str, str]] = {
 }
 
 
@@ -530,19 +592,70 @@ SCHEDULED_DESCRIPTOR_KINDS = frozenset({
 })
 
 
-def native_package_available(module: GraphIRModule) -> bool:
-    """Whether ``package_native`` can produce ``module``'s package on this host.
+#: E2E-REAL-6 Apple GPU linalg (2026-11-04): the families whose package is
+#: projected from the native Schedule/Tile/Target artifact
+#: (``scheduled_apple_gpu_kernel``), never from the Graph object.
+NATIVE_LINALG_KINDS = frozenset({"svd", "value_cholesky", "value_tri_solve", "value_cholesky_solve"})
 
-    Every family needs the runtime dylib; a scheduled descriptor family also
-    needs production ``tessera-opt`` with the Apple GPU value lowering.
+
+
+def package_scheduled_apple_gpu_domain(
+    artifact: ScheduledAppleGPUDomainArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Bind a replayed Apple GPU PPO / EBM / Clifford kernel to its C ABI entry.
+
+    E2E-REAL-6 Apple GPU domain families (2026-11-04). Every descriptor field --
+    buffers, shape guards, layout and the semantic values the delegate reads --
+    is projected from the contract ``verify_apple_gpu_domain_projection`` just
+    proved equal to the native replay of all three boundaries; nothing is read
+    from a Graph object, and the replay runs before the runtime dylib is
+    touched. The consumer is a hand-written MSL / MPSGraph wrapper in
+    ``apple_gpu_runtime.mm``, a declared Decision #28 Tier-3 delegate reached
+    through the verified ``tessera_apple.gpu.kernel_call`` Target IR op.
     """
-    kind = native_package_kind(module)
-    if kind is None or not tools_available():
-        return False
-    if kind not in SCHEDULED_DESCRIPTOR_KINDS:
-        return True
-    from .scheduled_apple_gpu_descriptor import compiler_available
-    return compiler_available()
+    from .scheduled_apple_gpu_domain import verify_apple_gpu_domain_projection
+
+    projection = verify_apple_gpu_domain_projection(artifact)
+    kind, symbol = projection.kind, projection.symbol
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError("E2E-REAL-6 Apple GPU domain packaging requires a fresh Tessera Apple GPU runtime dylib")
+    abi = f"tessera.apple.value.{kind}.f32.v1"
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(artifact.target_ir.encode()).hexdigest(),
+        binary_format="shared_object", payload=payload,
+        entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    buffers = tuple(
+        BufferBinding(ordinal, name, "input" if ordinal < projection.inputs else "output",
+                      "fp32", len(shape), "row_major", 4)
+        for ordinal, (name, shape) in enumerate(zip(projection.bindings, projection.shapes))
+    )
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi, buffers=buffers,
+        shape_guards=tuple(ShapeGuard(name, axis, "eq", extent)
+                           for name, shape in zip(projection.bindings, projection.shapes)
+                           for axis, extent in enumerate(shape)),
+        geometry=LaunchGeometry(policy="apple_value_executor"),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
+        provenance={
+            "work_item": "E2E-REAL-6", "route": "apple_value_executor", "op_kind": kind,
+            "value_call": {"op": "tessera_apple.gpu.kernel_call", "op_kind": kind, "symbol": symbol,
+                           "status": "executable", **projection.semantics},
+            "storage": "f32", "target_ir_op": "tessera_apple.gpu.kernel_call",
+            "delegate_abi": projection.abi, "framework": projection.framework,
+            "abi_scalars": dict(projection.scalars), "schedule_digest": projection.schedule_digest,
+            "tile_ir_digest": hashlib.sha256(artifact.tile_ir.encode()).hexdigest(),
+        },
+    )
+    return AppleNativePackage(artifact.tile_ir, artifact.target_ir, artifact.target_ir, image, descriptor)
 
 
 def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
@@ -551,14 +664,20 @@ def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleNativeP
         from .scheduled_apple_gpu_descriptor import lower_scheduled_apple_gpu_descriptor
         return package_scheduled_apple_gpu_descriptor(
             lower_scheduled_apple_gpu_descriptor(module), pipeline_name=pipeline_name)
+    if kind in NATIVE_LINALG_KINDS:
+        from .scheduled_apple_gpu_kernel import lower_scheduled_apple_gpu_kernel
+        return package_scheduled_apple_gpu_kernel(
+            lower_scheduled_apple_gpu_kernel(module), pipeline_name=pipeline_name)
     if kind == "softmax":
         return package_softmax(module, pipeline_name=pipeline_name)
     if kind == "gelu":
         return package_gelu(module, pipeline_name=pipeline_name)
-    if kind == "svd":
-        return package_svd(module, pipeline_name=pipeline_name)
     if kind is None:
         raise ValueError("Apple GPU native packaging requires one supported static descriptor contract")
+    if _scheduled_domain_kind(module) is not None:
+        from .scheduled_apple_gpu_domain import lower_scheduled_apple_gpu_domain
+        return package_scheduled_apple_gpu_domain(
+            lower_scheduled_apple_gpu_domain(module), pipeline_name=pipeline_name)
     fn, op = module.functions[0], module.functions[0].body[0]
     entry = _VALUE_SYMBOLS.get(op.op_name)
     if entry is None or len(fn.result_types) != 1:
@@ -574,15 +693,6 @@ def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleNativeP
         raise ValueError("Apple value descriptors require static shapes") from exc
     kind, symbol = entry
     value_kwargs = dict(op.kwargs)
-    if op.op_name == "tessera.rl.ppo_policy_loss" and len(names) > 3:
-        if len(names) > 6:
-            raise ValueError("Apple PPO descriptors accept at most mask, ref_logp, and entropy side tensors")
-        symbol = "tessera_apple_gpu_ppo_policy_loss_ex_f32"
-        value_kwargs.update({
-            "has_mask": len(names) >= 4,
-            "has_ref_kl": len(names) >= 5,
-            "has_entropy": len(names) >= 6,
-        })
     abi = f"tessera.apple.value.{kind}.f32.v1"
     out = op.result or "output"; target_ir = f'tessera_apple.gpu.kernel_call @{symbol} {{abi = "{abi}", status = "executable"}}'
     library = _runtime_library_path()
@@ -2032,55 +2142,77 @@ def package_dynamic_topk(module: GraphIRModule, *, pipeline_name: str) -> AppleN
     return AppleNativePackage("tile.top_k_kernel", target_ir, target_ir, image, descriptor)
 
 
-def package_svd(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
-    """Package static reduced f32 SVD with ordered ``(U, S, Vh)`` bindings."""
-    contract = _svd_contract(module)
-    if contract is None:
-        raise ValueError("Apple GPU SVD package requires static tall reduced f32 (U, S, Vh) contract")
+def package_scheduled_apple_gpu_kernel(
+    artifact: ScheduledAppleGPUKernelArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Bind a replayed Apple GPU linalg kernel to its Metal C ABI entry.
+
+    E2E-REAL-6 Apple GPU linalg (2026-11-04). Every descriptor field --
+    buffers, shape guards, ABI scalars and the semantic flags the delegate
+    reads -- is projected from the contract
+    ``verify_apple_gpu_kernel_projection`` just proved equal to the native
+    replay of all three boundaries; nothing is read from a Graph object. The
+    consumer is a hand-written MSL / MPS entry in ``apple_gpu_runtime.mm``, a
+    declared Decision #28 Tier-3 delegate reached through the verified
+    ``tessera_apple.gpu.kernel_call`` Target IR op. The retired Graph-owned
+    constructors are the oracle ``tests/_support/apple_gpu_linalg_baseline.py``.
+    """
+    from .scheduled_apple_gpu_kernel import verify_apple_gpu_kernel_projection
+
+    projection = verify_apple_gpu_kernel_projection(artifact)
     library = _runtime_library_path()
     if library is None:
-        raise RuntimeError("APPLE-NATIVE-E2E-2 requires a fresh Tessera Apple GPU runtime dylib")
-    x, outputs, shape = contract
-    is_batched = len(shape) == 3
-    batch = 1 if not is_batched else shape[0]
-    m, n = shape[-2:]
-    symbol = APPLE_SVD_REDUCED_BATCHED_F32_SYMBOL if is_batched else APPLE_SVD_REDUCED_F32_SYMBOL
-    abi = APPLE_SVD_REDUCED_BATCHED_F32_ABI if is_batched else APPLE_SVD_REDUCED_F32_ABI
-    output_shapes = ((m, n), (n,), (n, n)) if not is_batched else (
-        (batch, m, n), (batch, n), (batch, n, n)
-    )
-    target_ir = (f'tessera_apple.gpu.kernel_call @{symbol} '
-                 f'{{abi = "{abi}", result_order = "u,s,vh", status = "executable"}}')
+        raise RuntimeError("E2E-REAL-6 Apple GPU linalg requires a fresh Tessera Apple GPU runtime dylib")
+    kind, symbol, abi = projection.kind, projection.symbol, projection.abi
     payload = library.read_bytes()
     digest = hashlib.sha256(payload).hexdigest()
     image = NativeImageArtifact(
         target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
         compiler_fingerprint="apple-runtime-abi-v1",
         toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
-        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(), binary_format="shared_object",
-        payload=payload, entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+        target_ir_digest=hashlib.sha256(artifact.target_ir.encode()).hexdigest(),
+        binary_format="shared_object", payload=payload,
+        entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
     )
-    buffers = (
-        BufferBinding(0, x, "input", "fp32", len(shape), "row_major", 4),
-        *(BufferBinding(index + 1, name, "output", "fp32", len(output_shapes[index]), "row_major", 4)
-          for index, name in enumerate(outputs)),
+    buffers = tuple(
+        BufferBinding(ordinal, name, "input" if ordinal < projection.inputs else "output",
+                      "fp32", len(shape), "row_major", 4)
+        for ordinal, (name, shape) in enumerate(zip(projection.bindings, projection.shapes))
     )
-    scalars = ((ScalarArgument(4, "M", "int32"), ScalarArgument(5, "N", "int32"))
-               if not is_batched else
-               (ScalarArgument(4, "Batch", "int32"), ScalarArgument(5, "M", "int32"),
-                ScalarArgument(6, "N", "int32")))
-    guards = tuple(
-        ShapeGuard(name, axis, "eq", extent)
-        for name, guarded_shape in ((x, shape), *zip(outputs, output_shapes))
-        for axis, extent in enumerate(guarded_shape)
-    )
+    guards = tuple(ShapeGuard(name, axis, "eq", extent)
+                   for name, shape in zip(projection.bindings, projection.shapes)
+                   for axis, extent in enumerate(shape))
+    native = {
+        "schedule_digest": projection.schedule_digest,
+        "tile_ir_digest": hashlib.sha256(artifact.tile_ir.encode()).hexdigest(),
+        "target_ir_op": "tessera_apple.gpu.kernel_call",
+        "abi_scalars": dict(projection.scalars),
+    }
+    ordering = OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",))
+    if kind == "svd":
+        # The reduced Jacobi adapter reads its extents as trailing int32
+        # arguments after the four buffers, in the ABI id's order.
+        names = [name for name in ("Batch", "M", "N") if name in projection.scalars]
+        scalars = tuple(ScalarArgument(len(buffers) + index, name, "int32")
+                        for index, name in enumerate(names))
+        descriptor = LaunchDescriptor(
+            image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+            buffers=buffers, scalars=scalars, shape_guards=guards,
+            geometry=LaunchGeometry(policy="apple_gpu_svd_reduced"), ordering=ordering,
+            provenance={"work_item": "E2E-REAL-6", "route": "apple_gpu_svd_reduced_adapter",
+                        "op_kind": "svd", "result_order": ["u", "s", "vh"],
+                        "full_matrices": projection.semantics["full_matrices"], "tall_only": True,
+                        "batch": int(projection.scalars.get("Batch", 1)), **native},
+        )
+        return AppleNativePackage(artifact.tile_ir, artifact.target_ir, artifact.target_ir, image, descriptor)
     descriptor = LaunchDescriptor(
-        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
-        buffers=buffers, scalars=scalars, shape_guards=guards,
-        geometry=LaunchGeometry(policy="apple_gpu_svd_reduced"),
-        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
-        provenance={"work_item": "APPLE-NATIVE-E2E-2", "route": "apple_gpu_svd_reduced_adapter",
-                    "op_kind": "svd", "result_order": ["u", "s", "vh"],
-                    "full_matrices": False, "tall_only": True, "batch": batch},
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi, buffers=buffers,
+        shape_guards=guards, geometry=LaunchGeometry(policy="apple_value_executor"), ordering=ordering,
+        provenance={"work_item": "E2E-REAL-6", "route": "apple_value_executor", "op_kind": kind,
+                    "value_call": {"op": "tessera_apple.gpu.kernel_call", "op_kind": kind,
+                                   "symbol": symbol, "status": "executable", **projection.semantics},
+                    **native},
     )
-    return AppleNativePackage("apple.svd_reduced", target_ir, target_ir, image, descriptor)
+    return AppleNativePackage(artifact.tile_ir, artifact.target_ir, artifact.target_ir, image, descriptor)

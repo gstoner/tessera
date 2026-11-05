@@ -730,6 +730,21 @@ static LogicalResult materializeSm120MxMatmulKernel(
               : desc.getAType() == "e2m3" ? "fp6_e2m3" : "fp6_e3m2";
   if (failed(requireStoragePackDescriptor(op, logical, isMXFP4 ? 2 : 1)))
     return failure();
+  // E2E-REAL-6 SM120 MX (2026-11-04): the scale contract is a semantic key
+  // (Decision #21a). The kernel below hardcodes one UE8M0 byte per 32 K, so a
+  // launch op that does not state exactly that is refused, not defaulted.
+  auto physicalContract = op->getAttrOfType<StringAttr>("physical_contract");
+  auto scaleVector = op->getAttrOfType<IntegerAttr>("tessera.scale_vector_size");
+  auto scaleFormat = op->getAttrOfType<StringAttr>("tessera.scale_format");
+  if (!physicalContract ||
+      physicalContract.getValue() != "nvidia_sm120_mx_blockscale_v1" ||
+      !scaleVector || scaleVector.getInt() != 32 || !scaleFormat ||
+      scaleFormat.getValue() != "ue8m0") {
+    op->emitError("sm_120 FP6/MXFP4 matmul_kernel requires physical_contract = "
+                  "\"nvidia_sm120_mx_blockscale_v1\", tessera.scale_vector_size "
+                  "= 32 and tessera.scale_format = \"ue8m0\"");
+    return failure();
+  }
   if (auto attr = op->getAttrOfType<StringAttr>("staging");
       !attr || attr.getValue() != "global") {
     op->emitError("sm_120 FP6/MXFP4 materializer requires direct global staging");

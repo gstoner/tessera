@@ -697,6 +697,62 @@ LogicalResult ScaledMatmulOp::verify() {
         return emitOpError("NVIDIA NVFP4 contract requires ui8 [M,ceil(K/16)] / [ceil(K/16),N] UE4M3 scales with exact K16 semantics");
       return success();
     }
+    // E2E-REAL-6 SM120 MX (2026-11-04): OCP MX FP6 (E2M3/E3M2) or MXFP4
+    // (E2M1) A/B with one UE8M0 scale per 32 logical K values -- the contract
+    // `kind::mxf8f6f4` / `kind::mxf4` block-scale mma.sync computes. Unlike
+    // NVFP4 it has no batch or transpose profile: rank-2 row-major only.
+    if (physical.getValue() == "nvidia_sm120_mx_blockscale_v1") {
+      auto mxType = [](Type type) {
+        return isa<Float6E2M3FNType, Float6E3M2FNType, Float4E2M1FNType>(type);
+      };
+      auto lhsScale = dyn_cast<RankedTensorType>(getLhsScale().getType());
+      auto rhsScale = dyn_cast<RankedTensorType>(getRhsScale().getType());
+      auto layout = getScaleLayoutAttr();
+      auto block = layout ? dyn_cast_or_null<ArrayAttr>(layout.get("block"))
+                          : ArrayAttr();
+      auto granularity =
+          layout ? dyn_cast_or_null<StringAttr>(layout.get("granularity"))
+                 : StringAttr();
+      auto format = layout ? dyn_cast_or_null<StringAttr>(layout.get("format"))
+                           : StringAttr();
+      auto policy = getNumericPolicyAttr();
+      auto accum = policy ? dyn_cast_or_null<StringAttr>(policy.get("accum"))
+                          : StringAttr();
+      auto mode = policy ? dyn_cast_or_null<StringAttr>(policy.get("execution_mode"))
+                         : StringAttr();
+      auto byteScale = [](RankedTensorType type) {
+        return type && type.hasStaticShape() && type.getRank() == 2 &&
+               (type.getElementType().isUnsignedInteger(8) ||
+                type.getElementType().isSignlessInteger(8));
+      };
+      if (batching || getTransposeA() || getTransposeB() || !aType || !bType ||
+          !rType || aType.getRank() != 2 || bType.getRank() != 2 ||
+          rType.getRank() != 2 || !aType.hasStaticShape() ||
+          !bType.hasStaticShape() || !rType.hasStaticShape() ||
+          !mxType(aType.getElementType()) ||
+          aType.getElementType() != bType.getElementType() ||
+          !rType.getElementType().isF32())
+        return emitOpError("NVIDIA MX contract requires static rank-2 row-major "
+                           "FP6/MXFP4 A/B of one element type and f32 output");
+      const int64_t m = aType.getDimSize(0), k = aType.getDimSize(1);
+      const int64_t n = bType.getDimSize(1);
+      const int64_t scaleK = k / 32 + (k % 32 != 0);
+      if (m <= 0 || n <= 0 || k <= 0 || bType.getDimSize(0) != k ||
+          rType.getDimSize(0) != m || rType.getDimSize(1) != n ||
+          !byteScale(lhsScale) || !byteScale(rhsScale) ||
+          lhsScale.getShape() != ArrayRef<int64_t>({m, scaleK}) ||
+          rhsScale.getShape() != ArrayRef<int64_t>({scaleK, n}) ||
+          !layout || layout.size() != 3 || !policy || policy.size() != 2 ||
+          !granularity || granularity.getValue() != "block" ||
+          !block || block.size() != 2 ||
+          !isa<IntegerAttr>(block[0]) || cast<IntegerAttr>(block[0]).getInt() != 1 ||
+          !isa<IntegerAttr>(block[1]) || cast<IntegerAttr>(block[1]).getInt() != 32 ||
+          !format || format.getValue() != "ue8m0" || !accum ||
+          accum.getValue() != "fp32" || !mode ||
+          mode.getValue() != "exact_per_block")
+        return emitOpError("NVIDIA MX contract requires ui8 [M,ceil(K/32)] / [ceil(K/32),N] UE8M0 scales with exact K32 semantics");
+      return success();
+    }
     const bool folded =
         physical.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1" ||
         physical.getValue() == "rocm_mxfp4_w4a8_folded_row_pitched_v1";
@@ -2242,15 +2298,21 @@ LogicalResult CholeskySolveOp::verify() {
   auto x = dyn_cast<RankedTensorType>(getResult().getType());
   if (!a || !b || !x)
     return success();
-  if (a.getRank() != 2 || b.getRank() != 2 || x.getRank() != 2)
-    return emitOpError("expects rank-2 A, B, and result tensors");
-  if (!dimsAgree(a.getDimSize(0), a.getDimSize(1)))
+  // A rank-3 form is a batch of independent solves, the same convention
+  // cholesky and tri_solve verify (E2E-REAL-6, 2026-11-04: the Apple GPU
+  // native contract executes it).
+  int64_t rank = a.getRank();
+  if ((rank != 2 && rank != 3) || b.getRank() != rank || x.getRank() != rank)
+    return emitOpError("expects matching rank-2 or rank-3 A, B, and result tensors");
+  if (!dimsAgree(a.getDimSize(rank - 2), a.getDimSize(rank - 1)))
     return emitOpError("A must be square (SPD)");
-  if (!dimsAgree(a.getDimSize(0), b.getDimSize(0)))
+  if (!dimsAgree(a.getDimSize(rank - 2), b.getDimSize(rank - 2)))
     return emitOpError("A rows must match B rows (A X = B)");
-  if (!dimsAgree(b.getDimSize(0), x.getDimSize(0)) ||
-      !dimsAgree(b.getDimSize(1), x.getDimSize(1)))
-    return emitOpError("result must have the same shape as B");
+  if (rank == 3 && !dimsAgree(a.getDimSize(0), b.getDimSize(0)))
+    return emitOpError("A and B batch dimensions must match");
+  for (int64_t axis = 0; axis < rank; ++axis)
+    if (!dimsAgree(b.getDimSize(axis), x.getDimSize(axis)))
+      return emitOpError("result must have the same shape as B");
   return success();
 }
 
@@ -2309,17 +2371,25 @@ LogicalResult SVDOp::verify() {
   auto v = dyn_cast<RankedTensorType>(getV().getType());
   if (!a || !u || !s || !v)
     return success();
-  if (a.getRank() != 2 || u.getRank() != 2 || v.getRank() != 2)
-    return emitOpError("expects rank-2 A, U, and V tensors");
-  if (s.getRank() != 1)
-    return emitOpError("singular values S must be a rank-1 tensor");
+  // A rank-3 form is a batch of independent factorizations (E2E-REAL-6,
+  // 2026-11-04: the Apple GPU native contract executes it); every check below
+  // reads the trailing matrix dimensions.
+  int64_t rank = a.getRank();
+  if ((rank != 2 && rank != 3) || u.getRank() != rank || v.getRank() != rank)
+    return emitOpError("expects matching rank-2 or rank-3 A, U, and V tensors");
+  if (s.getRank() != rank - 1)
+    return emitOpError("singular values S must have rank one less than A");
+  if (rank == 3 && (!dimsAgree(a.getDimSize(0), u.getDimSize(0)) ||
+                    !dimsAgree(a.getDimSize(0), s.getDimSize(0)) ||
+                    !dimsAgree(a.getDimSize(0), v.getDimSize(0))))
+    return emitOpError("A, U, S and V batch dimensions must match");
   // A = U diag(S) V.  U rows = A rows and V columns = A columns always hold
   // (review R4).
-  int64_t aRows = a.getDimSize(0), aCols = a.getDimSize(1);
-  int64_t uCols = u.getDimSize(1);
-  int64_t vRows = v.getDimSize(0), vCols = v.getDimSize(1);
-  int64_t sLen = s.getDimSize(0);
-  if (!dimsAgree(aRows, u.getDimSize(0)))
+  int64_t aRows = a.getDimSize(rank - 2), aCols = a.getDimSize(rank - 1);
+  int64_t uCols = u.getDimSize(rank - 1);
+  int64_t vRows = v.getDimSize(rank - 2), vCols = v.getDimSize(rank - 1);
+  int64_t sLen = s.getDimSize(rank - 2);
+  if (!dimsAgree(aRows, u.getDimSize(rank - 2)))
     return emitOpError("U rows must match A rows");
   if (!dimsAgree(vCols, aCols))
     return emitOpError("V columns must match A columns");

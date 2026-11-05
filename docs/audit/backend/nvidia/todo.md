@@ -5,6 +5,55 @@ owner: NVIDIA backend
 target: nvidia_sm120
 last_updated: 2026-11-04
 ---
+## E2E-REAL-6-sm120-mx-matmul-2026-11-04 — MX matmul lowers natively and its packager consumes the replayed artifact
+
+Owner: E2E-REAL-6. Sync: E2E-REAL-6-sm120-mx-matmul-2026-11-04.
+
+- Done: `mx_matmul` (OCP MX FP6 E2M3/E3M2 and MXFP4 E2M1, one UE8M0 scale
+  per 32 logical K). It closes the item owed by the low-precision entry below.
+  - **Graph types.** `_mlir_dtype` spells FP6 as MLIR 23's builtin
+    `f6E2M3FN`/`f6E3M2FN`; `!tessera.fp6_*` named a type no dialect defines,
+    so no FP6 Graph text had ever parsed.
+  - **C++ contract `nvidia_sm120_mx_blockscale_v1`.** The
+    `tessera.scaled_matmul` verifier admits static rank-2 row-major A/B of one
+    FP6/MXFP4 element type, ui8/i8 scales `[M, ceil(K/32)]` /
+    `[ceil(K/32), N]`, `scale_layout = {block = [1, 32], format = "ue8m0"}`,
+    `{accum = fp32, exact_per_block}`, f32 output, and no batching or
+    transpose. `getInferredMatmulSchedule` re-derives the same contract and
+    selects storage `e2m3`/`e3m2`/`fp4_e2m1` with m16n8k32 (FP6) or m16n8k64
+    (MXFP4). The `schedule.matmul` verifier pins the instruction shape,
+    UE8M0/K32, f32 accumulate/output and no epilogue. Schedule→Tile emits
+    `tile.matmul_kernel` on `tessera_tile_matmul_mx_<storage>`, carrying the
+    packed format, `physical_contract`, `tessera.scale_vector_size = 32` and
+    `tessera.scale_format = "ue8m0"`.
+  - **Materializer.** `materializeSm120MxMatmulKernel` now requires those
+    three scale-contract keys and refuses any other value. Before, it assumed
+    K32 UE8M0 from the element type (Decision #21a). Two negative fixtures
+    cover a missing contract and a K16 block.
+  - **Packager.** `package_mx_matmul` canonicalizes the Graph
+    (`canonical_mx_graph`), lowers it through `lower_scheduled_matmul`, and
+    hands the artifact to `package_scheduled_mx_matmul`.
+    `verify_mx_projection` replays Graph→Schedule→Tile, binds host aliases to
+    the Schedule's operand roles, and reads M/N/K, storage, scale extents and
+    the Tile contract before `_compile_tile_ir`. `package_scheduled_matmul`
+    dispatches MX by storage. `emit_mx_matmul_tile_ir` is gone from
+    production.
+  - **Capability table.** SM120's `tessera.scaled_matmul` row now admits
+    FP6/MXFP4.
+- Oracle: `tests/_support/nvidia_lowp_matmul_baseline.baseline_mx_matmul`
+  (#31(a)): the 4606fc710 Graph-authored packager. Its Tile now states the
+  scale contract, which the materializer requires.
+  - Host-free tests: `tests/unit/test_nvidia_mx_matmul_migration.py` covers
+    descriptor equality across 3 storages × 4 shapes × permuted args, no Graph
+    re-entry, 19 tamper cases and semantic-key conflicts.
+  - Device tests: `tests/device/nvidia/test_mx_matmul_migration.py` checks
+    PTX identity, bitwise-equal outputs and a NumPy oracle on the RTX 5070.
+- Changed on the wire: the MX descriptor gains `provenance.schedule_digest`,
+  and its `tile_ir_digest` is now the C++ Tile's. Every launch field and the
+  PTX are unchanged. No performance claim.
+- Sibling impact: FP6 Graph text now parses for every target. No ROCm, Apple
+  or x86 consumer of FP6 `scaled_matmul` exists, and none is claimed.
+
 ## E2E-REAL-6-sm120-lowp-matmul-2026-11-04 — low-precision matmul packagers consume replayed artifacts
 
 Owner: E2E-REAL-6. Sync: E2E-REAL-6-sm120-lowp-matmul-2026-11-04.
@@ -28,7 +77,7 @@ Owner: E2E-REAL-6. Sync: E2E-REAL-6-sm120-lowp-matmul-2026-11-04.
   descriptor-equality and tamper tests in
   `tests/unit/test_nvidia_lowp_matmul_migration.py` and the RTX 5070 bitwise
   differential in `tests/device/nvidia/test_lowp_matmul_migration.py`.
-- Owed: `mx_matmul` (FP6 E2M3/E3M2 and MXFP4 with UE8M0 K32 scales).
+- Owed (closed by E2E-REAL-6-sm120-mx-matmul-2026-11-04 above): `mx_matmul` (FP6 E2M3/E3M2 and MXFP4 with UE8M0 K32 scales).
   `package_mx_matmul` still authors its Tile IR in Python
   (`emit_mx_matmul_tile_ir`) because there is no native contract to replay:
   the Graph spells FP6 as `!tessera.fp6_e2m3`/`!tessera.fp6_e3m2`, which no
@@ -5623,6 +5672,9 @@ enters the replayed contract:
 4. **nvfp4 / mx matmul** (`package_nvfp4_matmul`, `package_mx_matmul`): Python
    Tile IR with no scheduled contract. They are the only route, not a
    duplicate, but they skip Schedule IR.
+   - **Closed 2026-11-04.** NVFP4 by E2E-REAL-6-sm120-lowp-matmul and MX by
+     E2E-REAL-6-sm120-mx-matmul (entries at the top of this file). Both now
+     lower Graph→Schedule→Tile natively and package the replayed artifact.
 5. **Bench-only arbiter candidates.**
    - `NvidiaMmaGemmEmittedCandidate` emits Python PTX via
      `ptx_emit.emit_mma_sync_gemm_ptx`.
@@ -16936,6 +16988,14 @@ Apple CPU static f32 matmul/gemm/softmax moved onto the shared scheduled matmul 
 ## `E2E-REAL-6-apple-cpu-factorizations-2026-11-04`: sibling outcome — not applicable
 
 Apple CPU `batched_gemm`, `tri_solve`, `cholesky`, `cholesky_solve`, `lu`, `qr` and `svd` moved onto a new native Graph→Schedule→Tile contract, `NativeAppleCPUKernel.h` (Apple queue, same key). Shared code touched: `PMPasses.cpp` calls `scheduleNativeAppleCPUKernel` / `lowerNativeAppleCPUKernel`, which claim a module only when `tessera.target = "apple_cpu"` and `tessera.launch_bindings` are both present and return early only after claiming it; every other module reaches the existing Schedule/Tile code unchanged. `TileToApple.cpp` (Apple backend only) and the Python `scheduled_apple_cpu_kernel` module do not touch an NVIDIA path. No sm_120 selector, ABI or result changes; sm_120 device lanes were not re-run.
+
+## `E2E-REAL-6-apple-gpu-domain-2026-11-04`: sibling outcome — not applicable
+
+Apple GPU `ppo_policy_loss`, the four EBM value kernels and the Clifford geometric product moved onto a new native Graph→Schedule→Tile contract, `NativeAppleGPUDomain.h` (Apple queue, same key). Shared code touched: `PMPasses.cpp` calls `scheduleNativeAppleGPUDomain` / `lowerNativeAppleGPUDomain`, which claim a module only when `tessera.target = "apple_gpu"` and `tessera.launch_bindings` are both present and return early only after claiming it; every other module reaches the existing Schedule/Tile code unchanged. `TileToApple.cpp` (Apple backend only) gained a GPU `value` pass option; the `driver.py` change is in the `apple_gpu` option-resolution branch only. No sm_120 selector, ABI or result changes; sm_120 device lanes were not re-run.
+
+## `E2E-REAL-6-apple-gpu-linalg-2026-11-04`: sibling outcome — not applicable
+
+Apple GPU `svd`, `cholesky`, `tri_solve` and `cholesky_solve` moved onto a new native Graph→Schedule→Tile contract, `NativeAppleGPUKernel.h` (Apple queue, same key). Shared code touched: `PMPasses.cpp` calls `scheduleNativeAppleGPUKernel` / `lowerNativeAppleGPUKernel`, which claim a module only when `tessera.target = "apple_gpu"` and `tessera.launch_bindings` are both present; every other module reaches the existing Schedule/Tile code unchanged. `TesseraOps.cpp` widens the `tessera.svd` and `tessera.cholesky_solve` Graph verifiers to admit a rank-3 batch (rank-2 behaviour unchanged; a backend that does not implement the batch must refuse it in its own contract, as the Apple CPU contract already does). No sm_120 selector, ABI or result changes; sm_120 device lanes were not re-run.
 
 ## `E2E-REAL-6-apple-gpu-descriptors-2026-11-04`: sibling outcome — not applicable
 

@@ -1612,7 +1612,7 @@ def canonical_compile_options(
 
         resolved["package_native"] = supports_native_package(module) and tools_available()
     if target_kind == "apple_gpu" and "package_native" not in resolved:
-        from .apple_native import native_package_available, tools_available
+        from .apple_native import native_package_available, native_package_kind, tools_available
         from .scheduled_attention import supports_scheduled_attention
         from .scheduled_kernel import supports_scheduled_kernel
         from .scheduled_matmul import supports_scheduled_matmul
@@ -1621,8 +1621,9 @@ def canonical_compile_options(
             apple_target_ir_mode != "value"
             and tools_available()
             and (
-                # E2E-REAL-6: a native descriptor family also needs tessera-opt.
-                native_package_available(module)
+                # E2E-REAL-6: a domain or linalg family also needs the Apple
+                # GPU value lowering in tessera-opt (native_package_available).
+                (native_package_kind(module) is not None and native_package_available(module))
                 # E2E-REAL-3/5/5A — a rank-2 f32 matmul, f32 softmax, or rank-4
                 # f32 attention is not an Apple descriptor kind, but it is a
                 # shared scheduled-boundary consumer.  Only claim it when that

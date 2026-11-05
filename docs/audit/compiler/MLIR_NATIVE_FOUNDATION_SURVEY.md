@@ -264,7 +264,7 @@ The remaining NVIDIA Graph-owned constructors are explicit next work:
 
 | Entry/family | Native contract still required |
 |---|---|
-| `package_matmul` and the MX variant | Remaining dtype/layout/packing envelopes outside the scheduled consumer; `package_mx_matmul` needs FP6/MXFP4 Graph types and a UE8M0 K32 Schedule contract (NVFP4 and INT4 moved to replayed consumers 2026-11-04) |
+| `package_matmul` | Remaining dtype/layout/packing envelopes outside the scheduled consumer (NVFP4, INT4 and MX moved to replayed consumers 2026-11-04) |
 | `package_paged_attention` | Page table, logical positions, ownership and bounds |
 | `package_replay_ssm_kernels` | Paired decode/flush state and ordered effects |
 | `package_moe_kernels` | Multi-entry routing, movement, capacities and workspace |
@@ -447,8 +447,24 @@ UE4M3 scale views and packed int8 extents, before compilation;
 packager is frozen in `tests/_support/nvidia_lowp_matmul_baseline.py`, the
 #31(a) oracle of `tests/unit/test_nvidia_lowp_matmul_migration.py` and the RTX
 5070 bitwise differential `tests/device/nvidia/test_lowp_matmul_migration.py`.
-`mx_matmul` remains a Graph-owned constructor: its FP6 Graph types do not
-parse and the C++ Schedule has no MX block-scale contract.
+`mx_matmul` remained a Graph-owned constructor: its FP6 Graph types did not
+parse and the C++ Schedule had no MX block-scale contract. The section below
+closes it.
+
+## SM120 MX matmul native contract (2026-11-04)
+
+E2E-REAL-6, sync `E2E-REAL-6-sm120-mx-matmul-2026-11-04`. This one took C++
+work. Two fixes came first: FP6 Graph types now use MLIR's builtin
+`f6E2M3FN`/`f6E3M2FN`, and the `tessera.scaled_matmul` verifier,
+`getInferredMatmulSchedule` and the `schedule.matmul` verifier own
+`nvidia_sm120_mx_blockscale_v1` (UE8M0, one scale per 32 K, no batching or
+transpose). Schedule→Tile then emits `tile.matmul_kernel` with the scale
+contract stated, and the NVIDIA materializer now requires it rather than
+deriving it from the element type. `package_scheduled_mx_matmul` takes only
+the replayed artifact (`verify_mx_projection`). The retired packager, Python
+Tile included, is the #31(a) oracle in
+`tests/_support/nvidia_lowp_matmul_baseline.py`. Its PTX is identical to the
+native route's on the RTX 5070.
 
 ## Apple CPU batched GEMM and LAPACK constructor retirement (2026-11-04)
 

@@ -1057,6 +1057,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             "nvidia_sm120", "sm_120", "nvfp4", "f32", 16, 8)
         function_name = "tessera_tile_matmul_nvfp4"
     elif mx_scaled:
+        assert a_dtype is not None  # admitted against MX_STORAGES above
         mx_storage = MX_STORAGES[a_dtype][0]
         compiler_target, architecture, storage, accum, macro_tile_m, macro_tile_n = (
             "nvidia_sm120", "sm_120", mx_storage, "f32", 16, 8)

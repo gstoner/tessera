@@ -16407,3 +16407,17 @@ the existing Apple spine/GELU/low-precision/ODS files are 295 passed, including
 17 Metal cases bit-exact against the oracle. Lit adds
 `phase8/apple_gpu_descriptor_{schedule_tile,invalid}.mlir`. With the domain and linalg
 slices (same date) this closes every Apple GPU gap row in the prune census.
+
+## `E2E-REAL-6F-apple-gpu-norm-packet-2026-11-05`: Apple GPU normalization VJP exact-device packet
+
+Owner: E2E-REAL-6F. `tests/device/apple/test_native_vjp_execution_certificates.py`
+runs the public `apple_gpu` reverse product for `rmsnorm`, `rmsnorm_safe` and
+`layer_norm` against an independent float64 VJP and requires runtime-origin
+`apple7` attestations from the Metal launch; `frontend_authority_coverage` now
+credits `normalization`/`apple_gpu` to it. The attestation now reads the live
+`MTLGPUFamilyAppleN` through `tessera_apple_gpu_family_integer` instead of
+inferring apple7 from `sys.platform`. Only apple7 has a certificate model: a
+newer Apple part gets `runtime_unattested` certificates and the packet skips
+there until it is modelled and proven on that part. Evidence (Mac M1 Max,
+macOS 27.2, unsandboxed Metal): packet + `test_apple_normalization_vjp.py` 14
+passed, 0 skipped.

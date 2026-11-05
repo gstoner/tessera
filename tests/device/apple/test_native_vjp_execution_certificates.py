@@ -75,7 +75,6 @@ def _run(compiled, args, dy, expected, op_name):
 
 def test_every_declared_apple_gpu_vjp_family_records_an_exact_certificate() -> None:
     from tessera import runtime
-    from tessera.compiler import apple_native
     from tessera.compiler.frontend_authority_audit import collect_rows
     from tessera.compiler.native_vjp_plugins import (
         native_vjp_exact_execution_coverage,
@@ -83,8 +82,8 @@ def test_every_declared_apple_gpu_vjp_family_records_an_exact_certificate() -> N
         validate_native_vjp_execution_certificate,
     )
 
-    if not apple_native.tools_available():
-        pytest.skip("Apple GPU runtime dylib and Metal toolchain are required")
+    # The Metal runtime/device boundary is the `hardware_apple_gpu` marker
+    # (tests/conftest.py); only the certificate model's arch is checked here.
     arch = runtime._apple_gpu_live_arch()
     if arch != "apple7":
         pytest.skip(f"no exact-device VJP certificate model for {arch!r}")

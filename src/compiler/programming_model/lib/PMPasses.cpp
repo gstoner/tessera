@@ -98,6 +98,7 @@ namespace tessera {
 #include "NativeAbsolute.h"
 #include "NativeX86Kernel.h"
 #include "NativeAppleCPUKernel.h"
+#include "NativeAppleGPUDomain.h"
 #include "NativeROCMMath.h"
 #include "NativeResultPermutation.h"
 #include "NativeSparse.h"
@@ -4055,6 +4056,11 @@ struct GraphToSchedulePass
     if (failed(scheduleNativeAppleCPUKernel(mod, appleCPUKernelSelected)))
       return signalPassFailure();
     if (appleCPUKernelSelected) return;
+    // E2E-REAL-6 Apple GPU domain value families (2026-11-04): same opt-in.
+    bool appleGPUDomainSelected = false;
+    if (failed(scheduleNativeAppleGPUDomain(mod, appleGPUDomainSelected)))
+      return signalPassFailure();
+    if (appleGPUDomainSelected) return;
     if (failed(scheduleNativeAbsolute(mod))) return signalPassFailure();
     if (failed(scheduleNativeX86Kernel(mod))) return signalPassFailure();
     if (failed(scheduleNativeROCMMath(mod))) return signalPassFailure();
@@ -5233,6 +5239,10 @@ struct ScheduleToTilePass
     if (failed(lowerNativeAppleCPUKernel(mod, appleCPUKernelSelected)))
       return signalPassFailure();
     if (appleCPUKernelSelected) return;
+    bool appleGPUDomainSelected = false;
+    if (failed(lowerNativeAppleGPUDomain(mod, appleGPUDomainSelected)))
+      return signalPassFailure();
+    if (appleGPUDomainSelected) return;
     if (failed(lowerNativeAbsolute(mod))) return signalPassFailure();
     if (failed(lowerNativeX86Kernel(mod))) return signalPassFailure();
     if (failed(lowerNativeROCMMath(mod))) return signalPassFailure();

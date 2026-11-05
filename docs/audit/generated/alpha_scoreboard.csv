@@ -19,7 +19,7 @@ mac_gpu,Mac M1 Max,Apple7 GPU,norm,bypass,unmeasured,unrouted,partial,absent,no
 mac_gpu,Mac M1 Max,Apple7 GPU,attention,bypass,unmeasured,unrouted,partial,absent,no
 mac_gpu,Mac M1 Max,Apple7 GPU,paged_kv,bypass,unmeasured,unrouted,partial,absent,no
 mac_gpu,Mac M1 Max,Apple7 GPU,moe,bypass,unmeasured,unrouted,partial,absent,no
-mac_gpu,Mac M1 Max,Apple7 GPU,linalg,bypass,unmeasured,bypass,partial,packet_pending,no
+mac_gpu,Mac M1 Max,Apple7 GPU,linalg,bypass,unmeasured,native,partial,packet_pending,no
 mac_gpu,Mac M1 Max,Apple7 GPU,epilogue,bypass,unmeasured,unrouted,partial,absent,no
 mac_gpu,Mac M1 Max,Apple7 GPU,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
 mac_gpu,Mac M1 Max,Apple7 GPU,ppo,bypass,unmeasured,native,partial,packet_pending,no

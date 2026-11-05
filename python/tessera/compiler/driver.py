@@ -1621,8 +1621,8 @@ def canonical_compile_options(
             apple_target_ir_mode != "value"
             and tools_available()
             and (
-                # E2E-REAL-6: a domain family also needs the Apple GPU value
-                # lowering in tessera-opt (native_package_available).
+                # E2E-REAL-6: a domain or linalg family also needs the Apple
+                # GPU value lowering in tessera-opt (native_package_available).
                 (native_package_kind(module) is not None and native_package_available(module))
                 # E2E-REAL-3/5/5A — a rank-2 f32 matmul, f32 softmax, or rank-4
                 # f32 attention is not an Apple descriptor kind, but it is a

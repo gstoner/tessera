@@ -16343,3 +16343,39 @@ longer dispatched as a mask.
 Evidence: Mac M1 Max, Metal, unsandboxed: migration suite 91 passed (17 Metal bit-for-bit); lit 513 passed / 0 failed; `tests/unit/` A/B against main `4606fc710` has the identical 758 failing nodes (no new failures). Lit adds `phase8/apple_gpu_domain_{schedule_tile,invalid,tampered}.mlir`.
 Owed on Apple GPU: `batched_gemm`, `transpose`, the dynamic families, `svd` and
 the value linalg families (sibling sessions).
+
+## `E2E-REAL-6-apple-gpu-linalg-2026-11-04`: Apple GPU SVD and the value linalg families retire their Graph-owned constructors
+
+Owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+Synchronization key: `E2E-REAL-6-apple-gpu-linalg-2026-11-04`.
+
+`apple_gpu,{svd,value_cholesky,value_cholesky_solve,value_tri_solve}` now
+lower through native Graph→Schedule→Tile (`NativeAppleGPUKernel.h`,
+`schedule.artifact` family `apple_gpu_kernel` → `tile.<kind>`) and the Apple GPU
+value lowering, which gained a `value` pass option (`--tile-to-apple_gpu=value=true`)
+and a branch that lowers a Tile op carrying `tessera.apple_gpu_kernel_contract`
+to one verified `tessera_apple.gpu.kernel_call`. The lowering owns the
+(symbol, ABI) choice and refuses a contract naming another entry.
+`apple_native.package_scheduled_apple_gpu_kernel` replays every boundary and
+projects the descriptor; tampering with the artifact, Graph, Schedule, Tile or
+Target text fails closed before the runtime is touched. A host whose
+`tessera-opt` lacks the lowering is refused by name (the driver does not
+promote packaging there). The MSL/MPS entries in `apple_gpu_runtime.mm` stay
+Tier-3 delegates behind the declared op (runtime sources untouched). The old
+`package_svd` and the generic value branch for these three ops are the #31(a)
+oracle `tests/_support/apple_gpu_linalg_baseline.py`.
+
+The Graph verifiers of `tessera.svd` and `tessera.cholesky_solve` now admit a
+rank-3 batch (as `cholesky` and `tri_solve` already did); the retired route
+admitted batched SVD and batched Cholesky solve, so the compiled route had to be
+able to express them.
+
+Named behaviour changes: `cholesky(lower=False)` and `cholesky_solve(lower=False)`
+(the Metal kernels compute the lower factor and the executor ignored the flag),
+rank-4+ and non-square matrices, vector right-hand sides, rhs/batch/result
+shape mismatches, non-boolean flags and unknown keywords are refused at compile
+time.
+
+Evidence: see the log entry for this key. Owed: the other Apple GPU gap rows
+(batched GEMM, transpose, dynamic families, EBM/PPO/Clifford value families)
+belong to sibling sessions.

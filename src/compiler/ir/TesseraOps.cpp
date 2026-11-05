@@ -2298,15 +2298,21 @@ LogicalResult CholeskySolveOp::verify() {
   auto x = dyn_cast<RankedTensorType>(getResult().getType());
   if (!a || !b || !x)
     return success();
-  if (a.getRank() != 2 || b.getRank() != 2 || x.getRank() != 2)
-    return emitOpError("expects rank-2 A, B, and result tensors");
-  if (!dimsAgree(a.getDimSize(0), a.getDimSize(1)))
+  // A rank-3 form is a batch of independent solves, the same convention
+  // cholesky and tri_solve verify (E2E-REAL-6, 2026-11-04: the Apple GPU
+  // native contract executes it).
+  int64_t rank = a.getRank();
+  if ((rank != 2 && rank != 3) || b.getRank() != rank || x.getRank() != rank)
+    return emitOpError("expects matching rank-2 or rank-3 A, B, and result tensors");
+  if (!dimsAgree(a.getDimSize(rank - 2), a.getDimSize(rank - 1)))
     return emitOpError("A must be square (SPD)");
-  if (!dimsAgree(a.getDimSize(0), b.getDimSize(0)))
+  if (!dimsAgree(a.getDimSize(rank - 2), b.getDimSize(rank - 2)))
     return emitOpError("A rows must match B rows (A X = B)");
-  if (!dimsAgree(b.getDimSize(0), x.getDimSize(0)) ||
-      !dimsAgree(b.getDimSize(1), x.getDimSize(1)))
-    return emitOpError("result must have the same shape as B");
+  if (rank == 3 && !dimsAgree(a.getDimSize(0), b.getDimSize(0)))
+    return emitOpError("A and B batch dimensions must match");
+  for (int64_t axis = 0; axis < rank; ++axis)
+    if (!dimsAgree(b.getDimSize(axis), x.getDimSize(axis)))
+      return emitOpError("result must have the same shape as B");
   return success();
 }
 
@@ -2365,17 +2371,25 @@ LogicalResult SVDOp::verify() {
   auto v = dyn_cast<RankedTensorType>(getV().getType());
   if (!a || !u || !s || !v)
     return success();
-  if (a.getRank() != 2 || u.getRank() != 2 || v.getRank() != 2)
-    return emitOpError("expects rank-2 A, U, and V tensors");
-  if (s.getRank() != 1)
-    return emitOpError("singular values S must be a rank-1 tensor");
+  // A rank-3 form is a batch of independent factorizations (E2E-REAL-6,
+  // 2026-11-04: the Apple GPU native contract executes it); every check below
+  // reads the trailing matrix dimensions.
+  int64_t rank = a.getRank();
+  if ((rank != 2 && rank != 3) || u.getRank() != rank || v.getRank() != rank)
+    return emitOpError("expects matching rank-2 or rank-3 A, U, and V tensors");
+  if (s.getRank() != rank - 1)
+    return emitOpError("singular values S must have rank one less than A");
+  if (rank == 3 && (!dimsAgree(a.getDimSize(0), u.getDimSize(0)) ||
+                    !dimsAgree(a.getDimSize(0), s.getDimSize(0)) ||
+                    !dimsAgree(a.getDimSize(0), v.getDimSize(0))))
+    return emitOpError("A, U, S and V batch dimensions must match");
   // A = U diag(S) V.  U rows = A rows and V columns = A columns always hold
   // (review R4).
-  int64_t aRows = a.getDimSize(0), aCols = a.getDimSize(1);
-  int64_t uCols = u.getDimSize(1);
-  int64_t vRows = v.getDimSize(0), vCols = v.getDimSize(1);
-  int64_t sLen = s.getDimSize(0);
-  if (!dimsAgree(aRows, u.getDimSize(0)))
+  int64_t aRows = a.getDimSize(rank - 2), aCols = a.getDimSize(rank - 1);
+  int64_t uCols = u.getDimSize(rank - 1);
+  int64_t vRows = v.getDimSize(rank - 2), vCols = v.getDimSize(rank - 1);
+  int64_t sLen = s.getDimSize(rank - 2);
+  if (!dimsAgree(aRows, u.getDimSize(rank - 2)))
     return emitOpError("U rows must match A rows");
   if (!dimsAgree(vCols, aCols))
     return emitOpError("V columns must match A columns");

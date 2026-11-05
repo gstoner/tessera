@@ -386,9 +386,10 @@ def test_prune_census_sees_the_compiled_routes():
     for family in ("batched_gemm", "tri_solve", "cholesky", "cholesky_solve", "lu", "qr", "svd"):
         assert rows[("apple_cpu", family)] == (
             "scheduled_apple_cpu_kernel.supports_scheduled_apple_cpu_kernel", "compiled"), family
-    # The per-target declaration must not leak to the Apple GPU rows.
-    assert rows[("apple_gpu", "batched_gemm")][1] == "gap"
-    assert rows[("apple_gpu", "svd")][1] == "gap"
+    # The per-target declaration must not leak to the Apple GPU rows: where an
+    # Apple GPU row is covered, it is by its own route.
+    for family in ("batched_gemm", "svd"):
+        assert not rows[("apple_gpu", family)][0].startswith("scheduled_apple_cpu_kernel."), family
 
 
 # ---------------------------------------------------------------------------

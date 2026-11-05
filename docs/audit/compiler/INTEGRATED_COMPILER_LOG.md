@@ -14714,7 +14714,13 @@ Outcome: the last `nvidia_sm120` `gap` row on `bootstrap_prune_gap`, `mx_matmul`
   - `test_mx_matmul_migration.py` passes 14/14: 3 storages × 4 shapes, plus 2 short-scale refusals. For every case, oracle and native PTX are identical (comment lines stripped) and outputs are bitwise-equal and match NumPy.
   - The pre-existing `test_canonical_sm120_mx_general_shape_scales_and_ragged` (6) now runs on the native route and passes.
   - NVIDIA backend lit: 74/74.
-  - A/B: per-file junit A/B of the sm_120 suite against `main` 4606fc710: pending (run in progress at the time of writing; this line gets the counts once it finishes).
+  - A/B against `main` 4606fc710 (main sources on the box's main build; branch sources on its own build). Each of the 177 `tests/device/nvidia/` files ran in its own pytest process, plus one process for the NVIDIA/low-precision/dtype unit files (154 on main, 155 on the branch with the new test).
+    - main: 12127 cases (11664 passed, 235 failed, 228 skipped).
+    - branch: 12193 cases (11730 / 235 / 228).
+    - 0 of the 12126 shared cases changed outcome. All 67 new cases pass. One case was renamed (`test_prune_rows_name_the_projecting_routes_and_mx_stays_owed`).
+    - The 235 failures fail identically on main. 193 are the resident/bounded/dynamic-LHS tensor-frontend and RHS-JIT device lanes; the rest are norm/spine/attention-gradient device cases and 2 x86 `scheduled_matmul_consumers` unit cases. None is an MX case.
+    - `test_bounded_lhs_jit.py` segfaults at interpreter teardown after its summary, with identical outcomes (25 failed / 19 passed). It is pre-existing and not attributable to the branch: main sources on main's build crash in 6 of 10 runs, and every source/build swap crashes too.
+    - Setup, recorded because it bit: a worktree needs `build-nvidia-cuda/` beside its sources, because `_nvidia_gemm_lib_path` resolves from the source root. A single process over the whole suite dies on a hard abort.
 - **Assertions-ON (Tajasarus, LLVM/MLIR 23.1.1 assertions).** Separate worktree, `build-assertions-nvidia` with `TESSERA_FORCE_FULL_COMPILER_DRIVER=ON`. The default NVIDIA-only driver registers no core `tessera` dialect, so its fixture runs say nothing. Both new phase2 fixtures and the NVIDIA backend suite (74/74) pass. Across 43 phase2 nvidia/nvfp4/scaled/matmul/mx fixtures: 23 pass, 20 are unsupported (ROCm/x86 not configured there), none fail. No assertion fired.
 - **Mac.** mypy clean on the changed modules; 234 passed / 112 skipped on the related unit files (skips are NVIDIA-dialect lanes this worktree has no `tessera-opt` for); generated docs in sync.
 

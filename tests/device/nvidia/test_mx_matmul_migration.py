@@ -4,8 +4,9 @@ E2E-REAL-6 (sync ``E2E-REAL-6-sm120-mx-matmul-2026-11-04``). Each FP6/MXFP4
 case builds the retired packager (Python-authored Tile IR, launch fields read
 from the Graph; ``tests/_support/nvidia_lowp_matmul_baseline.py``, the
 Decision #31(a) oracle) and the production package from the replayed native
-Graph -> Schedule -> Tile artifact, launches both on the RTX 5070, and
-requires bitwise-equal outputs plus agreement with a NumPy oracle of the
+Graph -> Schedule -> Tile artifact, requires identical PTX, launches both on
+the RTX 5070, and requires bitwise-equal outputs plus agreement with a NumPy
+oracle of the
 UE8M0 K32 block-scaled product. RTX 5070 evidence only; it transfers to no
 other part.
 """
@@ -51,6 +52,11 @@ def test_mx_matches_retired_packager_bitwise(dtype, shape):
     packages = (baseline.baseline_mx_matmul(module, pipeline_name=PIPELINE),
                 native.package_native(module, pipeline_name=PIPELINE))
     assert "tessera.schedule_hash" in packages[1].tile_ir
+    # The two Tile texts differ (the C++ producer states its schedule identity
+    # and K-loop contract); the PTX they lower to must not.
+    ptx = ["\n".join(line for line in p.image.payload.decode().splitlines() if not line.startswith("//"))
+           for p in packages]
+    assert ptx[0] == ptx[1]
     value_dtype = {
         "fp6_e2m3": ml_dtypes.float6_e2m3fn,
         "fp6_e3m2": ml_dtypes.float6_e3m2fn,

@@ -12,6 +12,9 @@ E2E-REAL-6 (sync ``E2E-REAL-6-sm120-lowp-matmul-2026-11-04``). Production
 * INT4 packaged its artifact without projecting it. Its Graph-side launch
   contract is reconstructed by :func:`graph_authored_int4_launch` from the
   Graph signature alone, independent of any native contract.
+* FP6/MXFP4 authored its Tile IR in Python with no Schedule at all.
+  :func:`baseline_mx_matmul` is that packager (sync
+  ``E2E-REAL-6-sm120-mx-matmul-2026-11-04``).
 
 Nothing in ``python/tessera`` may import this module.
 """
@@ -220,3 +223,131 @@ def graph_authored_int4_launch(module: GraphIRModule) -> dict[str, object]:
         "scalars": ("M", "N", "K"),
         "shape": [m, n, k],
     }
+
+
+# ---------------------------------------------------------------------------
+# OCP MX FP6/MXFP4 (sync ``E2E-REAL-6-sm120-mx-matmul-2026-11-04``). Before the
+# cut, ``nvidia_native.package_mx_matmul`` authored its Tile IR in Python and
+# read every launch field from the caller's Graph; no Schedule existed for
+# FP6/MXFP4. :func:`emit_mx_matmul_tile_ir` and :func:`baseline_mx_matmul`
+# are that packager as at 4606fc710, with one change: the Tile launch op now
+# states the UE8M0 K32 scale contract, which the NVIDIA materializer requires
+# (Decision #21a) instead of assuming it.
+# ---------------------------------------------------------------------------
+
+
+def emit_mx_matmul_tile_ir(*, entry: str, storage: str) -> str:
+    """Emit a typed FP6/MXFP4 launch kernel with explicit UE8M0 scales."""
+    if storage not in {"e2m3", "e3m2", "fp4_e2m1"}:
+        raise ValueError(f"unsupported SM120 MX matmul storage {storage!r}")
+    fragment_k = 64 if storage == "fp4_e2m1" else 32
+    logical_storage = storage if storage == "fp4_e2m1" else f"fp6_{storage}"
+    packed_format = native._packed_format_attr(logical_storage)
+    return f'''module {{
+  llvm.func @{entry}(%a: !llvm.ptr, %b: !llvm.ptr,
+                     %scale_a: !llvm.ptr, %scale_b: !llvm.ptr,
+                     %d: !llvm.ptr, %m: i64, %n: i64, %k: i64)
+      attributes {{nvvm.kernel}} {{
+    tile.matmul_kernel %a, %b, %scale_a, %scale_b, %d, %m, %n, %k {{
+      mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {fragment_k}, a = "{storage}", b = "{storage}", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
+      epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">,
+      warps = 1 : i64, staging = "global",
+      physical_contract = "nvidia_sm120_mx_blockscale_v1",
+      tessera.scale_vector_size = 32 : i64,
+      tessera.scale_format = "ue8m0",
+      tessera.storage_packed = true,
+      tessera.storage_container = "int8",
+      tessera.storage_pack = {packed_format}
+    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+    llvm.return
+  }}
+}}
+'''
+
+
+def baseline_mx_matmul(module: GraphIRModule, *, pipeline_name: str) -> native.NVIDIANativePackage:
+    """The retired packager: Python-authored Tile, launch fields read from the Graph."""
+    if not native.supports_mx_matmul(module):
+        raise ValueError(
+            "SM120 MX packaging requires one static rank-2 FP6/MXFP4 matmul with logical UE8M0 scale_a/scale_b views"
+        )
+    fn = module.functions[0]
+    op = fn.body[0]
+    a_name, b_name = native._matrix_names(op)
+    args = {arg.name: arg for arg in fn.args}
+    storage = args[a_name].ir_type.dtype
+    physical = {"fp6_e2m3": "e2m3", "fp6_e3m2": "e3m2", "fp4_e2m1": "fp4_e2m1"}[storage]
+    abi_id = {
+        "fp6_e2m3": native.SM120_FP6_E2M3_ABI,
+        "fp6_e3m2": native.SM120_FP6_E3M2_ABI,
+        "fp4_e2m1": native.SM120_MXFP4_ABI,
+    }[storage]
+    entry = f"tessera_tile_matmul_mx_{physical}"
+    tile_ir = emit_mx_matmul_tile_ir(entry=entry, storage=physical)
+    (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = native._compile_tile_ir(
+        tile_ir, entry
+    )
+    image = NativeImageArtifact(
+        target="nvidia_sm120",
+        architecture="sm_120a",
+        pipeline_name=pipeline_name,
+        compiler_fingerprint=compiler_fp,
+        toolchain_fingerprint=toolchain_fp,
+        target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
+        binary_format="ptx",
+        payload=ptx.encode("ascii"),
+        entry_points=(NativeEntryPoint(entry, abi_id),),
+        compile_state=compile_state,
+        device_libraries=device_libraries,
+        resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
+    )
+    scale_names = native._scale_names(module)
+    assert scale_names is not None
+    scale_a_name, scale_b_name = scale_names
+    a_shape = native._static_shape(module, a_name)
+    b_shape = native._static_shape(module, b_name)
+    assert a_shape is not None and b_shape is not None
+    m, k = a_shape
+    n = b_shape[1]
+    physical_k = k if storage.startswith("fp6") else (k + 1) // 2
+    scale_k = (k + 31) // 32
+    output_name = op.result or "output"
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest,
+        entry_symbol=entry,
+        abi_id=abi_id,
+        buffers=(
+            BufferBinding(0, a_name, "input", "uint8", 2, "row_major", 1),
+            BufferBinding(1, b_name, "input", "uint8", 2, "row_major", 1),
+            BufferBinding(2, scale_a_name, "input", "uint8", 2, "row_major", 1),
+            BufferBinding(3, scale_b_name, "input", "uint8", 2, "row_major", 1),
+            BufferBinding(4, output_name, "output", "fp32", 2, "row_major", 4),
+        ),
+        scalars=(ScalarArgument(5, "M", "int64"), ScalarArgument(6, "N", "int64"), ScalarArgument(7, "K", "int64")),
+        shape_guards=(
+            ShapeGuard(a_name, 0, "eq", m), ShapeGuard(a_name, 1, "eq", physical_k),
+            ShapeGuard(b_name, 0, "eq", physical_k), ShapeGuard(b_name, 1, "eq", n),
+            ShapeGuard(scale_a_name, 0, "eq", m), ShapeGuard(scale_a_name, 1, "eq", scale_k),
+            ShapeGuard(scale_b_name, 0, "eq", scale_k), ShapeGuard(scale_b_name, 1, "eq", n),
+            ShapeGuard(output_name, 0, "eq", m), ShapeGuard(output_name, 1, "eq", n),
+        ),
+        geometry=LaunchGeometry(policy="sm120_mx_m16n8"),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
+        provenance={
+            "work_item": "NVIDIA-E2E-2",
+            "sync_key": "E2E-SPINE-2026-07-18",
+            "schedule": "warp_m16n8_mx",
+            "shape": [m, n, k],
+            "storage": storage,
+            "scale_dtype": "ue8m0",
+            "scale_vector_size": 32,
+            "storage_pack": {
+                "logical": storage,
+                "container": "int8",
+                "factor": 2 if storage == "fp4_e2m1" else 1,
+                "signedness": "format_defined",
+            },
+            "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
+        },
+    )
+    return native.NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)

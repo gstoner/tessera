@@ -331,6 +331,18 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 ### E2E-REAL-6
 
+- Current increment (2026-11-04, sync E2E-REAL-6-sm120-mx-matmul-2026-11-04):
+  sm_120 `mx_matmul` (FP6 E2M3/E3M2, MXFP4; UE8M0 K32 scales) lowers
+  Graph→Schedule→Tile natively under the C++ contract
+  `nvidia_sm120_mx_blockscale_v1`. The Graph verifier, Schedule inference and
+  Schedule verifier own it, and Schedule→Tile emits the launch op. FP6 Graph
+  types are now MLIR builtins. `package_scheduled_mx_matmul` projects every
+  launch field from the replayed artifact. The Graph-authored packager is a
+  test-only #31(a) oracle with identical PTX and bitwise-equal output on the
+  RTX 5070. The prune row is `compiled`, and no `nvidia_sm120` family row is `gap`.
+  RTX 5070 evidence only.
+  [Log](INTEGRATED_COMPILER_LOG.md#2026-11-04--e2e-real-6-sm120-mx-matmul-lowers-natively-and-packages-its-replayed-artifact).
+
 - Current increment (2026-11-04, sync E2E-REAL-6-sm120-lowp-matmul-2026-11-04):
   the sm_120 `nvfp4_matmul` and `int4_matmul` packagers consume their replayed
   `ScheduledMatmulArtifact`. `package_scheduled_nvfp4_matmul` and the hardened

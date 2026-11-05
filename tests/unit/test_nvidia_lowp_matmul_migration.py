@@ -12,8 +12,8 @@ Host-free half: projected descriptors equal the retired Graph-authored ones on
 every launch field, the consumers never re-enter Graph admission, and a
 tampered artifact or a changed semantic key (storage, scale layout, scale
 format) fails before target compilation. The device half lives in
-``tests/device/nvidia/test_lowp_matmul_migration.py``. ``mx_matmul`` stays a
-prune gap: its Graph types have no native Schedule contract yet.
+``tests/device/nvidia/test_lowp_matmul_migration.py``. ``mx_matmul`` has its
+own differential in ``test_nvidia_mx_matmul_migration.py``.
 """
 
 from __future__ import annotations
@@ -218,15 +218,14 @@ def test_int4_tile_carries_the_packed_shapes_the_consumer_reads():
     assert "tessera.packed_shapes = array<i64: 11, 19, 19, 19>" in _int4_artifact().tile_ir
 
 
-def test_prune_rows_name_the_projecting_routes_and_mx_stays_owed():
+def test_prune_rows_name_the_projecting_routes():
     rows = {(t, f): (route, status) for t, f, route, status in audit.family_rows()}
     assert rows[("nvidia_sm120", "nvfp4_matmul")] == (
         "scheduled_matmul.supports_scheduled_nvfp4_matmul", "compiled")
     assert rows[("nvidia_sm120", "int4_matmul")] == (
         "scheduled_matmul.supports_scheduled_int4_matmul", "compiled")
-    # Owed (E2E-REAL-6, 2026-11-04): FP6/MXFP4 Graph types have no native
-    # Schedule contract, so package_mx_matmul still authors its Tile IR.
-    assert rows[("nvidia_sm120", "mx_matmul")] == ("—", "gap")
+    assert rows[("nvidia_sm120", "mx_matmul")] == (
+        "scheduled_matmul.supports_scheduled_mx_matmul", "compiled")
 
 
 def test_admission_predicates_are_sm120_only():

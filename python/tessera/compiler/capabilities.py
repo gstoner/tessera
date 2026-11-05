@@ -1254,11 +1254,15 @@ def _with_nvfp4_ingest_state(target: TargetCapability) -> TargetCapability:
     if target.name == "nvidia_sm120":
         ops["tessera.scaled_matmul"] = OpCapability(
             "tessera.scaled_matmul", "artifact_only",
-            dtypes=("uint8", "nvfp4"), min_rank=2,
+            dtypes=("uint8", "nvfp4", "fp6_e2m3", "fp6_e3m2", "fp4_e2m1"), min_rank=2,
             reason="SM120 named NVFP4 K16 block-scale Graph/Schedule/Tile contract; "
                    "native verification requires static logical NVFP4 A/B, UE4M3 scales, "
                    "fp32 accumulation/output and exact_per_block policy. "
-                   "Named static shared-RHS/independent-RHS/shared-LHS leading-prefix batching only; native verification preserves exact logical prefixes before Schedule flattening. No generic scaled or sibling-target execution claim")
+                   "Named static shared-RHS/independent-RHS/shared-LHS leading-prefix batching only; native verification preserves exact logical prefixes before Schedule flattening. "
+                   "SM120 named OCP MX contract (nvidia_sm120_mx_blockscale_v1, E2E-REAL-6 2026-11-04): "
+                   "static rank-2 row-major FP6 E2M3/E3M2 or MXFP4 E2M1 A/B of one dtype, UE8M0 "
+                   "scales per 32 K, fp32 accumulation/output, exact_per_block; no batching or transpose. "
+                   "No generic scaled or sibling-target execution claim")
     # SM120-SAVED-LSE-SCALED-FP8-KV-20261025: FP8 codes x broadcast f32 scale.
     ops["tessera.dequantize_scaled"] = OpCapability(
         "tessera.dequantize_scaled", "unsupported", dtypes=("fp8_e4m3", "fp8_e5m2", "fp32"),

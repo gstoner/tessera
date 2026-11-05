@@ -1711,32 +1711,6 @@ def emit_softmax_tile_ir(*, entry: str, storage: str) -> str:
 '''
 
 
-def emit_mx_matmul_tile_ir(*, entry: str, storage: str) -> str:
-    """Emit a typed FP6/MXFP4 launch kernel with explicit UE8M0 scales."""
-    if storage not in {"e2m3", "e3m2", "fp4_e2m1"}:
-        raise ValueError(f"unsupported SM120 MX matmul storage {storage!r}")
-    fragment_k = 64 if storage == "fp4_e2m1" else 32
-    logical_storage = storage if storage == "fp4_e2m1" else f"fp6_{storage}"
-    packed_format = _packed_format_attr(logical_storage)
-    return f'''module {{
-  llvm.func @{entry}(%a: !llvm.ptr, %b: !llvm.ptr,
-                     %scale_a: !llvm.ptr, %scale_b: !llvm.ptr,
-                     %d: !llvm.ptr, %m: i64, %n: i64, %k: i64)
-      attributes {{nvvm.kernel}} {{
-    tile.matmul_kernel %a, %b, %scale_a, %scale_b, %d, %m, %n, %k {{
-      mma = #tile.mma_desc<family = "mma_sync", m = 16, n = 8, k = {fragment_k}, a = "{storage}", b = "{storage}", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 1>,
-      epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">,
-      warps = 1 : i64, staging = "global",
-      tessera.storage_packed = true,
-      tessera.storage_container = "int8",
-      tessera.storage_pack = {packed_format}
-    }} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
-    llvm.return
-  }}
-}}
-'''
-
-
 def emit_reduce_tile_ir(*, entry: str, storage: str, kind: str, axis: int = 0,
                         keepdims: bool = False, schedule: str = "serial") -> str:
     """Emit a typed arbitrary-axis reduction with explicit shape semantics."""
@@ -3300,6 +3274,8 @@ def package_scheduled_matmul(
         return package_scheduled_int4_matmul(artifact, pipeline_name=pipeline_name)
     if artifact.storage == "nvfp4":
         return package_scheduled_nvfp4_matmul(artifact, pipeline_name=pipeline_name)
+    if artifact.storage in {"e2m3", "e3m2", "fp4_e2m1"}:
+        return package_scheduled_mx_matmul(artifact, pipeline_name=pipeline_name)
     if (artifact.target == "nvidia_sm120" and
             "fp32" in {artifact.a_dtype, artifact.b_dtype}):
         from .prepared_nvidia_scalar_matmul import package
@@ -3771,30 +3747,43 @@ def package_mx_matmul(
     *,
     pipeline_name: str,
 ) -> NVIDIANativePackage:
-    """Compile and package one static FP6/MXFP4 matmul with UE8M0 scales."""
+    """Lower a logical FP6/MXFP4 Graph and package its replayed native artifact.
+
+    Graph admission decides only whether this route is tried; every launch
+    field comes from :func:`package_scheduled_mx_matmul`.
+    """
     if not supports_mx_matmul(module):
         raise ValueError(
             "SM120 MX packaging requires one static rank-2 FP6/MXFP4 matmul with logical UE8M0 scale_a/scale_b views"
         )
-    fn = module.functions[0]
-    op = fn.body[0]
-    a_name, b_name = _matrix_names(op)
-    args = {arg.name: arg for arg in fn.args}
-    storage = args[a_name].ir_type.dtype
-    if storage not in {"fp6_e2m3", "fp6_e3m2", "fp4_e2m1"}:
-        raise ValueError("SM120 MX packaging received an unsupported logical storage dtype")
-    physical = {
-        "fp6_e2m3": "e2m3",
-        "fp6_e3m2": "e3m2",
-        "fp4_e2m1": "fp4_e2m1",
-    }[storage]
+    from .scheduled_matmul import canonical_mx_graph, lower_scheduled_matmul
+
+    artifact = lower_scheduled_matmul(canonical_mx_graph(module), target="nvidia_sm120")
+    return package_scheduled_mx_matmul(artifact, pipeline_name=pipeline_name)
+
+
+def package_scheduled_mx_matmul(
+    artifact: ScheduledMatmulArtifact, *, pipeline_name: str
+) -> NVIDIANativePackage:
+    """Package a replayed FP6/MXFP4 matmul; every launch field is a native projection.
+
+    E2E-REAL-6 (sync ``E2E-REAL-6-sm120-mx-matmul-2026-11-04``):
+    ``verify_mx_projection`` replays Graph -> Schedule -> Tile and reads the
+    operand roles, storage, M/N/K and the K32 UE8M0 scale views from the
+    native Schedule, so a relabelled or tampered artifact fails before
+    ``_compile_tile_ir``. The retired Graph-authored packager is the test-only
+    oracle ``tests/_support/nvidia_lowp_matmul_baseline.py``.
+    """
+    from .scheduled_matmul import verify_mx_projection
+
+    artifact.validate()
+    projection = verify_mx_projection(artifact)
+    tile_ir, entry, storage = artifact.tile_ir, projection.entry, projection.dtype
     abi_id = {
         "fp6_e2m3": SM120_FP6_E2M3_ABI,
         "fp6_e3m2": SM120_FP6_E3M2_ABI,
         "fp4_e2m1": SM120_MXFP4_ABI,
     }[storage]
-    entry = f"tessera_tile_matmul_mx_{physical}"
-    tile_ir = emit_mx_matmul_tile_ir(entry=entry, storage=physical)
     (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
         tile_ir, entry
     )
@@ -3815,17 +3804,12 @@ def package_mx_matmul(
             metrics=metrics,
         ),
     )
-    scale_names = _scale_names(module)
-    assert scale_names is not None
-    scale_a_name, scale_b_name = scale_names
-    a_shape = _static_shape(module, a_name)
-    b_shape = _static_shape(module, b_name)
-    assert a_shape is not None and b_shape is not None
-    m, k = a_shape
-    n = b_shape[1]
+    a_name, b_name = projection.a_name, projection.b_name
+    scale_a_name, scale_b_name = projection.scale_a_name, projection.scale_b_name
+    output_name = projection.output_name
+    m, n, k = projection.m, projection.n, projection.k
     physical_k = k if storage.startswith("fp6") else (k + 1) // 2
     scale_k = (k + 31) // 32
-    output_name = op.result or "output"
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
@@ -3874,6 +3858,7 @@ def package_mx_matmul(
                 "factor": 2 if storage == "fp4_e2m1" else 1,
                 "signedness": "format_defined",
             },
+            "schedule_digest": artifact.schedule_digest,
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )
@@ -5295,7 +5280,6 @@ __all__ = [
     "emit_f16_matmul_tile_ir",
     "emit_f16_softmax_tile_ir",
     "emit_matmul_tile_ir",
-    "emit_mx_matmul_tile_ir",
     "emit_reduce_tile_ir",
     "emit_norm_tile_ir",
     "emit_f32_softmax_tile_ir",
@@ -5321,6 +5305,7 @@ __all__ = [
     "package_scheduled_matmul",
     "package_scheduled_kernel",
     "package_mx_matmul",
+    "package_scheduled_mx_matmul",
     "package_reduction",
     "package_norm",
     "package_f32_softmax",

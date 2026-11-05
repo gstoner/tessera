@@ -98,6 +98,9 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
 #: which dispatches by artifact storage to consumers that project the block-
 #: scale or packed-int8 ABI from the replayed Schedule (E2E-REAL-6,
 #: 2026-11-04). Declared per target because each predicate admits SM120 only.
+#: SM120 ``mx_matmul`` (FP6/MXFP4, UE8M0 K32) joined them once the C++ Graph
+#: verifier and Schedule owned ``nvidia_sm120_mx_blockscale_v1`` (E2E-REAL-6,
+#: 2026-11-04).
 #: The Apple CPU batched-GEMM/LAPACK families (E2E-REAL-6, 2026-11-04) are
 #: per target because their contract (``NativeAppleCPUKernel.h``) claims only
 #: an ``apple_cpu`` module; ``apple_gpu`` keeps its own owed rows.
@@ -110,6 +113,7 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
 _TARGET_FAMILY_TO_COMPILED: dict[tuple[str, str], tuple[str, str]] = {
     ("nvidia_sm120", "nvfp4_matmul"): ("scheduled_matmul", "supports_scheduled_nvfp4_matmul"),
     ("nvidia_sm120", "int4_matmul"): ("scheduled_matmul", "supports_scheduled_int4_matmul"),
+    ("nvidia_sm120", "mx_matmul"): ("scheduled_matmul", "supports_scheduled_mx_matmul"),
     ("apple_cpu", "gemm"): ("scheduled_matmul", "supports_scheduled_matmul"),
     ("apple_cpu", "softmax"): ("scheduled_kernel", "supports_scheduled_kernel"),
     **{("apple_cpu", family): ("scheduled_apple_cpu_kernel", "supports_scheduled_apple_cpu_kernel")

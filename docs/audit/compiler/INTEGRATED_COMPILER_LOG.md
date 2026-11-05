@@ -14711,6 +14711,41 @@ Remaining: the Apple GPU `batched_gemm`, `transpose`, dynamic softmax/GELU/popco
 Evidence: tests/unit/test_apple_gpu_domain_migration.py; tests/_support/apple_gpu_domain_baseline.py; tests/tessera-ir/phase8/apple_gpu_domain_schedule_tile.mlir; tests/tessera-ir/phase8/apple_gpu_domain_invalid.mlir; tests/tessera-ir/phase8/apple_gpu_domain_tampered.mlir; src/compiler/programming_model/lib/NativeAppleGPUDomain.h; docs/audit/generated/bootstrap_prune_gap.csv
 <!-- entry-fields:end -->
 
+### 2026-11-04 — E2E-REAL-6: SM120 MX matmul lowers natively and packages its replayed artifact
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: branch `claude/e2e6-sm120-mx-matmul-eeeba7`; sync E2E-REAL-6-sm120-mx-matmul-2026-11-04.
+Outcome: the last `nvidia_sm120` `gap` row on `bootstrap_prune_gap`, `mx_matmul` (OCP MX FP6 E2M3/E3M2 and MXFP4 E2M1, one UE8M0 scale per 32 K), is `compiled`. Unlike NVFP4/INT4 this was a lowering gap, not only a packaging one. FP6 Graph text did not parse, and no Schedule contract existed, so `package_mx_matmul` wrote its Tile IR in Python.
+- **Graph types.** `_mlir_dtype` maps `fp6_e2m3`/`fp6_e3m2` to MLIR 23's builtin `f6E2M3FN`/`f6E3M2FN`. `!tessera.fp6_*` named no dialect type. The reverse map still reads the old spelling.
+- **C++ contract `nvidia_sm120_mx_blockscale_v1`.** Three places own it:
+  - `ScaledMatmulOp::verify`: static rank-2 row-major A/B of one FP6/MXFP4 type, ui8/i8 scales `[M, ceil(K/32)]` / `[ceil(K/32), N]`, `{block = [1, 32], format = "ue8m0"}`, `{fp32, exact_per_block}`, f32 output, no batching or transpose.
+  - `getInferredMatmulSchedule`: re-derives that contract and selects storage `e2m3`/`e3m2`/`fp4_e2m1`, m16n8k32 or m16n8k64.
+  - `schedule.matmul` verifier: pins the instruction shape, K32/UE8M0, f32 and no epilogue. The rule that `scale_k` must be a multiple of `tile_k` does not apply to MXFP4: its K64 instruction carries two K32 scales.
+  - Schedule→Tile emits `tile.matmul_kernel @tessera_tile_matmul_mx_<storage>` with the packed format, `physical_contract`, `tessera.scale_vector_size = 32` and `tessera.scale_format = "ue8m0"`.
+- **Consumer of the stated scale.** `materializeSm120MxMatmulKernel` now requires those three keys and refuses any other value (Decision #21a). It used to infer K32 UE8M0 from the element type. Fixtures: `sm120_mx_matmul_kernel_scale_{contract,block}_invalid.mlir`. `sm120_mxfp4_rejected.mlir` now states the contract.
+- **Packager.** `package_mx_matmul` = `canonical_mx_graph` → `lower_scheduled_matmul` → `package_scheduled_mx_matmul`. `verify_mx_projection` replays both boundaries, binds host aliases to the Schedule's operand roles and reads every launch field before `_compile_tile_ir`; `package_scheduled_matmul` dispatches MX by storage. The NVFP4 projection now shares the scaled-op attribute readers. SM120's `tessera.scaled_matmul` capability row admits FP6/MXFP4 (`dtype_flow` gains two rows).
+- **Oracle (#31(a)).** `baseline_mx_matmul` + `emit_mx_matmul_tile_ir` in `tests/_support/nvidia_lowp_matmul_baseline.py` are the 4606fc710 packager. Its Tile now states the scale contract, the one change. Following #1045, the oracle lives in `tests/_support`, not `nvidia_native.py`, so production keeps no Python MX Tile author.
+  - `test_nvidia_mx_matmul_migration.py` (52 cases) covers launch-field equality across 3 storages × 4 shapes × permuted args, no Graph re-entry, 19 tamper cases and semantic-key conflicts.
+  - Lit: `e2e_mx_matmul_scheduled_nvidia.mlir` (three storages, Schedule and Tile) and `mx_matmul_scheduled_nvidia_invalid.mlir` (five verifier refusals).
+- **Device (The-Super-Bear, RTX 5070, CUDA 13.4, driver 610.88; unsandboxed, under `flock /tmp/tessera-nvidia-sm120-release.lock`).** Run in a separate worktree with its own `build-nvidia-cuda` built from the branch.
+  - `test_mx_matmul_migration.py` passes 14/14: 3 storages × 4 shapes, plus 2 short-scale refusals. For every case, oracle and native PTX are identical (comment lines stripped) and outputs are bitwise-equal and match NumPy.
+  - The pre-existing `test_canonical_sm120_mx_general_shape_scales_and_ragged` (6) now runs on the native route and passes.
+  - NVIDIA backend lit: 74/74.
+  - A/B against `main` 4606fc710 (main sources on the box's main build; branch sources on its own build). Each of the 177 `tests/device/nvidia/` files ran in its own pytest process, plus one process for the NVIDIA/low-precision/dtype unit files (154 on main, 155 on the branch with the new test).
+    - main: 12127 cases (11664 passed, 235 failed, 228 skipped).
+    - branch: 12193 cases (11730 / 235 / 228).
+    - 0 of the 12126 shared cases changed outcome. All 67 new cases pass. One case was renamed (`test_prune_rows_name_the_projecting_routes_and_mx_stays_owed`).
+    - The 235 failures fail identically on main. 193 are the resident/bounded/dynamic-LHS tensor-frontend and RHS-JIT device lanes; the rest are norm/spine/attention-gradient device cases and 2 x86 `scheduled_matmul_consumers` unit cases. None is an MX case.
+    - `test_bounded_lhs_jit.py` segfaults at interpreter teardown after its summary, with identical outcomes (25 failed / 19 passed). It is pre-existing and not attributable to the branch: main sources on main's build crash in 6 of 10 runs, and every source/build swap crashes too.
+    - Setup, recorded because it bit: a worktree needs `build-nvidia-cuda/` beside its sources, because `_nvidia_gemm_lib_path` resolves from the source root. A single process over the whole suite dies on a hard abort.
+- **Assertions-ON (Tajasarus, LLVM/MLIR 23.1.1 assertions).** Separate worktree, `build-assertions-nvidia` with `TESSERA_FORCE_FULL_COMPILER_DRIVER=ON`. The default NVIDIA-only driver registers no core `tessera` dialect, so its fixture runs say nothing. Both new phase2 fixtures and the NVIDIA backend suite (74/74) pass. Across 43 phase2 nvidia/nvfp4/scaled/matmul/mx fixtures: 23 pass, 20 are unsupported (ROCm/x86 not configured there), none fail. No assertion fired.
+- **Mac.** mypy clean on the changed modules; 234 passed / 112 skipped on the related unit files (skips are NVIDIA-dialect lanes this worktree has no `tessera-opt` for); generated docs in sync.
+
+ROCm, Apple, x86: not applicable. FP6 Graph text now parses for every target, but no sibling FP6 `scaled_matmul` consumer exists or is claimed.
+Remaining: no `nvidia_sm120` family row is `gap`. The seven SM120 orphan packagers and the generic-route rows (softmax, norm, reduction) are unchanged. No performance claim.
+Evidence: src/compiler/ir/TesseraOps.cpp; src/compiler/programming_model/lib/PMPasses.cpp; src/compiler/programming_model/ir/ScheduleDialect.cpp; src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp; python/tessera/compiler/scheduled_matmul.py; python/tessera/compiler/nvidia_native.py; tests/_support/nvidia_lowp_matmul_baseline.py; tests/unit/test_nvidia_mx_matmul_migration.py; tests/device/nvidia/test_mx_matmul_migration.py; tests/tessera-ir/phase2/e2e_mx_matmul_scheduled_nvidia.mlir; docs/audit/generated/bootstrap_prune_gap.md
+<!-- entry-fields:end -->
+
 ### 2026-11-04 — E2E-REAL-6: Apple GPU SVD and value linalg retire their Graph-owned constructors
 
 Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)

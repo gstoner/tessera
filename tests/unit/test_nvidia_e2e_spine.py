@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 from tests._support.nvidia_attention_baseline import emit_attention_tile_ir, emit_paged_kv_read_tile_ir, emit_attention_backward_tile_ir
+# The Python MX Tile author is the retired #31(a) oracle (E2E-REAL-6, 2026-11-04).
+from tests._support.nvidia_lowp_matmul_baseline import emit_mx_matmul_tile_ir
 
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.capabilities import supports_op
@@ -27,7 +29,6 @@ from tessera.compiler.nvidia_native import (
     emit_reduce_tile_ir,
     emit_matmul_tile_ir,
     emit_moe_tile_ir,
-    emit_mx_matmul_tile_ir,
     emit_packed_decode_tile_ir,
     emit_paged_attention_tile_ir,
     native_package_kind,
@@ -730,9 +731,9 @@ def test_sm120_nvfp4_native_packager_owns_scales_and_k64_contract() -> None:
 
 def _mx_matmul_module(dtype: str, *, scale_k: int = 2) -> GraphIRModule:
     mlir_dtype = {
-        "fp6_e2m3": "!tessera.fp6_e2m3",
-        "fp6_e3m2": "!tessera.fp6_e3m2",
-        "fp4_e2m1": "!tessera.fp4_e2m1",
+        "fp6_e2m3": "f6E2M3FN",
+        "fp6_e3m2": "f6E3M2FN",
+        "fp4_e2m1": "f4E2M1FN",
     }[dtype]
     a = IRType(f"tensor<19x37x{mlir_dtype}>", ("19", "37"), dtype)
     b = IRType(f"tensor<37x13x{mlir_dtype}>", ("37", "13"), dtype)

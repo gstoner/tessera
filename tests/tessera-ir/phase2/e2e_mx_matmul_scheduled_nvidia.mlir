@@ -54,7 +54,7 @@ module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {
 // SCHEDULE: schedule.matmul
 // SCHEDULE-SAME: storage = "e3m2"
 // TILE-LABEL: llvm.func @tessera_tile_matmul_mx_e3m2(
-// TILE-SAME: !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+// TILE-SAME: %arg3: !llvm.ptr, %arg4: !llvm.ptr, %arg5: i64, %arg6: i64, %arg7: i64)
 // TILE: tile.matmul_kernel
 // TILE-SAME: a = "e3m2", b = "e3m2"
 

@@ -500,10 +500,12 @@ def _mlir_dtype(dtype: Optional[str]) -> str:
         # tensor_view verifier read). The earlier "xf8E4M3FN" doubled the
         # tensor separator and "!tessera.fp4_e2m1" named a type no dialect
         # defines, so no low-precision Graph IR text ever parsed (2026-09-15).
+        # FP6 had the same defect until E2E-REAL-6 SM120 MX (2026-11-04):
+        # MLIR 23 has builtin f6E2M3FN / f6E3M2FN, which the Schedule reads.
         "fp8_e4m3": "f8E4M3FN",
         "fp8_e5m2": "f8E5M2",
-        "fp6_e2m3": "!tessera.fp6_e2m3",
-        "fp6_e3m2": "!tessera.fp6_e3m2",
+        "fp6_e2m3": "f6E2M3FN",
+        "fp6_e3m2": "f6E3M2FN",
         "fp4_e2m1": "f4E2M1FN",
         "nvfp4": "!tessera.nvfp4",
         "int4": "i4",
@@ -4978,6 +4980,8 @@ def _parse_mlir_tensor_type(text: str) -> IRType:
         "bf16": "bf16",
         "f8E4M3FN": "fp8_e4m3",
         "f8E5M2": "fp8_e5m2",
+        "f6E2M3FN": "fp6_e2m3",
+        "f6E3M2FN": "fp6_e3m2",
         "!tessera.fp6_e2m3": "fp6_e2m3",
         "!tessera.fp6_e3m2": "fp6_e3m2",
         "f4E2M1FN": "fp4_e2m1",

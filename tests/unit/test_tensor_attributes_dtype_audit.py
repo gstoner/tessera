@@ -56,12 +56,13 @@ MLIR_CANONICAL = {
     "bf16": "bf16",
     # MLIR 23 builtin spellings (2026-09-15): the earlier "xf8E4M3FN" doubled
     # the tensor separator and "!tessera.fp4_e2m1" named a type no dialect
-    # defines, so no low-precision Graph IR text ever parsed. fp6 / nvfp4 have
-    # no builtin and keep their tessera spellings.
+    # defines, so no low-precision Graph IR text ever parsed. fp6 moved to its
+    # builtins on 2026-11-04 (E2E-REAL-6 SM120 MX); nvfp4 has no builtin and
+    # keeps its tessera spelling.
     "fp8_e4m3": "f8E4M3FN",
     "fp8_e5m2": "f8E5M2",
-    "fp6_e2m3": "!tessera.fp6_e2m3",
-    "fp6_e3m2": "!tessera.fp6_e3m2",
+    "fp6_e2m3": "f6E2M3FN",
+    "fp6_e3m2": "f6E3M2FN",
     "fp4_e2m1": "f4E2M1FN",
     "nvfp4": "!tessera.nvfp4",
     "int4": "i4",

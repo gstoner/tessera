@@ -3723,6 +3723,30 @@ class Tessera_ArgReduceOp<string mnemonic, string summaryText> : Op<
 def Tessera_ArgmaxOp : Tessera_ArgReduceOp<"argmax", "Index of the maximum along one axis">;
 def Tessera_ArgminOp : Tessera_ArgReduceOp<"argmin", "Index of the minimum along one axis">;
 
+// E2E-REAL-6 Apple GPU (2026-11-04): declared so the native Apple GPU
+// descriptor contract (NativeAppleGPUDescriptor.h, its consumer) can read them
+// as parsed Graph IR. Nonzero count along one axis; the result is an integer
+// count tensor with the reduced axis removed (or kept as 1).
+def Tessera_CountNonzeroOp : Op<Tessera_Dialect, "count_nonzero", [Pure]> {
+  let summary = "Count of nonzero elements along one axis";
+  let arguments = (ins TensorType:$x, OptionalAttr<I64Attr>:$axis,
+                       DefaultValuedAttr<BoolAttr, "false">:$keepdims);
+  let results = (outs TensorType:$counts);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// The K largest elements along one axis and their source indices, in that
+// order. Both results take the input shape with the selected axis set to K.
+def Tessera_TopKOp : Op<Tessera_Dialect, "top_k", [Pure]> {
+  let summary = "K largest values along one axis with their indices";
+  let arguments = (ins TensorType:$x, I64Attr:$k,
+                       DefaultValuedAttr<I64Attr, "-1">:$axis);
+  let results = (outs TensorType:$values, TensorType:$indices);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
 // Inclusive scans beside `tessera.cumsum` (same type-preserving contract).
 class Tessera_InclusiveScanOp<string mnemonic, string summaryText> : Op<
   Tessera_Dialect, mnemonic, [Pure]

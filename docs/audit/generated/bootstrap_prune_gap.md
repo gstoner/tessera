@@ -22,19 +22,19 @@ the bootstrap row can go.
 | Metric | Count |
 |---|---|
 | Backends with a bootstrap module | 5 |
-| `package_*` functions total | 86 |
+| `package_*` functions total | 87 |
 | — Graph-input boundaries (including scheduled wrappers) | 44 |
 |   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 4 |
 |   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 0 |
 |   ·  of the bootstrap, both | 0 |
 |   ·  of the bootstrap, other (wrapper / dispatcher) | 40 |
-| — typed scheduled-artifact inputs (consumption needs verification) | 26 |
+| — typed scheduled-artifact inputs (consumption needs verification) | 27 |
 | — unclassified/raw inputs (not assumed compiled) | 16 |
-| Lines in those modules | 13095 |
+| Lines in those modules | 13264 |
 | Classified family/target candidates (shape admission not implied) | 57 |
-| — covered by a compiled route | 38 |
+| — covered by a compiled route | 45 |
 | — packager lowers only through the generic Schedule→Tile route | 12 |
-| — **gap (no declared family route)** | 7 |
+| — **gap (no declared family route)** | 0 |
 | Packagers matching no family | 9 |
 
 Graph input alone does not prove reconstruction: wrappers may call the
@@ -49,7 +49,7 @@ exact artifacts before treating a row as a constructor deletion target.
 | `rocm_gfx1151` | `rocm_native.py` | 7 | 7 | 1 | 5 | 3525 |
 | `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1603 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 3 | 0 | 10 | 527 |
-| `apple_gpu` | `apple_native.py` | 10 | 6 | 1 | 19 | 2050 |
+| `apple_gpu` | `apple_native.py` | 10 | 7 | 1 | 19 | 2219 |
 
 ## Census limits
 
@@ -120,15 +120,15 @@ queues own.
 | `apple_cpu` | `softmax` | `scheduled_kernel.supports_scheduled_kernel` | ✅ compiled |
 | `apple_cpu` | `svd` | `scheduled_apple_cpu_kernel.supports_scheduled_apple_cpu_kernel` | ✅ compiled |
 | `apple_cpu` | `tri_solve` | `scheduled_apple_cpu_kernel.supports_scheduled_apple_cpu_kernel` | ✅ compiled |
-| `apple_gpu` | `batched_gemm` | — | 🔴 **gap** |
+| `apple_gpu` | `transpose` | `scheduled_apple_gpu_descriptor.supports_scheduled_apple_gpu_descriptor` | ✅ compiled |
+| `apple_gpu` | `batched_gemm` | `scheduled_apple_gpu_descriptor.supports_scheduled_apple_gpu_descriptor` | ✅ compiled |
 | `apple_gpu` | `softmax` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
-| `apple_gpu` | `dynamic_softmax` | — | 🔴 **gap** |
-| `apple_gpu` | `transpose` | — | 🔴 **gap** |
+| `apple_gpu` | `dynamic_softmax` | `scheduled_apple_gpu_descriptor.supports_scheduled_apple_gpu_descriptor` | ✅ compiled |
 | `apple_gpu` | `gelu` | `scheduled_kernel.supports_scheduled_kernel` | 🟡 generic |
-| `apple_gpu` | `dynamic_gelu` | — | 🔴 **gap** |
-| `apple_gpu` | `dynamic_popcount` | — | 🔴 **gap** |
-| `apple_gpu` | `dynamic_count_nonzero` | — | 🔴 **gap** |
-| `apple_gpu` | `dynamic_topk` | — | 🔴 **gap** |
+| `apple_gpu` | `dynamic_gelu` | `scheduled_apple_gpu_descriptor.supports_scheduled_apple_gpu_descriptor` | ✅ compiled |
+| `apple_gpu` | `dynamic_popcount` | `scheduled_apple_gpu_descriptor.supports_scheduled_apple_gpu_descriptor` | ✅ compiled |
+| `apple_gpu` | `dynamic_count_nonzero` | `scheduled_apple_gpu_descriptor.supports_scheduled_apple_gpu_descriptor` | ✅ compiled |
+| `apple_gpu` | `dynamic_topk` | `scheduled_apple_gpu_descriptor.supports_scheduled_apple_gpu_descriptor` | ✅ compiled |
 | `apple_gpu` | `svd` | `scheduled_apple_gpu_kernel.supports_scheduled_apple_gpu_kernel` | ✅ compiled |
 | `apple_gpu` | `value_cholesky` | `scheduled_apple_gpu_kernel.supports_scheduled_apple_gpu_kernel` | ✅ compiled |
 | `apple_gpu` | `value_cholesky_solve` | `scheduled_apple_gpu_kernel.supports_scheduled_apple_gpu_kernel` | ✅ compiled |

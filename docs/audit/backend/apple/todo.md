@@ -16379,3 +16379,31 @@ time.
 Evidence: see the log entry for this key. Owed: the other Apple GPU gap rows
 (batched GEMM, transpose, dynamic families, EBM/PPO/Clifford value families)
 belong to sibling sessions.
+
+## `E2E-REAL-6-apple-gpu-descriptors-2026-11-04`: Apple GPU batched GEMM, transpose and the dynamic descriptor families retire their Graph-owned constructor
+
+Owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+Synchronization key: `E2E-REAL-6-apple-gpu-descriptors-2026-11-04`.
+
+`apple_gpu,{batched_gemm,transpose,dynamic_softmax,dynamic_gelu,dynamic_popcount,dynamic_count_nonzero,dynamic_topk}`
+now lower through native Graph→Schedule→Tile (`NativeAppleGPUDescriptor.h`,
+`schedule.artifact` family `apple_gpu_descriptor` → `tile.<op>` carrying the
+contract) and the Apple GPU value lowering, which gained a `value` pass option
+and derives the runtime entry itself before emitting `tessera_apple.gpu.kernel_call`.
+`package_scheduled_apple_gpu_descriptor` replays every boundary and projects the
+descriptor; tampering fails closed before the runtime is touched, and a
+`tessera-opt` without the lowering fails closed naming it. The MPS / MPSGraph /
+MSL entries in `apple_gpu_runtime.mm` stay Tier-3 delegates behind the declared
+op (no new op; runtime sources untouched). The old constructors stay in
+`apple_native.py` as the #31(a) oracle. `tessera.count_nonzero` and
+`tessera.top_k` are now registered Graph ops.
+
+Named behaviour changes: broadcast-B `batched_gemm` and rank-3 `matmul`/`gemm`
+(invalid Graph IR) and keywords the kernels ignore are refused at compile time;
+a batch-1 GEMM's unread `broadcast_b` label is now `False`.
+
+Evidence (Mac M1 Max, macOS 27.2, unsandboxed Metal): the migration test plus
+the existing Apple spine/GELU/low-precision/ODS files are 295 passed, including
+17 Metal cases bit-exact against the oracle. Lit adds
+`phase8/apple_gpu_descriptor_{schedule_tile,invalid}.mlir`. With the domain and linalg
+slices (same date) this closes every Apple GPU gap row in the prune census.

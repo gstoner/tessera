@@ -341,13 +341,14 @@ def test_native_graph_to_schedule_refuses_outside_the_envelope(text):
 def test_prune_census_sees_the_compiled_routes():
     from tessera.compiler import bootstrap_prune_audit
 
-    rows = {(t, f): status for t, f, _, status in bootstrap_prune_audit.family_rows()}
-    assert rows[("apple_cpu", "matmul")] == "compiled"
-    assert rows[("apple_cpu", "gemm")] == "compiled"
-    assert rows[("apple_cpu", "softmax")] == "compiled"
+    rows = {(t, f): (route, status) for t, f, route, status in bootstrap_prune_audit.family_rows()}
+    assert rows[("apple_cpu", "matmul")][1] == "compiled"
+    assert rows[("apple_cpu", "gemm")][1] == "compiled"
+    assert rows[("apple_cpu", "softmax")][1] == "compiled"
     # The per-target gemm alias must not leak to another target. The other
-    # Apple CPU families are pinned by test_apple_cpu_kernel_migration.py.
-    assert rows[("apple_gpu", "batched_gemm")] == "gap"
+    # Apple CPU families are pinned by test_apple_cpu_kernel_migration.py; the
+    # GPU batched_gemm row is compiled by its own descriptor owner.
+    assert rows[("apple_gpu", "batched_gemm")][0].startswith("scheduled_apple_gpu_descriptor.")
 
 
 # ---------------------------------------------------------------------------

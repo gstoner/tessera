@@ -98,6 +98,7 @@ namespace tessera {
 #include "NativeAbsolute.h"
 #include "NativeX86Kernel.h"
 #include "NativeAppleCPUKernel.h"
+#include "NativeAppleGPUDescriptor.h"
 #include "NativeAppleGPUKernel.h"
 #include "NativeAppleGPUDomain.h"
 #include "NativeROCMMath.h"
@@ -4109,6 +4110,12 @@ struct GraphToSchedulePass
     if (failed(scheduleNativeAppleCPUKernel(mod, appleCPUKernelSelected)))
       return signalPassFailure();
     if (appleCPUKernelSelected) return;
+    // E2E-REAL-6 Apple GPU runtime-descriptor families (2026-11-04): the same
+    // opt-in (launch bindings) on an apple_gpu module.
+    bool appleGPUDescriptorSelected = false;
+    if (failed(scheduleNativeAppleGPUDescriptor(mod, appleGPUDescriptorSelected)))
+      return signalPassFailure();
+    if (appleGPUDescriptorSelected) return;
     // E2E-REAL-6 Apple GPU linalg families (2026-11-04): the same opt-in
     // ownership for an apple_gpu module.
     bool appleGPUKernelSelected = false;
@@ -5298,6 +5305,10 @@ struct ScheduleToTilePass
     if (failed(lowerNativeAppleCPUKernel(mod, appleCPUKernelSelected)))
       return signalPassFailure();
     if (appleCPUKernelSelected) return;
+    bool appleGPUDescriptorSelected = false;
+    if (failed(lowerNativeAppleGPUDescriptor(mod, appleGPUDescriptorSelected)))
+      return signalPassFailure();
+    if (appleGPUDescriptorSelected) return;
     bool appleGPUKernelSelected = false;
     if (failed(lowerNativeAppleGPUKernel(mod, appleGPUKernelSelected)))
       return signalPassFailure();

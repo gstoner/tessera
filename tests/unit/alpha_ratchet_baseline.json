@@ -8,7 +8,7 @@
     "luna_cpu": 9,
     "luna_gpu": 9,
     "mac_cpu": 4,
-    "mac_gpu": 7,
+    "mac_gpu": 8,
     "taj_cpu": 9,
     "taj_gpu": 5
   },
@@ -18,7 +18,7 @@
     "frontend": 0,
     "graph_opt": 0,
     "native_lowering": 0,
-    "schedule_tile": 36
+    "schedule_tile": 37
   },
   "target_ops_without_required_contract": 104
 }

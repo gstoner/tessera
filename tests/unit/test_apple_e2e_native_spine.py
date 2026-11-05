@@ -40,6 +40,18 @@ def _apple_cpu_compiler_available() -> bool:
     return tool is not None and apple_cpu_value_lowering_available(str(tool))
 
 
+def _apple_gpu_compiler_available() -> bool:
+    from tessera.compiler.scheduled_apple_gpu_descriptor import compiler_available
+
+    return compiler_available()
+
+
+def _apple_compiler_available(target: str) -> bool:
+    if target == "apple_gpu":
+        return _apple_gpu_compiler_available()
+    return _apple_cpu_compiler_available()
+
+
 def _softmax_module() -> GraphIRModule:
     x = IRType("tensor<3x7xf32>", ("3", "7"), "fp32")
     return GraphIRModule(functions=[GraphIRFunction(
@@ -137,10 +149,11 @@ def test_canonical_compile_promotes_only_descriptor_contracts(
     dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     dylib.write_bytes(b"apple-e2e-test-runtime")
     monkeypatch.setenv(runtime_var, str(dylib))
-    # Apple CPU batched GEMM lowers through native Schedule/Tile (E2E-REAL-6,
-    # 2026-11-04), so it is promoted only where the production compiler has the
-    # Apple CPU value lowering; elsewhere the honest answer is "not packageable".
-    expected = target == "apple_gpu" or _apple_cpu_compiler_available()
+    # Apple CPU and GPU batched GEMM lower through native Schedule/Tile
+    # (E2E-REAL-6, 2026-11-04), so each is promoted only where the production
+    # compiler has that target's value lowering; elsewhere the honest answer is
+    # "not packageable".
+    expected = _apple_compiler_available(target)
     assert canonical_compile_options(_module(), target=target)["package_native"] is expected
     assert canonical_compile_options(
         _module(), target=target, options={"apple_target_ir_mode": "value"},
@@ -183,7 +196,7 @@ def test_apple_package_trace_uses_backend_selected_kind(monkeypatch, tmp_path, t
     dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     dylib.write_bytes(b"apple-spine-test-runtime")
     monkeypatch.setenv(runtime_var, str(dylib))
-    if target == "apple_cpu" and not _apple_cpu_compiler_available():
+    if not _apple_compiler_available(target):
         # Without the production compiler an explicit request fails closed.
         with pytest.raises(RuntimeError, match="tessera-opt"):
             compile_graph_module(
@@ -530,7 +543,10 @@ def test_apple_gpu_low_precision_gelu_static_and_dynamic_execute_compare(
         assert bundle.launch_descriptor.provenance["storage"] == storage
         assert bundle.launch_descriptor.provenance["accumulation"] == "fp32"
         if dynamic:
-            assert 'cf.assert' in bundle.target_ir.text
+            # E2E-REAL-6 (2026-11-04): the replayed native descriptor contract
+            # lowers to one verified kernel_call naming the dynamic ABI.
+            assert "tessera_apple.gpu.kernel_call" in bundle.target_ir.text
+            assert f'abi = "{abi}"' in bundle.target_ir.text
         else:
             # E2E-REAL-6: the scheduled activation names its runtime delegate.
             assert 'implementation = "runtime_msl"' in bundle.target_ir.text
@@ -796,6 +812,18 @@ def test_dynamic_topk_contract_orders_outputs_and_rejects_unsupported_forms(
     dylib = tmp_path / "libTesseraAppleRuntime.dylib"
     dylib.write_bytes(b"apple-e2e2-test-runtime")
     monkeypatch.setenv("TESSERA_APPLE_GPU_RUNTIME_LIB", str(dylib))
+    # Admission refusals are host-independent; packaging needs the production
+    # compiler's Apple GPU value lowering and fails closed without it.
+    assert not apple_native.supports_native_package(_dynamic_topk_module(axis=0))
+    assert not apple_native.supports_native_package(
+        _dynamic_topk_module(index_dtype="int64")
+    )
+    if not _apple_gpu_compiler_available():
+        with pytest.raises(RuntimeError, match="tessera-opt"):
+            apple_native.package_native(
+                _dynamic_topk_module(), pipeline_name="tessera-lower-to-apple_gpu-runtime",
+            )
+        return
     package = apple_native.package_native(
         _dynamic_topk_module(), pipeline_name="tessera-lower-to-apple_gpu-runtime",
     )
@@ -809,10 +837,6 @@ def test_dynamic_topk_contract_orders_outputs_and_rejects_unsupported_forms(
     assert [scalar.name for scalar in descriptor.scalars] == ["Rows", "Columns", "K"]
     assert descriptor.provenance["nan_policy"] == "last"
     assert descriptor.provenance["tie_policy"] == "lower_index"
-    assert not apple_native.supports_native_package(_dynamic_topk_module(axis=0))
-    assert not apple_native.supports_native_package(
-        _dynamic_topk_module(index_dtype="int64")
-    )
 
 
 @pytest.mark.hardware_apple_gpu

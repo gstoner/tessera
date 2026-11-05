@@ -86,7 +86,6 @@ UNREGISTERED: dict[str, str] = {
     "conformal_energy_on_sphere": "undeclared: complex",
     "conformal_jacobian": "undeclared: complex",
     "conv3d_ndhwc": "undeclared: other",
-    "count_nonzero": "undeclared: reduction",
     "cross_ratio": "undeclared: complex",
     "dbar": "undeclared: complex",
     "dequantize_fp6": "undeclared: quantize",
@@ -181,14 +180,13 @@ UNREGISTERED: dict[str, str] = {
     "take": "undeclared: shape-index",
     "tile": "undeclared: shape-index",
     "tile_view": "undeclared: shape-index",
-    "top_k": "undeclared: shape-index",
     "trace": "undeclared: linalg",
     "unpack": "undeclared: shape-index",
     "var": "undeclared: reduction",
     "vec": "undeclared: linalg",
     "weight_norm": "undeclared: other",
 }
-UNREGISTERED_CEILING = 143
+UNREGISTERED_CEILING = 141
 
 _FAMILIES = ("reduce-kind:", "dotted-spelling:", "renamed:", "undeclared:")
 _PREFIX = "tessera."

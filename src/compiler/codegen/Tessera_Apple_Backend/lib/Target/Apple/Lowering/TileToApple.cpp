@@ -612,6 +612,77 @@ void emitAppleValueCall(OpBuilder &b, Operation *op,
   op->erase();
 }
 
+// E2E-REAL-6 Apple GPU runtime-descriptor families (2026-11-04). A Tile op
+// produced from the native Schedule record (NativeAppleGPUDescriptor.h) carries
+// its contract. The runtime entry is derived here, independently, from the Tile
+// op and its storage -- this lowering's own table -- and must equal the symbol
+// and framework the contract recorded; the ABI id is carried through. A
+// disagreement is a stale or altered contract and fails closed.
+struct AppleGPUDescriptorEntry {
+  llvm::StringLiteral tile;
+  llvm::StringLiteral storage;
+  llvm::StringLiteral symbol;
+  llvm::StringLiteral framework;
+};
+
+constexpr AppleGPUDescriptorEntry kAppleGPUDescriptorEntries[] = {
+    {"tile.batched_gemm", "f32", "tessera_apple_gpu_bmm_f32", "MPS"},
+    {"tile.batched_gemm", "f16", "tessera_apple_gpu_bmm_f16", "MPS"},
+    {"tile.batched_gemm", "bf16", "tessera_apple_gpu_bmm_bf16", "MPS"},
+    {"tile.transpose", "f32", "tessera_apple_gpu_mpsgraph_transpose_f32", "MPSGraph"},
+    // bf16 shares the 16-bit MPSGraph entry; the ABI id names the storage.
+    {"tile.transpose", "f16", "tessera_apple_gpu_mpsgraph_transpose_f16", "MPSGraph"},
+    {"tile.transpose", "bf16", "tessera_apple_gpu_mpsgraph_transpose_f16", "MPSGraph"},
+    {"tile.softmax", "f32", "tessera_apple_gpu_softmax_f32_status", "Metal"},
+    {"tile.gelu", "f32", "tessera_apple_gpu_gelu_f32_status", "Metal"},
+    {"tile.gelu", "f16", "tessera_apple_gpu_gelu_f16_status", "Metal"},
+    {"tile.gelu", "bf16", "tessera_apple_gpu_gelu_bf16_status", "Metal"},
+    {"tile.popcount", "i32", "tessera_apple_gpu_popcount_i32", "Metal"},
+    {"tile.count_nonzero", "f32", "tessera_apple_gpu_count_nonzero_lastaxis_f32", "Metal"},
+    {"tile.top_k", "f32", "tessera_apple_gpu_topk_f32", "Metal"},
+};
+
+LogicalResult emitAppleGPUDescriptorCall(OpBuilder &b, Operation *op,
+                                         DictionaryAttr contract) {
+  llvm::StringRef name = op->getName().getStringRef();
+  llvm::StringRef storage;
+  if (op->getNumOperands() > 0)
+    if (auto ty = llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType())) {
+      Type et = ty.getElementType();
+      storage = et.isF32()          ? "f32"
+                : et.isF16()        ? "f16"
+                : et.isBF16()       ? "bf16"
+                : et.isInteger(32)  ? "i32"
+                                    : "";
+    }
+  const AppleGPUDescriptorEntry *entry = nullptr;
+  for (const AppleGPUDescriptorEntry &e : kAppleGPUDescriptorEntries)
+    if (name == e.tile && storage == e.storage)
+      entry = &e;
+  auto text = [&](llvm::StringRef key) {
+    auto attr = contract.getAs<StringAttr>(key);
+    return attr ? attr.getValue() : llvm::StringRef();
+  };
+  if (!entry)
+    return op->emitError("apple_gpu value lowering: no runtime descriptor entry "
+                         "for '")
+           << name << "' over " << (storage.empty() ? "this" : storage)
+           << " storage";
+  if (text("tile_op") != name || text("symbol") != entry->symbol ||
+      text("framework") != entry->framework || text("abi").empty() ||
+      !op->getAttrOfType<StringAttr>("tessera.schedule_hash"))
+    return op->emitError("apple_gpu value lowering: '")
+           << name << "' descriptor contract disagrees with the runtime entry "
+           << entry->symbol << " (" << entry->framework << ")";
+  llvm::StringRef opKind = name;
+  opKind.consume_front("tile.");
+  emitAppleValueCall(b, op, "tessera_apple.gpu.kernel_call", opKind,
+                     entry->symbol, text("abi"), "executable", entry->framework,
+                     {b.getNamedAttr("tessera.apple_gpu_descriptor_contract",
+                                     contract)});
+  return success();
+}
+
 //===----------------------------------------------------------------------===//
 // CPU pass
 //===----------------------------------------------------------------------===//
@@ -955,9 +1026,9 @@ struct LowerTileToAppleGPUPass
       : PassWrapper(other) {}
 
   // E2E-REAL-6 (2026-11-04): a pass option as on the CPU pass, so the
-  // replayed Apple GPU domain and linalg Schedule/Tile artifacts
-  // (NativeAppleGPUDomain.h, NativeAppleGPUKernel.h) reach the value lowering
-  // standalone (`--tile-to-apple_gpu=value=true`).
+  // replayed Apple GPU domain, linalg and descriptor Schedule/Tile artifacts
+  // (NativeAppleGPUDomain.h, NativeAppleGPUKernel.h, NativeAppleGPUDescriptor.h)
+  // reach the value lowering standalone (`--tile-to-apple_gpu=value=true`).
   Option<bool> valueMode{*this, "value",
                          llvm::cl::desc("Emit value-producing "
                                         "tessera_apple.gpu.kernel_call ops"),
@@ -992,6 +1063,15 @@ struct LowerTileToAppleGPUPass
       // with a named diagnostic (the full pipeline is value-only and must not
       // silently degrade to an artifact).
       if (valueMode) {
+        if (auto contract = op->getAttrOfType<DictionaryAttr>(
+                "tessera.apple_gpu_descriptor_contract")) {
+          if (failed(emitAppleGPUDescriptorCall(builder, op, contract))) {
+            signalPassFailure();
+            return;
+          }
+          ++ordinal;
+          continue;
+        }
         // E2E-REAL-6: a Tile op the native Apple GPU Schedule produced carries
         // its contract; it lowers from that contract or not at all.
         if (op->hasAttr("tessera.apple_gpu_kernel_contract")) {

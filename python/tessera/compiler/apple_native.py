@@ -21,6 +21,7 @@ from .graph_ir import GraphIRModule
 from .native_artifact import (BufferBinding, LaunchDescriptor, LaunchGeometry,
                               NativeEntryPoint, NativeImageArtifact,
                               OrderingSemantics, ScalarArgument, ShapeGuard)
+from .scheduled_apple_gpu_descriptor import ScheduledAppleGPUDescriptorArtifact
 from .scheduled_attention import ScheduledAttentionArtifact
 from .scheduled_attention_backward import ScheduledAttentionBackwardArtifact
 from .scheduled_kernel import ScheduledKernelArtifact
@@ -189,15 +190,19 @@ def tools_available() -> bool:
 def native_package_available(module: GraphIRModule) -> bool:
     """Whether ``package_native`` can package ``module`` on this host.
 
-    The runtime dylib is always required. A domain or linalg family
-    (``NATIVE_LINALG_KINDS``) that lowers through native Schedule/Tile also needs a ``tessera-opt`` that registers the Apple
+    The runtime dylib is always required. A descriptor, domain or linalg
+    family (``SCHEDULED_DESCRIPTOR_KINDS``, ``NATIVE_LINALG_KINDS``) that lowers through native Schedule/Tile also needs a ``tessera-opt`` that registers the Apple
     GPU value lowering; without one the request is not packageable here, so
     the driver does not claim it (an explicit ``package_native=True`` still
     fails closed, naming ``tessera-opt``).
     """
     if not tools_available():
         return False
-    if native_package_kind(module) in NATIVE_LINALG_KINDS:
+    kind = native_package_kind(module)
+    if kind in SCHEDULED_DESCRIPTOR_KINDS:
+        from .scheduled_apple_gpu_descriptor import compiler_available
+        return compiler_available()
+    if kind in NATIVE_LINALG_KINDS:
         from .scheduled_apple_gpu_kernel import lowering_available as linalg_lowering_available
         return linalg_lowering_available()
     if _scheduled_domain_kind(module) is None:
@@ -496,6 +501,21 @@ def native_package_kind(module: GraphIRModule) -> str | None:
     canonical driver can then ask one backend-owned question instead of
     maintaining a second Apple value/descriptor family table.
     """
+    from .scheduled_apple_gpu_descriptor import owns, supports_scheduled_apple_gpu_descriptor
+
+    # E2E-REAL-6 (2026-11-04): the descriptor families below have one
+    # authority, the native contract (NativeAppleGPUDescriptor.h); a request it
+    # refuses is not an Apple GPU descriptor request at all. What it admits
+    # also passes the matching Graph-owned predicate (it is stricter): rank-3
+    # matmul/gemm and broadcast-B batched_gemm, which that predicate accepted,
+    # are not valid Graph IR.
+    if owns(module) and not supports_scheduled_apple_gpu_descriptor(module):
+        return None
+    if (owns(module) and module.functions[0].body[0].op_name == "tessera.transpose"
+            and _transpose_contract(module) is None):
+        # The Graph emitter's `permutation=` spelling, which the retired
+        # predicate below does not read (it refused such a request).
+        return "transpose"
     if len(module.functions) == 1 and len(module.functions[0].body) == 1:
         from .scheduled_apple_gpu_kernel import APPLE_GPU_KERNEL_OPS, supports_scheduled_apple_gpu_kernel
         if (module.functions[0].body[0].op_name in APPLE_GPU_KERNEL_OPS
@@ -506,6 +526,8 @@ def native_package_kind(module: GraphIRModule) -> str | None:
             # the classification below (it is stricter).
             return None
     if _contract(module) is not None:
+        if not supports_scheduled_apple_gpu_descriptor(module):
+            return None
         return "batched_gemm"
     if _softmax_contract(module) is not None:
         return "softmax"
@@ -560,6 +582,14 @@ def supports_native_package(module: GraphIRModule) -> bool:
 # Graph-owned branch; a value kind with no entry fails closed below.
 _VALUE_SYMBOLS: dict[str, tuple[str, str]] = {
 }
+
+
+#: E2E-REAL-6 (2026-11-04): families packaged from the replayed native
+#: Schedule/Tile/Target artifact (``scheduled_apple_gpu_descriptor``).
+SCHEDULED_DESCRIPTOR_KINDS = frozenset({
+    "batched_gemm", "transpose", "dynamic_softmax", "dynamic_gelu",
+    "dynamic_popcount", "dynamic_count_nonzero", "dynamic_topk",
+})
 
 
 #: E2E-REAL-6 Apple GPU linalg (2026-11-04): the families whose package is
@@ -630,28 +660,18 @@ def package_scheduled_apple_gpu_domain(
 
 def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
     kind = native_package_kind(module)
+    if kind in SCHEDULED_DESCRIPTOR_KINDS:
+        from .scheduled_apple_gpu_descriptor import lower_scheduled_apple_gpu_descriptor
+        return package_scheduled_apple_gpu_descriptor(
+            lower_scheduled_apple_gpu_descriptor(module), pipeline_name=pipeline_name)
     if kind in NATIVE_LINALG_KINDS:
         from .scheduled_apple_gpu_kernel import lower_scheduled_apple_gpu_kernel
         return package_scheduled_apple_gpu_kernel(
             lower_scheduled_apple_gpu_kernel(module), pipeline_name=pipeline_name)
-    if kind == "batched_gemm":
-        return package_batched_gemm(module, pipeline_name=pipeline_name)
     if kind == "softmax":
         return package_softmax(module, pipeline_name=pipeline_name)
-    if kind == "dynamic_softmax":
-        return package_dynamic_softmax(module, pipeline_name=pipeline_name)
-    if kind == "transpose":
-        return package_transpose(module, pipeline_name=pipeline_name)
     if kind == "gelu":
         return package_gelu(module, pipeline_name=pipeline_name)
-    if kind == "dynamic_gelu":
-        return package_dynamic_gelu(module, pipeline_name=pipeline_name)
-    if kind == "dynamic_popcount":
-        return package_dynamic_popcount(module, pipeline_name=pipeline_name)
-    if kind == "dynamic_count_nonzero":
-        return package_dynamic_count_nonzero(module, pipeline_name=pipeline_name)
-    if kind == "dynamic_topk":
-        return package_dynamic_topk(module, pipeline_name=pipeline_name)
     if kind is None:
         raise ValueError("Apple GPU native packaging requires one supported static descriptor contract")
     if _scheduled_domain_kind(module) is not None:
@@ -685,6 +705,13 @@ def package_native(module: GraphIRModule, *, pipeline_name: str) -> AppleNativeP
     return AppleNativePackage("apple.value", target_ir, target_ir, image, descriptor)
 
 def package_batched_gemm(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
+    """Package one static rank-3 batched GEMM MPS ABI.
+
+    Decision #31(a) oracle, test-only (E2E-REAL-6, 2026-11-04): production
+    packages this family from the replayed native artifact
+    (``package_scheduled_apple_gpu_descriptor``); this Graph-owned constructor
+    survives only for ``tests/unit/test_apple_gpu_descriptor_migration.py``.
+    """
     contract = _contract(module)
     if contract is None:
         raise ValueError("Apple native package requires one static f32/f16/bf16 rank-3 batched_gemm")
@@ -1621,6 +1648,112 @@ def package_scheduled_attention_backward(
     return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
 
 
+#: Per family: (launch-geometry policy, provenance route, provenance fields
+#: beyond the contract). The names the runtime launcher and its tests read --
+#: they are the retired Graph-owned constructors' descriptor labels, kept so a
+#: replayed descriptor is interchangeable with the one it replaces.
+_DESCRIPTOR_LABELS: dict[str, tuple[str, str, dict[str, object]]] = {
+    "batched_gemm": ("apple_mps_bmm", "mps_bmm_native_library", {}),
+    "transpose": ("apple_mpsgraph_transpose", "apple_mpsgraph_transpose_native_library", {}),
+    "dynamic_softmax": ("apple_msl_softmax_dynamic", "apple_softmax_native_library", {
+        "dynamic_shape": True, "scalar_contract": "Rows=x.shape[0],Columns=x.shape[1]"}),
+    "dynamic_gelu": ("apple_msl_gelu_dynamic", "apple_gelu_native_library", {
+        "dynamic_shape": True, "scalar_contract": "Elements=x.size", "accumulation": "fp32"}),
+    "dynamic_popcount": ("apple_msl_popcount_dynamic", "apple_popcount_native_library", {
+        "dynamic_shape": True, "scalar_contract": "Elements=x.size"}),
+    "dynamic_count_nonzero": (
+        "apple_msl_count_nonzero_lastaxis_dynamic", "apple_count_nonzero_native_library", {
+            "dynamic_shape": True, "scalar_contract": "Outer=x.shape[0],AxisExtent=x.shape[1]"}),
+    "dynamic_topk": ("apple_msl_topk_deterministic_dynamic", "apple_topk_deterministic_native_library", {
+        "dynamic_shape": True, "result_order": ["values", "indices"],
+        "scalar_contract": "Rows=x.shape[0],Columns=x.shape[1],K=graph.k"}),
+}
+
+
+def package_scheduled_apple_gpu_descriptor(
+    artifact: ScheduledAppleGPUDescriptorArtifact,
+    *,
+    pipeline_name: str,
+) -> AppleNativePackage:
+    """Bind a replayed Apple GPU descriptor family to its runtime C ABI entry.
+
+    E2E-REAL-6 (2026-11-04): ``batched_gemm``, ``transpose`` and the dynamic
+    ``softmax``/``gelu``/``popcount``/``count_nonzero``/``top_k``. Every
+    descriptor field -- buffers, storage, ranks, static shape guards, ABI
+    scalars, ordering policy -- is projected from the contract
+    ``verify_apple_gpu_descriptor_projection`` just proved equal to the native
+    replay of all three boundaries; nothing is read from a Graph object. The
+    consumer is a hand-written MPS/MPSGraph/MSL entry, a declared Decision #28
+    Tier-3 delegate reached through the verified
+    ``tessera_apple.gpu.kernel_call`` the Apple GPU value lowering produced.
+    """
+    from .scheduled_apple_gpu_descriptor import verify_apple_gpu_descriptor_projection
+
+    projection = verify_apple_gpu_descriptor_projection(artifact)
+    library = _runtime_library_path()
+    if library is None:
+        raise RuntimeError("E2E-REAL-6 Apple GPU descriptor requires a fresh Tessera Apple GPU runtime dylib")
+    kind, symbol, abi = projection.kind, projection.symbol, projection.abi
+    geometry, route, labels = _DESCRIPTOR_LABELS[kind]
+    target_ir = artifact.target_ir
+    payload = library.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    image = NativeImageArtifact(
+        target="apple_gpu", architecture="apple_gpu", pipeline_name=pipeline_name,
+        compiler_fingerprint="apple-runtime-abi-v1",
+        toolchain_fingerprint=hashlib.sha256(("apple_gpu|" + digest).encode()).hexdigest(),
+        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(), binary_format="shared_object",
+        payload=payload, entry_points=(NativeEntryPoint(symbol, abi),), compile_state="prepackaged",
+    )
+    width = {"fp32": 4, "int32": 4, "fp16": 2, "bf16": 2}
+    buffers = tuple(
+        BufferBinding(ordinal, name, "input" if ordinal < projection.inputs else "output",
+                      dtype, len(shape), "row_major", width[dtype])
+        for ordinal, (name, shape, dtype) in enumerate(
+            zip(projection.bindings, projection.shapes, projection.dtypes))
+    )
+    # A fully static family is guarded extent by extent; a dynamic family's
+    # extents are bound by its ABI scalars, which the launcher checks.
+    static = all(-1 not in shape for shape in projection.shapes)
+    guards = tuple(
+        ShapeGuard(name, axis, "eq", extent)
+        for name, shape in zip(projection.bindings, projection.shapes)
+        for axis, extent in enumerate(shape)
+    ) if static else ()
+    scalars = tuple(ScalarArgument(len(buffers) + index, name, dtype)
+                    for index, (name, dtype) in enumerate(projection.scalars))
+    semantics = {key: list(value) if isinstance(value, tuple) else value
+                 for key, value in projection.semantics.items()}
+    op_kind = projection.tile_op.removeprefix("tile.")
+    provenance: dict[str, object] = {
+        "work_item": "E2E-REAL-6", "route": route, "op_kind": op_kind, **labels,
+        **{key: value for key, value in semantics.items() if key != "broadcast_b"},
+        "storage": projection.dtypes[0],
+        "framework": projection.framework, "target_ir_op": "tessera_apple.gpu.kernel_call",
+        "native_contract": "apple_gpu_descriptor", "schedule_digest": projection.schedule_digest,
+        "tile_ir_digest": hashlib.sha256(artifact.tile_ir.encode()).hexdigest(),
+    }
+    if kind == "batched_gemm":
+        batch, m, k = projection.shapes[0]
+        provenance.update(shape=[batch, m, projection.shapes[1][2], k],
+                          broadcast_b=semantics["broadcast_b"])
+    elif kind == "transpose":
+        provenance["shape"] = list(projection.shapes[0])
+    elif kind == "dynamic_gelu":
+        provenance["shape"] = [None, None]
+    if kind in {"dynamic_popcount", "dynamic_count_nonzero", "dynamic_topk"}:
+        # Their retired descriptors named no storage; the buffers carry it.
+        del provenance["storage"]
+    descriptor = LaunchDescriptor(
+        image_digest=image.image_digest, entry_symbol=symbol, abi_id=abi,
+        buffers=buffers, shape_guards=guards, scalars=scalars,
+        geometry=LaunchGeometry(policy=geometry),
+        ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("return",)),
+        provenance=provenance,
+    )
+    return AppleNativePackage(artifact.tile_ir, target_ir, target_ir, image, descriptor)
+
+
 def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
     """Compatibility frontend; the native artifact owns static softmax packaging."""
     if _softmax_contract(module) is None:
@@ -1631,7 +1764,13 @@ def package_softmax(module: GraphIRModule, *, pipeline_name: str) -> AppleNative
 
 
 def package_dynamic_softmax(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
-    """Package dynamic rank-2 f32 row-softmax with verified shape scalars."""
+    """Package dynamic rank-2 f32 row-softmax with verified shape scalars.
+
+    Decision #31(a) oracle, test-only (E2E-REAL-6, 2026-11-04): production
+    packages this family from the replayed native artifact
+    (``package_scheduled_apple_gpu_descriptor``); this Graph-owned constructor
+    survives only for ``tests/unit/test_apple_gpu_descriptor_migration.py``.
+    """
     contract = _dynamic_softmax_contract(module)
     if contract is None:
         raise ValueError("Apple dynamic softmax requires rank-2 ?x? f32 last-axis input and output")
@@ -1673,7 +1812,13 @@ def package_dynamic_softmax(module: GraphIRModule, *, pipeline_name: str) -> App
 
 
 def package_transpose(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
-    """Package one static rank-2/rank-3 MPSGraph transpose ABI."""
+    """Package one static rank-2/rank-3 MPSGraph transpose ABI.
+
+    Decision #31(a) oracle, test-only (E2E-REAL-6, 2026-11-04): production
+    packages this family from the replayed native artifact
+    (``package_scheduled_apple_gpu_descriptor``); this Graph-owned constructor
+    survives only for ``tests/unit/test_apple_gpu_descriptor_migration.py``.
+    """
     contract = _transpose_contract(module)
     if contract is None:
         raise ValueError("Apple transpose package requires one static f32/f16/bf16 rank-2/rank-3 permutation")
@@ -1830,14 +1975,26 @@ def package_gelu_artifact(artifact: AppleGeluArtifact, *, pipeline_name: str) ->
 
 
 def package_dynamic_gelu(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
-    """Compatibility frontend; native IR owns dynamic dimensions and shape checks."""
+    """Compatibility frontend; native IR owns dynamic dimensions and shape checks.
+
+    Decision #31(a) oracle, test-only (E2E-REAL-6, 2026-11-04): production
+    packages this family from the replayed native artifact
+    (``package_scheduled_apple_gpu_descriptor``); this Graph-owned constructor
+    survives only for ``tests/unit/test_apple_gpu_descriptor_migration.py``.
+    """
     if _dynamic_gelu_contract(module) is None:
         raise ValueError("Apple dynamic GELU requires matching rank-two dynamic tensors")
     return package_gelu_artifact(lower_gelu_artifact(module), pipeline_name=pipeline_name)
 
 
 def package_dynamic_popcount(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
-    """Package rank-1 dynamic i32 popcount with scalar-verified extent."""
+    """Package rank-1 dynamic i32 popcount with scalar-verified extent.
+
+    Decision #31(a) oracle, test-only (E2E-REAL-6, 2026-11-04): production
+    packages this family from the replayed native artifact
+    (``package_scheduled_apple_gpu_descriptor``); this Graph-owned constructor
+    survives only for ``tests/unit/test_apple_gpu_descriptor_migration.py``.
+    """
     contract = _dynamic_popcount_contract(module)
     if contract is None:
         raise ValueError("Apple dynamic popcount requires rank-1 ? i32 input and output")
@@ -1874,7 +2031,13 @@ def package_dynamic_popcount(module: GraphIRModule, *, pipeline_name: str) -> Ap
 def package_dynamic_count_nonzero(
     module: GraphIRModule, *, pipeline_name: str,
 ) -> AppleNativePackage:
-    """Package dynamic rank-2 f32 last-axis count-nonzero reduction."""
+    """Package dynamic rank-2 f32 last-axis count-nonzero reduction.
+
+    Decision #31(a) oracle, test-only (E2E-REAL-6, 2026-11-04): production
+    packages this family from the replayed native artifact
+    (``package_scheduled_apple_gpu_descriptor``); this Graph-owned constructor
+    survives only for ``tests/unit/test_apple_gpu_descriptor_migration.py``.
+    """
     contract = _dynamic_count_nonzero_contract(module)
     if contract is None:
         raise ValueError(
@@ -1922,7 +2085,13 @@ def package_dynamic_count_nonzero(
 
 
 def package_dynamic_topk(module: GraphIRModule, *, pipeline_name: str) -> AppleNativePackage:
-    """Package deterministic ordered top-k with explicit output bindings."""
+    """Package deterministic ordered top-k with explicit output bindings.
+
+    Decision #31(a) oracle, test-only (E2E-REAL-6, 2026-11-04): production
+    packages this family from the replayed native artifact
+    (``package_scheduled_apple_gpu_descriptor``); this Graph-owned constructor
+    survives only for ``tests/unit/test_apple_gpu_descriptor_migration.py``.
+    """
     contract = _dynamic_topk_contract(module)
     if contract is None:
         raise ValueError(

@@ -286,9 +286,12 @@ def test_missing_value_lowering_fails_closed_naming_tessera_opt(monkeypatch, fak
     assert canonical_compile_options(module, target="apple_gpu")["package_native"] is False
     with pytest.raises(RuntimeError, match=r"tessera-opt.*tile-to-apple_gpu=value=true"):
         apple_native.package_native(module, pipeline_name=PIPELINE)
-    # Families outside this contract do not consult the probe.
-    transpose = _module("tessera.transpose", [(3, 4)], (4, 3), kwargs={"axes": (1, 0)})
-    assert apple_native.native_package_available(transpose)
+    # Families outside this contract do not consult the probe. (Transpose was
+    # the example until it moved onto the descriptor contract, which needs the
+    # same lowering; a static softmax packages from the semantic kernel.)
+    softmax = _module("tessera.softmax", [(4, 8)], (4, 8))
+    assert apple_native.native_package_kind(softmax) == "softmax"
+    assert apple_native.native_package_available(softmax)
 
 
 # ---------------------------------------------------------------------------

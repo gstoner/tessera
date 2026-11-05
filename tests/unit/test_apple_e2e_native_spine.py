@@ -9,6 +9,7 @@ import numpy as np
 from tessera.compiler.apple_native import APPLE_BMM_F32_ABI, APPLE_BMM_F32_SYMBOL
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.pipeline_registry import target_pipeline_lookup
+from tessera.compiler.scheduled_apple_gpu_kernel import lowering_available as apple_gpu_lowering_available
 from tessera.compiler.scheduled_matmul import find_tessera_opt
 
 
@@ -1101,10 +1102,19 @@ def test_apple_gpu_tuple_svd_descriptor_states_are_explicit():
     assert value_descriptor_state("tessera.svd") == "descriptor_ready"
 
 
+@pytest.mark.compiler_route
+@pytest.mark.skipif(
+    not apple_gpu_lowering_available(),
+    reason="requires production tessera-opt with the native Apple GPU value lowering",
+)
 def test_apple_gpu_reduced_svd_target_ir_and_serialized_descriptor_contract(
     monkeypatch, tmp_path,
 ):
-    """Ratchet target IR, ordered binding/scalar ABI, and excluded SVD forms."""
+    """Ratchet target IR, ordered binding/scalar ABI, and excluded SVD forms.
+
+    Since E2E-REAL-6 (2026-11-04) the SVD package is projected from the native
+    Schedule/Tile/Target artifact, so this needs the production compiler.
+    """
     from tessera.compiler import apple_native
     from tessera.compiler.driver import compile_graph_module
 

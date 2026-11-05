@@ -41,12 +41,18 @@ def _value_lowering_registered() -> bool:
     return native.lowering_available()
 
 
-#: The Target IR is produced by the Apple GPU value lowering, which exists only
-#: where the production compiler was configured with the Apple backend.
-_needs_compiler = pytest.mark.skipif(
+_compiler_skip = pytest.mark.skipif(
     not _value_lowering_registered(),
     reason="requires production tessera-opt with the native Apple GPU value lowering",
 )
+
+
+def _needs_compiler(test):
+    """The Target IR is produced by the Apple GPU value lowering, which exists
+    only where the production compiler was configured with the Apple backend.
+    ``compiler_route`` selects these into the CI lane that builds exactly that
+    compiler and refuses a skipped proof (``scripts/ci_require_executed.py``)."""
+    return pytest.mark.compiler_route(_compiler_skip(test))
 
 
 def _type(shape) -> IRType:

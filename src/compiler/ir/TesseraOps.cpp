@@ -697,6 +697,62 @@ LogicalResult ScaledMatmulOp::verify() {
         return emitOpError("NVIDIA NVFP4 contract requires ui8 [M,ceil(K/16)] / [ceil(K/16),N] UE4M3 scales with exact K16 semantics");
       return success();
     }
+    // E2E-REAL-6 SM120 MX (2026-11-04): OCP MX FP6 (E2M3/E3M2) or MXFP4
+    // (E2M1) A/B with one UE8M0 scale per 32 logical K values -- the contract
+    // `kind::mxf8f6f4` / `kind::mxf4` block-scale mma.sync computes. Unlike
+    // NVFP4 it has no batch or transpose profile: rank-2 row-major only.
+    if (physical.getValue() == "nvidia_sm120_mx_blockscale_v1") {
+      auto mxType = [](Type type) {
+        return isa<Float6E2M3FNType, Float6E3M2FNType, Float4E2M1FNType>(type);
+      };
+      auto lhsScale = dyn_cast<RankedTensorType>(getLhsScale().getType());
+      auto rhsScale = dyn_cast<RankedTensorType>(getRhsScale().getType());
+      auto layout = getScaleLayoutAttr();
+      auto block = layout ? dyn_cast_or_null<ArrayAttr>(layout.get("block"))
+                          : ArrayAttr();
+      auto granularity =
+          layout ? dyn_cast_or_null<StringAttr>(layout.get("granularity"))
+                 : StringAttr();
+      auto format = layout ? dyn_cast_or_null<StringAttr>(layout.get("format"))
+                           : StringAttr();
+      auto policy = getNumericPolicyAttr();
+      auto accum = policy ? dyn_cast_or_null<StringAttr>(policy.get("accum"))
+                          : StringAttr();
+      auto mode = policy ? dyn_cast_or_null<StringAttr>(policy.get("execution_mode"))
+                         : StringAttr();
+      auto byteScale = [](RankedTensorType type) {
+        return type && type.hasStaticShape() && type.getRank() == 2 &&
+               (type.getElementType().isUnsignedInteger(8) ||
+                type.getElementType().isSignlessInteger(8));
+      };
+      if (batching || getTransposeA() || getTransposeB() || !aType || !bType ||
+          !rType || aType.getRank() != 2 || bType.getRank() != 2 ||
+          rType.getRank() != 2 || !aType.hasStaticShape() ||
+          !bType.hasStaticShape() || !rType.hasStaticShape() ||
+          !mxType(aType.getElementType()) ||
+          aType.getElementType() != bType.getElementType() ||
+          !rType.getElementType().isF32())
+        return emitOpError("NVIDIA MX contract requires static rank-2 row-major "
+                           "FP6/MXFP4 A/B of one element type and f32 output");
+      const int64_t m = aType.getDimSize(0), k = aType.getDimSize(1);
+      const int64_t n = bType.getDimSize(1);
+      const int64_t scaleK = k / 32 + (k % 32 != 0);
+      if (m <= 0 || n <= 0 || k <= 0 || bType.getDimSize(0) != k ||
+          rType.getDimSize(0) != m || rType.getDimSize(1) != n ||
+          !byteScale(lhsScale) || !byteScale(rhsScale) ||
+          lhsScale.getShape() != ArrayRef<int64_t>({m, scaleK}) ||
+          rhsScale.getShape() != ArrayRef<int64_t>({scaleK, n}) ||
+          !layout || layout.size() != 3 || !policy || policy.size() != 2 ||
+          !granularity || granularity.getValue() != "block" ||
+          !block || block.size() != 2 ||
+          !isa<IntegerAttr>(block[0]) || cast<IntegerAttr>(block[0]).getInt() != 1 ||
+          !isa<IntegerAttr>(block[1]) || cast<IntegerAttr>(block[1]).getInt() != 32 ||
+          !format || format.getValue() != "ue8m0" || !accum ||
+          accum.getValue() != "fp32" || !mode ||
+          mode.getValue() != "exact_per_block")
+        return emitOpError("NVIDIA MX contract requires ui8 [M,ceil(K/32)] / [ceil(K/32),N] UE8M0 scales with exact K32 semantics");
+      return success();
+    }
     const bool folded =
         physical.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1" ||
         physical.getValue() == "rocm_mxfp4_w4a8_folded_row_pitched_v1";

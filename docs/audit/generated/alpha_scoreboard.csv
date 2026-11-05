@@ -12,7 +12,7 @@ mac_cpu,Mac M1 Max,arm64 CPU,replay_ssm,bypass,unmeasured,unrouted,partial,absen
 mac_cpu,Mac M1 Max,arm64 CPU,ppo,bypass,unmeasured,unrouted,partial,absent,no
 mac_cpu,Mac M1 Max,arm64 CPU,ebm,bypass,unmeasured,unrouted,partial,absent,no
 mac_cpu,Mac M1 Max,arm64 CPU,clifford,bypass,unmeasured,unrouted,partial,absent,no
-mac_gpu,Mac M1 Max,Apple7 GPU,matmul,bypass,unmeasured,bypass,partial,native,no
+mac_gpu,Mac M1 Max,Apple7 GPU,matmul,bypass,unmeasured,native,partial,native,no
 mac_gpu,Mac M1 Max,Apple7 GPU,softmax,bypass,unmeasured,native,partial,native,no
 mac_gpu,Mac M1 Max,Apple7 GPU,reduction,bypass,unmeasured,unrouted,partial,absent,no
 mac_gpu,Mac M1 Max,Apple7 GPU,norm,bypass,unmeasured,unrouted,partial,absent,no

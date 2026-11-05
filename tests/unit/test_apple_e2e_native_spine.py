@@ -521,7 +521,10 @@ def test_apple_gpu_low_precision_gelu_static_and_dynamic_execute_compare(
         assert bundle.launch_descriptor.provenance["storage"] == storage
         assert bundle.launch_descriptor.provenance["accumulation"] == "fp32"
         if dynamic:
-            assert 'cf.assert' in bundle.target_ir.text
+            # E2E-REAL-6 (2026-11-04): the replayed native descriptor contract
+            # lowers to one verified kernel_call naming the dynamic ABI.
+            assert "tessera_apple.gpu.kernel_call" in bundle.target_ir.text
+            assert f'abi = "{abi}"' in bundle.target_ir.text
         else:
             # E2E-REAL-6: the scheduled activation names its runtime delegate.
             assert 'implementation = "runtime_msl"' in bundle.target_ir.text

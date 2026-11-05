@@ -98,6 +98,7 @@ namespace tessera {
 #include "NativeAbsolute.h"
 #include "NativeX86Kernel.h"
 #include "NativeAppleCPUKernel.h"
+#include "NativeAppleGPUDescriptor.h"
 #include "NativeROCMMath.h"
 #include "NativeResultPermutation.h"
 #include "NativeSparse.h"
@@ -4055,6 +4056,12 @@ struct GraphToSchedulePass
     if (failed(scheduleNativeAppleCPUKernel(mod, appleCPUKernelSelected)))
       return signalPassFailure();
     if (appleCPUKernelSelected) return;
+    // E2E-REAL-6 Apple GPU runtime-descriptor families (2026-11-04): the same
+    // opt-in (launch bindings) on an apple_gpu module.
+    bool appleGPUDescriptorSelected = false;
+    if (failed(scheduleNativeAppleGPUDescriptor(mod, appleGPUDescriptorSelected)))
+      return signalPassFailure();
+    if (appleGPUDescriptorSelected) return;
     if (failed(scheduleNativeAbsolute(mod))) return signalPassFailure();
     if (failed(scheduleNativeX86Kernel(mod))) return signalPassFailure();
     if (failed(scheduleNativeROCMMath(mod))) return signalPassFailure();
@@ -5233,6 +5240,10 @@ struct ScheduleToTilePass
     if (failed(lowerNativeAppleCPUKernel(mod, appleCPUKernelSelected)))
       return signalPassFailure();
     if (appleCPUKernelSelected) return;
+    bool appleGPUDescriptorSelected = false;
+    if (failed(lowerNativeAppleGPUDescriptor(mod, appleGPUDescriptorSelected)))
+      return signalPassFailure();
+    if (appleGPUDescriptorSelected) return;
     if (failed(lowerNativeAbsolute(mod))) return signalPassFailure();
     if (failed(lowerNativeX86Kernel(mod))) return signalPassFailure();
     if (failed(lowerNativeROCMMath(mod))) return signalPassFailure();

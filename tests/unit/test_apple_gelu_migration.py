@@ -284,7 +284,8 @@ def test_prune_census_sees_the_generic_compiled_route():
 
     rows = {(t, f): status for t, f, _, status in bootstrap_prune_audit.family_rows()}
     assert rows[("apple_gpu", "gelu")] == "generic_compiled"
-    assert rows[("apple_gpu", "dynamic_gelu")] == "gap"
+    # E2E-REAL-6 (2026-11-04): dynamic GELU has its own native descriptor route.
+    assert rows[("apple_gpu", "dynamic_gelu")] == "compiled"
 
 
 # ---------------------------------------------------------------------------

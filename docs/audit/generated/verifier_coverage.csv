@@ -60,6 +60,7 @@ src/compiler/ir/TesseraOps.td,ControlWhileOp,1,1,real
 src/compiler/ir/TesseraOps.td,Conv2DNHWCOp,1,1,real
 src/compiler/ir/TesseraOps.td,CosOp,1,1,real
 src/compiler/ir/TesseraOps.td,CoshOp,1,1,real
+src/compiler/ir/TesseraOps.td,CountNonzeroOp,1,1,real
 src/compiler/ir/TesseraOps.td,CrossEntropyLossBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,CrossEntropyLossOp,1,1,real
 src/compiler/ir/TesseraOps.td,CummaxOp,1,1,real
@@ -268,6 +269,7 @@ src/compiler/ir/TesseraOps.td,SwigluFusedOp,1,1,real
 src/compiler/ir/TesseraOps.td,TanOp,1,1,real
 src/compiler/ir/TesseraOps.td,TanhOp,1,1,real
 src/compiler/ir/TesseraOps.td,TargetVerifyOp,1,1,real
+src/compiler/ir/TesseraOps.td,TopKOp,1,1,real
 src/compiler/ir/TesseraOps.td,TrainingLossAdamWOp,1,1,real
 src/compiler/ir/TesseraOps.td,TrainingLossSGDOp,1,1,real
 src/compiler/ir/TesseraOps.td,TransposeOp,1,1,real

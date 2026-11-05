@@ -101,6 +101,10 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
 #: The Apple CPU batched-GEMM/LAPACK families (E2E-REAL-6, 2026-11-04) are
 #: per target because their contract (``NativeAppleCPUKernel.h``) claims only
 #: an ``apple_cpu`` module; ``apple_gpu`` keeps its own owed rows.
+#: Apple GPU ``batched_gemm`` / ``transpose`` and the dynamic softmax, GELU,
+#: popcount, count_nonzero and top_k (E2E-REAL-6, 2026-11-04) reach
+#: ``package_scheduled_apple_gpu_descriptor`` through their contract
+#: (``NativeAppleGPUDescriptor.h``), which claims only an ``apple_gpu`` module.
 _TARGET_FAMILY_TO_COMPILED: dict[tuple[str, str], tuple[str, str]] = {
     ("nvidia_sm120", "nvfp4_matmul"): ("scheduled_matmul", "supports_scheduled_nvfp4_matmul"),
     ("nvidia_sm120", "int4_matmul"): ("scheduled_matmul", "supports_scheduled_int4_matmul"),
@@ -108,6 +112,10 @@ _TARGET_FAMILY_TO_COMPILED: dict[tuple[str, str], tuple[str, str]] = {
     ("apple_cpu", "softmax"): ("scheduled_kernel", "supports_scheduled_kernel"),
     **{("apple_cpu", family): ("scheduled_apple_cpu_kernel", "supports_scheduled_apple_cpu_kernel")
        for family in ("batched_gemm", "tri_solve", "cholesky", "cholesky_solve", "lu", "qr", "svd")},
+    **{("apple_gpu", family): ("scheduled_apple_gpu_descriptor",
+                               "supports_scheduled_apple_gpu_descriptor")
+       for family in ("batched_gemm", "transpose", "dynamic_softmax", "dynamic_gelu",
+                      "dynamic_popcount", "dynamic_count_nonzero", "dynamic_topk")},
     ("nvidia_sm120", "attention_backward"): (
         "scheduled_attention_recompute",
         "supports_scheduled_attention_recompute",

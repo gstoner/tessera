@@ -6116,12 +6116,13 @@ LogicalResult WhereOp::verify() {
 static LogicalResult verifyArgReduce(Operation *op, Value xValue,
                                      Value indicesValue,
                                      std::optional<int64_t> axis,
-                                     bool keepdims, StringRef name) {
+                                     bool keepdims, StringRef name,
+                                     bool floatingOperand = true) {
   auto x = dyn_cast<RankedTensorType>(xValue.getType());
   auto indices = dyn_cast<RankedTensorType>(indicesValue.getType());
   if (!x || !indices)
     return success();
-  if (!isFloatTensor(x))
+  if (floatingOperand && !isFloatTensor(x))
     return op->emitOpError() << name << " requires a floating operand";
   auto integer = dyn_cast<IntegerType>(indices.getElementType());
   if (!integer || (integer.getWidth() != 32 && integer.getWidth() != 64))
@@ -6157,6 +6158,51 @@ LogicalResult ArgmaxOp::verify() {
 LogicalResult ArgminOp::verify() {
   return verifyArgReduce(getOperation(), getX(), getIndices(), getAxis(),
                          getKeepdims(), "argmin");
+}
+
+// Same axis/keepdims result-shape rule as argmax, over any element type: a
+// nonzero test is defined for integer, boolean and floating operands.
+LogicalResult CountNonzeroOp::verify() {
+  return verifyArgReduce(getOperation(), getX(), getCounts(), getAxis(),
+                         getKeepdims(), "count_nonzero",
+                         /*floatingOperand=*/false);
+}
+
+LogicalResult TopKOp::verify() {
+  auto x = dyn_cast<RankedTensorType>(getX().getType());
+  auto values = dyn_cast<RankedTensorType>(getValues().getType());
+  auto indices = dyn_cast<RankedTensorType>(getIndices().getType());
+  // I64Attr getters return uint64_t; read the signed values.
+  int64_t k = getKAttr().getInt();
+  int64_t axisAttr = getAxisAttr().getInt();
+  if (k <= 0)
+    return emitOpError("top_k requires a positive k");
+  if (!x || !values || !indices)
+    return success();
+  if (!isFloatTensor(x) || values.getElementType() != x.getElementType())
+    return emitOpError("top_k requires a floating operand and values of its "
+                       "element type");
+  auto integer = dyn_cast<IntegerType>(indices.getElementType());
+  if (!integer || (integer.getWidth() != 32 && integer.getWidth() != 64))
+    return emitOpError("top_k indices must be an i32/i64 tensor");
+  int64_t rank = x.getRank();
+  int64_t axis = axisAttr < 0 ? axisAttr + rank : axisAttr;
+  if (rank == 0 || axis < 0 || axis >= rank)
+    return emitOpError("top_k axis is out of range");
+  if (!ShapedType::isDynamic(x.getDimSize(axis)) && k > x.getDimSize(axis))
+    return emitOpError("top_k k exceeds the selected axis extent");
+  for (RankedTensorType result : {values, indices}) {
+    if (result.getRank() != rank)
+      return emitOpError("top_k results keep the operand rank");
+    for (int64_t d = 0; d < rank; ++d) {
+      int64_t want = d == axis ? k : x.getDimSize(d);
+      int64_t got = result.getDimSize(d);
+      if (!ShapedType::isDynamic(want) && !ShapedType::isDynamic(got) &&
+          want != got)
+        return emitOpError("top_k result shape disagrees with k and the axis");
+    }
+  }
+  return success();
 }
 
 static LogicalResult verifyInclusiveScan(Operation *op, Value inputValue,

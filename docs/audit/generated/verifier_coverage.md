@@ -6,11 +6,11 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 
 | Status | Count | Meaning |
 |--------|-------|---------|
-| `real` | 302 | `hasVerifier = 1;` + substantive `verify()` body. |
+| `real` | 304 | `hasVerifier = 1;` + substantive `verify()` body. |
 | `trivial_stub` | 0 | `hasVerifier = 1;` + trivial `return success();` stub. |
 | `absent` | 0 | `hasVerifier = 1;` but no `verify()` body (build error risk). |
 | `no_verifier` | 0 | No verifier declared.  TD constraints suffice — fine for many ops. |
-| **Total** | 302 | |
+| **Total** | 304 | |
 
 ## Per-dialect details
 
@@ -79,6 +79,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `Conv2DNHWCOp` | `real` |
 | `CosOp` | `real` |
 | `CoshOp` | `real` |
+| `CountNonzeroOp` | `real` |
 | `CrossEntropyLossBackwardOp` | `real` |
 | `CrossEntropyLossOp` | `real` |
 | `CummaxOp` | `real` |
@@ -287,6 +288,7 @@ Human-readable view. The canonical machine-readable artifact is `verifier_covera
 | `TanOp` | `real` |
 | `TanhOp` | `real` |
 | `TargetVerifyOp` | `real` |
+| `TopKOp` | `real` |
 | `TrainingLossAdamWOp` | `real` |
 | `TrainingLossSGDOp` | `real` |
 | `TransposeOp` | `real` |

@@ -79,7 +79,7 @@ route fixtures and an inventory derived from those existing routes.
 | NVIDIA `package_native` | Softmax and reduction now enter native Schedule/Tile lowering, including narrow storage, min, keepdims and cooperative reduction. Their Graph constructors are deleted from production. Norm and forward attention now also consume native Schedule/Tile; their former constructors are test-only baselines. Fused paged attention and scaled/quantized matmul still reconstruct Tile. Saved-LSE pairs (incl. typed and scaled FP8 K/V forwards), recompute backward attention, signed INT4 and bounded paged reads now have native producers and typed replayed-artifact consumers (`package_scheduled_checkpoint`, `package_scheduled_attention_recompute` since 2026-11-03). | F2-U1–U10 close the bounded unary migration with RTX differential proof. Aligned masks and paired-LSE validation landed in the next cut; native paired, signed-INT4 and bounded paged producers are implemented; reuse NVVM/PTX compilation and retain per-storage ABI gates. |
 | ROCm `rocm_native.package_native` | `package_attention` reconstructs Tile/Graph text. (`package_softmax` / `package_reduction` lower through the native Schedule contract since 2026-09-27; `package_paged_kv_read` and `package_moe_dispatch` package their replayed artifacts through `package_scheduled_paged_kv` / `package_scheduled_moe_dispatch` since 2026-11-03; their Graph-authored packagers are test-only oracles -- see the dated notes below.) | Matmul, attention, depth-attention and generic semantic-kernel scheduled consumers already exist. Verify old/new envelope differences, extend missing paged-KV/MoE movement carriers, migrate one family, and delete its Graph constructor after equivalence. Reuse Target→ROCDL→HSACO. |
 | x86 `x86_native.package_native` | Direct baseline and AVX-512 softmax and rank-reducing or keepdims sum/mean/max now use replayed native Schedule/Tile with projected descriptor fields. Direct f32 matmul also replays its native Schedule and projects descriptor fields. Remaining non-f32 matmul/attention, cohort2, elementwise and delegated `x86_breadth.package_graph_breadth` classify Graph and construct lower-level calls/carriers. | Use existing scheduled matmul/attention/kernel consumers for covered shapes; move remaining pointwise/cohort/breadth contracts through canonical IR. For general compiled bodies, reuse `tessera-jit` LLVM lowering; keep native library calls explicit rather than relabeling them as generated bodies. |
-| Apple GPU `apple_native.package_native` | Batched GEMM, dynamic softmax and GELU, transpose, popcount/count-nonzero/topk, SVD and the value-ABI fallback read Graph operands/kwargs and construct descriptors. Static softmax and (since 2026-11-03) static rank-two GELU lower through native Schedule/Tile; GELU's former constructor is a test-only baseline. | Extend existing scheduled matmul/kernel/attention consumers. Migrate one value family to a verified native Target call with IR-derived ABI, then MSL body generation where appropriate. Keep MPS delegation explicitly represented in IR. |
+| Apple GPU `apple_native.package_native` | Batched GEMM, dynamic softmax and GELU, transpose, popcount/count-nonzero/topk, SVD and the linalg value-ABI fallback read Graph operands/kwargs and construct descriptors. Static softmax and (since 2026-11-03) static rank-two GELU lower through native Schedule/Tile, as do (since 2026-11-04, `NativeAppleGPUDomain.h`) the PPO, EBM and Clifford value families; their former constructors are test-only baselines. | Extend existing scheduled matmul/kernel/attention consumers. Migrate one value family to a verified native Target call with IR-derived ABI, then MSL body generation where appropriate. Keep MPS delegation explicitly represented in IR. |
 | Apple CPU `apple_cpu_native.package_native` | Only the BNNS f16/bf16 matmul still reads the single Graph op, shapes, kwargs and dtype to synthesize a runtime-call record. Static f32 matmul/gemm and rank-two f32 softmax (2026-11-03) and batched GEMM plus the six LAPACK factorizations (2026-11-04, `NativeAppleCPUKernel.h`) lower through native Schedule/Tile; their former constructor is a test-only baseline. | Add the typed call/ABI lowering from canonical IR; use the CPU LLVM path for general program bodies. This fifth package entry point must not disappear from a “four backend” inventory. |
 
 Source anchors are the corresponding `native_package_kind`, `package_native`
@@ -465,3 +465,19 @@ constructor is the #31(a) oracle of
 `tests/unit/test_apple_cpu_kernel_migration.py`, bit-exact on the M1 Max. The
 route census moves those seven rows to `compiled`. The BNNS f16/bf16 matmul is
 the last Apple CPU Graph-owned constructor.
+
+## Apple GPU PPO, EBM and Clifford value constructor retirement (2026-11-04)
+
+E2E-REAL-6, sync `E2E-REAL-6-apple-gpu-domain-2026-11-04`: `NativeAppleGPUDomain.h` owns
+`rl.ppo_policy_loss`, `ebm.{energy_quadratic,langevin_step,refinement,partition_exact}`
+and `clifford.geometric_product` on an opted-in `apple_gpu` / `apple7` module.
+It records a content-addressed Schedule contract with every semantic value the
+MSL/MPSGraph delegate reads, emits the registered Tile value op, and the
+existing Apple GPU value lowering (`tile-to-apple_gpu{value=true}`, a new pass
+option) produces the verified `tessera_apple.gpu.kernel_call`.
+`apple_native.package_scheduled_apple_gpu_domain` replays all three boundaries
+and projects the descriptor from the contract. The retired generic value branch
+is the #31(a) oracle of `tests/unit/test_apple_gpu_domain_migration.py`,
+bit-exact on the M1 Max. The route census moves those six rows to `compiled`;
+the Apple GPU linalg value families and the dynamic/BMM/transpose/SVD rows stay
+Graph-owned.

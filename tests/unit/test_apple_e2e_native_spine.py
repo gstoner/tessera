@@ -9,8 +9,16 @@ import numpy as np
 from tessera.compiler.apple_native import APPLE_BMM_F32_ABI, APPLE_BMM_F32_SYMBOL
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 from tessera.compiler.pipeline_registry import target_pipeline_lookup
-from tessera.compiler.scheduled_apple_gpu_kernel import lowering_available as apple_gpu_lowering_available
+from tessera.compiler.scheduled_apple_gpu_kernel import lowering_available as _gpu_value_lowering_registered
 from tessera.compiler.scheduled_matmul import find_tessera_opt
+
+#: A compiler-availability gate (tessera-opt built with the Apple backend), not
+#: a hardware capability gate: ``compiler_route`` runs it in the CI lane that
+#: builds that compiler and refuses a skip.
+_needs_gpu_value_lowering = pytest.mark.skipif(
+    not _gpu_value_lowering_registered(),
+    reason="requires production tessera-opt with the native value lowering",
+)
 
 
 def _module(dtype: str = "fp32") -> GraphIRModule:
@@ -1103,10 +1111,7 @@ def test_apple_gpu_tuple_svd_descriptor_states_are_explicit():
 
 
 @pytest.mark.compiler_route
-@pytest.mark.skipif(
-    not apple_gpu_lowering_available(),
-    reason="requires production tessera-opt with the native Apple GPU value lowering",
-)
+@_needs_gpu_value_lowering
 def test_apple_gpu_reduced_svd_target_ir_and_serialized_descriptor_contract(
     monkeypatch, tmp_path,
 ):

@@ -24,7 +24,7 @@ Rows are derived from the `register_native_vjp_plugin` declarations, so a family
 | `normalization` | `layer_norm`, `rmsnorm`, `rmsnorm_safe` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.native_vjp_program` | `tile.native_vjp_program` | apple_gpu, nvidia_sm120, rocm, x86 |
 | `optimizer_vjp` | `adam`, `adamw`, `momentum`, `nesterov`, `sgd` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `tessera.native_vjp_execution.v1` | `schedule.optimizer_vjp` | `tile.training_kernel` | nvidia_sm120, rocm, x86 |
 | `regression_loss_backward` | `huber_loss`, `loss.huber`, `loss.mae`, `loss.mse`, `loss.smooth_l1`, `mae_loss`, `mse_loss`, `smooth_l1_loss` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.loss_backward` | `tile.loss_backward_kernel` | nvidia_sm120, rocm, x86 |
-| `scaled_product_transpose` | `scaled_matmul` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.artifact` | `tile.structured_reduction_kernel` | rocm, rocm_gfx1201 |
+| `scaled_product_transpose` | `scaled_matmul` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.artifact` | `tile.structured_reduction_kernel` | rocm_gfx1201 |
 | `selective_ssm_backward` | `selective_ssm` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `tessera.native_vjp_execution.v1` | `schedule.sequence_mixer_backward` | `tile.training_kernel` | rocm |
 | `sequence_mixer_backward` | `gated_deltanet`, `kimi_delta_attention`, `modified_delta_attention` | canonical_composite | non_reexecuting_state_lineage | `certify_frontends_non_reexecuting` | `tessera.native_vjp_execution.v1` | `schedule.sequence_mixer_backward` | `tile.training_kernel` | nvidia_sm120, rocm, x86 |
 | `spectral_backward` | `istft`, `spectral_conv`, `spectral_filter`, `stft` | canonical_composite | pure_only | `certify_frontends` | `tessera.native_vjp_execution.v1` | `schedule.spectral_backward` | `tile.spectral_backward_kernel` | nvidia_sm120, rocm, x86 |
@@ -39,9 +39,9 @@ The distinction matters because the failure it guards against is specific: a fam
 
 A declaration is not execution evidence. Target-owned packets run every declared family in one process, validate independent numerical oracles, require runtime-origin physical attestations, and compare the observed family/target set exactly with the live declarations. Family-specific packets cover their named architecture and envelope; they do not inherit coverage from legacy whole-target packets. A test double produces only `runtime_unattested` evidence and cannot satisfy these packets.
 
-- declared family/target rows: **36**
+- declared family/target rows: **35**
 - exact-device packet rows: **24**
-- blocking rows without a packet: **12**
+- blocking rows without a packet: **11**
 
 | family | target | evidence status | evidence gate |
 |---|---|---|---|
@@ -66,7 +66,6 @@ A declaration is not execution evidence. Target-owned packets run every declared
 | `normalization` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
 | `optimizer_vjp` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
 | `regression_loss_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
-| `scaled_product_transpose` | `rocm` | `missing_exact_device_packet` | `none` |
 | `selective_ssm_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
 | `sequence_mixer_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |
 | `spectral_backward` | `rocm` | `exact_device_packet` | `tests/device/rocm/test_native_vjp_execution_certificates.py` |

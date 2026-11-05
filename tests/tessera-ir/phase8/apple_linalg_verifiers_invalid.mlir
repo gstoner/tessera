@@ -49,3 +49,53 @@ func.func @qr_bad_r_order(%a: tensor<6x4xf32>) -> (tensor<6x4xf32>, tensor<5x5xf
   %q, %r = tessera.qr %a : (tensor<6x4xf32>) -> (tensor<6x4xf32>, tensor<5x5xf32>)
   return %q, %r : tensor<6x4xf32>, tensor<5x5xf32>
 }
+
+// -----
+
+// E2E-REAL-6 (2026-11-04): svd and cholesky_solve admit a rank-3 batch, so the
+// verifier checks the batch dimension and the trailing matrix relations.
+func.func @svd_batch_mismatch(%a: tensor<2x6x4xf32>)
+    -> (tensor<3x6x4xf32>, tensor<2x4xf32>, tensor<2x4x4xf32>) {
+  // expected-error @+1 {{A, U, S and V batch dimensions must match}}
+  %u, %s, %v = tessera.svd %a
+      : (tensor<2x6x4xf32>) -> (tensor<3x6x4xf32>, tensor<2x4xf32>, tensor<2x4x4xf32>)
+  return %u, %s, %v : tensor<3x6x4xf32>, tensor<2x4xf32>, tensor<2x4x4xf32>
+}
+
+// -----
+
+func.func @svd_batched_bad_s(%a: tensor<2x6x4xf32>)
+    -> (tensor<2x6x4xf32>, tensor<2x5xf32>, tensor<2x4x4xf32>) {
+  // expected-error @+1 {{number of singular values S must equal min(M, N)}}
+  %u, %s, %v = tessera.svd %a
+      : (tensor<2x6x4xf32>) -> (tensor<2x6x4xf32>, tensor<2x5xf32>, tensor<2x4x4xf32>)
+  return %u, %s, %v : tensor<2x6x4xf32>, tensor<2x5xf32>, tensor<2x4x4xf32>
+}
+
+// -----
+
+func.func @svd_rank_mismatch(%a: tensor<2x6x4xf32>)
+    -> (tensor<2x6x4xf32>, tensor<4xf32>, tensor<2x4x4xf32>) {
+  // expected-error @+1 {{singular values S must have rank one less than A}}
+  %u, %s, %v = tessera.svd %a
+      : (tensor<2x6x4xf32>) -> (tensor<2x6x4xf32>, tensor<4xf32>, tensor<2x4x4xf32>)
+  return %u, %s, %v : tensor<2x6x4xf32>, tensor<4xf32>, tensor<2x4x4xf32>
+}
+
+// -----
+
+func.func @cholesky_solve_batch_mismatch(%a: tensor<2x3x3xf32>, %b: tensor<3x3x2xf32>)
+    -> tensor<3x3x2xf32> {
+  // expected-error @+1 {{A and B batch dimensions must match}}
+  %x = tessera.cholesky_solve %a, %b : (tensor<2x3x3xf32>, tensor<3x3x2xf32>) -> tensor<3x3x2xf32>
+  return %x : tensor<3x3x2xf32>
+}
+
+// -----
+
+func.func @cholesky_solve_rank4(%a: tensor<1x2x3x3xf32>, %b: tensor<1x2x3x2xf32>)
+    -> tensor<1x2x3x2xf32> {
+  // expected-error @+1 {{expects matching rank-2 or rank-3 A, B, and result tensors}}
+  %x = tessera.cholesky_solve %a, %b : (tensor<1x2x3x3xf32>, tensor<1x2x3x2xf32>) -> tensor<1x2x3x2xf32>
+  return %x : tensor<1x2x3x2xf32>
+}

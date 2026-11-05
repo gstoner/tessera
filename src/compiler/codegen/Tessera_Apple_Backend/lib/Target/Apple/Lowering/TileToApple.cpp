@@ -864,16 +864,104 @@ struct LowerTileToAppleCPUPass
 // GPU pass
 //===----------------------------------------------------------------------===//
 
+// E2E-REAL-6 Apple GPU linalg (2026-11-04). The C ABI entry and ABI id for a
+// Tile op the native Apple GPU Schedule produced
+// (src/compiler/programming_model/lib/NativeAppleGPUKernel.h). This lowering
+// owns the choice; the contract records what it expects, and a disagreement
+// is refused rather than resolved in either direction.
+struct NativeAppleGPUKernelEntry {
+  llvm::StringLiteral kind;
+  bool batched;
+  llvm::StringLiteral symbol;
+  llvm::StringLiteral abi;
+};
+
+constexpr NativeAppleGPUKernelEntry kNativeAppleGPUKernelEntries[] = {
+    {"cholesky", false, "tessera_apple_gpu_cholesky_f32",
+     "tessera.apple.value.cholesky.f32.v1"},
+    {"cholesky", true, "tessera_apple_gpu_cholesky_f32",
+     "tessera.apple.value.cholesky.f32.v1"},
+    {"tri_solve", false, "tessera_apple_gpu_tri_solve_f32",
+     "tessera.apple.value.tri_solve.f32.v1"},
+    {"tri_solve", true, "tessera_apple_gpu_tri_solve_f32",
+     "tessera.apple.value.tri_solve.f32.v1"},
+    {"cholesky_solve", false, "tessera_apple_gpu_solve_cholesky_f32",
+     "tessera.apple.value.cholesky_solve.f32.v1"},
+    {"cholesky_solve", true, "tessera_apple_gpu_solve_cholesky_f32",
+     "tessera.apple.value.cholesky_solve.f32.v1"},
+    {"svd", false, "tessera_apple_gpu_svd_reduced_f32",
+     "tessera.apple.svd.a_u_s_vh_m_n.f32.v1"},
+    {"svd", true, "tessera_apple_gpu_svd_reduced_batched_f32",
+     "tessera.apple.svd.a_u_s_vh_batch_m_n.f32.v1"},
+};
+
+LogicalResult lowerNativeAppleGPUKernelValue(OpBuilder &b, Operation *op) {
+  auto fail = [&](const llvm::Twine &message) -> InFlightDiagnostic {
+    return op->emitError("apple_gpu value lowering: native Apple GPU kernel ")
+           << message;
+  };
+  auto contract =
+      op->getAttrOfType<DictionaryAttr>("tessera.apple_gpu_kernel_contract");
+  auto hash = op->getAttrOfType<StringAttr>("tessera.schedule_hash");
+  if (!contract || !hash || hash.getValue().size() != 64)
+    return fail("requires its contract and a schedule digest");
+  auto kind = contract.getAs<StringAttr>("kind");
+  auto symbol = contract.getAs<StringAttr>("symbol");
+  auto abi = contract.getAs<StringAttr>("abi");
+  auto graphOp = contract.getAs<StringAttr>("graph_op");
+  auto semantics = contract.getAs<DictionaryAttr>("semantics");
+  llvm::StringRef name = op->getName().getStringRef();
+  if (!kind || !symbol || !abi || !graphOp || !semantics ||
+      name != ("tile." + kind.getValue()).str() ||
+      graphOp.getValue() != ("tessera." + kind.getValue()).str() ||
+      op->getAttrOfType<StringAttr>("source") != graphOp)
+    return fail("contract disagrees with its Tile op");
+  auto matrix = op->getNumOperands()
+                    ? llvm::dyn_cast<RankedTensorType>(op->getOperand(0).getType())
+                    : RankedTensorType();
+  if (!matrix || (matrix.getRank() != 2 && matrix.getRank() != 3))
+    return fail("requires a rank-2 or rank-3 matrix operand");
+  bool batched = matrix.getRank() == 3;
+  const NativeAppleGPUKernelEntry *entry = nullptr;
+  for (const NativeAppleGPUKernelEntry &e : kNativeAppleGPUKernelEntries)
+    if (e.kind == kind.getValue() && e.batched == batched)
+      entry = &e;
+  if (!entry)
+    return fail("has no Metal entry for '") << kind.getValue() << "'";
+  if (symbol.getValue() != entry->symbol || abi.getValue() != entry->abi)
+    return fail("contract names '")
+           << symbol.getValue() << "' but the lowering selects '"
+           << entry->symbol << "'";
+  // The Tile op's semantic flags are exactly the contract's: no flag the
+  // contract did not materialize, none with another value.
+  for (llvm::StringRef flag : {"lower", "trans", "unit_diag", "full_matrices"})
+    if (op->getAttr(flag) != semantics.get(flag))
+      return fail("semantic flag '") << flag << "' disagrees with its contract";
+  llvm::SmallVector<NamedAttribute, 2> extra;
+  if (kind.getValue() == "svd")
+    extra.push_back(b.getNamedAttr("result_order", b.getStringAttr("u,s,vh")));
+  emitAppleValueCall(b, op, "tessera_apple.gpu.kernel_call", kind.getValue(),
+                     entry->symbol, entry->abi, "executable", "Metal", extra);
+  return success();
+}
+
 struct LowerTileToAppleGPUPass
     : public PassWrapper<LowerTileToAppleGPUPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTileToAppleGPUPass)
 
   LowerTileToAppleGPUPass() = default;
-  explicit LowerTileToAppleGPUPass(bool valueMode) : valueMode(valueMode) {}
+  explicit LowerTileToAppleGPUPass(bool value) { valueMode = value; }
   LowerTileToAppleGPUPass(const LowerTileToAppleGPUPass &other)
-      : PassWrapper(other), valueMode(other.valueMode) {}
+      : PassWrapper(other) {}
 
-  bool valueMode = false;
+  // E2E-REAL-6 (2026-11-04): a pass option as well as the `-full` pipeline's
+  // constructor argument, so the replayed Apple GPU Schedule/Tile artifact
+  // (NativeAppleGPUKernel.h) reaches the value lowering standalone
+  // (`--tile-to-apple_gpu=value=true`).
+  Option<bool> valueMode{*this, "value",
+                         llvm::cl::desc("Emit value-producing "
+                                        "tessera_apple.gpu.kernel_call ops"),
+                         llvm::cl::init(false)};
 
   llvm::StringRef getArgument() const final {
     return "tile-to-apple_gpu";
@@ -904,6 +992,16 @@ struct LowerTileToAppleGPUPass
       // with a named diagnostic (the full pipeline is value-only and must not
       // silently degrade to an artifact).
       if (valueMode) {
+        // E2E-REAL-6: a Tile op the native Apple GPU Schedule produced carries
+        // its contract; it lowers from that contract or not at all.
+        if (op->hasAttr("tessera.apple_gpu_kernel_contract")) {
+          if (failed(lowerNativeAppleGPUKernelValue(builder, op))) {
+            signalPassFailure();
+            return;
+          }
+          ++ordinal;
+          continue;
+        }
         const LinalgSpec *sp = linalgSpecFor(name);
         if (!sp)
           sp = linalgSpecFor(src);

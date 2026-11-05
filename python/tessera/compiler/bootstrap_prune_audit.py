@@ -100,7 +100,10 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
 #: 2026-11-04). Declared per target because each predicate admits SM120 only.
 #: The Apple CPU batched-GEMM/LAPACK families (E2E-REAL-6, 2026-11-04) are
 #: per target because their contract (``NativeAppleCPUKernel.h``) claims only
-#: an ``apple_cpu`` module; ``apple_gpu`` keeps its own owed rows.
+#: an ``apple_cpu`` module. The Apple GPU linalg families (same date) are per
+#: target for the same reason (``NativeAppleGPUKernel.h`` claims only an
+#: ``apple_gpu`` module); ``package_native`` reaches their consumer
+#: ``package_scheduled_apple_gpu_kernel`` directly.
 _TARGET_FAMILY_TO_COMPILED: dict[tuple[str, str], tuple[str, str]] = {
     ("nvidia_sm120", "nvfp4_matmul"): ("scheduled_matmul", "supports_scheduled_nvfp4_matmul"),
     ("nvidia_sm120", "int4_matmul"): ("scheduled_matmul", "supports_scheduled_int4_matmul"),
@@ -108,6 +111,8 @@ _TARGET_FAMILY_TO_COMPILED: dict[tuple[str, str], tuple[str, str]] = {
     ("apple_cpu", "softmax"): ("scheduled_kernel", "supports_scheduled_kernel"),
     **{("apple_cpu", family): ("scheduled_apple_cpu_kernel", "supports_scheduled_apple_cpu_kernel")
        for family in ("batched_gemm", "tri_solve", "cholesky", "cholesky_solve", "lu", "qr", "svd")},
+    **{("apple_gpu", family): ("scheduled_apple_gpu_kernel", "supports_scheduled_apple_gpu_kernel")
+       for family in ("svd", "value_cholesky", "value_cholesky_solve", "value_tri_solve")},
     ("nvidia_sm120", "attention_backward"): (
         "scheduled_attention_recompute",
         "supports_scheduled_attention_recompute",

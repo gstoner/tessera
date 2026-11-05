@@ -386,8 +386,10 @@ def test_prune_census_sees_the_compiled_routes():
     for family in ("batched_gemm", "tri_solve", "cholesky", "cholesky_solve", "lu", "qr", "svd"):
         assert rows[("apple_cpu", family)] == (
             "scheduled_apple_cpu_kernel.supports_scheduled_apple_cpu_kernel", "compiled"), family
-    # The per-target declaration must not leak to the Apple GPU rows.
-    assert rows[("apple_gpu", "batched_gemm")][1] == "gap"
+    # The per-target declaration must not leak to the Apple GPU rows. The GPU
+    # batched_gemm row is compiled by its own descriptor owner, never this one.
+    assert rows[("apple_gpu", "batched_gemm")] == (
+        "scheduled_apple_gpu_descriptor.supports_scheduled_apple_gpu_descriptor", "compiled")
     assert rows[("apple_gpu", "svd")][1] == "gap"
 
 

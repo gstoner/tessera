@@ -1,4 +1,11 @@
-"""E2E-REAL-6F exact-device certificate packet for every NVIDIA VJP family."""
+"""E2E-REAL-6F exact-device certificate packet for every NVIDIA VJP family.
+
+Each composed row keeps its own independent numerical oracle. Running them in
+one process lets the process-level execution registry prove total
+family/target coverage: the final set equality fails when a newly declared
+``nvidia_sm120`` family has no exact-device row here. Evidence is the RTX 5070
+(sm_120) only; it does not transfer to another cc 12.x part.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +15,7 @@ import pytest
 import tessera as ts
 from tests.device.nvidia import test_spectral_autodiff as spectral
 from tests.device.nvidia import test_optimizer_reverse as optimizer_reverse
+from tests.device.nvidia import test_public_attention_vjp as attention
 from tests.device.nvidia import test_training_autodiff_native as training
 from tests.unit import test_autodiff_training_series_target_binding as series
 
@@ -38,7 +46,9 @@ def _nvidia_sequence(q, k, v, gate, beta, decay):
 
 @pytest.mark.compiler_nvidia
 @pytest.mark.hardware_nvidia
-def test_every_declared_nvidia_vjp_family_records_an_exact_certificate() -> None:
+def test_every_declared_nvidia_vjp_family_records_an_exact_certificate(
+    tmp_path,
+) -> None:
     from tessera import runtime
     from tessera.autodiff.vjp import get_vjp
     from tessera.compiler.frontend_authority_audit import collect_rows
@@ -54,6 +64,10 @@ def test_every_declared_nvidia_vjp_family_records_an_exact_certificate() -> None
     # Normalization and regression loss use their independent device oracles.
     training.test_public_jit_native_backward_binds_sm120_training_packages()
     series.test_nvidia_lion_backward_runs_sm120_stop_sign_package()
+    # Saved-LSE grouped-query reverse against an independent fp64 oracle.
+    attention.test_public_saved_lse_reverse(
+        tmp_path, ("v", "q", "k"), ("k", "q"), 129, True, None
+    )
     optimizer_reverse.test_sm120_sgd_reverse_exact_certificate()
     optimizer_reverse.test_sm120_momentum_and_nesterov_reverse_exact_certificates()
     optimizer_reverse.test_sm120_adam_and_adamw_reverse_exact_certificates()

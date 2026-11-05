@@ -176,8 +176,7 @@ def admit(module: GraphIRModule) -> AppleGPUDescriptorRequest:
             or len(function.args) != n_inputs):
         raise ValueError("Apple GPU native descriptor operands must be its distinct entry arguments")
     if (len(outputs) != n_results or len(function.result_types) != n_results
-            or len(set(inputs + outputs)) != n_inputs + n_results or "" in outputs
-            or any(not name.isidentifier() for name in inputs + outputs)):
+            or len(set(inputs + outputs)) != n_inputs + n_results or "" in outputs):
         raise ValueError("Apple GPU native descriptor binds each result to a distinct name")
     shapes = [_shape(args[name].ir_type.shape) for name in inputs]
     dtypes = [str(args[name].ir_type.dtype) for name in inputs]
@@ -212,12 +211,15 @@ def admit(module: GraphIRModule) -> AppleGPUDescriptorRequest:
             raise ValueError("Apple GPU batched_gemm requires [B,M,K] x [B,K,N] -> [B,M,N] with no broadcasting")
         semantics["broadcast_b"] = False
     elif kind == "transpose":
-        refuse_unknown("axes")
+        # The Graph emitter accepts either spelling and prints `permutation`.
+        refuse_unknown("axes", "permutation")
         x, out = shapes
         rank = len(x)
         if -1 in x or -1 in out or rank not in {2, 3} or not floats or dtypes[1] != storage:
             raise ValueError("Apple GPU transpose requires a static rank-2/rank-3 f32/f16/bf16 permutation")
-        raw_axes = raw.get("axes", tuple(range(rank - 1, -1, -1)))
+        if "axes" in raw and "permutation" in raw and list(raw["axes"]) != list(raw["permutation"]):
+            raise ValueError("Apple GPU transpose axes and permutation disagree")
+        raw_axes = raw.get("axes", raw.get("permutation", tuple(range(rank - 1, -1, -1))))
         if not isinstance(raw_axes, (list, tuple)) or any(
                 isinstance(a, bool) or not isinstance(a, int) for a in raw_axes):
             raise ValueError("Apple GPU transpose axes must be integers")

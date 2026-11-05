@@ -194,6 +194,26 @@ def test_driver_routes_the_families_through_the_scheduled_package(name, fake_run
     assert "tessera_apple.gpu.kernel_call" in bundle.target_ir.text
 
 
+@_needs_compiler
+def test_transpose_permutation_keyword_is_honoured(fake_runtime):
+    """The Graph emitter accepts ``permutation`` as well as ``axes``. The retired
+    constructor read only ``axes``, so a ``permutation`` request failed its
+    shape check and was not packaged; the native contract reads the emitted
+    attribute and admits it (a widening, not a change to admitted output)."""
+    shape, axes = (2, 3, 5), (2, 0, 1)
+    module = _module("tessera.transpose", [(shape, "fp32")],
+                     [("out", tuple(shape[a] for a in axes), "fp32")], kwargs={"permutation": axes})
+    package = apple_native.package_native(module, pipeline_name=PIPELINE)
+    assert package.descriptor.provenance["axes"] == list(axes)
+    assert apple_native._transpose_contract(module) is None  # the retired reading
+    with pytest.raises(ValueError):
+        apple_native.package_transpose(module, pipeline_name=PIPELINE)
+    disagreeing = _module("tessera.transpose", [(shape, "fp32")],
+                          [("out", tuple(shape[a] for a in axes), "fp32")],
+                          kwargs={"axes": axes, "permutation": (1, 2, 0)})
+    assert not native.supports_scheduled_apple_gpu_descriptor(disagreeing)
+
+
 def test_static_softmax_and_gelu_stay_on_the_semantic_kernel():
     static_softmax = _module("tessera.softmax", [((3, 7), "fp32")], [("out", (3, 7), "fp32")],
                              kwargs={"axis": -1})

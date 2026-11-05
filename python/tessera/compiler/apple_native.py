@@ -460,6 +460,11 @@ def native_package_kind(module: GraphIRModule) -> str | None:
     # are not valid Graph IR.
     if owns(module) and not supports_scheduled_apple_gpu_descriptor(module):
         return None
+    if (owns(module) and module.functions[0].body[0].op_name == "tessera.transpose"
+            and _transpose_contract(module) is None):
+        # The Graph emitter's `permutation=` spelling, which the retired
+        # predicate below does not read (it refused such a request).
+        return "transpose"
     if _contract(module) is not None:
         if not supports_scheduled_apple_gpu_descriptor(module):
             return None

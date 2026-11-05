@@ -173,7 +173,8 @@ void registerTesseraAppleBackendPipelines() {
   // with valueMode=true; standalone registration is the artifact form, which
   // is what `tessera-lower-to-apple_{cpu,gpu}` runs. The CPU pass also takes
   // `value=true` (E2E-REAL-6, 2026-11-04) for the replayed Apple CPU
-  // Schedule/Tile artifact.
+  // Schedule/Tile artifact; the GPU pass takes it for the replayed Apple GPU
+  // domain artifact.
   registerPass([]() { return createLowerTileToAppleCPUPass(); });
   registerPass([]() { return createLowerTileToAppleGPUPass(); });
   registerPass([]() { return createLowerControlForToAppleGPUPass(); });

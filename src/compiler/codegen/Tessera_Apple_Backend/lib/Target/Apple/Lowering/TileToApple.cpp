@@ -869,11 +869,17 @@ struct LowerTileToAppleGPUPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LowerTileToAppleGPUPass)
 
   LowerTileToAppleGPUPass() = default;
-  explicit LowerTileToAppleGPUPass(bool valueMode) : valueMode(valueMode) {}
+  explicit LowerTileToAppleGPUPass(bool value) { valueMode = value; }
   LowerTileToAppleGPUPass(const LowerTileToAppleGPUPass &other)
-      : PassWrapper(other), valueMode(other.valueMode) {}
+      : PassWrapper(other) {}
 
-  bool valueMode = false;
+  // E2E-REAL-6 (2026-11-04): a pass option as on the CPU pass, so the
+  // replayed Apple GPU domain Schedule/Tile artifact (NativeAppleGPUDomain.h)
+  // reaches the value lowering standalone (`--tile-to-apple_gpu=value=true`).
+  Option<bool> valueMode{*this, "value",
+                         llvm::cl::desc("Emit value-producing "
+                                        "tessera_apple.gpu.kernel_call ops"),
+                         llvm::cl::init(false)};
 
   llvm::StringRef getArgument() const final {
     return "tile-to-apple_gpu";

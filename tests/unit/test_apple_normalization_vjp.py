@@ -169,3 +169,34 @@ def test_apple_normalization_vjp_affine_gradients_are_deterministic() -> None:
     for later in runs[1:]:
         for first, repeat in zip(runs[0], later):
             assert np.array_equal(first, repeat)
+
+
+@pytest.mark.parametrize("family,arch", [(1007, "apple7"), (1009, "apple9"), (-1, None)])
+def test_apple_attestation_reads_the_live_metal_family(monkeypatch, family, arch) -> None:
+    """The attestation names the device that ran, not the host OS.
+
+    It used to attest apple7 whenever ``sys.platform == "darwin"``, so an
+    Apple9 Mac would have produced apple7 exact-device certificates.
+    """
+    from tessera import runtime as R
+
+    class _Probe:
+        argtypes: list = []
+        restype = None
+
+        def __call__(self):
+            return family
+
+    class _Runtime:
+        tessera_apple_gpu_family_integer = _Probe()
+
+    monkeypatch.setattr(R.sys, "platform", "darwin")
+    monkeypatch.setattr(R, "_load_apple_gpu_runtime", lambda: _Runtime())
+    assert R._apple_gpu_live_arch() == arch
+    attestation = R._physical_execution_attestation(
+        target="apple_gpu", execution_kind="native_gpu",
+        execution_mode="metal_runtime", artifact_hash="0" * 64)
+    if arch == "apple7":
+        assert attestation is not None and attestation["device_arch"] == "apple7"
+    else:
+        assert attestation is None

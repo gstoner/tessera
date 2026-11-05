@@ -40,12 +40,12 @@ The distinction matters because the failure it guards against is specific: a fam
 A declaration is not execution evidence. Target-owned packets run every declared family in one process, validate independent numerical oracles, require runtime-origin physical attestations, and compare the observed family/target set exactly with the live declarations. Family-specific packets cover their named architecture and envelope; they do not inherit coverage from legacy whole-target packets. A test double produces only `runtime_unattested` evidence and cannot satisfy these packets.
 
 - declared family/target rows: **36**
-- exact-device packet rows: **24**
-- blocking rows without a packet: **12**
+- exact-device packet rows: **25**
+- blocking rows without a packet: **11**
 
 | family | target | evidence status | evidence gate |
 |---|---|---|---|
-| `normalization` | `apple_gpu` | `missing_exact_device_packet` | `none` |
+| `normalization` | `apple_gpu` | `exact_device_packet` | `tests/device/apple/test_native_vjp_execution_certificates.py` |
 | `adafactor_vjp` | `nvidia_sm120` | `missing_exact_device_packet` | `none` |
 | `attention_backward` | `nvidia_sm120` | `missing_exact_device_packet` | `none` |
 | `binary_loss_backward` | `nvidia_sm120` | `missing_exact_device_packet` | `none` |

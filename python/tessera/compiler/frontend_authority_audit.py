@@ -65,6 +65,7 @@ _CERTIFIER = {
 }
 
 _EXACT_TARGET_PACKETS = {
+    "apple_gpu": "tests/device/apple/test_native_vjp_execution_certificates.py",
     "rocm": "tests/device/rocm/test_native_vjp_execution_certificates.py",
     "x86": "tests/device/x86/test_native_vjp_execution_certificates.py",
 }

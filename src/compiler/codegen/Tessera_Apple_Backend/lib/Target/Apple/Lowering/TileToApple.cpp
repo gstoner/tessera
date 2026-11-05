@@ -954,10 +954,10 @@ struct LowerTileToAppleGPUPass
   LowerTileToAppleGPUPass(const LowerTileToAppleGPUPass &other)
       : PassWrapper(other) {}
 
-  // E2E-REAL-6 (2026-11-04): a pass option as well as the `-full` pipeline's
-  // constructor argument, so the replayed Apple GPU Schedule/Tile artifact
-  // (NativeAppleGPUKernel.h) reaches the value lowering standalone
-  // (`--tile-to-apple_gpu=value=true`).
+  // E2E-REAL-6 (2026-11-04): a pass option as on the CPU pass, so the
+  // replayed Apple GPU domain and linalg Schedule/Tile artifacts
+  // (NativeAppleGPUDomain.h, NativeAppleGPUKernel.h) reach the value lowering
+  // standalone (`--tile-to-apple_gpu=value=true`).
   Option<bool> valueMode{*this, "value",
                          llvm::cl::desc("Emit value-producing "
                                         "tessera_apple.gpu.kernel_call ops"),

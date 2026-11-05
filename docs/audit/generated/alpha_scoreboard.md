@@ -17,7 +17,7 @@ MLIR passes. A cell is alpha-complete only when all five stages are
 |---|---|---|
 | `frontend` | AST: does `graph_ir._OpExtractor` still exist (E2E-REAL-6) | 0 |
 | `graph_opt` | not yet derivable per family — shown `unmeasured` | 0 |
-| `schedule_tile` | [`bootstrap_prune_gap`](bootstrap_prune_gap.md) family routes | 33 |
+| `schedule_tile` | [`bootstrap_prune_gap`](bootstrap_prune_gap.md) family routes | 36 |
 | `native_lowering` | [spine](compilation_spine_inventory.md) Level C for the lane target | 0 |
 | `execution` | [E2E fleet](e2e_fleet.md) release packet for the lane | 27 |
 
@@ -40,7 +40,7 @@ improvement fails until the baseline is tightened, so gains are locked.
 | Lane | Host | Device | Native stage-cells |
 |---|---|---|---|
 | `mac_cpu` | Mac M1 Max | arm64 CPU | 4 |
-| `mac_gpu` | Mac M1 Max | Apple7 GPU | 4 |
+| `mac_gpu` | Mac M1 Max | Apple7 GPU | 7 |
 | `luna_cpu` | Princess-Luna | Zen 5 AVX-512 | 9 |
 | `luna_gpu` | Princess-Luna | gfx1151 | 9 |
 | `bear_cpu` | The-Super-Bear | Zen 2 AVX2 | 6 |
@@ -80,9 +80,9 @@ Legend: ✅ native · 🔴 bypass · 🟡 partial / pending · ⬛ absent / unro
 | `mac_gpu` | `linalg` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | 🟡 packet_pending | — |
 | `mac_gpu` | `epilogue` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
 | `mac_gpu` | `replay_ssm` | 🔴 bypass | ❔ unmeasured | ⬛ unrouted | 🟡 partial | ⬛ absent | — |
-| `mac_gpu` | `ppo` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | 🟡 packet_pending | — |
-| `mac_gpu` | `ebm` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | 🟡 packet_pending | — |
-| `mac_gpu` | `clifford` | 🔴 bypass | ❔ unmeasured | 🔴 bypass | 🟡 partial | 🟡 packet_pending | — |
+| `mac_gpu` | `ppo` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | 🟡 packet_pending | — |
+| `mac_gpu` | `ebm` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | 🟡 packet_pending | — |
+| `mac_gpu` | `clifford` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | 🟡 packet_pending | — |
 | `luna_cpu` | `matmul` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
 | `luna_cpu` | `softmax` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |
 | `luna_cpu` | `reduction` | 🔴 bypass | ❔ unmeasured | ✅ native | 🟡 partial | ✅ native | — |

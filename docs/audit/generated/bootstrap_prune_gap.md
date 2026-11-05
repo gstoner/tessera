@@ -22,19 +22,19 @@ the bootstrap row can go.
 | Metric | Count |
 |---|---|
 | Backends with a bootstrap module | 5 |
-| `package_*` functions total | 84 |
+| `package_*` functions total | 85 |
 | — Graph-input boundaries (including scheduled wrappers) | 44 |
 |   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 5 |
 |   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 0 |
 |   ·  of the bootstrap, both | 0 |
 |   ·  of the bootstrap, other (wrapper / dispatcher) | 39 |
-| — typed scheduled-artifact inputs (consumption needs verification) | 24 |
+| — typed scheduled-artifact inputs (consumption needs verification) | 25 |
 | — unclassified/raw inputs (not assumed compiled) | 16 |
-| Lines in those modules | 13019 |
+| Lines in those modules | 13110 |
 | Classified family/target candidates (shape admission not implied) | 57 |
-| — covered by a compiled route | 31 |
+| — covered by a compiled route | 37 |
 | — packager lowers only through the generic Schedule→Tile route | 12 |
-| — **gap (no declared family route)** | 14 |
+| — **gap (no declared family route)** | 8 |
 | Packagers matching no family | 9 |
 
 Graph input alone does not prove reconstruction: wrappers may call the
@@ -49,7 +49,7 @@ exact artifacts before treating a row as a constructor deletion target.
 | `rocm_gfx1151` | `rocm_native.py` | 7 | 7 | 1 | 5 | 3525 |
 | `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1603 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 3 | 0 | 10 | 527 |
-| `apple_gpu` | `apple_native.py` | 10 | 5 | 1 | 19 | 1959 |
+| `apple_gpu` | `apple_native.py` | 10 | 6 | 1 | 19 | 2050 |
 
 ## Census limits
 
@@ -132,12 +132,12 @@ queues own.
 | `apple_gpu` | `svd` | `scheduled_apple_gpu_kernel.supports_scheduled_apple_gpu_kernel` | ✅ compiled |
 | `apple_gpu` | `value_cholesky` | `scheduled_apple_gpu_kernel.supports_scheduled_apple_gpu_kernel` | ✅ compiled |
 | `apple_gpu` | `value_cholesky_solve` | `scheduled_apple_gpu_kernel.supports_scheduled_apple_gpu_kernel` | ✅ compiled |
-| `apple_gpu` | `value_clifford_geometric_product` | — | 🔴 **gap** |
-| `apple_gpu` | `value_ebm_energy_quadratic` | — | 🔴 **gap** |
-| `apple_gpu` | `value_ebm_langevin_step` | — | 🔴 **gap** |
-| `apple_gpu` | `value_ebm_partition_exact` | — | 🔴 **gap** |
-| `apple_gpu` | `value_ebm_refinement` | — | 🔴 **gap** |
-| `apple_gpu` | `value_rl_ppo_policy_loss` | — | 🔴 **gap** |
+| `apple_gpu` | `value_clifford_geometric_product` | `scheduled_apple_gpu_domain.supports_scheduled_apple_gpu_domain` | ✅ compiled |
+| `apple_gpu` | `value_ebm_energy_quadratic` | `scheduled_apple_gpu_domain.supports_scheduled_apple_gpu_domain` | ✅ compiled |
+| `apple_gpu` | `value_ebm_langevin_step` | `scheduled_apple_gpu_domain.supports_scheduled_apple_gpu_domain` | ✅ compiled |
+| `apple_gpu` | `value_ebm_partition_exact` | `scheduled_apple_gpu_domain.supports_scheduled_apple_gpu_domain` | ✅ compiled |
+| `apple_gpu` | `value_ebm_refinement` | `scheduled_apple_gpu_domain.supports_scheduled_apple_gpu_domain` | ✅ compiled |
+| `apple_gpu` | `value_rl_ppo_policy_loss` | `scheduled_apple_gpu_domain.supports_scheduled_apple_gpu_domain` | ✅ compiled |
 | `apple_gpu` | `value_tri_solve` | `scheduled_apple_gpu_kernel.supports_scheduled_apple_gpu_kernel` | ✅ compiled |
 
 ## Packagers matching no classified family

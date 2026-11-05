@@ -22,9 +22,9 @@ mac_gpu,Mac M1 Max,Apple7 GPU,moe,bypass,unmeasured,unrouted,partial,absent,no
 mac_gpu,Mac M1 Max,Apple7 GPU,linalg,bypass,unmeasured,native,partial,packet_pending,no
 mac_gpu,Mac M1 Max,Apple7 GPU,epilogue,bypass,unmeasured,unrouted,partial,absent,no
 mac_gpu,Mac M1 Max,Apple7 GPU,replay_ssm,bypass,unmeasured,unrouted,partial,absent,no
-mac_gpu,Mac M1 Max,Apple7 GPU,ppo,bypass,unmeasured,bypass,partial,packet_pending,no
-mac_gpu,Mac M1 Max,Apple7 GPU,ebm,bypass,unmeasured,bypass,partial,packet_pending,no
-mac_gpu,Mac M1 Max,Apple7 GPU,clifford,bypass,unmeasured,bypass,partial,packet_pending,no
+mac_gpu,Mac M1 Max,Apple7 GPU,ppo,bypass,unmeasured,native,partial,packet_pending,no
+mac_gpu,Mac M1 Max,Apple7 GPU,ebm,bypass,unmeasured,native,partial,packet_pending,no
+mac_gpu,Mac M1 Max,Apple7 GPU,clifford,bypass,unmeasured,native,partial,packet_pending,no
 luna_cpu,Princess-Luna,Zen 5 AVX-512,matmul,bypass,unmeasured,native,partial,native,no
 luna_cpu,Princess-Luna,Zen 5 AVX-512,softmax,bypass,unmeasured,native,partial,native,no
 luna_cpu,Princess-Luna,Zen 5 AVX-512,reduction,bypass,unmeasured,native,partial,native,no

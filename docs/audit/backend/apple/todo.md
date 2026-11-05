@@ -16316,6 +16316,34 @@ oracle and a float64 reconstruction check. Lit adds
 `phase8/apple_cpu_kernel_{schedule_tile,invalid}.mlir`. Owed: BNNS f16/bf16
 matmul, the last Apple CPU Graph-owned constructor.
 
+## `E2E-REAL-6-apple-gpu-domain-2026-11-04`: Apple GPU PPO, EBM and Clifford value families retire their Graph-owned constructor
+
+Owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).
+Synchronization key: `E2E-REAL-6-apple-gpu-domain-2026-11-04`.
+
+`apple_gpu,value_{rl_ppo_policy_loss,ebm_energy_quadratic,ebm_langevin_step,ebm_refinement,ebm_partition_exact,clifford_geometric_product}`
+now lower through native Graph→Schedule→Tile (`NativeAppleGPUDomain.h`,
+`schedule.artifact` family `apple_gpu_domain` → `tile.<kind>`) and the Apple GPU
+value lowering, which gained a `value` pass option (`--tile-to-apple_gpu=value=true`).
+`package_scheduled_apple_gpu_domain` replays every boundary and projects the
+descriptor; tampering with the artifact, Graph, Schedule, Tile or Target text
+fails closed before the runtime is touched, and a `tessera-opt` without the
+lowering fails closed naming it. The MSL/MPSGraph wrappers in
+`apple_gpu_runtime.mm` stay Tier-3 delegates behind the declared op (no new
+op; runtime sources untouched). The old route is the #31(a) oracle
+`tests/_support/apple_gpu_domain_baseline.py`.
+
+Named behaviour changes: Langevin `temperature`, refinement
+`temperature`/`noise_scale`, a non-`logsumexp` partition reduction, Clifford
+`blade_major` layout or non-Euclidean signature, and PPO side-term
+coefficients without their tensor are refused at compile time (the delegates
+ignored them); PPO side tensors bind by ODS segment, so a lone `ref_logp` is no
+longer dispatched as a mask.
+
+Evidence: Mac M1 Max, Metal, unsandboxed: migration suite 91 passed (17 Metal bit-for-bit); lit 513 passed / 0 failed; `tests/unit/` A/B against main `4606fc710` has the identical 758 failing nodes (no new failures). Lit adds `phase8/apple_gpu_domain_{schedule_tile,invalid,tampered}.mlir`.
+Owed on Apple GPU: `batched_gemm`, `transpose`, the dynamic families, `svd` and
+the value linalg families (sibling sessions).
+
 ## `E2E-REAL-6-apple-gpu-linalg-2026-11-04`: Apple GPU SVD and the value linalg families retire their Graph-owned constructors
 
 Owner: [E2E-REAL-6](../../compiler/INTEGRATED_COMPILER_PLAN.md#e2e-real-6).

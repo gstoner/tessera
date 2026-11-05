@@ -100,10 +100,13 @@ _FAMILY_TO_COMPILED: dict[str, tuple[str, str]] = {
 #: 2026-11-04). Declared per target because each predicate admits SM120 only.
 #: The Apple CPU batched-GEMM/LAPACK families (E2E-REAL-6, 2026-11-04) are
 #: per target because their contract (``NativeAppleCPUKernel.h``) claims only
-#: an ``apple_cpu`` module. The Apple GPU linalg families (same date) are per
-#: target for the same reason (``NativeAppleGPUKernel.h`` claims only an
-#: ``apple_gpu`` module); ``package_native`` reaches their consumer
-#: ``package_scheduled_apple_gpu_kernel`` directly.
+#: an ``apple_cpu`` module; ``apple_gpu`` keeps its own owed rows.
+#: The Apple GPU PPO / EBM / Clifford value families (E2E-REAL-6, 2026-11-04)
+#: reach ``package_scheduled_apple_gpu_domain`` through the contract in
+#: ``NativeAppleGPUDomain.h``, which claims only an ``apple_gpu`` module.
+#: The Apple GPU linalg families (same date) reach
+#: ``package_scheduled_apple_gpu_kernel`` through ``NativeAppleGPUKernel.h``,
+#: which also claims only an ``apple_gpu`` module.
 _TARGET_FAMILY_TO_COMPILED: dict[tuple[str, str], tuple[str, str]] = {
     ("nvidia_sm120", "nvfp4_matmul"): ("scheduled_matmul", "supports_scheduled_nvfp4_matmul"),
     ("nvidia_sm120", "int4_matmul"): ("scheduled_matmul", "supports_scheduled_int4_matmul"),
@@ -117,6 +120,10 @@ _TARGET_FAMILY_TO_COMPILED: dict[tuple[str, str], tuple[str, str]] = {
         "scheduled_attention_recompute",
         "supports_scheduled_attention_recompute",
     ),
+    **{("apple_gpu", family): ("scheduled_apple_gpu_domain", "supports_scheduled_apple_gpu_domain")
+       for family in ("value_rl_ppo_policy_loss", "value_ebm_energy_quadratic",
+                      "value_ebm_langevin_step", "value_ebm_refinement",
+                      "value_ebm_partition_exact", "value_clifford_geometric_product")},
 }
 
 #: The generic compiled fallback the driver tries last. It admits by op

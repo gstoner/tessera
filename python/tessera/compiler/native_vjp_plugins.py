@@ -194,8 +194,6 @@ def validate_native_vjp_execution_certificate(
         "nvidia_sm120": "sm_120",
         "apple_gpu": "apple7",
     }.get(str(body.get("target", "")))
-    if body.get("target") == "rocm" and body.get("evidence_target") == "rocm_gfx1201":
-        expected_arch = "gfx1201"
     expected_scope = (
         "exact_device"
         if isinstance(attestation, Mapping)
@@ -244,8 +242,6 @@ def _record_execution_certificate(
         "nvidia_sm120": "sm_120",
         "apple_gpu": "apple7",
     }.get(target)
-    if target == "rocm" and execution.get("evidence_target") == "rocm_gfx1201":
-        expected_arch = "gfx1201"
     identities = {
         key: str(execution[key])
         for key in (
@@ -349,8 +345,10 @@ def register_native_vjp_plugin(
     "scaled_matmul", family="scaled_product_transpose",
     schedule_consumer="schedule.artifact",
     tile_consumer="tile.structured_reduction_kernel",
-    target_consumers={"rocm": "rocm.gfx1201_native_scaled_program",
-                      "rocm_gfx1201": "rocm.gfx1201_native_scaled_program"},
+    # gfx1201 only: the executor refuses every other arch, and the generic
+    # ``rocm`` name certifies as gfx1151, so declaring it claimed a lane this
+    # family cannot run (E2E6F-ROCM-SCALED-ALIAS-2026-11-05).
+    target_consumers={"rocm_gfx1201": "rocm.gfx1201_native_scaled_program"},
 )
 def _execute_scaled_product_transpose(
     *, source, target, ordered_inputs, arg_names, source_arg_names,

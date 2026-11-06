@@ -66,16 +66,17 @@ _CERTIFIER = {
 
 _EXACT_TARGET_PACKETS = {
     "apple_gpu": "tests/device/apple/test_native_vjp_execution_certificates.py",
+    "nvidia_sm120": "tests/device/nvidia/test_native_vjp_execution_certificates.py",
     "rocm": "tests/device/rocm/test_native_vjp_execution_certificates.py",
     "x86": "tests/device/x86/test_native_vjp_execution_certificates.py",
 }
 
 
 # Newly registered families must bind their own architecture-specific proof.
-# The generic ROCm alias is not covered by the gfx1201-only packet.
+# A gfx1201-only family declares ``rocm_gfx1201`` alone: the generic ``rocm``
+# row is gfx1151 evidence and the gfx1201 packet never covers it.
 _EXACT_FAMILY_TARGET_PACKETS = {
     ("scaled_product_transpose", "rocm_gfx1201"): "tests/device/rocm/test_public_scaled_vjp.py",
-    ("scaled_product_transpose", "rocm"): None,
 }
 
 

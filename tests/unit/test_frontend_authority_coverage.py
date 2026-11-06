@@ -95,12 +95,13 @@ def test_exact_target_packets_cover_local_rows_and_leave_siblings_blocking(rows)
     assert {(row.family, row.target) for row in target_rows} == declared
     exact = {row.target for row in target_rows if not row.blocks_exact_coverage}
     blocking = {row.target for row in target_rows if row.blocks_exact_coverage}
-    assert exact == {"apple_gpu", "rocm", "x86", "rocm_gfx1201"}
-    assert blocking == {"nvidia_sm120", "rocm"}
+    assert exact == {"apple_gpu", "nvidia_sm120", "rocm", "x86", "rocm_gfx1201"}
+    assert blocking == set()
     scale_rows = {row.target: row for row in target_rows
                   if row.family == "scaled_product_transpose"}
     assert not scale_rows["rocm_gfx1201"].blocks_exact_coverage
-    assert scale_rows["rocm"].blocks_exact_coverage
+    # gfx1201-only: the generic (gfx1151-certified) ROCm name is not declared.
+    assert set(scale_rows) == {"rocm_gfx1201"}
     for row in target_rows:
         if not row.blocks_exact_coverage:
             assert Path(row.evidence_gate).is_file()
@@ -137,3 +138,13 @@ def test_the_csv_and_dashboard_agree(rows):
     csv_text = audit.render_csv()
     assert csv_text.splitlines()[0].startswith("family,ops,")
     assert len(csv_text.strip().splitlines()) == len(rows) + 1
+
+
+def test_scaled_product_transpose_is_owned_only_by_the_exact_gfx1201_name():
+    """The executor refuses every arch but gfx1201, so the generic ``rocm``
+    name (certified as gfx1151) must not route here."""
+    from tessera.compiler.native_vjp_plugins import native_vjp_plugin_available
+
+    assert native_vjp_plugin_available("tessera.scaled_matmul", "rocm_gfx1201")
+    assert not native_vjp_plugin_available("tessera.scaled_matmul", "rocm")
+    assert not native_vjp_plugin_available("tessera.scaled_matmul", "rocm_gfx1151")

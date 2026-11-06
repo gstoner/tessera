@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-11-04
+last_updated: 2026-11-05
 audit_role: reference
 ---
 
@@ -14781,6 +14781,22 @@ Outcome: `apple_native.package_native` no longer reads the Python Graph object f
 NVIDIA, ROCm and x86: not applicable (sibling notes in each queue). No sm_120 or ROCm device sweep was run: the new `PMPasses.cpp` branch claims only `apple_gpu` modules with launch bindings, and the two newly registered Graph ops reach no other backend's package route.
 Remaining: Apple GPU `svd` and the nine `value_*` families (sibling slices), and sm_120 `mx_matmul`. No performance claim.
 Evidence: tests/unit/test_apple_gpu_descriptor_migration.py; tests/tessera-ir/phase8/apple_gpu_descriptor_schedule_tile.mlir; tests/tessera-ir/phase8/apple_gpu_descriptor_invalid.mlir; src/compiler/programming_model/lib/NativeAppleGPUDescriptor.h; python/tessera/compiler/scheduled_apple_gpu_descriptor.py; docs/audit/generated/bootstrap_prune_gap.csv
+<!-- entry-fields:end -->
+
+### 2026-11-05 — E2E-REAL-6F: the scaled-product transpose VJP stops declaring the generic ROCm target
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: branch `claude/e2e6f-rocm-scaled-transpose-packet-0eff6a`; sync E2E6F-ROCM-SCALED-ALIAS-2026-11-05.
+Outcome: the `scaled_product_transpose` / `rocm` row that `frontend_authority_coverage` listed as `missing_exact_device_packet` was a wrong declaration, not a missing packet, and is removed. This was not done by writing a gfx1151 packet.
+- **What generic `rocm` means here.** The execution-certificate model certifies `target="rocm"` as gfx1151 (`validate_native_vjp_execution_certificate`). The gfx1151 packet `tests/device/rocm/test_native_vjp_execution_certificates.py` requires every family that declares `rocm`. The family's executor raises "native scale VJP requires the owning gfx1201 device" on every other arch. Its only consumer is `rocm.gfx1201_native_scaled_program`, and every proof (`test_public_scaled_vjp.py`, `test_composed_scaled_vjp.py`) uses `target="rocm_gfx1201"`. The JVP side already refuses gfx1151 for the same program (`native_jvp.architecture_admits`). So the generic key was a dispatch alias for gfx1201 work that certified under a gfx1151 identity, and no gfx1151 packet could honestly cover it.
+- **Change.** `register_native_vjp_plugin("scaled_matmul", …)` declares only `rocm_gfx1201`. The `target == "rocm" and evidence_target == "rocm_gfx1201"` special cases in certificate recording and validation had no other producer, so they are deleted (Decision #29). `frontend_authority_audit` drops the `None` placeholder row. `@jit(target="rocm")` on a gfx1201 host no longer reaches this plugin and falls through to the non-plugin lane. Request `rocm_gfx1201` explicitly.
+- **The packet was red on main.** Princess-Luna (gfx1151, ROCm 10.0, unsandboxed, separate worktrees, a fresh branch `build/` with an identical C++ tree). The gfx1151 packet on `main` 0206b16a8 fails with exactly one extra required pair, `('scaled_product_transpose', 'rocm')`. On the branch it passes, along with all 10 `test_frontend_authority_coverage.py` cases. The same result held against the box's stale shared `build/`.
+- **Unit A/B on the box (same fresh build).** Over every unit file that touches native VJP, `scaled_matmul` or frontend authority, `not slow`: main 3948 passed / 332 skipped, branch 3949 / 332 (the new routing test). Neither side has a failure.
+- **Mac.** `check_generated_docs.sh`, `check_compiler_plan.py`, mypy on the two modules, and the native-VJP/scaled/frontend-authority unit files all pass. Three failures in `test_native_nvfp4_parent_view_program.py` and `test_rocm_gfx1201_scheduled.py` fail identically with this change stashed.
+
+gfx1201: the `rocm_gfx1201` row and its packet are unchanged. No Python path on that box changes for `target="rocm_gfx1201"`, so it was not re-run on Tajasarus. NVIDIA, Apple and x86: not applicable.
+Remaining: `frontend_authority_coverage` has 11 blocking rows: Apple GPU `normalization` and 10 sm_120 rows (sibling sessions). No performance claim.
+Evidence: python/tessera/compiler/native_vjp_plugins.py; python/tessera/compiler/frontend_authority_audit.py; tests/unit/test_frontend_authority_coverage.py; tests/device/rocm/test_native_vjp_execution_certificates.py; docs/audit/generated/frontend_authority_coverage.md
 <!-- entry-fields:end -->
 
 ### 2026-11-05 — E2E-REAL-6F: Apple GPU normalization VJP gets an exact-device packet

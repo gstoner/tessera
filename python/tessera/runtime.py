@@ -36144,7 +36144,7 @@ def _apple_gpu_live_arch() -> str | None:
     device that executed, not the host. ``None`` when no runtime, no Metal
     device, or a runtime that predates the family probe.
     """
-    if sys.platform != "darwin":
+    if not _running_on_darwin():
         return None
     try:
         runtime = _load_apple_gpu_runtime()

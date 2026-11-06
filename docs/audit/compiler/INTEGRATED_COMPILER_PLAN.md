@@ -94,7 +94,8 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Gate: The expanded census includes x86 breadth packaging: 46 Graph inputs, 14 scheduled inputs and 14 raw/unclassified entries. Import-resolved caller candidates and local helper-to-emitter paths expose reconstruction paths; scope-aware import candidates now reject parameter/rebinding shadowing and sibling-scope leakage; indirect dispatch and per-envelope certificate joins still require review. Counts do not authorize constructor deletion.
 - Depends on: —
 - Start: host-free
-- Latest: [2026-09-10 — Route census and device profile attribution](INTEGRATED_COMPILER_LOG.md#2026-09-10--route-census-and-device-profile-attribution)
+- Current slice (2026-11-05, sync E2E-REAL-6F-apple-gpu-norm-packet-2026-11-05): `normalization`/`apple_gpu` is backed by an exact-device packet (`tests/device/apple/test_native_vjp_execution_certificates.py`), and the Apple physical attestation now reads the live Metal GPU family instead of the host OS. Blocking family/target rows: 11 (10 sm_120, generic `rocm` `scaled_product_transpose`). [Log](INTEGRATED_COMPILER_LOG.md#2026-11-05--e2e-real-6f-apple-gpu-normalization-vjp-gets-an-exact-device-packet).
+- Latest: [2026-11-05 — E2E-REAL-6F: Apple GPU normalization VJP gets an exact-device packet](INTEGRATED_COMPILER_LOG.md#2026-11-05--e2e-real-6f-apple-gpu-normalization-vjp-gets-an-exact-device-packet)
 
 ### COMPILER-DEVEX-1
 

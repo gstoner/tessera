@@ -36137,6 +36137,30 @@ def _launch_native_descriptor(
     }
 
 
+def _apple_gpu_live_arch() -> str | None:
+    """``appleN`` for the live Metal device's highest MTLGPUFamilyAppleN.
+
+    Read through the already-loaded Apple runtime so the answer names the
+    device that executed, not the host. ``None`` when no runtime, no Metal
+    device, or a runtime that predates the family probe.
+    """
+    if not _running_on_darwin():
+        return None
+    try:
+        runtime = _load_apple_gpu_runtime()
+    except (OSError, RuntimeError, ValueError):
+        return None
+    probe = getattr(runtime, "tessera_apple_gpu_family_integer", None)
+    if probe is None:
+        return None
+    probe.argtypes = []
+    probe.restype = ctypes.c_int32
+    family = int(probe())
+    if not 1001 <= family <= 1099:
+        return None
+    return f"apple{family - 1000}"
+
+
 def _physical_execution_attestation(
     *, target: str, execution_kind: str, execution_mode: str, artifact_hash: str,
     expected_device_arch: str | None = None,
@@ -36171,7 +36195,10 @@ def _physical_execution_attestation(
         device_arch = _nvidia_device_name()
         expected_arch = "sm_120"
     elif target == "apple_gpu" and execution_kind == "native_gpu":
-        device_arch = "apple7" if sys.platform == "darwin" else None
+        # Measured from the Metal device that ran the launch, never inferred
+        # from the host OS: `sys.platform == "darwin"` attested apple7 on any
+        # Mac, including an Apple9 part that has no apple7 proof.
+        device_arch = _apple_gpu_live_arch()
         expected_arch = "apple7"
     if device_arch is None or device_arch != expected_arch:
         return None

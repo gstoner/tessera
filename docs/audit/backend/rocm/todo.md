@@ -19546,3 +19546,7 @@ Apple GPU `svd`, `cholesky`, `tri_solve` and `cholesky_solve` moved onto a new n
 ## `E2E-REAL-6-apple-gpu-descriptors-2026-11-04`: sibling outcome — not applicable
 
 Apple GPU `batched_gemm`, `transpose` and the dynamic `softmax`, `gelu`, `popcount`, `count_nonzero` and `top_k` moved onto a new native Graph→Schedule→Tile contract, `NativeAppleGPUDescriptor.h` (Apple queue, same key). Shared code touched: `PMPasses.cpp` calls `scheduleNativeAppleGPUDescriptor` / `lowerNativeAppleGPUDescriptor`, which claim a module only when `tessera.target = "apple_gpu"` and `tessera.launch_bindings` are both present; every other module reaches the existing Schedule/Tile code unchanged. `TesseraOps.td` now registers `tessera.count_nonzero` and `tessera.top_k` with verifiers; no rocm package route emits either op, so the change can only turn a former unregistered-op parse failure into verified IR. Device lanes on this backend were not re-run; no claim for it.
+
+## `E2E-REAL-6F-apple-gpu-norm-packet-2026-11-05`: sibling outcome — not applicable
+
+The Apple GPU normalization VJP gained an exact-device packet, and the `apple_gpu` branch of `runtime._physical_execution_attestation` now reads the live Metal GPU family instead of `sys.platform` (Apple queue, same key). No other target's attestation branch, certificate model or packet changed; device lanes on this backend were not re-run.

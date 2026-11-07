@@ -16421,3 +16421,7 @@ newer Apple part gets `runtime_unattested` certificates and the packet skips
 there until it is modelled and proven on that part. Evidence (Mac M1 Max,
 macOS 27.2, unsandboxed Metal): packet + `test_apple_normalization_vjp.py` 14
 passed, 0 skipped.
+
+## `E2E-REAL-6F-effect-scan-2026-11-07`: sibling outcome — parity validation on the Mac
+
+`EffectLattice.infer` now scans call sites resolved by identity (`compiler/effect_scan.py`) instead of lowering the function through `_OpExtractor`. `@jit(deterministic=True)` refuses unresolved calls and host I/O at decoration, even with a `seed`. `_establish_tracer_authority` keeps an unresolved call at `top` instead of reading the AST body's effect. `copy` is registered `memory`. No target code changed. What changes for this backend is which programs reach the tracer-authored Graph IR, and so which native route they take. The Mac `tests/unit -m "not slow"` A/B against `main` edf94f1e5 (same build tree, M1 Max, macOS 27.2) fails the same nodes once two stale pins were updated. The Apple GPU and CPU lanes in that suite are the evidence. No separate `tests/device/apple` run was made. (PR #1055.)

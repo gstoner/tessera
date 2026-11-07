@@ -159,7 +159,7 @@ def test_in_place_write_is_memory_not_unknown():
 
 def test_unavailable_source_is_top():
     namespace: dict = {}
-    exec("def f(x):\n    return x\n", namespace)
+    exec("def f(x):\n    return x\n", namespace)  # noqa: S102 -- a function with no source file
     assert scan_call_effects(namespace["f"]).effect == Effect.top
     assert scan_call_effects(namespace["f"], "def f(x):\n    return x\n").effect == Effect.pure
 
@@ -236,3 +236,49 @@ def test_pure_program_still_traces():
     assert fn.inferred_effect == Effect.pure
     np.testing.assert_allclose(fn(np.array([-1.0, 2.0], np.float32)), [0.0, 2.0])
     assert fn.frontend_authority == "tracer"
+
+
+# ── lexical scopes (review findings on #1055) ────────────────────────────────
+
+
+class _ExternalOps:
+    @staticmethod
+    def relu(x):
+        return np.random.rand(*np.shape(x))
+
+
+external_ops = _ExternalOps()
+
+
+def test_rebound_import_is_not_resolved_to_the_original_import():
+    def rebound(x):
+        from tessera import ops
+
+        ops = external_ops  # noqa: F841 -- the point is the rebinding
+        return ops.relu(x)
+
+    scan = scan_call_effects(rebound)
+    assert scan.effect == Effect.top
+    assert "ops.relu" in scan.unresolved
+
+
+def test_nested_parameters_do_not_bind_names_in_the_enclosing_scope():
+    def outer(x):
+        def helper(ts):  # shadows the module only inside helper
+            return ts
+
+        return ts.ops.relu(helper(x))
+
+    assert scan_call_effects(outer).effect == Effect.pure
+
+
+def test_nested_parameter_shadowing_a_module_stays_unresolved_inside_it():
+    def outer(x):
+        def helper(ts, y):
+            return ts.ops.relu(y)  # ``ts`` here is whatever the caller passes
+
+        return helper(external_ops, x)
+
+    scan = scan_call_effects(outer)
+    assert scan.effect == Effect.top
+    assert "ts.ops.relu" in scan.unresolved

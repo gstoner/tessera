@@ -14838,7 +14838,9 @@ Outcome: `EffectLattice.infer` no longer lowers the function through the AST Gra
   - `mypy --platform linux python/tessera/`: clean, 696 files.
   - Generated docs: 33 in sync.
 
-NVIDIA, ROCm, Apple and x86: no target code changed. The change is host-independent frontend analysis, so no device claim is made or owed.
+- **Lexical scopes (review fix).** The scan treats each nested `def`/`lambda` as its own scope, so a helper's parameter named `ts` no longer marks the enclosing `ts.ops.relu` unresolved. An import that is rebound in the same scope (`from tessera import ops; ops = external_ops`) stays unresolved instead of resolving to the original import.
+
+No target code changed, but which programs reach tracer-authored Graph IR, and so which native route they take, changes on every backend. The sibling notes under the same sync key record parity on Apple (Mac A/B) and not-applicable on x86. NVIDIA (sm_120) and ROCm (gfx1201, gfx1151) device A/B runs are owed before merge.
 Remaining: 2,490 non-static and 592 effectful decorations still build Graph IR through `_OpExtractor`. Symbolic-dim decoration tracing is a sibling slice (PR #1054). Unannotated programs still need a decision on decoration-time Graph IR before `_OpExtractor` can be deleted. No performance claim.
 Evidence: python/tessera/compiler/effect_scan.py; python/tessera/compiler/effects.py; python/tessera/compiler/jit.py; tests/unit/test_effect_scan.py; tests/unit/test_frontend_authority.py; tests/unit/test_stochastic_graph.py
 <!-- entry-fields:end -->

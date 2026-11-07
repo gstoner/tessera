@@ -19,7 +19,6 @@ Reference: CLAUDE.md §Key Design Contracts — Effect Lattice
 
 from __future__ import annotations
 import enum
-import inspect
 import weakref
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional
 

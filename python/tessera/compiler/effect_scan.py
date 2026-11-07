@@ -158,53 +158,53 @@ def _function_node(fn: Callable, source_text: Optional[str]) -> Optional[ast.AST
     return None
 
 
-def _body_nodes(node: ast.AST) -> list:
-    """Nodes that execute when the function is called.
+_FUNCTION_NODES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+
+
+def _scope_roots(node: ast.AST) -> list:
+    """Nodes a call of ``node`` evaluates directly.
 
     Decorators, default values and annotations ran once, at definition.
     """
     if isinstance(node, ast.Lambda):
-        return list(ast.walk(node.body))
-    return [child for stmt in node.body for child in ast.walk(stmt)]  # type: ignore[attr-defined]
+        return [node.body]
+    return list(node.body)  # type: ignore[attr-defined]
 
 
-def _local_names(node: ast.AST) -> Tuple[frozenset, frozenset]:
-    """(value names bound in the function, helpers defined in it)."""
-    values: set[str] = set()
-    helpers: set[str] = set()
-    args = node.args  # type: ignore[attr-defined]
-    for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs):
-        values.add(arg.arg)
-    for extra in (args.vararg, args.kwarg):
-        if extra is not None:
-            values.add(extra.arg)
-    for child in ast.walk(node):
-        if child is node:
+def _scope_nodes(node: ast.AST) -> Tuple[list, list]:
+    """(nodes in ``node``'s own lexical scope, nested function scopes).
+
+    A nested ``def`` or ``lambda`` is its own scope: its parameters and
+    assignments do not bind names here. Its decorators and defaults, which
+    the enclosing scope evaluates when it defines the helper, stay here.
+    """
+    own: list = []
+    nested: list = []
+    stack = list(reversed(_scope_roots(node)))
+    while stack:
+        child = stack.pop()
+        own.append(child)
+        if isinstance(child, _FUNCTION_NODES):
+            nested.append(child)
+            evaluated_here = list(child.args.defaults) + [
+                d for d in child.args.kw_defaults if d is not None]
+            if not isinstance(child, ast.Lambda):
+                evaluated_here += child.decorator_list
+            stack.extend(reversed(evaluated_here))
             continue
-        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            helpers.add(child.name)
-        elif isinstance(child, ast.Name) and isinstance(child.ctx, ast.Store):
-            values.add(child.id)
-        elif isinstance(child, ast.arg):
-            values.add(child.arg)
-    # A name bound to a lambda is a helper, not a value.
-    for child in ast.walk(node):
-        if isinstance(child, ast.Assign) and isinstance(child.value, ast.Lambda):
-            for target in child.targets:
-                if isinstance(target, ast.Name):
-                    helpers.add(target.id)
-    return frozenset(values - helpers), frozenset(helpers)
+        stack.extend(reversed(list(ast.iter_child_nodes(child))))
+    return own, nested
 
 
-def _local_imports(body: list) -> Dict[str, Any]:
-    """Names a body binds with ``import``, for modules already imported.
+def _import_bindings(own: list) -> Dict[str, Any]:
+    """Names a scope binds with ``import``, for modules already imported.
 
     A module the process has not imported yet is left unbound (so its calls
     stay unresolved): resolving it here would run its import side effects at
     decoration time.
     """
     bound: Dict[str, Any] = {}
-    for child in body:
+    for child in own:
         if isinstance(child, ast.Import):
             for alias in child.names:
                 if alias.asname is not None:
@@ -231,6 +231,56 @@ def _local_imports(body: list) -> Dict[str, Any]:
     return bound
 
 
+# A local binding is one of: a value (parameter, assignment, loop target,
+# ``with`` target, an import also assigned elsewhere), a helper defined in the
+# function, or an import of an already-loaded module (bound to its object).
+_VALUE = "value"
+_HELPER = "helper"
+
+
+def _scope_bindings(node: ast.AST, own: list) -> Dict[str, Any]:
+    """This scope's own bindings: name -> ``_VALUE``, ``_HELPER`` or the
+    imported object. A name bound more than one way is a value, so a rebound
+    import or helper is never resolved to what it was first bound to."""
+    kinds: Dict[str, set] = {}
+
+    def bind(name: str, kind: Any) -> None:
+        kinds.setdefault(name, set()).add(kind if isinstance(kind, str) else id(kind))
+
+    args = node.args  # type: ignore[attr-defined]
+    for arg in (*args.posonlyargs, *args.args, *args.kwonlyargs, args.vararg, args.kwarg):
+        if arg is not None:
+            bind(arg.arg, _VALUE)
+    lambda_targets: set[int] = set()
+    for child in own:
+        if isinstance(child, ast.Assign) and isinstance(child.value, ast.Lambda):
+            for target in child.targets:
+                if isinstance(target, ast.Name):
+                    lambda_targets.add(id(target))
+                    bind(target.id, _HELPER)
+    imports = _import_bindings(own)
+    for child in own:
+        if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bind(child.name, _HELPER if not isinstance(child, ast.ClassDef) else _VALUE)
+        elif (isinstance(child, ast.Name) and isinstance(child.ctx, ast.Store)
+              and id(child) not in lambda_targets):
+            bind(child.id, _VALUE)
+        elif isinstance(child, (ast.Import, ast.ImportFrom)):
+            for alias in child.names:
+                name = alias.asname or alias.name.split(".")[0]
+                bind(name, imports.get(name, _VALUE))
+        elif isinstance(child, ast.ExceptHandler) and child.name:
+            bind(child.name, _VALUE)
+    resolved: Dict[str, Any] = {}
+    for name, seen in kinds.items():
+        if len(seen) != 1:
+            resolved[name] = _VALUE
+        else:
+            (only,) = seen
+            resolved[name] = only if isinstance(only, str) else imports.get(name, _VALUE)
+    return resolved
+
+
 def _is_user_function(obj: Any) -> bool:
     """A plain Python function outside the ``tessera`` package.
 
@@ -251,79 +301,105 @@ def scan_call_effects(
 ) -> CallScan:
     """Scan ``fn``'s call sites and join their registered effects.
 
-    A call to a plain Python helper is scanned through (transitively, up to
-    ``_MAX_HELPER_DEPTH`` and cycle-safe), so a program composed of helpers
-    that only call ``tessera.ops`` is as pure as the ops it calls.
+    Each nested ``def``/``lambda`` is scanned as its own lexical scope, inside
+    the enclosing one. A call to a plain Python helper from another scope is
+    scanned through (transitively, up to ``_MAX_HELPER_DEPTH`` and
+    cycle-safe), so a program composed of helpers that only call
+    ``tessera.ops`` is as pure as the ops it calls.
     """
-    from .effects import Effect, registered_op_effect
+    from .effects import Effect
 
     node = _function_node(fn, source_text)
     if node is None:
         return CallScan(Effect.top, (), ("<source-unavailable>",), False)
-    values, helpers = _local_names(node)
-    body = _body_nodes(node)
-    scope = _function_scope(fn)
-    imported = _local_imports(body)
-    scope.update(imported)
-    values = values - frozenset(imported)
-    effect = Effect.pure
-    effectful: list[str] = []
-    unresolved: list[str] = []
-    for child in body:
-        if isinstance(child, (ast.Global, ast.Nonlocal)):
-            unresolved.append(f"<{type(child).__name__.lower()}>")
-        elif isinstance(child, ast.Delete):
-            unresolved.append("<del>")
-        elif isinstance(child, (ast.Subscript, ast.Attribute)) and isinstance(
-                child.ctx, ast.Store):
-            # An in-place write (``a[:] = ...``, ``obj.x = ...``) mutates a
-            # value the caller may hold; the Graph front end records it as
-            # ``tessera.copy``, whose registered effect is the join here.
-            copy_effect = registered_op_effect("tessera.copy")
-            if copy_effect > Effect.pure:
-                effectful.append("copy")
-            effect = effect.join(copy_effect)
-    for child in body:
-        if not isinstance(child, ast.Call):
-            continue
-        dotted = _dotted(child.func)
+    state = _ScanState(fn, _active)
+    state.scan_scope(node, {})
+    unresolved = tuple(state.unresolved)
+    effect = Effect.top if unresolved else state.effect
+    return CallScan(effect, tuple(state.effectful), unresolved, True)
+
+
+class _ScanState:
+    def __init__(self, fn: Callable, active: Tuple[Any, ...]) -> None:
+        from .effects import Effect
+
+        self.fn = fn
+        self.active = active
+        self.globals = _function_scope(fn)
+        self.effect = Effect.pure
+        self.effectful: list[str] = []
+        self.unresolved: list[str] = []
+
+    def join(self, op: str, op_effect: Any) -> None:
+        from .effects import Effect
+
+        if op_effect > Effect.pure:
+            self.effectful.append(op)
+        self.effect = self.effect.join(op_effect)
+
+    def scan_scope(self, node: ast.AST, enclosing: Dict[str, Any]) -> None:
+        from .effects import registered_op_effect
+
+        own, nested = _scope_nodes(node)
+        bindings = {**enclosing, **_scope_bindings(node, own)}
+        for child in own:
+            if isinstance(child, (ast.Global, ast.Nonlocal)):
+                self.unresolved.append(f"<{type(child).__name__.lower()}>")
+            elif isinstance(child, ast.Delete):
+                self.unresolved.append("<del>")
+            elif isinstance(child, ast.ClassDef):
+                self.unresolved.append(f"<class {child.name}>")
+            elif isinstance(child, (ast.Subscript, ast.Attribute)) and isinstance(
+                    child.ctx, ast.Store):
+                # An in-place write (``a[:] = ...``, ``obj.x = ...``) mutates a
+                # value the caller may hold; the Graph front end records it as
+                # ``tessera.copy``, whose registered effect is the join here.
+                self.join("copy", registered_op_effect("tessera.copy"))
+            elif isinstance(child, ast.Call):
+                self.scan_call(child, bindings)
+        for inner in nested:
+            self.scan_scope(inner, bindings)
+
+    def scan_call(self, call: ast.Call, bindings: Dict[str, Any]) -> None:
+        from .effects import registered_op_effect
+
+        dotted = _dotted(call.func)
         if dotted is None:
             # Calling the result of a call, a subscript or a lambda literal:
             # nothing names the callee, so nothing can be resolved.
-            if isinstance(child.func, ast.Attribute):
-                unresolved.append(f"<expression>.{child.func.attr}")
+            if isinstance(call.func, ast.Attribute):
+                self.unresolved.append(f"<expression>.{call.func.attr}")
             else:
-                unresolved.append("<dynamic>")
-            continue
+                self.unresolved.append("<dynamic>")
+            return
         root = dotted.split(".")[0]
-        if "." not in dotted and root in helpers:
-            continue  # its body is part of this walk
-        if root in values:
-            unresolved.append(dotted)  # a method on a value, or a bound callable
-            continue
-        if "." not in dotted and root not in scope:
-            if root in _PURE_BUILTINS and getattr(builtins, root, None) is not None:
-                continue
-            unresolved.append(dotted)
-            continue
-        obj = _resolve_dotted(scope, dotted)
+        local = bindings.get(root)
+        if local == _HELPER and "." not in dotted:
+            return  # its body is scanned as a nested scope
+        if isinstance(local, str):
+            self.unresolved.append(dotted)  # a method on a value, or a rebound name
+            return
+        if local is not None:
+            obj = _resolve_dotted({root: local}, dotted)
+        elif root in self.globals:
+            obj = _resolve_dotted(self.globals, dotted)
+        else:
+            if ("." not in dotted and root in _PURE_BUILTINS
+                    and getattr(builtins, root, None) is not None):
+                return
+            self.unresolved.append(dotted)
+            return
         if _is_constraint_declaration(obj):
-            continue
+            return
         op = _ops_name(obj, dotted)
         if op is not None:
-            op_effect = registered_op_effect(op)
-            if op_effect > Effect.pure:
-                effectful.append(op)
-            effect = effect.join(op_effect)
-            continue
-        if (_is_user_function(obj) and obj not in _active
-                and len(_active) < _MAX_HELPER_DEPTH):
-            inner = scan_call_effects(obj, _active=(*_active, fn))
-            effect = effect.join(inner.effect)
-            effectful.extend(inner.effectful_ops)
-            unresolved.extend(f"{dotted}->{name}" for name in inner.unresolved)
-            continue
-        unresolved.append(dotted)
-    if unresolved:
-        effect = Effect.top
-    return CallScan(effect, tuple(effectful), tuple(unresolved), True)
+            self.join(op, registered_op_effect(op))
+            return
+        if (_is_user_function(obj) and obj not in self.active
+                and len(self.active) < _MAX_HELPER_DEPTH):
+            inner = scan_call_effects(obj, _active=(*self.active, self.fn))
+            self.effect = self.effect.join(inner.effect)
+            self.effectful.extend(inner.effectful_ops)
+            self.unresolved.extend(f"{dotted}->{name}" for name in inner.unresolved)
+            return
+        self.unresolved.append(dotted)

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-11-05
+last_updated: 2026-11-07
 audit_role: reference
 ---
 
@@ -14810,4 +14810,35 @@ Outcome: `frontend_authority_coverage` row `normalization`/`apple_gpu` moves fro
 NVIDIA, ROCm and x86: not applicable (sibling notes in each queue). The only shared-code change is the `apple_gpu` branch of `_physical_execution_attestation`; no other target's attestation is read or changed.
 Remaining: 10 `nvidia_sm120` rows and generic `rocm` `scaled_product_transpose` (sibling slices). No performance claim.
 Evidence: tests/device/apple/test_native_vjp_execution_certificates.py; tests/unit/test_apple_normalization_vjp.py; tests/unit/test_frontend_authority_coverage.py; python/tessera/compiler/frontend_authority_audit.py; docs/audit/generated/frontend_authority_coverage.csv
+<!-- entry-fields:end -->
+
+### 2026-11-07 — E2E-REAL-6F: effect inference leaves `_OpExtractor`, and `deterministic=True` stops admitting host RNG
+
+Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
+PRs: branch `claude/effect-inference-call-scan`; sync E2E-REAL-6F-effect-scan-2026-11-07.
+Outcome: `EffectLattice.infer` no longer lowers the function through the AST Graph IR front end. It scans the body's call sites (`python/tessera/compiler/effect_scan.py`) and resolves each by object identity. A resolved call is one of: a registered `tessera.ops` callable (it contributes its catalog effect), a `ts.require`/`ts.constraint` declaration, a pure builtin, or a plain Python helper (scanned through, with a cycle guard). Every other call is `top`. Decision #5 is amended in `CLAUDE.md`.
+- **Measured on the Mac unit suite (M1 Max, `tests/unit -m "not slow"`).** A probe counted each `GraphIRBuilder.lower` call and why it took the AST route. AST lowerings fell from 11,264 to 3,290, and those from `effects.py:infer` from 7,959 to 0. What remains is decoration-time Graph IR for signatures the decoration-time tracer cannot take: 2,490 non-static and 592 effectful `_jit_emit_graph_ir` lowerings. A second probe recorded the authority `_establish_tracer_authority` settles on. Before: tracer 159, effectful 40, unmigrated 54. After: tracer 173, effectful 83, unmigrated 56.
+- **Agreement with the AST lattice before the switch.** A differential ran both inferences on every decoration and kept the AST answer. 6,086 of 6,232 agreed. The 146 differences each have a cause:
+  - 101 move `top`→`pure`: the AST marked a pure body `top` because it could not lower a construct (a loop, a raw `if`, a captured numpy constant becoming unregistered `arith.constant`), not because anything there has an effect.
+  - 19 move `pure`→`top`: lambdas whose AST was empty, so the AST answered `pure` for a body it never read.
+  - 5 move `pure`→`top`: calls to a nonexistent `tessera.matmul` that the AST accepted by spelling.
+  - The remainder are constraint declarations (`ts.require`, `ts.constraint.Divisible`; since admitted) and a function-local `import`/`from tessera.ops import` (since resolved).
+  - Two tests used undefined bare names (`cache_commit(...)`, `ops.all_reduce(...)` with `# noqa: F821`). They now call the registered op.
+- **Fail-open closed.** A trace records only operations that touch traced values, so `noise = np.random.rand(4)` beside `return ts.ops.relu(x)` traces as `pure`. Before this change, such a body under `@jit(deterministic=True)` got through every check:
+  - `_jit_analyze_frontend` refused only `random`.
+  - The call-time certificate read the trace.
+  - `_establish_tracer_authority` replaced the lattice's `top` with the AST body's effect, which omits dropped calls.
+
+  So the program decorated, claimed tracer authority and ran the host RNG. Decoration now calls `check_deterministic`. Unresolved calls and host I/O are refused even with a `seed`, since Tessera's seed does not seed numpy. A registered RNG op without a seed is refused at decoration instead of at the first call (`test_stochastic_graph.py` moved its expectation). Tracer authority requires the scanned effect to be `pure` and the traced graph to confirm it. `copy` (in-place `a[:] = ...`) is registered `memory`, so it stays admissible under `deterministic=True`; it was `top` only because it was unregistered.
+- **Tests (Mac M1 Max, macOS 27.2, same build tree as `main`).** Full `tests/unit -m "not slow"` A/B against clean `main` edf94f1e5:
+  - `main` failed 759 nodes and the branch 760.
+  - The two new failures were stale pins: `test_static_annotations_use_symbolic_tracing_before_ast_extraction` pinned exactly one `_OpExtractor` call (now zero), and `test_deterministic_allows_ir_visible_state_and_collectives` used an undefined `ops`. Both were updated and re-run green.
+  - The one node that stopped failing is the `test_apple_gpu_precompile_warmup` timing comparison, which is noise.
+  - `test_effect_scan.py` is new (resolution, fail-closed cases, deterministic refusals, call-time authority).
+  - `mypy --platform linux python/tessera/`: clean, 696 files.
+  - Generated docs: 33 in sync.
+
+NVIDIA, ROCm, Apple and x86: no target code changed. The change is host-independent frontend analysis, so no device claim is made or owed.
+Remaining: 2,490 non-static and 592 effectful decorations still build Graph IR through `_OpExtractor`. Symbolic-dim decoration tracing is a sibling slice (PR #1054). Unannotated programs still need a decision on decoration-time Graph IR before `_OpExtractor` can be deleted. No performance claim.
+Evidence: python/tessera/compiler/effect_scan.py; python/tessera/compiler/effects.py; python/tessera/compiler/jit.py; tests/unit/test_effect_scan.py; tests/unit/test_frontend_authority.py; tests/unit/test_stochastic_graph.py
 <!-- entry-fields:end -->

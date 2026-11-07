@@ -17011,3 +17011,7 @@ Evidence: tests/device/nvidia/test_native_vjp_execution_certificates.py; tests/u
 ## `E2E-REAL-6F-apple-gpu-norm-packet-2026-11-05`: sibling outcome — not applicable
 
 The Apple GPU normalization VJP gained an exact-device packet, and the `apple_gpu` branch of `runtime._physical_execution_attestation` now reads the live Metal GPU family instead of `sys.platform` (Apple queue, same key). No other target's attestation branch, certificate model or packet changed; device lanes on this backend were not re-run.
+
+## `E2E-REAL-6F-effect-scan-2026-11-07`: sibling outcome — follow-up required — device A/B on The-Super-Bear
+
+`EffectLattice.infer` now scans call sites resolved by identity (`compiler/effect_scan.py`) instead of lowering the function through `_OpExtractor`. `@jit(deterministic=True)` refuses unresolved calls and host I/O at decoration, even with a `seed`. `_establish_tracer_authority` keeps an unresolved call at `top` instead of reading the AST body's effect. `copy` is registered `memory`. No target code changed. What changes for this backend is which programs reach the tracer-authored Graph IR, and so which native route they take. An sm_120 A/B (`tests/unit` plus `tests/device/nvidia`, `main` edf94f1e5 against the branch, shared `build-nvidia-cuda`) is owed before merge. The result is recorded here when it lands. (PR #1055.)

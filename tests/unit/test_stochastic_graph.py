@@ -146,12 +146,13 @@ def test_jit_deterministic_gate_rejects_aliased_rng_from_trace():
 
     sampler = ts.ops.dropout
 
-    @ts.jit(deterministic=True)
     def aliased_rng(x):
         return sampler(x)
 
-    with pytest.raises(TesseraEffectError, match="random traced dependency"):
-        aliased_rng(np.ones((2, 2)))
+    # The call-site scan resolves the alias by identity, so the refusal now
+    # lands at decoration rather than at the first call's trace certificate.
+    with pytest.raises(TesseraEffectError, match="without a seed"):
+        ts.jit(deterministic=True)(aliased_rng)
 
 
 def test_estimator_provenance_fails_closed_and_requires_replay_identity():

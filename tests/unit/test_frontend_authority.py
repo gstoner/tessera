@@ -57,17 +57,18 @@ def test_static_annotations_use_symbolic_tracing_before_ast_extraction(
     original_extract = graph_ir_module.GraphIRBuilder._extract_ops
     extraction_count = 0
 
-    def count_effect_analysis_only(*args, **kwargs):
+    # Effect inference scans call sites (effect_scan) instead of lowering the
+    # function through the AST front end, so a statically annotated pure
+    # program never enters _OpExtractor at decoration.
+    def refuse_extraction(*args, **kwargs):
         nonlocal extraction_count
         extraction_count += 1
-        if extraction_count > 1:
-            raise AssertionError("JIT emission must not enter _OpExtractor")
-        return original_extract(*args, **kwargs)
+        raise AssertionError("decoration must not enter _OpExtractor")
 
     monkeypatch.setattr(
         graph_ir_module.GraphIRBuilder,
         "_extract_ops",
-        count_effect_analysis_only,
+        refuse_extraction,
     )
 
     @tessera.jit
@@ -77,7 +78,7 @@ def test_static_annotations_use_symbolic_tracing_before_ast_extraction(
     assert annotated.graph_ir.module_attrs["tessera.frontend.authority"] == '"tracer"'
     assert annotated._legacy_graph_ir is None
     assert annotated.arg_names == ["x", "y"]
-    assert extraction_count == 1
+    assert extraction_count == 0
 
     # The compatibility AST is delayed until an explicit differential proof
     # asks for it; ordinary compilation never pays for or trusts that capture.

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-11-03
+last_updated: 2026-11-07
 audit_role: plan
 plan_state: open
 ---
@@ -94,8 +94,8 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Gate: The expanded census includes x86 breadth packaging: 46 Graph inputs, 14 scheduled inputs and 14 raw/unclassified entries. Import-resolved caller candidates and local helper-to-emitter paths expose reconstruction paths; scope-aware import candidates now reject parameter/rebinding shadowing and sibling-scope leakage; indirect dispatch and per-envelope certificate joins still require review. Counts do not authorize constructor deletion.
 - Depends on: —
 - Start: host-free
-- Current slice (2026-11-05, sync E2E-REAL-6F-apple-gpu-norm-packet-2026-11-05): `normalization`/`apple_gpu` is backed by an exact-device packet (`tests/device/apple/test_native_vjp_execution_certificates.py`), and the Apple physical attestation now reads the live Metal GPU family instead of the host OS. Blocking family/target rows: 11 (10 sm_120, generic `rocm` `scaled_product_transpose`). [Log](INTEGRATED_COMPILER_LOG.md#2026-11-05--e2e-real-6f-apple-gpu-normalization-vjp-gets-an-exact-device-packet).
-- Latest: [2026-11-05 — E2E-REAL-6F: Apple GPU normalization VJP gets an exact-device packet](INTEGRATED_COMPILER_LOG.md#2026-11-05--e2e-real-6f-apple-gpu-normalization-vjp-gets-an-exact-device-packet)
+- Current slice (2026-11-07, sync E2E-REAL-6F-effect-scan-2026-11-07): every family/target row in `frontend_authority_coverage` has its exact-device packet (0 blocking rows since #1051–#1053). The deletion gate is now the frontend route census, not the packet census. Effect inference no longer lowers through `_OpExtractor`: the Mac unit suite went from 11,264 AST lowerings to 3,290 (effect inference 7,959 → 0). The remaining AST route is decoration-time Graph IR for 2,490 non-static and 592 effectful signatures. `deterministic=True` refuses unresolved host calls at decoration. [Log](INTEGRATED_COMPILER_LOG.md#2026-11-07--e2e-real-6f-effect-inference-leaves-opextractor-and-deterministictrue-stops-admitting-host-rng).
+- Latest: [2026-11-07 — E2E-REAL-6F: effect inference leaves `_OpExtractor`, and `deterministic=True` stops admitting host RNG](INTEGRATED_COMPILER_LOG.md#2026-11-07--e2e-real-6f-effect-inference-leaves-opextractor-and-deterministictrue-stops-admitting-host-rng)
 
 ### COMPILER-DEVEX-1
 

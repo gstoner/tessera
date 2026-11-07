@@ -19,7 +19,6 @@ Reference: CLAUDE.md §Key Design Contracts — Effect Lattice
 
 from __future__ import annotations
 import enum
-import inspect
 import weakref
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional
 
@@ -152,6 +151,9 @@ _OP_EFFECTS.update({
     "send": Effect.collective,
     "recv": Effect.collective,
     "barrier": Effect.collective,
+    # ``a[:] = ...`` -- an in-place tensor write, recorded by the Graph front
+    # end as ``tessera.copy`` and by the effect scan as a subscript store.
+    "copy": Effect.memory,
 })
 
 def registered_op_effect(
@@ -195,8 +197,13 @@ class EffectLattice:
     """
     Infers and validates the effect level of a Tessera function.
 
-    Effects are inferred from emitted/traced Graph operations. The former AST
-    call-name visitor was retired because aliases could make it fail open.
+    Effects are inferred by scanning the function's call sites and resolving
+    each by object identity (``effect_scan.scan_call_effects``): a resolved
+    ``tessera.ops`` call contributes its registered effect, and every call
+    that does not resolve -- raw numpy, a non-Python callable, ``getattr`` or
+    dict dispatch -- joins to ``top``. The former AST call-name visitor was
+    retired because aliases could make it fail open; the scan resolves
+    aliases by identity and fails closed on everything else.
 
     Usage:
         lattice = EffectLattice()
@@ -217,7 +224,7 @@ class EffectLattice:
 
     def infer(self, fn: Callable, source_text: Optional[str] = None) -> Effect:
         """
-        Infer the effect level from the function's emitted Graph IR.
+        Infer the effect level from the function's resolved call sites.
 
         Returns:
             Effect — the inferred effect level
@@ -236,19 +243,9 @@ class EffectLattice:
                     return cached
 
         try:
-            from .graph_ir import GraphIRBuilder
+            from .effect_scan import scan_call_effects
 
-            source = source_text if source_text is not None else inspect.getsource(fn)
-            builder = GraphIRBuilder()
-            builder.lower(fn, source_text=source)
-            if any(d.severity in {"warning", "error"} for d in builder.diagnostics):
-                result = Effect.top
-                if use_cache:
-                    self._cache[fn] = result
-                return result
-            body = [op for graph_fn in builder.module().functions
-                    for op in graph_fn.body]
-            result, _ = infer_graph_effects(body)
+            result = scan_call_effects(fn, source_text).effect
         except Exception:
             if use_cache:
                 self._cache[fn] = Effect.top
@@ -265,18 +262,12 @@ class EffectLattice:
             (Effect, List[str]) — effect level and offending ops
         """
         try:
-            from .graph_ir import GraphIRBuilder
+            from .effect_scan import scan_call_effects
 
-            source = source_text if source_text is not None else inspect.getsource(fn)
-            builder = GraphIRBuilder()
-            builder.lower(fn, source_text=source)
-            if any(d.severity in {"warning", "error"} for d in builder.diagnostics):
-                return Effect.top, ["<untraceable-graph>"]
-            body = [op for graph_fn in builder.module().functions
-                    for op in graph_fn.body]
-            return infer_graph_effects(body)
+            scan = scan_call_effects(fn, source_text)
         except Exception:
             return Effect.top, ["<untraceable-graph>"]
+        return scan.effect, [*scan.effectful_ops, *scan.unresolved]
 
     def check_deterministic(
         self,

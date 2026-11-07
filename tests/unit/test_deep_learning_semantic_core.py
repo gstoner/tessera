@@ -41,9 +41,13 @@ def test_effect_lattice_distinguishes_movement_state_collective():
 
 
 def test_deterministic_allows_ir_visible_state_and_collectives():
+    import tessera
+
+    # Effect inference resolves calls by identity, so the step must call the
+    # registered ops themselves (an undefined bare ``ops`` is unresolved).
     def step(cache, x):
-        cache = ops.kv_cache_append(cache, x, x)  # noqa: F821
-        y = ops.all_reduce(x)  # noqa: F821
+        cache = tessera.ops.kv_cache_append(cache, x, x)
+        y = tessera.ops.all_reduce(x)
         return y
 
     EffectLattice().check_deterministic(step, seed=42)

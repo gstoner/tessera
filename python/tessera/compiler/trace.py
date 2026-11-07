@@ -22,7 +22,7 @@ import inspect
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Sequence, Tuple, Union
 
 import numpy as np
 
@@ -32,6 +32,15 @@ from .op_catalog import graph_name_for
 
 if TYPE_CHECKING:
     from .graph_ir import GraphIRModule
+
+# A traced extent: an ``int`` when static, or a symbol NAME when the trace was
+# seeded from a symbolic signature (``Tensor["B", "D"]``). Two dims are the same
+# extent only when they are the same int or the same name; the call-time
+# constraint check (``JitFn._enforce_call_time_constraints``) is what makes one
+# name bind one extent across arguments. Graph IR spells every symbol ``?``
+# (names ride as ``tessera.dim_names``), see ``_render_dim``.
+Dim = Union[int, str]
+Shape = Tuple[Dim, ...]
 
 # python/tessera -- frames inside the package are library frames, not user code.
 _TESSERA_PKG_ROOT = Path(__file__).resolve().parent.parent
@@ -93,7 +102,7 @@ def _user_source_span() -> SourceSpan | None:
 class Tracer:
     """An abstract value flowing through a trace: shape + dtype + graph SSA."""
 
-    shape: Tuple[int, ...]
+    shape: Shape
     dtype: str
     ssa: str
     # F6 concrete tracing — the op's numpy result, threaded so shape/dtype come
@@ -138,7 +147,7 @@ class TracedFunction:
     """The result of a trace: typed args, a straight-line graph_ir body, and the
     SSA names of the outputs."""
 
-    args: List[Tuple[str, Tuple[int, ...], str]]  # (ssa, shape, dtype)
+    args: List[Tuple[str, Shape, str]]  # (ssa, shape, dtype)
     body: List[IROp]
     outputs: List[str]                            # output SSA names
     output_values: Tuple[Any, ...] = field(default=(), compare=False, repr=False)
@@ -156,35 +165,92 @@ class TracedFunction:
 # ── shape rules (executable subset; widened in F6) ────────────────────────── #
 
 
-def _matmul_shape(ins: List[Tuple[int, ...]], kw: dict) -> Tuple[int, ...]:
+def _is_symbol(dim: Any) -> bool:
+    return isinstance(dim, str)
+
+
+def _as_dim(dim: Any) -> Dim:
+    """Normalize one spec extent: digits are static, any other string a symbol.
+
+    ``?`` and ``*`` are refused rather than admitted as symbols: two anonymous
+    extents spelled alike would unify, which is a guess, not a proof.
+    """
+    if isinstance(dim, str) and not dim.isdigit():
+        if dim in {"", "?", "*"} or dim.startswith("?"):
+            raise TesseraTraceError(
+                f"trace: anonymous extent {dim!r} must be named to be traced")
+        return dim
+    return int(dim)
+
+
+def _render_dim(dim: Dim) -> str:
+    # Graph IR's tensor spelling for a symbolic extent is `?`; the AST
+    # frontend writes it the same way (`graph_ir._shape_from_annotation`).
+    return "?" if _is_symbol(dim) else str(dim)
+
+
+def _render_shape(shape: Shape) -> Tuple[str, ...]:
+    return tuple(_render_dim(dim) for dim in shape)
+
+
+def _matmul_shape(ins: List[Shape], kw: dict) -> Shape:
     a, b = ins[0], ins[1]
     if len(a) < 2 or len(b) < 2:
         raise TesseraTraceError(f"matmul needs rank>=2 operands, got {a} @ {b}")
     m, k = a[-2], a[-1]
     k2, n = b[-2], b[-1]
+    # A symbol equals only itself: `K @ K` contracts, `K @ 16` or `K @ D` is
+    # unprovable and refuses rather than assuming the extents agree.
     if k != k2:
         raise TesseraTraceError(f"matmul inner-dim mismatch: {a} @ {b}")
     batch = a[:-2] if len(a) >= len(b) else b[:-2]
     return (*batch, m, n)
 
 
-def _transpose_shape(ins: List[Tuple[int, ...]], kw: dict) -> Tuple[int, ...]:
+def _transpose_shape(ins: List[Shape], kw: dict) -> Shape:
     from .graph_ir import _transpose_permutation
     shape = ins[0]
     return tuple(shape[axis] for axis in _transpose_permutation(len(shape), kw))
 
 
-def _broadcast_shape(ins: List[Tuple[int, ...]], kw: dict) -> Tuple[int, ...]:
-    return tuple(np.broadcast_shapes(*ins))
+def _symbolic_broadcast(ins: List[Shape]) -> Shape:
+    """NumPy broadcasting over extents that may be symbols.
+
+    Right-aligned; a static ``1`` stretches to anything; equal extents (same
+    int or same name) agree. Everything else -- two different names, or a name
+    against a static extent other than 1 -- cannot be proven at trace time, so
+    the trace refuses instead of guessing a result extent.
+    """
+    rank = max(len(shape) for shape in ins)
+    out: List[Dim] = []
+    for position in range(rank):
+        extents = {shape[len(shape) - rank + position]
+                   for shape in ins if len(shape) - rank + position >= 0}
+        stretched = extents - {1}
+        if not stretched:
+            out.append(1)
+        elif len(stretched) == 1:
+            out.append(next(iter(stretched)))
+        else:
+            raise TesseraTraceError(
+                f"trace: cannot prove broadcast of {list(ins)}: extents "
+                f"{sorted(map(str, stretched))} are not provably equal")
+    return tuple(out)
 
 
-def _first_shape(ins: List[Tuple[int, ...]], kw: dict) -> Tuple[int, ...]:
+def _broadcast_shape(ins: List[Shape], kw: dict) -> Shape:
+    if not any(_is_symbol(dim) for shape in ins for dim in shape):
+        return tuple(np.broadcast_shapes(*ins))
+    return _symbolic_broadcast(ins)
+
+
+def _first_shape(ins: List[Shape], kw: dict) -> Shape:
     return ins[0]
 
 
 # public-name -> shape rule. Anything not here falls back by arity (unary →
 # shape-preserving, binary → broadcast); unknown/ambiguous → diagnostic.
-_SHAPE_RULES: Dict[str, Callable[[List[Tuple[int, ...]], dict], Tuple[int, ...]]] = {
+_SHAPE_RULES: Dict[str, Callable[[List[Shape], dict], Shape]] = {
     "matmul": _matmul_shape,
     "gemm": _matmul_shape,
     "transpose": _transpose_shape,
@@ -206,15 +272,15 @@ def register_shape_rule(name: str, rule) -> None:
     _SHAPE_RULES[name] = rule
 
 
-def _infer_shape(name: str, in_shapes: List[Tuple[int, ...]], kw: dict
-                 ) -> Tuple[int, ...]:
+def _infer_shape(name: str, in_shapes: List[Shape], kw: dict
+                 ) -> Shape:
     rule = _SHAPE_RULES.get(name)
     if rule is not None:
         return rule(in_shapes, kw)
     if len(in_shapes) == 1:           # unary fallback: shape-preserving
         return in_shapes[0]
     if len(in_shapes) == 2:           # binary fallback: broadcast
-        return tuple(np.broadcast_shapes(*in_shapes))
+        return _broadcast_shape(in_shapes, kw)
     raise TesseraTraceError(
         f"trace: no shape rule for op {name!r} ({len(in_shapes)} tensor inputs); "
         f"register one via tessera.compiler.trace.register_shape_rule")
@@ -223,10 +289,10 @@ def _infer_shape(name: str, in_shapes: List[Tuple[int, ...]], kw: dict
 # ── trace builder ─────────────────────────────────────────────────────────── #
 
 
-def _ty(shape: Tuple[int, ...], dtype: str) -> str:
+def _ty(shape: Shape, dtype: str) -> str:
     from .graph_ir import tensor_ir_type
 
-    return str(tensor_ir_type(tuple(str(dim) for dim in shape), dtype))
+    return str(tensor_ir_type(_render_shape(shape), dtype))
 
 
 @dataclass
@@ -234,16 +300,80 @@ class TraceBuilder:
     """Accumulates the graph_ir body as ``tessera.ops`` calls record themselves
     via :meth:`record_op` while this builder is the active tracer."""
 
-    args: List[Tuple[str, Tuple[int, ...], str]] = field(default_factory=list)
+    args: List[Tuple[str, Shape, str]] = field(default_factory=list)
     body: List[IROp] = field(default_factory=list)
     outputs: List[str] = field(default_factory=list)
     evaluate_catalog_outputs: bool = False
+    # Set once any argument carries a symbolic extent. A symbolic trace is held
+    # to the AST frontend's typing: every recorded result type must equal the
+    # catalog inference over the same `?`-spelled operands (`_check_symbolic`).
+    symbolic: bool = False
     _counter: int = 0
+    _symbol_counter: int = 0
 
     def arg(self, ssa: str, shape, dtype: str, value: Any = None) -> Tracer:
-        sh = tuple(int(d) for d in shape)
+        sh = tuple(_as_dim(d) for d in shape)
+        if any(_is_symbol(dim) for dim in sh):
+            if value is not None:
+                raise TesseraTraceError(
+                    "trace: a concrete value cannot carry a symbolic shape")
+            self.symbolic = True
         self.args.append((ssa, sh, dtype))
         return Tracer(sh, dtype, ssa, value)
+
+    def _fresh_symbol(self) -> str:
+        # An extent the catalog leaves unnamed (`?`). `$` keeps it disjoint from
+        # every user dim name, and a fresh one per result means it unifies with
+        # nothing but itself -- an unknown extent is never assumed equal to one.
+        n = self._symbol_counter
+        self._symbol_counter += 1
+        return f"$s{n}"
+
+    def _require_static(self, construct: str) -> None:
+        if self.symbolic:
+            raise TesseraTraceError(
+                f"trace: {construct} is not traced over symbolic extents")
+
+    def _catalog_shape(self, graph_name: str, inferred: Any,
+                       tracer_args: List["Tracer"]) -> Shape:
+        if not self.symbolic:
+            return tuple(map(int, inferred.shape))
+        from .op_catalog import shape_rule_for
+        rendered = tuple(inferred.shape)
+        if (tracer_args and shape_rule_for(graph_name) == "same_as_first"
+                and rendered == _render_shape(tracer_args[0].shape)):
+            return tracer_args[0].shape
+        dims: List[Dim] = []
+        for dim in rendered:
+            if dim.isdigit():
+                dims.append(int(dim))
+            elif dim == "?":
+                dims.append(self._fresh_symbol())
+            else:
+                raise TesseraTraceError(
+                    f"trace: {graph_name} result extent {dim!r} is not traceable")
+        return tuple(dims)
+
+    def _check_symbolic(self, graph_name: str, operand_ir_types: List[Any],
+                        ir_kwargs: dict, result_ir_types: Tuple[Any, ...]) -> None:
+        """Refuse a symbolic op whose type the AST frontend would spell differently.
+
+        The AST candidate types each op with the catalog inference, plus the
+        structural-view override, over the same operand types. A symbolic trace
+        must produce exactly those types or it is not the same program; a
+        disagreement falls back to the AST rather than picking one.
+        """
+        from .graph_ir import _infer_result_types, _struct_result_type
+        expected = tuple(_infer_result_types(graph_name, operand_ir_types, ir_kwargs))
+        struct = _struct_result_type(
+            graph_name, operand_ir_types[0] if operand_ir_types else None, ir_kwargs)
+        if struct is not None:
+            expected = (struct,)
+        if tuple(map(str, expected)) != tuple(map(str, result_ir_types)):
+            raise TesseraTraceError(
+                f"trace: symbolic {graph_name} result "
+                f"{[str(t) for t in result_ir_types]} disagrees with the catalog "
+                f"inference {[str(t) for t in expected]}")
 
     def _fresh(self) -> str:
         n = self._counter
@@ -441,9 +571,11 @@ class TraceBuilder:
             # including attention output/row-LSE and packed conversion results.
             from .graph_ir import _infer_result_types, tensor_ir_type
             inferred = _infer_result_types(graph_name, [
-                tensor_ir_type(tuple(map(str, value.shape)), value.dtype)
+                tensor_ir_type(_render_shape(value.shape), value.dtype)
                 for value in tracer_args], ir_kwargs)
-            out_shapes = tuple(tuple(map(int, value.shape)) for value in inferred)
+            out_shapes = tuple(
+                self._catalog_shape(graph_name, value, tracer_args)
+                for value in inferred)
             dtypes = tuple(value.dtype for value in inferred)
             if cast_types_only or slice_types_only or silu_types_only:
                 # Tracer output specs use the same float element spellings as
@@ -525,7 +657,7 @@ class TraceBuilder:
                 ir_kwargs["kind"] = ir_kwargs.pop("op", "sum")
         from .graph_ir import _canonicalize_spectral_attrs, tensor_ir_type
         operand_ir_types = [
-            tensor_ir_type(tuple(str(dim) for dim in item.shape), item.dtype)
+            tensor_ir_type(_render_shape(item.shape), item.dtype)
             for item in tracer_args
         ]
         from .op_catalog import shape_rule_for
@@ -544,9 +676,12 @@ class TraceBuilder:
         _canonicalize_spectral_attrs(graph_name, operand_ir_types, ir_kwargs)
         ssas = tuple(self._fresh() for _ in out_shapes)
         result_ir_types = tuple(
-            tensor_ir_type(tuple(str(dim) for dim in shape), dtype)
+            tensor_ir_type(_render_shape(shape), dtype)
             for shape, dtype in zip(out_shapes, dtypes, strict=True)
         )
+        if self.symbolic:
+            self._check_symbolic(graph_name, operand_ir_types, ir_kwargs,
+                                 result_ir_types)
         result_type = (
             str(result_ir_types[0])
             if len(result_ir_types) == 1
@@ -591,6 +726,7 @@ class TraceBuilder:
         """Trace a bounded ``fori_loop`` into a ``tessera.control_for`` IROp.
         ``body_fun(i, carry)`` is traced once with ``i=0`` (the control_for ABI is
         index-independent); the carry is captured by the body's returned Tracer."""
+        self._require_static("control flow (fori_loop)")
         if not isinstance(init_carry, Tracer):
             raise TesseraTraceError("traced fori_loop: init_val must be a Tracer")
         trip = int(upper) - int(lower)
@@ -623,6 +759,7 @@ class TraceBuilder:
 
     def record_cond(self, pred, true_fun, false_fun, operands) -> Any:
         """Trace a ``cond`` into a ``tessera.control_if`` IROp."""
+        self._require_static("control flow (cond)")
         if not isinstance(pred, Tracer):
             raise TesseraTraceError("traced cond: pred must be a Tracer")
         then_body, tval = self._trace_region(lambda: true_fun(*operands))
@@ -680,6 +817,7 @@ class TraceBuilder:
 
     def record_while(self, cond_fun, body_fun, init, max_steps) -> "Tracer":
         """Trace a bounded ``while_loop`` into a ``tessera.control_while`` IROp."""
+        self._require_static("control flow (while_loop)")
         if not isinstance(init, Tracer):
             raise TesseraTraceError("traced while_loop: init_val must be a Tracer")
         if max_steps is None:
@@ -722,6 +860,7 @@ class TraceBuilder:
         ``execute_traced`` can dispatch ``run_graph_scan_f32``. Returns the carry
         Tracer; the stacked-ys Tracer is stashed on the op (``_ys_ssa``) and
         returned by ``scan`` (see the wrapper below)."""
+        self._require_static("control flow (scan)")
         if not (isinstance(init, Tracer) and isinstance(xs, Tracer)):
             raise TesseraTraceError("traced scan: init and xs must be Tracers")
         if len(xs.shape) < 1:
@@ -785,7 +924,7 @@ class TraceBuilder:
 # ── trace entry points ────────────────────────────────────────────────────── #
 
 
-def _spec_shape_dtype(spec: Any) -> Tuple[Tuple[int, ...], str]:
+def _spec_shape_dtype(spec: Any) -> Tuple[Shape, str]:
     from .nvfp4_tensor import NVFP4Tensor
     if isinstance(spec, NVFP4Tensor):
         spec.validate()
@@ -794,7 +933,7 @@ def _spec_shape_dtype(spec: Any) -> Tuple[Tuple[int, ...], str]:
         return tuple(spec.shape), _np_dtype_to_elem(spec.dtype)
     if isinstance(spec, tuple) and len(spec) == 2 and not isinstance(spec[1], int):
         shape, dtype = spec
-        return tuple(int(d) for d in shape), str(dtype)
+        return tuple(_as_dim(d) for d in shape), str(dtype)
     # a bare shape tuple
     return tuple(int(d) for d in spec), "fp32"
 
@@ -937,14 +1076,14 @@ def to_graph_ir_module(
             result_types.append(operation.inferred_types[result_index])
         elif index < len(traced.output_specs):
             shape, dtype = traced.output_specs[index]
-            result_types.append(tensor_ir_type(tuple(str(dim) for dim in shape), dtype))
+            result_types.append(tensor_ir_type(_render_shape(shape), dtype))
         else:
             result_types.append(IRType(operation.result_type))
     structured_cfg = recover_structured_cfg(traced.body)
     function = GraphIRFunction(
         name=name,
         args=[
-            IRArg(ssa, tensor_ir_type(tuple(str(dim) for dim in shape), dtype))
+            IRArg(ssa, tensor_ir_type(_render_shape(shape), dtype))
             for ssa, shape, dtype in traced.args
         ],
         result_types=result_types,

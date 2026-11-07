@@ -33,7 +33,7 @@ import textwrap
 import typing
 from dataclasses import dataclass, field
 from typing import (
-    Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, cast,
+    Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union, cast,
 )
 
 from ..diagnostics import DiagnosticLevel, DiagnosticWhere, SourceLocation, TesseraDiagnostic, TesseraErrorCode
@@ -5066,6 +5066,42 @@ def ir_args_from_signature(fn: Callable) -> List[IRArg]:
     return args
 
 
+def _abstract_trace_specs(
+    args: Sequence[IRArg],
+) -> Optional[List[Tuple[Tuple[Union[int, str], ...], str]]]:
+    """Abstract-trace seeds for a signature, or ``None`` when it is not traceable.
+
+    A static extent seeds an ``int``. A symbolic one (`?` in the type) seeds the
+    name the annotation gave it in ``dim_names``, so `Tensor["B", "D"]` and
+    `Tensor["D", "N"]` share the extent ``D``; an unnamed `?` seeds a name of
+    its own (``$<arg>.<axis>``) that unifies with nothing else. Unranked,
+    untyped or laid-out arguments stay with the AST candidate: the trace does
+    not carry a layout, and an unknown rank or dtype is not something to trace
+    a typed program over.
+    """
+    specs: List[Tuple[Tuple[Union[int, str], ...], str]] = []
+    for argument in args:
+        ir_type = argument.ir_type
+        shape, dtype = ir_type.shape, ir_type.dtype
+        if not shape or "*" in shape or dtype is None:
+            return None
+        names = argument.dim_names if len(argument.dim_names) == len(shape) else ()
+        dims: List[Union[int, str]] = []
+        for axis, dim in enumerate(shape):
+            text = str(dim)
+            if text.isdigit():
+                dims.append(int(text))
+                continue
+            if argument.layout or ir_type.layout:
+                return None
+            name = names[axis] if names else ""
+            if not name or name.isdigit() or name in {"?", "*"} or name.startswith(("?", "$")):
+                name = f"${argument.name}.{axis}"
+            dims.append(name)
+        specs.append((tuple(dims), dtype))
+    return specs
+
+
 class GraphIRBuilder:
     """
     Lowers a Python function (decorated with @jit) into a GraphIRFunction.
@@ -5115,24 +5151,15 @@ class GraphIRBuilder:
 
         args = ir_args_from_signature(fn)
 
-        # Pure, statically shaped programs can be traced from annotations
-        # without concrete values. This is the delayed/symbolic frontend
-        # boundary needed to retire `_OpExtractor`: unsupported annotations or
+        # Pure programs with ranked, typed annotations can be traced without
+        # concrete values. This is the delayed/symbolic frontend boundary
+        # needed to retire `_OpExtractor`: unsupported annotations or
         # operations fall back to the explicitly retained AST candidate.
         if prefer_abstract_trace:
-            specs: list[tuple[tuple[int, ...], str]] = []
-            for argument in args:
-                shape = argument.ir_type.shape
-                dtype = argument.ir_type.dtype
-                if (
-                    not shape
-                    or "*" in shape
-                    or any(not str(dim).isdigit() for dim in shape)
-                    or dtype is None
-                ):
-                    break
-                specs.append((tuple(int(dim) for dim in shape), dtype))
-            else:
+            specs = _abstract_trace_specs(args)
+            symbolic = specs is not None and any(
+                isinstance(dim, str) for shape, _ in specs for dim in shape)
+            if specs is not None:
                 try:
                     import hashlib
 
@@ -5157,6 +5184,16 @@ class GraphIRBuilder:
                         traced_module.functions[0].fn_attrs["tessera.effect"] = (
                             f'"{effect_tag}"'
                         )
+                    if symbolic:
+                        # The symbolic names live on the signature's args
+                        # (`tessera.dim_names`), exactly as the AST frontend
+                        # emits them; the trace only re-derives the `?` types.
+                        traced_args = traced_module.functions[0].args
+                        if [(a.name, str(a.ir_type)) for a in traced_args] != [
+                                (a.name, str(a.ir_type)) for a in args]:
+                            raise ValueError(
+                                "symbolic trace re-typed a signature argument")
+                        traced_module.functions[0].args = args
                     self.context.add_function(traced_module.functions[0])
                     self.context.module.module_attrs.update(
                         traced_module.module_attrs

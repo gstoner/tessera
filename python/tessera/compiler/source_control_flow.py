@@ -1062,7 +1062,7 @@ def to_native_autodiff_ir(module):
     Preserve argument, function and module contracts while reusing the source
     serializer. No source re-execution and no derivative recipes live here.
     """
-    from .trace import TracedFunction
+    from .trace import Shape, TracedFunction
     if len(module.functions) != 1:
         raise SourceControlFlowError('native region AD requires one source function')
     fn = module.functions[0]
@@ -1072,7 +1072,7 @@ def to_native_autodiff_ir(module):
     verification = module.verify()
     if not verification.ok:
         raise SourceControlFlowError(verification.format())
-    args = []
+    args: list[tuple[str, Shape, str]] = []
     for arg in fn.args:
         shape = arg.ir_type.shape
         if shape is None or any(not str(d).isdigit() for d in shape):

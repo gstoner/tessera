@@ -553,7 +553,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 
 - Current slice (2026-09-30, sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30): The Graph-to-package contract composes bounded dynamic M/N/K on gfx1201 and sm_120. Exact-device fp16/bf16 parity, padded host ingress, allocation residency, and image reuse pass. Separate fp16 and bf16 event packets support stage attribution only; gfx1201 variation is high. Apple and x86 need independent resident consumers; wider physical layouts and remaining W1.1 producers stay open. [Evidence](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 
-- Latest: [2026-11-05 — E2E-REAL-6F: the scaled-product transpose VJP stops declaring the generic ROCm target](INTEGRATED_COMPILER_LOG.md#2026-11-05--e2e-real-6f-the-scaled-product-transpose-vjp-stops-declaring-the-generic-rocm-target)
+- Latest: [2026-11-07 — E2E-REAL-6F: the decoration-time tracer carries symbolic dimensions](INTEGRATED_COMPILER_LOG.md#2026-11-07--e2e-real-6f-the-decoration-time-tracer-carries-symbolic-dimensions)
 
 Current increment: checked rank-four broadcast saved-LSE packages and private tape execute on SM120; physical bias extents, deterministic reduction and saved-state pairing are bound through native Graph/Schedule/Tile and checked CUDA descriptors. [Evidence](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md). Broader W1.1, frontend/AD and sibling routes remain open.
 

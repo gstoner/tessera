@@ -393,6 +393,23 @@ def _op_payload(op: Any) -> Dict[str, Any]:
     return payload
 
 
+@dataclass
+class _TracedPlan:
+    """The executable plan compiled from one traced specialization.
+
+    ``module`` is held so the ``id`` it is cached under stays unique.
+    ``arg_names`` are the traced module's canonical parameter names, which
+    the plan binds; the Python call ABI names are not its operands.
+    """
+
+    module: GraphIRModule
+    cpu_plan: Any
+    compile_bundle: Any
+    compile_result: Any
+    arg_names: Tuple[str, ...]
+    artifact: Any = None
+
+
 class _NativeTensorThreadState(threading.local):
     """Mutable CUDA owners and inspection belong to the calling thread."""
 
@@ -598,6 +615,17 @@ class JitFn:
         # The decoration-time AST module remains a named candidate until a
         # family differential certificate permits its deletion.
         self._traced_frontend_specializations: Dict[Any, GraphIRModule] = {}
+        # The plan the AST lanes (CPU plan, tessera_jit, Apple fast paths)
+        # execute. Decoration compiles it from the emitted module; once the
+        # tracer holds authority for a call, the plan compiled from the traced
+        # module replaces it for that call, one compile per specialization.
+        self._decoration_compile = (cpu_plan, compile_bundle, compile_result)
+        self._traced_plan_specializations: Dict[int, _TracedPlan] = {}
+        self._executed_traced_plan: Optional[_TracedPlan] = None
+        # Which frontend authored the plan the last call executed: "tracer",
+        # "ast", or None before a call reaches an AST lane.
+        self.executed_plan_frontend: Optional[str] = None
+        self.executed_plan_fallback_reason: Optional[str] = None
         self._bounded_lhs = None
         if shape_bounds is not None:
             from .bounded_nvidia_lhs import BoundedLhsDispatcher,SourceCertificate,validate_bounds
@@ -1064,6 +1092,12 @@ class JitFn:
             self._cached_artifact = None
         if self._native_tensor_last_program is not None:
             self._cached_artifact = None
+        # Every call starts from the decoration plan; tracer authority swaps
+        # in a traced one below. The native routes in between read
+        # ``cpu_plan`` and must not see the previous call's specialization.
+        self._select_traced_plan(None)
+        self.executed_plan_frontend = None
+        self.executed_plan_fallback_reason = None
         self._native_tensor_last_program = None
         self._native_tensor_last_owner = None
         self._native_tensor_last_receipt = None
@@ -1170,28 +1204,36 @@ class JitFn:
             dropped_calls = self._dropped_calls_for_this_call()
             if dropped_calls:
                 return self._eager_for_dropped_calls(args, kwargs, dropped_calls)
+            # A traced plan binds the traced module's parameters, so its lanes
+            # take the inputs positionally in ABI order.
+            plan_args, plan_kwargs = self._executed_plan_inputs(args, kwargs)
+            plan_frontend = "tracer" if self._executed_traced_plan is not None else "ast"
             if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
+                self.executed_plan_frontend = plan_frontend
                 if self.execution_kind == "native_cpu":
-                    return self._native_cpu_fast_call(args, kwargs)
+                    return self._native_cpu_fast_call(plan_args, plan_kwargs)
                 # Phase 4 — run the whole graph through the tessera_jit MLIR→LLVM
                 # lane (real codegen) for the covered f32 op set, before the numpy
                 # reference plan. A fallback sentinel means the graph is outside
                 # the lane (unsupported op / non-f32 / rank) → numpy.
-                jit_result = self._try_tessera_jit_call(args, kwargs)
+                jit_result = self._try_tessera_jit_call(plan_args, plan_kwargs)
                 if jit_result is not _JIT_FALLBACK:
                     return jit_result
-                return self.cpu_plan.execute(args, kwargs, self.arg_names)
+                return self.cpu_plan.execute(plan_args, plan_kwargs, self._plan_arg_names())
             if (
                 self.cpu_plan is not None
                 and self.cpu_plan.target_kind == "apple_cpu"
                 and self.compile_bundle is not None
                 and self.compile_bundle.executable
             ):
-                return self._apple_cpu_fast_call(args, kwargs)
+                self.executed_plan_frontend = plan_frontend
+                return self._apple_cpu_fast_call(plan_args, plan_kwargs)
             # PK8e — opt-in: execute through the authored `.mtlpackage`. Tried
             # before the live MPS/MSL path; a fallback sentinel means the call
             # couldn't be routed (non-fp32 / unrecognized shape / runtime
-            # down), so we drop through to the normal apple_gpu lane.
+            # down), so we drop through to the normal apple_gpu lane. The
+            # package is recognized from the decoration module, so a call it
+            # serves executes the AST's program whoever holds authority.
             if (
                 self.dispatch_via_package
                 and self.recognized_package is not None
@@ -1200,6 +1242,7 @@ class JitFn:
             ):
                 result = self._call_via_package(args, kwargs)
                 if result is not _PKG_FALLBACK:
+                    self.executed_plan_frontend = "ast"
                     return result
             if (
                 self.cpu_plan is not None
@@ -1207,7 +1250,8 @@ class JitFn:
                 and self.compile_bundle is not None
                 and self.compile_bundle.executable
             ):
-                return self._apple_gpu_fast_call(args, kwargs)
+                self.executed_plan_frontend = plan_frontend
+                return self._apple_gpu_fast_call(plan_args, plan_kwargs)
             return self._fn(*args, **kwargs)
         finally:
             from . import compile_report as _cr
@@ -1746,6 +1790,99 @@ class JitFn:
         self.graph_ir = traced_module
         self.frontend_authority = "tracer"
         self.frontend_authority_error = None
+        self._select_traced_plan(self._traced_plan_for(traced_module))
+
+    # Targets whose post-authority lanes execute ``cpu_plan`` / the runtime
+    # artifact. Every other target either returns from a native route or ends
+    # in the original function, so a traced plan would have no consumer.
+    _TRACED_PLAN_TARGETS = frozenset({"cpu", "apple_cpu", "apple_gpu"})
+
+    def _traced_plan_for(self, traced_module: GraphIRModule) -> Optional[_TracedPlan]:
+        """Compile the plan the AST lanes execute from one traced module.
+
+        Returns ``None`` -- the decoration plan keeps running -- when no lane
+        here consumes a plan, and records why in
+        ``executed_plan_fallback_reason`` when compiling the traced module
+        failed or produced a plan the decoration one is not. A traced module
+        is specialized to one signature, so the compile is cached on it.
+        """
+        decoration_plan, decoration_bundle, _ = self._decoration_compile
+        if decoration_plan is None or decoration_plan.target_kind not in self._TRACED_PLAN_TARGETS:
+            return None
+        # A batched or differentiated trace is projected for its own consumers
+        # (native vmap, the AD owners); it is not the program these lanes run.
+        if self._frontend_batch_axes is not None or self.differentiation_request is not None:
+            self.executed_plan_fallback_reason = "traced module is projected for batching or differentiation"
+            return None
+        cached = self._traced_plan_specializations.get(id(traced_module))
+        if cached is not None:
+            return cached
+        # No Presburger carrier: its rows name the symbolic dimensions, which a
+        # concrete trace no longer has. The trace declares that loss itself
+        # (``declare_frontier_debt``); the constraints were checked on this
+        # call's shapes before authority.
+        try:
+            bundle = compile_graph_module(
+                traced_module,
+                source_origin=self.source_origin,
+                target=decoration_plan.target_kind,
+                cpu_tile=(self.cpu_tile[0], self.cpu_tile[1], self.cpu_tile[2]),
+                options={
+                    "cpu_tile": list(self.cpu_tile),
+                    "deterministic": self.deterministic,
+                    "seed": self.seed,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001 -- recorded; the AST plan runs
+            self.executed_plan_fallback_reason = (
+                f"traced module did not compile: {type(exc).__name__}: {exc}")
+            return None
+        plan = bundle.cpu_plan
+        if plan is None or plan.target_kind != decoration_plan.target_kind:
+            self.executed_plan_fallback_reason = "traced module compiled to no plan for this target"
+            return None
+        decoration_executable = bool(decoration_bundle is not None and decoration_bundle.executable)
+        if bundle.executable != decoration_executable:
+            self.executed_plan_fallback_reason = (
+                f"traced plan executable={bundle.executable} but the decoration "
+                f"plan executable={decoration_executable}")
+            return None
+        entry = _TracedPlan(
+            module=traced_module,
+            cpu_plan=plan,
+            compile_bundle=bundle,
+            compile_result=compile_result_from_bundle(bundle, module=traced_module),
+            arg_names=tuple(arg.name for arg in traced_module.functions[0].args),
+        )
+        self._traced_plan_specializations[id(traced_module)] = entry
+        return entry
+
+    def _select_traced_plan(self, entry: Optional[_TracedPlan]) -> None:
+        """Make ``entry`` the executed plan, or restore the decoration plan."""
+        if entry is self._executed_traced_plan:
+            return
+        if entry is None:
+            self.cpu_plan, self.compile_bundle, self.compile_result = self._decoration_compile
+        else:
+            self.cpu_plan = entry.cpu_plan
+            self.compile_bundle = entry.compile_bundle
+            self.compile_result = entry.compile_result
+        self._executed_traced_plan = entry
+        self._cached_artifact = None
+
+    def _plan_arg_names(self) -> List[str]:
+        entry = self._executed_traced_plan
+        return list(entry.arg_names) if entry is not None else self.arg_names
+
+    def _executed_plan_inputs(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    ) -> Tuple[Tuple[Any, ...], Dict[str, Any]]:
+        if self._executed_traced_plan is None:
+            return args, kwargs
+        ordered = self._ordered_inputs(args, kwargs)
+        # Authority was established on these inputs, so every one is bound.
+        assert ordered is not None
+        return tuple(ordered), {}
 
     def frontend_differential(
         self,
@@ -4337,7 +4474,7 @@ class JitFn:
                 ) from exc
             # ``cpu_plan`` is None-checked at the entry point; narrow.
             assert self.cpu_plan is not None
-            return self.cpu_plan.execute(args, kwargs, self.arg_names)
+            return self.cpu_plan.execute(args, kwargs, self._plan_arg_names())
 
     def _apple_cpu_fast_call(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
         """Phase 8.2 launch-overhead fast path. Bypasses ``runtime.launch`` by
@@ -4814,6 +4951,8 @@ class JitFn:
             "runtime_status": "unsupported",
             **bundle_metadata,
         }
+        # A traced plan's operands are its module's parameter names.
+        plan_arg_names = self._plan_arg_names()
         if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
             native_cpu = self.execution_kind == "native_cpu"
             metadata.update({
@@ -4821,9 +4960,9 @@ class JitFn:
                 "compiler_path": "jit_cpu_numpy",
                 "execution_kind": "native_cpu" if native_cpu else "reference_cpu",
                 "runtime_status": "ready",
-                "arg_names": list(self.arg_names),
+                "arg_names": list(plan_arg_names),
                 "output_name": self.cpu_plan.output_name,
-                "input_descriptors": [{"name": name} for name in self.arg_names],
+                "input_descriptors": [{"name": name} for name in plan_arg_names],
                 "output_descriptor": {"name": self.cpu_plan.output_name},
                 "cpu_tile": list(self.cpu_plan.tile),
                 "ops": [
@@ -4866,7 +5005,7 @@ class JitFn:
             if single_matmul:
                 input_descriptors = [
                     {"name": name, "dtype": "f32", "rank": 2}
-                    for name in self.arg_names
+                    for name in plan_arg_names
                 ]
                 output_descriptor = {
                     "name": self.cpu_plan.output_name,
@@ -4880,7 +5019,7 @@ class JitFn:
                     "op_count": 1,
                 }
             else:
-                input_descriptors = [{"name": name} for name in self.arg_names]
+                input_descriptors = [{"name": name} for name in plan_arg_names]
                 output_descriptor = {"name": self.cpu_plan.output_name}
                 guards = {
                     "op_count": len(self.cpu_plan.ops),
@@ -4895,7 +5034,7 @@ class JitFn:
                 "compiler_path": "apple_cpu_accelerate",
                 "execution_kind": "native_cpu",
                 "runtime_status": "ready",
-                "arg_names": list(self.arg_names),
+                "arg_names": list(plan_arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "input_descriptors": input_descriptors,
                 "output_descriptor": output_descriptor,
@@ -4926,7 +5065,7 @@ class JitFn:
             if single_matmul:
                 gpu_input_descriptors: list[dict[str, Any]] = [
                     {"name": name, "dtype": "f32", "rank": 2}
-                    for name in self.arg_names
+                    for name in plan_arg_names
                 ]
                 gpu_output_descriptor: dict[str, Any] = {
                     "name": self.cpu_plan.output_name, "dtype": "f32", "rank": 2}
@@ -4934,7 +5073,7 @@ class JitFn:
                     "dtype": "float32", "rank": 2,
                     "static_shape_at_launch": True, "op_count": 1}
             else:
-                gpu_input_descriptors = [{"name": name} for name in self.arg_names]
+                gpu_input_descriptors = [{"name": name} for name in plan_arg_names]
                 gpu_output_descriptor = {"name": self.cpu_plan.output_name}
                 gpu_guards = {"op_count": len(self.cpu_plan.ops),
                               "static_shape_at_launch": True}
@@ -4944,7 +5083,7 @@ class JitFn:
                 "execution_kind": "native_gpu",
                 "runtime_status": "ready",
                 "execution_mode": "metal_runtime",
-                "arg_names": list(self.arg_names),
+                "arg_names": list(plan_arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "input_descriptors": gpu_input_descriptors,
                 "output_descriptor": gpu_output_descriptor,
@@ -4971,7 +5110,7 @@ class JitFn:
                 "execution_kind": "native_gpu",
                 "runtime_status": "ready",
                 "execution_mode": "hip_runtime",
-                "arg_names": list(self.arg_names),
+                "arg_names": list(plan_arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "ops": ops_payload,
                 "cpu_tile": list(self.cpu_plan.tile),
@@ -4993,7 +5132,7 @@ class JitFn:
                 "execution_kind": "native_gpu",
                 "runtime_status": "ready",
                 "execution_mode": "hip_runtime",
-                "arg_names": list(self.arg_names),
+                "arg_names": list(plan_arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "ops": ops_payload,
                 "cpu_tile": list(self.cpu_plan.tile),
@@ -5010,7 +5149,7 @@ class JitFn:
                 "execution_kind": "native_gpu",
                 "runtime_status": "ready",
                 "execution_mode": "hip_runtime",
-                "arg_names": list(self.arg_names),
+                "arg_names": list(plan_arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "ops": ops_payload,
                 "cpu_tile": list(self.cpu_plan.tile),
@@ -5032,7 +5171,7 @@ class JitFn:
                 "execution_kind": "native_gpu",
                 "runtime_status": "ready",
                 "execution_mode": "cuda_runtime",
-                "arg_names": list(self.arg_names),
+                "arg_names": list(plan_arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "ops": ops_payload,
                 "cpu_tile": list(self.cpu_plan.tile),
@@ -5043,7 +5182,7 @@ class JitFn:
                 "execution_kind": "artifact_only",
                 "runtime_status": "artifact_only",
                 "reason": "native target execution is not wired",
-                "arg_names": list(self.arg_names),
+                "arg_names": list(plan_arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "cpu_tile": list(self.cpu_plan.tile),
             })

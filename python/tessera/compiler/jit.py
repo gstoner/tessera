@@ -378,13 +378,20 @@ def _serialized_numeric_policy(op: Any) -> Optional[Dict[str, Any]]:
     return out or None
 
 
-def _op_payload(op: Any) -> Dict[str, Any]:
+def _op_payload(op: Any, operand_names: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     """One runtime-ABI operation record. Single writer, so a field added for
-    one target cannot go missing on another."""
+    one target cannot go missing on another.
+
+    ``operand_names`` maps a traced plan's parameters to the public argument
+    names, so a runtime artifact binds the same names whichever frontend
+    authored its plan.
+    """
+    rename = operand_names or {}
+    operands = [o[1:] if o.startswith("%") else o for o in op.operands]
     payload: Dict[str, Any] = {
         "op_name": op.op_name,
         "result": op.result,
-        "operands": [o[1:] if o.startswith("%") else o for o in op.operands],
+        "operands": [rename.get(o, o) for o in operands],
         "kwargs": dict(op.kwargs),
     }
     policy = _serialized_numeric_policy(op)
@@ -399,7 +406,8 @@ class _TracedPlan:
 
     ``module`` is held so the ``id`` it is cached under stays unique.
     ``arg_names`` are the traced module's canonical parameter names, which
-    the plan binds; the Python call ABI names are not its operands.
+    the plan object binds; the runtime artifact renames them to the public
+    argument names. ``artifact`` caches that artifact for the specialization.
     """
 
     module: GraphIRModule
@@ -622,6 +630,7 @@ class JitFn:
         self._decoration_compile = (cpu_plan, compile_bundle, compile_result)
         self._traced_plan_specializations: Dict[int, _TracedPlan] = {}
         self._executed_traced_plan: Optional[_TracedPlan] = None
+        self._decoration_artifact: Any = None
         # Which frontend authored the plan the last call executed: "tracer",
         # "ast", or None before a call reaches an AST lane.
         self.executed_plan_frontend: Optional[str] = None
@@ -1204,21 +1213,20 @@ class JitFn:
             dropped_calls = self._dropped_calls_for_this_call()
             if dropped_calls:
                 return self._eager_for_dropped_calls(args, kwargs, dropped_calls)
-            # A traced plan binds the traced module's parameters, so its lanes
-            # take the inputs positionally in ABI order.
-            plan_args, plan_kwargs = self._executed_plan_inputs(args, kwargs)
             plan_frontend = "tracer" if self._executed_traced_plan is not None else "ast"
             if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
                 self.executed_plan_frontend = plan_frontend
                 if self.execution_kind == "native_cpu":
-                    return self._native_cpu_fast_call(plan_args, plan_kwargs)
+                    return self._native_cpu_fast_call(args, kwargs)
                 # Phase 4 — run the whole graph through the tessera_jit MLIR→LLVM
                 # lane (real codegen) for the covered f32 op set, before the numpy
                 # reference plan. A fallback sentinel means the graph is outside
                 # the lane (unsupported op / non-f32 / rank) → numpy.
-                jit_result = self._try_tessera_jit_call(plan_args, plan_kwargs)
+                jit_result = self._try_tessera_jit_call(args, kwargs)
                 if jit_result is not _JIT_FALLBACK:
                     return jit_result
+                # The plan object binds a traced plan's own parameter names.
+                plan_args, plan_kwargs = self._executed_plan_inputs(args, kwargs)
                 return self.cpu_plan.execute(plan_args, plan_kwargs, self._plan_arg_names())
             if (
                 self.cpu_plan is not None
@@ -1227,7 +1235,7 @@ class JitFn:
                 and self.compile_bundle.executable
             ):
                 self.executed_plan_frontend = plan_frontend
-                return self._apple_cpu_fast_call(plan_args, plan_kwargs)
+                return self._apple_cpu_fast_call(args, kwargs)
             # PK8e — opt-in: execute through the authored `.mtlpackage`. Tried
             # before the live MPS/MSL path; a fallback sentinel means the call
             # couldn't be routed (non-fp32 / unrecognized shape / runtime
@@ -1251,7 +1259,7 @@ class JitFn:
                 and self.compile_bundle.executable
             ):
                 self.executed_plan_frontend = plan_frontend
-                return self._apple_gpu_fast_call(plan_args, plan_kwargs)
+                return self._apple_gpu_fast_call(args, kwargs)
             return self._fn(*args, **kwargs)
         finally:
             from . import compile_report as _cr
@@ -1847,12 +1855,24 @@ class JitFn:
                 f"traced plan executable={bundle.executable} but the decoration "
                 f"plan executable={decoration_executable}")
             return None
+        traced_names = tuple(arg.name for arg in traced_module.functions[0].args)
+        # The artifact renames each traced parameter to its public name, which
+        # must not already name another value of the plan.
+        public_names = tuple(self.arg_names)
+        other_names = {op.result for op in plan.ops if op.result} | set(traced_names)
+        if len(public_names) != len(traced_names) or any(
+            public in other_names and public != traced
+            for public, traced in zip(public_names, traced_names)
+        ):
+            self.executed_plan_fallback_reason = (
+                "a public argument name collides with a traced plan value")
+            return None
         entry = _TracedPlan(
             module=traced_module,
             cpu_plan=plan,
             compile_bundle=bundle,
             compile_result=compile_result_from_bundle(bundle, module=traced_module),
-            arg_names=tuple(arg.name for arg in traced_module.functions[0].args),
+            arg_names=traced_names,
         )
         self._traced_plan_specializations[id(traced_module)] = entry
         return entry
@@ -1861,6 +1881,13 @@ class JitFn:
         """Make ``entry`` the executed plan, or restore the decoration plan."""
         if entry is self._executed_traced_plan:
             return
+        # Each plan keeps its own artifact, so a repeated signature reuses
+        # the one it built instead of re-rendering and re-hashing per call.
+        current = self._executed_traced_plan
+        if current is None:
+            self._decoration_artifact = self._cached_artifact
+        else:
+            current.artifact = self._cached_artifact
         if entry is None:
             self.cpu_plan, self.compile_bundle, self.compile_result = self._decoration_compile
         else:
@@ -1868,7 +1895,14 @@ class JitFn:
             self.compile_bundle = entry.compile_bundle
             self.compile_result = entry.compile_result
         self._executed_traced_plan = entry
-        self._cached_artifact = None
+        self._cached_artifact = (
+            self._decoration_artifact if entry is None else entry.artifact)
+
+    def _artifact_operand_names(self) -> Optional[Dict[str, str]]:
+        entry = self._executed_traced_plan
+        if entry is None:
+            return None
+        return dict(zip(entry.arg_names, self.arg_names, strict=True))
 
     def _plan_arg_names(self) -> List[str]:
         entry = self._executed_traced_plan
@@ -4474,7 +4508,8 @@ class JitFn:
                 ) from exc
             # ``cpu_plan`` is None-checked at the entry point; narrow.
             assert self.cpu_plan is not None
-            return self.cpu_plan.execute(args, kwargs, self._plan_arg_names())
+            plan_args, plan_kwargs = self._executed_plan_inputs(args, kwargs)
+            return self.cpu_plan.execute(plan_args, plan_kwargs, self._plan_arg_names())
 
     def _apple_cpu_fast_call(self, args: Tuple[Any, ...], kwargs: Dict[str, Any]) -> Any:
         """Phase 8.2 launch-overhead fast path. Bypasses ``runtime.launch`` by
@@ -4951,8 +4986,9 @@ class JitFn:
             "runtime_status": "unsupported",
             **bundle_metadata,
         }
-        # A traced plan's operands are its module's parameter names.
-        plan_arg_names = self._plan_arg_names()
+        # The artifact keeps the public argument names; a traced plan's
+        # parameters are renamed to them as its ops are serialized.
+        operand_names = self._artifact_operand_names()
         if self.cpu_plan is not None and self.cpu_plan.target_kind == "cpu":
             native_cpu = self.execution_kind == "native_cpu"
             metadata.update({
@@ -4960,13 +4996,13 @@ class JitFn:
                 "compiler_path": "jit_cpu_numpy",
                 "execution_kind": "native_cpu" if native_cpu else "reference_cpu",
                 "runtime_status": "ready",
-                "arg_names": list(plan_arg_names),
+                "arg_names": list(self.arg_names),
                 "output_name": self.cpu_plan.output_name,
-                "input_descriptors": [{"name": name} for name in plan_arg_names],
+                "input_descriptors": [{"name": name} for name in self.arg_names],
                 "output_descriptor": {"name": self.cpu_plan.output_name},
                 "cpu_tile": list(self.cpu_plan.tile),
                 "ops": [
-                    _op_payload(op)
+                    _op_payload(op, operand_names)
                     for op in self.cpu_plan.ops
                 ],
                 "guards": {
@@ -4984,7 +5020,7 @@ class JitFn:
             and self.compile_bundle.executable
         ):
             ops_payload = [
-                _op_payload(op)
+                _op_payload(op, operand_names)
                 for op in self.cpu_plan.ops
             ]
             accelerate_ops = [
@@ -5005,7 +5041,7 @@ class JitFn:
             if single_matmul:
                 input_descriptors = [
                     {"name": name, "dtype": "f32", "rank": 2}
-                    for name in plan_arg_names
+                    for name in self.arg_names
                 ]
                 output_descriptor = {
                     "name": self.cpu_plan.output_name,
@@ -5019,7 +5055,7 @@ class JitFn:
                     "op_count": 1,
                 }
             else:
-                input_descriptors = [{"name": name} for name in plan_arg_names]
+                input_descriptors = [{"name": name} for name in self.arg_names]
                 output_descriptor = {"name": self.cpu_plan.output_name}
                 guards = {
                     "op_count": len(self.cpu_plan.ops),
@@ -5034,7 +5070,7 @@ class JitFn:
                 "compiler_path": "apple_cpu_accelerate",
                 "execution_kind": "native_cpu",
                 "runtime_status": "ready",
-                "arg_names": list(plan_arg_names),
+                "arg_names": list(self.arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "input_descriptors": input_descriptors,
                 "output_descriptor": output_descriptor,
@@ -5050,7 +5086,7 @@ class JitFn:
             and self.compile_bundle.executable
         ):
             ops_payload = [
-                _op_payload(op)
+                _op_payload(op, operand_names)
                 for op in self.cpu_plan.ops
             ]
             # The strict f32/rank-2 descriptor schema is the matmul/gemm contract
@@ -5065,7 +5101,7 @@ class JitFn:
             if single_matmul:
                 gpu_input_descriptors: list[dict[str, Any]] = [
                     {"name": name, "dtype": "f32", "rank": 2}
-                    for name in plan_arg_names
+                    for name in self.arg_names
                 ]
                 gpu_output_descriptor: dict[str, Any] = {
                     "name": self.cpu_plan.output_name, "dtype": "f32", "rank": 2}
@@ -5073,7 +5109,7 @@ class JitFn:
                     "dtype": "float32", "rank": 2,
                     "static_shape_at_launch": True, "op_count": 1}
             else:
-                gpu_input_descriptors = [{"name": name} for name in plan_arg_names]
+                gpu_input_descriptors = [{"name": name} for name in self.arg_names]
                 gpu_output_descriptor = {"name": self.cpu_plan.output_name}
                 gpu_guards = {"op_count": len(self.cpu_plan.ops),
                               "static_shape_at_launch": True}
@@ -5083,7 +5119,7 @@ class JitFn:
                 "execution_kind": "native_gpu",
                 "runtime_status": "ready",
                 "execution_mode": "metal_runtime",
-                "arg_names": list(plan_arg_names),
+                "arg_names": list(self.arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "input_descriptors": gpu_input_descriptors,
                 "output_descriptor": gpu_output_descriptor,
@@ -5101,7 +5137,7 @@ class JitFn:
             # artifact_only (the generic branch below) — no behavior change.
             assert self.cpu_plan is not None  # narrowed by the guard above
             ops_payload = [
-                _op_payload(op)
+                _op_payload(op, operand_names)
                 for op in self.cpu_plan.ops
             ]
             metadata.update({
@@ -5110,7 +5146,7 @@ class JitFn:
                 "execution_kind": "native_gpu",
                 "runtime_status": "ready",
                 "execution_mode": "hip_runtime",
-                "arg_names": list(plan_arg_names),
+                "arg_names": list(self.arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "ops": ops_payload,
                 "cpu_tile": list(self.cpu_plan.tile),
@@ -5123,7 +5159,7 @@ class JitFn:
             # and the artifact stays artifact_only — no behavior change.
             assert self.cpu_plan is not None  # narrowed by the guard above
             ops_payload = [
-                _op_payload(op)
+                _op_payload(op, operand_names)
                 for op in self.cpu_plan.ops
             ]
             metadata.update({
@@ -5132,7 +5168,7 @@ class JitFn:
                 "execution_kind": "native_gpu",
                 "runtime_status": "ready",
                 "execution_mode": "hip_runtime",
-                "arg_names": list(plan_arg_names),
+                "arg_names": list(self.arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "ops": ops_payload,
                 "cpu_tile": list(self.cpu_plan.tile),
@@ -5140,7 +5176,7 @@ class JitFn:
         elif self._uses_rocm_grouped_gemm_default():
             assert self.cpu_plan is not None
             ops_payload = [
-                _op_payload(op)
+                _op_payload(op, operand_names)
                 for op in self.cpu_plan.ops
             ]
             metadata.update({
@@ -5149,7 +5185,7 @@ class JitFn:
                 "execution_kind": "native_gpu",
                 "runtime_status": "ready",
                 "execution_mode": "hip_runtime",
-                "arg_names": list(plan_arg_names),
+                "arg_names": list(self.arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "ops": ops_payload,
                 "cpu_tile": list(self.cpu_plan.tile),
@@ -5162,7 +5198,7 @@ class JitFn:
             # stays artifact_only (the generic branch below) — no behavior change.
             assert self.cpu_plan is not None  # narrowed by the guard above
             ops_payload = [
-                _op_payload(op)
+                _op_payload(op, operand_names)
                 for op in self.cpu_plan.ops
             ]
             metadata.update({
@@ -5171,7 +5207,7 @@ class JitFn:
                 "execution_kind": "native_gpu",
                 "runtime_status": "ready",
                 "execution_mode": "cuda_runtime",
-                "arg_names": list(plan_arg_names),
+                "arg_names": list(self.arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "ops": ops_payload,
                 "cpu_tile": list(self.cpu_plan.tile),
@@ -5182,7 +5218,7 @@ class JitFn:
                 "execution_kind": "artifact_only",
                 "runtime_status": "artifact_only",
                 "reason": "native target execution is not wired",
-                "arg_names": list(plan_arg_names),
+                "arg_names": list(self.arg_names),
                 "output_name": self.cpu_plan.output_name,
                 "cpu_tile": list(self.cpu_plan.tile),
             })

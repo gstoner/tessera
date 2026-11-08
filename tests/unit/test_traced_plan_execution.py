@@ -15,6 +15,7 @@ import numpy as np
 import pytest
 
 import tessera
+from tessera.runtime import launch
 
 # ``tessera.compiler.jit`` the attribute is the decorator; this is the module.
 jit_module = importlib.import_module("tessera.compiler.jit")
@@ -62,8 +63,12 @@ def test_tracer_authority_executes_the_traced_plan_not_the_decoration_plan(monke
     assert mlp.cpu_plan is not decoration_plan
     traced_names = [arg.name for arg in mlp.graph_ir.functions[0].args]
     assert mlp._plan_arg_names() == traced_names
-    # The artifact the tessera_jit and Apple lanes read binds the same names.
-    assert mlp.runtime_artifact().metadata["arg_names"] == traced_names
+    # The runtime artifact keeps the public names: its ops bind ``x``/``w``.
+    metadata = mlp.runtime_artifact().metadata
+    assert metadata["arg_names"] == ["x", "w"]
+    operands = {name for op in metadata["ops"] for name in op["operands"]}
+    assert {"x", "w"} <= operands
+    assert not operands & set(traced_names)
 
 
 def test_traced_plan_accepts_keyword_arguments_by_abi_name():
@@ -125,3 +130,41 @@ def test_a_legacy_call_after_a_traced_one_restores_the_decoration_plan(monkeypat
     assert mlp.frontend_authority == "legacy_candidate_non_tensor_signature"
     assert mlp.executed_plan_frontend == "ast"
     assert mlp.cpu_plan is mlp._decoration_compile[0]
+
+
+def test_a_warmed_traced_artifact_still_launches_by_public_name():
+    @tessera.jit
+    def stable_probs(x):
+        return tessera.ops.softmax(tessera.ops.relu(x), axis=0)
+
+    x = np.array([-1.0, 2.0], dtype=np.float32)
+    expected = tessera.ops.softmax(tessera.ops.relu(x), axis=0)
+    np.testing.assert_allclose(stable_probs(x), expected, rtol=1e-6)
+    assert stable_probs.executed_plan_frontend == "tracer"
+
+    result = launch(stable_probs.runtime_artifact(), args={"x": x})
+    assert result["ok"] is True
+    np.testing.assert_allclose(result["output"], expected, rtol=1e-6)
+
+
+def test_a_repeated_signature_reuses_its_runtime_artifact(monkeypatch):
+    mlp = _mlp()
+    small, wide = _inputs(4), _inputs(6)
+    mlp(*small)
+    small_artifact = mlp.runtime_artifact()
+    mlp(*wide)
+    wide_artifact = mlp.runtime_artifact()
+
+    builds = []
+    original = type(mlp)._build_runtime_artifact
+
+    def counting(self):
+        builds.append(1)
+        return original(self)
+
+    monkeypatch.setattr(type(mlp), "_build_runtime_artifact", counting)
+    mlp(*small)
+    assert mlp.runtime_artifact() is small_artifact
+    mlp(*wide)
+    assert mlp.runtime_artifact() is wide_artifact
+    assert builds == []

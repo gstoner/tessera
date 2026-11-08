@@ -149,7 +149,7 @@ class ResidentTensorCall:
             lib.tessera_nvidia_matmul_close(self.handle)
             raise
         self._finalizer = weakref.finalize(self, close_in_live_context, lib, self.handle,
-                                           self.context_identity)
+                                           self.context_identity, self.pid)
         try:
             axes = int(program.dynamic_m) | (int(program.dynamic_n) << 1) | (int(program.dynamic_k) << 2)
             if axes:

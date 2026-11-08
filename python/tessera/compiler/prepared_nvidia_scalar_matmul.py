@@ -115,7 +115,7 @@ class PreparedScalarMatmulCall:
             raise
         self.lock = threading.RLock()
         self.finalizer = weakref.finalize(self, close_in_live_context, lib, self.handle,
-                                          self.context_identity)
+                                          self.context_identity, self.pid)
 
     def _check(self, status):
         if status:

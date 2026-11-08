@@ -336,8 +336,63 @@ def test_owner_of_destroyed_context_is_forgotten_not_closed(monkeypatch):
         del leaked,function
         gc.collect()
     assert not leaked_handles&set(closed)
-    assert {(handle,identity) for handle in leaked_handles}<=set(prepared.forgotten_handles())
-    # Forgotten natively too: no ~Owner may push the dead context when the
-    # registry is destroyed at process exit.
+    pending={(handle,identity) for handle in leaked_handles}
+    assert pending<=set(prepared.deferred_handles())
+    # A dead context never becomes live again: a later settle keeps them.
+    prepared.close_deferred()
+    assert pending<=set(prepared.deferred_handles()) and not leaked_handles&set(closed)
+    # What interpreter exit runs: forget them, natively too, so no ~Owner
+    # pushes the dead context when the registry is destroyed.
+    prepared.close_deferred(final=True)
+    assert not pending&set(prepared.deferred_handles())
+    assert pending<=set(prepared.forgotten_handles())
     assert all(native_close(handle)!=0 for handle in leaked_handles)
     kept.close_native_storage()
+
+
+def test_owner_of_live_noncurrent_context_is_deferred_then_closed(monkeypatch):
+    import ctypes as ct
+    import gc
+    from tessera.compiler import prepared_nvidia_matmul as prepared
+    lib=rt._load_nvidia_ptx_launch()
+    native_close=lib.tessera_nvidia_matmul_close
+    closed=[]
+    def recording_close(handle):
+        closed.append(handle)
+        return native_close(handle)
+    monkeypatch.setattr(lib,"tessera_nvidia_matmul_close",recording_close)
+    source=np.ones((17,35),np.float16)
+    rhs=np.ones((35,19),np.float16)
+    function=ts.jit(target="nvidia_sm120",shape_bounds={"M":17,"N":19,"K":35})(bounded_rms._fn)
+    function(source,rhs)
+    cuda=_cuda_driver()
+    cuda.cuCtxPushCurrent_v2.argtypes=[ct.c_void_p]
+    original,other,popped=ct.c_void_p(),ct.c_void_p(),ct.c_void_p()
+    assert cuda.cuCtxGetCurrent(ct.byref(original))==0
+    assert cuda.cuCtxCreate_v2(ct.byref(other),0,0)==0
+    pushed=True
+    try:
+        identity=prepared.current_context_identity()
+        function(source[:3,:11],rhs[:11,:7])
+        handles={call.handle for key,call in function._nvidia_lhs_prepared_calls.items()
+                 if key[-1]==identity}
+        assert handles
+        # `other` stays alive but is no longer current when the owner dies.
+        assert cuda.cuCtxPopCurrent_v2(ct.byref(popped))==0 and popped.value==other.value
+        pushed=False
+        with pytest.warns(ResourceWarning,match="not provably live"):
+            del function
+            gc.collect()
+        assert not handles&set(closed)
+        assert {(handle,identity) for handle in handles}<=set(prepared.deferred_handles())
+        assert cuda.cuCtxPushCurrent_v2(other)==0
+        pushed=True
+        prepared.close_deferred()
+        assert handles<=set(closed)
+        assert not {(handle,identity) for handle in handles}&set(prepared.deferred_handles())
+        assert not {(handle,identity) for handle in handles}&set(prepared.forgotten_handles())
+    finally:
+        if pushed:
+            _pop_and_destroy(cuda,original,other)
+        else:
+            assert cuda.cuCtxDestroy_v2(other)==0

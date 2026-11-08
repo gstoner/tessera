@@ -1722,11 +1722,11 @@ class JitFn:
         has_nvfp4 = any(isinstance(value, NVFP4Tensor) for value in ordered)
         if has_nvfp4 and normalize_target_kind(self.target) != "nvidia_sm120":
             raise ValueError("logical NVFP4 host bindings require an owning SM120 package")
-        legacy = self._legacy_graph_ir
-        effect = self.inferred_effect
-        if legacy is not None and legacy.functions:
-            effect, _ = infer_graph_effects(legacy.functions[0].body)
-        if effect != Effect.pure:
+        # The decoration-time effect comes from the call-site scan, which keeps
+        # an unresolved call at ``top``. The emitted AST body is not consulted:
+        # a call it dropped is absent from it, so its effect could read
+        # ``pure`` for a body that calls ``np.random``.
+        if self.inferred_effect != Effect.pure:
             self.frontend_authority = "legacy_candidate_effectful_signature"
             return
         try:
@@ -1736,6 +1736,12 @@ class JitFn:
                 raise
             self.frontend_authority = "legacy_candidate_unmigrated"
             self.frontend_authority_error = str(exc)
+            return
+        # The trace resolves dispatch the scan cannot see; it may only confirm
+        # purity, never relax it.
+        traced_effect, _ = infer_graph_effects(traced_module.functions[0].body)
+        if traced_effect != Effect.pure:
+            self.frontend_authority = "legacy_candidate_effectful_signature"
             return
         self.graph_ir = traced_module
         self.frontend_authority = "tracer"
@@ -5290,65 +5296,29 @@ def _jit_analyze_frontend(
     # Step 2: check constraints against any known bindings.
     solver.check(bindings or {})
 
-    # Step 3: infer effects.
+    # Step 3: infer effects from the body's resolved call sites. This used to
+    # lower the whole function through the AST Graph IR front end a second
+    # time; the scan resolves each call by identity and joins an unresolved
+    # one to ``top`` (E2E-REAL-6F, effect inference off ``_OpExtractor``).
     lattice = EffectLattice()
     inferred_effect = lattice.infer(fn, source_text=source_text)
 
-    # Step 4: reject a proven unseeded random dependency now. Unknown source
-    # aliases are not guessed here; the concrete traced-IR certificate in
-    # JitFn.__call__ owns that decision once operand shapes are available.
-    if deterministic and inferred_effect == Effect.random and seed is None:
-        from .effects import TesseraEffectError
-        raise TesseraEffectError(
-            fn.__name__, Effect.pure, inferred_effect,
-            message=(f"@jit(deterministic=True) function {fn.__name__!r} "
-                     "contains a registered random Graph operation without "
-                     "a seed"),
-        )
+    # Step 4: enforce the deterministic contract at decoration. An unseeded
+    # registered RNG op, host I/O, or a call the scan cannot resolve is
+    # refused here. The concrete trace certificate in JitFn.__call__ cannot
+    # stand in for the last case: a trace records only operations that touch
+    # traced values, so ``np.random.rand(4)`` is invisible to it.
+    if deterministic:
+        lattice.check_deterministic(fn, seed=seed, source_text=source_text)
 
     return _FrontendAnalysis(solver=solver, inferred_effect=inferred_effect)
 
 
 def _resolve_tessera_ops_callee(fn: Callable, dotted: str) -> Optional[str]:
-    """Return the ``tessera.ops`` public name a dropped call resolves to.
+    """Return the ``tessera.ops`` public name a dropped call resolves to."""
+    from .effect_scan import resolve_tessera_ops_callee
 
-    Resolution is by object identity against ``fn``'s globals and closure, so
-    every spelling counts (``ts.ops.x``, ``import tessera as T``,
-    ``from tessera.ops import x as y``). Only module attributes are traversed
-    (and ``SimpleNamespace``, which is what ``tessera.ops`` is) between the
-    root and the leaf: a dotted name through a user object is
-    never evaluated, since an attribute read there may run arbitrary code.
-    Returns ``None`` when the name does not resolve to a ``tessera.ops``
-    callable (a local, a numpy call, a user helper).
-    """
-    import types
-
-    from .. import ops as _ops
-
-    parts = dotted.split(".")
-    scope: Dict[str, Any] = dict(getattr(fn, "__globals__", {}) or {})
-    try:
-        scope.update(inspect.getclosurevars(fn).nonlocals)
-    except (TypeError, ValueError):
-        pass
-    if parts[0] not in scope:
-        return None
-    obj: Any = scope[parts[0]]
-    for part in parts[1:]:
-        if not isinstance(obj, (types.ModuleType, types.SimpleNamespace)):
-            return None
-        obj = getattr(obj, part, None)
-        if obj is None:
-            return None
-    if not callable(obj) or isinstance(obj, (types.ModuleType, type)):
-        return None
-    leaf = parts[-1]
-    if getattr(_ops, leaf, None) is obj:
-        return leaf
-    for name in dir(_ops):
-        if not name.startswith("_") and getattr(_ops, name, None) is obj:
-            return name
-    return None
+    return resolve_tessera_ops_callee(fn, dotted)
 
 
 def _refuse_unlowered_ops_for_native_target(

@@ -12659,3 +12659,7 @@ Apple GPU `batched_gemm`, `transpose` and the dynamic `softmax`, `gelu`, `popcou
 ## `E2E-REAL-6F-apple-gpu-norm-packet-2026-11-05`: sibling outcome — not applicable
 
 The Apple GPU normalization VJP gained an exact-device packet, and the `apple_gpu` branch of `runtime._physical_execution_attestation` now reads the live Metal GPU family instead of `sys.platform` (Apple queue, same key). No other target's attestation branch, certificate model or packet changed; device lanes on this backend were not re-run.
+
+## `E2E-REAL-6F-effect-scan-2026-11-07`: sibling outcome — not applicable
+
+`EffectLattice.infer` now scans call sites resolved by identity (`compiler/effect_scan.py`) instead of lowering the function through `_OpExtractor`. `@jit(deterministic=True)` refuses unresolved calls and host I/O at decoration, even with a `seed`. `_establish_tracer_authority` keeps an unresolved call at `top` instead of reading the AST body's effect. `copy` is registered `memory`. No target code changed. What changes for this backend is which programs reach the tracer-authored Graph IR, and so which native route they take. No x86 lowering, runtime or packet reads the changed paths beyond the shared frontend. The x86 unit lanes run inside the Mac A/B only as host-portable checks, and AVX-512 execution was not re-run. (PR #1055.)

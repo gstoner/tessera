@@ -29,16 +29,19 @@ def test_effect_lattice_infers_state_for_a_cache_committing_region():
     def pure_region(x):
         return x + 1
 
+    # Effect inference resolves each call by identity (effect_scan), so the
+    # region must call the registered op itself; a bare undefined name is an
+    # unresolved call and joins to top.
     def committing_region(cache, n):
-        return cache_commit(cache, n)  # noqa: F821 — canonical Graph op name
+        return tessera.ops.cache_commit(cache, n)
 
     def rolling_region(cache, n):
-        return cache_rollback(cache, n)  # noqa: F821
+        return tessera.ops.cache_rollback(cache, n)
 
     assert lat.infer(pure_region) == Effect.pure
     # The cache cursor ops lift the region's effect to >= state (out of pure).
-    assert lat.infer(committing_region) >= Effect.state
-    assert lat.infer(rolling_region) >= Effect.state
+    assert lat.infer(committing_region) == Effect.state
+    assert lat.infer(rolling_region) == Effect.state
 
 
 def test_cache_ops_registered_and_dispatchable():

@@ -326,6 +326,30 @@ Per-phase deliverables and the open-work priority queue live in
    side — that is the one `GPUCollectiveInsertionPass` orders against.
    History of the old fail-open AST design:
    [`docs/audit/compiler/COMPILER_ARCHITECTURE_SWEEP.md`](docs/audit/compiler/COMPILER_ARCHITECTURE_SWEEP.md) §F1.
+   **Amended 2026-11-07 — inference reads resolved call sites, not a second
+   AST lowering, and `deterministic=True` refuses unknown calls at
+   decoration (sync `E2E-REAL-6F-effect-scan-2026-11-07`).** "IR-derived"
+   above meant the lattice lowered the whole function through the AST
+   `_OpExtractor` a second time just to read its records. It now scans the
+   body's call sites (`compiler/effect_scan.py`): each call resolves *by
+   object identity* to a registered `tessera.ops` callable (its catalog
+   effect), a constraint declaration, a pure builtin, or a plain Python
+   helper that is scanned through; **anything else — raw numpy, `getattr`
+   or dict dispatch, a method on a value, an undefined name — is `top`.**
+   Still fail-closed, and it no longer accepts a bare spelling (`cache_commit(...)`
+   with no such name in scope used to infer `state`). The scan exists because
+   **a trace cannot replace it**: a trace records only operations that touch
+   traced values, so `np.random.rand(4)` in a body is invisible to it. That
+   blind spot was live — `_jit_analyze_frontend` refused only `random`, the
+   call-time certificate read the trace, and `_establish_tracer_authority`
+   replaced a `top` effect with the AST body's (which omits dropped calls),
+   so an unseeded-host-RNG `@jit(deterministic=True)` program decorated,
+   claimed tracer authority and ran. Decoration now calls
+   `EffectLattice.check_deterministic`: unresolved calls and host I/O are
+   refused even with a `seed` (Tessera's seed does not seed numpy), and a
+   registered RNG op without a seed is refused at decoration rather than at
+   the first call. In-place tensor writes (`a[:] = ...`, `tessera.copy`) are
+   registered `memory`, not unknown, so they stay admissible.
 
 6. **Mock collectives use threads, not processes.** Multi-rank tests run in-process via `MockRankGroup`. No NCCL/MPI dependency in the test suite.
 

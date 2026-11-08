@@ -301,6 +301,7 @@ def test_owner_of_destroyed_context_is_forgotten_not_closed(monkeypatch):
     import gc
     from tessera.compiler import prepared_nvidia_matmul as prepared
     lib=rt._load_nvidia_ptx_launch()
+    assert hasattr(lib,"tessera_nvidia_matmul_forget"), "matching NVIDIA launch library required"
     native_close=lib.tessera_nvidia_matmul_close
     closed=[]
     def recording_close(handle):
@@ -336,4 +337,7 @@ def test_owner_of_destroyed_context_is_forgotten_not_closed(monkeypatch):
         gc.collect()
     assert not leaked_handles&set(closed)
     assert {(handle,identity) for handle in leaked_handles}<=set(prepared.forgotten_handles())
+    # Forgotten natively too: no ~Owner may push the dead context when the
+    # registry is destroyed at process exit.
+    assert all(native_close(handle)!=0 for handle in leaked_handles)
     kept.close_native_storage()

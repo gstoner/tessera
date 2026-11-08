@@ -1091,6 +1091,19 @@ extern "C" int tessera_nvidia_matmul_close(uint64_t handle) {
   if (found == owners.end()) return bad("prepared matmul is closed or unknown");
   owners.erase(found); return 0;
 }
+// Drop an owner whose context the caller cannot prove is still alive. ~Owner
+// pushes that context, which segfaults once it is destroyed -- including from
+// this map's static destructor at process exit -- so the owner is leaked, not
+// destroyed. Its device memory went with its context.
+extern "C" int tessera_nvidia_matmul_forget(uint64_t handle) {
+  error.clear();
+  if (getpid() != process) return bad("prepared matmul cannot cross fork");
+  std::lock_guard<std::mutex> lock(mutex);
+  auto found = owners.find(handle);
+  if (found == owners.end()) return bad("prepared matmul is closed or unknown");
+  (void)found->second.release();
+  owners.erase(found); return 0;
+}
 extern "C" int tessera_nvidia_matmul_scratch_stats(
     uint64_t handle, size_t *capacity, size_t *allocations) {
   error.clear();

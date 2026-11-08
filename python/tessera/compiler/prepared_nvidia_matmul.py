@@ -88,7 +88,9 @@ def close_in_live_context(lib, handle, identity):
     Native close pushes the owner's context to free its modules and memory;
     against a destroyed context that push/pop segfaults inside the driver.
     An owner whose context is not provably live is forgotten instead of
-    closed, recorded in ``_forgotten_handles`` with a ResourceWarning.
+    closed, recorded in ``_forgotten_handles`` with a ResourceWarning, and
+    removed from the native registry without running its destructor, which
+    would otherwise push the dead context when the library unloads at exit.
     """
     try:
         live = identity in _live_context_identities()
@@ -97,6 +99,11 @@ def close_in_live_context(lib, handle, identity):
     if live:
         return lib.tessera_nvidia_matmul_close(handle)
     _forgotten_handles.append((handle, identity))
+    forget = getattr(lib, "tessera_nvidia_matmul_forget", None)
+    if forget is not None:
+        forget.argtypes = [ct.c_uint64]
+        forget.restype = ct.c_int
+        forget(handle)
     warnings.warn(f"prepared NVIDIA owner {handle} not closed: CUDA context {identity} "
                   "is not provably live", ResourceWarning, stacklevel=2)
     return 0

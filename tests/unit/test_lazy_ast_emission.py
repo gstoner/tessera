@@ -31,7 +31,7 @@ def _expected(x: np.ndarray) -> np.ndarray:
     return np.maximum(x + x, 0.0)
 
 
-@pytest.mark.parametrize("target", [None, "cpu"])
+@pytest.mark.parametrize("target", [None, "cpu", "rocm", "x86", "nvidia_sm120"])
 def test_decoration_defers_the_ast_emission(target):
     fn = ts.jit(_body) if target is None else ts.jit(target=target)(_body)
     assert fn.ast_emission_pending
@@ -81,16 +81,14 @@ def test_reading_graph_ir_builds_the_ast_module():
 
 
 @pytest.mark.parametrize("decorate", [
-    lambda f: ts.jit(target="rocm")(f),
     lambda f: ts.jit(target="apple_cpu")(f),
     lambda f: ts.jit(target="apple_gpu")(f),
     lambda f: ts.jit(autodiff="reverse", wrt=["x"])(f),
 ])
 def test_decoration_time_readers_keep_the_eager_emission(decorate):
-    # A native target's legality check refuses unsupported ops while compiling
-    # the module; the Apple targets also read it (tracer gate, package
-    # recognizer, the AST-vs-traced executable comparison); a differentiation
-    # request writes its intent into it.
+    # The Apple targets read the module (tracer gate, package recognizer, the
+    # AST-vs-traced executable comparison); a differentiation request writes
+    # its intent into it.
     assert not decorate(_body).ast_emission_pending
 
 
@@ -148,3 +146,43 @@ def test_concurrent_first_readers_all_get_the_module():
     assert errors == []
     assert len(results) == 4 and calls == [1]
     assert results[0] is results[2] is fn.graph_ir
+
+
+# ── Native targets defer only when target capability admits the body ─────────
+
+def _expands(x, s, g):
+    return tessera.ops.nvfp4_expand(x, s, g)
+
+
+def _syntax_only(x, y):
+    return x + y
+
+
+def test_a_native_target_defers_only_what_its_capability_admits():
+    from tessera.compiler.jit import _scan_admits_target_capability
+
+    assert _scan_admits_target_capability(_body, "x86", None)
+    # x86 has no NVFP4 expansion: the module is built at decoration and its
+    # compilation gives the refusal, so nothing is deferred past it.
+    assert not _scan_admits_target_capability(_expands, "x86", None)
+    with pytest.raises(TesseraJitError, match="LEGALITY_TARGET_CAPABILITY"):
+        ts.jit(target="x86")(_expands)
+
+
+def test_ops_lowered_from_syntax_are_checked(monkeypatch):
+    from tessera.compiler import legality
+    from tessera.compiler.jit import _scan_admits_target_capability
+
+    real = legality.check_op_legality
+
+    def refuse_add(op_name, *args, **kwargs):
+        result = real(op_name, *args, **kwargs)
+        if op_name != "tessera.add":
+            return result
+        return legality.LegalityResult(op_name, "x86", (legality.LegalityDiagnostic(
+            "LEGALITY_TARGET_CAPABILITY", "add refused", "target_capability"),))
+
+    monkeypatch.setattr(legality, "check_op_legality", refuse_add)
+    # ``x + y`` is no call, so the effect scan does not list it.
+    assert not _scan_admits_target_capability(_syntax_only, "x86", None)
+    assert not ts.jit(target="x86")(_syntax_only).ast_emission_pending

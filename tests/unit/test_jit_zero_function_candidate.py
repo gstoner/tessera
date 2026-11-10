@@ -11,18 +11,19 @@ The reachable producer is an unlowerable intermediate statement. ``_OpExtractor`
 drops a statement it cannot emit (``visit_Assign`` falls through to
 ``generic_visit`` when ``_emit_expr`` returns ``None``), which leaves a later op
 referencing a dangling operand; the function then fails verification with
-``GRAPH_IR_UNDEFINED_OPERAND``. Native targets other than ``apple_gpu``
-re-raise that as a ``TesseraJitError`` at decoration; ``apple_gpu`` defers to
-the tracer and keeps an empty module; the ``cpu`` reference target defers the
-AST emission itself (E2E-REAL-6F), so the error is raised by the first call
-that needs the AST plan, and a tensor call the tracer captures never builds it.
+``GRAPH_IR_UNDEFINED_OPERAND``. ``apple_cpu`` re-raises that as a
+``TesseraJitError`` at decoration; ``apple_gpu`` defers to the tracer and
+keeps an empty module; the ``cpu`` reference target and the native targets
+whose capability admits every op the body calls defer the AST emission itself
+(E2E-REAL-6F), so the error is raised by the first call that needs the AST
+plan, and a ``cpu`` tensor call the tracer captures never builds it.
 
 What is pinned here, per target:
 
 * No target ever surfaces a raw ``IndexError`` (the regression).
-* Native targets raise ``TesseraJitError`` at decoration time; ``cpu`` raises
-  it from a call that needs the AST plan, and runs a tensor call through the
-  tracer.
+* ``apple_cpu`` raises ``TesseraJitError`` at decoration time; ``cpu``,
+  ``rocm`` and ``x86`` raise it from a call that needs the AST plan, and
+  ``cpu`` runs a tensor call through the tracer.
 * ``apple_gpu`` decorates and routes to the tracer. The tracer runs the body,
   so a construct the AST front end could not lower may well execute correctly
   there -- and when it cannot, the failure is a stable Tessera diagnostic
@@ -48,12 +49,13 @@ from tessera.compiler.trace import TesseraTraceError
 
 gpu = pytest.mark.hardware_apple_gpu
 
-# Targets that depend on the AST Graph IR. Native targets emit it at
-# decoration and hard-fail there; ``cpu`` (target None) defers the emission to
-# the first reader of the AST plan.
+# Targets that depend on the AST Graph IR. ``apple_cpu`` emits it at
+# decoration and hard-fails there; ``cpu`` (target None) and a native target
+# whose capability admits the body's ops defer the emission to the first
+# reader of the AST plan.
 _IR_DEPENDENT_TARGETS = [None, "apple_cpu", "rocm"]
-_DECORATION_EMITTING_TARGETS = ["apple_cpu", "rocm"]
-_DEFERRED_TARGETS = [None, "cpu"]
+_DECORATION_EMITTING_TARGETS = ["apple_cpu"]
+_DEFERRED_TARGETS = [None, "cpu", "rocm", "x86"]
 
 
 def _not_a_graph_op(v):

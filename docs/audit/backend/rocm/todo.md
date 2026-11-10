@@ -19567,3 +19567,7 @@ The native-target unlowered-op refusal reads the effect scan's resolved `tessera
 ## `E2E-REAL-6F-lazy-ast-module-2026-11-10`: sibling outcome — not applicable (ROCm keeps eager emission)
 
 On the `cpu` reference target, `@jit` now defers the decoration-time AST Graph IR emission until something reads it, so a tracer-authority call never builds the module. ROCm targets keep decoration-time emission, because target legality (`LEGALITY_TARGET_CAPABILITY`) runs on the module. A first draft that deferred `rocm` too broke the gfx1151 standalone-member decoration refusals in `test_gfx1151_quantized_program_packaging.py`, and was narrowed. No ROCm lane changed, so neither gfx1151 nor gfx1201 was re-run. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-10--e2e-real-6f-the-cpu-target-builds-the-ast-module-only-when-something-reads-it))
+
+## `E2E-REAL-6F-native-lazy-legality-2026-11-10`: sibling outcome — parity validated on gfx1151 and gfx1201
+
+`@jit(target="rocm")` no longer builds the AST Graph IR module at decoration when the op-level capability check over the effect scan admits every op the body can execute. Otherwise it builds the module now, as before, so the gfx1151 quantized-MLP program admission and the standalone-member refusals are unchanged. Princess-Luna (gfx1151) and Tajasarus (gfx1201): `tests/unit` and `tests/device/rocm` have the same failing node IDs as the merge base b3f55fc71. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-10--e2e-real-6f-native-targets-defer-the-ast-module-when-capability-admits-the-body))

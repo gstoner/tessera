@@ -17064,3 +17064,7 @@ The native-target unlowered-op refusal reads the effect scan's resolved `tessera
 ## `E2E-REAL-6F-lazy-ast-module-2026-11-10`: sibling outcome — not applicable (NVIDIA keeps eager emission)
 
 On the `cpu` reference target, `@jit` now defers the decoration-time AST Graph IR emission until something reads it, so a tracer-authority call never builds the module. NVIDIA targets keep decoration-time emission, because target legality runs on the module. No sm_120 lane changed, so nothing was re-run on The-Super-Bear. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-10--e2e-real-6f-the-cpu-target-builds-the-ast-module-only-when-something-reads-it))
+
+## `E2E-REAL-6F-native-lazy-legality-2026-11-10`: sibling outcome — follow-up required (sm_120 not evaluated)
+
+NVIDIA targets now defer the decoration-time AST Graph IR module when the op-level capability check over the effect scan admits the body. The trace capture still reads the AST module's function name and source hash on NVIDIA targets, because portable NVIDIA routes record `source_hash` in their Tile IR. **Owed:** the sm_120 unit + `tests/device/nvidia` A/B against the merge base b3f55fc71. The run on The-Super-Bear was lost when its WSL2 instance went down mid-sweep, so no sm_120 result exists for this change. ([log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-11-10--e2e-real-6f-native-targets-defer-the-ast-module-when-capability-admits-the-body))

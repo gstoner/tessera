@@ -14926,3 +14926,29 @@ Apple, ROCm, NVIDIA, x86: not applicable. Their targets keep decoration-time emi
 Remaining: the AST route now serves native targets and Apple at decoration, mainly so target legality runs on a module, plus legacy-candidate calls everywhere. Next: run target legality on the effect scan's resolved op list, so native decorations can defer too. A second option is a traced module where the signature is static. Not measured: decoration-time cost; the census counts builds, not seconds.
 Evidence: python/tessera/compiler/jit.py; tests/unit/test_lazy_ast_emission.py; tests/unit/test_jit_zero_function_candidate.py
 <!-- entry-fields:end -->
+
+### 2026-11-10 — E2E-REAL-6F: native targets defer the AST module when capability admits the body
+
+Owner: [E2E-REAL-6F](INTEGRATED_COMPILER_PLAN.md#e2e-real-6f)
+PRs: branch `claude/e2e6f-native-lazy-legality`; sync E2E-REAL-6F-native-lazy-legality-2026-11-10.
+Outcome: `@jit` on rocm, x86 and NVIDIA targets no longer builds the AST Graph IR module at decoration when the op-level target-capability check admits every op the body can execute. The check is the `LEGALITY_TARGET_CAPABILITY` rule the module's compilation applies. It covers the effect scan's resolved `tessera.ops` calls and the ops Python syntax lowers to (`+ - * /` and `.T`). When it refuses any op, the module is built at decoration as before and gives the authoritative answer, including a program-level admission such as gfx1151's quantized MLP. `apple_cpu` and `apple_gpu` keep decoration-time emission (tracer gate, package recognizer, AST-vs-traced comparison).
+
+Why the op-level check is enough at decoration:
+- **Census** (Mac unit suite, plugin on `_jit_emit_graph_ir`): 3,621 native decorations. All 5 that the AST compilation refused for capability were refused by the scan check too; the scan check is stricter on 4 gfx1151 quantized-MLP decorations, which therefore stay eager.
+- **dtype-dependent refusals did not fire at decoration on `main` either.** The registry refuses 348 ops for some dtype on each target (for example matmul f64 on x86). But a dtype-annotated matmul decorates on `main` too, for rocm f32/bf16, x86 f64/bf16 and sm_120 f64, so deferral removes no decoration-time refusal there.
+
+Contract change, as on `cpu`: an AST emission failure (an unlowerable statement, such as `GRAPH_IR_UNDEFINED_OPERAND`, or a `cast` the AST front end leaves unresolved) moves from decoration to the first reader of the module, which raises the same `TesseraJitError`. `JIT_UNLOWERED_OP_NATIVE_TARGET` still refuses at decoration: it reads the effect scan, not the module.
+
+Not changed: a native-target call still builds the module. Three call-path readers do it on the Mac: the trace-failure check in `_trace_frontend_capture` (rocm), `_try_source_attention_call` (NVIDIA) and the dropped-call guard (x86, whose lane executes the AST plan). The trace capture also keeps reading the AST function's name and source hash on native targets, because portable NVIDIA routes record `source_hash` in their Tile IR. So this slice saves the build only for a native decoration that is never called.
+
+Measured:
+- **Mac M1 Max (macOS 27.2, unsandboxed)**, `tests/unit -m "not slow" -n 8`, merge base b3f55fc71 against c8f757cd6: identical failing node IDs (345 failed, 413 errors on both); the extra passes are the new tests.
+- **Princess-Luna (gfx1151, Zen 5)**, ROCm env, scratch worktrees over the shared `build/`: `tests/unit -n 8` 327 failed / 327 errors on both; `tests/device/rocm` 93 failed / 201 passed on both; identical IDs.
+- **Tajasarus (gfx1201)**, `TESSERA_ROCM_CHIP=gfx1201`, `TESSERA_GFX1201_DEVICE_PROOF=1`: `tests/unit` 347 failed / 313 errors on both; `tests/device/rocm` 178 failed / 3,675 passed on both; identical IDs.
+- **The-Super-Bear (sm_120): not evaluated.** Its WSL2 instance went down during the run and no result was produced.
+- `tests/unit/test_lazy_ast_emission.py` (15 tests); `mypy python/tessera/` clean (696 files), ruff clean.
+
+ROCm: parity validated on gfx1151 and gfx1201. x86: parity validated on Princess-Luna. Apple: not applicable (eager), Mac sweep identical. NVIDIA: follow-up required, the sm_120 A/B is owed.
+Remaining: native-target calls still build the module through the three readers above; making them AST-free is the next slice (dropped calls from the scan on trace failure, the source-attention gate from the source, and x86 executing a traced plan). The Apple readers and the legacy-candidate calls remain after that.
+Evidence: python/tessera/compiler/jit.py; tests/unit/test_lazy_ast_emission.py; tests/unit/test_jit_zero_function_candidate.py
+<!-- entry-fields:end -->
